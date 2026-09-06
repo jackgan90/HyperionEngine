@@ -1,6 +1,6 @@
 Checks: '-*,readability-identifier-naming,readability-isolate-declaration'
 WarningsAsErrors: 'readability-identifier-naming,readability-isolate-declaration'
-HeaderFilterRegex: '[/\\](include[/\\]hyperion|tests)[/\\]'
+HeaderFilterRegex: '[/\\]Source[/\\]'
 CheckOptions:
   readability-identifier-naming.NamespaceCase: CamelCase
   readability-identifier-naming.ClassCase: CamelCase

@@ -130,7 +130,7 @@ def main():
             command += ["--target", "hyperion_check"]
         run(command, environment)
     print(f"\nSolution: {solution}\nOpen in Visual Studio, select Debug/Release | x64, then press F5.\n"
-          "To run all tests: right-click hyperion_check under Tests and choose Build.", flush=True)
+          "To run all tests: right-click hyperion_check under Hyperion/Tests and choose Build.", flush=True)
     if args.open:
         if not selected["ide"].is_file():
             raise RuntimeError("The selected installation contains Build Tools only. Open the solution in a compatible IDE.")

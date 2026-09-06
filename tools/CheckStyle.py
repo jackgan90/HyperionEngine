@@ -9,7 +9,7 @@ import shutil
 import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SOURCE_DIRS = ('include', 'src', 'apps', 'plugins', 'tests', 'shaders')
+SOURCE_DIRS = ('Source', 'shaders')
 SOURCE_SUFFIXES = ('.h', '.cpp', '.hlsl', '.hlsli')
 
 
@@ -27,8 +27,9 @@ def check_paths(sources):
     for path in files:
         if not re.fullmatch(r'[A-Z][A-Za-z0-9]*', path.stem) or path.suffix == '.hpp':
             failures.append(f'{path.relative_to(ROOT)}: expected PascalCase filename (.h for headers)')
-    headers = {path.relative_to(ROOT / 'include').as_posix(): path
-               for path in (ROOT / 'include').rglob('*.h')}
+    headers = {path.relative_to(public).as_posix(): path
+               for public in (ROOT / 'Source').rglob('Public')
+               for path in public.rglob('*.h')}
     lookup = {name.lower(): name for name in headers}
     for path in sources:
         for line, include in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):

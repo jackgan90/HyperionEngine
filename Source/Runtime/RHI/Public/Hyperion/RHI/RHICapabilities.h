@@ -1,0 +1,60 @@
+#pragma once
+#include "Hyperion/Shaders/ShaderCompiler.h"
+#include <array>
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace Hyperion
+{
+enum class ERHIBackend
+{
+	D3D12,
+	Vulkan,
+	Metal
+};
+enum class ERHIFeature
+{
+	Graphics,
+	TextureSampling,
+	ConcurrentRecording,
+	Readback,
+	RayTracing,
+	MeshShaders,
+	Count
+};
+
+struct FRHIFeatureSupport
+{
+	// Hardware/driver support and usability through this RHI contract are distinct.
+	bool Supported{};
+	bool Enabled{};
+};
+
+struct FRHICapabilities
+{
+	ERHIBackend Backend = ERHIBackend::D3D12;
+	EShaderFormat ShaderFormat = EShaderFormat::Dxil;
+	std::string Adapter;
+	std::uint32_t MaxRecordingContexts{};
+	std::uint32_t MaxSampledTextures{};
+	std::uint32_t MaxTextureDimension{};
+	std::array<FRHIFeatureSupport, static_cast<std::size_t>(ERHIFeature::Count)> Features{};
+
+	FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const;
+};
+
+struct FRHIDeviceDesc
+{
+	// Best effort; for D3D12 the first creation chooses the process-wide debug layer policy.
+	bool EnableDebug = true;
+	// Required features must be enabled or creation fails. Optional features may stay disabled.
+	std::vector<ERHIFeature> RequiredFeatures;
+	std::vector<ERHIFeature> OptionalFeatures;
+};
+
+std::string_view GetRHIBackendName(ERHIBackend InBackend);
+ERHIBackend ParseRHIBackend(std::string_view InName);
+void ValidateRequiredFeatures(const FRHIDeviceDesc& InDesc, const FRHICapabilities& InCapabilities);
+} // namespace Hyperion

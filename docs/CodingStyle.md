@@ -23,7 +23,7 @@
 
 ## 排版和文件
 
-使用 Allman 大括号；控制流即使只有一条语句也写大括号。用 Tab 缩进，显示宽度为 4 列；对齐可用空格。每条声明只定义一个变量。头文件用 `.h` 和 `#pragma once`，实现用 `.cpp`；C++/HLSL 使用 LF 换行，由 `.editorconfig`、`.clang-format` 和 `.gitattributes` 保持一致。保持现有模块目录划分，不因命名调整移动模块边界。
+使用 Allman 大括号；控制流即使只有一条语句也写大括号。用 Tab 缩进，显示宽度为 4 列；对齐可用空格。每条声明只定义一个变量。头文件用 `.h` 和 `#pragma once`，实现用 `.cpp`；C++/HLSL 使用 LF 换行，由 `.editorconfig`、`.clang-format` 和 `.gitattributes` 保持一致。按 [源码组织](SourceLayout.md) 的概念模块和 Public/Private 边界组织新增文件；不要把不相关功能平铺在公共源码目录。
 
 ```cpp
 namespace Hyperion

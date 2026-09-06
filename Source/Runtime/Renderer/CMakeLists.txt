@@ -1,0 +1,3 @@
+add_library(hyperion_render STATIC Private/RenderGraph.cpp)
+hyp_module(hyperion_render)
+target_link_libraries(hyperion_render PUBLIC hyperion_rhi hyperion_tasks hyperion_plugins hyperion_config PRIVATE hyperion_core)

@@ -1,0 +1,3 @@
+add_library(hyperion_debug_ui STATIC Private/DebugUIPlugin.cpp)
+hyp_module(hyperion_debug_ui)
+target_link_libraries(hyperion_debug_ui PUBLIC hyperion_render hyperion_gui PRIVATE hyperion_core)

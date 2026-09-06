@@ -1,0 +1,3 @@
+add_library(hyperion_config STATIC Private/AppSettings.cpp)
+hyp_module(hyperion_config)
+target_link_libraries(hyperion_config PUBLIC hyperion_reflection)

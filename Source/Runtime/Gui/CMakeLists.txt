@@ -1,0 +1,3 @@
+add_library(hyperion_gui STATIC Private/Adapters/Gui.cpp)
+hyp_module(hyperion_gui)
+target_link_libraries(hyperion_gui PUBLIC hyperion_assets hyperion_platform hyperion_reflection PRIVATE hyperion_core hyp_imgui hyp_implot)

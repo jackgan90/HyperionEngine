@@ -6,6 +6,7 @@
     "width": 1280,
     "height": 720,
     "workers": 4,
+    "rhi_backend": "d3d12",
     "rhi_threads": 2,
     "vsync": true,
     "show_gui": true,

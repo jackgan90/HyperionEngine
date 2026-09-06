@@ -1,0 +1,3 @@
+add_library(hyperion_triangle STATIC Private/TrianglePlugin.cpp)
+hyp_module(hyperion_triangle)
+target_link_libraries(hyperion_triangle PUBLIC hyperion_render)

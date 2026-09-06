@@ -19,16 +19,16 @@
 
 1. 打开 `Hyperion.sln`，选择 `Debug | x64` 或 `Release | x64`。
 2. 默认启动项目为 `hyperion_viewer`，按 F5 编译并调试渲染器；Ctrl+F5 不附加调试器运行。已有 `.suo` 的启动偏好可能优先，此时手动设一次启动项目。
-3. `Applications` 放 Viewer，`Hyperion` 放引擎模块，`Tests` 放测试项目，`ThirdParty` 放依赖。模块头文件显示在 `include/hyperion` 筛选器中；Viewer 项目也列出 shader、实验配置和文档。
+3. `Hyperion/Applications` 放 Viewer，`Hyperion/Runtime` 放运行时模块，`Hyperion/Backends` 放图形后端，`Hyperion/Plugins` 放实验插件，`Hyperion/Tests` 放测试，`ThirdParty` 放依赖。模块源码显示在各自的 `Public` / `Private` 筛选器中；Viewer 项目也列出 shader、实验配置和文档。
 4. HLSL 在工程里用于查看/编辑，实际由引擎 DXC wrapper 编译，不走 Visual Studio 的默认 FXC 规则。
 
 Viewer 的调试工作目录为仓库根目录，可以在项目属性的“调试 → 命令参数”中填写 `--config experiments/Triangle.json` 等选项。生成的可执行文件在 `out/build/vs2022/bin/Debug` 或 `bin/Release`，所需 DLL 会自动复制到旁边。
 
 ## 在 VS 中跑测试
 
-展开 `Tests`，**右键 `hyperion_check` → 生成（Build）**。它会先构建测试和 Viewer，再按当前配置运行完整 CTest 套件；失败会让该项目构建失败。输出窗口显示各项测试结果，日志位于构建目录的 `Testing/Temporary/LastTest.log`。
+展开 `Hyperion/Tests`，**右键 `hyperion_check` → 生成（Build）**。它会先构建测试和 Viewer，再按当前配置运行完整 CTest 套件；失败会让该项目构建失败。输出窗口显示各项测试结果，日志位于构建目录的 `Testing/Temporary/LastTest.log`。
 
-需要调试单个 C++ 测试时，将 `core_tests`、`task_tests`、`config_tests`、`asset_tests`、`shader_tests`、`graph_tests` 或 `gui_tests` 设为启动项目并按 F5。测试调试工作目录与 CTest 保持一致，避免把临时文件写入源码目录。调试结束后切回 `hyperion_viewer`。
+需要调试单个 C++ 测试时，将 `core_tests`、`task_tests`、`config_tests`、`asset_tests`、`shader_tests`、`graph_tests` 、`gui_tests`、`rhi_contract_tests` 或 `d3d12_device_tests` 设为启动项目并按 F5。测试调试工作目录与 CTest 保持一致，避免把临时文件写入源码目录。调试结束后切回 `hyperion_viewer`。
 
 当前测试是由 CTest 驱动的独立可执行程序和 Python 验收脚本，没有接入 VS Test Explorer 适配器，所以完整套件通过 `hyperion_check` 运行。GPU 测试需要可用的 DX12 硬件和桌面会话。右键执行即可，不需要先手动生成整个解决方案。
 
@@ -66,3 +66,5 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 2026-09-06：VS 2022 Community / MSBuild 17 / MSVC 19.38，Debug 与 Release 均通过 `hyperion_check` 完成 **13/13** CTest 验收，包含 DX12 硬件测试。CMD 入口也已从仓库外的工作目录执行，并成功重复生成。日志为 `out/vs-workflow-debug.log`、`out/vs-workflow-release.log` 和 `out/vs-workflow-cmd.log`。
 
 同日完成 UE 风格迁移后，再次生成并验证 Debug/Release，均为 **14/14**（新增 `code_style_paths`），记录为 `out/style-vs-debug.log`、`out/style-vs-release.log`。CMD 入口也已复验，记录为 `out/style-cmd.log`。代码文件和辅助脚本已采用 PascalCase，解决方案名称、启动项目和 `hyperion_check` 使用方式保持一致；Viewer 项目中可以直接浏览规范和格式配置。
+
+同日完成 RHI 抽象与源码模块化后，Debug/Release 均为 **16/16**，新增 `rhi_backend_contracts` 与 `d3d12_device_ownership`。记录为 `out/ModularDebugTest.log`、`out/ModularReleaseTest.log`。解决方案仍由同一入口生成，项目按 `Hyperion/Runtime`、`Backends`、`Plugins`、`Applications`、`Tests` 分组，模块内的 Public/Private 与源码目录一致。

@@ -35,3 +35,22 @@ Vulkan/Metal 实际后端、移动平台、多目标 Render Graph、动态插件
 | 迁移审计 | 依赖 lock 和实验 JSON 数据不变；运行时字符串仅变更自有文件路径 | `out/style-migration-audit.log` |
 
 CTest 在原有 13 项基础上新增不依赖 LLVM 的 `code_style_paths`。完整格式和语义命名检查仍通过 `python tools/CheckStyle.py --naming` 显式执行。MSVC 的剩余警告来自第三方 tinyexr；自有代码未产生编译警告。
+
+## RHI 抽象与模块目录迭代
+
+2026-09-06：`modularize-runtime-and-rhi-backends` 将源码按 16 个运行时、后端、插件和应用模块组织，加入独立的后端工厂、设备/交换链接口、能力查询和资源归属检查。目录约定见 [SourceLayout.md](SourceLayout.md)。
+
+| 检查 | 结果 | 证据 |
+| --- | --- | --- |
+| VS 2022 Debug / CTest | 16/16 通过 | `out/ModularDebugTest.log` |
+| VS 2022 Release / CTest | 16/16 通过 | `out/ModularReleaseTest.log` |
+| Ninja Debug 构建 | 通过，生成新目录的编译数据库 | `out/ModularNinjaBuild.log` |
+| 格式、路径与语义命名 | 60 个 C++/HLSL 文件、30 个 C++ 翻译单元通过 | `out/ModularNaming.log` |
+| 独立 RHI provider | 公共接口接入测试 provider，未链接 D3D12 后端或 D3D12 SDK library | `Source/Tests/RHI/RHIContractTests.cpp`、`out/ModularStructureAudit.log` |
+| 真实 D3D12 资源与生命周期 | 无窗口创建设备、能力要求、跨设备/后端资源拒绝、交换链隔离、旧命令拒绝、resize/readback、设备包装对象提前释放通过 | `Source/Tests/RHI/D3D12DeviceTests.cpp` |
+| 边界检查反向验证 | 拒绝公共 vendor include、Renderer 引入后端、Assets 依赖 Renderer、跨模块私有头；临时夹具已移除 | `out/ModularStructureAudit.log` |
+| Visual Studio 分组 | 模块 Public/Private、Viewer 文档/shader 分类正确；HLSL 未进入 FXC 构建 | `out/ModularStructureAudit.log` |
+| 后端配置 | 旧配置默认 D3D12、保存恢复、CLI 覆盖、未知/未注册后端显式失败通过 | `Source/Tests/Integration/ViewerAcceptance.py` |
+| 最终 GUI 标题调整 | 标题从配置显示后端名称；Debug/Release 的 `d3d12_gui` 均复验通过 | `out/ModularFinalGui.log` |
+
+三角形与 GUI 读回截图通过像素验收，并检查了 `out/captures/gui.png`。D3D12 验证错误为 0。未来 Vulkan/Metal、Scene/Animation、多资源 Render Graph 仍需要独立实现；本次测试 provider 仅验证接口替换，不代表 Vulkan 运行时已实现。

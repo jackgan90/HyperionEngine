@@ -16,7 +16,7 @@ C++20 渲染实验框架。当前实现 Windows x64 / D3D12：通过静态插件
 
 脚本自动检测 VS/CMake 并准备缺少的锁定依赖。本机默认使用 VS 2022，生成 `out/build/vs2022/Hyperion.sln`。打开后选择 `Debug | x64` 或 `Release | x64`，默认启动项目为 `hyperion_viewer`，按 F5 调试。
 
-在解决方案的 `Tests` 文件夹中，**右键 `hyperion_check` → 生成**，即可先编译所需项目，再运行完整测试套件。公共头文件、shader 和实验配置已加入工程筛选器，方便浏览。
+在解决方案的 `Hyperion/Tests` 文件夹中，**右键 `hyperion_check` → 生成**，即可先编译所需项目，再运行完整测试套件。公共头文件、shader 和实验配置已加入工程筛选器，方便浏览。
 
 ```powershell
 # 一条命令生成、编译并跑测试
@@ -61,8 +61,9 @@ python tools/Bootstrap.py
 - Main 管理窗口、输入和 GUI；Render 组织帧；多个专用 RHI 线程录制命令，RHI 0 提交。oneTBB 执行通用 CPU jobs，支持依赖、异常传播和等待。
 - 逻辑插件通过 ID、依赖和启动/关闭生命周期组织，当前为静态链接。已有 `triangle`、`debug-ui`，不涉及 DLL 热更新。
 - 反射使用手写类型/属性描述符，驱动配置、资产引用保存和 GUI 编辑。没有 GC、AST 生成器或对象图序列化。
-- 首版 Render Graph 管理一个导入的交换链颜色目标，校验 pass 依赖、内容初始化及状态转换。最多 15 个颜色 pass，单 graphics queue、2 个 GPU frame context、256 个采样纹理描述符。
+- 首版 Render Graph 管理一个导入的交换链颜色目标，校验 pass 依赖、内容初始化及状态转换。容量由后端能力限定；当前 D3D12 支持最多 15 个颜色 pass（另占一个 Present context）、单 graphics queue、2 个 GPU frame context、256 个采样纹理描述符。
 - 数学使用引擎自有列主序类型；资产层支持单个 glTF 三角形 primitive、PNG 与 EXR。没有完整场景、材质或动画导入。
+- RHI 由 `IRHIBackend`、`IRHIDevice`、`IRHISwapchain` 抽象接口与独立后端组成，设备可以脱离窗口创建。通过配置 `rhi_backend` 或 `--backend d3d12` 选择；尚未注册的 Vulkan/Metal 会明确报错。
 - HLSL 可生成 DXIL、SPIR-V 和 MSL 文本。实际运行的是 DX12；Vulkan/Metal 运行时与移动平台尚未实现。
 - CPU 内存统计覆盖内部 allocator/PMR，以及接入回调的 cgltf、GUI 和 D3D12MA 元数据；不代表进程总内存。GPU 统计覆盖 D3D12MA 资源，不包含交换链和驱动内部占用。
 - Tracy 已启用按需连接，支持 CPU scope 和显式内存事件。GUI 曲线显示包含 Present 等待的 CPU 帧间隔，不是 GPU timestamp。
@@ -71,7 +72,7 @@ python tools/Bootstrap.py
 
 默认代码风格参考 Unreal Engine：`Hyperion` 命名空间，PascalCase 标识符和文件名，`F`/`E`/`I` 类型前缀，Allman 大括号、4 列 Tab 和 `.h` 头文件。布尔变量也遵循大写开头要求。规范、例外和检查命令见 [代码规范](docs/CodingStyle.md)；后续开发同时遵循根目录 `AGENTS.md`。
 
-`include/hyperion` 是引擎公共接口；`src/adapters` 隔离第三方与原生 API；`plugins` 放算法/UI 插件；`shaders` 放 HLSL；`tests` 提供 CPU 和真实 GPU 验收；`openspec` 保存规范、change 和验证记录。
+`Source/Runtime` 按 Core、Tasks、Math、Reflection、Assets、RHI、Renderer 等概念组织，每个模块有独立的 `Public` / `Private` 和 CMake target。`Source/Backends` 放原生图形后端；`Source/Plugins` 放实验与 UI 插件；`Source/Applications` 放应用；`Source/Tests` 放测试。`shaders` 放 HLSL；`openspec` 保存规范与归档。后续 Scene、Animation 将作为独立 Runtime 模块接入，详见 [源码组织与扩展位置](docs/SourceLayout.md)。
 
 依赖必须通过引擎 wrapper 使用，公共头文件不暴露第三方类型。执行 `python tools/CheckBoundaries.py` 检查 include 边界。参考 [架构和扩展约定](docs/Architecture.md)、[依赖列表](docs/Dependencies.md) 和 [九步实施路线](docs/Roadmap.md)。
 
