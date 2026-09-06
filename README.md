@@ -82,3 +82,7 @@ Git 保存源码、测试、Shader、实验配置模板、CMake 和工具脚本�
 依赖源码与下载缓存、编译产物、运行日志、截图和临时脚本统一放在 `out/`，不提交。`.sln`、`.vcxproj` 等工程文件通过 `GenerateSolution.cmd` 重新生成；IDE 用户状态、`CMakeUserPresets.json`、本地环境覆盖文件和 Python 缓存也由 `.gitignore` 排除。共享构建选项写入 `CMakePresets.json`，本机路径写入被忽略的用户预设。
 
 提交前用 `git status --short --untracked-files=all` 检查遗漏，再用 `git diff --cached --stat` 和 `git diff --cached --check` 检查暂存内容。不要通过忽略整个源码目录来隐藏未完成的修改。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。第三方依赖仍遵循各自的许可证。
