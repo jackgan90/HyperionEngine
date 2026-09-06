@@ -11,6 +11,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(HYP_ENABLE_RENDERDOC "Build the optional RenderDoc capture plugin" OFF)
+option(HYP_ENABLE_TRACY "Enable Tracy profiling and its network listener in Core-linked executables" OFF)
 include(cmake/Dependencies.cmake)
 include(CTest)
 

@@ -141,18 +141,24 @@ std::uint64_t ClockNanoseconds()
 FProfileScope::FProfileScope(const char* InName)
 {
 	Start = ClockNanoseconds();
+#ifdef TRACY_ENABLE
 	TracyCZone(Context, true);
 	TracyCZoneName(Context, InName, std::strlen(InName));
 	Id = Context.id;
 	Active = Context.active;
+#else
+	(void)InName;
+#endif
 }
 
 FProfileScope::~FProfileScope()
 {
 	ScopeTime.fetch_add(ClockNanoseconds() - Start);
 	ScopeCount.fetch_add(1);
+#ifdef TRACY_ENABLE
 	TracyCZoneCtx Context{Id, Active};
 	TracyCZoneEnd(Context);
+#endif
 }
 
 FProfileStats ProfileStats()

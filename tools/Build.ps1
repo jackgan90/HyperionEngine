@@ -3,7 +3,9 @@ param(
     [string]$Target = '',
     [switch]$Test,
     [switch]$RenderDoc,
-    [switch]$NoRenderDoc
+    [switch]$NoRenderDoc,
+    [switch]$Tracy,
+    [switch]$NoTracy
 )
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -28,6 +30,9 @@ try {
         $CaptureArguments += '-DHYP_ENABLE_RENDERDOC=ON'
     }
     if ($NoRenderDoc) { $CaptureArguments += '-DHYP_ENABLE_RENDERDOC=OFF' }
+    if ($Tracy -and $NoTracy) { throw 'Use either -Tracy or -NoTracy.' }
+    if ($Tracy) { $CaptureArguments += '-DHYP_ENABLE_TRACY=ON' }
+    if ($NoTracy) { $CaptureArguments += '-DHYP_ENABLE_TRACY=OFF' }
     & $Cmake --preset $Preset "-DCMAKE_MAKE_PROGRAM=$Ninja" "-DPython3_EXECUTABLE=$PythonExecutable" @CaptureArguments
     if ($LASTEXITCODE) { throw 'CMake configure failed.' }
     $Arguments = @('--build', '--preset', $Preset, '--parallel', '8')

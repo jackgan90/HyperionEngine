@@ -61,7 +61,30 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 
 最后一条只运行已构建的测试；前两条调用 MSBuild。未安装请求的 VS/C++ 组件、没有兼容 CMake、依赖下载失败或编译/测试失败时，脚本会报错并返回非零状态。
 
+## Tracy 与网络监听
+
+`HYP_ENABLE_TRACY` 默认 `OFF`。普通 Viewer 和测试 exe 保留本地 CPU 计时、内存统计和 GUI 曲线，但不启动 Tracy 的 TCP 监听和 UDP 发现广播。以前强制启用的 `TRACY_ENABLE=ON` 缓存会在重新配置时按此选项更新；需要重新编译已有 exe 才生效。
+
+需要连接 Tracy Profiler 时显式开启，结束后恢复关闭：
+
+```powershell
+.\tools\GenerateSolution.ps1 -Tracy -Build
+.\tools\GenerateSolution.ps1 -NoTracy -Build
+
+# Ninja 构建使用相同开关
+.\tools\Build.ps1 -Tracy
+.\tools\Build.ps1 -NoTracy
+```
+
+原生 CMake 对应 `-DHYP_ENABLE_TRACY=ON/OFF`。开关作用于该构建目录中所有链接 Core 的 exe；同一 VS 解决方案的 Debug/Release 共用此选项，各配置需要分别重编译。不传开关会保留该构建目录的选择；全新配置（或 `-Fresh`）默认关闭，除非同时传入 `-Tracy`。
+
+Tracy 的 `TRACY_ON_DEMAND` 只延迟采集，仍会监听连接，因此启用 Tracy 的 exe 可能触发 Windows 防火墙授权。Windows 的此类提示主要针对入站监听，是否再次提示取决于 exe 路径、网络配置文件、已有防火墙规则和系统策略，并非所有出站联网都弹窗，详见 [微软防火墙规则说明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules)。此构建选项只控制 Tracy；显式加载 RenderDoc 或以后引入其他网络功能时，应由对应功能按需启用。构建脚本不修改防火墙规则或通知设置。
+
+默认关闭 Tracy 时，CTest 的 `offline_startup` 会启动真实 Viewer，在启动及开始渲染后检查该进程的 TCP/UDP 端点，防止默认监听再次引入。
+
 ## 本机验证记录
+
+2026-09-07：Tracy 改为显式启用后，VS 2022 Debug/Release 均通过 **32/32** CTest，包含新增 `offline_startup`。该检查在修改前的 Viewer 上检测到 TCP 8086 监听和 UDP 端点，修改后两种配置均未发现 TCP/UDP 端点。Ninja Debug/Release 构建、61 个编译单元命名、格式和模块边界检查通过；显式开启 Tracy 的 Release Core 测试通过。VS 2022 和 Ninja 的 Debug/Release 产物均已重编译并恢复 Tracy 关闭。日志见 `out/NetworkVsDebug.log`、`out/NetworkVsRelease.log`、`out/NetworkNinjaDebugBuild.log`、`out/NetworkNinjaReleaseBuild.log`、`out/NetworkTracyEnabledBuild.log` 和 `out/NetworkStyle.log`。
 
 2026-09-06 上述限定 change 的独立审计后，补齐 Present 失败时的 GPU 等待并新增 `d3d12_frame_failure_recovery`：Debug/Release 分别通过 **31/31**，RenderDoc OFF Debug 通过 **26/26**。61 个编译单元命名、格式、模块边界和 OpenSpec strict 均通过；原 P2 已由独立 reviewer 复审关闭。日志位于 `out/IndependentReview/FinalVsDebug.log`、`FinalVsRelease.log`、`FinalDisabledTest.log`，详见 [独立审计记录](../openspec/changes/archive/2026-09-06-fix-lifecycle-and-split-entrypoints/independent-review.md)。
 

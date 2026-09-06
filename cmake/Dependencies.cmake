@@ -33,7 +33,9 @@ set(MI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(MI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(MI_OVERRIDE OFF CACHE BOOL "" FORCE)
 set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
-set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+# On-demand capture still starts a listener and discovery broadcasts. Require
+# explicit opt-in, including when migrating caches that previously forced Tracy on.
+set(TRACY_ENABLE ${HYP_ENABLE_TRACY} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 hyp_dependency(spdlog)
 hyp_dependency(mimalloc)

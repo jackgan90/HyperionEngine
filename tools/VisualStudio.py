@@ -104,6 +104,8 @@ def main():
     parser.add_argument("--fresh", action="store_true")
     parser.add_argument("--renderdoc", action=argparse.BooleanOptionalAction, default=None,
                         help="Enable or disable the optional capture plugin; otherwise preserve the CMake cache")
+    parser.add_argument("--tracy", action=argparse.BooleanOptionalAction, default=None,
+                        help="Enable or disable Tracy network profiling; otherwise preserve the CMake cache (default OFF)")
     args = parser.parse_args()
     if os.name != "nt" or sys.version_info < (3, 10):
         raise RuntimeError("This script requires Windows and Python 3.10+.")
@@ -130,6 +132,8 @@ def main():
                  "-DCMAKE_CONFIGURATION_TYPES=Debug;Release", "-DBUILD_TESTING=ON",
                  "-DPython3_EXECUTABLE=" + sys.executable]
     configure.append("-DHYP_ENABLE_RENDERDOC=" + ("ON" if renderdoc else "OFF"))
+    if args.tracy is not None:
+        configure.append("-DHYP_ENABLE_TRACY=" + ("ON" if args.tracy else "OFF"))
     if args.fresh:
         configure.append("--fresh")
     run(configure, environment)

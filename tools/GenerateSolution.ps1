@@ -6,7 +6,9 @@ param(
     [switch]$Open,
     [switch]$Fresh,
     [switch]$RenderDoc,
-    [switch]$NoRenderDoc
+    [switch]$NoRenderDoc,
+    [switch]$Tracy,
+    [switch]$NoTracy
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -21,5 +23,8 @@ if ($Fresh) { $Arguments += '--fresh' }
 if ($RenderDoc -and $NoRenderDoc) { throw 'Use either -RenderDoc or -NoRenderDoc.' }
 if ($RenderDoc) { $Arguments += '--renderdoc' }
 if ($NoRenderDoc) { $Arguments += '--no-renderdoc' }
+if ($Tracy -and $NoTracy) { throw 'Use either -Tracy or -NoTracy.' }
+if ($Tracy) { $Arguments += '--tracy' }
+if ($NoTracy) { $Arguments += '--no-tracy' }
 & python @arguments
 if ($LASTEXITCODE) { throw "Visual Studio workflow failed (exit code $LASTEXITCODE). See the error above." }
