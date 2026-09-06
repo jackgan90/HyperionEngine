@@ -61,8 +61,8 @@ struct FModelMaterial
 	float OcclusionStrength = 1;
 	float AlphaCutoff = .5f;
 	EAlphaMode AlphaMode = EAlphaMode::Opaque;
-	bool DoubleSided{};
-	bool Unlit{};
+	bool bDoubleSided{};
+	bool bUnlit{};
 	FTextureBinding BaseColorTexture;
 	FTextureBinding MetallicRoughnessTexture;
 	FTextureBinding NormalTexture;
@@ -113,7 +113,7 @@ struct FBounds
 {
 	FVec3 Minimum;
 	FVec3 Maximum;
-	bool Valid{};
+	bool bValid{};
 };
 
 void ValidateModel(const FModelAsset& InModel);

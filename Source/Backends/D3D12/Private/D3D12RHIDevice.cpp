@@ -8,26 +8,128 @@
 
 namespace Hyperion
 {
+namespace
+{
+void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& InDesc)
+{
+	auto& Caps = InState.Capabilities;
+	Caps.Backend = ERHIBackend::D3D12;
+	Caps.ShaderFormat = EShaderFormat::Dxil;
+	Caps.Adapter = InState.AdapterName;
+	Caps.MaxRecordingContexts = ContextCount;
+	Caps.MaxSampledTextures = TextureCount;
+	Caps.MaxTextureDimension = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+	for (const auto Feature :
+	     {ERHIFeature::Graphics, ERHIFeature::TextureSampling, ERHIFeature::ConcurrentRecording, ERHIFeature::Readback})
+	{
+		Caps.Features[static_cast<std::size_t>(Feature)] = {true, true};
+	}
+	D3D12_FEATURE_DATA_D3D12_OPTIONS5 Options5{};
+	if (SUCCEEDED(InState.Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &Options5, sizeof(Options5))))
+	{
+		Caps.Features[static_cast<std::size_t>(ERHIFeature::RayTracing)].bSupported =
+		    Options5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
+	}
+	D3D12_FEATURE_DATA_D3D12_OPTIONS7 Options7{};
+	if (SUCCEEDED(InState.Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &Options7, sizeof(Options7))))
+	{
+		Caps.Features[static_cast<std::size_t>(ERHIFeature::MeshShaders)].bSupported =
+		    Options7.MeshShaderTier != D3D12_MESH_SHADER_TIER_NOT_SUPPORTED;
+	}
+	ValidateRequiredFeatures(InDesc, Caps);
+}
+
+void CreateRootSignature(FD3D12DeviceState& InState, FD3D12Pipeline& InPipeline, const FPipelineDesc& InDesc)
+{
+	D3D12_DESCRIPTOR_RANGE Range{};
+	Range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	Range.NumDescriptors = 1;
+	Range.BaseShaderRegister = 0;
+	D3D12_ROOT_PARAMETER Parameters[6]{};
+	Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+	Parameters[0].Constants = {0, 0, 16};
+	Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	Parameters[1].DescriptorTable = {1, &Range};
+	Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	D3D12_STATIC_SAMPLER_DESC Sampler{};
+	Sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	Sampler.MaxLOD = D3D12_FLOAT32_MAX;
+	Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+	Sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	D3D12_ROOT_SIGNATURE_DESC Root{};
+	Root.NumParameters = InDesc.bTextured ? 2 : 1;
+	Root.pParameters = Parameters;
+	Root.NumStaticSamplers = InDesc.bTextured ? 1 : 0;
+	Root.pStaticSamplers = &Sampler;
+	Root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	std::array<D3D12_DESCRIPTOR_RANGE, 5> MaterialRanges{};
+	std::array<D3D12_STATIC_SAMPLER_DESC, 5> MaterialSamplers{};
+	if (InDesc.bMaterialLayout)
+	{
+		Parameters[0] = {};
+		Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		const auto Address = [](ERHIAddressMode InMode)
+		{
+			return InMode == ERHIAddressMode::Clamp    ? D3D12_TEXTURE_ADDRESS_MODE_CLAMP
+			       : InMode == ERHIAddressMode::Mirror ? D3D12_TEXTURE_ADDRESS_MODE_MIRROR
+			                                           : D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		};
+		for (UINT Index = 0; Index < 5; ++Index)
+		{
+			MaterialRanges[Index] = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, Index, 0, 0};
+			Parameters[Index + 1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+			Parameters[Index + 1].DescriptorTable = {1, &MaterialRanges[Index]};
+			Parameters[Index + 1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+			const auto& Source = InDesc.Samplers[Index];
+			auto& NativeSampler = MaterialSamplers[Index];
+			NativeSampler.Filter = static_cast<D3D12_FILTER>((Source.bMinLinear ? 16 : 0) |
+			                                                 (Source.bMagLinear ? 4 : 0) | (Source.bMipLinear ? 1 : 0));
+			NativeSampler.AddressU = Address(Source.U);
+			NativeSampler.AddressV = Address(Source.V);
+			NativeSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+			NativeSampler.MaxLOD = Source.bMipmapped ? D3D12_FLOAT32_MAX : 0;
+			NativeSampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+			NativeSampler.ShaderRegister = Index;
+			NativeSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		}
+		Root.NumParameters = 6;
+		Root.NumStaticSamplers = 5;
+		Root.pStaticSamplers = MaterialSamplers.data();
+	}
+	ComPtr<ID3DBlob> Blob;
+	ComPtr<ID3DBlob> Error;
+	Check(D3D12SerializeRootSignature(&Root, D3D_ROOT_SIGNATURE_VERSION_1, &Blob, &Error), "Serialize root signature");
+	Check(InState.Device->CreateRootSignature(0, Blob->GetBufferPointer(), Blob->GetBufferSize(),
+	                                          IID_PPV_ARGS(&InPipeline.Root)),
+	      "Create root signature");
+}
+
+} // namespace
+
 FD3D12RHIDevice::FD3D12RHIDevice(const FRHIDeviceDesc& InDesc) : State(std::make_shared<FD3D12DeviceState>())
 {
 	auto& P = *State;
 	static std::once_flag DebugOnce;
-	static bool DebugEnabled = false;
+	static bool bDebugEnabled = false;
 	std::call_once(DebugOnce,
 	               [&]()
 	               {
-		               if (InDesc.EnableDebug)
+		               if (InDesc.bEnableDebug)
 		               {
 			               ComPtr<ID3D12Debug> Layer;
 			               if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&Layer))))
 			               {
 				               Layer->EnableDebugLayer();
-				               DebugEnabled = true;
+				               bDebugEnabled = true;
 			               }
 		               }
 	               });
-	P.Debug = DebugEnabled;
-	Check(CreateDXGIFactory2(P.Debug ? DXGI_CREATE_FACTORY_DEBUG : 0, IID_PPV_ARGS(&P.Factory)), "Create DXGI factory");
+	P.bDebug = bDebugEnabled;
+	Check(CreateDXGIFactory2(P.bDebug ? DXGI_CREATE_FACTORY_DEBUG : 0, IID_PPV_ARGS(&P.Factory)),
+	      "Create DXGI factory");
 	for (UINT I = 0;; ++I)
 	{
 		ComPtr<IDXGIAdapter1> Candidate;
@@ -55,36 +157,12 @@ FD3D12RHIDevice::FD3D12RHIDevice(const FRHIDeviceDesc& InDesc) : State(std::make
 	{
 		throw std::runtime_error("No hardware D3D12 feature-level 12.0 adapter found");
 	}
-	if (P.Debug)
+	if (P.bDebug)
 	{
 		P.Device.As(&P.Info);
 	}
 
-	auto& Caps = P.Capabilities;
-	Caps.Backend = ERHIBackend::D3D12;
-	Caps.ShaderFormat = EShaderFormat::Dxil;
-	Caps.Adapter = P.AdapterName;
-	Caps.MaxRecordingContexts = ContextCount;
-	Caps.MaxSampledTextures = TextureCount;
-	Caps.MaxTextureDimension = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
-	for (const auto Feature :
-	     {ERHIFeature::Graphics, ERHIFeature::TextureSampling, ERHIFeature::ConcurrentRecording, ERHIFeature::Readback})
-	{
-		Caps.Features[static_cast<std::size_t>(Feature)] = {true, true};
-	}
-	D3D12_FEATURE_DATA_D3D12_OPTIONS5 Options5{};
-	if (SUCCEEDED(P.Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &Options5, sizeof(Options5))))
-	{
-		Caps.Features[static_cast<std::size_t>(ERHIFeature::RayTracing)].Supported =
-		    Options5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED;
-	}
-	D3D12_FEATURE_DATA_D3D12_OPTIONS7 Options7{};
-	if (SUCCEEDED(P.Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &Options7, sizeof(Options7))))
-	{
-		Caps.Features[static_cast<std::size_t>(ERHIFeature::MeshShaders)].Supported =
-		    Options7.MeshShaderTier != D3D12_MESH_SHADER_TIER_NOT_SUPPORTED;
-	}
-	ValidateRequiredFeatures(InDesc, Caps);
+	InitializeCapabilities(P, InDesc);
 	D3D12MA::ALLOCATION_CALLBACKS Callbacks{};
 	Callbacks.pAllocate = [](size_t InSize, size_t InAlignment, void*) -> void*
 	{
@@ -122,7 +200,8 @@ FD3D12RHIDevice::FD3D12RHIDevice(const FRHIDeviceDesc& InDesc) : State(std::make
 		throw std::runtime_error("Create fence event failed");
 	}
 
-	Log(ELogLevel::Info, "D3D12 adapter: " + P.AdapterName + "; debug layer: " + (P.Debug ? "enabled" : "unavailable"));
+	Log(ELogLevel::Info,
+	    "D3D12 adapter: " + P.AdapterName + "; debug layer: " + (P.bDebug ? "enabled" : "unavailable"));
 }
 
 FD3D12RHIDevice::~FD3D12RHIDevice()
@@ -245,72 +324,9 @@ FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 	}
 	auto R = std::make_shared<FD3D12Pipeline>();
 	R->State = State;
-	R->Textured = InDesc.Textured;
-	R->MaterialLayout = InDesc.MaterialLayout;
-	D3D12_DESCRIPTOR_RANGE Range{};
-	Range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	Range.NumDescriptors = 1;
-	Range.BaseShaderRegister = 0;
-	D3D12_ROOT_PARAMETER Parameters[6]{};
-	Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-	Parameters[0].Constants = {0, 0, 16};
-	Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	Parameters[1].DescriptorTable = {1, &Range};
-	Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	D3D12_STATIC_SAMPLER_DESC Sampler{};
-	Sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-	Sampler.MaxLOD = D3D12_FLOAT32_MAX;
-	Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-	Sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	D3D12_ROOT_SIGNATURE_DESC Root{};
-	Root.NumParameters = InDesc.Textured ? 2 : 1;
-	Root.pParameters = Parameters;
-	Root.NumStaticSamplers = InDesc.Textured ? 1 : 0;
-	Root.pStaticSamplers = &Sampler;
-	Root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-	std::array<D3D12_DESCRIPTOR_RANGE, 5> MaterialRanges{};
-	std::array<D3D12_STATIC_SAMPLER_DESC, 5> MaterialSamplers{};
-	if (InDesc.MaterialLayout)
-	{
-		Parameters[0] = {};
-		Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		const auto Address = [](ERHIAddressMode InMode)
-		{
-			return InMode == ERHIAddressMode::Clamp    ? D3D12_TEXTURE_ADDRESS_MODE_CLAMP
-			       : InMode == ERHIAddressMode::Mirror ? D3D12_TEXTURE_ADDRESS_MODE_MIRROR
-			                                           : D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-		};
-		for (UINT Index = 0; Index < 5; ++Index)
-		{
-			MaterialRanges[Index] = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, Index, 0, 0};
-			Parameters[Index + 1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-			Parameters[Index + 1].DescriptorTable = {1, &MaterialRanges[Index]};
-			Parameters[Index + 1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-			const auto& Source = InDesc.Samplers[Index];
-			auto& NativeSampler = MaterialSamplers[Index];
-			NativeSampler.Filter = static_cast<D3D12_FILTER>((Source.MinLinear ? 16 : 0) | (Source.MagLinear ? 4 : 0) |
-			                                                 (Source.MipLinear ? 1 : 0));
-			NativeSampler.AddressU = Address(Source.U);
-			NativeSampler.AddressV = Address(Source.V);
-			NativeSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-			NativeSampler.MaxLOD = Source.Mipmapped ? D3D12_FLOAT32_MAX : 0;
-			NativeSampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-			NativeSampler.ShaderRegister = Index;
-			NativeSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		}
-		Root.NumParameters = 6;
-		Root.NumStaticSamplers = 5;
-		Root.pStaticSamplers = MaterialSamplers.data();
-	}
-	ComPtr<ID3DBlob> Blob;
-	ComPtr<ID3DBlob> Error;
-	Check(D3D12SerializeRootSignature(&Root, D3D_ROOT_SIGNATURE_VERSION_1, &Blob, &Error), "Serialize root signature");
-	Check(
-	    State->Device->CreateRootSignature(0, Blob->GetBufferPointer(), Blob->GetBufferSize(), IID_PPV_ARGS(&R->Root)),
-	    "Create root signature");
+	R->bTextured = InDesc.bTextured;
+	R->bMaterialLayout = InDesc.bMaterialLayout;
+	CreateRootSignature(*State, *R, InDesc);
 	std::vector<D3D12_INPUT_ELEMENT_DESC> Attributes;
 	for (const auto& A : InDesc.Attributes)
 	{
@@ -340,20 +356,21 @@ FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 	Pso.SampleMask = UINT_MAX;
 	Pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	Pso.NumRenderTargets = 1;
-	Pso.RTVFormats[0] = InDesc.SrgbTarget ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+	Pso.RTVFormats[0] = InDesc.bSrgbTarget ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
 	Pso.SampleDesc.Count = 1;
 	Pso.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	Pso.RasterizerState.CullMode = InDesc.CullBack ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
-	Pso.RasterizerState.FrontCounterClockwise = InDesc.FrontCounterClockwise;
+	Pso.RasterizerState.CullMode = InDesc.bCullBack ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
+	Pso.RasterizerState.FrontCounterClockwise = InDesc.bFrontCounterClockwise;
 	Pso.RasterizerState.DepthClipEnable = TRUE;
-	Pso.DepthStencilState.DepthEnable = InDesc.DepthTest;
-	Pso.DepthStencilState.DepthWriteMask = InDesc.DepthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+	Pso.DepthStencilState.DepthEnable = InDesc.bDepthTest;
+	Pso.DepthStencilState.DepthWriteMask =
+	    InDesc.bDepthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
 	Pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-	Pso.DSVFormat = InDesc.DepthTest ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
+	Pso.DSVFormat = InDesc.bDepthTest ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
 	Pso.DepthStencilState.StencilEnable = FALSE;
 	auto& Blend = Pso.BlendState.RenderTarget[0];
 	Blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-	Blend.BlendEnable = InDesc.AlphaBlend;
+	Blend.BlendEnable = InDesc.bAlphaBlend;
 	Blend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
 	Blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 	Blend.BlendOp = D3D12_BLEND_OP_ADD;
@@ -367,7 +384,7 @@ FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 FDeviceStats FD3D12RHIDevice::Statistics() const
 {
 	auto& P = *State;
-	FDeviceStats Stats{P.AdapterName, P.Debug, 0, P.Submitted, 0};
+	FDeviceStats Stats{P.AdapterName, P.bDebug, 0, P.Submitted, 0};
 	D3D12MA::Budget Local{};
 	D3D12MA::Budget Nonlocal{};
 	P.Allocator->GetBudget(&Local, &Nonlocal);

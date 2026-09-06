@@ -8,12 +8,12 @@ namespace Hyperion
 {
 void FViewerApplication::InitializeCapture()
 {
-	const bool Enabled =
+	const bool bEnabled =
 	    std::find(Settings.Plugins.begin(), Settings.Plugins.end(), "renderdoc") != Settings.Plugins.end();
 #if HYP_ENABLE_RENDERDOC
-	Metrics.FrameCapture.Compiled = true;
+	Metrics.FrameCapture.bCompiled = true;
 	Metrics.FrameCapture.Status = "RenderDoc disabled (enable plugin, save and restart)";
-	if (Enabled)
+	if (bEnabled)
 	{
 		FPluginRegistry Registry;
 		RegisterRenderDocPlugin(
@@ -30,7 +30,7 @@ void FViewerApplication::InitializeCapture()
 		}
 	}
 #else
-	if (Enabled)
+	if (bEnabled)
 	{
 		throw std::runtime_error("RenderDoc plugin is not compiled; configure HYP_ENABLE_RENDERDOC=ON");
 	}
@@ -43,8 +43,8 @@ void FViewerApplication::UpdateCaptureStatus()
 	if (FrameCapture)
 	{
 		const auto Status = FrameCapture->Status();
-		Metrics.FrameCapture.Available = Status.Available;
-		Metrics.FrameCapture.Busy =
+		Metrics.FrameCapture.bAvailable = Status.bAvailable;
+		Metrics.FrameCapture.bBusy =
 		    Status.State == EFrameCaptureState::Pending || Status.State == EFrameCaptureState::Capturing;
 		Metrics.FrameCapture.Status = Status.Message;
 		const auto Path = Status.LastCapture.u8string();
@@ -54,26 +54,26 @@ void FViewerApplication::UpdateCaptureStatus()
 #endif
 }
 
-void FViewerApplication::HandleCaptureActions(const FDebugActions& InActions, bool InScheduled)
+void FViewerApplication::HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled)
 {
 #if HYP_ENABLE_RENDERDOC
-	if (FrameCapture && (InActions.CaptureRdc || (InScheduled && !Options.ExerciseRdcUi)))
+	if (FrameCapture && (InActions.bCaptureRdc || (bInScheduled && !Options.bExerciseRdcUi)))
 	{
 		FrameCapture->RequestCapture();
 	}
-	if (FrameCapture && InActions.OpenRdc)
+	if (FrameCapture && InActions.bOpenRdc)
 	{
 		FrameCapture->OpenLastCapture();
 	}
 #else
 	(void)InActions;
-	(void)InScheduled;
+	(void)bInScheduled;
 #endif
 }
 
-void FViewerApplication::ExerciseCaptureInput(bool InScheduled, std::vector<FInputEvent>& InEvents)
+void FViewerApplication::ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents)
 {
-	if (Options.ExerciseRdcUi && (InScheduled || RdcMouseDown))
+	if (Options.bExerciseRdcUi && (bInScheduled || bRdcMouseDown))
 	{
 		FInputEvent Move;
 		Move.Type = EEventType::MouseMove;
@@ -81,10 +81,10 @@ void FViewerApplication::ExerciseCaptureInput(bool InScheduled, std::vector<FInp
 		Move.Y = (RdcButtonBounds.Y + RdcButtonBounds.W) * .5f;
 		FInputEvent Button;
 		Button.Type = EEventType::MouseButton;
-		Button.Down = InScheduled;
+		Button.bDown = bInScheduled;
 		InEvents.push_back(Move);
 		InEvents.push_back(Button);
-		RdcMouseDown = InScheduled;
+		bRdcMouseDown = bInScheduled;
 	}
 }
 } // namespace Hyperion

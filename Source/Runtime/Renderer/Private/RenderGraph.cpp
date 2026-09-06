@@ -67,11 +67,11 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 	}
 	std::vector<FPassCommands> Result;
 	std::vector<bool> Visited(Count);
-	bool Initialized = false;
-	bool DepthInitialized = false;
+	bool bInitialized = false;
+	bool bDepthInitialized = false;
 	while (Result.size() < Count)
 	{
-		bool Progress = false;
+		bool bProgress = false;
 		for (std::size_t I = 0; I < Count; ++I)
 		{
 			if (Visited[I] || !std::all_of(Deps[I].begin(), Deps[I].end(),
@@ -83,35 +83,35 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 				continue;
 			}
 			const auto& Pass = Passes[I];
-			if (Pass.Commands.ClearDepth && !Pass.Commands.UseDepth)
+			if (Pass.Commands.bClearDepth && !Pass.Commands.bUseDepth)
 			{
 				throw std::runtime_error("Depth clear requires a depth target");
 			}
-			if (Pass.Commands.UseDepth)
+			if (Pass.Commands.bUseDepth)
 			{
-				if (!DepthInitialized && !Pass.Commands.ClearDepth)
+				if (!bDepthInitialized && !Pass.Commands.bClearDepth)
 				{
 					throw std::runtime_error("Graph loads undefined depth");
 				}
-				DepthInitialized = true;
+				bDepthInitialized = true;
 			}
-			if (Pass.Load == EColorLoad::Load && !Initialized)
+			if (Pass.Load == EColorLoad::Load && !bInitialized)
 			{
 				throw std::runtime_error("Graph loads undefined color contents");
 			}
 			auto Commands = Pass.Commands;
-			Commands.Clear = Pass.Load == EColorLoad::Clear;
+			Commands.bClear = Pass.Load == EColorLoad::Clear;
 			if (Result.empty())
 			{
 				Commands.TransitionFrom = EResourceState::Present;
 				Commands.TransitionTo = EResourceState::RenderTarget;
 			}
 			Result.push_back(std::move(Commands));
-			Initialized = true;
+			bInitialized = true;
 			Visited[I] = true;
-			Progress = true;
+			bProgress = true;
 		}
-		if (!Progress)
+		if (!bProgress)
 		{
 			throw std::runtime_error("Graph dependency cycle");
 		}
@@ -125,7 +125,7 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 }
 
 FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
-                    bool InVsync, bool InCapture)
+                    bool bInVsync, bool bInCapture)
 {
 	auto Commands = InGraph.Compile();
 	// Reject unsupported graphs before acquiring a frame or dispatching any recorder.
@@ -133,7 +133,7 @@ FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapc
 	{
 		throw std::runtime_error("Graph exceeds backend recording context capacity");
 	}
-	if (InCapture && !InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::Readback).Enabled)
+	if (bInCapture && !InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::Readback).bEnabled)
 	{
 		throw std::runtime_error("Backend does not enable image readback");
 	}
@@ -150,7 +150,7 @@ FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapc
 		for (std::size_t I = 0; I < Commands.size(); ++I)
 		{
 			Recordings.push_back(InTasks.Dispatch(
-			    {EDomain::Rhi, InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).Enabled
+			    {EDomain::Rhi, InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).bEnabled
 			                       ? static_cast<std::uint32_t>(I % InTasks.RhiThreadCount())
 			                       : 0},
 			    [&, I]
@@ -168,7 +168,7 @@ FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapc
 		InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
 		                              [&]
 		                              {
-			                              Image = InSwapchain.EndFrame(Lists, InVsync, InCapture);
+			                              Image = InSwapchain.EndFrame(Lists, bInVsync, bInCapture);
 		                              }));
 		return Image;
 	}

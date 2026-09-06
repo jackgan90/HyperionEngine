@@ -17,7 +17,7 @@ EWrapMode Wrap(cgltf_wrap_mode InWrap)
 	return EWrapMode::Repeat;
 }
 
-ESamplerFilter Filter(cgltf_filter_type InFilter, bool InMagnification)
+ESamplerFilter Filter(cgltf_filter_type InFilter, bool bInMagnification)
 {
 	switch (InFilter)
 	{
@@ -32,7 +32,7 @@ ESamplerFilter Filter(cgltf_filter_type InFilter, bool InMagnification)
 		case cgltf_filter_type_nearest_mipmap_linear:
 			return ESamplerFilter::NearestMipLinear;
 		default:
-			return InMagnification ? ESamplerFilter::Linear : ESamplerFilter::LinearMipLinear;
+			return bInMagnification ? ESamplerFilter::Linear : ESamplerFilter::LinearMipLinear;
 	}
 }
 
@@ -87,8 +87,8 @@ void LoadMaterials(const cgltf_data& InData, FModelAsset& OutModel)
 		Material.AlphaMode = Source.alpha_mode == cgltf_alpha_mode_mask    ? EAlphaMode::Mask
 		                     : Source.alpha_mode == cgltf_alpha_mode_blend ? EAlphaMode::Blend
 		                                                                   : EAlphaMode::Opaque;
-		Material.DoubleSided = Source.double_sided != 0;
-		Material.Unlit = Source.unlit != 0;
+		Material.bDoubleSided = Source.double_sided != 0;
+		Material.bUnlit = Source.unlit != 0;
 		OutModel.Materials.push_back(std::move(Material));
 	}
 }

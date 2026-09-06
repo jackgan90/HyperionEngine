@@ -3,6 +3,34 @@
 
 namespace Hyperion
 {
+namespace
+{
+void ValidateTextureMips(const FTextureDesc& InSource)
+{
+	if (InSource.Mips.empty() || InSource.Mips.size() > 15)
+	{
+		throw std::invalid_argument("Invalid texture mip count");
+	}
+	const auto& Base = InSource.Mips.front();
+	if (!Base.Width || !Base.Height || Base.Width > 16384 || Base.Height > 16384)
+	{
+		throw std::invalid_argument("Invalid texture dimensions");
+	}
+	std::uint32_t Width = Base.Width;
+	std::uint32_t Height = Base.Height;
+	for (const auto& Mip : InSource.Mips)
+	{
+		if (Mip.Width != Width || Mip.Height != Height || Mip.Rgba.size() != std::size_t(Width) * Height * 4)
+		{
+			throw std::invalid_argument("Invalid mip dimensions or bytes");
+		}
+		Width = std::max(1u, Width / 2);
+		Height = std::max(1u, Height / 2);
+	}
+}
+
+} // namespace
+
 std::vector<FTexture> FD3D12RHIDevice::CreateTexturesAsync(std::span<const FTextureDesc> InTextures)
 {
 	auto& P = *State;
@@ -20,26 +48,8 @@ std::vector<FTexture> FD3D12RHIDevice::CreateTexturesAsync(std::span<const FText
 	std::vector<FTexture> Textures;
 	for (const auto& Source : InTextures)
 	{
-		if (Source.Mips.empty() || Source.Mips.size() > 15)
-		{
-			throw std::invalid_argument("Invalid texture mip count");
-		}
+		ValidateTextureMips(Source);
 		const auto& Base = Source.Mips.front();
-		if (!Base.Width || !Base.Height || Base.Width > 16384 || Base.Height > 16384)
-		{
-			throw std::invalid_argument("Invalid texture dimensions");
-		}
-		std::uint32_t Width = Base.Width;
-		std::uint32_t Height = Base.Height;
-		for (const auto& Mip : Source.Mips)
-		{
-			if (Mip.Width != Width || Mip.Height != Height || Mip.Rgba.size() != std::size_t(Width) * Height * 4)
-			{
-				throw std::invalid_argument("Invalid mip dimensions or bytes");
-			}
-			Width = std::max(1u, Width / 2);
-			Height = std::max(1u, Height / 2);
-		}
 		auto Texture = std::make_shared<FD3D12Texture>();
 		Texture->State = State;
 		D3D12_RESOURCE_DESC Desc{};
@@ -48,7 +58,7 @@ std::vector<FTexture> FD3D12RHIDevice::CreateTexturesAsync(std::span<const FText
 		Desc.Height = Base.Height;
 		Desc.DepthOrArraySize = 1;
 		Desc.MipLevels = static_cast<UINT16>(Source.Mips.size());
-		Desc.Format = Source.Srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+		Desc.Format = Source.bSrgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
 		Desc.SampleDesc.Count = 1;
 		D3D12MA::ALLOCATION_DESC Allocation{};
 		Allocation.HeapType = D3D12_HEAP_TYPE_DEFAULT;

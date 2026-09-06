@@ -8,7 +8,9 @@
 
 namespace Hyperion
 {
-FMesh LoadGltfPrimitive(const std::filesystem::path& InPath, std::size_t InMeshIndex, std::size_t InPrimitiveIndex)
+namespace
+{
+cgltf_options GltfOptions()
 {
 	cgltf_options Options{};
 	Options.memory.alloc_func = [](void*, cgltf_size InSize) -> void*
@@ -26,6 +28,14 @@ FMesh LoadGltfPrimitive(const std::filesystem::path& InPath, std::size_t InMeshI
 	{
 		Deallocate(InPtr);
 	};
+	return Options;
+}
+
+} // namespace
+
+FMesh LoadGltfPrimitive(const std::filesystem::path& InPath, std::size_t InMeshIndex, std::size_t InPrimitiveIndex)
+{
+	cgltf_options Options = GltfOptions();
 	cgltf_data* Raw{};
 	auto Name = InPath.string();
 	if (cgltf_parse_file(&Options, Name.c_str(), &Raw) != cgltf_result_success)

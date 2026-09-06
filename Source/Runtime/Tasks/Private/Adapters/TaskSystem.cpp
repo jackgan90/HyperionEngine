@@ -20,7 +20,7 @@ struct FTaskState
 {
 	std::mutex Mutex;
 	std::condition_variable Changed;
-	bool Done = false;
+	bool bDone = false;
 	std::exception_ptr Error;
 	std::vector<std::function<void()>> Continuations;
 	FTarget Target;
@@ -30,7 +30,7 @@ struct FTaskState
 	{
 		{
 			std::lock_guard Lock(Mutex);
-			if (!Done)
+			if (!bDone)
 			{
 				Continuations.push_back(std::move(InCallback));
 				return;
@@ -74,7 +74,7 @@ bool FTaskHandle::Ready() const
 		return true;
 	}
 	std::lock_guard Lock(State->Mutex);
-	return State->Done;
+	return State->bDone;
 }
 
 struct FTaskSystem::FImpl
@@ -84,7 +84,7 @@ struct FTaskSystem::FImpl
 		std::mutex Mutex;
 		std::condition_variable Changed;
 		std::deque<std::function<void()>> Pending;
-		bool Stop = false;
+		bool bStop = false;
 		std::thread Thread;
 		std::string Name;
 		std::atomic_uint64_t Executed{};
@@ -110,8 +110,8 @@ struct FTaskSystem::FImpl
 	std::mutex Admission;
 	std::mutex DrainMutex;
 	std::condition_variable Drained;
-	bool Accepting = true;
-	bool Closed = false;
+	bool bAccepting = true;
+	bool bClosed = false;
 
 	explicit FImpl(std::uint32_t InWorkers, std::uint32_t InRhi)
 	    : RhiCount(InRhi), WorkerCount(InWorkers ? InWorkers
@@ -158,9 +158,9 @@ struct FTaskSystem::FImpl
 							    Q->Changed.wait(Lock,
 							                    [&]
 							                    {
-								                    return Q->Stop || !Q->Pending.empty();
+								                    return Q->bStop || !Q->Pending.empty();
 							                    });
-							    if (Q->Stop && Q->Pending.empty())
+							    if (Q->bStop && Q->Pending.empty())
 								    break;
 							    Work = std::move(Q->Pending.front());
 							    Q->Pending.pop_front();
@@ -200,7 +200,7 @@ struct FTaskSystem::FImpl
 		{
 			{
 				std::lock_guard Lock(Q->Mutex);
-				Q->Stop = true;
+				Q->bStop = true;
 			}
 			Q->Changed.notify_all();
 		}
@@ -219,7 +219,7 @@ struct FTaskSystem::FImpl
 		{
 			std::lock_guard Lock(InState->Mutex);
 			InState->Error = InError;
-			InState->Done = true;
+			InState->bDone = true;
 			Callbacks.swap(InState->Continuations);
 		}
 		InState->Changed.notify_all();
@@ -355,7 +355,7 @@ FTaskHandle FTaskSystem::Dispatch(FTarget InTarget, std::function<void()> InBody
 	Work->Remaining = InDependencies.size() + 1;
 	{
 		std::lock_guard Lock(S.Admission);
-		if (!S.Accepting)
+		if (!S.bAccepting)
 		{
 			throw std::logic_error("Task system is shutting down");
 		}
@@ -406,7 +406,7 @@ void FTaskSystem::Wait(const FTaskHandle& InHandle)
 				State->Changed.wait_for(Lock, std::chrono::milliseconds(1),
 				                        [&]
 				                        {
-					                        return State->Done;
+					                        return State->bDone;
 				                        });
 			}
 		}
@@ -432,7 +432,7 @@ void FTaskSystem::Wait(const FTaskHandle& InHandle)
 			State->Changed.wait(Lock,
 			                    [&]
 			                    {
-				                    return State->Done;
+				                    return State->bDone;
 			                    });
 		}
 	}
@@ -459,7 +459,7 @@ void FTaskSystem::PumpMain()
 void FTaskSystem::Shutdown()
 {
 	auto& S = *Impl;
-	if (S.Closed)
+	if (S.bClosed)
 	{
 		return;
 	}
@@ -469,7 +469,7 @@ void FTaskSystem::Shutdown()
 	}
 	{
 		std::lock_guard Lock(S.Admission);
-		S.Accepting = false;
+		S.bAccepting = false;
 	}
 	while (S.Outstanding.load())
 	{
@@ -478,7 +478,7 @@ void FTaskSystem::Shutdown()
 		S.Drained.wait_for(Lock, std::chrono::milliseconds(1));
 	}
 	S.StopQueues();
-	S.Closed = true;
+	S.bClosed = true;
 	if (ActiveSystem == &S)
 	{
 		ActiveSystem = nullptr;

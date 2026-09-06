@@ -27,7 +27,7 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	}
 	else if (InArg == "--verify-model")
 	{
-		InOptions.VerifyModel = true;
+		InOptions.bVerifyModel = true;
 	}
 	else if (InArg == "--save-config" && InIndex + 1 < InArgc)
 	{
@@ -39,27 +39,27 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	}
 	else if (InArg == "--hidden")
 	{
-		InOptions.Hidden = true;
+		InOptions.bHidden = true;
 	}
 	else if (InArg == "--exercise-window")
 	{
-		InOptions.Exercise = true;
+		InOptions.bExercise = true;
 	}
 	else if (InArg == "--verify-clear")
 	{
-		InOptions.VerifyClear = true;
+		InOptions.bVerifyClear = true;
 	}
 	else if (InArg == "--verify-triangle")
 	{
-		InOptions.VerifyTriangle = true;
+		InOptions.bVerifyTriangle = true;
 	}
 	else if (InArg == "--verify-ui")
 	{
-		InOptions.VerifyUi = true;
+		InOptions.bVerifyUi = true;
 	}
 	else if (InArg == "--no-ui")
 	{
-		InOptions.NoUi = true;
+		InOptions.bNoUi = true;
 	}
 	else
 	{
@@ -72,12 +72,12 @@ bool ParseCaptureOption(FOptions& InOptions, const std::string& InArg, int InArg
 {
 	if (InArg == "--renderdoc")
 	{
-		InOptions.RenderDoc = true;
+		InOptions.bRenderDoc = true;
 	}
 	else if (InArg == "--renderdoc-library" && InIndex + 1 < InArgc)
 	{
 		InOptions.RenderDocLibrary = InArgv[++InIndex];
-		InOptions.RenderDoc = true;
+		InOptions.bRenderDoc = true;
 	}
 	else if (InArg == "--rdc-output" && InIndex + 1 < InArgc)
 	{
@@ -86,16 +86,16 @@ bool ParseCaptureOption(FOptions& InOptions, const std::string& InArg, int InArg
 	else if (InArg == "--capture-rdc" && InIndex + 1 < InArgc)
 	{
 		InOptions.RdcFrames.push_back(std::stoi(InArgv[++InIndex]));
-		InOptions.RenderDoc = true;
+		InOptions.bRenderDoc = true;
 	}
 	else if (InArg == "--open-rdc")
 	{
-		InOptions.OpenRdc = true;
-		InOptions.RenderDoc = true;
+		InOptions.bOpenRdc = true;
+		InOptions.bRenderDoc = true;
 	}
 	else if (InArg == "--exercise-rdc-ui")
 	{
-		InOptions.ExerciseRdcUi = true;
+		InOptions.bExerciseRdcUi = true;
 	}
 	else
 	{
@@ -110,13 +110,13 @@ void ValidateOptions(FOptions& InOptions)
 	{
 		throw std::invalid_argument("--frames must be nonnegative");
 	}
-	if ((!InOptions.Capture.empty() || InOptions.VerifyClear || InOptions.VerifyTriangle || InOptions.VerifyUi ||
-	     InOptions.VerifyModel) &&
+	if ((!InOptions.Capture.empty() || InOptions.bVerifyClear || InOptions.bVerifyTriangle || InOptions.bVerifyUi ||
+	     InOptions.bVerifyModel) &&
 	    InOptions.Frames == 0)
 	{
 		throw std::invalid_argument("Capture verification requires a bounded --frames run");
 	}
-	if ((InOptions.VerifyClear || InOptions.VerifyTriangle || InOptions.VerifyUi || InOptions.VerifyModel) &&
+	if ((InOptions.bVerifyClear || InOptions.bVerifyTriangle || InOptions.bVerifyUi || InOptions.bVerifyModel) &&
 	    InOptions.Capture.empty())
 	{
 		throw std::invalid_argument("Verification requires --capture");
@@ -125,14 +125,14 @@ void ValidateOptions(FOptions& InOptions)
 	for (std::size_t I = 0; I < InOptions.RdcFrames.size(); ++I)
 	{
 		if (InOptions.RdcFrames[I] < 1 || !InOptions.Frames ||
-		    InOptions.RdcFrames[I] + int(InOptions.ExerciseRdcUi) > InOptions.Frames ||
-		    (I && InOptions.RdcFrames[I] <= InOptions.RdcFrames[I - 1] + int(InOptions.ExerciseRdcUi)))
+		    InOptions.RdcFrames[I] + int(InOptions.bExerciseRdcUi) > InOptions.Frames ||
+		    (I && InOptions.RdcFrames[I] <= InOptions.RdcFrames[I - 1] + int(InOptions.bExerciseRdcUi)))
 		{
 			throw std::invalid_argument("--capture-rdc requires distinct positive frame numbers within --frames (UI "
 			                            "exercise needs one release frame)");
 		}
 	}
-	if (InOptions.ExerciseRdcUi && (InOptions.RdcFrames.empty() || InOptions.NoUi))
+	if (InOptions.bExerciseRdcUi && (InOptions.RdcFrames.empty() || InOptions.bNoUi))
 	{
 		throw std::invalid_argument("--exercise-rdc-ui requires --capture-rdc and the debug UI");
 	}
@@ -181,8 +181,8 @@ void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings)
 	{
 		InSettings.RenderDocOutput = *InOptions.RdcOutput;
 	}
-	InSettings.RenderDocAutoOpen = InSettings.RenderDocAutoOpen || InOptions.OpenRdc;
-	if (InOptions.RenderDoc &&
+	InSettings.bRenderDocAutoOpen = InSettings.bRenderDocAutoOpen || InOptions.bOpenRdc;
+	if (InOptions.bRenderDoc &&
 	    std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "renderdoc") == InSettings.Plugins.end())
 	{
 		InSettings.Plugins.push_back("renderdoc");
@@ -191,7 +191,7 @@ void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings)
 
 void VerifyImage(const FImage& InImage, const FAppSettings& InSettings, const FOptions& InOptions)
 {
-	if (InOptions.VerifyModel)
+	if (InOptions.bVerifyModel)
 	{
 		std::size_t Colored{};
 		for (std::size_t Index = 0; Index < InImage.Rgba.size(); Index += 4)
@@ -206,7 +206,7 @@ void VerifyImage(const FImage& InImage, const FAppSettings& InSettings, const FO
 			throw std::runtime_error("Model readback has insufficient visible geometry");
 		}
 	}
-	if (InOptions.VerifyClear)
+	if (InOptions.bVerifyClear)
 	{
 		for (std::size_t I = 0; I < InImage.Rgba.size(); I += 4)
 		{
@@ -218,7 +218,7 @@ void VerifyImage(const FImage& InImage, const FAppSettings& InSettings, const FO
 			}
 		}
 	}
-	if (InOptions.VerifyTriangle)
+	if (InOptions.bVerifyTriangle)
 	{
 		auto Center = (std::size_t(InImage.Height / 2) * InImage.Width + InImage.Width / 2) * 4;
 		auto Corner = (std::size_t(10) * InImage.Width + 10) * 4;
@@ -228,7 +228,7 @@ void VerifyImage(const FImage& InImage, const FAppSettings& InSettings, const FO
 			throw std::runtime_error("Triangle readback mismatch");
 		}
 	}
-	if (InOptions.VerifyUi)
+	if (InOptions.bVerifyUi)
 	{
 		std::size_t Bright{};
 		for (std::uint32_t Y = 30; Y < std::min(InImage.Height, 650u); ++Y)

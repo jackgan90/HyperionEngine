@@ -6,7 +6,7 @@
 namespace Hyperion::Private
 {
 inline constexpr std::size_t MaxImportBytes = 512u * 1024u * 1024u;
-void Require(bool InValue, const std::string& InMessage);
+void Require(bool bInValue, const std::string& InMessage);
 std::string Name(const char* InName);
 std::shared_ptr<const FBytes> ReadUri(FAssetLoadContext& InContext, const char* InUri);
 void ValidateAccessorRanges(const cgltf_data& InData);

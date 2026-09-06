@@ -61,14 +61,14 @@ struct FInputEvent
 	std::uint32_t Button{};
 	std::uint32_t Modifiers{};
 	EKey Key{};
-	bool Down{};
+	bool bDown{};
 	std::string Text;
 };
 
 class FWindow
 {
 public:
-	FWindow(std::string InTitle, FSize InSize, bool InHidden = false);
+	FWindow(std::string InTitle, FSize InSize, bool bInHidden = false);
 	~FWindow();
 	FWindow(const FWindow&) = delete;
 	FWindow& operator=(const FWindow&) = delete;

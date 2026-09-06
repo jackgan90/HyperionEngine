@@ -27,7 +27,7 @@ FAssetService::~FAssetService()
 void FAssetService::Register(FAssetCodec InCodec)
 {
 	std::lock_guard Lock(Mutex);
-	if (Loading || Closing || !InCodec.Load || InCodec.TypeId.empty())
+	if (bLoading || bClosing || !InCodec.Load || InCodec.TypeId.empty())
 	{
 		throw std::logic_error("Register codecs before loading");
 	}
@@ -51,11 +51,11 @@ TAsyncResult<std::shared_ptr<const void>> FAssetService::Load(const std::filesys
 	const auto Path = std::filesystem::absolute(InPath).lexically_normal();
 	const auto Key = std::make_pair(Path, InType.Id);
 	std::lock_guard Lock(Mutex);
-	if (Closing)
+	if (bClosing)
 	{
 		throw std::logic_error("Asset service is closing");
 	}
-	Loading = true;
+	bLoading = true;
 	if (auto It = Cache.find(Key); It != Cache.end())
 	{
 		if (!It->second.Ready())
@@ -110,7 +110,7 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
                                        std::shared_ptr<const void> InSnapshot)
 {
 	std::lock_guard Lock(Mutex);
-	if (Closing || !InSnapshot)
+	if (bClosing || !InSnapshot)
 	{
 		throw std::logic_error("Invalid asset save request");
 	}
@@ -124,10 +124,10 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
 			    throw std::runtime_error("Asset export is supported only for .hasset archives");
 		    }
 		    auto Bytes = EncodeArchive(WriteRecord(Type, Snapshot.get()));
-		    const bool Written = *IO.WriteAsync(Path, std::move(Bytes), Cancellation).Get(IO.TaskSystem());
+		    const bool bWritten = *IO.WriteAsync(Path, std::move(Bytes), Cancellation).Get(IO.TaskSystem());
 		    std::lock_guard CacheLock(Mutex);
 		    Cache.erase(std::make_pair(Path, Type.Id));
-		    return Written;
+		    return bWritten;
 	    },
 	    Cancellation);
 	Pending.push_back(Result.Task());
@@ -139,7 +139,7 @@ void FAssetService::Drain()
 	std::vector<FTaskHandle> Work;
 	{
 		std::lock_guard Lock(Mutex);
-		Closing = true;
+		bClosing = true;
 		Work = Pending;
 	}
 	for (const auto& Task : Work)

@@ -40,7 +40,7 @@ void ValidateRequiredFeatures(const FRHIDeviceDesc& InDesc, const FRHICapabiliti
 	for (ERHIFeature Feature : InDesc.RequiredFeatures)
 	{
 		const FRHIFeatureSupport Support = InCapabilities.QueryFeature(Feature);
-		if (!Support.Supported || !Support.Enabled)
+		if (!Support.bSupported || !Support.bEnabled)
 		{
 			throw std::runtime_error("Required RHI feature cannot be enabled by " +
 			                         std::string(GetRHIBackendName(InCapabilities.Backend)) + ": " +

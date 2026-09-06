@@ -205,6 +205,74 @@ FShaderCompiler::FShaderCompiler(std::filesystem::path InRoot, std::filesystem::
 
 FShaderCompiler::~FShaderCompiler() = default;
 
+namespace
+{
+std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::filesystem::path& InRoot,
+                           const std::string& InEntry, EShaderStage InStage, EShaderFormat InFormat)
+{
+	std::string Identity = "hyperion-shader-v2:" HYP_TOOLCHAIN_ID;
+	auto Append = [&](const std::string& InPart)
+	{
+		Identity += std::to_string(InPart.size()) + ":" + InPart;
+	};
+	Append(InPath.lexically_relative(InRoot).generic_string());
+	Append(InEntry);
+	Append(std::to_string(static_cast<int>(InStage)));
+	Append(std::to_string(static_cast<int>(InFormat)));
+	std::vector<std::filesystem::path> Files;
+	for (const auto& Item : std::filesystem::recursive_directory_iterator(InRoot))
+	{
+		if (Item.is_regular_file())
+		{
+			Files.push_back(Item.path());
+		}
+	}
+	std::sort(Files.begin(), Files.end());
+	for (const auto& File : Files)
+	{
+		Append(File.lexically_relative(InRoot).generic_string());
+		Append(Read(File));
+	}
+	return Sha256(Identity);
+}
+
+void ReflectShaderPayload(FShaderArtifact& InArtifact, std::string& InPayload)
+{
+	if (InArtifact.Format != EShaderFormat::Dxil)
+	{
+		if (InPayload.size() % 4)
+		{
+			throw std::runtime_error("Invalid SPIR-V size");
+		}
+		std::vector<std::uint32_t> Words(InPayload.size() / 4);
+		std::memcpy(Words.data(), InPayload.data(), InPayload.size());
+		spirv_cross::CompilerMSL Cross(std::move(Words));
+		auto Resources = Cross.get_shader_resources();
+		auto Reflect = [&](const auto& InList, EBindingKind InKind)
+		{
+			for (const auto& R : InList)
+			{
+				std::uint32_t Size{};
+				if (InKind == EBindingKind::UniformBuffer)
+				{
+					Size = static_cast<std::uint32_t>(Cross.get_declared_struct_size(Cross.get_type(R.base_type_id)));
+				}
+				InArtifact.Bindings.push_back({R.name, InKind, Cross.get_decoration(R.id, spv::DecorationBinding),
+				                               Cross.get_decoration(R.id, spv::DecorationDescriptorSet), Size});
+			}
+		};
+		Reflect(Resources.uniform_buffers, EBindingKind::UniformBuffer);
+		Reflect(Resources.separate_images, EBindingKind::Texture);
+		Reflect(Resources.separate_samplers, EBindingKind::Sampler);
+		if (InArtifact.Format == EShaderFormat::Msl)
+		{
+			InPayload = Cross.compile();
+		}
+	}
+}
+
+} // namespace
+
 FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, std::string InEntry,
                                          EShaderStage InStage, EShaderFormat InFormat)
 {
@@ -215,32 +283,9 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 	{
 		throw std::invalid_argument("Shader outside source root");
 	}
-	std::string Identity = "hyperion-shader-v2:" HYP_TOOLCHAIN_ID;
-	auto Append = [&](const std::string& InPart)
-	{
-		Identity += std::to_string(InPart.size()) + ":" + InPart;
-	};
-	Append(Path.lexically_relative(Impl->Root).generic_string());
-	Append(InEntry);
-	Append(std::to_string(static_cast<int>(InStage)));
-	Append(std::to_string(static_cast<int>(InFormat)));
-	std::vector<std::filesystem::path> Files;
-	for (const auto& Item : std::filesystem::recursive_directory_iterator(Impl->Root))
-	{
-		if (Item.is_regular_file())
-		{
-			Files.push_back(Item.path());
-		}
-	}
-	std::sort(Files.begin(), Files.end());
-	for (const auto& File : Files)
-	{
-		Append(File.lexically_relative(Impl->Root).generic_string());
-		Append(Read(File));
-	}
 	FShaderArtifact Artifact{};
 	Artifact.Format = InFormat;
-	Artifact.CacheKey = Sha256(Identity);
+	Artifact.CacheKey = ShaderCacheKey(Path, Impl->Root, InEntry, InStage, InFormat);
 	auto CacheFile = Impl->Cache / (Artifact.CacheKey + ".bin");
 	std::string Payload;
 	if (std::filesystem::exists(CacheFile))
@@ -249,10 +294,10 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 		if (Cached.size() > 65 && Cached[64] == '\n' && Sha256(Cached.substr(65)) == Cached.substr(0, 64))
 		{
 			Payload = Cached.substr(65);
-			Artifact.CacheHit = true;
+			Artifact.bCacheHit = true;
 		}
 	}
-	if (!Artifact.CacheHit)
+	if (!Artifact.bCacheHit)
 	{
 		auto Content = Read(Path);
 		DxcBuffer Buffer{Content.data(), Content.size(), DXC_CP_UTF8};
@@ -306,37 +351,7 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 			throw std::runtime_error("Shader cache write failed");
 		}
 	}
-	if (InFormat != EShaderFormat::Dxil)
-	{
-		if (Payload.size() % 4)
-		{
-			throw std::runtime_error("Invalid SPIR-V size");
-		}
-		std::vector<std::uint32_t> Words(Payload.size() / 4);
-		std::memcpy(Words.data(), Payload.data(), Payload.size());
-		spirv_cross::CompilerMSL Cross(std::move(Words));
-		auto Resources = Cross.get_shader_resources();
-		auto Reflect = [&](const auto& InList, EBindingKind InKind)
-		{
-			for (const auto& R : InList)
-			{
-				std::uint32_t Size{};
-				if (InKind == EBindingKind::UniformBuffer)
-				{
-					Size = static_cast<std::uint32_t>(Cross.get_declared_struct_size(Cross.get_type(R.base_type_id)));
-				}
-				Artifact.Bindings.push_back({R.name, InKind, Cross.get_decoration(R.id, spv::DecorationBinding),
-				                             Cross.get_decoration(R.id, spv::DecorationDescriptorSet), Size});
-			}
-		};
-		Reflect(Resources.uniform_buffers, EBindingKind::UniformBuffer);
-		Reflect(Resources.separate_images, EBindingKind::Texture);
-		Reflect(Resources.separate_samplers, EBindingKind::Sampler);
-		if (InFormat == EShaderFormat::Msl)
-		{
-			Payload = Cross.compile();
-		}
-	}
+	ReflectShaderPayload(Artifact, Payload);
 	Artifact.Bytes.assign(Payload.begin(), Payload.end());
 	return Artifact;
 }

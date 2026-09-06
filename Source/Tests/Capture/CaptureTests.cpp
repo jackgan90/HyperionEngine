@@ -17,7 +17,7 @@ void Unavailable(const std::filesystem::path& InLibrary)
 	HYP_CHECK(!Capture.RequestCapture());
 	Capture.Initialize();
 	HYP_CHECK(Capture.Status().State == EFrameCaptureState::Unavailable);
-	HYP_CHECK(!Capture.Status().Available);
+	HYP_CHECK(!Capture.Status().bAvailable);
 	HYP_CHECK(!Capture.RequestCapture());
 	HYP_CHECK(!Capture.BeginFrame({}));
 	HYP_CHECK(!Capture.EndFrame());
@@ -29,12 +29,82 @@ void Unavailable(const std::filesystem::path& InLibrary)
 	HYP_CHECK(Capture.Status().State == EFrameCaptureState::Disabled);
 }
 
+template<class RhiOperation, class DrawOperation>
+void CheckCaptureOwnership(FFrameCapture& InCapture, FFrameCapture& InExternal, FNativeSurface InSurface,
+                           const RhiOperation& InRhi, const DrawOperation& InDraw)
+{
+	HYP_CHECK(InCapture.RequestCapture());
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(InCapture.BeginFrame(InSurface));
+	    });
+	HYP_CHECK(!InExternal.RequestCapture());
+	InExternal.Cancel(); // Must not discard InCapture's active capture.
+	InDraw();
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(InCapture.EndFrame());
+	    });
+	const auto First = InCapture.Status().LastCapture;
+	HYP_CHECK(std::filesystem::file_size(First) > 0);
+	HYP_CHECK(InCapture.Status().CompletedCaptures == 1);
+
+	HYP_CHECK(InCapture.RequestCapture());
+	HYP_CHECK(InExternal.RequestCapture());
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(InExternal.BeginFrame(InSurface));
+	    });
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(!InCapture.BeginFrame(InSurface));
+	    });
+	HYP_CHECK(InCapture.Status().State == EFrameCaptureState::Failed);
+	HYP_CHECK(InCapture.Status().LastCapture == First);
+	HYP_CHECK(InCapture.Status().CompletedCaptures == 1);
+	HYP_CHECK(!InCapture.EndFrame());
+	InCapture.Cancel();
+	InDraw();
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(InExternal.EndFrame());
+	    });
+
+	HYP_CHECK(InCapture.RequestCapture());
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(InCapture.BeginFrame(InSurface));
+		    InCapture.Cancel();
+	    });
+	HYP_CHECK(InCapture.Status().CompletedCaptures == 1);
+	HYP_CHECK(InCapture.RequestCapture());
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(InCapture.BeginFrame(InSurface));
+	    });
+	InDraw();
+	InRhi(
+	    [&]
+	    {
+		    HYP_CHECK(InCapture.EndFrame());
+	    });
+	HYP_CHECK(InCapture.Status().CompletedCaptures == 2);
+	HYP_CHECK(InCapture.Status().LastCapture != First);
+}
+
 int Runtime()
 {
 	const auto Root = std::filesystem::absolute("capture-service-tests") / std::to_string(ClockNanoseconds());
 	FFrameCapture Capture({{}, Root / std::filesystem::path(u8"RDC 测试"), "Service"});
 	Capture.Initialize();
-	if (!Capture.Status().Available)
+	if (!Capture.Status().bAvailable)
 	{
 		std::cout << "SKIP: " << Capture.Status().Message << '\n';
 		return 77;
@@ -83,70 +153,7 @@ int Runtime()
 			                          ExecuteGraph(Graph, Tasks, *Swapchain, {128, 128}, false, false);
 		                          }));
 	};
-	HYP_CHECK(Capture.RequestCapture());
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(Capture.BeginFrame(Surface));
-	    });
-	HYP_CHECK(!External.RequestCapture());
-	External.Cancel(); // Must not discard Capture's active capture.
-	Draw();
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(Capture.EndFrame());
-	    });
-	const auto First = Capture.Status().LastCapture;
-	HYP_CHECK(std::filesystem::file_size(First) > 0);
-	HYP_CHECK(Capture.Status().CompletedCaptures == 1);
-
-	HYP_CHECK(Capture.RequestCapture());
-	HYP_CHECK(External.RequestCapture());
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(External.BeginFrame(Surface));
-	    });
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(!Capture.BeginFrame(Surface));
-	    });
-	HYP_CHECK(Capture.Status().State == EFrameCaptureState::Failed);
-	HYP_CHECK(Capture.Status().LastCapture == First);
-	HYP_CHECK(Capture.Status().CompletedCaptures == 1);
-	HYP_CHECK(!Capture.EndFrame());
-	Capture.Cancel();
-	Draw();
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(External.EndFrame());
-	    });
-
-	HYP_CHECK(Capture.RequestCapture());
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(Capture.BeginFrame(Surface));
-		    Capture.Cancel();
-	    });
-	HYP_CHECK(Capture.Status().CompletedCaptures == 1);
-	HYP_CHECK(Capture.RequestCapture());
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(Capture.BeginFrame(Surface));
-	    });
-	Draw();
-	Rhi(
-	    [&]
-	    {
-		    HYP_CHECK(Capture.EndFrame());
-	    });
-	HYP_CHECK(Capture.Status().CompletedCaptures == 2);
-	HYP_CHECK(Capture.Status().LastCapture != First);
+	CheckCaptureOwnership(Capture, External, Surface, Rhi, Draw);
 
 	const auto Blocker = Root / "OutputIsAFile";
 	std::ofstream(Blocker) << "sentinel";

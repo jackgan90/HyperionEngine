@@ -59,9 +59,9 @@ EKey Translate(SDL_Keycode InKey)
 	}
 }
 
-void Check(bool InOk)
+void Check(bool bInOk)
 {
-	if (!InOk)
+	if (!bInOk)
 	{
 		throw std::runtime_error(std::string("SDL: ") + SDL_GetError());
 	}
@@ -89,7 +89,7 @@ struct FWindow::FImpl
 	FNativeSurface Surface;
 	std::thread::id Owner = std::this_thread::get_id();
 	std::vector<FInputEvent> Events;
-	bool Close = false;
+	bool bClose = false;
 
 	~FImpl()
 	{
@@ -108,11 +108,11 @@ struct FWindow::FImpl
 	}
 };
 
-FWindow::FWindow(std::string InTitle, FSize InSize, bool InHidden) : Impl(std::make_unique<FImpl>())
+FWindow::FWindow(std::string InTitle, FSize InSize, bool bInHidden) : Impl(std::make_unique<FImpl>())
 {
 	Impl->Window =
 	    SDL_CreateWindow(InTitle.c_str(), static_cast<int>(InSize.Width), static_cast<int>(InSize.Height),
-	                     SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | (InHidden ? SDL_WINDOW_HIDDEN : 0));
+	                     SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | (bInHidden ? SDL_WINDOW_HIDDEN : 0));
 	if (!Impl->Window)
 	{
 		const std::string Error = SDL_GetError();
@@ -140,7 +140,7 @@ void FWindow::Poll()
 			case SDL_EVENT_QUIT:
 			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 				Event.Type = EEventType::Quit;
-				Impl->Close = true;
+				Impl->bClose = true;
 				break;
 			case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
 				Event.Type = EEventType::Resize;
@@ -155,7 +155,7 @@ void FWindow::Poll()
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
 			case SDL_EVENT_MOUSE_BUTTON_UP:
 				Event.Type = EEventType::MouseButton;
-				Event.Down = Native.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+				Event.bDown = Native.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
 				Event.Button = Native.button.button == SDL_BUTTON_LEFT     ? 0
 				               : Native.button.button == SDL_BUTTON_RIGHT  ? 1
 				               : Native.button.button == SDL_BUTTON_MIDDLE ? 2
@@ -175,7 +175,7 @@ void FWindow::Poll()
 			case SDL_EVENT_KEY_DOWN:
 			case SDL_EVENT_KEY_UP:
 				Event.Type = EEventType::Key;
-				Event.Down = Native.type == SDL_EVENT_KEY_DOWN;
+				Event.bDown = Native.type == SDL_EVENT_KEY_DOWN;
 				Event.Key = Translate(Native.key.key);
 				Event.Modifiers =
 				    ((Native.key.mod & SDL_KMOD_CTRL) ? 1u : 0u) | ((Native.key.mod & SDL_KMOD_SHIFT) ? 2u : 0u) |
@@ -188,7 +188,7 @@ void FWindow::Poll()
 			case SDL_EVENT_WINDOW_FOCUS_GAINED:
 			case SDL_EVENT_WINDOW_FOCUS_LOST:
 				Event.Type = EEventType::Focus;
-				Event.Down = Native.type == SDL_EVENT_WINDOW_FOCUS_GAINED;
+				Event.bDown = Native.type == SDL_EVENT_WINDOW_FOCUS_GAINED;
 				break;
 			default:
 				continue;
@@ -200,7 +200,7 @@ void FWindow::Poll()
 bool FWindow::ShouldClose() const
 {
 	Impl->RequireOwner();
-	return Impl->Close;
+	return Impl->bClose;
 }
 
 bool FWindow::Minimized() const
@@ -259,7 +259,7 @@ void FWindow::Restore()
 void FWindow::RequestClose()
 {
 	Impl->RequireOwner();
-	Impl->Close = true;
+	Impl->bClose = true;
 }
 
 std::string FWindow::Clipboard() const

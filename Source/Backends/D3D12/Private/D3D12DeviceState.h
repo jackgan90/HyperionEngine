@@ -23,7 +23,7 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	HANDLE Event{};
 	std::uint64_t NextFence = 1;
 	std::uint64_t Submitted{};
-	bool Debug{};
+	bool bDebug{};
 	std::string AdapterName;
 	FRHICapabilities Capabilities;
 	~FD3D12DeviceState();

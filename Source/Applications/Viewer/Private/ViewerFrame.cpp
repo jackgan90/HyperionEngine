@@ -10,7 +10,7 @@ namespace Hyperion
 void FViewerApplication::RunFrames()
 {
 	auto LastFrame = ClockNanoseconds();
-	if (Options.ExerciseRdcUi && (!Gui || !Settings.ShowGui))
+	if (Options.bExerciseRdcUi && (!Gui || !Settings.bShowGui))
 	{
 		throw std::runtime_error("RDC UI exercise requires a visible diagnostics panel");
 	}
@@ -33,9 +33,9 @@ void FViewerApplication::PollInput()
 		Metrics.AssetStatus = ModelPlugin->Status();
 		for (const auto& Event : Window->Events())
 		{
-			if (Event.Type == EEventType::Key && Event.Key == EKey::Tab && Event.Down)
+			if (Event.Type == EEventType::Key && Event.Key == EKey::Tab && Event.bDown)
 			{
-				Settings.ShowGui = !Settings.ShowGui;
+				Settings.bShowGui = !Settings.bShowGui;
 			}
 		}
 	}
@@ -43,7 +43,7 @@ void FViewerApplication::PollInput()
 
 void FViewerApplication::ExerciseWindow(int InFrame)
 {
-	if (!Options.Exercise)
+	if (!Options.bExercise)
 	{
 		return;
 	}
@@ -66,7 +66,7 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 {
 	UpdateCaptureStatus();
 	FDebugActions Actions;
-	if (Gui && Settings.ShowGui)
+	if (Gui && Settings.bShowGui)
 	{
 		std::vector<FInputEvent> UiEvents(Window->Events().begin(), Window->Events().end());
 		ExerciseCaptureInput(std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1),
@@ -99,32 +99,32 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	FGuiDrawData GuiData;
 	const auto Actions = BuildGui(InFrame, InDelta, Logical, Size, GuiData);
 	HandleCaptureActions(Actions, std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1));
-	if (Actions.Save)
+	if (Actions.bSave)
 	{
 		SaveSettingsAsync(Options.Config);
 		Log(ELogLevel::Info, "Experiment save queued: " + Options.Config.string());
 	}
 	if (ModelPlugin)
 	{
-		ModelPlugin->Input(Window->Events(), Gui && Settings.ShowGui && Gui->WantsMouse(),
-		                   Gui && Settings.ShowGui && Gui->WantsKeyboard());
+		ModelPlugin->Input(Window->Events(), Gui && Settings.bShowGui && Gui->WantsMouse(),
+		                   Gui && Settings.bShowGui && Gui->WantsKeyboard());
 	}
-	const bool TakeCapture = Actions.Capture || (!Options.Capture.empty() && InFrame == Options.Frames - 1);
-	auto Screenshot = RenderFrame(Size, GuiData, TakeCapture);
-	if (TakeCapture)
+	const bool bTakeCapture = Actions.bCapture || (!Options.Capture.empty() && InFrame == Options.Frames - 1);
+	auto Screenshot = RenderFrame(Size, GuiData, bTakeCapture);
+	if (bTakeCapture)
 	{
 		SaveScreenshot(std::move(Screenshot));
 	}
 	ProfileFrame();
 }
 
-FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool InTakeCapture)
+FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture)
 {
 	auto& Tasks = Services->Tasks;
 	FImage Screenshot;
 #if HYP_ENABLE_RENDERDOC
 	const auto Surface = Window->Surface();
-	bool RdcSucceeded = false;
+	bool bRdcSucceeded = false;
 #endif
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 	                          [&]
@@ -156,9 +156,9 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 			                          }
 		                          }
 		                          Screenshot =
-		                              ExecuteGraph(Graph, Tasks, *Swapchain, InSize, Settings.Vsync, InTakeCapture);
+		                              ExecuteGraph(Graph, Tasks, *Swapchain, InSize, Settings.bVsync, bInTakeCapture);
 #if HYP_ENABLE_RENDERDOC
-		                          RdcSucceeded = CaptureScope.Finish();
+		                          bRdcSucceeded = CaptureScope.Finish();
 #endif
 		                          Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 		                                                    [&]
@@ -167,7 +167,7 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 		                                                    }));
 	                          }));
 #if HYP_ENABLE_RENDERDOC
-	if (RdcSucceeded && Settings.RenderDocAutoOpen)
+	if (bRdcSucceeded && Settings.bRenderDocAutoOpen)
 	{
 		FrameCapture->OpenLastCapture();
 	}

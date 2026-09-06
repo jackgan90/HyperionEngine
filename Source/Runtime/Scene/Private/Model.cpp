@@ -6,9 +6,9 @@ namespace Hyperion
 {
 namespace
 {
-void Require(bool InCondition, const char* InMessage)
+void Require(bool bInCondition, const char* InMessage)
 {
-	if (!InCondition)
+	if (!bInCondition)
 	{
 		throw std::runtime_error(InMessage);
 	}
@@ -23,10 +23,10 @@ void Include(FBounds& InBounds, FVec3 InPoint)
 {
 	Require(std::isfinite(InPoint.X) && std::isfinite(InPoint.Y) && std::isfinite(InPoint.Z),
 	        "Non-finite transformed model bounds");
-	if (!InBounds.Valid)
+	if (!InBounds.bValid)
 	{
 		InBounds.Minimum = InBounds.Maximum = InPoint;
-		InBounds.Valid = true;
+		InBounds.bValid = true;
 	}
 	InBounds.Minimum = {std::min(InBounds.Minimum.X, InPoint.X), std::min(InBounds.Minimum.Y, InPoint.Y),
 	                    std::min(InBounds.Minimum.Z, InPoint.Z)};
@@ -192,7 +192,7 @@ FBounds ModelBounds(const FModelAsset& InModel)
 	for (const auto& Instance : ModelInstances(InModel))
 	{
 		auto& Local = LocalBounds[Instance.Primitive];
-		if (!Local.Valid)
+		if (!Local.bValid)
 		{
 			const auto& Positions = InModel.Primitives[Instance.Primitive].Positions;
 			for (std::size_t Index = 0; Index < Positions.size(); Index += 3)
@@ -218,7 +218,7 @@ void GenerateMeshDirections(FModelPrimitive& InPrimitive, std::uint32_t InTangen
 		return;
 	}
 	const auto Count = InPrimitive.Positions.size() / 3;
-	const bool MissingNormals = InPrimitive.Normals.empty();
+	const bool bMissingNormals = InPrimitive.Normals.empty();
 	std::vector<FVec3> Normals(Count);
 	std::vector<FVec3> Tangents(Count);
 	std::vector<FVec3> Bitangents(Count);
@@ -256,25 +256,25 @@ void GenerateMeshDirections(FModelPrimitive& InPrimitive, std::uint32_t InTangen
 			}
 		}
 	}
-	if (MissingNormals)
+	if (bMissingNormals)
 	{
 		InPrimitive.Normals.resize(Count * 3);
 	}
-	const bool MissingTangents = InPrimitive.Tangents.empty();
-	if (MissingTangents)
+	const bool bMissingTangents = InPrimitive.Tangents.empty();
+	if (bMissingTangents)
 	{
 		InPrimitive.Tangents.resize(Count * 4);
 	}
 	for (std::size_t Index = 0; Index < Count; ++Index)
 	{
-		const auto Normal = Normalize(MissingNormals ? Normals[Index] : VectorAt(InPrimitive.Normals, Index));
-		if (MissingNormals)
+		const auto Normal = Normalize(bMissingNormals ? Normals[Index] : VectorAt(InPrimitive.Normals, Index));
+		if (bMissingNormals)
 		{
 			InPrimitive.Normals[Index * 3] = Normal.X;
 			InPrimitive.Normals[Index * 3 + 1] = Normal.Y;
 			InPrimitive.Normals[Index * 3 + 2] = Normal.Z;
 		}
-		if (MissingTangents)
+		if (bMissingTangents)
 		{
 			auto Tangent = Subtract(Tangents[Index], ScaleVector(Normal, Dot(Normal, Tangents[Index])));
 			if (Length(Tangent) < 1e-10f)

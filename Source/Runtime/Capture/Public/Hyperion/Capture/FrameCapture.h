@@ -27,7 +27,7 @@ struct FFrameCaptureSettings
 struct FFrameCaptureStatus
 {
 	EFrameCaptureState State = EFrameCaptureState::Disabled;
-	bool Available = false;
+	bool bAvailable = false;
 	std::string Message = "RenderDoc is disabled (restart to enable)";
 	std::filesystem::path LastCapture;
 	std::uint64_t CompletedCaptures = 0;

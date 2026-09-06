@@ -9,9 +9,9 @@ namespace
 {
 using namespace Hyperion;
 
-void Check(bool InValue, const char* InMessage)
+void Check(bool bInValue, const char* InMessage)
 {
-	if (!InValue)
+	if (!bInValue)
 	{
 		throw std::runtime_error(InMessage);
 	}
@@ -40,16 +40,16 @@ int main()
 		          Mesh.Vertices[0].Position.Y == 1,
 		      "glTF triangle");
 		Check(MemoryStats(EMemoryTag::Assets).LiveBytes == 0, "cgltf frees tracked allocations");
-		bool Failed = false;
+		bool bFailed = false;
 		try
 		{
 			LoadGltfPrimitive("asset-test/missing.gltf");
 		}
 		catch (...)
 		{
-			Failed = true;
+			bFailed = true;
 		}
-		Check(Failed, "Missing mesh error");
+		Check(bFailed, "Missing mesh error");
 		FImage Source{2, 2, EColorSpace::Linear, {1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 3, 1, .25f, .5f, .75f, 1}};
 		SaveImage("asset-test/test.exr", Source);
 		auto Exr = LoadImageFile("asset-test/test.exr");

@@ -197,14 +197,14 @@ void FGui::BeginFrame(FSize InLogical, FSize InPixels, float InDelta, std::span<
 			case EEventType::MouseButton:
 				if (E.Button < 5)
 				{
-					Io.AddMouseButtonEvent(static_cast<int>(E.Button), E.Down);
+					Io.AddMouseButtonEvent(static_cast<int>(E.Button), E.bDown);
 				}
 				break;
 			case EEventType::MouseWheel:
 				Io.AddMouseWheelEvent(E.X, E.Y);
 				break;
 			case EEventType::Focus:
-				Io.AddFocusEvent(E.Down);
+				Io.AddFocusEvent(E.bDown);
 				break;
 			case EEventType::Text:
 				Io.AddInputCharactersUTF8(E.Text.c_str());
@@ -216,7 +216,7 @@ void FGui::BeginFrame(FSize InLogical, FSize InPixels, float InDelta, std::span<
 				Io.AddKeyEvent(ImGuiMod_Super, (E.Modifiers & 8) != 0);
 				if (auto Mapped = Key(E.Key); Mapped != ImGuiKey_None)
 				{
-					Io.AddKeyEvent(Mapped, E.Down);
+					Io.AddKeyEvent(Mapped, E.bDown);
 				}
 				break;
 			default:
@@ -274,19 +274,19 @@ void FGui::Separator()
 	ImGui::Separator();
 }
 
-bool FGui::Button(const char* InLabel, bool InEnabled)
+bool FGui::Button(const char* InLabel, bool bInEnabled)
 {
 	Impl->Select();
-	ImGui::BeginDisabled(!InEnabled);
-	const bool Pressed = ImGui::Button(InLabel);
+	ImGui::BeginDisabled(!bInEnabled);
+	const bool bPressed = ImGui::Button(InLabel);
 	ImGui::EndDisabled();
-	return Pressed;
+	return bPressed;
 }
 
-bool FGui::Checkbox(const char* InLabel, bool& InValue)
+bool FGui::Checkbox(const char* InLabel, bool& bInValue)
 {
 	Impl->Select();
-	return ImGui::Checkbox(InLabel, &InValue);
+	return ImGui::Checkbox(InLabel, &bInValue);
 }
 
 bool FGui::Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum)
@@ -306,7 +306,7 @@ FVec4 FGui::LastItemBounds()
 bool FGui::EditProperties(const FTypeDescriptor& InType, void* InObject, std::span<const std::string_view> InIds)
 {
 	Impl->Select();
-	bool Edited = false;
+	bool bEdited = false;
 	ImGui::PushItemWidth(155);
 	for (const auto& P : InType.Properties)
 	{
@@ -315,18 +315,18 @@ bool FGui::EditProperties(const FTypeDescriptor& InType, void* InObject, std::sp
 			continue;
 		}
 		auto Value = P.Get(InObject);
-		bool Changed = false;
+		bool bChanged = false;
 		ImGui::PushID(P.Id.c_str());
 		if (P.Kind == EPropertyKind::Boolean)
 		{
-			auto V = std::get<bool>(Value);
-			Changed = ImGui::Checkbox(P.Label.c_str(), &V);
-			Value = V;
+			auto bV = std::get<bool>(Value);
+			bChanged = ImGui::Checkbox(P.Label.c_str(), &bV);
+			Value = bV;
 		}
 		if (P.Kind == EPropertyKind::Number)
 		{
 			auto V = std::get<double>(Value);
-			Changed = ImGui::SliderScalar(P.Label.c_str(), ImGuiDataType_Double, &V, &P.Minimum, &P.Maximum, "%.3f");
+			bChanged = ImGui::SliderScalar(P.Label.c_str(), ImGuiDataType_Double, &V, &P.Minimum, &P.Maximum, "%.3f");
 			Value = V;
 		}
 		if (P.Kind == EPropertyKind::Integer)
@@ -334,18 +334,18 @@ bool FGui::EditProperties(const FTypeDescriptor& InType, void* InObject, std::sp
 			auto V = std::get<std::int64_t>(Value);
 			auto Low = static_cast<std::int64_t>(P.Minimum);
 			auto High = static_cast<std::int64_t>(P.Maximum);
-			Changed = ImGui::SliderScalar(P.Label.c_str(), ImGuiDataType_S64, &V, &Low, &High);
+			bChanged = ImGui::SliderScalar(P.Label.c_str(), ImGuiDataType_S64, &V, &Low, &High);
 			Value = V;
 		}
-		if (Changed)
+		if (bChanged)
 		{
 			P.Set(InObject, Value);
-			Edited = true;
+			bEdited = true;
 		}
 		ImGui::PopID();
 	}
 	ImGui::PopItemWidth();
-	return Edited;
+	return bEdited;
 }
 
 void FGui::Plot(const char* InLabel, std::span<const float> InValues, float InMaximum)

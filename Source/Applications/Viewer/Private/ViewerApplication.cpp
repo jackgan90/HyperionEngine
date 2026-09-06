@@ -41,7 +41,7 @@ FViewerApplication::FViewerApplication(FOptions InOptions)
 
 FViewerApplication::~FViewerApplication()
 {
-	if (Services && !Stopped)
+	if (Services && !bStopped)
 	{
 		Services->DrainWrites();
 		Services->Assets.Drain();
@@ -68,7 +68,7 @@ void FViewerApplication::InitializeGraphics()
 	Services = std::make_unique<FViewerServices>(Settings);
 	Window = std::make_unique<FWindow>(
 	    Settings.Title, FSize{static_cast<unsigned>(Settings.Width), static_cast<unsigned>(Settings.Height)},
-	    Options.Hidden);
+	    Options.bHidden);
 	const auto Surface = Window->Surface();
 	const auto InitialSize = Window->PixelSize();
 	auto& Tasks = Services->Tasks;
@@ -86,8 +86,8 @@ void FViewerApplication::InitializeGraphics()
 
 void FViewerApplication::InitializePlugins()
 {
-	auto Requested = Options.VerifyClear ? std::vector<std::string>{} : Settings.Plugins;
-	if (Options.NoUi)
+	auto Requested = Options.bVerifyClear ? std::vector<std::string>{} : Settings.Plugins;
+	if (Options.bNoUi)
 	{
 		std::erase(Requested, std::string("debug-ui"));
 	}
@@ -164,7 +164,7 @@ void FViewerApplication::Shutdown()
 		                         std::to_string(Thread.ThreadId));
 	}
 	Services->Tasks.Shutdown();
-	Stopped = true;
+	bStopped = true;
 	Log(ELogLevel::Info, "GPU frames: " + std::to_string(Stats.SubmittedFrames) +
 	                         "; validation errors: " + std::to_string(Stats.ValidationErrors));
 	if (Stats.ValidationErrors)

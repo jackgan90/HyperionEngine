@@ -5,6 +5,49 @@
 
 namespace Hyperion
 {
+namespace
+{
+void ValidateDraws(const FD3D12DeviceState* InState, const FPassCommands& InCommands)
+{
+	for (const auto& Draw : InCommands.Draws)
+	{
+		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, InState);
+		const auto& Vertices = NativeResource<FD3D12Buffer>(Draw.Vertices.Payload, InState);
+		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, InState);
+		if (!Draw.VertexStride || Vertices.Size > UINT_MAX || Indices.Size > UINT_MAX ||
+		    (std::uint64_t(Draw.FirstIndex) + Draw.IndexCount) * 4 > Indices.Size)
+		{
+			throw std::invalid_argument("Invalid draw packet");
+		}
+		if (Draw.Texture || Pipeline.bTextured)
+		{
+			NativeResource<FD3D12Texture>(Draw.Texture.Payload, InState);
+		}
+		if (Pipeline.bMaterialLayout)
+		{
+			if (!InCommands.bUseDepth)
+			{
+				throw std::invalid_argument("Material pass requires depth target");
+			}
+			const auto& Constants = NativeResource<FD3D12Buffer>(Draw.MaterialConstants.Payload, InState);
+			if (Constants.Size < 512 || Draw.MaterialConstantOffset > Constants.Size - 512 ||
+			    Draw.MaterialConstantOffset % 256 || Constants.Resource->GetGPUVirtualAddress() % 256)
+			{
+				throw std::invalid_argument("Invalid material constant buffer");
+			}
+			for (const auto& Texture : Draw.MaterialTextures)
+			{
+				const auto& NativeTexture = NativeResource<FD3D12Texture>(Texture.Payload, InState);
+				if (NativeTexture.UploadFence > InState->Fence->GetCompletedValue())
+				{
+					throw std::invalid_argument("Texture upload is not ready");
+				}
+			}
+		}
+	}
+}
+} // namespace
+
 #if defined(HYP_TEST_D3D12_PRESENT)
 // Linked only by the native fault-injection test target; normal builds call DXGI directly.
 HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval);
@@ -35,8 +78,8 @@ struct FD3D12RHISwapchain::FImpl
 	UINT RtvStep{};
 	std::uint64_t Serial{};
 	FSize Size;
-	bool Active{};
-	bool SubmissionStarted{};
+	bool bActive{};
+	bool bSubmissionStarted{};
 
 	void Idle()
 	{
@@ -148,7 +191,7 @@ const FRHICapabilities& FD3D12RHISwapchain::GetCapabilities() const noexcept
 void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 {
 	auto& P = *Impl;
-	if (P.Active)
+	if (P.bActive)
 	{
 		throw std::logic_error("Frame already active");
 	}
@@ -172,58 +215,23 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 	auto& F = P.Frames[P.FrameIndex];
 	P.State->Wait(F.FenceValue);
 	F.Retained.clear();
-	for (auto& B : F.Recorded)
+	for (auto& bRecorded : F.Recorded)
 	{
-		B = false;
+		bRecorded = false;
 	}
-	P.Active = true;
-	P.SubmissionStarted = false;
+	P.bActive = true;
+	P.bSubmissionStarted = false;
 	++P.Serial;
 }
 
 FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCommands& InCommands)
 {
 	auto& P = *Impl;
-	if (!P.Active || InContext >= ContextCount)
+	if (!P.bActive || InContext >= ContextCount)
 	{
 		throw std::invalid_argument("Invalid recording context");
 	}
-	for (const auto& Draw : InCommands.Draws)
-	{
-		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, P.State.get());
-		const auto& Vertices = NativeResource<FD3D12Buffer>(Draw.Vertices.Payload, P.State.get());
-		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, P.State.get());
-		if (!Draw.VertexStride || Vertices.Size > UINT_MAX || Indices.Size > UINT_MAX ||
-		    (std::uint64_t(Draw.FirstIndex) + Draw.IndexCount) * 4 > Indices.Size)
-		{
-			throw std::invalid_argument("Invalid draw packet");
-		}
-		if (Draw.Texture || Pipeline.Textured)
-		{
-			NativeResource<FD3D12Texture>(Draw.Texture.Payload, P.State.get());
-		}
-		if (Pipeline.MaterialLayout)
-		{
-			if (!InCommands.UseDepth)
-			{
-				throw std::invalid_argument("Material pass requires depth target");
-			}
-			const auto& Constants = NativeResource<FD3D12Buffer>(Draw.MaterialConstants.Payload, P.State.get());
-			if (Constants.Size < 512 || Draw.MaterialConstantOffset > Constants.Size - 512 ||
-			    Draw.MaterialConstantOffset % 256 || Constants.Resource->GetGPUVirtualAddress() % 256)
-			{
-				throw std::invalid_argument("Invalid material constant buffer");
-			}
-			for (const auto& Texture : Draw.MaterialTextures)
-			{
-				const auto& NativeTexture = NativeResource<FD3D12Texture>(Texture.Payload, P.State.get());
-				if (NativeTexture.UploadFence > P.State->Fence->GetCompletedValue())
-				{
-					throw std::invalid_argument("Texture upload is not ready");
-				}
-			}
-		}
-	}
+	ValidateDraws(P.State.get(), InCommands);
 	auto& Frame = P.Frames[P.FrameIndex];
 	if (Frame.Recorded[InContext].exchange(true))
 	{
@@ -248,14 +256,14 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		           Native(*InCommands.TransitionTo));
 	}
 	auto Rtv = P.Rtvs->GetCPUDescriptorHandleForHeapStart();
-	Rtv.ptr += std::size_t(P.FrameIndex + (InCommands.SrgbTarget ? FrameCount : 0)) * P.RtvStep;
+	Rtv.ptr += std::size_t(P.FrameIndex + (InCommands.bSrgbTarget ? FrameCount : 0)) * P.RtvStep;
 	auto Dsv = P.Dsvs->GetCPUDescriptorHandleForHeapStart();
-	List->OMSetRenderTargets(1, &Rtv, FALSE, InCommands.UseDepth ? &Dsv : nullptr);
-	if (InCommands.ClearDepth)
+	List->OMSetRenderTargets(1, &Rtv, FALSE, InCommands.bUseDepth ? &Dsv : nullptr);
+	if (InCommands.bClearDepth)
 	{
 		List->ClearDepthStencilView(Dsv, D3D12_CLEAR_FLAG_DEPTH, 1, 0, 0, nullptr);
 	}
-	if (InCommands.Clear)
+	if (InCommands.bClear)
 	{
 		float Color[] = {InCommands.ClearColor.X, InCommands.ClearColor.Y, InCommands.ClearColor.Z,
 		                 InCommands.ClearColor.W};
@@ -273,7 +281,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, P.State.get());
 		List->SetPipelineState(Pipeline.Pipeline.Get());
 		List->SetGraphicsRootSignature(Pipeline.Root.Get());
-		if (Pipeline.MaterialLayout)
+		if (Pipeline.bMaterialLayout)
 		{
 			List->SetGraphicsRootConstantBufferView(
 			    0, NativeResource<FD3D12Buffer>(Draw.MaterialConstants.Payload, P.State.get())
@@ -291,7 +299,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		{
 			List->SetGraphicsRoot32BitConstants(0, 16, Draw.Constants.Values.data(), 0);
 		}
-		if (Pipeline.Textured)
+		if (Pipeline.bTextured)
 		{
 			if (!Draw.Texture)
 			{
@@ -315,10 +323,10 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	return {std::move(R)};
 }
 
-FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool InVsync, bool InCapture)
+FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool bInVsync, bool bInCapture)
 {
 	auto& P = *Impl;
-	if (!P.Active || InLists.empty())
+	if (!P.bActive || InLists.empty())
 	{
 		throw std::logic_error("No active frame commands");
 	}
@@ -337,10 +345,10 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 		NativeLists.push_back(NativeList.List.Get());
 	}
 	Frame.Retained.assign(InLists.begin(), InLists.end());
-	P.SubmissionStarted = true;
+	P.bSubmissionStarted = true;
 	P.State->Queue->ExecuteCommandLists(static_cast<UINT>(NativeLists.size()), NativeLists.data());
 	FImage Result;
-	if (InCapture)
+	if (bInCapture)
 	{
 		auto Desc = P.Backbuffers[P.FrameIndex]->GetDesc();
 		D3D12_PLACED_SUBRESOURCE_FOOTPRINT Footprint{};
@@ -379,32 +387,32 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 		Readback->Resource->Unmap(0, &Written);
 	}
 #if defined(HYP_TEST_D3D12_PRESENT)
-	auto Hr = PresentForTesting(P.Swapchain.Get(), InVsync ? 1 : 0);
+	auto Hr = PresentForTesting(P.Swapchain.Get(), bInVsync ? 1 : 0);
 #else
-	auto Hr = P.Swapchain->Present(InVsync ? 1 : 0, 0);
+	auto Hr = P.Swapchain->Present(bInVsync ? 1 : 0, 0);
 #endif
 	Frame.FenceValue = P.State->Signal();
 	++P.State->Submitted;
 	// A failed Present must remain cancellable until submitted work has drained.
 	Check(Hr, "Present swapchain");
-	P.Active = false;
+	P.bActive = false;
 	return Result;
 }
 
 void FD3D12RHISwapchain::CancelFrame()
 {
 	auto& P = *Impl;
-	if (!P.Active)
+	if (!P.bActive)
 	{
 		return;
 	}
-	if (P.SubmissionStarted)
+	if (P.bSubmissionStarted)
 	{
 		// Keep Active and retained resources intact if draining the device fails.
 		P.Idle();
 	}
 	P.Frames[P.FrameIndex].Retained.clear();
-	P.Active = false;
+	P.bActive = false;
 }
 
 void FD3D12RHISwapchain::WaitIdle()

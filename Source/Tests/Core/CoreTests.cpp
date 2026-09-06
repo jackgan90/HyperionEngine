@@ -47,16 +47,16 @@ int main()
 		HYP_CHECK(Hyperion::ProfileStats().Nanoseconds > 0);
 		HYP_CHECK(Hyperion::MemoryStats(Hyperion::EMemoryTag::Core).LiveBytes == 0);
 		HYP_CHECK(Hyperion::MemoryStats(Hyperion::EMemoryTag::Assets).LiveBytes == 0);
-		bool Rejected = false;
+		bool bRejected = false;
 		try
 		{
 			(void)Hyperion::Allocate(16, 3);
 		}
 		catch (const std::invalid_argument&)
 		{
-			Rejected = true;
+			bRejected = true;
 		}
-		HYP_CHECK(Rejected);
+		HYP_CHECK(bRejected);
 		Hyperion::ShutdownLog();
 		std::cout << "Core integration passed\n";
 		return 0;

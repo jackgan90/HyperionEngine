@@ -13,16 +13,16 @@ using namespace Hyperion;
 
 template<class F> void Rejects(F InOperation)
 {
-	bool Failed = false;
+	bool bFailed = false;
 	try
 	{
 		InOperation();
 	}
 	catch (const std::exception&)
 	{
-		Failed = true;
+		bFailed = true;
 	}
-	HYP_CHECK(Failed);
+	HYP_CHECK(bFailed);
 }
 
 // Deliberately implemented using only public contracts; this target never links a native backend.
@@ -40,8 +40,8 @@ public:
 
 	void BeginFrame(FSize) override
 	{
-		HYP_CHECK(!Active);
-		Active = true;
+		HYP_CHECK(!bActive);
+		bActive = true;
 		Recorded = 0;
 		++Begun;
 	}
@@ -59,11 +59,11 @@ public:
 	FImage EndFrame(std::span<const FRecordedList> InLists, bool, bool) override
 	{
 		HYP_CHECK(InLists.size() == Recorded);
-		if (FailEnd)
+		if (bFailEnd)
 		{
 			throw std::runtime_error("injected submission failure");
 		}
-		Active = false;
+		bActive = false;
 		++Submitted;
 		return {1, 1, EColorSpace::Linear, {1, 0, 0, 1}};
 	}
@@ -78,15 +78,15 @@ public:
 		{
 			OnCancel();
 		}
-		Active = false;
+		bActive = false;
 		++Cancelled;
 	}
 
 	FRHICapabilities Capabilities;
 	std::function<void(std::uint32_t)> OnRecord;
 	std::function<void()> OnCancel;
-	bool Active{};
-	bool FailEnd{};
+	bool bActive{};
+	bool bFailEnd{};
 	std::uint32_t Begun{};
 	std::atomic<std::uint32_t> Recorded{};
 	std::uint32_t Submitted{};
@@ -173,25 +173,25 @@ void CheckFrameErrors(const FRHICapabilities& InCapabilities)
 	Clear.Commands.Name = "clear";
 	Clear.Load = EColorLoad::Clear;
 	Graph.Add(Clear);
-	std::atomic<bool> PeerStarted{};
-	std::atomic<bool> PeerFinished{};
+	std::atomic<bool> bPeerStarted{};
+	std::atomic<bool> bPeerFinished{};
 	Swapchain.OnRecord = [&](std::uint32_t InContext)
 	{
 		if (InContext == 0)
 		{
-			while (!PeerStarted)
+			while (!bPeerStarted)
 			{
 				std::this_thread::yield();
 			}
 			throw std::runtime_error("injected recording failure");
 		}
-		PeerStarted = true;
+		bPeerStarted = true;
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-		PeerFinished = true;
+		bPeerFinished = true;
 	};
 	Swapchain.OnCancel = [&]
 	{
-		HYP_CHECK(PeerFinished);
+		HYP_CHECK(bPeerFinished);
 	};
 	const auto Execute = [&]
 	{
@@ -202,14 +202,14 @@ void CheckFrameErrors(const FRHICapabilities& InCapabilities)
 		                          }));
 	};
 	Rejects(Execute);
-	HYP_CHECK(PeerFinished && Swapchain.Cancelled == 1 && !Swapchain.Active && Swapchain.Submitted == 0);
+	HYP_CHECK(bPeerFinished && Swapchain.Cancelled == 1 && !Swapchain.bActive && Swapchain.Submitted == 0);
 	Swapchain.OnRecord = {};
 	Execute();
 	HYP_CHECK(Swapchain.Submitted == 1);
-	Swapchain.FailEnd = true;
+	Swapchain.bFailEnd = true;
 	Rejects(Execute);
-	HYP_CHECK(Swapchain.Cancelled == 2 && !Swapchain.Active);
-	Swapchain.FailEnd = false;
+	HYP_CHECK(Swapchain.Cancelled == 2 && !Swapchain.bActive);
+	Swapchain.bFailEnd = false;
 	Execute();
 	HYP_CHECK(Swapchain.Submitted == 2);
 	Tasks.Shutdown();
@@ -261,9 +261,9 @@ int main()
 			    });
 		}
 		HYP_CHECK(Device->GetCapabilities().ShaderFormat == EShaderFormat::Spirv);
-		HYP_CHECK(Device->QueryFeature(ERHIFeature::RayTracing).Supported);
-		HYP_CHECK(!Device->QueryFeature(ERHIFeature::RayTracing).Enabled);
-		HYP_CHECK(!Device->QueryFeature(ERHIFeature::MeshShaders).Enabled);
+		HYP_CHECK(Device->QueryFeature(ERHIFeature::RayTracing).bSupported);
+		HYP_CHECK(!Device->QueryFeature(ERHIFeature::RayTracing).bEnabled);
+		HYP_CHECK(!Device->QueryFeature(ERHIFeature::MeshShaders).bEnabled);
 		Rejects(
 		    [&]
 		    {
@@ -288,7 +288,7 @@ int main()
 		    });
 		HYP_CHECK(Test.Begun == 1); // Capacity failure must not acquire a frame.
 		Test.Capabilities.MaxRecordingContexts = 2;
-		Test.Capabilities.Features[static_cast<std::size_t>(ERHIFeature::Readback)].Enabled = false;
+		Test.Capabilities.Features[static_cast<std::size_t>(ERHIFeature::Readback)].bEnabled = false;
 		Rejects(
 		    [&]
 		    {

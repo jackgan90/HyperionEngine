@@ -37,10 +37,10 @@ private:
 	void PollInput();
 	void ExerciseWindow(int InFrame);
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
-	void ExerciseCaptureInput(bool InScheduled, std::vector<FInputEvent>& InEvents);
-	FImage RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool InTakeCapture);
+	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
+	FImage RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture);
 	void UpdateCaptureStatus();
-	void HandleCaptureActions(const FDebugActions& InActions, bool InScheduled);
+	void HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled);
 	void SaveSettingsAsync(const std::filesystem::path& InPath);
 	void SaveScreenshot(FImage InImage);
 	void VerifyOutputs();
@@ -65,8 +65,8 @@ private:
 	FDebugUiPlugin* GuiPlugin{};
 	FModelViewerPlugin* ModelPlugin{};
 	FVec4 RdcButtonBounds;
-	bool RdcMouseDown{};
-	bool Captured{};
-	bool Stopped{};
+	bool bRdcMouseDown{};
+	bool bCaptured{};
+	bool bStopped{};
 };
 } // namespace Hyperion

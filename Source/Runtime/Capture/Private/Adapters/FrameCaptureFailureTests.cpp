@@ -8,13 +8,13 @@
 
 namespace
 {
-bool Capturing = false;
-bool StopsOnFailure = false;
+bool bCapturing = false;
+bool bStopsOnFailure = false;
 std::uint32_t DiscardCalls = 0;
 
-void Check(bool InCondition, std::source_location InLocation = std::source_location::current())
+void Check(bool bInCondition, std::source_location InLocation = std::source_location::current())
 {
-	if (!InCondition)
+	if (!bInCondition)
 	{
 		throw std::runtime_error("Capture failure recovery check failed at line " + std::to_string(InLocation.line()));
 	}
@@ -22,12 +22,12 @@ void Check(bool InCondition, std::source_location InLocation = std::source_locat
 
 void RENDERDOC_CC Start(RENDERDOC_DevicePointer, RENDERDOC_WindowHandle)
 {
-	Capturing = true;
+	bCapturing = true;
 }
 
 std::uint32_t RENDERDOC_CC IsCapturing()
 {
-	return Capturing;
+	return bCapturing;
 }
 
 std::uint32_t RENDERDOC_CC End(RENDERDOC_DevicePointer, RENDERDOC_WindowHandle)
@@ -39,10 +39,10 @@ std::uint32_t RENDERDOC_CC Discard(RENDERDOC_DevicePointer, RENDERDOC_WindowHand
 {
 	if (++DiscardCalls == 1)
 	{
-		Capturing = !StopsOnFailure;
+		bCapturing = !bStopsOnFailure;
 		return 0;
 	}
-	Capturing = false;
+	bCapturing = false;
 	return 1;
 }
 
@@ -53,7 +53,7 @@ struct FScopedFailure
 
 	explicit FScopedFailure(RENDERDOC_API_1_6_0& InApi) : Api(InApi), Original(InApi)
 	{
-		Capturing = false;
+		bCapturing = false;
 		DiscardCalls = 0;
 		Api.StartFrameCapture = Start;
 		Api.IsFrameCapturing = IsCapturing;
@@ -78,7 +78,7 @@ int main()
 		{
 			FFrameCapture Capture({{}, "capture-failure-tests", "Failure"});
 			Capture.Initialize();
-			if (!Capture.Status().Available)
+			if (!Capture.Status().bAvailable)
 			{
 				std::cout << "SKIP: " << Capture.Status().Message << '\n';
 				return 77;
@@ -88,7 +88,7 @@ int main()
 			RENDERDOC_API_1_6_0* Api = nullptr;
 			Check(GetApi && GetApi(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&Api)) && Api);
 			FScopedFailure Failure(*Api);
-			StopsOnFailure = Case == 3;
+			bStopsOnFailure = Case == 3;
 			Check(Capture.RequestCapture());
 			Check(Capture.BeginFrame({}));
 			if (Case == 1)
@@ -105,19 +105,19 @@ int main()
 			}
 			Check(DiscardCalls == 1);
 			Check(Capture.Status().CompletedCaptures == 0 && Capture.Status().LastCapture.empty());
-			if (StopsOnFailure)
+			if (bStopsOnFailure)
 			{
-				Check(!Capturing && Capture.Status().Available);
+				Check(!bCapturing && Capture.Status().bAvailable);
 				Check(Capture.RequestCapture());
 				Capture.Cancel();
 				Check(DiscardCalls == 1);
 				continue;
 			}
-			Check(Capturing && !Capture.Status().Available);
+			Check(bCapturing && !Capture.Status().bAvailable);
 			Check(Capture.Status().State == EFrameCaptureState::Failed);
 			Check(Capture.Status().Message.find("still active") != std::string::npos);
 			Capture.Initialize();
-			Check(!Capture.Status().Available && !Capture.RequestCapture());
+			Check(!Capture.Status().bAvailable && !Capture.RequestCapture());
 			if (Case == 1)
 			{
 				Capture.Shutdown();
@@ -127,8 +127,8 @@ int main()
 			{
 				Capture.Cancel();
 			}
-			Check(DiscardCalls == 2 && !Capturing);
-			Check(!Capture.Status().Available);
+			Check(DiscardCalls == 2 && !bCapturing);
+			Check(!Capture.Status().bAvailable);
 		}
 		std::cout << "Cancel/End/Shutdown failure ownership, retry and inactive-error recovery passed\n";
 		return 0;

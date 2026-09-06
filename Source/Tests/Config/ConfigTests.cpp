@@ -11,16 +11,16 @@ struct FProbe final : Hyperion::FPlugin
 {
 	std::vector<int>& Events;
 	int Id;
-	bool Fail;
+	bool bFail;
 
-	FProbe(std::vector<int>& InE, int InI, bool InF = false) : Events(InE), Id(InI), Fail(InF)
+	FProbe(std::vector<int>& InE, int InI, bool bInF = false) : Events(InE), Id(InI), bFail(bInF)
 	{
 	}
 
 	void Start() override
 	{
 		Events.push_back(Id);
-		if (Fail)
+		if (bFail)
 		{
 			throw std::runtime_error("expected startup failure");
 		}
@@ -31,54 +31,61 @@ struct FProbe final : Hyperion::FPlugin
 		Events.push_back(-Id);
 	}
 };
+
+void CheckSettingsPersistence()
+{
+	Hyperion::FAppSettings Settings;
+	Settings.Width = 960;
+	Settings.TriangleScale = 0.6;
+	Settings.Plugins = {"triangle"};
+	Hyperion::SaveSettings("test-settings.json", Settings);
+	const auto Loaded = Hyperion::LoadSettings("test-settings.json");
+	HYP_CHECK(Loaded.Width == 960 && Loaded.TriangleScale == 0.6 && Loaded.Plugins == Settings.Plugins);
+	{
+		std::ofstream File("test-invalid.json");
+		File
+		    << R"({"type":"hyperion.application-settings","schema_version":1,"properties":{"title":"changed","width":-20}})";
+	}
+	const auto Before = Settings;
+	bool bRejected = false;
+	try
+	{
+		Hyperion::LoadReflected("test-invalid.json", Hyperion::SettingsType(), &Settings);
+	}
+	catch (const std::exception&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected && Settings.Width == Before.Width && Settings.Title == Before.Title);
+	{
+		std::ofstream File("test-invalid.json");
+		File << R"({"type":"hyperion.application-settings","schema_version":99,"properties":{}})";
+	}
+	bRejected = false;
+	try
+	{
+		(void)Hyperion::LoadSettings("test-invalid.json");
+	}
+	catch (const std::exception&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+	{
+		std::ofstream File("test-defaults.json");
+		File << R"({"type":"hyperion.application-settings","schema_version":1,"properties":{"width":800}})";
+	}
+	HYP_CHECK(Hyperion::LoadSettings("test-defaults.json").Height == Hyperion::FAppSettings{}.Height);
+}
+
 } // namespace
 
 int main()
 {
 	try
 	{
-		Hyperion::FAppSettings Settings;
-		Settings.Width = 960;
-		Settings.TriangleScale = 0.6;
-		Settings.Plugins = {"triangle"};
-		Hyperion::SaveSettings("test-settings.json", Settings);
-		const auto Loaded = Hyperion::LoadSettings("test-settings.json");
-		HYP_CHECK(Loaded.Width == 960 && Loaded.TriangleScale == 0.6 && Loaded.Plugins == Settings.Plugins);
-		{
-			std::ofstream File("test-invalid.json");
-			File
-			    << R"({"type":"hyperion.application-settings","schema_version":1,"properties":{"title":"changed","width":-20}})";
-		}
-		const auto Before = Settings;
-		bool Rejected = false;
-		try
-		{
-			Hyperion::LoadReflected("test-invalid.json", Hyperion::SettingsType(), &Settings);
-		}
-		catch (const std::exception&)
-		{
-			Rejected = true;
-		}
-		HYP_CHECK(Rejected && Settings.Width == Before.Width && Settings.Title == Before.Title);
-		{
-			std::ofstream File("test-invalid.json");
-			File << R"({"type":"hyperion.application-settings","schema_version":99,"properties":{}})";
-		}
-		Rejected = false;
-		try
-		{
-			(void)Hyperion::LoadSettings("test-invalid.json");
-		}
-		catch (const std::exception&)
-		{
-			Rejected = true;
-		}
-		HYP_CHECK(Rejected);
-		{
-			std::ofstream File("test-defaults.json");
-			File << R"({"type":"hyperion.application-settings","schema_version":1,"properties":{"width":800}})";
-		}
-		HYP_CHECK(Hyperion::LoadSettings("test-defaults.json").Height == Hyperion::FAppSettings{}.Height);
+		CheckSettingsPersistence();
+		bool bRejected = false;
 		std::vector<int> Events;
 		Hyperion::FPluginRegistry Registry;
 		Registry.Add({"base",
@@ -106,16 +113,16 @@ int main()
 			              return std::make_unique<FProbe>(Events, 3, true);
 		              }});
 		Events.clear();
-		Rejected = false;
+		bRejected = false;
 		try
 		{
 			(void)Registry.Activate(std::array{std::string("failure")});
 		}
 		catch (const std::exception&)
 		{
-			Rejected = true;
+			bRejected = true;
 		}
-		HYP_CHECK(Rejected && (Events == std::vector<int>{1, 3, -3, -1}));
+		HYP_CHECK(bRejected && (Events == std::vector<int>{1, 3, -3, -1}));
 		Registry.Add({"cycle-a",
 		              {"cycle-b"},
 		              [&]
@@ -128,26 +135,26 @@ int main()
 		              {
 			              return std::make_unique<FProbe>(Events, 5);
 		              }});
-		Rejected = false;
+		bRejected = false;
 		try
 		{
 			(void)Registry.Activate(std::array{std::string("cycle-a")});
 		}
 		catch (const std::exception&)
 		{
-			Rejected = true;
+			bRejected = true;
 		}
-		HYP_CHECK(Rejected);
-		Rejected = false;
+		HYP_CHECK(bRejected);
+		bRejected = false;
 		try
 		{
 			(void)Registry.Activate(std::array{std::string("missing")});
 		}
 		catch (const std::exception&)
 		{
-			Rejected = true;
+			bRejected = true;
 		}
-		HYP_CHECK(Rejected);
+		HYP_CHECK(bRejected);
 		std::cout << "Configuration and plugins passed\n";
 	}
 	catch (const std::exception& E)

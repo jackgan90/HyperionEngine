@@ -22,13 +22,13 @@ FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, co
 {
 	FDebugActions Actions;
 	InGui.Text("RENDERDOC");
-	if (InMetrics.Compiled)
+	if (InMetrics.bCompiled)
 	{
-		bool Enabled =
+		bool bEnabled =
 		    std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "renderdoc") != InSettings.Plugins.end();
-		if (InGui.Checkbox("RenderDoc plugin (restart)", Enabled))
+		if (InGui.Checkbox("RenderDoc plugin (restart)", bEnabled))
 		{
-			if (Enabled)
+			if (bEnabled)
 			{
 				InSettings.Plugins.push_back("renderdoc");
 			}
@@ -37,12 +37,12 @@ FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, co
 				std::erase(InSettings.Plugins, std::string("renderdoc"));
 			}
 		}
-		Actions.CaptureRdc = InGui.Button("Capture RDC", InMetrics.Available && !InMetrics.Busy);
+		Actions.bCaptureRdc = InGui.Button("Capture RDC", InMetrics.bAvailable && !InMetrics.bBusy);
 		Actions.CaptureRdcBounds = InGui.LastItemBounds();
-		Actions.OpenRdc =
-		    InGui.Button("Open last capture", InMetrics.Available && !InMetrics.Busy && !InMetrics.LastCapture.empty());
+		Actions.bOpenRdc = InGui.Button("Open last capture",
+		                                InMetrics.bAvailable && !InMetrics.bBusy && !InMetrics.LastCapture.empty());
 		Actions.OpenRdcBounds = InGui.LastItemBounds();
-		InGui.Checkbox("Open automatically after capture", InSettings.RenderDocAutoOpen);
+		InGui.Checkbox("Open automatically after capture", InSettings.bRenderDocAutoOpen);
 		Actions.AutoOpenRdcBounds = InGui.LastItemBounds();
 	}
 	InGui.TextWrapped(InMetrics.Status);
@@ -74,7 +74,7 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		}
 		InGui.Separator();
 		InGui.Text(InMetrics.Device.Adapter);
-		InGui.Text(std::string("Validation: ") + (InMetrics.Device.DebugLayer ? "enabled" : "unavailable") +
+		InGui.Text(std::string("Validation: ") + (InMetrics.Device.bDebugLayer ? "enabled" : "unavailable") +
 		           "  |  Errors: " + std::to_string(InMetrics.Device.ValidationErrors));
 		const float Ms = InMetrics.FrameMilliseconds.empty() ? 0 : InMetrics.FrameMilliseconds.back();
 		InGui.Text(Fixed(Ms) + " ms  /  " + Fixed(Ms > 0 ? 1000 / Ms : 0, 0) + " FPS");
@@ -85,11 +85,11 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		                                              "vsync"};
 		InGui.EditProperties(SettingsType(), &InSettings,
 		                     InSettings.ModelSource.empty() ? std::span(Ids) : std::span(Ids).subspan(1));
-		bool Triangle =
+		bool bTriangle =
 		    std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "triangle") != InSettings.Plugins.end();
-		if (InSettings.ModelSource.empty() && InGui.Checkbox("Triangle plugin (restart)", Triangle))
+		if (InSettings.ModelSource.empty() && InGui.Checkbox("Triangle plugin (restart)", bTriangle))
 		{
-			if (Triangle)
+			if (bTriangle)
 			{
 				InSettings.Plugins.insert(InSettings.Plugins.begin(), "triangle");
 			}
@@ -98,12 +98,12 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 				std::erase(InSettings.Plugins, std::string("triangle"));
 			}
 		}
-		Actions.Save = InGui.Button("Save experiment");
-		Actions.Capture = InGui.Button("Capture screenshot");
+		Actions.bSave = InGui.Button("Save experiment");
+		Actions.bCapture = InGui.Button("Capture screenshot");
 		InGui.Separator();
 		const auto CaptureActions = DrawFrameCaptureControls(InGui, InSettings, InMetrics.FrameCapture);
-		Actions.CaptureRdc = CaptureActions.CaptureRdc;
-		Actions.OpenRdc = CaptureActions.OpenRdc;
+		Actions.bCaptureRdc = CaptureActions.bCaptureRdc;
+		Actions.bOpenRdc = CaptureActions.bOpenRdc;
 		Actions.CaptureRdcBounds = CaptureActions.CaptureRdcBounds;
 		Actions.OpenRdcBounds = CaptureActions.OpenRdcBounds;
 		Actions.AutoOpenRdcBounds = CaptureActions.AutoOpenRdcBounds;
@@ -149,8 +149,8 @@ void FDebugUiPlugin::Start()
 {
 	auto& P = *Impl;
 	FPipelineDesc Desc;
-	Desc.AlphaBlend = true;
-	Desc.Textured = true;
+	Desc.bAlphaBlend = true;
+	Desc.bTextured = true;
 	P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Worker},
 	                              [&]
 	                              {

@@ -49,8 +49,8 @@ struct FD3D12Pipeline final : IRHIPipeline
 
 	ComPtr<ID3D12RootSignature> Root;
 	ComPtr<ID3D12PipelineState> Pipeline;
-	bool Textured{};
-	bool MaterialLayout{};
+	bool bTextured{};
+	bool bMaterialLayout{};
 };
 
 struct FD3D12SwapchainIdentity

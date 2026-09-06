@@ -3,6 +3,31 @@
 #include "Support/TestSupport.h"
 #include <iostream>
 
+namespace
+{
+using namespace Hyperion;
+
+void CheckTransformedBounds(const FModelAsset& InModel)
+{
+	auto Rotated = InModel;
+	Rotated.Nodes[1].Local = ComposeTRS({-2, 1, 0}, {0, 0, .38268343f, .92387953f}, {-2, 3, 1});
+	const auto RotatedBounds = ModelBounds(Rotated);
+	for (const auto& Instance : ModelInstances(Rotated))
+	{
+		const auto& Positions = Rotated.Primitives[Instance.Primitive].Positions;
+		for (std::size_t Index = 0; Index < Positions.size(); Index += 3)
+		{
+			const auto Vertex =
+			    Transform(Instance.World, {Positions[Index], Positions[Index + 1], Positions[Index + 2], 1});
+			HYP_CHECK(Vertex.X >= RotatedBounds.Minimum.X - .00001f && Vertex.X <= RotatedBounds.Maximum.X + .00001f);
+			HYP_CHECK(Vertex.Y >= RotatedBounds.Minimum.Y - .00001f && Vertex.Y <= RotatedBounds.Maximum.Y + .00001f);
+			HYP_CHECK(Vertex.Z >= RotatedBounds.Minimum.Z - .00001f && Vertex.Z <= RotatedBounds.Maximum.Z + .00001f);
+		}
+	}
+}
+
+} // namespace
+
 int main()
 {
 	using namespace Hyperion;
@@ -21,43 +46,26 @@ int main()
 		Model.Roots = {0};
 		ValidateModel(Model);
 		auto Bounds = ModelBounds(Model);
-		HYP_CHECK(Bounds.Valid && Bounds.Minimum.X == 2 && Bounds.Maximum.X == 4 && Bounds.Maximum.Y == 5);
+		HYP_CHECK(Bounds.bValid && Bounds.Minimum.X == 2 && Bounds.Maximum.X == 4 && Bounds.Maximum.Y == 5);
 		auto Instances = ModelInstances(Model);
 		HYP_CHECK(Instances.size() == 2 && Instances[0].Primitive == Instances[1].Primitive);
-		auto Rotated = Model;
-		Rotated.Nodes[1].Local = ComposeTRS({-2, 1, 0}, {0, 0, .38268343f, .92387953f}, {-2, 3, 1});
-		const auto RotatedBounds = ModelBounds(Rotated);
-		for (const auto& Instance : ModelInstances(Rotated))
-		{
-			const auto& Positions = Rotated.Primitives[Instance.Primitive].Positions;
-			for (std::size_t Index = 0; Index < Positions.size(); Index += 3)
-			{
-				const auto Vertex =
-				    Transform(Instance.World, {Positions[Index], Positions[Index + 1], Positions[Index + 2], 1});
-				HYP_CHECK(Vertex.X >= RotatedBounds.Minimum.X - .00001f &&
-				          Vertex.X <= RotatedBounds.Maximum.X + .00001f);
-				HYP_CHECK(Vertex.Y >= RotatedBounds.Minimum.Y - .00001f &&
-				          Vertex.Y <= RotatedBounds.Maximum.Y + .00001f);
-				HYP_CHECK(Vertex.Z >= RotatedBounds.Minimum.Z - .00001f &&
-				          Vertex.Z <= RotatedBounds.Maximum.Z + .00001f);
-			}
-		}
+		CheckTransformedBounds(Model);
 		auto Restored = Deserialize<FModelAsset>(Serialize(Model));
 		HYP_CHECK(Serialize(Restored) == Serialize(Model));
 		auto Invalid = WriteValue(Model);
 		auto& Fields =
 		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Invalid.Value).at("fields").Value);
 		Fields["roots"] = WriteValue(std::vector<std::uint32_t>{999});
-		bool InvalidRejected = false;
+		bool bInvalidRejected = false;
 		try
 		{
 			Restored = Deserialize<FModelAsset>(EncodeArchive(Invalid));
 		}
 		catch (...)
 		{
-			InvalidRejected = true;
+			bInvalidRejected = true;
 		}
-		HYP_CHECK(InvalidRejected && Serialize(Restored) == Serialize(Model));
+		HYP_CHECK(bInvalidRejected && Serialize(Restored) == Serialize(Model));
 		auto Projection = Perspective(1, 1, .1f, 100);
 		auto Near = Transform(Projection, {0, 0, -.1f, 1});
 		HYP_CHECK(std::abs(Near.Z / Near.W) < .00001f);
@@ -79,27 +87,27 @@ int main()
 			Reversed.Nodes.push_back(std::move(Node));
 		}
 		Reversed.Roots = {299};
-		bool DepthRejected = false;
+		bool bDepthRejected = false;
 		try
 		{
 			ValidateModel(Reversed);
 		}
 		catch (...)
 		{
-			DepthRejected = true;
+			bDepthRejected = true;
 		}
-		HYP_CHECK(DepthRejected);
+		HYP_CHECK(bDepthRejected);
 		Model.Nodes[1].Children = {0};
-		bool Failed = false;
+		bool bFailed = false;
 		try
 		{
 			ValidateModel(Model);
 		}
 		catch (...)
 		{
-			Failed = true;
+			bFailed = true;
 		}
-		HYP_CHECK(Failed);
+		HYP_CHECK(bFailed);
 		std::cout << "Static model data checks passed\n";
 	}
 	catch (const std::exception& InError)

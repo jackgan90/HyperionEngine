@@ -28,8 +28,8 @@ enum class ERHIFeature
 struct FRHIFeatureSupport
 {
 	// Hardware/driver support and usability through this RHI contract are distinct.
-	bool Supported{};
-	bool Enabled{};
+	bool bSupported{};
+	bool bEnabled{};
 };
 
 struct FRHICapabilities
@@ -48,7 +48,7 @@ struct FRHICapabilities
 struct FRHIDeviceDesc
 {
 	// Best effort; for D3D12 the first creation chooses the process-wide debug layer policy.
-	bool EnableDebug = true;
+	bool bEnableDebug = true;
 	// Required features must be enabled or creation fails. Optional features may stay disabled.
 	std::vector<ERHIFeature> RequiredFeatures;
 	std::vector<ERHIFeature> OptionalFeatures;

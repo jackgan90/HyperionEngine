@@ -6,9 +6,9 @@ namespace
 {
 using namespace Hyperion;
 
-void Check(bool InB, const char* InM)
+void Check(bool bInB, const char* InM)
 {
-	if (!InB)
+	if (!bInB)
 	{
 		throw std::runtime_error(InM);
 	}
@@ -16,16 +16,16 @@ void Check(bool InB, const char* InM)
 
 template<class F> void Rejects(F InF)
 {
-	bool Failed = false;
+	bool bFailed = false;
 	try
 	{
 		InF();
 	}
 	catch (const std::runtime_error&)
 	{
-		Failed = true;
+		bFailed = true;
 	}
-	Check(Failed, "Invalid graph accepted");
+	Check(bFailed, "Invalid graph accepted");
 }
 
 FColorPass Pass(const char* InName, EColorLoad InLoad = EColorLoad::Load)
@@ -46,7 +46,7 @@ int main()
 		Valid.Add(Pass("clear", EColorLoad::Clear));
 		Valid.Add(Pass("triangle"));
 		auto Plan = Valid.Compile();
-		Check(Plan.size() == 3 && Plan[0].Clear && Plan[0].TransitionFrom == EResourceState::Present &&
+		Check(Plan.size() == 3 && Plan[0].bClear && Plan[0].TransitionFrom == EResourceState::Present &&
 		          Plan[2].TransitionTo == EResourceState::Present,
 		      "Graph transitions");
 		FRenderGraph Undefined;

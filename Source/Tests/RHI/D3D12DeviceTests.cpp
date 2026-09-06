@@ -9,16 +9,16 @@ using namespace Hyperion;
 
 template<class F> void Rejects(F InOperation)
 {
-	bool Failed = false;
+	bool bFailed = false;
 	try
 	{
 		InOperation();
 	}
 	catch (const std::exception&)
 	{
-		Failed = true;
+		bFailed = true;
 	}
-	HYP_CHECK(Failed);
+	HYP_CHECK(bFailed);
 }
 
 class FForeignBuffer final : public IRHIBuffer
@@ -34,7 +34,7 @@ FPassCommands ClearCommands()
 {
 	FPassCommands Commands;
 	Commands.Name = "clear";
-	Commands.Clear = true;
+	Commands.bClear = true;
 	Commands.ClearColor = {.25f, .5f, .75f, 1};
 	Commands.TransitionFrom = EResourceState::Present;
 	Commands.TransitionTo = EResourceState::RenderTarget;
@@ -49,6 +49,90 @@ FPassCommands PresentCommands()
 	Commands.TransitionTo = EResourceState::Present;
 	return Commands;
 }
+
+void CheckDeviceCapabilities(FRHIBackendRegistry& InRegistry, IRHIDevice& InDevice, FRHIDeviceDesc& InDesc)
+{
+	HYP_CHECK(InDevice.GetCapabilities().Backend == ERHIBackend::D3D12);
+	HYP_CHECK(InDevice.GetCapabilities().ShaderFormat == EShaderFormat::Dxil);
+	HYP_CHECK(InDevice.QueryFeature(ERHIFeature::Graphics).bEnabled);
+	HYP_CHECK(!InDevice.QueryFeature(ERHIFeature::RayTracing).bEnabled);
+	InDesc.RequiredFeatures = {ERHIFeature::RayTracing};
+	Rejects(
+	    [&]
+	    {
+		    InRegistry.CreateDevice(ERHIBackend::D3D12, InDesc);
+	    });
+	Rejects(
+	    [&]
+	    {
+		    InDevice.CreateSwapchain({});
+	    });
+}
+
+void CheckForeignDrawResources(IRHISwapchain& InSwapchain, FPassCommands& InCommands, const FBuffer& InOwn,
+                               const FPipeline& InPipeline, const FPipeline& InForeignPipeline,
+                               const FTexture& InTexture)
+{
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, InCommands);
+	    });
+	InCommands.Draws[0].Vertices = {std::make_shared<FForeignBuffer>()};
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, InCommands);
+	    });
+	InCommands.Draws[0].Vertices = InOwn;
+	InCommands.Draws[0].Pipeline = InForeignPipeline;
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, InCommands);
+	    });
+	InCommands.Draws[0].Pipeline = InPipeline;
+	InCommands.Draws[0].Texture = InTexture;
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, InCommands);
+	    });
+}
+
+FPipelineDesc TrianglePipeline(FShaderCompiler& InCompiler, EShaderFormat InFormat)
+{
+	FPipelineDesc PipelineDesc;
+	PipelineDesc.Vertex = InCompiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, InFormat);
+	PipelineDesc.Pixel = InCompiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel, InFormat);
+	PipelineDesc.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FVertex, Position)},
+	                           {"COLOR", 0, EVertexFormat::Float4, offsetof(FVertex, Color)},
+	                           {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FVertex, Uv)}};
+	return PipelineDesc;
+}
+
+void CheckRejectedFrameLists(IRHISwapchain& InSwapchain, const FRecordedList& InClear, const FRecordedList& InPresent,
+                             const FRecordedList& InOtherClear)
+{
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, ClearCommands());
+	    });
+	const std::array<FRecordedList, 2> ForeignLists{InOtherClear, InPresent};
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.EndFrame(ForeignLists, false);
+	    });
+	const std::array<FRecordedList, 2> DuplicateLists{InClear, InClear};
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.EndFrame(DuplicateLists, false);
+	    });
+}
+
 } // namespace
 
 int main()
@@ -62,21 +146,7 @@ int main()
 		Desc.OptionalFeatures = {ERHIFeature::RayTracing};
 		auto Device = Registry.CreateDevice(ERHIBackend::D3D12, Desc);
 		auto OtherDevice = Registry.CreateDevice(ERHIBackend::D3D12, Desc);
-		HYP_CHECK(Device->GetCapabilities().Backend == ERHIBackend::D3D12);
-		HYP_CHECK(Device->GetCapabilities().ShaderFormat == EShaderFormat::Dxil);
-		HYP_CHECK(Device->QueryFeature(ERHIFeature::Graphics).Enabled);
-		HYP_CHECK(!Device->QueryFeature(ERHIFeature::RayTracing).Enabled);
-		Desc.RequiredFeatures = {ERHIFeature::RayTracing};
-		Rejects(
-		    [&]
-		    {
-			    Registry.CreateDevice(ERHIBackend::D3D12, Desc);
-		    });
-		Rejects(
-		    [&]
-		    {
-			    Device->CreateSwapchain({});
-		    });
+		CheckDeviceCapabilities(Registry, *Device, Desc);
 
 		// Both devices and resources exist before any window is created.
 		const std::array<std::uint32_t, 3> Indices{0, 1, 2};
@@ -85,14 +155,7 @@ int main()
 		HYP_CHECK(Own.Payload->GetDeviceIdentity() != Foreign.Payload->GetDeviceIdentity());
 		FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
 		                         std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
-		FPipelineDesc PipelineDesc;
-		PipelineDesc.Vertex =
-		    Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, Device->GetCapabilities().ShaderFormat);
-		PipelineDesc.Pixel =
-		    Compiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel, Device->GetCapabilities().ShaderFormat);
-		PipelineDesc.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FVertex, Position)},
-		                           {"COLOR", 0, EVertexFormat::Float4, offsetof(FVertex, Color)},
-		                           {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FVertex, Uv)}};
+		FPipelineDesc PipelineDesc = TrianglePipeline(Compiler, Device->GetCapabilities().ShaderFormat);
 		auto Pipeline = Device->CreatePipeline(PipelineDesc);
 		auto ForeignPipeline = OtherDevice->CreatePipeline(PipelineDesc);
 		auto Texture = OtherDevice->CreateTexture({1, 1, EColorSpace::Linear, {1, 1, 1, 1}});
@@ -111,53 +174,13 @@ int main()
 		Draw.VertexStride = 4;
 		Draw.IndexCount = 3;
 		Commands.Draws = {Draw};
-		Rejects(
-		    [&]
-		    {
-			    Swapchain->Record(0, Commands);
-		    });
-		Commands.Draws[0].Vertices = {std::make_shared<FForeignBuffer>()};
-		Rejects(
-		    [&]
-		    {
-			    Swapchain->Record(0, Commands);
-		    });
-		Commands.Draws[0].Vertices = Own;
-		Commands.Draws[0].Pipeline = ForeignPipeline;
-		Rejects(
-		    [&]
-		    {
-			    Swapchain->Record(0, Commands);
-		    });
-		Commands.Draws[0].Pipeline = Pipeline;
-		Commands.Draws[0].Texture = Texture;
-		Rejects(
-		    [&]
-		    {
-			    Swapchain->Record(0, Commands);
-		    });
+		CheckForeignDrawResources(*Swapchain, Commands, Own, Pipeline, ForeignPipeline, Texture);
 
 		auto Clear = Swapchain->Record(0, ClearCommands());
 		auto Present = Swapchain->Record(1, PresentCommands());
 		auto OtherClear = OtherSwapchain->Record(0, ClearCommands());
 		auto OtherPresent = OtherSwapchain->Record(1, PresentCommands());
-		Rejects(
-		    [&]
-		    {
-			    Swapchain->Record(0, ClearCommands());
-		    });
-		const std::array<FRecordedList, 2> ForeignLists{OtherClear, Present};
-		Rejects(
-		    [&]
-		    {
-			    Swapchain->EndFrame(ForeignLists, false);
-		    });
-		const std::array<FRecordedList, 2> DuplicateLists{Clear, Clear};
-		Rejects(
-		    [&]
-		    {
-			    Swapchain->EndFrame(DuplicateLists, false);
-		    });
+		CheckRejectedFrameLists(*Swapchain, Clear, Present, OtherClear);
 		const std::array<FRecordedList, 2> Lists{Clear, Present};
 		auto Image = Swapchain->EndFrame(Lists, false, true);
 		HYP_CHECK(Image.Width == 64 && Image.Height == 64 && Image.Rgba[0] > .24f && Image.Rgba[0] < .26f);

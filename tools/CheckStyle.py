@@ -60,6 +60,32 @@ def llvm_tool(name):
     raise RuntimeError(f'{name} is required; install LLVM 22.1.1 and add its bin directory to PATH.')
 
 
+def check_boolean_names(tool, path, build_dir):
+    # Ignore instantiated generic parameters; a T or auto parameter is not a boolean declaration.
+    arguments = [tool, str(path), '-p', str(build_dir),
+                 '-c', 'set traversal IgnoreUnlessSpelledInSource']
+    atomic_type = ('hasDeclaration(classTemplateSpecializationDecl(hasName("::std::atomic"), '
+                   'hasTemplateArgument(0, refersToType(booleanType()))))')
+    types = ('booleanType()', 'references(booleanType())', atomic_type, f'references({atomic_type})')
+    for kind in types:
+        query = ('match namedDecl(anyOf(varDecl(hasType(' + kind + ')), '
+                 'fieldDecl(hasType(' + kind + '))), matchesName("[A-Za-z0-9_]$"), '
+                 'isExpansionInFileMatching("[/\\\\]Source[/\\\\]"), '
+                 'unless(matchesName("(^|::)b[A-Z][A-Za-z0-9]*$")))')
+        arguments += ['-c', query]
+    non_boolean = 'unless(anyOf(' + ', '.join(f'hasType({kind})' for kind in types) + '))'
+    query = ('match namedDecl(anyOf(varDecl(' + non_boolean + '), fieldDecl(' + non_boolean + ')), '
+             'isExpansionInFileMatching("[/\\\\]Source[/\\\\]"), '
+             'matchesName("(^|::)b[A-Z][A-Za-z0-9]*$"))')
+    arguments += ['-c', query]
+    result = subprocess.run(arguments, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding='utf-8', errors='replace')
+    counts = re.findall(r'^(\d+) matches?\.$', result.stdout, re.MULTILINE)
+    if result.returncode or counts != ['0'] * (len(types) + 1):
+        return f'{path.relative_to(ROOT)}: b prefixes must be used for boolean variables only:\n{result.stdout}'
+    return None
+
+
 def check_naming(build_dir, sources):
     database = build_dir / 'compile_commands.json'
     if not database.is_file():
@@ -70,6 +96,7 @@ def check_naming(build_dir, sources):
     if missing:
         raise RuntimeError('Compile database is incomplete or stale: ' + ', '.join(missing))
     tool = llvm_tool('clang-tidy')
+    query_tool = llvm_tool('clang-query')
 
     def check(path):
         result = subprocess.run([tool, str(path), '-p', str(build_dir)], cwd=ROOT,
@@ -77,7 +104,7 @@ def check_naming(build_dir, sources):
                                 text=True, encoding='utf-8', errors='replace')
         if result.returncode:
             return f'{path.relative_to(ROOT)}:\n{result.stdout}'
-        return None
+        return check_boolean_names(query_tool, path, build_dir)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
         failures = [result for result in pool.map(check, units) if result]

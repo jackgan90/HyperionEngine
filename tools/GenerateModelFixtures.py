@@ -21,8 +21,7 @@ def png(width, height):
             rows.extend(color)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">2I5B", width, height, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
 
-def generate(output):
-    output.mkdir(parents=True, exist_ok=True)
+def build_showcase():
     binary = bytearray()
     doc = {"asset": {"version": "2.0", "generator": "Hyperion deterministic fixtures"},
            "bufferViews": [], "accessors": [], "meshes": [], "nodes": [],
@@ -95,19 +94,10 @@ def generate(output):
         {"name":"Teal", "mesh":2, "translation":[2.3,.6,.5], "scale":[.5,.5,.5]},
         {"name":"Pedestal", "mesh":3, "translation":[.2,-.12,0], "scale":[5.8,.24,3.2]}]
     doc["buffers"] = [{"uri":"Showcase.bin", "byteLength":len(binary)}]
-    (output / "Checker.png").write_bytes(png(64,64))
-    (output / "Tiny.jpg").write_bytes(base64.b64decode(JPEG))
-    (output / "Showcase.bin").write_bytes(binary)
-    def save(name, value):
-        (output / name).write_text(json.dumps(value, indent=2)+"\n", encoding="utf-8")
-    save("Showcase.gltf", doc)
-    data_uri = copy.deepcopy(doc)
-    data_uri["buffers"][0]["uri"] = "data:application/octet-stream;base64," + base64.b64encode(binary).decode()
-    data_uri["images"][0]["uri"] = "data:image/png;base64," + base64.b64encode(png(64,64)).decode()
-    save("DataUri.gltf", data_uri)
-    jpeg = copy.deepcopy(doc)
-    jpeg["images"][0]["uri"] = "Tiny.jpg"
-    save("Jpeg.gltf", jpeg)
+    return doc, binary
+
+
+def write_glb(output, doc, binary):
     glb = copy.deepcopy(doc)
     glb["buffers"][0].pop("uri")
     glb_binary = bytearray(binary)
@@ -123,6 +113,25 @@ def generate(output):
     json_chunk += b" " * (-len(json_chunk) % 4)
     chunks = struct.pack("<II", len(json_chunk), 0x4e4f534a) + json_chunk + struct.pack("<II", len(glb_binary), 0x004e4942) + glb_binary
     (output / "Showcase.glb").write_bytes(struct.pack("<III",0x46546c67,2,12+len(chunks))+chunks)
+
+
+def generate(output):
+    output.mkdir(parents=True, exist_ok=True)
+    doc, binary = build_showcase()
+    (output / "Checker.png").write_bytes(png(64,64))
+    (output / "Tiny.jpg").write_bytes(base64.b64decode(JPEG))
+    (output / "Showcase.bin").write_bytes(binary)
+    def save(name, value):
+        (output / name).write_text(json.dumps(value, indent=2)+"\n", encoding="utf-8")
+    save("Showcase.gltf", doc)
+    data_uri = copy.deepcopy(doc)
+    data_uri["buffers"][0]["uri"] = "data:application/octet-stream;base64," + base64.b64encode(binary).decode()
+    data_uri["images"][0]["uri"] = "data:image/png;base64," + base64.b64encode(png(64,64)).decode()
+    save("DataUri.gltf", data_uri)
+    jpeg = copy.deepcopy(doc)
+    jpeg["images"][0]["uri"] = "Tiny.jpg"
+    save("Jpeg.gltf", jpeg)
+    write_glb(output, doc, binary)
     bad = copy.deepcopy(doc)
     bad["extensionsRequired"] = ["KHR_draco_mesh_compression"]
     bad["extensionsUsed"] = ["KHR_draco_mesh_compression"]

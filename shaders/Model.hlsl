@@ -63,7 +63,7 @@ float2 SelectUv(FVertexOutput InInput, float InSet)
 	return InSet > .5 ? InInput.Uv1 : InInput.Uv0;
 }
 
-float4 PSMain(FVertexOutput InInput, bool InFront : SV_IsFrontFace) : SV_Target0
+float4 PSMain(FVertexOutput InInput, bool bInFront : SV_IsFrontFace) : SV_Target0
 {
 	float4 Base =
 	    BaseColorFactor * InInput.Color * BaseColorTexture.Sample(BaseColorSampler, SelectUv(InInput, UvSets.x));
@@ -77,7 +77,7 @@ float4 PSMain(FVertexOutput InInput, bool InFront : SV_IsFrontFace) : SV_Target0
 		return float4(Base.rgb, Alpha);
 	}
 	float3 N = normalize(InInput.Normal);
-	if (Modes.y > .5 && !InFront)
+	if (Modes.y > .5 && !bInFront)
 	{
 		N = -N;
 	}

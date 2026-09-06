@@ -27,7 +27,7 @@ FModelAsset Quads()
 		Primitive.Material = Index;
 		Model.Primitives.push_back(Primitive);
 		FModelMaterial Material;
-		Material.Unlit = true;
+		Material.bUnlit = true;
 		Material.BaseColor = Index == 0 ? FVec4{.25f, 0, 0, 1} : FVec4{0, 0, 1, 1};
 		Model.Materials.push_back(Material);
 		FModelNode Node;
@@ -64,11 +64,11 @@ public:
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
 	{
 		std::unique_lock Lock(Mutex);
-		Started = true;
+		bStarted = true;
 		Signal.wait(Lock,
 		            [&]
 		            {
-			            return Released;
+			            return bReleased;
 		            });
 		Lock.unlock();
 		return Local.Read(InPath, InLimit);
@@ -82,18 +82,203 @@ public:
 	void Release()
 	{
 		std::lock_guard Lock(Mutex);
-		Released = true;
+		bReleased = true;
 		Signal.notify_all();
 	}
 
-	std::atomic<bool> Started{};
+	std::atomic<bool> bStarted{};
 
 private:
 	std::mutex Mutex;
 	std::condition_variable Signal;
-	bool Released{};
+	bool bReleased{};
 	FLocalFileSystem Local;
 };
+
+struct FModelReadbackContext
+{
+	FTaskSystem& Tasks;
+	IRHIDevice& Device;
+	IRHISwapchain& Swapchain;
+	const FShaderArtifact& Vertex;
+	const FShaderArtifact& Fragment;
+};
+
+FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset InModel, bool bInCheckConstantRanges)
+{
+	auto Prepared = PrepareModel(std::make_shared<const FModelAsset>(std::move(InModel)));
+	FImage Image;
+	InContext.Tasks.Wait(InContext.Tasks.Dispatch(
+	    {EDomain::Rhi, 0},
+	    [&]
+	    {
+		    FModelRenderer Renderer(InContext.Device, Prepared, InContext.Vertex, InContext.Fragment);
+		    // A single readback-test barrier; the production path only polls upload
+		    // fences.
+		    InContext.Device.WaitIdle();
+		    HYP_CHECK(Renderer.Ready());
+		    InContext.Swapchain.BeginFrame({320, 240});
+		    FPassCommands Draw;
+		    Draw.Name = "Known material pixels";
+		    Draw.bClear = Draw.bUseDepth = Draw.bClearDepth = Draw.bSrgbTarget = true;
+		    Draw.TransitionFrom = EResourceState::Present;
+		    Draw.TransitionTo = EResourceState::RenderTarget;
+		    Draw.Draws = Renderer.Draws(Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})),
+		                                {0, 0, 3}, {320, 240});
+		    if (bInCheckConstantRanges)
+		    {
+			    auto Invalid = Draw;
+			    for (std::uint64_t Offset : {std::uint64_t(1), UINT64_MAX, std::uint64_t(1024)})
+			    {
+				    Invalid.Draws[0].MaterialConstantOffset = Offset;
+				    bool bRejected = false;
+				    try
+				    {
+					    InContext.Swapchain.Record(0, Invalid);
+				    }
+				    catch (const std::invalid_argument&)
+				    {
+					    bRejected = true;
+				    }
+				    HYP_CHECK(bRejected);
+			    }
+		    }
+		    FPassCommands Present;
+		    Present.Name = "Present";
+		    Present.TransitionFrom = EResourceState::RenderTarget;
+		    Present.TransitionTo = EResourceState::Present;
+		    const std::array Lists{InContext.Swapchain.Record(0, Draw), InContext.Swapchain.Record(1, Present)};
+		    Image = InContext.Swapchain.EndFrame(Lists, false, true);
+	    }));
+	return Image;
+}
+
+template<class RenderOperation>
+void CheckMaterialPixels(const RenderOperation& InRender, const std::filesystem::path& InRoot)
+{
+	// Near red is submitted first; far blue must not overwrite it. Output is sRGB(.25).
+	Pixel(InRender(Quads(), true), 160, 120, {.5371f, 0, 0});
+	auto Blend = Quads();
+	Blend.Materials[0].BaseColor = {1, 0, 0, .5f};
+	Blend.Materials[0].AlphaMode = EAlphaMode::Blend;
+	const auto Blended = InRender(Blend);
+	Pixel(Blended, 160, 120, {.7354f, 0, .7354f});
+	SaveImage(InRoot / "out/captures/model-alpha.png", Blended);
+	auto OffAxisBlend = Quads();
+	OffAxisBlend.Materials[0].BaseColor = {1, 0, 0, .5f};
+	OffAxisBlend.Materials[1].BaseColor = {0, 0, 1, .5f};
+	OffAxisBlend.Materials[0].AlphaMode = OffAxisBlend.Materials[1].AlphaMode = EAlphaMode::Blend;
+	OffAxisBlend.Nodes[0].Local = Translation({0, 0, 1});
+	OffAxisBlend.Primitives[0].Positions = {-1, -1, 0, 7, -1, 0, 7, 1, 0, -1, 1, 0};
+	Pixel(InRender(OffAxisBlend), 160, 120, {.7354f, 0, .5371f});
+	auto Mask = Quads();
+	Mask.Materials[0].BaseColor = {1, 1, 1, 1};
+	Mask.Materials[0].AlphaMode = EAlphaMode::Mask;
+	Mask.Materials[0].BaseColorTexture = {0, 0, 0};
+	Mask.Images.push_back({"Mask", 2, 1, {255, 0, 0, 0, 255, 0, 0, 255}});
+	FModelSampler Nearest;
+	Nearest.Min = Nearest.Mag = ESamplerFilter::Nearest;
+	Mask.Samplers.push_back(Nearest);
+	const auto Masked = InRender(Mask);
+	Pixel(Masked, 120, 120, {0, 0, 1});
+	Pixel(Masked, 200, 120, {1, 0, 0});
+	SaveImage(InRoot / "out/captures/model-mask.png", Masked);
+	Mask.Images[0].Rgba = {128, 128, 128, 255, 255, 255, 255, 255};
+	Mask.Materials[0].BaseColorTexture.TexCoord = 1;
+	Mask.Primitives[0].TexCoords1 = {.25f, .5f, .25f, .5f, .25f, .5f, .25f, .5f};
+	Pixel(InRender(Mask), 200, 120, {.502f, .502f, .502f});
+	Mask.Images[0].Rgba = {0, 0, 0, 255, 255, 255, 255, 255};
+	auto Prepared = PrepareModel(std::make_shared<const FModelAsset>(Mask));
+	HYP_CHECK(Prepared.Textures[1].Mips.back().Rgba[0] == 188);
+	auto Mirrored = Quads();
+	Mirrored.Nodes[0].Local = ComposeTRS({0, 0, .25f}, {0, 0, 0, 1}, {-1, 1, 1});
+	Pixel(InRender(Mirrored), 160, 120, {.5371f, 0, 0});
+	auto Backface = Quads();
+	std::reverse(Backface.Primitives[0].Indices.begin(), Backface.Primitives[0].Indices.end());
+	Backface.Materials[0].bDoubleSided = true;
+	Pixel(InRender(Backface), 160, 120, {.5371f, 0, 0});
+}
+
+FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain& InSwapchain,
+                         const FAppSettings& InSettings, FModelViewerPlugin& InPlugin, FSize InSize)
+{
+	InWindow.Poll();
+	FImage Image;
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              FRenderGraph Graph;
+		                              FColorPass Clear;
+		                              Clear.Load = EColorLoad::Clear;
+		                              Clear.Commands.Name = "Background";
+		                              Graph.Add(std::move(Clear));
+		                              InPlugin.Build(Graph, {InSize, InSettings});
+		                              Image = ExecuteGraph(Graph, InTasks, InSwapchain, InSize, false, true);
+	                              }));
+	return Image;
+}
+
+template<class FrameOperation>
+void CheckCameraInput(FModelViewerPlugin& InPlugin, const FrameOperation& InFrame, const FImage& InReadyImage,
+                      const std::filesystem::path& InRoot)
+{
+	FInputEvent Wheel;
+	Wheel.Type = EEventType::MouseWheel;
+	Wheel.Y = 2;
+	InPlugin.Input(std::span(&Wheel, 1), true, false);
+	HYP_CHECK(Difference(InReadyImage, InFrame(InPlugin)) < .0001f);
+	InPlugin.Input(std::span(&Wheel, 1), false, false);
+	HYP_CHECK(Difference(InReadyImage, InFrame(InPlugin)) > .003f);
+	FInputEvent Home;
+	Home.Type = EEventType::Key;
+	Home.Key = EKey::Home;
+	Home.bDown = true;
+	InPlugin.Input(std::span(&Home, 1), false, false);
+	HYP_CHECK(Difference(InReadyImage, InFrame(InPlugin)) < .0001f);
+	std::array<FInputEvent, 4> Drag;
+	Drag[0].Type = EEventType::MouseMove;
+	Drag[0].X = 100;
+	Drag[0].Y = 100;
+	Drag[1].Type = EEventType::MouseButton;
+	Drag[1].Button = 1;
+	Drag[1].bDown = true;
+	Drag[2] = Drag[0];
+	Drag[2].X = 180;
+	Drag[3] = Drag[1];
+	Drag[3].bDown = false;
+	InPlugin.Input(Drag, false, false);
+	const auto Orbited = InFrame(InPlugin);
+	HYP_CHECK(Difference(InReadyImage, Orbited) > .003f);
+	SaveImage(InRoot / "out/captures/model-orbit.png", Orbited);
+	HYP_CHECK(InFrame(InPlugin, {480, 200}).Width == 480);
+}
+
+template<class FrameOperation>
+void CheckGatedFrames(FGatedFileSystem& InStorage, FModelViewerPlugin& InPlugin, const FrameOperation& InFrame)
+{
+	// The physical read remains gated while Main, Render and RHI finish two frames.
+	bool bResponsive{};
+	try
+	{
+		const auto LoadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+		while (!InStorage.bStarted && std::chrono::steady_clock::now() < LoadDeadline)
+		{
+			InFrame(InPlugin);
+		}
+		InFrame(InPlugin);
+		InFrame(InPlugin, {480, 200});
+		bResponsive = InStorage.bStarted && !InPlugin.Ready() && InPlugin.Error().empty();
+	}
+	catch (...)
+	{
+		InStorage.Release();
+		InPlugin.Stop();
+		throw;
+	}
+	InStorage.Release();
+	HYP_CHECK(bResponsive);
+}
+
 } // namespace
 
 int main()
@@ -125,96 +310,12 @@ int main()
 			    Vertex = Compiler.Compile("Model.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
 			    Fragment = Compiler.Compile("Model.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);
 		    }));
-		const auto RenderModel = [&](FModelAsset InModel, bool InCheckConstantRanges = false)
+		const FModelReadbackContext RenderContext{Tasks, *Device, *Swapchain, Vertex, Fragment};
+		const auto RenderModel = [&](FModelAsset InModel, bool bInCheckConstantRanges = false)
 		{
-			auto Prepared = PrepareModel(std::make_shared<const FModelAsset>(std::move(InModel)));
-			FImage Image;
-			Tasks.Wait(Tasks.Dispatch(
-			    {EDomain::Rhi, 0},
-			    [&]
-			    {
-				    FModelRenderer Renderer(*Device, Prepared, Vertex, Fragment);
-				    // A single readback-test barrier; the production path only polls upload
-				    // fences.
-				    Device->WaitIdle();
-				    HYP_CHECK(Renderer.Ready());
-				    Swapchain->BeginFrame({320, 240});
-				    FPassCommands Draw;
-				    Draw.Name = "Known material pixels";
-				    Draw.Clear = Draw.UseDepth = Draw.ClearDepth = Draw.SrgbTarget = true;
-				    Draw.TransitionFrom = EResourceState::Present;
-				    Draw.TransitionTo = EResourceState::RenderTarget;
-				    Draw.Draws =
-				        Renderer.Draws(Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})),
-				                       {0, 0, 3}, {320, 240});
-				    if (InCheckConstantRanges)
-				    {
-					    auto Invalid = Draw;
-					    for (std::uint64_t Offset : {std::uint64_t(1), UINT64_MAX, std::uint64_t(1024)})
-					    {
-						    Invalid.Draws[0].MaterialConstantOffset = Offset;
-						    bool Rejected = false;
-						    try
-						    {
-							    Swapchain->Record(0, Invalid);
-						    }
-						    catch (const std::invalid_argument&)
-						    {
-							    Rejected = true;
-						    }
-						    HYP_CHECK(Rejected);
-					    }
-				    }
-				    FPassCommands Present;
-				    Present.Name = "Present";
-				    Present.TransitionFrom = EResourceState::RenderTarget;
-				    Present.TransitionTo = EResourceState::Present;
-				    const std::array Lists{Swapchain->Record(0, Draw), Swapchain->Record(1, Present)};
-				    Image = Swapchain->EndFrame(Lists, false, true);
-			    }));
-			return Image;
+			return RenderModelReadback(RenderContext, std::move(InModel), bInCheckConstantRanges);
 		};
-		// Near red is submitted first; far blue must not overwrite it. Output is sRGB(.25).
-		Pixel(RenderModel(Quads(), true), 160, 120, {.5371f, 0, 0});
-		auto Blend = Quads();
-		Blend.Materials[0].BaseColor = {1, 0, 0, .5f};
-		Blend.Materials[0].AlphaMode = EAlphaMode::Blend;
-		const auto Blended = RenderModel(Blend);
-		Pixel(Blended, 160, 120, {.7354f, 0, .7354f});
-		SaveImage(Root / "out/captures/model-alpha.png", Blended);
-		auto OffAxisBlend = Quads();
-		OffAxisBlend.Materials[0].BaseColor = {1, 0, 0, .5f};
-		OffAxisBlend.Materials[1].BaseColor = {0, 0, 1, .5f};
-		OffAxisBlend.Materials[0].AlphaMode = OffAxisBlend.Materials[1].AlphaMode = EAlphaMode::Blend;
-		OffAxisBlend.Nodes[0].Local = Translation({0, 0, 1});
-		OffAxisBlend.Primitives[0].Positions = {-1, -1, 0, 7, -1, 0, 7, 1, 0, -1, 1, 0};
-		Pixel(RenderModel(OffAxisBlend), 160, 120, {.7354f, 0, .5371f});
-		auto Mask = Quads();
-		Mask.Materials[0].BaseColor = {1, 1, 1, 1};
-		Mask.Materials[0].AlphaMode = EAlphaMode::Mask;
-		Mask.Materials[0].BaseColorTexture = {0, 0, 0};
-		Mask.Images.push_back({"Mask", 2, 1, {255, 0, 0, 0, 255, 0, 0, 255}});
-		FModelSampler Nearest;
-		Nearest.Min = Nearest.Mag = ESamplerFilter::Nearest;
-		Mask.Samplers.push_back(Nearest);
-		const auto Masked = RenderModel(Mask);
-		Pixel(Masked, 120, 120, {0, 0, 1});
-		Pixel(Masked, 200, 120, {1, 0, 0});
-		SaveImage(Root / "out/captures/model-mask.png", Masked);
-		Mask.Images[0].Rgba = {128, 128, 128, 255, 255, 255, 255, 255};
-		Mask.Materials[0].BaseColorTexture.TexCoord = 1;
-		Mask.Primitives[0].TexCoords1 = {.25f, .5f, .25f, .5f, .25f, .5f, .25f, .5f};
-		Pixel(RenderModel(Mask), 200, 120, {.502f, .502f, .502f});
-		Mask.Images[0].Rgba = {0, 0, 0, 255, 255, 255, 255, 255};
-		auto Prepared = PrepareModel(std::make_shared<const FModelAsset>(Mask));
-		HYP_CHECK(Prepared.Textures[1].Mips.back().Rgba[0] == 188);
-		auto Mirrored = Quads();
-		Mirrored.Nodes[0].Local = ComposeTRS({0, 0, .25f}, {0, 0, 0, 1}, {-1, 1, 1});
-		Pixel(RenderModel(Mirrored), 160, 120, {.5371f, 0, 0});
-		auto Backface = Quads();
-		std::reverse(Backface.Primitives[0].Indices.begin(), Backface.Primitives[0].Indices.end());
-		Backface.Materials[0].DoubleSided = true;
-		Pixel(RenderModel(Backface), 160, 120, {.5371f, 0, 0});
+		CheckMaterialPixels(RenderModel, Root);
 
 		auto Storage = std::make_shared<FGatedFileSystem>();
 		FIOService IO(Tasks, Storage);
@@ -225,78 +326,17 @@ int main()
 		Plugin.Start();
 		const auto Frame = [&](FModelViewerPlugin& InPlugin, FSize InSize = {320, 240})
 		{
-			Window.Poll();
-			FImage Image;
-			Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-			                          [&]
-			                          {
-				                          FRenderGraph Graph;
-				                          FColorPass Clear;
-				                          Clear.Load = EColorLoad::Clear;
-				                          Clear.Commands.Name = "Background";
-				                          Graph.Add(std::move(Clear));
-				                          InPlugin.Build(Graph, {InSize, Settings});
-				                          Image = ExecuteGraph(Graph, Tasks, *Swapchain, InSize, false, true);
-			                          }));
-			return Image;
+			return RenderViewerFrame(Tasks, Window, *Swapchain, Settings, InPlugin, InSize);
 		};
-		// The physical read remains gated while Main, Render and RHI finish two frames.
-		bool Responsive{};
-		try
-		{
-			const auto LoadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-			while (!Storage->Started && std::chrono::steady_clock::now() < LoadDeadline)
-			{
-				Frame(Plugin);
-			}
-			Frame(Plugin);
-			Frame(Plugin, {480, 200});
-			Responsive = Storage->Started && !Plugin.Ready() && Plugin.Error().empty();
-		}
-		catch (...)
-		{
-			Storage->Release();
-			Plugin.Stop();
-			throw;
-		}
-		Storage->Release();
-		HYP_CHECK(Responsive);
+		CheckGatedFrames(*Storage, Plugin, Frame);
 		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 		FImage ReadyImage;
 		while (!Plugin.Ready() && Plugin.Error().empty() && std::chrono::steady_clock::now() < Deadline)
 		{
 			ReadyImage = Frame(Plugin);
 		}
-		HYP_CHECK(Plugin.Ready() && Storage->Started);
-		FInputEvent Wheel;
-		Wheel.Type = EEventType::MouseWheel;
-		Wheel.Y = 2;
-		Plugin.Input(std::span(&Wheel, 1), true, false);
-		HYP_CHECK(Difference(ReadyImage, Frame(Plugin)) < .0001f);
-		Plugin.Input(std::span(&Wheel, 1), false, false);
-		HYP_CHECK(Difference(ReadyImage, Frame(Plugin)) > .003f);
-		FInputEvent Home;
-		Home.Type = EEventType::Key;
-		Home.Key = EKey::Home;
-		Home.Down = true;
-		Plugin.Input(std::span(&Home, 1), false, false);
-		HYP_CHECK(Difference(ReadyImage, Frame(Plugin)) < .0001f);
-		std::array<FInputEvent, 4> Drag;
-		Drag[0].Type = EEventType::MouseMove;
-		Drag[0].X = 100;
-		Drag[0].Y = 100;
-		Drag[1].Type = EEventType::MouseButton;
-		Drag[1].Button = 1;
-		Drag[1].Down = true;
-		Drag[2] = Drag[0];
-		Drag[2].X = 180;
-		Drag[3] = Drag[1];
-		Drag[3].Down = false;
-		Plugin.Input(Drag, false, false);
-		const auto Orbited = Frame(Plugin);
-		HYP_CHECK(Difference(ReadyImage, Orbited) > .003f);
-		SaveImage(Root / "out/captures/model-orbit.png", Orbited);
-		HYP_CHECK(Frame(Plugin, {480, 200}).Width == 480);
+		HYP_CHECK(Plugin.Ready() && Storage->bStarted);
+		CheckCameraInput(Plugin, Frame, ReadyImage, Root);
 		Plugin.Stop();
 		FModelViewerPlugin Broken(*Device, Compiler, Tasks, Assets, Root / "out/fixtures/Missing.gltf");
 		Broken.Start();

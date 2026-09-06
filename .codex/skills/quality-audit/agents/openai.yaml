@@ -1,0 +1,4 @@
+interface:
+  display_name: "开发质量审计"
+  short_description: "以独立 reviewer 审计代码，由主 agent 复核缺陷并控制修复范围"
+  default_prompt: "请使用 $quality-audit 审计本次开发，结合我补充的重点独立审核，复核 findings 后仅做范围内的最小修复。"

@@ -31,5 +31,5 @@ private:
 
 // Called from Render; jobs are routed to engine-owned RHI executors.
 FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
-                    bool InVsync, bool InCapture);
+                    bool bInVsync, bool bInCapture);
 } // namespace Hyperion

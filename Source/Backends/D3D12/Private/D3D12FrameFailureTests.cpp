@@ -11,11 +11,11 @@ namespace Hyperion
 {
 namespace
 {
-bool FailPresent = false;
+bool bFailPresent = false;
 
-void CheckCondition(bool InCondition, std::source_location InLocation = std::source_location::current())
+void CheckCondition(bool bInCondition, std::source_location InLocation = std::source_location::current())
 {
-	if (!InCondition)
+	if (!bInCondition)
 	{
 		throw std::runtime_error("Frame failure check failed at line " + std::to_string(InLocation.line()));
 	}
@@ -87,9 +87,9 @@ void CheckSubmittedFailure(FFrameFixture& InFixture, const FRenderGraph& InGraph
 		    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		    Gate->Signal(1);
 	    });
-	FailPresent = true;
-	bool Failed = false;
-	bool Drained = false;
+	bFailPresent = true;
+	bool bFailed = false;
+	bool bDrained = false;
 	try
 	{
 		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
@@ -100,12 +100,12 @@ void CheckSubmittedFailure(FFrameFixture& InFixture, const FRenderGraph& InGraph
 	}
 	catch (const std::exception& Error)
 	{
-		Failed = std::string(Error.what()).find("Present swapchain (HRESULT 0x80004005)") != std::string::npos;
-		Drained = Gate->GetCompletedValue() >= 1 && State.Fence->GetCompletedValue() >= State.NextFence - 1;
+		bFailed = std::string(Error.what()).find("Present swapchain (HRESULT 0x80004005)") != std::string::npos;
+		bDrained = Gate->GetCompletedValue() >= 1 && State.Fence->GetCompletedValue() >= State.NextFence - 1;
 	}
 	ReleaseGate.join(); // Always unblock the queue before assertions or fixture destruction.
-	CheckCondition(Failed);
-	CheckCondition(Drained);
+	CheckCondition(bFailed);
+	CheckCondition(bDrained);
 }
 
 void CheckRecovery(FFrameFixture& InFixture, const FRenderGraph& InGraph)
@@ -135,9 +135,9 @@ void CheckRecovery(FFrameFixture& InFixture, const FRenderGraph& InGraph)
 
 HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval)
 {
-	if (FailPresent)
+	if (bFailPresent)
 	{
-		FailPresent = false;
+		bFailPresent = false;
 		return E_FAIL;
 	}
 	return InSwapchain->Present(InInterval, 0);

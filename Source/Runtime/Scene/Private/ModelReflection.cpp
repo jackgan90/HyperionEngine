@@ -62,7 +62,7 @@ template<> const FRecordDescriptor& RecordType<FModelMaterial>()
 	     Member("roughness", &FModelMaterial::Roughness), Member("normalScale", &FModelMaterial::NormalScale),
 	     Member("occlusionStrength", &FModelMaterial::OcclusionStrength),
 	     Member("alphaCutoff", &FModelMaterial::AlphaCutoff), Member("alphaMode", &FModelMaterial::AlphaMode),
-	     Member("doubleSided", &FModelMaterial::DoubleSided), Member("unlit", &FModelMaterial::Unlit),
+	     Member("doubleSided", &FModelMaterial::bDoubleSided), Member("unlit", &FModelMaterial::bUnlit),
 	     Member("baseColorTexture", &FModelMaterial::BaseColorTexture),
 	     Member("metallicRoughnessTexture", &FModelMaterial::MetallicRoughnessTexture),
 	     Member("normalTexture", &FModelMaterial::NormalTexture),

@@ -9,7 +9,7 @@ struct FFrameCaptureScope
 {
 	FTaskSystem& Tasks;
 	FFrameCapture* Capture;
-	bool Active = false;
+	bool bActive = false;
 
 	FFrameCaptureScope(FTaskSystem& InTasks, FFrameCapture* InCapture, FNativeSurface InSurface)
 	    : Tasks(InTasks), Capture(InCapture)
@@ -19,14 +19,14 @@ struct FFrameCaptureScope
 			Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 			                          [&]
 			                          {
-				                          Active = Capture->BeginFrame(InSurface);
+				                          bActive = Capture->BeginFrame(InSurface);
 			                          }));
 		}
 	}
 
 	~FFrameCaptureScope()
 	{
-		if (Active)
+		if (bActive)
 		{
 			try
 			{
@@ -44,17 +44,17 @@ struct FFrameCaptureScope
 
 	bool Finish()
 	{
-		bool Success = false;
-		if (Active)
+		bool bSuccess = false;
+		if (bActive)
 		{
 			Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 			                          [&]
 			                          {
-				                          Success = Capture->EndFrame();
+				                          bSuccess = Capture->EndFrame();
 			                          }));
-			Active = false;
+			bActive = false;
 		}
-		return Success;
+		return bSuccess;
 	}
 };
 } // namespace Hyperion

@@ -18,10 +18,10 @@ struct FSamplerDesc
 {
 	ERHIAddressMode U = ERHIAddressMode::Repeat;
 	ERHIAddressMode V = ERHIAddressMode::Repeat;
-	bool MinLinear = true;
-	bool MagLinear = true;
-	bool MipLinear = true;
-	bool Mipmapped = true;
+	bool bMinLinear = true;
+	bool bMagLinear = true;
+	bool bMipLinear = true;
+	bool bMipmapped = true;
 };
 
 struct FTextureMip
@@ -33,7 +33,7 @@ struct FTextureMip
 
 struct FTextureDesc
 {
-	bool Srgb{};
+	bool bSrgb{};
 	std::vector<FTextureMip> Mips;
 };
 enum class EVertexFormat
@@ -57,14 +57,14 @@ struct FPipelineDesc
 	FShaderArtifact Vertex;
 	FShaderArtifact Pixel;
 	std::vector<FVertexAttribute> Attributes;
-	bool AlphaBlend{};
-	bool Textured{};
-	bool MaterialLayout{};
-	bool SrgbTarget{};
-	bool DepthTest{};
-	bool DepthWrite{};
-	bool CullBack{};
-	bool FrontCounterClockwise = true;
+	bool bAlphaBlend{};
+	bool bTextured{};
+	bool bMaterialLayout{};
+	bool bSrgbTarget{};
+	bool bDepthTest{};
+	bool bDepthWrite{};
+	bool bCullBack{};
+	bool bFrontCounterClockwise = true;
 	std::array<FSamplerDesc, 5> Samplers;
 };
 
@@ -104,18 +104,18 @@ struct FPassCommands
 	std::string Name;
 	std::optional<EResourceState> TransitionFrom;
 	std::optional<EResourceState> TransitionTo;
-	bool Clear{};
+	bool bClear{};
 	FVec4 ClearColor;
 	std::vector<FDrawPacket> Draws;
-	bool UseDepth{};
-	bool SrgbTarget{};
-	bool ClearDepth{};
+	bool bUseDepth{};
+	bool bSrgbTarget{};
+	bool bClearDepth{};
 };
 
 struct FDeviceStats
 {
 	std::string Adapter;
-	bool DebugLayer{};
+	bool bDebugLayer{};
 	std::uint64_t ValidationErrors{};
 	std::uint64_t SubmittedFrames{};
 	std::uint64_t GpuAllocationBytes{};

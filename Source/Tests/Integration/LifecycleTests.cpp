@@ -10,26 +10,26 @@ using namespace Hyperion;
 
 template<class F> void Rejects(F InOperation)
 {
-	bool Failed = false;
+	bool bFailed = false;
 	try
 	{
 		InOperation();
 	}
 	catch (const std::exception&)
 	{
-		Failed = true;
+		bFailed = true;
 	}
-	HYP_CHECK(Failed);
+	HYP_CHECK(bFailed);
 }
 
 void CheckWindows()
 {
-	for (bool DestroyFirst : {false, true})
+	for (bool bDestroyFirst : {false, true})
 	{
 		auto First = std::make_unique<FWindow>("First", FSize{64, 64}, true);
 		auto Second = std::make_unique<FWindow>("Second", FSize{64, 64}, true);
-		auto& Survivor = DestroyFirst ? Second : First;
-		(DestroyFirst ? First : Second).reset();
+		auto& Survivor = bDestroyFirst ? Second : First;
+		(bDestroyFirst ? First : Second).reset();
 		HYP_CHECK(Survivor->PixelSize().Width > 0);
 		Survivor->Resize({80, 48});
 		Survivor->Poll();

@@ -52,28 +52,28 @@ int main()
 		HYP_CHECK(ReadValue<FArchiveFixture>(Node).Count == 7);
 		for (std::size_t Size : {std::size_t(0), std::size_t(7), Bytes.size() - 1})
 		{
-			bool Failed = false;
+			bool bFailed = false;
 			try
 			{
 				Restored = Deserialize<FArchiveFixture>(std::span(Bytes).first(Size));
 			}
 			catch (...)
 			{
-				Failed = true;
+				bFailed = true;
 			}
-			HYP_CHECK(Failed && Restored.Count == 42);
+			HYP_CHECK(bFailed && Restored.Count == 42);
 		}
 		std::get<FArchiveNode::FObject>(Node.Value)["version"] = WriteValue(2u);
-		bool Failed = false;
+		bool bFailed = false;
 		try
 		{
 			ReadValue<FArchiveFixture>(Node);
 		}
 		catch (...)
 		{
-			Failed = true;
+			bFailed = true;
 		}
-		HYP_CHECK(Failed);
+		HYP_CHECK(bFailed);
 		std::cout << "Reflected archive checks passed\n";
 	}
 	catch (const std::exception& InError)

@@ -6,9 +6,9 @@
 
 namespace Hyperion::Private
 {
-void Require(bool InValue, const std::string& InMessage)
+void Require(bool bInValue, const std::string& InMessage)
 {
-	if (!InValue)
+	if (!bInValue)
 	{
 		throw std::runtime_error("glTF: " + InMessage);
 	}

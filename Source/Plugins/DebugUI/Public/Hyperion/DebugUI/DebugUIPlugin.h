@@ -6,9 +6,9 @@ namespace Hyperion
 {
 struct FFrameCaptureMetrics
 {
-	bool Compiled = false;
-	bool Available = false;
-	bool Busy = false;
+	bool bCompiled = false;
+	bool bAvailable = false;
+	bool bBusy = false;
 	std::string Status = "RenderDoc support is not compiled in";
 	std::string LastCapture;
 	std::string OpenStatus;
@@ -25,10 +25,10 @@ struct FDebugMetrics
 
 struct FDebugActions
 {
-	bool Save{};
-	bool Capture{};
-	bool CaptureRdc{};
-	bool OpenRdc{};
+	bool bSave{};
+	bool bCapture{};
+	bool bCaptureRdc{};
+	bool bOpenRdc{};
 	// Logical pixel bounds allow normalized input acceptance without OS input injection.
 	FVec4 CaptureRdcBounds;
 	FVec4 OpenRdcBounds;

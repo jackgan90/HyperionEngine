@@ -81,7 +81,7 @@ std::string EncodeReflected(const FTypeDescriptor& InType, const void* InObject)
 	FJson Document{{"type", InType.Id}, {"schema_version", InType.Version}, {"properties", FJson::object()}};
 	for (const auto& Property : InType.Properties)
 	{
-		if (Property.Persistent)
+		if (Property.bPersistent)
 		{
 			FJson Value = std::visit(
 			    [](const auto& InItem) -> FJson
@@ -155,7 +155,7 @@ void DecodeReflected(std::string_view InText, const FTypeDescriptor& InType, voi
 	std::vector<std::pair<const FProperty*, FValue>> Pending;
 	for (const auto& Property : InType.Properties)
 	{
-		if (Property.Persistent && Properties.contains(Property.Id))
+		if (Property.bPersistent && Properties.contains(Property.Id))
 		{
 			Pending.emplace_back(&Property, ReadValue(Properties.at(Property.Id), Property));
 		}

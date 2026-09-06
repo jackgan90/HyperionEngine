@@ -13,11 +13,13 @@
 | 类模板 | T 前缀 | `TResourcePool<ElementType>` |
 | 函数、成员、局部变量 | PascalCase，不带下划线前后缀 | `InitializeLog`、`FrameIndex` |
 | 参数 | In + PascalCase；输出参数使用 Out | `InWidth`、`OutImage` |
-| 布尔变量和查询 | 大写开头，优先表达状态或问题 | `IsReady`、`ShouldClose` |
+| 布尔变量 | b + PascalCase，包含成员、局部变量、常量和原子布尔标志 | `bIsReady`、`bShouldClose` |
+| 布尔参数 | bIn + PascalCase；输出参数使用 bOut | `bInEnabled`、`bOutSuccess` |
+| 布尔查询函数 | PascalCase，优先表达状态或问题 | `IsReady()`、`ShouldClose()` |
 | 项目宏 | HYP_ + 大写下划线 | `HYP_SOURCE_DIR` |
 | 自有文件 | PascalCase，无 F/I/E 类型前缀 | `TaskSystem.h`、`TaskSystem.cpp` |
 
-**布尔命名是本仓库对 UE 的明确调整**：UE 常用小写 `b` 前缀；用户要求变量大写开头，因此本仓库不使用该前缀。也不采用 UObject、Actor、Slate 专用的 U/A/S 前缀，不引入 UE 宏、容器或运行时。
+布尔变量遵循 UE 的小写 `b` 前缀约定，其余变量继续采用大写开头的命名。布尔引用参数同样适用；存放布尔值的集合仍按集合命名，返回布尔值的函数不加 `b`。不采用 UObject、Actor、Slate 专用的 U/A/S 前缀，不引入 UE 宏、容器或运行时。
 
 名称应表达含义，避免不必要的缩写。已有领域缩写如 RHI、DX12、GUI 可以沿用。构造参数使用 `In`，避免与无下划线后缀的成员同名。公开接口在前，受保护/私有实现和成员在后。
 
@@ -49,7 +51,7 @@ private:
 
 ## 函数长度与职责
 
-单一函数原则上不应超过 **100 行**，超出应按逻辑拆分，除非逻辑上耦合极紧密，难以拆分。例外应在函数附近用简短注释说明具体原因，不能仅以“现有代码”或“拆分麻烦”为由豁免。
+单一函数原则上不应超过 **100 行**，超出应按逻辑拆分，除非逻辑上耦合极紧密，难以拆分。可按需用注释帮助理解不直观的耦合或执行流程；代码结构和现有注释可以自然体现保持完整函数的必要性，不要求仅因超过 100 行就额外添加理由注释。
 
 按完整函数定义计数，从签名首行到结束大括号，包含空行、注释和内部 lambda；构造函数同样适用。优先按职责、数据所有权和执行阶段拆分，避免机械切块、压缩排版或把长代码藏进 lambda。紧密关联的参数可组成有明确职责的上下文，但不要用无边界的共享状态掩盖耦合。
 
@@ -66,7 +68,7 @@ private:
 
 ## 检查与格式化
 
-需要 Python 3.10+ 和 LLVM 22.1.1（本机验证版本）的 `clang-format` / `clang-tidy`。脚本先检查 PATH，也会查找 Windows 默认 LLVM 安装目录。普通构建不强制安装 LLVM。
+需要 Python 3.10+ 和 LLVM 22.1.1（本机验证版本）的 `clang-format` / `clang-tidy` / `clang-query`。脚本先检查 PATH，也会查找 Windows 默认 LLVM 安装目录。普通构建不强制安装 LLVM。
 
 ```powershell
 # 检查文件名、头文件路径大小写与 C++/HLSL 排版
@@ -81,6 +83,8 @@ python tools/CheckStyle.py --naming --build-dir out/build/debug
 ```
 
 `--naming` 需要有效的 Ninja `compile_commands.json`；Visual Studio generator 不导出该文件。clang-tidy 理解符号所属类型，因此不会把 `std::vector::size()` 或 SDK 字段误判为引擎方法。命名检查覆盖普通声明；依赖模板、宏、HLSL 标识符及模板类型前缀仍需代码审阅。不要对整个仓库（包含 `out/deps`）执行自动修复。
+
+`.clang-tidy` 允许 `b` / `bIn` / `bOut` 前缀，`--naming` 同时用 clang-query 的类型信息检查布尔变量、布尔引用和 `std::atomic<bool>`，包括推导为布尔值的普通 `auto` 变量；也会拒绝非布尔变量借此前缀绕过普通命名规则。泛型模板的实例化不会把通用参数误判为布尔专用参数；布尔集合和查询函数仍遵循普通命名。
 
 CTest 的 `code_style_paths` 检查自有文件名和 include 路径的准确大小写，不需要 LLVM；完整格式/命名检查由上述命令显式运行。
 

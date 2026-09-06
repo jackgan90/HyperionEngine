@@ -12,11 +12,11 @@ struct FAppSettings
 	int RhiThreads = 2;
 	std::string RHIBackend = "d3d12";
 	std::string ModelSource;
-	bool Vsync = true;
-	bool ShowGui = true;
+	bool bVsync = true;
+	bool bShowGui = true;
 	std::string RenderDocLibrary;
 	std::string RenderDocOutput = "out/captures/renderdoc";
-	bool RenderDocAutoOpen = false;
+	bool bRenderDocAutoOpen = false;
 	double TriangleScale = 0.85;
 	double ClearRed = 0.025;
 	double ClearGreen = 0.035;

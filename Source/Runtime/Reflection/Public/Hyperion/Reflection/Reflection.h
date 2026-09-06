@@ -26,7 +26,7 @@ struct FProperty
 	EPropertyKind Kind;
 	double Minimum{};
 	double Maximum{};
-	bool Persistent = true;
+	bool bPersistent = true;
 	std::function<FValue(const void*)> Get;
 	std::function<void(void*, const FValue&)> Set;
 };

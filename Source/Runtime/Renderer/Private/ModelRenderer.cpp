@@ -17,10 +17,10 @@ float Srgb(float InValue)
 	return InValue <= .0031308f ? InValue * 12.92f : 1.055f * std::pow(InValue, 1 / 2.4f) - .055f;
 }
 
-FTextureDesc Texture(const FModelImage& InImage, bool InSrgb)
+FTextureDesc Texture(const FModelImage& InImage, bool bInSrgb)
 {
 	FTextureDesc Result;
-	Result.Srgb = InSrgb;
+	Result.bSrgb = bInSrgb;
 	Result.Mips.push_back({InImage.Width, InImage.Height, InImage.Rgba});
 	while (Result.Mips.back().Width > 1 || Result.Mips.back().Height > 1)
 	{
@@ -45,12 +45,12 @@ FTextureDesc Texture(const FModelImage& InImage, bool InSrgb)
 						{
 							float Value =
 							    Previous.Rgba[(std::size_t(Row) * Previous.Width + Column) * 4 + Channel] / 255.f;
-							Sum += InSrgb && Channel < 3 ? Linear(Value) : Value;
+							Sum += bInSrgb && Channel < 3 ? Linear(Value) : Value;
 							++Count;
 						}
 					}
 					float Value = Sum / Count;
-					if (InSrgb && Channel < 3)
+					if (bInSrgb && Channel < 3)
 					{
 						Value = Srgb(Value);
 					}
@@ -194,12 +194,12 @@ FModelRenderer::FModelRenderer(IRHIDevice& InDevice, const FPreparedModel& InMod
 		FPipelineDesc Desc;
 		Desc.Vertex = InVertex;
 		Desc.Pixel = InPixel;
-		Desc.MaterialLayout = true;
-		Desc.SrgbTarget = true;
-		Desc.DepthTest = true;
-		Desc.DepthWrite = Prepared.Material.AlphaMode != EAlphaMode::Blend;
-		Desc.AlphaBlend = Prepared.Material.AlphaMode == EAlphaMode::Blend;
-		Desc.CullBack = !Prepared.Material.DoubleSided;
+		Desc.bMaterialLayout = true;
+		Desc.bSrgbTarget = true;
+		Desc.bDepthTest = true;
+		Desc.bDepthWrite = Prepared.Material.AlphaMode != EAlphaMode::Blend;
+		Desc.bAlphaBlend = Prepared.Material.AlphaMode == EAlphaMode::Blend;
+		Desc.bCullBack = !Prepared.Material.bDoubleSided;
 		Desc.Samplers = Prepared.Samplers;
 		Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FModelVertex, Position)},
 		                   {"NORMAL", 0, EVertexFormat::Float3, offsetof(FModelVertex, Normal)},
@@ -209,7 +209,7 @@ FModelRenderer::FModelRenderer(IRHIDevice& InDevice, const FPreparedModel& InMod
 		                   {"TEXCOORD", 1, EVertexFormat::Float2, offsetof(FModelVertex, Uv1)}};
 		std::array<FPipeline, 2> Pair;
 		Pair[0] = Device.CreatePipeline(Desc);
-		Desc.FrontCounterClockwise = false;
+		Desc.bFrontCounterClockwise = false;
 		Pair[1] = Device.CreatePipeline(Desc);
 		Pipelines.push_back(std::move(Pair));
 	}
@@ -231,7 +231,7 @@ std::vector<FDrawPacket> FModelRenderer::Draws(const FMat4& InViewProjection, FV
 	struct FOrderedInstance
 	{
 		FModelInstance Instance;
-		bool Blend{};
+		bool bBlend{};
 		float Depth{};
 	};
 
@@ -240,7 +240,7 @@ std::vector<FDrawPacket> FModelRenderer::Draws(const FMat4& InViewProjection, FV
 	for (const auto& Instance : Instances)
 	{
 		FOrderedInstance Item{Instance, Materials[MaterialIndex(Instance)].Material.AlphaMode == EAlphaMode::Blend};
-		if (Item.Blend)
+		if (Item.bBlend)
 		{
 			const auto Center = Centers[Instance.Primitive];
 			const auto Clip = Transform(InViewProjection, Transform(Instance.World, {Center.X, Center.Y, Center.Z, 1}));
@@ -255,7 +255,7 @@ std::vector<FDrawPacket> FModelRenderer::Draws(const FMat4& InViewProjection, FV
 	std::stable_sort(Ordered.begin(), Ordered.end(),
 	                 [](const FOrderedInstance& InA, const FOrderedInstance& InB)
 	                 {
-		                 return InA.Blend != InB.Blend ? !InA.Blend : InA.Blend && InA.Depth > InB.Depth;
+		                 return InA.bBlend != InB.bBlend ? !InA.bBlend : InA.bBlend && InA.Depth > InB.Depth;
 	                 });
 	std::vector<FDrawPacket> Draws;
 	Draws.reserve(Ordered.size());
@@ -267,7 +267,7 @@ std::vector<FDrawPacket> FModelRenderer::Draws(const FMat4& InViewProjection, FV
 		const auto Index = MaterialIndex(Instance);
 		const auto& Prepared = Materials[Index];
 		const auto& Material = Prepared.Material;
-		const bool Mirrored = Determinant(Instance.World) < 0;
+		const bool bMirrored = Determinant(Instance.World) < 0;
 		FModelConstants Constants{};
 		Constants.World = Instance.World;
 		Constants.ViewProjection = InViewProjection;
@@ -277,15 +277,15 @@ std::vector<FDrawPacket> FModelRenderer::Draws(const FMat4& InViewProjection, FV
 		Constants.EmissiveAndNormal = {Material.Emissive.X, Material.Emissive.Y, Material.Emissive.Z,
 		                               Material.NormalScale};
 		Constants.Pbr = {Material.Metallic, Material.Roughness, Material.OcclusionStrength, Material.AlphaCutoff};
-		Constants.Modes = {static_cast<float>(Material.AlphaMode), Material.DoubleSided ? 1.f : 0.f,
-		                   Material.Unlit ? 1.f : 0.f, Mirrored ? -1.f : 1.f};
+		Constants.Modes = {static_cast<float>(Material.AlphaMode), Material.bDoubleSided ? 1.f : 0.f,
+		                   Material.bUnlit ? 1.f : 0.f, bMirrored ? -1.f : 1.f};
 		Constants.UvSets = {float(Material.BaseColorTexture.TexCoord),
 		                    float(Material.MetallicRoughnessTexture.TexCoord), float(Material.NormalTexture.TexCoord),
 		                    float(Material.OcclusionTexture.TexCoord)};
 		Constants.Extra = {float(Material.EmissiveTexture.TexCoord), Material.NormalTexture.Image >= 0 ? 1.f : 0.f, 0,
 		                   0};
 		FDrawPacket Draw;
-		Draw.Pipeline = Pipelines[Index][Mirrored ? 1 : 0];
+		Draw.Pipeline = Pipelines[Index][bMirrored ? 1 : 0];
 		Draw.Vertices = Vertices[Instance.Primitive];
 		Draw.Indices = Indices[Instance.Primitive];
 		Draw.VertexStride = sizeof(FModelVertex);

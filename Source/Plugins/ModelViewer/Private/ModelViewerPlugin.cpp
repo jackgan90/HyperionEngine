@@ -25,10 +25,10 @@ struct FModelViewerPlugin::FImpl
 	std::shared_ptr<FModelRenderer> Renderer;
 	std::string Status = "Loading model...";
 	std::string Error;
-	bool UploadStarted{};
-	bool IsReady{};
-	bool Dragging{};
-	bool FitRequested = true;
+	bool bUploadStarted{};
+	bool bIsReady{};
+	bool bDragging{};
+	bool bFitRequested = true;
 	FVec2 LastMouse;
 	FVec3 Center;
 	float Radius = 1;
@@ -73,7 +73,7 @@ void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFram
 	}
 	try
 	{
-		if (!P.UploadStarted)
+		if (!P.bUploadStarted)
 		{
 			if (!P.Preparation.Ready())
 			{
@@ -90,7 +90,7 @@ void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFram
 				                                                              P.Device, Prepared->Model,
 				                                                              Prepared->Vertex, Prepared->Pixel);
 			                                                          });
-			P.UploadStarted = true;
+			P.bUploadStarted = true;
 			P.Preparation = {};
 		}
 		if (!P.Renderer)
@@ -103,11 +103,11 @@ void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFram
 			P.Upload = {};
 		}
 		const float Aspect = float(InFrame.Size.Width) / InFrame.Size.Height;
-		if (P.FitRequested)
+		if (P.bFitRequested)
 		{
 			const float Limit = std::min(.5f, std::atan(std::tan(.5f) * Aspect));
 			P.Distance = P.Radius / std::sin(Limit) * 1.12f;
-			P.FitRequested = false;
+			P.bFitRequested = false;
 		}
 		const FVec3 Direction{std::sin(P.Yaw) * std::cos(P.Pitch), std::sin(P.Pitch),
 		                      std::cos(P.Yaw) * std::cos(P.Pitch)};
@@ -119,22 +119,22 @@ void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFram
 		P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Rhi, 0},
 		                              [&]
 		                              {
-			                              P.IsReady = P.Renderer->Ready();
-			                              if (P.IsReady)
+			                              P.bIsReady = P.Renderer->Ready();
+			                              if (P.bIsReady)
 			                              {
 				                              Draws = P.Renderer->Draws(ViewProjection, Eye, InFrame.Size);
 			                              }
 		                              }));
-		if (!P.IsReady)
+		if (!P.bIsReady)
 		{
 			return;
 		}
 		P.Status = "Ready | " + std::to_string(Draws.size()) + " draws";
 		FColorPass Pass;
 		Pass.Commands.Name = "Static model";
-		Pass.Commands.UseDepth = true;
-		Pass.Commands.ClearDepth = true;
-		Pass.Commands.SrgbTarget = true;
+		Pass.Commands.bUseDepth = true;
+		Pass.Commands.bClearDepth = true;
+		Pass.Commands.bSrgbTarget = true;
 		Pass.Commands.Draws = std::move(Draws);
 		InGraph.Add(std::move(Pass));
 	}
@@ -142,41 +142,41 @@ void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFram
 	{
 		P.Error = Error.what();
 		P.Status = "Load failed: " + P.Error;
-		P.IsReady = false;
+		P.bIsReady = false;
 	}
 }
 
-void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool InMouseCaptured, bool InKeyboardCaptured)
+void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured)
 {
 	auto& P = *Impl;
 	for (const auto& Event : InEvents)
 	{
-		if (Event.Type == EEventType::Focus && !Event.Down)
+		if (Event.Type == EEventType::Focus && !Event.bDown)
 		{
-			P.Dragging = false;
+			P.bDragging = false;
 		}
 		if (Event.Type == EEventType::MouseButton && Event.Button == 1)
 		{
-			P.Dragging = Event.Down && !InMouseCaptured;
+			P.bDragging = Event.bDown && !bInMouseCaptured;
 		}
 		if (Event.Type == EEventType::MouseMove)
 		{
-			if (P.Dragging)
+			if (P.bDragging)
 			{
 				P.Yaw -= (Event.X - P.LastMouse.X) * .006f;
 				P.Pitch = std::clamp(P.Pitch + (Event.Y - P.LastMouse.Y) * .006f, -1.5f, 1.5f);
 			}
 			P.LastMouse = {Event.X, Event.Y};
 		}
-		if (Event.Type == EEventType::MouseWheel && !InMouseCaptured)
+		if (Event.Type == EEventType::MouseWheel && !bInMouseCaptured)
 		{
 			P.Distance = std::clamp(P.Distance * std::pow(.85f, Event.Y), P.Radius * .15f, P.Radius * 100);
 		}
-		if (Event.Type == EEventType::Key && Event.Down && !InKeyboardCaptured)
+		if (Event.Type == EEventType::Key && Event.bDown && !bInKeyboardCaptured)
 		{
 			if (Event.Key == EKey::Home)
 			{
-				P.FitRequested = true;
+				P.bFitRequested = true;
 			}
 			if (Event.Key == EKey::Left)
 			{
@@ -239,7 +239,7 @@ const std::string& FModelViewerPlugin::Error() const
 
 bool FModelViewerPlugin::Ready() const
 {
-	return Impl->IsReady;
+	return Impl->bIsReady;
 }
 
 void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,

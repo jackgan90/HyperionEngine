@@ -19,28 +19,28 @@ int main()
 			                                return *IO.ReadAsync(Path).Get(Tasks) == Bytes;
 		                                });
 		HYP_CHECK(*Work.Get(Tasks));
-		bool Failed = false;
+		bool bFailed = false;
 		try
 		{
 			IO.ReadAsync(Path, {}, 2).Get(Tasks);
 		}
 		catch (...)
 		{
-			Failed = true;
+			bFailed = true;
 		}
-		HYP_CHECK(Failed);
+		HYP_CHECK(bFailed);
 		FCancellationToken Token;
 		Token.Cancel();
-		Failed = false;
+		bFailed = false;
 		try
 		{
 			IO.ReadAsync(Path, Token).Get(Tasks);
 		}
 		catch (...)
 		{
-			Failed = true;
+			bFailed = true;
 		}
-		HYP_CHECK(Failed);
+		HYP_CHECK(bFailed);
 		std::thread::id IOId;
 		Tasks.Wait(Tasks.Dispatch({EDomain::Io},
 		                          [&]

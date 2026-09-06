@@ -13,7 +13,7 @@ public:
 	const FRHICapabilities& GetCapabilities() const noexcept override;
 	void BeginFrame(FSize InSize) override;
 	FRecordedList Record(std::uint32_t InContext, const FPassCommands& InCommands) override;
-	FImage EndFrame(std::span<const FRecordedList> InLists, bool InVsync, bool InCapture) override;
+	FImage EndFrame(std::span<const FRecordedList> InLists, bool bInVsync, bool bInCapture) override;
 	void CancelFrame() override;
 	void WaitIdle() override;
 

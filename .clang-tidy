@@ -22,9 +22,12 @@ CheckOptions:
   readability-identifier-naming.FunctionCase: CamelCase
   readability-identifier-naming.MethodCase: CamelCase
   readability-identifier-naming.VariableCase: CamelCase
+  # Boolean prefixes are checked by CheckStyle.py using Clang's type information.
+  readability-identifier-naming.VariableIgnoredRegexp: '^b[A-Z][A-Za-z0-9]*$'
   readability-identifier-naming.MemberCase: CamelCase
+  readability-identifier-naming.MemberIgnoredRegexp: '^b[A-Z][A-Za-z0-9]*$'
   readability-identifier-naming.ParameterCase: CamelCase
   readability-identifier-naming.ParameterPrefix: In
-  readability-identifier-naming.ParameterIgnoredRegexp: '^(Out[A-Z].*)$'
+  readability-identifier-naming.ParameterIgnoredRegexp: '^(Out|bIn|bOut)[A-Z][A-Za-z0-9]*$'
   readability-identifier-naming.TemplateParameterCase: CamelCase
   readability-identifier-naming.MacroDefinitionCase: UPPER_CASE

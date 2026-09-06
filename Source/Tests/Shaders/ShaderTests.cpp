@@ -7,9 +7,9 @@ namespace
 {
 using namespace Hyperion;
 
-void Check(bool InB, const char* InM)
+void Check(bool bInB, const char* InM)
 {
-	if (!InB)
+	if (!bInB)
 	{
 		throw std::runtime_error(InM);
 	}
@@ -77,7 +77,7 @@ int main()
 		}
 		auto First = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
 		auto Second = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
-		Check(Second.CacheHit && First.Bytes == Second.Bytes, "Cache hit");
+		Check(Second.bCacheHit && First.Bytes == Second.Bytes, "Cache hit");
 		{
 			std::ofstream File(Root / "Common.hlsli", std::ios::app);
 			File << "\n// cache invalidation test\n";
@@ -89,21 +89,21 @@ int main()
 			File << "corrupt";
 		}
 		auto Repaired = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
-		Check(!Repaired.CacheHit && Repaired.Bytes == Changed.Bytes, "Corrupt cache recovery");
+		Check(!Repaired.bCacheHit && Repaired.Bytes == Changed.Bytes, "Corrupt cache recovery");
 		{
 			std::ofstream File(Root / "invalid.hlsl");
 			File << "not valid shader source";
 		}
-		bool Failed = false;
+		bool bFailed = false;
 		try
 		{
 			Compiler.Compile("invalid.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
 		}
 		catch (const std::exception& E)
 		{
-			Failed = std::string(E.what()).find("error") != std::string::npos;
+			bFailed = std::string(E.what()).find("error") != std::string::npos;
 		}
-		Check(Failed, "Compiler diagnostics");
+		Check(bFailed, "Compiler diagnostics");
 		std::cout << "Shader target, reflection and cache checks passed\n";
 		return 0;
 	}

@@ -13,7 +13,7 @@ public:
 	void Start() override;
 	void Build(FRenderGraph& InGraph, const FRenderFrame& InFrame) override;
 	void Stop() noexcept override;
-	void Input(std::span<const FInputEvent> InEvents, bool InMouseCaptured, bool InKeyboardCaptured);
+	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);
 	const std::string& Status() const;
 	const std::string& Error() const;
 	bool Ready() const;

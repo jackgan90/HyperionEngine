@@ -9,9 +9,9 @@ namespace
 {
 using namespace Hyperion;
 
-void Check(bool InB, const char* InM)
+void Check(bool bInB, const char* InM)
 {
-	if (!InB)
+	if (!bInB)
 	{
 		throw std::runtime_error(InM);
 	}
@@ -27,7 +27,7 @@ int main()
 			FGui Gui;
 			auto Font = Gui.FontImage();
 			Check(Font.Width && Font.Height, "Font atlas");
-			bool Enabled = false;
+			bool bEnabled = false;
 			FAppSettings Settings;
 			FVec4 Box;
 			FVec4 Property;
@@ -35,7 +35,7 @@ int main()
 			{
 				Gui.BeginFrame({640, 480}, {1280, 960}, 1.f / 60, InEvents);
 				Gui.BeginPanel("Test", {0, 0}, {400, 300});
-				Gui.Checkbox("Enabled", Enabled);
+				Gui.Checkbox("Enabled", bEnabled);
 				Box = Gui.LastItemBounds();
 				constexpr std::array<std::string_view, 1> Ids{"triangle_scale"};
 				Gui.EditProperties(SettingsType(), &Settings, Ids);
@@ -55,18 +55,18 @@ int main()
 				Move.Y = (InBounds.Y + InBounds.W) * .5f;
 				FInputEvent Down;
 				Down.Type = EEventType::MouseButton;
-				Down.Down = true;
+				Down.bDown = true;
 				Down.Button = 0;
 				std::array Events{Move, Down};
 				Frame(Events);
-				Down.Down = false;
+				Down.bDown = false;
 				std::array Release{Down};
 				Frame(Release);
 			};
 			Frame({});
 			Click(Box, .05f);
 			Frame({});
-			Check(Enabled, "Normalized mouse toggles checkbox");
+			Check(bEnabled, "Normalized mouse toggles checkbox");
 			double Original = Settings.TriangleScale;
 			Click(Property, .1f);
 			Check(Settings.TriangleScale != Original, "Reflection control updates settings");

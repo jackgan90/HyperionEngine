@@ -45,8 +45,8 @@ public:
 	bool WantsMouse() const;
 	bool WantsKeyboard() const;
 	void Separator();
-	bool Button(const char* InLabel, bool InEnabled = true);
-	bool Checkbox(const char* InLabel, bool& InValue);
+	bool Button(const char* InLabel, bool bInEnabled = true);
+	bool Checkbox(const char* InLabel, bool& bInValue);
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
 	FVec4 LastItemBounds();
 	bool EditProperties(const FTypeDescriptor& InType, void* InObject, std::span<const std::string_view> InIds);

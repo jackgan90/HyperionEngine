@@ -49,7 +49,7 @@ struct FFrameCapture::FImpl
 	FFrameCaptureStatus Status;
 	RENDERDOC_API_1_6_0* Api = nullptr;
 	FNativeSurface Surface;
-	bool OwnsCapture = false;
+	bool bOwnsCapture = false;
 	std::uint32_t CaptureCountBefore = 0;
 	std::uint64_t RequestIndex = 0;
 	std::string Session;
@@ -59,7 +59,7 @@ struct FFrameCapture::FImpl
 	{
 		Status.State = EFrameCaptureState::Failed;
 		Status.Message = InMessage;
-		if (OwnsCapture)
+		if (bOwnsCapture)
 		{
 			Status.Message += "; capture is still active, further captures disabled until restart";
 		}
@@ -68,17 +68,17 @@ struct FFrameCapture::FImpl
 
 	void DiscardOwned()
 	{
-		if (OwnsCapture && Api && Api->IsFrameCapturing())
+		if (bOwnsCapture && Api && Api->IsFrameCapturing())
 		{
-			const bool Discarded = Api->DiscardFrameCapture(nullptr, Surface.Handle) != 0;
-			if (!Discarded && Api->IsFrameCapturing())
+			const bool bDiscarded = Api->DiscardFrameCapture(nullptr, Surface.Handle) != 0;
+			if (!bDiscarded && Api->IsFrameCapturing())
 			{
 				// Retain ownership so Cancel/Shutdown can retry; never treat our failed cleanup as external.
-				Status.Available = false;
+				Status.bAvailable = false;
 				return;
 			}
 		}
-		OwnsCapture = false;
+		bOwnsCapture = false;
 	}
 };
 
@@ -96,7 +96,7 @@ void FFrameCapture::Initialize()
 {
 	auto& P = *Impl;
 	std::lock_guard Lock(P.Mutex);
-	if (P.Status.Available || P.OwnsCapture)
+	if (P.Status.bAvailable || P.bOwnsCapture)
 	{
 		return;
 	}
@@ -138,7 +138,7 @@ void FFrameCapture::Initialize()
 		int Patch = 0;
 		P.Api->GetAPIVersion(&Major, &Minor, &Patch);
 		P.Status.State = EFrameCaptureState::Ready;
-		P.Status.Available = true;
+		P.Status.bAvailable = true;
 		P.Status.Message =
 		    "Ready (API " + std::to_string(Major) + "." + std::to_string(Minor) + "." + std::to_string(Patch) + ")";
 		Log(ELogLevel::Info, "RenderDoc: " + P.Status.Message);
@@ -146,7 +146,7 @@ void FFrameCapture::Initialize()
 	catch (const std::exception& Error)
 	{
 		P.Api = nullptr;
-		P.Status.Available = false;
+		P.Status.bAvailable = false;
 		P.Status.State = EFrameCaptureState::Unavailable;
 		P.Status.Message = Error.what();
 		Log(ELogLevel::Warning, "RenderDoc unavailable: " + P.Status.Message);
@@ -160,8 +160,8 @@ void FFrameCapture::Shutdown() noexcept
 		auto& P = *Impl;
 		std::lock_guard Lock(P.Mutex);
 		P.DiscardOwned();
-		P.Status.Available = false;
-		if (P.OwnsCapture)
+		P.Status.bAvailable = false;
+		if (P.bOwnsCapture)
 		{
 			P.Fail("RenderDoc could not stop the owned capture");
 			return;
@@ -184,7 +184,7 @@ bool FFrameCapture::RequestCapture()
 {
 	auto& P = *Impl;
 	std::lock_guard Lock(P.Mutex);
-	if (!P.Status.Available || P.Status.State == EFrameCaptureState::Pending || P.OwnsCapture)
+	if (!P.Status.bAvailable || P.Status.State == EFrameCaptureState::Pending || P.bOwnsCapture)
 	{
 		return false;
 	}
@@ -238,7 +238,7 @@ bool FFrameCapture::BeginFrame(FNativeSurface InSurface)
 		{
 			throw std::runtime_error("No hooked graphics target; enable RenderDoc before device creation and restart");
 		}
-		P.OwnsCapture = true;
+		P.bOwnsCapture = true;
 		P.Status.State = EFrameCaptureState::Capturing;
 		P.Status.Message = "Capturing frame";
 		return true;
@@ -255,15 +255,15 @@ bool FFrameCapture::EndFrame()
 {
 	auto& P = *Impl;
 	std::lock_guard Lock(P.Mutex);
-	if (!P.OwnsCapture)
+	if (!P.bOwnsCapture)
 	{
 		return false;
 	}
 	try
 	{
-		const bool Success = P.Api->EndFrameCapture(nullptr, P.Surface.Handle) != 0;
-		P.OwnsCapture = !Success && P.Api->IsFrameCapturing();
-		if (!Success)
+		const bool bSuccess = P.Api->EndFrameCapture(nullptr, P.Surface.Handle) != 0;
+		P.bOwnsCapture = !bSuccess && P.Api->IsFrameCapturing();
+		if (!bSuccess)
 		{
 			throw std::runtime_error("RenderDoc failed to save the frame");
 		}
@@ -309,12 +309,12 @@ void FFrameCapture::Cancel() noexcept
 	{
 		auto& P = *Impl;
 		std::lock_guard Lock(P.Mutex);
-		if (P.OwnsCapture || P.Status.State == EFrameCaptureState::Pending)
+		if (P.bOwnsCapture || P.Status.State == EFrameCaptureState::Pending)
 		{
 			P.DiscardOwned();
-			P.Fail(P.OwnsCapture         ? "RenderDoc could not cancel the owned capture"
-			       : !P.Status.Available ? "Capture cancelled; restart the application to resume capturing"
-			                             : "Capture cancelled before the frame completed");
+			P.Fail(P.bOwnsCapture         ? "RenderDoc could not cancel the owned capture"
+			       : !P.Status.bAvailable ? "Capture cancelled; restart the application to resume capturing"
+			                              : "Capture cancelled before the frame completed");
 		}
 	}
 	catch (...)
@@ -329,7 +329,7 @@ bool FFrameCapture::OpenLastCapture()
 	P.Status.ReplayProcessId = 0;
 	try
 	{
-		if (!P.Status.Available || !ValidCaptureFile(P.Status.LastCapture))
+		if (!P.Status.bAvailable || !ValidCaptureFile(P.Status.LastCapture))
 		{
 			throw std::runtime_error("No saved capture is available to open");
 		}

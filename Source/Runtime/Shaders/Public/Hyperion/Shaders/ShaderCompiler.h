@@ -40,7 +40,7 @@ struct FShaderArtifact
 	std::vector<std::uint8_t> Bytes;
 	std::vector<FShaderBinding> Bindings; // SPIR-V/MSL resource metadata; DXIL stays opaque.
 	std::string CacheKey;
-	bool CacheHit{};
+	bool bCacheHit{};
 };
 
 class FShaderCompiler

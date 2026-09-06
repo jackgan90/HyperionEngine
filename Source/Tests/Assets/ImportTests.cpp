@@ -31,6 +31,35 @@ private:
 };
 } // namespace Hyperion
 
+namespace
+{
+using namespace Hyperion;
+
+void CheckInvalidImports(FAssetService& InAssets, FTaskSystem& InTasks, const std::filesystem::path& InRoot)
+{
+	bool bFailed = false;
+	for (const auto* File :
+	     {"Missing.gltf", "Unsupported.gltf", "BadAccessor.gltf", "Cycle.gltf", "Lines.gltf", "Truncated.glb",
+	      "InvalidSparseView.gltf", "OverflowView.gltf", "InvalidSparseCount.gltf", "DeepNodes.gltf"})
+	{
+		bFailed = false;
+		try
+		{
+			InAssets.LoadAsync<FModelAsset>(InRoot / File).Get(InTasks);
+		}
+		catch (...)
+		{
+			bFailed = true;
+		}
+		if (!bFailed)
+		{
+			throw std::runtime_error(std::string("Expected import rejection: ") + File);
+		}
+	}
+}
+
+} // namespace
+
 int main()
 {
 	using namespace Hyperion;
@@ -50,16 +79,16 @@ int main()
 		HYP_CHECK(Storage->Thread != std::this_thread::get_id());
 		HYP_CHECK(IO.Statistics().Reads == 3);
 		HYP_CHECK(Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf").Get(Tasks) == Model);
-		bool Failed = false;
+		bool bFailed = false;
 		try
 		{
 			Cancelled.GetReady();
 		}
 		catch (...)
 		{
-			Failed = true;
+			bFailed = true;
 		}
-		HYP_CHECK(Failed);
+		HYP_CHECK(bFailed);
 		for (const auto* File : {"Showcase.glb", "DataUri.gltf", "Jpeg.gltf"})
 		{
 			auto Loaded = Assets.LoadAsync<FModelAsset>(Root / File).Get(Tasks);
@@ -82,24 +111,7 @@ int main()
 				HYP_CHECK(Topology->Primitives[0].Normals[Index] == 1);
 			}
 		}
-		for (const auto* File :
-		     {"Missing.gltf", "Unsupported.gltf", "BadAccessor.gltf", "Cycle.gltf", "Lines.gltf", "Truncated.glb",
-		      "InvalidSparseView.gltf", "OverflowView.gltf", "InvalidSparseCount.gltf", "DeepNodes.gltf"})
-		{
-			Failed = false;
-			try
-			{
-				Assets.LoadAsync<FModelAsset>(Root / File).Get(Tasks);
-			}
-			catch (...)
-			{
-				Failed = true;
-			}
-			if (!Failed)
-			{
-				throw std::runtime_error(std::string("Expected import rejection: ") + File);
-			}
-		}
+		CheckInvalidImports(Assets, Tasks, Root);
 		Assets.SaveAsync("model-roundtrip.hasset", Model).Get(Tasks);
 		auto Restored = Assets.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks);
 		HYP_CHECK(Serialize(*Restored) == Serialize(*Model));
@@ -107,16 +119,16 @@ int main()
 		Changed->Name = "Changed snapshot";
 		Assets.SaveAsync<FModelAsset>("model-roundtrip.hasset", Changed).Get(Tasks);
 		HYP_CHECK(Assets.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks)->Name == "Changed snapshot");
-		Failed = false;
+		bFailed = false;
 		try
 		{
 			Assets.SaveAsync("unsupported.gltf", Model).Get(Tasks);
 		}
 		catch (...)
 		{
-			Failed = true;
+			bFailed = true;
 		}
-		HYP_CHECK(Failed);
+		HYP_CHECK(bFailed);
 		{
 			FAssetService Temporary(IO);
 			RegisterGltfImporter(Temporary);

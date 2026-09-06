@@ -95,8 +95,8 @@ private:
 	                        std::shared_ptr<const void> InSnapshot);
 	FIOService& IO;
 	std::mutex Mutex;
-	bool Loading{};
-	bool Closing{};
+	bool bLoading{};
+	bool bClosing{};
 	FCancellationToken Cancellation;
 	std::vector<FAssetCodec> Codecs;
 	std::map<std::pair<std::filesystem::path, std::string>, TAsyncResult<std::shared_ptr<const void>>> Cache;
