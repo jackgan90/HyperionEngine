@@ -1,0 +1,27 @@
+Checks: '-*,readability-identifier-naming,readability-isolate-declaration'
+WarningsAsErrors: 'readability-identifier-naming,readability-isolate-declaration'
+HeaderFilterRegex: '[/\\](include[/\\]hyperion|tests)[/\\]'
+CheckOptions:
+  readability-identifier-naming.NamespaceCase: CamelCase
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.ClassPrefix: F
+  readability-identifier-naming.AbstractClassCase: CamelCase
+  readability-identifier-naming.AbstractClassPrefix: I
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.StructPrefix: F
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.EnumPrefix: E
+  readability-identifier-naming.EnumConstantCase: CamelCase
+  readability-identifier-naming.TypeAliasCase: CamelCase
+  readability-identifier-naming.TypeAliasPrefix: F
+  readability-identifier-naming.TypedefCase: CamelCase
+  readability-identifier-naming.TypedefPrefix: F
+  readability-identifier-naming.FunctionCase: CamelCase
+  readability-identifier-naming.MethodCase: CamelCase
+  readability-identifier-naming.VariableCase: CamelCase
+  readability-identifier-naming.MemberCase: CamelCase
+  readability-identifier-naming.ParameterCase: CamelCase
+  readability-identifier-naming.ParameterPrefix: In
+  readability-identifier-naming.ParameterIgnoredRegexp: '^(Out[A-Z].*)$'
+  readability-identifier-naming.TemplateParameterCase: CamelCase
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE

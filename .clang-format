@@ -1,0 +1,23 @@
+BasedOnStyle: Microsoft
+LineEnding: LF
+UseTab: ForIndentation
+IndentWidth: 4
+TabWidth: 4
+ColumnLimit: 120
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortLambdasOnASingleLine: None
+AllowShortEnumsOnASingleLine: false
+BreakBeforeBraces: Allman
+BraceWrapping:
+  AfterNamespace: true
+NamespaceIndentation: None
+AccessModifierOffset: -4
+IndentCaseLabels: true
+InsertBraces: true
+SeparateDefinitionBlocks: Always
+SortIncludes: CaseSensitive
+PointerAlignment: Left
+SpaceAfterTemplateKeyword: false

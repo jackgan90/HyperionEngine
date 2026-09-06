@@ -1,0 +1,18 @@
+{
+  "type": "hyperion.application-settings",
+  "schema_version": 1,
+  "properties": {
+    "title": "Hyperion | Rendering Lab",
+    "width": 1280,
+    "height": 720,
+    "workers": 4,
+    "rhi_threads": 2,
+    "vsync": true,
+    "show_gui": true,
+    "triangle_scale": 0.85,
+    "clear_red": 0.025,
+    "clear_green": 0.035,
+    "clear_blue": 0.065,
+    "plugins": ["triangle", "debug-ui"]
+  }
+}

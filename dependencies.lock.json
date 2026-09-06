@@ -1,0 +1,107 @@
+{
+  "spdlog": {
+    "repository": "gabime/spdlog",
+    "version": "v1.17.0",
+    "commit": "79524ddd08a4ec981b7fea76afd08ee05f83755d",
+    "url": "https://codeload.github.com/gabime/spdlog/zip/79524ddd08a4ec981b7fea76afd08ee05f83755d",
+    "sha256": "2594162a28f06d12bf38ab4388c002156db9f8d5f7bcb0e1b4e60067dbad6c76"
+  },
+  "mimalloc": {
+    "repository": "microsoft/mimalloc",
+    "version": "v3.5.1",
+    "commit": "34fbd7e7cd4627424490afe19b20f8066bfc537d",
+    "url": "https://codeload.github.com/microsoft/mimalloc/zip/34fbd7e7cd4627424490afe19b20f8066bfc537d",
+    "sha256": "85a4b5191efa854120f4fc742c063e8e18883e984adf609116a3a8c79ef96c78"
+  },
+  "tracy": {
+    "repository": "wolfpld/tracy",
+    "version": "v0.14.1",
+    "commit": "30997d5ca6bb632cc10807a1da8a6d3de0aeeb3c",
+    "url": "https://codeload.github.com/wolfpld/tracy/zip/30997d5ca6bb632cc10807a1da8a6d3de0aeeb3c",
+    "sha256": "14d458af6f78e1c4f517bc41c2ae2d3a8ad334219fe767f3387fb8e3d272c62d"
+  },
+  "onetbb": {
+    "repository": "uxlfoundation/oneTBB",
+    "version": "v2023.1.0",
+    "commit": "3046c8b0c29df995980003ea24f4d78c80ec0c8d",
+    "url": "https://codeload.github.com/uxlfoundation/oneTBB/zip/3046c8b0c29df995980003ea24f4d78c80ec0c8d",
+    "sha256": "25f3bd989960901cd13c2050bd9b71479dfb2f8d045bff1b0a68654c31210ece"
+  },
+  "sdl": {
+    "repository": "libsdl-org/SDL",
+    "version": "release-3.4.16",
+    "commit": "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c",
+    "url": "https://codeload.github.com/libsdl-org/SDL/zip/fa2c02bb6e21974a89ea9824bc53c9932abe5f9c",
+    "sha256": "ab7a774d41332dc73e6cad6ed9cb14b91cb1de76497dca116be7080f069a703a"
+  },
+  "json": {
+    "repository": "nlohmann/json",
+    "version": "v3.12.0",
+    "commit": "55f93686c01528224f448c19128836e7df245f72",
+    "url": "https://codeload.github.com/nlohmann/json/zip/55f93686c01528224f448c19128836e7df245f72",
+    "sha256": "0746352e4e9532e7aeabbcbaa79079b6bc6008e9261e4d459c9486a9b48a172e"
+  },
+  "glm": {
+    "repository": "g-truc/glm",
+    "version": "1.0.3",
+    "commit": "8d1fd52e5ab5590e2c81768ace50c72bae28f2ed",
+    "url": "https://codeload.github.com/g-truc/glm/zip/8d1fd52e5ab5590e2c81768ace50c72bae28f2ed",
+    "sha256": "3685779c341ed1c09a57ac038d119a735a63afb14f2365a24fbc3ffd31afe0db"
+  },
+  "cgltf": {
+    "repository": "jkuhlmann/cgltf",
+    "version": "v1.15",
+    "commit": "360db1a95480fe102ae9c69b27c5d101167ff5ba",
+    "url": "https://codeload.github.com/jkuhlmann/cgltf/zip/360db1a95480fe102ae9c69b27c5d101167ff5ba",
+    "sha256": "ae52cc0ccb092793958735720e5b373b20463fefc36393e3e91c01e2287c8c6d"
+  },
+  "stb": {
+    "repository": "nothings/stb",
+    "version": "HEAD",
+    "commit": "2c980bb59875b0d32144a71867fbdebb2f77cd20",
+    "url": "https://codeload.github.com/nothings/stb/zip/2c980bb59875b0d32144a71867fbdebb2f77cd20",
+    "sha256": "8e59f72b0780690cda64726804269f638a3be77b9d1506ea95f443f7964bccf0"
+  },
+  "tinyexr": {
+    "repository": "syoyo/tinyexr",
+    "version": "v3.2.0",
+    "commit": "6f470c9ab24bf3992bc512ce07e8ecb00d9bf105",
+    "url": "https://codeload.github.com/syoyo/tinyexr/zip/6f470c9ab24bf3992bc512ce07e8ecb00d9bf105",
+    "sha256": "41017d74a7eb1848d6d3a1a031882773582050b2b50c367c353eaa0ed673e790"
+  },
+  "spirv-cross": {
+    "repository": "KhronosGroup/SPIRV-Cross",
+    "version": "HEAD",
+    "commit": "83fa691cb8606ca4b3af7f13bfcbedd5668f2a3a",
+    "url": "https://codeload.github.com/KhronosGroup/SPIRV-Cross/zip/83fa691cb8606ca4b3af7f13bfcbedd5668f2a3a",
+    "sha256": "3235439a6b3d95238e5883eca722bb5d60850e896b7e748a4ecc17f505fb60df"
+  },
+  "d3d12ma": {
+    "repository": "GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator",
+    "version": "v3.2.0",
+    "commit": "1d86c1130f61453634b1df85782e1fecfd59a525",
+    "url": "https://codeload.github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator/zip/1d86c1130f61453634b1df85782e1fecfd59a525",
+    "sha256": "e0a502545613aa9167f2fa449fd64d3eabe5116957bd3824fd3125d17373701a"
+  },
+  "imgui": {
+    "repository": "ocornut/imgui",
+    "version": "v1.92.9b",
+    "commit": "f1cc2ae15e53a861a874c3034aae6798fde194ab",
+    "url": "https://codeload.github.com/ocornut/imgui/zip/f1cc2ae15e53a861a874c3034aae6798fde194ab",
+    "sha256": "008e1f3398e1c6e4d317ae4a05d2dec597bd360f4f3717b1d96e9edb66dba34f"
+  },
+  "implot": {
+    "repository": "epezent/implot",
+    "version": "v1.0",
+    "commit": "524f9fcd48d76c13fdf94c5ffbba8787a1ff7e39",
+    "url": "https://codeload.github.com/epezent/implot/zip/524f9fcd48d76c13fdf94c5ffbba8787a1ff7e39",
+    "sha256": "d560ef9d594b3ea306f42b55ef04bef46f6251f71dfb03c4a2713f509257da07"
+  },
+  "dxc": {
+    "repository": "microsoft/DirectXShaderCompiler",
+    "version": "v1.9.2607",
+    "url": "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/dxc_2026_07_29.zip",
+    "flat": true,
+    "sha256": "a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241"
+  }
+}

@@ -1,0 +1,1 @@
+Debug build succeeded. CTest: 5/5 passed, including the hidden Windows window lifecycle test (16 frames, resize, minimize, restore), execution-domain tests, configuration/plugins and dependency boundaries. Evidence: `out/change04-debug.log`.

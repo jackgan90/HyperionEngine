@@ -1,0 +1,48 @@
+schema: spec-driven
+
+context: |
+  Confirmed project decisions:
+  - Use oneTBB as the initial backend for general CPU worker tasks. Hyperion owns
+    the FTaskSystem API, task handles, dependencies, completion notifications, and
+    routing to dedicated Main, Render, and RHI execution domains. Keep oneTBB
+    implementation details behind the internal task-system wrapper.
+  - Every third-party library must, by default, be accessed through an
+    engine-owned wrapper or adapter. Engine modules and algorithm plugins must
+    use these internal interfaces rather than call third-party APIs directly.
+  - Wrappers expose engine-owned contracts. Keep third-party headers, types,
+    macros, and backend-specific behavior out of public engine interfaces;
+    confine direct third-party API use to the relevant wrapper implementation.
+    Express third-party CMake dependencies privately where applicable.
+  - Build wrappers incrementally around actual engine needs rather than copying
+    entire third-party APIs. Define ownership, allocation, threading, errors,
+    and completion behavior at the wrapper boundary. Wrappers do not inherently
+    require virtual dispatch or runtime backend replacement.
+  - Exceptions to third-party isolation require a concrete justification and
+    documented scope and replacement implications in the relevant design.
+    Convenience alone is not a default exemption, including for GUI, math, and
+    header-only libraries.
+  - Default owned C++/HLSL style is Unreal-inspired; follow AGENTS.md and
+    docs/CodingStyle.md. Use Hyperion namespaces, PascalCase identifiers, UE
+    F/E/I/T type prefixes, PascalCase filenames, .h headers, Allman braces and
+    four-column tabs. The owner's uppercase-first rule also applies to booleans.
+    Preserve SDK/STL required spellings and serialized IDs. Use the checked-in
+    clang-format/clang-tidy configurations; never restyle third-party sources.
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours

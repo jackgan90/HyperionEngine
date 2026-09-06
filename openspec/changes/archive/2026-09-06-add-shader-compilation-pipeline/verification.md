@@ -1,0 +1,1 @@
+Debug CTest 7/7 passed. Actual DXC compiled vertex/pixel shaders to DXIL and SPIR-V; SPIRV-Cross reflected the 64-byte uniform block and generated both MSL stages. Cache reuse, include invalidation, corrupted cache recovery and invalid-source diagnostics passed. Evidence: out/change06-debug.log. Metal runtime was not tested.

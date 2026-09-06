@@ -1,0 +1,1 @@
+Debug CTest 10/10 passed. Actual graph submission produced a colored triangle through the static plugin on RTX 5080 with debug layer enabled and zero D3D12 errors. Clear-only pixel validation and invalid graph rejection passed. Screenshot visually inspected: out/captures/triangle.png. Evidence: out/change08-debug.log. Graph currently covers one imported color target.

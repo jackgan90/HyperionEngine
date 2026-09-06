@@ -1,0 +1,1 @@
+Debug build and CTest 6/6 passed. Tests cover column-vector transforms, external-buffer glTF triangle, missing mesh error, tracked cgltf cleanup, PNG quantization, full-float EXR and reflected asset references. Evidence: out/change05-debug.log.
