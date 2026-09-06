@@ -23,6 +23,9 @@ public:
 	virtual void BeginFrame(FSize InSize) = 0;
 	virtual FRecordedList Record(std::uint32_t InContext, const FPassCommands& InCommands) = 0;
 	virtual FImage EndFrame(std::span<const FRecordedList> InLists, bool InVsync, bool InCapture = false) = 0;
+	// Coordinator only, after all recorders finish. Idempotent; submitted work must
+	// finish before releasing resources. Throws if the device cannot recover safely.
+	virtual void CancelFrame() = 0;
 	virtual void WaitIdle() = 0;
 };
 } // namespace Hyperion

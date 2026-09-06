@@ -5,6 +5,11 @@
 
 namespace Hyperion
 {
+#if defined(HYP_TEST_D3D12_PRESENT)
+// Linked only by the native fault-injection test target; normal builds call DXGI directly.
+HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval);
+#endif
+
 struct FD3D12RHISwapchain::FImpl
 {
 	std::shared_ptr<FD3D12DeviceState> State;
@@ -31,6 +36,7 @@ struct FD3D12RHISwapchain::FImpl
 	std::uint64_t Serial{};
 	FSize Size;
 	bool Active{};
+	bool SubmissionStarted{};
 
 	void Idle()
 	{
@@ -171,6 +177,7 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 		B = false;
 	}
 	P.Active = true;
+	P.SubmissionStarted = false;
 	++P.Serial;
 }
 
@@ -330,6 +337,7 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 		NativeLists.push_back(NativeList.List.Get());
 	}
 	Frame.Retained.assign(InLists.begin(), InLists.end());
+	P.SubmissionStarted = true;
 	P.State->Queue->ExecuteCommandLists(static_cast<UINT>(NativeLists.size()), NativeLists.data());
 	FImage Result;
 	if (InCapture)
@@ -370,12 +378,33 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 		D3D12_RANGE Written{0, 0};
 		Readback->Resource->Unmap(0, &Written);
 	}
+#if defined(HYP_TEST_D3D12_PRESENT)
+	auto Hr = PresentForTesting(P.Swapchain.Get(), InVsync ? 1 : 0);
+#else
 	auto Hr = P.Swapchain->Present(InVsync ? 1 : 0, 0);
+#endif
 	Frame.FenceValue = P.State->Signal();
-	P.Active = false;
 	++P.State->Submitted;
+	// A failed Present must remain cancellable until submitted work has drained.
 	Check(Hr, "Present swapchain");
+	P.Active = false;
 	return Result;
+}
+
+void FD3D12RHISwapchain::CancelFrame()
+{
+	auto& P = *Impl;
+	if (!P.Active)
+	{
+		return;
+	}
+	if (P.SubmissionStarted)
+	{
+		// Keep Active and retained resources intact if draining the device fails.
+		P.Idle();
+	}
+	P.Frames[P.FrameIndex].Retained.clear();
+	P.Active = false;
 }
 
 void FD3D12RHISwapchain::WaitIdle()

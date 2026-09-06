@@ -58,7 +58,20 @@ TAsyncResult<std::shared_ptr<const void>> FAssetService::Load(const std::filesys
 	Loading = true;
 	if (auto It = Cache.find(Key); It != Cache.end())
 	{
-		return It->second;
+		if (!It->second.Ready())
+		{
+			return It->second;
+		}
+		try
+		{
+			(void)It->second.GetReady();
+			return It->second;
+		}
+		catch (...)
+		{
+			// Old consumers retain the failed result; fresh requests share a new attempt.
+			Cache.erase(It);
+		}
 	}
 	const auto Ext = Extension(Path);
 	std::function<std::shared_ptr<void>(FAssetLoadContext&)> Import;

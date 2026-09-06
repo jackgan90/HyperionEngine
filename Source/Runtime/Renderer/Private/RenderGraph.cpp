@@ -6,6 +6,27 @@
 
 namespace Hyperion
 {
+namespace
+{
+void JoinRecordings(FTaskSystem& InTasks, std::span<const FTaskHandle> InRecordings, std::exception_ptr& OutError)
+{
+	for (const auto& Task : InRecordings)
+	{
+		try
+		{
+			InTasks.Wait(Task);
+		}
+		catch (...)
+		{
+			if (!OutError)
+			{
+				OutError = std::current_exception();
+			}
+		}
+	}
+}
+} // namespace
+
 std::size_t FRenderGraph::Add(FColorPass InPass)
 {
 	Passes.push_back(std::move(InPass));
@@ -116,50 +137,59 @@ FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapc
 	{
 		throw std::runtime_error("Backend does not enable image readback");
 	}
+	std::vector<FRecordedList> Lists(Commands.size());
+	std::vector<FTaskHandle> Recordings;
+	Recordings.reserve(Commands.size());
 	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
 	                              [&]
 	                              {
 		                              InSwapchain.BeginFrame(InSize);
 	                              }));
-	std::vector<FRecordedList> Lists(Commands.size());
-	std::vector<FTaskHandle> Recordings;
-	for (std::size_t I = 0; I < Commands.size(); ++I)
+	try
 	{
-		Recordings.push_back(InTasks.Dispatch(
-		    {EDomain::Rhi, InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).Enabled
-		                       ? static_cast<std::uint32_t>(I % InTasks.RhiThreadCount())
-		                       : 0},
-		    [&, I]
-		    {
-			    Lists[I] = InSwapchain.Record(static_cast<std::uint32_t>(I), Commands[I]);
-		    }));
+		for (std::size_t I = 0; I < Commands.size(); ++I)
+		{
+			Recordings.push_back(InTasks.Dispatch(
+			    {EDomain::Rhi, InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).Enabled
+			                       ? static_cast<std::uint32_t>(I % InTasks.RhiThreadCount())
+			                       : 0},
+			    [&, I]
+			    {
+				    Lists[I] = InSwapchain.Record(static_cast<std::uint32_t>(I), Commands[I]);
+			    }));
+		}
+		std::exception_ptr Error;
+		JoinRecordings(InTasks, Recordings, Error);
+		if (Error)
+		{
+			std::rethrow_exception(Error);
+		}
+		FImage Image;
+		InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
+		                              [&]
+		                              {
+			                              Image = InSwapchain.EndFrame(Lists, InVsync, InCapture);
+		                              }));
+		return Image;
 	}
-	// Always drain every recorder, including on error, before stack-owned packets can disappear.
-	std::exception_ptr Error;
-	for (const auto& Task : Recordings)
+	catch (...)
 	{
+		auto Error = std::current_exception();
+		// Also covers failure while dispatching, before every recorder was admitted.
+		JoinRecordings(InTasks, Recordings, Error);
 		try
 		{
-			InTasks.Wait(Task);
+			InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
+			                              [&]
+			                              {
+				                              InSwapchain.CancelFrame();
+			                              }));
 		}
-		catch (...)
+		catch (const std::exception& CleanupError)
 		{
-			if (!Error)
-			{
-				Error = std::current_exception();
-			}
+			Log(ELogLevel::Error, std::string("Frame cancellation failed: ") + CleanupError.what());
 		}
-	}
-	if (Error)
-	{
 		std::rethrow_exception(Error);
 	}
-	FImage Image;
-	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
-	                              [&]
-	                              {
-		                              Image = InSwapchain.EndFrame(Lists, InVsync, InCapture);
-	                              }));
-	return Image;
 }
 } // namespace Hyperion

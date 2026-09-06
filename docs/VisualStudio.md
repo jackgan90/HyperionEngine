@@ -63,6 +63,10 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 
 ## 本机验证记录
 
+2026-09-06 上述限定 change 的独立审计后，补齐 Present 失败时的 GPU 等待并新增 `d3d12_frame_failure_recovery`：Debug/Release 分别通过 **31/31**，RenderDoc OFF Debug 通过 **26/26**。61 个编译单元命名、格式、模块边界和 OpenSpec strict 均通过；原 P2 已由独立 reviewer 复审关闭。日志位于 `out/IndependentReview/FinalVsDebug.log`、`FinalVsRelease.log`、`FinalDisabledTest.log`，详见 [独立审计记录](../openspec/changes/archive/2026-09-06-fix-lifecycle-and-split-entrypoints/independent-review.md)。
+
+2026-09-06 架构审查的限定修复与 Viewer/importer 拆分后，VS Debug/Release 分别通过 **30/30**，独立 RenderDoc OFF Debug 构建通过 **25/25**；新增 `lifecycle_recovery` 覆盖窗口、资产重试和帧失败恢复。格式、60 个编译单元命名、模块边界与 OpenSpec strict 均通过。日志位于 `out/ArchitectureReview/FixesVsDebug.log`、`FixesVsRelease.log`、`FixesDisabledTest.log`，详见 [本轮验证记录](../openspec/changes/archive/2026-09-06-fix-lifecycle-and-split-entrypoints/verification.md)。
+
 可选 RenderDoc 抓帧支持可通过 `-RenderDoc` 编入，通过 `-NoRenderDoc` 关闭；不指定时保留 CMake 缓存。完整说明见 [RenderDoc 抓帧](RenderDoc.md)。2026-09-06 验证：启用时 Debug/Release 分别通过 **28/28**；关闭时 Debug 通过 **24/24**，并验证了未编译插件的明确错误。日志为 `out/RenderDocDebugTest.log`、`out/RenderDocReleaseTest.log`、`out/RenderDocDisabledTest.log`；验收后已恢复启用支持的 Debug 构建。
 
 同日 RenderDoc 独立审计后，修复内容验收误报与清理失败后的所有权丢失，并增加 `capture_failure_recovery` 回归。最终启用时 Debug/Release 分别通过 **29/29**，关闭时 Debug 通过 **24/24**；格式、模块边界、51 个编译单元的命名检查及 OpenSpec strict 全部通过。日志为 `out/RenderDocReviewDebug.log`、`out/RenderDocReviewRelease.log`、`out/RenderDocReviewDisabled.log`，复核过程见 [RenderDoc 独立审计](RenderDocReview.md)。当前 VS 工程已恢复启用支持并重新构建 Debug。

@@ -18,6 +18,12 @@ Main waits for CPU frame completion before editing the next settings snapshot. G
 
 RHI frame control/resource creation belongs to RHI 0. Recording can happen concurrently in distinct contexts; each context can be used once per frame. Submitted draw packets keep their buffers, textures and pipelines alive until the associated fence completes. Resize and shutdown drain the graphics queue. Geometry uses immutable upload buffers, and the font uses a default-heap texture with staging upload.
 
+If recording or frame ending fails, graph execution joins every admitted recorder and calls `IRHISwapchain::CancelFrame` on RHI 0 before propagating the original error. Cancellation is idempotent. Unsubmitted commands are abandoned; submitted work must finish before its resources are released. A healthy device can begin another frame after successful cancellation; a failure to drain the device remains an error.
+
+Each `FWindow` owns a balanced SDL video/events subsystem reference. Destroying one window leaves other windows usable; the last reference releases its subsystem ownership. Event routing remains the current single-window polling model.
+
+The Viewer session is composed by `FViewerApplication`: options/settings, service and graphics lifetime, frame preparation, capture control and file output have separate private implementations. RenderDoc hooks initialize before windows/devices. Normal and exceptional shutdown join file producers before IO/task services are destroyed and release graphics on RHI 0.
+
 Task handles carry completion and exceptions. Dependencies are continuation driven and do not occupy waiting workers. Worker waits use oneTBB resumable tasks; a waiting worker can run a child even with one worker configured. Main waits pump Main jobs. Waiting for unfinished work on the same dedicated Render/RHI queue is rejected. Cross-domain cyclic waits are a caller error, not an automatically solved dependency graph. Stop task producers before shutdown. Tracy scopes must not span a resumable worker wait because resumption can migrate between OS threads.
 
 ## Adding an experiment

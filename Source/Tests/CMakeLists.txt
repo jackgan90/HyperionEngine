@@ -28,6 +28,10 @@ hyp_test(model_render_tests model_rendering hyperion_render Renderer/ModelRender
 target_link_libraries(model_render_tests PRIVATE hyperion_model_viewer hyperion_rhi_d3d12 hyperion_asset_import)
 target_compile_definitions(model_render_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(model_rendering PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+hyp_test(lifecycle_tests lifecycle_recovery hyperion_render Integration/LifecycleTests.cpp)
+target_link_libraries(lifecycle_tests PRIVATE hyperion_rhi_d3d12 hyperion_asset_import)
+target_compile_definitions(lifecycle_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+set_tests_properties(lifecycle_recovery PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_test(gui_tests gui_input_and_data hyperion_gui Gui/GuiTests.cpp)
 hyp_test(capture_controls_tests capture_controls hyperion_debug_ui Gui/CaptureControlsTests.cpp)
 target_link_libraries(capture_controls_tests PRIVATE hyperion_gui hyperion_config)
@@ -36,6 +40,8 @@ target_link_libraries(asset_tests PRIVATE hyperion_core)
 target_link_libraries(gui_tests PRIVATE hyperion_config)
 hyp_test(rhi_contract_tests rhi_backend_contracts hyperion_render RHI/RHIContractTests.cpp)
 hyp_test(d3d12_device_tests d3d12_device_ownership hyperion_rhi_d3d12 RHI/D3D12DeviceTests.cpp)
+add_test(NAME d3d12_frame_failure_recovery COMMAND d3d12_frame_failure_tests)
+set_tests_properties(d3d12_frame_failure_recovery PROPERTIES TIMEOUT 60 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 target_compile_definitions(d3d12_device_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_compile_definitions(shader_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 add_test(NAME dependency_boundaries COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/CheckBoundaries.py")
@@ -62,9 +68,10 @@ get_property(hyperion_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${hyperion_tests} PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_custom_target(hyperion_check
   COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${PROJECT_BINARY_DIR}" -C "$<CONFIG>" --output-on-failure
-  DEPENDS core_tests task_tests io_tests archive_tests model_tests import_tests config_tests asset_tests shader_tests graph_tests model_render_tests gui_tests capture_controls_tests rhi_contract_tests d3d12_device_tests hyperion_viewer
+  DEPENDS core_tests task_tests io_tests archive_tests model_tests import_tests config_tests asset_tests shader_tests graph_tests model_render_tests lifecycle_tests gui_tests capture_controls_tests rhi_contract_tests d3d12_device_tests hyperion_viewer
   USES_TERMINAL
   COMMENT "Running Hyperion CTest suite")
 if(HYP_ENABLE_RENDERDOC)
   add_dependencies(hyperion_check capture_tests capture_failure_tests)
 endif()
+add_dependencies(hyperion_check d3d12_frame_failure_tests)

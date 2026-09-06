@@ -66,15 +66,38 @@ void Check(bool InOk)
 		throw std::runtime_error(std::string("SDL: ") + SDL_GetError());
 	}
 }
+
+struct FSDLSession
+{
+	FSDLSession()
+	{
+		Check(SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
+	}
+
+	~FSDLSession()
+	{
+		SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+	}
+};
 } // namespace
 
 struct FWindow::FImpl
 {
+	// Balanced subsystem references keep surviving windows alive.
+	FSDLSession Session;
 	SDL_Window* Window{};
 	FNativeSurface Surface;
 	std::thread::id Owner = std::this_thread::get_id();
 	std::vector<FInputEvent> Events;
 	bool Close = false;
+
+	~FImpl()
+	{
+		if (Window)
+		{
+			SDL_DestroyWindow(Window);
+		}
+	}
 
 	void RequireOwner() const
 	{
@@ -87,14 +110,12 @@ struct FWindow::FImpl
 
 FWindow::FWindow(std::string InTitle, FSize InSize, bool InHidden) : Impl(std::make_unique<FImpl>())
 {
-	Check(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
 	Impl->Window =
 	    SDL_CreateWindow(InTitle.c_str(), static_cast<int>(InSize.Width), static_cast<int>(InSize.Height),
 	                     SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | (InHidden ? SDL_WINDOW_HIDDEN : 0));
 	if (!Impl->Window)
 	{
 		const std::string Error = SDL_GetError();
-		SDL_Quit();
 		throw std::runtime_error(Error);
 	}
 #ifdef _WIN32
@@ -104,11 +125,7 @@ FWindow::FWindow(std::string InTitle, FSize InSize, bool InHidden) : Impl(std::m
 	SDL_StartTextInput(Impl->Window);
 }
 
-FWindow::~FWindow()
-{
-	SDL_DestroyWindow(Impl->Window);
-	SDL_Quit();
-}
+FWindow::~FWindow() = default;
 
 void FWindow::Poll()
 {

@@ -1,7 +1,10 @@
 #include "Hyperion/RHI/RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Support/TestSupport.h"
+#include <atomic>
+#include <chrono>
 #include <iostream>
+#include <thread>
 #include <type_traits>
 
 namespace
@@ -37,11 +40,18 @@ public:
 
 	void BeginFrame(FSize) override
 	{
+		HYP_CHECK(!Active);
+		Active = true;
+		Recorded = 0;
 		++Begun;
 	}
 
-	FRecordedList Record(std::uint32_t, const FPassCommands&) override
+	FRecordedList Record(std::uint32_t InContext, const FPassCommands&) override
 	{
+		if (OnRecord)
+		{
+			OnRecord(InContext);
+		}
 		++Recorded;
 		return {};
 	}
@@ -49,6 +59,11 @@ public:
 	FImage EndFrame(std::span<const FRecordedList> InLists, bool, bool) override
 	{
 		HYP_CHECK(InLists.size() == Recorded);
+		if (FailEnd)
+		{
+			throw std::runtime_error("injected submission failure");
+		}
+		Active = false;
 		++Submitted;
 		return {1, 1, EColorSpace::Linear, {1, 0, 0, 1}};
 	}
@@ -57,10 +72,25 @@ public:
 	{
 	}
 
+	void CancelFrame() override
+	{
+		if (OnCancel)
+		{
+			OnCancel();
+		}
+		Active = false;
+		++Cancelled;
+	}
+
 	FRHICapabilities Capabilities;
+	std::function<void(std::uint32_t)> OnRecord;
+	std::function<void()> OnCancel;
+	bool Active{};
+	bool FailEnd{};
 	std::uint32_t Begun{};
-	std::uint32_t Recorded{};
+	std::atomic<std::uint32_t> Recorded{};
 	std::uint32_t Submitted{};
+	std::uint32_t Cancelled{};
 };
 
 class FTestDevice final : public IRHIDevice
@@ -132,6 +162,58 @@ public:
 		return std::make_unique<FTestDevice>();
 	}
 };
+
+void CheckFrameErrors(const FRHICapabilities& InCapabilities)
+{
+	FTestSwapchain Swapchain(InCapabilities);
+	Swapchain.Capabilities.Features[static_cast<std::size_t>(ERHIFeature::ConcurrentRecording)] = {true, true};
+	FTaskSystem Tasks(1, 2);
+	FRenderGraph Graph;
+	FColorPass Clear;
+	Clear.Commands.Name = "clear";
+	Clear.Load = EColorLoad::Clear;
+	Graph.Add(Clear);
+	std::atomic<bool> PeerStarted{};
+	std::atomic<bool> PeerFinished{};
+	Swapchain.OnRecord = [&](std::uint32_t InContext)
+	{
+		if (InContext == 0)
+		{
+			while (!PeerStarted)
+			{
+				std::this_thread::yield();
+			}
+			throw std::runtime_error("injected recording failure");
+		}
+		PeerStarted = true;
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		PeerFinished = true;
+	};
+	Swapchain.OnCancel = [&]
+	{
+		HYP_CHECK(PeerFinished);
+	};
+	const auto Execute = [&]
+	{
+		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+		                          [&]
+		                          {
+			                          ExecuteGraph(Graph, Tasks, Swapchain, {32, 32}, false, false);
+		                          }));
+	};
+	Rejects(Execute);
+	HYP_CHECK(PeerFinished && Swapchain.Cancelled == 1 && !Swapchain.Active && Swapchain.Submitted == 0);
+	Swapchain.OnRecord = {};
+	Execute();
+	HYP_CHECK(Swapchain.Submitted == 1);
+	Swapchain.FailEnd = true;
+	Rejects(Execute);
+	HYP_CHECK(Swapchain.Cancelled == 2 && !Swapchain.Active);
+	Swapchain.FailEnd = false;
+	Execute();
+	HYP_CHECK(Swapchain.Submitted == 2);
+	Tasks.Shutdown();
+}
 } // namespace
 
 int main()
@@ -214,6 +296,7 @@ int main()
 		    });
 		HYP_CHECK(Test.Begun == 1);
 		Tasks.Shutdown();
+		CheckFrameErrors(Device->GetCapabilities());
 		std::cout << "Independent RHI provider and renderer contracts passed\n";
 		return 0;
 	}
