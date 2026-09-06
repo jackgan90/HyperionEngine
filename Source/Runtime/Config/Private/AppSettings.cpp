@@ -72,6 +72,7 @@ const FTypeDescriptor& SettingsType()
 	     Field("workers", "CPU workers", &FAppSettings::Workers, 1, 64),
 	     Field("rhi_threads", "RHI threads", &FAppSettings::RhiThreads, 1, 8),
 	     Field("rhi_backend", "RHI backend (restart)", &FAppSettings::RHIBackend),
+	     Field("model_source", "Model source (restart)", &FAppSettings::ModelSource),
 	     Field("vsync", "Vertical sync", &FAppSettings::Vsync),
 	     Field("show_gui", "Show debug UI", &FAppSettings::ShowGui),
 	     Field("triangle_scale", "Triangle scale", &FAppSettings::TriangleScale, 0.05, 1.5),

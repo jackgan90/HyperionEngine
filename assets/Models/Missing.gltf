@@ -1,0 +1,353 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Hyperion deterministic fixtures"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 288
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 288,
+      "byteLength": 288
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 192
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 768,
+      "byteLength": 144
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 912,
+      "byteLength": 14700
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 15612,
+      "byteLength": 14700
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 30312,
+      "byteLength": 9800
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 40112,
+      "byteLength": 27648
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "min": [
+        -0.5,
+        -0.5,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "min": [
+        -1,
+        -1,
+        -1
+      ],
+      "max": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5125,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 1225,
+      "type": "VEC3",
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 1225,
+      "type": "VEC3",
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 1225,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5125,
+      "count": 6912,
+      "type": "SCALAR"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Checker cube",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    },
+    {
+      "name": "Copper sphere",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 4,
+            "NORMAL": 5,
+            "TEXCOORD_0": 6
+          },
+          "indices": 7,
+          "material": 1
+        }
+      ]
+    },
+    {
+      "name": "Teal sphere",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 4,
+            "NORMAL": 5,
+            "TEXCOORD_0": 6
+          },
+          "indices": 7,
+          "material": 2
+        }
+      ]
+    },
+    {
+      "name": "Platform",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 3
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Material study",
+      "children": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "name": "Checker",
+      "mesh": 0,
+      "translation": [
+        -1.35,
+        0.9,
+        0
+      ],
+      "scale": [
+        1.35,
+        1.8,
+        1.35
+      ],
+      "rotation": [
+        0,
+        0.21822962308086932,
+        0,
+        0.9758974493306055
+      ]
+    },
+    {
+      "name": "Copper",
+      "mesh": 1,
+      "translation": [
+        0.8,
+        1.05,
+        0
+      ],
+      "scale": [
+        0.9,
+        0.9,
+        0.9
+      ]
+    },
+    {
+      "name": "Teal",
+      "mesh": 2,
+      "translation": [
+        2.3,
+        0.6,
+        0.5
+      ],
+      "scale": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "Pedestal",
+      "mesh": 3,
+      "translation": [
+        0.2,
+        -0.12,
+        0
+      ],
+      "scale": [
+        5.8,
+        0.24,
+        3.2
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "Checker ceramic",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.5
+      }
+    },
+    {
+      "name": "Copper",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.95,
+          0.48,
+          0.2,
+          1
+        ],
+        "metallicFactor": 0.9,
+        "roughnessFactor": 0.18
+      }
+    },
+    {
+      "name": "Matte teal",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.06,
+          0.52,
+          0.45,
+          1
+        ],
+        "metallicFactor": 0.1,
+        "roughnessFactor": 0.8
+      }
+    },
+    {
+      "name": "Platform",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.18,
+          0.22,
+          0.29,
+          1
+        ],
+        "metallicFactor": 0.15,
+        "roughnessFactor": 0.7
+      }
+    }
+  ],
+  "images": [
+    {
+      "uri": "Checker.png"
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497,
+      "minFilter": 9987,
+      "magFilter": 9729
+    }
+  ],
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "buffers": [
+    {
+      "uri": "Missing.bin",
+      "byteLength": 67760
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+add_library(hyperion_model_viewer STATIC Private/ModelViewerPlugin.cpp)
+hyp_module(hyperion_model_viewer)
+target_link_libraries(hyperion_model_viewer PUBLIC hyperion_render hyperion_assets PRIVATE hyperion_scene hyperion_shaders hyperion_tasks hyperion_platform)

@@ -3,6 +3,7 @@
 #include "Hyperion/Reflection/Reflection.h"
 #include <cstdint>
 #include <filesystem>
+#include <span>
 #include <vector>
 
 namespace Hyperion
@@ -47,4 +48,14 @@ struct FAssetReference
 };
 
 const FTypeDescriptor& AssetReferenceType();
+
+struct FImagePixels
+{
+	std::uint32_t Width{};
+	std::uint32_t Height{};
+	std::vector<std::uint8_t> Rgba;
+};
+
+FImagePixels DecodeImage(std::span<const std::byte> InBytes);
+std::vector<std::byte> EncodePng(const FImage& InImage);
 } // namespace Hyperion

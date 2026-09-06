@@ -30,6 +30,18 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	void Wait(std::uint64_t InValue);
 	std::uint64_t Signal();
 	void Idle();
+
+	struct FUploadBatch
+	{
+		ComPtr<ID3D12CommandAllocator> Allocator;
+		ComPtr<ID3D12GraphicsCommandList> List;
+		std::vector<ComPtr<ID3D12Resource>> Resources;
+		std::vector<ComPtr<D3D12MA::Allocation>> Allocations;
+		std::uint64_t FenceValue = UINT64_MAX;
+	};
+
+	std::vector<FUploadBatch> Uploads;
+	void CollectUploads();
 	std::shared_ptr<FD3D12Buffer> AllocateBuffer(std::uint64_t InBytes, D3D12_HEAP_TYPE InHeap,
 	                                             D3D12_RESOURCE_STATES InInitial);
 	void Immediate(const std::function<void(ID3D12GraphicsCommandList*)>& InRecord);

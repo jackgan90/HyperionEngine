@@ -27,6 +27,7 @@ struct FD3D12Texture final : IRHITexture
 	ComPtr<D3D12MA::Allocation> Allocation;
 	ComPtr<ID3D12Resource> Resource;
 	UINT Slot = TextureCount;
+	std::uint64_t UploadFence{};
 
 	~FD3D12Texture() override
 	{
@@ -49,6 +50,7 @@ struct FD3D12Pipeline final : IRHIPipeline
 	ComPtr<ID3D12RootSignature> Root;
 	ComPtr<ID3D12PipelineState> Pipeline;
 	bool Textured{};
+	bool MaterialLayout{};
 };
 
 struct FD3D12SwapchainIdentity

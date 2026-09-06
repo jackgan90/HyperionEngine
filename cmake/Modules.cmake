@@ -1,4 +1,17 @@
 # Owned modules export only their Public directory. Native headers remain private.
+# Stage shared DLLs once per build. Per-executable post-build copies race under MSBuild /m.
+get_property(hyp_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+set(hyp_runtime_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+if(hyp_multi_config)
+  string(APPEND hyp_runtime_directory "/$<CONFIG>")
+endif()
+add_custom_target(hyperion_runtime_files
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${hyp_runtime_directory}"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:TBB::tbb>"
+    "${HYP_DEPS}/dxc/bin/x64/dxcompiler.dll" "${HYP_DEPS}/dxc/bin/x64/dxil.dll" "${hyp_runtime_directory}"
+  DEPENDS TBB::tbb
+  VERBATIM)
+set_target_properties(hyperion_runtime_files PROPERTIES FOLDER "Hyperion/Build")
 function(hyp_module target)
   target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Public")
   target_compile_features(${target} PUBLIC cxx_std_20)
@@ -18,8 +31,5 @@ function(hyp_module target)
 endfunction()
 function(hyp_executable target)
   hyp_module(${target})
-  add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:TBB::tbb> $<TARGET_FILE_DIR:${target}>)
-  foreach(dll dxcompiler dxil)
-    add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "${HYP_DEPS}/dxc/bin/x64/${dll}.dll" $<TARGET_FILE_DIR:${target}>)
-  endforeach()
+  add_dependencies(${target} hyperion_runtime_files)
 endfunction()

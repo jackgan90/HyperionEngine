@@ -47,6 +47,7 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 	std::vector<FPassCommands> Result;
 	std::vector<bool> Visited(Count);
 	bool Initialized = false;
+	bool DepthInitialized = false;
 	while (Result.size() < Count)
 	{
 		bool Progress = false;
@@ -61,6 +62,18 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 				continue;
 			}
 			const auto& Pass = Passes[I];
+			if (Pass.Commands.ClearDepth && !Pass.Commands.UseDepth)
+			{
+				throw std::runtime_error("Depth clear requires a depth target");
+			}
+			if (Pass.Commands.UseDepth)
+			{
+				if (!DepthInitialized && !Pass.Commands.ClearDepth)
+				{
+					throw std::runtime_error("Graph loads undefined depth");
+				}
+				DepthInitialized = true;
+			}
 			if (Pass.Load == EColorLoad::Load && !Initialized)
 			{
 				throw std::runtime_error("Graph loads undefined color contents");

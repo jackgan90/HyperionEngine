@@ -246,11 +246,12 @@ FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 	auto R = std::make_shared<FD3D12Pipeline>();
 	R->State = State;
 	R->Textured = InDesc.Textured;
+	R->MaterialLayout = InDesc.MaterialLayout;
 	D3D12_DESCRIPTOR_RANGE Range{};
 	Range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	Range.NumDescriptors = 1;
 	Range.BaseShaderRegister = 0;
-	D3D12_ROOT_PARAMETER Parameters[2]{};
+	D3D12_ROOT_PARAMETER Parameters[6]{};
 	Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 	Parameters[0].Constants = {0, 0, 16};
 	Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
@@ -269,6 +270,41 @@ FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 	Root.NumStaticSamplers = InDesc.Textured ? 1 : 0;
 	Root.pStaticSamplers = &Sampler;
 	Root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	std::array<D3D12_DESCRIPTOR_RANGE, 5> MaterialRanges{};
+	std::array<D3D12_STATIC_SAMPLER_DESC, 5> MaterialSamplers{};
+	if (InDesc.MaterialLayout)
+	{
+		Parameters[0] = {};
+		Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		const auto Address = [](ERHIAddressMode InMode)
+		{
+			return InMode == ERHIAddressMode::Clamp    ? D3D12_TEXTURE_ADDRESS_MODE_CLAMP
+			       : InMode == ERHIAddressMode::Mirror ? D3D12_TEXTURE_ADDRESS_MODE_MIRROR
+			                                           : D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		};
+		for (UINT Index = 0; Index < 5; ++Index)
+		{
+			MaterialRanges[Index] = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, Index, 0, 0};
+			Parameters[Index + 1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+			Parameters[Index + 1].DescriptorTable = {1, &MaterialRanges[Index]};
+			Parameters[Index + 1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+			const auto& Source = InDesc.Samplers[Index];
+			auto& NativeSampler = MaterialSamplers[Index];
+			NativeSampler.Filter = static_cast<D3D12_FILTER>((Source.MinLinear ? 16 : 0) | (Source.MagLinear ? 4 : 0) |
+			                                                 (Source.MipLinear ? 1 : 0));
+			NativeSampler.AddressU = Address(Source.U);
+			NativeSampler.AddressV = Address(Source.V);
+			NativeSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+			NativeSampler.MaxLOD = Source.Mipmapped ? D3D12_FLOAT32_MAX : 0;
+			NativeSampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+			NativeSampler.ShaderRegister = Index;
+			NativeSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		}
+		Root.NumParameters = 6;
+		Root.NumStaticSamplers = 5;
+		Root.pStaticSamplers = MaterialSamplers.data();
+	}
 	ComPtr<ID3DBlob> Blob;
 	ComPtr<ID3DBlob> Error;
 	Check(D3D12SerializeRootSignature(&Root, D3D_ROOT_SIGNATURE_VERSION_1, &Blob, &Error), "Serialize root signature");
@@ -304,12 +340,16 @@ FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 	Pso.SampleMask = UINT_MAX;
 	Pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	Pso.NumRenderTargets = 1;
-	Pso.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	Pso.RTVFormats[0] = InDesc.SrgbTarget ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
 	Pso.SampleDesc.Count = 1;
 	Pso.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	Pso.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	Pso.RasterizerState.CullMode = InDesc.CullBack ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
+	Pso.RasterizerState.FrontCounterClockwise = InDesc.FrontCounterClockwise;
 	Pso.RasterizerState.DepthClipEnable = TRUE;
-	Pso.DepthStencilState.DepthEnable = FALSE;
+	Pso.DepthStencilState.DepthEnable = InDesc.DepthTest;
+	Pso.DepthStencilState.DepthWriteMask = InDesc.DepthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+	Pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	Pso.DSVFormat = InDesc.DepthTest ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
 	Pso.DepthStencilState.StencilEnable = FALSE;
 	auto& Blend = Pso.BlendState.RenderTarget[0];
 	Blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;

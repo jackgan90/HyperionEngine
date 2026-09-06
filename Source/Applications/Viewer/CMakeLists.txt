@@ -1,6 +1,6 @@
 add_executable(hyperion_viewer Private/Main.cpp)
 hyp_executable(hyperion_viewer)
-target_link_libraries(hyperion_viewer PRIVATE hyperion_debug_ui hyperion_triangle hyperion_rhi_d3d12 hyperion_core)
+target_link_libraries(hyperion_viewer PRIVATE hyperion_debug_ui hyperion_triangle hyperion_model_viewer hyperion_asset_import hyperion_io hyperion_assets hyperion_rhi_d3d12 hyperion_core)
 target_compile_definitions(hyperion_viewer PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_target_properties(hyperion_viewer PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 if(CMAKE_GENERATOR MATCHES "^Visual Studio")

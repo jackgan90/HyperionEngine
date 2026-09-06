@@ -7,12 +7,16 @@ Source/
   Runtime/
     Core/          # 日志、内存 hook、时间、profile
     Tasks/         # dedicated threads 与 oneTBB wrapper
+    IO/            # 专用 IO 队列、字节读写、存储后端
     Math/          # 引擎数学类型与 GLM wrapper
     Reflection/    # 类型描述及 JSON 序列化 wrapper
+    Serialization/ # 反射记录的原生二进制内存 Archive
     Config/        # 应用/实验配置，依赖 Reflection
     Plugins/       # 逻辑插件注册、依赖和生命周期
     Platform/      # 窗口、输入与 SDL wrapper
     Assets/        # 资产引用、图片、网格及导入 wrapper
+    Scene/         # 独立 CPU 模型、材质、节点与反射注册
+    AssetImport/   # glTF 场景适配，通过 Assets / IO 加载
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
     RHI/           # 公共图形契约、能力查询、后端注册表
     Renderer/      # RenderGraph 与 IRenderPlugin
@@ -22,6 +26,7 @@ Source/
   Plugins/
     Triangle/      # 三角形实验
     DebugUI/       # 调试 UI 的渲染插件
+    ModelViewer/   # 异步静态模型显示与相机
   Applications/
     Viewer/        # 应用入口与模块组装
   Tests/           # 对应模块的单元测试及 Integration 验收
@@ -40,7 +45,7 @@ Source/Runtime/Assets/
 
 调用方写 `#include "Hyperion/Assets/Assets.h"`，并在自己的 CMake target 声明依赖。只有公共接口确实依赖的模块使用 `PUBLIC`；实现细节使用 `PRIVATE`。第三方库私有链接，第三方类型不能出现在引擎公共接口中。`tools/CheckBoundaries.py` 检查模块依赖声明、私有头越界、第三方 include 和依赖方向。
 
-后续 `Scene`、`Animation` 将作为 `Runtime` 下的独立同级模块，按需依赖 Core、Math、Assets、Tasks、Reflection。它们负责场景层级、变换、空间数据、骨骼与姿态等 CPU 数据；Renderer 通过渲染侧适配生成快照、更新 GPU 资源并构造 pass。它们不应依赖 Renderer、RHI 或某个图形后端。本次没有添加尚无实现需求的占位类或空模块。
+`Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection，保存静态模型和节点层级，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 将 CPU 数据转为 GPU 资源与 pass。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
 
 Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Containers/`；仅供某个模块使用的工具留在该模块 `Private`，避免把所有辅助代码集中进一个无边界的 Utils 模块。当前 Core 接口数量少，后续增长时再按这些概念拆分。
 

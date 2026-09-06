@@ -1,3 +1,3 @@
-add_library(hyperion_reflection STATIC Private/Adapters/JsonSerialization.cpp)
+add_library(hyperion_reflection STATIC Private/Adapters/JsonSerialization.cpp Private/Record.cpp)
 hyp_module(hyperion_reflection)
 target_link_libraries(hyperion_reflection PRIVATE nlohmann_json::nlohmann_json)

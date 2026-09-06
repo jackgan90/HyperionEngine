@@ -14,6 +14,8 @@ public:
 	FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const override;
 	FBuffer CreateBuffer(std::span<const std::byte> InBytes) override;
 	FTexture CreateTexture(const FImage& InImage) override;
+	std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc> InTextures) override;
+	bool TexturesReady(std::span<const FTexture> InTextures) override;
 	FPipeline CreatePipeline(const FPipelineDesc& InDesc) override;
 	std::unique_ptr<IRHISwapchain> CreateSwapchain(const FRHISwapchainDesc& InDesc) override;
 	void WaitIdle() override;

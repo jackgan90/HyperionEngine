@@ -1,6 +1,6 @@
 # Hyperion
 
-C++20 渲染实验框架。当前实现 Windows x64 / D3D12：通过静态插件和 Render Graph 绘制三角形，配有可交互的调试面板。
+C++20 渲染实验框架。当前实现 Windows x64 / D3D12：支持异步加载和渲染静态 glTF / GLB 模型、反射原生资产读写，以及三角形实验和交互调试面板。
 
 ## 构建和运行
 
@@ -41,6 +41,8 @@ python tools/Bootstrap.py
 
 ## 实验操作
 
+静态模型入口：`hyperion_viewer.exe --config experiments/Model.json`，或 `--model "模型路径.glb"`。右键旋转、滚轮缩放、Home 取景、Tab 显隐面板。运行命令、格式支持边界、资产 API 和 OpenSpec 实施顺序见 [资产流水线](docs/AssetPipeline.md)。
+
 默认配置为 `experiments/Triangle.json`。面板可实时修改三角形缩放、背景色和 VSync；“Save experiment”保存到当前配置文件，“Capture screenshot”写入 `out/captures`。插件列表修改后重启生效。窗口右上角关闭按钮退出应用。
 
 ```powershell
@@ -58,11 +60,11 @@ python tools/Bootstrap.py
 
 ## 实现边界
 
-- Main 管理窗口、输入和 GUI；Render 组织帧；多个专用 RHI 线程录制命令，RHI 0 提交。oneTBB 执行通用 CPU jobs，支持依赖、异常传播和等待。
-- 逻辑插件通过 ID、依赖和启动/关闭生命周期组织，当前为静态链接。已有 `triangle`、`debug-ui`，不涉及 DLL 热更新。
-- 反射使用手写类型/属性描述符，驱动配置、资产引用保存和 GUI 编辑。没有 GC、AST 生成器或对象图序列化。
-- 首版 Render Graph 管理一个导入的交换链颜色目标，校验 pass 依赖、内容初始化及状态转换。容量由后端能力限定；当前 D3D12 支持最多 15 个颜色 pass（另占一个 Present context）、单 graphics queue、2 个 GPU frame context、256 个采样纹理描述符。
-- 数学使用引擎自有列主序类型；资产层支持单个 glTF 三角形 primitive、PNG 与 EXR。没有完整场景、材质或动画导入。
+- Main 管理窗口、输入和 GUI；Render 组织帧；多个专用 RHI 线程录制命令，RHI 0 提交；单独 IO 线程处理新资产的文件读写。oneTBB 执行解析、解码等 CPU jobs，支持依赖、异常传播和挂起等待。
+- 逻辑插件通过 ID、依赖和启动/关闭生命周期组织，当前为静态链接。已有 `triangle`、`debug-ui`、`model-viewer`，不涉及 DLL 热更新。
+- 反射使用类型/属性和记录描述符，驱动配置、GUI 编辑、嵌套模型数据与数值 bulk 的原生读写。没有 GC、AST 生成器或任意指针对象图序列化。
+- Render Graph 管理交换链颜色及可选深度目标，校验 pass 依赖、内容初始化及状态转换。容量由后端能力限定；当前 D3D12 支持最多 15 个颜色 pass（另占一个 Present context）、单 graphics queue、2 个 GPU frame context、256 个采样纹理描述符。
+- 数学使用引擎自有列主序类型；Scene 保存静态模型层级，AssetImport 支持 glTF 多网格/材质和 PNG/JPEG，兼容图片接口保留 EXR。未实现动画、骨骼或压缩 glTF 扩展，具体范围见资产流水线文档。
 - RHI 由 `IRHIBackend`、`IRHIDevice`、`IRHISwapchain` 抽象接口与独立后端组成，设备可以脱离窗口创建。通过配置 `rhi_backend` 或 `--backend d3d12` 选择；尚未注册的 Vulkan/Metal 会明确报错。
 - HLSL 可生成 DXIL、SPIR-V 和 MSL 文本。实际运行的是 DX12；Vulkan/Metal 运行时与移动平台尚未实现。
 - CPU 内存统计覆盖内部 allocator/PMR，以及接入回调的 cgltf、GUI 和 D3D12MA 元数据；不代表进程总内存。GPU 统计覆盖 D3D12MA 资源，不包含交换链和驱动内部占用。
@@ -72,7 +74,7 @@ python tools/Bootstrap.py
 
 默认代码风格参考 Unreal Engine：`Hyperion` 命名空间，PascalCase 标识符和文件名，`F`/`E`/`I` 类型前缀，Allman 大括号、4 列 Tab 和 `.h` 头文件。布尔变量也遵循大写开头要求。规范、例外和检查命令见 [代码规范](docs/CodingStyle.md)；后续开发同时遵循根目录 `AGENTS.md`。
 
-`Source/Runtime` 按 Core、Tasks、Math、Reflection、Assets、RHI、Renderer 等概念组织，每个模块有独立的 `Public` / `Private` 和 CMake target。`Source/Backends` 放原生图形后端；`Source/Plugins` 放实验与 UI 插件；`Source/Applications` 放应用；`Source/Tests` 放测试。`shaders` 放 HLSL；`openspec` 保存规范与归档。后续 Scene、Animation 将作为独立 Runtime 模块接入，详见 [源码组织与扩展位置](docs/SourceLayout.md)。
+`Source/Runtime` 按 Core、Tasks、IO、Math、Reflection、Serialization、Assets、Scene、AssetImport、RHI、Renderer 等概念组织，每个模块有独立的 `Public` / `Private` 和 CMake target。`Source/Backends` 放原生图形后端；`Source/Plugins` 放实验与 UI 插件；`Source/Applications` 放应用；`Source/Tests` 放测试。`shaders` 放 HLSL；`assets/Models` 放离线示例；`openspec` 保存规范与归档。Scene 独立于 RHI/Renderer，后续 Animation 遵循相同边界，详见 [源码组织与扩展位置](docs/SourceLayout.md)。
 
 依赖必须通过引擎 wrapper 使用，公共头文件不暴露第三方类型。执行 `python tools/CheckBoundaries.py` 检查 include 边界。参考 [架构和扩展约定](docs/Architecture.md)、[依赖列表](docs/Dependencies.md) 和 [九步实施路线](docs/Roadmap.md)。
 

@@ -2,6 +2,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
 #include <stb_image.h>
 #include <stb_image_write.h>
 #define TINYEXR_IMPLEMENTATION
@@ -40,6 +41,62 @@ void ExrError(int InResult, const char* InError)
 	}
 }
 } // namespace
+
+FImagePixels DecodeImage(std::span<const std::byte> InBytes)
+{
+	if (InBytes.empty() || InBytes.size() > std::numeric_limits<int>::max())
+	{
+		throw std::runtime_error("Invalid encoded image size");
+	}
+	const auto* Bytes = reinterpret_cast<const unsigned char*>(InBytes.data());
+	const auto Size = static_cast<int>(InBytes.size());
+	int Width{};
+	int Height{};
+	int Channels{};
+	if (!stbi_info_from_memory(Bytes, Size, &Width, &Height, &Channels) || Width <= 0 || Height <= 0 || Width > 16384 ||
+	    Height > 16384 || std::uint64_t(Width) * Height * 4 > 256u * 1024u * 1024u)
+	{
+		throw std::runtime_error("Invalid image dimensions or decoded image exceeds 256 MiB");
+	}
+	auto* Raw = stbi_load_from_memory(Bytes, Size, &Width, &Height, &Channels, 4);
+	std::unique_ptr<unsigned char, decltype(&stbi_image_free)> Holder(Raw, stbi_image_free);
+	if (!Raw)
+	{
+		throw std::runtime_error("PNG/JPEG decode failed");
+	}
+	return {static_cast<std::uint32_t>(Width),
+	        static_cast<std::uint32_t>(Height),
+	        {Raw, Raw + std::size_t(Width) * Height * 4}};
+}
+
+std::vector<std::byte> EncodePng(const FImage& InImage)
+{
+	const auto Count = Pixels(InImage.Width, InImage.Height);
+	if (InImage.Encoding != EColorSpace::Srgb || InImage.Rgba.size() != Count)
+	{
+		throw std::runtime_error("PNG requires encoded RGBA data");
+	}
+	std::vector<unsigned char> Pixels8(Count);
+	for (std::size_t Index = 0; Index < Count; ++Index)
+	{
+		if (!std::isfinite(InImage.Rgba[Index]))
+		{
+			throw std::runtime_error("Non-finite PNG value");
+		}
+		Pixels8[Index] = static_cast<unsigned char>(std::lround(std::clamp(InImage.Rgba[Index], 0.f, 1.f) * 255.f));
+	}
+	int Size{};
+	unsigned char* Raw =
+	    stbi_write_png_to_mem(Pixels8.data(), static_cast<int>(InImage.Width * 4), static_cast<int>(InImage.Width),
+	                          static_cast<int>(InImage.Height), 4, &Size);
+	std::unique_ptr<unsigned char, decltype(&std::free)> Holder(Raw, std::free);
+	if (!Raw || Size <= 0)
+	{
+		throw std::runtime_error("PNG encoding failed");
+	}
+	const auto* Bytes = reinterpret_cast<const std::byte*>(Raw);
+	return {Bytes, Bytes + Size};
+}
 
 FImage LoadImageFile(const std::filesystem::path& InPath)
 {

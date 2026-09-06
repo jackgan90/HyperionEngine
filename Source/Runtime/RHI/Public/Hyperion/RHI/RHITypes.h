@@ -7,6 +7,35 @@
 
 namespace Hyperion
 {
+enum class ERHIAddressMode
+{
+	Repeat,
+	Clamp,
+	Mirror
+};
+
+struct FSamplerDesc
+{
+	ERHIAddressMode U = ERHIAddressMode::Repeat;
+	ERHIAddressMode V = ERHIAddressMode::Repeat;
+	bool MinLinear = true;
+	bool MagLinear = true;
+	bool MipLinear = true;
+	bool Mipmapped = true;
+};
+
+struct FTextureMip
+{
+	std::uint32_t Width{};
+	std::uint32_t Height{};
+	std::vector<std::uint8_t> Rgba;
+};
+
+struct FTextureDesc
+{
+	bool Srgb{};
+	std::vector<FTextureMip> Mips;
+};
 enum class EVertexFormat
 {
 	Float2,
@@ -30,6 +59,13 @@ struct FPipelineDesc
 	std::vector<FVertexAttribute> Attributes;
 	bool AlphaBlend{};
 	bool Textured{};
+	bool MaterialLayout{};
+	bool SrgbTarget{};
+	bool DepthTest{};
+	bool DepthWrite{};
+	bool CullBack{};
+	bool FrontCounterClockwise = true;
+	std::array<FSamplerDesc, 5> Samplers;
 };
 
 struct FRect
@@ -52,6 +88,10 @@ struct FDrawPacket
 	std::int32_t VertexOffset{};
 	FMat4 Constants;
 	FRect Scissor;
+	FBuffer MaterialConstants;
+	std::array<FTexture, 5> MaterialTextures;
+	// Material layout uses a 512-byte slice at a 256-byte aligned buffer offset.
+	std::uint64_t MaterialConstantOffset{};
 };
 enum class EResourceState
 {
@@ -67,6 +107,9 @@ struct FPassCommands
 	bool Clear{};
 	FVec4 ClearColor;
 	std::vector<FDrawPacket> Draws;
+	bool UseDepth{};
+	bool SrgbTarget{};
+	bool ClearDepth{};
 };
 
 struct FDeviceStats

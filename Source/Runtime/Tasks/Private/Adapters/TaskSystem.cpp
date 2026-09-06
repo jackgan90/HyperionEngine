@@ -126,10 +126,10 @@ struct FTaskSystem::FImpl
 			throw std::invalid_argument("Invalid executor thread count");
 		}
 		Arena.initialize();
-		for (std::uint32_t I = 0; I < InRhi + 2; ++I)
+		for (std::uint32_t I = 0; I < InRhi + 3; ++I)
 		{
 			auto Queue = std::make_unique<FQueue>();
-			Queue->Name = I == 0 ? "Main" : I == 1 ? "Render" : "RHI " + std::to_string(I - 2);
+			Queue->Name = I == 0 ? "Main" : I == 1 ? "Render" : I == InRhi + 2 ? "IO" : "RHI " + std::to_string(I - 2);
 			Queues.push_back(std::move(Queue));
 		}
 		Queues[0]->ThreadId = std::hash<std::thread::id>{}(MainId);
@@ -142,7 +142,9 @@ struct FTaskSystem::FImpl
 				    [this, Q, I]
 				    {
 					    ActiveSystem = this;
-					    ActiveTarget = I == 1 ? FTarget{EDomain::Render} : FTarget{EDomain::Rhi, I - 2};
+					    ActiveTarget = I == 1              ? FTarget{EDomain::Render}
+					                   : I == RhiCount + 2 ? FTarget{EDomain::Io}
+					                                       : FTarget{EDomain::Rhi, I - 2};
 					    Q->ThreadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
 #ifdef _WIN32
 					    const std::wstring Name(Q->Name.begin(), Q->Name.end());
@@ -189,7 +191,7 @@ struct FTaskSystem::FImpl
 		{
 			throw std::out_of_range("Only RHI executors accept an index");
 		}
-		return InTarget.Domain == EDomain::Main ? 0 : 1;
+		return InTarget.Domain == EDomain::Main ? 0 : InTarget.Domain == EDomain::Io ? RhiCount + 2 : 1;
 	}
 
 	void StopQueues()

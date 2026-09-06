@@ -1,0 +1,3 @@
+add_library(hyperion_serialization STATIC Private/Archive.cpp)
+hyp_module(hyperion_serialization)
+target_link_libraries(hyperion_serialization PUBLIC hyperion_reflection)

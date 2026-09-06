@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -38,5 +39,7 @@ struct FTypeDescriptor
 };
 
 void SaveReflected(const std::filesystem::path& InPath, const FTypeDescriptor& InType, const void* InObject);
+std::string EncodeReflected(const FTypeDescriptor& InType, const void* InObject);
+void DecodeReflected(std::string_view InText, const FTypeDescriptor& InType, void* InObject);
 void LoadReflected(const std::filesystem::path& InPath, const FTypeDescriptor& InType, void* InObject);
 } // namespace Hyperion

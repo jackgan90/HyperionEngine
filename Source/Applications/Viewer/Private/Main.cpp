@@ -1,6 +1,8 @@
+#include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
+#include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Triangle/TrianglePlugin.h"
 #include <algorithm>
 #include <chrono>
@@ -15,6 +17,8 @@ struct FOptions
 	std::filesystem::path Config = std::filesystem::path(HYP_SOURCE_DIR) / "experiments/Triangle.json";
 	std::filesystem::path Capture;
 	std::filesystem::path SaveConfig;
+	std::filesystem::path Model;
+	bool VerifyModel{};
 	std::optional<std::string> Backend;
 	int Frames{};
 	bool Hidden{};
@@ -42,6 +46,14 @@ FOptions Parse(int InArgc, char** InArgv)
 		else if (Arg == "--capture" && I + 1 < InArgc)
 		{
 			O.Capture = InArgv[++I];
+		}
+		else if (Arg == "--model" && I + 1 < InArgc)
+		{
+			O.Model = InArgv[++I];
+		}
+		else if (Arg == "--verify-model")
+		{
+			O.VerifyModel = true;
 		}
 		else if (Arg == "--save-config" && I + 1 < InArgc)
 		{
@@ -84,11 +96,11 @@ FOptions Parse(int InArgc, char** InArgv)
 	{
 		throw std::invalid_argument("--frames must be nonnegative");
 	}
-	if ((!O.Capture.empty() || O.VerifyClear || O.VerifyTriangle || O.VerifyUi) && O.Frames == 0)
+	if ((!O.Capture.empty() || O.VerifyClear || O.VerifyTriangle || O.VerifyUi || O.VerifyModel) && O.Frames == 0)
 	{
 		throw std::invalid_argument("Capture verification requires a bounded --frames run");
 	}
-	if ((O.VerifyClear || O.VerifyTriangle || O.VerifyUi) && O.Capture.empty())
+	if ((O.VerifyClear || O.VerifyTriangle || O.VerifyUi || O.VerifyModel) && O.Capture.empty())
 	{
 		throw std::invalid_argument("Verification requires --capture");
 	}
@@ -97,6 +109,21 @@ FOptions Parse(int InArgc, char** InArgv)
 
 void Verify(const Hyperion::FImage& InImage, const Hyperion::FAppSettings& InSettings, const FOptions& InOptions)
 {
+	if (InOptions.VerifyModel)
+	{
+		std::size_t Colored{};
+		for (std::size_t Index = 0; Index < InImage.Rgba.size(); Index += 4)
+		{
+			if (std::max({InImage.Rgba[Index], InImage.Rgba[Index + 1], InImage.Rgba[Index + 2]}) > .22f)
+			{
+				++Colored;
+			}
+		}
+		if (Colored < std::size_t(InImage.Width) * InImage.Height / 40)
+		{
+			throw std::runtime_error("Model readback has insufficient visible geometry");
+		}
+	}
 	if (InOptions.VerifyClear)
 	{
 		for (std::size_t I = 0; I < InImage.Rgba.size(); I += 4)
@@ -141,6 +168,31 @@ void Verify(const Hyperion::FImage& InImage, const Hyperion::FAppSettings& InSet
 }
 } // namespace
 
+namespace
+{
+// Join every file producer on exception paths too, before IO and Tasks are destroyed.
+struct FFileWriteScope
+{
+	Hyperion::FTaskSystem& Tasks;
+	const std::vector<Hyperion::FTaskHandle>& Writes;
+
+	~FFileWriteScope()
+	{
+		for (const auto& Write : Writes)
+		{
+			try
+			{
+				Tasks.Wait(Write);
+			}
+			catch (...)
+			{
+				// The normal path propagates save failures; unwinding must still drain all jobs.
+			}
+		}
+	}
+};
+} // namespace
+
 int main(int InArgCount, char** InArgValues)
 {
 	try
@@ -148,6 +200,18 @@ int main(int InArgCount, char** InArgValues)
 		const auto Options = Parse(InArgCount, InArgValues);
 		Hyperion::InitializeLog(std::filesystem::path(HYP_SOURCE_DIR) / "out/logs/viewer.log");
 		auto Settings = Hyperion::LoadSettings(Options.Config);
+		if (!Options.Model.empty())
+		{
+			Settings.ModelSource = Options.Model.string();
+		}
+		if (!Settings.ModelSource.empty())
+		{
+			std::erase(Settings.Plugins, std::string("triangle"));
+			if (std::find(Settings.Plugins.begin(), Settings.Plugins.end(), "model-viewer") == Settings.Plugins.end())
+			{
+				Settings.Plugins.insert(Settings.Plugins.begin(), "model-viewer");
+			}
+		}
 		if (Options.Backend)
 		{
 			Settings.RHIBackend = *Options.Backend;
@@ -161,6 +225,17 @@ int main(int InArgCount, char** InArgValues)
 		}
 		Hyperion::FTaskSystem Tasks(static_cast<unsigned>(Settings.Workers),
 		                            static_cast<unsigned>(Settings.RhiThreads));
+		Hyperion::FIOService IO(Tasks);
+		Hyperion::FAssetService Assets(IO);
+		Hyperion::RegisterGltfImporter(Assets);
+		std::vector<Hyperion::FTaskHandle> FileWrites;
+		FFileWriteScope FileWriteScope{Tasks, FileWrites};
+		const auto SaveSettingsAsync = [&](const std::filesystem::path& InPath)
+		{
+			const auto Text = Hyperion::EncodeReflected(Hyperion::SettingsType(), &Settings);
+			const auto Bytes = std::as_bytes(std::span(Text));
+			FileWrites.push_back(IO.WriteAsync(InPath, {Bytes.begin(), Bytes.end()}).Task());
+		};
 		Hyperion::FWindow Window(Settings.Title,
 		                         {static_cast<unsigned>(Settings.Width), static_cast<unsigned>(Settings.Height)},
 		                         Options.Hidden);
@@ -193,9 +268,11 @@ int main(int InArgCount, char** InArgValues)
 		}
 		Hyperion::FPluginRegistry Registry;
 		Hyperion::RegisterTrianglePlugin(Registry, *Device, Compiler, Tasks);
+		Hyperion::RegisterModelViewerPlugin(Registry, *Device, Compiler, Tasks, Assets, Settings.ModelSource);
 		Hyperion::RegisterDebugUiPlugin(Registry, *Device, Compiler, Tasks, Font);
 		std::unique_ptr<Hyperion::FPluginSet> Plugins;
 		Hyperion::FDebugUiPlugin* GuiPlugin{};
+		Hyperion::FModelViewerPlugin* ModelPlugin{};
 		Hyperion::FDebugMetrics Metrics;
 		Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
 		                          [&]
@@ -206,6 +283,10 @@ int main(int InArgCount, char** InArgValues)
 				                          if (auto Debug = dynamic_cast<Hyperion::FDebugUiPlugin*>(Plugin.get()))
 				                          {
 					                          GuiPlugin = Debug;
+				                          }
+				                          if (auto Model = dynamic_cast<Hyperion::FModelViewerPlugin*>(Plugin.get()))
+				                          {
+					                          ModelPlugin = Model;
 				                          }
 			                          }
 			                          Metrics.Device = Device->Statistics();
@@ -222,6 +303,17 @@ int main(int InArgCount, char** InArgValues)
 			LastFrame = Now;
 			Window.Poll();
 			Tasks.PumpMain();
+			if (ModelPlugin)
+			{
+				Metrics.AssetStatus = ModelPlugin->Status();
+				for (const auto& Event : Window.Events())
+				{
+					if (Event.Type == Hyperion::EEventType::Key && Event.Key == Hyperion::EKey::Tab && Event.Down)
+					{
+						Settings.ShowGui = !Settings.ShowGui;
+					}
+				}
+			}
 			if (Options.Exercise)
 			{
 				if (Frame == 2)
@@ -260,8 +352,13 @@ int main(int InArgCount, char** InArgValues)
 			}
 			if (Actions.Save)
 			{
-				Hyperion::SaveSettings(Options.Config, Settings);
-				Hyperion::Log(Hyperion::ELogLevel::Info, "Experiment saved: " + Options.Config.string());
+				SaveSettingsAsync(Options.Config);
+				Hyperion::Log(Hyperion::ELogLevel::Info, "Experiment save queued: " + Options.Config.string());
+			}
+			if (ModelPlugin)
+			{
+				ModelPlugin->Input(Window.Events(), Gui && Settings.ShowGui && Gui->WantsMouse(),
+				                   Gui && Settings.ShowGui && Gui->WantsKeyboard());
 			}
 			const bool TakeCapture = Actions.Capture || (!Options.Capture.empty() && Frame == Options.Frames - 1);
 			Hyperion::FImage Screenshot;
@@ -305,14 +402,24 @@ int main(int InArgCount, char** InArgValues)
 			}
 			if (TakeCapture)
 			{
+				if (Options.VerifyModel && (!ModelPlugin || !ModelPlugin->Ready()))
+				{
+					throw std::runtime_error(ModelPlugin ? ModelPlugin->Status() : "No model plugin active");
+				}
 				auto Path = Options.Capture.empty()
 				                ? std::filesystem::path(HYP_SOURCE_DIR) / "out/captures" /
 				                      ("capture-" + std::to_string(Hyperion::ClockNanoseconds()) + ".png")
 				                : Options.Capture;
-				Hyperion::SaveImage(Path, Screenshot);
 				Verify(Screenshot, Settings, Options);
+				FileWrites.push_back(Hyperion::DispatchAsync<bool>(
+				                         Tasks, {Hyperion::EDomain::Worker},
+				                         [&, Path, Snapshot = std::move(Screenshot)]
+				                         {
+					                         return *IO.WriteAsync(Path, Hyperion::EncodePng(Snapshot)).Get(Tasks);
+				                         })
+				                         .Task());
 				Captured = true;
-				Hyperion::Log(Hyperion::ELogLevel::Info, "Screenshot saved: " + Path.string());
+				Hyperion::Log(Hyperion::ELogLevel::Info, "Screenshot save queued: " + Path.string());
 			}
 			Hyperion::ProfileFrame();
 		}
@@ -325,8 +432,10 @@ int main(int InArgCount, char** InArgValues)
 			auto Size = Window.LogicalSize();
 			Settings.Width = static_cast<int>(Size.Width);
 			Settings.Height = static_cast<int>(Size.Height);
-			Hyperion::SaveSettings(Options.SaveConfig, Settings);
+			SaveSettingsAsync(Options.SaveConfig);
 		}
+		Assets.Drain();
+		Tasks.WaitAll(FileWrites);
 		Hyperion::FDeviceStats Stats;
 		Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
 		                          [&]

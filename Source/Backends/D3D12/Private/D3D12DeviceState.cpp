@@ -32,6 +32,17 @@ std::uint64_t FD3D12DeviceState::Signal()
 void FD3D12DeviceState::Idle()
 {
 	Wait(Signal());
+	CollectUploads();
+}
+
+void FD3D12DeviceState::CollectUploads()
+{
+	const auto Completed = Fence->GetCompletedValue();
+	std::erase_if(Uploads,
+	              [Completed](const FUploadBatch& InBatch)
+	              {
+		              return InBatch.FenceValue <= Completed;
+	              });
 }
 
 std::shared_ptr<FD3D12Buffer> FD3D12DeviceState::AllocateBuffer(std::uint64_t InBytes, D3D12_HEAP_TYPE InHeap,

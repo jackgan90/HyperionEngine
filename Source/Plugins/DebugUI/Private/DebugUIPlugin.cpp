@@ -25,6 +25,14 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 	{
 		InGui.Text("H Y P E R I O N");
 		InGui.Text("Rendering lab  /  " + InSettings.RHIBackend);
+		if (!InMetrics.AssetStatus.empty())
+		{
+			InGui.Separator();
+			InGui.Text("MODEL");
+			InGui.TextWrapped(InMetrics.AssetStatus);
+			InGui.Text("Right drag: orbit | Wheel: zoom");
+			InGui.Text("Home: fit | Tab: toggle panel");
+		}
 		InGui.Separator();
 		InGui.Text(InMetrics.Device.Adapter);
 		InGui.Text(std::string("Validation: ") + (InMetrics.Device.DebugLayer ? "enabled" : "unavailable") +
@@ -36,10 +44,11 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		InGui.Text("EXPERIMENT");
 		constexpr std::array<std::string_view, 5> Ids{"triangle_scale", "clear_red", "clear_green", "clear_blue",
 		                                              "vsync"};
-		InGui.EditProperties(SettingsType(), &InSettings, Ids);
+		InGui.EditProperties(SettingsType(), &InSettings,
+		                     InSettings.ModelSource.empty() ? std::span(Ids) : std::span(Ids).subspan(1));
 		bool Triangle =
 		    std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "triangle") != InSettings.Plugins.end();
-		if (InGui.Checkbox("Triangle plugin (restart)", Triangle))
+		if (InSettings.ModelSource.empty() && InGui.Checkbox("Triangle plugin (restart)", Triangle))
 		{
 			if (Triangle)
 			{

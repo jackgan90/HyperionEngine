@@ -68,3 +68,7 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 同日完成 UE 风格迁移后，再次生成并验证 Debug/Release，均为 **14/14**（新增 `code_style_paths`），记录为 `out/style-vs-debug.log`、`out/style-vs-release.log`。CMD 入口也已复验，记录为 `out/style-cmd.log`。代码文件和辅助脚本已采用 PascalCase，解决方案名称、启动项目和 `hyperion_check` 使用方式保持一致；Viewer 项目中可以直接浏览规范和格式配置。
 
 同日完成 RHI 抽象与源码模块化后，Debug/Release 均为 **16/16**，新增 `rhi_backend_contracts` 与 `d3d12_device_ownership`。记录为 `out/ModularDebugTest.log`、`out/ModularReleaseTest.log`。解决方案仍由同一入口生成，项目按 `Hyperion/Runtime`、`Backends`、`Plugins`、`Applications`、`Tests` 分组，模块内的 Public/Private 与源码目录一致。
+
+同日完成异步 glTF 资产流水线后，Debug/Release 均为 **23/23**，记录为 `out/GltfVsDebugVerified.log`（41.62 秒）与 `out/GltfVsReleaseVerified.log`（37.39 秒）。新增 IO、Archive、Scene、importer、材质像素与模型 Viewer 验收；涵盖单 Worker、延迟读取、取消、保存失败收尾和真实 D3D12 截图。并行构建曾暴露每个程序重复复制同一 DLL 的竞态，现由共享 `hyperion_runtime_files` 目标统一准备 DLL。两种配置均已通过此修复后的完整流程。示例运行见 [AssetPipeline.md](AssetPipeline.md)。
+
+同日 Model Viewer 独立审计修复后，Debug/Release 再次通过 **23/23**，记录为 `out/ModelReviewDebug.log`（35.62 秒）与 `out/ModelReviewRelease.log`（28.13 秒）。原测试中新增 sparse/interleaved 组合、畸形范围、倒序深层级、偏轴透明像素与常量偏移回归；审计及修复范围见 [ModelViewerReview.md](ModelViewerReview.md)。

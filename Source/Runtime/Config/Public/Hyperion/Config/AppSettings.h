@@ -11,6 +11,7 @@ struct FAppSettings
 	int Workers = 4;
 	int RhiThreads = 2;
 	std::string RHIBackend = "d3d12";
+	std::string ModelSource;
 	bool Vsync = true;
 	bool ShowGui = true;
 	double TriangleScale = 0.85;

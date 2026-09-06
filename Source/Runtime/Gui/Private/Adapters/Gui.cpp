@@ -248,6 +248,26 @@ void FGui::Text(const std::string& InValue)
 	ImGui::TextUnformatted(InValue.c_str());
 }
 
+void FGui::TextWrapped(const std::string& InValue)
+{
+	Impl->Select();
+	ImGui::PushTextWrapPos(0);
+	ImGui::TextUnformatted(InValue.c_str());
+	ImGui::PopTextWrapPos();
+}
+
+bool FGui::WantsMouse() const
+{
+	Impl->Select();
+	return ImGui::GetIO().WantCaptureMouse;
+}
+
+bool FGui::WantsKeyboard() const
+{
+	Impl->Select();
+	return ImGui::GetIO().WantCaptureKeyboard;
+}
+
 void FGui::Separator()
 {
 	Impl->Select();

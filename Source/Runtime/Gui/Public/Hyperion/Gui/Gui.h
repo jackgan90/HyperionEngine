@@ -41,6 +41,9 @@ public:
 	bool BeginPanel(const char* InTitle, FVec2 InPosition, FVec2 InSize);
 	void EndPanel();
 	void Text(const std::string& InValue);
+	void TextWrapped(const std::string& InValue);
+	bool WantsMouse() const;
+	bool WantsKeyboard() const;
 	void Separator();
 	bool Button(const char* InLabel);
 	bool Checkbox(const char* InLabel, bool& InValue);

@@ -13,7 +13,8 @@ enum class EDomain
 	Main,
 	Render,
 	Rhi,
-	Worker
+	Worker,
+	Io
 };
 
 struct FTarget

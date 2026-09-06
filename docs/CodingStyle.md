@@ -75,3 +75,5 @@ python tools/CheckStyle.py --naming --build-dir out/build/debug
 `--naming` 需要有效的 Ninja `compile_commands.json`；Visual Studio generator 不导出该文件。clang-tidy 理解符号所属类型，因此不会把 `std::vector::size()` 或 SDK 字段误判为引擎方法。命名检查覆盖普通声明；依赖模板、宏、HLSL 标识符及模板类型前缀仍需代码审阅。不要对整个仓库（包含 `out/deps`）执行自动修复。
 
 CTest 的 `code_style_paths` 检查自有文件名和 include 路径的准确大小写，不需要 LLVM；完整格式/命名检查由上述命令显式运行。
+
+clang-tidy 尚无独立的类模板前缀配置，`.clang-tidy` 对 `TAsyncState`、`TAsyncResult`、`TAssetRequest` 设置了精确命名例外，以保留仓库要求的 T 前缀。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。

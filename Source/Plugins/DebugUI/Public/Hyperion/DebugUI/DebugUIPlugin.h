@@ -9,6 +9,7 @@ struct FDebugMetrics
 	FDeviceStats Device;
 	std::vector<FExecutionStats> Threads;
 	std::vector<float> FrameMilliseconds;
+	std::string AssetStatus;
 };
 
 struct FDebugActions

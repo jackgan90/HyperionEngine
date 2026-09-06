@@ -76,7 +76,7 @@ FValue ReadValue(const FJson& InJson, const FProperty& InProperty)
 }
 } // namespace
 
-void SaveReflected(const std::filesystem::path& InPath, const FTypeDescriptor& InType, const void* InObject)
+std::string EncodeReflected(const FTypeDescriptor& InType, const void* InObject)
 {
 	FJson Document{{"type", InType.Id}, {"schema_version", InType.Version}, {"properties", FJson::object()}};
 	for (const auto& Property : InType.Properties)
@@ -93,6 +93,12 @@ void SaveReflected(const std::filesystem::path& InPath, const FTypeDescriptor& I
 			Document["properties"][Property.Id] = std::move(Value);
 		}
 	}
+	return Document.dump(2) + '\n';
+}
+
+void SaveReflected(const std::filesystem::path& InPath, const FTypeDescriptor& InType, const void* InObject)
+{
+	const auto Text = EncodeReflected(InType, InObject);
 	if (!InPath.parent_path().empty())
 	{
 		std::filesystem::create_directories(InPath.parent_path());
@@ -101,7 +107,7 @@ void SaveReflected(const std::filesystem::path& InPath, const FTypeDescriptor& I
 	Temporary += ".tmp";
 	{
 		std::ofstream File(Temporary, std::ios::binary | std::ios::trunc);
-		File << Document.dump(2) << '\n';
+		File << Text;
 		File.flush();
 		if (!File)
 		{
@@ -114,7 +120,7 @@ void SaveReflected(const std::filesystem::path& InPath, const FTypeDescriptor& I
 		throw std::runtime_error("Cannot replace configuration: " + InPath.string());
 	}
 #else
-	std::filesystem::rename(temporary, path);
+	std::filesystem::rename(Temporary, InPath);
 #endif
 }
 
@@ -125,7 +131,13 @@ void LoadReflected(const std::filesystem::path& InPath, const FTypeDescriptor& I
 	{
 		throw std::runtime_error("Cannot read configuration: " + InPath.string());
 	}
-	const FJson Document = FJson::parse(File);
+	const std::string Text{std::istreambuf_iterator<char>(File), std::istreambuf_iterator<char>()};
+	DecodeReflected(Text, InType, InObject);
+}
+
+void DecodeReflected(std::string_view InText, const FTypeDescriptor& InType, void* InObject)
+{
+	const FJson Document = FJson::parse(InText);
 	if (!Document.is_object() || Document.at("type") != InType.Id)
 	{
 		throw std::runtime_error("Configuration type mismatch");

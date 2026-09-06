@@ -12,6 +12,9 @@ struct FD3D12RHISwapchain::FImpl
 	std::shared_ptr<const FD3D12SwapchainIdentity> Identity = std::make_shared<FD3D12SwapchainIdentity>();
 	ComPtr<IDXGISwapChain3> Swapchain;
 	ComPtr<ID3D12DescriptorHeap> Rtvs;
+	ComPtr<ID3D12DescriptorHeap> Dsvs;
+	ComPtr<ID3D12Resource> Depth;
+	ComPtr<D3D12MA::Allocation> DepthAllocation;
 	std::array<ComPtr<ID3D12Resource>, FrameCount> Backbuffers;
 
 	struct FFrame
@@ -40,12 +43,37 @@ struct FD3D12RHISwapchain::FImpl
 
 	void Buffers()
 	{
+		Depth.Reset();
+		DepthAllocation.Reset();
+		D3D12_RESOURCE_DESC Desc{};
+		Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		Desc.Width = Size.Width;
+		Desc.Height = Size.Height;
+		Desc.DepthOrArraySize = 1;
+		Desc.MipLevels = 1;
+		Desc.Format = DXGI_FORMAT_D32_FLOAT;
+		Desc.SampleDesc.Count = 1;
+		Desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+		D3D12MA::ALLOCATION_DESC Allocation{};
+		Allocation.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+		D3D12_CLEAR_VALUE Clear{};
+		Clear.Format = Desc.Format;
+		Clear.DepthStencil.Depth = 1;
+		Check(State->Allocator->CreateResource(&Allocation, &Desc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &Clear,
+		                                       &DepthAllocation, IID_PPV_ARGS(&Depth)),
+		      "Create scene depth");
+		State->Device->CreateDepthStencilView(Depth.Get(), nullptr, Dsvs->GetCPUDescriptorHandleForHeapStart());
 		for (UINT I = 0; I < FrameCount; ++I)
 		{
 			Check(Swapchain->GetBuffer(I, IID_PPV_ARGS(&Backbuffers[I])), "Get swapchain buffer");
 			auto H = Rtvs->GetCPUDescriptorHandleForHeapStart();
 			H.ptr += std::size_t(I) * RtvStep;
 			State->Device->CreateRenderTargetView(Backbuffers[I].Get(), nullptr, H);
+			H.ptr += std::size_t(FrameCount) * RtvStep;
+			D3D12_RENDER_TARGET_VIEW_DESC Srgb{};
+			Srgb.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+			Srgb.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+			State->Device->CreateRenderTargetView(Backbuffers[I].Get(), &Srgb, H);
 		}
 	}
 };
@@ -61,10 +89,13 @@ FD3D12RHISwapchain::FD3D12RHISwapchain(std::shared_ptr<FD3D12DeviceState> InStat
 	P.State = std::move(InState);
 	P.Size = InDesc.Size;
 	D3D12_DESCRIPTOR_HEAP_DESC Heap{};
-	Heap.NumDescriptors = FrameCount;
+	Heap.NumDescriptors = FrameCount * 2;
 	Heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	Check(P.State->Device->CreateDescriptorHeap(&Heap, IID_PPV_ARGS(&P.Rtvs)), "RTV heap");
 	P.RtvStep = P.State->Device->GetDescriptorHandleIncrementSize(Heap.Type);
+	Heap.NumDescriptors = 1;
+	Heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+	Check(P.State->Device->CreateDescriptorHeap(&Heap, IID_PPV_ARGS(&P.Dsvs)), "DSV heap");
 	DXGI_SWAP_CHAIN_DESC1 Sc{};
 	Sc.Width = InDesc.Size.Width;
 	Sc.Height = InDesc.Size.Height;
@@ -164,6 +195,27 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		{
 			NativeResource<FD3D12Texture>(Draw.Texture.Payload, P.State.get());
 		}
+		if (Pipeline.MaterialLayout)
+		{
+			if (!InCommands.UseDepth)
+			{
+				throw std::invalid_argument("Material pass requires depth target");
+			}
+			const auto& Constants = NativeResource<FD3D12Buffer>(Draw.MaterialConstants.Payload, P.State.get());
+			if (Constants.Size < 512 || Draw.MaterialConstantOffset > Constants.Size - 512 ||
+			    Draw.MaterialConstantOffset % 256 || Constants.Resource->GetGPUVirtualAddress() % 256)
+			{
+				throw std::invalid_argument("Invalid material constant buffer");
+			}
+			for (const auto& Texture : Draw.MaterialTextures)
+			{
+				const auto& NativeTexture = NativeResource<FD3D12Texture>(Texture.Payload, P.State.get());
+				if (NativeTexture.UploadFence > P.State->Fence->GetCompletedValue())
+				{
+					throw std::invalid_argument("Texture upload is not ready");
+				}
+			}
+		}
 	}
 	auto& Frame = P.Frames[P.FrameIndex];
 	if (Frame.Recorded[InContext].exchange(true))
@@ -188,8 +240,13 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		           Native(*InCommands.TransitionTo));
 	}
 	auto Rtv = P.Rtvs->GetCPUDescriptorHandleForHeapStart();
-	Rtv.ptr += std::size_t(P.FrameIndex) * P.RtvStep;
-	List->OMSetRenderTargets(1, &Rtv, FALSE, nullptr);
+	Rtv.ptr += std::size_t(P.FrameIndex + (InCommands.SrgbTarget ? FrameCount : 0)) * P.RtvStep;
+	auto Dsv = P.Dsvs->GetCPUDescriptorHandleForHeapStart();
+	List->OMSetRenderTargets(1, &Rtv, FALSE, InCommands.UseDepth ? &Dsv : nullptr);
+	if (InCommands.ClearDepth)
+	{
+		List->ClearDepthStencilView(Dsv, D3D12_CLEAR_FLAG_DEPTH, 1, 0, 0, nullptr);
+	}
 	if (InCommands.Clear)
 	{
 		float Color[] = {InCommands.ClearColor.X, InCommands.ClearColor.Y, InCommands.ClearColor.Z,
@@ -208,7 +265,24 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, P.State.get());
 		List->SetPipelineState(Pipeline.Pipeline.Get());
 		List->SetGraphicsRootSignature(Pipeline.Root.Get());
-		List->SetGraphicsRoot32BitConstants(0, 16, Draw.Constants.Values.data(), 0);
+		if (Pipeline.MaterialLayout)
+		{
+			List->SetGraphicsRootConstantBufferView(
+			    0, NativeResource<FD3D12Buffer>(Draw.MaterialConstants.Payload, P.State.get())
+			               .Resource->GetGPUVirtualAddress() +
+			           Draw.MaterialConstantOffset);
+			for (UINT Index = 0; Index < 5; ++Index)
+			{
+				List->SetGraphicsRootDescriptorTable(
+				    Index + 1,
+				    P.State->Gpu(
+				        NativeResource<FD3D12Texture>(Draw.MaterialTextures[Index].Payload, P.State.get()).Slot));
+			}
+		}
+		else
+		{
+			List->SetGraphicsRoot32BitConstants(0, 16, Draw.Constants.Values.data(), 0);
+		}
 		if (Pipeline.Textured)
 		{
 			if (!Draw.Texture)

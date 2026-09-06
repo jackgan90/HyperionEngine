@@ -1,0 +1,19 @@
+{
+  "type": "hyperion.application-settings",
+  "schema_version": 1,
+  "properties": {
+    "title": "Hyperion | glTF Model Viewer",
+    "width": 1440,
+    "height": 900,
+    "workers": 4,
+    "rhi_threads": 2,
+    "rhi_backend": "d3d12",
+    "model_source": "assets/Models/Showcase.gltf",
+    "plugins": ["model-viewer", "debug-ui"],
+    "show_gui": true,
+    "vsync": true,
+    "clear_red": 0.025,
+    "clear_green": 0.035,
+    "clear_blue": 0.065
+  }
+}

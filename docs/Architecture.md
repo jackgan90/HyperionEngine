@@ -27,9 +27,11 @@ Task handles carry completion and exceptions. Dependencies are continuation driv
 3. In `Build()`, contribute `FColorPass` commands using owned draw packets. A Load pass depends on previously initialized color contents. The graph inserts transitions and presentation automatically.
 4. Release owned handles in `Stop()` after the application drains GPU work. Add the ID to an experiment configuration and restart.
 
-The current graph is explicitly a swapchain color graph. An offscreen GI algorithm will need a future change introducing graph resource handles, textures/formats/usages and read/write tracking across multiple resources. Do not bypass RHI to add native graphics calls in a plugin.
+The current graph manages swapchain color and an optional matching depth target. Static models use depth and an sRGB color view, followed by the existing GUI pass. An offscreen GI algorithm still needs a future change introducing graph resource handles, textures/formats/usages and read/write tracking across multiple resources. Do not bypass RHI to add native graphics calls in a plugin.
 
 ## Reflection, allocation and dependency boundaries
+
+See [AssetPipeline.md](AssetPipeline.md) for the single IO thread, resumable worker import, reflected `.hasset` records, immutable Scene assets, asynchronous fenced texture upload and the supported glTF boundary. Existing configuration reflection remains compatible; `FRecordDescriptor` adds nested data and bulk serialization without exposing GPU or vendor objects.
 
 Reflection descriptors expose stable property IDs, kinds, ranges, getters and setters. JSON serialization uses a type ID and schema version. Unknown properties are ignored, missing properties preserve defaults, and incompatible future versions fail. GPU handles are never serialized; persistent assets store identity and source paths.
 
