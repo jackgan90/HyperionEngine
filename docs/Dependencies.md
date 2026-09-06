@@ -13,6 +13,7 @@ All direct calls are isolated behind the indicated engine wrapper. Full commits 
 | [json](https://github.com/nlohmann/json) | v3.12.0 | Reflection serialization |
 | [mimalloc](https://github.com/microsoft/mimalloc) | v3.5.1 | Core allocation / PMR |
 | [onetbb](https://github.com/uxlfoundation/oneTBB) | v2023.1.0 | FTaskSystem workers |
+| [renderdoc](https://github.com/baldurk/renderdoc) | v1.37 / cd94206b0fd9 | Optional API header only; Runtime/Capture private adapter, MIT license in header |
 | [sdl](https://github.com/libsdl-org/SDL) | release-3.4.16 | Platform window / input |
 | [spdlog](https://github.com/gabime/spdlog) | v1.17.0 | Core logging |
 | [spirv-cross](https://github.com/KhronosGroup/SPIRV-Cross) | 83fa691cb860 | Shader reflection / MSL |

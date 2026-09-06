@@ -234,6 +234,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	                                         nullptr, IID_PPV_ARGS(&R->List)),
 	      "Create recording list");
 	auto List = R->List.Get();
+	List->BeginEvent(1, InCommands.Name.c_str(), static_cast<UINT>(InCommands.Name.size() + 1));
 	if (InCommands.TransitionFrom && InCommands.TransitionTo)
 	{
 		Transition(List, P.Backbuffers[P.FrameIndex].Get(), Native(*InCommands.TransitionFrom),
@@ -302,6 +303,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		List->RSSetScissorRects(1, &Rect);
 		List->DrawIndexedInstanced(Draw.IndexCount, 1, Draw.FirstIndex, Draw.VertexOffset, 0);
 	}
+	List->EndEvent();
 	Check(List->Close(), "Close recording list");
 	return {std::move(R)};
 }

@@ -21,12 +21,14 @@ Source/
     RHI/           # 公共图形契约、能力查询、后端注册表
     Renderer/      # RenderGraph 与 IRenderPlugin
     Gui/           # ImGui / ImPlot wrapper 和引擎绘制数据
+    Capture/       # 可选 RenderDoc API wrapper，不依赖原生 RHI 后端
   Backends/
     D3D12/         # 独立的 D3D12 RHI provider
   Plugins/
     Triangle/      # 三角形实验
     DebugUI/       # 调试 UI 的渲染插件
     ModelViewer/   # 异步静态模型显示与相机
+    RenderDoc/     # 可选抓帧服务的设备创建前生命周期
   Applications/
     Viewer/        # 应用入口与模块组装
   Tests/           # 对应模块的单元测试及 Integration 验收

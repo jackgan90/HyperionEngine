@@ -4,7 +4,7 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'Source'
-VENDORS = re.compile(r'(?:spdlog/|mimalloc|tracy/|oneapi/|tbb/|SDL3/|nlohmann/|glm/|cgltf|stb_|tinyexr|spirv_|spirv_cross|dxcapi|D3D12MemAlloc|imgui|implot|d3d12(?:sdklayers|shader)?\.h|dxgi\d*\.h|wrl/|Windows\.h)', re.I)
+VENDORS = re.compile(r'(?:renderdoc_app|spdlog/|mimalloc|tracy/|oneapi/|tbb/|SDL3/|nlohmann/|glm/|cgltf|stb_|tinyexr|spirv_|spirv_cross|dxcapi|D3D12MemAlloc|imgui|implot|d3d12(?:sdklayers|shader)?\.h|dxgi\d*\.h|wrl/|Windows\.h)', re.I)
 modules = {}
 headers = {}
 bad = []

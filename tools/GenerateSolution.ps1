@@ -4,7 +4,9 @@ param(
     [switch]$Build,
     [switch]$Test,
     [switch]$Open,
-    [switch]$Fresh
+    [switch]$Fresh,
+    [switch]$RenderDoc,
+    [switch]$NoRenderDoc
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -16,5 +18,8 @@ if ($Build) { $Arguments += '--build' }
 if ($Test) { $Arguments += '--test' }
 if ($Open) { $Arguments += '--open' }
 if ($Fresh) { $Arguments += '--fresh' }
+if ($RenderDoc -and $NoRenderDoc) { throw 'Use either -RenderDoc or -NoRenderDoc.' }
+if ($RenderDoc) { $Arguments += '--renderdoc' }
+if ($NoRenderDoc) { $Arguments += '--no-renderdoc' }
 & python @arguments
 if ($LASTEXITCODE) { throw "Visual Studio workflow failed (exit code $LASTEXITCODE). See the error above." }

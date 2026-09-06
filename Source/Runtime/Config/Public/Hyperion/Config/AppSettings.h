@@ -14,6 +14,9 @@ struct FAppSettings
 	std::string ModelSource;
 	bool Vsync = true;
 	bool ShowGui = true;
+	std::string RenderDocLibrary;
+	std::string RenderDocOutput = "out/captures/renderdoc";
+	bool RenderDocAutoOpen = false;
 	double TriangleScale = 0.85;
 	double ClearRed = 0.025;
 	double ClearGreen = 0.035;

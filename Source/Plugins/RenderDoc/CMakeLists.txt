@@ -1,0 +1,3 @@
+add_library(hyperion_renderdoc STATIC Private/RenderDocPlugin.cpp)
+hyp_module(hyperion_renderdoc)
+target_link_libraries(hyperion_renderdoc PUBLIC hyperion_capture hyperion_plugins)

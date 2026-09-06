@@ -29,6 +29,8 @@ target_link_libraries(model_render_tests PRIVATE hyperion_model_viewer hyperion_
 target_compile_definitions(model_render_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(model_rendering PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_test(gui_tests gui_input_and_data hyperion_gui Gui/GuiTests.cpp)
+hyp_test(capture_controls_tests capture_controls hyperion_debug_ui Gui/CaptureControlsTests.cpp)
+target_link_libraries(capture_controls_tests PRIVATE hyperion_gui hyperion_config)
 target_link_libraries(config_tests PRIVATE hyperion_plugins)
 target_link_libraries(asset_tests PRIVATE hyperion_core)
 target_link_libraries(gui_tests PRIVATE hyperion_config)
@@ -46,10 +48,23 @@ add_test(NAME viewer_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT
 add_test(NAME model_viewer_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ModelAcceptance.py" $<TARGET_FILE:hyperion_viewer> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(model_viewer_acceptance PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 set_tests_properties(d3d12_device_ownership window_lifecycle d3d12_clear d3d12_triangle d3d12_gui viewer_acceptance PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+if(HYP_ENABLE_RENDERDOC)
+  hyp_test(capture_tests capture_unavailable hyperion_capture Capture/CaptureTests.cpp)
+  target_link_libraries(capture_tests PRIVATE hyperion_rhi_d3d12 hyperion_render hyperion_core hyperion_tasks hyperion_platform)
+  add_test(NAME capture_failure_recovery COMMAND capture_failure_tests)
+  set_tests_properties(capture_failure_recovery PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77 LABELS "renderdoc")
+  add_test(NAME capture_incompatible COMMAND capture_tests "$ENV{WINDIR}/System32/kernel32.dll")
+  add_test(NAME capture_runtime COMMAND capture_tests --runtime)
+  add_test(NAME renderdoc_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/RenderDocAcceptance.py" $<TARGET_FILE:hyperion_viewer> "${PROJECT_SOURCE_DIR}")
+  set_tests_properties(capture_runtime renderdoc_acceptance PROPERTIES SKIP_RETURN_CODE 77 LABELS "gpu;desktop;renderdoc" RUN_SERIAL TRUE TIMEOUT 240)
+endif()
 get_property(hyperion_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${hyperion_tests} PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_custom_target(hyperion_check
   COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${PROJECT_BINARY_DIR}" -C "$<CONFIG>" --output-on-failure
-  DEPENDS core_tests task_tests io_tests archive_tests model_tests import_tests config_tests asset_tests shader_tests graph_tests model_render_tests gui_tests rhi_contract_tests d3d12_device_tests hyperion_viewer
+  DEPENDS core_tests task_tests io_tests archive_tests model_tests import_tests config_tests asset_tests shader_tests graph_tests model_render_tests gui_tests capture_controls_tests rhi_contract_tests d3d12_device_tests hyperion_viewer
   USES_TERMINAL
   COMMENT "Running Hyperion CTest suite")
+if(HYP_ENABLE_RENDERDOC)
+  add_dependencies(hyperion_check capture_tests capture_failure_tests)
+endif()

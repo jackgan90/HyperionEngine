@@ -57,15 +57,17 @@ def resolve(name):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--only', nargs='*', choices=list(REPOS))
+    parser.add_argument('--only', nargs='*', choices=[*REPOS, 'renderdoc'])
+    parser.add_argument('--renderdoc', action='store_true', help='Also fetch the optional RenderDoc API header')
     args = parser.parse_args()
     lockfile = ROOT / 'dependencies.lock.json'
     lock = json.loads(lockfile.read_text()) if lockfile.exists() else {}
     cache = ROOT / 'out/downloads'
     cache.mkdir(parents=True, exist_ok=True)
-    for name in args.only or REPOS:
+    for name in args.only or [*REPOS, *(['renderdoc'] if args.renderdoc else [])]:
         entry = lock.get(name) or resolve(name)
-        archive = cache / (name + '-' + entry.get('commit', entry['version']) + '.zip')
+        suffix = '.h' if entry.get('file') else '.zip'
+        archive = cache / (name + '-' + entry.get('commit', entry['version']) + suffix)
         if not archive.exists():
             print(f'Downloading {name} {entry["version"]}', flush=True)
             archive.write_bytes(request(entry['url']))
@@ -83,6 +85,14 @@ def main():
         if destination.exists() and any(destination.iterdir()):
             raise RuntimeError(f'Refusing to overwrite a different dependency tree: {destination}')
         destination.mkdir(parents=True, exist_ok=True)
+        if entry.get('file'):
+            target = (destination / entry['file']).resolve()
+            if not target.is_relative_to(destination):
+                raise RuntimeError('Unsafe dependency file path')
+            shutil.copyfile(archive, target)
+            marker.write_text(digest)
+            print(f'Ready {name} {digest[:12]}', flush=True)
+            continue
         with zipfile.ZipFile(archive) as source:
             for member in source.infolist():
                 parts = pathlib.PurePosixPath(member.filename).parts

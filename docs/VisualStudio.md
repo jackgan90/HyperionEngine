@@ -63,6 +63,10 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 
 ## 本机验证记录
 
+可选 RenderDoc 抓帧支持可通过 `-RenderDoc` 编入，通过 `-NoRenderDoc` 关闭；不指定时保留 CMake 缓存。完整说明见 [RenderDoc 抓帧](RenderDoc.md)。2026-09-06 验证：启用时 Debug/Release 分别通过 **28/28**；关闭时 Debug 通过 **24/24**，并验证了未编译插件的明确错误。日志为 `out/RenderDocDebugTest.log`、`out/RenderDocReleaseTest.log`、`out/RenderDocDisabledTest.log`；验收后已恢复启用支持的 Debug 构建。
+
+同日 RenderDoc 独立审计后，修复内容验收误报与清理失败后的所有权丢失，并增加 `capture_failure_recovery` 回归。最终启用时 Debug/Release 分别通过 **29/29**，关闭时 Debug 通过 **24/24**；格式、模块边界、51 个编译单元的命名检查及 OpenSpec strict 全部通过。日志为 `out/RenderDocReviewDebug.log`、`out/RenderDocReviewRelease.log`、`out/RenderDocReviewDisabled.log`，复核过程见 [RenderDoc 独立审计](RenderDocReview.md)。当前 VS 工程已恢复启用支持并重新构建 Debug。
+
 2026-09-06：VS 2022 Community / MSBuild 17 / MSVC 19.38，Debug 与 Release 均通过 `hyperion_check` 完成 **13/13** CTest 验收，包含 DX12 硬件测试。CMD 入口也已从仓库外的工作目录执行，并成功重复生成。日志为 `out/vs-workflow-debug.log`、`out/vs-workflow-release.log` 和 `out/vs-workflow-cmd.log`。
 
 同日完成 UE 风格迁移后，再次生成并验证 Debug/Release，均为 **14/14**（新增 `code_style_paths`），记录为 `out/style-vs-debug.log`、`out/style-vs-release.log`。CMD 入口也已复验，记录为 `out/style-cmd.log`。代码文件和辅助脚本已采用 PascalCase，解决方案名称、启动项目和 `hyperion_check` 使用方式保持一致；Viewer 项目中可以直接浏览规范和格式配置。

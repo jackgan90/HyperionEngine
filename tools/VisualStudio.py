@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -78,17 +79,19 @@ def select_cmake(found, generator, environment):
     raise RuntimeError(f"CMake 3.28+ supporting '{generator}' was not found. Install the VS CMake tools component.")
 
 
-def prepare_dependencies(environment):
+def prepare_dependencies(environment, renderdoc=False):
     lock = json.loads((ROOT / "dependencies.lock.json").read_text(encoding="utf-8"))
     pending = []
     for name, package in lock.items():
+        if package.get("optional") and not renderdoc:
+            continue
         marker = ROOT / "out/deps" / name / ".hyperion-sha256"
         if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != package["sha256"]:
             pending.append(name)
     if pending:
         run([sys.executable, ROOT / "tools/Bootstrap.py", "--only", *pending], environment)
     else:
-        print(f"Dependencies: all {len(lock)} locked packages are available.", flush=True)
+        print("Dependencies: all required locked packages are available.", flush=True)
 
 
 def main():
@@ -99,6 +102,8 @@ def main():
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--open", action="store_true")
     parser.add_argument("--fresh", action="store_true")
+    parser.add_argument("--renderdoc", action=argparse.BooleanOptionalAction, default=None,
+                        help="Enable or disable the optional capture plugin; otherwise preserve the CMake cache")
     args = parser.parse_args()
     if os.name != "nt" or sys.version_info < (3, 10):
         raise RuntimeError("This script requires Windows and Python 3.10+.")
@@ -113,12 +118,18 @@ def main():
     directory = ROOT / "out/build" / f"vs{selected['year']}"
     solution = directory / "Hyperion.sln"
     print(f"Visual Studio: {selected['displayName']}\nCMake: {cmake}", flush=True)
-    prepare_dependencies(environment)
+    cache = directory / "CMakeCache.txt"
+    renderdoc = args.renderdoc
+    if renderdoc is None:
+        renderdoc = cache.is_file() and bool(re.search(r"^HYP_ENABLE_RENDERDOC:BOOL=(ON|TRUE|YES|Y|1)$",
+                                                      cache.read_text(encoding="utf-8"), re.MULTILINE | re.IGNORECASE))
+    prepare_dependencies(environment, renderdoc)
     configure = [cmake, "-S", ROOT, "-B", directory, "-G", generator, "-A", "x64",
                  "-DCMAKE_GENERATOR_INSTANCE=" + str(selected["directory"]),
                  "-DCMAKE_MAKE_PROGRAM=" + str(selected["msbuild"]),
                  "-DCMAKE_CONFIGURATION_TYPES=Debug;Release", "-DBUILD_TESTING=ON",
                  "-DPython3_EXECUTABLE=" + sys.executable]
+    configure.append("-DHYP_ENABLE_RENDERDOC=" + ("ON" if renderdoc else "OFF"))
     if args.fresh:
         configure.append("--fresh")
     run(configure, environment)

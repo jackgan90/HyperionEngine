@@ -18,6 +18,45 @@ std::string Fixed(double InValue, int InDecimals = 2)
 }
 } // namespace
 
+FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, const FFrameCaptureMetrics& InMetrics)
+{
+	FDebugActions Actions;
+	InGui.Text("RENDERDOC");
+	if (InMetrics.Compiled)
+	{
+		bool Enabled =
+		    std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "renderdoc") != InSettings.Plugins.end();
+		if (InGui.Checkbox("RenderDoc plugin (restart)", Enabled))
+		{
+			if (Enabled)
+			{
+				InSettings.Plugins.push_back("renderdoc");
+			}
+			else
+			{
+				std::erase(InSettings.Plugins, std::string("renderdoc"));
+			}
+		}
+		Actions.CaptureRdc = InGui.Button("Capture RDC", InMetrics.Available && !InMetrics.Busy);
+		Actions.CaptureRdcBounds = InGui.LastItemBounds();
+		Actions.OpenRdc =
+		    InGui.Button("Open last capture", InMetrics.Available && !InMetrics.Busy && !InMetrics.LastCapture.empty());
+		Actions.OpenRdcBounds = InGui.LastItemBounds();
+		InGui.Checkbox("Open automatically after capture", InSettings.RenderDocAutoOpen);
+		Actions.AutoOpenRdcBounds = InGui.LastItemBounds();
+	}
+	InGui.TextWrapped(InMetrics.Status);
+	if (!InMetrics.LastCapture.empty())
+	{
+		InGui.TextWrapped(InMetrics.LastCapture);
+	}
+	if (!InMetrics.OpenStatus.empty())
+	{
+		InGui.TextWrapped(InMetrics.OpenStatus);
+	}
+	return Actions;
+}
+
 FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebugMetrics& InMetrics, FSize InLogicalSize)
 {
 	FDebugActions Actions;
@@ -61,6 +100,13 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		}
 		Actions.Save = InGui.Button("Save experiment");
 		Actions.Capture = InGui.Button("Capture screenshot");
+		InGui.Separator();
+		const auto CaptureActions = DrawFrameCaptureControls(InGui, InSettings, InMetrics.FrameCapture);
+		Actions.CaptureRdc = CaptureActions.CaptureRdc;
+		Actions.OpenRdc = CaptureActions.OpenRdc;
+		Actions.CaptureRdcBounds = CaptureActions.CaptureRdcBounds;
+		Actions.OpenRdcBounds = CaptureActions.OpenRdcBounds;
+		Actions.AutoOpenRdcBounds = CaptureActions.AutoOpenRdcBounds;
 		InGui.Separator();
 		InGui.Text("EXECUTION / MEMORY");
 		for (const auto& Thread : InMetrics.Threads)

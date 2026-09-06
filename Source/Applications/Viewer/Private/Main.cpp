@@ -4,6 +4,10 @@
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Triangle/TrianglePlugin.h"
+#if HYP_ENABLE_RENDERDOC
+#include "Hyperion/Capture/FrameCapture.h"
+#include "Hyperion/RenderDoc/RenderDocPlugin.h"
+#endif
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -27,6 +31,12 @@ struct FOptions
 	bool VerifyTriangle{};
 	bool VerifyUi{};
 	bool NoUi{};
+	bool RenderDoc{};
+	bool OpenRdc{};
+	bool ExerciseRdcUi{};
+	std::optional<std::string> RenderDocLibrary;
+	std::optional<std::string> RdcOutput;
+	std::vector<int> RdcFrames;
 };
 
 FOptions Parse(int InArgc, char** InArgv)
@@ -87,6 +97,33 @@ FOptions Parse(int InArgc, char** InArgv)
 		{
 			O.NoUi = true;
 		}
+		else if (Arg == "--renderdoc")
+		{
+			O.RenderDoc = true;
+		}
+		else if (Arg == "--renderdoc-library" && I + 1 < InArgc)
+		{
+			O.RenderDocLibrary = InArgv[++I];
+			O.RenderDoc = true;
+		}
+		else if (Arg == "--rdc-output" && I + 1 < InArgc)
+		{
+			O.RdcOutput = InArgv[++I];
+		}
+		else if (Arg == "--capture-rdc" && I + 1 < InArgc)
+		{
+			O.RdcFrames.push_back(std::stoi(InArgv[++I]));
+			O.RenderDoc = true;
+		}
+		else if (Arg == "--open-rdc")
+		{
+			O.OpenRdc = true;
+			O.RenderDoc = true;
+		}
+		else if (Arg == "--exercise-rdc-ui")
+		{
+			O.ExerciseRdcUi = true;
+		}
 		else
 		{
 			throw std::invalid_argument("Unknown or incomplete option: " + Arg);
@@ -103,6 +140,20 @@ FOptions Parse(int InArgc, char** InArgv)
 	if ((O.VerifyClear || O.VerifyTriangle || O.VerifyUi || O.VerifyModel) && O.Capture.empty())
 	{
 		throw std::invalid_argument("Verification requires --capture");
+	}
+	std::sort(O.RdcFrames.begin(), O.RdcFrames.end());
+	for (std::size_t I = 0; I < O.RdcFrames.size(); ++I)
+	{
+		if (O.RdcFrames[I] < 1 || !O.Frames || O.RdcFrames[I] + int(O.ExerciseRdcUi) > O.Frames ||
+		    (I && O.RdcFrames[I] <= O.RdcFrames[I - 1] + int(O.ExerciseRdcUi)))
+		{
+			throw std::invalid_argument("--capture-rdc requires distinct positive frame numbers within --frames (UI "
+			                            "exercise needs one release frame)");
+		}
+	}
+	if (O.ExerciseRdcUi && (O.RdcFrames.empty() || O.NoUi))
+	{
+		throw std::invalid_argument("--exercise-rdc-ui requires --capture-rdc and the debug UI");
 	}
 	return O;
 }
@@ -170,6 +221,61 @@ void Verify(const Hyperion::FImage& InImage, const Hyperion::FAppSettings& InSet
 
 namespace
 {
+#if HYP_ENABLE_RENDERDOC
+struct FFrameCaptureScope
+{
+	Hyperion::FTaskSystem& Tasks;
+	Hyperion::FFrameCapture* Capture;
+	bool Active = false;
+
+	FFrameCaptureScope(Hyperion::FTaskSystem& InTasks, Hyperion::FFrameCapture* InCapture,
+	                   Hyperion::FNativeSurface InSurface)
+	    : Tasks(InTasks), Capture(InCapture)
+	{
+		if (Capture)
+		{
+			Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
+			                          [&]
+			                          {
+				                          Active = Capture->BeginFrame(InSurface);
+			                          }));
+		}
+	}
+
+	~FFrameCaptureScope()
+	{
+		if (Active)
+		{
+			try
+			{
+				Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
+				                          [&]
+				                          {
+					                          Capture->Cancel();
+				                          }));
+			}
+			catch (...)
+			{
+			}
+		}
+	}
+
+	bool Finish()
+	{
+		bool Success = false;
+		if (Active)
+		{
+			Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
+			                          [&]
+			                          {
+				                          Success = Capture->EndFrame();
+			                          }));
+			Active = false;
+		}
+		return Success;
+	}
+};
+#endif
 // Join every file producer on exception paths too, before IO and Tasks are destroyed.
 struct FFileWriteScope
 {
@@ -216,6 +322,57 @@ int main(int InArgCount, char** InArgValues)
 		{
 			Settings.RHIBackend = *Options.Backend;
 		}
+		if (Options.RenderDocLibrary)
+		{
+			Settings.RenderDocLibrary = *Options.RenderDocLibrary;
+		}
+		if (Options.RdcOutput)
+		{
+			Settings.RenderDocOutput = *Options.RdcOutput;
+		}
+		Settings.RenderDocAutoOpen = Settings.RenderDocAutoOpen || Options.OpenRdc;
+		if (Options.RenderDoc &&
+		    std::find(Settings.Plugins.begin(), Settings.Plugins.end(), "renderdoc") == Settings.Plugins.end())
+		{
+			Settings.Plugins.push_back("renderdoc");
+		}
+		auto Requested = Options.VerifyClear ? std::vector<std::string>{} : Settings.Plugins;
+		if (Options.NoUi)
+		{
+			std::erase(Requested, std::string("debug-ui"));
+		}
+		const bool EnableRenderDoc =
+		    std::find(Settings.Plugins.begin(), Settings.Plugins.end(), "renderdoc") != Settings.Plugins.end();
+		std::erase(Requested, std::string("renderdoc"));
+		Hyperion::FDebugMetrics Metrics;
+#if HYP_ENABLE_RENDERDOC
+		std::unique_ptr<Hyperion::FPluginSet> StartupPlugins;
+		Hyperion::FFrameCapture* FrameCapture = nullptr;
+		Metrics.FrameCapture.Compiled = true;
+		Metrics.FrameCapture.Status = "RenderDoc disabled (enable plugin, save and restart)";
+		if (EnableRenderDoc)
+		{
+			Hyperion::FPluginRegistry StartupRegistry;
+			Hyperion::RegisterRenderDocPlugin(
+			    StartupRegistry,
+			    {std::filesystem::path(
+			         std::u8string(Settings.RenderDocLibrary.begin(), Settings.RenderDocLibrary.end())),
+			     std::filesystem::path(std::u8string(Settings.RenderDocOutput.begin(), Settings.RenderDocOutput.end())),
+			     Settings.ModelSource.empty() ? "Triangle" : "Model"});
+			const std::array<std::string, 1> StartupIds{"renderdoc"};
+			// This runs before any window or DXGI/D3D12 API can create graphics objects.
+			StartupPlugins = std::make_unique<Hyperion::FPluginSet>(StartupRegistry.Activate(StartupIds));
+			for (const auto& Plugin : StartupPlugins->GetInstances())
+			{
+				FrameCapture = &static_cast<Hyperion::FRenderDocPlugin&>(*Plugin).Capture();
+			}
+		}
+#else
+		if (EnableRenderDoc)
+		{
+			throw std::runtime_error("RenderDoc plugin is not compiled; configure HYP_ENABLE_RENDERDOC=ON");
+		}
+#endif
 		const auto SelectedBackend = Hyperion::ParseRHIBackend(Settings.RHIBackend);
 		Hyperion::FRHIBackendRegistry Backends;
 		Hyperion::RegisterD3D12RHIBackend(Backends);
@@ -254,11 +411,6 @@ int main(int InArgCount, char** InArgValues)
 		                          }));
 		Hyperion::FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
 		                                   std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
-		auto Requested = Options.VerifyClear ? std::vector<std::string>{} : Settings.Plugins;
-		if (Options.NoUi)
-		{
-			std::erase(Requested, std::string("debug-ui"));
-		}
 		std::unique_ptr<Hyperion::FGui> Gui;
 		Hyperion::FImage Font;
 		if (std::find(Requested.begin(), Requested.end(), "debug-ui") != Requested.end())
@@ -273,7 +425,6 @@ int main(int InArgCount, char** InArgValues)
 		std::unique_ptr<Hyperion::FPluginSet> Plugins;
 		Hyperion::FDebugUiPlugin* GuiPlugin{};
 		Hyperion::FModelViewerPlugin* ModelPlugin{};
-		Hyperion::FDebugMetrics Metrics;
 		Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
 		                          [&]
 		                          {
@@ -295,6 +446,12 @@ int main(int InArgCount, char** InArgValues)
 		Hyperion::Log(Hyperion::ELogLevel::Info, "Windows rendering application started");
 		auto LastFrame = Hyperion::ClockNanoseconds();
 		bool Captured = false;
+		Hyperion::FVec4 RdcButtonBounds;
+		bool RdcMouseDown = false;
+		if (Options.ExerciseRdcUi && (!Gui || !Settings.ShowGui))
+		{
+			throw std::runtime_error("RDC UI exercise requires a visible diagnostics panel");
+		}
 		for (int Frame = 0; !Window.ShouldClose() && (!Options.Frames || Frame < Options.Frames); ++Frame)
 		{
 			Hyperion::FProfileScope Scope("Application frame");
@@ -344,12 +501,52 @@ int main(int InArgCount, char** InArgValues)
 			}
 			Hyperion::FGuiDrawData GuiData;
 			Hyperion::FDebugActions Actions;
+			const bool ScheduledRdc = std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), Frame + 1);
+#if HYP_ENABLE_RENDERDOC
+			if (FrameCapture)
+			{
+				const auto CaptureStatus = FrameCapture->Status();
+				Metrics.FrameCapture.Available = CaptureStatus.Available;
+				Metrics.FrameCapture.Busy = CaptureStatus.State == Hyperion::EFrameCaptureState::Pending ||
+				                            CaptureStatus.State == Hyperion::EFrameCaptureState::Capturing;
+				Metrics.FrameCapture.Status = CaptureStatus.Message;
+				const auto Path = CaptureStatus.LastCapture.u8string();
+				Metrics.FrameCapture.LastCapture.assign(reinterpret_cast<const char*>(Path.data()), Path.size());
+				Metrics.FrameCapture.OpenStatus = CaptureStatus.ReplayMessage;
+			}
+#endif
 			if (Gui && Settings.ShowGui)
 			{
-				Gui->BeginFrame(Logical, Size, Delta, Window.Events());
+				std::vector<Hyperion::FInputEvent> UiEvents(Window.Events().begin(), Window.Events().end());
+				if (Options.ExerciseRdcUi && (ScheduledRdc || RdcMouseDown))
+				{
+					Hyperion::FInputEvent Move;
+					Move.Type = Hyperion::EEventType::MouseMove;
+					Move.X = (RdcButtonBounds.X + RdcButtonBounds.Z) * .5f;
+					Move.Y = (RdcButtonBounds.Y + RdcButtonBounds.W) * .5f;
+					Hyperion::FInputEvent Button;
+					Button.Type = Hyperion::EEventType::MouseButton;
+					Button.Down = ScheduledRdc;
+					UiEvents.push_back(Move);
+					UiEvents.push_back(Button);
+					RdcMouseDown = ScheduledRdc;
+				}
+				Gui->BeginFrame(Logical, Size, Delta, UiEvents);
 				Actions = Hyperion::DrawDebugPanel(*Gui, Settings, Metrics, Logical);
+				RdcButtonBounds = Actions.CaptureRdcBounds;
 				GuiData = Gui->Render();
 			}
+#if HYP_ENABLE_RENDERDOC
+			if (FrameCapture && (Actions.CaptureRdc || (ScheduledRdc && !Options.ExerciseRdcUi)))
+			{
+				FrameCapture->RequestCapture();
+			}
+			if (FrameCapture && Actions.OpenRdc)
+			{
+				FrameCapture->OpenLastCapture();
+			}
+			bool RdcSucceeded = false;
+#endif
 			if (Actions.Save)
 			{
 				SaveSettingsAsync(Options.Config);
@@ -367,6 +564,9 @@ int main(int InArgCount, char** InArgValues)
 			    [&]
 			    {
 				    Hyperion::FProfileScope Prepare("Render preparation");
+#if HYP_ENABLE_RENDERDOC
+				    FFrameCaptureScope CaptureScope(Tasks, FrameCapture, Surface);
+#endif
 				    if (GuiPlugin)
 				    {
 					    Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
@@ -390,12 +590,21 @@ int main(int InArgCount, char** InArgValues)
 					    }
 				    }
 				    Screenshot = Hyperion::ExecuteGraph(Graph, Tasks, *Swapchain, Size, Settings.Vsync, TakeCapture);
+#if HYP_ENABLE_RENDERDOC
+				    RdcSucceeded = CaptureScope.Finish();
+#endif
 				    Tasks.Wait(Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
 				                              [&]
 				                              {
 					                              Metrics.Device = Device->Statistics();
 				                              }));
 			    }));
+#if HYP_ENABLE_RENDERDOC
+			if (RdcSucceeded && Settings.RenderDocAutoOpen)
+			{
+				FrameCapture->OpenLastCapture();
+			}
+#endif
 			if (Metrics.Device.ValidationErrors)
 			{
 				throw std::runtime_error("RHI validation errors");
@@ -427,6 +636,15 @@ int main(int InArgCount, char** InArgValues)
 		{
 			throw std::runtime_error("Requested capture was not produced");
 		}
+#if HYP_ENABLE_RENDERDOC
+		if (!Options.RdcFrames.empty() &&
+		    (!FrameCapture || FrameCapture->Status().CompletedCaptures != Options.RdcFrames.size()))
+		{
+			throw std::runtime_error(
+			    "Requested RDC capture was not produced: " +
+			    (FrameCapture ? FrameCapture->Status().Message : std::string("plugin unavailable")));
+		}
+#endif
 		if (!Options.SaveConfig.empty())
 		{
 			auto Size = Window.LogicalSize();
@@ -445,6 +663,12 @@ int main(int InArgCount, char** InArgValues)
 			                          Swapchain.reset();
 			                          Stats = Device->Statistics();
 			                          Device.reset();
+#if HYP_ENABLE_RENDERDOC
+			                          if (StartupPlugins)
+			                          {
+				                          StartupPlugins->Stop();
+			                          }
+#endif
 		                          }));
 		Gui.reset();
 		for (const auto& Thread : Tasks.Statistics())

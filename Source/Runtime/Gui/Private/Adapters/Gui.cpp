@@ -274,10 +274,13 @@ void FGui::Separator()
 	ImGui::Separator();
 }
 
-bool FGui::Button(const char* InLabel)
+bool FGui::Button(const char* InLabel, bool InEnabled)
 {
 	Impl->Select();
-	return ImGui::Button(InLabel);
+	ImGui::BeginDisabled(!InEnabled);
+	const bool Pressed = ImGui::Button(InLabel);
+	ImGui::EndDisabled();
+	return Pressed;
 }
 
 bool FGui::Checkbox(const char* InLabel, bool& InValue)

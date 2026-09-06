@@ -4,19 +4,38 @@
 
 namespace Hyperion
 {
+struct FFrameCaptureMetrics
+{
+	bool Compiled = false;
+	bool Available = false;
+	bool Busy = false;
+	std::string Status = "RenderDoc support is not compiled in";
+	std::string LastCapture;
+	std::string OpenStatus;
+};
+
 struct FDebugMetrics
 {
 	FDeviceStats Device;
 	std::vector<FExecutionStats> Threads;
 	std::vector<float> FrameMilliseconds;
 	std::string AssetStatus;
+	FFrameCaptureMetrics FrameCapture;
 };
 
 struct FDebugActions
 {
 	bool Save{};
 	bool Capture{};
+	bool CaptureRdc{};
+	bool OpenRdc{};
+	// Logical pixel bounds allow normalized input acceptance without OS input injection.
+	FVec4 CaptureRdcBounds;
+	FVec4 OpenRdcBounds;
+	FVec4 AutoOpenRdcBounds;
 };
+
+FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, const FFrameCaptureMetrics& InMetrics);
 
 FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebugMetrics& InMetrics,
                              FSize InLogicalSize);

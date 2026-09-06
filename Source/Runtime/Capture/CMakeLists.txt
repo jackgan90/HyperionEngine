@@ -1,0 +1,12 @@
+add_library(hyperion_capture STATIC Private/Adapters/FrameCapture.cpp)
+hyp_module(hyperion_capture)
+target_link_libraries(hyperion_capture PUBLIC hyperion_platform PRIVATE hyperion_core)
+target_include_directories(hyperion_capture SYSTEM PRIVATE "${HYP_DEPS}/renderdoc")
+if(BUILD_TESTING)
+  add_executable(capture_failure_tests Private/Adapters/FrameCaptureFailureTests.cpp)
+  hyp_executable(capture_failure_tests)
+  target_link_libraries(capture_failure_tests PRIVATE hyperion_capture)
+  target_include_directories(capture_failure_tests SYSTEM PRIVATE "${HYP_DEPS}/renderdoc")
+  set_target_properties(capture_failure_tests PROPERTIES FOLDER "Hyperion/Tests"
+    VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+endif()

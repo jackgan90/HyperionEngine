@@ -97,6 +97,15 @@
     "url": "https://codeload.github.com/epezent/implot/zip/524f9fcd48d76c13fdf94c5ffbba8787a1ff7e39",
     "sha256": "d560ef9d594b3ea306f42b55ef04bef46f6251f71dfb03c4a2713f509257da07"
   },
+  "renderdoc": {
+    "repository": "baldurk/renderdoc",
+    "version": "v1.37",
+    "commit": "cd94206b0fd995bfb3e5ed95c1e68d4f5d38ea7e",
+    "url": "https://raw.githubusercontent.com/baldurk/renderdoc/cd94206b0fd995bfb3e5ed95c1e68d4f5d38ea7e/renderdoc/api/app/renderdoc_app.h",
+    "file": "renderdoc_app.h",
+    "optional": true,
+    "sha256": "0ab27bfa81235ebfc8f4c48111399ea81477eb4f77665e6209c9247daee91b94"
+  },
   "dxc": {
     "repository": "microsoft/DirectXShaderCompiler",
     "version": "v1.9.2607",
