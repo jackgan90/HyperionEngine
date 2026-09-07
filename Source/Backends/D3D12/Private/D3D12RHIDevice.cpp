@@ -1,7 +1,9 @@
 #include "D3D12RHIDevice.h"
+#include "D3D12GraphicsState.h"
 #include "D3D12RHISwapchain.h"
 #include "D3D12Resources.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/RHI/RHIPipeline.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -17,7 +19,23 @@ void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& In
 	Caps.ShaderFormat = EShaderFormat::Dxil;
 	Caps.Adapter = InState.AdapterName;
 	Caps.MaxRecordingContexts = ContextCount;
-	Caps.MaxSampledTextures = TextureCount;
+	Caps.MaxSampledTextures = 128;
+	Caps.MaxRegisterSpaces = ShaderRegisterSpaceCount;
+	Caps.MaxConstantBuffers = 14;
+	Caps.MaxSamplers = 16;
+	Caps.MaxReadBuffers = 128;
+	Caps.ConstantAlignment = 256;
+	Caps.MaxConstantRange = 65536;
+	Caps.MaxAnisotropy = 16;
+	Caps.bReadOnlyBuffers = true;
+	Caps.bVertexTextures = true;
+	if (InDesc.ResourceDescriptorCapacity == 0 || InDesc.ResourceDescriptorCapacity > 1000000 ||
+	    InDesc.SamplerDescriptorCapacity == 0 || InDesc.SamplerDescriptorCapacity > 2048)
+	{
+		throw std::invalid_argument("Invalid material descriptor heap capacities");
+	}
+	Caps.ResourceDescriptorCapacity = InDesc.ResourceDescriptorCapacity;
+	Caps.SamplerDescriptorCapacity = InDesc.SamplerDescriptorCapacity;
 	Caps.MaxTextureDimension = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
 	for (const auto Feature :
 	     {ERHIFeature::Graphics, ERHIFeature::TextureSampling, ERHIFeature::ConcurrentRecording, ERHIFeature::Readback})
@@ -37,74 +55,6 @@ void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& In
 		    Options7.MeshShaderTier != D3D12_MESH_SHADER_TIER_NOT_SUPPORTED;
 	}
 	ValidateRequiredFeatures(InDesc, Caps);
-}
-
-void CreateRootSignature(FD3D12DeviceState& InState, FD3D12Pipeline& InPipeline, const FPipelineDesc& InDesc)
-{
-	D3D12_DESCRIPTOR_RANGE Range{};
-	Range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	Range.NumDescriptors = 1;
-	Range.BaseShaderRegister = 0;
-	D3D12_ROOT_PARAMETER Parameters[6]{};
-	Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-	Parameters[0].Constants = {0, 0, 16};
-	Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	Parameters[1].DescriptorTable = {1, &Range};
-	Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	D3D12_STATIC_SAMPLER_DESC Sampler{};
-	Sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	Sampler.AddressU = Sampler.AddressV = Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-	Sampler.MaxLOD = D3D12_FLOAT32_MAX;
-	Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-	Sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	D3D12_ROOT_SIGNATURE_DESC Root{};
-	Root.NumParameters = InDesc.bTextured ? 2 : 1;
-	Root.pParameters = Parameters;
-	Root.NumStaticSamplers = InDesc.bTextured ? 1 : 0;
-	Root.pStaticSamplers = &Sampler;
-	Root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-	std::array<D3D12_DESCRIPTOR_RANGE, 5> MaterialRanges{};
-	std::array<D3D12_STATIC_SAMPLER_DESC, 5> MaterialSamplers{};
-	if (InDesc.bMaterialLayout)
-	{
-		Parameters[0] = {};
-		Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		const auto Address = [](ERHIAddressMode InMode)
-		{
-			return InMode == ERHIAddressMode::Clamp    ? D3D12_TEXTURE_ADDRESS_MODE_CLAMP
-			       : InMode == ERHIAddressMode::Mirror ? D3D12_TEXTURE_ADDRESS_MODE_MIRROR
-			                                           : D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-		};
-		for (UINT Index = 0; Index < 5; ++Index)
-		{
-			MaterialRanges[Index] = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, Index, 0, 0};
-			Parameters[Index + 1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-			Parameters[Index + 1].DescriptorTable = {1, &MaterialRanges[Index]};
-			Parameters[Index + 1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-			const auto& Source = InDesc.Samplers[Index];
-			auto& NativeSampler = MaterialSamplers[Index];
-			NativeSampler.Filter = static_cast<D3D12_FILTER>((Source.bMinLinear ? 16 : 0) |
-			                                                 (Source.bMagLinear ? 4 : 0) | (Source.bMipLinear ? 1 : 0));
-			NativeSampler.AddressU = Address(Source.U);
-			NativeSampler.AddressV = Address(Source.V);
-			NativeSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-			NativeSampler.MaxLOD = Source.bMipmapped ? D3D12_FLOAT32_MAX : 0;
-			NativeSampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-			NativeSampler.ShaderRegister = Index;
-			NativeSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-		}
-		Root.NumParameters = 6;
-		Root.NumStaticSamplers = 5;
-		Root.pStaticSamplers = MaterialSamplers.data();
-	}
-	ComPtr<ID3DBlob> Blob;
-	ComPtr<ID3DBlob> Error;
-	Check(D3D12SerializeRootSignature(&Root, D3D_ROOT_SIGNATURE_VERSION_1, &Blob, &Error), "Serialize root signature");
-	Check(InState.Device->CreateRootSignature(0, Blob->GetBufferPointer(), Blob->GetBufferSize(),
-	                                          IID_PPV_ARGS(&InPipeline.Root)),
-	      "Create root signature");
 }
 
 } // namespace
@@ -184,12 +134,14 @@ FD3D12RHIDevice::FD3D12RHIDevice(const FRHIDeviceDesc& InDesc) : State(std::make
 	Ma.pAdapter = P.Adapter.Get();
 	Ma.pAllocationCallbacks = &Callbacks;
 	Check(D3D12MA::CreateAllocator(&Ma, &P.Allocator), "Create GPU allocator");
-	D3D12_DESCRIPTOR_HEAP_DESC Heap{};
-	Heap.NumDescriptors = TextureCount;
-	Heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	Heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	Check(P.Device->CreateDescriptorHeap(&Heap, IID_PPV_ARGS(&P.Textures)), "Texture descriptor heap");
-	P.TextureStep = P.Device->GetDescriptorHandleIncrementSize(Heap.Type);
+	P.ResourceSources.Initialize(*P.Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+	                             P.Capabilities.ResourceDescriptorCapacity, false);
+	P.ResourceTables.Initialize(*P.Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+	                            P.Capabilities.ResourceDescriptorCapacity, true);
+	P.SamplerSources.Initialize(*P.Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+	                            P.Capabilities.SamplerDescriptorCapacity, false);
+	P.SamplerTables.Initialize(*P.Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+	                           P.Capabilities.SamplerDescriptorCapacity, true);
 	D3D12_COMMAND_QUEUE_DESC Q{};
 	Q.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 	Check(P.Device->CreateCommandQueue(&Q, IID_PPV_ARGS(&P.Queue)), "Create graphics queue");
@@ -303,81 +255,55 @@ FTexture FD3D12RHIDevice::CreateTexture(const FImage& InImage)
 		    Src.PlacedFootprint = Footprint;
 		    InList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
 		    Transition(InList, R->Resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
-		               D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	    });
-	R->Slot = P.Reserve();
+		               D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	    },
+	    {R->Resource, Upload->Resource}, {R->Allocation, Upload->Allocation});
 	D3D12_SHADER_RESOURCE_VIEW_DESC Srv{};
 	Srv.Format = D.Format;
 	Srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	Srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	Srv.Texture2D.MipLevels = 1;
-	P.Device->CreateShaderResourceView(R->Resource.Get(), &Srv, P.Cpu(R->Slot));
+	R->SourceDescriptor = P.ResourceSources.Reserve(1);
+	P.Device->CreateShaderResourceView(R->Resource.Get(), &Srv, P.ResourceSources.Cpu(R->SourceDescriptor.Offset));
+	++P.DescriptorAllocations;
 	return {std::move(R)};
 }
 
 FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 {
-	if (InDesc.Vertex.Format != EShaderFormat::Dxil || InDesc.Pixel.Format != EShaderFormat::Dxil ||
-	    InDesc.Vertex.Bytes.empty() || InDesc.Pixel.Bytes.empty())
+	if (InDesc.Vertex.Format != EShaderFormat::Dxil || InDesc.Vertex.Bytes.empty() ||
+	    (!InDesc.Pixel.Bytes.empty() && InDesc.Pixel.Format != EShaderFormat::Dxil))
 	{
 		throw std::invalid_argument("DX12 pipeline requires DXIL shaders");
 	}
 	auto R = std::make_shared<FD3D12Pipeline>();
 	R->State = State;
-	R->bTextured = InDesc.bTextured;
-	R->bMaterialLayout = InDesc.bMaterialLayout;
-	CreateRootSignature(*State, *R, InDesc);
+	R->Layout = InDesc.Layout;
+	ValidateGraphicsPipeline(InDesc);
+	const auto& Layout = NativeResource<FD3D12BindingLayout>(R->Layout.Payload, State.get());
+	ValidatePipelineBindings(InDesc, Layout.Description);
+	R->Root = Layout.Root;
+	R->Target = InDesc.Target;
+	R->GraphicsState = InDesc.State;
+	R->VertexStride = InDesc.VertexStride;
+	R->Topology = InDesc.Topology;
 	std::vector<D3D12_INPUT_ELEMENT_DESC> Attributes;
 	for (const auto& A : InDesc.Attributes)
 	{
-		DXGI_FORMAT F = DXGI_FORMAT_R32G32_FLOAT;
-		switch (A.Format)
-		{
-			case EVertexFormat::Float2:
-				break;
-			case EVertexFormat::Float3:
-				F = DXGI_FORMAT_R32G32B32_FLOAT;
-				break;
-			case EVertexFormat::Float4:
-				F = DXGI_FORMAT_R32G32B32A32_FLOAT;
-				break;
-			case EVertexFormat::Unorm8x4:
-				F = DXGI_FORMAT_R8G8B8A8_UNORM;
-				break;
-		}
-		Attributes.push_back(
-		    {A.Semantic.c_str(), A.SemanticIndex, F, 0, A.Offset, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0});
+		Attributes.push_back({A.Semantic.c_str(), A.SemanticIndex, NativeVertexFormat(A.Format), 0, A.Offset,
+		                      D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0});
 	}
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC Pso{};
 	Pso.pRootSignature = R->Root.Get();
 	Pso.VS = {InDesc.Vertex.Bytes.data(), InDesc.Vertex.Bytes.size()};
-	Pso.PS = {InDesc.Pixel.Bytes.data(), InDesc.Pixel.Bytes.size()};
+	if (!InDesc.Pixel.Bytes.empty())
+	{
+		Pso.PS = {InDesc.Pixel.Bytes.data(), InDesc.Pixel.Bytes.size()};
+	}
 	Pso.InputLayout = {Attributes.data(), static_cast<UINT>(Attributes.size())};
-	Pso.SampleMask = UINT_MAX;
-	Pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	Pso.NumRenderTargets = 1;
-	Pso.RTVFormats[0] = InDesc.bSrgbTarget ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
-	Pso.SampleDesc.Count = 1;
-	Pso.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	Pso.RasterizerState.CullMode = InDesc.bCullBack ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
-	Pso.RasterizerState.FrontCounterClockwise = InDesc.bFrontCounterClockwise;
-	Pso.RasterizerState.DepthClipEnable = TRUE;
-	Pso.DepthStencilState.DepthEnable = InDesc.bDepthTest;
-	Pso.DepthStencilState.DepthWriteMask =
-	    InDesc.bDepthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
-	Pso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-	Pso.DSVFormat = InDesc.bDepthTest ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
-	Pso.DepthStencilState.StencilEnable = FALSE;
-	auto& Blend = Pso.BlendState.RenderTarget[0];
-	Blend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-	Blend.BlendEnable = InDesc.bAlphaBlend;
-	Blend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
-	Blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-	Blend.BlendOp = D3D12_BLEND_OP_ADD;
-	Blend.SrcBlendAlpha = D3D12_BLEND_ONE;
-	Blend.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
-	Blend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	ApplyGraphicsState(Pso, InDesc);
 	Check(State->Device->CreateGraphicsPipelineState(&Pso, IID_PPV_ARGS(&R->Pipeline)), "Create graphics pipeline");
+	++State->PipelinesCreated;
 	return {std::move(R)};
 }
 
@@ -385,6 +311,11 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 {
 	auto& P = *State;
 	FDeviceStats Stats{P.AdapterName, P.bDebug, 0, P.Submitted, 0};
+	Stats.DescriptorAllocations = P.DescriptorAllocations;
+	Stats.DescriptorCopies = P.DescriptorCopies;
+	Stats.BindingSetsCreated = P.BindingSetsCreated;
+	Stats.PipelinesCreated = P.PipelinesCreated;
+	Stats.ConstantBytesWritten = P.ConstantBytesWritten;
 	D3D12MA::Budget Local{};
 	D3D12MA::Budget Nonlocal{};
 	P.Allocator->GetBudget(&Local, &Nonlocal);

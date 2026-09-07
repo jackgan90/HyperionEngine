@@ -1,0 +1,89 @@
+#include "SessionMaterialsInternal.h"
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+
+namespace Hyperion
+{
+namespace
+{
+constexpr auto ScopeIndex(EMaterialScope InScope)
+{
+	return static_cast<std::size_t>(InScope);
+}
+
+void ReplaceValues(FMaterialProviderInputs& InInputs, EMaterialScope InScope, FMaterialParameterValues InValues,
+                   const FRenderResourceService& InResources)
+{
+	std::set<std::string> Names;
+	for (const auto& Value : InValues)
+	{
+		Value.Value.Validate();
+		if (Value.Name.empty() || !Names.insert(Value.Name).second)
+		{
+			throw std::invalid_argument("Duplicate or empty session material input");
+		}
+	}
+	auto& Scope = InInputs.Scopes[ScopeIndex(InScope)];
+	auto Lifetime = InResources.CreateScopeLifetime();
+	InInputs.Values[ScopeIndex(InScope)] = std::move(InValues);
+	++Scope.Key.Revision;
+	Scope.Lifetime = std::move(Lifetime);
+}
+} // namespace
+
+std::shared_ptr<const FMaterialFrameContext> FRenderSession::FMaterialState::Frame(
+    const FRenderResourceService& InResources, float InTime, FMaterialParameterValues InValues,
+    std::uint64_t InSceneIdentity)
+{
+	if (!std::isfinite(InTime))
+	{
+		throw std::invalid_argument("Nonfinite material frame time");
+	}
+	std::lock_guard Lock(Publication);
+	Providers.Freeze();
+	auto& SceneScope = Inputs.Scopes[ScopeIndex(EMaterialScope::Scene)];
+	if (SceneScope.Key.Qualifiers != std::vector<std::uint64_t>{InSceneIdentity})
+	{
+		SceneScope.Key.Qualifiers = {InSceneIdentity};
+		SceneScope.Lifetime = InResources.CreateScopeLifetime();
+		++SceneScope.Key.Revision;
+	}
+	auto Result = std::make_shared<FMaterialFrameContext>();
+	Result->Session = Identity;
+	Result->Frame = NextFrame.fetch_add(1);
+	Result->Inputs = Inputs;
+	InValues.push_back({"Engine.Frame.Time", FMaterialValue::Float(InTime)});
+	InValues.push_back({"Engine.Frame.Index", FMaterialValue::Uint(static_cast<std::uint32_t>(Result->Frame))});
+	ReplaceValues(Result->Inputs, EMaterialScope::Frame, std::move(InValues), InResources);
+	Result->Inputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Key = {Identity, Result->Frame};
+	return Result;
+}
+
+std::shared_ptr<const FMaterialFrameContext> FRenderSession::FreezeFrame(float InTime,
+                                                                         FMaterialParameterValues InFrameValues)
+{
+	Tasks.Require({EDomain::Main});
+	return MaterialState->Frame(Resources, InTime, std::move(InFrameValues), Scene.GetLogicalSceneIdentity());
+}
+
+void FRenderSession::SetGlobalParameters(FMaterialParameterValues InValues)
+{
+	Tasks.Require({EDomain::Main});
+	std::lock_guard Lock(MaterialState->Publication);
+	ReplaceValues(MaterialState->Inputs, EMaterialScope::Global, std::move(InValues), Resources);
+}
+
+void FRenderSession::SetSceneParameters(FMaterialParameterValues InValues)
+{
+	Tasks.Require({EDomain::Main});
+	std::lock_guard Lock(MaterialState->Publication);
+	ReplaceValues(MaterialState->Inputs, EMaterialScope::Scene, std::move(InValues), Resources);
+}
+
+FMaterialProviderRegistry& FRenderSession::GetProviders()
+{
+	Tasks.Require({EDomain::Main});
+	return MaterialState->Providers;
+}
+} // namespace Hyperion

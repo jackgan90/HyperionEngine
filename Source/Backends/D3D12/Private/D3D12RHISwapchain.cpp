@@ -1,12 +1,62 @@
 #include "D3D12RHISwapchain.h"
+#include "D3D12Bindings.h"
+#include "D3D12GraphicsState.h"
 #include "D3D12Resources.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/RHI/RHIPipeline.h"
 #include <atomic>
+#include <cmath>
 
 namespace Hyperion
 {
 namespace
 {
+std::pair<std::uint32_t, std::uint32_t> IndexBounds(const FDrawPacket& InDraw, const FD3D12Buffer& InIndices)
+{
+	std::lock_guard Lock(InIndices.IndexRangesMutex);
+	for (const auto& Range : InIndices.IndexRanges)
+	{
+		if (Range[0] == InDraw.FirstIndex && Range[1] == InDraw.IndexCount)
+		{
+			return {Range[2], Range[3]};
+		}
+	}
+	void* Mapped{};
+	D3D12_RANGE Read{static_cast<SIZE_T>(InDraw.FirstIndex) * 4,
+	                 (static_cast<SIZE_T>(InDraw.FirstIndex) + InDraw.IndexCount) * 4};
+	Check(InIndices.Resource->Map(0, &Read, &Mapped), "Validate draw index range");
+	const auto* Indices = static_cast<const std::uint32_t*>(Mapped);
+	std::uint32_t Minimum = UINT_MAX;
+	std::uint32_t Maximum{};
+	for (std::uint32_t Index = 0; Index < InDraw.IndexCount; ++Index)
+	{
+		Minimum = std::min(Minimum, Indices[InDraw.FirstIndex + Index]);
+		Maximum = std::max(Maximum, Indices[InDraw.FirstIndex + Index]);
+	}
+	D3D12_RANGE Written{0, 0};
+	InIndices.Resource->Unmap(0, &Written);
+	if (InIndices.IndexRanges.size() < 32)
+	{
+		InIndices.IndexRanges.push_back({InDraw.FirstIndex, InDraw.IndexCount, Minimum, Maximum});
+	}
+	return {Minimum, Maximum};
+}
+
+void ValidateIndexRange(const FDrawPacket& InDraw, const FD3D12Buffer& InVertices, const FD3D12Buffer& InIndices)
+{
+	if (!InDraw.IndexCount)
+	{
+		return;
+	}
+	const auto [Minimum, Maximum] = IndexBounds(InDraw, InIndices);
+	const std::int64_t First = static_cast<std::int64_t>(Minimum) + InDraw.VertexOffset;
+	const std::int64_t Last = static_cast<std::int64_t>(Maximum) + InDraw.VertexOffset;
+	if (First < 0 || static_cast<std::uint64_t>(Last) >= InVertices.Size / InDraw.VertexStride)
+	{
+		throw std::invalid_argument("Draw index references a vertex outside the geometry buffer");
+	}
+}
+
 void ValidateDraws(const FD3D12DeviceState* InState, const FPassCommands& InCommands)
 {
 	for (const auto& Draw : InCommands.Draws)
@@ -15,35 +65,40 @@ void ValidateDraws(const FD3D12DeviceState* InState, const FPassCommands& InComm
 		const auto& Vertices = NativeResource<FD3D12Buffer>(Draw.Vertices.Payload, InState);
 		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, InState);
 		if (!Draw.VertexStride || Vertices.Size > UINT_MAX || Indices.Size > UINT_MAX ||
+		    (Vertices.Usage & BufferUsage(ERHIBufferUsage::Vertex)) == 0 ||
+		    (Indices.Usage & BufferUsage(ERHIBufferUsage::Index)) == 0 ||
 		    (std::uint64_t(Draw.FirstIndex) + Draw.IndexCount) * 4 > Indices.Size)
 		{
 			throw std::invalid_argument("Invalid draw packet");
 		}
-		if (Draw.Texture || Pipeline.bTextured)
+
+		ValidateIndexRange(Draw, Vertices, Indices);
+		const ERHIDepthFormat Depth =
+		    (InCommands.bUseDepth || InCommands.bUseStencil) ? InCommands.DepthFormat : ERHIDepthFormat::None;
+		if (Draw.VertexStride != Pipeline.VertexStride || Pipeline.Target.bSrgb != InCommands.bSrgbTarget ||
+		    Pipeline.Target.Depth != Depth || (Pipeline.GraphicsState.bDepthTest && !InCommands.bUseDepth) ||
+		    (Pipeline.GraphicsState.bStencil && !InCommands.bUseStencil))
 		{
-			NativeResource<FD3D12Texture>(Draw.Texture.Payload, InState);
+			throw std::invalid_argument("Draw geometry or target is incompatible with pipeline");
 		}
-		if (Pipeline.bMaterialLayout)
-		{
-			if (!InCommands.bUseDepth)
-			{
-				throw std::invalid_argument("Material pass requires depth target");
-			}
-			const auto& Constants = NativeResource<FD3D12Buffer>(Draw.MaterialConstants.Payload, InState);
-			if (Constants.Size < 512 || Draw.MaterialConstantOffset > Constants.Size - 512 ||
-			    Draw.MaterialConstantOffset % 256 || Constants.Resource->GetGPUVirtualAddress() % 256)
-			{
-				throw std::invalid_argument("Invalid material constant buffer");
-			}
-			for (const auto& Texture : Draw.MaterialTextures)
-			{
-				const auto& NativeTexture = NativeResource<FD3D12Texture>(Texture.Payload, InState);
-				if (NativeTexture.UploadFence > InState->Fence->GetCompletedValue())
-				{
-					throw std::invalid_argument("Texture upload is not ready");
-				}
-			}
-		}
+		ValidateGraphicsDynamicState(Draw.DynamicState);
+		ValidateGraphicsBindings(Draw, Pipeline, *InState);
+	}
+}
+
+void ValidatePass(const FPassCommands& InCommands, FSize InSize, ERHIDepthFormat InDepthFormat)
+{
+	if ((InCommands.bClearDepth && !InCommands.bUseDepth) || (InCommands.bClearStencil && !InCommands.bUseStencil) ||
+	    ((InCommands.bUseDepth || InCommands.bUseStencil) &&
+	     (InCommands.DepthFormat != InDepthFormat || InDepthFormat == ERHIDepthFormat::None)) ||
+	    (InCommands.bUseStencil && InDepthFormat != ERHIDepthFormat::D32S8) || !std::isfinite(InCommands.ClearDepth) ||
+	    InCommands.ClearDepth < 0 || InCommands.ClearDepth > 1)
+	{
+		throw std::invalid_argument("Invalid depth/stencil pass attachment or clear");
+	}
+	if (InCommands.Viewport)
+	{
+		ValidateViewport(*InCommands.Viewport, InSize);
 	}
 }
 } // namespace
@@ -78,6 +133,7 @@ struct FD3D12RHISwapchain::FImpl
 	UINT RtvStep{};
 	std::uint64_t Serial{};
 	FSize Size;
+	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
 	bool bActive{};
 	bool bSubmissionStarted{};
 
@@ -100,7 +156,7 @@ struct FD3D12RHISwapchain::FImpl
 		Desc.Height = Size.Height;
 		Desc.DepthOrArraySize = 1;
 		Desc.MipLevels = 1;
-		Desc.Format = DXGI_FORMAT_D32_FLOAT;
+		Desc.Format = NativeDepthFormat(DepthFormat);
 		Desc.SampleDesc.Count = 1;
 		Desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 		D3D12MA::ALLOCATION_DESC Allocation{};
@@ -112,6 +168,14 @@ struct FD3D12RHISwapchain::FImpl
 		                                       &DepthAllocation, IID_PPV_ARGS(&Depth)),
 		      "Create scene depth");
 		State->Device->CreateDepthStencilView(Depth.Get(), nullptr, Dsvs->GetCPUDescriptorHandleForHeapStart());
+		// Placed depth resources need whole-resource initialization before a partial viewport clear.
+		// Graph compilation still requires an explicit clear before any logical depth/stencil load.
+		State->Immediate(
+		    [&](ID3D12GraphicsCommandList* InList)
+		    {
+			    InList->DiscardResource(Depth.Get(), nullptr);
+		    },
+		    {Depth}, {DepthAllocation});
 		for (UINT I = 0; I < FrameCount; ++I)
 		{
 			Check(Swapchain->GetBuffer(I, IID_PPV_ARGS(&Backbuffers[I])), "Get swapchain buffer");
@@ -130,13 +194,15 @@ struct FD3D12RHISwapchain::FImpl
 FD3D12RHISwapchain::FD3D12RHISwapchain(std::shared_ptr<FD3D12DeviceState> InState, const FRHISwapchainDesc& InDesc)
     : Impl(std::make_unique<FImpl>())
 {
-	if (!InDesc.Surface.Handle || !InDesc.Size.Width || !InDesc.Size.Height)
+	if (!InDesc.Surface.Handle || !InDesc.Size.Width || !InDesc.Size.Height ||
+	    (InDesc.DepthFormat != ERHIDepthFormat::D32 && InDesc.DepthFormat != ERHIDepthFormat::D32S8))
 	{
 		throw std::invalid_argument("Invalid RHI surface");
 	}
 	auto& P = *Impl;
 	P.State = std::move(InState);
 	P.Size = InDesc.Size;
+	P.DepthFormat = InDesc.DepthFormat;
 	D3D12_DESCRIPTOR_HEAP_DESC Heap{};
 	Heap.NumDescriptors = FrameCount * 2;
 	Heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
@@ -233,6 +299,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	{
 		throw std::invalid_argument("Invalid recording context");
 	}
+	ValidatePass(InCommands, P.Size, P.DepthFormat);
 	ValidateDraws(P.State.get(), InCommands);
 	auto& Frame = P.Frames[P.FrameIndex];
 	if (Frame.Recorded[InContext].exchange(true))
@@ -260,22 +327,26 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	auto Rtv = P.Rtvs->GetCPUDescriptorHandleForHeapStart();
 	Rtv.ptr += std::size_t(P.FrameIndex + (InCommands.bSrgbTarget ? FrameCount : 0)) * P.RtvStep;
 	auto Dsv = P.Dsvs->GetCPUDescriptorHandleForHeapStart();
-	List->OMSetRenderTargets(1, &Rtv, FALSE, InCommands.bUseDepth ? &Dsv : nullptr);
-	if (InCommands.bClearDepth)
+	List->OMSetRenderTargets(1, &Rtv, FALSE, (InCommands.bUseDepth || InCommands.bUseStencil) ? &Dsv : nullptr);
+	const FViewport View = InCommands.Viewport.value_or(
+	    FViewport{0, 0, static_cast<float>(P.Size.Width), static_cast<float>(P.Size.Height), 0, 1});
+	D3D12_RECT ClearRect{static_cast<LONG>(std::floor(View.X)), static_cast<LONG>(std::floor(View.Y)),
+	                     static_cast<LONG>(std::ceil(View.X + View.Width)),
+	                     static_cast<LONG>(std::ceil(View.Y + View.Height))};
+	if (InCommands.bClearDepth || InCommands.bClearStencil)
 	{
-		List->ClearDepthStencilView(Dsv, D3D12_CLEAR_FLAG_DEPTH, 1, 0, 0, nullptr);
+		const auto Flags = static_cast<D3D12_CLEAR_FLAGS>((InCommands.bClearDepth ? D3D12_CLEAR_FLAG_DEPTH : 0) |
+		                                                  (InCommands.bClearStencil ? D3D12_CLEAR_FLAG_STENCIL : 0));
+		List->ClearDepthStencilView(Dsv, Flags, InCommands.ClearDepth, InCommands.ClearStencil, 1, &ClearRect);
 	}
 	if (InCommands.bClear)
 	{
 		float Color[] = {InCommands.ClearColor.X, InCommands.ClearColor.Y, InCommands.ClearColor.Z,
 		                 InCommands.ClearColor.W};
-		List->ClearRenderTargetView(Rtv, Color, 0, nullptr);
+		List->ClearRenderTargetView(Rtv, Color, 1, &ClearRect);
 	}
-	D3D12_VIEWPORT Viewport{0, 0, static_cast<float>(P.Size.Width), static_cast<float>(P.Size.Height), 0, 1};
+	D3D12_VIEWPORT Viewport{View.X, View.Y, View.Width, View.Height, View.MinDepth, View.MaxDepth};
 	List->RSSetViewports(1, &Viewport);
-	List->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	ID3D12DescriptorHeap* Heaps[] = {P.State->Textures.Get()};
-	List->SetDescriptorHeaps(1, Heaps);
 	for (const auto& Draw : InCommands.Draws)
 	{
 		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, P.State.get());
@@ -283,33 +354,10 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, P.State.get());
 		List->SetPipelineState(Pipeline.Pipeline.Get());
 		List->SetGraphicsRootSignature(Pipeline.Root.Get());
-		if (Pipeline.bMaterialLayout)
-		{
-			List->SetGraphicsRootConstantBufferView(
-			    0, NativeResource<FD3D12Buffer>(Draw.MaterialConstants.Payload, P.State.get())
-			               .Resource->GetGPUVirtualAddress() +
-			           Draw.MaterialConstantOffset);
-			for (UINT Index = 0; Index < 5; ++Index)
-			{
-				List->SetGraphicsRootDescriptorTable(
-				    Index + 1,
-				    P.State->Gpu(
-				        NativeResource<FD3D12Texture>(Draw.MaterialTextures[Index].Payload, P.State.get()).Slot));
-			}
-		}
-		else
-		{
-			List->SetGraphicsRoot32BitConstants(0, 16, Draw.Constants.Values.data(), 0);
-		}
-		if (Pipeline.bTextured)
-		{
-			if (!Draw.Texture)
-			{
-				throw std::invalid_argument("Textured draw has no texture");
-			}
-			List->SetGraphicsRootDescriptorTable(
-			    1, P.State->Gpu(NativeResource<FD3D12Texture>(Draw.Texture.Payload, P.State.get()).Slot));
-		}
+		List->IASetPrimitiveTopology(NativeTopology(Pipeline.Topology));
+		List->OMSetStencilRef(Draw.DynamicState.StencilReference);
+		List->OMSetBlendFactor(Draw.DynamicState.BlendConstants.data());
+		RecordGraphicsBindings(*List, Draw, Pipeline, *P.State);
 		D3D12_VERTEX_BUFFER_VIEW Vb{Vertices.Resource->GetGPUVirtualAddress(), static_cast<UINT>(Vertices.Size),
 		                            Draw.VertexStride};
 		D3D12_INDEX_BUFFER_VIEW Ib{Indices.Resource->GetGPUVirtualAddress(), static_cast<UINT>(Indices.Size),
@@ -371,7 +419,8 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 			    Dst.PlacedFootprint = Footprint;
 			    InList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
 			    Transition(InList, Resource, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PRESENT);
-		    });
+		    },
+		    {P.Backbuffers[P.FrameIndex], Readback->Resource}, {Readback->Allocation});
 		Result = {P.Size.Width, P.Size.Height, EColorSpace::Srgb, {}};
 		Result.Rgba.resize(std::size_t(P.Size.Width) * P.Size.Height * 4);
 		void* Mapped{};

@@ -42,8 +42,7 @@ std::shared_ptr<const FRenderResourceDesc> FRenderResource::GetDescription() con
 
 FRenderResourceRecord::~FRenderResourceRecord()
 {
-	if ((!Vertices.empty() || !Indices.empty() || !Textures.empty() || !Pipelines.empty()) &&
-	    !Tasks.IsCurrent({EDomain::Rhi, 0}))
+	if ((!Vertices.empty() || !Indices.empty()) && !Tasks.IsCurrent({EDomain::Rhi, 0}))
 	{
 		std::terminate();
 	}
@@ -72,35 +71,21 @@ bool FRenderResourceRecord::CanRelease() const
 			return false;
 		}
 	}
-	for (const auto& Texture : Textures)
-	{
-		if (Texture.Payload.use_count() > 1)
-		{
-			return false;
-		}
-	}
-	for (const auto& Pair : Pipelines)
-	{
-		for (const auto& Pipeline : Pair)
-		{
-			if (Pipeline.Payload.use_count() > 1)
-			{
-				return false;
-			}
-		}
-	}
 	return true;
 }
 
-void FRenderResourceRecord::Release()
+std::vector<std::shared_ptr<const FRenderMaterial>> FRenderResourceRecord::Release()
 {
 	Tasks.Require({EDomain::Rhi, 0});
+	std::vector<std::shared_ptr<const FRenderMaterial>> ReleasedMaterials;
+	{
+		std::lock_guard Lock(Publication);
+		ReleasedMaterials = std::move(Materials);
+	}
 	Vertices.clear();
 	Indices.clear();
-	Textures.clear();
-	bUploadPending = false;
-	Pipelines.clear();
 	Publish(ERenderResourceStatus::Retired);
+	return ReleasedMaterials;
 }
 
 std::shared_ptr<const FRenderResource> FRenderResourceCoordinator::MakeLease(FEntry& InEntry)
@@ -185,18 +170,6 @@ bool FRenderResourceCoordinator::Process(FEntry& InEntry)
 			}
 			Upload(Record);
 		}
-		if (Record.bUploadPending)
-		{
-			if (!Device.TexturesReady(Record.Textures))
-			{
-				return true;
-			}
-			Record.bUploadPending = false;
-			if (Record.Status != ERenderResourceStatus::Failed)
-			{
-				Record.Publish(ERenderResourceStatus::Ready);
-			}
-		}
 	}
 	catch (const std::exception& Error)
 	{
@@ -208,8 +181,7 @@ bool FRenderResourceCoordinator::Process(FEntry& InEntry)
 		Record.Preparation = {};
 		Record.Publish(ERenderResourceStatus::Failed, "Unknown resource preparation/upload failure");
 	}
-	return Record.bUploadPending ||
-	       (InEntry.Lease.expired() && (!Record.CanRelease() || InEntry.Record.use_count() != 1));
+	return (InEntry.Lease.expired() && (!Record.CanRelease() || InEntry.Record.use_count() != 1));
 }
 
 bool FRenderResourceCoordinator::CollectCompleted()
@@ -225,12 +197,23 @@ bool FRenderResourceCoordinator::CollectCompleted()
 		{
 			Entry.Record->Publish(ERenderResourceStatus::Failed, Error.what());
 		}
+		for (auto& Entry : MaterialEntries)
+		{
+			Entry.Record->Publish(ERenderMaterialStatus::Failed, Error.what());
+		}
 	}
 	catch (...)
 	{
 		for (const auto& [Key, Entry] : Entries)
 		{
 			Entry.Record->Publish(ERenderResourceStatus::Failed, "GPU completion query failed");
+		}
+	}
+	for (auto& Entry : MaterialEntries)
+	{
+		if (Entry.Record->Status != ERenderMaterialStatus::Failed)
+		{
+			Entry.Record->Publish(ERenderMaterialStatus::Failed, "GPU completion query failed");
 		}
 	}
 	// Failed queries prove no completion. Keep ownership and allow a later collection or shutdown drain.
@@ -241,6 +224,7 @@ void FRenderResourceCoordinator::Tick()
 {
 	Tasks.Require({EDomain::Rhi, 0});
 	bool bAgain = false;
+	std::vector<std::shared_ptr<const FRenderMaterial>> ReleasedMaterials;
 	{
 		std::lock_guard Lock(Mutex);
 		bScheduled = false;
@@ -249,13 +233,20 @@ void FRenderResourceCoordinator::Tick()
 			return;
 		}
 		const bool bCompleted = CollectCompleted();
+		CollectPreparedDraws();
 		bAgain = !bCompleted;
+		if (bCompleted)
+		{
+			bAgain |= ProcessMaterials();
+		}
 		for (auto It = Entries.begin(); It != Entries.end();)
 		{
 			const bool bPending = !bCompleted || Process(It->second);
 			if (!bPending && It->second.Lease.expired() && It->second.Record.use_count() == 1)
 			{
-				It->second.Record->Release();
+				auto Released = It->second.Record->Release();
+				ReleasedMaterials.insert(ReleasedMaterials.end(), std::make_move_iterator(Released.begin()),
+				                         std::make_move_iterator(Released.end()));
 				It = Entries.erase(It);
 				++Stats.Retired;
 			}
@@ -265,15 +256,12 @@ void FRenderResourceCoordinator::Tick()
 				++It;
 			}
 		}
-		if (bCompleted)
-		{
-			std::erase_if(Constants,
-			              [](const FBuffer& InBuffer)
-			              {
-				              return InBuffer.Payload.use_count() == 1;
-			              });
-		}
-		bAgain |= !Constants.empty();
+		bAgain |= std::any_of(MaterialEntries.begin(), MaterialEntries.end(),
+		                      [](const FMaterialEntry& InEntry)
+		                      {
+			                      return InEntry.Record->Status == ERenderMaterialStatus::Preparing ||
+			                             InEntry.Record->Status == ERenderMaterialStatus::Uploading;
+		                      });
 		Stats.LiveResources = Entries.size();
 	}
 	if (bAgain)

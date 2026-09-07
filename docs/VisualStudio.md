@@ -84,6 +84,10 @@ Tracy 的 `TRACY_ON_DEMAND` 只延迟采集，仍会监听连接，因此启用 
 
 ## 本机验证记录
 
+2026-09-07：通用材质系统及 Triangle/ModelViewer/SceneViewer/DebugUI 迁移完成。最终 VS 2022 Debug **42/42**（104.95 秒）、Release **42/42**（70.33 秒）CTest 通过，包含材质像素/共享常量、连续 Object 更新回收、Scene 原子发布、失败 Present、原场景规模验收及实际 RenderDoc replay。514 模型/2053 draws 的 Debug 180 帧无剔除测试约 22 秒，保持原 45 秒限制并得到零 D3D12 validation errors。Ninja Debug 构建、225 自有源码的格式、137 编译单元命名、220 模块源码/25 模块边界及 OpenSpec strict 检查通过。日志为 `out/MaterialFinalVsDebug.log`、`out/MaterialFinalVsRelease.log`、`out/MaterialFinalNaming.log`、`out/MaterialFinalBoundaries.log` 和 `out/MaterialFinalDebugSceneNone.log`；接口和首版能力见 [Materials.md](Materials.md)，完整证据见 [implementation.md](../openspec/changes/archive/2026-09-07-add-extensible-material-system/implementation.md)。未执行 Git commit。
+
+2026-09-07 审计收尾：10 项确认缺陷完成修复并由原独立 reviewer 复审关闭。最终 Debug **42/42**（119.87 秒）、Release **42/42**（74.97 秒）CTest 通过；命名、格式、模块边界和 OpenSpec strict 检查通过。原 514 模型无剔除 fixture 的 Debug 应用运行约 18.36 秒，保持原超时门槛。详情见 [材质审计报告](MaterialAudit.md)，最终日志为 `out/MaterialAudit/ProgramFinalVsDebug.log`、`ProgramFinalVsRelease.log` 和 `ProgramFinalNaming.log`。
+
 2026-09-07：Tracy 改为显式启用后，VS 2022 Debug/Release 均通过 **32/32** CTest，包含新增 `offline_startup`。该检查在修改前的 Viewer 上检测到 TCP 8086 监听和 UDP 端点，修改后两种配置均未发现 TCP/UDP 端点。Ninja Debug/Release 构建、61 个编译单元命名、格式和模块边界检查通过；显式开启 Tracy 的 Release Core 测试通过。VS 2022 和 Ninja 的 Debug/Release 产物均已重编译并恢复 Tracy 关闭。日志见 `out/NetworkVsDebug.log`、`out/NetworkVsRelease.log`、`out/NetworkNinjaDebugBuild.log`、`out/NetworkNinjaReleaseBuild.log`、`out/NetworkTracyEnabledBuild.log` 和 `out/NetworkStyle.log`。
 
 2026-09-06 上述限定 change 的独立审计后，补齐 Present 失败时的 GPU 等待并新增 `d3d12_frame_failure_recovery`：Debug/Release 分别通过 **31/31**，RenderDoc OFF Debug 通过 **26/26**。61 个编译单元命名、格式、模块边界和 OpenSpec strict 均通过；原 P2 已由独立 reviewer 复审关闭。日志位于 `out/IndependentReview/FinalVsDebug.log`、`FinalVsRelease.log`、`FinalDisabledTest.log`，详见 [独立审计记录](../openspec/changes/archive/2026-09-06-fix-lifecycle-and-split-entrypoints/independent-review.md)。

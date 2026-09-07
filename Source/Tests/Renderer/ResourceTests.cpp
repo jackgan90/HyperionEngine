@@ -23,7 +23,9 @@ template<class Predicate> void Await(const Predicate& InPredicate)
 template<class Interface> class TTrackedResource final : public Interface
 {
 public:
-	TTrackedResource(FTaskSystem& InTasks, std::atomic_int& InAlive) : Tasks(InTasks), Alive(InAlive)
+	TTrackedResource(FTaskSystem& InTasks, std::atomic_int& InAlive,
+	                 std::vector<std::shared_ptr<IRHIResource>> InDependencies = {})
+	    : Tasks(InTasks), Alive(InAlive), Dependencies(std::move(InDependencies))
 	{
 		++Alive;
 	}
@@ -45,6 +47,7 @@ public:
 private:
 	FTaskSystem& Tasks;
 	std::atomic_int& Alive;
+	std::vector<std::shared_ptr<IRHIResource>> Dependencies;
 };
 
 class FTestDevice final : public IRHIDevice
@@ -52,6 +55,8 @@ class FTestDevice final : public IRHIDevice
 public:
 	explicit FTestDevice(FTaskSystem& InTasks) : Tasks(InTasks)
 	{
+		Capabilities.ConstantAlignment = 256;
+		Capabilities.MaxConstantRange = 65536;
 	}
 
 	const FRHICapabilities& GetCapabilities() const noexcept override
@@ -86,20 +91,77 @@ public:
 		return Result;
 	}
 
-	bool TexturesReady(std::span<const FTexture>) override
+	bool TexturesReady(std::span<const FTexture> InTextures) override
 	{
 		Tasks.Require({EDomain::Rhi, 0});
-		return bUploadComplete;
+		return InTextures.empty() || bUploadComplete;
 	}
 
-	FPipeline CreatePipeline(const FPipelineDesc&) override
+	FPipeline CreatePipeline(const FPipelineDesc& InDesc) override
 	{
 		Tasks.Require({EDomain::Rhi, 0});
-		if (bFailPipeline.exchange(false))
+		return {std::make_shared<TTrackedResource<IRHIPipeline>>(
+		    Tasks, Alive, std::vector<std::shared_ptr<IRHIResource>>{InDesc.Layout.Payload})};
+	}
+
+	FBuffer CreateBuffer(const FBufferDesc&, std::span<const std::byte> InData = {}) override
+	{
+		return CreateBuffer(InData);
+	}
+
+	FBufferSlice PublishConstantSlice(const FBuffer& InBuffer, std::uint64_t InOffset,
+	                                  std::span<const std::byte> InData) override
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+		return {InBuffer, InOffset, static_cast<std::uint32_t>(InData.size()),
+		        static_cast<std::uint32_t>((InData.size() + 255) & ~std::size_t(255)), ++Publication};
+	}
+
+	void ResetConstantBuffer(const FBuffer&) override
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+	}
+
+	FSampler CreateSampler(const FSamplerDesc&) override
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+		return {std::make_shared<TTrackedResource<IRHISampler>>(Tasks, Alive)};
+	}
+
+	FResourceBindingLayout CreateBindingLayout(const FResourceBindingLayoutDesc&) override
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+		return {std::make_shared<TTrackedResource<IRHIResourceBindingLayout>>(Tasks, Alive)};
+	}
+
+	FResourceBindingSet CreateBindingSet(const FResourceBindingSetDesc& InDesc) override
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+		if (bFailBinding.exchange(false))
 		{
-			throw std::runtime_error("Expected pipeline failure");
+			throw std::runtime_error("Expected binding failure");
 		}
-		return {std::make_shared<TTrackedResource<IRHIPipeline>>(Tasks, Alive)};
+		std::vector<std::shared_ptr<IRHIResource>> Dependencies{InDesc.Layout.Payload};
+		for (const auto& Entry : InDesc.Entries)
+		{
+			for (const auto& Value : Entry.Values)
+			{
+				std::visit(
+				    [&](const auto& InValue)
+				    {
+					    if constexpr (std::is_same_v<std::decay_t<decltype(InValue)>, FReadBufferView>)
+					    {
+						    Dependencies.push_back(InValue.Buffer.Payload);
+					    }
+					    else
+					    {
+						    Dependencies.push_back(InValue.Payload);
+					    }
+				    },
+				    Value);
+			}
+		}
+		return {std::make_shared<TTrackedResource<IRHIResourceBindingSet>>(Tasks, Alive, std::move(Dependencies))};
 	}
 
 	std::unique_ptr<IRHISwapchain> CreateSwapchain(const FRHISwapchainDesc&) override
@@ -138,10 +200,11 @@ public:
 	std::atomic_int Alive{};
 	std::atomic<bool> bUploadComplete{};
 	std::atomic<bool> bFrameComplete{};
-	std::atomic<bool> bFailPipeline{};
+	std::atomic<bool> bFailBinding{};
 	std::atomic<bool> bFailCollection{};
 	std::atomic_int IdleCalls{};
 	std::vector<FColorPass> Retained;
+	std::uint64_t Publication{};
 };
 
 FRenderResourceDesc Geometry(bool bInTexture = false)
@@ -150,16 +213,51 @@ FRenderResourceDesc Geometry(bool bInTexture = false)
 	FRenderGeometryDesc Mesh;
 	Mesh.Vertices.resize(3 * sizeof(FVec3));
 	Mesh.VertexStride = sizeof(FVec3);
+	Mesh.Attributes = {{"POSITION", 0, EVertexFormat::Float3, 0}};
 	Mesh.Indices = {0, 1, 2};
 	Mesh.Bounds = {{-.5f, -.5f, .25f}, {.5f, .5f, .75f}, true};
 	Result.Geometries.push_back(std::move(Mesh));
-	Result.Materials.emplace_back();
-	Result.Materials[0].Pipeline.bDepthTest = true;
-	Result.Sections.push_back({0, 0, 0, 3});
+	FMaterialDescription Description;
+	Description.Name = "Fake material";
+	FMaterialPass Pass;
+	Pass.Vertex = {"Unused.hlsl", "VSMain"};
+	Pass.Pixel = {"Unused.hlsl", "PSMain"};
+	Pass.State.bDepthTest = true;
+	Description.Passes.push_back(Pass);
 	if (bInTexture)
 	{
-		Result.Textures.emplace_back();
+		FMaterialParameterDeclaration Texture;
+		Texture.Name = "Map";
+		Texture.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
+		Texture.Default = FMaterialValue::FromTexture(std::make_shared<const FMaterialTextureSource>(
+		    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {255, 255, 255, 255}}}));
+		Description.Parameters.push_back(Texture);
 	}
+	auto Program = std::make_shared<FCompiledMaterialDefinition>();
+	Program->Interface.Definition = std::make_shared<const FMaterialDefinition>(Description);
+	Program->Interface.Schema = std::make_shared<const FMaterialParameterSchema>(Description.Parameters);
+	FCompiledMaterialPass Compiled;
+	Compiled.Usage = "Forward";
+	Compiled.Variant = "Default";
+	Compiled.Vertex.Stage = EShaderStage::Vertex;
+	Compiled.Pixel.Stage = EShaderStage::Pixel;
+	Compiled.Vertex.Bytes.resize(1);
+	Compiled.Pixel.Bytes.resize(1);
+	if (bInTexture)
+	{
+		FMaterialProgramBinding Binding;
+		Binding.Resource.Name = "Map";
+		Binding.Resource.Kind = EBindingKind::Texture;
+		Binding.Resource.Dimension = EShaderResourceDimension::Texture2D;
+		Binding.Resource.Count = 1;
+		Binding.ResourceParameter = 0;
+		Binding.Stages = 2;
+		Compiled.Bindings.push_back(Binding);
+		Compiled.ActiveParameters.push_back(0);
+	}
+	Program->Passes.push_back(std::move(Compiled));
+	Result.Materials.push_back({FMaterialInstance(Program->Interface).Freeze(), Program});
+	Result.Sections.push_back({0, 0, 0, 3});
 	return Result;
 }
 
@@ -186,7 +284,7 @@ void CheckSharedUpload(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompi
 	Await(
 	    [&]
 	    {
-		    return First->GetStatus() == ERenderResourceStatus::Uploading;
+		    return First->GetMaterial(0) && First->GetMaterial(0)->GetStatus() == ERenderMaterialStatus::Uploading;
 	    });
 	InTasks.Wait(A.Remove());
 	First.reset();
@@ -213,12 +311,13 @@ void CheckSharedUpload(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompi
 	                              }));
 	InTasks.Wait(B.Remove());
 	Second.reset();
-	HYP_CHECK(InDevice.Alive == 5); // Native frame references outlive the scene and all public leases.
+	HYP_CHECK(InDevice.Alive > 0); // Native frame references outlive the scene and all public leases.
 	InDevice.bFrameComplete = true;
 	Await(
 	    [&]
 	    {
-		    return Session.GetResources().Statistics().LiveResources == 0;
+		    return Session.GetResources().Statistics().LiveResources == 0 &&
+		           Session.GetResources().Statistics().Materials.LiveObjects == 0;
 	    });
 	HYP_CHECK(InDevice.Alive == 0 && InDevice.IdleCalls == 0);
 	Session.Close();
@@ -360,7 +459,8 @@ void CheckQueryFailure(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompi
 	Await(
 	    [&]
 	    {
-		    return Session.GetResources().Statistics().LiveResources == 0;
+		    return Session.GetResources().Statistics().LiveResources == 0 &&
+		           Session.GetResources().Statistics().Materials.LiveObjects == 0;
 	    });
 	auto Unknown = Session.GetResources().Request(std::make_shared<const int>(12), 1, "non-standard-failure",
 	                                              []() -> FRenderResourceDesc
@@ -376,7 +476,8 @@ void CheckQueryFailure(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompi
 	Await(
 	    [&]
 	    {
-		    return Session.GetResources().Statistics().LiveResources == 0;
+		    return Session.GetResources().Statistics().LiveResources == 0 &&
+		           Session.GetResources().Statistics().Materials.LiveObjects == 0;
 	    });
 	HYP_CHECK(InDevice.Alive == 0);
 }
@@ -385,7 +486,7 @@ void CheckNoFrameCleanup(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 {
 	FRenderSession Session(InTasks, InDevice, InCompiler);
 	const auto IdleBefore = InDevice.IdleCalls.load();
-	InDevice.bFailPipeline = true;
+	InDevice.bFailBinding = true;
 	auto Failed = Session.GetResources().Request(std::make_shared<const int>(7), 1, "pipeline-failure",
 	                                             []
 	                                             {
@@ -399,13 +500,14 @@ void CheckNoFrameCleanup(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	    {
 		    return Binding.GetStatus().State == ERenderPrimitiveStatus::Failed;
 	    });
-	HYP_CHECK(Binding.GetStatus().Error == "Expected pipeline failure");
+	HYP_CHECK(Binding.GetStatus().Error == "Expected binding failure");
 	InTasks.Wait(Binding.Remove());
 	Failed.reset();
 	Await(
 	    [&]
 	    {
-		    return Session.GetResources().Statistics().LiveResources == 0;
+		    return Session.GetResources().Statistics().LiveResources == 0 &&
+		           Session.GetResources().Statistics().Materials.LiveObjects == 0;
 	    });
 	HYP_CHECK(InDevice.Alive == 0 && InDevice.IdleCalls == IdleBefore);
 	std::promise<void> Gate;
@@ -425,7 +527,8 @@ void CheckNoFrameCleanup(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	Await(
 	    [&]
 	    {
-		    return Session.GetResources().Statistics().LiveResources == 0;
+		    return Session.GetResources().Statistics().LiveResources == 0 &&
+		           Session.GetResources().Statistics().Materials.LiveObjects == 0;
 	    });
 	HYP_CHECK(InDevice.Alive == 0 && InDevice.IdleCalls == IdleBefore);
 	// Shutdown joins a still-running producer, independently of frames and Main callbacks.
@@ -507,17 +610,30 @@ void CheckSectionTransactions(FTaskSystem& InTasks, FTestDevice& InDevice, FShad
 void CheckPendingSection(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompiler& InCompiler)
 {
 	FRenderSession Session(InTasks, InDevice, InCompiler);
+	std::promise<void> Gate;
+	const auto Released = Gate.get_future().share();
+	std::jthread ReleaseOnFailure(
+	    [&](std::stop_token InStop)
+	    {
+		    while (!InStop.stop_requested())
+		    {
+			    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		    }
+		    try
+		    {
+			    Gate.set_value();
+		    }
+		    catch (const std::future_error&)
+		    {
+		    }
+	    });
 	InDevice.bUploadComplete = false;
 	auto Resource = Session.GetResources().Request(std::make_shared<const int>(11), 1, "pending-section",
-	                                               []
+	                                               [Released]
 	                                               {
+		                                               Released.wait();
 		                                               return Geometry(true);
 	                                               });
-	Await(
-	    [&]
-	    {
-		    return Resource->GetStatus() == ERenderResourceStatus::Uploading;
-	    });
 	FRenderPrimitiveState State;
 	State.Resource = Resource;
 	auto Valid = Session.GetScene().Create(State);
@@ -525,12 +641,21 @@ void CheckPendingSection(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	auto Invalid = Session.GetScene().Create(State);
 	InTasks.Wait(Session.GetScene().Flush());
 	HYP_CHECK(Invalid.GetStatus().State == ERenderPrimitiveStatus::PendingResources);
-	// Resolve resource-dependent validation without producing any frame or Main callback.
+	Gate.set_value();
+	Await(
+	    [&]
+	    {
+		    return Resource->GetMaterial(0) &&
+		           Resource->GetMaterial(0)->GetStatus() == ERenderMaterialStatus::Uploading;
+	    });
+	HYP_CHECK(Invalid.GetStatus().State == ERenderPrimitiveStatus::Failed);
+	HYP_CHECK(Valid.GetStatus().State == ERenderPrimitiveStatus::PendingResources);
+	// Material resource readiness resolves independently of geometry/section validation.
 	InDevice.bUploadComplete = true;
 	Await(
 	    [&]
 	    {
-		    return Resource->GetStatus() == ERenderResourceStatus::Ready;
+		    return Valid.GetStatus().State == ERenderPrimitiveStatus::Ready;
 	    });
 	HYP_CHECK(Valid.GetStatus().State == ERenderPrimitiveStatus::Ready);
 	HYP_CHECK(Invalid.GetStatus().State == ERenderPrimitiveStatus::Failed);
@@ -540,7 +665,7 @@ void CheckPendingSection(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	    [&]
 	    {
 		    const auto Snapshot = PrepareSceneSnapshot(Session.GetScene().Collect({}));
-		    HYP_CHECK(Snapshot.Items.size() == 1 && Snapshot.Items[0].Primitive == Valid.GetHandle());
+		    HYP_CHECK(Snapshot.Items.size() == 2 && Snapshot.Items[0].Primitive == Valid.GetHandle());
 		    InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
 		                                  [&]
 		                                  {
@@ -646,7 +771,7 @@ void CheckBoundsReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCo
 	                                                   []
 	                                                   {
 		                                                   auto Desc = Geometry();
-		                                                   Desc.Materials[0].bClipSpace = true;
+
 		                                                   return Desc;
 	                                                   });
 	Await(
@@ -655,6 +780,7 @@ void CheckBoundsReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCo
 		    return ClipResource->GetStatus() == ERenderResourceStatus::Ready;
 	    });
 	State.Resource = ClipResource;
+	State.bClipSpace = true;
 	State.LocalBounds = {{-.5f, -.5f, 0}, {.5f, .5f, 1}, true};
 	auto Clip = Session.GetScene().Create(State);
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},

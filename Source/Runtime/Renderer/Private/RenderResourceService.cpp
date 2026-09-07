@@ -5,7 +5,7 @@
 namespace Hyperion
 {
 FRenderResourceService::FRenderResourceService(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler)
-    : Coordinator(std::make_shared<FRenderResourceCoordinator>(InTasks, InDevice)), Compiler(InCompiler)
+    : Coordinator(std::make_shared<FRenderResourceCoordinator>(InTasks, InDevice, InCompiler)), Compiler(InCompiler)
 {
 	InTasks.Require({EDomain::Main});
 }
@@ -108,26 +108,9 @@ void FRenderResourceCoordinator::Upload(FRenderResourceRecord& InRecord)
 	}
 	for (const auto& Material : Desc.Materials)
 	{
-		InRecord.Pipelines.emplace_back();
-		auto Pipeline = Material.Pipeline;
-		InRecord.Pipelines.back()[0] = Device.CreatePipeline(Pipeline);
-		Pipeline.bFrontCounterClockwise = !Pipeline.bFrontCounterClockwise;
-		InRecord.Pipelines.back()[1] = Device.CreatePipeline(Pipeline);
-		if (Pipeline.bMaterialLayout)
-		{
-			for (auto Texture : Material.Textures)
-			{
-				if (Texture >= Desc.Textures.size())
-				{
-					throw std::invalid_argument("Invalid material texture");
-				}
-			}
-		}
+		InRecord.Materials.push_back(AcquireMaterial(Material.Surface, Material.Compiled));
 	}
-	// Upload last: no throwing resource construction follows queue submission.
-	InRecord.Textures = Desc.Textures.empty() ? std::vector<FTexture>{} : Device.CreateTexturesAsync(Desc.Textures);
-	InRecord.bUploadPending = !InRecord.Textures.empty();
-	InRecord.Publish(Desc.Textures.empty() ? ERenderResourceStatus::Ready : ERenderResourceStatus::Uploading);
+	InRecord.Publish(ERenderResourceStatus::Ready);
 }
 
 FRenderResourceStats FRenderResourceService::Statistics() const
@@ -143,7 +126,7 @@ void FRenderResourceService::Close()
 	std::vector<FTaskHandle> Preparations;
 	{
 		std::lock_guard Lock(Owner.Mutex);
-		if (Owner.bClosed && Owner.Entries.empty())
+		if (Owner.bClosed && Owner.bNativeClosed)
 		{
 			return;
 		}
@@ -153,6 +136,13 @@ void FRenderResourceService::Close()
 		for (const auto& [Key, Entry] : Owner.Entries)
 		{
 			Preparations.push_back(Entry.Record->Preparation.Task());
+		}
+		for (const auto& [Identity, Program] : Owner.Programs)
+		{
+			if (Program)
+			{
+				Preparations.push_back(Program->Preparation.Task());
+			}
 		}
 	}
 	try
@@ -175,31 +165,7 @@ void FRenderResourceService::Close()
 	Owner.Tasks.Wait(Owner.Tasks.Dispatch({EDomain::Rhi, 0},
 	                                      [State = Coordinator]
 	                                      {
-		                                      State->Device.WaitIdle();
-		                                      State->Device.CollectCompletedResources();
-		                                      std::lock_guard Lock(State->Mutex);
-		                                      for (const auto& [Key, Entry] : State->Entries)
-		                                      {
-			                                      if (!Entry.Record->CanRelease())
-			                                      {
-				                                      throw std::logic_error("Close requires released frame packets");
-			                                      }
-		                                      }
-		                                      for (const auto& Buffer : State->Constants)
-		                                      {
-			                                      if (Buffer.Payload.use_count() > 1)
-			                                      {
-				                                      throw std::logic_error("Close requires released frame constants");
-			                                      }
-		                                      }
-		                                      for (const auto& [Key, Entry] : State->Entries)
-		                                      {
-			                                      Entry.Record->Release();
-			                                      ++State->Stats.Retired;
-		                                      }
-		                                      State->Constants.clear();
-		                                      State->Entries.clear();
-		                                      State->Stats.LiveResources = 0;
+		                                      State->CloseNativeResources();
 	                                      }));
 }
 } // namespace Hyperion

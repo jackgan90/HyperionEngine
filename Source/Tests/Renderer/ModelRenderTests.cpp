@@ -114,24 +114,34 @@ FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset I
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
+	if (!Model.GetError().empty())
+	{
+		throw std::runtime_error(Model.GetError());
+	}
 	HYP_CHECK(Model.IsReady());
-	FRenderSceneSnapshot Snapshot;
+	FPassCommands PreparedDraw;
 	InContext.Tasks.Wait(InContext.Tasks.Dispatch(
 	    {EDomain::Render},
 	    [&]
 	    {
 		    FRenderView View{
 		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
-		    Snapshot = PrepareSceneSnapshot(InContext.Session.GetScene().Collect(View));
+		    FRenderGraph Graph;
+		    FColorPass Clear;
+		    Clear.Commands.Name = "Clear model";
+		    Clear.Load = EColorLoad::Clear;
+		    Graph.Add(std::move(Clear));
+		    InContext.Session.Build(Graph, View);
+		    const auto Passes = Graph.Compile();
+		    HYP_CHECK(Passes.size() == 3);
+		    PreparedDraw = Passes[1];
 	    }));
 	FImage Image;
 	InContext.Tasks.Wait(InContext.Tasks.Dispatch(
 	    {EDomain::Rhi, 0},
 	    [&]
 	    {
-		    auto Passes = InContext.Session.GetResources().BuildPasses(Snapshot);
-		    HYP_CHECK(Passes.size() == 1);
-		    auto Draw = std::move(Passes.front().Commands);
+		    auto Draw = std::move(PreparedDraw);
 		    Draw.Name = "Known material pixels";
 		    Draw.bClear = true;
 		    Draw.TransitionFrom = EResourceState::Present;
@@ -142,7 +152,7 @@ FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset I
 			    auto Invalid = Draw;
 			    for (std::uint64_t Offset : {std::uint64_t(1), UINT64_MAX, std::uint64_t(1024)})
 			    {
-				    Invalid.Draws[0].MaterialConstantOffset = Offset;
+				    Invalid.Draws[0].ConstantBindings[0].Slice.Offset = Offset;
 				    bool bRejected = false;
 				    try
 				    {

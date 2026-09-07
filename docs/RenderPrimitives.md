@@ -29,7 +29,7 @@ Main 和 Render 类型树不要求对应，也不共享可变对象。新的 pro
 
 每次更新是完整 `FRenderPrimitiveState`，带严格递增 revision；资源请求使用不可变 identity/version/configuration。旧 revision、旧 generation、其他 scene 的句柄不会覆盖当前对象。一个更新 batch 先校验所有成员再应用，非法字段会在返回的 task 上报告异常；调用者应观察返回 task，移除任务仍会执行。 已就绪资源的 section 索引在发布前校验；资源仍在准备/上传时无法确定的索引，在描述就绪后通过 binding 状态报告 Failed，无效 item 不进入绘制，也不阻断其他对象。延迟失败不会回滚已经接收的 revision，后续合法更新或 Remove 仍可处理。
 
-`FRenderSession::Build` 的 Render 任务是帧边界：之前入队的控制任务已经完成，后续控制任务在该任务结束后才执行。收集结果按值持有矩阵、可见性、材质覆盖和资源租约。多次或多视图收集不得推进动画/逻辑状态，也不得直接创建 native GPU 资源。Main 等待当前 CPU 帧只是 Viewer 的调度选择；数据隔离依靠自有快照。
+`FRenderSession::BuildViews`（单 view 的 `Build` 委托它）的 Render 任务是帧边界：之前入队的控制任务已经完成，后续控制任务在该任务结束后才执行。收集结果按值持有矩阵、可见性、材质覆盖和资源租约。多次或多视图收集不得推进动画/逻辑状态，也不得直接创建 native GPU 资源。Main 等待当前 CPU 帧只是 Viewer 的调度选择；数据隔离依靠自有快照。
 
 创建、更新和移除无需出帧即可推进。最小化、没有 Present 时仍由专用 Render 队列处理。`Remove()` 立即使 binding 停止接受更新，返回的回执表示 Render 已移除/析构对象；它不表示 GPU 完成。重复 Remove 返回同一回执。关闭后存活的 binding 只释放已经失效的 mailbox/result，不访问 executor。
 
@@ -39,11 +39,11 @@ Main 和 Render 类型树不要求对应，也不共享可变对象。新的 pro
 
 每个设备/session 创建一个 `FRenderResourceService` 并供所有生产者复用。服务以仍被强引用保活的不可变源 identity、version、configuration 定位资源，记录另外分配唯一 identity。section 的 geometry/material 索引及范围描述子资源。地址只在源对象仍受保活时参与键，不会把复用地址当成旧资产。不同服务/device 不共享 native payload。
 
-模型 preparation 固定顶点布局，按图片索引与 sRGB/线性角色分别生成纹理，并保留材质 sampler、shader、depth/blend/cull 及镜像绕序变体。通用 `Request` 的调用者必须把所有影响布局、shader 或颜色解释的配置纳入 configuration，或提高 version。不能以相同键请求不同内容。初版按完整资产资源组共享，不做独立导入副本的内容去重、LRU 或热重载。
+模型 preparation 固定顶点布局，按图片索引与 sRGB/线性角色分别生成纹理，并保留材质 sampler、shader、depth/blend/cull 及镜像绕序变体。通用 `Request` 的调用者必须把所有影响布局、shader 或颜色解释的配置纳入 configuration，或提高 version。不能以相同键请求不同内容。geometry 与 material 分别共享和退休；材质资源以不可变 source/view 身份复用。不做独立导入副本的内容去重、LRU 或热重载。
 
 Worker 准备不可变 CPU 顶点、mip、shader 数据；RHI 0 创建 GPU 资源并发起上传；Render 读取已发布的就绪描述。组内所有上传完成前不会输出该组 draw。资源替换提交完整状态和显式新版本；pending 版本不会被物化，旧结果也无法覆盖新请求。首版替换期间可暂时不绘制该组，不提供旧版本持续显示或热重载事务 UI。
 
-兼容请求共享一次 preparation/upload；释放一个消费者不取消其他消费者。失败记录为原消费者保留错误，新请求可重试，重试中的请求继续合并。变换、可见性及当前支持的 base color、metallic、roughness 覆盖只进入实例状态和常量数据，不能修改共享定义。改变 alpha mode、shader 或纹理绑定需要新的不可变资源版本。
+兼容请求共享一次 preparation/upload；释放一个消费者不取消其他消费者。失败记录为原消费者保留错误，新请求可重试，重试中的请求继续合并。变换、可见性及当前支持的 base color、metallic、roughness 覆盖只进入实例状态和常量数据，不能修改共享定义。改变 alpha mode/shader 需要新的不可变 material definition，改变纹理/sampler 发布新 material snapshot；两者均不要求重新上传 geometry。
 
 ## Render 析构与 GPU 退休
 
@@ -61,7 +61,7 @@ D3D12 上传批次由上传 fence 保活；成功提交的录制列表进入设�
 
 Render 先冻结资源组就绪状态，过滤隐藏和未就绪 item，以局部 AABB 的八角做保守视锥测试；缺少有效 bounds 或无法得出有限结果时保留。镜像及非均匀变换直接体现在 clip 变换中。opaque/mask 在前，blend 按全场景中心投影深度稳定排序，不做每模型局部排序。中心排序不能解决相交透明面。
 
-兼容的 item 聚合到场景 pass，深度只在场景首次使用时初始化。pass 只因所需 depth/color target 模式变化而分开，不能按 Model/primitive 数量创建。RHI 0 按帧批量创建模型常量 buffer，每个普通 draw 使用独立的 512 字节片，然后沿用 RenderGraph 验证、并行录制、提交和错误取消。
+兼容的 item 聚合到场景 pass，每个 view 的 depth/stencil 在首次使用时独立初始化。depth 开关由各 draw 的 pipeline 控制；pass 只因 view/viewport、linear/sRGB 目标或显式用途边界分开，不能按 Model/primitive 数量创建。RHI 0 按真实反射布局打包并共享各 scope 的不可变常量 slice，沿用 RenderGraph 验证、并行录制、提交和错误取消。队列排序仅移动索引，保持 opaque/mask 等深次序与全场景透明顺序。
 
 场景插件实现 `IScenePlugin`：`Start/Update/Stop` 在 Main 执行，注册资源和 binding；`Update` 可生成 owned view/settings snapshot。ModelViewer 管理加载、相机与 `FModel`；Triangle 使用通用 geometry/material 描述和自己的 shader。Renderer 不识别它们的类型或 ID。非场景插件实现 `IRenderPlugin::Build`，在 Render 添加 GUI 等 pass；其 Main 生命周期自行 dispatch RHI 资源工作。
 
@@ -72,3 +72,11 @@ Render 先冻结资源组就绪状态，过滤隐藏和未就绪 item，以局�
 `render_primitives` 覆盖线程、消息隔离、revision/generation、原子更新、异构 proxy、移除与关闭。`render_resources` 用受控替身覆盖共享上传、失败重试、迟到结果、pending 移除、native 析构域、视锥与聚合。`scene_rendering` 不链接实验插件，以真实 D3D12 像素检查多模型共享/实例隔离、全场景深度、交错透明和 40 个 primitive。`d3d12_frame_failure_recovery` 的真实 fence gate 验证 proxy 先析构，native buffer 仍保活，放开 gate 后没有新帧也会退休。
 
 完整运行入口和环境要求见 [VisualStudio.md](VisualStudio.md)。本次变更的实际验证证据见 [verification.md](../openspec/changes/archive/2026-09-07-add-render-primitives/verification.md)。
+
+## 通用材质入口
+
+完整类型、按 name/semantic 绑定和 GPU 共享契约见 [Materials.md](Materials.md)。`FRenderPrimitiveState.Surface` 是独立的 material lease，`ObjectParameters/SectionParameters` 是 owned typed overrides。`FRenderItem.DrawParameters` 只影响当前 draw；`ObjectInputs/DrawInputs` 单独向 semantic provider 提供输入。
+
+`LocalItemId` 为自定义多 item primitive 提供稳定身份；省略时 ordinal 仅在当前 collection 有效，不能跨 collection 共享 Object/Draw 参数。cache key 同时包含实际 World/参数内容，不能仅以 primitive revision 代替。clip-space 在 primitive 上声明；shader 位移材质未提供保守 bounds 时，组、pre-collection 和 item 层均保持保守。
+
+`FRenderBinding.GetStatus()` 表示静态 readiness，`GetLastDrawResult()` 单独报告带 frame/view/material revision 的上下文准备结果。同一 group 的 packets 全部准备成功才输出，其他 group 继续。Model/Scene bridge 提供 `GetDrawResults()` 给上层 UI。静态 Ready 可在零帧条件达成，缺少动态 provider 的错误可在下一有效 frame 中恢复。

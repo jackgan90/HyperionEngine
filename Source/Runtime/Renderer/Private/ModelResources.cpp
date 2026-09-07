@@ -1,42 +1,15 @@
-#include "Hyperion/Renderer/ModelPreparation.h"
 #include "Hyperion/Renderer/RenderResources.h"
+#include "ModelMaterials.h"
 #include <algorithm>
 
 namespace Hyperion
 {
-namespace
-{
-FPipelineDesc ModelPipeline(const FShaderArtifact& InVertex, const FShaderArtifact& InPixel,
-                            const FPreparedMaterial& InMaterial)
-{
-	FPipelineDesc Desc;
-	Desc.Vertex = InVertex;
-	Desc.Pixel = InPixel;
-	Desc.bMaterialLayout = true;
-	Desc.bSrgbTarget = true;
-	Desc.bDepthTest = true;
-	Desc.bDepthWrite = InMaterial.Material.AlphaMode != EAlphaMode::Blend;
-	Desc.bAlphaBlend = InMaterial.Material.AlphaMode == EAlphaMode::Blend;
-	Desc.bCullBack = !InMaterial.Material.bDoubleSided;
-	Desc.Samplers = InMaterial.Samplers;
-	Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FModelVertex, Position)},
-	                   {"NORMAL", 0, EVertexFormat::Float3, offsetof(FModelVertex, Normal)},
-	                   {"TANGENT", 0, EVertexFormat::Float4, offsetof(FModelVertex, Tangent)},
-	                   {"COLOR", 0, EVertexFormat::Float4, offsetof(FModelVertex, Color)},
-	                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FModelVertex, Uv0)},
-	                   {"TEXCOORD", 1, EVertexFormat::Float2, offsetof(FModelVertex, Uv1)}};
-	return Desc;
-}
-} // namespace
-
 FRenderResourceDesc PrepareModelResources(std::shared_ptr<const FModelAsset> InAsset, FShaderCompiler& InCompiler,
                                           EShaderFormat InFormat)
 {
 	const auto Prepared = PrepareModel(InAsset);
-	const auto Vertex = InCompiler.Compile("Model.hlsl", "VSMain", EShaderStage::Vertex, InFormat);
-	const auto Pixel = InCompiler.Compile("Model.hlsl", "PSMain", EShaderStage::Pixel, InFormat);
 	FRenderResourceDesc Result;
-	Result.Textures = Prepared.Textures;
+	Result.Materials = PrepareModelMaterials(Prepared, InCompiler, InFormat);
 	for (const auto& Primitive : Prepared.Primitives)
 	{
 		FRenderGeometryDesc Geometry;
@@ -44,6 +17,7 @@ FRenderResourceDesc PrepareModelResources(std::shared_ptr<const FModelAsset> InA
 		Geometry.Vertices.assign(Bytes.begin(), Bytes.end());
 		Geometry.Indices = Primitive.Indices;
 		Geometry.VertexStride = sizeof(FModelVertex);
+		Geometry.Attributes = ModelVertexAttributes();
 		for (const auto& Item : Primitive.Vertices)
 		{
 			if (!Geometry.Bounds.bValid)
@@ -64,11 +38,6 @@ FRenderResourceDesc PrepareModelResources(std::shared_ptr<const FModelAsset> InA
 		                                        : static_cast<std::uint32_t>(Material),
 		                           0, static_cast<std::uint32_t>(Primitive.Indices.size())});
 		Result.Geometries.push_back(std::move(Geometry));
-	}
-	for (const auto& Material : Prepared.Materials)
-	{
-		Result.Materials.push_back(
-		    {ModelPipeline(Vertex, Pixel, Material), Material.Material, Material.Textures, false});
 	}
 	return Result;
 }

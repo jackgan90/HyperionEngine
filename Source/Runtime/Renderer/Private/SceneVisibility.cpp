@@ -10,15 +10,17 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 {
 	struct FOrderedItem
 	{
-		FRenderItem Item;
-		bool bBlend{};
+		std::size_t Index{};
+		unsigned Queue{};
 		float Depth{};
 	};
 
 	std::vector<FOrderedItem> Ordered;
+	Ordered.reserve(InSnapshot.Items.size());
 	std::map<const FRenderResource*, std::shared_ptr<const FRenderResourceDesc>> Descriptions;
-	for (auto& Item : InSnapshot.Items)
+	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
 	{
+		auto& Item = InSnapshot.Items[Index];
 		if (!Item.State.bVisible || !Item.State.Resource)
 		{
 			continue;
@@ -31,26 +33,39 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 		const auto& Desc = It->second;
 		if (!Desc)
 		{
+			Item.PreparationError = "Geometry resources are not ready";
+			Ordered.push_back({Index, 0, 0});
 			continue;
 		}
 		if (Item.State.Section >= Desc->Sections.size())
 		{
-			// Pending descriptions can reveal an invalid section after state admission.
-			// The binding reports failure independently; other scene items remain renderable.
+			Item.PreparationError = "Invalid primitive section";
+			Ordered.push_back({Index, 0, 0});
 			continue;
 		}
 		const auto& Section = Desc->Sections[Item.State.Section];
 		const auto& Geometry = Desc->Geometries[Section.Geometry];
-		const auto& Material = Desc->Materials[Section.Material];
-		const auto Clip =
-		    Material.bClipSpace ? Item.State.World : Multiply(InSnapshot.View.ViewProjection, Item.State.World);
+		if (!Item.State.Surface)
+		{
+			Item.State.Surface = Item.State.Resource->GetMaterial(Item.State.Section);
+		}
+		const auto Surface = Item.State.Surface ? Item.State.Surface->GetSnapshot() : nullptr;
+		const bool bClipSpace = Item.State.bClipSpace;
+		const bool bConservative = Surface && std::any_of(Surface->Definition->GetDescription().Passes.begin(),
+		                                                  Surface->Definition->GetDescription().Passes.end(),
+		                                                  [](const auto& InPass)
+		                                                  {
+			                                                  return InPass.bRequiresConservativeBounds;
+		                                                  });
+		const auto Clip = bClipSpace ? Item.State.World : Multiply(InSnapshot.View.ViewProjection, Item.State.World);
 		const auto CullingClip =
-		    Material.bClipSpace
-		        ? Item.State.World
-		        : Multiply(InSnapshot.View.CullingViewProjection.value_or(InSnapshot.View.ViewProjection),
-		                   Item.State.World);
+		    bClipSpace ? Item.State.World
+		               : Multiply(InSnapshot.View.CullingViewProjection.value_or(InSnapshot.View.ViewProjection),
+		                          Item.State.World);
 		if (InSnapshot.View.CullingMode != ESceneCullingMode::None &&
-		    !FFrustum(CullingClip).Intersects(Geometry.Bounds))
+		    (!bConservative || Item.State.bConservativeBounds) &&
+		    !FFrustum(CullingClip)
+		         .Intersects(IsUsable(Item.State.LocalBounds) ? Item.State.LocalBounds : Geometry.Bounds))
 		{
 			continue;
 		}
@@ -61,18 +76,26 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 		{
 			Depth = std::numeric_limits<float>::lowest();
 		}
-		Ordered.push_back({std::move(Item), Material.Pipeline.bAlphaBlend, Depth});
+		const auto Queue = Surface && Surface->Definition->HasPass(InSnapshot.View.Usage)
+		                       ? Surface->Definition->GetPass(InSnapshot.View.Usage).Queue
+		                       : EMaterialQueue::Opaque;
+		const unsigned Bucket = Queue == EMaterialQueue::Overlay ? 2 : Queue == EMaterialQueue::Transparent ? 1 : 0;
+		Ordered.push_back({Index, Bucket, Depth});
 	}
 	std::stable_sort(Ordered.begin(), Ordered.end(),
 	                 [](const FOrderedItem& InA, const FOrderedItem& InB)
 	                 {
-		                 return InA.bBlend != InB.bBlend ? !InA.bBlend : InA.bBlend && InA.Depth > InB.Depth;
+		                 return InA.Queue != InB.Queue ? InA.Queue < InB.Queue
+		                                               : InA.Queue == 1 && InA.Depth > InB.Depth;
 	                 });
-	InSnapshot.Items.clear();
-	for (auto& Item : Ordered)
+	// Sort indices so parameter containers move only once, preserving stable queue/depth ordering.
+	std::vector<FRenderItem> Items;
+	Items.reserve(Ordered.size());
+	for (const auto& Item : Ordered)
 	{
-		InSnapshot.Items.push_back(std::move(Item.Item));
+		Items.push_back(std::move(InSnapshot.Items[Item.Index]));
 	}
+	InSnapshot.Items = std::move(Items);
 	InSnapshot.Statistics.VisibleItems = InSnapshot.Items.size();
 	return InSnapshot;
 }

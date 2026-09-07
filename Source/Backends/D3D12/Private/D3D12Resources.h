@@ -14,6 +14,22 @@ struct FD3D12Buffer final : IRHIBuffer
 	ComPtr<D3D12MA::Allocation> Allocation;
 	ComPtr<ID3D12Resource> Resource;
 	std::uint64_t Size{};
+	std::uint32_t Usage = BufferUsage(ERHIBufferUsage::Vertex) | BufferUsage(ERHIBufferUsage::Index);
+	std::uint64_t PublishedEnd{};
+	std::uint64_t NextPublication = 1;
+
+	struct FPublishedSlice
+	{
+		std::uint64_t Offset{};
+		std::uint32_t Size{};
+		std::uint32_t Extent{};
+		std::uint64_t Publication{};
+	};
+
+	std::vector<FPublishedSlice> Published;
+	// Immutable index data: cache bounded range min/max results across repeated draws and recording contexts.
+	mutable std::mutex IndexRangesMutex;
+	mutable std::vector<std::array<std::uint32_t, 4>> IndexRanges; // first, count, minimum, maximum.
 };
 
 struct FD3D12Texture final : IRHITexture
@@ -26,16 +42,75 @@ struct FD3D12Texture final : IRHITexture
 	std::shared_ptr<FD3D12DeviceState> State;
 	ComPtr<D3D12MA::Allocation> Allocation;
 	ComPtr<ID3D12Resource> Resource;
-	UINT Slot = TextureCount;
 	std::uint64_t UploadFence{};
+	FD3D12DescriptorRange SourceDescriptor;
 
 	~FD3D12Texture() override
 	{
-		if (Slot < TextureCount)
-		{
-			State->Release(Slot);
-		}
+		State->ResourceSources.Release(SourceDescriptor);
 	}
+};
+
+struct FD3D12Sampler final : IRHISampler
+{
+	std::shared_ptr<FD3D12DeviceState> State;
+	FSamplerDesc Description;
+	FD3D12DescriptorRange SourceDescriptor;
+
+	const void* GetDeviceIdentity() const noexcept override
+	{
+		return State.get();
+	}
+
+	~FD3D12Sampler() override
+	{
+		State->SamplerSources.Release(SourceDescriptor);
+	}
+};
+
+struct FD3D12BindingLayout final : IRHIResourceBindingLayout
+{
+	std::shared_ptr<FD3D12DeviceState> State;
+	FResourceBindingLayoutDesc Description;
+	ComPtr<ID3D12RootSignature> Root;
+
+	struct FSlot
+	{
+		UINT RootParameter{};
+		UINT Table = UINT_MAX;
+		UINT Offset{};
+	};
+
+	struct FTable
+	{
+		UINT RootParameter{};
+		bool bSampler{};
+		ERHIShaderVisibility Visibility{};
+		UINT Count{};
+		std::vector<D3D12_DESCRIPTOR_RANGE> Ranges;
+	};
+
+	std::vector<FSlot> Slots;
+	std::vector<FTable> Tables;
+
+	const void* GetDeviceIdentity() const noexcept override
+	{
+		return State.get();
+	}
+};
+
+struct FD3D12BindingSet final : IRHIResourceBindingSet
+{
+	std::shared_ptr<FD3D12DeviceState> State;
+	FResourceBindingSetDesc Description;
+	std::vector<FD3D12DescriptorRange> Tables;
+
+	const void* GetDeviceIdentity() const noexcept override
+	{
+		return State.get();
+	}
+
+	~FD3D12BindingSet() override;
 };
 
 struct FD3D12Pipeline final : IRHIPipeline
@@ -49,8 +124,11 @@ struct FD3D12Pipeline final : IRHIPipeline
 
 	ComPtr<ID3D12RootSignature> Root;
 	ComPtr<ID3D12PipelineState> Pipeline;
-	bool bTextured{};
-	bool bMaterialLayout{};
+	FResourceBindingLayout Layout;
+	FGraphicsTarget Target;
+	FGraphicsState GraphicsState;
+	ERHIPrimitiveTopology Topology = ERHIPrimitiveTopology::TriangleList;
+	std::uint32_t VertexStride{};
 };
 
 struct FD3D12SwapchainIdentity

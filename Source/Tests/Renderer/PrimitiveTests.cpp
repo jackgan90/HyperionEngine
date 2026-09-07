@@ -122,6 +122,25 @@ void CheckBatchesAndIdentity(FTaskSystem& InTasks)
 	HYP_CHECK(Snapshot(InTasks, Client).Items[1].State.Revision == 2);
 }
 
+void CheckPublishedRemovalGeneration(FTaskSystem& InTasks)
+{
+	FRenderSceneClient Client(InTasks);
+	auto Old = Client.Create({});
+	InTasks.Wait(Client.PublishGroups({}, {}, {Old.GetHandle()}).Task);
+	auto Replacement = Client.Create({});
+	HYP_CHECK(Old.GetHandle().Slot == Replacement.GetHandle().Slot);
+	HYP_CHECK(Old.GetHandle().Generation != Replacement.GetHandle().Generation);
+	InTasks.Wait(Client.RemoveBatch(std::span(&Old, 1)));
+	FRenderPrimitiveState Changed;
+	Changed.Revision = 2;
+	InTasks.Wait(Client.Update({{Replacement.GetHandle(), Changed}}));
+	HYP_CHECK(Replacement.GetStatus().Revision == 2);
+	auto Next = Client.Create({});
+	HYP_CHECK(Replacement.GetHandle().Slot != Next.GetHandle().Slot);
+	const auto Current = Snapshot(InTasks, Client);
+	HYP_CHECK(Current.Items.size() == 2 && Current.Items[0].Primitive != Current.Items[1].Primitive);
+}
+
 void CheckFailureAndClose(FTaskSystem& InTasks)
 {
 	std::atomic_uint32_t Destroyed{};
@@ -191,6 +210,7 @@ int main()
 		CheckDomains(Tasks);
 		CheckOwnedMessages(Tasks);
 		CheckBatchesAndIdentity(Tasks);
+		CheckPublishedRemovalGeneration(Tasks);
 		CheckFailureAndClose(Tasks);
 		std::cout << "Primitive ownership, snapshots, transactions, generations, failure and shutdown passed\n";
 		return 0;

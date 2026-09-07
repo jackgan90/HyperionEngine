@@ -50,34 +50,6 @@ void FSceneRenderBridge::Observe(bool bInWait)
 	}
 }
 
-void FSceneRenderBridge::Apply(const FSceneChange& InChange)
-{
-	auto It = Attachments.find(InChange.Handle);
-	const auto Data = InChange.Model ? InChange.Model->Data : nullptr;
-	if (It != Attachments.end() && (!Data || It->second.Data != Data))
-	{
-		It->second.Model->Remove();
-		Attachments.erase(It);
-		It = Attachments.end();
-	}
-	if (!Data)
-	{
-		return;
-	}
-	if (It == Attachments.end())
-	{
-		auto Model = std::make_unique<FModel>(Session.GetScene(), Session.GetResources(), *InChange.Model);
-		Attachments.emplace(InChange.Handle, FAttachment{Data, std::move(Model), {}, InChange.Revision});
-	}
-	else
-	{
-		const auto Receipt = It->second.Model->SetState(*InChange.Model);
-		Receipts.push_back({InChange.Handle, Receipt, InChange.Revision});
-		It->second.Revision = InChange.Revision;
-		It->second.Error.clear();
-	}
-}
-
 void FSceneRenderBridge::Flush()
 {
 	Tasks.Require({EDomain::Main});
@@ -86,10 +58,152 @@ void FSceneRenderBridge::Flush()
 		throw std::logic_error("Scene bridge is closed");
 	}
 	Observe(false);
-	for (const auto& Change : Scene.GetChanges())
+	const auto Changes = Scene.GetChanges();
+	auto Pending = PrepareChanges(Changes);
+	PublishChanges(Pending);
+	for (const auto& Change : Changes)
 	{
-		Apply(Change);
 		Scene.Acknowledge(Change.Revision);
+	}
+}
+
+std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(const std::vector<FSceneChange>& InChanges)
+{
+	std::map<FSceneHandle, std::uint64_t> Changed;
+	for (const auto& Change : InChanges)
+	{
+		Changed.emplace(Change.Handle, Change.Revision);
+	}
+
+	FModel::FFrozenMaterials Frozen;
+	std::vector<FPending> Pending;
+	for (const auto Handle : Scene.GetHandles())
+	{
+		const auto& State = *Scene.Find(Handle);
+		if (!State.Data)
+		{
+			continue;
+		}
+		std::vector<std::pair<std::uint64_t, std::uint64_t>> Versions;
+		const auto Freeze = [&](const FSceneMaterialSelection& InSelection)
+		{
+			const auto Snapshot = FModel::FreezeSelection(InSelection, Frozen);
+			Versions.emplace_back(Snapshot ? Snapshot->Identity : 0, Snapshot ? Snapshot->Revision : 0);
+		};
+		Freeze(State.Surface);
+		for (const auto& [Section, Selection] : State.SectionSurfaces)
+		{
+			Versions.emplace_back(Section, 0);
+			Freeze(Selection);
+		}
+		auto Entry = Attachments.find(Handle);
+		if (Entry != Attachments.end() && Entry->second.Data == State.Data && !Changed.contains(Handle) &&
+		    Entry->second.MaterialVersions == Versions)
+		{
+			continue;
+		}
+		FPending Work;
+		Work.Handle = Handle;
+		if (Entry == Attachments.end() || Entry->second.Data != State.Data)
+		{
+			Work.NewModel =
+			    std::unique_ptr<FModel>(new FModel(Session.GetScene(), Session.GetResources(), State, true));
+			Work.Model = Work.NewModel.get();
+		}
+		else
+		{
+			Work.Model = Entry->second.Model.get();
+		}
+		Work.Update = Work.Model->PrepareState(State, Frozen);
+		Work.Versions = std::move(Versions);
+		Pending.push_back(std::move(Work));
+	}
+	return Pending;
+}
+
+void FSceneRenderBridge::PublishChanges(std::vector<FPending>& InPending)
+{
+	std::vector<std::vector<FRenderPrimitiveState>> Groups;
+	std::vector<FRenderPrimitiveUpdate> Updates;
+	for (const auto& Work : InPending)
+	{
+		if (Work.NewModel)
+		{
+			auto& Group = Groups.emplace_back();
+			for (const auto& Update : Work.Update.Updates)
+			{
+				Group.push_back(Update.State);
+			}
+		}
+		else
+		{
+			Updates.insert(Updates.end(), Work.Update.Updates.begin(), Work.Update.Updates.end());
+		}
+	}
+	std::vector<FRenderPrimitiveHandle> Removals;
+	for (const auto& [Handle, Entry] : Attachments)
+	{
+		const auto State = Scene.Find(Handle);
+		if (!State || !State->Data || State->Data != Entry.Data)
+		{
+			for (const auto& Binding : Entry.Model->Bindings)
+			{
+				Removals.push_back(Binding.GetHandle());
+			}
+		}
+	}
+	// All snapshots, schemas and overrides are prepared before any related Render publication.
+	std::map<FSceneHandle, FAttachment> NewAttachments;
+	for (const auto& Work : InPending)
+	{
+		if (!Attachments.contains(Work.Handle))
+		{
+			NewAttachments.try_emplace(Work.Handle);
+		}
+	}
+	Receipts.reserve(Receipts.size() + InPending.size());
+	auto Publication =
+	    InPending.empty() && Removals.empty()
+	        ? FRenderScenePublication{}
+	        : Session.GetScene().PublishGroups(std::move(Groups), std::move(Updates), std::move(Removals));
+	Attachments.merge(NewAttachments); // Preallocated nodes; no allocation after admission.
+	CommitChanges(InPending, Publication);
+}
+
+void FSceneRenderBridge::CommitChanges(std::vector<FPending>& InPending, FRenderScenePublication& InPublication)
+{
+	std::size_t GroupIndex{};
+	for (auto& Work : InPending)
+	{
+		auto& Entry = Attachments.at(Work.Handle);
+		if (Work.NewModel)
+		{
+			if (Entry.Model)
+			{
+				Entry.Model->Remove();
+			}
+			Work.NewModel->Bindings = std::move(InPublication.Groups[GroupIndex++]);
+			Entry.Model = std::move(Work.NewModel);
+			Entry.Data = Work.Update.State.Data;
+		}
+		Entry.Model->CommitState(std::move(Work.Update));
+		Entry.MaterialVersions = std::move(Work.Versions);
+		Entry.Revision = ++NextPublication;
+		Entry.Error.clear();
+		Receipts.push_back({Work.Handle, InPublication.Task, Entry.Revision});
+	}
+	for (auto It = Attachments.begin(); It != Attachments.end();)
+	{
+		const auto State = Scene.Find(It->first);
+		if (!State || !State->Data)
+		{
+			It->second.Model->Remove();
+			It = Attachments.erase(It);
+		}
+		else
+		{
+			++It;
+		}
 	}
 }
 
@@ -126,6 +240,13 @@ std::string FSceneRenderBridge::GetError(FSceneHandle InHandle) const
 	return It == Attachments.end()     ? std::string{}
 	       : !It->second.Error.empty() ? It->second.Error
 	                                   : It->second.Model->GetError();
+}
+
+std::vector<FRenderDrawResult> FSceneRenderBridge::GetDrawResults(FSceneHandle InHandle) const
+{
+	Tasks.Require({EDomain::Main});
+	const auto It = Attachments.find(InHandle);
+	return It == Attachments.end() ? std::vector<FRenderDrawResult>{} : It->second.Model->GetDrawResults();
 }
 
 std::size_t FSceneRenderBridge::PrimitiveCount(FSceneHandle InHandle) const

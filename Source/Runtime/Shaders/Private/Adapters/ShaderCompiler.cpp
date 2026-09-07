@@ -1,18 +1,18 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
 #include "Hyperion/Core/Core.h"
+#include "ShaderReflection.h"
 // DXC's Windows declarations require the COM types provided by WRL first.
 #include <Windows.h>
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <bcrypt.h>
 #include <cstring>
 #include <dxcapi.h>
 #include <fstream>
 #include <mutex>
-#include <spirv_cross.hpp>
-#include <spirv_msl.hpp>
 #include <stdexcept>
 
 namespace Hyperion
@@ -208,9 +208,10 @@ FShaderCompiler::~FShaderCompiler() = default;
 namespace
 {
 std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::filesystem::path& InRoot,
-                           const std::string& InEntry, EShaderStage InStage, EShaderFormat InFormat)
+                           const std::string& InEntry, EShaderStage InStage, EShaderFormat InFormat,
+                           const FShaderCompileOptions& InOptions)
 {
-	std::string Identity = "hyperion-shader-v2:" HYP_TOOLCHAIN_ID;
+	std::string Identity = "hyperion-shader-v7-msl20:" HYP_TOOLCHAIN_ID;
 	auto Append = [&](const std::string& InPart)
 	{
 		Identity += std::to_string(InPart.size()) + ":" + InPart;
@@ -219,6 +220,14 @@ std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::files
 	Append(InEntry);
 	Append(std::to_string(static_cast<int>(InStage)));
 	Append(std::to_string(static_cast<int>(InFormat)));
+	Append(std::to_string(ShaderBindingMappingVersion));
+	Append(std::to_string(FShaderReflection{}.Version));
+	Append(InOptions.bOptimize ? "O3" : "Od");
+	for (const FShaderDefine& Define : InOptions.Defines)
+	{
+		Append(Define.Name);
+		Append(Define.Value);
+	}
 	std::vector<std::filesystem::path> Files;
 	for (const auto& Item : std::filesystem::recursive_directory_iterator(InRoot))
 	{
@@ -236,39 +245,88 @@ std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::files
 	return Sha256(Identity);
 }
 
-void ReflectShaderPayload(FShaderArtifact& InArtifact, std::string& InPayload)
+void NormalizeOptions(FShaderCompileOptions& InOptions)
 {
-	if (InArtifact.Format != EShaderFormat::Dxil)
+	std::sort(InOptions.Defines.begin(), InOptions.Defines.end(),
+	          [](const FShaderDefine& InA, const FShaderDefine& InB)
+	          {
+		          return InA.Name < InB.Name;
+	          });
+	std::string Previous;
+	for (const FShaderDefine& Define : InOptions.Defines)
 	{
-		if (InPayload.size() % 4)
+		if (Define.Name.empty() || Define.Name == Previous ||
+		    Define.Name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") !=
+		        std::string::npos ||
+		    (Define.Name.front() >= '0' && Define.Name.front() <= '9') ||
+		    Define.Value.find_first_of("\r\n") != std::string::npos)
 		{
-			throw std::runtime_error("Invalid SPIR-V size");
+			throw std::invalid_argument("Invalid or duplicate shader define: " + Define.Name);
 		}
-		std::vector<std::uint32_t> Words(InPayload.size() / 4);
-		std::memcpy(Words.data(), InPayload.data(), InPayload.size());
-		spirv_cross::CompilerMSL Cross(std::move(Words));
-		auto Resources = Cross.get_shader_resources();
-		auto Reflect = [&](const auto& InList, EBindingKind InKind)
+		Previous = Define.Name;
+	}
+}
+
+std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const std::filesystem::path& InPath,
+                           const std::filesystem::path& InRoot, const std::string& InEntry, EShaderStage InStage,
+                           EShaderFormat InFormat, const FShaderCompileOptions& InOptions)
+{
+	const std::string Content = Read(InPath);
+	DxcBuffer Buffer{Content.data(), Content.size(), DXC_CP_UTF8};
+	std::vector<std::wstring> Arguments{InPath.wstring(),
+	                                    L"-E",
+	                                    std::wstring(InEntry.begin(), InEntry.end()),
+	                                    L"-T",
+	                                    InStage == EShaderStage::Vertex ? L"vs_6_0" : L"ps_6_0",
+	                                    L"-HV",
+	                                    L"2021",
+	                                    L"-Ges",
+	                                    InOptions.bOptimize ? L"-O3" : L"-Od",
+	                                    L"-I",
+	                                    InPath.parent_path().wstring(),
+	                                    L"-I",
+	                                    InRoot.wstring()};
+	for (const FShaderDefine& Define : InOptions.Defines)
+	{
+		const std::string Argument = "-D" + Define.Name + "=" + Define.Value;
+		Arguments.emplace_back(Argument.begin(), Argument.end());
+	}
+	if (InFormat != EShaderFormat::Dxil)
+	{
+		Arguments.insert(Arguments.end(), {L"-spirv", L"-fspv-target-env=vulkan1.1", L"-fspv-reflect"});
+		for (std::uint32_t Space = 0; Space < ShaderRegisterSpaceCount; ++Space)
 		{
-			for (const auto& R : InList)
+			for (std::uint32_t Kind = 0; Kind < 4; ++Kind)
 			{
-				std::uint32_t Size{};
-				if (InKind == EBindingKind::UniformBuffer)
-				{
-					Size = static_cast<std::uint32_t>(Cross.get_declared_struct_size(Cross.get_type(R.base_type_id)));
-				}
-				InArtifact.Bindings.push_back({R.name, InKind, Cross.get_decoration(R.id, spv::DecorationBinding),
-				                               Cross.get_decoration(R.id, spv::DecorationDescriptorSet), Size});
+				const std::array<std::wstring, 4> Shifts{L"-fvk-b-shift", L"-fvk-t-shift", L"-fvk-s-shift",
+				                                         L"-fvk-u-shift"};
+				Arguments.insert(Arguments.end(), {Shifts[Kind], std::to_wstring(Kind * ShaderRegistersPerKind),
+				                                   std::to_wstring(Space)});
 			}
-		};
-		Reflect(Resources.uniform_buffers, EBindingKind::UniformBuffer);
-		Reflect(Resources.separate_images, EBindingKind::Texture);
-		Reflect(Resources.separate_samplers, EBindingKind::Sampler);
-		if (InArtifact.Format == EShaderFormat::Msl)
-		{
-			InPayload = Cross.compile();
 		}
 	}
+	std::vector<LPCWSTR> Pointers;
+	for (const std::wstring& Argument : Arguments)
+	{
+		Pointers.push_back(Argument.c_str());
+	}
+	ComPtr<IDxcIncludeHandler> Include;
+	Include.Attach(new FIncludeHandler(InUtils, InRoot));
+	ComPtr<IDxcResult> Result;
+	Checked(InCompiler->Compile(&Buffer, Pointers.data(), static_cast<UINT32>(Pointers.size()), Include.Get(),
+	                            IID_PPV_ARGS(&Result)),
+	        "DXC invocation failed");
+	HRESULT Status{};
+	Checked(Result->GetStatus(&Status), "DXC status failed");
+	if (FAILED(Status))
+	{
+		ComPtr<IDxcBlobUtf8> Errors;
+		Result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&Errors), nullptr);
+		throw std::runtime_error(Errors ? Errors->GetStringPointer() : "Shader compilation failed");
+	}
+	ComPtr<IDxcBlob> Object;
+	Checked(Result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&Object), nullptr), "DXC object missing");
+	return {static_cast<const char*>(Object->GetBufferPointer()), Object->GetBufferSize()};
 }
 
 } // namespace
@@ -276,21 +334,41 @@ void ReflectShaderPayload(FShaderArtifact& InArtifact, std::string& InPayload)
 FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, std::string InEntry,
                                          EShaderStage InStage, EShaderFormat InFormat)
 {
+	return Compile(InSource, std::move(InEntry), InStage, InFormat, {});
+}
+
+FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, std::string InEntry,
+                                         EShaderStage InStage, EShaderFormat InFormat, FShaderCompileOptions InOptions)
+{
+	NormalizeOptions(InOptions);
+	if (InEntry.empty() || (InStage != EShaderStage::Vertex && InStage != EShaderStage::Pixel) ||
+	    (InFormat != EShaderFormat::Dxil && InFormat != EShaderFormat::Spirv && InFormat != EShaderFormat::Msl))
+	{
+		throw std::invalid_argument("Unsupported shader entry, stage or target");
+	}
+	// Logical HLSL types can be lowered (notably bool -> uint) by SPIR-V. Preserve their DXIL source types,
+	// while reflecting every offset and stride from the actual SPIR-V intermediate.
+	FShaderArtifact Logical{};
+	if (InFormat != EShaderFormat::Dxil)
+	{
+		Logical = Compile(InSource, InEntry, InStage, EShaderFormat::Dxil, InOptions);
+	}
 	std::lock_guard Lock(Impl->Mutex);
 	FProfileScope Trace("Shader compilation");
-	auto Path = std::filesystem::canonical(InSource.is_absolute() ? InSource : Impl->Root / InSource);
+	const auto Path = std::filesystem::canonical(InSource.is_absolute() ? InSource : Impl->Root / InSource);
 	if (!Within(Path, Impl->Root))
 	{
 		throw std::invalid_argument("Shader outside source root");
 	}
 	FShaderArtifact Artifact{};
 	Artifact.Format = InFormat;
-	Artifact.CacheKey = ShaderCacheKey(Path, Impl->Root, InEntry, InStage, InFormat);
-	auto CacheFile = Impl->Cache / (Artifact.CacheKey + ".bin");
+	Artifact.Stage = InStage;
+	Artifact.CacheKey = ShaderCacheKey(Path, Impl->Root, InEntry, InStage, InFormat, InOptions);
+	const auto CacheFile = Impl->Cache / (Artifact.CacheKey + ".bin");
 	std::string Payload;
 	if (std::filesystem::exists(CacheFile))
 	{
-		auto Cached = Read(CacheFile);
+		const std::string Cached = Read(CacheFile);
 		if (Cached.size() > 65 && Cached[64] == '\n' && Sha256(Cached.substr(65)) == Cached.substr(0, 64))
 		{
 			Payload = Cached.substr(65);
@@ -299,59 +377,30 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 	}
 	if (!Artifact.bCacheHit)
 	{
-		auto Content = Read(Path);
-		DxcBuffer Buffer{Content.data(), Content.size(), DXC_CP_UTF8};
-		std::wstring WideEntry(InEntry.begin(), InEntry.end());
-		auto Parent = Path.parent_path().wstring();
-		auto Root = Impl->Root.wstring();
-		auto Filename = Path.wstring();
-		const wchar_t* Profile = InStage == EShaderStage::Vertex ? L"vs_6_0" : L"ps_6_0";
-		std::vector<LPCWSTR> Args{Filename.c_str(), L"-E",   WideEntry.c_str(), L"-T",  Profile,
-		                          L"-HV",           L"2021", L"-Ges",           L"-O3", L"-I",
-		                          Parent.c_str(),   L"-I",   Root.c_str()};
-		if (InFormat != EShaderFormat::Dxil)
-		{
-			const LPCWSTR SpirvArgs[] = {L"-spirv",
-			                             L"-fspv-target-env=vulkan1.1",
-			                             L"-fvk-t-shift",
-			                             L"1000",
-			                             L"0",
-			                             L"-fvk-s-shift",
-			                             L"2000",
-			                             L"0",
-			                             L"-fvk-u-shift",
-			                             L"3000",
-			                             L"0"};
-			Args.insert(Args.end(), std::begin(SpirvArgs), std::end(SpirvArgs));
-		}
-		ComPtr<IDxcIncludeHandler> Include;
-		Include.Attach(new FIncludeHandler(Impl->Utils.Get(), Impl->Root));
-		ComPtr<IDxcResult> Result;
-		Checked(Impl->Compiler->Compile(&Buffer, Args.data(), static_cast<UINT32>(Args.size()), Include.Get(),
-		                                IID_PPV_ARGS(&Result)),
-		        "DXC invocation failed");
-		HRESULT Status{};
-		Checked(Result->GetStatus(&Status), "DXC status failed");
-		if (FAILED(Status))
-		{
-			ComPtr<IDxcBlobUtf8> Errors;
-			Result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&Errors), nullptr);
-			throw std::runtime_error(Errors ? Errors->GetStringPointer() : "Shader compilation failed");
-		}
-		ComPtr<IDxcBlob> Object;
-		Checked(Result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&Object), nullptr), "DXC object missing");
-		Payload.assign(static_cast<const char*>(Object->GetBufferPointer()), Object->GetBufferSize());
-		// One immutable filename per content key; a partial/concurrent write is rejected by the digest on
-		// next read.
+		Payload = CompilePayload(Impl->Compiler.Get(), Impl->Utils.Get(), Path, Impl->Root, InEntry, InStage, InFormat,
+		                         InOptions);
+	}
+	const std::string Intermediate = Payload;
+	if (InFormat == EShaderFormat::Dxil)
+	{
+		ShadersPrivate::ReflectDxil(Artifact, Payload);
+	}
+	else
+	{
+		ShadersPrivate::ReflectSpirv(Artifact, Payload, Logical);
+	}
+	ShadersPrivate::ValidateShaderBindings(Artifact);
+	if (!Artifact.bCacheHit)
+	{
+		// Cache the unstripped intermediate, so hot and cold paths reconstruct identical reflection.
 		std::ofstream Out(CacheFile, std::ios::binary | std::ios::trunc);
-		Out << Sha256(Payload) << '\n';
-		Out.write(Payload.data(), static_cast<std::streamsize>(Payload.size()));
+		Out << Sha256(Intermediate) << '\n';
+		Out.write(Intermediate.data(), static_cast<std::streamsize>(Intermediate.size()));
 		if (!Out)
 		{
 			throw std::runtime_error("Shader cache write failed");
 		}
 	}
-	ReflectShaderPayload(Artifact, Payload);
 	Artifact.Bytes.assign(Payload.begin(), Payload.end());
 	return Artifact;
 }

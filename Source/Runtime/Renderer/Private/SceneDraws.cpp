@@ -5,72 +5,104 @@ namespace Hyperion
 {
 namespace
 {
-struct FModelConstants
+struct FPreparedSceneDraws
 {
-	FMat4 World;
-	FMat4 ViewProjection;
-	FMat4 Normal;
-	FVec4 Camera;
-	FVec4 BaseColor;
-	FVec4 EmissiveAndNormal;
-	FVec4 Pbr;
-	FVec4 Modes;
-	FVec4 UvSets;
-	FVec4 Extra;
-	std::array<std::byte, 208> Padding{};
+	std::vector<std::optional<FDrawPacket>> Packets;
+	std::vector<bool> Srgb;
+	std::map<std::pair<std::uint64_t, std::uint64_t>, std::string> Failures;
+	bool bDepth{};
+	bool bStencil{};
+	ERHIDepthFormat Depth = ERHIDepthFormat::None;
 };
 
-static_assert(sizeof(FModelConstants) == 512);
-
-FModelConstants ModelConstants(const FRenderItem& InItem, const FRenderView& InView, const FModelMaterial& InMaterial)
+FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot)
 {
-	FModelConstants Result{};
-	Result.World = InItem.State.World;
-	Result.ViewProjection = InView.ViewProjection;
-	Result.Normal = NormalMatrix(InItem.State.World);
-	Result.Camera = {InView.Eye.X, InView.Eye.Y, InView.Eye.Z, 1};
-	Result.BaseColor = InItem.State.Material.BaseColor.value_or(InMaterial.BaseColor);
-	Result.EmissiveAndNormal = {InMaterial.Emissive.X, InMaterial.Emissive.Y, InMaterial.Emissive.Z,
-	                            InMaterial.NormalScale};
-	Result.Pbr = {InItem.State.Material.Metallic.value_or(InMaterial.Metallic),
-	              InItem.State.Material.Roughness.value_or(InMaterial.Roughness), InMaterial.OcclusionStrength,
-	              InMaterial.AlphaCutoff};
-	Result.Modes = {static_cast<float>(InMaterial.AlphaMode), InMaterial.bDoubleSided ? 1.f : 0.f,
-	                InMaterial.bUnlit ? 1.f : 0.f, Determinant(InItem.State.World) < 0 ? -1.f : 1.f};
-	Result.UvSets = {float(InMaterial.BaseColorTexture.TexCoord), float(InMaterial.MetallicRoughnessTexture.TexCoord),
-	                 float(InMaterial.NormalTexture.TexCoord), float(InMaterial.OcclusionTexture.TexCoord)};
-	Result.Extra = {float(InMaterial.EmissiveTexture.TexCoord), InMaterial.NormalTexture.Image >= 0 ? 1.f : 0.f, 0, 0};
-	return Result;
-}
-} // namespace
-
-FDrawPacket FRenderResourceCoordinator::Draw(const FRenderItem& InItem, const FRenderView& InView)
-{
-	const auto& Record = *InItem.State.Resource->Record;
-	if (Record.Owner != this || Record.Status != ERenderResourceStatus::Ready)
+	FPreparedSceneDraws Result;
+	Result.Packets.resize(InSnapshot.Items.size());
+	Result.Srgb.resize(InSnapshot.Items.size());
+	for (const auto& Item : InSnapshot.Items)
 	{
-		throw std::invalid_argument("Unready or foreign render resource");
-	}
-	const auto& Section = Record.Description->Sections.at(InItem.State.Section);
-	const auto& Material = Record.Description->Materials[Section.Material];
-	FDrawPacket Result;
-	Result.Pipeline = Record.Pipelines[Section.Material][Determinant(InItem.State.World) < 0 ? 1 : 0];
-	Result.Vertices = Record.Vertices[Section.Geometry];
-	Result.Indices = Record.Indices[Section.Geometry];
-	Result.VertexStride = Record.Description->Geometries[Section.Geometry].VertexStride;
-	Result.IndexCount = Section.IndexCount;
-	Result.FirstIndex = Section.FirstIndex;
-	Result.Constants = Material.bClipSpace ? InItem.State.World : Multiply(InView.ViewProjection, InItem.State.World);
-	if (Material.Pipeline.bMaterialLayout)
-	{
-		for (std::size_t Slot = 0; Slot < 5; ++Slot)
+		if (Item.PreparationError.empty() && Item.State.Surface &&
+		    Item.State.Surface->GetSnapshot()->Definition->HasPass(InSnapshot.View.Usage))
 		{
-			Result.MaterialTextures[Slot] = Record.Textures[Material.Textures[Slot]];
+			const auto& State = Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).State;
+			Result.bDepth |= State.bDepthTest;
+			Result.bStencil |= State.bStencil;
 		}
 	}
-	Result.Scissor = {0, 0, static_cast<std::int32_t>(InView.Width), static_cast<std::int32_t>(InView.Height)};
+	Result.Depth = Result.bDepth || Result.bStencil ? InSnapshot.DepthFormat : ERHIDepthFormat::None;
+	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+	{
+		const auto& Item = InSnapshot.Items[Index];
+		try
+		{
+			if (!Item.PreparationError.empty())
+			{
+				throw std::runtime_error(Item.PreparationError);
+			}
+			if (!Item.State.Surface || !Item.State.Resource)
+			{
+				throw std::invalid_argument("A draw requires ready geometry and a material selection");
+			}
+			Result.Srgb[Index] =
+			    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
+			Result.Packets[Index] = InOwner.DrawMaterial(Item, InSnapshot.View, {Result.Srgb[Index], Result.Depth});
+		}
+		catch (const std::exception& Error)
+		{
+			Result.Failures[{Item.Primitive.Scene, Item.Group}] = Error.what();
+		}
+	}
 	return Result;
 }
+
+FColorPass NewPass(const FRenderSceneSnapshot& InSnapshot, const FPreparedSceneDraws& InPrepared, std::size_t InIndex,
+                   bool bInSrgb)
+{
+	FColorPass Pass;
+	const auto Frame = InSnapshot.Frame;
+	Pass.Commands.Name = "Scene " + std::to_string(Frame ? Frame->Session : 0) + "/" +
+	                     std::to_string(Frame ? Frame->Frame : 0) + "/" + std::to_string(InSnapshot.Family) + "/" +
+	                     std::to_string(InSnapshot.View.Identity) + "/" + InSnapshot.View.Usage + "/" +
+	                     std::to_string(InIndex);
+	Pass.Commands.bUseDepth = InPrepared.bDepth;
+	Pass.Commands.bUseStencil = InPrepared.bStencil;
+	Pass.Commands.DepthFormat = InPrepared.Depth;
+	Pass.Commands.bClearDepth = InPrepared.bDepth && InIndex == 0;
+	Pass.Commands.bClearStencil = InPrepared.bStencil && InIndex == 0;
+	Pass.Commands.DepthDomain = InSnapshot.View.Identity;
+	Pass.Commands.Viewport = InSnapshot.View.Viewport;
+	Pass.Commands.bSrgbTarget = bInSrgb;
+	return Pass;
+}
+
+std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPreparedSceneDraws InPrepared)
+{
+	std::vector<FColorPass> Passes;
+	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+	{
+		const auto& Item = InSnapshot.Items[Index];
+		const auto Failed = InPrepared.Failures.find({Item.Primitive.Scene, Item.Group});
+		if (Item.Report)
+		{
+			Item.Report({InSnapshot.Frame ? InSnapshot.Frame->Frame : 0, InSnapshot.Family, InSnapshot.View.Identity,
+			             Item.State.Revision, Item.State.Surface ? Item.State.Surface->GetSnapshot()->Revision : 0,
+			             InSnapshot.View.Usage, Failed == InPrepared.Failures.end(),
+			             Failed == InPrepared.Failures.end() ? "" : Failed->second});
+		}
+		if (Failed != InPrepared.Failures.end())
+		{
+			continue;
+		}
+		if (Passes.empty() || Passes.back().Commands.bSrgbTarget != InPrepared.Srgb[Index])
+		{
+			Passes.push_back(NewPass(InSnapshot, InPrepared, Passes.size(), InPrepared.Srgb[Index]));
+		}
+		Passes.back().Commands.Draws.push_back(std::move(*InPrepared.Packets[Index]));
+	}
+	return Passes;
+}
+} // namespace
 
 std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSnapshot& InSnapshot)
 {
@@ -83,47 +115,11 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 		{
 			throw std::logic_error("Render resource service is closed");
 		}
-		std::vector<FModelConstants> Data;
-		bool bDepthInitialized = false;
-		for (const auto& Item : InSnapshot.Items)
+		Passes = PublishDraws(InSnapshot, PrepareDraws(Owner, InSnapshot));
+		if (Owner.MaterialGpu)
 		{
-			const auto& Record = *Item.State.Resource->Record;
-			auto Packet = Owner.Draw(Item, InSnapshot.View);
-			const auto& Section = Record.Description->Sections.at(Item.State.Section);
-			const auto& Material = Record.Description->Materials[Section.Material];
-			const bool bDepth = Material.Pipeline.bDepthTest;
-			const bool bSrgb = Material.Pipeline.bSrgbTarget;
-			if (Passes.empty() || Passes.back().Commands.bUseDepth != bDepth ||
-			    Passes.back().Commands.bSrgbTarget != bSrgb)
-			{
-				FColorPass Pass;
-				Pass.Commands.Name = "Scene " + std::to_string(Passes.size());
-				Pass.Commands.bUseDepth = bDepth;
-				Pass.Commands.bClearDepth = bDepth && !bDepthInitialized;
-				Pass.Commands.bSrgbTarget = bSrgb;
-				bDepthInitialized |= bDepth;
-				Passes.push_back(std::move(Pass));
-			}
-			if (Material.Pipeline.bMaterialLayout)
-			{
-				Packet.MaterialConstantOffset = Data.size() * sizeof(FModelConstants);
-				Data.push_back(ModelConstants(Item, InSnapshot.View, Material.Parameters));
-			}
-			Passes.back().Commands.Draws.push_back(std::move(Packet));
-		}
-		if (!Data.empty())
-		{
-			Owner.Constants.push_back(Owner.Device.CreateBuffer(std::as_bytes(std::span(Data))));
-			for (auto& Pass : Passes)
-			{
-				for (auto& Packet : Pass.Commands.Draws)
-				{
-					if (Packet.MaterialTextures[0])
-					{
-						Packet.MaterialConstants = Owner.Constants.back();
-					}
-				}
-			}
+			Owner.Stats.Materials = Owner.MaterialGpu->Statistics();
+			Owner.Stats.Constants = Owner.MaterialConstants->Statistics();
 		}
 	}
 	Owner.Schedule();

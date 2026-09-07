@@ -42,6 +42,7 @@ public:
 	FRenderBinding& operator=(const FRenderBinding&) = delete;
 	FRenderPrimitiveHandle GetHandle() const;
 	FRenderBindingStatus GetStatus() const;
+	FRenderDrawResult GetLastDrawResult() const;
 	FTaskHandle Remove();
 	static FTaskHandle RemoveBatch(std::span<FRenderBinding> InBindings);
 
@@ -55,22 +56,33 @@ private:
 	friend class FRenderSceneClient;
 };
 
+struct FRenderScenePublication
+{
+	std::vector<std::vector<FRenderBinding>> Groups;
+	FTaskHandle Task;
+};
+
 // Main facade. Dependency-free commands are serialized into the Render mailbox;
 // they continue to execute without producing a GPU frame. Close before Tasks.
 class FRenderSceneClient
 {
 public:
-	explicit FRenderSceneClient(FTaskSystem& InTasks);
+	explicit FRenderSceneClient(FTaskSystem& InTasks, std::function<std::shared_ptr<const void>()> InScopeFactory = {});
 	~FRenderSceneClient();
 	FRenderSceneClient(const FRenderSceneClient&) = delete;
 	FRenderSceneClient& operator=(const FRenderSceneClient&) = delete;
 	void RequireMain() const;
+	std::uint64_t GetLogicalSceneIdentity() const;
 	void AttachLogicalScene(std::uint64_t InIdentity);
 	void DetachLogicalScene(std::uint64_t InIdentity);
 	FRenderBinding Create(FRenderPrimitiveState InState, FRenderPrimitiveFactory InFactory = {});
 	std::vector<FRenderBinding> CreateBatch(std::vector<FRenderPrimitiveState> InStates,
 	                                        FRenderPrimitiveFactory InFactory = {});
 	FTaskHandle Update(std::vector<FRenderPrimitiveUpdate> InUpdates);
+	// One admission for a material bridge's new groups and already validated existing-object updates.
+	FRenderScenePublication PublishGroups(std::vector<std::vector<FRenderPrimitiveState>> InGroups,
+	                                      std::vector<FRenderPrimitiveUpdate> InUpdates,
+	                                      std::vector<FRenderPrimitiveHandle> InRemovals = {});
 	FTaskHandle RemoveBatch(std::span<FRenderBinding> InBindings);
 	FTaskHandle Flush();
 	void Close();

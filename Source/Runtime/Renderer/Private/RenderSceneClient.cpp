@@ -41,17 +41,38 @@ FRenderPrimitiveHandle FRenderBinding::GetHandle() const
 	return Handle;
 }
 
+FRenderDrawResult FRenderBinding::GetLastDrawResult() const
+{
+	if (!Result)
+	{
+		return {};
+	}
+	std::lock_guard Lock(Result->Mutex);
+	return Result->LastDraw;
+}
+
 FRenderBindingStatus FRenderBinding::GetStatus() const
 {
 	if (!Result)
 	{
 		return {ERenderPrimitiveStatus::Removed, 0, {}};
 	}
-	std::lock_guard Lock(Result->Mutex);
-	auto Status = Result->Status;
+	FRenderBindingStatus Status;
+	std::shared_ptr<const FMaterialParameterSchema> ValidatedSchema;
+	std::shared_ptr<const FRenderResource> ResourceLease;
+	std::shared_ptr<const FRenderPrimitiveState> Admitted;
+	std::uint32_t Section{};
+	{
+		std::lock_guard Lock(Result->Mutex);
+		Status = Result->Status;
+		ResourceLease = Result->Resource.lock();
+		Admitted = Result->Admitted;
+		Section = Result->Section;
+		ValidatedSchema = Result->ValidatedSchema;
+	}
 	if (Status.State == ERenderPrimitiveStatus::PendingResources)
 	{
-		if (auto Resource = Result->Resource.lock())
+		if (auto Resource = ResourceLease)
 		{
 			const auto State = Resource->GetStatus();
 			if (State == ERenderResourceStatus::Ready)
@@ -59,7 +80,7 @@ FRenderBindingStatus FRenderBinding::GetStatus() const
 				const auto Description = Resource->GetDescription();
 				if (Description)
 				{
-					const bool bValid = Result->Section < Description->Sections.size();
+					const bool bValid = Section < Description->Sections.size();
 					Status.State = bValid ? ERenderPrimitiveStatus::Ready : ERenderPrimitiveStatus::Failed;
 					if (!bValid)
 					{
@@ -71,6 +92,54 @@ FRenderBindingStatus FRenderBinding::GetStatus() const
 			{
 				Status.State = ERenderPrimitiveStatus::Failed;
 				Status.Error = Resource->GetError();
+			}
+		}
+	}
+	if (Status.State == ERenderPrimitiveStatus::Ready)
+	{
+		auto Surface = Admitted ? Admitted->Surface : nullptr;
+		if (!Surface)
+		{
+			if (const auto Resource = ResourceLease)
+			{
+				Surface = Resource->GetMaterial(Section);
+			}
+		}
+		if (Surface)
+		{
+			const auto MaterialStatus = Surface->GetStatus();
+			if (MaterialStatus == ERenderMaterialStatus::Preparing ||
+			    MaterialStatus == ERenderMaterialStatus::Uploading)
+			{
+				Status.State = ERenderPrimitiveStatus::PendingResources;
+			}
+			else if (MaterialStatus != ERenderMaterialStatus::Ready)
+			{
+				Status.State = ERenderPrimitiveStatus::Failed;
+				Status.Error = Surface->GetError();
+			}
+			else if (ValidatedSchema != Surface->GetCompiled()->Interface.Schema)
+			{
+				try
+				{
+					auto Snapshot = *Surface->GetSnapshot();
+					Snapshot.Schema = Surface->GetCompiled()->Interface.Schema;
+					const std::array<std::size_t, 0> NoRequiredParameters{};
+					ResolveMaterialParameters(Snapshot, {},
+					                          Admitted ? GetPrimitiveMaterialOverrides(*Admitted, *Snapshot.Schema)
+					                                   : FMaterialParameterValues{},
+					                          {}, NoRequiredParameters);
+					std::lock_guard Lock(Result->Mutex);
+					if (Result->Admitted == Admitted)
+					{
+						Result->ValidatedSchema = Snapshot.Schema;
+					}
+				}
+				catch (const std::exception& Error)
+				{
+					Status.State = ERenderPrimitiveStatus::Failed;
+					Status.Error = Error.what();
+				}
 			}
 		}
 	}
@@ -87,13 +156,22 @@ FTaskHandle FRenderBinding::Remove()
 	return Removal;
 }
 
-FRenderSceneClient::FRenderSceneClient(FTaskSystem& InTasks) : Mailbox(std::make_shared<FRenderSceneMailbox>(InTasks))
+FRenderSceneClient::FRenderSceneClient(FTaskSystem& InTasks,
+                                       std::function<std::shared_ptr<const void>()> InScopeFactory)
+    : Mailbox(std::make_shared<FRenderSceneMailbox>(InTasks))
 {
 	InTasks.Require({EDomain::Main});
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
-	                              [State = Mailbox]
+	                              [State = Mailbox, Factory = std::move(InScopeFactory)]() mutable
 	                              {
-		                              State->Scene = std::make_unique<FRenderScene>(State->Tasks);
+		                              if (!Factory)
+		                              {
+			                              Factory = []
+			                              {
+				                              return std::make_shared<const int>(0);
+			                              };
+		                              }
+		                              State->Scene = std::make_unique<FRenderScene>(State->Tasks, std::move(Factory));
 	                              }));
 }
 
@@ -239,6 +317,12 @@ void FRenderSceneClient::Close()
 		Completion = Queue.Last;
 	}
 	Queue.Tasks.Wait(Completion);
+}
+
+std::uint64_t FRenderSceneClient::GetLogicalSceneIdentity() const
+{
+	std::lock_guard Lock(Mailbox->Admission);
+	return Mailbox->LogicalScene;
 }
 
 FRenderSceneSnapshot FRenderSceneClient::Collect(FRenderView InView) const

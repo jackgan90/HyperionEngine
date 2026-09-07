@@ -17,6 +17,7 @@ public:
 	void Close();
 	bool IsReady(FSceneHandle InHandle) const;
 	std::string GetError(FSceneHandle InHandle) const;
+	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
 	std::size_t PrimitiveCount(FSceneHandle InHandle) const;
 
 private:
@@ -26,6 +27,7 @@ private:
 		std::unique_ptr<FModel> Model;
 		std::string Error;
 		std::uint64_t Revision{};
+		std::vector<std::pair<std::uint64_t, std::uint64_t>> MaterialVersions;
 	};
 
 	struct FReceipt
@@ -35,7 +37,18 @@ private:
 		std::uint64_t Revision{};
 	};
 
-	void Apply(const FSceneChange& InChange);
+	struct FPending
+	{
+		FSceneHandle Handle;
+		std::unique_ptr<FModel> NewModel;
+		FModel* Model{};
+		FModel::FPreparedUpdate Update;
+		std::vector<std::pair<std::uint64_t, std::uint64_t>> Versions;
+	};
+
+	std::vector<FPending> PrepareChanges(const std::vector<FSceneChange>& InChanges);
+	void PublishChanges(std::vector<FPending>& InPending);
+	void CommitChanges(std::vector<FPending>& InPending, FRenderScenePublication& InPublication);
 	void Observe(bool bInWait);
 	FScene& Scene;
 	FRenderSession& Session;
@@ -43,5 +56,6 @@ private:
 	std::map<FSceneHandle, FAttachment> Attachments;
 	std::vector<FReceipt> Receipts;
 	bool bClosed{};
+	std::uint64_t NextPublication{};
 };
 } // namespace Hyperion

@@ -148,6 +148,7 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 {
 	auto& Tasks = Services->Tasks;
 	const auto Frame = UpdateScene(InSize);
+	const auto MaterialFrame = RenderSession->FreezeFrame(float(ClockNanoseconds() / 1000000000.0));
 	FImage Screenshot;
 #if HYP_ENABLE_RENDERDOC
 	const auto Surface = Window->Surface();
@@ -155,7 +156,7 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 #endif
 	Tasks.Wait(Tasks.Dispatch(
 	    {EDomain::Render},
-	    [&, Frame, GuiData = InGuiData]
+	    [&, Frame, MaterialFrame, GuiData = InGuiData]
 	    {
 		    FProfileScope Prepare("Render preparation");
 #if HYP_ENABLE_RENDERDOC
@@ -176,7 +177,7 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 		    Clear.Commands.ClearColor = {float(Frame.Settings.ClearRed), float(Frame.Settings.ClearGreen),
 		                                 float(Frame.Settings.ClearBlue), 1};
 		    Graph.Add(std::move(Clear));
-		    RenderSession->Build(Graph, Frame.View);
+		    RenderSession->BuildViews(Graph, std::span(&Frame.View, 1), MaterialFrame);
 		    SceneStatistics = RenderSession->Statistics();
 		    for (const auto& Plugin : Plugins->GetInstances())
 		    {

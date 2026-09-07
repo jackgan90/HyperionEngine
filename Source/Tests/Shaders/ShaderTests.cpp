@@ -3,6 +3,8 @@
 #include <iostream>
 #include <stdexcept>
 
+void CheckMaterialShaderReflection(const std::filesystem::path& InRoot);
+
 namespace
 {
 using namespace Hyperion;
@@ -104,6 +106,7 @@ int main()
 			bFailed = std::string(E.what()).find("error") != std::string::npos;
 		}
 		Check(bFailed, "Compiler diagnostics");
+		CheckMaterialShaderReflection(Root);
 		std::cout << "Shader target, reflection and cache checks passed\n";
 		return 0;
 	}

@@ -60,7 +60,7 @@ struct FSceneFixture
 	FTaskSystem Tasks{1, 2};
 	FWindow Window{"Shared render primitives", {320, 240}, true};
 	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                         std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache"};
+	                         std::filesystem::absolute("scene-render-shader-cache")};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;
@@ -242,6 +242,131 @@ void AwaitBridge(FSceneRenderBridge& InBridge, FSceneHandle InHandle)
 	HYP_CHECK(InBridge.IsReady(InHandle));
 }
 
+std::vector<FRenderItem> CollectItems(FSceneFixture& InFixture)
+{
+	std::vector<FRenderItem> Result;
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              FRenderView View;
+		                                              View.CullingMode = ESceneCullingMode::None;
+		                                              Result = InFixture.Session->GetScene().Collect(View).Items;
+	                                              }));
+	return Result;
+}
+
+std::shared_ptr<FMaterialInstance> SharedSurface(FSceneFixture& InFixture, std::shared_ptr<const FModelAsset> InAsset)
+{
+	FModel Warm(InFixture.Session->GetScene(), InFixture.Session->GetResources(), InAsset);
+	AwaitModel(Warm);
+	const auto Surface = Warm.GetResource()->GetMaterial(0);
+	auto Instance = std::make_shared<FMaterialInstance>(Surface->GetCompiled()->Interface);
+	for (const auto& Parameter : Surface->GetSnapshot()->Overrides)
+	{
+		Instance->Set(Parameter.Name, Parameter.Value);
+	}
+	return Instance;
+}
+
+void CheckMaterialAtomicity(FSceneFixture& InFixture, FScene& InScene, FSceneRenderBridge& InBridge,
+                            FSceneHandle InFirst, FSceneHandle InSecond)
+{
+	const auto Before = CollectItems(InFixture);
+	auto First = *InScene.Find(InFirst);
+	First.World = Translation({-.5f, 0, 0});
+	InScene.Update(InFirst, First);
+	auto Second = *InScene.Find(InSecond);
+	Second.Surface.Overrides = {{"Pbr.BaseColorFactor", FMaterialValue::Uint(1)}};
+	InScene.Update(InSecond, Second);
+	bool bRejected{};
+	try
+	{
+		InBridge.Flush();
+	}
+	catch (const std::invalid_argument&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected && InScene.GetChanges().size() == 2);
+	const auto After = CollectItems(InFixture);
+	HYP_CHECK(Before.size() == After.size());
+	for (std::size_t Index = 0; Index < Before.size(); ++Index)
+	{
+		HYP_CHECK(Before[Index].State.Revision == After[Index].State.Revision);
+		HYP_CHECK(Before[Index].State.World.Values == After[Index].State.World.Values);
+	}
+	Second.Surface.Overrides.clear();
+	InScene.Update(InSecond, Second);
+	InBridge.Flush();
+	HYP_CHECK(InScene.GetChanges().empty());
+	const auto Recovered = CollectItems(InFixture);
+	HYP_CHECK(Recovered[0].State.Revision > Before[0].State.Revision);
+	// A delayed result for the old publication must not overwrite the new revision.
+	Before[0].Report({999999, 1, 1, Before[0].State.Revision, 1, "Forward", false, "old frame"});
+	HYP_CHECK(InBridge.GetDrawResults(InFirst)[0].Error.empty());
+}
+
+void CheckSharedMaterialPublication(FSceneFixture& InFixture)
+{
+	auto Asset = std::make_shared<const FModelAsset>(Quad());
+	auto Shared = SharedSurface(InFixture, Asset);
+	FScene Scene;
+	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
+	FSceneModel Left{"left", PrepareSceneModel(Asset)};
+	Left.World = Multiply(Translation({-.7f, 0, 0}), Scale({.4f, .4f, 1}));
+	Left.Surface.Instance = Shared;
+	FSceneModel Right = Left;
+	Right.Data = PrepareSceneModel(std::make_shared<const FModelAsset>(Quad()));
+	Right.World = Multiply(Translation({.7f, 0, 0}), Scale({.4f, .4f, 1}));
+	const auto A = Scene.Add(Left);
+	const auto B = Scene.Add(Right);
+	Bridge.Flush();
+	AwaitBridge(Bridge, A);
+	AwaitBridge(Bridge, B);
+	InFixture.Frame(2);
+	const auto Warm = InFixture.Session->GetResources().Statistics();
+	Shared->SetSemantic("Pbr.BaseColorFactor", FMaterialValue::Float(FVec4{1, 0, 0, 1}));
+	HYP_CHECK(Scene.GetChanges().empty()); // Material-only edits have no logical Scene revision.
+	Bridge.Flush();
+	AwaitBridge(Bridge, A);
+	AwaitBridge(Bridge, B);
+	{
+		const auto Items = CollectItems(InFixture);
+		HYP_CHECK(Items.size() == 2);
+		HYP_CHECK(Items[0].State.Surface->GetSnapshot() == Items[1].State.Surface->GetSnapshot());
+		HYP_CHECK(Items[0].State.Surface->GetSnapshot()->Revision == Shared->GetRevision());
+	}
+	const auto Image = InFixture.Frame(2);
+	Pixel(Image, 110, {1, 0, 0});
+	Pixel(Image, 210, {1, 0, 0});
+	const auto Changed = InFixture.Session->GetResources().Statistics();
+	HYP_CHECK(Changed.GeometryUploads == Warm.GeometryUploads);
+	HYP_CHECK(Changed.Materials.PipelinesCreated == Warm.Materials.PipelinesCreated);
+	HYP_CHECK(Changed.Materials.SetsCreated == Warm.Materials.SetsCreated);
+	CheckMaterialAtomicity(InFixture, Scene, Bridge, A, B);
+	Right.Material.BaseColor = FVec4{0, 0, 1, 1};
+	Right.Surface.Overrides = {{"Pbr.BaseColorFactor", FMaterialValue::Float(FVec4{1, 0, 0, 1})}};
+	Right.SectionSurfaces[0].Overrides = {{"Pbr.BaseColorFactor", FMaterialValue::Float(FVec4{0, 1, 0, 1})}};
+	Scene.Update(B, Right);
+	Bridge.Flush();
+	Pixel(InFixture.Frame(2), 210, {0, 1, 0}); // section > object > legacy override > instance.
+	Right.Surface = {};
+	Right.SectionSurfaces.clear();
+	Scene.Update(B, Right);
+	Scene.Remove(A);
+	Bridge.Flush();
+	Shared->SetSemantic("Pbr.BaseColorFactor", FMaterialValue::Float(FVec4{1, 1, 0, 1}));
+	Bridge.Flush();
+	Pixel(InFixture.Frame(1), 210, {0, 0, 1}); // Removed subscriptions cannot affect the inherited material.
+	Scene.Clear();
+	Bridge.Flush();
+	Bridge.Close();
+	Shared.reset();
+	Left = {};
+	Right = {};
+	InFixture.AwaitRetirement();
+}
+
 void CheckLogicalAttachment(FSceneFixture& InFixture)
 {
 	FScene Scene;
@@ -311,6 +436,7 @@ int main()
 		CheckGlobalBlend(Fixture);
 		CheckManyPrimitives(Fixture);
 		CheckLogicalAttachment(Fixture);
+		CheckSharedMaterialPublication(Fixture);
 		Fixture.Tasks.Wait(Fixture.Tasks.Dispatch({EDomain::Rhi, 0},
 		                                          [&]
 		                                          {

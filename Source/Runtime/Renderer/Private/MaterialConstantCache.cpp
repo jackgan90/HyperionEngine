@@ -1,0 +1,313 @@
+#include "Hyperion/Renderer/MaterialConstantCache.h"
+#include "Hyperion/Renderer/MaterialPacking.h"
+#include <algorithm>
+#include <map>
+#include <set>
+#include <thread>
+
+namespace Hyperion
+{
+namespace
+{
+struct FConstantKey
+{
+	EShaderFormat Format{};
+	std::uint32_t Size{};
+	std::vector<FShaderMember> Layout;
+	std::vector<std::string> Mapping;
+	std::vector<std::optional<FMaterialValue>> Values;
+	std::vector<std::pair<EMaterialScope, FMaterialScopeKey>> Scopes;
+	bool operator==(const FConstantKey&) const = default;
+};
+
+std::uint64_t HashKey(const FConstantKey& InKey)
+{
+	// Full structured equality follows every hash hit. The hash only selects a small candidate bucket.
+	std::uint64_t Hash = 14695981039346656037ULL;
+	const auto Add = [&](std::uint64_t InValue)
+	{
+		Hash = (Hash ^ InValue) * 1099511628211ULL;
+	};
+	Add(InKey.Size);
+	Add(static_cast<unsigned>(InKey.Format));
+	for (const auto& Member : InKey.Layout)
+	{
+		Add(Member.Offset);
+		Add(Member.Size);
+		Add(Member.Rows);
+		Add(Member.Columns);
+	}
+	for (const auto& Name : InKey.Mapping)
+	{
+		Add(Name.size());
+		for (const unsigned char Character : Name)
+		{
+			Add(Character);
+		}
+	}
+	for (const auto& [Scope, Key] : InKey.Scopes)
+	{
+		Add(static_cast<unsigned>(Scope));
+		Add(Key.Identity);
+		Add(Key.Revision);
+		for (const auto Qualifier : Key.Qualifiers)
+		{
+			Add(Qualifier);
+		}
+	}
+	return Hash;
+}
+
+struct FCacheEntry
+{
+	FConstantKey Key;
+	FBufferSlice Slice;
+	std::vector<std::weak_ptr<const void>> Owners;
+
+	bool IsExpired() const
+	{
+		return std::any_of(Owners.begin(), Owners.end(),
+		                   [](const auto& InOwner)
+		                   {
+			                   return InOwner.expired();
+		                   });
+	}
+};
+
+FCacheEntry MakeEntry(const FMaterialProgramBinding& InBinding, EShaderFormat InFormat,
+                      const FMaterialParameterSchema& InSchema, const FResolvedMaterialParameters& InParameters)
+{
+	FCacheEntry Result;
+	auto& Key = Result.Key;
+	Key.Format = InFormat;
+	Key.Size = InBinding.Resource.ByteSize;
+	std::uint32_t Dependencies{};
+	for (const auto& Member : InBinding.Members)
+	{
+		Key.Layout.push_back(Member.Layout);
+		const auto& Declaration = InSchema.GetParameters().at(Member.ParameterIndex);
+		Key.Mapping.push_back(Declaration.Name + std::string(1, '\0') + Declaration.Semantic);
+		Key.Values.push_back(InParameters.Values.at(Member.ParameterIndex));
+		Dependencies |= InParameters.Dependencies.at(Member.ParameterIndex);
+	}
+	for (std::size_t Index = 0; Index < MaterialScopeCount; ++Index)
+	{
+		if ((Dependencies & (1U << Index)) == 0)
+		{
+			continue;
+		}
+		const auto& Input = InParameters.Scopes[Index];
+		if (Input.Key.Identity == 0 || Input.Key.Revision == 0 || !Input.Lifetime)
+		{
+			throw std::invalid_argument("Material constant dependency requires an owned scope identity and revision");
+		}
+		Key.Scopes.push_back({static_cast<EMaterialScope>(Index), Input.Key});
+		Result.Owners.push_back(Input.Lifetime);
+	}
+	if (Result.Owners.empty())
+	{
+		Result.Owners.push_back(InParameters.Scopes[static_cast<std::size_t>(EMaterialScope::Material)].Lifetime);
+	}
+	return Result;
+}
+} // namespace
+
+struct FMaterialConstantCache::FImpl
+{
+	struct FPage
+	{
+		FBuffer Buffer;
+		std::uint32_t End{};
+		bool bTransient{};
+	};
+
+	IRHIDevice& Device;
+	std::thread::id Owner = std::this_thread::get_id();
+	std::uint32_t PageSize;
+	std::map<std::uint64_t, std::vector<FCacheEntry>> Entries;
+	std::vector<FPage> Pages;
+	FMaterialConstantStats Stats;
+
+	FImpl(IRHIDevice& InDevice, std::uint32_t InPageSize) : Device(InDevice), PageSize(InPageSize)
+	{
+	}
+
+	void CheckOwner() const
+	{
+		if (Owner != std::this_thread::get_id())
+		{
+			throw std::logic_error("Material constant cache requires its RHI owner");
+		}
+	}
+
+	FBufferSlice Publish(std::span<const std::byte> InData, bool bInTransient)
+	{
+		const auto Alignment = Device.GetCapabilities().ConstantAlignment;
+		const auto Extent = static_cast<std::uint32_t>((InData.size() + Alignment - 1) / Alignment * Alignment);
+		auto Page = std::find_if(Pages.begin(), Pages.end(),
+		                         [&](const FPage& InPage)
+		                         {
+			                         return (InPage.End == 0 || InPage.bTransient == bInTransient) &&
+			                                Extent <= PageSize - InPage.End;
+		                         });
+		if (Page == Pages.end())
+		{
+			Pages.push_back({Device.CreateBuffer({PageSize, BufferUsage(ERHIBufferUsage::Constant)}), 0, bInTransient});
+			Page = std::prev(Pages.end());
+			++Stats.PagesCreated;
+		}
+		Page->bTransient = bInTransient;
+		FBufferSlice Result = Device.PublishConstantSlice(Page->Buffer, Page->End, InData);
+		Page->End += Extent;
+		Stats.UploadBytes += InData.size();
+		return Result;
+	}
+
+	FBufferSlice Bind(const FMaterialProgramBinding& InBinding, EShaderFormat InFormat,
+	                  const FMaterialParameterSchema& InSchema, const FResolvedMaterialParameters& InParameters)
+	{
+		FCacheEntry Entry = MakeEntry(InBinding, InFormat, InSchema, InParameters);
+		auto& Bucket = Entries[HashKey(Entry.Key)];
+		for (const auto& Existing : Bucket)
+		{
+			if (!Existing.IsExpired() && Existing.Key == Entry.Key)
+			{
+				++Stats.Reuses;
+				return Existing.Slice;
+			}
+		}
+		bool bTransient = false;
+		for (const auto& [Scope, Key] : Entry.Key.Scopes)
+		{
+			bTransient |= Scope == EMaterialScope::Frame || Scope == EMaterialScope::Draw;
+			++Stats.ScopePacks[static_cast<std::size_t>(Scope)];
+		}
+		const auto Data = PackMaterialConstants(InBinding, InParameters.Values);
+		if (Data.size() > PageSize)
+		{
+			throw std::invalid_argument("Material constant block exceeds page capacity");
+		}
+		Entry.Slice = Publish(Data, bTransient);
+		++Stats.Packs;
+		Bucket.push_back(std::move(Entry));
+		return Bucket.back().Slice;
+	}
+};
+
+FMaterialConstantCache::FMaterialConstantCache(IRHIDevice& InDevice, std::uint32_t InPageSize)
+    : Impl(std::make_unique<FImpl>(InDevice, InPageSize))
+{
+	const auto Alignment = InDevice.GetCapabilities().ConstantAlignment;
+	if (Alignment == 0 || InPageSize == 0 || InPageSize % Alignment != 0)
+	{
+		throw std::invalid_argument("Invalid material constant page alignment or capacity");
+	}
+}
+
+FMaterialConstantCache::~FMaterialConstantCache() = default;
+
+std::vector<FConstantBinding> FMaterialConstantCache::Bind(const FCompiledMaterialPass& InPass,
+                                                           const FMaterialParameterSchema& InSchema,
+                                                           const FResolvedMaterialParameters& InParameters)
+{
+	Impl->CheckOwner();
+	std::vector<FConstantBinding> Result;
+	for (std::uint32_t Index = 0; Index < InPass.Bindings.size(); ++Index)
+	{
+		const auto& Binding = InPass.Bindings[Index];
+		if (Binding.Resource.Kind == EBindingKind::UniformBuffer)
+		{
+			Result.push_back({Index, Impl->Bind(Binding, InPass.Vertex.Format, InSchema, InParameters)});
+		}
+	}
+	return Result;
+}
+
+bool FMaterialConstantCache::Collect()
+{
+	Impl->CheckOwner();
+	for (auto Iterator = Impl->Entries.begin(); Iterator != Impl->Entries.end();)
+	{
+		std::erase_if(Iterator->second,
+		              [](const FCacheEntry& InEntry)
+		              {
+			              return InEntry.IsExpired();
+		              });
+		if (Iterator->second.empty())
+		{
+			Iterator = Impl->Entries.erase(Iterator);
+		}
+		else
+		{
+			++Iterator;
+		}
+	}
+	bool bKeptIdle = false;
+	std::erase_if(Impl->Pages,
+	              [&](FImpl::FPage& InPage)
+	              {
+		              if (InPage.Buffer.Payload.use_count() != 1)
+		              {
+			              return false;
+		              }
+		              if (bKeptIdle)
+		              {
+			              return true;
+		              }
+		              bKeptIdle = true;
+		              if (InPage.End != 0)
+		              {
+			              Impl->Device.ResetConstantBuffer(InPage.Buffer);
+			              InPage.End = 0;
+			              ++Impl->Stats.PagesReset;
+		              }
+		              return false;
+	              });
+	std::set<const IRHIBuffer*> UsedPages;
+	for (const auto& [Hash, Bucket] : Impl->Entries)
+	{
+		for (const auto& Entry : Bucket)
+		{
+			UsedPages.insert(Entry.Slice.Buffer.Payload.get());
+		}
+	}
+	for (const auto& Page : Impl->Pages)
+	{
+		// Live scopes will notify on retirement. Poll only pages whose CPU entries are gone but packets remain.
+		if (!UsedPages.contains(Page.Buffer.Payload.get()) && Page.Buffer.Payload.use_count() > 1)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void FMaterialConstantCache::Clear()
+{
+	Impl->CheckOwner();
+	Impl->Entries.clear();
+	Collect();
+}
+
+bool FMaterialConstantCache::CanRelease() const
+{
+	Impl->CheckOwner();
+	return std::all_of(Impl->Pages.begin(), Impl->Pages.end(),
+	                   [](const FImpl::FPage& InPage)
+	                   {
+		                   return InPage.Buffer.Payload.use_count() == 1;
+	                   });
+}
+
+FMaterialConstantStats FMaterialConstantCache::Statistics() const
+{
+	Impl->CheckOwner();
+	auto Result = Impl->Stats;
+	Result.LivePages = Impl->Pages.size();
+	for (const auto& [Hash, Bucket] : Impl->Entries)
+	{
+		Result.CachedBlocks += Bucket.size();
+	}
+	return Result;
+}
+} // namespace Hyperion

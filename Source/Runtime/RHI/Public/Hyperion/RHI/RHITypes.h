@@ -1,5 +1,7 @@
 #pragma once
 #include "Hyperion/Assets/Assets.h"
+#include "Hyperion/RHI/RHIBindings.h"
+#include "Hyperion/RHI/RHIGraphicsState.h"
 #include "Hyperion/RHI/RHIResources.h"
 #include "Hyperion/Shaders/ShaderCompiler.h"
 #include <optional>
@@ -11,7 +13,9 @@ enum class ERHIAddressMode
 {
 	Repeat,
 	Clamp,
-	Mirror
+	Mirror,
+	Border,
+	MirrorOnce
 };
 
 struct FSamplerDesc
@@ -22,6 +26,14 @@ struct FSamplerDesc
 	bool bMagLinear = true;
 	bool bMipLinear = true;
 	bool bMipmapped = true;
+	ERHIAddressMode W = ERHIAddressMode::Repeat;
+	float MipLodBias{};
+	float MinLod{};
+	float MaxLod = 3.402823466e+38F;
+	std::uint32_t MaxAnisotropy = 1;
+	std::array<float, 4> BorderColor{};
+	bool bComparison{};
+	bool operator==(const FSamplerDesc&) const = default;
 };
 
 struct FTextureMip
@@ -41,7 +53,16 @@ enum class EVertexFormat
 	Float2,
 	Float3,
 	Float4,
-	Unorm8x4
+	Unorm8x4,
+	Float,
+	Int,
+	Int2,
+	Int3,
+	Int4,
+	Uint,
+	Uint2,
+	Uint3,
+	Uint4
 };
 
 struct FVertexAttribute
@@ -50,6 +71,7 @@ struct FVertexAttribute
 	std::uint32_t SemanticIndex{};
 	EVertexFormat Format;
 	std::uint32_t Offset{};
+	bool operator==(const FVertexAttribute&) const = default;
 };
 
 struct FPipelineDesc
@@ -57,15 +79,11 @@ struct FPipelineDesc
 	FShaderArtifact Vertex;
 	FShaderArtifact Pixel;
 	std::vector<FVertexAttribute> Attributes;
-	bool bAlphaBlend{};
-	bool bTextured{};
-	bool bMaterialLayout{};
-	bool bSrgbTarget{};
-	bool bDepthTest{};
-	bool bDepthWrite{};
-	bool bCullBack{};
-	bool bFrontCounterClockwise = true;
-	std::array<FSamplerDesc, 5> Samplers;
+	FResourceBindingLayout Layout;
+	FGraphicsState State;
+	FGraphicsTarget Target;
+	ERHIPrimitiveTopology Topology = ERHIPrimitiveTopology::TriangleList;
+	std::uint32_t VertexStride{};
 };
 
 struct FRect
@@ -81,17 +99,14 @@ struct FDrawPacket
 	FPipeline Pipeline;
 	FBuffer Vertices;
 	FBuffer Indices;
-	FTexture Texture;
 	std::uint32_t VertexStride{};
 	std::uint32_t IndexCount{};
 	std::uint32_t FirstIndex{};
 	std::int32_t VertexOffset{};
-	FMat4 Constants;
 	FRect Scissor;
-	FBuffer MaterialConstants;
-	std::array<FTexture, 5> MaterialTextures;
-	// Material layout uses a 512-byte slice at a 256-byte aligned buffer offset.
-	std::uint64_t MaterialConstantOffset{};
+	FResourceBindingSet Bindings;
+	std::vector<FConstantBinding> ConstantBindings;
+	FGraphicsDynamicState DynamicState;
 };
 enum class EResourceState
 {
@@ -110,6 +125,14 @@ struct FPassCommands
 	bool bUseDepth{};
 	bool bSrgbTarget{};
 	bool bClearDepth{};
+	bool bUseStencil{};
+	bool bClearStencil{};
+	float ClearDepth = 1;
+	std::uint8_t ClearStencil{};
+	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
+	std::optional<FViewport> Viewport;
+	// View family builders set a new domain at each view boundary. Zero is the legacy full target domain.
+	std::uint64_t DepthDomain{};
 };
 
 struct FDeviceStats
@@ -119,6 +142,11 @@ struct FDeviceStats
 	std::uint64_t ValidationErrors{};
 	std::uint64_t SubmittedFrames{};
 	std::uint64_t GpuAllocationBytes{};
+	std::uint64_t DescriptorAllocations{};
+	std::uint64_t DescriptorCopies{};
+	std::uint64_t BindingSetsCreated{};
+	std::uint64_t PipelinesCreated{};
+	std::uint64_t ConstantBytesWritten{};
 };
 
 } // namespace Hyperion

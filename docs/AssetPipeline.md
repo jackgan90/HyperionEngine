@@ -70,7 +70,7 @@ Worker 请求依赖字节时通过现有 oneTBB resumable wait 挂起，因此�
 
 GPU 资源创建在 RHI 0 执行；一次模型图片上传使用一个批次和 fence，暂存资源保留到 fence 完成，不逐张纹理 `WaitIdle()`。模型仅在上传完成后提交绘制。帧内缓冲区与纹理由 draw packet 保留到帧 fence 完成。当前仍是单 graphics queue；顶点/索引采用不可变 upload heap buffer，尚无专用 copy queue。PSO 创建仍可能产生 CPU 帧抖动，异步 IO 不代表所有操作都没有开销。
 
-整个场景按帧批量创建常量 buffer，各 draw 使用独立的 512 字节片；后端检查偏移对齐与范围。buffer 不跨帧写入复用，沿用已有 fence 生命周期。已有 normals 和 tangents 的网格跳过方向生成。
+Renderer 的私有 PBR adapter 将导入材质转换为通用 definition/instance 和 semantic 资源角色；View/Object/Material/Scene 常量按目标反射打包，在相同 scope、布局和值下共享实际 GPU slice。发布区域不可覆写，旧 frame 通过 fence 保活；数值或材质替换不重新上传 geometry。五种 PBR 纹理是适配器约定，通用材质没有固定纹理数，详见 [Materials.md](Materials.md)。已有 normals 和 tangents 的网格跳过方向生成。
 
 启动配置读取、日志、shader source/cache 和保留的同步兼容函数尚未迁移到 IO 服务。新的模型加载、原生资产保存、Viewer 截图编码/写入和配置保存使用异步路径。截图 PNG 编码在 Worker，字节写入在 IO；退出前等待保存完成。
 

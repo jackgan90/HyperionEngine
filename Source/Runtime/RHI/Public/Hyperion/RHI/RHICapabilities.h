@@ -40,6 +40,18 @@ struct FRHICapabilities
 	std::uint32_t MaxRecordingContexts{};
 	std::uint32_t MaxSampledTextures{};
 	std::uint32_t MaxTextureDimension{};
+	std::uint32_t MaxRegisterSpaces{};
+	std::uint32_t MaxConstantBuffers{};
+	std::uint32_t MaxSamplers{};
+	std::uint32_t MaxReadBuffers{};
+	std::uint32_t ConstantAlignment{};
+	std::uint32_t MaxConstantRange{};
+	std::uint32_t ResourceDescriptorCapacity{};
+	std::uint32_t SamplerDescriptorCapacity{};
+	std::uint32_t MaxAnisotropy{};
+	bool bReadOnlyBuffers{};
+	bool bVertexTextures{};
+	bool bComparisonSamplers{};
 	std::array<FRHIFeatureSupport, static_cast<std::size_t>(ERHIFeature::Count)> Features{};
 
 	FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const;
@@ -52,6 +64,8 @@ struct FRHIDeviceDesc
 	// Required features must be enabled or creation fails. Optional features may stay disabled.
 	std::vector<ERHIFeature> RequiredFeatures;
 	std::vector<ERHIFeature> OptionalFeatures;
+	std::uint32_t ResourceDescriptorCapacity = 4096;
+	std::uint32_t SamplerDescriptorCapacity = 512;
 };
 
 std::string_view GetRHIBackendName(ERHIBackend InBackend);

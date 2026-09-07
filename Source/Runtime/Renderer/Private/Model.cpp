@@ -9,52 +9,58 @@ FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources,
 }
 
 FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources, const FSceneModel& InModel)
-    : Scene(InScene), Asset(InModel.Data->Asset), Data(InModel.Data), Resource(InResources.RequestModel(Asset)),
-      Instances(Data->Instances), World(InModel.World), Material(InModel.Material), bVisible(InModel.bVisible)
+    : FModel(InScene, InResources, InModel, false)
 {
-	std::vector<FRenderPrimitiveState> States;
-	States.reserve(Instances.size());
-	for (const auto& Instance : Instances)
+}
+
+FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources, const FSceneModel& InModel,
+               bool bInDeferred)
+    : Scene(InScene), Resources(InResources)
+{
+	Scene.RequireMain();
+	if (!InModel.Data || !InModel.Data->Asset)
 	{
-		FRenderPrimitiveState State;
-		State.Resource = Resource;
-		State.Section = Instance.Primitive;
-		State.World = Multiply(World, Instance.World);
-		State.bVisible = bVisible;
-		State.Material = Material;
-		State.LocalBounds = Data->PrimitiveBounds[Instance.Primitive];
-		States.push_back(std::move(State));
+		throw std::invalid_argument("A render model requires prepared CPU geometry");
 	}
-	Bindings = Scene.CreateBatch(std::move(States));
+	Data = InModel.Data;
+	Asset = Data->Asset;
+	Instances = Data->Instances;
+	Resource = Resources.RequestModel(Asset);
+	if (!bInDeferred)
+	{
+		FFrozenMaterials Frozen;
+		auto Prepared = PrepareState(InModel, Frozen);
+		std::vector<FRenderPrimitiveState> States;
+		for (const auto& Update : Prepared.Updates)
+		{
+			States.push_back(Update.State);
+		}
+		Bindings = Scene.CreateBatch(std::move(States));
+		CommitState(std::move(Prepared));
+	}
 }
 
 FModel::~FModel()
 {
-	// Bindings retain an inert mailbox after session shutdown; no borrowed Scene access.
 	FRenderBinding::RemoveBatch(Bindings);
 }
 
-FTaskHandle FModel::Publish()
+std::shared_ptr<const FMaterialSnapshot> FModel::FreezeSelection(const FSceneMaterialSelection& InSelection,
+                                                                 FFrozenMaterials& InFrozen)
 {
-	Scene.RequireMain();
-	std::vector<FRenderPrimitiveUpdate> Updates;
-	++Revision;
-	for (std::size_t Index = 0; Index < Bindings.size(); ++Index)
+	if (!InSelection.Instance)
 	{
-		FRenderPrimitiveState State;
-		State.Resource = Resource;
-		State.Section = Instances[Index].Primitive;
-		State.World = Multiply(World, Instances[Index].World);
-		State.Revision = Revision;
-		State.bVisible = bVisible;
-		State.Material = Material;
-		State.LocalBounds = Data->PrimitiveBounds[Instances[Index].Primitive];
-		Updates.push_back({Bindings[Index].GetHandle(), std::move(State)});
+		return InSelection.Snapshot;
 	}
-	return Scene.Update(std::move(Updates));
+	auto& Snapshot = InFrozen[InSelection.Instance.get()];
+	if (!Snapshot)
+	{
+		Snapshot = InSelection.Instance->Freeze();
+	}
+	return Snapshot;
 }
 
-FTaskHandle FModel::SetState(const FSceneModel& InModel)
+FModel::FPreparedUpdate FModel::PrepareState(const FSceneModel& InModel, FFrozenMaterials& InFrozen) const
 {
 	Scene.RequireMain();
 	if (InModel.Data != Data || !IsAffine(InModel.World))
@@ -62,31 +68,82 @@ FTaskHandle FModel::SetState(const FSceneModel& InModel)
 		throw std::invalid_argument("Model state requires the same prepared asset and an affine transform");
 	}
 	ValidateMaterialOverride(InModel.Material);
-	World = InModel.World;
-	bVisible = InModel.bVisible;
-	Material = InModel.Material;
-	return Publish();
+	ValidateSceneMaterialSelections(InModel);
+	FPreparedUpdate Result{InModel, Revision + 1, {}};
+	const auto ModelSnapshot = FreezeSelection(InModel.Surface, InFrozen);
+	for (std::size_t Index = 0; Index < Instances.size(); ++Index)
+	{
+		FRenderPrimitiveState State;
+		State.Resource = Resource;
+		State.Section = Instances[Index].Primitive;
+		State.World = Multiply(InModel.World, Instances[Index].World);
+		State.Revision = Result.Revision;
+		State.bVisible = InModel.bVisible;
+		State.Material = InModel.Material;
+		State.LocalBounds = Data->PrimitiveBounds[State.Section];
+		State.ObjectParameters = InModel.Surface.Overrides;
+		auto Snapshot = ModelSnapshot;
+		const auto Selection = InModel.SectionSurfaces.find(State.Section);
+		if (Selection != InModel.SectionSurfaces.end())
+		{
+			if (auto Selected = FreezeSelection(Selection->second, InFrozen))
+			{
+				Snapshot = std::move(Selected);
+			}
+			State.SectionParameters = Selection->second.Overrides;
+		}
+		if (Snapshot)
+		{
+			State.Surface = Resources.RequestMaterial(std::move(Snapshot));
+		}
+		ValidatePrimitiveState(State);
+		Result.Updates.push_back(
+		    {Bindings.empty() ? FRenderPrimitiveHandle{} : Bindings[Index].GetHandle(), std::move(State)});
+	}
+	return Result;
+}
+
+void FModel::CommitState(FPreparedUpdate InUpdate) noexcept
+{
+	Current = std::move(InUpdate.State);
+	Revision = InUpdate.Revision;
+}
+
+FTaskHandle FModel::SetState(const FSceneModel& InModel)
+{
+	FFrozenMaterials Frozen;
+	auto Prepared = PrepareState(InModel, Frozen);
+	auto Receipt = Scene.Update(Prepared.Updates);
+	if (!Receipt)
+	{
+		throw std::runtime_error("Model update was not admitted by its render scene");
+	}
+	CommitState(std::move(Prepared));
+	return Receipt;
 }
 
 FTaskHandle FModel::SetTransform(FMat4 InWorld)
 {
 	Scene.RequireMain();
-	World = InWorld;
-	return Publish();
+	auto State = Current;
+	State.World = InWorld;
+	return SetState(State);
 }
 
 FTaskHandle FModel::SetVisible(bool bInVisible)
 {
 	Scene.RequireMain();
-	bVisible = bInVisible;
-	return Publish();
+	auto State = Current;
+	State.bVisible = bInVisible;
+	return SetState(State);
 }
 
 FTaskHandle FModel::SetMaterial(FMaterialOverride InMaterial)
 {
 	Scene.RequireMain();
-	Material = std::move(InMaterial);
-	return Publish();
+	auto State = Current;
+	State.Material = std::move(InMaterial);
+	return SetState(State);
 }
 
 bool FModel::IsReady() const
@@ -122,6 +179,17 @@ std::string FModel::GetError() const
 		}
 	}
 	return {};
+}
+
+std::vector<FRenderDrawResult> FModel::GetDrawResults() const
+{
+	Scene.RequireMain();
+	std::vector<FRenderDrawResult> Results;
+	for (const auto& Binding : Bindings)
+	{
+		Results.push_back(Binding.GetLastDrawResult());
+	}
+	return Results;
 }
 
 std::size_t FModel::PrimitiveCount() const

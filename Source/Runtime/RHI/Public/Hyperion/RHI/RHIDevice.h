@@ -14,6 +14,37 @@ public:
 	virtual const FRHICapabilities& GetCapabilities() const noexcept = 0;
 	virtual FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const = 0;
 	virtual FBuffer CreateBuffer(std::span<const std::byte> InBytes) = 0;
+
+	virtual FBuffer CreateBuffer(const FBufferDesc&, std::span<const std::byte> = {})
+	{
+		throw std::runtime_error("Backend does not support typed buffers");
+	}
+
+	virtual FBufferSlice PublishConstantSlice(const FBuffer&, std::uint64_t, std::span<const std::byte>)
+	{
+		throw std::runtime_error("Backend does not support constant slices");
+	}
+
+	virtual void ResetConstantBuffer(const FBuffer&)
+	{
+		throw std::runtime_error("Backend does not support constant page reuse");
+	}
+
+	virtual FSampler CreateSampler(const FSamplerDesc&)
+	{
+		throw std::runtime_error("Backend does not support independent samplers");
+	}
+
+	virtual FResourceBindingLayout CreateBindingLayout(const FResourceBindingLayoutDesc&)
+	{
+		throw std::runtime_error("Backend does not support binding layouts");
+	}
+
+	virtual FResourceBindingSet CreateBindingSet(const FResourceBindingSetDesc&)
+	{
+		throw std::runtime_error("Backend does not support binding sets");
+	}
+
 	virtual FTexture CreateTexture(const FImage& InImage) = 0;
 
 	virtual std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc>)

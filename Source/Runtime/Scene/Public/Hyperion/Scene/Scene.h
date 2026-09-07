@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Materials/Material.h"
 #include "Hyperion/Scene/Model.h"
 #include <compare>
 #include <optional>
@@ -33,6 +34,14 @@ struct FSceneHandle
 	auto operator<=>(const FSceneHandle&) const = default;
 };
 
+struct FSceneMaterialSelection
+{
+	// Choose either a Main-owned editable instance or an already frozen snapshot; empty means inherited.
+	std::shared_ptr<FMaterialInstance> Instance;
+	std::shared_ptr<const FMaterialSnapshot> Snapshot;
+	FMaterialParameterValues Overrides;
+};
+
 struct FSceneModel
 {
 	std::string Name;
@@ -40,7 +49,11 @@ struct FSceneModel
 	FMat4 World = Identity();
 	bool bVisible = true;
 	FMaterialOverride Material;
+	FSceneMaterialSelection Surface;
+	std::map<std::uint32_t, FSceneMaterialSelection> SectionSurfaces;
 };
+
+void ValidateSceneMaterialSelections(const FSceneModel& InModel);
 
 struct FSceneChange
 {

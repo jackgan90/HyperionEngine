@@ -182,12 +182,31 @@ FRenderResourceDesc TestTriangle(FShaderCompiler& InCompiler)
 {
 	FRenderResourceDesc Desc;
 	FRenderMaterialDesc Material;
-	Material.bClipSpace = true;
-	Material.Pipeline.Vertex = InCompiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
-	Material.Pipeline.Pixel = InCompiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);
-	Material.Pipeline.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FVertex, Position)},
-	                                {"COLOR", 0, EVertexFormat::Float4, offsetof(FVertex, Color)},
-	                                {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FVertex, Uv)}};
+	FMaterialDescription Description;
+	Description.Name = "Fence retirement material";
+	FMaterialPass Pass;
+	Pass.Vertex = {"Gui.hlsl", "VSMain"};
+	Pass.Pixel = {"Gui.hlsl", "PSMain"};
+	Description.Passes.push_back(Pass);
+	auto Transform =
+	    DeclareMaterialSemantic("Transform", "Engine.Object.WorldViewProjection", *GetStandardMaterialSemantics());
+	Transform.Targets = {"DrawConstants.TransformMatrix"};
+	Description.Parameters.push_back(std::move(Transform));
+	FMaterialParameterDeclaration Texture;
+	Texture.Name = "FontTexture";
+	Texture.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
+	Texture.Default = FMaterialValue::FromTexture(std::make_shared<const FMaterialTextureSource>(
+	    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {255, 255, 255, 255}}}));
+	Description.Parameters.push_back(Texture);
+	FMaterialParameterDeclaration Sampler;
+	Sampler.Name = "FontSampler";
+	Sampler.Type = FMaterialParameterType::Resource(EMaterialValueKind::Sampler);
+	Sampler.Default = FMaterialValue::FromSampler({});
+	Description.Parameters.push_back(Sampler);
+	const auto Definition = std::make_shared<const FMaterialDefinition>(Description);
+	Material.Compiled = std::make_shared<const FCompiledMaterialDefinition>(
+	    CompileMaterialDefinition(InCompiler, Definition, EShaderFormat::Dxil));
+	Material.Surface = FMaterialInstance(Material.Compiled->Interface).Freeze();
 	const std::array<FVertex, 3> Vertices{
 	    {{{0, .5f, 0}, {1, 0, 0, 1}, {}}, {{-.5f, -.5f, 0}, {0, 1, 0, 1}, {}}, {{.5f, -.5f, 0}, {0, 0, 1, 1}, {}}}};
 	FRenderGeometryDesc Geometry;
@@ -195,17 +214,36 @@ FRenderResourceDesc TestTriangle(FShaderCompiler& InCompiler)
 	Geometry.Vertices.assign(Bytes.begin(), Bytes.end());
 	Geometry.Indices = {0, 1, 2};
 	Geometry.VertexStride = sizeof(FVertex);
+	Geometry.Attributes = {{"POSITION", 0, EVertexFormat::Float2, offsetof(FVertex, Position)},
+	                       {"COLOR", 0, EVertexFormat::Float4, offsetof(FVertex, Color)},
+	                       {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FVertex, Uv)}};
 	Desc.Geometries.push_back(std::move(Geometry));
 	Desc.Materials.push_back(std::move(Material));
 	Desc.Sections.push_back({0, 0, 0, 3});
 	return Desc;
 }
 
+std::weak_ptr<IRHISampler> GetSampler(const FResourceBindingSet& InBindings)
+{
+	const auto Native = std::dynamic_pointer_cast<FD3D12BindingSet>(InBindings.Payload);
+	for (const auto& Entry : Native->Description.Entries)
+	{
+		for (const auto& Value : Entry.Values)
+		{
+			if (const auto* Source = std::get_if<FSampler>(&Value))
+			{
+				return Source->Payload;
+			}
+		}
+	}
+	throw std::runtime_error("Missing sampler in retirement fixture");
+}
+
 void CheckPrimitiveFenceRetirement(FFrameFixture& InFixture)
 {
 	auto& Tasks = InFixture.Tasks;
 	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                         std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
+	                         std::filesystem::absolute("frame-failure-shader-cache"));
 	FRenderSession Session(Tasks, *InFixture.Device, Compiler);
 	auto Resource = Session.GetResources().Request(std::make_shared<const int>(1), 1, "fence-test",
 	                                               [&Compiler]
@@ -213,19 +251,35 @@ void CheckPrimitiveFenceRetirement(FFrameFixture& InFixture)
 		                                               return TestTriangle(Compiler);
 	                                               });
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-	while (Resource->GetStatus() == ERenderResourceStatus::Preparing && std::chrono::steady_clock::now() < Deadline)
+	while ((!Resource->GetMaterial(0) || Resource->GetMaterial(0)->GetStatus() != ERenderMaterialStatus::Ready) &&
+	       std::chrono::steady_clock::now() < Deadline)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	if (!Resource->GetError().empty())
+	{
+		throw std::runtime_error(Resource->GetError());
 	}
 	CheckCondition(Resource->GetStatus() == ERenderResourceStatus::Ready);
 	std::atomic_int Destroyed{};
 	FRenderPrimitiveState Initial;
 	Initial.Resource = Resource;
+	Initial.bClipSpace = true;
 	auto Binding = Session.GetScene().Create(std::move(Initial),
 	                                         [&Destroyed](FTaskSystem& InTasks)
 	                                         {
 		                                         return std::make_unique<FCountedPrimitive>(InTasks, Destroyed);
 	                                         });
+	Tasks.Wait(Session.GetScene().Flush());
+	FRenderGraph FailedGraph;
+	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+	                          [&]
+	                          {
+		                          FailedGraph = ClearGraph();
+		                          Session.Build(FailedGraph, {Identity(), {}, 64, 64});
+	                          }));
+	CheckSubmittedFailure(InFixture, FailedGraph); // Descriptor tables and CBV pages survive failed Present.
+	FailedGraph = {};
 	ComPtr<ID3D12Fence> Gate;
 	Check(InFixture.State->Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Gate)),
 	      "Create retirement gate");
@@ -250,26 +304,38 @@ void CheckPrimitiveFenceRetirement(FFrameFixture& InFixture)
 
 	bSkipPresent = true;
 	std::weak_ptr<IRHIBuffer> Vertices;
+	std::weak_ptr<IRHIBuffer> Constants;
+	std::weak_ptr<IRHIResourceBindingSet> Bindings;
+	std::weak_ptr<IRHISampler> Sampler;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 	                          [&]
 	                          {
 		                          auto Graph = ClearGraph();
 		                          CheckCondition(Session.Build(Graph, {Identity(), {}, 64, 64}) == 1);
-		                          Vertices = Graph.Compile()[1].Draws[0].Vertices.Payload;
+		                          const auto Draw = Graph.Compile()[1].Draws[0];
+		                          Vertices = Draw.Vertices.Payload;
+		                          Constants = Draw.ConstantBindings[0].Slice.Buffer.Payload;
+		                          Bindings = Draw.Bindings.Payload;
+		                          Sampler = GetSampler(Draw.Bindings);
 		                          ExecuteGraph(Graph, Tasks, *InFixture.Swapchain, {64, 64}, false, false);
 	                          }));
 	Tasks.Wait(Binding.Remove());
 	Resource.reset();
 	CheckCondition(Destroyed == 1 && !Vertices.expired());
+	CheckCondition(!Constants.expired() && !Bindings.expired() && !Sampler.expired());
 	CheckCondition(Session.GetResources().Statistics().Retired == 0);
 	CheckCondition(Gate->GetCompletedValue() == 0);
 	Gate->Signal(1);
-	while (Session.GetResources().Statistics().LiveResources && std::chrono::steady_clock::now() < Deadline)
+	while ((Session.GetResources().Statistics().LiveResources ||
+	        Session.GetResources().Statistics().Materials.LiveObjects) &&
+	       std::chrono::steady_clock::now() < Deadline)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 	CheckCondition(Vertices.expired() && Session.GetResources().Statistics().Retired == 1);
+	CheckCondition(Bindings.expired() && Sampler.expired());
 	Session.Close();
+	CheckCondition(Constants.expired());
 }
 } // namespace
 

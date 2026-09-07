@@ -140,6 +140,17 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		}
 		for (const auto& Instance : P.Instances)
 		{
+			if (P.Bridge)
+			{
+				for (const auto& Draw : P.Bridge->GetDrawResults(Instance.Handle))
+				{
+					if (!Draw.Error.empty())
+					{
+						InGui.TextWrapped(P.Scene.Find(Instance.Handle)->Name + " (view " + std::to_string(Draw.View) +
+						                  "): " + Draw.Error);
+					}
+				}
+			}
 			const auto Error = P.Bridge ? P.Bridge->GetError(Instance.Handle) : std::string{};
 			if (!Error.empty())
 			{

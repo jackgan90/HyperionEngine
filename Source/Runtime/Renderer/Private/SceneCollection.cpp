@@ -53,6 +53,7 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView)
 	}
 	std::sort(Slots.begin(), Slots.end()); // Preserve registry order, including transparent ties.
 	Stats.CandidatePrimitives = Slots.size();
+	Snapshot.Items.reserve(Slots.size());
 	for (const auto Slot : Slots)
 	{
 		const auto& Entry = Entries.at(Slot);
@@ -65,7 +66,20 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView)
 		Entry.Primitive->Collect(InView, Snapshot.Items);
 		for (auto Index = Start; Index < Snapshot.Items.size(); ++Index)
 		{
-			Snapshot.Items[Index].Primitive = Entry.Handle;
+			auto& Item = Snapshot.Items[Index];
+			Item.Primitive = Entry.Handle;
+			Item.Group = Entry.Group;
+			Item.Ordinal = Index - Start;
+			Item.Lifetime = Entry.Lifetime;
+			Item.EvaluationCache = Entry.EvaluationCache;
+			Item.Report = [Result = Entry.Result](FRenderDrawResult InResult)
+			{
+				std::lock_guard Lock(Result->Mutex);
+				if (InResult.Revision == Result->Status.Revision && InResult.Frame >= Result->LastDraw.Frame)
+				{
+					Result->LastDraw = std::move(InResult);
+				}
+			};
 		}
 	}
 	Stats.EmittedItems = Snapshot.Items.size();

@@ -1,4 +1,5 @@
 #pragma once
+#include "D3D12Descriptors.h"
 #include "D3D12Utilities.h"
 #include "Hyperion/RHI/RHICapabilities.h"
 #include <D3D12MemAlloc.h>
@@ -14,7 +15,15 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 {
 	ComPtr<ID3D12Device> Device;
 	ComPtr<D3D12MA::Allocator> Allocator;
-	ComPtr<ID3D12DescriptorHeap> Textures;
+	FD3D12DescriptorArena ResourceSources;
+	FD3D12DescriptorArena ResourceTables;
+	FD3D12DescriptorArena SamplerSources;
+	FD3D12DescriptorArena SamplerTables;
+	std::uint64_t DescriptorAllocations{};
+	std::uint64_t DescriptorCopies{};
+	std::uint64_t BindingSetsCreated{};
+	std::uint64_t PipelinesCreated{};
+	std::uint64_t ConstantBytesWritten{};
 	ComPtr<IDXGIFactory6> Factory;
 	ComPtr<IDXGIAdapter1> Adapter;
 	ComPtr<ID3D12CommandQueue> Queue;
@@ -52,43 +61,8 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	void CollectUploads();
 	std::shared_ptr<FD3D12Buffer> AllocateBuffer(std::uint64_t InBytes, D3D12_HEAP_TYPE InHeap,
 	                                             D3D12_RESOURCE_STATES InInitial);
-	void Immediate(const std::function<void(ID3D12GraphicsCommandList*)>& InRecord);
-	UINT TextureStep{};
-	std::mutex DescriptorsMutex;
-	std::array<bool, TextureCount> Occupied{};
-
-	UINT Reserve()
-	{
-		std::lock_guard Lock(DescriptorsMutex);
-		for (UINT I = 0; I < TextureCount; ++I)
-		{
-			if (!Occupied[I])
-			{
-				Occupied[I] = true;
-				return I;
-			}
-		}
-		throw std::runtime_error("Texture descriptor capacity exceeded");
-	}
-
-	void Release(UINT InI)
-	{
-		std::lock_guard Lock(DescriptorsMutex);
-		Occupied[InI] = false;
-	}
-
-	D3D12_CPU_DESCRIPTOR_HANDLE Cpu(UINT InI) const
-	{
-		auto H = Textures->GetCPUDescriptorHandleForHeapStart();
-		H.ptr += std::size_t(InI) * TextureStep;
-		return H;
-	}
-
-	D3D12_GPU_DESCRIPTOR_HANDLE Gpu(UINT InI) const
-	{
-		auto H = Textures->GetGPUDescriptorHandleForHeapStart();
-		H.ptr += std::uint64_t(InI) * TextureStep;
-		return H;
-	}
+	void Immediate(const std::function<void(ID3D12GraphicsCommandList*)>& InRecord,
+	               std::vector<ComPtr<ID3D12Resource>> InResources,
+	               std::vector<ComPtr<D3D12MA::Allocation>> InAllocations);
 };
 } // namespace Hyperion

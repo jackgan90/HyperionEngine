@@ -13,6 +13,13 @@ public:
 	const FRHICapabilities& GetCapabilities() const noexcept override;
 	FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const override;
 	FBuffer CreateBuffer(std::span<const std::byte> InBytes) override;
+	FBuffer CreateBuffer(const FBufferDesc& InDesc, std::span<const std::byte> InBytes = {}) override;
+	FBufferSlice PublishConstantSlice(const FBuffer& InBuffer, std::uint64_t InOffset,
+	                                  std::span<const std::byte> InBytes) override;
+	void ResetConstantBuffer(const FBuffer& InBuffer) override;
+	FSampler CreateSampler(const FSamplerDesc& InDesc) override;
+	FResourceBindingLayout CreateBindingLayout(const FResourceBindingLayoutDesc& InDesc) override;
+	FResourceBindingSet CreateBindingSet(const FResourceBindingSetDesc& InDesc) override;
 	FTexture CreateTexture(const FImage& InImage) override;
 	std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc> InTextures) override;
 	bool TexturesReady(std::span<const FTexture> InTextures) override;

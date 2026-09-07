@@ -13,6 +13,7 @@ void ValidateSceneModel(const FSceneModel& InModel)
 		throw std::invalid_argument("Scene transform must be finite and affine");
 	}
 	ValidateMaterialOverride(InModel.Material);
+	ValidateSceneMaterialSelections(InModel);
 }
 } // namespace
 

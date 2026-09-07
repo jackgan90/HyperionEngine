@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/RenderScene.h"
+#include "MaterialEvaluationCache.h"
 #include <map>
 #include <mutex>
 #include <set>
@@ -12,14 +13,19 @@ struct FRenderBindingResult
 	FRenderBindingStatus Status;
 	std::weak_ptr<const FRenderResource> Resource;
 	std::uint32_t Section{};
+	std::shared_ptr<const FRenderPrimitiveState> Admitted;
+	FRenderDrawResult LastDraw;
+	std::shared_ptr<const FMaterialParameterSchema> ValidatedSchema;
 	void Publish(ERenderPrimitiveStatus InState, std::uint64_t InRevision, std::string InError = {},
-	             std::shared_ptr<const FRenderResource> InResource = {}, std::uint32_t InSection = 0);
+	             std::shared_ptr<const FRenderResource> InResource = {}, std::uint32_t InSection = 0,
+	             std::shared_ptr<const FRenderPrimitiveState> InAdmitted = {});
 };
 
 class FRenderScene
 {
 public:
-	explicit FRenderScene(FTaskSystem& InTasks) : Tasks(InTasks)
+	explicit FRenderScene(FTaskSystem& InTasks, std::function<std::shared_ptr<const void>()> InScopeFactory)
+	    : Tasks(InTasks), ScopeFactory(std::move(InScopeFactory))
 	{
 		Tasks.Require({EDomain::Render});
 	}
@@ -39,9 +45,12 @@ private:
 		std::shared_ptr<FRenderBindingResult> Result;
 		std::uint64_t Group{};
 		FBounds Bounds;
+		std::shared_ptr<const void> Lifetime;
+		std::shared_ptr<FMaterialEvaluationCache> EvaluationCache = std::make_shared<FMaterialEvaluationCache>();
 	};
 
 	FTaskSystem& Tasks;
+	std::function<std::shared_ptr<const void>()> ScopeFactory;
 	std::map<std::uint32_t, FEntry> Entries;
 	std::map<std::uint64_t, std::set<std::uint32_t>> Groups;
 	std::set<std::uint64_t> DirtyGroups;

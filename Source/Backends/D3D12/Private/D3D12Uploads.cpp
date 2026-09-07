@@ -94,14 +94,16 @@ std::vector<FTexture> FD3D12RHIDevice::CreateTexturesAsync(std::span<const FText
 		}
 		Upload->Resource->Unmap(0, nullptr);
 		Transition(Batch.List.Get(), Texture->Resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
-		           D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-		Texture->Slot = P.Reserve();
+		           D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		D3D12_SHADER_RESOURCE_VIEW_DESC View{};
 		View.Format = Desc.Format;
 		View.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 		View.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		View.Texture2D.MipLevels = Desc.MipLevels;
-		P.Device->CreateShaderResourceView(Texture->Resource.Get(), &View, P.Cpu(Texture->Slot));
+		Texture->SourceDescriptor = P.ResourceSources.Reserve(1);
+		P.Device->CreateShaderResourceView(Texture->Resource.Get(), &View,
+		                                   P.ResourceSources.Cpu(Texture->SourceDescriptor.Offset));
+		++P.DescriptorAllocations;
 		Batch.Resources.push_back(Upload->Resource);
 		Batch.Allocations.push_back(Upload->Allocation);
 		Batch.Resources.push_back(Texture->Resource);

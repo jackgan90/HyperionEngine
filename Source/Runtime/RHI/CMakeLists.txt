@@ -1,3 +1,3 @@
-add_library(hyperion_rhi STATIC Private/RHIBackend.cpp)
+add_library(hyperion_rhi STATIC Private/RHIBackend.cpp Private/RHIPipeline.cpp)
 hyp_module(hyperion_rhi)
 target_link_libraries(hyperion_rhi PUBLIC hyperion_assets hyperion_shaders hyperion_platform)

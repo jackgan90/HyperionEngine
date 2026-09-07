@@ -88,4 +88,4 @@ python tools/CheckStyle.py --naming --build-dir out/build/debug
 
 CTest 的 `code_style_paths` 检查自有文件名和 include 路径的准确大小写，不需要 LLVM；完整格式/命名检查由上述命令显式运行。
 
-clang-tidy 尚无独立的类模板前缀配置，`.clang-tidy` 对 `TAsyncState`、`TAsyncResult`、`TAssetRequest` 设置了精确命名例外，以保留仓库要求的 T 前缀。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。
+clang-tidy 尚无独立的类模板前缀配置，`.clang-tidy` 对 `TAsyncState`、`TAsyncResult`、`TAssetRequest`、`TMaterialGpuEntry` 设置了精确命名例外，以保留仓库要求的 T 前缀。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。

@@ -11,7 +11,7 @@ CheckOptions:
   readability-identifier-naming.AbstractClassPrefix: I
   readability-identifier-naming.StructCase: CamelCase
   readability-identifier-naming.StructPrefix: F
-  readability-identifier-naming.StructIgnoredRegexp: '^TAsyncState$'
+  readability-identifier-naming.StructIgnoredRegexp: '^(TAsyncState|TMaterialGpuEntry)$'
   readability-identifier-naming.EnumCase: CamelCase
   readability-identifier-naming.EnumPrefix: E
   readability-identifier-naming.EnumConstantCase: CamelCase

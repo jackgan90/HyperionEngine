@@ -1,16 +1,8 @@
-cbuffer ModelConstants : register(b0)
-{
-	column_major float4x4 World;
-	column_major float4x4 ViewProjection;
-	column_major float4x4 NormalTransform;
-	float4 CameraPosition;
-	float4 BaseColorFactor;
-	float4 EmissiveAndNormal;
-	float4 Pbr;
-	float4 Modes;
-	float4 UvSets;
-	float4 Extra;
-};
+#define HYP_MATERIAL_VIEW_V1
+#define HYP_MATERIAL_OBJECT_V1
+#define HYP_MATERIAL_SURFACE_V1
+#define HYP_MATERIAL_SCENE_V1
+#include "MaterialBlocks.hlsli"
 
 Texture2D BaseColorTexture : register(t0);
 Texture2D MetallicRoughnessTexture : register(t1);
@@ -50,8 +42,8 @@ FVertexOutput VSMain(FVertexInput InInput)
 	float4 Position = mul(World, float4(InInput.Position, 1));
 	Output.Position = mul(ViewProjection, Position);
 	Output.WorldPosition = Position.xyz;
-	Output.Normal = mul((float3x3)NormalTransform, InInput.Normal);
-	Output.Tangent = float4(mul((float3x3)World, InInput.Tangent.xyz), InInput.Tangent.w * Modes.w);
+	Output.Normal = mul((float3x3)Normal, InInput.Normal);
+	Output.Tangent = float4(mul((float3x3)World, InInput.Tangent.xyz), InInput.Tangent.w * OrientationSign);
 	Output.Color = InInput.Color;
 	Output.Uv0 = InInput.Uv0;
 	Output.Uv1 = InInput.Uv1;
@@ -65,54 +57,54 @@ float2 SelectUv(FVertexOutput InInput, float InSet)
 
 float4 PSMain(FVertexOutput InInput, bool bInFront : SV_IsFrontFace) : SV_Target0
 {
-	float4 Base =
-	    BaseColorFactor * InInput.Color * BaseColorTexture.Sample(BaseColorSampler, SelectUv(InInput, UvSets.x));
-	if (Modes.x > .5 && Modes.x < 1.5)
+	float4 Base = BaseColor * InInput.Color * BaseColorTexture.Sample(BaseColorSampler, SelectUv(InInput, BaseColorUv));
+	if (AlphaMode == 1)
 	{
-		clip(Base.a - Pbr.w);
+		clip(Base.a - AlphaCutoff);
 	}
-	float Alpha = Modes.x > 1.5 ? Base.a : 1;
-	if (Modes.z > .5)
+	float Alpha = AlphaMode == 2 ? Base.a : 1;
+	if (bUnlit)
 	{
 		return float4(Base.rgb, Alpha);
 	}
 	float3 N = normalize(InInput.Normal);
-	if (Modes.y > .5 && !bInFront)
+	if (bDoubleSided && !bInFront)
 	{
 		N = -N;
 	}
-	if (Extra.y > .5)
+	if (bHasNormal)
 	{
 		float3 T = normalize(InInput.Tangent.xyz - N * dot(N, InInput.Tangent.xyz));
 		float3 B = cross(N, T) * InInput.Tangent.w;
-		float3 Mapped = NormalTexture.Sample(NormalSampler, SelectUv(InInput, UvSets.z)).xyz * 2 - 1;
-		Mapped.xy *= EmissiveAndNormal.w;
+		float3 Mapped = NormalTexture.Sample(NormalSampler, SelectUv(InInput, NormalUv)).xyz * 2 - 1;
+		Mapped.xy *= NormalScale;
 		N = normalize(T * Mapped.x + B * Mapped.y + N * Mapped.z);
 	}
-	float4 Mr = MetallicRoughnessTexture.Sample(MetallicRoughnessSampler, SelectUv(InInput, UvSets.y));
-	float Metallic = saturate(Pbr.x * Mr.b);
-	float Roughness = clamp(Pbr.y * Mr.g, .045, 1);
+	float4 Mr = MetallicRoughnessTexture.Sample(MetallicRoughnessSampler, SelectUv(InInput, MetallicRoughnessUv));
+	float SurfaceMetallic = saturate(Metallic * Mr.b);
+	float SurfaceRoughness = clamp(Roughness * Mr.g, .045, 1);
 	float3 V = normalize(CameraPosition.xyz - InInput.WorldPosition);
-	float3 L = normalize(float3(-.45, .8, .65));
+	float3 L = MainLightDirection;
 	float3 H = normalize(V + L);
 	float Nl = saturate(dot(N, L));
 	float Nv = max(saturate(dot(N, V)), .0001);
 	float Nh = saturate(dot(N, H));
 	float Vh = saturate(dot(V, H));
-	float A = Roughness * Roughness;
+	float A = SurfaceRoughness * SurfaceRoughness;
 	float A2 = A * A;
 	float Denominator = Nh * Nh * (A2 - 1) + 1;
 	float Distribution = A2 / max(3.14159265 * Denominator * Denominator, .000001);
 	float VisibilityV = 2 * Nv / max(Nv + sqrt(A2 + (1 - A2) * Nv * Nv), .0001);
 	float VisibilityL = 2 * Nl / max(Nl + sqrt(A2 + (1 - A2) * Nl * Nl), .0001);
-	float3 F0 = lerp(float3(.04, .04, .04), Base.rgb, Metallic);
+	float3 F0 = lerp(float3(.04, .04, .04), Base.rgb, SurfaceMetallic);
 	float3 Fresnel = F0 + (1 - F0) * pow(1 - Vh, 5);
 	float3 Specular = Distribution * VisibilityV * VisibilityL * Fresnel / max(4 * Nv * Nl, .0001);
-	float3 Diffuse = (1 - Fresnel) * (1 - Metallic) * Base.rgb / 3.14159265;
-	float Occlusion = lerp(1, OcclusionTexture.Sample(OcclusionSampler, SelectUv(InInput, UvSets.w)).r, Pbr.z);
-	float3 Ambient = (Base.rgb * (1 - Metallic) + F0 * (.7 - .4 * Roughness)) * float3(.22, .25, .3) * Occlusion;
-	float3 Emissive = EmissiveAndNormal.xyz * EmissiveTexture.Sample(EmissiveSampler, SelectUv(InInput, Extra.x)).rgb;
-	float3 Color = (Diffuse + Specular) * float3(3, 2.85, 2.7) * Nl + Ambient + Emissive;
+	float3 Diffuse = (1 - Fresnel) * (1 - SurfaceMetallic) * Base.rgb / 3.14159265;
+	float Occlusion =
+	    lerp(1, OcclusionTexture.Sample(OcclusionSampler, SelectUv(InInput, OcclusionUv)).r, OcclusionStrength);
+	float3 Ambient = (Base.rgb * (1 - SurfaceMetallic) + F0 * (.7 - .4 * SurfaceRoughness)) * AmbientColor * Occlusion;
+	float3 SurfaceEmissive = Emissive * EmissiveTexture.Sample(EmissiveSampler, SelectUv(InInput, EmissiveUv)).rgb;
+	float3 Color = (Diffuse + Specular) * MainLightColor * Nl + Ambient + SurfaceEmissive;
 	Color = Color / (1 + Color);
 	return float4(Color, Alpha);
 }

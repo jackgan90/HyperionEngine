@@ -28,9 +28,55 @@ class IRHIRecordedList : public IRHIResource
 {
 };
 
+class IRHISampler : public IRHIResource
+{
+};
+
+class IRHIResourceBindingLayout : public IRHIResource
+{
+};
+
+class IRHIResourceBindingSet : public IRHIResource
+{
+};
+
+struct FSampler
+{
+	std::shared_ptr<IRHISampler> Payload;
+	bool operator==(const FSampler&) const = default;
+
+	explicit operator bool() const
+	{
+		return bool(Payload);
+	}
+};
+
+struct FResourceBindingLayout
+{
+	std::shared_ptr<IRHIResourceBindingLayout> Payload;
+	bool operator==(const FResourceBindingLayout&) const = default;
+
+	explicit operator bool() const
+	{
+		return bool(Payload);
+	}
+};
+
+struct FResourceBindingSet
+{
+	std::shared_ptr<IRHIResourceBindingSet> Payload;
+	bool operator==(const FResourceBindingSet&) const = default;
+
+	explicit operator bool() const
+	{
+		return bool(Payload);
+	}
+};
+
 struct FBuffer
 {
 	std::shared_ptr<IRHIBuffer> Payload;
+	bool operator==(const FBuffer&) const = default;
 
 	explicit operator bool() const
 	{
@@ -41,6 +87,7 @@ struct FBuffer
 struct FTexture
 {
 	std::shared_ptr<IRHITexture> Payload;
+	bool operator==(const FTexture&) const = default;
 
 	explicit operator bool() const
 	{
@@ -51,6 +98,7 @@ struct FTexture
 struct FPipeline
 {
 	std::shared_ptr<IRHIPipeline> Payload;
+	bool operator==(const FPipeline&) const = default;
 
 	explicit operator bool() const
 	{

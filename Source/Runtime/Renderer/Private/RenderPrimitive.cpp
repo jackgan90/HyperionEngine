@@ -44,6 +44,27 @@ FBounds IRenderPrimitive::GetWorldBounds() const
 FBounds FStaticMeshRenderPrimitive::GetWorldBounds() const
 {
 	const auto& Current = GetState();
+	if (Current.bClipSpace)
+	{
+		return {};
+	}
+	auto Surface = Current.Surface;
+	if (!Surface && Current.Resource)
+	{
+		Surface = Current.Resource->GetMaterial(Current.Section);
+	}
+	if (Surface && !Current.bConservativeBounds)
+	{
+		const auto& Passes = Surface->GetSnapshot()->Definition->GetDescription().Passes;
+		if (std::any_of(Passes.begin(), Passes.end(),
+		                [](const auto& InPass)
+		                {
+			                return InPass.bRequiresConservativeBounds;
+		                }))
+		{
+			return {};
+		}
+	}
 	if (!Current.Resource)
 	{
 		return TransformBounds(Current.LocalBounds, Current.World);
@@ -54,11 +75,8 @@ FBounds FStaticMeshRenderPrimitive::GetWorldBounds() const
 		return {};
 	}
 	const auto& Section = Desc->Sections[Current.Section];
-	return Desc->Materials[Section.Material].bClipSpace
-	           ? FBounds{}
-	           : TransformBounds(IsUsable(Current.LocalBounds) ? Current.LocalBounds
-	                                                           : Desc->Geometries[Section.Geometry].Bounds,
-	                             Current.World);
+	return TransformBounds(
+	    IsUsable(Current.LocalBounds) ? Current.LocalBounds : Desc->Geometries[Section.Geometry].Bounds, Current.World);
 }
 
 void FStaticMeshRenderPrimitive::Collect(const FRenderView&, std::vector<FRenderItem>& OutItems) const
@@ -66,7 +84,10 @@ void FStaticMeshRenderPrimitive::Collect(const FRenderView&, std::vector<FRender
 	const auto& PrimitiveState = GetState();
 	if (PrimitiveState.bVisible)
 	{
-		OutItems.push_back({PrimitiveState, {}});
+		FRenderItem Item;
+		Item.State = PrimitiveState;
+		Item.LocalItemId = 0;
+		OutItems.push_back(std::move(Item));
 	}
 }
 
@@ -78,6 +99,29 @@ void ValidatePrimitiveState(const FRenderPrimitiveState& InState)
 		if (Description && InState.Section >= Description->Sections.size())
 		{
 			throw std::invalid_argument("Invalid primitive section");
+		}
+	}
+	auto Surface = InState.Surface;
+	if (!Surface && InState.Resource)
+	{
+		Surface = InState.Resource->GetMaterial(InState.Section);
+	}
+	if (Surface && Surface->GetCompiled())
+	{
+		auto Snapshot = *Surface->GetSnapshot();
+		Snapshot.Schema = Surface->GetCompiled()->Interface.Schema;
+		const std::array<std::size_t, 0> NoRequiredParameters{};
+		ResolveMaterialParameters(Snapshot, {}, GetPrimitiveMaterialOverrides(InState, *Snapshot.Schema), {},
+		                          NoRequiredParameters);
+	}
+	else
+	{
+		for (const auto* Level : {&InState.ObjectParameters, &InState.SectionParameters})
+		{
+			for (const auto& Override : *Level)
+			{
+				Override.Value.Validate();
+			}
 		}
 	}
 	if (!InState.Revision || !std::all_of(InState.World.Values.begin(), InState.World.Values.end(),

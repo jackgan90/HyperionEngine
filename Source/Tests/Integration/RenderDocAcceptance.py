@@ -57,8 +57,10 @@ def verify_capture(document, experiment):
         elif name == 'ID3D12CommandQueue::ExecuteCommandLists':
             for submitted_list in node.findall("array[@name='ppCommandLists']/ResourceId"):
                 submitted.update(recorded.get(submitted_list.text, {}))
-    scene = 'Scene 0'  # Both scene producers submit through the runtime render session.
-    assert submitted[scene] > 0, f'{experiment}: missing submitted scene draws inside {scene!r}'
+    # Session/frame/family/view/usage/segment marker, distinct from GUI and arbitrary events.
+    scene_draws = sum(count for marker, count in submitted.items()
+                      if re.fullmatch(r'Scene [1-9]\d*/[1-9]\d*/[1-9]\d*/[1-9]\d*/Forward/\d+', marker))
+    assert scene_draws > 0, f'{experiment}: missing submitted session scene draws'
     assert submitted['Debug UI'] > 0, f'{experiment}: missing submitted GUI draws'
     assert any('Present' in name for name in chunks), f'{experiment}: missing Present'
     assert any('CreateGraphicsPipeline' in name for name in chunks), f'{experiment}: missing pipeline'

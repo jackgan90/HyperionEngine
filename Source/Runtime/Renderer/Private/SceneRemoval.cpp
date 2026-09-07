@@ -80,7 +80,11 @@ FTaskHandle FRenderBinding::RemoveBatch(std::span<FRenderBinding> InBindings)
 		                                  });
 		for (const auto& [Handle, Result] : Removals)
 		{
-			Queue.Active[Handle.Slot] = false;
+			if (Handle.Scene == Queue.Identity && Handle.Slot < Queue.Active.size() &&
+			    Queue.Generations[Handle.Slot] == Handle.Generation)
+			{
+				Queue.Active[Handle.Slot] = false;
+			}
 		}
 	}
 	for (auto& Binding : InBindings)

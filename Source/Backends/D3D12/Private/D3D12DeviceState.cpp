@@ -32,7 +32,9 @@ std::uint64_t FD3D12DeviceState::Signal()
 void FD3D12DeviceState::Idle()
 {
 	Wait(Signal());
-	CollectUploads();
+	// This fence follows every submitted upload, including batches whose own Signal failed.
+	Uploads.clear();
+	Submissions.clear();
 }
 
 void FD3D12DeviceState::CollectUploads()
@@ -64,17 +66,26 @@ std::shared_ptr<FD3D12Buffer> FD3D12DeviceState::AllocateBuffer(std::uint64_t In
 	return R;
 }
 
-void FD3D12DeviceState::Immediate(const std::function<void(ID3D12GraphicsCommandList*)>& InRecord)
+void FD3D12DeviceState::Immediate(const std::function<void(ID3D12GraphicsCommandList*)>& InRecord,
+                                  std::vector<ComPtr<ID3D12Resource>> InResources,
+                                  std::vector<ComPtr<D3D12MA::Allocation>> InAllocations)
 {
-	ComPtr<ID3D12CommandAllocator> A;
-	ComPtr<ID3D12GraphicsCommandList> L;
-	Check(Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&A)), "Upload allocator");
-	Check(Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, A.Get(), nullptr, IID_PPV_ARGS(&L)),
+	FUploadBatch Batch;
+	Batch.Resources = std::move(InResources);
+	Batch.Allocations = std::move(InAllocations);
+	Check(Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&Batch.Allocator)),
+	      "Upload allocator");
+	Check(Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Batch.Allocator.Get(), nullptr,
+	                                IID_PPV_ARGS(&Batch.List)),
 	      "Upload list");
-	InRecord(L.Get());
-	Check(L->Close(), "Close upload list");
-	ID3D12CommandList* Lists[] = {L.Get()};
+	InRecord(Batch.List.Get());
+	Check(Batch.List->Close(), "Close upload list");
+	Uploads.push_back(std::move(Batch));
+	auto& SubmittedUpload = Uploads.back();
+	ID3D12CommandList* Lists[] = {SubmittedUpload.List.Get()};
 	Queue->ExecuteCommandLists(1, Lists);
-	Wait(Signal());
+	SubmittedUpload.FenceValue = Signal();
+	Wait(SubmittedUpload.FenceValue);
+	CollectUploads();
 }
 } // namespace Hyperion

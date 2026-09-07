@@ -8,6 +8,78 @@ namespace Hyperion
 {
 namespace
 {
+struct FAttachmentInitialization
+{
+	bool bFull{};
+	std::vector<FViewport> Regions;
+
+	void Use(const std::optional<FViewport>& InViewport, bool bInInitialize, const char* InName)
+	{
+		if (bInInitialize)
+		{
+			if (InViewport)
+			{
+				Regions.push_back(*InViewport);
+			}
+			else
+			{
+				bFull = true;
+			}
+			return;
+		}
+		if (bFull)
+		{
+			return;
+		}
+		if (InViewport && std::any_of(Regions.begin(), Regions.end(),
+		                              [&](const FViewport& InRegion)
+		                              {
+			                              return InRegion.X <= InViewport->X && InRegion.Y <= InViewport->Y &&
+			                                     InRegion.X + InRegion.Width >= InViewport->X + InViewport->Width &&
+			                                     InRegion.Y + InRegion.Height >= InViewport->Y + InViewport->Height;
+		                              }))
+		{
+			return;
+		}
+		throw std::runtime_error(std::string("Graph loads undefined ") + InName);
+	}
+};
+
+struct FGraphAttachments
+{
+	FAttachmentInitialization Color;
+	FAttachmentInitialization Depth;
+	FAttachmentInitialization Stencil;
+	std::optional<std::pair<std::uint64_t, ERHIDepthFormat>> DepthOwner;
+
+	void Validate(const FColorPass& InPass)
+	{
+		const auto& Commands = InPass.Commands;
+		if ((Commands.bClearDepth && !Commands.bUseDepth) || (Commands.bClearStencil && !Commands.bUseStencil) ||
+		    (Commands.bUseDepth && Commands.DepthFormat == ERHIDepthFormat::None) ||
+		    (Commands.bUseStencil && Commands.DepthFormat != ERHIDepthFormat::D32S8))
+		{
+			throw std::runtime_error("Invalid graph depth/stencil attachment or clear");
+		}
+		const auto Key = std::make_pair(Commands.DepthDomain, Commands.DepthFormat);
+		if ((Commands.bUseDepth || Commands.bUseStencil) && DepthOwner != Key)
+		{
+			Depth = {};
+			Stencil = {};
+			DepthOwner = Key;
+		}
+		if (Commands.bUseDepth)
+		{
+			Depth.Use(Commands.Viewport, Commands.bClearDepth, "depth");
+		}
+		if (Commands.bUseStencil)
+		{
+			Stencil.Use(Commands.Viewport, Commands.bClearStencil, "stencil");
+		}
+		Color.Use(Commands.Viewport, InPass.Load != EColorLoad::Load, "color contents");
+	}
+};
+
 void JoinRecordings(FTaskSystem& InTasks, std::span<const FTaskHandle> InRecordings, std::exception_ptr& OutError)
 {
 	for (const auto& Task : InRecordings)
@@ -67,8 +139,7 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 	}
 	std::vector<FPassCommands> Result;
 	std::vector<bool> Visited(Count);
-	bool bInitialized = false;
-	bool bDepthInitialized = false;
+	FGraphAttachments Attachments;
 	while (Result.size() < Count)
 	{
 		bool bProgress = false;
@@ -83,22 +154,7 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 				continue;
 			}
 			const auto& Pass = Passes[I];
-			if (Pass.Commands.bClearDepth && !Pass.Commands.bUseDepth)
-			{
-				throw std::runtime_error("Depth clear requires a depth target");
-			}
-			if (Pass.Commands.bUseDepth)
-			{
-				if (!bDepthInitialized && !Pass.Commands.bClearDepth)
-				{
-					throw std::runtime_error("Graph loads undefined depth");
-				}
-				bDepthInitialized = true;
-			}
-			if (Pass.Load == EColorLoad::Load && !bInitialized)
-			{
-				throw std::runtime_error("Graph loads undefined color contents");
-			}
+			Attachments.Validate(Pass);
 			auto Commands = Pass.Commands;
 			Commands.bClear = Pass.Load == EColorLoad::Clear;
 			if (Result.empty())
@@ -107,7 +163,6 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 				Commands.TransitionTo = EResourceState::RenderTarget;
 			}
 			Result.push_back(std::move(Commands));
-			bInitialized = true;
 			Visited[I] = true;
 			bProgress = true;
 		}

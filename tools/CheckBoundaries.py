@@ -54,7 +54,7 @@ for path in SOURCE.rglob('*'):
                 bad.append(f'{prefix}: backend providers may only be selected by applications')
             if owner.is_relative_to(SOURCE / 'Runtime') and dependency.is_relative_to(SOURCE / 'Plugins'):
                 bad.append(f'{prefix}: Runtime must not depend on experiment plugins')
-            if owner.name in ('Core', 'Math', 'Reflection', 'Tasks', 'Plugins', 'Config', 'Platform', 'Assets', 'Scene', 'Animation') and dependency.name in ('RHI', 'Renderer'):
+            if owner.name in ('Core', 'Math', 'Reflection', 'Tasks', 'Plugins', 'Config', 'Platform', 'Assets', 'Materials', 'Scene', 'Animation') and dependency.name in ('RHI', 'Renderer'):
                 bad.append(f'{prefix}: data/foundation module must not depend on rendering')
         elif '"' in text:
             resolved = (path.parent / name).resolve()
@@ -63,6 +63,24 @@ for path in SOURCE.rglob('*'):
                 continue
             if not owner or not resolved.is_relative_to(owner / 'Private') or not resolved.is_file() or path.is_relative_to(owner / 'Public'):
                 bad.append(f'{prefix}: private header crosses a module boundary: {name}')
+
+targets = {target: (folder, dependencies) for folder, (target, dependencies) in modules.items()}
+for target in ('hyperion_scene', 'hyperion_materials'):
+    pending = [target]
+    visited = set()
+    while pending:
+        dependency = pending.pop()
+        if dependency in visited or dependency not in targets:
+            continue
+        visited.add(dependency)
+        folder, dependencies = targets[dependency]
+        if folder.name in ('RHI', 'Renderer') or folder.is_relative_to(SOURCE / 'Backends'):
+            bad.append(f'{target}: transitive rendering dependency on {dependency}')
+        pending.extend(dependencies)
+if 'hyperion_materials' in targets:
+    unexpected = targets['hyperion_materials'][1] - {'hyperion_core', 'hyperion_math'}
+    if unexpected:
+        bad.append(f'Materials may depend only on Core/Math: {sorted(unexpected)}')
 
 if bad:
     raise SystemExit('\n'.join(bad))

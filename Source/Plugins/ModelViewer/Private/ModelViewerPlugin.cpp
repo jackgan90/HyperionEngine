@@ -112,6 +112,14 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 		if (P.bIsReady)
 		{
 			P.Status = "Ready | " + std::to_string(P.Bridge->PrimitiveCount(P.Model)) + " primitives";
+			for (const auto& Draw : P.Bridge->GetDrawResults(P.Model))
+			{
+				if (!Draw.Error.empty())
+				{
+					P.Status = "Draw unavailable (view " + std::to_string(Draw.View) + "): " + Draw.Error;
+					break;
+				}
+			}
 		}
 	}
 	catch (const std::exception& Error)

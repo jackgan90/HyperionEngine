@@ -1,5 +1,8 @@
 #pragma once
+#include "Hyperion/Renderer/MaterialConstantCache.h"
+#include "Hyperion/Renderer/MaterialGpuCache.h"
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "Hyperion/Renderer/RenderMaterial.h"
 #include "Hyperion/Renderer/RenderPrimitive.h"
 #include "Hyperion/Tasks/AsyncResult.h"
 
@@ -11,14 +14,14 @@ struct FRenderGeometryDesc
 	std::vector<std::uint32_t> Indices;
 	std::uint32_t VertexStride{};
 	FBounds Bounds;
+	std::vector<FVertexAttribute> Attributes;
+	ERHIPrimitiveTopology Topology = ERHIPrimitiveTopology::TriangleList;
 };
 
 struct FRenderMaterialDesc
 {
-	FPipelineDesc Pipeline;
-	FModelMaterial Parameters;
-	std::array<std::uint32_t, 5> Textures{};
-	bool bClipSpace{};
+	std::shared_ptr<const FMaterialSnapshot> Surface;
+	std::shared_ptr<const FCompiledMaterialDefinition> Compiled;
 };
 
 struct FRenderSection
@@ -33,7 +36,6 @@ struct FRenderResourceDesc
 {
 	std::vector<FRenderGeometryDesc> Geometries;
 	std::vector<FRenderMaterialDesc> Materials;
-	std::vector<FTextureDesc> Textures;
 	std::vector<FRenderSection> Sections;
 };
 
@@ -58,6 +60,7 @@ public:
 	std::string GetError() const;
 	std::uint64_t GetIdentity() const;
 	std::shared_ptr<const FRenderResourceDesc> GetDescription() const;
+	std::shared_ptr<const FRenderMaterial> GetMaterial(std::uint32_t InSection) const;
 
 private:
 	FRenderResource(std::shared_ptr<FRenderResourceRecord> InRecord, std::function<void()> InReleased);
@@ -74,6 +77,8 @@ struct FRenderResourceStats
 	std::uint64_t GeometryUploads{};
 	std::uint64_t Retired{};
 	std::size_t LiveResources{};
+	FMaterialConstantStats Constants;
+	FMaterialGpuStats Materials;
 };
 
 // One service per rendering device/session, shared by all its scene producers.
@@ -87,6 +92,8 @@ public:
 	FRenderResourceService& operator=(const FRenderResourceService&) = delete;
 	std::shared_ptr<const FRenderResource> RequestModel(std::shared_ptr<const FModelAsset> InAsset,
 	                                                    std::uint64_t InVersion = 1);
+	std::shared_ptr<const FRenderMaterial> RequestMaterial(std::shared_ptr<const FMaterialSnapshot> InSnapshot);
+	std::shared_ptr<const void> CreateScopeLifetime() const;
 	std::shared_ptr<const FRenderResource> Request(std::shared_ptr<const void> InIdentity, std::uint64_t InVersion,
 	                                               std::string InConfiguration,
 	                                               std::function<FRenderResourceDesc()> InPrepare);

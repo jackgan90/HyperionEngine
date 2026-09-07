@@ -137,6 +137,7 @@ struct FDebugUiPlugin::FImpl
 	FPipeline Pipeline;
 	FTexture Texture;
 	std::vector<FDrawPacket> Draws;
+	FResourceBindingSet Bindings;
 };
 
 FDebugUiPlugin::FDebugUiPlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont)
@@ -151,8 +152,11 @@ void FDebugUiPlugin::Start()
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
 	FPipelineDesc Desc;
-	Desc.bAlphaBlend = true;
-	Desc.bTextured = true;
+	Desc.State.bBlend = true;
+	Desc.State.SourceRgb = ERHIBlendFactor::SourceAlpha;
+	Desc.State.DestinationRgb = ERHIBlendFactor::InverseSourceAlpha;
+	Desc.State.DestinationAlpha = ERHIBlendFactor::InverseSourceAlpha;
+	Desc.VertexStride = sizeof(FGuiVertex);
 	P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Worker},
 	                              [&]
 	                              {
@@ -164,13 +168,23 @@ void FDebugUiPlugin::Start()
 	Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Position)},
 	                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Uv)},
 	                   {"COLOR", 0, EVertexFormat::Unorm8x4, offsetof(FGuiVertex, Color)}};
-	P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Rhi, 0},
-	                              [&P, Desc = std::move(Desc)]
-	                              {
-		                              P.Pipeline = P.Device.CreatePipeline(Desc);
-		                              P.Texture = P.Device.CreateTexture(P.Font);
-		                              P.Font = {};
-	                              }));
+	P.Tasks.Wait(P.Tasks.Dispatch(
+	    {EDomain::Rhi, 0},
+	    [&P, Desc = std::move(Desc)]() mutable
+	    {
+		    FResourceBindingLayoutDesc Layout;
+		    Layout.Slots = {{ERHIBindingKind::ConstantBuffer, ERHIShaderVisibility::Vertex, 0, 0, 1, 64},
+		                    {ERHIBindingKind::Texture2D, ERHIShaderVisibility::Pixel, 0},
+		                    {ERHIBindingKind::Sampler, ERHIShaderVisibility::Pixel, 0}};
+		    Desc.Layout = P.Device.CreateBindingLayout(Layout);
+		    P.Pipeline = P.Device.CreatePipeline(Desc);
+		    P.Texture = P.Device.CreateTexture(P.Font);
+		    FSamplerDesc Sampler;
+		    Sampler.U = Sampler.V = Sampler.W = ERHIAddressMode::Clamp;
+		    const auto FontSampler = P.Device.CreateSampler(Sampler);
+		    P.Bindings = P.Device.CreateBindingSet({Desc.Layout, {{1, {P.Texture}}, {2, {FontSampler}}}});
+		    P.Font = {};
+	    }));
 }
 
 void FDebugUiPlugin::Stop() noexcept
@@ -182,6 +196,7 @@ void FDebugUiPlugin::Stop() noexcept
 		                                      Impl->Draws.clear();
 		                                      Impl->Pipeline = {};
 		                                      Impl->Texture = {};
+		                                      Impl->Bindings = {};
 	                                      }));
 }
 
@@ -203,6 +218,8 @@ void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 	Matrix.Values[5] = -2 / H;
 	Matrix.Values[12] = -1 - 2 * InData.DisplayPosition.X / W;
 	Matrix.Values[13] = 1 + 2 * InData.DisplayPosition.Y / H;
+	const auto Constants = P.Device.CreateBuffer({256, BufferUsage(ERHIBufferUsage::Constant)});
+	const auto Slice = P.Device.PublishConstantSlice(Constants, 0, std::as_bytes(std::span(&Matrix, 1)));
 	for (const auto& Command : InData.Commands)
 	{
 		FRect Scissor{static_cast<std::int32_t>(
@@ -223,12 +240,12 @@ void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 		Draw.Pipeline = P.Pipeline;
 		Draw.Vertices = Vertices;
 		Draw.Indices = Indices;
-		Draw.Texture = P.Texture;
+		Draw.Bindings = P.Bindings;
 		Draw.VertexStride = sizeof(FGuiVertex);
 		Draw.IndexCount = Command.IndexCount;
 		Draw.FirstIndex = Command.FirstIndex;
 		Draw.VertexOffset = Command.VertexOffset;
-		Draw.Constants = Matrix;
+		Draw.ConstantBindings = {{0, Slice}};
 		Draw.Scissor = Scissor;
 		P.Draws.push_back(std::move(Draw));
 	}
