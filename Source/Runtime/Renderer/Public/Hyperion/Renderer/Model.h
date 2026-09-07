@@ -10,12 +10,14 @@ class FModel
 public:
 	FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources,
 	       std::shared_ptr<const FModelAsset> InAsset);
-	~FModel() = default;
+	FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources, const FSceneModel& InModel);
+	~FModel();
 	FModel(const FModel&) = delete;
 	FModel& operator=(const FModel&) = delete;
 	FTaskHandle SetTransform(FMat4 InWorld);
 	FTaskHandle SetVisible(bool bInVisible);
 	FTaskHandle SetMaterial(FMaterialOverride InMaterial);
+	FTaskHandle SetState(const FSceneModel& InModel);
 	bool IsReady() const;
 	std::string GetError() const;
 	std::size_t PrimitiveCount() const;
@@ -26,6 +28,7 @@ private:
 	FTaskHandle Publish();
 	FRenderSceneClient& Scene;
 	std::shared_ptr<const FModelAsset> Asset;
+	std::shared_ptr<const FSceneModelData> Data;
 	std::shared_ptr<const FRenderResource> Resource;
 	std::vector<FModelInstance> Instances;
 	std::vector<FRenderBinding> Bindings;

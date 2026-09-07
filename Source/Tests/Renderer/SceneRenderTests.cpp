@@ -1,6 +1,7 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneBridge.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <cmath>
@@ -91,7 +92,7 @@ struct FSceneFixture
 		                          }));
 	}
 
-	FImage Frame(std::size_t InExpectedItems)
+	FImage Frame(std::size_t InExpectedItems, ESceneCullingMode InMode = ESceneCullingMode::Bvh)
 	{
 		Window.Poll();
 		FImage Image;
@@ -106,6 +107,7 @@ struct FSceneFixture
 			    Graph.Add(Clear);
 			    FRenderView View{
 			        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
+			    View.CullingMode = InMode;
 			    HYP_CHECK(Session->Build(Graph, View) == InExpectedItems);
 			    HYP_CHECK(Graph.Compile().size() <= 3);
 			    Image = ExecuteGraph(Graph, Tasks, *Swapchain, {320, 240}, false, true);
@@ -227,6 +229,76 @@ void CheckManyPrimitives(FSceneFixture& InFixture)
 	Models.clear();
 	InFixture.AwaitRetirement();
 }
+
+void AwaitBridge(FSceneRenderBridge& InBridge, FSceneHandle InHandle)
+{
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	while (!InBridge.IsReady(InHandle) && InBridge.GetError(InHandle).empty() &&
+	       std::chrono::steady_clock::now() < Deadline)
+	{
+		InBridge.Flush();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	HYP_CHECK(InBridge.IsReady(InHandle));
+}
+
+void CheckLogicalAttachment(FSceneFixture& InFixture)
+{
+	FScene Scene;
+	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
+	bool bRejected = false;
+	try
+	{
+		FSceneRenderBridge Duplicate(Scene, *InFixture.Session, InFixture.Tasks);
+	}
+	catch (const std::logic_error&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+	const auto Data = PrepareSceneModel(std::make_shared<const FModelAsset>(Quad()));
+	const auto Before = InFixture.Session->GetResources().Statistics();
+	const auto Stale = Scene.Add({"loading"});
+	Scene.Remove(Stale);
+	FSceneModel Model{"outside", Data};
+	Model.World = Translation({100, 0, 0});
+	const auto Handle = Scene.Add(Model);
+	HYP_CHECK(!Scene.Update(Stale, Model));
+	Bridge.Flush();
+	AwaitBridge(Bridge, Handle);
+	Pixel(InFixture.Frame(0), 160, {0, 0, 0}); // Initial state must never expose an identity frame.
+	Model.World = Identity();
+	Scene.Update(Handle, Model);
+	const auto Shared = Scene.Add(Model);
+	Bridge.Flush();
+	AwaitBridge(Bridge, Shared);
+	const auto BvhImage = InFixture.Frame(2);
+	HYP_CHECK(BvhImage.Rgba == InFixture.Frame(2, ESceneCullingMode::Linear).Rgba);
+	HYP_CHECK(BvhImage.Rgba == InFixture.Frame(2, ESceneCullingMode::None).Rgba);
+	HYP_CHECK(InFixture.Session->GetResources().Statistics().GeometryUploads == Before.GeometryUploads + 1);
+	Model.bVisible = false;
+	Scene.Update(Handle, Model);
+	Scene.Remove(Shared);
+	Bridge.Flush();
+	Pixel(InFixture.Frame(0), 160, {0, 0, 0});
+	Bridge.Close();
+	InFixture.AwaitRetirement();
+	FSceneRenderBridge Reattached(Scene, *InFixture.Session, InFixture.Tasks);
+	Reattached.Flush();
+	AwaitBridge(Reattached, Handle);
+	HYP_CHECK(Reattached.PrimitiveCount(Handle) == 1);
+	Scene.Clear();
+	Reattached.Flush();
+	Reattached.Close();
+	InFixture.AwaitRetirement();
+	FSceneRenderBridge Pending(Scene, *InFixture.Session, InFixture.Tasks);
+	const auto Loading = Scene.Add({"pending", PrepareSceneModel(std::make_shared<const FModelAsset>(Quad()))});
+	Pending.Flush();
+	Scene.Remove(Loading);
+	Pending.Flush();
+	Pending.Close();
+	InFixture.AwaitRetirement(); // Removal and upload cleanup without another frame.
+}
 } // namespace
 
 int main()
@@ -238,6 +310,7 @@ int main()
 		CheckSceneDepth(Fixture);
 		CheckGlobalBlend(Fixture);
 		CheckManyPrimitives(Fixture);
+		CheckLogicalAttachment(Fixture);
 		Fixture.Tasks.Wait(Fixture.Tasks.Dispatch({EDomain::Rhi, 0},
 		                                          [&]
 		                                          {

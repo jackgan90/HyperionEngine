@@ -42,6 +42,8 @@ public:
 	void EndPanel();
 	void Text(const std::string& InValue);
 	void TextWrapped(const std::string& InValue);
+	FVec2 DisplaySize() const;
+	void OverlayLine(FVec2 InNormalizedA, FVec2 InNormalizedB, std::uint32_t InColor);
 	bool WantsMouse() const;
 	bool WantsKeyboard() const;
 	void Separator();

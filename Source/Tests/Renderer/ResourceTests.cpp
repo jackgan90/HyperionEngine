@@ -587,7 +587,10 @@ void CheckVisibilityAndAggregation(FTaskSystem& InTasks, FTestDevice& InDevice, 
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
 	                              {
-		                              const auto Raw = Session.GetScene().Collect({});
+		                              FRenderView Unculled;
+		                              Unculled.CullingMode = ESceneCullingMode::None;
+		                              auto Raw = Session.GetScene().Collect(Unculled);
+		                              Raw.View.CullingMode = ESceneCullingMode::Linear;
 		                              const auto First = PrepareSceneSnapshot(Raw);
 		                              const auto Second = PrepareSceneSnapshot(Raw);
 		                              HYP_CHECK(First.Items.size() == 41 && Second.Items.size() == 41);
@@ -603,6 +606,64 @@ void CheckVisibilityAndAggregation(FTaskSystem& InTasks, FTestDevice& InDevice, 
 			                                  HYP_CHECK(Passes.size() == 1 && Passes[0].Commands.Draws.size() == 41);
 			                                  HYP_CHECK(Passes[0].Commands.bClearDepth);
 		                                  }));
+	                              }));
+}
+
+void CheckBoundsReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompiler& InCompiler)
+{
+	FRenderSession Session(InTasks, InDevice, InCompiler);
+	InDevice.bUploadComplete = false;
+	auto Resource = Session.GetResources().Request(std::make_shared<const int>(9), 1, "late-bounds",
+	                                               []
+	                                               {
+		                                               return Geometry(true);
+	                                               });
+	FRenderPrimitiveState State;
+	State.Resource = Resource;
+	State.World = Translation({30, 0, 0});
+	auto Pending = Session.GetScene().Create(State);
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              const auto Frame = Session.GetScene().Collect({});
+		                              HYP_CHECK(Frame.Statistics.UnboundedGroups == 1 && Frame.Items.size() == 1);
+	                              }));
+	InDevice.bUploadComplete = true;
+	Await(
+	    [&]
+	    {
+		    return Resource->GetStatus() == ERenderResourceStatus::Ready;
+	    });
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              HYP_CHECK(Session.GetScene().Collect({}).Items.empty());
+		                              FRenderView View;
+		                              View.ViewProjection = Translation({-30, 0, 0});
+		                              HYP_CHECK(Session.GetScene().Collect(View).Items.size() == 1);
+	                              }));
+	auto ClipResource = Session.GetResources().Request(std::make_shared<const int>(10), 1, "clip-bounds",
+	                                                   []
+	                                                   {
+		                                                   auto Desc = Geometry();
+		                                                   Desc.Materials[0].bClipSpace = true;
+		                                                   return Desc;
+	                                                   });
+	Await(
+	    [&]
+	    {
+		    return ClipResource->GetStatus() == ERenderResourceStatus::Ready;
+	    });
+	State.Resource = ClipResource;
+	State.LocalBounds = {{-.5f, -.5f, 0}, {.5f, .5f, 1}, true};
+	auto Clip = Session.GetScene().Create(State);
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              const auto Frame = Session.GetScene().Collect({});
+		                              HYP_CHECK(Frame.Items.size() == 1 &&
+		                                        Frame.Items[0].Primitive == Clip.GetHandle());
+		                              HYP_CHECK(Frame.Statistics.UnboundedGroups == 1);
 	                              }));
 }
 } // namespace
@@ -624,6 +685,7 @@ int main()
 		CheckSectionTransactions(Tasks, Device, Compiler);
 		CheckPendingSection(Tasks, Device, Compiler);
 		CheckVisibilityAndAggregation(Tasks, Device, Compiler);
+		CheckBoundsReadiness(Tasks, Device, Compiler);
 		HYP_CHECK(Device.Alive == 0);
 		std::cout << "Resource sharing, retry, supersession, GPU retention, RHI destruction and culling passed\n";
 	}

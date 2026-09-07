@@ -4,8 +4,13 @@ namespace Hyperion
 {
 FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources,
                std::shared_ptr<const FModelAsset> InAsset)
-    : Scene(InScene), Asset(std::move(InAsset)), Resource(InResources.RequestModel(Asset)),
-      Instances(ModelInstances(*Asset))
+    : FModel(InScene, InResources, FSceneModel{"", PrepareSceneModel(std::move(InAsset))})
+{
+}
+
+FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources, const FSceneModel& InModel)
+    : Scene(InScene), Asset(InModel.Data->Asset), Data(InModel.Data), Resource(InResources.RequestModel(Asset)),
+      Instances(Data->Instances), World(InModel.World), Material(InModel.Material), bVisible(InModel.bVisible)
 {
 	std::vector<FRenderPrimitiveState> States;
 	States.reserve(Instances.size());
@@ -14,10 +19,19 @@ FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources,
 		FRenderPrimitiveState State;
 		State.Resource = Resource;
 		State.Section = Instance.Primitive;
-		State.World = Instance.World;
+		State.World = Multiply(World, Instance.World);
+		State.bVisible = bVisible;
+		State.Material = Material;
+		State.LocalBounds = Data->PrimitiveBounds[Instance.Primitive];
 		States.push_back(std::move(State));
 	}
 	Bindings = Scene.CreateBatch(std::move(States));
+}
+
+FModel::~FModel()
+{
+	// Bindings retain an inert mailbox after session shutdown; no borrowed Scene access.
+	FRenderBinding::RemoveBatch(Bindings);
 }
 
 FTaskHandle FModel::Publish()
@@ -34,9 +48,24 @@ FTaskHandle FModel::Publish()
 		State.Revision = Revision;
 		State.bVisible = bVisible;
 		State.Material = Material;
+		State.LocalBounds = Data->PrimitiveBounds[Instances[Index].Primitive];
 		Updates.push_back({Bindings[Index].GetHandle(), std::move(State)});
 	}
 	return Scene.Update(std::move(Updates));
+}
+
+FTaskHandle FModel::SetState(const FSceneModel& InModel)
+{
+	Scene.RequireMain();
+	if (InModel.Data != Data || !IsAffine(InModel.World))
+	{
+		throw std::invalid_argument("Model state requires the same prepared asset and an affine transform");
+	}
+	ValidateMaterialOverride(InModel.Material);
+	World = InModel.World;
+	bVisible = InModel.bVisible;
+	Material = InModel.Material;
+	return Publish();
 }
 
 FTaskHandle FModel::SetTransform(FMat4 InWorld)
@@ -110,6 +139,7 @@ std::shared_ptr<const FRenderResource> FModel::GetResource() const
 void FModel::Remove()
 {
 	Scene.RequireMain();
+	Scene.RemoveBatch(Bindings);
 	Bindings.clear();
 	Resource.reset();
 }

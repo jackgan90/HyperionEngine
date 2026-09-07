@@ -28,9 +28,10 @@ void FViewerApplication::PollInput()
 {
 	Window->Poll();
 	Services->Tasks.PumpMain();
-	if (ModelPlugin)
+	if (ModelPlugin || ScenePlugin)
 	{
-		Metrics.AssetStatus = ModelPlugin->Status();
+		Metrics.AssetStatus = ModelPlugin ? ModelPlugin->Status() : ScenePlugin->Status();
+		Metrics.bSceneViewer = ScenePlugin != nullptr;
 		for (const auto& Event : Window->Events())
 		{
 			if (Event.Type == EEventType::Key && Event.Key == EKey::Tab && Event.bDown)
@@ -74,6 +75,10 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 		Gui->BeginFrame(InLogical, InPixels, InDelta, UiEvents);
 		Actions = DrawDebugPanel(*Gui, Settings, Metrics, InLogical);
 		RdcButtonBounds = Actions.CaptureRdcBounds;
+		if (ScenePlugin)
+		{
+			ScenePlugin->DrawGui(*Gui, SceneStatistics);
+		}
 		OutData = Gui->Render();
 	}
 	return Actions;
@@ -111,6 +116,11 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 		                   Gui && Settings.bShowGui && Gui->WantsKeyboard());
 	}
 	const bool bTakeCapture = Actions.bCapture || (!Options.Capture.empty() && InFrame == Options.Frames - 1);
+	if (ScenePlugin)
+	{
+		ScenePlugin->Input(Window->Events(), Gui && Settings.bShowGui && Gui->WantsMouse(),
+		                   Gui && Settings.bShowGui && Gui->WantsKeyboard());
+	}
 	auto Screenshot = RenderFrame(Size, GuiData, bTakeCapture);
 	if (bTakeCapture)
 	{
@@ -167,6 +177,7 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 		                                 float(Frame.Settings.ClearBlue), 1};
 		    Graph.Add(std::move(Clear));
 		    RenderSession->Build(Graph, Frame.View);
+		    SceneStatistics = RenderSession->Statistics();
 		    for (const auto& Plugin : Plugins->GetInstances())
 		    {
 			    if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))

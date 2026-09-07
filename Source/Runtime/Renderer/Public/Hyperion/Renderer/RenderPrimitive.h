@@ -1,5 +1,6 @@
 #pragma once
-#include "Hyperion/Scene/Model.h"
+#include "Hyperion/Renderer/SceneSpatialIndex.h"
+#include "Hyperion/Scene/Scene.h"
 #include "Hyperion/Tasks/TaskSystem.h"
 #include <optional>
 
@@ -15,13 +16,6 @@ struct FRenderPrimitiveHandle
 	bool operator==(const FRenderPrimitiveHandle&) const = default;
 };
 
-struct FMaterialOverride
-{
-	std::optional<FVec4> BaseColor;
-	std::optional<float> Metallic;
-	std::optional<float> Roughness;
-};
-
 // Complete instance snapshot; no borrowed logical-object or GPU pointers.
 struct FRenderPrimitiveState
 {
@@ -31,6 +25,7 @@ struct FRenderPrimitiveState
 	std::shared_ptr<const FRenderResource> Resource;
 	std::uint32_t Section{};
 	FMaterialOverride Material;
+	FBounds LocalBounds;
 };
 
 struct FRenderView
@@ -39,6 +34,8 @@ struct FRenderView
 	FVec3 Eye;
 	std::uint32_t Width = 1;
 	std::uint32_t Height = 1;
+	ESceneCullingMode CullingMode = ESceneCullingMode::Bvh;
+	std::optional<FMat4> CullingViewProjection;
 };
 
 struct FRenderItem
@@ -51,6 +48,7 @@ struct FRenderSceneSnapshot
 {
 	FRenderView View;
 	std::vector<FRenderItem> Items;
+	FSceneVisibilityStats Statistics;
 };
 
 // All instance methods, including construction/destruction, belong to Render.
@@ -64,6 +62,7 @@ public:
 	IRenderPrimitive& operator=(const IRenderPrimitive&) = delete;
 	void Apply(FRenderPrimitiveState InState) noexcept;
 	const FRenderPrimitiveState& GetState() const;
+	virtual FBounds GetWorldBounds() const;
 	virtual void Collect(const FRenderView& InView, std::vector<FRenderItem>& OutItems) const = 0;
 
 protected:
@@ -77,6 +76,7 @@ class FStaticMeshRenderPrimitive final : public IRenderPrimitive
 {
 public:
 	using IRenderPrimitive::IRenderPrimitive;
+	FBounds GetWorldBounds() const override;
 	void Collect(const FRenderView& InView, std::vector<FRenderItem>& OutItems) const override;
 };
 

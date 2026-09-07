@@ -1,3 +1,3 @@
-add_library(hyperion_scene STATIC Private/Model.cpp Private/ModelReflection.cpp)
+add_library(hyperion_scene STATIC Private/Model.cpp Private/ModelReflection.cpp Private/Scene.cpp Private/SceneModel.cpp Private/SceneManifest.cpp Private/Adapters/SceneJson.cpp)
 hyp_module(hyperion_scene)
-target_link_libraries(hyperion_scene PUBLIC hyperion_math hyperion_reflection)
+target_link_libraries(hyperion_scene PUBLIC hyperion_math hyperion_reflection PRIVATE nlohmann_json::nlohmann_json)

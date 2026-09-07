@@ -1,5 +1,7 @@
 # Render primitive 开发契约
 
+通用逻辑场景、Main 桥接和 Render BVH 提前剔除已接入，使用及更新后的数据流见 [SceneManagement.md](SceneManagement.md)。`FModel` 保留为 Renderer 绑定适配器，Scene 中独立的 `FSceneModel` 表示逻辑实例。`CreateBatch` 对应一个剔除组，先执行组和 primitive 级筛选再 Collect；后续 item 过滤及全场景排序继续沿用本契约。
+
 场景渲染统一通过 `FRenderSession`。Main 的逻辑对象向 `FRenderSceneClient` 提交自有描述；Render 独占 `IRenderPrimitive`，收集当帧 `FRenderItem`，再交 RHI 0 物化 GPU draw。模型、三角形及未来其他场景对象遵守相同协议。GUI、清屏和非场景 pass 仍使用 RenderGraph。
 
 ## 类型与依赖
@@ -7,7 +9,8 @@
 | 类型 | 所有权和职责 |
 | --- | --- |
 | `FModelAsset` | Scene 中不可变、可序列化的 CPU 数据，无 Renderer/RHI 依赖 |
-| `FModel` | Main 逻辑组；组合资产、独立实例状态和多个 binding，不提交 GPU draw |
+| `FModel` | Renderer 的 Main 绑定适配器；组合资产、实例状态和多个 binding，保留直接客户端兼容性 |
+| `FScene` / `FSceneModel` | Scene 模块中的 Main 逻辑场景与实例，通过桥接器同步到 Render，不依赖 Renderer/RHI |
 | `FRenderBinding` | Main 的 move-only 凭证；持有身份和独立状态结果，不持有 proxy 指针 |
 | `FRenderPrimitiveHandle` | scene identity、slot、generation，不能当成对象地址使用 |
 | `FRenderScene` | Renderer 私有的 Render 注册表，唯一拥有完整 proxy |

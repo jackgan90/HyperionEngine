@@ -73,6 +73,7 @@ const FTypeDescriptor& SettingsType()
 	     Field("rhi_threads", "RHI threads", &FAppSettings::RhiThreads, 1, 8),
 	     Field("rhi_backend", "RHI backend (restart)", &FAppSettings::RHIBackend),
 	     Field("model_source", "Model source (restart)", &FAppSettings::ModelSource),
+	     Field("scene_source", "Scene source (restart)", &FAppSettings::SceneSource),
 	     Field("vsync", "Vertical sync", &FAppSettings::bVsync),
 	     Field("show_gui", "Show debug UI", &FAppSettings::bShowGui),
 	     Field("renderdoc_library", "RenderDoc DLL path (restart)", &FAppSettings::RenderDocLibrary),

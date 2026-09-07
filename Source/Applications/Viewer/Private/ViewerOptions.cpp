@@ -25,6 +25,14 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	{
 		InOptions.Model = InArgv[++InIndex];
 	}
+	else if (InArg == "--scene" && InIndex + 1 < InArgc)
+	{
+		InOptions.Scene = InArgv[++InIndex];
+	}
+	else if (InArg == "--scene-culling" && InIndex + 1 < InArgc)
+	{
+		InOptions.SceneCulling = InArgv[++InIndex];
+	}
 	else if (InArg == "--verify-model")
 	{
 		InOptions.bVerifyModel = true;
@@ -106,6 +114,11 @@ bool ParseCaptureOption(FOptions& InOptions, const std::string& InArg, int InArg
 
 void ValidateOptions(FOptions& InOptions)
 {
+	if ((!InOptions.Model.empty() && !InOptions.Scene.empty()) ||
+	    (InOptions.SceneCulling != "none" && InOptions.SceneCulling != "linear" && InOptions.SceneCulling != "bvh"))
+	{
+		throw std::invalid_argument("Choose --model or --scene; --scene-culling accepts none, linear or bvh");
+	}
 	if (InOptions.Frames < 0)
 	{
 		throw std::invalid_argument("--frames must be nonnegative");
@@ -157,12 +170,32 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 
 void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings)
 {
+	if (!InOptions.Scene.empty())
+	{
+		InSettings.SceneSource = InOptions.Scene.string();
+		InSettings.ModelSource.clear();
+	}
 	if (!InOptions.Model.empty())
 	{
 		InSettings.ModelSource = InOptions.Model.string();
+		InSettings.SceneSource.clear();
+	}
+	if (!InSettings.SceneSource.empty() && !InSettings.ModelSource.empty())
+	{
+		throw std::invalid_argument("Only one Viewer camera owner may be selected: scene_source or model_source");
+	}
+	if (!InSettings.SceneSource.empty())
+	{
+		std::erase(InSettings.Plugins, std::string("triangle"));
+		std::erase(InSettings.Plugins, std::string("model-viewer"));
+		if (std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "scene-viewer") == InSettings.Plugins.end())
+		{
+			InSettings.Plugins.insert(InSettings.Plugins.begin(), "scene-viewer");
+		}
 	}
 	if (!InSettings.ModelSource.empty())
 	{
+		std::erase(InSettings.Plugins, std::string("scene-viewer"));
 		std::erase(InSettings.Plugins, std::string("triangle"));
 		if (std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "model-viewer") == InSettings.Plugins.end())
 		{

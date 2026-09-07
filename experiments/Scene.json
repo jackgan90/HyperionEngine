@@ -1,0 +1,13 @@
+{
+  "type": "hyperion.application-settings",
+  "schema_version": 1,
+  "properties": {
+    "title": "Hyperion | Scene Viewer",
+    "width": 1440,
+    "height": 900,
+    "scene_source": "assets/Scenes/Showcase.json",
+    "plugins": ["scene-viewer", "debug-ui"],
+    "vsync": true,
+    "show_gui": true
+  }
+}

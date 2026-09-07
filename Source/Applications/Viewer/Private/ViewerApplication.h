@@ -3,6 +3,7 @@
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "ViewerOptions.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
@@ -67,6 +68,8 @@ private:
 	std::unique_ptr<FPluginSet> Plugins;
 	FDebugUiPlugin* GuiPlugin{};
 	FModelViewerPlugin* ModelPlugin{};
+	FSceneViewerPlugin* ScenePlugin{};
+	FSceneVisibilityStats SceneStatistics;
 	FVec4 RdcButtonBounds;
 	bool bRdcMouseDown{};
 	bool bCaptured{};

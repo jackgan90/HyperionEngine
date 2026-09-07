@@ -35,6 +35,32 @@ const FRenderPrimitiveState& IRenderPrimitive::GetState() const
 	return State;
 }
 
+FBounds IRenderPrimitive::GetWorldBounds() const
+{
+	Tasks.Require({EDomain::Render});
+	return {};
+}
+
+FBounds FStaticMeshRenderPrimitive::GetWorldBounds() const
+{
+	const auto& Current = GetState();
+	if (!Current.Resource)
+	{
+		return TransformBounds(Current.LocalBounds, Current.World);
+	}
+	const auto Desc = Current.Resource ? Current.Resource->GetDescription() : nullptr;
+	if (!Desc || Current.Section >= Desc->Sections.size())
+	{
+		return {};
+	}
+	const auto& Section = Desc->Sections[Current.Section];
+	return Desc->Materials[Section.Material].bClipSpace
+	           ? FBounds{}
+	           : TransformBounds(IsUsable(Current.LocalBounds) ? Current.LocalBounds
+	                                                           : Desc->Geometries[Section.Geometry].Bounds,
+	                             Current.World);
+}
+
 void FStaticMeshRenderPrimitive::Collect(const FRenderView&, std::vector<FRenderItem>& OutItems) const
 {
 	const auto& PrimitiveState = GetState();

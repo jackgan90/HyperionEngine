@@ -6,38 +6,6 @@
 
 namespace Hyperion
 {
-namespace
-{
-bool Outside(const FBounds& InBounds, const FMat4& InClip)
-{
-	if (!InBounds.bValid)
-	{
-		return false;
-	}
-	std::array<bool, 6> Rejected{true, true, true, true, true, true};
-	for (unsigned Corner = 0; Corner < 8; ++Corner)
-	{
-		const auto P = Transform(InClip, {Corner & 1 ? InBounds.Maximum.X : InBounds.Minimum.X,
-		                                  Corner & 2 ? InBounds.Maximum.Y : InBounds.Minimum.Y,
-		                                  Corner & 4 ? InBounds.Maximum.Z : InBounds.Minimum.Z, 1});
-		if (!std::isfinite(P.X) || !std::isfinite(P.Y) || !std::isfinite(P.Z) || !std::isfinite(P.W))
-		{
-			return false;
-		}
-		const std::array Planes{P.X<-P.W, P.X> P.W, P.Y<-P.W, P.Y> P.W, P.Z<0, P.Z> P.W};
-		for (std::size_t Index = 0; Index < Planes.size(); ++Index)
-		{
-			Rejected[Index] = Rejected[Index] && Planes[Index];
-		}
-	}
-	return std::any_of(Rejected.begin(), Rejected.end(),
-	                   [](bool bInValue)
-	                   {
-		                   return bInValue;
-	                   });
-}
-} // namespace
-
 FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 {
 	struct FOrderedItem
@@ -76,7 +44,13 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 		const auto& Material = Desc->Materials[Section.Material];
 		const auto Clip =
 		    Material.bClipSpace ? Item.State.World : Multiply(InSnapshot.View.ViewProjection, Item.State.World);
-		if (Outside(Geometry.Bounds, Clip))
+		const auto CullingClip =
+		    Material.bClipSpace
+		        ? Item.State.World
+		        : Multiply(InSnapshot.View.CullingViewProjection.value_or(InSnapshot.View.ViewProjection),
+		                   Item.State.World);
+		if (InSnapshot.View.CullingMode != ESceneCullingMode::None &&
+		    !FFrustum(CullingClip).Intersects(Geometry.Bounds))
 		{
 			continue;
 		}
@@ -99,6 +73,7 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 	{
 		InSnapshot.Items.push_back(std::move(Item.Item));
 	}
+	InSnapshot.Statistics.VisibleItems = InSnapshot.Items.size();
 	return InSnapshot;
 }
 } // namespace Hyperion

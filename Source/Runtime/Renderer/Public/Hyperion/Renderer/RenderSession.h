@@ -15,6 +15,7 @@ public:
 	FRenderSceneClient& GetScene();
 	FRenderResourceService& GetResources();
 	std::size_t Build(FRenderGraph& InGraph, FRenderView InView);
+	FSceneVisibilityStats Statistics() const;
 	void Close();
 
 private:
@@ -22,5 +23,6 @@ private:
 	FRenderResourceService Resources;
 	FRenderSceneClient Scene;
 	bool bClosed{};
+	FSceneVisibilityStats LastStatistics;
 };
 } // namespace Hyperion

@@ -20,6 +20,7 @@ struct FDebugMetrics
 	std::vector<FExecutionStats> Threads;
 	std::vector<float> FrameMilliseconds;
 	std::string AssetStatus;
+	bool bSceneViewer{};
 	FFrameCaptureMetrics FrameCapture;
 };
 

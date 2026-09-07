@@ -15,7 +15,7 @@ Source/
     Plugins/       # 逻辑插件注册、依赖和生命周期
     Platform/      # 窗口、输入与 SDL wrapper
     Assets/        # 资产引用、图片、网格及导入 wrapper
-    Scene/         # 独立 CPU 模型、材质、节点与反射注册
+    Scene/         # 独立 CPU 模型、Main 逻辑场景、清单与反射注册
     AssetImport/   # glTF 场景适配，通过 Assets / IO 加载
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
     RHI/           # 公共图形契约、能力查询、后端注册表
@@ -28,6 +28,7 @@ Source/
     Triangle/      # 三角形实验
     DebugUI/       # 调试 UI 的渲染插件
     ModelViewer/   # 异步静态模型显示与相机
+    SceneViewer/   # 场景清单、多实例及空间剔除诊断
     RenderDoc/     # 可选抓帧服务的设备创建前生命周期
   Applications/
     Viewer/        # 应用入口与模块组装

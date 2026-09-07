@@ -1,0 +1,1122 @@
+{
+  "type": "hyperion.scene",
+  "schema_version": 1,
+  "assets": [
+    {
+      "id": "showcase",
+      "path": "../Models/Showcase.gltf"
+    },
+    {
+      "id": "interleaved",
+      "path": "../Models/Interleaved.gltf"
+    }
+  ],
+  "instances": [
+    {
+      "id": "model-1-6",
+      "asset": "showcase",
+      "translation": [
+        0,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-5",
+      "asset": "interleaved",
+      "translation": [
+        -5,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-7",
+      "asset": "showcase",
+      "translation": [
+        5,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-6",
+      "asset": "showcase",
+      "translation": [
+        0,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-6",
+      "asset": "interleaved",
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-4",
+      "asset": "showcase",
+      "translation": [
+        -10,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-8",
+      "asset": "interleaved",
+      "translation": [
+        10,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-5",
+      "asset": "showcase",
+      "translation": [
+        -5,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-7",
+      "asset": "interleaved",
+      "translation": [
+        5,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-5",
+      "asset": "showcase",
+      "translation": [
+        -5,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-7",
+      "asset": "showcase",
+      "translation": [
+        5,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-6",
+      "asset": "interleaved",
+      "translation": [
+        0,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-3",
+      "asset": "showcase",
+      "translation": [
+        -15,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-9",
+      "asset": "showcase",
+      "translation": [
+        15,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-4",
+      "asset": "interleaved",
+      "translation": [
+        -10,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-8",
+      "asset": "showcase",
+      "translation": [
+        10,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-4",
+      "asset": "showcase",
+      "translation": [
+        -10,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-8",
+      "asset": "showcase",
+      "translation": [
+        10,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-5",
+      "asset": "showcase",
+      "translation": [
+        -5,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-7",
+      "asset": "showcase",
+      "translation": [
+        5,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-6",
+      "asset": "showcase",
+      "translation": [
+        0,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-2",
+      "asset": "interleaved",
+      "translation": [
+        -20,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-10",
+      "asset": "showcase",
+      "translation": [
+        20,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-3",
+      "asset": "showcase",
+      "translation": [
+        -15,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-9",
+      "asset": "showcase",
+      "translation": [
+        15,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-3",
+      "asset": "interleaved",
+      "translation": [
+        -15,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-9",
+      "asset": "interleaved",
+      "translation": [
+        15,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-4",
+      "asset": "showcase",
+      "translation": [
+        -10,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-8",
+      "asset": "showcase",
+      "translation": [
+        10,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-5",
+      "asset": "interleaved",
+      "translation": [
+        -5,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-7",
+      "asset": "showcase",
+      "translation": [
+        5,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-1",
+      "asset": "showcase",
+      "translation": [
+        -25,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-11",
+      "asset": "interleaved",
+      "translation": [
+        25,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-2",
+      "asset": "showcase",
+      "translation": [
+        -20,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-10",
+      "asset": "interleaved",
+      "translation": [
+        20,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-6",
+      "asset": "showcase",
+      "translation": [
+        0,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-2",
+      "asset": "showcase",
+      "translation": [
+        -20,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-10",
+      "asset": "showcase",
+      "translation": [
+        20,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-3",
+      "asset": "interleaved",
+      "translation": [
+        -15,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-9",
+      "asset": "interleaved",
+      "translation": [
+        15,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-4",
+      "asset": "showcase",
+      "translation": [
+        -10,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-8",
+      "asset": "interleaved",
+      "translation": [
+        10,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-0",
+      "asset": "showcase",
+      "translation": [
+        -30,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-1-12",
+      "asset": "showcase",
+      "translation": [
+        30,
+        0,
+        -7
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-1",
+      "asset": "interleaved",
+      "translation": [
+        -25,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-11",
+      "asset": "showcase",
+      "translation": [
+        25,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-5",
+      "asset": "showcase",
+      "translation": [
+        -5,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-7",
+      "asset": "interleaved",
+      "translation": [
+        5,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-1",
+      "asset": "showcase",
+      "translation": [
+        -25,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-11",
+      "asset": "showcase",
+      "translation": [
+        25,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-2",
+      "asset": "showcase",
+      "translation": [
+        -20,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-10",
+      "asset": "showcase",
+      "translation": [
+        20,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-3",
+      "asset": "showcase",
+      "translation": [
+        -15,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-9",
+      "asset": "showcase",
+      "translation": [
+        15,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-0",
+      "asset": "showcase",
+      "translation": [
+        -30,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-2-12",
+      "asset": "showcase",
+      "translation": [
+        30,
+        0,
+        -14
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-4",
+      "asset": "interleaved",
+      "translation": [
+        -10,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-8",
+      "asset": "showcase",
+      "translation": [
+        10,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-0",
+      "asset": "interleaved",
+      "translation": [
+        -30,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-0-12",
+      "asset": "interleaved",
+      "translation": [
+        30,
+        0,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-1",
+      "asset": "showcase",
+      "translation": [
+        -25,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-11",
+      "asset": "showcase",
+      "translation": [
+        25,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-2",
+      "asset": "interleaved",
+      "translation": [
+        -20,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-10",
+      "asset": "showcase",
+      "translation": [
+        20,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-3",
+      "asset": "showcase",
+      "translation": [
+        -15,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-9",
+      "asset": "showcase",
+      "translation": [
+        15,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-0",
+      "asset": "interleaved",
+      "translation": [
+        -30,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-3-12",
+      "asset": "interleaved",
+      "translation": [
+        30,
+        0,
+        -21
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-1",
+      "asset": "showcase",
+      "translation": [
+        -25,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-11",
+      "asset": "interleaved",
+      "translation": [
+        25,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-2",
+      "asset": "showcase",
+      "translation": [
+        -20,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-10",
+      "asset": "interleaved",
+      "translation": [
+        20,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-0",
+      "asset": "showcase",
+      "translation": [
+        -30,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-4-12",
+      "asset": "showcase",
+      "translation": [
+        30,
+        0,
+        -28
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-1",
+      "asset": "interleaved",
+      "translation": [
+        -25,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-11",
+      "asset": "showcase",
+      "translation": [
+        25,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-0",
+      "asset": "showcase",
+      "translation": [
+        -30,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "model-5-12",
+      "asset": "showcase",
+      "translation": [
+        30,
+        0,
+        -35
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    }
+  ],
+  "camera": {
+    "eye": [
+      0,
+      6,
+      16
+    ],
+    "target": [
+      0,
+      0,
+      -8
+    ],
+    "near": 0.05,
+    "far": 500
+  }
+}

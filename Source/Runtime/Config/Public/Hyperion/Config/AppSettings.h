@@ -12,6 +12,7 @@ struct FAppSettings
 	int RhiThreads = 2;
 	std::string RHIBackend = "d3d12";
 	std::string ModelSource;
+	std::string SceneSource;
 	bool bVsync = true;
 	bool bShowGui = true;
 	std::string RenderDocLibrary;

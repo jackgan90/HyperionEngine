@@ -11,6 +11,7 @@ FViewerServices::FViewerServices(const FAppSettings& InSettings)
       Assets(IO)
 {
 	RegisterGltfImporter(Assets);
+	RegisterSceneManifestLoader(Assets);
 }
 
 FViewerServices::~FViewerServices()
@@ -103,6 +104,7 @@ void FViewerApplication::InitializePlugins()
 	FPluginRegistry Registry;
 	RegisterTrianglePlugin(Registry, *RenderSession, *Device, *Compiler, Tasks);
 	RegisterModelViewerPlugin(Registry, *RenderSession, Tasks, Services->Assets, Settings.ModelSource);
+	RegisterSceneViewerPlugin(Registry, *RenderSession, Tasks, Services->Assets, Settings.SceneSource);
 	RegisterDebugUiPlugin(Registry, *Device, *Compiler, Tasks, Font);
 	Plugins = std::make_unique<FPluginSet>(Registry.Activate(Requested));
 	for (const auto& Plugin : Plugins->GetInstances())
@@ -114,6 +116,13 @@ void FViewerApplication::InitializePlugins()
 		if (auto Model = dynamic_cast<FModelViewerPlugin*>(Plugin.get()))
 		{
 			ModelPlugin = Model;
+		}
+		if (auto Scene = dynamic_cast<FSceneViewerPlugin*>(Plugin.get()))
+		{
+			ScenePlugin = Scene;
+			ScenePlugin->SetCullingMode(Options.SceneCulling == "none"     ? ESceneCullingMode::None
+			                            : Options.SceneCulling == "linear" ? ESceneCullingMode::Linear
+			                                                               : ESceneCullingMode::Bvh);
 		}
 	}
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
@@ -130,6 +139,7 @@ FDeviceStats FViewerApplication::ReleaseGraphics()
 	Plugins.reset();
 	GuiPlugin = nullptr;
 	ModelPlugin = nullptr;
+	ScenePlugin = nullptr;
 	if (RenderSession)
 	{
 		RenderSession->Close();

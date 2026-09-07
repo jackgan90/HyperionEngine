@@ -28,7 +28,7 @@ FRenderScene::~FRenderScene()
 	}
 }
 
-void FRenderScene::Create(FRenderPrimitiveHandle InHandle, FRenderPrimitiveState InState,
+void FRenderScene::Create(FRenderPrimitiveHandle InHandle, FRenderPrimitiveState InState, std::uint64_t InGroup,
                           const FRenderPrimitiveFactory& InFactory, std::shared_ptr<FRenderBindingResult> InResult)
 {
 	Tasks.Require({EDomain::Render});
@@ -43,7 +43,9 @@ void FRenderScene::Create(FRenderPrimitiveHandle InHandle, FRenderPrimitiveState
 		const auto Revision = InState.Revision;
 		const bool bPending = bool(InState.Resource);
 		Primitive->Apply(std::move(InState));
-		Entries.emplace(InHandle.Slot, FEntry{InHandle, std::move(Primitive), InResult});
+		Entries.emplace(InHandle.Slot, FEntry{InHandle, std::move(Primitive), InResult, InGroup});
+		Groups[InGroup].insert(InHandle.Slot);
+		DirtyGroups.insert(InGroup);
 		const auto& State = Entries.at(InHandle.Slot).Primitive->GetState();
 		InResult->Publish(bPending ? ERenderPrimitiveStatus::PendingResources : ERenderPrimitiveStatus::Ready, Revision,
 		                  {}, State.Resource, State.Section);
@@ -72,6 +74,7 @@ void FRenderScene::Update(std::vector<FRenderPrimitiveUpdate> InUpdates)
 			return;
 		}
 		ValidatePrimitiveState(Update.State);
+		DirtyGroups.insert(It->second.Group);
 		if (!Seen.insert(Update.Handle.Slot).second)
 		{
 			throw std::invalid_argument("Duplicate primitive in update batch");
@@ -96,25 +99,22 @@ void FRenderScene::Remove(FRenderPrimitiveHandle InHandle)
 	if (It != Entries.end() && It->second.Handle == InHandle)
 	{
 		auto Result = It->second.Result;
+		const auto Group = It->second.Group;
+		Groups.at(Group).erase(InHandle.Slot);
+		if (Groups.at(Group).empty())
+		{
+			Groups.erase(Group);
+			Spatial->Remove(Group);
+			DirtyGroups.erase(Group);
+			UnboundedGroups.erase(Group);
+		}
+		else
+		{
+			DirtyGroups.insert(Group);
+		}
 		Entries.erase(It);
 		Result->Publish(ERenderPrimitiveStatus::Removed, 0);
 	}
-}
-
-FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView) const
-{
-	Tasks.Require({EDomain::Render});
-	FRenderSceneSnapshot Snapshot{InView, {}};
-	for (const auto& [Slot, Entry] : Entries)
-	{
-		const auto Start = Snapshot.Items.size();
-		Entry.Primitive->Collect(InView, Snapshot.Items);
-		for (auto Index = Start; Index < Snapshot.Items.size(); ++Index)
-		{
-			Snapshot.Items[Index].Primitive = Entry.Handle;
-		}
-	}
-	return Snapshot;
 }
 
 FRenderSceneMailbox::FRenderSceneMailbox(FTaskSystem& InTasks) : Tasks(InTasks)

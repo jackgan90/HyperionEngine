@@ -367,6 +367,21 @@ void FGui::Plot(const char* InLabel, std::span<const float> InValues, float InMa
 	}
 }
 
+FVec2 FGui::DisplaySize() const
+{
+	Impl->Select();
+	const auto Size = ImGui::GetIO().DisplaySize;
+	return {Size.x, Size.y};
+}
+
+void FGui::OverlayLine(FVec2 InNormalizedA, FVec2 InNormalizedB, std::uint32_t InColor)
+{
+	Impl->Select();
+	const auto Size = ImGui::GetIO().DisplaySize;
+	ImGui::GetBackgroundDrawList()->AddLine({InNormalizedA.X * Size.x, InNormalizedA.Y * Size.y},
+	                                        {InNormalizedB.X * Size.x, InNormalizedB.Y * Size.y}, InColor, 1.5f);
+}
+
 FGuiDrawData FGui::Render()
 {
 	Impl->Select();

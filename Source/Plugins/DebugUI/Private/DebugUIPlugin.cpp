@@ -67,9 +67,10 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		if (!InMetrics.AssetStatus.empty())
 		{
 			InGui.Separator();
-			InGui.Text("MODEL");
+			InGui.Text(InMetrics.bSceneViewer ? "SCENE" : "MODEL");
 			InGui.TextWrapped(InMetrics.AssetStatus);
-			InGui.Text("Right drag: orbit | Wheel: zoom");
+			InGui.Text(InMetrics.bSceneViewer ? "Arrows: move | Drag: orbit | Wheel: dolly"
+			                                  : "Drag: orbit | Wheel: zoom");
 			InGui.Text("Home: fit | Tab: toggle panel");
 		}
 		InGui.Separator();

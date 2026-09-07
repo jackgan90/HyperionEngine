@@ -12,9 +12,11 @@ void FViewerApplication::SaveSettingsAsync(const std::filesystem::path& InPath)
 
 void FViewerApplication::SaveScreenshot(FImage InImage)
 {
-	if (Options.bVerifyModel && (!ModelPlugin || !ModelPlugin->Ready()))
+	if (Options.bVerifyModel && !(ModelPlugin ? ModelPlugin->Ready() : ScenePlugin && ScenePlugin->Ready()))
 	{
-		throw std::runtime_error(ModelPlugin ? ModelPlugin->Status() : "No model plugin active");
+		throw std::runtime_error(ModelPlugin   ? ModelPlugin->Status()
+		                         : ScenePlugin ? ScenePlugin->Status()
+		                                       : "No model plugin active");
 	}
 	const auto Path = Options.Capture.empty() ? std::filesystem::path(HYP_SOURCE_DIR) / "out/captures" /
 	                                                ("capture-" + std::to_string(ClockNanoseconds()) + ".png")
@@ -33,6 +35,15 @@ void FViewerApplication::SaveScreenshot(FImage InImage)
 
 void FViewerApplication::VerifyOutputs()
 {
+	if (ScenePlugin)
+	{
+		Log(ELogLevel::Info, "Scene: " + ScenePlugin->Status() + " | groups=" + std::to_string(SceneStatistics.Groups) +
+		                         " visits=" + std::to_string(SceneStatistics.VisitedNodes) +
+		                         " group_tests=" + std::to_string(SceneStatistics.GroupTests) +
+		                         " collects=" + std::to_string(SceneStatistics.CollectedPrimitives) +
+		                         " items=" + std::to_string(SceneStatistics.VisibleItems) +
+		                         " draws=" + std::to_string(SceneStatistics.Draws));
+	}
 	if (!Options.Capture.empty() && !bCaptured)
 	{
 		throw std::runtime_error("Requested capture was not produced");

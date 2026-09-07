@@ -41,6 +41,8 @@ python tools/Bootstrap.py
 
 ## 实验操作
 
+多模型场景入口：`hyperion_viewer.exe --config experiments/Scene.json`，或 `--scene "场景清单.json"`。支持平级模型实例增删、移动、显隐，Render 线程 BVH 视锥剔除，以及关闭／线性／BVH 三种模式对照、冻结剔除相机和包围盒显示。清单格式、控制与架构见 [场景管理](docs/SceneManagement.md)。
+
 静态模型入口：`hyperion_viewer.exe --config experiments/Model.json`，或 `--model "模型路径.glb"`。右键旋转、滚轮缩放、Home 取景、Tab 显隐面板。运行命令、格式支持边界、资产 API 和 OpenSpec 实施顺序见 [资产流水线](docs/AssetPipeline.md)。
 
 默认配置为 `experiments/Triangle.json`。面板可实时修改三角形缩放、背景色和 VSync；“Save experiment”保存到当前配置文件，“Capture screenshot”写入 `out/captures`。插件列表修改后重启生效。窗口右上角关闭按钮退出应用。

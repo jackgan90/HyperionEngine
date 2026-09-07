@@ -154,15 +154,15 @@ std::vector<FRenderBinding> FRenderSceneClient::CreateBatch(std::vector<FRenderP
 			Queue.Active[Slot] = true;
 		}
 		// One Render task makes the complete registration visible at a frame boundary.
-		Queue.Last = Queue.Tasks.Dispatch({EDomain::Render},
-		                                  [Mailbox = Mailbox, Creations, Factory = std::move(InFactory)]() mutable
-		                                  {
-			                                  for (auto& Creation : Creations)
-			                                  {
-				                                  Mailbox->Scene->Create(Creation.Handle, std::move(Creation.State),
-				                                                         Factory, Creation.Result);
-			                                  }
-		                                  });
+		Queue.Last = Queue.Tasks.Dispatch(
+		    {EDomain::Render},
+		    [Mailbox = Mailbox, Creations, Group = ++Queue.NextGroup, Factory = std::move(InFactory)]() mutable
+		    {
+			    for (auto& Creation : Creations)
+			    {
+				    Mailbox->Scene->Create(Creation.Handle, std::move(Creation.State), Group, Factory, Creation.Result);
+			    }
+		    });
 	}
 	catch (...)
 	{

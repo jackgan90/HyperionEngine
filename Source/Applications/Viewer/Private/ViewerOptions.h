@@ -11,6 +11,8 @@ struct FOptions
 	std::filesystem::path Capture;
 	std::filesystem::path SaveConfig;
 	std::filesystem::path Model;
+	std::filesystem::path Scene;
+	std::string SceneCulling = "bvh";
 	bool bVerifyModel{};
 	std::optional<std::string> Backend;
 	int Frames{};

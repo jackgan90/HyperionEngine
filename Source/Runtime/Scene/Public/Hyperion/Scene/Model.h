@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/Math/Math.h"
+#include "Hyperion/Math/Bounds.h"
 #include "Hyperion/Reflection/Record.h"
 #include <span>
 
@@ -107,13 +107,6 @@ struct FModelInstance
 {
 	std::uint32_t Primitive{};
 	FMat4 World;
-};
-
-struct FBounds
-{
-	FVec3 Minimum;
-	FVec3 Maximum;
-	bool bValid{};
 };
 
 void ValidateModel(const FModelAsset& InModel);

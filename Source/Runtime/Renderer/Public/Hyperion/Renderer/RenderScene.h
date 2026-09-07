@@ -43,6 +43,7 @@ public:
 	FRenderPrimitiveHandle GetHandle() const;
 	FRenderBindingStatus GetStatus() const;
 	FTaskHandle Remove();
+	static FTaskHandle RemoveBatch(std::span<FRenderBinding> InBindings);
 
 private:
 	FRenderBinding(std::shared_ptr<FRenderSceneMailbox> InMailbox, FRenderPrimitiveHandle InHandle,
@@ -64,10 +65,13 @@ public:
 	FRenderSceneClient(const FRenderSceneClient&) = delete;
 	FRenderSceneClient& operator=(const FRenderSceneClient&) = delete;
 	void RequireMain() const;
+	void AttachLogicalScene(std::uint64_t InIdentity);
+	void DetachLogicalScene(std::uint64_t InIdentity);
 	FRenderBinding Create(FRenderPrimitiveState InState, FRenderPrimitiveFactory InFactory = {});
 	std::vector<FRenderBinding> CreateBatch(std::vector<FRenderPrimitiveState> InStates,
 	                                        FRenderPrimitiveFactory InFactory = {});
 	FTaskHandle Update(std::vector<FRenderPrimitiveUpdate> InUpdates);
+	FTaskHandle RemoveBatch(std::span<FRenderBinding> InBindings);
 	FTaskHandle Flush();
 	void Close();
 	// Render only. The result owns all state required by subsequent frame work.

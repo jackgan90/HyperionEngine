@@ -1,6 +1,6 @@
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
-#include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneBridge.h"
 #include <algorithm>
 #include <cmath>
 
@@ -8,9 +8,14 @@ namespace Hyperion
 {
 struct FModelViewerPlugin::FImpl
 {
+	FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets, std::filesystem::path InPath)
+	    : Session(InSession), Tasks(InTasks), Assets(InAssets), Path(std::move(InPath))
+	{
+	}
+
 	struct FLoadedModel
 	{
-		std::shared_ptr<const FModelAsset> Asset;
+		std::shared_ptr<const FSceneModelData> Data;
 		FBounds Bounds;
 	};
 
@@ -20,7 +25,9 @@ struct FModelViewerPlugin::FImpl
 	std::filesystem::path Path;
 	TAssetRequest<FModelAsset> Request;
 	TAsyncResult<FLoadedModel> Preparation;
-	std::unique_ptr<FModel> Model;
+	FScene Scene;
+	FSceneHandle Model;
+	std::unique_ptr<FSceneRenderBridge> Bridge;
 	std::string Status = "Loading model...";
 	std::string Error;
 	bool bIsReady{};
@@ -36,7 +43,7 @@ struct FModelViewerPlugin::FImpl
 
 FModelViewerPlugin::FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
                                        std::filesystem::path InPath)
-    : Impl(std::make_unique<FImpl>(FImpl{InSession, InTasks, InAssets, std::move(InPath)}))
+    : Impl(std::make_unique<FImpl>(InSession, InTasks, InAssets, std::move(InPath)))
 {
 	InTasks.Require({EDomain::Main});
 }
@@ -47,12 +54,14 @@ void FModelViewerPlugin::Start()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
+	P.Bridge = std::make_unique<FSceneRenderBridge>(P.Scene, P.Session, P.Tasks);
 	P.Request = P.Assets.LoadAsync<FModelAsset>(P.Path);
 	P.Preparation = DispatchAsync<FImpl::FLoadedModel>(P.Tasks, {EDomain::Worker},
 	                                                   [Request = P.Request, Tasks = &P.Tasks]
 	                                                   {
 		                                                   auto Asset = Request.Get(*Tasks);
-		                                                   return FImpl::FLoadedModel{Asset, ModelBounds(*Asset)};
+		                                                   const auto Data = PrepareSceneModel(Asset);
+		                                                   return FImpl::FLoadedModel{Data, Data->Bounds};
 	                                                   });
 }
 
@@ -66,7 +75,7 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 	}
 	try
 	{
-		if (!P.Model)
+		if (!P.Model.Generation)
 		{
 			if (!P.Preparation.Ready())
 			{
@@ -76,11 +85,12 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 			const auto& Bounds = Loaded->Bounds;
 			P.Center = ScaleVector(Add(Bounds.Minimum, Bounds.Maximum), .5f);
 			P.Radius = std::max(.01f, Length(Subtract(Bounds.Maximum, P.Center)));
-			P.Model = std::make_unique<FModel>(P.Session.GetScene(), P.Session.GetResources(), Loaded->Asset);
+			P.Model = P.Scene.Add(FSceneModel{Loaded->Data->Asset->Name, Loaded->Data});
 			P.Preparation = {};
 			P.Status = "Uploading model to GPU...";
 		}
-		if (auto Error = P.Model->GetError(); !Error.empty())
+		P.Bridge->Flush();
+		if (auto Error = P.Bridge->GetError(P.Model); !Error.empty())
 		{
 			throw std::runtime_error(Error);
 		}
@@ -98,10 +108,10 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 		    Multiply(Perspective(1, Aspect, std::max(.0001f, P.Radius * .001f), P.Distance + P.Radius * 10),
 		             LookAt(Eye, P.Center));
 		InFrame.View.Eye = Eye;
-		P.bIsReady = P.Model->IsReady();
+		P.bIsReady = P.Bridge->IsReady(P.Model);
 		if (P.bIsReady)
 		{
-			P.Status = "Ready | " + std::to_string(P.Model->PrimitiveCount()) + " primitives";
+			P.Status = "Ready | " + std::to_string(P.Bridge->PrimitiveCount(P.Model)) + " primitives";
 		}
 	}
 	catch (const std::exception& Error)
@@ -179,7 +189,9 @@ void FModelViewerPlugin::Stop() noexcept
 		// Cancellation or import failure still joins the producer before the plugin is released.
 	}
 	P.Preparation = {};
-	P.Model.reset();
+	P.Scene.Clear();
+	P.Bridge.reset();
+	P.Model = {};
 	P.bIsReady = false;
 }
 
