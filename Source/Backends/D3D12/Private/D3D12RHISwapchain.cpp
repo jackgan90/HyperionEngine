@@ -214,6 +214,8 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 	P.FrameIndex = P.Swapchain->GetCurrentBackBufferIndex();
 	auto& F = P.Frames[P.FrameIndex];
 	P.State->Wait(F.FenceValue);
+	// Direct RHI clients also retire completed lists during normal frame-ring progress.
+	P.State->CollectUploads();
 	F.Retained.clear();
 	for (auto& bRecorded : F.Recorded)
 	{
@@ -392,6 +394,10 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 	auto Hr = P.Swapchain->Present(bInVsync ? 1 : 0, 0);
 #endif
 	Frame.FenceValue = P.State->Signal();
+	// Device-level retention also progresses when no further frame is presented.
+	// Keep the frame copy until publishing the submission succeeds (including allocation failure).
+	P.State->Submissions.push_back({Frame.FenceValue, Frame.Retained});
+	Frame.Retained.clear();
 	++P.State->Submitted;
 	// A failed Present must remain cancellable until submitted work has drained.
 	Check(Hr, "Present swapchain");

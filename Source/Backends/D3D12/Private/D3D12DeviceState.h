@@ -41,6 +41,14 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	};
 
 	std::vector<FUploadBatch> Uploads;
+
+	struct FSubmission
+	{
+		std::uint64_t FenceValue{};
+		std::vector<FRecordedList> Lists;
+	};
+
+	std::vector<FSubmission> Submissions;
 	void CollectUploads();
 	std::shared_ptr<FD3D12Buffer> AllocateBuffer(std::uint64_t InBytes, D3D12_HEAP_TYPE InHeap,
 	                                             D3D12_RESOURCE_STATES InInitial);

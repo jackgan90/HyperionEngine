@@ -87,6 +87,7 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	const auto Logical = Window->LogicalSize();
 	if (Window->Minimized() || !Size.Width || !Size.Height)
 	{
+		UpdateScene(Size);
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		return;
 	}
@@ -118,54 +119,71 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	ProfileFrame();
 }
 
+FRenderFrame FViewerApplication::UpdateScene(FSize InSize)
+{
+	FRenderFrame Frame{InSize, Settings};
+	Frame.View.Width = std::max(1u, InSize.Width);
+	Frame.View.Height = std::max(1u, InSize.Height);
+	for (const auto& Plugin : Plugins->GetInstances())
+	{
+		if (auto Scene = dynamic_cast<IScenePlugin*>(Plugin.get()))
+		{
+			Scene->Update(Frame);
+		}
+	}
+	return Frame;
+}
+
 FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture)
 {
 	auto& Tasks = Services->Tasks;
+	const auto Frame = UpdateScene(InSize);
 	FImage Screenshot;
 #if HYP_ENABLE_RENDERDOC
 	const auto Surface = Window->Surface();
 	bool bRdcSucceeded = false;
 #endif
-	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-	                          [&]
-	                          {
-		                          FProfileScope Prepare("Render preparation");
+	Tasks.Wait(Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&, Frame, GuiData = InGuiData]
+	    {
+		    FProfileScope Prepare("Render preparation");
 #if HYP_ENABLE_RENDERDOC
-		                          FFrameCaptureScope CaptureScope(Tasks, FrameCapture, Surface);
+		    FFrameCaptureScope CaptureScope(Tasks, FrameCapture, Surface);
 #endif
-		                          if (GuiPlugin)
-		                          {
-			                          Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-			                                                    [&]
-			                                                    {
-				                                                    GuiPlugin->Prepare(InGuiData);
-			                                                    }));
-		                          }
-		                          FRenderGraph Graph;
-		                          FColorPass Clear;
-		                          Clear.Commands.Name = "Clear";
-		                          Clear.Load = EColorLoad::Clear;
-		                          Clear.Commands.ClearColor = {float(Settings.ClearRed), float(Settings.ClearGreen),
-		                                                       float(Settings.ClearBlue), 1};
-		                          Graph.Add(std::move(Clear));
-		                          for (const auto& Plugin : Plugins->GetInstances())
-		                          {
-			                          if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
-			                          {
-				                          Render->Build(Graph, {InSize, Settings});
-			                          }
-		                          }
-		                          Screenshot =
-		                              ExecuteGraph(Graph, Tasks, *Swapchain, InSize, Settings.bVsync, bInTakeCapture);
+		    if (GuiPlugin)
+		    {
+			    Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+			                              [&]
+			                              {
+				                              GuiPlugin->Prepare(GuiData);
+			                              }));
+		    }
+		    FRenderGraph Graph;
+		    FColorPass Clear;
+		    Clear.Commands.Name = "Clear";
+		    Clear.Load = EColorLoad::Clear;
+		    Clear.Commands.ClearColor = {float(Frame.Settings.ClearRed), float(Frame.Settings.ClearGreen),
+		                                 float(Frame.Settings.ClearBlue), 1};
+		    Graph.Add(std::move(Clear));
+		    RenderSession->Build(Graph, Frame.View);
+		    for (const auto& Plugin : Plugins->GetInstances())
+		    {
+			    if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
+			    {
+				    Render->Build(Graph, Frame);
+			    }
+		    }
+		    Screenshot = ExecuteGraph(Graph, Tasks, *Swapchain, InSize, Frame.Settings.bVsync, bInTakeCapture);
 #if HYP_ENABLE_RENDERDOC
-		                          bRdcSucceeded = CaptureScope.Finish();
+		    bRdcSucceeded = CaptureScope.Finish();
 #endif
-		                          Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-		                                                    [&]
-		                                                    {
-			                                                    Metrics.Device = Device->Statistics();
-		                                                    }));
-	                          }));
+		    Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+		                              [&]
+		                              {
+			                              Metrics.Device = Device->Statistics();
+		                              }));
+	    }));
 #if HYP_ENABLE_RENDERDOC
 	if (bRdcSucceeded && Settings.bRenderDocAutoOpen)
 	{

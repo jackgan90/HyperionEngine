@@ -1,4 +1,4 @@
-#include "Hyperion/Renderer/ModelRenderer.h"
+#include "Hyperion/Renderer/ModelPreparation.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -81,22 +81,6 @@ FSamplerDesc Sampler(const FModelSampler& InSampler)
 	        InSampler.Min >= ESamplerFilter::NearestMipNearest};
 }
 
-struct FModelConstants
-{
-	FMat4 World;
-	FMat4 ViewProjection;
-	FMat4 Normal;
-	FVec4 Camera;
-	FVec4 BaseColor;
-	FVec4 EmissiveAndNormal;
-	FVec4 Pbr;
-	FVec4 Modes;
-	FVec4 UvSets;
-	FVec4 Extra;
-	std::array<std::byte, 208> Padding{};
-};
-
-static_assert(sizeof(FModelConstants) == 512);
 } // namespace
 
 FPreparedModel PrepareModel(std::shared_ptr<const FModelAsset> InModel)
@@ -178,135 +162,4 @@ FPreparedModel PrepareModel(std::shared_ptr<const FModelAsset> InModel)
 	return Result;
 }
 
-FModelRenderer::FModelRenderer(IRHIDevice& InDevice, const FPreparedModel& InModel, const FShaderArtifact& InVertex,
-                               const FShaderArtifact& InPixel)
-    : Device(InDevice), Source(InModel.Source), Instances(ModelInstances(*Source)), Materials(InModel.Materials)
-{
-	Textures = Device.CreateTexturesAsync(InModel.Textures);
-	for (const auto& Primitive : InModel.Primitives)
-	{
-		Vertices.push_back(Device.CreateBuffer(std::as_bytes(std::span(Primitive.Vertices))));
-		Indices.push_back(Device.CreateBuffer(std::as_bytes(std::span(Primitive.Indices))));
-		Centers.push_back(Primitive.Center);
-	}
-	for (const auto& Prepared : Materials)
-	{
-		FPipelineDesc Desc;
-		Desc.Vertex = InVertex;
-		Desc.Pixel = InPixel;
-		Desc.bMaterialLayout = true;
-		Desc.bSrgbTarget = true;
-		Desc.bDepthTest = true;
-		Desc.bDepthWrite = Prepared.Material.AlphaMode != EAlphaMode::Blend;
-		Desc.bAlphaBlend = Prepared.Material.AlphaMode == EAlphaMode::Blend;
-		Desc.bCullBack = !Prepared.Material.bDoubleSided;
-		Desc.Samplers = Prepared.Samplers;
-		Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FModelVertex, Position)},
-		                   {"NORMAL", 0, EVertexFormat::Float3, offsetof(FModelVertex, Normal)},
-		                   {"TANGENT", 0, EVertexFormat::Float4, offsetof(FModelVertex, Tangent)},
-		                   {"COLOR", 0, EVertexFormat::Float4, offsetof(FModelVertex, Color)},
-		                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FModelVertex, Uv0)},
-		                   {"TEXCOORD", 1, EVertexFormat::Float2, offsetof(FModelVertex, Uv1)}};
-		std::array<FPipeline, 2> Pair;
-		Pair[0] = Device.CreatePipeline(Desc);
-		Desc.bFrontCounterClockwise = false;
-		Pair[1] = Device.CreatePipeline(Desc);
-		Pipelines.push_back(std::move(Pair));
-	}
-}
-
-bool FModelRenderer::Ready()
-{
-	return Device.TexturesReady(Textures);
-}
-
-std::vector<FDrawPacket> FModelRenderer::Draws(const FMat4& InViewProjection, FVec3 InEye, FSize InSize)
-{
-	const auto MaterialIndex = [&](const FModelInstance& InInstance)
-	{
-		const auto Index = Source->Primitives[InInstance.Primitive].Material;
-		return Index < 0 ? Materials.size() - 1 : std::size_t(Index);
-	};
-
-	struct FOrderedInstance
-	{
-		FModelInstance Instance;
-		bool bBlend{};
-		float Depth{};
-	};
-
-	std::vector<FOrderedInstance> Ordered;
-	Ordered.reserve(Instances.size());
-	for (const auto& Instance : Instances)
-	{
-		FOrderedInstance Item{Instance, Materials[MaterialIndex(Instance)].Material.AlphaMode == EAlphaMode::Blend};
-		if (Item.bBlend)
-		{
-			const auto Center = Centers[Instance.Primitive];
-			const auto Clip = Transform(InViewProjection, Transform(Instance.World, {Center.X, Center.Y, Center.Z, 1}));
-			Item.Depth = Clip.W > 0 ? Clip.Z / Clip.W : std::numeric_limits<float>::lowest();
-			if (!std::isfinite(Item.Depth))
-			{
-				Item.Depth = std::numeric_limits<float>::lowest();
-			}
-		}
-		Ordered.push_back(Item);
-	}
-	std::stable_sort(Ordered.begin(), Ordered.end(),
-	                 [](const FOrderedInstance& InA, const FOrderedInstance& InB)
-	                 {
-		                 return InA.bBlend != InB.bBlend ? !InA.bBlend : InA.bBlend && InA.Depth > InB.Depth;
-	                 });
-	std::vector<FDrawPacket> Draws;
-	Draws.reserve(Ordered.size());
-	std::vector<FModelConstants> ConstantData;
-	ConstantData.reserve(Ordered.size());
-	for (const auto& Item : Ordered)
-	{
-		const auto& Instance = Item.Instance;
-		const auto Index = MaterialIndex(Instance);
-		const auto& Prepared = Materials[Index];
-		const auto& Material = Prepared.Material;
-		const bool bMirrored = Determinant(Instance.World) < 0;
-		FModelConstants Constants{};
-		Constants.World = Instance.World;
-		Constants.ViewProjection = InViewProjection;
-		Constants.Normal = NormalMatrix(Instance.World);
-		Constants.Camera = {InEye.X, InEye.Y, InEye.Z, 1};
-		Constants.BaseColor = Material.BaseColor;
-		Constants.EmissiveAndNormal = {Material.Emissive.X, Material.Emissive.Y, Material.Emissive.Z,
-		                               Material.NormalScale};
-		Constants.Pbr = {Material.Metallic, Material.Roughness, Material.OcclusionStrength, Material.AlphaCutoff};
-		Constants.Modes = {static_cast<float>(Material.AlphaMode), Material.bDoubleSided ? 1.f : 0.f,
-		                   Material.bUnlit ? 1.f : 0.f, bMirrored ? -1.f : 1.f};
-		Constants.UvSets = {float(Material.BaseColorTexture.TexCoord),
-		                    float(Material.MetallicRoughnessTexture.TexCoord), float(Material.NormalTexture.TexCoord),
-		                    float(Material.OcclusionTexture.TexCoord)};
-		Constants.Extra = {float(Material.EmissiveTexture.TexCoord), Material.NormalTexture.Image >= 0 ? 1.f : 0.f, 0,
-		                   0};
-		FDrawPacket Draw;
-		Draw.Pipeline = Pipelines[Index][bMirrored ? 1 : 0];
-		Draw.Vertices = Vertices[Instance.Primitive];
-		Draw.Indices = Indices[Instance.Primitive];
-		Draw.VertexStride = sizeof(FModelVertex);
-		Draw.IndexCount = static_cast<std::uint32_t>(Source->Primitives[Instance.Primitive].Indices.size());
-		Draw.MaterialConstantOffset = ConstantData.size() * sizeof(FModelConstants);
-		ConstantData.push_back(Constants);
-		for (std::size_t Slot = 0; Slot < 5; ++Slot)
-		{
-			Draw.MaterialTextures[Slot] = Textures[Prepared.Textures[Slot]];
-		}
-		Draw.Scissor = {0, 0, static_cast<std::int32_t>(InSize.Width), static_cast<std::int32_t>(InSize.Height)};
-		Draws.push_back(std::move(Draw));
-	}
-	if (!ConstantData.empty())
-	{
-		const auto Buffer = Device.CreateBuffer(std::as_bytes(std::span(ConstantData)));
-		for (auto& Draw : Draws)
-		{
-			Draw.MaterialConstants = Buffer;
-		}
-	}
-	return Draws;
-}
 } // namespace Hyperion

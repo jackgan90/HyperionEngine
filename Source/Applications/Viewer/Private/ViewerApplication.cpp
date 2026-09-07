@@ -99,25 +99,26 @@ void FViewerApplication::InitializePlugins()
 		Font = Gui->FontImage();
 	}
 	auto& Tasks = Services->Tasks;
+	RenderSession = std::make_unique<FRenderSession>(Tasks, *Device, *Compiler);
 	FPluginRegistry Registry;
-	RegisterTrianglePlugin(Registry, *Device, *Compiler, Tasks);
-	RegisterModelViewerPlugin(Registry, *Device, *Compiler, Tasks, Services->Assets, Settings.ModelSource);
+	RegisterTrianglePlugin(Registry, *RenderSession, *Device, *Compiler, Tasks);
+	RegisterModelViewerPlugin(Registry, *RenderSession, Tasks, Services->Assets, Settings.ModelSource);
 	RegisterDebugUiPlugin(Registry, *Device, *Compiler, Tasks, Font);
+	Plugins = std::make_unique<FPluginSet>(Registry.Activate(Requested));
+	for (const auto& Plugin : Plugins->GetInstances())
+	{
+		if (auto Debug = dynamic_cast<FDebugUiPlugin*>(Plugin.get()))
+		{
+			GuiPlugin = Debug;
+		}
+		if (auto Model = dynamic_cast<FModelViewerPlugin*>(Plugin.get()))
+		{
+			ModelPlugin = Model;
+		}
+	}
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 	                          [&]
 	                          {
-		                          Plugins = std::make_unique<FPluginSet>(Registry.Activate(Requested));
-		                          for (const auto& Plugin : Plugins->GetInstances())
-		                          {
-			                          if (auto Debug = dynamic_cast<FDebugUiPlugin*>(Plugin.get()))
-			                          {
-				                          GuiPlugin = Debug;
-			                          }
-			                          if (auto Model = dynamic_cast<FModelViewerPlugin*>(Plugin.get()))
-			                          {
-				                          ModelPlugin = Model;
-			                          }
-		                          }
 		                          Metrics.Device = Device->Statistics();
 	                          }));
 }
@@ -126,6 +127,14 @@ FDeviceStats FViewerApplication::ReleaseGraphics()
 {
 	FDeviceStats Stats;
 	auto& Tasks = Services->Tasks;
+	Plugins.reset();
+	GuiPlugin = nullptr;
+	ModelPlugin = nullptr;
+	if (RenderSession)
+	{
+		RenderSession->Close();
+		RenderSession.reset();
+	}
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 	                          [&]
 	                          {
@@ -133,9 +142,6 @@ FDeviceStats FViewerApplication::ReleaseGraphics()
 		                          {
 			                          Device->WaitIdle();
 		                          }
-		                          Plugins.reset();
-		                          GuiPlugin = nullptr;
-		                          ModelPlugin = nullptr;
 		                          Swapchain.reset();
 		                          if (Device)
 		                          {

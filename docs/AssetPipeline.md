@@ -55,7 +55,9 @@ flowchart LR
   Worker --> CPU[不可变 FModelAsset]
   CPU --> RHI[RHI 0: 创建资源 / 批量上传]
   RHI --> Fence[上传 fence 完成]
-  Fence --> Render[Render: 模型 pass / 相机]
+  Fence --> Render[Render: primitives / 全场景排序]
+  CPU --> Model[Main: FModel / 相机 / binding]
+  Model --> Render
 ```
 
 `Runtime/IO` 定义 `IFileSystem`、`FLocalFileSystem`、`FMemoryFileSystem` 与 `FIOService`。替换存储后端时只需注入 `IFileSystem`。实际文件操作在 `EDomain::Io` 的单个专用线程执行；初版使用阻塞系统文件操作，但相对于调用者是异步的。写入使用同目录唯一临时文件，然后原子替换目标。
@@ -68,9 +70,11 @@ Worker 请求依赖字节时通过现有 oneTBB resumable wait 挂起，因此�
 
 GPU 资源创建在 RHI 0 执行；一次模型图片上传使用一个批次和 fence，暂存资源保留到 fence 完成，不逐张纹理 `WaitIdle()`。模型仅在上传完成后提交绘制。帧内缓冲区与纹理由 draw packet 保留到帧 fence 完成。当前仍是单 graphics queue；顶点/索引采用不可变 upload heap buffer，尚无专用 copy queue。PSO 创建仍可能产生 CPU 帧抖动，异步 IO 不代表所有操作都没有开销。
 
-每个模型每帧只创建一个常量 buffer，各 draw 使用独立的 512 字节片；后端检查偏移对齐与范围。buffer 不跨帧写入复用，沿用已有 fence 生命周期。已有 normals 和 tangents 的网格跳过方向生成。
+整个场景按帧批量创建常量 buffer，各 draw 使用独立的 512 字节片；后端检查偏移对齐与范围。buffer 不跨帧写入复用，沿用已有 fence 生命周期。已有 normals 和 tangents 的网格跳过方向生成。
 
 启动配置读取、日志、shader source/cache 和保留的同步兼容函数尚未迁移到 IO 服务。新的模型加载、原生资产保存、Viewer 截图编码/写入和配置保存使用异步路径。截图 PNG 编码在 Worker，字节写入在 IO；退出前等待保存完成。
+
+模型及程序化三角形统一使用 [RenderPrimitives.md](RenderPrimitives.md) 的 session/primitive 流程。`FModel` 是 Main 逻辑组，多个实例共享同一资产资源服务的 VB/IB、材质与纹理。相机在 Main 生成自有 view，Render 做全场景深度/透明组织；proxy 与 GPU 资源分别在 Render 和 RHI 0 析构。
 
 ## 调用和扩展
 
@@ -107,7 +111,7 @@ glTF 私有适配器按访问器/URI 读取、材质、图元转换和场景组�
 
 glTF 的 accessor、材质语义和节点引用不能仅凭同名字段反射为引擎对象。每种外部格式仍需一个集中适配器完成语义转换；业务层统一调用资产服务。引擎原生资产新增字段时只注册字段，通用 Archive 完成读写绑定，不需要每个字段重复 open/read/assignment。当前没有反射代码生成、任意指针对象图、schema 迁移回调或通用编辑器。
 
-未来接入 FBX/OBJ/COLLADA 时，可在 `AssetImport/Private/Adapters` 增加 Assimp importer，注册 `FAssetCodec` 的类型 ID、扩展名和 Load 回调，并将 Assimp `IOSystem`/`IOStream` 接到同一个 IO 服务。专用格式解析库可以并存，Renderer 始终只消费 `FModelAsset`。同步库的 IO handler 需要在 Worker 中请求 IO 并挂起等待，或先预取依赖；不能将整个 importer 放进 IO 线程。不得跨 resumable wait 持有 OS 线程绑定的锁或 Tracy scope。未来第三方 exporter 是单独的能力扩展；当前只有内置 `.hasset` writer。
+未来接入 FBX/OBJ/COLLADA 时，可在 `AssetImport/Private/Adapters` 增加 Assimp importer，注册 `FAssetCodec` 的类型 ID、扩展名和 Load 回调，并将 Assimp `IOSystem`/`IOStream` 接到同一个 IO 服务。专用格式解析库可以并存，模型桥接始终消费 `FModelAsset`，而通用 Renderer 只通过 render primitive 收集场景绘制。同步库的 IO handler 需要在 Worker 中请求 IO 并挂起等待，或先预取依赖；不能将整个 importer 放进 IO 线程。不得跨 resumable wait 持有 OS 线程绑定的锁或 Tracy scope。未来第三方 exporter 是单独的能力扩展；当前只有内置 `.hasset` writer。
 
 ## OpenSpec 顺序与验证
 

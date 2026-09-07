@@ -43,6 +43,11 @@ void FD3D12DeviceState::CollectUploads()
 	              {
 		              return InBatch.FenceValue <= Completed;
 	              });
+	std::erase_if(Submissions,
+	              [Completed](const FSubmission& InSubmission)
+	              {
+		              return InSubmission.FenceValue <= Completed;
+	              });
 }
 
 std::shared_ptr<FD3D12Buffer> FD3D12DeviceState::AllocateBuffer(std::uint64_t InBytes, D3D12_HEAP_TYPE InHeap,

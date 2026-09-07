@@ -500,4 +500,21 @@ std::uint32_t FTaskSystem::RhiThreadCount() const
 {
 	return Impl->RhiCount;
 }
+
+bool FTaskSystem::IsCurrent(FTarget InTarget) const
+{
+	if (InTarget.Domain == EDomain::Main)
+	{
+		return InTarget.Index == 0 && std::this_thread::get_id() == Impl->MainId;
+	}
+	return ActiveSystem == Impl.get() && ActiveTarget == InTarget;
+}
+
+void FTaskSystem::Require(FTarget InTarget) const
+{
+	if (!IsCurrent(InTarget))
+	{
+		throw std::logic_error("Operation called from the wrong execution domain");
+	}
+}
 } // namespace Hyperion

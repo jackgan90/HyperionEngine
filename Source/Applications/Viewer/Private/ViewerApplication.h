@@ -2,6 +2,7 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
+#include "Hyperion/Renderer/RenderSession.h"
 #include "ViewerOptions.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
@@ -38,6 +39,7 @@ private:
 	void ExerciseWindow(int InFrame);
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
 	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
+	FRenderFrame UpdateScene(FSize InSize);
 	FImage RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture);
 	void UpdateCaptureStatus();
 	void HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled);
@@ -60,6 +62,7 @@ private:
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FShaderCompiler> Compiler;
+	std::unique_ptr<FRenderSession> RenderSession;
 	std::unique_ptr<FGui> Gui;
 	std::unique_ptr<FPluginSet> Plugins;
 	FDebugUiPlugin* GuiPlugin{};

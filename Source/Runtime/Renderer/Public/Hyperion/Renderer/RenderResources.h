@@ -1,0 +1,106 @@
+#pragma once
+#include "Hyperion/Renderer/RenderGraph.h"
+#include "Hyperion/Renderer/RenderPrimitive.h"
+#include "Hyperion/Tasks/AsyncResult.h"
+
+namespace Hyperion
+{
+struct FRenderGeometryDesc
+{
+	std::vector<std::byte> Vertices;
+	std::vector<std::uint32_t> Indices;
+	std::uint32_t VertexStride{};
+	FBounds Bounds;
+};
+
+struct FRenderMaterialDesc
+{
+	FPipelineDesc Pipeline;
+	FModelMaterial Parameters;
+	std::array<std::uint32_t, 5> Textures{};
+	bool bClipSpace{};
+};
+
+struct FRenderSection
+{
+	std::uint32_t Geometry{};
+	std::uint32_t Material{};
+	std::uint32_t FirstIndex{};
+	std::uint32_t IndexCount{};
+};
+
+struct FRenderResourceDesc
+{
+	std::vector<FRenderGeometryDesc> Geometries;
+	std::vector<FRenderMaterialDesc> Materials;
+	std::vector<FTextureDesc> Textures;
+	std::vector<FRenderSection> Sections;
+};
+
+enum class ERenderResourceStatus
+{
+	Preparing,
+	Uploading,
+	Ready,
+	Failed,
+	Retired
+};
+
+struct FRenderResourceRecord;
+struct FRenderResourceCoordinator;
+
+// Thread-neutral lease. Native resources are private and pinned by the RHI coordinator.
+class FRenderResource
+{
+public:
+	~FRenderResource();
+	ERenderResourceStatus GetStatus() const;
+	std::string GetError() const;
+	std::uint64_t GetIdentity() const;
+	std::shared_ptr<const FRenderResourceDesc> GetDescription() const;
+
+private:
+	FRenderResource(std::shared_ptr<FRenderResourceRecord> InRecord, std::function<void()> InReleased);
+	std::shared_ptr<FRenderResourceRecord> Record;
+	std::function<void()> Released;
+	friend struct FRenderResourceCoordinator;
+	friend class FRenderResourceService;
+};
+
+struct FRenderResourceStats
+{
+	std::uint64_t Requests{};
+	std::uint64_t Productions{};
+	std::uint64_t GeometryUploads{};
+	std::uint64_t Retired{};
+	std::size_t LiveResources{};
+};
+
+// One service per rendering device/session, shared by all its scene producers.
+// Request/Close: Main. BuildPasses: RHI 0. Queries: any domain.
+class FRenderResourceService
+{
+public:
+	FRenderResourceService(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler);
+	~FRenderResourceService();
+	FRenderResourceService(const FRenderResourceService&) = delete;
+	FRenderResourceService& operator=(const FRenderResourceService&) = delete;
+	std::shared_ptr<const FRenderResource> RequestModel(std::shared_ptr<const FModelAsset> InAsset,
+	                                                    std::uint64_t InVersion = 1);
+	std::shared_ptr<const FRenderResource> Request(std::shared_ptr<const void> InIdentity, std::uint64_t InVersion,
+	                                               std::string InConfiguration,
+	                                               std::function<FRenderResourceDesc()> InPrepare);
+	std::vector<FColorPass> BuildPasses(const FRenderSceneSnapshot& InSnapshot);
+	FRenderResourceStats Statistics() const;
+	void Close();
+
+private:
+	std::shared_ptr<FRenderResourceCoordinator> Coordinator;
+	FShaderCompiler& Compiler;
+};
+
+// Render only: freeze resource readiness, conservatively cull and globally order items.
+FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot);
+FRenderResourceDesc PrepareModelResources(std::shared_ptr<const FModelAsset> InAsset, FShaderCompiler& InCompiler,
+                                          EShaderFormat InFormat);
+} // namespace Hyperion

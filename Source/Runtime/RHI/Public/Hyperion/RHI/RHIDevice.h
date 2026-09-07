@@ -29,6 +29,12 @@ public:
 	virtual FPipeline CreatePipeline(const FPipelineDesc& InDesc) = 0;
 	virtual std::unique_ptr<IRHISwapchain> CreateSwapchain(const FRHISwapchainDesc& InDesc) = 0;
 	virtual void WaitIdle() = 0;
+
+	// RHI coordinator: release completed upload/submission retention without an idle wait.
+	virtual void CollectCompletedResources()
+	{
+	}
+
 	virtual FDeviceStats Statistics() const = 0;
 };
 } // namespace Hyperion

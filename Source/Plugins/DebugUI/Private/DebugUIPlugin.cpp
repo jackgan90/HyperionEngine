@@ -148,6 +148,7 @@ FDebugUiPlugin::~FDebugUiPlugin() = default;
 void FDebugUiPlugin::Start()
 {
 	auto& P = *Impl;
+	P.Tasks.Require({EDomain::Main});
 	FPipelineDesc Desc;
 	Desc.bAlphaBlend = true;
 	Desc.bTextured = true;
@@ -162,21 +163,31 @@ void FDebugUiPlugin::Start()
 	Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Position)},
 	                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Uv)},
 	                   {"COLOR", 0, EVertexFormat::Unorm8x4, offsetof(FGuiVertex, Color)}};
-	P.Pipeline = P.Device.CreatePipeline(Desc);
-	P.Texture = P.Device.CreateTexture(P.Font);
-	P.Font = {};
+	P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Rhi, 0},
+	                              [&P, Desc = std::move(Desc)]
+	                              {
+		                              P.Pipeline = P.Device.CreatePipeline(Desc);
+		                              P.Texture = P.Device.CreateTexture(P.Font);
+		                              P.Font = {};
+	                              }));
 }
 
 void FDebugUiPlugin::Stop() noexcept
 {
-	Impl->Draws.clear();
-	Impl->Pipeline = {};
-	Impl->Texture = {};
+	Impl->Tasks.Require({EDomain::Main});
+	Impl->Tasks.Wait(Impl->Tasks.Dispatch({EDomain::Rhi, 0},
+	                                      [this]
+	                                      {
+		                                      Impl->Draws.clear();
+		                                      Impl->Pipeline = {};
+		                                      Impl->Texture = {};
+	                                      }));
 }
 
 void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 {
 	auto& P = *Impl;
+	P.Tasks.Require({EDomain::Rhi, 0});
 	P.Draws.clear();
 	if (InData.Vertices.empty() || InData.Indices.empty())
 	{
@@ -224,6 +235,7 @@ void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 
 void FDebugUiPlugin::Build(FRenderGraph& InGraph, const FRenderFrame&)
 {
+	Impl->Tasks.Require({EDomain::Render});
 	if (Impl->Draws.empty())
 	{
 		return;

@@ -4,14 +4,16 @@
 
 namespace Hyperion
 {
-class FModelViewerPlugin final : public IRenderPlugin
+class FRenderSession;
+
+class FModelViewerPlugin final : public IScenePlugin
 {
 public:
-	FModelViewerPlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FAssetService& InAssets,
+	FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
 	                   std::filesystem::path InPath);
 	~FModelViewerPlugin() override;
 	void Start() override;
-	void Build(FRenderGraph& InGraph, const FRenderFrame& InFrame) override;
+	void Update(FRenderFrame& InFrame) override;
 	void Stop() noexcept override;
 	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);
 	const std::string& Status() const;
@@ -23,6 +25,6 @@ private:
 	std::unique_ptr<FImpl> Impl;
 };
 
-void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,
-                               FTaskSystem& InTasks, FAssetService& InAssets, const std::filesystem::path& InPath);
+void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, FTaskSystem& InTasks,
+                               FAssetService& InAssets, const std::filesystem::path& InPath);
 } // namespace Hyperion

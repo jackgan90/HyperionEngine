@@ -19,6 +19,7 @@ public:
 	FPipeline CreatePipeline(const FPipelineDesc& InDesc) override;
 	std::unique_ptr<IRHISwapchain> CreateSwapchain(const FRHISwapchainDesc& InDesc) override;
 	void WaitIdle() override;
+	void CollectCompletedResources() override;
 	FDeviceStats Statistics() const override;
 
 private:

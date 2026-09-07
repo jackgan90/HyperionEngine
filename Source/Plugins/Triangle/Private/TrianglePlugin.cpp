@@ -1,4 +1,6 @@
 #include "Hyperion/Triangle/TrianglePlugin.h"
+#include "Hyperion/Renderer/RenderSession.h"
+#include <algorithm>
 #include <array>
 #include <cstddef>
 
@@ -6,75 +8,87 @@ namespace Hyperion
 {
 namespace
 {
-class FTrianglePlugin final : public IRenderPlugin
+FRenderResourceDesc PrepareTriangle(FShaderCompiler& InCompiler, EShaderFormat InFormat)
+{
+	FRenderResourceDesc Desc;
+	FRenderMaterialDesc Material;
+	Material.bClipSpace = true;
+	Material.Pipeline.Vertex = InCompiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, InFormat);
+	Material.Pipeline.Pixel = InCompiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel, InFormat);
+	Material.Pipeline.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FVertex, Position)},
+	                                {"COLOR", 0, EVertexFormat::Float4, offsetof(FVertex, Color)},
+	                                {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FVertex, Uv)}};
+	const std::array<FVertex, 3> Vertices{{{{0, .75f, 0}, {1, .22f, .27f, 1}, {}},
+	                                       {{-.75f, -.65f, 0}, {.12f, .9f, .72f, 1}, {}},
+	                                       {{.75f, -.65f, 0}, {.2f, .4f, 1, 1}, {}}}};
+	FRenderGeometryDesc Geometry;
+	const auto Bytes = std::as_bytes(std::span(Vertices));
+	Geometry.Vertices.assign(Bytes.begin(), Bytes.end());
+	Geometry.Indices = {0, 1, 2};
+	Geometry.VertexStride = sizeof(FVertex);
+	Geometry.Bounds = {{-.75f, -.65f, 0}, {.75f, .75f, 0}, true};
+	Desc.Geometries.push_back(std::move(Geometry));
+	Desc.Materials.push_back(std::move(Material));
+	Desc.Sections.push_back({0, 0, 0, 3});
+	return Desc;
+}
+
+class FTrianglePlugin final : public IScenePlugin
 {
 public:
-	FTrianglePlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks)
-	    : Device(InDevice), Compiler(InCompiler), Tasks(InTasks)
+	FTrianglePlugin(FRenderSession& InSession, IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks)
+	    : Session(InSession), Compiler(InCompiler), Tasks(InTasks), Format(InDevice.GetCapabilities().ShaderFormat)
 	{
 	}
 
 	void Start() override
 	{
-		FPipelineDesc Desc;
-		Tasks.Wait(Tasks.Dispatch({EDomain::Worker},
-		                          [&]
-		                          {
-			                          Desc.Vertex = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex,
-			                                                         Device.GetCapabilities().ShaderFormat);
-			                          Desc.Pixel = Compiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel,
-			                                                        Device.GetCapabilities().ShaderFormat);
-		                          }));
-		Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FVertex, Position)},
-		                   {"COLOR", 0, EVertexFormat::Float4, offsetof(FVertex, Color)},
-		                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FVertex, Uv)}};
-		Draw.Pipeline = Device.CreatePipeline(Desc);
-		const std::array<FVertex, 3> Vertices{{{{0, .75f, 0}, {1, .22f, .27f, 1}, {}},
-		                                       {{-.75f, -.65f, 0}, {.12f, .9f, .72f, 1}, {}},
-		                                       {{.75f, -.65f, 0}, {.2f, .4f, 1, 1}, {}}}};
-		const std::array<std::uint32_t, 3> Indices{0, 1, 2};
-		Draw.Vertices = Device.CreateBuffer(std::as_bytes(std::span(Vertices)));
-		Draw.Indices = Device.CreateBuffer(std::as_bytes(std::span(Indices)));
-		Draw.VertexStride = sizeof(FVertex);
-		Draw.IndexCount = 3;
+		Tasks.Require({EDomain::Main});
+		static const auto Identity = std::make_shared<const int>(0);
+		State.Resource = Session.GetResources().Request(Identity, 1, "TriangleVertex-v1",
+		                                                [ShaderCompiler = &Compiler, ShaderFormat = Format]
+		                                                {
+			                                                return PrepareTriangle(*ShaderCompiler, ShaderFormat);
+		                                                });
+		Binding = Session.GetScene().Create(State);
 	}
 
-	void Build(FRenderGraph& InGraph, const FRenderFrame& InFrame) override
+	void Update(FRenderFrame& InFrame) override
 	{
-		FDrawPacket FrameDraw = Draw;
+		Tasks.Require({EDomain::Main});
 		const float TriangleScale = static_cast<float>(InFrame.Settings.TriangleScale);
-		FrameDraw.Constants =
-		    Scale({TriangleScale * static_cast<float>(InFrame.Size.Height) / static_cast<float>(InFrame.Size.Width),
+		State.World =
+		    Scale({TriangleScale * float(std::max(1u, InFrame.Size.Height)) / std::max(1u, InFrame.Size.Width),
 		           TriangleScale, 1});
-		FrameDraw.Scissor = {0, 0, static_cast<std::int32_t>(InFrame.Size.Width),
-		                     static_cast<std::int32_t>(InFrame.Size.Height)};
-		FColorPass Pass;
-		Pass.Commands.Name = "Triangle";
-		Pass.Commands.Draws.push_back(std::move(FrameDraw));
-		InGraph.Add(std::move(Pass));
+		++State.Revision;
+		Session.GetScene().Update({{Binding.GetHandle(), State}});
 	}
 
 	void Stop() noexcept override
 	{
-		Draw = {};
+		Tasks.Require({EDomain::Main});
+		Binding.Remove();
+		State.Resource.reset();
 	}
 
 private:
-	IRHIDevice& Device;
+	FRenderSession& Session;
 	FShaderCompiler& Compiler;
 	FTaskSystem& Tasks;
-	FDrawPacket Draw;
+	EShaderFormat Format;
+	FRenderPrimitiveState State;
+	FRenderBinding Binding;
 };
 } // namespace
 
-void RegisterTrianglePlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,
-                            FTaskSystem& InTasks)
+void RegisterTrianglePlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, IRHIDevice& InDevice,
+                            FShaderCompiler& InCompiler, FTaskSystem& InTasks)
 {
 	InRegistry.Add({"triangle",
 	                {},
 	                [&]
 	                {
-		                return std::make_unique<FTrianglePlugin>(InDevice, InCompiler, InTasks);
+		                return std::make_unique<FTrianglePlugin>(InSession, InDevice, InCompiler, InTasks);
 	                }});
 }
 } // namespace Hyperion

@@ -19,7 +19,7 @@ Source/
     AssetImport/   # glTF 场景适配，通过 Assets / IO 加载
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
     RHI/           # 公共图形契约、能力查询、后端注册表
-    Renderer/      # RenderGraph 与 IRenderPlugin
+    Renderer/      # render session / primitive / resources / Model 桥接 / RenderGraph
     Gui/           # ImGui / ImPlot wrapper 和引擎绘制数据
     Capture/       # 可选 RenderDoc API wrapper，不依赖原生 RHI 后端
   Backends/
@@ -47,7 +47,7 @@ Source/Runtime/Assets/
 
 调用方写 `#include "Hyperion/Assets/Assets.h"`，并在自己的 CMake target 声明依赖。只有公共接口确实依赖的模块使用 `PUBLIC`；实现细节使用 `PRIVATE`。第三方库私有链接，第三方类型不能出现在引擎公共接口中。`tools/CheckBoundaries.py` 检查模块依赖声明、私有头越界、第三方 include 和依赖方向。
 
-`Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection，保存静态模型和节点层级，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 将 CPU 数据转为 GPU 资源与 pass。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
+`Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection，保存静态模型和节点层级，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 的 Model 桥接将 CPU 数据注册为 Render primitives，共享资源服务管理 GPU 资源，由 session 统一收集和提交场景 pass。完整线程/所有权契约见 [RenderPrimitives.md](RenderPrimitives.md)。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
 
 Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Containers/`；仅供某个模块使用的工具留在该模块 `Private`，避免把所有辅助代码集中进一个无边界的 Utils 模块。当前 Core 接口数量少，后续增长时再按这些概念拆分。
 

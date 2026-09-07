@@ -37,26 +37,7 @@ struct FPreparedModel
 	FBounds Bounds;
 };
 
-// CPU work only. All methods of FModelRenderer execute on the RHI coordinator.
+// Immutable CPU preparation, normally called on Worker.
 FPreparedModel PrepareModel(std::shared_ptr<const FModelAsset> InModel);
 
-class FModelRenderer
-{
-public:
-	FModelRenderer(IRHIDevice& InDevice, const FPreparedModel& InModel, const FShaderArtifact& InVertex,
-	               const FShaderArtifact& InPixel);
-	bool Ready();
-	std::vector<FDrawPacket> Draws(const FMat4& InViewProjection, FVec3 InEye, FSize InSize);
-
-private:
-	IRHIDevice& Device;
-	std::shared_ptr<const FModelAsset> Source;
-	std::vector<FModelInstance> Instances;
-	std::vector<FBuffer> Vertices;
-	std::vector<FBuffer> Indices;
-	std::vector<FVec3> Centers;
-	std::vector<FTexture> Textures;
-	std::vector<FPreparedMaterial> Materials;
-	std::vector<std::array<FPipeline, 2>> Pipelines;
-};
 } // namespace Hyperion

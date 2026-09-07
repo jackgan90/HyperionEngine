@@ -1,7 +1,9 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
-#include "Hyperion/Renderer/ModelRenderer.h"
+#include "Hyperion/Renderer/Model.h"
+#include "Hyperion/Renderer/ModelPreparation.h"
+#include "Hyperion/Renderer/RenderSession.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <atomic>
@@ -100,31 +102,41 @@ struct FModelReadbackContext
 	FTaskSystem& Tasks;
 	IRHIDevice& Device;
 	IRHISwapchain& Swapchain;
-	const FShaderArtifact& Vertex;
-	const FShaderArtifact& Fragment;
+	FRenderSession& Session;
 };
 
 FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset InModel, bool bInCheckConstantRanges)
 {
-	auto Prepared = PrepareModel(std::make_shared<const FModelAsset>(std::move(InModel)));
+	FModel Model(InContext.Session.GetScene(), InContext.Session.GetResources(),
+	             std::make_shared<const FModelAsset>(std::move(InModel)));
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	while (!Model.IsReady() && Model.GetError().empty() && std::chrono::steady_clock::now() < Deadline)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	HYP_CHECK(Model.IsReady());
+	FRenderSceneSnapshot Snapshot;
+	InContext.Tasks.Wait(InContext.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    FRenderView View{
+		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
+		    Snapshot = PrepareSceneSnapshot(InContext.Session.GetScene().Collect(View));
+	    }));
 	FImage Image;
 	InContext.Tasks.Wait(InContext.Tasks.Dispatch(
 	    {EDomain::Rhi, 0},
 	    [&]
 	    {
-		    FModelRenderer Renderer(InContext.Device, Prepared, InContext.Vertex, InContext.Fragment);
-		    // A single readback-test barrier; the production path only polls upload
-		    // fences.
-		    InContext.Device.WaitIdle();
-		    HYP_CHECK(Renderer.Ready());
-		    InContext.Swapchain.BeginFrame({320, 240});
-		    FPassCommands Draw;
+		    auto Passes = InContext.Session.GetResources().BuildPasses(Snapshot);
+		    HYP_CHECK(Passes.size() == 1);
+		    auto Draw = std::move(Passes.front().Commands);
 		    Draw.Name = "Known material pixels";
-		    Draw.bClear = Draw.bUseDepth = Draw.bClearDepth = Draw.bSrgbTarget = true;
+		    Draw.bClear = true;
 		    Draw.TransitionFrom = EResourceState::Present;
 		    Draw.TransitionTo = EResourceState::RenderTarget;
-		    Draw.Draws = Renderer.Draws(Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})),
-		                                {0, 0, 3}, {320, 240});
+		    InContext.Swapchain.BeginFrame({320, 240});
 		    if (bInCheckConstantRanges)
 		    {
 			    auto Invalid = Draw;
@@ -200,9 +212,14 @@ void CheckMaterialPixels(const RenderOperation& InRender, const std::filesystem:
 }
 
 FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain& InSwapchain,
-                         const FAppSettings& InSettings, FModelViewerPlugin& InPlugin, FSize InSize)
+                         const FAppSettings& InSettings, FModelViewerPlugin& InPlugin, FRenderSession& InSession,
+                         FSize InSize)
 {
 	InWindow.Poll();
+	FRenderFrame Frame{InSize, InSettings};
+	Frame.View.Width = InSize.Width;
+	Frame.View.Height = InSize.Height;
+	InPlugin.Update(Frame);
 	FImage Image;
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
@@ -212,7 +229,7 @@ FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain&
 		                              Clear.Load = EColorLoad::Clear;
 		                              Clear.Commands.Name = "Background";
 		                              Graph.Add(std::move(Clear));
-		                              InPlugin.Build(Graph, {InSize, InSettings});
+		                              InSession.Build(Graph, Frame.View);
 		                              Image = ExecuteGraph(Graph, InTasks, InSwapchain, InSize, false, true);
 	                              }));
 	return Image;
@@ -301,16 +318,8 @@ int main()
 			                          Swapchain = Device->CreateSwapchain(SwapchainDesc);
 		                          }));
 		FShaderCompiler Compiler(Root / "shaders", Root / "out/shader-cache");
-		FShaderArtifact Vertex;
-		FShaderArtifact Fragment;
-		Tasks.Wait(Tasks.Dispatch(
-		    {EDomain::Worker},
-		    [&]
-		    {
-			    Vertex = Compiler.Compile("Model.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
-			    Fragment = Compiler.Compile("Model.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);
-		    }));
-		const FModelReadbackContext RenderContext{Tasks, *Device, *Swapchain, Vertex, Fragment};
+		FRenderSession Session(Tasks, *Device, Compiler);
+		const FModelReadbackContext RenderContext{Tasks, *Device, *Swapchain, Session};
 		const auto RenderModel = [&](FModelAsset InModel, bool bInCheckConstantRanges = false)
 		{
 			return RenderModelReadback(RenderContext, std::move(InModel), bInCheckConstantRanges);
@@ -322,11 +331,11 @@ int main()
 		FAssetService Assets(IO);
 		RegisterGltfImporter(Assets);
 		FAppSettings Settings;
-		FModelViewerPlugin Plugin(*Device, Compiler, Tasks, Assets, Root / "out/fixtures/Showcase.gltf");
+		FModelViewerPlugin Plugin(Session, Tasks, Assets, Root / "out/fixtures/Showcase.gltf");
 		Plugin.Start();
 		const auto Frame = [&](FModelViewerPlugin& InPlugin, FSize InSize = {320, 240})
 		{
-			return RenderViewerFrame(Tasks, Window, *Swapchain, Settings, InPlugin, InSize);
+			return RenderViewerFrame(Tasks, Window, *Swapchain, Settings, InPlugin, Session, InSize);
 		};
 		CheckGatedFrames(*Storage, Plugin, Frame);
 		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
@@ -338,7 +347,7 @@ int main()
 		HYP_CHECK(Plugin.Ready() && Storage->bStarted);
 		CheckCameraInput(Plugin, Frame, ReadyImage, Root);
 		Plugin.Stop();
-		FModelViewerPlugin Broken(*Device, Compiler, Tasks, Assets, Root / "out/fixtures/Missing.gltf");
+		FModelViewerPlugin Broken(Session, Tasks, Assets, Root / "out/fixtures/Missing.gltf");
 		Broken.Start();
 		while (Broken.Error().empty() && std::chrono::steady_clock::now() < Deadline)
 		{
@@ -347,6 +356,7 @@ int main()
 		HYP_CHECK(!Broken.Error().empty() && !Broken.Ready());
 		Broken.Stop();
 		Assets.Drain();
+		Session.Close();
 		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 		                          [&]
 		                          {

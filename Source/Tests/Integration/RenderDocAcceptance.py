@@ -57,7 +57,7 @@ def verify_capture(document, experiment):
         elif name == 'ID3D12CommandQueue::ExecuteCommandLists':
             for submitted_list in node.findall("array[@name='ppCommandLists']/ResourceId"):
                 submitted.update(recorded.get(submitted_list.text, {}))
-    scene = {'Triangle': 'Triangle', 'Model': 'Static model'}[experiment]
+    scene = 'Scene 0'  # Both scene producers submit through the runtime render session.
     assert submitted[scene] > 0, f'{experiment}: missing submitted scene draws inside {scene!r}'
     assert submitted['Debug UI'] > 0, f'{experiment}: missing submitted GUI draws'
     assert any('Present' in name for name in chunks), f'{experiment}: missing Present'

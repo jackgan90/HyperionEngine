@@ -67,6 +67,8 @@ public:
 	void Shutdown();
 	std::vector<FExecutionStats> Statistics() const;
 	std::uint32_t RhiThreadCount() const;
+	bool IsCurrent(FTarget InTarget) const;
+	void Require(FTarget InTarget) const;
 
 private:
 	struct FImpl;

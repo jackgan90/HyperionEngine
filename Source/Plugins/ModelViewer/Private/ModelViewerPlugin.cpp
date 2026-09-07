@@ -1,5 +1,6 @@
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
-#include "Hyperion/Renderer/ModelRenderer.h"
+#include "Hyperion/Renderer/Model.h"
+#include "Hyperion/Renderer/RenderSession.h"
 #include <algorithm>
 #include <cmath>
 
@@ -7,25 +8,21 @@ namespace Hyperion
 {
 struct FModelViewerPlugin::FImpl
 {
-	struct FPreparedScene
+	struct FLoadedModel
 	{
-		FPreparedModel Model;
-		FShaderArtifact Vertex;
-		FShaderArtifact Pixel;
+		std::shared_ptr<const FModelAsset> Asset;
+		FBounds Bounds;
 	};
 
-	IRHIDevice& Device;
-	FShaderCompiler& Compiler;
+	FRenderSession& Session;
 	FTaskSystem& Tasks;
 	FAssetService& Assets;
 	std::filesystem::path Path;
 	TAssetRequest<FModelAsset> Request;
-	TAsyncResult<FPreparedScene> Preparation;
-	TAsyncResult<std::shared_ptr<FModelRenderer>> Upload;
-	std::shared_ptr<FModelRenderer> Renderer;
+	TAsyncResult<FLoadedModel> Preparation;
+	std::unique_ptr<FModel> Model;
 	std::string Status = "Loading model...";
 	std::string Error;
-	bool bUploadStarted{};
 	bool bIsReady{};
 	bool bDragging{};
 	bool bFitRequested = true;
@@ -37,10 +34,11 @@ struct FModelViewerPlugin::FImpl
 	float Pitch = .3f;
 };
 
-FModelViewerPlugin::FModelViewerPlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks,
-                                       FAssetService& InAssets, std::filesystem::path InPath)
-    : Impl(std::make_unique<FImpl>(FImpl{InDevice, InCompiler, InTasks, InAssets, std::move(InPath)}))
+FModelViewerPlugin::FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
+                                       std::filesystem::path InPath)
+    : Impl(std::make_unique<FImpl>(FImpl{InSession, InTasks, InAssets, std::move(InPath)}))
 {
+	InTasks.Require({EDomain::Main});
 }
 
 FModelViewerPlugin::~FModelViewerPlugin() = default;
@@ -48,61 +46,45 @@ FModelViewerPlugin::~FModelViewerPlugin() = default;
 void FModelViewerPlugin::Start()
 {
 	auto& P = *Impl;
+	P.Tasks.Require({EDomain::Main});
 	P.Request = P.Assets.LoadAsync<FModelAsset>(P.Path);
-	P.Preparation = DispatchAsync<FImpl::FPreparedScene>(
-	    P.Tasks, {EDomain::Worker},
-	    [&P]
-	    {
-		    auto Model = P.Request.Get(P.Tasks);
-		    FImpl::FPreparedScene Prepared;
-		    Prepared.Model = PrepareModel(Model);
-		    Prepared.Vertex = P.Compiler.Compile("Model.hlsl", "VSMain", EShaderStage::Vertex,
-		                                         P.Device.GetCapabilities().ShaderFormat);
-		    Prepared.Pixel = P.Compiler.Compile("Model.hlsl", "PSMain", EShaderStage::Pixel,
-		                                        P.Device.GetCapabilities().ShaderFormat);
-		    return Prepared;
-	    });
+	P.Preparation = DispatchAsync<FImpl::FLoadedModel>(P.Tasks, {EDomain::Worker},
+	                                                   [Request = P.Request, Tasks = &P.Tasks]
+	                                                   {
+		                                                   auto Asset = Request.Get(*Tasks);
+		                                                   return FImpl::FLoadedModel{Asset, ModelBounds(*Asset)};
+	                                                   });
 }
 
-void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFrame)
+void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 {
 	auto& P = *Impl;
+	P.Tasks.Require({EDomain::Main});
 	if (!P.Error.empty())
 	{
 		return;
 	}
 	try
 	{
-		if (!P.bUploadStarted)
+		if (!P.Model)
 		{
 			if (!P.Preparation.Ready())
 			{
 				return;
 			}
-			auto Prepared = P.Preparation.GetReady();
-			P.Center = ScaleVector(Add(Prepared->Model.Bounds.Minimum, Prepared->Model.Bounds.Maximum), .5f);
-			P.Radius = std::max(.01f, Length(Subtract(Prepared->Model.Bounds.Maximum, P.Center)));
-			P.Status = "Uploading model to GPU...";
-			P.Upload = DispatchAsync<std::shared_ptr<FModelRenderer>>(P.Tasks, {EDomain::Rhi, 0},
-			                                                          [&P, Prepared]
-			                                                          {
-				                                                          return std::make_shared<FModelRenderer>(
-				                                                              P.Device, Prepared->Model,
-				                                                              Prepared->Vertex, Prepared->Pixel);
-			                                                          });
-			P.bUploadStarted = true;
+			const auto Loaded = P.Preparation.GetReady();
+			const auto& Bounds = Loaded->Bounds;
+			P.Center = ScaleVector(Add(Bounds.Minimum, Bounds.Maximum), .5f);
+			P.Radius = std::max(.01f, Length(Subtract(Bounds.Maximum, P.Center)));
+			P.Model = std::make_unique<FModel>(P.Session.GetScene(), P.Session.GetResources(), Loaded->Asset);
 			P.Preparation = {};
+			P.Status = "Uploading model to GPU...";
 		}
-		if (!P.Renderer)
+		if (auto Error = P.Model->GetError(); !Error.empty())
 		{
-			if (!P.Upload.Ready())
-			{
-				return;
-			}
-			P.Renderer = *P.Upload.GetReady();
-			P.Upload = {};
+			throw std::runtime_error(Error);
 		}
-		const float Aspect = float(InFrame.Size.Width) / InFrame.Size.Height;
+		const float Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
 		if (P.bFitRequested)
 		{
 			const float Limit = std::min(.5f, std::atan(std::tan(.5f) * Aspect));
@@ -112,31 +94,15 @@ void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFram
 		const FVec3 Direction{std::sin(P.Yaw) * std::cos(P.Pitch), std::sin(P.Pitch),
 		                      std::cos(P.Yaw) * std::cos(P.Pitch)};
 		const FVec3 Eye = Add(P.Center, ScaleVector(Direction, P.Distance));
-		const auto ViewProjection =
+		InFrame.View.ViewProjection =
 		    Multiply(Perspective(1, Aspect, std::max(.0001f, P.Radius * .001f), P.Distance + P.Radius * 10),
 		             LookAt(Eye, P.Center));
-		std::vector<FDrawPacket> Draws;
-		P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Rhi, 0},
-		                              [&]
-		                              {
-			                              P.bIsReady = P.Renderer->Ready();
-			                              if (P.bIsReady)
-			                              {
-				                              Draws = P.Renderer->Draws(ViewProjection, Eye, InFrame.Size);
-			                              }
-		                              }));
-		if (!P.bIsReady)
+		InFrame.View.Eye = Eye;
+		P.bIsReady = P.Model->IsReady();
+		if (P.bIsReady)
 		{
-			return;
+			P.Status = "Ready | " + std::to_string(P.Model->PrimitiveCount()) + " primitives";
 		}
-		P.Status = "Ready | " + std::to_string(Draws.size()) + " draws";
-		FColorPass Pass;
-		Pass.Commands.Name = "Static model";
-		Pass.Commands.bUseDepth = true;
-		Pass.Commands.bClearDepth = true;
-		Pass.Commands.bSrgbTarget = true;
-		Pass.Commands.Draws = std::move(Draws);
-		InGraph.Add(std::move(Pass));
 	}
 	catch (const std::exception& Error)
 	{
@@ -149,6 +115,7 @@ void FModelViewerPlugin::Build(FRenderGraph& InGraph, const FRenderFrame& InFram
 void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured)
 {
 	auto& P = *Impl;
+	P.Tasks.Require({EDomain::Main});
 	for (const auto& Event : InEvents)
 	{
 		if (Event.Type == EEventType::Focus && !Event.bDown)
@@ -201,55 +168,47 @@ void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMo
 void FModelViewerPlugin::Stop() noexcept
 {
 	auto& P = *Impl;
+	P.Tasks.Require({EDomain::Main});
 	P.Request.Cancel();
 	try
 	{
-		if (P.Preparation.Task())
-		{
-			P.Tasks.Wait(P.Preparation.Task());
-		}
+		P.Tasks.Wait(P.Preparation.Task());
 	}
 	catch (...)
 	{
+		// Cancellation or import failure still joins the producer before the plugin is released.
 	}
-	try
-	{
-		if (P.Upload.Task())
-		{
-			P.Tasks.Wait(P.Upload.Task());
-		}
-	}
-	catch (...)
-	{
-	}
-	P.Renderer.reset();
 	P.Preparation = {};
-	P.Upload = {};
+	P.Model.reset();
+	P.bIsReady = false;
 }
 
 const std::string& FModelViewerPlugin::Status() const
 {
+	Impl->Tasks.Require({EDomain::Main});
 	return Impl->Status;
 }
 
 const std::string& FModelViewerPlugin::Error() const
 {
+	Impl->Tasks.Require({EDomain::Main});
 	return Impl->Error;
 }
 
 bool FModelViewerPlugin::Ready() const
 {
+	Impl->Tasks.Require({EDomain::Main});
 	return Impl->bIsReady;
 }
 
-void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,
-                               FTaskSystem& InTasks, FAssetService& InAssets, const std::filesystem::path& InPath)
+void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, FTaskSystem& InTasks,
+                               FAssetService& InAssets, const std::filesystem::path& InPath)
 {
 	InRegistry.Add({"model-viewer",
 	                {},
-	                [&InDevice, &InCompiler, &InTasks, &InAssets, Path = InPath]
+	                [&InSession, &InTasks, &InAssets, Path = InPath]
 	                {
-		                return std::make_unique<FModelViewerPlugin>(InDevice, InCompiler, InTasks, InAssets, Path);
+		                return std::make_unique<FModelViewerPlugin>(InSession, InTasks, InAssets, Path);
 	                }});
 }
 } // namespace Hyperion

@@ -407,4 +407,9 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 	}
 	return Stats;
 }
+
+void FD3D12RHIDevice::CollectCompletedResources()
+{
+	State->CollectUploads();
+}
 } // namespace Hyperion
