@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Renderer/RenderBatch.h"
 #include "Hyperion/Renderer/RenderResources.h"
 #include "Hyperion/Renderer/RenderScene.h"
 #include <set>
@@ -25,6 +26,7 @@ public:
 	void SetGlobalParameters(FMaterialParameterValues InValues);
 	void SetSceneParameters(FMaterialParameterValues InValues);
 	FMaterialProviderRegistry& GetProviders();
+	FRenderBatchSystem& GetBatchSystem(); // Register strategies on Main before the first build.
 	FSceneVisibilityStats Statistics() const;
 	FMaterialProviderStats ProviderStatistics() const; // Render only.
 	void Close();
@@ -33,6 +35,7 @@ private:
 	FTaskSystem& Tasks;
 	FRenderResourceService Resources;
 	FRenderSceneClient Scene;
+	FRenderBatchSystem Batches;
 	bool bClosed{};
 	FSceneVisibilityStats LastStatistics;
 	struct FMaterialState;

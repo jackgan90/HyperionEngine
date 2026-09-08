@@ -68,7 +68,7 @@ std::vector<std::byte> PackConstants(const FMaterialProgramBinding& InBinding, c
 	{
 		throw std::invalid_argument("Cannot pack an invalid material constant buffer");
 	}
-	std::vector<std::byte> Result(InBinding.Resource.ByteSize);
+	std::vector<std::byte> Result(InBinding.InstanceStride ? InBinding.InstanceStride : InBinding.Resource.ByteSize);
 	for (const auto& Member : InBinding.Members)
 	{
 		if (Member.ParameterIndex >= InSize)

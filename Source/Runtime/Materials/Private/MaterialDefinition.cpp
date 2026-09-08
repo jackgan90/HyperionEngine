@@ -48,6 +48,14 @@ void ValidatePass(FMaterialPass& InPass)
 	NormalizeShader(InPass.Vertex, true);
 	NormalizeShader(InPass.Pixel, false);
 	InPass.State = NormalizeMaterialState(InPass.State);
+	std::set<std::string> InstanceBlocks;
+	for (const auto& Array : InPass.InstanceArrays)
+	{
+		if (Array.Block.empty() || Array.Member.empty() || !InstanceBlocks.insert(Array.Block).second)
+		{
+			throw std::invalid_argument("Invalid or duplicate material instance array");
+		}
+	}
 	if (InPass.Usage.empty() || InPass.Queue > EMaterialQueue::Overlay ||
 	    (InPass.Pixel.Path.empty() && (InPass.State.ColorWriteMask != 0 || InPass.bAlphaClip)))
 	{

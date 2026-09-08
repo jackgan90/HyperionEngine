@@ -16,6 +16,7 @@ struct FOptions
 	int BenchmarkWarmup = 60;
 	bool bBenchmarkCamera{};
 	bool bNoVsync{};
+	bool bNoInstanceBatching{};
 	std::uint32_t ProfilingMask{};
 	int ProfileStart{};
 	int ProfileFrames{};

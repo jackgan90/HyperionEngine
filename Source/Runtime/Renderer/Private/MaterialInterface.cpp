@@ -68,6 +68,7 @@ bool Compatible(const FMaterialProgramBinding& InA, const FMaterialProgramBindin
 	    InA.Resource.ResourceScalar != InB.Resource.ResourceScalar ||
 	    InA.Resource.StructureByteStride != InB.Resource.StructureByteStride ||
 	    InA.Resource.bComparison != InB.Resource.bComparison || InA.ResourceParameter != InB.ResourceParameter ||
+	    InA.InstanceStride != InB.InstanceStride || InA.InstanceCapacity != InB.InstanceCapacity ||
 	    InA.Members.size() != InB.Members.size())
 	{
 		return false;
@@ -137,6 +138,18 @@ std::vector<FMaterialProgramBinding> MergeMaterialBindings(std::vector<FMaterial
 		}
 	}
 	return Result;
+}
+
+const FCompiledMaterialPass* FCompiledMaterialDefinition::FindInstancePass(std::string_view InUsage) const
+{
+	for (const auto& Pass : Passes)
+	{
+		if (Pass.Usage == InUsage && Pass.Variant == "Instance")
+		{
+			return &Pass;
+		}
+	}
+	return nullptr;
 }
 
 const FCompiledMaterialPass& FCompiledMaterialDefinition::GetPass(std::string_view InUsage,

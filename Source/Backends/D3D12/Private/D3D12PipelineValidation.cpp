@@ -56,6 +56,18 @@ void ValidateStage(const FShaderArtifact& InShader, const FResourceBindingLayout
 		{
 			throw std::invalid_argument("Graphics binding layout does not cover shader resource: " + Binding.Name);
 		}
+		if (Slot->InstanceStride)
+		{
+			if (Binding.Members.size() != 1 || Binding.Members.front().Kind != EShaderValueKind::Array ||
+			    Binding.Members.front().Offset != 0 || Binding.Members.front().ArrayStride != Slot->InstanceStride ||
+			    Binding.Members.front().ArrayCount != Slot->InstanceCapacity ||
+			    Binding.Members.front().Members.size() != 1 ||
+			    Binding.Members.front().Members.front().Kind != EShaderValueKind::Structure)
+			{
+				throw std::invalid_argument("Graphics instance layout does not match reflected record array: " +
+				                            Binding.Name);
+			}
+		}
 	}
 }
 } // namespace

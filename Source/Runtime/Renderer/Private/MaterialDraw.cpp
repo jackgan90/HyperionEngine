@@ -78,7 +78,7 @@ void FRenderResourceCoordinator::CollectPreparedDraws()
 }
 
 FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, const FRenderView& InView,
-                                                     FGraphicsTarget InTarget)
+                                                     FGraphicsTarget InTarget, bool bInInstance)
 {
 	HYP_PERF_SCOPE_C(Detail, DrawMaterial);
 	const auto& GeometryRecord = *InItem.State.Resource->Record;
@@ -89,7 +89,7 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 		throw std::invalid_argument("Unready or foreign geometry/material resource");
 	}
 	const auto& Compiled = *MaterialRecord.Compiled;
-	const auto& Program = Compiled.GetPass(InView.Usage);
+	const auto& Program = Compiled.GetPass(InView.Usage, bInInstance ? "Instance" : "Default");
 	const auto& Snapshot = InItem.State.Surface->GetSnapshot();
 	const auto& Pass = Snapshot->Definition->GetPass(InView.Usage);
 	const auto Resolved = InItem.ResolvedParameters
@@ -99,7 +99,8 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	const bool bMirrored = Determinant(InItem.State.World) < 0;
 	const std::shared_ptr<const void> ResourceIdentity =
 	    Resolved->ResourceIdentity ? Resolved->ResourceIdentity : Resolved;
-	const FDrawKey Key{ResourceIdentity.get(), InItem.State.Resource.get(), InItem.State.Section, InView.Usage};
+	const FDrawKey Key{ResourceIdentity.get(), InItem.State.Resource.get(), InItem.State.Section, InView.Usage,
+	                   bInInstance};
 	const auto Existing = PreparedDraws.find(Key);
 	if (Existing != PreparedDraws.end())
 	{

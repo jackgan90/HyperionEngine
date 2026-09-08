@@ -4,6 +4,15 @@
 
 namespace Hyperion
 {
+namespace
+{
+struct FPreparedViewFamily
+{
+	std::vector<FColorPass> Passes;
+	FRenderBatchStats Statistics;
+};
+} // namespace
+
 FRenderSession::FRenderSession(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler)
     : FRenderSession(InTasks, InDevice, InCompiler, ERHIDepthFormat::D32, GetStandardMaterialSemantics())
 {
@@ -17,6 +26,7 @@ FRenderSession::FRenderSession(FTaskSystem& InTasks, IRHIDevice& InDevice, FShad
                                                                       {
 	                                                                      return Resources.CreateScopeLifetime();
                                                                       }),
+      Batches(InTasks, InDevice.GetCapabilities()),
       MaterialState(std::make_unique<FMaterialState>(InDepthFormat, std::move(InSemantics)))
 {
 	for (auto& Scope : MaterialState->Inputs.Scopes)
@@ -42,6 +52,12 @@ FRenderSceneClient& FRenderSession::GetScene()
 FRenderResourceService& FRenderSession::GetResources()
 {
 	return Resources;
+}
+
+FRenderBatchSystem& FRenderSession::GetBatchSystem()
+{
+	Tasks.Require({EDomain::Main});
+	return Batches;
 }
 
 std::size_t FRenderSession::Build(FRenderGraph& InGraph, FRenderView InView)
@@ -74,25 +90,28 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 		Snapshot.Family = InFamily;
 		Snapshot.DepthFormat = MaterialState->Depth;
 		PrepareMaterials(Snapshot);
+		Snapshot.Batches = Batches.Build(Snapshot, View.bInstanceBatching);
 		Count += Snapshot.Items.size();
 		LastStatistics = Snapshot.Statistics;
 		Snapshots.push_back(std::move(Snapshot));
 	}
-	auto Result = DispatchAsync<std::vector<FColorPass>>(
+	auto Result = DispatchAsync<FPreparedViewFamily>(
 	    Tasks, {EDomain::Rhi, 0},
 	    [ResourceService = &Resources, Frames = std::move(Snapshots)]
 	    {
-		    std::vector<FColorPass> Passes;
+		    FPreparedViewFamily Family;
 		    for (const auto& Frame : Frames)
 		    {
 			    auto Prepared = ResourceService->BuildPasses(Frame);
-			    Passes.insert(Passes.end(), std::make_move_iterator(Prepared.begin()),
-			                  std::make_move_iterator(Prepared.end()));
+			    Family.Passes.insert(Family.Passes.end(), std::make_move_iterator(Prepared.begin()),
+			                         std::make_move_iterator(Prepared.end()));
+			    Family.Statistics += ResourceService->Statistics().Batches;
 		    }
-		    return Passes;
+		    return Family;
 	    });
 	Tasks.Wait(Result.Task());
-	for (auto Pass : *Result.GetReady())
+	LastStatistics.Batches = Result.GetReady()->Statistics;
+	for (auto Pass : Result.GetReady()->Passes)
 	{
 		LastStatistics.Draws += Pass.Commands.Draws.size();
 		InGraph.Add(std::move(Pass));
@@ -152,6 +171,12 @@ void FRenderSession::Close()
 		return;
 	}
 	Tasks.Require({EDomain::Main});
+	const auto Clear = Tasks.Dispatch({EDomain::Render},
+	                                  [this]
+	                                  {
+		                                  Batches.Clear();
+	                                  });
+	Tasks.Wait(Clear);
 	Scene.Close();
 	MaterialState.reset();
 	Resources.Close();

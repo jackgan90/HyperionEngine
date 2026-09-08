@@ -1,6 +1,7 @@
 #include "Hyperion/Renderer/MaterialConstantCache.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/MaterialPacking.h"
+#include "Hyperion/Renderer/RenderBatch.h"
 #include <algorithm>
 #include <list>
 #include <map>
@@ -194,6 +195,14 @@ struct FMaterialConstantCache::FImpl
 		std::uint64_t Access{};
 	};
 
+	struct FInstanceEntry
+	{
+		std::weak_ptr<const FInstanceBatchData> Data;
+		std::vector<FConstantBinding> Bindings;
+		std::size_t Bytes{};
+		std::list<const FInstanceBatchData*>::iterator Recent;
+	};
+
 	IRHIDevice& Device;
 	std::thread::id Owner = std::this_thread::get_id();
 	std::uint32_t PageSize;
@@ -204,6 +213,9 @@ struct FMaterialConstantCache::FImpl
 	FMaterialConstantLimits Limits;
 	std::uint64_t Access{};
 	std::map<std::pair<const FCompiledMaterialDefinition*, const FMaterialProgramBinding*>, FPreparedBlock> Prepared;
+	std::map<const FInstanceBatchData*, FInstanceEntry> Instances;
+	std::list<const FInstanceBatchData*> RecentInstances;
+	std::size_t InstanceBytes{};
 
 	FImpl(IRHIDevice& InDevice, std::uint32_t InPageSize, FMaterialConstantLimits InLimits)
 	    : Device(InDevice), PageSize(InPageSize), Limits(InLimits)
@@ -220,6 +232,10 @@ struct FMaterialConstantCache::FImpl
 
 	FBufferSlice Publish(std::span<const std::byte> InData, bool bInTransient)
 	{
+		if (InData.empty() || InData.size() > PageSize || InData.size() > Device.GetCapabilities().MaxConstantRange)
+		{
+			throw std::invalid_argument("Constant publication exceeds device/page capacity");
+		}
 		const auto Alignment = Device.GetCapabilities().ConstantAlignment;
 		const auto Extent = static_cast<std::uint32_t>((InData.size() + Alignment - 1) / Alignment * Alignment);
 		auto Page = std::find_if(Pages.begin(), Pages.end(),
@@ -246,6 +262,13 @@ struct FMaterialConstantCache::FImpl
 		Recent.erase(InEntry.Recency);
 		Stats.CachedBytes -= InEntry.Slice.Extent;
 		--Stats.CachedBlocks;
+	}
+
+	void EraseInstance(std::map<const FInstanceBatchData*, FInstanceEntry>::iterator InEntry)
+	{
+		InstanceBytes -= InEntry->second.Bytes;
+		RecentInstances.erase(InEntry->second.Recent);
+		Instances.erase(InEntry);
 	}
 
 	void Trim(std::size_t InBytes)
@@ -493,9 +516,68 @@ std::vector<FConstantBinding> FMaterialConstantCache::BindPrepared(
 	return Result;
 }
 
+std::vector<FConstantBinding> FMaterialConstantCache::BindInstances(std::shared_ptr<const FInstanceBatchData> InData)
+{
+	Impl->CheckOwner();
+	if (!InData || !InData->InstanceCount || InData->Constants.empty())
+	{
+		throw std::invalid_argument("Missing instance constant data");
+	}
+	const auto Key = InData.get();
+	const auto Existing = Impl->Instances.find(Key);
+	if (Existing != Impl->Instances.end())
+	{
+		if (Existing->second.Data.lock() == InData && InData->IsLive())
+		{
+			Impl->RecentInstances.splice(Impl->RecentInstances.end(), Impl->RecentInstances, Existing->second.Recent);
+			Impl->Stats.InstanceReuses += Existing->second.Bindings.size();
+			return Existing->second.Bindings;
+		}
+		Impl->EraseInstance(Existing);
+	}
+	FImpl::FInstanceEntry Entry;
+	Entry.Data = InData;
+	for (const auto& Block : InData->Constants)
+	{
+		auto Slice = Impl->Publish(Block.Bytes, false);
+		Entry.Bytes += Slice.Extent;
+		Entry.Bindings.push_back({Block.Slot, std::move(Slice)});
+		Impl->Stats.InstanceUploadBytes += Block.Bytes.size();
+		++Impl->Stats.Packs;
+	}
+	const auto Result = Entry.Bindings;
+	if (InData->IsLive() && Impl->Limits.MaxPreparedBlocks && Entry.Bytes <= Impl->Limits.MaxBytes)
+	{
+		while (!Impl->RecentInstances.empty() && (Impl->Instances.size() >= Impl->Limits.MaxPreparedBlocks ||
+		                                          Impl->InstanceBytes + Entry.Bytes > Impl->Limits.MaxBytes))
+		{
+			Impl->EraseInstance(Impl->Instances.find(Impl->RecentInstances.front()));
+			++Impl->Stats.Evictions;
+		}
+		Impl->RecentInstances.push_back(Key);
+		Entry.Recent = std::prev(Impl->RecentInstances.end());
+		Impl->InstanceBytes += Entry.Bytes;
+		Impl->Instances.emplace(Key, std::move(Entry));
+	}
+	return Result;
+}
+
 bool FMaterialConstantCache::Collect()
 {
 	Impl->CheckOwner();
+	for (auto It = Impl->Instances.begin(); It != Impl->Instances.end();)
+	{
+		const auto Data = It->second.Data.lock();
+		if (!Data || !Data->IsLive())
+		{
+			const auto Previous = It++;
+			Impl->EraseInstance(Previous);
+		}
+		else
+		{
+			++It;
+		}
+	}
 	for (auto Iterator = Impl->Entries.begin(); Iterator != Impl->Entries.end();)
 	{
 		std::erase_if(Iterator->second,
@@ -555,6 +637,13 @@ bool FMaterialConstantCache::Collect()
 	{
 		UsedPages.insert(Block.Slice.Buffer.Payload.get());
 	}
+	for (const auto& [Key, Entry] : Impl->Instances)
+	{
+		for (const auto& Binding : Entry.Bindings)
+		{
+			UsedPages.insert(Binding.Slice.Buffer.Payload.get());
+		}
+	}
 	for (const auto& Page : Impl->Pages)
 	{
 		// Live scopes will notify on retirement. Poll only pages whose CPU entries are gone but packets remain.
@@ -572,6 +661,9 @@ void FMaterialConstantCache::Clear()
 	Impl->Recent.clear();
 	Impl->Entries.clear();
 	Impl->Prepared.clear();
+	Impl->Instances.clear();
+	Impl->RecentInstances.clear();
+	Impl->InstanceBytes = 0;
 	Impl->Stats.CachedBytes = 0;
 	Impl->Stats.CachedBlocks = 0;
 	Collect();
@@ -593,6 +685,8 @@ FMaterialConstantStats FMaterialConstantCache::Statistics() const
 	auto Result = Impl->Stats;
 	Result.LivePages = Impl->Pages.size();
 	Result.PreparedBlocks = Impl->Prepared.size();
+	Result.InstanceBlocks = Impl->Instances.size();
+	Result.InstanceBytes = Impl->InstanceBytes;
 	Result.PageBytes = Impl->Pages.size() * Impl->PageSize;
 	return Result;
 }

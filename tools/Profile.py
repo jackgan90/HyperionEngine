@@ -137,6 +137,7 @@ def main():
     parser.add_argument("--frames", type=int, default=600)
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--static", action="store_true")
+    parser.add_argument("--no-instance-batching", action="store_true")
     parser.add_argument("--visible", action="store_true")
     parser.add_argument("--no-build", action="store_true")
     args = parser.parse_args()
@@ -157,6 +158,8 @@ def main():
                "--benchmark-warmup", str(args.warmup), "--benchmark", str(output / "Frames.csv"), "--no-vsync"]
     if not args.static:
         command.append("--benchmark-camera")
+    if args.no_instance_batching:
+        command.append("--no-instance-batching")
     if not args.visible:
         command.append("--hidden")
     if args.mode != "off":

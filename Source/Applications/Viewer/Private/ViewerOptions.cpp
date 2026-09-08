@@ -21,6 +21,10 @@ bool ParseBenchmarkOption(FOptions& InOptions, const std::string& InArg, int InA
 	{
 		InOptions.bBenchmarkCamera = true;
 	}
+	else if (InArg == "--no-instance-batching")
+	{
+		InOptions.bNoInstanceBatching = true;
+	}
 	else if (InArg == "--no-vsync")
 	{
 		InOptions.bNoVsync = true;

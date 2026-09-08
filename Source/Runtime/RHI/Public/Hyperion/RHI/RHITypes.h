@@ -107,6 +107,7 @@ struct FDrawPacket
 	FResourceBindingSet Bindings;
 	std::vector<FConstantBinding> ConstantBindings;
 	FGraphicsDynamicState DynamicState;
+	std::uint32_t InstanceCount = 1;
 };
 enum class EResourceState
 {

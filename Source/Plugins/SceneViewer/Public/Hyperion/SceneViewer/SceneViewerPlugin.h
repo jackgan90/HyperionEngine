@@ -17,7 +17,7 @@ public:
 	void Update(FRenderFrame& InFrame) override;
 	void Stop() noexcept override;
 	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);
-	void DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats);
+	void DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats, bool bInForceOrdinary = false);
 	bool Ready() const;
 	const std::string& Status() const;
 	const std::string& Error() const;

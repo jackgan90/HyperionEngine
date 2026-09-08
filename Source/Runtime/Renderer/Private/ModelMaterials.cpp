@@ -14,6 +14,8 @@ FMaterialPass ModelPass(const FModelMaterial& InMaterial)
 	FMaterialPass Pass;
 	Pass.Vertex = {"Model.hlsl", "VSMain"};
 	Pass.Pixel = {"Model.hlsl", "PSMain"};
+	Pass.InstanceArrays = {{"HyperionObjectV1", "ObjectInstances"}, {"HyperionMaterialV1", "SurfaceInstances"}};
+	Pass.bAllowBatchReordering = InMaterial.AlphaMode != EAlphaMode::Blend;
 	Pass.bSrgbTarget = true;
 	Pass.bAlphaClip = InMaterial.AlphaMode == EAlphaMode::Mask;
 	Pass.Queue = InMaterial.AlphaMode == EAlphaMode::Blend  ? EMaterialQueue::Transparent

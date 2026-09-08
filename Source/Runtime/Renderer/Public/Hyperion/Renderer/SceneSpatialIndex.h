@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Math/Bounds.h"
+#include "Hyperion/Renderer/RenderBatchStats.h"
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -30,6 +31,7 @@ struct FSceneVisibilityStats
 	std::size_t IndexRefits{};
 	double UpdateMilliseconds{};
 	double QueryMilliseconds{};
+	FRenderBatchStats Batches;
 };
 
 // CPU conservative candidate test. Future GPU stages are separate RenderGraph work.

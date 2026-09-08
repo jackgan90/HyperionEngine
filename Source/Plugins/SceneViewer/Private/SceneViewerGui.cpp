@@ -7,6 +7,18 @@ namespace Hyperion
 {
 namespace
 {
+void DrawBatchControl(FGui& InGui, bool& bInEnabled, bool bInForceOrdinary)
+{
+	if (bInForceOrdinary)
+	{
+		InGui.TextWrapped("Instance batching: off (--no-instance-batching)");
+	}
+	else
+	{
+		InGui.Checkbox("Instance batching", bInEnabled);
+	}
+}
+
 void DrawStatistics(FGui& InGui, const FSceneVisibilityStats& InStats)
 {
 	InGui.Text("Groups " + std::to_string(InStats.Groups) + " | unbounded " + std::to_string(InStats.UnboundedGroups));
@@ -18,6 +30,26 @@ void DrawStatistics(FGui& InGui, const FSceneVisibilityStats& InStats)
 	           std::to_string(InStats.EmittedItems));
 	InGui.Text("Visible items " + std::to_string(InStats.VisibleItems) + " | scene draws " +
 	           std::to_string(InStats.Draws));
+	const auto& Batch = InStats.Batches;
+	InGui.Text("Instanced " + std::to_string(Batch.InstancedItems) + " in " + std::to_string(Batch.InstancedDraws) +
+	           " draws | singles " + std::to_string(Batch.SingleDraws));
+	std::string Fallbacks;
+	for (std::size_t Index = 0; Index < Batch.Fallbacks.size(); ++Index)
+	{
+		if (Batch.Fallbacks[Index])
+		{
+			Fallbacks += Fallbacks.empty() ? "" : " | ";
+			Fallbacks += GetRenderBatchFallbackName(static_cast<ERenderBatchFallback>(Index));
+			Fallbacks += " " + std::to_string(Batch.Fallbacks[Index]);
+		}
+	}
+	InGui.TextWrapped("Fallbacks: " + (Fallbacks.empty() ? "none" : Fallbacks));
+	InGui.Text("Chunks reused/rebuilt " + std::to_string(Batch.ReusedChunks) + "/" +
+	           std::to_string(Batch.RebuiltChunks) + " | upload " + std::to_string(Batch.UploadBytes) + " B");
+	std::ostringstream BatchTime;
+	BatchTime << std::fixed << std::setprecision(3) << "Batch plan " << Batch.PlanningMilliseconds << " ms | draw prep "
+	          << Batch.PreparationMilliseconds << " ms";
+	InGui.Text(BatchTime.str());
 	std::ostringstream Timing;
 	Timing << std::fixed << std::setprecision(3) << "Index update " << InStats.UpdateMilliseconds << " ms | query "
 	       << InStats.QueryMilliseconds << " ms";
@@ -64,7 +96,7 @@ void FSceneViewerPlugin::FImpl::DrawBounds(FGui& InGui) const
 	}
 }
 
-void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats)
+void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats, bool bInForceOrdinary)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
@@ -89,6 +121,7 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		{
 			SetFrozen(bFrozen);
 		}
+		DrawBatchControl(InGui, P.bInstanceBatching, bInForceOrdinary);
 		InGui.Checkbox("Show model bounds", P.bBounds);
 		if (InGui.Button("Fit all [Home]"))
 		{

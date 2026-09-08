@@ -81,6 +81,8 @@ private:
 		int Frame{};
 		double Milliseconds{};
 		std::size_t Draws{};
+		std::size_t VisibleItems{};
+		FRenderBatchStats Batches;
 	};
 
 	std::vector<FBenchmarkFrame> BenchmarkFrames;

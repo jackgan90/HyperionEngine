@@ -248,6 +248,7 @@ FRenderResourceDesc TestTriangle(FShaderCompiler& InCompiler)
 	FMaterialPass Pass;
 	Pass.Vertex = {"Gui.hlsl", "VSMain"};
 	Pass.Pixel = {"Gui.hlsl", "PSMain"};
+	Pass.InstanceArrays = {{"DrawConstants", "DrawInstances"}};
 	Description.Passes.push_back(Pass);
 	auto Transform =
 	    DeclareMaterialSemantic("Transform", "Engine.Object.WorldViewProjection", *GetStandardMaterialSemantics());

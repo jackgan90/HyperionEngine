@@ -43,12 +43,30 @@ void FViewerApplication::SaveBenchmark()
 	}
 	std::ofstream Output(Options.Benchmark);
 	Output.exceptions(std::ios::failbit | std::ios::badbit);
-	Output << "frame,frame_ms,scene_draws\n" << std::fixed << std::setprecision(6);
+	Output << "frame,frame_ms,scene_draws,visible_items,instanced_items,instanced_draws,single_draws,failed_items,"
+	          "reused_chunks,rebuilt_chunks,packed_bytes,instance_upload_bytes,gpu_reuses,compat_reuses,compat_builds,"
+	          "plan_ms,prepare_ms";
+	for (std::size_t Index = 0; Index < static_cast<std::size_t>(ERenderBatchFallback::Count); ++Index)
+	{
+		Output << ",fallback_" << GetRenderBatchFallbackName(static_cast<ERenderBatchFallback>(Index));
+	}
+	Output << '\n' << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
 	for (const auto& Frame : BenchmarkFrames)
 	{
-		Output << Frame.Frame << ',' << Frame.Milliseconds << ',' << Frame.Draws << '\n';
+		Output << Frame.Frame << ',' << Frame.Milliseconds << ',' << Frame.Draws << ',' << Frame.VisibleItems << ','
+		       << Frame.Batches.InstancedItems << ',' << Frame.Batches.InstancedDraws << ','
+		       << Frame.Batches.SingleDraws << ',' << Frame.Batches.FailedItems << ',' << Frame.Batches.ReusedChunks
+		       << ',' << Frame.Batches.RebuiltChunks << ',' << Frame.Batches.PackedBytes << ','
+		       << Frame.Batches.UploadBytes << ',' << Frame.Batches.GpuReuses << ','
+		       << Frame.Batches.CompatibilityReuses << ',' << Frame.Batches.CompatibilityBuilds << ','
+		       << Frame.Batches.PlanningMilliseconds << ',' << Frame.Batches.PreparationMilliseconds;
+		for (const auto Count : Frame.Batches.Fallbacks)
+		{
+			Output << ',' << Count;
+		}
+		Output << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}
 	Output.close();

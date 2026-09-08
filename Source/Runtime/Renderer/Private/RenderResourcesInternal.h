@@ -95,7 +95,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 		FMaterialConstantState Constants;
 	};
 
-	using FDrawKey = std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string>;
+	using FDrawKey = std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string, bool>;
 	std::map<FDrawKey, FPreparedDraw> PreparedDraws;
 	void CollectPreparedDraws();
 	FTaskSystem& Tasks;
@@ -133,6 +133,9 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	bool CollectCompleted();
 	void Upload(FRenderResourceRecord& InRecord);
 	bool Process(FEntry& InEntry);
-	FDrawPacket DrawMaterial(const FRenderItem& InItem, const FRenderView& InView, FGraphicsTarget InTarget);
+	FDrawPacket DrawMaterial(const FRenderItem& InItem, const FRenderView& InView, FGraphicsTarget InTarget,
+	                         bool bInInstance = false);
+	void ValidateDrawItem(const FRenderItem& InItem, const FRenderView& InView);
+	void BindInstances(FDrawPacket& InPacket, std::shared_ptr<const FInstanceBatchData> InData);
 };
 } // namespace Hyperion

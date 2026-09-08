@@ -136,12 +136,18 @@ void WriteDescriptor(FD3D12DeviceState& InState, D3D12_CPU_DESCRIPTOR_HANDLE InD
 }
 
 void ValidateConstant(const FConstantBinding& InBinding, const FResourceBindingSlot& InSlot,
-                      const FD3D12DeviceState& InState)
+                      const FD3D12DeviceState& InState, std::uint32_t InInstanceCount)
 {
 	const FBufferSlice& Slice = InBinding.Slice;
 	const FD3D12Buffer& Buffer = NativeResource<FD3D12Buffer>(Slice.Buffer.Payload, &InState);
+	if (InSlot.InstanceStride && InInstanceCount > InSlot.InstanceCapacity)
+	{
+		throw std::invalid_argument("Draw exceeds instance constant capacity");
+	}
+	const auto Required =
+	    InSlot.InstanceStride ? std::uint64_t(InSlot.InstanceStride) * InInstanceCount : InSlot.MinimumBufferSize;
 	if (Buffer.Usage != BufferUsage(ERHIBufferUsage::Constant) || Slice.Offset % 256 != 0 || Slice.Size == 0 ||
-	    Slice.Size > 65536 || Slice.Size < InSlot.MinimumBufferSize || Slice.Extent != ((Slice.Size + 255U) & ~255U) ||
+	    Slice.Size > 65536 || Slice.Size < Required || Slice.Extent != ((Slice.Size + 255U) & ~255U) ||
 	    Slice.Offset > Buffer.Size || Slice.Extent > Buffer.Size - Slice.Offset)
 	{
 		throw std::invalid_argument("Invalid constant buffer slice alignment or range");
@@ -286,7 +292,7 @@ void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& I
 			throw std::invalid_argument("Invalid or duplicate dynamic constant binding");
 		}
 		Seen[Constant.Slot] = true;
-		ValidateConstant(Constant, Layout.Description.Slots[Constant.Slot], InState);
+		ValidateConstant(Constant, Layout.Description.Slots[Constant.Slot], InState, InDraw.InstanceCount);
 	}
 	for (std::size_t Index = 0; Index < Seen.size(); ++Index)
 	{

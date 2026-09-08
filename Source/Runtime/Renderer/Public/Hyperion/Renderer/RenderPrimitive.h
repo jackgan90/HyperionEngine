@@ -12,6 +12,7 @@ namespace Hyperion
 class FRenderResource;
 class FRenderMaterial;
 struct FMaterialEvaluationCache;
+struct FRenderBatchPlan;
 
 struct FRenderPrimitiveHandle
 {
@@ -53,6 +54,7 @@ struct FRenderView
 	std::optional<FViewport> Viewport;
 	FMaterialParameterValues Parameters;
 	FMaterialParameterValues PassParameters;
+	bool bInstanceBatching = true;
 };
 
 struct FRenderItem
@@ -81,6 +83,7 @@ struct FRenderSceneSnapshot
 	std::shared_ptr<const FMaterialFrameContext> Frame;
 	std::uint64_t Family = 1;
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
+	std::shared_ptr<const FRenderBatchPlan> Batches;
 };
 
 // All instance methods, including construction/destruction, belong to Render.

@@ -79,6 +79,7 @@ struct FRenderResourceStats
 	std::size_t LiveResources{};
 	FMaterialConstantStats Constants;
 	FMaterialGpuStats Materials;
+	FRenderBatchStats Batches;
 };
 
 // One service per rendering device/session, shared by all its scene producers.

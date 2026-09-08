@@ -16,10 +16,20 @@ struct FVertexOutput
 	float4 Color : COLOR0;
 };
 
-FVertexOutput VSMain(FVertexInput InInput)
+FVertexOutput VSMain(FVertexInput InInput
+#if HYP_ENABLE_INSTANCE
+                     ,
+                     uint InInstanceId : SV_InstanceID
+#endif
+)
 {
 	FVertexOutput Output;
-	Output.Position = mul(TransformMatrix, float4(InInput.Position, 0, 1));
+#if HYP_ENABLE_INSTANCE
+#define HYP_TRANSFORM DrawInstances[InInstanceId].TransformMatrix
+#else
+#define HYP_TRANSFORM TransformMatrix
+#endif
+	Output.Position = mul(HYP_TRANSFORM, float4(InInput.Position, 0, 1));
 	Output.Uv = InInput.Uv;
 	Output.Color = InInput.Color;
 	return Output;

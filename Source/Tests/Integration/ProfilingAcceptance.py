@@ -82,7 +82,7 @@ def check_viewer(profile, viewer, output, mode):
                  "--out", folder, "--no-build", "--warmup", "120", "--frames", "120"],
                 output / (mode + ".log"), timeout=60)
     summary = json.loads((folder / "Metadata.json").read_text())["summary"]
-    assert 190 <= summary["draw_min"] <= summary["draw_max"] <= 210, summary
+    assert 1 <= summary["draw_min"] <= summary["draw_max"] <= 10, summary
     events = rows(folder / "Events.csv")
     frames = [event for event in events if event["name"] == "ApplicationFrame"]
     assert len(frames) == 120 and sorted(int(event["value"].split()[0]) for event in frames) == list(range(120, 240))
@@ -132,7 +132,7 @@ def check_asset_load(profile, viewer, output):
             assert not sources.keys() & counts.keys(), counts
             assert counts["ApplicationFrame"] == 240, counts
         summary = profile.frame_statistics(folder / "Frames.csv")
-        assert summary["samples"] == 120 and 190 <= summary["draw_min"] <= summary["draw_max"] <= 210, summary
+        assert summary["samples"] == 120 and 1 <= summary["draw_min"] <= summary["draw_max"] <= 10, summary
         summaries[category] = {"scope_counts": dict(counts), "frames": summary}
     return summaries
 

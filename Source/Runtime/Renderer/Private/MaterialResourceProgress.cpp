@@ -75,6 +75,11 @@ void FRenderResourceCoordinator::PrepareMaterialResources(FRenderMaterialRecord&
 	std::vector<FMaterialResourceBindings> Bindings;
 	for (const auto& Pass : InRecord.Compiled->Passes)
 	{
+		if (Pass.Variant == "Instance")
+		{
+			// Optional native layouts are prepared by the batch path, which can fall back to ordinary draws.
+			continue;
+		}
 		auto Binding = MaterialGpu->BindResources(Pass, Values, {InRecord.GpuLifetime}, true);
 		bReady &= Binding.bReady;
 		Bindings.push_back(std::move(Binding));

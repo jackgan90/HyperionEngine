@@ -61,7 +61,7 @@ void ValidateDraws(const FD3D12DeviceState* InState, const FPassCommands& InComm
 		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, InState);
 		const auto& Vertices = NativeResource<FD3D12Buffer>(Draw.Vertices.Payload, InState);
 		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, InState);
-		if (!Draw.VertexStride || Vertices.Size > UINT_MAX || Indices.Size > UINT_MAX ||
+		if (!Draw.InstanceCount || !Draw.VertexStride || Vertices.Size > UINT_MAX || Indices.Size > UINT_MAX ||
 		    (Vertices.Usage & BufferUsage(ERHIBufferUsage::Vertex)) == 0 ||
 		    (Indices.Usage & BufferUsage(ERHIBufferUsage::Index)) == 0 ||
 		    (std::uint64_t(Draw.FirstIndex) + Draw.IndexCount) * 4 > Indices.Size)
@@ -380,7 +380,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		List->IASetIndexBuffer(&Ib);
 		D3D12_RECT Rect{Draw.Scissor.Left, Draw.Scissor.Top, Draw.Scissor.Right, Draw.Scissor.Bottom};
 		List->RSSetScissorRects(1, &Rect);
-		List->DrawIndexedInstanced(Draw.IndexCount, 1, Draw.FirstIndex, Draw.VertexOffset, 0);
+		List->DrawIndexedInstanced(Draw.IndexCount, Draw.InstanceCount, Draw.FirstIndex, Draw.VertexOffset, 0);
 	}
 	List->EndEvent();
 	P.State->GraphicsRootBinds += BindingState.RootBinds;

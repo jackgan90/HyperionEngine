@@ -222,6 +222,8 @@ FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& I
 		Slot.Count = Binding.Resource.Count;
 		Slot.MinimumBufferSize = Binding.Resource.ByteSize;
 		Slot.StructureByteStride = Binding.Resource.StructureByteStride;
+		Slot.InstanceStride = Binding.InstanceStride;
+		Slot.InstanceCapacity = Binding.InstanceCapacity;
 		Result.Slots.push_back(Slot);
 	}
 	return Result;

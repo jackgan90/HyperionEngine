@@ -41,6 +41,13 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 	{
 		const FResourceBindingSlot& Slot = InDesc.Slots[Index];
 		NativeVisibility(Slot.Visibility);
+		if ((Slot.InstanceStride == 0) != (Slot.InstanceCapacity == 0) ||
+		    (Slot.InstanceStride &&
+		     (Slot.Kind != ERHIBindingKind::ConstantBuffer || Slot.InstanceStride % 16 ||
+		      std::uint64_t(Slot.InstanceStride) * Slot.InstanceCapacity != Slot.MinimumBufferSize)))
+		{
+			throw std::invalid_argument("Invalid instance constant layout");
+		}
 		if (Slot.Kind < ERHIBindingKind::ConstantBuffer || Slot.Kind > ERHIBindingKind::Sampler || Slot.Count == 0 ||
 		    Slot.Space >= InCaps.MaxRegisterSpaces || Slot.Register >= ShaderRegistersPerKind ||
 		    Slot.Count > ShaderRegistersPerKind - Slot.Register || Slot.MinimumBufferSize > InCaps.MaxConstantRange ||

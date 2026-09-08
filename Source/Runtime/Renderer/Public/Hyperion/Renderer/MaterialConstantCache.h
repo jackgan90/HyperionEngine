@@ -4,6 +4,8 @@
 
 namespace Hyperion
 {
+struct FInstanceBatchData;
+
 struct FMaterialConstantStats
 {
 	std::uint64_t Packs{};
@@ -14,10 +16,14 @@ struct FMaterialConstantStats
 	std::uint64_t FullLookups{};
 	std::uint64_t PreparedReuses{};
 	std::uint64_t Evictions{};
+	std::uint64_t InstanceUploadBytes{};
+	std::uint64_t InstanceReuses{};
 	std::size_t LivePages{};
 	std::size_t CachedBlocks{};
 	std::size_t CachedBytes{};
 	std::size_t PreparedBlocks{};
+	std::size_t InstanceBlocks{};
+	std::size_t InstanceBytes{};
 	std::size_t PageBytes{};
 	std::array<std::uint64_t, MaterialScopeCount> ScopePacks{};
 };
@@ -64,6 +70,7 @@ private:
 	                                           const FCompiledMaterialPass& InPass,
 	                                           const FResolvedMaterialParameters& InParameters,
 	                                           FMaterialConstantState& InState);
+	std::vector<FConstantBinding> BindInstances(std::shared_ptr<const FInstanceBatchData> InData);
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;
 };

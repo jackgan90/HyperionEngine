@@ -12,6 +12,7 @@ void FSceneViewerPlugin::FImpl::UpdateCamera(FRenderFrame& InFrame)
 	InFrame.View.ViewProjection =
 	    Multiply(Perspective(1, Aspect, Manifest->Near, Manifest->Far), LookAt(InFrame.View.Eye, Target));
 	InFrame.View.CullingMode = Mode;
+	InFrame.View.bInstanceBatching = bInstanceBatching;
 	if (bFrozen)
 	{
 		InFrame.View.CullingViewProjection = FrozenView;

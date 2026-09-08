@@ -35,7 +35,8 @@ void FViewerApplication::RunFrames()
 			{
 				throw std::runtime_error("Benchmark scene is not ready; increase --benchmark-warmup and --frames");
 			}
-			BenchmarkFrames.push_back({Frame, double(ClockNanoseconds() - Now) / 1e6, SceneStatistics.Draws});
+			BenchmarkFrames.push_back({Frame, double(ClockNanoseconds() - Now) / 1e6, SceneStatistics.Draws,
+			                           SceneStatistics.VisibleItems, SceneStatistics.Batches});
 		}
 	}
 	if (Options.ProfileFrames)
@@ -100,7 +101,7 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 		RdcButtonBounds = Actions.CaptureRdcBounds;
 		if (ScenePlugin)
 		{
-			ScenePlugin->DrawGui(*Gui, SceneStatistics);
+			ScenePlugin->DrawGui(*Gui, SceneStatistics, Options.bNoInstanceBatching);
 		}
 		OutData = Gui->Render();
 	}
@@ -167,6 +168,7 @@ FRenderFrame FViewerApplication::UpdateScene(FSize InSize)
 			Scene->Update(Frame);
 		}
 	}
+	Frame.View.bInstanceBatching &= !Options.bNoInstanceBatching;
 	return Frame;
 }
 

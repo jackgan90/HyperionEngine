@@ -22,6 +22,7 @@ enum class ERHIFeature
 	Readback,
 	RayTracing,
 	MeshShaders,
+	InstancedDrawing,
 	Count
 };
 

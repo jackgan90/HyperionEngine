@@ -37,8 +37,8 @@ void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& In
 	Caps.ResourceDescriptorCapacity = InDesc.ResourceDescriptorCapacity;
 	Caps.SamplerDescriptorCapacity = InDesc.SamplerDescriptorCapacity;
 	Caps.MaxTextureDimension = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
-	for (const auto Feature :
-	     {ERHIFeature::Graphics, ERHIFeature::TextureSampling, ERHIFeature::ConcurrentRecording, ERHIFeature::Readback})
+	for (const auto Feature : {ERHIFeature::Graphics, ERHIFeature::TextureSampling, ERHIFeature::ConcurrentRecording,
+	                           ERHIFeature::Readback, ERHIFeature::InstancedDrawing})
 	{
 		Caps.Features[static_cast<std::size_t>(Feature)] = {true, true};
 	}

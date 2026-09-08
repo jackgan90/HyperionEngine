@@ -210,11 +210,16 @@ FMaterialParameterType ResourceType(const FShaderBinding& InBinding)
 	return Result;
 }
 
-void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, const FShaderArtifact& InArtifact)
+void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, const FShaderArtifact& InArtifact,
+               const FMaterialPass& InDescription)
 {
 	const std::string Stage = InArtifact.Stage == EShaderStage::Vertex ? "Vertex:" : "Pixel:";
-	for (FShaderBinding Resource : InArtifact.Bindings)
+	for (const FShaderBinding& NativeResource : InArtifact.Bindings)
 	{
+		FMaterialProgramBinding Binding;
+		auto Resource = InPass.Variant == "Instance"
+		                    ? PrepareMaterialInstanceBinding(NativeResource, InDescription, Binding)
+		                    : NativeResource;
 		if (NormalizeStandardMaterialBlock(Resource))
 		{
 			for (auto Parameter : GetStandardMaterialBlockParameters(Resource.Name, *InBuilder.Semantics))
@@ -226,8 +231,10 @@ void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, cons
 				}
 			}
 		}
-		FMaterialProgramBinding Binding;
-		Binding.Resource = Resource;
+		if (!Binding.InstanceStride)
+		{
+			Binding.Resource = Resource;
+		}
 		Binding.Stages = InArtifact.Stage == EShaderStage::Vertex ? 1U : 2U;
 		if (Resource.Kind == EBindingKind::UniformBuffer)
 		{
@@ -264,7 +271,106 @@ FShaderCompileOptions CompileOptions(const FMaterialShader& InShader, const FMat
 		Result.Defines.push_back({Define.Name, Define.Value});
 	}
 	Result.Defines.insert(Result.Defines.end(), InVariant.Defines.begin(), InVariant.Defines.end());
+	std::erase_if(Result.Defines,
+	              [](const auto& InDefine)
+	              {
+		              return InDefine.Name == "HYP_ENABLE_INSTANCE";
+	              });
+	Result.Defines.push_back({"HYP_ENABLE_INSTANCE", InVariant.Name == "Instance" ? "1" : "0"});
 	return Result;
+}
+
+FCompiledMaterialPass CompileVariant(FShaderCompiler& InCompiler, const FMaterialDefinition& InDefinition,
+                                     EShaderFormat InFormat, const FMaterialVariantRequest& InVariant,
+                                     FInterfaceBuilder& InBuilder)
+{
+	const FMaterialPass& Pass = InDefinition.GetPass(InVariant.Usage);
+	InBuilder.Usage = InVariant.Usage;
+	InBuilder.Variant = InVariant.Name;
+	FCompiledMaterialPass Compiled;
+	Compiled.Usage = InVariant.Usage;
+	Compiled.Variant = InVariant.Name;
+	Compiled.VariantDefines = InVariant.Defines;
+	Compiled.Vertex = InCompiler.Compile(Pass.Vertex.Path, Pass.Vertex.Entry, EShaderStage::Vertex, InFormat,
+	                                     CompileOptions(Pass.Vertex, InVariant));
+	BindStage(InBuilder, Compiled, Compiled.Vertex, Pass);
+	if (!Pass.Pixel.Path.empty())
+	{
+		Compiled.Pixel = InCompiler.Compile(Pass.Pixel.Path, Pass.Pixel.Entry, EShaderStage::Pixel, InFormat,
+		                                    CompileOptions(Pass.Pixel, InVariant));
+		BindStage(InBuilder, Compiled, Compiled.Pixel, Pass);
+	}
+	Compiled.Bindings = MergeMaterialBindings(std::move(Compiled.Bindings));
+	Compiled.InstanceCapacity = InVariant.Name != "Instance" ? 1 : UINT32_MAX;
+	for (const auto& Array : InVariant.Name == "Instance" ? Pass.InstanceArrays : std::vector<FMaterialInstanceArray>{})
+	{
+		const auto Binding = std::find_if(Compiled.Bindings.begin(), Compiled.Bindings.end(),
+		                                  [&](const auto& InBinding)
+		                                  {
+			                                  return InBinding.Resource.Name == Array.Block;
+		                                  });
+		if (Binding == Compiled.Bindings.end() || !Binding->InstanceStride)
+		{
+			throw std::invalid_argument("Missing material instance block: " + Array.Block);
+		}
+		Compiled.InstanceCapacity = std::min(Compiled.InstanceCapacity, Binding->InstanceCapacity);
+	}
+	std::sort(Compiled.ActiveParameters.begin(), Compiled.ActiveParameters.end());
+	Compiled.ActiveParameters.erase(std::unique(Compiled.ActiveParameters.begin(), Compiled.ActiveParameters.end()),
+	                                Compiled.ActiveParameters.end());
+	if (InVariant.Name == "Instance")
+	{
+		const bool bInstanceId =
+		    std::any_of(Compiled.Vertex.Reflection.Inputs.begin(), Compiled.Vertex.Reflection.Inputs.end(),
+		                [](const auto& InInput)
+		                {
+			                return InInput.bSystemValue &&
+			                       (InInput.Semantic == "SV_InstanceID" || InInput.Semantic == "SV_INSTANCEID");
+		                });
+		if (!bInstanceId || Pass.InstanceArrays.empty() || Compiled.InstanceCapacity < 2)
+		{
+			throw std::invalid_argument("HYP_ENABLE_INSTANCE=1 must expose SV_InstanceID and instance constant arrays");
+		}
+	}
+	return Compiled;
+}
+
+void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefinition& InDefinition,
+                              EShaderFormat InFormat, FInterfaceBuilder& InBuilder,
+                              FCompiledMaterialDefinition& OutResult)
+{
+	const auto Count = OutResult.Passes.size();
+	for (std::size_t Index = 0; Index < Count; ++Index)
+	{
+		const auto& Default = OutResult.Passes[Index];
+		if (Default.Variant != "Default" || OutResult.FindInstancePass(Default.Usage))
+		{
+			continue;
+		}
+		const auto& Description = InDefinition.GetPass(Default.Usage);
+		if (Description.InstanceArrays.empty())
+		{
+			continue;
+		}
+		auto Trial = InBuilder;
+		try
+		{
+			auto Instance = CompileVariant(InCompiler, InDefinition, InFormat,
+			                               {Default.Usage, "Instance", Default.VariantDefines}, Trial);
+			if (!std::includes(Default.ActiveParameters.begin(), Default.ActiveParameters.end(),
+			                   Instance.ActiveParameters.begin(), Instance.ActiveParameters.end()))
+			{
+				throw std::invalid_argument("Instance permutation requires inputs unavailable to the ordinary pass");
+			}
+			OutResult.Key += "/instance/" + Instance.Vertex.CacheKey + "/" + Instance.Pixel.CacheKey;
+			OutResult.Passes.push_back(std::move(Instance));
+			InBuilder = std::move(Trial);
+		}
+		catch (const std::exception& Error)
+		{
+			OutResult.InstanceDiagnostics.push_back(Description.Usage + ": " + Error.what());
+		}
+	}
 }
 } // namespace
 
@@ -307,30 +413,13 @@ FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompile
 		{
 			throw std::invalid_argument("Duplicate or empty material variant");
 		}
-		const FMaterialPass& Pass = InDefinition->GetPass(Variant.Usage);
-		Builder.Usage = Variant.Usage;
-		Builder.Variant = Variant.Name;
-		FCompiledMaterialPass Compiled;
-		Compiled.Usage = Variant.Usage;
-		Compiled.Variant = Variant.Name;
-		Compiled.Vertex = InCompiler.Compile(Pass.Vertex.Path, Pass.Vertex.Entry, EShaderStage::Vertex, InFormat,
-		                                     CompileOptions(Pass.Vertex, Variant));
-		BindStage(Builder, Compiled, Compiled.Vertex);
-		if (!Pass.Pixel.Path.empty())
-		{
-			Compiled.Pixel = InCompiler.Compile(Pass.Pixel.Path, Pass.Pixel.Entry, EShaderStage::Pixel, InFormat,
-			                                    CompileOptions(Pass.Pixel, Variant));
-			BindStage(Builder, Compiled, Compiled.Pixel);
-		}
-		Compiled.Bindings = MergeMaterialBindings(std::move(Compiled.Bindings));
-		std::sort(Compiled.ActiveParameters.begin(), Compiled.ActiveParameters.end());
-		Compiled.ActiveParameters.erase(std::unique(Compiled.ActiveParameters.begin(), Compiled.ActiveParameters.end()),
-		                                Compiled.ActiveParameters.end());
+		auto Compiled = CompileVariant(InCompiler, *InDefinition, InFormat, Variant, Builder);
 		Result.Key += "/" + std::to_string(Variant.Usage.size()) + ":" + Variant.Usage +
 		              std::to_string(Variant.Name.size()) + ":" + Variant.Name + "/" + Compiled.Vertex.CacheKey + "/" +
 		              Compiled.Pixel.CacheKey;
 		Result.Passes.push_back(std::move(Compiled));
 	}
+	CompileOptionalInstances(InCompiler, *InDefinition, InFormat, Builder, Result);
 	// Register reflected aliases only after binding all stages/variants: authored targets drive matching.
 	for (const auto& Mapping : Builder.Mappings)
 	{

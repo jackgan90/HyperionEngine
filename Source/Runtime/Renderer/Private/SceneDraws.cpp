@@ -1,22 +1,13 @@
 #include "Hyperion/Core/Profiling.h"
 #include "MaterialProfiling.h"
-#include "RenderResourcesInternal.h"
+#include "SceneDrawsInternal.h"
+#include <chrono>
 #include <stdexcept>
 
 namespace Hyperion
 {
 namespace
 {
-struct FPreparedSceneDraws
-{
-	std::vector<std::optional<FDrawPacket>> Packets;
-	std::vector<bool> Srgb;
-	std::map<std::pair<std::uint64_t, std::uint64_t>, std::string> Failures;
-	bool bDepth{};
-	bool bStencil{};
-	ERHIDepthFormat Depth = ERHIDepthFormat::None;
-};
-
 FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot)
 {
 	FPreparedSceneDraws Result;
@@ -33,6 +24,11 @@ FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRen
 		}
 	}
 	Result.Depth = Result.bDepth || Result.bStencil ? InSnapshot.DepthFormat : ERHIDepthFormat::None;
+	if (InSnapshot.Batches)
+	{
+		PrepareBatchedDraws(InOwner, InSnapshot, Result);
+		return Result;
+	}
 	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
 	{
 		const auto& Item = InSnapshot.Items[Index];
@@ -92,7 +88,7 @@ std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPr
 			             InSnapshot.View.Usage, Failed == InPrepared.Failures.end(),
 			             Failed == InPrepared.Failures.end() ? "" : Failed->second});
 		}
-		if (Failed != InPrepared.Failures.end())
+		if (Failed != InPrepared.Failures.end() || !InPrepared.Packets[Index])
 		{
 			continue;
 		}
@@ -127,7 +123,36 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 			Before.Materials = Owner.MaterialGpu->Statistics();
 		}
 #endif
-		Passes = PublishDraws(InSnapshot, PrepareDraws(Owner, InSnapshot));
+		const auto Start = std::chrono::steady_clock::now();
+		const auto BeforeInstances =
+		    Owner.MaterialConstants ? Owner.MaterialConstants->Statistics() : FMaterialConstantStats{};
+		auto Prepared = PrepareDraws(Owner, InSnapshot);
+		auto& Stats = Prepared.Statistics;
+		for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+		{
+			const auto& Item = InSnapshot.Items[Index];
+			if (Prepared.Failures.contains({Item.Primitive.Scene, Item.Group}))
+			{
+				++Stats.FailedItems;
+			}
+			else if (Prepared.Packets[Index])
+			{
+				const auto Count = Prepared.Packets[Index]->InstanceCount;
+				Stats.InstancedDraws += Count > 1;
+				Stats.InstancedItems += Count > 1 ? Count : 0;
+				Stats.SingleDraws += Count == 1;
+			}
+		}
+		Stats.PreparationMilliseconds =
+		    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
+		if (Owner.MaterialConstants)
+		{
+			const auto After = Owner.MaterialConstants->Statistics();
+			Stats.UploadBytes = After.InstanceUploadBytes - BeforeInstances.InstanceUploadBytes;
+			Stats.GpuReuses = After.InstanceReuses - BeforeInstances.InstanceReuses;
+		}
+		Owner.Stats.Batches = Stats;
+		Passes = PublishDraws(InSnapshot, std::move(Prepared));
 		if (Owner.MaterialGpu)
 		{
 			Owner.Stats.Materials = Owner.MaterialGpu->Statistics();

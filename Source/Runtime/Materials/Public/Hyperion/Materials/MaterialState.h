@@ -132,6 +132,15 @@ struct FMaterialShader
 	bool operator==(const FMaterialShader&) const = default;
 };
 
+// One constant block containing only a fixed array of numeric records.
+// Record fields remain ordinary logical parameters; shader indices must stay below the draw's instance count.
+struct FMaterialInstanceArray
+{
+	std::string Block;
+	std::string Member;
+	bool operator==(const FMaterialInstanceArray&) const = default;
+};
+
 struct FMaterialPass
 {
 	std::string Usage = "Forward";
@@ -144,6 +153,8 @@ struct FMaterialPass
 	bool bAlphaClip{};
 	bool bRequiresConservativeBounds{};
 	bool bAllowDynamicOverrides{};
+	std::vector<FMaterialInstanceArray> InstanceArrays;
+	bool bAllowBatchReordering{};
 };
 
 enum class EMaterialAvailability : std::uint8_t

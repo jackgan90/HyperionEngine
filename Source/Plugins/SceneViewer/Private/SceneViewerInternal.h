@@ -45,6 +45,7 @@ struct FSceneViewerPlugin::FImpl
 	bool bFrozen{};
 	bool bBounds{};
 	bool bAnimate{};
+	bool bInstanceBatching = true;
 	FVec2 LastMouse;
 	FVec3 Target;
 	float Distance = 12;
