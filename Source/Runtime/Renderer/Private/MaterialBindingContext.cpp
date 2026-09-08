@@ -69,6 +69,7 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
 	const auto Values = ResolveMaterialParameters(Snapshot, ProviderValues, InContext.ObjectParameters,
 	                                              InContext.DrawParameters, InPass.ActiveParameters);
 	FResolvedMaterialParameters Result;
+	Result.ResourceIdentity = std::make_shared<const int>(0);
 	Result.Scopes = InContext.Scopes;
 	Result.Scopes[static_cast<std::size_t>(EMaterialScope::Material)] = {{Snapshot.Identity, Snapshot.Revision},
 	                                                                     InMaterial};
@@ -77,7 +78,7 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
 	Result.Dependencies.resize(Parameters.size(), MaterialScopeBit(EMaterialScope::Material));
 	for (const auto& Value : Values)
 	{
-		Result.Values[Snapshot.Schema->Find(Value.Name).Index] = Value.Value;
+		Result.Values[Snapshot.Schema->Find(Value.Name).Index] = std::make_shared<const FMaterialValue>(Value.Value);
 	}
 	for (std::size_t Index = 0; Index < Parameters.size(); ++Index)
 	{

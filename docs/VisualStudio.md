@@ -84,6 +84,8 @@ Tracy 的 `TRACY_ON_DEMAND` 只延迟采集，仍会监听连接，因此启用 
 
 ## 本机验证记录
 
+2026-09-08：Scene 性能修复完成，VS 2022 Debug/Release 均通过 **43/43** CTest，新增真实运动镜头验收；Ninja Debug Viewer、227 源码格式、139 编译单元命名和模块边界检查通过。同一 194–195 draw 场景、GUI/RenderDoc 开启且 VSync 关闭时，Release 静止约 389 FPS、连续相机运动约 266 FPS；详见 [性能定位与数据](ScenePerformance.md)。
+
 2026-09-07：通用材质系统及 Triangle/ModelViewer/SceneViewer/DebugUI 迁移完成。最终 VS 2022 Debug **42/42**（104.95 秒）、Release **42/42**（70.33 秒）CTest 通过，包含材质像素/共享常量、连续 Object 更新回收、Scene 原子发布、失败 Present、原场景规模验收及实际 RenderDoc replay。514 模型/2053 draws 的 Debug 180 帧无剔除测试约 22 秒，保持原 45 秒限制并得到零 D3D12 validation errors。Ninja Debug 构建、225 自有源码的格式、137 编译单元命名、220 模块源码/25 模块边界及 OpenSpec strict 检查通过。日志为 `out/MaterialFinalVsDebug.log`、`out/MaterialFinalVsRelease.log`、`out/MaterialFinalNaming.log`、`out/MaterialFinalBoundaries.log` 和 `out/MaterialFinalDebugSceneNone.log`；接口和首版能力见 [Materials.md](Materials.md)，完整证据见 [implementation.md](../openspec/changes/archive/2026-09-07-add-extensible-material-system/implementation.md)。未执行 Git commit。
 
 2026-09-07 审计收尾：10 项确认缺陷完成修复并由原独立 reviewer 复审关闭。最终 Debug **42/42**（119.87 秒）、Release **42/42**（74.97 秒）CTest 通过；命名、格式、模块边界和 OpenSpec strict 检查通过。原 514 模型无剔除 fixture 的 Debug 应用运行约 18.36 秒，保持原超时门槛。详情见 [材质审计报告](MaterialAudit.md)，最终日志为 `out/MaterialAudit/ProgramFinalVsDebug.log`、`ProgramFinalVsRelease.log` 和 `ProgramFinalNaming.log`。

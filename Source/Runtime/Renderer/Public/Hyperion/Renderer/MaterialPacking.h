@@ -7,4 +7,6 @@ namespace Hyperion
 // The caller supplies only active logical values. All remaining bytes, including padding, are zeroed.
 std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
                                              std::span<const std::optional<FMaterialValue>> InValues);
+std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
+                                             std::span<const std::shared_ptr<const FMaterialValue>> InValues);
 } // namespace Hyperion

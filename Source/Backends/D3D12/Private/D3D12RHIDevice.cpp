@@ -194,13 +194,8 @@ FBuffer FD3D12RHIDevice::CreateBuffer(std::span<const std::byte> InBytes)
 	{
 		throw std::invalid_argument("Empty GPU buffer");
 	}
-	auto R = State->AllocateBuffer(InBytes.size(), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-	void* Mapped{};
-	D3D12_RANGE Read{0, 0};
-	Check(R->Resource->Map(0, &Read, &Mapped), "Map upload buffer");
-	std::memcpy(Mapped, InBytes.data(), InBytes.size());
-	R->Resource->Unmap(0, nullptr);
-	return {std::move(R)};
+	return CreateBuffer({InBytes.size(), BufferUsage(ERHIBufferUsage::Vertex) | BufferUsage(ERHIBufferUsage::Index)},
+	                    InBytes);
 }
 
 FTexture FD3D12RHIDevice::CreateTexture(const FImage& InImage)

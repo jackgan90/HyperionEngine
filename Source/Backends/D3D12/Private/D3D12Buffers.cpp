@@ -1,5 +1,6 @@
 #include "D3D12RHIDevice.h"
 #include "D3D12Resources.h"
+#include <algorithm>
 #include <cstring>
 #include <limits>
 
@@ -19,6 +20,15 @@ FBuffer FD3D12RHIDevice::CreateBuffer(const FBufferDesc& InDesc, std::span<const
 	}
 	auto Buffer = State->AllocateBuffer(InDesc.Size, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 	Buffer->Usage = InDesc.Usage;
+	if ((InDesc.Usage & BufferUsage(ERHIBufferUsage::Index)) != 0)
+	{
+		Buffer->IndexData.resize(static_cast<std::size_t>(InDesc.Size / sizeof(std::uint32_t)));
+		const auto Bytes = std::min(InBytes.size(), Buffer->IndexData.size() * sizeof(std::uint32_t));
+		if (Bytes != 0)
+		{
+			std::memcpy(Buffer->IndexData.data(), InBytes.data(), Bytes);
+		}
+	}
 	void* Mapped{};
 	D3D12_RANGE Read{0, 0};
 	Check(Buffer->Resource->Map(0, &Read, &Mapped), "Map typed upload buffer");

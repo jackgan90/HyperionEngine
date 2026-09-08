@@ -21,11 +21,7 @@ std::pair<std::uint32_t, std::uint32_t> IndexBounds(const FDrawPacket& InDraw, c
 			return {Range[2], Range[3]};
 		}
 	}
-	void* Mapped{};
-	D3D12_RANGE Read{static_cast<SIZE_T>(InDraw.FirstIndex) * 4,
-	                 (static_cast<SIZE_T>(InDraw.FirstIndex) + InDraw.IndexCount) * 4};
-	Check(InIndices.Resource->Map(0, &Read, &Mapped), "Validate draw index range");
-	const auto* Indices = static_cast<const std::uint32_t*>(Mapped);
+	const auto& Indices = InIndices.IndexData;
 	std::uint32_t Minimum = UINT_MAX;
 	std::uint32_t Maximum{};
 	for (std::uint32_t Index = 0; Index < InDraw.IndexCount; ++Index)
@@ -33,8 +29,6 @@ std::pair<std::uint32_t, std::uint32_t> IndexBounds(const FDrawPacket& InDraw, c
 		Minimum = std::min(Minimum, Indices[InDraw.FirstIndex + Index]);
 		Maximum = std::max(Maximum, Indices[InDraw.FirstIndex + Index]);
 	}
-	D3D12_RANGE Written{0, 0};
-	InIndices.Resource->Unmap(0, &Written);
 	if (InIndices.IndexRanges.size() < 32)
 	{
 		InIndices.IndexRanges.push_back({InDraw.FirstIndex, InDraw.IndexCount, Minimum, Maximum});

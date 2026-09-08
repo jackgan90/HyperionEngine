@@ -39,10 +39,19 @@ struct FMaterialBindingContext
 
 struct FResolvedMaterialParameters
 {
-	std::vector<std::optional<FMaterialValue>> Values;
+	// Frozen values are shared individually; a camera update copies handles, not every material array.
+	std::vector<std::shared_ptr<const FMaterialValue>> Values;
 	std::vector<std::uint32_t> Dependencies;
 	std::array<FMaterialScopeInput, MaterialScopeCount> Scopes;
+	// Shared only while resource values and their dependency owners are unchanged across numeric refreshes.
+	std::shared_ptr<const void> ResourceIdentity;
 };
+
+inline bool SameMaterialValue(const std::shared_ptr<const FMaterialValue>& InA,
+                              const std::shared_ptr<const FMaterialValue>& InB)
+{
+	return InA == InB || (InA && InB && *InA == *InB);
+}
 
 FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const FMaterialSnapshot> InMaterial,
                                                           const FCompiledMaterialDefinition& InCompiled,

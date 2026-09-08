@@ -115,10 +115,10 @@ FResourceBindingSet FMaterialGpuCache::FImpl::Set(FResourceBindingSetDesc InDesc
 	return Iterator->second.Resource;
 }
 
-FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMaterialPass& InPass,
-                                                           std::span<const std::optional<FMaterialValue>> InValues,
-                                                           const FMaterialResourceOwners& InOwners,
-                                                           bool bInAllowMissing)
+FMaterialResourceBindings FMaterialGpuCache::BindResourceValues(const FCompiledMaterialPass& InPass,
+                                                                std::span<const FMaterialValue* const> InValues,
+                                                                const FMaterialResourceOwners& InOwners,
+                                                                bool bInAllowMissing)
 {
 	Impl->CheckOwner();
 	FResourceBindingSetDesc Description;
@@ -178,6 +178,33 @@ FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMateri
 	}
 	Result.bReady = Textures.empty() || Impl->Device.TexturesReady(Textures);
 	return Result;
+}
+
+FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMaterialPass& InPass,
+                                                           std::span<const std::optional<FMaterialValue>> InValues,
+                                                           const FMaterialResourceOwners& InOwners,
+                                                           bool bInAllowMissing)
+{
+	std::vector<const FMaterialValue*> Values;
+	Values.reserve(InValues.size());
+	for (const auto& Value : InValues)
+	{
+		Values.push_back(Value ? &*Value : nullptr);
+	}
+	return BindResourceValues(InPass, Values, InOwners, bInAllowMissing);
+}
+
+FMaterialResourceBindings FMaterialGpuCache::BindResources(
+    const FCompiledMaterialPass& InPass, std::span<const std::shared_ptr<const FMaterialValue>> InValues,
+    const FMaterialResourceOwners& InOwners, bool bInAllowMissing)
+{
+	std::vector<const FMaterialValue*> Values;
+	Values.reserve(InValues.size());
+	for (const auto& Value : InValues)
+	{
+		Values.push_back(Value ? &*Value : nullptr);
+	}
+	return BindResourceValues(InPass, Values, InOwners, bInAllowMissing);
 }
 
 FPipeline FMaterialGpuCache::GetMaterialPipeline(const FCompiledMaterialPass& InProgram, const FMaterialPass& InPass,

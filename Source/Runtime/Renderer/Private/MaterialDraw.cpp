@@ -7,6 +7,48 @@ namespace Hyperion
 {
 namespace
 {
+bool SameResources(const std::vector<std::shared_ptr<const FMaterialValue>>& InValues,
+                   const FCompiledMaterialPass& InPass, const FResolvedMaterialParameters& InParameters)
+{
+	std::size_t Index{};
+	for (const auto& Binding : InPass.Bindings)
+	{
+		if (Binding.ResourceParameter)
+		{
+			if (Index >= InValues.size() ||
+			    !SameMaterialValue(InValues[Index++], InParameters.Values.at(*Binding.ResourceParameter)))
+			{
+				return false;
+			}
+		}
+	}
+	return Index == InValues.size();
+}
+
+FMaterialResourceOwners ResourceOwners(const std::shared_ptr<const void>& InLifetime,
+                                       const FCompiledMaterialPass& InProgram,
+                                       const FResolvedMaterialParameters& InValues)
+{
+	FMaterialResourceOwners Owners{InLifetime};
+	std::uint32_t Dependencies{};
+	for (const auto& Binding : InProgram.Bindings)
+	{
+		if (Binding.ResourceParameter)
+		{
+			Dependencies |= InValues.Dependencies[*Binding.ResourceParameter];
+		}
+	}
+	// Numeric Object/View changes never invalidate static descriptor tables.
+	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
+	{
+		if ((Dependencies & (1U << Scope)) && Scope != static_cast<std::size_t>(EMaterialScope::Material))
+		{
+			Owners.push_back(InValues.Scopes[Scope].Lifetime);
+		}
+	}
+	return Owners;
+}
+
 FDrawPacket FinalizeDraw(FDrawPacket InDraw, const FRenderItem& InItem, const FRenderView& InView,
                          const FMaterialPass& InPass)
 {
@@ -29,7 +71,7 @@ void FRenderResourceCoordinator::CollectPreparedDraws()
 	std::erase_if(PreparedDraws,
 	              [](const auto& InEntry)
 	              {
-		              return InEntry.second.Parameters.expired() || InEntry.second.Geometry.expired() ||
+		              return InEntry.second.Resources.expired() || InEntry.second.Geometry.expired() ||
 		                     InEntry.second.Surface.expired();
 	              });
 }
@@ -53,35 +95,30 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	                          : std::make_shared<const FResolvedMaterialParameters>(
 	                                ResolveMaterialBindingContext(Snapshot, Compiled, Program, InItem.Context));
 	const bool bMirrored = Determinant(InItem.State.World) < 0;
-	const FDrawKey Key{Resolved.get(), InItem.State.Resource.get(), InItem.State.Section, InView.Usage};
+	const std::shared_ptr<const void> ResourceIdentity =
+	    Resolved->ResourceIdentity ? Resolved->ResourceIdentity : Resolved;
+	const FDrawKey Key{ResourceIdentity.get(), InItem.State.Resource.get(), InItem.State.Section, InView.Usage};
 	const auto Existing = PreparedDraws.find(Key);
 	if (Existing != PreparedDraws.end())
 	{
-		const auto& Cached = Existing->second;
-		if (Cached.Parameters.lock() == Resolved && Cached.Geometry.lock() == InItem.State.Resource &&
-		    Cached.Surface.lock() == InItem.State.Surface && Cached.Target == InTarget && Cached.bMirrored == bMirrored)
+		auto& Cached = Existing->second;
+		const bool bSameParameters = Cached.Parameters.lock() == Resolved;
+		if (Cached.Resources.lock() == ResourceIdentity && Cached.Geometry.lock() == InItem.State.Resource &&
+		    Cached.Surface.lock() == InItem.State.Surface && Cached.Target == InTarget &&
+		    Cached.bMirrored == bMirrored &&
+		    (bSameParameters || SameResources(Cached.ResourceValues, Program, *Resolved)))
 		{
+			if (!bSameParameters)
+			{
+				Cached.Packet.ConstantBindings =
+				    MaterialConstants->Bind(Program, *Compiled.Interface.Schema, *Resolved);
+				Cached.Parameters = Resolved;
+			}
 			return FinalizeDraw(Cached.Packet, InItem, InView, Pass);
 		}
 	}
 	const auto& Values = *Resolved;
-	FMaterialResourceOwners Owners{MaterialRecord.GpuLifetime};
-	std::uint32_t Dependencies{};
-	for (const auto& Binding : Program.Bindings)
-	{
-		if (Binding.ResourceParameter)
-		{
-			Dependencies |= Values.Dependencies[*Binding.ResourceParameter];
-		}
-	}
-	// Numeric Object/View changes never invalidate static descriptor tables.
-	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
-	{
-		if ((Dependencies & (1U << Scope)) && Scope != static_cast<std::size_t>(EMaterialScope::Material))
-		{
-			Owners.push_back(Values.Scopes[Scope].Lifetime);
-		}
-	}
+	const auto Owners = ResourceOwners(MaterialRecord.GpuLifetime, Program, Values);
 	EnsureMaterialCaches();
 	const auto Bindings = MaterialGpu->BindResources(Program, Values.Values, Owners);
 	if (!Bindings.bReady)
@@ -102,8 +139,17 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	Result.Bindings = Bindings.Set;
 	Result.ConstantBindings = MaterialConstants->Bind(Program, *Compiled.Interface.Schema, Values);
 	Result = FinalizeDraw(std::move(Result), InItem, InView, Pass);
-	PreparedDraws.insert_or_assign(
-	    Key, FPreparedDraw{Resolved, InItem.State.Resource, InItem.State.Surface, InTarget, bMirrored, Result});
+	std::vector<std::shared_ptr<const FMaterialValue>> ResourceValues;
+	for (const auto& Binding : Program.Bindings)
+	{
+		if (Binding.ResourceParameter)
+		{
+			ResourceValues.push_back(Resolved->Values.at(*Binding.ResourceParameter));
+		}
+	}
+	PreparedDraws.insert_or_assign(Key, FPreparedDraw{Resolved, ResourceIdentity, std::move(ResourceValues),
+	                                                  InItem.State.Resource, InItem.State.Surface, InTarget, bMirrored,
+	                                                  Result});
 	return Result;
 }
 } // namespace Hyperion

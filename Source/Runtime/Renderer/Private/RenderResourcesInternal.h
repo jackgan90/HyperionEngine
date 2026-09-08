@@ -85,6 +85,8 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	struct FPreparedDraw
 	{
 		std::weak_ptr<const FResolvedMaterialParameters> Parameters;
+		std::weak_ptr<const void> Resources;
+		std::vector<std::shared_ptr<const FMaterialValue>> ResourceValues;
 		std::weak_ptr<const FRenderResource> Geometry;
 		std::weak_ptr<const FRenderMaterial> Surface;
 		FGraphicsTarget Target;
@@ -92,7 +94,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 		FDrawPacket Packet;
 	};
 
-	using FDrawKey = std::tuple<const FResolvedMaterialParameters*, const FRenderResource*, std::uint32_t, std::string>;
+	using FDrawKey = std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string>;
 	std::map<FDrawKey, FPreparedDraw> PreparedDraws;
 	void CollectPreparedDraws();
 	FTaskSystem& Tasks;

@@ -209,8 +209,10 @@ void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 	{
 		return;
 	}
-	auto Vertices = P.Device.CreateBuffer(std::as_bytes(std::span(InData.Vertices)));
-	auto Indices = P.Device.CreateBuffer(std::as_bytes(std::span(InData.Indices)));
+	const auto VertexBytes = std::as_bytes(std::span(InData.Vertices));
+	const auto IndexBytes = std::as_bytes(std::span(InData.Indices));
+	auto Vertices = P.Device.CreateBuffer({VertexBytes.size(), BufferUsage(ERHIBufferUsage::Vertex)}, VertexBytes);
+	auto Indices = P.Device.CreateBuffer({IndexBytes.size(), BufferUsage(ERHIBufferUsage::Index)}, IndexBytes);
 	auto Matrix = Identity();
 	const float W = InData.DisplaySize.X;
 	const float H = InData.DisplaySize.Y;

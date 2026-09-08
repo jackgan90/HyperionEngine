@@ -33,7 +33,7 @@ struct FMaterialEvaluationCache
 
 		bool Matches(const FMaterialProviderInputs& InInputs, const FMaterialParameterValues& InObject,
 		             const FMaterialParameterValues& InDraw, const FMat4& InWorld, bool bInClipSpace,
-		             const FMaterialParameterValues& InObjectInputs) const
+		             const FMaterialParameterValues& InObjectInputs, std::uint32_t InIgnoredScopes = 0) const
 		{
 			const auto Transient = MaterialScopeBit(EMaterialScope::Frame) | MaterialScopeBit(EMaterialScope::Pass) |
 			                       MaterialScopeBit(EMaterialScope::Draw);
@@ -56,8 +56,9 @@ struct FMaterialEvaluationCache
 				{
 					continue;
 				}
-				if ((Dependencies & (1U << Scope)) && (Inputs.Scopes[Scope].Key != InInputs.Scopes[Scope].Key ||
-				                                       Inputs.Values[Scope] != InInputs.Values[Scope]))
+				if ((Dependencies & ~InIgnoredScopes & (1U << Scope)) &&
+				    (Inputs.Scopes[Scope].Key != InInputs.Scopes[Scope].Key ||
+				     Inputs.Values[Scope] != InInputs.Values[Scope]))
 				{
 					return false;
 				}
@@ -68,4 +69,9 @@ struct FMaterialEvaluationCache
 
 	std::map<std::pair<std::uint64_t, std::uint64_t>, FEntry> Entries;
 };
+struct FRenderItem;
+struct FRenderView;
+bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMaterialProviderInputs& InInputs,
+                               const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
+                               FMaterialProviderRegistry& InProviders);
 } // namespace Hyperion

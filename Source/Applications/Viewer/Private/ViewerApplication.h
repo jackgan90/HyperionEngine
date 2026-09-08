@@ -38,6 +38,8 @@ private:
 	void Tick(int InFrame, float InDelta);
 	void PollInput();
 	void ExerciseWindow(int InFrame);
+	void ExerciseBenchmarkCamera(int InFrame);
+	void SaveBenchmark();
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
 	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
 	FRenderFrame UpdateScene(FSize InSize);
@@ -70,6 +72,15 @@ private:
 	FModelViewerPlugin* ModelPlugin{};
 	FSceneViewerPlugin* ScenePlugin{};
 	FSceneVisibilityStats SceneStatistics;
+
+	struct FBenchmarkFrame
+	{
+		int Frame{};
+		double Milliseconds{};
+		std::size_t Draws{};
+	};
+
+	std::vector<FBenchmarkFrame> BenchmarkFrames;
 	FVec4 RdcButtonBounds;
 	bool bRdcMouseDown{};
 	bool bCaptured{};

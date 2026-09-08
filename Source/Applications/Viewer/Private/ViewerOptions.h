@@ -12,6 +12,10 @@ struct FOptions
 	std::filesystem::path SaveConfig;
 	std::filesystem::path Model;
 	std::filesystem::path Scene;
+	std::filesystem::path Benchmark;
+	int BenchmarkWarmup = 60;
+	bool bBenchmarkCamera{};
+	bool bNoVsync{};
 	std::string SceneCulling = "bvh";
 	bool bVerifyModel{};
 	std::optional<std::string> Backend;

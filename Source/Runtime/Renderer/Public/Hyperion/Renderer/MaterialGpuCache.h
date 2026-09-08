@@ -40,6 +40,9 @@ public:
 	FMaterialResourceBindings BindResources(const FCompiledMaterialPass& InPass,
 	                                        std::span<const std::optional<FMaterialValue>> InValues,
 	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
+	FMaterialResourceBindings BindResources(const FCompiledMaterialPass& InPass,
+	                                        std::span<const std::shared_ptr<const FMaterialValue>> InValues,
+	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
 	FPipeline GetPipeline(const FPipelineDesc& InDescription, const FMaterialResourceOwners& InOwners);
 	FPipeline GetMaterialPipeline(const FCompiledMaterialPass& InProgram, const FMaterialPass& InPass,
 	                              const FResourceBindingLayout& InLayout,
@@ -53,6 +56,10 @@ public:
 	FMaterialGpuStats Statistics() const;
 
 private:
+	FMaterialResourceBindings BindResourceValues(const FCompiledMaterialPass& InPass,
+	                                             std::span<const FMaterialValue* const> InValues,
+	                                             const FMaterialResourceOwners& InOwners, bool bInAllowMissing);
+
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;
 };

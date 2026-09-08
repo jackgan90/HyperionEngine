@@ -306,12 +306,18 @@ cbuffer SurfaceData : register(b2) { float4 Tint; };
 #if NEED_EXTRA
 cbuffer SceneData : register(b3) { float Extra; };
 #endif
+#if NEED_TEXTURE
+Texture2D<float4> ViewTexture : register(t0);
+#endif
 float4 VSMain(float3 InPosition : POSITION) : SV_Position { return mul(ViewProjection, mul(World, float4(InPosition, 1))) + float4(Camera.yz, 0, 0); }
 float4 PSMain() : SV_Target0
 {
     float4 Color = Tint + float4(Camera.x + ViewProjection[0][0] - 1, 0, 0, 0);
 #if NEED_EXTRA
     Color.b += Extra;
+#endif
+#if NEED_TEXTURE
+    Color *= ViewTexture.Load(int3(0, 0, 0));
 #endif
     return Color;
 }
@@ -373,6 +379,97 @@ void CheckProviderFallback(FTaskSystem& InTasks, FRenderSession& InSession, IRHI
 	HYP_CHECK(std::abs(Restored.Rgba[(32 * 64 + 16) * 4 + 2] - .15f) < .01f);
 	InTasks.Wait(Binding.Remove());
 }
+
+void CheckMovingViews(FTaskSystem& InTasks, FRenderSession& InSession, IRHISwapchain& InSwapchain,
+                      std::array<FRenderView, 2> InViews)
+{
+	const auto Original = Build(InTasks, InSession, InViews);
+	const auto OriginalEye = InViews[0].Eye.X;
+	const auto Warm = InSession.GetResources().Statistics();
+	std::vector<FPassCommands> Current;
+	for (std::uint32_t Index = 0; Index < 128; ++Index)
+	{
+		InViews[0].Eye.X = .2f + float(Index % 20) * .01f;
+		Current = Build(InTasks, InSession, InViews);
+		HYP_CHECK(Current[1].Draws.size() == 2 && Current[2].Draws.size() == 2);
+		for (std::size_t Draw = 0; Draw < 2; ++Draw)
+		{
+			HYP_CHECK(Current[1].Draws[Draw].Pipeline == Original[1].Draws[Draw].Pipeline);
+			HYP_CHECK(Current[1].Draws[Draw].ConstantBindings[1].Slice ==
+			          Original[1].Draws[Draw].ConstantBindings[1].Slice);
+			HYP_CHECK(Current[1].Draws[Draw].ConstantBindings[2].Slice ==
+			          Original[1].Draws[Draw].ConstantBindings[2].Slice);
+		}
+	}
+	const auto Final = InSession.GetResources().Statistics();
+	HYP_CHECK(Final.Constants.Packs == Warm.Constants.Packs + 128);
+	HYP_CHECK(Final.Materials.PipelineReuses == Warm.Materials.PipelineReuses);
+	HYP_CHECK(Final.Materials.SetReuses == Warm.Materials.SetReuses);
+	Pixel(RenderViews(InTasks, InSwapchain, Current), 16, .2f + InViews[0].Eye.X);
+	// A packet retained across many view revisions must still see the original immutable upload bytes.
+	Pixel(RenderViews(InTasks, InSwapchain, Original), 16, .2f + OriginalEye);
+	WaitFor(
+	    [&]
+	    {
+		    return InSession.GetResources().Statistics().Constants.CachedBlocks < 16;
+	    });
+	HYP_CHECK(InSession.GetResources().Statistics().Constants.LivePages <= 3);
+}
+
+void CheckViewResourceRefresh(FTaskSystem& InTasks, FRenderSession& InSession, IRHISwapchain& InSwapchain,
+                              std::shared_ptr<const FMaterialSemanticRegistry> InSemantics,
+                              const std::shared_ptr<const FRenderResource>& InResource, FRenderView InView)
+{
+	auto Description = Surface(InSemantics)->Definition->GetDescription();
+	Description.Passes[0].Pixel.Defines.push_back({"NEED_TEXTURE", "1"});
+	Description.Parameters.push_back(DeclareMaterialSemantic("ViewTexture", "Test.View.Texture", *InSemantics));
+	FRenderPrimitiveState State;
+	State.Resource = InResource;
+	State.Surface = InSession.GetResources().RequestMaterial(
+	    FMaterialInstance(std::make_shared<const FMaterialDefinition>(Description, InSemantics)).Freeze());
+	auto Binding = InSession.GetScene().Create(State);
+	WaitFor(
+	    [&]
+	    {
+		    return Binding.GetStatus().State == ERenderPrimitiveStatus::Ready;
+	    });
+	const auto Texture = [](std::array<std::uint8_t, 4> InColor)
+	{
+		return FMaterialValue::FromTexture(std::make_shared<const FMaterialTextureSource>(
+		    EMaterialTextureEncoding::Linear,
+		    std::vector<FMaterialTextureMip>{{1, 1, {InColor.begin(), InColor.end()}}}));
+	};
+	const auto Red = Texture({255, 0, 0, 255});
+	const auto Green = Texture({0, 255, 0, 255});
+	const auto Ready = [&]
+	{
+		std::vector<FPassCommands> Passes;
+		WaitFor(
+		    [&]
+		    {
+			    Passes = Build(InTasks, InSession, std::span(&InView, 1));
+			    return Passes.size() > 2 && Passes[1].Draws.size() == 1;
+		    });
+		return Passes;
+	};
+	InView.Parameters = {{"Test.View.Texture", Red}};
+	const auto Original = Ready();
+	Pixel(RenderViews(InTasks, InSwapchain, Original), 16, .2f + InView.Eye.X);
+	InView.Parameters = {{"Test.View.Texture", Green}};
+	auto Changed = Ready();
+	HYP_CHECK(Changed[1].Draws[0].Bindings != Original[1].Draws[0].Bindings);
+	const auto Image = RenderViews(InTasks, InSwapchain, Changed);
+	Pixel(Image, 16, 0);
+	HYP_CHECK(std::abs(Image.Rgba[(32 * 64 + 16) * 4 + 1] - .1f) < .01f);
+	InView.Parameters.clear();
+	HYP_CHECK(Build(InTasks, InSession, std::span(&InView, 1)).size() == 2);
+	HYP_CHECK(!Binding.GetLastDrawResult().bReady);
+	InView.Parameters = {{"Test.View.Texture", Red}};
+	Changed = Ready();
+	Pixel(RenderViews(InTasks, InSwapchain, Changed), 16, .2f + InView.Eye.X);
+	Pixel(RenderViews(InTasks, InSwapchain, Original), 16, .2f + InView.Eye.X);
+	InTasks.Wait(Binding.Remove());
+}
 } // namespace
 
 void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
@@ -381,6 +478,8 @@ void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	auto Semantics = std::make_shared<FMaterialSemanticRegistry>();
 	Semantics->Register({"Test.Scene.Extra", FMaterialParameterType::Numeric(EMaterialScalar::Float),
 	                     EMaterialScope::Scene, "Linear blue contribution"});
+	Semantics->Register({"Test.View.Texture", FMaterialParameterType::Resource(EMaterialValueKind::Texture2D),
+	                     EMaterialScope::View, "View resource refresh"});
 	Semantics->Freeze();
 	FTaskSystem Tasks(1, 1);
 	FShaderCompiler Compiler(Root, "material-session-test/cache");
@@ -428,6 +527,7 @@ void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	Passes = Build(Tasks, Session, Views);
 	HYP_CHECK(Session.GetResources().Statistics().Constants.Packs == Warm.Constants.Packs + 1);
 	HYP_CHECK(Session.GetResources().Statistics().Materials.SetsCreated == Warm.Materials.SetsCreated);
+	CheckMovingViews(Tasks, Session, InSwapchain, Views);
 	auto Required = Session.GetResources().RequestMaterial(Surface(Semantics, true));
 	WaitFor(
 	    [&]
@@ -459,6 +559,7 @@ void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	CheckFamilyValidation(Tasks, Session, Views[0]);
 	CheckBoundsContract(Tasks, Session, Resource, Views[0]);
 	CheckProviderFallback(Tasks, Session, InSwapchain, Semantics, Resource, Views[0]);
+	CheckViewResourceRefresh(Tasks, Session, InSwapchain, Semantics, Resource, Views[0]);
 	State = {};
 	Independent = {};
 	Required.reset();

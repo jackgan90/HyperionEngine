@@ -7,6 +7,31 @@ namespace Hyperion
 {
 namespace
 {
+bool ParseBenchmarkOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex)
+{
+	if (InArg == "--benchmark" && InIndex + 1 < InArgc)
+	{
+		InOptions.Benchmark = InArgv[++InIndex];
+	}
+	else if (InArg == "--benchmark-warmup" && InIndex + 1 < InArgc)
+	{
+		InOptions.BenchmarkWarmup = std::stoi(InArgv[++InIndex]);
+	}
+	else if (InArg == "--benchmark-camera")
+	{
+		InOptions.bBenchmarkCamera = true;
+	}
+	else if (InArg == "--no-vsync")
+	{
+		InOptions.bNoVsync = true;
+	}
+	else
+	{
+		return false;
+	}
+	return true;
+}
+
 bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex)
 {
 	if (InArg == "--frames" && InIndex + 1 < InArgc)
@@ -114,6 +139,12 @@ bool ParseCaptureOption(FOptions& InOptions, const std::string& InArg, int InArg
 
 void ValidateOptions(FOptions& InOptions)
 {
+	if (InOptions.BenchmarkWarmup < 0 || (InOptions.bBenchmarkCamera && InOptions.Benchmark.empty()) ||
+	    (!InOptions.Benchmark.empty() && InOptions.Frames <= InOptions.BenchmarkWarmup))
+	{
+		throw std::invalid_argument(
+		    "--benchmark needs --frames greater than its nonnegative warmup; --benchmark-camera needs --benchmark");
+	}
 	if ((!InOptions.Model.empty() && !InOptions.Scene.empty()) ||
 	    (InOptions.SceneCulling != "none" && InOptions.SceneCulling != "linear" && InOptions.SceneCulling != "bvh"))
 	{
@@ -159,7 +190,8 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 	{
 		const std::string Arg = InArgv[Index];
 		if (!ParseApplicationOption(Options, Arg, InArgc, InArgv, Index) &&
-		    !ParseCaptureOption(Options, Arg, InArgc, InArgv, Index))
+		    !ParseCaptureOption(Options, Arg, InArgc, InArgv, Index) &&
+		    !ParseBenchmarkOption(Options, Arg, InArgc, InArgv, Index))
 		{
 			throw std::invalid_argument("Unknown or incomplete option: " + Arg);
 		}
@@ -170,6 +202,10 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 
 void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings)
 {
+	if (InOptions.bNoVsync)
+	{
+		InSettings.bVsync = false;
+	}
 	if (!InOptions.Scene.empty())
 	{
 		InSettings.SceneSource = InOptions.Scene.string();

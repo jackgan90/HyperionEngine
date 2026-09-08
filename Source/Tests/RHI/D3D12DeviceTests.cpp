@@ -155,6 +155,45 @@ void CheckSwapchainRecreation(IRHIDevice& InDevice, FWindow& InWindow, std::uniq
 	InSwapchain->EndFrame(Lists, false);
 }
 
+void CheckIndexShadowValidation(IRHIDevice& InDevice, IRHISwapchain& InSwapchain, FDrawPacket InDraw)
+{
+	std::vector<std::uint32_t> Indices(99);
+	for (std::size_t Index = 0; Index < Indices.size(); ++Index)
+	{
+		Indices[Index] = static_cast<std::uint32_t>(Index % 3);
+	}
+	Indices.back() = 3;
+	const auto Bytes = std::as_bytes(std::span(Indices));
+	InDraw.Indices = InDevice.CreateBuffer({Bytes.size(), BufferUsage(ERHIBufferUsage::Index)}, Bytes);
+	FPassCommands Commands = ClearCommands();
+	for (std::uint32_t Index = 0; Index < 33; ++Index)
+	{
+		InDraw.FirstIndex = Index * 3;
+		Commands.Draws.push_back(InDraw);
+	}
+	// The invalid 33rd range remains checked after the bounded 32-entry range cache is full.
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, Commands);
+	    });
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, Commands);
+	    });
+	const std::array<std::byte, 9> Partial{std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0},  std::byte{1},
+	                                       std::byte{0}, std::byte{0}, std::byte{0}, std::byte{255}};
+	InDraw.FirstIndex = 0;
+	InDraw.Indices = InDevice.CreateBuffer({12, BufferUsage(ERHIBufferUsage::Index)}, Partial);
+	Commands.Draws = {InDraw};
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.Record(0, Commands);
+	    });
+}
+
 void CheckDeviceOwnership()
 {
 	FRHIBackendRegistry Registry;
@@ -210,6 +249,8 @@ void CheckDeviceOwnership()
 	Draw.IndexCount = 3;
 	Commands.Draws = {Draw};
 	CheckForeignDrawResources(*Swapchain, Commands, Own, Pipeline, ForeignPipeline, ForeignBindings);
+	Draw.Vertices = Own;
+	CheckIndexShadowValidation(*Device, *Swapchain, Draw);
 
 	auto Clear = Swapchain->Record(0, ClearCommands());
 	auto Present = Swapchain->Record(1, PresentCommands());

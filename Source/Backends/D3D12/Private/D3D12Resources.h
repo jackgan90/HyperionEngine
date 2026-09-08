@@ -27,6 +27,8 @@ struct FD3D12Buffer final : IRHIBuffer
 	};
 
 	std::vector<FPublishedSlice> Published;
+	// Upload heaps are write-combined. Validate immutable indices from ordinary CPU memory.
+	std::vector<std::uint32_t> IndexData;
 	// Immutable index data: cache bounded range min/max results across repeated draws and recording contexts.
 	mutable std::mutex IndexRangesMutex;
 	mutable std::vector<std::array<std::uint32_t, 4>> IndexRanges; // first, count, minimum, maximum.

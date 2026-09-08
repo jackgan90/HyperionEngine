@@ -9,6 +9,10 @@ namespace Hyperion
 {
 void FViewerApplication::RunFrames()
 {
+	if (Options.bBenchmarkCamera && !ScenePlugin)
+	{
+		throw std::invalid_argument("--benchmark-camera requires scene-viewer");
+	}
 	auto LastFrame = ClockNanoseconds();
 	if (Options.bExerciseRdcUi && (!Gui || !Settings.bShowGui))
 	{
@@ -20,8 +24,18 @@ void FViewerApplication::RunFrames()
 		const auto Now = ClockNanoseconds();
 		const float Delta = Frame ? float(Now - LastFrame) / 1e9f : 1.f / 60.f;
 		LastFrame = Now;
+		ExerciseBenchmarkCamera(Frame);
 		Tick(Frame, Delta);
+		if (!Options.Benchmark.empty() && Frame >= Options.BenchmarkWarmup)
+		{
+			if (ScenePlugin && !ScenePlugin->Ready())
+			{
+				throw std::runtime_error("Benchmark scene is not ready; increase --benchmark-warmup and --frames");
+			}
+			BenchmarkFrames.push_back({Frame, double(ClockNanoseconds() - Now) / 1e6, SceneStatistics.Draws});
+		}
 	}
+	SaveBenchmark();
 }
 
 void FViewerApplication::PollInput()
@@ -118,7 +132,8 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	const bool bTakeCapture = Actions.bCapture || (!Options.Capture.empty() && InFrame == Options.Frames - 1);
 	if (ScenePlugin)
 	{
-		ScenePlugin->Input(Window->Events(), Gui && Settings.bShowGui && Gui->WantsMouse(),
+		ScenePlugin->Input(Options.bBenchmarkCamera ? std::span<const FInputEvent>{} : Window->Events(),
+		                   Gui && Settings.bShowGui && Gui->WantsMouse(),
 		                   Gui && Settings.bShowGui && Gui->WantsKeyboard());
 	}
 	auto Screenshot = RenderFrame(Size, GuiData, bTakeCapture);

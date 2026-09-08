@@ -45,6 +45,64 @@ struct FMaterialProviderRegistry::FImpl
 	std::atomic<bool> bFrozen{};
 	FMaterialProviderStats Stats;
 
+	const FEntry* FindDefault(const FMaterialProviderDescription& InProvider,
+	                          const FMaterialProviderInputs& InInputs) const
+	{
+		std::uint64_t Hash = 14695981039346656037ULL;
+		for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
+		{
+			if ((InProvider.Dependencies & (1U << Scope)) == 0)
+			{
+				continue;
+			}
+			const auto& Input = InInputs.Scopes[Scope];
+			if (!Input.Lifetime)
+			{
+				return nullptr;
+			}
+			Hash = (Hash ^ Input.Key.Identity) * 1099511628211ULL;
+			Hash = (Hash ^ Input.Key.Revision) * 1099511628211ULL;
+			for (const auto Value : Input.Key.Qualifiers)
+			{
+				Hash = (Hash ^ Value) * 1099511628211ULL;
+			}
+		}
+		const auto Bucket = Cache.find({InProvider.Semantic, Hash});
+		if (Bucket == Cache.end())
+		{
+			return nullptr;
+		}
+		for (const auto& Entry : Bucket->second)
+		{
+			bool bMatches = !Entry.IsExpired();
+			std::size_t Index{};
+			for (std::size_t Scope = 0; bMatches && Scope < MaterialScopeCount; ++Scope)
+			{
+				if ((InProvider.Dependencies & (1U << Scope)) == 0)
+				{
+					continue;
+				}
+				bMatches = Entry.Keys[Index] == InInputs.Scopes[Scope].Key;
+				std::size_t Count{};
+				for (const auto& Value : InInputs.Values[Scope])
+				{
+					if (Value.Name == InProvider.Semantic)
+					{
+						++Count;
+						bMatches &= Entry.Inputs[Index].size() == 1 && Entry.Inputs[Index].front().Value == Value.Value;
+					}
+				}
+				bMatches &= Count == Entry.Inputs[Index].size();
+				++Index;
+			}
+			if (bMatches)
+			{
+				return &Entry;
+			}
+		}
+		return nullptr;
+	}
+
 	std::optional<FEntry> Inputs(const FMaterialProviderDescription& InProvider,
 	                             const FMaterialProviderInputs& InInputs, bool bInDefault) const
 	{
@@ -98,6 +156,14 @@ struct FMaterialProviderRegistry::FImpl
 	FMaterialProvidedValue Evaluate(const FMaterialProviderDescription& InProvider,
 	                                const FMaterialProviderInputs& InInputs, bool bInDefault)
 	{
+		if (bInDefault)
+		{
+			if (const auto* Existing = FindDefault(InProvider, InInputs))
+			{
+				++Stats.Reuses;
+				return {InProvider.Semantic, Existing->Value, InProvider.Dependencies};
+			}
+		}
 		auto Entry = Inputs(InProvider, InInputs, bInDefault);
 		if (!Entry)
 		{

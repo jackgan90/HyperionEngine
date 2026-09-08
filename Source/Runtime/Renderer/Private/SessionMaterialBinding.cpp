@@ -146,6 +146,7 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	InItem.ResolvedParameters = Entry.Resolved;
 	Entries.insert_or_assign(Key, std::move(Entry));
 }
+
 } // namespace
 
 void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
@@ -186,6 +187,10 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 			const auto& Pass = Compiled->GetPass(InSnapshot.View.Usage);
 			Item.Context.ObjectParameters = GetPrimitiveMaterialOverrides(Item.State, *Compiled->Interface.Schema);
 			if (ReuseEvaluation(Item, InSnapshot.View, Inputs, Compiled))
+			{
+				continue;
+			}
+			if (RefreshMaterialEvaluation(Item, InSnapshot.View, Inputs, Compiled, MaterialState->Providers))
 			{
 				continue;
 			}

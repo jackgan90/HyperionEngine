@@ -94,8 +94,11 @@ void FRenderResourceCoordinator::Upload(FRenderResourceRecord& InRecord)
 				throw std::invalid_argument("Invalid geometry index");
 			}
 		}
-		InRecord.Vertices.push_back(Device.CreateBuffer(Geometry.Vertices));
-		InRecord.Indices.push_back(Device.CreateBuffer(std::as_bytes(std::span(Geometry.Indices))));
+		InRecord.Vertices.push_back(
+		    Device.CreateBuffer({Geometry.Vertices.size(), BufferUsage(ERHIBufferUsage::Vertex)}, Geometry.Vertices));
+		const auto IndexBytes = std::as_bytes(std::span(Geometry.Indices));
+		InRecord.Indices.push_back(
+		    Device.CreateBuffer({IndexBytes.size(), BufferUsage(ERHIBufferUsage::Index)}, IndexBytes));
 		++Stats.GeometryUploads;
 	}
 	for (const auto& Section : Desc.Sections)

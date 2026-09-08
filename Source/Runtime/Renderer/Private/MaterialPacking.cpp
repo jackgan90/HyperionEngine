@@ -58,8 +58,8 @@ void PackValue(std::span<std::byte> OutBytes, const FShaderMember& InLayout, con
 }
 } // namespace
 
-std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
-                                             std::span<const std::optional<FMaterialValue>> InValues)
+template<typename TValue>
+std::vector<std::byte> PackConstants(const FMaterialProgramBinding& InBinding, std::span<const TValue> InValues)
 {
 	if (InBinding.Resource.Kind != EBindingKind::UniformBuffer || InBinding.Resource.ByteSize == 0 ||
 	    InBinding.Resource.ByteSize > 65536)
@@ -86,5 +86,17 @@ std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBi
 		PackValue(Result, Member.Layout, Value, 0);
 	}
 	return Result;
+}
+
+std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
+                                             std::span<const std::optional<FMaterialValue>> InValues)
+{
+	return PackConstants(InBinding, InValues);
+}
+
+std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
+                                             std::span<const std::shared_ptr<const FMaterialValue>> InValues)
+{
+	return PackConstants(InBinding, InValues);
 }
 } // namespace Hyperion

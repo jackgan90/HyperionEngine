@@ -78,7 +78,7 @@ void CheckAbsentProviderDependencies()
 	Context.Providers = Missing;
 	const auto Fallback = ResolveMaterialBindingContext(Instance.Freeze(), Compiled, Program, Context);
 	HYP_CHECK((Fallback.Dependencies[0] & Dependencies) == Dependencies);
-	HYP_CHECK(Fallback.Values[0] == FMaterialValue::Float(1));
+	HYP_CHECK(Fallback.Values[0] && *Fallback.Values[0] == FMaterialValue::Float(1));
 	const std::array<std::byte, 4> Bytes{};
 	std::vector<std::weak_ptr<const FMaterialReadBufferSource>> Sources;
 	for (std::uint32_t Index = 0; Index < 64; ++Index)
@@ -94,12 +94,40 @@ void CheckAbsentProviderDependencies()
 	}
 	HYP_CHECK(Sources.front().expired() && !Sources.back().expired());
 }
+
+void CheckDefaultProviderCacheValidation()
+{
+	FMaterialProviderRegistry Providers;
+	Providers.Freeze();
+	FMaterialProviderInputs Inputs;
+	const auto View = static_cast<std::size_t>(EMaterialScope::View);
+	SetScope(Inputs, EMaterialScope::View, 1, {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{1, 2, 3})}});
+	const std::vector<std::string> Names{"Engine.View.CameraPosition"};
+	const auto First = Providers.Evaluate(Inputs, Names);
+	HYP_CHECK(Providers.Evaluate(Inputs, Names)[0].Value == First[0].Value);
+	Inputs.Values[View].push_back(Inputs.Values[View].front());
+	bool bRejected = false;
+	try
+	{
+		Providers.Evaluate(Inputs, Names);
+	}
+	catch (const std::invalid_argument&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+	Inputs.Values[View].pop_back();
+	Inputs.Values[View][0].Value = FMaterialValue::Float(FVec3{4, 5, 6});
+	HYP_CHECK(Providers.Evaluate(Inputs, Names)[0].Value == Inputs.Values[View][0].Value);
+	HYP_CHECK(Providers.Statistics().CachedEntries == 1);
+}
 } // namespace
 
 void RunMaterialProviderTests()
 {
 	CheckProviderHistory();
 	CheckAbsentProviderDependencies();
+	CheckDefaultProviderCacheValidation();
 	auto Semantics = std::make_shared<FMaterialSemanticRegistry>();
 	Semantics->Register({"Experiment.Exposure", FMaterialParameterType::Numeric(EMaterialScalar::Float),
 	                     EMaterialScope::Global, "Global exposure multiplier"});

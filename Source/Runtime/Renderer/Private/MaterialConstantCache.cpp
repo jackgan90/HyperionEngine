@@ -15,12 +15,12 @@ struct FConstantKey
 	std::uint32_t Size{};
 	std::vector<FShaderMember> Layout;
 	std::vector<std::string> Mapping;
-	std::vector<std::optional<FMaterialValue>> Values;
+	std::vector<std::shared_ptr<const FMaterialValue>> Values;
 	std::vector<std::pair<EMaterialScope, FMaterialScopeKey>> Scopes;
-	bool operator==(const FConstantKey&) const = default;
 };
 
-std::uint64_t HashKey(const FConstantKey& InKey)
+std::uint64_t HashBinding(const FMaterialProgramBinding& InBinding, EShaderFormat InFormat,
+                          const FMaterialParameterSchema& InSchema, const FResolvedMaterialParameters& InParameters)
 {
 	// Full structured equality follows every hash hit. The hash only selects a small candidate bucket.
 	std::uint64_t Hash = 14695981039346656037ULL;
@@ -28,25 +28,43 @@ std::uint64_t HashKey(const FConstantKey& InKey)
 	{
 		Hash = (Hash ^ InValue) * 1099511628211ULL;
 	};
-	Add(InKey.Size);
-	Add(static_cast<unsigned>(InKey.Format));
-	for (const auto& Member : InKey.Layout)
+	Add(InBinding.Resource.ByteSize);
+	Add(static_cast<unsigned>(InFormat));
+	std::uint32_t Dependencies{};
+	for (const auto& Member : InBinding.Members)
 	{
-		Add(Member.Offset);
-		Add(Member.Size);
-		Add(Member.Rows);
-		Add(Member.Columns);
+		Add(Member.Layout.Offset);
+		Add(Member.Layout.Size);
+		Add(Member.Layout.Rows);
+		Add(Member.Layout.Columns);
+		Dependencies |= InParameters.Dependencies.at(Member.ParameterIndex);
 	}
-	for (const auto& Name : InKey.Mapping)
+	for (const auto& Member : InBinding.Members)
 	{
-		Add(Name.size());
-		for (const unsigned char Character : Name)
+		const auto& Parameter = InSchema.GetParameters().at(Member.ParameterIndex);
+		Add(Parameter.Name.size() + 1 + Parameter.Semantic.size());
+		for (const unsigned char Character : Parameter.Name)
+		{
+			Add(Character);
+		}
+		Add(0);
+		for (const unsigned char Character : Parameter.Semantic)
 		{
 			Add(Character);
 		}
 	}
-	for (const auto& [Scope, Key] : InKey.Scopes)
+	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
 	{
+		if ((Dependencies & (1U << Scope)) == 0)
+		{
+			continue;
+		}
+		const auto& Input = InParameters.Scopes[Scope];
+		const auto& Key = Input.Key;
+		if (!Input.Lifetime || Key.Identity == 0 || Key.Revision == 0)
+		{
+			throw std::invalid_argument("Material constant dependency requires an owned scope identity and revision");
+		}
 		Add(static_cast<unsigned>(Scope));
 		Add(Key.Identity);
 		Add(Key.Revision);
@@ -56,6 +74,46 @@ std::uint64_t HashKey(const FConstantKey& InKey)
 		}
 	}
 	return Hash;
+}
+
+bool MatchesBinding(const FConstantKey& InKey, const FMaterialProgramBinding& InBinding, EShaderFormat InFormat,
+                    const FMaterialParameterSchema& InSchema, const FResolvedMaterialParameters& InParameters)
+{
+	if (InKey.Format != InFormat || InKey.Size != InBinding.Resource.ByteSize ||
+	    InKey.Layout.size() != InBinding.Members.size())
+	{
+		return false;
+	}
+	std::uint32_t Dependencies{};
+	for (std::size_t Index = 0; Index < InBinding.Members.size(); ++Index)
+	{
+		const auto& Member = InBinding.Members[Index];
+		const auto& Parameter = InSchema.GetParameters().at(Member.ParameterIndex);
+		const std::string_view Mapping = InKey.Mapping[Index];
+		if (InKey.Layout[Index] != Member.Layout ||
+		    !SameMaterialValue(InKey.Values[Index], InParameters.Values.at(Member.ParameterIndex)) ||
+		    Mapping.size() != Parameter.Name.size() + 1 + Parameter.Semantic.size() ||
+		    !Mapping.starts_with(Parameter.Name) || Mapping[Parameter.Name.size()] != '\0' ||
+		    Mapping.substr(Parameter.Name.size() + 1) != Parameter.Semantic)
+		{
+			return false;
+		}
+		Dependencies |= InParameters.Dependencies.at(Member.ParameterIndex);
+	}
+	std::size_t Index{};
+	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
+	{
+		if ((Dependencies & (1U << Scope)) != 0)
+		{
+			if (Index >= InKey.Scopes.size() || InKey.Scopes[Index].first != static_cast<EMaterialScope>(Scope) ||
+			    InKey.Scopes[Index].second != InParameters.Scopes[Scope].Key)
+			{
+				return false;
+			}
+			++Index;
+		}
+	}
+	return Index == InKey.Scopes.size();
 }
 
 struct FCacheEntry
@@ -166,16 +224,16 @@ struct FMaterialConstantCache::FImpl
 	FBufferSlice Bind(const FMaterialProgramBinding& InBinding, EShaderFormat InFormat,
 	                  const FMaterialParameterSchema& InSchema, const FResolvedMaterialParameters& InParameters)
 	{
-		FCacheEntry Entry = MakeEntry(InBinding, InFormat, InSchema, InParameters);
-		auto& Bucket = Entries[HashKey(Entry.Key)];
+		auto& Bucket = Entries[HashBinding(InBinding, InFormat, InSchema, InParameters)];
 		for (const auto& Existing : Bucket)
 		{
-			if (!Existing.IsExpired() && Existing.Key == Entry.Key)
+			if (!Existing.IsExpired() && MatchesBinding(Existing.Key, InBinding, InFormat, InSchema, InParameters))
 			{
 				++Stats.Reuses;
 				return Existing.Slice;
 			}
 		}
+		FCacheEntry Entry = MakeEntry(InBinding, InFormat, InSchema, InParameters);
 		bool bTransient = false;
 		for (const auto& [Scope, Key] : Entry.Key.Scopes)
 		{
