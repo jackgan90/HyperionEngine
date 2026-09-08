@@ -9,6 +9,10 @@
     {
       "id": "interleaved",
       "path": "../Models/Interleaved.gltf"
+    },
+    {
+      "id": "ground",
+      "path": "../Models/Ground.gltf"
     }
   ],
   "instances": [
@@ -17,7 +21,7 @@
       "asset": "showcase",
       "translation": [
         0,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -45,7 +49,7 @@
       "asset": "showcase",
       "translation": [
         5,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -59,7 +63,7 @@
       "asset": "showcase",
       "translation": [
         0,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -87,7 +91,7 @@
       "asset": "showcase",
       "translation": [
         -10,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -115,7 +119,7 @@
       "asset": "showcase",
       "translation": [
         -5,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -143,7 +147,7 @@
       "asset": "showcase",
       "translation": [
         -5,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -157,7 +161,7 @@
       "asset": "showcase",
       "translation": [
         5,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -185,7 +189,7 @@
       "asset": "showcase",
       "translation": [
         -15,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -199,7 +203,7 @@
       "asset": "showcase",
       "translation": [
         15,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -227,7 +231,7 @@
       "asset": "showcase",
       "translation": [
         10,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -241,7 +245,7 @@
       "asset": "showcase",
       "translation": [
         -10,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -255,7 +259,7 @@
       "asset": "showcase",
       "translation": [
         10,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -269,7 +273,7 @@
       "asset": "showcase",
       "translation": [
         -5,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -283,7 +287,7 @@
       "asset": "showcase",
       "translation": [
         5,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -297,7 +301,7 @@
       "asset": "showcase",
       "translation": [
         0,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -325,7 +329,7 @@
       "asset": "showcase",
       "translation": [
         20,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -339,7 +343,7 @@
       "asset": "showcase",
       "translation": [
         -15,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -353,7 +357,7 @@
       "asset": "showcase",
       "translation": [
         15,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -395,7 +399,7 @@
       "asset": "showcase",
       "translation": [
         -10,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -409,7 +413,7 @@
       "asset": "showcase",
       "translation": [
         10,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -437,7 +441,7 @@
       "asset": "showcase",
       "translation": [
         5,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -451,7 +455,7 @@
       "asset": "showcase",
       "translation": [
         -25,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -479,7 +483,7 @@
       "asset": "showcase",
       "translation": [
         -20,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -507,7 +511,7 @@
       "asset": "showcase",
       "translation": [
         0,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -521,7 +525,7 @@
       "asset": "showcase",
       "translation": [
         -20,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -535,7 +539,7 @@
       "asset": "showcase",
       "translation": [
         20,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -577,7 +581,7 @@
       "asset": "showcase",
       "translation": [
         -10,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -605,7 +609,7 @@
       "asset": "showcase",
       "translation": [
         -30,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -619,7 +623,7 @@
       "asset": "showcase",
       "translation": [
         30,
-        0,
+        0.192,
         -7
       ],
       "scale": [
@@ -647,7 +651,7 @@
       "asset": "showcase",
       "translation": [
         25,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -661,7 +665,7 @@
       "asset": "showcase",
       "translation": [
         -5,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -689,7 +693,7 @@
       "asset": "showcase",
       "translation": [
         -25,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -703,7 +707,7 @@
       "asset": "showcase",
       "translation": [
         25,
-        0,
+        0.192,
         0
       ],
       "scale": [
@@ -717,7 +721,7 @@
       "asset": "showcase",
       "translation": [
         -20,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -731,7 +735,7 @@
       "asset": "showcase",
       "translation": [
         20,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -745,7 +749,7 @@
       "asset": "showcase",
       "translation": [
         -15,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -759,7 +763,7 @@
       "asset": "showcase",
       "translation": [
         15,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -773,7 +777,7 @@
       "asset": "showcase",
       "translation": [
         -30,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -787,7 +791,7 @@
       "asset": "showcase",
       "translation": [
         30,
-        0,
+        0.192,
         -14
       ],
       "scale": [
@@ -815,7 +819,7 @@
       "asset": "showcase",
       "translation": [
         10,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -857,7 +861,7 @@
       "asset": "showcase",
       "translation": [
         -25,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -871,7 +875,7 @@
       "asset": "showcase",
       "translation": [
         25,
-        0,
+        0.192,
         -21
       ],
       "scale": [
@@ -899,7 +903,7 @@
       "asset": "showcase",
       "translation": [
         20,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -913,7 +917,7 @@
       "asset": "showcase",
       "translation": [
         -15,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -927,7 +931,7 @@
       "asset": "showcase",
       "translation": [
         15,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -969,7 +973,7 @@
       "asset": "showcase",
       "translation": [
         -25,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -997,7 +1001,7 @@
       "asset": "showcase",
       "translation": [
         -20,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -1025,7 +1029,7 @@
       "asset": "showcase",
       "translation": [
         -30,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -1039,7 +1043,7 @@
       "asset": "showcase",
       "translation": [
         30,
-        0,
+        0.192,
         -28
       ],
       "scale": [
@@ -1067,7 +1071,7 @@
       "asset": "showcase",
       "translation": [
         25,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -1081,7 +1085,7 @@
       "asset": "showcase",
       "translation": [
         -30,
-        0,
+        0.192,
         -35
       ],
       "scale": [
@@ -1095,13 +1099,27 @@
       "asset": "showcase",
       "translation": [
         30,
-        0,
+        0.192,
         -35
       ],
       "scale": [
         0.8,
         0.8,
         0.8
+      ]
+    },
+    {
+      "id": "ground",
+      "asset": "ground",
+      "translation": [
+        0,
+        -0.2,
+        -17.5
+      ],
+      "scale": [
+        70,
+        0.4,
+        45
       ]
     }
   ],

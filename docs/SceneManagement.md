@@ -10,7 +10,7 @@ From the repository root:
 ./out/build/debug/bin/hyperion_viewer.exe --scene assets/Scenes/Showcase.json --scene-culling bvh
 ```
 
-The example contains 78 instances of two existing model assets. `--scene-culling` accepts `none`, `linear` and `bvh`. Existing ModelViewer configuration, `--model`, capture and executable names remain supported. A configuration cannot select both model_source and scene_source.
+The example contains 78 model instances plus one shared ground slab (79 instances total). `assets/Models/Ground.gltf` reuses the repository-generated Showcase cube geometry with a matte gray material and embeds its buffer, so no external download or texture is required. The slab spans X=[-35,35], Z=[-40,5], with its top at Y=0 and thickness 0.4. Showcase instances are raised to Y=0.192 to place their scaled pedestal bottoms on the slab; Interleaved instances already start at Y=0. All 78 model instances sit on the top surface and fit within its edges. `--scene-culling` accepts `none`, `linear` and `bvh`. Existing ModelViewer configuration, `--model`, capture and executable names remain supported. A configuration cannot select both model_source and scene_source.
 
 | Control | Action |
 | --- | --- |
