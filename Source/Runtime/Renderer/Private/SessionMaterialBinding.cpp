@@ -1,4 +1,6 @@
+#include "Hyperion/Core/Profiling.h"
 #include "MaterialEvaluationCache.h"
+#include "MaterialProfiling.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
 #include <bit>
@@ -151,6 +153,8 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 
 void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 {
+	HYP_PERF_SCOPE_C(Material, PrepareMaterials);
+	FMaterialPreparationProfile Profile(MaterialState->Providers);
 	auto Inputs = InSnapshot.Frame->Inputs;
 	auto& View = MaterialState->Views[InSnapshot.View.Identity];
 	FMaterialParameterValues ViewValues{
@@ -188,12 +192,16 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 			Item.Context.ObjectParameters = GetPrimitiveMaterialOverrides(Item.State, *Compiled->Interface.Schema);
 			if (ReuseEvaluation(Item, InSnapshot.View, Inputs, Compiled))
 			{
+				Profile.Reused();
 				continue;
 			}
 			if (RefreshMaterialEvaluation(Item, InSnapshot.View, Inputs, Compiled, MaterialState->Providers))
 			{
+				Profile.Refreshed();
 				continue;
 			}
+			Profile.Evaluated();
+			HYP_PERF_SCOPE_C(Detail, FullMaterialEvaluation);
 			FillObjectInputs(Inputs, Item, InSnapshot, Resources);
 			std::vector<std::string> Semantics;
 			for (const auto Index : Pass.ActiveParameters)

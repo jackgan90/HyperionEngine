@@ -1,4 +1,5 @@
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/Core/Profiling.h"
 #include "ViewerApplication.h"
 #include "ViewerCaptureScope.h"
 #include <algorithm>
@@ -20,7 +21,9 @@ void FViewerApplication::RunFrames()
 	}
 	for (int Frame = 0; !Window->ShouldClose() && (!Options.Frames || Frame < Options.Frames); ++Frame)
 	{
-		FProfileScope Scope("Application frame");
+		UpdateProfiling(Frame);
+		HYP_PERF_SCOPE_NAMED(EProfileCategory::Frame, "ApplicationFrame", FrameScope);
+		HYP_PERF_VALUE(FrameScope, Frame);
 		const auto Now = ClockNanoseconds();
 		const float Delta = Frame ? float(Now - LastFrame) / 1e9f : 1.f / 60.f;
 		LastFrame = Now;
@@ -35,11 +38,16 @@ void FViewerApplication::RunFrames()
 			BenchmarkFrames.push_back({Frame, double(ClockNanoseconds() - Now) / 1e6, SceneStatistics.Draws});
 		}
 	}
+	if (Options.ProfileFrames)
+	{
+		SetProfilingMask(0);
+	}
 	SaveBenchmark();
 }
 
 void FViewerApplication::PollInput()
 {
+	HYP_PERF_SCOPE_C(Frame, PollInput);
 	Window->Poll();
 	Services->Tasks.PumpMain();
 	if (ModelPlugin || ScenePlugin)
@@ -79,6 +87,7 @@ void FViewerApplication::ExerciseWindow(int InFrame)
 FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels,
                                            FGuiDrawData& OutData)
 {
+	HYP_PERF_SCOPE_C(Frame, BuildGui);
 	UpdateCaptureStatus();
 	FDebugActions Actions;
 	if (Gui && Settings.bShowGui)
@@ -118,6 +127,7 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	}
 	FGuiDrawData GuiData;
 	const auto Actions = BuildGui(InFrame, InDelta, Logical, Size, GuiData);
+	HandleProfilingActions(Actions);
 	HandleCaptureActions(Actions, std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1));
 	if (Actions.bSave)
 	{
@@ -146,6 +156,7 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 
 FRenderFrame FViewerApplication::UpdateScene(FSize InSize)
 {
+	HYP_PERF_SCOPE_C(Frame, UpdateScene);
 	FRenderFrame Frame{InSize, Settings};
 	Frame.View.Width = std::max(1u, InSize.Width);
 	Frame.View.Height = std::max(1u, InSize.Height);
@@ -173,7 +184,7 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 	    {EDomain::Render},
 	    [&, Frame, MaterialFrame, GuiData = InGuiData]
 	    {
-		    FProfileScope Prepare("Render preparation");
+		    HYP_PERF_SCOPE_C(Render, RenderFrame);
 #if HYP_ENABLE_RENDERDOC
 		    FFrameCaptureScope CaptureScope(Tasks, FrameCapture, Surface);
 #endif
@@ -194,6 +205,7 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 		    Graph.Add(std::move(Clear));
 		    RenderSession->BuildViews(Graph, std::span(&Frame.View, 1), MaterialFrame);
 		    SceneStatistics = RenderSession->Statistics();
+		    HYP_PERF_PLOT(Frame, SceneDraws, double(SceneStatistics.Draws));
 		    for (const auto& Plugin : Plugins->GetInstances())
 		    {
 			    if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))

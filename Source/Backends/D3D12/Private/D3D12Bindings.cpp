@@ -1,5 +1,6 @@
 #include "D3D12Bindings.h"
 #include "D3D12RHIDevice.h"
+#include "Hyperion/Core/Profiling.h"
 #include <algorithm>
 #include <cmath>
 
@@ -299,6 +300,7 @@ void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& I
 void RecordGraphicsBindings(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw,
                             const FD3D12Pipeline& InPipeline, const FD3D12DeviceState& InState)
 {
+	HYP_PERF_SCOPE_C(Detail, RecordGraphicsBindings);
 	const FD3D12BindingLayout& Layout = NativeResource<FD3D12BindingLayout>(InPipeline.Layout.Payload, &InState);
 	ID3D12DescriptorHeap* Heaps[] = {InState.ResourceTables.GetHeap(), InState.SamplerTables.GetHeap()};
 	InList.SetDescriptorHeaps(2, Heaps);

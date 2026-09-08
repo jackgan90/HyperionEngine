@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "MaterialEvaluationCache.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
@@ -74,6 +75,7 @@ bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderView& InView, c
                                const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
                                FMaterialProviderRegistry& InProviders)
 {
+	HYP_PERF_SCOPE_C(Detail, RefreshMaterialEvaluation);
 	if (!InItem.EvaluationCache || !InItem.LocalItemId)
 	{
 		return false;

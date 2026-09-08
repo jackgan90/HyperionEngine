@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "MaterialGpuCacheInternal.h"
 
@@ -185,6 +186,7 @@ FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMateri
                                                            const FMaterialResourceOwners& InOwners,
                                                            bool bInAllowMissing)
 {
+	HYP_PERF_SCOPE_C(Detail, BindMaterialResources);
 	std::vector<const FMaterialValue*> Values;
 	Values.reserve(InValues.size());
 	for (const auto& Value : InValues)
@@ -198,6 +200,7 @@ FMaterialResourceBindings FMaterialGpuCache::BindResources(
     const FCompiledMaterialPass& InPass, std::span<const std::shared_ptr<const FMaterialValue>> InValues,
     const FMaterialResourceOwners& InOwners, bool bInAllowMissing)
 {
+	HYP_PERF_SCOPE_C(Detail, BindMaterialResources);
 	std::vector<const FMaterialValue*> Values;
 	Values.reserve(InValues.size());
 	for (const auto& Value : InValues)
@@ -214,6 +217,7 @@ FPipeline FMaterialGpuCache::GetMaterialPipeline(const FCompiledMaterialPass& In
                                                  FGraphicsTarget InTarget, bool bInMirrored,
                                                  const FMaterialResourceOwners& InOwners)
 {
+	HYP_PERF_SCOPE_C(Detail, GetMaterialPipeline);
 	Impl->CheckOwner();
 	const auto State = ConvertMaterialState(InPass.State, bInMirrored);
 	const auto Hash = std::hash<std::string>{}(InProgram.Vertex.CacheKey + "/" + InProgram.Pixel.CacheKey);

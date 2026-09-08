@@ -17,7 +17,7 @@ int main()
 		HYP_CHECK(Text.find("core integration marker") != std::string::npos);
 		const auto Start = Hyperion::ClockNanoseconds();
 		{
-			Hyperion::FProfileScope Scope("Core integration");
+			HYP_PERF_SCOPE(CoreIntegration);
 			std::vector<std::thread> Threads;
 			for (int I = 0; I < 4; ++I)
 			{
@@ -43,8 +43,6 @@ int main()
 			HYP_CHECK(Hyperion::MemoryStats(Hyperion::EMemoryTag::Assets).LiveBytes >= 4096 * sizeof(int));
 		}
 		HYP_CHECK(Hyperion::ClockNanoseconds() >= Start);
-		HYP_CHECK(Hyperion::ProfileStats().Scopes == 1);
-		HYP_CHECK(Hyperion::ProfileStats().Nanoseconds > 0);
 		HYP_CHECK(Hyperion::MemoryStats(Hyperion::EMemoryTag::Core).LiveBytes == 0);
 		HYP_CHECK(Hyperion::MemoryStats(Hyperion::EMemoryTag::Assets).LiveBytes == 0);
 		bool bRejected = false;

@@ -72,7 +72,7 @@ python tools/Bootstrap.py
 - RHI 由 `IRHIBackend`、`IRHIDevice`、`IRHISwapchain` 抽象接口与独立后端组成，设备可以脱离窗口创建。通过配置 `rhi_backend` 或 `--backend d3d12` 选择；尚未注册的 Vulkan/Metal 会明确报错。
 - HLSL 可生成 DXIL、SPIR-V 和 MSL 文本。实际运行的是 DX12；Vulkan/Metal 运行时与移动平台尚未实现。
 - CPU 内存统计覆盖内部 allocator/PMR，以及接入回调的 cgltf、GUI 和 D3D12MA 元数据；不代表进程总内存。GPU 统计覆盖 D3D12MA 资源，不包含交换链和驱动内部占用。
-- Tracy 网络分析默认关闭，普通 exe 不会因 Core profiling 启动监听或广播；本地 CPU scope、内存统计和 GUI 曲线仍可用。需要 Tracy 时用 `-Tracy` 显式编入，详见 [构建与网络监听](docs/VisualStudio.md#tracy-与网络监听)。GUI 曲线显示包含 Present 等待的 CPU 帧间隔，不是 GPU timestamp。
+- Profiling 默认编译关闭，scope 宏及其参数表达式被移除；日志、内存统计和 GUI 帧间隔曲线仍可用。`-Preset profile` 提供带符号的优化构建，Viewer 的 `--profile` 与 GUI 控制本次会话的采集。支持分阶段 CPU scope、材质计数、任务关联和可选 GPU pass timestamp，使用方法与自动采集见 [性能分析](docs/Profiling.md)。
 
 ## 目录和扩展
 

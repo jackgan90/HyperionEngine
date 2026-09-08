@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Core/Profiling.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -55,27 +56,4 @@ private:
 
 std::uint64_t ClockNanoseconds();
 
-struct FProfileStats
-{
-	std::uint64_t Scopes{};
-	std::uint64_t Nanoseconds{};
-};
-
-FProfileStats ProfileStats();
-
-class FProfileScope
-{
-public:
-	explicit FProfileScope(const char* InName);
-	~FProfileScope();
-	FProfileScope(const FProfileScope&) = delete;
-	FProfileScope& operator=(const FProfileScope&) = delete;
-
-private:
-	std::uint32_t Id{};
-	int Active{};
-	std::uint64_t Start{};
-};
-
-void ProfileFrame();
 } // namespace Hyperion

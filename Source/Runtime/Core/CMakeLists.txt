@@ -1,3 +1,7 @@
-add_library(hyperion_core STATIC Private/Adapters/Core.cpp)
+add_library(hyperion_core STATIC Private/Adapters/Core.cpp Private/Adapters/Profiling.cpp Private/Adapters/ProfilingControl.cpp Private/Adapters/ProfilingGpu.cpp)
 hyp_module(hyperion_core)
 target_link_libraries(hyperion_core PRIVATE spdlog::spdlog mimalloc-static Tracy::TracyClient)
+target_compile_definitions(hyperion_core PUBLIC HYP_ENABLE_PROFILING=$<BOOL:${HYP_ENABLE_TRACY}>)
+if(HYP_ENABLE_TRACY)
+  target_link_libraries(hyperion_core PRIVATE advapi32)
+endif()

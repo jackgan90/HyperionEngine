@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/MaterialBindingContext.h"
+#include "Hyperion/Core/Profiling.h"
 #include <algorithm>
 #include <map>
 #include <stdexcept>
@@ -57,6 +58,7 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
                                                           const FCompiledMaterialPass& InPass,
                                                           const FMaterialBindingContext& InContext)
 {
+	HYP_PERF_SCOPE_C(Detail, ResolveMaterialBindingContext);
 	if (!InMaterial || InMaterial->Definition != InCompiled.Interface.Definition || !InCompiled.Interface.Schema)
 	{
 		throw std::invalid_argument("Material snapshot and compiled definition are incompatible");

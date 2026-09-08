@@ -1,4 +1,5 @@
 #include "Hyperion/Assets/Assets.h"
+#include "Hyperion/Core/Profiling.h"
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STBI_ONLY_PNG
@@ -44,6 +45,7 @@ void ExrError(int InResult, const char* InError)
 
 FImagePixels DecodeImage(std::span<const std::byte> InBytes)
 {
+	HYP_PERF_SCOPE_C(Assets, DecodeImage);
 	if (InBytes.empty() || InBytes.size() > std::numeric_limits<int>::max())
 	{
 		throw std::runtime_error("Invalid encoded image size");

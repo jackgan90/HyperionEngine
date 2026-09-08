@@ -139,6 +139,17 @@ bool ParseCaptureOption(FOptions& InOptions, const std::string& InArg, int InArg
 
 void ValidateOptions(FOptions& InOptions)
 {
+	if (InOptions.ProfileStart < 0 || InOptions.ProfileFrames < 0 ||
+	    ((InOptions.ProfileStart || InOptions.ProfileFrames || InOptions.bProfileWait) && !InOptions.ProfilingMask))
+	{
+		throw std::invalid_argument("Profiling window requires --profile and nonnegative start/frame counts");
+	}
+	if (InOptions.ProfilingMask && InOptions.Frames &&
+	    (InOptions.ProfileStart >= InOptions.Frames ||
+	     InOptions.ProfileFrames > InOptions.Frames - InOptions.ProfileStart))
+	{
+		throw std::invalid_argument("Profiling window must fit within --frames");
+	}
 	if (InOptions.BenchmarkWarmup < 0 || (InOptions.bBenchmarkCamera && InOptions.Benchmark.empty()) ||
 	    (!InOptions.Benchmark.empty() && InOptions.Frames <= InOptions.BenchmarkWarmup))
 	{
@@ -191,7 +202,8 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 		const std::string Arg = InArgv[Index];
 		if (!ParseApplicationOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseCaptureOption(Options, Arg, InArgc, InArgv, Index) &&
-		    !ParseBenchmarkOption(Options, Arg, InArgc, InArgv, Index))
+		    !ParseBenchmarkOption(Options, Arg, InArgc, InArgv, Index) &&
+		    !ParseProfilingOption(Options, Arg, InArgc, InArgv, Index))
 		{
 			throw std::invalid_argument("Unknown or incomplete option: " + Arg);
 		}

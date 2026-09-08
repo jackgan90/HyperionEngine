@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/MaterialPacking.h"
+#include "Hyperion/Core/Profiling.h"
 #include <cstring>
 #include <stdexcept>
 
@@ -91,12 +92,14 @@ std::vector<std::byte> PackConstants(const FMaterialProgramBinding& InBinding, s
 std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
                                              std::span<const std::optional<FMaterialValue>> InValues)
 {
+	HYP_PERF_SCOPE_C(Detail, PackMaterialConstants);
 	return PackConstants(InBinding, InValues);
 }
 
 std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
                                              std::span<const std::shared_ptr<const FMaterialValue>> InValues)
 {
+	HYP_PERF_SCOPE_C(Detail, PackMaterialConstants);
 	return PackConstants(InBinding, InValues);
 }
 } // namespace Hyperion

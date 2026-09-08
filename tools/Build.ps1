@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('debug','release')][string]$Preset = 'debug',
+    [ValidateSet('debug','release','profile')][string]$Preset = 'debug',
     [string]$Target = '',
     [switch]$Test,
     [switch]$RenderDoc,

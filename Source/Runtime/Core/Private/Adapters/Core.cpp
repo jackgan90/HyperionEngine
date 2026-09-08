@@ -34,8 +34,6 @@ struct FHeader
 	EMemoryTag Tag;
 };
 
-std::atomic_uint64_t ScopeCount{};
-std::atomic_uint64_t ScopeTime{};
 } // namespace
 
 void InitializeLog(const std::filesystem::path& InFile)
@@ -138,36 +136,4 @@ std::uint64_t ClockNanoseconds()
 	        .count());
 }
 
-FProfileScope::FProfileScope(const char* InName)
-{
-	Start = ClockNanoseconds();
-#ifdef TRACY_ENABLE
-	TracyCZone(Context, true);
-	TracyCZoneName(Context, InName, std::strlen(InName));
-	Id = Context.id;
-	Active = Context.active;
-#else
-	(void)InName;
-#endif
-}
-
-FProfileScope::~FProfileScope()
-{
-	ScopeTime.fetch_add(ClockNanoseconds() - Start);
-	ScopeCount.fetch_add(1);
-#ifdef TRACY_ENABLE
-	TracyCZoneCtx Context{Id, Active};
-	TracyCZoneEnd(Context);
-#endif
-}
-
-FProfileStats ProfileStats()
-{
-	return {ScopeCount.load(), ScopeTime.load()};
-}
-
-void ProfileFrame()
-{
-	TracyCFrameMark;
-}
 } // namespace Hyperion

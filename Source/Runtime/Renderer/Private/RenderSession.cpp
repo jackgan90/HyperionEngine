@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "SessionMaterialsInternal.h"
 #include <stdexcept>
 
@@ -51,6 +52,7 @@ std::size_t FRenderSession::Build(FRenderGraph& InGraph, FRenderView InView)
 std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
                                        std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily)
 {
+	HYP_PERF_SCOPE_C(Render, BuildViews);
 	Tasks.Require({EDomain::Render});
 	if (bClosed || InViews.empty() || InFamily == 0)
 	{

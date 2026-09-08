@@ -63,7 +63,7 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 
 ## Tracy 与网络监听
 
-`HYP_ENABLE_TRACY` 默认 `OFF`。普通 Viewer 和测试 exe 保留本地 CPU 计时、内存统计和 GUI 曲线，但不启动 Tracy 的 TCP 监听和 UDP 发现广播。以前强制启用的 `TRACY_ENABLE=ON` 缓存会在重新配置时按此选项更新；需要重新编译已有 exe 才生效。
+`HYP_ENABLE_TRACY` 默认 `OFF`。普通 Viewer 和测试 exe 保留应用时钟、内存统计和 GUI 帧间隔曲线；scope 宏被编译移除，不再执行本地 scope 累计计时，也不启动 Tracy 的 TCP 监听和 UDP 发现广播。以前强制启用的 `TRACY_ENABLE=ON` 缓存会在重新配置时按此选项更新；需要重新编译已有 exe 才生效。
 
 需要连接 Tracy Profiler 时显式开启，结束后恢复关闭：
 
@@ -81,6 +81,8 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 Tracy 的 `TRACY_ON_DEMAND` 只延迟采集，仍会监听连接，因此启用 Tracy 的 exe 可能触发 Windows 防火墙授权。Windows 的此类提示主要针对入站监听，是否再次提示取决于 exe 路径、网络配置文件、已有防火墙规则和系统策略，并非所有出站联网都弹窗，详见 [微软防火墙规则说明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules)。此构建选项只控制 Tracy；显式加载 RenderDoc 或以后引入其他网络功能时，应由对应功能按需启用。构建脚本不修改防火墙规则或通知设置。
 
 默认关闭 Tracy 时，CTest 的 `offline_startup` 会启动真实 Viewer，在启动及开始渲染后检查该进程的 TCP/UDP 端点，防止默认监听再次引入。
+
+性能测量推荐独立的 `profile` preset：`.\tools\Build.ps1 -Preset profile` 使用 Release 优化并给自有模块生成 `/Zi`、可执行文件链接 `/DEBUG:FULL /INCREMENTAL:NO`。编入支持后仍需 `--profile` 或 GUI 开关启用 scope；细节、GPU 和系统采样分别选择。新配置的 Tracy 默认仅监听 loopback，并关闭发现广播；已有显式缓存选择保持不变。完整采集、导出命令与开销证据见 [性能分析](Profiling.md)。
 
 ## 本机验证记录
 

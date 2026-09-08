@@ -354,7 +354,7 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 		Logical = Compile(InSource, InEntry, InStage, EShaderFormat::Dxil, InOptions);
 	}
 	std::lock_guard Lock(Impl->Mutex);
-	FProfileScope Trace("Shader compilation");
+	HYP_PERF_SCOPE_C(Assets, ShaderCompilation);
 	const auto Path = std::filesystem::canonical(InSource.is_absolute() ? InSource : Impl->Root / InSource);
 	if (!Within(Path, Impl->Root))
 	{

@@ -1,5 +1,6 @@
 #include "D3D12RHIDevice.h"
 #include "D3D12Resources.h"
+#include "Hyperion/Core/Profiling.h"
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -8,6 +9,7 @@ namespace Hyperion
 {
 FBuffer FD3D12RHIDevice::CreateBuffer(const FBufferDesc& InDesc, std::span<const std::byte> InBytes)
 {
+	HYP_PERF_SCOPE_C(Detail, CreateBuffer);
 	if (InDesc.Size == 0 || InDesc.Size > std::numeric_limits<std::size_t>::max() || InDesc.Usage == 0 ||
 	    (InDesc.Usage & ~31U) != 0 || InBytes.size() > InDesc.Size)
 	{
@@ -44,6 +46,7 @@ FBuffer FD3D12RHIDevice::CreateBuffer(const FBufferDesc& InDesc, std::span<const
 FBufferSlice FD3D12RHIDevice::PublishConstantSlice(const FBuffer& InBuffer, std::uint64_t InOffset,
                                                    std::span<const std::byte> InBytes)
 {
+	HYP_PERF_SCOPE_C(Detail, UploadConstantSlice);
 	NativeResource<FD3D12Buffer>(InBuffer.Payload, State.get());
 	auto& Buffer = *static_cast<FD3D12Buffer*>(InBuffer.Payload.get());
 	if (Buffer.Usage != BufferUsage(ERHIBufferUsage::Constant) || InBytes.empty() || InBytes.size() > 65536 ||

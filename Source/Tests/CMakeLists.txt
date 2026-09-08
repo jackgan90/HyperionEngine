@@ -10,6 +10,10 @@ function(hyp_test target name module source)
   set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endfunction()
 hyp_test(core_tests core hyperion_core Core/CoreTests.cpp)
+hyp_test(profiling_tests profiling_contracts hyperion_core Core/ProfilingTests.cpp)
+hyp_test(profiling_controls_tests profiling_controls hyperion_debug_ui Gui/ProfilingControlsTests.cpp)
+target_link_libraries(profiling_tests PRIVATE hyperion_tasks)
+target_sources(profiling_tests PRIVATE Core/ProfilingBenchmark.cpp)
 hyp_test(task_tests tasks hyperion_tasks Tasks/TaskTests.cpp)
 hyp_test(io_tests async_io hyperion_io IO/IOTests.cpp)
 hyp_test(archive_tests reflected_archives hyperion_serialization Serialization/ArchiveTests.cpp)
@@ -81,6 +85,11 @@ add_test(NAME model_viewer_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_C
 add_test(NAME scene_viewer_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/SceneAcceptance.py" $<TARGET_FILE:hyperion_viewer> "${PROJECT_SOURCE_DIR}")
 add_test(NAME scene_moving_camera COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ScenePerformance.py" $<TARGET_FILE:hyperion_viewer> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(scene_moving_camera PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+if(HYP_ENABLE_TRACY)
+  add_test(NAME profiling_trace_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ProfilingAcceptance.py"
+    $<TARGET_FILE:hyperion_viewer> "${PROJECT_SOURCE_DIR}" $<TARGET_FILE:profiling_tests> $<TARGET_FILE:d3d12_frame_failure_tests>)
+  set_tests_properties(profiling_trace_acceptance PROPERTIES TIMEOUT 180 SKIP_RETURN_CODE 77 LABELS "gpu;desktop;profiling" RUN_SERIAL TRUE)
+endif()
 set_tests_properties(scene_viewer_acceptance PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 set_tests_properties(model_viewer_acceptance PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 set_tests_properties(d3d12_device_ownership window_lifecycle d3d12_clear d3d12_triangle d3d12_gui viewer_acceptance PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
@@ -98,7 +107,7 @@ get_property(hyperion_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${hyperion_tests} PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_custom_target(hyperion_check
   COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${PROJECT_BINARY_DIR}" -C "$<CONFIG>" --output-on-failure
-  DEPENDS core_tests task_tests io_tests archive_tests model_tests import_tests config_tests asset_tests shader_tests graph_tests model_render_tests lifecycle_tests gui_tests capture_controls_tests rhi_contract_tests d3d12_device_tests hyperion_viewer
+  DEPENDS core_tests profiling_tests profiling_controls_tests task_tests io_tests archive_tests model_tests import_tests config_tests asset_tests shader_tests graph_tests model_render_tests lifecycle_tests gui_tests capture_controls_tests rhi_contract_tests d3d12_device_tests hyperion_viewer
   USES_TERMINAL
   COMMENT "Running Hyperion CTest suite")
 if(HYP_ENABLE_RENDERDOC)

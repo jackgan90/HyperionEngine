@@ -1,5 +1,6 @@
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/Core/Profiling.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -109,6 +110,11 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		Actions.OpenRdcBounds = CaptureActions.OpenRdcBounds;
 		Actions.AutoOpenRdcBounds = CaptureActions.AutoOpenRdcBounds;
 		InGui.Separator();
+		const auto ProfilingActions = DrawProfilingControls(InGui, InMetrics.Profiling);
+		Actions.ProfilingMask = ProfilingActions.ProfilingMask;
+		Actions.Sampling = ProfilingActions.Sampling;
+		Actions.ProfilingBounds = ProfilingActions.ProfilingBounds;
+		InGui.Separator();
 		InGui.Text("EXECUTION / MEMORY");
 		for (const auto& Thread : InMetrics.Threads)
 		{
@@ -202,6 +208,7 @@ void FDebugUiPlugin::Stop() noexcept
 
 void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 {
+	HYP_PERF_SCOPE_C(Rhi, PrepareGuiResources);
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Rhi, 0});
 	P.Draws.clear();

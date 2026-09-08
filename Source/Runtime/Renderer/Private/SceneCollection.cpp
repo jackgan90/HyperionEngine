@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "RenderSceneInternal.h"
 #include <algorithm>
 #include <chrono>
@@ -6,6 +7,7 @@ namespace Hyperion
 {
 void FRenderScene::RefreshSpatial(FSceneVisibilityStats& OutStats)
 {
+	HYP_PERF_SCOPE_C(Render, RefreshSpatial);
 	const auto Start = std::chrono::steady_clock::now();
 	DirtyGroups.insert(UnboundedGroups.begin(), UnboundedGroups.end());
 	for (const auto Group : DirtyGroups)
@@ -38,6 +40,7 @@ void FRenderScene::RefreshSpatial(FSceneVisibilityStats& OutStats)
 
 FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView)
 {
+	HYP_PERF_SCOPE_C(Render, CollectScene);
 	Tasks.Require({EDomain::Render});
 	FRenderSceneSnapshot Snapshot{InView, {}};
 	auto& Stats = Snapshot.Statistics;

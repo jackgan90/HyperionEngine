@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/MaterialConstantCache.h"
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/MaterialPacking.h"
 #include <algorithm>
 #include <map>
@@ -268,6 +269,7 @@ std::vector<FConstantBinding> FMaterialConstantCache::Bind(const FCompiledMateri
                                                            const FMaterialParameterSchema& InSchema,
                                                            const FResolvedMaterialParameters& InParameters)
 {
+	HYP_PERF_SCOPE_C(Detail, BindMaterialConstants);
 	Impl->CheckOwner();
 	std::vector<FConstantBinding> Result;
 	for (std::uint32_t Index = 0; Index < InPass.Bindings.size(); ++Index)

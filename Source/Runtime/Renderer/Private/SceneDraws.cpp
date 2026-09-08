@@ -1,3 +1,5 @@
+#include "Hyperion/Core/Profiling.h"
+#include "MaterialProfiling.h"
 #include "RenderResourcesInternal.h"
 #include <stdexcept>
 
@@ -106,6 +108,7 @@ std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPr
 
 std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSnapshot& InSnapshot)
 {
+	HYP_PERF_SCOPE_C(Rhi, PrepareDraws);
 	auto& Owner = *Coordinator;
 	Owner.Tasks.Require({EDomain::Rhi, 0});
 	std::vector<FColorPass> Passes;
@@ -115,11 +118,26 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 		{
 			throw std::logic_error("Render resource service is closed");
 		}
+#if HYP_ENABLE_PROFILING
+		FRenderResourceStats Before;
+		const bool bProfile = IsProfilingEnabled(EProfileCategory::Material);
+		if (bProfile && Owner.MaterialGpu)
+		{
+			Before.Constants = Owner.MaterialConstants->Statistics();
+			Before.Materials = Owner.MaterialGpu->Statistics();
+		}
+#endif
 		Passes = PublishDraws(InSnapshot, PrepareDraws(Owner, InSnapshot));
 		if (Owner.MaterialGpu)
 		{
 			Owner.Stats.Materials = Owner.MaterialGpu->Statistics();
 			Owner.Stats.Constants = Owner.MaterialConstants->Statistics();
+#if HYP_ENABLE_PROFILING
+			if (bProfile)
+			{
+				PlotMaterialDrawCounters(Before, Owner.Stats);
+			}
+#endif
 		}
 	}
 	Owner.Schedule();

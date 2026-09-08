@@ -42,6 +42,7 @@ FViewerApplication::FViewerApplication(FOptions InOptions)
 
 FViewerApplication::~FViewerApplication()
 {
+	SetProfilingMask(0);
 	if (Services && !bStopped)
 	{
 		Services->DrainWrites();
@@ -195,6 +196,7 @@ void FViewerApplication::Shutdown()
 
 void FViewerApplication::Run()
 {
+	InitializeProfiling();
 	InitializeCapture();
 	InitializeGraphics();
 	InitializePlugins();

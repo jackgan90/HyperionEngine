@@ -16,6 +16,11 @@ struct FOptions
 	int BenchmarkWarmup = 60;
 	bool bBenchmarkCamera{};
 	bool bNoVsync{};
+	std::uint32_t ProfilingMask{};
+	int ProfileStart{};
+	int ProfileFrames{};
+	bool bProfileSampling{};
+	bool bProfileWait{};
 	std::string SceneCulling = "bvh";
 	bool bVerifyModel{};
 	std::optional<std::string> Backend;
@@ -35,6 +40,7 @@ struct FOptions
 };
 
 FOptions ParseOptions(int InArgc, char** InArgv);
+bool ParseProfilingOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex);
 void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings);
 void VerifyImage(const FImage& InImage, const FAppSettings& InSettings, const FOptions& InOptions);
 } // namespace Hyperion

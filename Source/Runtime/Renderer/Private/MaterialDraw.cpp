@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/RHI/RHIPipeline.h"
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "RenderResourcesInternal.h"
@@ -79,6 +80,7 @@ void FRenderResourceCoordinator::CollectPreparedDraws()
 FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, const FRenderView& InView,
                                                      FGraphicsTarget InTarget)
 {
+	HYP_PERF_SCOPE_C(Detail, DrawMaterial);
 	const auto& GeometryRecord = *InItem.State.Resource->Record;
 	const auto& MaterialRecord = *InItem.State.Surface->Record;
 	if (GeometryRecord.Owner != this || MaterialRecord.Owner != this ||

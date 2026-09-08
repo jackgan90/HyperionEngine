@@ -31,6 +31,9 @@ public:
 	void Run();
 
 private:
+	void InitializeProfiling();
+	void UpdateProfiling(int InFrame);
+	void HandleProfilingActions(const FDebugActions& InActions);
 	void InitializeCapture();
 	void InitializeGraphics();
 	void InitializePlugins();

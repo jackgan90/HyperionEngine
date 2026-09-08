@@ -1,4 +1,5 @@
 #include "D3D12Resources.h"
+#include "Hyperion/Core/Profiling.h"
 
 namespace Hyperion
 {
@@ -12,6 +13,7 @@ FD3D12DeviceState::~FD3D12DeviceState()
 
 void FD3D12DeviceState::Wait(std::uint64_t InValue)
 {
+	HYP_PERF_SCOPE_C(Rhi, FenceWait);
 	if (Fence->GetCompletedValue() < InValue)
 	{
 		Check(Fence->SetEventOnCompletion(InValue, Event), "Fence event");
@@ -34,6 +36,12 @@ void FD3D12DeviceState::Idle()
 	Wait(Signal());
 	// This fence follows every submitted upload, including batches whose own Signal failed.
 	Uploads.clear();
+#if HYP_ENABLE_PROFILING
+	for (const auto& Submission : Submissions)
+	{
+		CollectD3D12Profiles(Submission.Lists);
+	}
+#endif
 	Submissions.clear();
 }
 
@@ -48,6 +56,12 @@ void FD3D12DeviceState::CollectUploads()
 	std::erase_if(Submissions,
 	              [Completed](const FSubmission& InSubmission)
 	              {
+#if HYP_ENABLE_PROFILING
+		              if (Completed != UINT64_MAX && InSubmission.FenceValue <= Completed)
+		              {
+			              CollectD3D12Profiles(InSubmission.Lists);
+		              }
+#endif
 		              return InSubmission.FenceValue <= Completed;
 	              });
 }
@@ -70,6 +84,7 @@ void FD3D12DeviceState::Immediate(const std::function<void(ID3D12GraphicsCommand
                                   std::vector<ComPtr<ID3D12Resource>> InResources,
                                   std::vector<ComPtr<D3D12MA::Allocation>> InAllocations)
 {
+	HYP_PERF_SCOPE_C(Rhi, ImmediateUpload);
 	FUploadBatch Batch;
 	Batch.Resources = std::move(InResources);
 	Batch.Allocations = std::move(InAllocations);

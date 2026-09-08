@@ -3,6 +3,7 @@
 #include "D3D12GraphicsState.h"
 #include "D3D12Resources.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/RHI/RHIPipeline.h"
 #include <atomic>
 #include <cmath>
@@ -13,6 +14,7 @@ namespace
 {
 std::pair<std::uint32_t, std::uint32_t> IndexBounds(const FDrawPacket& InDraw, const FD3D12Buffer& InIndices)
 {
+	HYP_PERF_SCOPE_C(Detail, ValidateIndexBounds);
 	std::lock_guard Lock(InIndices.IndexRangesMutex);
 	for (const auto& Range : InIndices.IndexRanges)
 	{
@@ -53,6 +55,7 @@ void ValidateIndexRange(const FDrawPacket& InDraw, const FD3D12Buffer& InVertice
 
 void ValidateDraws(const FD3D12DeviceState* InState, const FPassCommands& InCommands)
 {
+	HYP_PERF_SCOPE_C(Rhi, ValidateDraws);
 	for (const auto& Draw : InCommands.Draws)
 	{
 		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, InState);
@@ -116,6 +119,9 @@ struct FD3D12RHISwapchain::FImpl
 
 	struct FFrame
 	{
+#if HYP_ENABLE_PROFILING
+		std::shared_ptr<FD3D12ProfileQueries> ProfileQueries;
+#endif
 		std::array<ComPtr<ID3D12CommandAllocator>, ContextCount> Allocators;
 		std::array<std::atomic<bool>, ContextCount> Recorded{};
 		std::vector<FRecordedList> Retained;
@@ -123,6 +129,9 @@ struct FD3D12RHISwapchain::FImpl
 	};
 
 	std::array<FFrame, FrameCount> Frames;
+#if HYP_ENABLE_PROFILING
+	FD3D12ProfileState Profiling;
+#endif
 	UINT FrameIndex{};
 	UINT RtvStep{};
 	std::uint64_t Serial{};
@@ -136,6 +145,9 @@ struct FD3D12RHISwapchain::FImpl
 		State->Idle();
 		for (auto& Frame : Frames)
 		{
+#if HYP_ENABLE_PROFILING
+			CollectD3D12Profiles(Frame.Retained);
+#endif
 			Frame.Retained.clear();
 		}
 	}
@@ -250,6 +262,7 @@ const FRHICapabilities& FD3D12RHISwapchain::GetCapabilities() const noexcept
 
 void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 {
+	HYP_PERF_SCOPE_C(Rhi, BeginFrame);
 	auto& P = *Impl;
 	if (P.bActive)
 	{
@@ -277,6 +290,9 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 	// Direct RHI clients also retire completed lists during normal frame-ring progress.
 	P.State->CollectUploads();
 	F.Retained.clear();
+#if HYP_ENABLE_PROFILING
+	PrepareD3D12Profiling(*P.State, P.Profiling, F.ProfileQueries);
+#endif
 	for (auto& bRecorded : F.Recorded)
 	{
 		bRecorded = false;
@@ -288,6 +304,7 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 
 FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCommands& InCommands)
 {
+	HYP_PERF_SCOPE_C(Rhi, RecordPass);
 	auto& P = *Impl;
 	if (!P.bActive || InContext >= ContextCount)
 	{
@@ -300,7 +317,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	{
 		throw std::logic_error("Command context already recorded this frame");
 	}
-	FProfileScope Trace(InCommands.Name.c_str());
+	HYP_PERF_SCOPE_C(Rhi, RecordCommands);
 	Check(Frame.Allocators[InContext]->Reset(), "Reset command allocator");
 	auto R = std::make_shared<FD3D12RecordedList>();
 	R->State = P.State;
@@ -312,6 +329,9 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	                                         nullptr, IID_PPV_ARGS(&R->List)),
 	      "Create recording list");
 	auto List = R->List.Get();
+#if HYP_ENABLE_PROFILING
+	BeginD3D12Profile(*R, P.Profiling, Frame.ProfileQueries);
+#endif
 	List->BeginEvent(1, InCommands.Name.c_str(), static_cast<UINT>(InCommands.Name.size() + 1));
 	if (InCommands.TransitionFrom && InCommands.TransitionTo)
 	{
@@ -363,12 +383,16 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		List->DrawIndexedInstanced(Draw.IndexCount, 1, Draw.FirstIndex, Draw.VertexOffset, 0);
 	}
 	List->EndEvent();
+#if HYP_ENABLE_PROFILING
+	EndD3D12Profile(*R);
+#endif
 	Check(List->Close(), "Close recording list");
 	return {std::move(R)};
 }
 
 FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool bInVsync, bool bInCapture)
 {
+	HYP_PERF_SCOPE_C(Rhi, SubmitAndPresent);
 	auto& P = *Impl;
 	if (!P.bActive || InLists.empty())
 	{
@@ -390,7 +414,10 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 	}
 	Frame.Retained.assign(InLists.begin(), InLists.end());
 	P.bSubmissionStarted = true;
-	P.State->Queue->ExecuteCommandLists(static_cast<UINT>(NativeLists.size()), NativeLists.data());
+	{
+		HYP_PERF_SCOPE_C(Rhi, SubmitCommandLists);
+		P.State->Queue->ExecuteCommandLists(static_cast<UINT>(NativeLists.size()), NativeLists.data());
+	}
 	FImage Result;
 	if (bInCapture)
 	{
@@ -431,11 +458,15 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 		D3D12_RANGE Written{0, 0};
 		Readback->Resource->Unmap(0, &Written);
 	}
+	HRESULT Hr{};
+	{
+		HYP_PERF_SCOPE_C(Rhi, PresentWait);
 #if defined(HYP_TEST_D3D12_PRESENT)
-	auto Hr = PresentForTesting(P.Swapchain.Get(), bInVsync ? 1 : 0);
+		Hr = PresentForTesting(P.Swapchain.Get(), bInVsync ? 1 : 0);
 #else
-	auto Hr = P.Swapchain->Present(bInVsync ? 1 : 0, 0);
+		Hr = P.Swapchain->Present(bInVsync ? 1 : 0, 0);
 #endif
+	}
 	Frame.FenceValue = P.State->Signal();
 	// Device-level retention also progresses when no further frame is presented.
 	// Keep the frame copy until publishing the submission succeeds (including allocation failure).

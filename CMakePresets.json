@@ -2,8 +2,9 @@
   "version": 3,
   "configurePresets": [
     {"name":"debug", "generator":"Ninja", "binaryDir":"${sourceDir}/out/build/debug", "cacheVariables":{"CMAKE_BUILD_TYPE":"Debug"}},
-    {"name":"release", "generator":"Ninja", "binaryDir":"${sourceDir}/out/build/release", "cacheVariables":{"CMAKE_BUILD_TYPE":"Release"}}
+    {"name":"release", "generator":"Ninja", "binaryDir":"${sourceDir}/out/build/release", "cacheVariables":{"CMAKE_BUILD_TYPE":"Release"}},
+    {"name":"profile", "generator":"Ninja", "binaryDir":"${sourceDir}/out/build/profile", "cacheVariables":{"CMAKE_BUILD_TYPE":"Release", "HYP_ENABLE_TRACY":"ON"}}
   ],
-  "buildPresets": [{"name":"debug","configurePreset":"debug"},{"name":"release","configurePreset":"release"}],
-  "testPresets": [{"name":"debug","configurePreset":"debug"},{"name":"release","configurePreset":"release"}]
+  "buildPresets": [{"name":"debug","configurePreset":"debug"},{"name":"release","configurePreset":"release"},{"name":"profile","configurePreset":"profile"}],
+  "testPresets": [{"name":"debug","configurePreset":"debug"},{"name":"release","configurePreset":"release"},{"name":"profile","configurePreset":"profile"}]
 }

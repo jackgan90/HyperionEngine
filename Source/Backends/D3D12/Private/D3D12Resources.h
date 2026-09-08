@@ -1,5 +1,6 @@
 #pragma once
 #include "D3D12DeviceState.h"
+#include "D3D12Profiling.h"
 
 namespace Hyperion
 {
@@ -139,6 +140,11 @@ struct FD3D12SwapchainIdentity
 
 struct FD3D12RecordedList final : IRHIRecordedList
 {
+#if HYP_ENABLE_PROFILING
+	std::shared_ptr<FD3D12ProfileQueries> ProfileQueries;
+	FProfileGpuContext ProfileContext;
+	FProfileGpuSpan ProfileSpan;
+#endif
 	std::shared_ptr<FD3D12DeviceState> State;
 
 	const void* GetDeviceIdentity() const noexcept override

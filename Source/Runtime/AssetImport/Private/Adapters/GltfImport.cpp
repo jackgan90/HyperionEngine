@@ -10,6 +10,7 @@ using FGltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
 FGltfData ParseSource(FAssetLoadContext& InContext)
 {
+	HYP_PERF_SCOPE_C(Assets, ParseGltf);
 	cgltf_options Options{};
 	Options.memory.alloc_func = [](void*, cgltf_size InSize) -> void*
 	{
@@ -162,6 +163,7 @@ void FGltfImport::LoadImages()
 
 void FGltfImport::LoadMeshes()
 {
+	HYP_PERF_SCOPE_C(Assets, ConvertGltfMeshes);
 	auto* Raw = Data.get();
 
 	for (std::size_t MeshIndex = 0; MeshIndex < Raw->meshes_count; ++MeshIndex)
@@ -234,6 +236,7 @@ std::shared_ptr<FModelAsset> FGltfImport::Run()
 
 std::shared_ptr<void> Import(FAssetLoadContext& InContext)
 {
+	HYP_PERF_SCOPE_C(Assets, ImportGltf);
 	return FGltfImport(InContext).Run();
 }
 

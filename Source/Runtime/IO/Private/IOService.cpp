@@ -1,4 +1,5 @@
 #include "Hyperion/IO/IOService.h"
+#include "Hyperion/Core/Profiling.h"
 
 namespace Hyperion
 {
@@ -18,6 +19,7 @@ TAsyncResult<FBytes> FIOService::ReadAsync(std::filesystem::path InPath, FCancel
 	    Tasks, {EDomain::Io},
 	    [InPath = std::move(InPath), InLimit, Storage = Files, Counters = Stats]
 	    {
+		    HYP_PERF_SCOPE_C(Assets, ReadAssetBytes);
 		    auto Bytes = Storage->Read(InPath, InLimit);
 		    Counters->Reads.fetch_add(1);
 		    Counters->ReadBytes.fetch_add(Bytes.size());

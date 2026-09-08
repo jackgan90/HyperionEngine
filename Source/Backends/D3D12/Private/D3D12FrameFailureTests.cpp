@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <iostream>
+#include <set>
 #include <source_location>
 #include <thread>
 
@@ -155,6 +156,66 @@ void CheckDirectRhiCollection(FFrameFixture& InFixture, const FRenderGraph& InGr
 		                          }));
 	}
 }
+
+#if HYP_ENABLE_PROFILING
+void CheckProfileQueryLifetime(FFrameFixture& InFixture, const FRenderGraph& InGraph)
+{
+	if (!GetProfilingConnection())
+	{
+		return;
+	}
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Rhi, 0},
+	    [&]
+	    {
+		    auto& Swapchain = *InFixture.Swapchain;
+		    const auto Commands = InGraph.Compile();
+		    Swapchain.WaitIdle();
+		    Swapchain.BeginFrame({64, 64});
+		    auto Cancelled = Swapchain.Record(0, Commands[0]);
+		    auto Native = std::dynamic_pointer_cast<FD3D12RecordedList>(Cancelled.Payload);
+		    CheckCondition(Native->ProfileQueries != nullptr);
+		    std::set<const FD3D12ProfileQueries*> Pools{Native->ProfileQueries.get()};
+		    Swapchain.CancelFrame();
+		    // A retained cancelled list occupies its fixed slot; repeated frames skip it, without waiting or growing.
+		    std::size_t Skipped{};
+		    for (unsigned Frame = 0; Frame < FrameCount * 3; ++Frame)
+		    {
+			    Swapchain.BeginFrame({64, 64});
+			    std::vector<FRecordedList> Lists;
+			    for (unsigned Index = 0; Index < Commands.size(); ++Index)
+			    {
+				    Lists.push_back(Swapchain.Record(Index, Commands[Index]));
+				    auto Recorded = std::dynamic_pointer_cast<FD3D12RecordedList>(Lists.back().Payload);
+				    if (Recorded->ProfileQueries)
+				    {
+					    Pools.insert(Recorded->ProfileQueries.get());
+				    }
+				    else
+				    {
+					    ++Skipped;
+				    }
+			    }
+			    Swapchain.EndFrame(Lists, false, false);
+			    Swapchain.WaitIdle();
+			    for (const auto& List : Lists)
+			    {
+				    CheckCondition(!std::dynamic_pointer_cast<FD3D12RecordedList>(List.Payload)->ProfileQueries);
+			    }
+		    }
+		    CheckCondition(Skipped > 0 && Pools.size() <= FrameCount);
+		    // No completion event was emitted for the abandoned recording.
+		    CheckCondition(Native->ProfileQueries != nullptr);
+		    Native.reset();
+		    Cancelled = {};
+		    Swapchain.BeginFrame({64, 64});
+		    const auto Recovered = Swapchain.Record(0, Commands[0]);
+		    CheckCondition(std::dynamic_pointer_cast<FD3D12RecordedList>(Recovered.Payload)->ProfileQueries != nullptr);
+		    Swapchain.CancelFrame();
+		    CheckCondition(InFixture.Device->Statistics().ValidationErrors == 0);
+	    }));
+}
+#endif
 
 class FCountedPrimitive final : public IRenderPrimitive
 {
@@ -350,16 +411,34 @@ HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval)
 }
 } // namespace Hyperion
 
-int main()
+int main(int InArgc, char** InArgv)
 {
 	try
 	{
+#if HYP_ENABLE_PROFILING
+		if (InArgc == 2 && std::string_view(InArgv[1]) == "--profile-wait")
+		{
+			Hyperion::SetProfilingMask(Hyperion::ProfileAllMask);
+			const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+			while (!Hyperion::GetProfilingConnection() && std::chrono::steady_clock::now() < Deadline)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			}
+			Hyperion::CheckCondition(Hyperion::GetProfilingConnection() != 0);
+		}
+#else
+		(void)InArgc;
+		(void)InArgv;
+#endif
 		Hyperion::FFrameFixture Fixture;
 		const auto Graph = Hyperion::ClearGraph();
 		Hyperion::CheckSubmittedFailure(Fixture, Graph);
 		Hyperion::CheckRecovery(Fixture, Graph);
 		Hyperion::CheckDirectRhiCollection(Fixture, Graph);
 		Hyperion::CheckPrimitiveFenceRetirement(Fixture);
+#if HYP_ENABLE_PROFILING
+		Hyperion::CheckProfileQueryLifetime(Fixture, Graph);
+#endif
 		std::cout << "Submitted frame failure drains the GPU and permits recovery\n";
 		return 0;
 	}

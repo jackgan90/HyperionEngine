@@ -25,6 +25,9 @@ struct FTaskState
 	std::vector<std::function<void()>> Continuations;
 	FTarget Target;
 	const void* Owner{};
+#if HYP_ENABLE_PROFILING
+	std::uint64_t ProfileId{};
+#endif
 
 	void Subscribe(std::function<void()> InCallback)
 	{
@@ -97,6 +100,9 @@ struct FTaskSystem::FImpl
 		std::function<void()> Body;
 		std::vector<FTaskHandle> Dependencies;
 		std::atomic_size_t Remaining{};
+#if HYP_ENABLE_PROFILING
+		std::uint64_t QueuedAt{};
+#endif
 	};
 
 	std::thread::id MainId = std::this_thread::get_id();
@@ -146,6 +152,7 @@ struct FTaskSystem::FImpl
 					                   : I == RhiCount + 2 ? FTarget{EDomain::Io}
 					                                       : FTarget{EDomain::Rhi, I - 2};
 					    Q->ThreadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+					    SetProfileThreadName(Q->Name.c_str());
 #ifdef _WIN32
 					    const std::wstring Name(Q->Name.begin(), Q->Name.end());
 					    SetThreadDescription(GetCurrentThread(), Name.c_str());
@@ -233,8 +240,22 @@ struct FTaskSystem::FImpl
 
 	void Schedule(const std::shared_ptr<FWork>& InWork)
 	{
+#if HYP_ENABLE_PROFILING
+		if (IsProfilingEnabled(EProfileCategory::Tasks))
+		{
+			InWork->QueuedAt = ClockNanoseconds();
+		}
+#endif
 		auto Execute = [this, InWork]
 		{
+			HYP_PERF_SCOPE_NAMED(EProfileCategory::Tasks, "TaskExecute", TaskScope);
+			HYP_PERF_VALUE(TaskScope, InWork->State->ProfileId);
+#if HYP_ENABLE_PROFILING
+			if (InWork->QueuedAt && IsProfilingEnabled(EProfileCategory::Tasks))
+			{
+				ProfilePlot("TaskQueueMilliseconds", double(ClockNanoseconds() - InWork->QueuedAt) / 1e6);
+			}
+#endif
 			std::exception_ptr Error;
 			try
 			{
@@ -276,6 +297,14 @@ struct FTaskSystem::FImpl
 				    {
 					    ActiveSystem = this;
 					    ActiveTarget = {EDomain::Worker};
+#if HYP_ENABLE_PROFILING
+					    static thread_local bool bNamed{};
+					    if (!bNamed)
+					    {
+						    SetProfileThreadName("Worker");
+						    bNamed = true;
+					    }
+#endif
 					    Execute();
 				    });
 			}
@@ -350,6 +379,15 @@ FTaskHandle FTaskSystem::Dispatch(FTarget InTarget, std::function<void()> InBody
 	Work->State = Tracked<FTaskState>();
 	Work->State->Owner = &S;
 	Work->State->Target = InTarget;
+#if HYP_ENABLE_PROFILING
+	if (IsProfilingEnabled(EProfileCategory::Tasks))
+	{
+		static std::atomic_uint64_t NextProfileId{1};
+		Work->State->ProfileId = NextProfileId.fetch_add(1, std::memory_order_relaxed);
+	}
+#endif
+	HYP_PERF_SCOPE_NAMED(EProfileCategory::Tasks, "TaskDispatch", DispatchScope);
+	HYP_PERF_VALUE(DispatchScope, Work->State->ProfileId);
 	Work->Body = std::move(InBody);
 	Work->Dependencies.assign(InDependencies.begin(), InDependencies.end());
 	Work->Remaining = InDependencies.size() + 1;
@@ -390,6 +428,8 @@ void FTaskSystem::Wait(const FTaskHandle& InHandle)
 		return;
 	}
 	auto State = InHandle.State;
+	HYP_PERF_SCOPE_NAMED(EProfileCategory::Tasks, "TaskWait", WaitScope);
+	HYP_PERF_VALUE(WaitScope, State->ProfileId);
 	auto& S = *Impl;
 	if (State->Owner != &S)
 	{
@@ -412,6 +452,9 @@ void FTaskSystem::Wait(const FTaskHandle& InHandle)
 		}
 		else if (ActiveSystem == &S && ActiveTarget.Domain == EDomain::Worker)
 		{
+#if HYP_ENABLE_PROFILING
+			FProfileSuspension Suspension;
+#endif
 			oneapi::tbb::task::suspend(
 			    [State](oneapi::tbb::task::suspend_point InPoint)
 			    {

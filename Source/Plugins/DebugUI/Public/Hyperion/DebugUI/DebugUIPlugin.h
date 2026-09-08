@@ -1,6 +1,9 @@
 #pragma once
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Gui/Gui.h"
 #include "Hyperion/Renderer/RenderPlugin.h"
+#include <array>
+#include <optional>
 
 namespace Hyperion
 {
@@ -22,6 +25,7 @@ struct FDebugMetrics
 	std::string AssetStatus;
 	bool bSceneViewer{};
 	FFrameCaptureMetrics FrameCapture;
+	FProfileStatus Profiling;
 };
 
 struct FDebugActions
@@ -30,13 +34,17 @@ struct FDebugActions
 	bool bCapture{};
 	bool bCaptureRdc{};
 	bool bOpenRdc{};
+	std::optional<std::uint32_t> ProfilingMask;
+	std::optional<bool> Sampling;
 	// Logical pixel bounds allow normalized input acceptance without OS input injection.
 	FVec4 CaptureRdcBounds;
 	FVec4 OpenRdcBounds;
 	FVec4 AutoOpenRdcBounds;
+	std::array<FVec4, 4> ProfilingBounds;
 };
 
 FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, const FFrameCaptureMetrics& InMetrics);
+FDebugActions DrawProfilingControls(FGui& InGui, const FProfileStatus& InStatus);
 
 FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebugMetrics& InMetrics,
                              FSize InLogicalSize);

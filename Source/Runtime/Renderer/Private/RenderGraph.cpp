@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/Core/Profiling.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -107,6 +108,7 @@ std::size_t FRenderGraph::Add(FColorPass InPass)
 
 std::vector<FPassCommands> FRenderGraph::Compile() const
 {
+	HYP_PERF_SCOPE_C(Render, CompileRenderGraph);
 	if (Passes.empty())
 	{
 		throw std::runtime_error("Graph requires at least one color pass");
@@ -182,6 +184,7 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
                     bool bInVsync, bool bInCapture)
 {
+	HYP_PERF_SCOPE_C(Render, ExecuteRenderGraph);
 	auto Commands = InGraph.Compile();
 	// Reject unsupported graphs before acquiring a frame or dispatching any recorder.
 	if (Commands.size() > InSwapchain.GetCapabilities().MaxRecordingContexts)
