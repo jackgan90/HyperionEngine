@@ -129,19 +129,19 @@ EMaterialWriteResult FMaterialInstance::Set(FMaterialParameterHandle InHandle, F
 	ValidateMaterialOverride(Parameter, InValue, EMaterialScope::Material);
 	const EMaterialWriteResult Result =
 	    Parameter.bActive ? EMaterialWriteResult::Active : EMaterialWriteResult::Inactive;
-	FMaterialSnapshot Next = *Snapshot;
-	const auto Existing = std::find_if(Next.Overrides.begin(), Next.Overrides.end(),
+	const auto Existing = std::find_if(Snapshot->Overrides.begin(), Snapshot->Overrides.end(),
 	                                   [&Parameter](const FMaterialParameterEntry& InEntry)
 	                                   {
 		                                   return InEntry.Name == Parameter.Name;
 	                                   });
-	if (Existing != Next.Overrides.end())
+	if (Existing != Snapshot->Overrides.end() && Existing->Value == InValue)
 	{
-		if (Existing->Value == InValue)
-		{
-			return Result;
-		}
-		Existing->Value = std::move(InValue);
+		return Result;
+	}
+	FMaterialSnapshot Next = *Snapshot;
+	if (Existing != Snapshot->Overrides.end())
+	{
+		Next.Overrides[static_cast<std::size_t>(Existing - Snapshot->Overrides.begin())].Value = std::move(InValue);
 	}
 	else
 	{
@@ -172,13 +172,15 @@ void FMaterialInstance::Clear(std::string_view InName)
 	{
 		throw std::invalid_argument("Cannot clear a locked material parameter: " + Parameter.Name);
 	}
-	FMaterialSnapshot Next = *Snapshot;
-	if (std::erase_if(Next.Overrides,
-	                  [&Parameter](const FMaterialParameterEntry& InEntry)
-	                  {
-		                  return InEntry.Name == Parameter.Name;
-	                  }) > 0)
+	const auto Existing = std::find_if(Snapshot->Overrides.begin(), Snapshot->Overrides.end(),
+	                                   [&Parameter](const FMaterialParameterEntry& InEntry)
+	                                   {
+		                                   return InEntry.Name == Parameter.Name;
+	                                   });
+	if (Existing != Snapshot->Overrides.end())
 	{
+		FMaterialSnapshot Next = *Snapshot;
+		Next.Overrides.erase(Next.Overrides.begin() + (Existing - Snapshot->Overrides.begin()));
 		Publish(std::move(Next));
 	}
 }

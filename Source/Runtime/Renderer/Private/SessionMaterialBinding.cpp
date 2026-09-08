@@ -17,20 +17,19 @@ constexpr auto ScopeIndex(EMaterialScope InScope)
 
 FMaterialScopeKey ItemKey(const FRenderItem& InItem, const FRenderSceneSnapshot& InSnapshot)
 {
-	FMaterialScopeKey Key{
-	    InItem.Primitive.Scene,
-	    1,
-	    {InItem.Primitive.Slot, InItem.Primitive.Generation, InItem.LocalItemId.value_or(InItem.Ordinal)}};
+	std::vector<std::uint64_t> Qualifiers{InItem.Primitive.Slot, InItem.Primitive.Generation,
+	                                      InItem.LocalItemId.value_or(InItem.Ordinal)};
 	if (!InItem.LocalItemId)
 	{
-		Key.Qualifiers.insert(Key.Qualifiers.end(),
-		                      {InSnapshot.Frame->Frame, InSnapshot.Family, InSnapshot.View.Identity, InItem.Ordinal});
+		Qualifiers.insert(Qualifiers.end(),
+		                  {InSnapshot.Frame->Frame, InSnapshot.Family, InSnapshot.View.Identity, InItem.Ordinal});
 	}
 	for (const auto Value : InItem.State.World.Values)
 	{
-		Key.Qualifiers.push_back(std::bit_cast<std::uint32_t>(Value));
+		Qualifiers.push_back(std::bit_cast<std::uint32_t>(Value));
 	}
-	Key.Qualifiers.push_back(InItem.State.bClipSpace);
+	Qualifiers.push_back(InItem.State.bClipSpace);
+	FMaterialScopeKey Key{InItem.Primitive.Scene, 1, std::move(Qualifiers)};
 	return Key;
 }
 
@@ -45,7 +44,17 @@ std::shared_ptr<const void> ObjectLifetime(const FRenderItem& InItem, const FRen
 	auto& Objects = InItem.EvaluationCache->Objects;
 	if (!Objects.contains(*InItem.LocalItemId) && Objects.size() >= 64)
 	{
-		return FrameLifetime;
+		const auto Oldest = std::min_element(Objects.begin(), Objects.end(),
+		                                     [](const auto& InA, const auto& InB)
+		                                     {
+			                                     return InA.second.AccessFrame < InB.second.AccessFrame;
+		                                     });
+		if (Oldest->second.AccessFrame == InSnapshot.Frame->Frame)
+		{
+			// Preserve this frame's hot set when a repeated collection exceeds capacity.
+			return FrameLifetime;
+		}
+		Objects.erase(Oldest);
 	}
 	auto& Entry = Objects[*InItem.LocalItemId];
 	if (!Entry.Scope.Lifetime || Entry.Scope.Key != InKey || Entry.Inputs != InItem.State.ObjectInputs ||
@@ -55,30 +64,8 @@ std::shared_ptr<const void> ObjectLifetime(const FRenderItem& InItem, const FRen
 		Entry = {
 		    {InKey, InResources.CreateScopeLifetime()}, InItem.State.ObjectInputs, InItem.Context.ObjectParameters};
 	}
+	Entry.AccessFrame = InSnapshot.Frame->Frame;
 	return Entry.Scope.Lifetime;
-}
-
-void FillObjectInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
-                      const FRenderSceneSnapshot& InSnapshot, const FRenderResourceService& InResources)
-{
-	const auto WorldViewProjection =
-	    InItem.State.bClipSpace ? InItem.State.World : Multiply(InSnapshot.View.ViewProjection, InItem.State.World);
-	InInputs.Values[ScopeIndex(EMaterialScope::Object)] = {
-	    {"Engine.Object.World", FMaterialValue::Matrix(InItem.State.World)},
-	    {"Engine.Object.Normal", FMaterialValue::Matrix(NormalMatrix(InItem.State.World))},
-	    {"Engine.Object.OrientationSign", FMaterialValue::Float(Determinant(InItem.State.World) < 0 ? -1.f : 1.f)},
-	    {"Engine.Object.WorldViewProjection", FMaterialValue::Matrix(WorldViewProjection)}};
-	auto& ObjectValues = InInputs.Values[ScopeIndex(EMaterialScope::Object)];
-	ObjectValues.insert(ObjectValues.end(), InItem.State.ObjectInputs.begin(), InItem.State.ObjectInputs.end());
-	const auto Key = ItemKey(InItem, InSnapshot);
-	const auto Lifetime = ObjectLifetime(InItem, InSnapshot, Key, InResources);
-	InInputs.Scopes[ScopeIndex(EMaterialScope::Object)] = {Key, Lifetime};
-	auto DrawKey = Key;
-	DrawKey.Qualifiers.insert(DrawKey.Qualifiers.end(),
-	                          {InSnapshot.Frame->Frame, InSnapshot.Family, InSnapshot.View.Identity});
-	InInputs.Scopes[ScopeIndex(EMaterialScope::Draw)] = {
-	    std::move(DrawKey), InSnapshot.Frame->Inputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Lifetime};
-	InInputs.Values[ScopeIndex(EMaterialScope::Draw)] = InItem.DrawInputs;
 }
 
 bool ReuseEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMaterialProviderInputs& InInputs,
@@ -93,7 +80,7 @@ bool ReuseEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	{
 		return false;
 	}
-	const auto& Entry = It->second;
+	auto& Entry = It->second;
 	if (Entry.Snapshot != InItem.State.Surface->GetSnapshot() || Entry.Compiled != InCompiled ||
 	    Entry.Usage != InView.Usage ||
 	    !Entry.Matches(InInputs, InItem.Context.ObjectParameters, InItem.DrawParameters, InItem.State.World,
@@ -102,6 +89,8 @@ bool ReuseEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 		return false;
 	}
 	InItem.ResolvedParameters = Entry.Resolved;
+	Entry.AccessFrame = InInputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Key.Revision;
+	InItem.EvaluationCache->TouchObject(*InItem.LocalItemId, Entry.AccessFrame);
 	return true;
 }
 
@@ -116,9 +105,20 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	auto& Entries = InItem.EvaluationCache->Entries;
 	if (!Entries.contains(Key) && Entries.size() >= 64)
 	{
-		return;
+		const auto Oldest = std::min_element(Entries.begin(), Entries.end(),
+		                                     [](const auto& InA, const auto& InB)
+		                                     {
+			                                     return InA.second.AccessFrame < InB.second.AccessFrame;
+		                                     });
+		if (Oldest->second.AccessFrame == InInputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Key.Revision)
+		{
+			// Newly scanned overflow items must not evict entries already used this frame.
+			return;
+		}
+		Entries.erase(Oldest);
 	}
 	FMaterialEvaluationCache::FEntry Entry;
+	Entry.AccessFrame = InInputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Key.Revision;
 	Entry.Snapshot = InItem.State.Surface->GetSnapshot();
 	Entry.Compiled = InCompiled;
 	Entry.Usage = InView.Usage;
@@ -127,9 +127,24 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	Entry.World = InItem.State.World;
 	Entry.bClipSpace = InItem.State.bClipSpace;
 	Entry.ObjectInputs = InItem.State.ObjectInputs;
+	std::vector<bool> Overridden(InCompiled->Interface.Schema->GetParameters().size());
+	const std::array<const FMaterialParameterValues*, 3> OverrideSets{&Entry.Snapshot->Overrides, &Entry.Object,
+	                                                                  &Entry.Draw};
+	for (const auto* Overrides : OverrideSets)
+	{
+		for (const auto& Override : *Overrides)
+		{
+			Overridden[InCompiled->Interface.Schema->Find(Override.Name).Index] = true;
+		}
+	}
 	for (const auto Index : InCompiled->GetPass(InView.Usage).ActiveParameters)
 	{
 		Entry.Dependencies |= InItem.ResolvedParameters->Dependencies[Index];
+		if (!Overridden[Index] &&
+		    InCompiled->Interface.Schema->GetParameters()[Index].Source == EMaterialParameterSource::Semantic)
+		{
+			Entry.ProviderParameters.push_back(Index);
+		}
 	}
 	FResolvedMaterialParameters Values = *InItem.ResolvedParameters;
 	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
@@ -151,6 +166,35 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 
 } // namespace
 
+void FillMaterialObjectInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
+                              const FRenderSceneSnapshot& InSnapshot, const FRenderResourceService& InResources)
+{
+	const auto WorldViewProjection =
+	    InItem.State.bClipSpace ? InItem.State.World : Multiply(InSnapshot.View.ViewProjection, InItem.State.World);
+	FMaterialParameterValues ObjectValues = {
+	    {"Engine.Object.World", FMaterialValue::Matrix(InItem.State.World)},
+	    {"Engine.Object.Normal", FMaterialValue::Matrix(NormalMatrix(InItem.State.World))},
+	    {"Engine.Object.OrientationSign", FMaterialValue::Float(Determinant(InItem.State.World) < 0 ? -1.f : 1.f)},
+	    {"Engine.Object.WorldViewProjection", FMaterialValue::Matrix(WorldViewProjection)}};
+	ObjectValues.insert(ObjectValues.end(), InItem.State.ObjectInputs.begin(), InItem.State.ObjectInputs.end());
+	InInputs.Values[ScopeIndex(EMaterialScope::Object)] = std::move(ObjectValues);
+	const auto Key = ItemKey(InItem, InSnapshot);
+	const auto Lifetime = ObjectLifetime(InItem, InSnapshot, Key, InResources);
+	InInputs.Scopes[ScopeIndex(EMaterialScope::Object)] = {Key, Lifetime};
+}
+
+void FillMaterialDrawInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
+                            const FRenderSceneSnapshot& InSnapshot)
+{
+	InInputs.Scopes[ScopeIndex(EMaterialScope::Draw)] = {
+	    {InSnapshot.Frame->Session,
+	     InSnapshot.Frame->Frame,
+	     {InSnapshot.Family, InSnapshot.View.Identity, InItem.Primitive.Scene, InItem.Primitive.Slot,
+	      InItem.Primitive.Generation, InItem.LocalItemId.has_value(), InItem.LocalItemId.value_or(0), InItem.Ordinal}},
+	    InSnapshot.Frame->Inputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Lifetime};
+	InInputs.Values[ScopeIndex(EMaterialScope::Draw)] = InItem.DrawInputs;
+}
+
 void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 {
 	HYP_PERF_SCOPE_C(Material, PrepareMaterials);
@@ -161,13 +205,14 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 	    {"Engine.View.ViewProjection", FMaterialValue::Matrix(InSnapshot.View.ViewProjection)},
 	    {"Engine.View.CameraPosition", FMaterialValue::Float(InSnapshot.View.Eye)}};
 	ViewValues.insert(ViewValues.end(), InSnapshot.View.Parameters.begin(), InSnapshot.View.Parameters.end());
-	if (!View.Scope.Lifetime || View.Values != ViewValues)
+	FMaterialInputValues PublishedView(std::move(ViewValues));
+	if (!View.Scope.Lifetime || View.Values != PublishedView)
 	{
 		View.Scope.Lifetime = Resources.CreateScopeLifetime();
 		View.Scope.Key.Identity = MaterialState->Identity;
 		++View.Scope.Key.Revision;
-		View.Scope.Key.Qualifiers = {InSnapshot.View.Identity};
-		View.Values = std::move(ViewValues);
+		View.Scope.Key.SetQualifiers({InSnapshot.View.Identity});
+		View.Values = std::move(PublishedView);
 	}
 	Inputs.Scopes[ScopeIndex(EMaterialScope::View)] = View.Scope;
 	Inputs.Values[ScopeIndex(EMaterialScope::View)] = View.Values;
@@ -195,14 +240,15 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 				Profile.Reused();
 				continue;
 			}
-			if (RefreshMaterialEvaluation(Item, InSnapshot.View, Inputs, Compiled, MaterialState->Providers))
+			if (RefreshMaterialEvaluation(Item, InSnapshot, Inputs, Resources, Compiled, MaterialState->Providers))
 			{
 				Profile.Refreshed();
 				continue;
 			}
 			Profile.Evaluated();
 			HYP_PERF_SCOPE_C(Detail, FullMaterialEvaluation);
-			FillObjectInputs(Inputs, Item, InSnapshot, Resources);
+			FillMaterialObjectInputs(Inputs, Item, InSnapshot, Resources);
+			FillMaterialDrawInputs(Inputs, Item, InSnapshot);
 			std::vector<std::string> Semantics;
 			for (const auto Index : Pass.ActiveParameters)
 			{

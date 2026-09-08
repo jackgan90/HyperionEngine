@@ -309,6 +309,10 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 	Stats.DescriptorAllocations = P.DescriptorAllocations;
 	Stats.DescriptorCopies = P.DescriptorCopies;
 	Stats.BindingSetsCreated = P.BindingSetsCreated;
+	Stats.GraphicsRootBinds = P.GraphicsRootBinds.load();
+	Stats.GraphicsHeapBinds = P.GraphicsHeapBinds.load();
+	Stats.GraphicsConstantBinds = P.GraphicsConstantBinds.load();
+	Stats.GraphicsTableBinds = P.GraphicsTableBinds.load();
 	Stats.PipelinesCreated = P.PipelinesCreated;
 	Stats.ConstantBytesWritten = P.ConstantBytesWritten;
 	D3D12MA::Budget Local{};

@@ -94,6 +94,8 @@ struct FEmission
 	bool bDrawParameters = true;
 	float Offset{};
 	bool bNegativeZero{};
+	std::uint64_t Count = 2;
+	std::uint64_t FirstId{};
 };
 
 class FMultipleItems final : public IRenderPrimitive
@@ -106,9 +108,9 @@ public:
 
 	void Collect(const FRenderView&, std::vector<FRenderItem>& OutItems) const override
 	{
-		for (std::uint64_t Ordinal = 0; Ordinal < 2; ++Ordinal)
+		for (std::uint64_t Ordinal = 0; Ordinal < Emission->Count; ++Ordinal)
 		{
-			const auto Index = Emission->bReverse ? 1 - Ordinal : Ordinal;
+			const auto Index = Emission->FirstId + (Emission->bReverse ? Emission->Count - 1 - Ordinal : Ordinal);
 			FRenderItem Item;
 			Item.State = GetState();
 			Item.State.World = Translation({float(Index) * (Emission->bChanged ? .2f : .1f) + Emission->Offset, 0, 0});
@@ -186,6 +188,42 @@ void CheckMultipleItems(FTaskSystem& InTasks, FRenderSession& InSession, FRender
 	HYP_CHECK(Allowed[1].Draws[0].DynamicState.BlendConstants[0] == .2f);
 	HYP_CHECK(InSession.GetResources().Statistics().Materials.PipelinesCreated == Before);
 	InTasks.Wait(Binding.Remove());
+}
+
+void CheckEvaluationCapacity(FTaskSystem& InTasks, FRenderSession& InSession, const FRenderPrimitiveState& InState,
+                             FRenderView InView)
+{
+	InView.CullingMode = ESceneCullingMode::None;
+	for (const std::uint64_t Count : {64, 65, 128})
+	{
+		auto Emission = std::make_shared<FEmission>();
+		Emission->Count = Count;
+		Emission->bDrawParameters = false;
+		auto Binding = InSession.GetScene().Create(InState,
+		                                           [Emission](FTaskSystem& InTasks)
+		                                           {
+			                                           return std::make_unique<FMultipleItems>(InTasks, Emission);
+		                                           });
+		InTasks.Wait(InSession.GetScene().Flush());
+		for (unsigned WorkingSet = 0; WorkingSet < 2; ++WorkingSet)
+		{
+			// Replacing every local item must admit the new working set and retire the old one.
+			Emission->FirstId = WorkingSet * Count;
+			Build(InTasks, InSession, std::span(&InView, 1));
+			for (unsigned Frame = 0; Frame < 3; ++Frame)
+			{
+				const auto Before = InSession.GetResources().Statistics().Materials;
+				// The final frame also checks that incremental refresh keeps hot Object owners admitted.
+				InView.Eye.X += Frame == 2 ? .001f : 0.f;
+				const auto Passes = Build(InTasks, InSession, std::span(&InView, 1));
+				HYP_CHECK(Passes[1].Draws.size() == Count);
+				const auto After = InSession.GetResources().Statistics().Materials;
+				HYP_CHECK(After.SetReuses - Before.SetReuses == Count - 64);
+				HYP_CHECK(After.PipelineReuses - Before.PipelineReuses == Count - 64);
+			}
+		}
+		InTasks.Wait(Binding.Remove());
+	}
 }
 
 void CheckChangingObjectRetirement(FTaskSystem& InTasks, FRenderSession& InSession,
@@ -555,6 +593,7 @@ void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	State = {};
 	State.Resource = Resource;
 	CheckMultipleItems(Tasks, Session, State, Views[0]);
+	CheckEvaluationCapacity(Tasks, Session, State, Views[0]);
 	CheckChangingObjectRetirement(Tasks, Session, State, Views[0]);
 	CheckFamilyValidation(Tasks, Session, Views[0]);
 	CheckBoundsContract(Tasks, Session, Resource, Views[0]);
@@ -565,4 +604,6 @@ void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	Required.reset();
 	Resource.reset();
 	Session.Close();
+	const auto Closed = Session.GetResources().Statistics().Constants;
+	HYP_CHECK(Closed.LivePages == 0 && Closed.PageBytes == 0);
 }

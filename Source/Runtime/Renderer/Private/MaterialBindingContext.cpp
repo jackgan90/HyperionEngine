@@ -13,7 +13,7 @@ void ApplyDependencyOverrides(FResolvedMaterialParameters& InResult, const FMate
 {
 	for (const auto& Entry : InValues)
 	{
-		InResult.Dependencies[InSchema.Find(Entry.Name).Index] = MaterialScopeBit(InScope);
+		InResult.Dependencies.Set(InSchema.Find(Entry.Name).Index, MaterialScopeBit(InScope));
 	}
 }
 
@@ -76,11 +76,11 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
 	Result.Scopes[static_cast<std::size_t>(EMaterialScope::Material)] = {{Snapshot.Identity, Snapshot.Revision},
 	                                                                     InMaterial};
 	const auto& Parameters = Snapshot.Schema->GetParameters();
-	Result.Values.resize(Parameters.size());
-	Result.Dependencies.resize(Parameters.size(), MaterialScopeBit(EMaterialScope::Material));
+	Result.Values.Reset(Parameters.size());
+	Result.Dependencies.Reset(Parameters.size(), MaterialScopeBit(EMaterialScope::Material));
 	for (const auto& Value : Values)
 	{
-		Result.Values[Snapshot.Schema->Find(Value.Name).Index] = std::make_shared<const FMaterialValue>(Value.Value);
+		Result.Values.Set(Snapshot.Schema->Find(Value.Name).Index, std::make_shared<const FMaterialValue>(Value.Value));
 	}
 	for (std::size_t Index = 0; Index < Parameters.size(); ++Index)
 	{
@@ -92,16 +92,20 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
 			    Provider != Providers.end()
 			        ? Provider->second->Dependencies
 			        : MaterialScopeBit(Snapshot.Definition->GetSemantics().Find(Parameter.Semantic).Scope);
-			Result.Dependencies[Index] = Dependencies;
+			Result.Dependencies.Set(Index, Dependencies);
 			if (Provider == Providers.end() || !Provider->second->Value)
 			{
-				Result.Dependencies[Index] |= MaterialScopeBit(EMaterialScope::Material);
+				Result.Dependencies.Set(Index, Result.Dependencies[Index] | MaterialScopeBit(EMaterialScope::Material));
 			}
 		}
 	}
 	ApplyDependencyOverrides(Result, *Snapshot.Schema, Snapshot.Overrides, EMaterialScope::Material);
 	ApplyDependencyOverrides(Result, *Snapshot.Schema, InContext.ObjectParameters, EMaterialScope::Object);
 	ApplyDependencyOverrides(Result, *Snapshot.Schema, InContext.DrawParameters, EMaterialScope::Draw);
+	for (const auto Index : InPass.ActiveParameters)
+	{
+		Result.DependenciesMask |= Result.Dependencies[Index];
+	}
 	return Result;
 }
 } // namespace Hyperion

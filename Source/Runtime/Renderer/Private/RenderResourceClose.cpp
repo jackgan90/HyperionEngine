@@ -52,6 +52,7 @@ void FRenderResourceCoordinator::CloseNativeResources()
 			}
 			Stats.Constants = MaterialConstants->Statistics();
 			Stats.Constants.LivePages = 0;
+			Stats.Constants.PageBytes = 0;
 			MaterialConstants.reset();
 		}
 		Stats.LiveResources = 0;

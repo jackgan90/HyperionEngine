@@ -17,7 +17,7 @@ bool SameResources(const std::vector<std::shared_ptr<const FMaterialValue>>& InV
 		if (Binding.ResourceParameter)
 		{
 			if (Index >= InValues.size() ||
-			    !SameMaterialValue(InValues[Index++], InParameters.Values.at(*Binding.ResourceParameter)))
+			    !SameMaterialValue(InValues[Index++], InParameters.Values.Get(*Binding.ResourceParameter)))
 			{
 				return false;
 			}
@@ -113,7 +113,7 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 			if (!bSameParameters)
 			{
 				Cached.Packet.ConstantBindings =
-				    MaterialConstants->Bind(Program, *Compiled.Interface.Schema, *Resolved);
+				    MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program, *Resolved, Cached.Constants);
 				Cached.Parameters = Resolved;
 			}
 			return FinalizeDraw(Cached.Packet, InItem, InView, Pass);
@@ -139,19 +139,20 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	Result.FirstIndex = Section.FirstIndex;
 	Result.IndexCount = Section.IndexCount;
 	Result.Bindings = Bindings.Set;
-	Result.ConstantBindings = MaterialConstants->Bind(Program, *Compiled.Interface.Schema, Values);
+	FMaterialConstantState Constants;
+	Result.ConstantBindings = MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program, Values, Constants);
 	Result = FinalizeDraw(std::move(Result), InItem, InView, Pass);
 	std::vector<std::shared_ptr<const FMaterialValue>> ResourceValues;
 	for (const auto& Binding : Program.Bindings)
 	{
 		if (Binding.ResourceParameter)
 		{
-			ResourceValues.push_back(Resolved->Values.at(*Binding.ResourceParameter));
+			ResourceValues.push_back(Resolved->Values.Get(*Binding.ResourceParameter));
 		}
 	}
 	PreparedDraws.insert_or_assign(Key, FPreparedDraw{Resolved, ResourceIdentity, std::move(ResourceValues),
 	                                                  InItem.State.Resource, InItem.State.Surface, InTarget, bMirrored,
-	                                                  Result});
+	                                                  Result, std::move(Constants)});
 	return Result;
 }
 } // namespace Hyperion

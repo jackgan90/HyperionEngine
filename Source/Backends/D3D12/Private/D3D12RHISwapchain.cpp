@@ -361,17 +361,17 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	}
 	D3D12_VIEWPORT Viewport{View.X, View.Y, View.Width, View.Height, View.MinDepth, View.MaxDepth};
 	List->RSSetViewports(1, &Viewport);
+	FD3D12GraphicsBindingState BindingState;
 	for (const auto& Draw : InCommands.Draws)
 	{
 		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, P.State.get());
 		const auto& Vertices = NativeResource<FD3D12Buffer>(Draw.Vertices.Payload, P.State.get());
 		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, P.State.get());
 		List->SetPipelineState(Pipeline.Pipeline.Get());
-		List->SetGraphicsRootSignature(Pipeline.Root.Get());
 		List->IASetPrimitiveTopology(NativeTopology(Pipeline.Topology));
 		List->OMSetStencilRef(Draw.DynamicState.StencilReference);
 		List->OMSetBlendFactor(Draw.DynamicState.BlendConstants.data());
-		RecordGraphicsBindings(*List, Draw, Pipeline, *P.State);
+		RecordGraphicsBindings(*List, Draw, Pipeline, *P.State, BindingState);
 		D3D12_VERTEX_BUFFER_VIEW Vb{Vertices.Resource->GetGPUVirtualAddress(), static_cast<UINT>(Vertices.Size),
 		                            Draw.VertexStride};
 		D3D12_INDEX_BUFFER_VIEW Ib{Indices.Resource->GetGPUVirtualAddress(), static_cast<UINT>(Indices.Size),
@@ -383,6 +383,14 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		List->DrawIndexedInstanced(Draw.IndexCount, 1, Draw.FirstIndex, Draw.VertexOffset, 0);
 	}
 	List->EndEvent();
+	P.State->GraphicsRootBinds += BindingState.RootBinds;
+	P.State->GraphicsHeapBinds += BindingState.HeapBinds;
+	P.State->GraphicsConstantBinds += BindingState.ConstantBinds;
+	P.State->GraphicsTableBinds += BindingState.TableBinds;
+	HYP_PERF_PLOT(Rhi, GraphicsRootBinds, double(BindingState.RootBinds));
+	HYP_PERF_PLOT(Rhi, GraphicsHeapBinds, double(BindingState.HeapBinds));
+	HYP_PERF_PLOT(Rhi, GraphicsConstantBinds, double(BindingState.ConstantBinds));
+	HYP_PERF_PLOT(Rhi, GraphicsTableBinds, double(BindingState.TableBinds));
 #if HYP_ENABLE_PROFILING
 	EndD3D12Profile(*R);
 #endif

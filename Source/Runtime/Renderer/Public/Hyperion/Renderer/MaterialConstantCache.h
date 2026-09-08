@@ -11,9 +11,31 @@ struct FMaterialConstantStats
 	std::uint64_t Reuses{};
 	std::uint64_t PagesCreated{};
 	std::uint64_t PagesReset{};
+	std::uint64_t FullLookups{};
+	std::uint64_t PreparedReuses{};
+	std::uint64_t Evictions{};
 	std::size_t LivePages{};
 	std::size_t CachedBlocks{};
+	std::size_t CachedBytes{};
+	std::size_t PreparedBlocks{};
+	std::size_t PageBytes{};
 	std::array<std::uint64_t, MaterialScopeCount> ScopePacks{};
+};
+
+struct FMaterialConstantLimits
+{
+	std::size_t MaxBlocks = 4096;
+	std::size_t MaxBytes = 16 * 1024 * 1024;
+	std::size_t MaxPreparedBlocks = 512;
+};
+
+// Latest numeric state of one prepared draw; never owns scope tokens or an evaluation history.
+struct FMaterialConstantState
+{
+	std::weak_ptr<const FCompiledMaterialDefinition> Program;
+	const FCompiledMaterialPass* Pass{};
+	FMaterialValueTable Values;
+	std::vector<FConstantBinding> Bindings;
 };
 
 // RHI coordinator owns this cache. Methods and destruction stay on its construction thread.
@@ -21,7 +43,8 @@ struct FMaterialConstantStats
 class FMaterialConstantCache
 {
 public:
-	explicit FMaterialConstantCache(IRHIDevice& InDevice, std::uint32_t InPageSize = 65536);
+	explicit FMaterialConstantCache(IRHIDevice& InDevice, std::uint32_t InPageSize = 65536,
+	                                FMaterialConstantLimits InLimits = {});
 	~FMaterialConstantCache();
 	FMaterialConstantCache(const FMaterialConstantCache&) = delete;
 	FMaterialConstantCache& operator=(const FMaterialConstantCache&) = delete;
@@ -35,6 +58,12 @@ public:
 	FMaterialConstantStats Statistics() const;
 
 private:
+	friend struct FRenderResourceCoordinator;
+	// Only the coordinator can use identities from the engine's immutable preparation pipeline.
+	std::vector<FConstantBinding> BindPrepared(std::shared_ptr<const FCompiledMaterialDefinition> InProgram,
+	                                           const FCompiledMaterialPass& InPass,
+	                                           const FResolvedMaterialParameters& InParameters,
+	                                           FMaterialConstantState& InState);
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;
 };

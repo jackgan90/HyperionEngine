@@ -12,7 +12,7 @@ struct FRenderSession::FMaterialState
 	struct FViewEntry
 	{
 		FMaterialScopeInput Scope;
-		FMaterialParameterValues Values;
+		FMaterialInputValues Values;
 	};
 
 	std::uint64_t Identity{};

@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/MaterialConstantCache.h"
+#include "Hyperion/Renderer/MaterialPipeline.h"
 #include "Support/TestSupport.h"
 #include <fstream>
 
@@ -74,11 +75,126 @@ bool Same(const FConstantBinding& InA, const FConstantBinding& InB)
 	return InA.Slice.Buffer.Payload == InB.Slice.Buffer.Payload && InA.Slice.Offset == InB.Slice.Offset &&
 	       InA.Slice.Publication == InB.Slice.Publication;
 }
+
+void CheckEvictedPixels(IRHIDevice& InDevice, IRHISwapchain& InSwapchain, const FCompiledMaterialDefinition& InCompiled,
+                        const std::vector<FConstantBinding>& InBindings)
+{
+	const auto& Program = InCompiled.GetPass();
+	const auto Layout = InDevice.CreateBindingLayout(DescribeMaterialLayout(Program));
+	FDrawPacket Draw;
+	Draw.Pipeline = InDevice.CreatePipeline(DescribeMaterialPipeline(
+	    Program, InCompiled.Interface.Definition->GetPass(), Layout, {{"POSITION", 0, EVertexFormat::Float3, 0}},
+	    sizeof(FVec3), ERHIPrimitiveTopology::TriangleList, {}));
+	Draw.Bindings = InDevice.CreateBindingSet({Layout, {}});
+	Draw.ConstantBindings = InBindings;
+	const std::array<FVec3, 3> Vertices{{{-2, -2, 0}, {6, -2, 0}, {-2, 6, 0}}};
+	const std::array<std::uint32_t, 3> Indices{0, 1, 2};
+	Draw.Vertices = InDevice.CreateBuffer(std::as_bytes(std::span(Vertices)));
+	Draw.Indices = InDevice.CreateBuffer(std::as_bytes(std::span(Indices)));
+	Draw.VertexStride = sizeof(FVec3);
+	Draw.IndexCount = 3;
+	Draw.Scissor = {0, 0, 64, 64};
+	InSwapchain.BeginFrame({64, 64});
+	FPassCommands Pass;
+	Pass.Name = "Evicted constant snapshot";
+	Pass.TransitionFrom = EResourceState::Present;
+	Pass.TransitionTo = EResourceState::RenderTarget;
+	Pass.bClear = true;
+	Pass.Draws = {Draw};
+	FPassCommands Present;
+	Present.TransitionFrom = EResourceState::RenderTarget;
+	Present.TransitionTo = EResourceState::Present;
+	const std::array Lists{InSwapchain.Record(0, Pass), InSwapchain.Record(1, Present)};
+	const auto Image = InSwapchain.EndFrame(Lists, false, true);
+	HYP_CHECK(std::abs(Image.Rgba[(32 * 64 + 32) * 4] - .2f) < .01f);
+}
+
+void CheckConstantRecency(IRHIDevice& InDevice, const FCompiledMaterialDefinition& InCompiled)
+{
+	FMaterialInstance Instance(InCompiled.Interface);
+	FMaterialConstantCache Cache(InDevice, 65536, {8, 65536, 0});
+	auto Inputs = Context();
+	const auto View = static_cast<std::size_t>(EMaterialScope::View);
+	const auto Bind = [&](std::uint64_t InRevision)
+	{
+		Inputs.Scopes[View].Key.Revision = InRevision;
+		return Cache.Bind(InCompiled.GetPass(), *InCompiled.Interface.Schema,
+		                  ResolveMaterialBindingContext(Instance.Freeze(), InCompiled, InCompiled.GetPass(), Inputs));
+	};
+	const auto Frozen = Bind(1);
+	Bind(2);
+	Bind(3);
+	HYP_CHECK(Cache.Statistics().CachedBlocks == 8);
+	Bind(1); // Keep the oldest insertion hot; the two revision-2 blocks become the next victims.
+	Bind(4);
+	const auto Before = Cache.Statistics().Packs;
+	const auto Again = Bind(1);
+	Bind(3);
+	HYP_CHECK(Cache.Statistics().Packs == Before);
+	for (std::size_t Index = 0; Index < Frozen.size(); ++Index)
+	{
+		HYP_CHECK(Same(Frozen[Index], Again[Index]));
+	}
+	Bind(2);
+	HYP_CHECK(Cache.Statistics().Packs == Before + 2);
+	Cache.Clear();
+	Bind(5);
+	HYP_CHECK(Cache.Statistics().CachedBlocks == 4);
+}
+
+void CheckConstantBudget(IRHIDevice& InDevice, IRHISwapchain& InSwapchain,
+                         const FCompiledMaterialDefinition& InCompiled, FMaterialConstantLimits InLimits)
+{
+	FMaterialInstance Instance(InCompiled.Interface);
+	Instance.Set("Tint", FMaterialValue::Float(FVec4{.2f, .3f, .4f, 1}));
+	FMaterialConstantCache Cache(InDevice, 512, InLimits);
+	auto Inputs = Context();
+	const auto Bind = [&]
+	{
+		return Cache.Bind(InCompiled.GetPass(), *InCompiled.Interface.Schema,
+		                  ResolveMaterialBindingContext(Instance.Freeze(), InCompiled, InCompiled.GetPass(), Inputs));
+	};
+	auto Frozen = Bind();
+	const auto Publication = Frozen[0].Slice.Publication;
+	for (std::uint64_t Index = 0; Index < 512; ++Index)
+	{
+		// Keep all scope owners alive while both a stable key's value and another key's revision change.
+		Inputs.Scopes[static_cast<std::size_t>(EMaterialScope::View)].Key.Revision = Index + 2;
+		Inputs.Providers[0].Value = FMaterialValue::Float(FVec3{float(Index) * .001f, 0, 0});
+		Inputs.Providers[1].Value = FMaterialValue::Matrix(Translation({float(Index) * .001f, 0, 0}));
+		Inputs.Providers[2].Value = Inputs.Providers[1].Value;
+		Bind();
+		Cache.Collect();
+		const auto Stats = Cache.Statistics();
+		HYP_CHECK(Stats.CachedBlocks <= InLimits.MaxBlocks && Stats.CachedBytes <= InLimits.MaxBytes);
+		HYP_CHECK(Stats.LivePages <= 12);
+	}
+	HYP_CHECK(Cache.Statistics().Evictions > 0 && Frozen[0].Slice.Publication == Publication);
+	Cache.Clear();
+	HYP_CHECK(!Cache.CanRelease());
+	CheckEvictedPixels(InDevice, InSwapchain, InCompiled, Frozen);
+	Frozen.clear();
+	InSwapchain.WaitIdle();
+	Cache.Collect();
+	HYP_CHECK(Cache.CanRelease() && Cache.Statistics().LivePages == 1);
+	FMaterialConstantCache Uncached(InDevice, 512, {0, 0, 0});
+	for (std::uint64_t Index = 0; Index < 32; ++Index)
+	{
+		Inputs.Scopes[static_cast<std::size_t>(EMaterialScope::View)].Key.Revision = Index + 1000;
+		Uncached.Bind(InCompiled.GetPass(), *InCompiled.Interface.Schema,
+		              ResolveMaterialBindingContext(Instance.Freeze(), InCompiled, InCompiled.GetPass(), Inputs));
+		Uncached.Collect();
+	}
+	HYP_CHECK(Uncached.Statistics().CachedBlocks == 0 && Uncached.Statistics().LivePages == 1);
+}
 } // namespace
 
-void RunMaterialCacheTests(IRHIDevice& InDevice)
+void RunMaterialCacheTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 {
 	const auto Compiled = Compile();
+	CheckConstantRecency(InDevice, Compiled);
+	CheckConstantBudget(InDevice, InSwapchain, Compiled, {7, 16 * 1024 * 1024, 2});
+	CheckConstantBudget(InDevice, InSwapchain, Compiled, {4096, 7 * 256, 2});
 	FMaterialInstance Instance(Compiled.Interface);
 	FMaterialConstantCache Cache(InDevice, 512);
 	auto Inputs = Context();

@@ -8,10 +8,11 @@ using namespace Hyperion;
 
 void RunMaterialStateGpuTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialPackingGpuTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
-void RunMaterialCacheTests(IRHIDevice& InDevice);
+void RunMaterialCacheTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialGpuCacheTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialResourceTests(IRHIDevice& InDevice);
 void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
+void RunMaterialFrequencyTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 
 namespace
 {
@@ -182,7 +183,7 @@ FImage Render(FFixture& InFixture, const FDrawPacket& InDraw)
 	Draw.TransitionTo = EResourceState::RenderTarget;
 	Draw.bClear = true;
 	Draw.ClearColor = {0, 0, 0, 1};
-	Draw.Draws = {InDraw};
+	Draw.Draws = {InDraw, InDraw};
 	FPassCommands Invalid = Draw;
 	++Invalid.Draws.front().ConstantBindings.front().Slice.Offset;
 	Rejects(
@@ -201,9 +202,48 @@ FImage Render(FFixture& InFixture, const FDrawPacket& InDraw)
 	Present.Name = "Present";
 	Present.TransitionFrom = EResourceState::RenderTarget;
 	Present.TransitionTo = EResourceState::Present;
+	const auto Before = InFixture.Device->Statistics();
 	const std::array<FRecordedList, 2> Lists{InFixture.Swapchain->Record(0, Draw),
 	                                         InFixture.Swapchain->Record(1, Present)};
+	const auto After = InFixture.Device->Statistics();
+	HYP_CHECK(After.GraphicsRootBinds == Before.GraphicsRootBinds + 1);
+	HYP_CHECK(After.GraphicsHeapBinds == Before.GraphicsHeapBinds + 1);
+	HYP_CHECK(After.GraphicsConstantBinds == Before.GraphicsConstantBinds + InDraw.ConstantBindings.size());
 	return InFixture.Swapchain->EndFrame(Lists, false, true);
+}
+
+void CheckRootSwitch(FFixture& InFixture, const FDrawSetup& InSetup, FPipelineDesc InPipeline)
+{
+	const auto Before = InFixture.Device->Statistics();
+	FDrawPacket Other = InSetup.Draw;
+	auto OtherLayout = InSetup.Layout;
+	Other.ConstantBindings.push_back(
+	    {static_cast<std::uint32_t>(OtherLayout.Slots.size()), InSetup.Draw.ConstantBindings.front().Slice});
+	OtherLayout.Slots.push_back({ERHIBindingKind::ConstantBuffer, ERHIShaderVisibility::Pixel, 3, 0, 1, 16});
+	InPipeline.Layout = InFixture.Device->CreateBindingLayout(OtherLayout);
+	Other.Pipeline = InFixture.Device->CreatePipeline(InPipeline);
+	auto OtherSet = InSetup.Set;
+	OtherSet.Layout = InPipeline.Layout;
+	Other.Bindings = InFixture.Device->CreateBindingSet(OtherSet);
+	InFixture.Swapchain->BeginFrame({64, 64});
+	FPassCommands Pass;
+	Pass.Name = "Root switch and repeated arguments";
+	Pass.TransitionFrom = EResourceState::Present;
+	Pass.TransitionTo = EResourceState::RenderTarget;
+	Pass.bClear = true;
+	Pass.Draws = {InSetup.Draw, Other, InSetup.Draw, InSetup.Draw};
+	FPassCommands Present;
+	Present.TransitionFrom = EResourceState::RenderTarget;
+	Present.TransitionTo = EResourceState::Present;
+	const std::array Lists{InFixture.Swapchain->Record(0, Pass), InFixture.Swapchain->Record(1, Present)};
+	const auto Image = InFixture.Swapchain->EndFrame(Lists, false, true);
+	const auto After = InFixture.Device->Statistics();
+	HYP_CHECK(After.GraphicsRootBinds == Before.GraphicsRootBinds + 3);
+	HYP_CHECK(After.GraphicsHeapBinds == Before.GraphicsHeapBinds + 1);
+	HYP_CHECK(After.GraphicsConstantBinds ==
+	          Before.GraphicsConstantBinds + 3 * InSetup.Draw.ConstantBindings.size() + 1);
+	HYP_CHECK(std::abs(Image.Rgba[(32 * 64 + 32) * 4] - InSetup.ExpectedRed) < .01f);
+	HYP_CHECK(After.ValidationErrors == 0);
 }
 
 void CheckPixels(FFixture& InFixture, std::uint32_t InTextureCount)
@@ -256,6 +296,7 @@ void CheckPixels(FFixture& InFixture, std::uint32_t InTextureCount)
 	Pipeline.Layout = Setup.Set.Layout;
 	Setup.Draw.Pipeline = InFixture.Device->CreatePipeline(Pipeline);
 	const FImage Image = Render(InFixture, Setup.Draw);
+	CheckRootSwitch(InFixture, Setup, Pipeline);
 	const std::size_t Pixel = (32 * Image.Width + 32) * 4;
 	HYP_CHECK(std::abs(Image.Rgba[Pixel] - Setup.ExpectedRed) < .01F);
 	HYP_CHECK(std::abs(Image.Rgba[Pixel + 1] - .2F) < .01F);
@@ -340,10 +381,11 @@ int main()
 		CheckIntegerTextureRejection(Fixture);
 		RunMaterialStateGpuTests(*Fixture.Device, *Fixture.Swapchain);
 		RunMaterialPackingGpuTests(*Fixture.Device, *Fixture.Swapchain);
-		RunMaterialCacheTests(*Fixture.Device);
+		RunMaterialCacheTests(*Fixture.Device, *Fixture.Swapchain);
 		RunMaterialGpuCacheTests(*Fixture.Device, *Fixture.Swapchain);
 		RunMaterialResourceTests(*Fixture.Device);
 		RunMaterialSessionTests(*Fixture.Device, *Fixture.Swapchain);
+		RunMaterialFrequencyTests(*Fixture.Device, *Fixture.Swapchain);
 		std::cout << "PASS: material resource bindings, constant publication, descriptor rollback and GPU pixels\n";
 		return 0;
 	}

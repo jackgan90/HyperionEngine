@@ -22,6 +22,10 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	std::uint64_t DescriptorAllocations{};
 	std::uint64_t DescriptorCopies{};
 	std::uint64_t BindingSetsCreated{};
+	std::atomic_uint64_t GraphicsRootBinds{};
+	std::atomic_uint64_t GraphicsHeapBinds{};
+	std::atomic_uint64_t GraphicsConstantBinds{};
+	std::atomic_uint64_t GraphicsTableBinds{};
 	std::uint64_t PipelinesCreated{};
 	std::uint64_t ConstantBytesWritten{};
 	ComPtr<IDXGIFactory6> Factory;

@@ -12,7 +12,7 @@
 | `RHI` | 通用 buffer/view/slice、sampler、binding layout/set、pipeline、draw packet 和能力查询 |
 | `D3D12` | 原生状态转换、root signature、descriptor arena、上传和 fence 退休 |
 
-`FMaterialDefinition` 是不可变配置；改变 shader、defines、pass 或固定状态需要新 definition。`FMaterialInstance` 由一个 Main owner 编辑，`Set`、`Clear`、`ReplaceDefinition` 成功后产生新 revision，失败保留旧快照。Worker 私有 PBR 适配器可以在其唯一 owner 内临时构建实例，只发布 `Freeze()` 的不可变结果。跨线程和跨模型共享的是 `shared_ptr<const FMaterialSnapshot>`，Render 不读取可变实例。
+`FMaterialDefinition` 是不可变配置；改变 shader、defines、pass 或固定状态需要新 definition。`FMaterialInstance` 由一个 Main owner 编辑，内容变化的 `Set`、`Clear`、`ReplaceDefinition` 产生新 revision，失败保留旧快照；设置相同值或清除不存在的覆盖不复制快照。Worker 私有 PBR 适配器可以在其唯一 owner 内临时构建实例，只发布 `Freeze()` 的不可变结果。跨线程和跨模型共享的是 `shared_ptr<const FMaterialSnapshot>`，Render 不读取可变实例。
 
 texture/read-buffer source 拥有字节副本和不可复用的 identity/version；更改内容要创建新 source。GPU 资源在各 session/device 内共享，按源身份、编码、view 范围、数组次序和 sampler 值区分，不做跨导入副本的内容哈希去重。CPU Scene 直接依赖 Materials，仍无 Renderer/RHI 的直接或传递依赖。
 
@@ -79,21 +79,27 @@ DXIL 原生反射会将直接多维数组展平为总元素数，自动 schema �
 | Pass | `FRenderView.PassParameters`，限定于 frame/family/view 的这次用途 |
 | Material | instance snapshot identity/revision |
 | Object | primitive 的 World/normal/orientation、`ObjectInputs`，以及发射 item 的稳定身份和实际内容 |
-| Draw | `FRenderItem.DrawInputs`，限定于 frame/family/view 和当前 item；`DrawParameters` 是按参数名覆盖 |
+| Draw | `FRenderItem.DrawInputs`，限定于 frame/family/view、primitive 的 Scene/Slot/Generation、LocalItemId 是否存在及其值和当前 ordinal；`DrawParameters` 是按参数名覆盖 |
 
 `GetProviders().Register` 只用于首次冻结前配置；provider 显式声明全部依赖 scope，只接收这些 scope 的 owned inputs。View×Object 派生矩阵同时依赖二者。`ObjectInputs`/`DrawInputs` 使用 semantic 名称；`ObjectParameters`、`SectionParameters`、`DrawParameters` 使用 schema 参数名，二者不混用。
 
 参数解析顺序是 default → semantic provider → instance → Object → Draw。每次覆盖都检查类型、`OverridePolicy` 和 `OverrideScopes`。Engine semantic 默认 Locked，PBR semantic 默认允许手动设置。`Clear` 去除该层覆盖，恢复较低层值；不会把参数写成零。缺少活跃且 required 的值会产生明确错误，inactive 参数不触发缺失错误。
 
-provider 返回空值仍保留全部声明依赖，保证原先采用 default 的参数在输入随后出现时重新求值。内置 provider 缓存只比较其实际读取的同名值；custom callback 仍比较全部声明 scope 的输入。同一组完整 scope key 只保留当前输入结果，内容变化替换旧项，过期 token 在 Collect 回收；`ProviderStatistics().CachedEntries` 可直接检查历史项是否退休。float/vector/matrix helper 保留有限 float32 的原始位模式，包括正负零。
+provider 返回空值仍保留全部声明依赖，保证原先采用 default 的参数在输入随后出现时重新求值。内置 provider 缓存只保存实际读取的同名值及弱输入身份，不延长无关 texture/buffer 的寿命；custom callback 仍比较全部声明 scope 的输入。同一组完整 scope key 只保留当前输入结果，内容变化替换旧项，过期 token 在 Collect 回收。默认预算为 4096 条、16 MiB 值树估算字节，超限淘汰最近最少访问项；估算包含输入、输出和 qualifiers，不包含外部共享资源载荷及全部分配器开销。`ProviderStatistics()` 提供 `CachedEntries/CachedValueBytes/Evictions`。float/vector/matrix helper 保留有限 float32 的原始位模式，包括正负零。
+
+冻结输入采用 `FMaterialInputValues`：构造或整体替换时验证并排序，之后通过 `Get()` 只读访问；复制共享不可变值树。Global/Scene 写入相同内容时保留 scope revision/token。provider callback 仍返回 `optional<FMaterialValue>`，求值结果用 `FMaterialSharedValue` 共享；scope key 的 qualifiers 通过 `GetQualifiers/SetQualifiers` 访问。直接使用 Renderer 解析接口时，Values/Dependencies 表用 `Reset/Get/Set` 访问：每页 8 项的 copy-on-write 存储共享未变内容，前 4 页引用内联，更多参数使用扩展页，不限制材质参数数量。
 
 标准块 `HyperionViewV1`（80 字节）、`HyperionObjectV1`（144）、`HyperionMaterialV1`（96）、`HyperionSceneV1`（48）见 `shaders/MaterialBlocks.hlsli`。标准块按完整版本化 ABI 校验，包括被优化掉的成员；用户自定义块按各目标反射打包，不要求使用标准名称。CPU 数值矩阵采用逻辑行序，打包器处理目标 major/stride，padding 清零。
 
-相同有效 layout、成员映射、值和完整 scope dependency 复用实际的 GPU buffer/offset。相机变化只更新依赖该 View 的数据；只改 Object 不重建纹理 descriptor set。混合 cbuffer 的任意依赖变化都会得到新 slice。发布的常量区域不可覆写，旧 frame 持有旧 slice；空闲整页在无引用时回收，允许保留一页供后续使用。`Resources.Statistics()` 提供 pack/upload/reuse、`CachedBlocks` 和资源计数，`Session.ProviderStatistics()` 在 Render 查询 provider 统计。
+相同有效 layout、成员映射、值和完整 scope dependency 可复用实际的 GPU buffer/offset。引擎准备路径另外按不可变程序及值身份复用未变块；scope 改变但最终数值相同时，也可安全复用原 slice。公共 `FMaterialConstantCache::Bind` 保留完整内容检查，接受同 key 下不同值并返回新 slice。相机变化只求值依赖 View 的参数；Frame/Pass/Draw 同样增量更新。混合 Object×View provider 在派生矩阵更新后求值。纯数值变化保留资源身份，不重新查询纹理 descriptor set 或 PSO；资源值或其依赖 owner 变化则失效。混合 cbuffer 中任一成员的有效数值变化时整块重新打包，不依赖标准块名称。
+
+常量候选缓存默认最多 4096 块、16 MiB 对齐 slice extent；同一完整逻辑 key 的新值替换旧记录，超限按最近最少访问淘汰。跨 draw 准备快表最多 512 块，每个活跃 prepared draw 只保存当前块状态；它们不保留 scope token 或解析历史链。64 KiB 页面将 View/Pass/Frame/Draw 与长期输入分组。发布的常量区域不可覆写，淘汰只释放缓存引用，旧 frame/fence 继续持有旧 slice；空闲整页在无引用时回收，最多保留一页。`Resources.Statistics().Constants` 提供 `FullLookups/PreparedReuses/Evictions/CachedBlocks/CachedBytes/PreparedBlocks/PageBytes`。候选预算不限制外部保存帧、活跃 draw 或 GPU 在途页面，`PageBytes` 才是实际页面容量。
 
 稳定 `LocalItemId` 的 primitive 持有有界的 CPU 参数解析缓存（最多 64 个 item/view 组合），键检查 snapshot、接口、usage、全部有效依赖的 identity/revision/内容，以及名称覆盖；稳定输入先检查，再构造派生矩阵/参数，World 按位比较以保留 shader 可观察的正负零差异；primitive 发布更新会替换缓存。Object scope 另按稳定 item 的实际 World、provider inputs 和名称覆盖维护有界 token，即使自定义发射器不改变 primitive revision，内容变化也会退休旧 token。RHI coordinator 用弱 CPU ownership 关联已准备的 draw packet，目标、镜像方向、geometry section 和材质不匹配时重新准备，动态状态和 scissor 每次应用。依赖 Draw/Frame/Pass 的值仍按相应频率失效。场景队列排序只移动索引，最终一次性移动完整 item，保持透明及等深稳定次序。
 
 正常 session 自动安排缓存回收。独立使用 `FMaterialConstantCache` 时，调用方需在 scope 退休和 GPU 完成资源采集后调用 `Collect()`；返回 true 表示还有无 CPU cache owner 的页面被 packet/fence 保留，需要继续采集。`Bind()` 不扫描无关条目，仍活跃的 scope 不触发持续空闲轮询。
+
+Object token 和参数解析缓存各自以 64 条为上限，插入压力下按最近访问帧淘汰，但保留本帧已访问的条目；本帧热集已满时，额外 item 直接求值而不加入缓存。这样重复扫描 65/128 项仍可复用已保留的 64 项，工作集更换后也能替换冷条目。完整复用与增量刷新都会更新 Object token 的访问帧。Provider 与常量候选使用独立访问顺序索引，O(1) 选择受害条目及更新顺序、O(log N) 定位并删除桶，不在每次逐出时遍历全表；同 key 替换、Collect 和 Clear 同步维护索引和统计。关闭资源服务后 `LivePages` 与 `PageBytes` 均为零，累计计数保留。活跃纹理、pipeline、descriptor 和 prepared draw 继续按租约及 fence 生命周期回收；本轮预算针对高频更新历史，不是整个资源系统的内存硬上限。
 
 ## Pass、能力与绘制边界
 

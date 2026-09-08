@@ -21,6 +21,7 @@ std::uint32_t ChangedEngineScopes(const FMaterialEvaluationCache::FEntry& InEntr
 		if (Scope != ScopeIndex(EMaterialScope::Object) && Scope != ScopeIndex(EMaterialScope::Material) &&
 		    (InEntry.Dependencies & (1U << Scope)) &&
 		    (InEntry.Inputs.Scopes[Scope].Key != InInputs.Scopes[Scope].Key ||
+		     InEntry.Inputs.Scopes[Scope].Lifetime != InInputs.Scopes[Scope].Lifetime ||
 		     InEntry.Inputs.Values[Scope] != InInputs.Values[Scope]))
 		{
 			Changed |= 1U << Scope;
@@ -33,25 +34,22 @@ void CommitEvaluation(FMaterialEvaluationCache::FEntry& InEntry, const FMaterial
                       std::uint32_t InChanged, FResolvedMaterialParameters InValues,
                       const FCompiledMaterialPass& InPass)
 {
-	struct FScopeUpdate
-	{
-		std::size_t Index{};
-		FMaterialScopeInput Scope;
-		FMaterialParameterValues Values;
-	};
-
-	std::vector<FScopeUpdate> Updates;
+	HYP_PERF_SCOPE_C(Detail, CommitMaterialEvaluation);
 	std::uint32_t Dependencies{};
 	for (const auto Index : InPass.ActiveParameters)
 	{
 		Dependencies |= InValues.Dependencies[Index];
 	}
+	InValues.DependenciesMask = Dependencies;
 	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
 	{
 		if ((InChanged & (1U << Scope)) != 0)
 		{
 			InValues.Scopes[Scope] = InInputs.Scopes[Scope];
-			Updates.push_back({Scope, InInputs.Scopes[Scope], InInputs.Values[Scope]});
+		}
+		if ((Dependencies & (1U << Scope)) == 0)
+		{
+			InValues.Scopes[Scope] = {};
 		}
 	}
 	if ((Dependencies & MaterialScopeBit(EMaterialScope::Material)) != 0)
@@ -61,91 +59,161 @@ void CommitEvaluation(FMaterialEvaluationCache::FEntry& InEntry, const FMaterial
 	}
 	auto Resolved = std::make_shared<const FResolvedMaterialParameters>(std::move(InValues));
 	// All allocating and validating work finishes before replacing the last valid cached evaluation.
-	for (auto& Update : Updates)
+	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
 	{
-		InEntry.Inputs.Scopes[Update.Index] = std::move(Update.Scope);
-		InEntry.Inputs.Values[Update.Index] = std::move(Update.Values);
+		if ((Dependencies & (1U << Scope)) == 0)
+		{
+			InEntry.Inputs.Scopes[Scope] = {};
+			InEntry.Inputs.Values[Scope] = {};
+		}
+		else if ((InChanged & (1U << Scope)) != 0)
+		{
+			InEntry.Inputs.Scopes[Scope] = InInputs.Scopes[Scope];
+			InEntry.Inputs.Values[Scope] = InInputs.Values[Scope];
+		}
 	}
 	InEntry.Dependencies = Dependencies;
 	InEntry.Resolved = std::move(Resolved);
 }
-} // namespace
 
-bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMaterialProviderInputs& InInputs,
-                               const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
-                               FMaterialProviderRegistry& InProviders)
+struct FMaterialInputRefresh
 {
-	HYP_PERF_SCOPE_C(Detail, RefreshMaterialEvaluation);
-	if (!InItem.EvaluationCache || !InItem.LocalItemId)
+	const FMaterialProviderInputs& Base;
+	std::optional<FMaterialProviderInputs> Derived;
+	std::uint32_t Changed{};
+	bool bObjectChanged{};
+
+	const FMaterialProviderInputs& Get() const
 	{
-		return false;
+		return Derived ? *Derived : Base;
 	}
-	const auto It = InItem.EvaluationCache->Entries.find({*InItem.LocalItemId, InView.Identity});
-	if (It == InItem.EvaluationCache->Entries.end())
+};
+
+FMaterialInputRefresh PrepareInputRefresh(const FMaterialEvaluationCache::FEntry& InEntry, const FRenderItem& InItem,
+                                          const FRenderSceneSnapshot& InSnapshot,
+                                          const FMaterialProviderInputs& InBaseInputs,
+                                          const FRenderResourceService& InResources)
+{
+	FMaterialInputRefresh Result{InBaseInputs};
+	if ((InEntry.Dependencies & MaterialScopeBit(EMaterialScope::Draw)) != 0)
 	{
-		return false;
+		Result.Derived.emplace(InBaseInputs);
+		FillMaterialDrawInputs(*Result.Derived, InItem, InSnapshot);
 	}
-	auto& Entry = It->second;
-	// Only refresh engine scopes when the compiled program, overrides and emitted object are unchanged.
-	// Transient Draw/Pass/Frame consumers retain the complete validation path in Matches.
-	if (Entry.Snapshot != InItem.State.Surface->GetSnapshot() || Entry.Compiled != InCompiled ||
-	    Entry.Usage != InView.Usage ||
-	    !Entry.Matches(InInputs, InItem.Context.ObjectParameters, InItem.DrawParameters, InItem.State.World,
-	                   InItem.State.bClipSpace, InItem.State.ObjectInputs, ~0U))
+	Result.Changed = ChangedEngineScopes(InEntry, Result.Get());
+	Result.bObjectChanged = std::bit_cast<std::array<std::uint32_t, 16>>(InEntry.World.Values) !=
+	                            std::bit_cast<std::array<std::uint32_t, 16>>(InItem.State.World.Values) ||
+	                        InEntry.bClipSpace != InItem.State.bClipSpace ||
+	                        InEntry.ObjectInputs != InItem.State.ObjectInputs;
+	if (Result.bObjectChanged)
 	{
-		return false;
+		Result.Changed |= MaterialScopeBit(EMaterialScope::Object);
 	}
-	const auto Changed = ChangedEngineScopes(Entry, InInputs);
-	const auto& Parameters = InCompiled->Interface.Schema->GetParameters();
-	std::vector<std::size_t> Indices;
-	std::vector<std::string> Semantics;
-	for (const auto Index : InCompiled->GetPass(InView.Usage).ActiveParameters)
+	bool bNeedsObject = false;
+	for (const auto Index : InEntry.ProviderParameters)
 	{
-		if ((Entry.Resolved->Dependencies[Index] & Changed) != 0)
+		bNeedsObject |= (InEntry.Resolved->Dependencies[Index] & Result.Changed) != 0 &&
+		                (InEntry.Resolved->Dependencies[Index] & MaterialScopeBit(EMaterialScope::Object)) != 0;
+	}
+	if (bNeedsObject || (Result.bObjectChanged && (InEntry.Dependencies & MaterialScopeBit(EMaterialScope::Object))))
+	{
+		if (!Result.Derived)
 		{
-			// A provider mixing Object and View may read derived WVP; rebuild those object inputs on the full path.
-			if (Parameters[Index].Source != EMaterialParameterSource::Semantic ||
-			    (Entry.Resolved->Dependencies[Index] & MaterialScopeBit(EMaterialScope::Object)) != 0)
-			{
-				return false;
-			}
-			Indices.push_back(Index);
-			Semantics.push_back(Parameters[Index].Semantic);
+			Result.Derived.emplace(InBaseInputs);
 		}
+		FillMaterialObjectInputs(*Result.Derived, InItem, InSnapshot, InResources);
 	}
-	const auto Providers = InProviders.Evaluate(InInputs, Semantics);
-	FResolvedMaterialParameters Values = *Entry.Resolved;
-	for (const auto Index : Indices)
+	return Result;
+}
+
+FResolvedMaterialParameters EvaluateChangedParameters(const FMaterialEvaluationCache::FEntry& InEntry,
+                                                      const FMaterialParameterSchema& InSchema,
+                                                      const FCompiledMaterialPass& InPass,
+                                                      const FMaterialProviderInputs& InInputs, std::uint32_t InChanged,
+                                                      FMaterialProviderRegistry& InProviders)
+{
+	HYP_PERF_SCOPE_C(Detail, EvaluateChangedParameters);
+	const auto& Parameters = InSchema.GetParameters();
+	FResolvedMaterialParameters Values = *InEntry.Resolved;
+	for (const auto Index : InEntry.ProviderParameters)
 	{
+		if ((InEntry.Resolved->Dependencies[Index] & InChanged) == 0)
+		{
+			continue;
+		}
 		const auto& Parameter = Parameters[Index];
-		const auto Provider = std::find_if(Providers.begin(), Providers.end(),
-		                                   [&](const auto& InProvider)
-		                                   {
-			                                   return InProvider.Semantic == Parameter.Semantic;
-		                                   });
-		if (Provider == Providers.end())
+		const auto Provider = InProviders.EvaluateOne(InInputs, Parameter.Semantic);
+		const auto Value =
+		    Provider.Value ? Provider.Value.Share()
+		                   : (Parameter.Default ? std::make_shared<const FMaterialValue>(*Parameter.Default) : nullptr);
+		if (!SameMaterialValue(Values.Values[Index], Value))
 		{
-			return false;
+			Values.Values.Set(Index, Value);
 		}
-		const auto& Value = Provider->Value ? Provider->Value : Parameter.Default;
-		Values.Values[Index] = Value ? std::make_shared<const FMaterialValue>(*Value) : nullptr;
-		Values.Dependencies[Index] =
-		    Provider->Dependencies | (Provider->Value ? 0U : MaterialScopeBit(EMaterialScope::Material));
+		Values.Dependencies.Set(Index, Provider.Dependencies |
+		                                   (Provider.Value ? 0U : MaterialScopeBit(EMaterialScope::Material)));
 		if ((!Values.Values[Index] && Parameter.bRequired) ||
 		    (Values.Values[Index] && Values.Values[Index]->Type != Parameter.Type))
 		{
 			throw std::invalid_argument("Missing or incompatible material input: " + Parameter.Name);
 		}
 	}
-	for (const auto& Binding : InCompiled->GetPass(InView.Usage).Bindings)
+	for (const auto& Binding : InPass.Bindings)
 	{
-		if (Binding.ResourceParameter && (Entry.Resolved->Dependencies[*Binding.ResourceParameter] & Changed) != 0)
+		if (Binding.ResourceParameter && (InEntry.Resolved->Dependencies[*Binding.ResourceParameter] & InChanged) != 0)
 		{
 			Values.ResourceIdentity = std::make_shared<const int>(0);
 			break;
 		}
 	}
-	CommitEvaluation(Entry, InInputs, Changed, std::move(Values), InCompiled->GetPass(InView.Usage));
+	return Values;
+}
+
+} // namespace
+
+bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& InSnapshot,
+                               const FMaterialProviderInputs& InBaseInputs, const FRenderResourceService& InResources,
+                               const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
+                               FMaterialProviderRegistry& InProviders)
+{
+	HYP_PERF_SCOPE_C(Detail, RefreshMaterialEvaluation);
+	const auto& View = InSnapshot.View;
+	if (!InItem.EvaluationCache || !InItem.LocalItemId)
+	{
+		return false;
+	}
+	const auto It = InItem.EvaluationCache->Entries.find({*InItem.LocalItemId, View.Identity});
+	if (It == InItem.EvaluationCache->Entries.end())
+	{
+		return false;
+	}
+	auto& Entry = It->second;
+	// Authoring/program changes use complete validation. Scope changes use incremental evaluation.
+	if (Entry.Snapshot != InItem.State.Surface->GetSnapshot() || Entry.Compiled != InCompiled ||
+	    Entry.Usage != View.Usage ||
+	    !Entry.Matches(InBaseInputs, InItem.Context.ObjectParameters, InItem.DrawParameters, InItem.State.World,
+	                   InItem.State.bClipSpace, InItem.State.ObjectInputs, ~0U))
+	{
+		return false;
+	}
+	const auto Refresh = PrepareInputRefresh(Entry, InItem, InSnapshot, InBaseInputs, InResources);
+	const auto& Pass = InCompiled->GetPass(View.Usage);
+	auto Values = EvaluateChangedParameters(Entry, *InCompiled->Interface.Schema, Pass, Refresh.Get(), Refresh.Changed,
+	                                        InProviders);
+	std::optional<FMaterialParameterValues> ObjectInputs;
+	if (Refresh.bObjectChanged)
+	{
+		ObjectInputs = InItem.State.ObjectInputs;
+	}
+	CommitEvaluation(Entry, Refresh.Get(), Refresh.Changed, std::move(Values), Pass);
+	Entry.World = InItem.State.World;
+	Entry.AccessFrame = InSnapshot.Frame->Frame;
+	InItem.EvaluationCache->TouchObject(*InItem.LocalItemId, Entry.AccessFrame);
+	Entry.bClipSpace = InItem.State.bClipSpace;
+	if (ObjectInputs)
+	{
+		Entry.ObjectInputs = std::move(*ObjectInputs);
+	}
 	InItem.ResolvedParameters = Entry.Resolved;
 	return true;
 }

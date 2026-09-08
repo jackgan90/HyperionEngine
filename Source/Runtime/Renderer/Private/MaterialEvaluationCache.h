@@ -13,9 +13,18 @@ struct FMaterialEvaluationCache
 		FMaterialScopeInput Scope;
 		FMaterialParameterValues Inputs;
 		FMaterialParameterValues Overrides;
+		std::uint64_t AccessFrame{};
 	};
 
 	std::map<std::uint64_t, FObjectEntry> Objects;
+
+	void TouchObject(std::uint64_t InLocalItemId, std::uint64_t InFrame)
+	{
+		if (const auto It = Objects.find(InLocalItemId); It != Objects.end())
+		{
+			It->second.AccessFrame = InFrame;
+		}
+	}
 
 	struct FEntry
 	{
@@ -30,18 +39,19 @@ struct FMaterialEvaluationCache
 		bool bClipSpace{};
 		std::shared_ptr<const FResolvedMaterialParameters> Resolved;
 		std::uint32_t Dependencies{};
+		std::vector<std::size_t> ProviderParameters;
+		std::uint64_t AccessFrame{};
 
 		bool Matches(const FMaterialProviderInputs& InInputs, const FMaterialParameterValues& InObject,
 		             const FMaterialParameterValues& InDraw, const FMat4& InWorld, bool bInClipSpace,
 		             const FMaterialParameterValues& InObjectInputs, std::uint32_t InIgnoredScopes = 0) const
 		{
-			const auto Transient = MaterialScopeBit(EMaterialScope::Frame) | MaterialScopeBit(EMaterialScope::Pass) |
-			                       MaterialScopeBit(EMaterialScope::Draw);
-			if ((Dependencies & Transient) || Object != InObject || Draw != InDraw)
+			if ((Dependencies & ~InIgnoredScopes & MaterialScopeBit(EMaterialScope::Draw)) || Object != InObject ||
+			    Draw != InDraw)
 			{
 				return false;
 			}
-			if ((Dependencies & MaterialScopeBit(EMaterialScope::Object)) &&
+			if ((Dependencies & ~InIgnoredScopes & MaterialScopeBit(EMaterialScope::Object)) &&
 			    (std::bit_cast<std::array<std::uint32_t, 16>>(World.Values) !=
 			         std::bit_cast<std::array<std::uint32_t, 16>>(InWorld.Values) ||
 			     bClipSpace != bInClipSpace || ObjectInputs != InObjectInputs))
@@ -58,6 +68,7 @@ struct FMaterialEvaluationCache
 				}
 				if ((Dependencies & ~InIgnoredScopes & (1U << Scope)) &&
 				    (Inputs.Scopes[Scope].Key != InInputs.Scopes[Scope].Key ||
+				     Inputs.Scopes[Scope].Lifetime != InInputs.Scopes[Scope].Lifetime ||
 				     Inputs.Values[Scope] != InInputs.Values[Scope]))
 				{
 					return false;
@@ -71,7 +82,14 @@ struct FMaterialEvaluationCache
 };
 struct FRenderItem;
 struct FRenderView;
-bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMaterialProviderInputs& InInputs,
+struct FRenderSceneSnapshot;
+class FRenderResourceService;
+void FillMaterialObjectInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
+                              const FRenderSceneSnapshot& InSnapshot, const FRenderResourceService& InResources);
+void FillMaterialDrawInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
+                            const FRenderSceneSnapshot& InSnapshot);
+bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& InSnapshot,
+                               const FMaterialProviderInputs& InInputs, const FRenderResourceService& InResources,
                                const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
                                FMaterialProviderRegistry& InProviders);
 } // namespace Hyperion

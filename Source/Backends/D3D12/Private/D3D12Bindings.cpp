@@ -298,17 +298,38 @@ void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& I
 }
 
 void RecordGraphicsBindings(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw,
-                            const FD3D12Pipeline& InPipeline, const FD3D12DeviceState& InState)
+                            const FD3D12Pipeline& InPipeline, const FD3D12DeviceState& InState,
+                            FD3D12GraphicsBindingState& InBindings)
 {
 	HYP_PERF_SCOPE_C(Detail, RecordGraphicsBindings);
 	const FD3D12BindingLayout& Layout = NativeResource<FD3D12BindingLayout>(InPipeline.Layout.Payload, &InState);
-	ID3D12DescriptorHeap* Heaps[] = {InState.ResourceTables.GetHeap(), InState.SamplerTables.GetHeap()};
-	InList.SetDescriptorHeaps(2, Heaps);
+	if (InBindings.Root != InPipeline.Root.Get())
+	{
+		InList.SetGraphicsRootSignature(InPipeline.Root.Get());
+		InBindings.Root = InPipeline.Root.Get();
+		InBindings.Constants.fill(0);
+		InBindings.Tables.fill(0);
+		++InBindings.RootBinds;
+	}
+	const std::array<ID3D12DescriptorHeap*, 2> Heaps{InState.ResourceTables.GetHeap(), InState.SamplerTables.GetHeap()};
+	if (InBindings.Heaps != Heaps)
+	{
+		InList.SetDescriptorHeaps(2, Heaps.data());
+		InBindings.Heaps = Heaps;
+		InBindings.Tables.fill(0);
+		++InBindings.HeapBinds;
+	}
 	for (const FConstantBinding& Constant : InDraw.ConstantBindings)
 	{
 		const FD3D12Buffer& Buffer = NativeResource<FD3D12Buffer>(Constant.Slice.Buffer.Payload, &InState);
-		InList.SetGraphicsRootConstantBufferView(Layout.Slots[Constant.Slot].RootParameter,
-		                                         Buffer.Resource->GetGPUVirtualAddress() + Constant.Slice.Offset);
+		const auto Root = Layout.Slots[Constant.Slot].RootParameter;
+		const auto Address = Buffer.Resource->GetGPUVirtualAddress() + Constant.Slice.Offset;
+		if (InBindings.Constants.at(Root) != Address)
+		{
+			InList.SetGraphicsRootConstantBufferView(Root, Address);
+			InBindings.Constants[Root] = Address;
+			++InBindings.ConstantBinds;
+		}
 	}
 	if (InDraw.Bindings)
 	{
@@ -316,8 +337,14 @@ void RecordGraphicsBindings(ID3D12GraphicsCommandList& InList, const FDrawPacket
 		for (std::size_t Index = 0; Index < Layout.Tables.size(); ++Index)
 		{
 			const auto& Arena = Layout.Tables[Index].bSampler ? InState.SamplerTables : InState.ResourceTables;
-			InList.SetGraphicsRootDescriptorTable(Layout.Tables[Index].RootParameter,
-			                                      Arena.Gpu(Set.Tables[Index].Offset));
+			const auto Root = Layout.Tables[Index].RootParameter;
+			const auto Handle = Arena.Gpu(Set.Tables[Index].Offset);
+			if (InBindings.Tables.at(Root) != Handle.ptr)
+			{
+				InList.SetGraphicsRootDescriptorTable(Root, Handle);
+				InBindings.Tables[Root] = Handle.ptr;
+				++InBindings.TableBinds;
+			}
 		}
 	}
 }

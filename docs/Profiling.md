@@ -63,6 +63,8 @@ void UpdateMaterial()
 
 材质 reuse/refresh/full 的计数在一次 view 准备中使用局部变量累计；provider 与常量/绑定/PSO 缓存使用已有累计计数的差值。`SceneDraws` 表示该 Viewer 帧实际场景 draw。当前 Viewer 一帧一个 view，因此这些 plot 每帧一组；多 view 调用者会每 view 发布一组，应按时间和 view 准备 scope 解读。Full 计数包含进入完整求值后失败的尝试，Refresh scope 包含未能使用快速刷新路径的尝试。
 
+材质优化新增 `ConstantFullLookups/ConstantPreparedReuses/ConstantEvictions` 和 `ProviderEvictions` 增量计数，以及 `ConstantCachedBlocks/ConstantCachedBytes/ConstantPreparedBlocks/ConstantPageBytes`、`ProviderCachedEntries/ProviderCachedValueBytes` 存量。候选常量字节为对齐后的 slice extent；provider 字节为 owned value-tree 估算，均不能代替进程 Private Bytes。`ConstantPageBytes` 包括外部旧帧与活跃 draw 保留的完整页面。原生 `GraphicsRootBinds/GraphicsHeapBinds/GraphicsConstantBinds/GraphicsTableBinds` 每次 list 录制发布实际命令数；同一帧有多个 pass/list 时需要汇总，不能拿单个 plot 样本当作每帧数量。详细对照见 [材质性能优化](MaterialPerformance.md)。
+
 CPU scope 是包含子 scope 的墙钟区间；不同线程的总时间不能直接相加当作帧耗时。Worker 在 oneTBB 主动挂起前关闭所有引擎 scope，恢复后重新打开 execution segment 并保留注释；6 秒挂起会显示为前后两个短段。段内仍可能发生 OS 抢占或阻塞，不是纯 on-CPU 时间。Render/RHI 专属线程的同步等待保留为墙钟等待区间。frame CSV 和 GUI 曲线包含 Present 等待，也不等同于 GPU 时间。
 
 GPU 使用 Direct3D12 队列时间戳与 clock calibration，单独显示静态 `GraphicsPass` 轨道，通过 CPU 录制时间关联各 pass。当前最多两个 frame 槽，每槽一个 32-query heap 和 readback buffer；每个 recording context 两个 timestamp。查询包跟随已提交 list 的现有 fence 回收，正常帧推进、Idle 和失败 Present drain 都能收集；不会为 profiling 新增 fence、wait 或 flush。未提交的取消录制不发布 GPU span，旧连接的数据不会进入新连接。槽仍被外部保存的旧 list 占用、查询分配失败或硬件不支持时跳过 telemetry，渲染继续。精度受 GPU 时钟周期与校准误差约束。

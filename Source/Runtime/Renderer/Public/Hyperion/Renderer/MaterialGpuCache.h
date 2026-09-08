@@ -44,6 +44,8 @@ public:
 	                                        std::span<const std::shared_ptr<const FMaterialValue>> InValues,
 	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
 	FPipeline GetPipeline(const FPipelineDesc& InDescription, const FMaterialResourceOwners& InOwners);
+	FMaterialResourceBindings BindResources(const FCompiledMaterialPass& InPass, const FMaterialValueTable& InValues,
+	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
 	FPipeline GetMaterialPipeline(const FCompiledMaterialPass& InProgram, const FMaterialPass& InPass,
 	                              const FResourceBindingLayout& InLayout,
 	                              const std::vector<FVertexAttribute>& InAttributes, std::uint32_t InStride,

@@ -1,6 +1,7 @@
 #include "Hyperion/Renderer/MaterialProviders.h"
 #include <algorithm>
 #include <atomic>
+#include <list>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -9,14 +10,13 @@ namespace Hyperion
 {
 const FMaterialValue* FMaterialProviderInputs::Find(EMaterialScope InScope, std::string_view InName) const
 {
-	for (const auto& Entry : Values.at(static_cast<std::size_t>(InScope)))
-	{
-		if (Entry.Name == InName)
-		{
-			return &Entry.Value;
-		}
-	}
-	return nullptr;
+	const auto& Entries = Values.at(static_cast<std::size_t>(InScope)).Get();
+	const auto It = std::lower_bound(Entries.begin(), Entries.end(), InName,
+	                                 [](const auto& InEntry, std::string_view InKey)
+	                                 {
+		                                 return InEntry.Name < InKey;
+	                                 });
+	return It != Entries.end() && It->Name == InName ? &It->Value : nullptr;
 }
 
 struct FMaterialProviderRegistry::FImpl
@@ -24,9 +24,14 @@ struct FMaterialProviderRegistry::FImpl
 	struct FEntry
 	{
 		std::vector<FMaterialScopeKey> Keys;
-		std::vector<FMaterialParameterValues> Inputs;
+		std::vector<FMaterialInputValues> Inputs;
 		std::vector<std::weak_ptr<const void>> Owners;
-		std::optional<FMaterialValue> Value;
+		std::vector<std::weak_ptr<const FMaterialParameterValues>> Sources;
+		std::size_t Bytes{};
+		FMaterialSharedValue Value;
+		const std::pair<std::string, std::uint64_t>* BucketKey{};
+		std::list<FEntry>::iterator Location;
+		std::list<FEntry*>::iterator Recency;
 
 		bool IsExpired() const
 		{
@@ -39,14 +44,144 @@ struct FMaterialProviderRegistry::FImpl
 	};
 
 	std::shared_ptr<const FMaterialSemanticRegistry> Semantics;
-	std::map<std::string, FMaterialProviderDescription> Providers;
-	std::map<std::pair<std::string, std::uint64_t>, std::vector<FEntry>> Cache;
+	std::map<std::string, FMaterialProviderDescription, std::less<>> Providers;
+	std::map<std::string, FMaterialProviderDescription, std::less<>> Defaults;
+	std::map<std::pair<std::string, std::uint64_t>, std::list<FEntry>> Cache;
+	std::list<FEntry*> Recent;
 	std::uint64_t Version = 1;
 	std::atomic<bool> bFrozen{};
 	FMaterialProviderStats Stats;
+	FMaterialProviderLimits Limits;
 
-	const FEntry* FindDefault(const FMaterialProviderDescription& InProvider,
-	                          const FMaterialProviderInputs& InInputs) const
+	bool Matches(const FEntry& InEntry, const FMaterialProviderDescription& InProvider,
+	             const FMaterialProviderInputs& InInputs, bool bInDefault) const
+	{
+		if (InEntry.IsExpired())
+		{
+			return false;
+		}
+		std::size_t Index{};
+		for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
+		{
+			if ((InProvider.Dependencies & (1U << Scope)) == 0)
+			{
+				continue;
+			}
+			if (InEntry.Keys[Index] != InInputs.Scopes[Scope].Key)
+			{
+				return false;
+			}
+			const auto& Previous = InEntry.Inputs[Index];
+			const auto Source = InEntry.Sources[Index++].lock();
+			const auto& Current = InInputs.Values[Scope];
+			if ((Source && Source == Current.Share()) || Previous == Current)
+			{
+				continue;
+			}
+			if (!bInDefault)
+			{
+				return false;
+			}
+			// Default providers read only their semantic; unrelated values must not invalidate them.
+			const FMaterialValue* OldValue{};
+			for (const auto& Entry : Previous.Get())
+			{
+				if (Entry.Name == InProvider.Semantic)
+				{
+					OldValue = &Entry.Value;
+					break;
+				}
+			}
+			const auto* NewValue = InInputs.Find(static_cast<EMaterialScope>(Scope), InProvider.Semantic);
+			if ((!OldValue != !NewValue) || (OldValue && *OldValue != *NewValue))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	void Untrack(const FEntry& InEntry)
+	{
+		Recent.erase(InEntry.Recency);
+		Stats.CachedValueBytes -= InEntry.Bytes;
+		--Stats.CachedEntries;
+	}
+
+	void Trim(std::size_t InBytes)
+	{
+		while (!Recent.empty() &&
+		       (Stats.CachedEntries >= Limits.MaxEntries || Stats.CachedValueBytes + InBytes > Limits.MaxValueBytes))
+		{
+			const auto* Entry = Recent.front();
+			const auto Bucket = Cache.find(*Entry->BucketKey);
+			const auto Location = Entry->Location;
+			Untrack(*Entry);
+			Bucket->second.erase(Location);
+			++Stats.Evictions;
+			if (Bucket->second.empty())
+			{
+				Cache.erase(Bucket);
+			}
+		}
+	}
+
+	void Store(const std::pair<std::string, std::uint64_t>& InKey, FEntry InEntry)
+	{
+		const auto Bucket = Cache.find(InKey);
+		if (Bucket != Cache.end())
+		{
+			std::erase_if(Bucket->second,
+			              [&](const FEntry& InPrevious)
+			              {
+				              if (InPrevious.Keys != InEntry.Keys)
+				              {
+					              return false;
+				              }
+				              Untrack(InPrevious);
+				              ++Stats.Evictions;
+				              return true;
+			              });
+			if (Bucket->second.empty())
+			{
+				Cache.erase(Bucket);
+			}
+		}
+		if (Limits.MaxEntries == 0 || InEntry.Bytes > Limits.MaxValueBytes)
+		{
+			return;
+		}
+		Trim(InEntry.Bytes);
+		auto StoredBucket = Cache.try_emplace(InKey).first;
+		auto& Entries = StoredBucket->second;
+		auto Location = Entries.end();
+		try
+		{
+			Location = Entries.insert(Entries.end(), std::move(InEntry));
+			Recent.push_back(&*Location);
+		}
+		catch (...)
+		{
+			if (Location != Entries.end())
+			{
+				Entries.erase(Location);
+			}
+			if (Entries.empty())
+			{
+				Cache.erase(StoredBucket);
+			}
+			throw;
+		}
+		auto& Stored = *Location;
+		Stored.BucketKey = &StoredBucket->first;
+		Stored.Location = Location;
+		Stored.Recency = std::prev(Recent.end());
+		Stats.CachedValueBytes += Stored.Bytes;
+		++Stats.CachedEntries;
+	}
+
+	std::optional<std::uint64_t> HashInputs(const FMaterialProviderDescription& InProvider,
+	                                        const FMaterialProviderInputs& InInputs) const
 	{
 		std::uint64_t Hash = 14695981039346656037ULL;
 		for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
@@ -58,177 +193,97 @@ struct FMaterialProviderRegistry::FImpl
 			const auto& Input = InInputs.Scopes[Scope];
 			if (!Input.Lifetime)
 			{
-				return nullptr;
+				return {};
+			}
+			if (!Input.Key.Identity || !Input.Key.Revision)
+			{
+				throw std::invalid_argument("Material provider input requires a valid scope key");
 			}
 			Hash = (Hash ^ Input.Key.Identity) * 1099511628211ULL;
 			Hash = (Hash ^ Input.Key.Revision) * 1099511628211ULL;
-			for (const auto Value : Input.Key.Qualifiers)
+			for (const auto Value : Input.Key.GetQualifiers())
 			{
 				Hash = (Hash ^ Value) * 1099511628211ULL;
 			}
 		}
-		const auto Bucket = Cache.find({InProvider.Semantic, Hash});
-		if (Bucket == Cache.end())
-		{
-			return nullptr;
-		}
-		for (const auto& Entry : Bucket->second)
-		{
-			bool bMatches = !Entry.IsExpired();
-			std::size_t Index{};
-			for (std::size_t Scope = 0; bMatches && Scope < MaterialScopeCount; ++Scope)
-			{
-				if ((InProvider.Dependencies & (1U << Scope)) == 0)
-				{
-					continue;
-				}
-				bMatches = Entry.Keys[Index] == InInputs.Scopes[Scope].Key;
-				std::size_t Count{};
-				for (const auto& Value : InInputs.Values[Scope])
-				{
-					if (Value.Name == InProvider.Semantic)
-					{
-						++Count;
-						bMatches &= Entry.Inputs[Index].size() == 1 && Entry.Inputs[Index].front().Value == Value.Value;
-					}
-				}
-				bMatches &= Count == Entry.Inputs[Index].size();
-				++Index;
-			}
-			if (bMatches)
-			{
-				return &Entry;
-			}
-		}
-		return nullptr;
+		return Hash;
 	}
 
-	std::optional<FEntry> Inputs(const FMaterialProviderDescription& InProvider,
-	                             const FMaterialProviderInputs& InInputs, bool bInDefault) const
+	FEntry PrepareEntry(const FMaterialProviderDescription& InProvider, const FMaterialProviderInputs& InInputs,
+	                    bool bInDefault)
 	{
-		FEntry Result;
-		for (std::size_t Index = 0; Index < MaterialScopeCount; ++Index)
+		FEntry Entry;
+		FMaterialProviderInputs DeclaredInputs;
+		for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
 		{
-			if ((InProvider.Dependencies & (1U << Index)) == 0)
+			if ((InProvider.Dependencies & (1U << Scope)) == 0)
 			{
 				continue;
 			}
-			const auto& Input = InInputs.Scopes[Index];
-			if (!Input.Lifetime)
+			DeclaredInputs.Scopes[Scope] = InInputs.Scopes[Scope];
+			DeclaredInputs.Values[Scope] = InInputs.Values[Scope];
+			Entry.Keys.push_back(InInputs.Scopes[Scope].Key);
+			Entry.Sources.push_back(InInputs.Values[Scope].Share());
+			if (bInDefault)
 			{
-				return {};
+				const auto* Value = InInputs.Find(static_cast<EMaterialScope>(Scope), InProvider.Semantic);
+				Entry.Inputs.push_back(Value ? FMaterialInputValues{{InProvider.Semantic, *Value}}
+				                             : FMaterialInputValues{});
 			}
-			if (Input.Key.Identity == 0 || Input.Key.Revision == 0)
+			else
 			{
-				throw std::invalid_argument("Material provider input requires a valid scope key");
+				Entry.Inputs.push_back(InInputs.Values[Scope]);
 			}
-			Result.Keys.push_back(Input.Key);
-			Result.Inputs.emplace_back();
-			auto& Values = Result.Inputs.back();
-			for (const auto& Value : InInputs.Values[Index])
-			{
-				// Builtin providers read one named value; custom callbacks can read all declared scopes.
-				if (!bInDefault || Value.Name == InProvider.Semantic)
-				{
-					Values.push_back(Value);
-				}
-			}
-			std::sort(Values.begin(), Values.end(),
-			          [](const auto& InA, const auto& InB)
-			          {
-				          return InA.Name < InB.Name;
-			          });
-			std::string Previous;
-			for (const auto& Value : Values)
-			{
-				if (Value.Name.empty() || Value.Name == Previous)
-				{
-					throw std::invalid_argument("Duplicate or empty material provider input");
-				}
-				Value.Value.Validate();
-				Previous = Value.Name;
-			}
-			Result.Owners.push_back(Input.Lifetime);
+			Entry.Bytes += Entry.Inputs.back().GetStorageBytes() +
+			               InInputs.Scopes[Scope].Key.GetQualifiers().capacity() * sizeof(std::uint64_t);
+			Entry.Owners.push_back(InInputs.Scopes[Scope].Lifetime);
 		}
-		return Result;
+		Entry.Value = InProvider.Evaluate(DeclaredInputs);
+		const auto& Semantic = Semantics->Find(InProvider.Semantic);
+		if (Entry.Value)
+		{
+			Entry.Value->Validate();
+			if (Entry.Value->Type != Semantic.Type)
+			{
+				throw std::invalid_argument("Material provider result type mismatch: " + Semantic.Name);
+			}
+		}
+		Entry.Bytes += sizeof(FEntry) + (Entry.Value ? MaterialValueStorageBytes(*Entry.Value) : 0);
+		return Entry;
 	}
 
 	FMaterialProvidedValue Evaluate(const FMaterialProviderDescription& InProvider,
 	                                const FMaterialProviderInputs& InInputs, bool bInDefault)
 	{
-		if (bInDefault)
-		{
-			if (const auto* Existing = FindDefault(InProvider, InInputs))
-			{
-				++Stats.Reuses;
-				return {InProvider.Semantic, Existing->Value, InProvider.Dependencies};
-			}
-		}
-		auto Entry = Inputs(InProvider, InInputs, bInDefault);
-		if (!Entry)
+		const auto Hash = HashInputs(InProvider, InInputs);
+		if (!Hash)
 		{
 			return {InProvider.Semantic, {}, InProvider.Dependencies};
 		}
-		std::uint64_t Hash = 14695981039346656037ULL;
-		for (const auto& Key : Entry->Keys)
+		const auto CacheKey = std::pair{InProvider.Semantic, *Hash};
+		const auto Bucket = Cache.find(CacheKey);
+		if (Bucket != Cache.end())
 		{
-			Hash = (Hash ^ Key.Identity) * 1099511628211ULL;
-			Hash = (Hash ^ Key.Revision) * 1099511628211ULL;
-			for (const auto Value : Key.Qualifiers)
+			for (auto& Existing : Bucket->second)
 			{
-				Hash = (Hash ^ Value) * 1099511628211ULL;
+				if (Matches(Existing, InProvider, InInputs, bInDefault))
+				{
+					++Stats.Reuses;
+					Recent.splice(Recent.end(), Recent, Existing.Recency);
+					return {InProvider.Semantic, Existing.Value, InProvider.Dependencies};
+				}
 			}
 		}
-		auto& Bucket = Cache[{InProvider.Semantic, Hash}];
-		for (const auto& Existing : Bucket)
-		{
-			if (!Existing.IsExpired() && Existing.Keys == Entry->Keys && Existing.Inputs == Entry->Inputs)
-			{
-				++Stats.Reuses;
-				return {InProvider.Semantic, Existing.Value, InProvider.Dependencies};
-			}
-		}
-		FMaterialProviderInputs DeclaredInputs;
-		for (std::size_t Index = 0; Index < MaterialScopeCount; ++Index)
-		{
-			if ((InProvider.Dependencies & (1U << Index)) != 0)
-			{
-				DeclaredInputs.Scopes[Index] = InInputs.Scopes[Index];
-				DeclaredInputs.Values[Index] = InInputs.Values[Index];
-			}
-		}
-		Entry->Value = InProvider.Evaluate(DeclaredInputs);
-		const auto& Semantic = Semantics->Find(InProvider.Semantic);
-		if (Entry->Value)
-		{
-			Entry->Value->Validate();
-			if (Entry->Value->Type != Semantic.Type)
-			{
-				throw std::invalid_argument("Material provider result type mismatch: " + Semantic.Name);
-			}
-		}
-		++Stats.Evaluations[static_cast<std::size_t>(Semantic.Scope)];
-		FMaterialProvidedValue Result{InProvider.Semantic, Entry->Value, InProvider.Dependencies};
-		const auto Previous = std::find_if(Bucket.begin(), Bucket.end(),
-		                                   [&](const FEntry& InEntry)
-		                                   {
-			                                   return InEntry.Keys == Entry->Keys;
-		                                   });
-		if (Previous != Bucket.end())
-		{
-			// One current value per complete scope key. Old frozen draws own their resolved values.
-			*Previous = std::move(*Entry);
-		}
-		else
-		{
-			Bucket.push_back(std::move(*Entry));
-			++Stats.CachedEntries;
-		}
+		auto Entry = PrepareEntry(InProvider, InInputs, bInDefault);
+		++Stats.Evaluations[static_cast<std::size_t>(Semantics->Find(InProvider.Semantic).Scope)];
+		FMaterialProvidedValue Result{InProvider.Semantic, Entry.Value, InProvider.Dependencies};
+		Store(CacheKey, std::move(Entry));
 		return Result;
 	}
 };
 
-FMaterialProviderRegistry::FMaterialProviderRegistry(std::shared_ptr<const FMaterialSemanticRegistry> InSemantics)
+FMaterialProviderRegistry::FMaterialProviderRegistry(std::shared_ptr<const FMaterialSemanticRegistry> InSemantics,
+                                                     FMaterialProviderLimits InLimits)
     : Impl(std::make_unique<FImpl>())
 {
 	if (!InSemantics)
@@ -238,6 +293,7 @@ FMaterialProviderRegistry::FMaterialProviderRegistry(std::shared_ptr<const FMate
 	auto Registry = std::make_shared<FMaterialSemanticRegistry>(*InSemantics);
 	Registry->Freeze();
 	Impl->Semantics = std::move(Registry);
+	Impl->Limits = InLimits;
 }
 
 FMaterialProviderRegistry::~FMaterialProviderRegistry() = default;
@@ -282,41 +338,59 @@ std::vector<FMaterialProvidedValue> FMaterialProviderRegistry::Evaluate(const FM
 		{
 			continue;
 		}
-		const auto Custom = Impl->Providers.find(Semantic.Name);
-		FMaterialProviderDescription Provider;
-		if (Custom != Impl->Providers.end())
-		{
-			Provider = Custom->second;
-		}
-		else
-		{
-			Provider.Semantic = Semantic.Name;
-			Provider.Dependencies = MaterialScopeBit(Semantic.Scope);
-			if (Semantic.Name == "Engine.Object.WorldViewProjection")
-			{
-				Provider.Dependencies |= MaterialScopeBit(EMaterialScope::View);
-			}
-			Provider.Evaluate = [Scope = Semantic.Scope, Name = Semantic.Name](
-			                        const FMaterialProviderInputs& InValues) -> std::optional<FMaterialValue>
-			{
-				const auto* Value = InValues.Find(Scope, Name);
-				return Value ? std::optional<FMaterialValue>(*Value) : std::nullopt;
-			};
-		}
-		Result.push_back(Impl->Evaluate(Provider, InInputs, Custom == Impl->Providers.end()));
+		Result.push_back(EvaluateOne(InInputs, Semantic.Name));
 	}
 	return Result;
+}
+
+FMaterialProvidedValue FMaterialProviderRegistry::EvaluateOne(const FMaterialProviderInputs& InInputs,
+                                                              std::string_view InSemantic)
+{
+	if (!Impl->bFrozen)
+	{
+		throw std::logic_error("Freeze material providers before preparing a frame");
+	}
+	const auto& Semantic = Impl->Semantics->Find(InSemantic);
+	const auto Custom = Impl->Providers.find(Semantic.Name);
+	if (Custom != Impl->Providers.end())
+	{
+		return Impl->Evaluate(Custom->second, InInputs, false);
+	}
+	auto Existing = Impl->Defaults.find(Semantic.Name);
+	if (Existing == Impl->Defaults.end())
+	{
+		FMaterialProviderDescription Provider;
+		Provider.Semantic = Semantic.Name;
+		Provider.Dependencies = MaterialScopeBit(Semantic.Scope);
+		if (Semantic.Name == "Engine.Object.WorldViewProjection")
+		{
+			Provider.Dependencies |= MaterialScopeBit(EMaterialScope::View);
+		}
+		Provider.Evaluate = [Scope = Semantic.Scope, Name = Semantic.Name](
+		                        const FMaterialProviderInputs& InValues) -> std::optional<FMaterialValue>
+		{
+			const auto* Value = InValues.Find(Scope, Name);
+			return Value ? std::optional<FMaterialValue>(*Value) : std::nullopt;
+		};
+		Existing = Impl->Defaults.emplace(Semantic.Name, std::move(Provider)).first;
+	}
+	return Impl->Evaluate(Existing->second, InInputs, true);
 }
 
 void FMaterialProviderRegistry::Collect()
 {
 	for (auto It = Impl->Cache.begin(); It != Impl->Cache.end();)
 	{
-		Impl->Stats.CachedEntries -= std::erase_if(It->second,
-		                                           [](const FImpl::FEntry& InEntry)
-		                                           {
-			                                           return InEntry.IsExpired();
-		                                           });
+		std::erase_if(It->second,
+		              [&](const FImpl::FEntry& InEntry)
+		              {
+			              if (!InEntry.IsExpired())
+			              {
+				              return false;
+			              }
+			              Impl->Untrack(InEntry);
+			              return true;
+		              });
 		if (It->second.empty())
 		{
 			It = Impl->Cache.erase(It);

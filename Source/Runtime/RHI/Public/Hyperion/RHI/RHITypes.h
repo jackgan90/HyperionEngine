@@ -145,6 +145,10 @@ struct FDeviceStats
 	std::uint64_t DescriptorAllocations{};
 	std::uint64_t DescriptorCopies{};
 	std::uint64_t BindingSetsCreated{};
+	std::uint64_t GraphicsRootBinds{};
+	std::uint64_t GraphicsHeapBinds{};
+	std::uint64_t GraphicsConstantBinds{};
+	std::uint64_t GraphicsTableBinds{};
 	std::uint64_t PipelinesCreated{};
 	std::uint64_t ConstantBytesWritten{};
 };

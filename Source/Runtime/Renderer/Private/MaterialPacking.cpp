@@ -59,8 +59,9 @@ void PackValue(std::span<std::byte> OutBytes, const FShaderMember& InLayout, con
 }
 } // namespace
 
-template<typename TValue>
-std::vector<std::byte> PackConstants(const FMaterialProgramBinding& InBinding, std::span<const TValue> InValues)
+template<typename TValues>
+std::vector<std::byte> PackConstants(const FMaterialProgramBinding& InBinding, const TValues& InValues,
+                                     std::size_t InSize)
 {
 	if (InBinding.Resource.Kind != EBindingKind::UniformBuffer || InBinding.Resource.ByteSize == 0 ||
 	    InBinding.Resource.ByteSize > 65536)
@@ -70,7 +71,7 @@ std::vector<std::byte> PackConstants(const FMaterialProgramBinding& InBinding, s
 	std::vector<std::byte> Result(InBinding.Resource.ByteSize);
 	for (const auto& Member : InBinding.Members)
 	{
-		if (Member.ParameterIndex >= InValues.size())
+		if (Member.ParameterIndex >= InSize)
 		{
 			throw std::invalid_argument("Invalid material constant parameter mapping");
 		}
@@ -93,13 +94,20 @@ std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBi
                                              std::span<const std::optional<FMaterialValue>> InValues)
 {
 	HYP_PERF_SCOPE_C(Detail, PackMaterialConstants);
-	return PackConstants(InBinding, InValues);
+	return PackConstants(InBinding, InValues, InValues.size());
 }
 
 std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
                                              std::span<const std::shared_ptr<const FMaterialValue>> InValues)
 {
 	HYP_PERF_SCOPE_C(Detail, PackMaterialConstants);
-	return PackConstants(InBinding, InValues);
+	return PackConstants(InBinding, InValues, InValues.size());
+}
+
+std::vector<std::byte> PackMaterialConstants(const FMaterialProgramBinding& InBinding,
+                                             const FMaterialValueTable& InValues)
+{
+	HYP_PERF_SCOPE_C(Detail, PackMaterialConstants);
+	return PackConstants(InBinding, InValues, InValues.GetSize());
 }
 } // namespace Hyperion

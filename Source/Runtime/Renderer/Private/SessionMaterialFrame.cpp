@@ -15,18 +15,14 @@ constexpr auto ScopeIndex(EMaterialScope InScope)
 void ReplaceValues(FMaterialProviderInputs& InInputs, EMaterialScope InScope, FMaterialParameterValues InValues,
                    const FRenderResourceService& InResources)
 {
-	std::set<std::string> Names;
-	for (const auto& Value : InValues)
-	{
-		Value.Value.Validate();
-		if (Value.Name.empty() || !Names.insert(Value.Name).second)
-		{
-			throw std::invalid_argument("Duplicate or empty session material input");
-		}
-	}
+	FMaterialInputValues Values(std::move(InValues));
 	auto& Scope = InInputs.Scopes[ScopeIndex(InScope)];
+	if (Scope.Lifetime && InInputs.Values[ScopeIndex(InScope)] == Values)
+	{
+		return;
+	}
 	auto Lifetime = InResources.CreateScopeLifetime();
-	InInputs.Values[ScopeIndex(InScope)] = std::move(InValues);
+	InInputs.Values[ScopeIndex(InScope)] = std::move(Values);
 	++Scope.Key.Revision;
 	Scope.Lifetime = std::move(Lifetime);
 }
@@ -43,9 +39,9 @@ std::shared_ptr<const FMaterialFrameContext> FRenderSession::FMaterialState::Fra
 	std::lock_guard Lock(Publication);
 	Providers.Freeze();
 	auto& SceneScope = Inputs.Scopes[ScopeIndex(EMaterialScope::Scene)];
-	if (SceneScope.Key.Qualifiers != std::vector<std::uint64_t>{InSceneIdentity})
+	if (SceneScope.Key.GetQualifiers() != std::vector<std::uint64_t>{InSceneIdentity})
 	{
-		SceneScope.Key.Qualifiers = {InSceneIdentity};
+		SceneScope.Key.SetQualifiers({InSceneIdentity});
 		SceneScope.Lifetime = InResources.CreateScopeLifetime();
 		++SceneScope.Key.Revision;
 	}

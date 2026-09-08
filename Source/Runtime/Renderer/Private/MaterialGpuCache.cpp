@@ -269,4 +269,21 @@ FPipeline FMaterialGpuCache::GetPipeline(const FPipelineDesc& InDescription, con
 	++Impl->Stats.PipelinesCreated;
 	return Iterator->second.Resource;
 }
+
+FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMaterialPass& InPass,
+                                                           const FMaterialValueTable& InValues,
+                                                           const FMaterialResourceOwners& InOwners,
+                                                           bool bInAllowMissing)
+{
+	HYP_PERF_SCOPE_C(Detail, BindMaterialResources);
+	std::vector<const FMaterialValue*> Values(InValues.GetSize());
+	for (const auto& Binding : InPass.Bindings)
+	{
+		if (Binding.ResourceParameter)
+		{
+			Values.at(*Binding.ResourceParameter) = InValues.Get(*Binding.ResourceParameter).get();
+		}
+	}
+	return BindResourceValues(InPass, Values, InOwners, bInAllowMissing);
+}
 } // namespace Hyperion

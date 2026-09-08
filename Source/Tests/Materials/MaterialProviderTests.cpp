@@ -5,6 +5,26 @@ using namespace Hyperion;
 
 namespace
 {
+void CheckSharedParameterPages()
+{
+	FMaterialValueTable Values;
+	Values.Reset(65);
+	for (std::size_t Index = 0; Index < Values.GetSize(); ++Index)
+	{
+		Values.Set(Index, std::make_shared<const FMaterialValue>(FMaterialValue::Float(float(Index))));
+	}
+	const auto Frozen = Values;
+	Values.Set(33, std::make_shared<const FMaterialValue>(FMaterialValue::Float(100)));
+	HYP_CHECK(*Frozen[33] == FMaterialValue::Float(33));
+	HYP_CHECK(*Values[33] == FMaterialValue::Float(100));
+	HYP_CHECK(Frozen.GetPageIdentity(0) == Values.GetPageIdentity(0));
+	HYP_CHECK(Frozen.GetPageIdentity(32) != Values.GetPageIdentity(32));
+	HYP_CHECK(Frozen.GetPageIdentity(64) == Values.GetPageIdentity(64));
+	const auto Page = Values.GetPageIdentity(32);
+	Values.Set(33, Values[33]);
+	HYP_CHECK(Values.GetPageIdentity(32) == Page);
+}
+
 void SetScope(FMaterialProviderInputs& InInputs, EMaterialScope InScope, std::uint64_t InId,
               FMaterialParameterValues InValues)
 {
@@ -38,6 +58,119 @@ void CheckProviderHistory()
 	Inputs.Scopes[Object] = {};
 	Providers.Collect();
 	HYP_CHECK(Providers.Statistics().CachedEntries == 0);
+}
+
+void CheckProviderBudget(FMaterialProviderLimits InLimits, std::uint64_t InCount = 256)
+{
+	FMaterialProviderRegistry Providers(GetStandardMaterialSemantics(), InLimits);
+	Providers.Freeze();
+	FMaterialProviderInputs Inputs;
+	SetScope(Inputs, EMaterialScope::View, 1, {});
+	const auto View = static_cast<std::size_t>(EMaterialScope::View);
+	FMaterialSharedValue Frozen;
+	for (std::uint64_t Index = 0; Index < InCount; ++Index)
+	{
+		Inputs.Scopes[View].Key.Revision = Index + 1;
+		Inputs.Values[View] = {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{float(Index), 0, 0})}};
+		const auto Result = Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition");
+		HYP_CHECK(Result.Value == FMaterialValue::Float(FVec3{float(Index), 0, 0}));
+		if (Index == 0)
+		{
+			Frozen = Result.Value;
+		}
+		const auto Stats = Providers.Statistics();
+		HYP_CHECK(Stats.CachedEntries <= InLimits.MaxEntries && Stats.CachedValueBytes <= InLimits.MaxValueBytes);
+	}
+	HYP_CHECK(Frozen == FMaterialValue::Float(FVec3{0, 0, 0}));
+	HYP_CHECK(Providers.Statistics().Evictions > 0);
+	Inputs.Scopes[View] = {};
+	Providers.Collect();
+	HYP_CHECK(Providers.Statistics().CachedEntries == 0 && Providers.Statistics().CachedValueBytes == 0);
+}
+
+void CheckProviderRecency()
+{
+	FMaterialProviderRegistry Providers(GetStandardMaterialSemantics(), {3, 65536});
+	Providers.Freeze();
+	FMaterialProviderInputs Inputs;
+	SetScope(Inputs, EMaterialScope::View, 1, {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{})}});
+	const auto View = static_cast<std::size_t>(EMaterialScope::View);
+	const auto Evaluate = [&](std::uint64_t InRevision)
+	{
+		Inputs.Scopes[View].Key.Revision = InRevision;
+		return Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition").Value;
+	};
+	const auto Frozen = Evaluate(1);
+	Evaluate(2);
+	Evaluate(3);
+	Evaluate(1); // Keep the oldest insertion hot, so revision 2 must be the next victim.
+	Evaluate(4);
+	const auto Before = Providers.Statistics().Evaluations[View];
+	Evaluate(1);
+	Evaluate(3);
+	HYP_CHECK(Providers.Statistics().Evaluations[View] == Before);
+	Evaluate(2);
+	HYP_CHECK(Providers.Statistics().Evaluations[View] == Before + 1);
+	Inputs.Values[View] = {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{1, 0, 0})}};
+	Evaluate(2); // Same-key replacement must remove its old recency node as well.
+	HYP_CHECK(Providers.Statistics().CachedEntries == 3);
+	HYP_CHECK(Frozen == FMaterialValue::Float(FVec3{}));
+	Inputs.Scopes[View] = {};
+	Providers.Collect();
+	HYP_CHECK(Providers.Statistics().CachedEntries == 0 && Providers.Statistics().CachedValueBytes == 0);
+	SetScope(Inputs, EMaterialScope::View, 2, {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{})}});
+	Evaluate(1);
+	HYP_CHECK(Providers.Statistics().CachedEntries == 1);
+}
+
+void CheckProviderByteEviction()
+{
+	FMaterialProviderRegistry Providers(GetStandardMaterialSemantics(), {4096, 8192});
+	Providers.Register({"Engine.View.CameraPosition", MaterialScopeBit(EMaterialScope::View), [](const auto&)
+	                    {
+		                    return FMaterialValue::Float(FVec3{});
+	                    }});
+	Providers.Freeze();
+	FMaterialProviderInputs Inputs;
+	SetScope(Inputs, EMaterialScope::View, 1, {});
+	const auto View = static_cast<std::size_t>(EMaterialScope::View);
+	for (std::uint64_t Revision = 1; Revision <= 32; ++Revision)
+	{
+		Inputs.Scopes[View].Key.Revision = Revision;
+		Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition");
+	}
+	const auto Before = Providers.Statistics();
+	Inputs.Scopes[View].Key.Revision = 33;
+	Inputs.Values[View] = {{"Extra", FMaterialValue::Array(std::vector<FMaterialValue>(16, FMaterialValue::Float(1)))}};
+	const auto Value = Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition");
+	const auto After = Providers.Statistics();
+	HYP_CHECK(Value.Value == FMaterialValue::Float(FVec3{}));
+	HYP_CHECK(After.CachedValueBytes <= 8192);
+	HYP_CHECK(After.Evictions > Before.Evictions + 1);
+	HYP_CHECK(After.CachedEntries < Before.CachedEntries);
+	Inputs.Scopes[View] = {};
+	Providers.Collect();
+	HYP_CHECK(Providers.Statistics().CachedEntries == 0 && Providers.Statistics().CachedValueBytes == 0);
+}
+
+void CheckUnusedProviderResourceRetirement()
+{
+	FMaterialProviderRegistry Providers;
+	Providers.Freeze();
+	FMaterialProviderInputs Inputs;
+	SetScope(Inputs, EMaterialScope::View, 1, {});
+	const std::array<std::byte, 4> Bytes{};
+	auto Source = std::make_shared<const FMaterialReadBufferSource>(Bytes);
+	const std::weak_ptr<const FMaterialReadBufferSource> Released = Source;
+	const auto View = static_cast<std::size_t>(EMaterialScope::View);
+	Inputs.Values[View] = {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{1, 2, 3})},
+	                       {"Unused", FMaterialValue::FromBuffer({Source, EMaterialBufferViewKind::Raw, 0, 4, 0})}};
+	Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition");
+	Source.reset();
+	Inputs.Values[View] = {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{1, 2, 3})}};
+	HYP_CHECK(Released.expired());
+	Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition");
+	HYP_CHECK(Providers.Statistics().Evaluations[View] == 1);
 }
 
 void CheckAbsentProviderDependencies()
@@ -105,26 +238,33 @@ void CheckDefaultProviderCacheValidation()
 	const std::vector<std::string> Names{"Engine.View.CameraPosition"};
 	const auto First = Providers.Evaluate(Inputs, Names);
 	HYP_CHECK(Providers.Evaluate(Inputs, Names)[0].Value == First[0].Value);
-	Inputs.Values[View].push_back(Inputs.Values[View].front());
+	const auto Frozen = Inputs;
 	bool bRejected = false;
 	try
 	{
-		Providers.Evaluate(Inputs, Names);
+		Inputs.Values[View] = {Inputs.Values[View].Get().front(), Inputs.Values[View].Get().front()};
 	}
 	catch (const std::invalid_argument&)
 	{
 		bRejected = true;
 	}
 	HYP_CHECK(bRejected);
-	Inputs.Values[View].pop_back();
-	Inputs.Values[View][0].Value = FMaterialValue::Float(FVec3{4, 5, 6});
-	HYP_CHECK(Providers.Evaluate(Inputs, Names)[0].Value == Inputs.Values[View][0].Value);
+	HYP_CHECK(Inputs.Values[View] == Frozen.Values[View]);
+	Inputs.Values[View] = {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{4, 5, 6})}};
+	HYP_CHECK(Providers.Evaluate(Inputs, Names)[0].Value == Inputs.Values[View].Get()[0].Value);
 	HYP_CHECK(Providers.Statistics().CachedEntries == 1);
 }
 } // namespace
 
 void RunMaterialProviderTests()
 {
+	CheckSharedParameterPages();
+	CheckProviderBudget({8, 16384});
+	CheckProviderBudget({4096, 4096});
+	CheckProviderBudget({4096, 16 * 1024 * 1024}, 5120);
+	CheckProviderRecency();
+	CheckProviderByteEviction();
+	CheckUnusedProviderResourceRetirement();
 	CheckProviderHistory();
 	CheckAbsentProviderDependencies();
 	CheckDefaultProviderCacheValidation();
@@ -159,7 +299,7 @@ void RunMaterialProviderTests()
 	}
 	HYP_CHECK(Evaluations == 1 &&
 	          Providers.Statistics().Evaluations[static_cast<std::size_t>(EMaterialScope::View)] == 1);
-	Inputs.Values[static_cast<std::size_t>(EMaterialScope::Global)].front().Value = FMaterialValue::Float(4);
+	Inputs.Values[static_cast<std::size_t>(EMaterialScope::Global)] = {{"ExposureInput", FMaterialValue::Float(4)}};
 	HYP_CHECK(Providers.Evaluate(Inputs, Names).front().Value == FMaterialValue::Float(4));
 	HYP_CHECK(Evaluations == 2);
 	Inputs.Scopes[static_cast<std::size_t>(EMaterialScope::View)] = {};
@@ -178,11 +318,10 @@ void RunMaterialProviderTests()
 		bRejected = true;
 	}
 	HYP_CHECK(bRejected);
-	Inputs.Values[0].push_back(Inputs.Values[0].front());
 	bRejected = false;
 	try
 	{
-		Providers.Evaluate(Inputs, Names);
+		Inputs.Values[0] = {Inputs.Values[0].Get().front(), Inputs.Values[0].Get().front()};
 	}
 	catch (const std::invalid_argument&)
 	{
