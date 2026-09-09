@@ -26,30 +26,6 @@ bool SameResources(const std::vector<std::shared_ptr<const FMaterialValue>>& InV
 	return Index == InValues.size();
 }
 
-FMaterialResourceOwners ResourceOwners(const std::shared_ptr<const void>& InLifetime,
-                                       const FCompiledMaterialPass& InProgram,
-                                       const FResolvedMaterialParameters& InValues)
-{
-	FMaterialResourceOwners Owners{InLifetime};
-	std::uint32_t Dependencies{};
-	for (const auto& Binding : InProgram.Bindings)
-	{
-		if (Binding.ResourceParameter)
-		{
-			Dependencies |= InValues.Dependencies[*Binding.ResourceParameter];
-		}
-	}
-	// Numeric Object/View changes never invalidate static descriptor tables.
-	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
-	{
-		if ((Dependencies & (1U << Scope)) && Scope != static_cast<std::size_t>(EMaterialScope::Material))
-		{
-			Owners.push_back(InValues.Scopes[Scope].Lifetime);
-		}
-	}
-	return Owners;
-}
-
 FDrawPacket FinalizeDraw(FDrawPacket InDraw, const FRenderItem& InItem, const FRenderView& InView,
                          const FMaterialPass& InPass)
 {
@@ -81,6 +57,7 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
                                                      FGraphicsTarget InTarget, bool bInInstance)
 {
 	HYP_PERF_SCOPE_C(Detail, DrawMaterial);
+	InTarget.ColorCount = InView.DepthTarget ? 0 : 1;
 	const auto& GeometryRecord = *InItem.State.Resource->Record;
 	const auto& MaterialRecord = *InItem.State.Surface->Record;
 	if (GeometryRecord.Owner != this || MaterialRecord.Owner != this ||
@@ -121,7 +98,9 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 		}
 	}
 	const auto& Values = *Resolved;
-	const auto Owners = ResourceOwners(MaterialRecord.GpuLifetime, Program, Values);
+	// The resource-value epoch survives numeric scope changes, and expires when its last evaluation retires.
+	// Keeping an obsolete View owner here would turn a live cached set into perpetual pending retirement.
+	const FMaterialResourceOwners Owners{MaterialRecord.GpuLifetime, ResourceIdentity};
 	EnsureMaterialCaches();
 	const auto Bindings = MaterialGpu->BindResources(Program, Values.Values, Owners);
 	if (!Bindings.bReady)

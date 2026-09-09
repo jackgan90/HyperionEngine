@@ -47,6 +47,12 @@ public:
 
 	virtual FTexture CreateTexture(const FImage& InImage) = 0;
 
+	// Initialized on the graphics queue; starts and finishes graph execution in ShaderRead state.
+	virtual FTexture CreateDepthTexture(const FDepthTextureDesc&)
+	{
+		throw std::runtime_error("Backend does not support sampled depth targets");
+	}
+
 	virtual std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc>)
 	{
 		throw std::runtime_error("Backend does not support asynchronous texture uploads");
@@ -67,5 +73,17 @@ public:
 	}
 
 	virtual FDeviceStats Statistics() const = 0;
+
+	// RHI coordinator. Opt-in bounded collection of completed submissions; neither operation waits.
+	// Frame IDs are local to each Swapchain. End after normal fence completion to include the final frame.
+	virtual void BeginGpuTimingCapture(std::size_t)
+	{
+		throw std::runtime_error("Backend does not support GPU timing capture");
+	}
+
+	virtual FGpuTimingCapture EndGpuTimingCapture()
+	{
+		return {};
+	}
 };
 } // namespace Hyperion

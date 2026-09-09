@@ -2,7 +2,6 @@
 
 ## Purpose
 Define engine-owned graphics binding layouts, immutable resource sets, complete pipeline-state composition, executable capability limits and validated resource retention through GPU completion.
-
 ## Requirements
 ### Requirement: General graphics binding layouts and sets
 RHI SHALL expose engine-owned binding layouts, immutable binding sets, samplers and buffer slices without material/model-specific fields. Layouts SHALL describe kind, count, stage visibility and binding space/location. Sets SHALL retain all referenced resources. Constant slices SHALL be independently bindable without duplicating unchanged texture/sampler sets per object.
@@ -42,7 +41,7 @@ Graphics pipelines SHALL describe rasterization, depth/stencil, RGB/alpha blend 
 - **THEN** the resulting pixels follow the declared front/back stencil operations and no undefined stencil contents are read
 
 ### Requirement: Bounded executable resource capabilities
-The device SHALL report enabled binding kinds, shader stages, register spaces, counts, constant alignment/range and descriptor capacities. Initial graphics support SHALL include fixed resource arrays, 2D RGBA8 sampled textures, independent samplers and validated read-only structured/raw buffer views. VS texture sampling SHALL use a resource state valid for that stage. Unsupported mandatory features SHALL fail before submission.
+The device SHALL report enabled binding kinds, shader stages, register spaces, counts, constant alignment/range and descriptor capacities. Graphics support SHALL include fixed resource arrays, 2D RGBA8 sampled textures, sampled D32 depth targets, independent ordinary/comparison samplers and validated read-only structured/raw buffer views. VS texture sampling SHALL use a resource state valid for that stage. Unsupported mandatory features SHALL fail before submission.
 
 #### Scenario: Read-only buffer view
 - **WHEN** a shader reads a valid structured or raw buffer view
@@ -53,8 +52,8 @@ The device SHALL report enabled binding kinds, shader stages, register spaces, c
 - **THEN** its descriptor is visible to VS and the uploaded resource is ready in a compatible shader-resource state
 
 #### Scenario: Comparison sampler request
-- **WHEN** a pipeline requires SamplerComparisonState or comparison sampling
-- **THEN** the initial backend capability rejects it explicitly rather than claiming a compatible RGBA8 execution path
+- **WHEN** a supported pipeline requires SamplerComparisonState for a sampled depth texture
+- **THEN** reflection, layout and sampler comparison state are validated and execute the requested comparison
 
 ### Requirement: Binding validation and failure isolation
 Before recording draws, the backend SHALL validate resource/device identity, layout compatibility, complete active slots, type/count/stage, upload readiness, constant range/alignment, geometry ranges and target compatibility. Partial creation failures SHALL roll back unpublished allocations without releasing submitted upload retention.
@@ -88,3 +87,10 @@ The native graphics backend SHALL avoid re-emitting identical binding state with
 #### Scenario: State boundary and failure recovery
 - **WHEN** a new list starts, root or heap state changes, or recording resumes after cancellation
 - **THEN** all required bindings are established without borrowing stale tracked state from another recording
+
+### Requirement: Renderer-produced texture sources
+Engine-owned CPU resource descriptions SHALL identify renderer-produced sampled depth targets without exposing RHI/native objects to Scene or Materials. Renderer SHALL resolve the same identity for attachment writes and material reads and preserve descriptor identity across content updates.
+
+#### Scenario: Reuse a rendered texture
+- **WHEN** a depth source is rendered again with unchanged dimensions and binding layout
+- **THEN** its texture and binding sets are reused while subsequent consumers see the new depth contents

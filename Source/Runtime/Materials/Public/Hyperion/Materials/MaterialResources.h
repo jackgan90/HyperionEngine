@@ -14,6 +14,15 @@ enum class EMaterialTextureEncoding : std::uint8_t
 	Srgb
 };
 
+// CPU description of a renderer-produced, single-sample depth texture.
+struct FMaterialDepthTexture
+{
+	std::uint32_t Width = 1;
+	std::uint32_t Height = 1;
+	float ClearDepth = 1;
+	bool operator==(const FMaterialDepthTexture&) const = default;
+};
+
 struct FMaterialTextureMip
 {
 	std::uint32_t Width{};
@@ -27,18 +36,22 @@ class FMaterialTextureSource
 public:
 	FMaterialTextureSource(EMaterialTextureEncoding InEncoding, std::vector<FMaterialTextureMip> InMips,
 	                       std::uint64_t InVersion = 1);
+	explicit FMaterialTextureSource(FMaterialDepthTexture InDepth, std::uint64_t InVersion = 1);
 	FMaterialTextureSource(const FMaterialTextureSource&) = delete;
 	FMaterialTextureSource& operator=(const FMaterialTextureSource&) = delete;
 	std::uint64_t GetIdentity() const;
 	std::uint64_t GetVersion() const;
 	EMaterialTextureEncoding GetEncoding() const;
 	const std::vector<FMaterialTextureMip>& GetMips() const;
+	const FMaterialDepthTexture* GetDepthTarget() const;
 
 private:
 	std::uint64_t Identity;
 	std::uint64_t Version;
 	EMaterialTextureEncoding Encoding;
 	std::vector<FMaterialTextureMip> Mips;
+	FMaterialDepthTexture Depth;
+	bool bDepthTarget{};
 };
 
 class FMaterialReadBufferSource
@@ -83,6 +96,18 @@ enum class EMaterialAddressMode : std::uint8_t
 	MirrorOnce
 };
 
+enum class EMaterialSamplerCompare : std::uint8_t
+{
+	Never,
+	Less,
+	Equal,
+	LessEqual,
+	Greater,
+	NotEqual,
+	GreaterEqual,
+	Always
+};
+
 struct FMaterialSampler
 {
 	EMaterialAddressMode U = EMaterialAddressMode::Repeat;
@@ -97,6 +122,7 @@ struct FMaterialSampler
 	float MinLod{};
 	float MaxLod = 3.402823466e+38F;
 	std::array<float, 4> BorderColor{};
+	EMaterialSamplerCompare Compare = EMaterialSamplerCompare::LessEqual;
 	void Validate() const;
 	bool operator==(const FMaterialSampler&) const = default;
 };

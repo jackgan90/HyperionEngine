@@ -1,6 +1,7 @@
 #pragma once
 #include "D3D12DeviceState.h"
 #include "D3D12Profiling.h"
+#include "Hyperion/RHI/RHISwapchain.h"
 
 namespace Hyperion
 {
@@ -47,6 +48,8 @@ struct FD3D12Texture final : IRHITexture
 	ComPtr<ID3D12Resource> Resource;
 	std::uint64_t UploadFence{};
 	FD3D12DescriptorRange SourceDescriptor;
+	ComPtr<ID3D12DescriptorHeap> DepthViews;
+	FSize DepthSize;
 
 	~FD3D12Texture() override
 	{
@@ -138,8 +141,12 @@ struct FD3D12SwapchainIdentity
 {
 };
 
+struct FD3D12PassQueries;
+
 struct FD3D12RecordedList final : IRHIRecordedList
 {
+	std::shared_ptr<FD3D12PassQueries> TimingQueries;
+	std::string Name;
 #if HYP_ENABLE_PROFILING
 	std::shared_ptr<FD3D12ProfileQueries> ProfileQueries;
 	FProfileGpuContext ProfileContext;
@@ -154,6 +161,7 @@ struct FD3D12RecordedList final : IRHIRecordedList
 
 	ComPtr<ID3D12GraphicsCommandList> List;
 	std::vector<FDrawPacket> Retained;
+	std::vector<FTexture> Textures;
 	std::uint64_t Frame{};
 	UINT Context{};
 	std::shared_ptr<const FD3D12SwapchainIdentity> Owner;

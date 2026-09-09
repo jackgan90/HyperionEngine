@@ -1,3 +1,4 @@
+#include "D3D12PassTimings.h"
 #include "D3D12Resources.h"
 #include "Hyperion/Core/Profiling.h"
 
@@ -36,6 +37,10 @@ void FD3D12DeviceState::Idle()
 	Wait(Signal());
 	// This fence follows every submitted upload, including batches whose own Signal failed.
 	Uploads.clear();
+	for (const auto& Submission : Submissions)
+	{
+		CollectPassTimings(*this, Submission.Lists);
+	}
 #if HYP_ENABLE_PROFILING
 	for (const auto& Submission : Submissions)
 	{
@@ -54,8 +59,12 @@ void FD3D12DeviceState::CollectUploads()
 		              return InBatch.FenceValue <= Completed;
 	              });
 	std::erase_if(Submissions,
-	              [Completed](const FSubmission& InSubmission)
+	              [this, Completed](const FSubmission& InSubmission)
 	              {
+		              if (Completed != UINT64_MAX && InSubmission.FenceValue <= Completed)
+		              {
+			              CollectPassTimings(*this, InSubmission.Lists);
+		              }
 #if HYP_ENABLE_PROFILING
 		              if (Completed != UINT64_MAX && InSubmission.FenceValue <= Completed)
 		              {

@@ -50,6 +50,10 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 			Item.State.Surface = Item.State.Resource->GetMaterial(Item.State.Section);
 		}
 		const auto Surface = Item.State.Surface ? Item.State.Surface->GetSnapshot() : nullptr;
+		if (InSnapshot.View.bSkipMissingPass && (!Surface || !Surface->Definition->HasPass(InSnapshot.View.Usage)))
+		{
+			continue;
+		}
 		const bool bClipSpace = Item.State.bClipSpace;
 		const bool bConservative = Surface && std::any_of(Surface->Definition->GetDescription().Passes.begin(),
 		                                                  Surface->Definition->GetDescription().Passes.end(),

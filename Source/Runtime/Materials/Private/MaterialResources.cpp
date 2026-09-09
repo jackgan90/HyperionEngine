@@ -6,6 +6,22 @@
 
 namespace Hyperion
 {
+FMaterialTextureSource::FMaterialTextureSource(FMaterialDepthTexture InDepth, std::uint64_t InVersion)
+    : Identity(MaterialsPrivate::NextIdentity()), Version(InVersion), Encoding(EMaterialTextureEncoding::Linear),
+      Depth(InDepth), bDepthTarget(true)
+{
+	if (!Version || !Depth.Width || !Depth.Height || Depth.Width > 16384 || Depth.Height > 16384 ||
+	    !std::isfinite(Depth.ClearDepth) || Depth.ClearDepth < 0 || Depth.ClearDepth > 1)
+	{
+		throw std::invalid_argument("Invalid material depth target description");
+	}
+}
+
+const FMaterialDepthTexture* FMaterialTextureSource::GetDepthTarget() const
+{
+	return bDepthTarget ? &Depth : nullptr;
+}
+
 FMaterialTextureSource::FMaterialTextureSource(EMaterialTextureEncoding InEncoding,
                                                std::vector<FMaterialTextureMip> InMips, std::uint64_t InVersion)
     : Identity(MaterialsPrivate::NextIdentity()), Version(InVersion), Encoding(InEncoding), Mips(std::move(InMips))
@@ -108,7 +124,8 @@ void FMaterialBufferView::Validate() const
 void FMaterialSampler::Validate() const
 {
 	if (U > EMaterialAddressMode::MirrorOnce || V > EMaterialAddressMode::MirrorOnce ||
-	    W > EMaterialAddressMode::MirrorOnce || MaxAnisotropy < 1 || MaxAnisotropy > 16 || !std::isfinite(MipLodBias) ||
+	    W > EMaterialAddressMode::MirrorOnce || Compare > EMaterialSamplerCompare::Always || MaxAnisotropy < 1 ||
+	    MaxAnisotropy > 16 || !std::isfinite(MipLodBias) ||
 	    (MaxAnisotropy > 1 && (!bMinLinear || !bMagLinear || !bMipLinear)) || !std::isfinite(MinLod) ||
 	    !std::isfinite(MaxLod) || MinLod > MaxLod || MipLodBias < -16 || MipLodBias > 15.99F ||
 	    !std::all_of(BorderColor.begin(), BorderColor.end(),

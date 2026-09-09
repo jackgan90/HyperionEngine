@@ -18,6 +18,22 @@ FMaterialSemanticRegistry::FMaterialSemanticRegistry()
 	Numeric("Engine.View.CameraPosition", EMaterialScalar::Float, 3, EMaterialScope::View, "World-space eye position");
 	Numeric("Engine.View.ViewProjection", EMaterialScalar::Float, 4, EMaterialScope::View,
 	        "Column-vector world to clip", 4);
+	for (unsigned Index = 0; Index < 4; ++Index)
+	{
+		Numeric("Engine.View.ShadowMatrix" + std::to_string(Index), EMaterialScalar::Float, 4, EMaterialScope::View,
+		        "Column-vector world to shadow clip, zero-to-one depth", 4);
+		Add({"Engine.View.ShadowDepth" + std::to_string(Index),
+		     FMaterialParameterType::Resource(EMaterialValueKind::Texture2D), EMaterialScope::View,
+		     "Directional cascade sampled D32 depth"});
+	}
+	for (const auto* Name :
+	     {"ShadowSplits", "ShadowTexels", "ShadowRanges", "ShadowCamera", "ShadowFilter", "ShadowControl"})
+	{
+		Numeric(std::string("Engine.View.") + Name, EMaterialScalar::Float, 4, EMaterialScope::View,
+		        "Cascaded directional shadow contract V1");
+	}
+	Add({"Engine.View.ShadowSampler", FMaterialParameterType::Resource(EMaterialValueKind::Sampler),
+	     EMaterialScope::View, "Less-equal depth comparison sampler"});
 	Numeric("Engine.Object.World", EMaterialScalar::Float, 4, EMaterialScope::Object, "Column-vector local to world",
 	        4);
 	Numeric("Engine.Object.Normal", EMaterialScalar::Float, 4, EMaterialScope::Object,

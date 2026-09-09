@@ -40,6 +40,15 @@ struct FRenderPrimitiveState
 	FMaterialParameterValues ObjectInputs; // Semantic provider inputs, independently owned.
 };
 
+struct FRenderCamera
+{
+	FVec3 Forward{0, 0, -1};
+	FVec3 Up{0, 1, 0};
+	float VerticalRadians = 1;
+	float Near = .05f;
+	float Far = 500;
+};
+
 struct FRenderView
 {
 	FMat4 ViewProjection = Hyperion::Identity();
@@ -55,6 +64,13 @@ struct FRenderView
 	FMaterialParameterValues Parameters;
 	FMaterialParameterValues PassParameters;
 	bool bInstanceBatching = true;
+	std::optional<FRenderCamera> Camera;
+	std::shared_ptr<const FMaterialTextureSource> DepthTarget;
+	std::vector<std::shared_ptr<const FMaterialTextureSource>> SampledDepth;
+	std::shared_ptr<const void> TargetLifetime;
+	std::string Name;
+	bool bSkipMissingPass{};
+	std::optional<FVec4> ClearColor;
 };
 
 struct FRenderItem

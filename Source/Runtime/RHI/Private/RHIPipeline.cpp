@@ -125,7 +125,8 @@ void ValidateShaderOutputs(const FPipelineDesc& InDesc)
 	for (const auto& Output : InDesc.Pixel.Reflection.Outputs)
 	{
 		const auto Semantic = CanonicalSemantic(Output.Semantic);
-		if ((Semantic == "SV_TARGET" && (Output.SemanticIndex != 0 || Output.Scalar != EShaderScalar::Float)) ||
+		if ((Semantic == "SV_TARGET" &&
+		     (Output.SemanticIndex >= InDesc.Target.ColorCount || Output.Scalar != EShaderScalar::Float)) ||
 		    (Semantic != "SV_TARGET" && Semantic != "SV_DEPTH" && Semantic != "SV_DEPTHLESSEQUAL" &&
 		     Semantic != "SV_DEPTHGREATEREQUAL"))
 		{
@@ -158,10 +159,13 @@ void ValidateStencil(const FStencilFaceDesc& InFace)
 void ValidateGraphicsPipeline(const FPipelineDesc& InDesc)
 {
 	const auto& State = InDesc.State;
-	if (InDesc.Target.SampleCount != 1 || InDesc.Target.ColorCount != 1 || State.bAlphaToCoverage ||
+	if (InDesc.Target.SampleCount != 1 || InDesc.Target.ColorCount > 1 || State.bAlphaToCoverage ||
+	    (InDesc.Target.ColorCount == 0 && (State.ColorWriteMask != 0 || State.bBlend || InDesc.Target.bSrgb ||
+	                                       InDesc.Target.Depth == ERHIDepthFormat::None)) ||
 	    InDesc.Target.Depth > ERHIDepthFormat::D32S8 || InDesc.Topology > ERHIPrimitiveTopology::PointList)
 	{
-		throw std::invalid_argument("Graphics pipeline requires one single-sample color target; A2C is unavailable");
+		throw std::invalid_argument(
+		    "Invalid graphics attachment count/state; single-sample zero/one color targets are supported");
 	}
 	if ((State.bDepthTest && InDesc.Target.Depth == ERHIDepthFormat::None) ||
 	    (State.bStencil && InDesc.Target.Depth != ERHIDepthFormat::D32S8) || (State.bDepthWrite && !State.bDepthTest))

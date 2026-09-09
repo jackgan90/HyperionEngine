@@ -8,6 +8,7 @@ void FSceneViewerPlugin::FImpl::UpdateCamera(FRenderFrame& InFrame)
 {
 	const FVec3 Direction{std::sin(Yaw) * std::cos(Pitch), std::sin(Pitch), std::cos(Yaw) * std::cos(Pitch)};
 	InFrame.View.Eye = Add(Target, ScaleVector(Direction, Distance));
+	InFrame.View.Camera = FRenderCamera{ScaleVector(Direction, -1), {0, 1, 0}, 1, Manifest->Near, Manifest->Far};
 	const float Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
 	InFrame.View.ViewProjection =
 	    Multiply(Perspective(1, Aspect, Manifest->Near, Manifest->Far), LookAt(InFrame.View.Eye, Target));

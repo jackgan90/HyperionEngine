@@ -1,6 +1,7 @@
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
+#include "RenderGraphResources.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -69,7 +70,7 @@ struct FGraphAttachments
 			Stencil = {};
 			DepthOwner = Key;
 		}
-		if (Commands.bUseDepth)
+		if (Commands.bUseDepth && !Commands.DepthTarget)
 		{
 			Depth.Use(Commands.Viewport, Commands.bClearDepth, "depth");
 		}
@@ -77,7 +78,14 @@ struct FGraphAttachments
 		{
 			Stencil.Use(Commands.Viewport, Commands.bClearStencil, "stencil");
 		}
-		Color.Use(Commands.Viewport, InPass.Load != EColorLoad::Load, "color contents");
+		if (Commands.bUseColor)
+		{
+			Color.Use(Commands.Viewport, InPass.Load != EColorLoad::Load, "color contents");
+		}
+		else if (InPass.Load != EColorLoad::Load)
+		{
+			throw std::invalid_argument("Color load operation requires a color attachment");
+		}
 	}
 };
 
@@ -106,6 +114,15 @@ std::size_t FRenderGraph::Add(FColorPass InPass)
 	return Passes.size() - 1;
 }
 
+void FRenderGraph::ImportDepth(FTexture InTexture)
+{
+	if (!InTexture)
+	{
+		throw std::invalid_argument("Cannot import an empty graph texture");
+	}
+	ImportedDepth.push_back(std::move(InTexture));
+}
+
 std::vector<FPassCommands> FRenderGraph::Compile() const
 {
 	HYP_PERF_SCOPE_C(Render, CompileRenderGraph);
@@ -122,13 +139,14 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 		{
 			throw std::runtime_error("Graph pass names must be unique and nonempty");
 		}
-		if (Passes[I].Commands.TransitionFrom || Passes[I].Commands.TransitionTo)
+		if (Passes[I].Commands.TransitionFrom || Passes[I].Commands.TransitionTo ||
+		    !Passes[I].Commands.TextureTransitions.empty())
 		{
 			throw std::runtime_error("Graph owns resource transitions");
 		}
 		if (I)
 		{
-			Deps[I].insert(I - 1); // Every pass writes the single color target: preserve its hazards.
+			Deps[I].insert(I - 1); // Preserve pipeline order, including explicit depth producer/consumer hazards.
 		}
 		for (auto Dependency : Passes[I].After)
 		{
@@ -142,6 +160,8 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 	std::vector<FPassCommands> Result;
 	std::vector<bool> Visited(Count);
 	FGraphAttachments Attachments;
+	FGraphDepthResources DepthResources(ImportedDepth);
+	bool bColorStarted = false;
 	while (Result.size() < Count)
 	{
 		bool bProgress = false;
@@ -159,8 +179,10 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 			Attachments.Validate(Pass);
 			auto Commands = Pass.Commands;
 			Commands.bClear = Pass.Load == EColorLoad::Clear;
-			if (Result.empty())
+			DepthResources.Compile(Commands);
+			if (Commands.bUseColor && !bColorStarted)
 			{
+				bColorStarted = true;
 				Commands.TransitionFrom = EResourceState::Present;
 				Commands.TransitionTo = EResourceState::RenderTarget;
 			}
@@ -175,8 +197,13 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 	}
 	FPassCommands Present;
 	Present.Name = "Present transition";
-	Present.TransitionFrom = EResourceState::RenderTarget;
-	Present.TransitionTo = EResourceState::Present;
+	Present.bUseColor = false;
+	if (bColorStarted)
+	{
+		Present.TransitionFrom = EResourceState::RenderTarget;
+		Present.TransitionTo = EResourceState::Present;
+	}
+	DepthResources.Finish(Present);
 	Result.push_back(std::move(Present));
 	return Result;
 }

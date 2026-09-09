@@ -43,6 +43,8 @@ python tools/Bootstrap.py
 
 多模型场景入口：`hyperion_viewer.exe --config experiments/Scene.json`，或 `--scene "场景清单.json"`。支持平级模型实例增删、移动、显隐，Render 线程 BVH 视锥剔除，以及关闭／线性／BVH 三种模式对照、冻结剔除相机和包围盒显示。清单格式、控制与架构见 [场景管理](docs/SceneManagement.md)。
 
+SceneViewer 默认启用四级方向光阴影；`experiments/Shadows.json` 展示接触、斜面、薄片和镂空投影。独立 ForwardRenderPipeline 编排 shadow depth → forward → 扩展 passes，面板提供 shadow 设置、cascade/depth 预览和 CPU/GPU 耗时。运行参数、精度边界、性能实测和验证见 [级联阴影](docs/CascadedShadows.md)。
+
 静态模型入口：`hyperion_viewer.exe --config experiments/Model.json`，或 `--model "模型路径.glb"`。右键旋转、滚轮缩放、Home 取景、Tab 显隐面板。运行命令、格式支持边界、资产 API 和 OpenSpec 实施顺序见 [资产流水线](docs/AssetPipeline.md)。
 
 默认配置为 `experiments/Triangle.json`。面板可实时修改三角形缩放、背景色和 VSync；“Save experiment”保存到当前配置文件，“Capture screenshot”写入 `out/captures`。插件列表修改后重启生效。窗口右上角关闭按钮退出应用。
@@ -67,7 +69,7 @@ python tools/Bootstrap.py
 - Main 管理窗口、输入和 GUI；Render 组织帧；多个专用 RHI 线程录制命令，RHI 0 提交；单独 IO 线程处理新资产的文件读写。oneTBB 执行解析、解码等 CPU jobs，支持依赖、异常传播和挂起等待。
 - 逻辑插件通过 ID、依赖和启动/关闭生命周期组织，当前为静态链接。已有 `triangle`、`debug-ui`、`model-viewer` 和可选 `renderdoc`；RenderDoc 服务在图形设备创建前启动，不涉及插件 DLL 热更新。
 - 反射使用类型/属性和记录描述符，驱动配置、GUI 编辑、嵌套模型数据与数值 bulk 的原生读写。没有 GC、AST 生成器或任意指针对象图序列化。
-- Render Graph 管理交换链颜色及可选深度目标，校验 pass 依赖、内容初始化及状态转换。容量由后端能力限定；当前 D3D12 支持最多 15 个颜色 pass（另占一个 Present context）、单 graphics queue、2 个 GPU frame context、256 个采样纹理描述符。
+- Render Graph 管理交换链颜色和可采样的独立深度目标，支持 depth-only pass，校验 pass 依赖、内容初始化及逐资源状态转换。容量由后端能力限定；当前 D3D12 支持最多 15 个 graphics pass（另占一个 Present context）、单 graphics queue、2 个 GPU frame context。
 - 数学使用引擎自有列主序类型；Scene 保存静态模型层级，AssetImport 支持 glTF 多网格/材质和 PNG/JPEG，兼容图片接口保留 EXR。未实现动画、骨骼或压缩 glTF 扩展，具体范围见资产流水线文档。
 - RHI 由 `IRHIBackend`、`IRHIDevice`、`IRHISwapchain` 抽象接口与独立后端组成，设备可以脱离窗口创建。通过配置 `rhi_backend` 或 `--backend d3d12` 选择；尚未注册的 Vulkan/Metal 会明确报错。
 - HLSL 可生成 DXIL、SPIR-V 和 MSL 文本。实际运行的是 DX12；Vulkan/Metal 运行时与移动平台尚未实现。

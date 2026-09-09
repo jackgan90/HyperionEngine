@@ -325,13 +325,25 @@ std::uint64_t FRenderSceneClient::GetLogicalSceneIdentity() const
 	return Mailbox->LogicalScene;
 }
 
-FRenderSceneSnapshot FRenderSceneClient::Collect(FRenderView InView) const
+FRenderSceneSnapshot FRenderSceneClient::Collect(FRenderView InView, bool bInRefresh) const
 {
 	Mailbox->Tasks.Require({EDomain::Render});
 	if (!Mailbox->Scene)
 	{
 		throw std::logic_error("Render scene is closed");
 	}
-	return Mailbox->Scene->Collect(InView);
+	return Mailbox->Scene->Collect(std::move(InView), bInRefresh);
+}
+
+FSceneVisibilityStats FRenderSceneClient::BeginViews() const
+{
+	Mailbox->Tasks.Require({EDomain::Render});
+	return Mailbox->Scene->BeginViews();
+}
+
+std::vector<FBounds> FRenderSceneClient::QueryBounds(const ISceneVisibility& InVisibility) const
+{
+	Mailbox->Tasks.Require({EDomain::Render});
+	return Mailbox->Scene->QueryBounds(InVisibility);
 }
 } // namespace Hyperion

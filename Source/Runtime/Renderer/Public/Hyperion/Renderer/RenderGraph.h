@@ -11,22 +11,26 @@ enum class EColorLoad
 	Load
 };
 
-struct FColorPass
+struct FGraphicsPass
 {
 	FPassCommands Commands;
 	EColorLoad Load = EColorLoad::Load;
 	std::vector<std::size_t> After;
 };
 
-// Initial graph scope: one imported swapchain color target, initially undefined.
+using FColorPass = FGraphicsPass; // Compatibility for existing color-only clients.
+
+// One imported swapchain color target plus explicitly written/sampled depth textures.
 class FRenderGraph
 {
 public:
 	std::size_t Add(FColorPass InPass);
 	std::vector<FPassCommands> Compile() const;
+	void ImportDepth(FTexture InTexture); // Previously initialized ShaderRead resource.
 
 private:
 	std::vector<FColorPass> Passes;
+	std::vector<FTexture> ImportedDepth;
 };
 
 // Called from Render; jobs are routed to engine-owned RHI executors.

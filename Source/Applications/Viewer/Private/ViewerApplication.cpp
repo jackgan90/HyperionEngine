@@ -38,6 +38,7 @@ FViewerApplication::FViewerApplication(FOptions InOptions)
     : Options(std::move(InOptions)), Settings(LoadSettings(Options.Config))
 {
 	ApplyOptions(Options, Settings);
+	InitializeShadowSettings();
 }
 
 FViewerApplication::~FViewerApplication()
@@ -81,6 +82,11 @@ void FViewerApplication::InitializeGraphics()
 		                          Desc.RequiredFeatures = {ERHIFeature::Graphics, ERHIFeature::TextureSampling};
 		                          Device = Backends.CreateDevice(SelectedBackend, Desc);
 		                          Swapchain = Device->CreateSwapchain({Surface, InitialSize});
+		                          Swapchain->SetGpuTimingEnabled(true);
+		                          if (!Options.Benchmark.empty())
+		                          {
+			                          Device->BeginGpuTimingCapture(Options.Frames > 0 ? Options.Frames : 65536);
+		                          }
 	                          }));
 	Compiler = std::make_unique<FShaderCompiler>(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
 	                                             std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
@@ -102,6 +108,7 @@ void FViewerApplication::InitializePlugins()
 	}
 	auto& Tasks = Services->Tasks;
 	RenderSession = std::make_unique<FRenderSession>(Tasks, *Device, *Compiler);
+	ForwardPipeline = std::make_unique<FForwardRenderPipeline>(*RenderSession);
 	FPluginRegistry Registry;
 	RegisterTrianglePlugin(Registry, *RenderSession, *Device, *Compiler, Tasks);
 	RegisterModelViewerPlugin(Registry, *RenderSession, Tasks, Services->Assets, Settings.ModelSource);
@@ -143,6 +150,7 @@ FDeviceStats FViewerApplication::ReleaseGraphics()
 	ScenePlugin = nullptr;
 	if (RenderSession)
 	{
+		ForwardPipeline.reset();
 		RenderSession->Close();
 		RenderSession.reset();
 	}
@@ -152,6 +160,7 @@ FDeviceStats FViewerApplication::ReleaseGraphics()
 		                          if (Device)
 		                          {
 			                          Device->WaitIdle();
+			                          BenchmarkGpu = Device->EndGpuTimingCapture();
 		                          }
 		                          Swapchain.reset();
 		                          if (Device)
@@ -204,6 +213,7 @@ void FViewerApplication::Run()
 	RunFrames();
 	VerifyOutputs();
 	Shutdown();
+	SaveBenchmark();
 	Log(ELogLevel::Info, "Rendering lifecycle completed successfully");
 }
 } // namespace Hyperion

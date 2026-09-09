@@ -119,7 +119,7 @@ struct FResolvedMaterialParameters
 	FMaterialDependencyTable Dependencies;
 	std::uint32_t DependenciesMask{};
 	std::array<FMaterialScopeInput, MaterialScopeCount> Scopes;
-	// Shared only while resource values and their dependency owners are unchanged across numeric refreshes.
+	// Owns a resource-value epoch across numeric refreshes; replaced when a resource value changes.
 	std::shared_ptr<const void> ResourceIdentity;
 };
 

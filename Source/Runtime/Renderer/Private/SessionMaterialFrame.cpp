@@ -82,4 +82,21 @@ FMaterialProviderRegistry& FRenderSession::GetProviders()
 	Tasks.Require({EDomain::Main});
 	return MaterialState->Providers;
 }
+
+FMaterialSharedValue FRenderSession::ResolveFrameSemantic(const FMaterialFrameContext& InFrame,
+                                                          std::string_view InSemantic)
+{
+	Tasks.Require({EDomain::Render});
+	if (bClosed || InFrame.Session != MaterialState->Identity || InFrame.Frame < MaterialState->LastFrame)
+	{
+		throw std::invalid_argument("Foreign or stale material frame");
+	}
+	FMaterialProviderInputs Inputs;
+	for (const auto Scope : {EMaterialScope::Global, EMaterialScope::Frame, EMaterialScope::Scene})
+	{
+		Inputs.Scopes[ScopeIndex(Scope)] = InFrame.Inputs.Scopes[ScopeIndex(Scope)];
+		Inputs.Values[ScopeIndex(Scope)] = InFrame.Inputs.Values[ScopeIndex(Scope)];
+	}
+	return MaterialState->Providers.EvaluateOne(Inputs, InSemantic).Value;
+}
 } // namespace Hyperion

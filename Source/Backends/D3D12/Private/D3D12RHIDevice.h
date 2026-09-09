@@ -21,6 +21,7 @@ public:
 	FResourceBindingLayout CreateBindingLayout(const FResourceBindingLayoutDesc& InDesc) override;
 	FResourceBindingSet CreateBindingSet(const FResourceBindingSetDesc& InDesc) override;
 	FTexture CreateTexture(const FImage& InImage) override;
+	FTexture CreateDepthTexture(const FDepthTextureDesc& InDesc) override;
 	std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc> InTextures) override;
 	bool TexturesReady(std::span<const FTexture> InTextures) override;
 	FPipeline CreatePipeline(const FPipelineDesc& InDesc) override;
@@ -28,6 +29,8 @@ public:
 	void WaitIdle() override;
 	void CollectCompletedResources() override;
 	FDeviceStats Statistics() const override;
+	void BeginGpuTimingCapture(std::size_t InCapacity) override;
+	FGpuTimingCapture EndGpuTimingCapture() override;
 
 private:
 	std::shared_ptr<FD3D12DeviceState> State;

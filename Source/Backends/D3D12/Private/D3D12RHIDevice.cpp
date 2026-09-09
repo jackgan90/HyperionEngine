@@ -29,6 +29,16 @@ void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& In
 	Caps.MaxAnisotropy = 16;
 	Caps.bReadOnlyBuffers = true;
 	Caps.bVertexTextures = true;
+	D3D12_FEATURE_DATA_FORMAT_SUPPORT DepthSupport{DXGI_FORMAT_D32_FLOAT};
+	D3D12_FEATURE_DATA_FORMAT_SUPPORT SampleSupport{DXGI_FORMAT_R32_FLOAT};
+	Caps.bSampledDepthTargets = SUCCEEDED(InState.Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,
+	                                                                          &DepthSupport, sizeof(DepthSupport))) &&
+	                            (DepthSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) != 0 &&
+	                            SUCCEEDED(InState.Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,
+	                                                                          &SampleSupport, sizeof(SampleSupport))) &&
+	                            (SampleSupport.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE) != 0;
+	Caps.bComparisonSamplers =
+	    Caps.bSampledDepthTargets && (SampleSupport.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE_COMPARISON) != 0;
 	if (InDesc.ResourceDescriptorCapacity == 0 || InDesc.ResourceDescriptorCapacity > 1000000 ||
 	    InDesc.SamplerDescriptorCapacity == 0 || InDesc.SamplerDescriptorCapacity > 2048)
 	{
@@ -315,6 +325,7 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 	Stats.GraphicsTableBinds = P.GraphicsTableBinds.load();
 	Stats.PipelinesCreated = P.PipelinesCreated;
 	Stats.ConstantBytesWritten = P.ConstantBytesWritten;
+	Stats.GpuTiming = P.LastGpuTiming;
 	D3D12MA::Budget Local{};
 	D3D12MA::Budget Nonlocal{};
 	P.Allocator->GetBudget(&Local, &Nonlocal);
@@ -336,6 +347,23 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 		}
 	}
 	return Stats;
+}
+
+void FD3D12RHIDevice::BeginGpuTimingCapture(std::size_t InCapacity)
+{
+	if (!InCapacity || State->GpuTimingCapacity)
+	{
+		throw std::invalid_argument("GPU timing capture needs a positive capacity and no active capture");
+	}
+	State->GpuTimingCapture = {};
+	State->GpuTimingCapture.Frames.reserve(InCapacity);
+	State->GpuTimingCapacity = InCapacity;
+}
+
+FGpuTimingCapture FD3D12RHIDevice::EndGpuTimingCapture()
+{
+	State->GpuTimingCapacity = 0;
+	return std::exchange(State->GpuTimingCapture, {});
 }
 
 void FD3D12RHIDevice::CollectCompletedResources()

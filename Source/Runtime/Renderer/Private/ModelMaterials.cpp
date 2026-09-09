@@ -1,4 +1,5 @@
 #include "ModelMaterials.h"
+#include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Hyperion/Renderer/MaterialBlocks.h"
 #include <map>
 #include <mutex>
@@ -31,6 +32,28 @@ FMaterialPass ModelPass(const FModelMaterial& InMaterial)
 	return Pass;
 }
 
+FMaterialPass ShadowPass(const FModelMaterial& InMaterial)
+{
+	auto Pass = ModelPass(InMaterial);
+	Pass.Usage = "ShadowDepth";
+	Pass.bSrgbTarget = false;
+	Pass.State.ColorWriteMask = 0;
+	Pass.State.DepthBias = 1;
+	Pass.State.SlopeScaledDepthBias = 1.25f;
+	Pass.State.DepthBiasClamp = .001f;
+	Pass.Vertex.Defines = {{"HYP_SHADOW_CASTER", "1"}};
+	if (Pass.bAlphaClip)
+	{
+		Pass.Pixel.Defines = Pass.Vertex.Defines;
+	}
+	else
+	{
+		Pass.Pixel = {};
+		Pass.InstanceArrays = {{"HyperionObjectV1", "ObjectInstances"}};
+	}
+	return Pass;
+}
+
 std::shared_ptr<const FMaterialDefinition> ModelDefinition(const FModelMaterial& InMaterial)
 {
 	static std::mutex Mutex;
@@ -44,8 +67,20 @@ std::shared_ptr<const FMaterialDefinition> ModelDefinition(const FModelMaterial&
 	FMaterialDescription Description;
 	Description.Name = "Builtin glTF PBR";
 	Description.Passes.push_back(ModelPass(InMaterial));
+	if (InMaterial.AlphaMode != EAlphaMode::Blend)
+	{
+		Description.Passes.push_back(ShadowPass(InMaterial));
+	}
 	const auto Semantics = GetStandardMaterialSemantics();
 	Description.Parameters = GetStandardMaterialBlockParameters("HyperionMaterialV1", *Semantics);
+	for (const auto& Entry : DefaultShadowParameters())
+	{
+		const auto Name = Entry.Name.substr(std::string("Engine.View.").size());
+		auto Parameter = DeclareMaterialSemantic(Entry.Name, Entry.Name, *Semantics);
+		Parameter.Targets = {Entry.Value.Type.Kind == EMaterialValueKind::Numeric ? "ShadowViewV1." + Name : Name};
+		Parameter.Default = Entry.Value;
+		Description.Parameters.push_back(std::move(Parameter));
+	}
 	for (const auto& Role : Roles)
 	{
 		for (const auto* Kind : {"Texture", "Sampler"})

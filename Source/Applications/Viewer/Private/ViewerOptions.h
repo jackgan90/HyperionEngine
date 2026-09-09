@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Config/AppSettings.h"
+#include "Hyperion/Renderer/CascadedShadowMap.h"
 #include <optional>
 
 namespace Hyperion
@@ -17,6 +18,9 @@ struct FOptions
 	bool bBenchmarkCamera{};
 	bool bNoVsync{};
 	bool bNoInstanceBatching{};
+	FCascadedShadowSettings Shadows;
+	std::optional<FVec3> ShadowLight;
+	bool bBenchmarkLight{};
 	std::uint32_t ProfilingMask{};
 	int ProfileStart{};
 	int ProfileFrames{};
@@ -42,6 +46,7 @@ struct FOptions
 
 FOptions ParseOptions(int InArgc, char** InArgv);
 bool ParseProfilingOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex);
+bool ParseShadowOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex);
 void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings);
 void VerifyImage(const FImage& InImage, const FAppSettings& InSettings, const FOptions& InOptions);
 } // namespace Hyperion

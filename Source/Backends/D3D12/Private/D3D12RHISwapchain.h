@@ -16,6 +16,7 @@ public:
 	FImage EndFrame(std::span<const FRecordedList> InLists, bool bInVsync, bool bInCapture) override;
 	void CancelFrame() override;
 	void WaitIdle() override;
+	void SetGpuTimingEnabled(bool bInEnabled) override;
 
 private:
 	struct FImpl;

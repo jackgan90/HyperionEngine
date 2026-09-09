@@ -224,6 +224,7 @@ FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& I
 		Slot.StructureByteStride = Binding.Resource.StructureByteStride;
 		Slot.InstanceStride = Binding.InstanceStride;
 		Slot.InstanceCapacity = Binding.InstanceCapacity;
+		Slot.bComparison = Binding.Resource.bComparison;
 		Result.Slots.push_back(Slot);
 	}
 	return Result;

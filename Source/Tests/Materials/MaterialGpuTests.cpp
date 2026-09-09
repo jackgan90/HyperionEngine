@@ -7,6 +7,7 @@
 using namespace Hyperion;
 
 void RunMaterialStateGpuTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
+void RunShadowDepthTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialPackingGpuTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialCacheTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialGpuCacheTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
@@ -359,11 +360,7 @@ void CheckAllocationRollback(FFixture& InFixture)
 	    });
 	FSamplerDesc Comparison;
 	Comparison.bComparison = true;
-	Rejects(
-	    [&]
-	    {
-		    Device->CreateSampler(Comparison);
-	    });
+	HYP_CHECK(InFixture.Device->CreateSampler(Comparison));
 	HYP_CHECK(Device->Statistics().ValidationErrors == 0);
 }
 } // namespace
@@ -380,6 +377,7 @@ int main()
 		CheckAllocationRollback(Fixture);
 		CheckIntegerTextureRejection(Fixture);
 		RunMaterialStateGpuTests(*Fixture.Device, *Fixture.Swapchain);
+		RunShadowDepthTests(*Fixture.Device, *Fixture.Swapchain);
 		RunMaterialPackingGpuTests(*Fixture.Device, *Fixture.Swapchain);
 		RunMaterialCacheTests(*Fixture.Device, *Fixture.Swapchain);
 		RunMaterialGpuCacheTests(*Fixture.Device, *Fixture.Swapchain);

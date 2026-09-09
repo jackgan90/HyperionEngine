@@ -83,6 +83,12 @@ void ValidateSet(const FResourceBindingSetDesc& InDesc, const FD3D12BindingLayou
 		for (const FResourceBindingValue& Value : Entry.Values)
 		{
 			ValidateValue(Value, Slot.Kind, InState);
+			if (Slot.Kind == ERHIBindingKind::Sampler &&
+			    NativeResource<FD3D12Sampler>(std::get<FSampler>(Value).Payload, &InState).Description.bComparison !=
+			        Slot.bComparison)
+			{
+				throw std::invalid_argument("Sampler comparison mode does not match reflected layout");
+			}
 			if (Slot.Kind == ERHIBindingKind::StructuredBuffer && Slot.StructureByteStride != 0 &&
 			    std::get<FReadBufferView>(Value).Stride != Slot.StructureByteStride)
 			{
@@ -166,9 +172,9 @@ void ValidateConstant(const FConstantBinding& InBinding, const FResourceBindingS
 
 FSampler FD3D12RHIDevice::CreateSampler(const FSamplerDesc& InDesc)
 {
-	if (InDesc.bComparison)
+	if (InDesc.Compare > ERHICompare::Always || (InDesc.bComparison && !State->Capabilities.bComparisonSamplers))
 	{
-		throw std::invalid_argument("Comparison samplers are unsupported");
+		throw std::invalid_argument("Invalid or unsupported sampler comparison");
 	}
 	if (InDesc.MaxAnisotropy == 0 || InDesc.MaxAnisotropy > State->Capabilities.MaxAnisotropy ||
 	    (InDesc.MaxAnisotropy > 1 && (!InDesc.bMinLinear || !InDesc.bMagLinear || !InDesc.bMipLinear)) ||
@@ -189,16 +195,17 @@ FSampler FD3D12RHIDevice::CreateSampler(const FSamplerDesc& InDesc)
 	Desc.AddressW = Address(InDesc.W);
 	Desc.Filter =
 	    InDesc.MaxAnisotropy > 1
-	        ? D3D12_FILTER_ANISOTROPIC
+	        ? (InDesc.bComparison ? D3D12_FILTER_COMPARISON_ANISOTROPIC : D3D12_FILTER_ANISOTROPIC)
 	        : D3D12_ENCODE_BASIC_FILTER(InDesc.bMinLinear ? D3D12_FILTER_TYPE_LINEAR : D3D12_FILTER_TYPE_POINT,
 	                                    InDesc.bMagLinear ? D3D12_FILTER_TYPE_LINEAR : D3D12_FILTER_TYPE_POINT,
 	                                    InDesc.bMipLinear ? D3D12_FILTER_TYPE_LINEAR : D3D12_FILTER_TYPE_POINT,
-	                                    D3D12_FILTER_REDUCTION_TYPE_STANDARD);
+	                                    InDesc.bComparison ? D3D12_FILTER_REDUCTION_TYPE_COMPARISON
+	                                                       : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
 	Desc.MipLODBias = InDesc.MipLodBias;
 	Desc.MaxAnisotropy = InDesc.MaxAnisotropy;
 	Desc.MinLOD = InDesc.MinLod;
 	Desc.MaxLOD = InDesc.bMipmapped ? InDesc.MaxLod : 0;
-	Desc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+	Desc.ComparisonFunc = static_cast<D3D12_COMPARISON_FUNC>(static_cast<unsigned>(InDesc.Compare) + 1);
 	std::copy(InDesc.BorderColor.begin(), InDesc.BorderColor.end(), Desc.BorderColor);
 	auto Sampler = std::make_shared<FD3D12Sampler>();
 	Sampler->State = State;

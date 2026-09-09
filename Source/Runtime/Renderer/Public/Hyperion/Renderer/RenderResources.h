@@ -99,6 +99,8 @@ public:
 	                                               std::string InConfiguration,
 	                                               std::function<FRenderResourceDesc()> InPrepare);
 	std::vector<FColorPass> BuildPasses(const FRenderSceneSnapshot& InSnapshot);
+	FGraphicsPass BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
+	                                std::shared_ptr<const void> InLifetime, FViewport InViewport);
 	FRenderResourceStats Statistics() const;
 	void Close();
 

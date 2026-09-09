@@ -1,5 +1,6 @@
 """Real moving-camera A/B: equal pixels and coverage, bounded draws and cache work."""
 import csv
+import json
 import math
 import pathlib
 import subprocess
@@ -10,6 +11,7 @@ viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
 work = pathlib.Path.cwd() / "scene-performance"
 work.mkdir(exist_ok=True)
+model_count = len(json.loads((root / "assets/Scenes/Showcase.json").read_text(encoding="utf-8"))["instances"])
 
 
 def run(name, batched):
@@ -24,7 +26,7 @@ def run(name, batched):
     log = result.stdout + result.stderr
     (work / f"{name}.log").write_text(log, encoding="utf-8")
     assert result.returncode == 0, log
-    assert "78/78 models ready | 0 failed" in log and "validation errors: 0" in log, log
+    assert f"{model_count}/{model_count} models ready | 0 failed" in log and "validation errors: 0" in log, log
     assert "vsync=off" in log and "Benchmark: 100 frames" in log, log
     with output.open(newline="", encoding="utf-8") as stream:
         samples = list(csv.DictReader(stream))

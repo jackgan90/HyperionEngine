@@ -53,6 +53,7 @@ struct FRHICapabilities
 	bool bReadOnlyBuffers{};
 	bool bVertexTextures{};
 	bool bComparisonSamplers{};
+	bool bSampledDepthTargets{};
 	std::array<FRHIFeatureSupport, static_cast<std::size_t>(ERHIFeature::Count)> Features{};
 
 	FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const;

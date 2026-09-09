@@ -1,4 +1,5 @@
-add_library(hyperion_render STATIC Private/RenderGraph.cpp
+add_library(hyperion_render STATIC Private/RenderGraph.cpp Private/RenderGraphResources.cpp
+  Private/CascadedShadowMap.cpp Private/ShadowParameters.cpp Private/ForwardRenderPipeline.cpp Private/DepthPreview.cpp
   Private/MaterialInterface.cpp Private/MaterialPreparation.cpp Private/MaterialPipeline.cpp Private/MaterialPacking.cpp Private/MaterialBlocks.cpp Private/MaterialInstances.cpp
   Private/MaterialBindingContext.cpp Private/MaterialProfiling.cpp
   Private/MaterialConstantCache.cpp

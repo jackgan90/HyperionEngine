@@ -130,7 +130,7 @@ FResolvedMaterialParameters EvaluateChangedParameters(const FMaterialEvaluationC
                                                       const FMaterialParameterSchema& InSchema,
                                                       const FCompiledMaterialPass& InPass,
                                                       const FMaterialProviderInputs& InInputs, std::uint32_t InChanged,
-                                                      FMaterialProviderRegistry& InProviders)
+                                                      FViewMaterialProviders& InProviders)
 {
 	HYP_PERF_SCOPE_C(Detail, EvaluateChangedParameters);
 	const auto& Parameters = InSchema.GetParameters();
@@ -142,7 +142,7 @@ FResolvedMaterialParameters EvaluateChangedParameters(const FMaterialEvaluationC
 			continue;
 		}
 		const auto& Parameter = Parameters[Index];
-		const auto Provider = InProviders.EvaluateOne(InInputs, Parameter.Semantic);
+		const auto Provider = InProviders.Evaluate(InInputs, Parameter.Semantic);
 		const auto Value =
 		    Provider.Value ? Provider.Value.Share()
 		                   : (Parameter.Default ? std::make_shared<const FMaterialValue>(*Parameter.Default) : nullptr);
@@ -160,8 +160,10 @@ FResolvedMaterialParameters EvaluateChangedParameters(const FMaterialEvaluationC
 	}
 	for (const auto& Binding : InPass.Bindings)
 	{
-		if (Binding.ResourceParameter && (InEntry.Resolved->Dependencies[*Binding.ResourceParameter] & InChanged) != 0)
+		if (Binding.ResourceParameter && !SameMaterialValue(Values.Values[*Binding.ResourceParameter],
+		                                                    InEntry.Resolved->Values[*Binding.ResourceParameter]))
 		{
+			// A camera/light numeric update does not change the textures or samplers in this descriptor table.
 			Values.ResourceIdentity = std::make_shared<const int>(0);
 			break;
 		}
@@ -171,10 +173,27 @@ FResolvedMaterialParameters EvaluateChangedParameters(const FMaterialEvaluationC
 
 } // namespace
 
+FMaterialProvidedValue FViewMaterialProviders::Evaluate(const FMaterialProviderInputs& InInputs,
+                                                        std::string_view InSemantic)
+{
+	if (const auto Found = Shared.find(InSemantic); Found != Shared.end())
+	{
+		return Found->second;
+	}
+	auto Result = Registry.EvaluateOne(InInputs, InSemantic);
+	constexpr auto PerItem = MaterialScopeBit(EMaterialScope::Object) | MaterialScopeBit(EMaterialScope::Material) |
+	                         MaterialScopeBit(EMaterialScope::Draw);
+	if ((Result.Dependencies & PerItem) == 0)
+	{
+		Shared.emplace(InSemantic, Result);
+	}
+	return Result;
+}
+
 bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& InSnapshot,
                                const FMaterialProviderInputs& InBaseInputs, const FRenderResourceService& InResources,
                                const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
-                               FMaterialProviderRegistry& InProviders)
+                               FViewMaterialProviders& InProviders)
 {
 	HYP_PERF_SCOPE_C(Detail, RefreshMaterialEvaluation);
 	const auto& View = InSnapshot.View;

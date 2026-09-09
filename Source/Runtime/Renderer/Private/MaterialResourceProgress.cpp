@@ -173,6 +173,7 @@ bool FRenderResourceCoordinator::ProcessMaterials()
 	}
 	if (MaterialGpu)
 	{
+		DepthPreview.Collect();
 		bPending |= MaterialGpu->Collect();
 		Stats.Materials = MaterialGpu->Statistics();
 	}

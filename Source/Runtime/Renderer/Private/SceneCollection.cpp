@@ -38,13 +38,46 @@ void FRenderScene::RefreshSpatial(FSceneVisibilityStats& OutStats)
 	Spatial->Commit(OutStats);
 }
 
-FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView)
+FSceneVisibilityStats FRenderScene::BeginViews()
+{
+	Tasks.Require({EDomain::Render});
+	FSceneVisibilityStats Stats;
+	RefreshSpatial(Stats);
+	return Stats;
+}
+
+std::vector<FBounds> FRenderScene::QueryBounds(const ISceneVisibility& InVisibility) const
+{
+	Tasks.Require({EDomain::Render});
+	FSceneVisibilityStats Stats;
+	std::vector<FBounds> Result;
+	for (const auto Group : Spatial->Query(&InVisibility, true, Stats))
+	{
+		for (const auto Slot : Groups.at(Group))
+		{
+			const auto& Entry = Entries.at(Slot);
+			if (Entry.Primitive->GetState().bVisible && InVisibility.Intersects(Entry.Bounds))
+			{
+				Result.push_back(Entry.Bounds);
+			}
+		}
+	}
+	return Result;
+}
+
+FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView, bool bInRefresh)
 {
 	HYP_PERF_SCOPE_C(Render, CollectScene);
 	Tasks.Require({EDomain::Render});
-	FRenderSceneSnapshot Snapshot{InView, {}};
+	FRenderSceneSnapshot Snapshot;
 	auto& Stats = Snapshot.Statistics;
-	RefreshSpatial(Stats);
+	if (bInRefresh)
+	{
+		RefreshSpatial(Stats);
+	}
+	Stats.Primitives = Entries.size();
+	Stats.Groups = Groups.size();
+	Stats.UnboundedGroups = UnboundedGroups.size();
 	const FFrustumVisibility Frustum(InView.CullingViewProjection.value_or(InView.ViewProjection));
 	const ISceneVisibility* Visibility = InView.CullingMode == ESceneCullingMode::None ? nullptr : &Frustum;
 	const auto Candidates = Spatial->Query(Visibility, InView.CullingMode == ESceneCullingMode::Bvh, Stats);
@@ -86,6 +119,7 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView)
 		}
 	}
 	Stats.EmittedItems = Snapshot.Items.size();
+	Snapshot.View = std::move(InView);
 	return Snapshot;
 }
 } // namespace Hyperion

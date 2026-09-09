@@ -1,6 +1,7 @@
 #include "D3D12RHISwapchain.h"
 #include "D3D12Bindings.h"
 #include "D3D12GraphicsState.h"
+#include "D3D12PassTimings.h"
 #include "D3D12Resources.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
@@ -73,18 +74,68 @@ void ValidateDraws(const FD3D12DeviceState* InState, const FPassCommands& InComm
 		const ERHIDepthFormat Depth =
 		    (InCommands.bUseDepth || InCommands.bUseStencil) ? InCommands.DepthFormat : ERHIDepthFormat::None;
 		if (Draw.VertexStride != Pipeline.VertexStride || Pipeline.Target.bSrgb != InCommands.bSrgbTarget ||
-		    Pipeline.Target.Depth != Depth || (Pipeline.GraphicsState.bDepthTest && !InCommands.bUseDepth) ||
+		    Pipeline.Target.ColorCount != (InCommands.bUseColor ? 1U : 0U) || Pipeline.Target.Depth != Depth ||
+		    (Pipeline.GraphicsState.bDepthTest && !InCommands.bUseDepth) ||
 		    (Pipeline.GraphicsState.bStencil && !InCommands.bUseStencil))
 		{
 			throw std::invalid_argument("Draw geometry or target is incompatible with pipeline");
 		}
 		ValidateGraphicsDynamicState(Draw.DynamicState);
 		ValidateGraphicsBindings(Draw, Pipeline, *InState);
+		if (InCommands.DepthTarget && Draw.Bindings)
+		{
+			const auto& Set = NativeResource<FD3D12BindingSet>(Draw.Bindings.Payload, InState);
+			for (const auto& Entry : Set.Description.Entries)
+			{
+				for (const auto& Value : Entry.Values)
+				{
+					if (const auto* Texture = std::get_if<FTexture>(&Value);
+					    Texture && *Texture == InCommands.DepthTarget)
+					{
+						throw std::invalid_argument("A draw cannot sample its writable depth target");
+					}
+				}
+			}
+		}
 	}
 }
 
-void ValidatePass(const FPassCommands& InCommands, FSize InSize, ERHIDepthFormat InDepthFormat)
+FSize ValidatePass(const FD3D12DeviceState& InState, const FPassCommands& InCommands, FSize InSize,
+                   ERHIDepthFormat InDepthFormat)
 {
+	if ((!InCommands.bUseColor && InCommands.bClear) ||
+	    (!InCommands.bUseColor && !InCommands.bUseDepth && !InCommands.Draws.empty()))
+	{
+		throw std::invalid_argument("Pass color clear/draw has no compatible attachment");
+	}
+	if (InCommands.DepthTarget)
+	{
+		const auto& Texture = NativeResource<FD3D12Texture>(InCommands.DepthTarget.Payload, &InState);
+		if (!Texture.DepthViews || !InCommands.bUseDepth ||
+		    (InCommands.bUseColor &&
+		     (Texture.DepthSize.Width != InSize.Width || Texture.DepthSize.Height != InSize.Height)))
+		{
+			throw std::invalid_argument("Invalid depth target type or color/depth dimensions");
+		}
+		InSize = Texture.DepthSize;
+		InDepthFormat = ERHIDepthFormat::D32;
+	}
+	for (const auto& Texture : InCommands.SampledDepth)
+	{
+		if (!NativeResource<FD3D12Texture>(Texture.Payload, &InState).DepthViews || Texture == InCommands.DepthTarget)
+		{
+			throw std::invalid_argument("Invalid sampled depth resource");
+		}
+	}
+	for (const auto& Barrier : InCommands.TextureTransitions)
+	{
+		if (!NativeResource<FD3D12Texture>(Barrier.Texture.Payload, &InState).DepthViews ||
+		    (Barrier.Before != EResourceState::ShaderRead && Barrier.Before != EResourceState::DepthWrite) ||
+		    (Barrier.After != EResourceState::ShaderRead && Barrier.After != EResourceState::DepthWrite))
+		{
+			throw std::invalid_argument("Invalid depth resource transition");
+		}
+	}
 	if ((InCommands.bClearDepth && !InCommands.bUseDepth) || (InCommands.bClearStencil && !InCommands.bUseStencil) ||
 	    ((InCommands.bUseDepth || InCommands.bUseStencil) &&
 	     (InCommands.DepthFormat != InDepthFormat || InDepthFormat == ERHIDepthFormat::None)) ||
@@ -97,6 +148,33 @@ void ValidatePass(const FPassCommands& InCommands, FSize InSize, ERHIDepthFormat
 	{
 		ValidateViewport(*InCommands.Viewport, InSize);
 	}
+	return InSize;
+}
+
+void RecordAttachments(ID3D12GraphicsCommandList& InList, const FPassCommands& InCommands, FSize InSize,
+                       D3D12_CPU_DESCRIPTOR_HANDLE InRtv, D3D12_CPU_DESCRIPTOR_HANDLE InDsv)
+{
+	InList.OMSetRenderTargets(InCommands.bUseColor ? 1 : 0, InCommands.bUseColor ? &InRtv : nullptr, FALSE,
+	                          (InCommands.bUseDepth || InCommands.bUseStencil) ? &InDsv : nullptr);
+	const FViewport View = InCommands.Viewport.value_or(
+	    FViewport{0, 0, static_cast<float>(InSize.Width), static_cast<float>(InSize.Height), 0, 1});
+	D3D12_RECT ClearRect{static_cast<LONG>(std::floor(View.X)), static_cast<LONG>(std::floor(View.Y)),
+	                     static_cast<LONG>(std::ceil(View.X + View.Width)),
+	                     static_cast<LONG>(std::ceil(View.Y + View.Height))};
+	if (InCommands.bClearDepth || InCommands.bClearStencil)
+	{
+		const auto Flags = static_cast<D3D12_CLEAR_FLAGS>((InCommands.bClearDepth ? D3D12_CLEAR_FLAG_DEPTH : 0) |
+		                                                  (InCommands.bClearStencil ? D3D12_CLEAR_FLAG_STENCIL : 0));
+		InList.ClearDepthStencilView(InDsv, Flags, InCommands.ClearDepth, InCommands.ClearStencil, 1, &ClearRect);
+	}
+	if (InCommands.bClear)
+	{
+		float Color[]{InCommands.ClearColor.X, InCommands.ClearColor.Y, InCommands.ClearColor.Z,
+		              InCommands.ClearColor.W};
+		InList.ClearRenderTargetView(InRtv, Color, 1, &ClearRect);
+	}
+	D3D12_VIEWPORT Viewport{View.X, View.Y, View.Width, View.Height, View.MinDepth, View.MaxDepth};
+	InList.RSSetViewports(1, &Viewport);
 }
 } // namespace
 
@@ -119,6 +197,8 @@ struct FD3D12RHISwapchain::FImpl
 
 	struct FFrame
 	{
+		std::shared_ptr<FD3D12PassQueries> TimingQueries;
+		bool bTimeFrame{};
 #if HYP_ENABLE_PROFILING
 		std::shared_ptr<FD3D12ProfileQueries> ProfileQueries;
 #endif
@@ -139,12 +219,14 @@ struct FD3D12RHISwapchain::FImpl
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
 	bool bActive{};
 	bool bSubmissionStarted{};
+	bool bGpuTiming{};
 
 	void Idle()
 	{
 		State->Idle();
 		for (auto& Frame : Frames)
 		{
+			CollectPassTimings(*State, Frame.Retained);
 #if HYP_ENABLE_PROFILING
 			CollectD3D12Profiles(Frame.Retained);
 #endif
@@ -290,6 +372,11 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 	// Direct RHI clients also retire completed lists during normal frame-ring progress.
 	P.State->CollectUploads();
 	F.Retained.clear();
+	if (P.bGpuTiming && !F.TimingQueries)
+	{
+		F.TimingQueries = CreatePassQueries(*P.State);
+	}
+	F.bTimeFrame = P.bGpuTiming && F.TimingQueries && F.TimingQueries.use_count() == 1;
 #if HYP_ENABLE_PROFILING
 	PrepareD3D12Profiling(*P.State, P.Profiling, F.ProfileQueries);
 #endif
@@ -310,7 +397,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	{
 		throw std::invalid_argument("Invalid recording context");
 	}
-	ValidatePass(InCommands, P.Size, P.DepthFormat);
+	const auto TargetSize = ValidatePass(*P.State, InCommands, P.Size, P.DepthFormat);
 	ValidateDraws(P.State.get(), InCommands);
 	auto& Frame = P.Frames[P.FrameIndex];
 	if (Frame.Recorded[InContext].exchange(true))
@@ -324,11 +411,25 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 	R->Frame = P.Serial;
 	R->Context = InContext;
 	R->Owner = P.Identity;
+	R->Name = InCommands.Name;
 	R->Retained = InCommands.Draws;
+	R->Textures = InCommands.SampledDepth;
+	if (InCommands.DepthTarget)
+	{
+		R->Textures.push_back(InCommands.DepthTarget);
+	}
+	for (const auto& Barrier : InCommands.TextureTransitions)
+	{
+		R->Textures.push_back(Barrier.Texture);
+	}
 	Check(P.State->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frame.Allocators[InContext].Get(),
 	                                         nullptr, IID_PPV_ARGS(&R->List)),
 	      "Create recording list");
 	auto List = R->List.Get();
+	if (Frame.bTimeFrame)
+	{
+		BeginPassTiming(*R, Frame.TimingQueries);
+	}
 #if HYP_ENABLE_PROFILING
 	BeginD3D12Profile(*R, P.Profiling, Frame.ProfileQueries);
 #endif
@@ -338,29 +439,20 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		Transition(List, P.Backbuffers[P.FrameIndex].Get(), Native(*InCommands.TransitionFrom),
 		           Native(*InCommands.TransitionTo));
 	}
+	for (const auto& Barrier : InCommands.TextureTransitions)
+	{
+		const auto& Texture = NativeResource<FD3D12Texture>(Barrier.Texture.Payload, P.State.get());
+		Transition(List, Texture.Resource.Get(), Native(Barrier.Before), Native(Barrier.After));
+	}
 	auto Rtv = P.Rtvs->GetCPUDescriptorHandleForHeapStart();
 	Rtv.ptr += std::size_t(P.FrameIndex + (InCommands.bSrgbTarget ? FrameCount : 0)) * P.RtvStep;
 	auto Dsv = P.Dsvs->GetCPUDescriptorHandleForHeapStart();
-	List->OMSetRenderTargets(1, &Rtv, FALSE, (InCommands.bUseDepth || InCommands.bUseStencil) ? &Dsv : nullptr);
-	const FViewport View = InCommands.Viewport.value_or(
-	    FViewport{0, 0, static_cast<float>(P.Size.Width), static_cast<float>(P.Size.Height), 0, 1});
-	D3D12_RECT ClearRect{static_cast<LONG>(std::floor(View.X)), static_cast<LONG>(std::floor(View.Y)),
-	                     static_cast<LONG>(std::ceil(View.X + View.Width)),
-	                     static_cast<LONG>(std::ceil(View.Y + View.Height))};
-	if (InCommands.bClearDepth || InCommands.bClearStencil)
+	if (InCommands.DepthTarget)
 	{
-		const auto Flags = static_cast<D3D12_CLEAR_FLAGS>((InCommands.bClearDepth ? D3D12_CLEAR_FLAG_DEPTH : 0) |
-		                                                  (InCommands.bClearStencil ? D3D12_CLEAR_FLAG_STENCIL : 0));
-		List->ClearDepthStencilView(Dsv, Flags, InCommands.ClearDepth, InCommands.ClearStencil, 1, &ClearRect);
+		Dsv = NativeResource<FD3D12Texture>(InCommands.DepthTarget.Payload, P.State.get())
+		          .DepthViews->GetCPUDescriptorHandleForHeapStart();
 	}
-	if (InCommands.bClear)
-	{
-		float Color[] = {InCommands.ClearColor.X, InCommands.ClearColor.Y, InCommands.ClearColor.Z,
-		                 InCommands.ClearColor.W};
-		List->ClearRenderTargetView(Rtv, Color, 1, &ClearRect);
-	}
-	D3D12_VIEWPORT Viewport{View.X, View.Y, View.Width, View.Height, View.MinDepth, View.MaxDepth};
-	List->RSSetViewports(1, &Viewport);
+	RecordAttachments(*List, InCommands, TargetSize, Rtv, Dsv);
 	FD3D12GraphicsBindingState BindingState;
 	for (const auto& Draw : InCommands.Draws)
 	{
@@ -394,6 +486,7 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 #if HYP_ENABLE_PROFILING
 	EndD3D12Profile(*R);
 #endif
+	EndPassTiming(*R);
 	Check(List->Close(), "Close recording list");
 	return {std::move(R)};
 }
@@ -506,6 +599,15 @@ void FD3D12RHISwapchain::CancelFrame()
 void FD3D12RHISwapchain::WaitIdle()
 {
 	Impl->Idle();
+}
+
+void FD3D12RHISwapchain::SetGpuTimingEnabled(bool bInEnabled)
+{
+	if (Impl->bActive)
+	{
+		throw std::logic_error("GPU timing cannot change during an active frame");
+	}
+	Impl->bGpuTiming = bInEnabled;
 }
 
 } // namespace Hyperion

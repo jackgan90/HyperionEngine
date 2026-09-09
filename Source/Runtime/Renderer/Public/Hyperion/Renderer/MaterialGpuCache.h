@@ -37,6 +37,8 @@ public:
 	FMaterialGpuCache& operator=(const FMaterialGpuCache&) = delete;
 	FResourceBindingLayout GetLayout(const FResourceBindingLayoutDesc& InDescription,
 	                                 const FMaterialResourceOwners& InOwners);
+	FTexture GetTexture(std::shared_ptr<const FMaterialTextureSource> InSource,
+	                    const FMaterialResourceOwners& InOwners);
 	FMaterialResourceBindings BindResources(const FCompiledMaterialPass& InPass,
 	                                        std::span<const std::optional<FMaterialValue>> InValues,
 	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);

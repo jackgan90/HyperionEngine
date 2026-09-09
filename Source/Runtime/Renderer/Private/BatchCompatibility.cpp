@@ -36,7 +36,8 @@ void ResourceKey(const FMaterialValue& InValue, std::vector<std::uint64_t>& OutW
 			const auto& Sampler = InValue.Sampler;
 			OutWords.insert(OutWords.end(), {static_cast<unsigned>(Sampler.U), static_cast<unsigned>(Sampler.V),
 			                                 static_cast<unsigned>(Sampler.W), Sampler.bMinLinear, Sampler.bMagLinear,
-			                                 Sampler.bMipLinear, Sampler.bComparison, Sampler.MaxAnisotropy});
+			                                 Sampler.bMipLinear, Sampler.bComparison, Sampler.MaxAnisotropy,
+			                                 static_cast<unsigned>(Sampler.Compare)});
 			for (const auto Value : {Sampler.MipLodBias, Sampler.MinLod, Sampler.MaxLod, Sampler.BorderColor[0],
 			                         Sampler.BorderColor[1], Sampler.BorderColor[2], Sampler.BorderColor[3]})
 			{

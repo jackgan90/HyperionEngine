@@ -19,11 +19,7 @@ ERHIBindingKind BindingKind(const FShaderBinding& InBinding)
 			}
 			break;
 		case EBindingKind::Sampler:
-			if (!InBinding.bComparison)
-			{
-				return ERHIBindingKind::Sampler;
-			}
-			break;
+			return ERHIBindingKind::Sampler;
 		case EBindingKind::StructuredBuffer:
 			return ERHIBindingKind::StructuredBuffer;
 		case EBindingKind::RawBuffer:
@@ -50,6 +46,7 @@ void ValidateStage(const FShaderArtifact& InShader, const FResourceBindingLayout
 			                            static_cast<std::uint64_t>(Binding.Register) + Binding.Count;
 		                 });
 		if (Slot == InLayout.Slots.end() ||
+		    (Slot->Kind == ERHIBindingKind::Sampler && Slot->bComparison != Binding.bComparison) ||
 		    (Kind == ERHIBindingKind::ConstantBuffer && Slot->MinimumBufferSize < Binding.ByteSize) ||
 		    (Kind == ERHIBindingKind::StructuredBuffer &&
 		     (Binding.StructureByteStride == 0 || Slot->StructureByteStride != Binding.StructureByteStride)))

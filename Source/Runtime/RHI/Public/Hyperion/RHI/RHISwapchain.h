@@ -28,5 +28,10 @@ public:
 	// finish before releasing resources. Throws if the device cannot recover safely.
 	virtual void CancelFrame() = 0;
 	virtual void WaitIdle() = 0;
+
+	virtual void SetGpuTimingEnabled(bool bInEnabled)
+	{
+		(void)bInEnabled;
+	}
 };
 } // namespace Hyperion

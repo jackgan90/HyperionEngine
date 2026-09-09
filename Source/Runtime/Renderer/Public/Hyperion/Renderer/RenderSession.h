@@ -6,6 +6,13 @@
 
 namespace Hyperion
 {
+struct FRenderViewStatistics
+{
+	std::uint64_t Identity{};
+	std::string Usage;
+	FSceneVisibilityStats Visibility;
+};
+
 // Main constructs/closes the session; Render builds its scene passes.
 class FRenderSession
 {
@@ -20,15 +27,21 @@ public:
 	FRenderResourceService& GetResources();
 	std::size_t Build(FRenderGraph& InGraph, FRenderView InView);
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
-	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1);
+	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
+	                       bool bInSpatialPrepared = false);
 	std::shared_ptr<const FMaterialFrameContext> FreezeFrame(float InTime = 0,
 	                                                         FMaterialParameterValues InFrameValues = {});
 	void SetGlobalParameters(FMaterialParameterValues InValues);
 	void SetSceneParameters(FMaterialParameterValues InValues);
 	FMaterialProviderRegistry& GetProviders();
-	FRenderBatchSystem& GetBatchSystem(); // Register strategies on Main before the first build.
-	FSceneVisibilityStats Statistics() const;
+	// Render only. Resolves Global/Frame/Scene dependencies; returns no value for any local dependency.
+	FMaterialSharedValue ResolveFrameSemantic(const FMaterialFrameContext& InFrame, std::string_view InSemantic);
+	FRenderBatchSystem& GetBatchSystem();     // Register strategies on Main before the first build.
+	FSceneVisibilityStats Statistics() const; // Legacy: last-view visibility, family-wide draws/batches.
+	const std::vector<FRenderViewStatistics>& ViewStatistics() const;
 	FMaterialProviderStats ProviderStatistics() const; // Render only.
+	void AppendDepthPreview(FRenderGraph& InGraph, std::shared_ptr<const FMaterialTextureSource> InSource,
+	                        std::shared_ptr<const void> InLifetime, FViewport InViewport);
 	void Close();
 
 private:
@@ -38,6 +51,7 @@ private:
 	FRenderBatchSystem Batches;
 	bool bClosed{};
 	FSceneVisibilityStats LastStatistics;
+	std::vector<FRenderViewStatistics> LastViews;
 	struct FMaterialState;
 	std::unique_ptr<FMaterialState> MaterialState;
 	std::set<std::uint64_t> AdmitFamily(std::span<const FRenderView> InViews, const FMaterialFrameContext& InFrame,

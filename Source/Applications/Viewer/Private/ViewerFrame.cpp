@@ -36,14 +36,14 @@ void FViewerApplication::RunFrames()
 				throw std::runtime_error("Benchmark scene is not ready; increase --benchmark-warmup and --frames");
 			}
 			BenchmarkFrames.push_back({Frame, double(ClockNanoseconds() - Now) / 1e6, SceneStatistics.Draws,
-			                           SceneStatistics.VisibleItems, SceneStatistics.Batches});
+			                           SceneStatistics.VisibleItems, SceneStatistics.Batches, PipelineStatistics,
+			                           Metrics.Device});
 		}
 	}
 	if (Options.ProfileFrames)
 	{
 		SetProfilingMask(0);
 	}
-	SaveBenchmark();
 }
 
 void FViewerApplication::PollInput()
@@ -91,6 +91,7 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 	HYP_PERF_SCOPE_C(Frame, BuildGui);
 	UpdateCaptureStatus();
 	FDebugActions Actions;
+	ShadowSettings.PreviewViewport.reset();
 	if (Gui && Settings.bShowGui)
 	{
 		std::vector<FInputEvent> UiEvents(Window->Events().begin(), Window->Events().end());
@@ -102,6 +103,17 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 		if (ScenePlugin)
 		{
 			ScenePlugin->DrawGui(*Gui, SceneStatistics, Options.bNoInstanceBatching);
+			DrawShadowGui();
+			if (ShadowSettings.PreviewViewport)
+			{
+				auto& Preview = *ShadowSettings.PreviewViewport;
+				const float ScaleX = float(InPixels.Width) / InLogical.Width;
+				const float ScaleY = float(InPixels.Height) / InLogical.Height;
+				Preview.X *= ScaleX;
+				Preview.Y *= ScaleY;
+				Preview.Width *= ScaleX;
+				Preview.Height *= ScaleY;
+			}
 		}
 		OutData = Gui->Render();
 	}
@@ -128,6 +140,7 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	}
 	FGuiDrawData GuiData;
 	const auto Actions = BuildGui(InFrame, InDelta, Logical, Size, GuiData);
+	UpdateShadowLight(InFrame);
 	HandleProfilingActions(Actions);
 	HandleCaptureActions(Actions, std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1));
 	if (Actions.bSave)
@@ -199,22 +212,25 @@ FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiDa
 			                              }));
 		    }
 		    FRenderGraph Graph;
-		    FColorPass Clear;
-		    Clear.Commands.Name = "Clear";
-		    Clear.Load = EColorLoad::Clear;
-		    Clear.Commands.ClearColor = {float(Frame.Settings.ClearRed), float(Frame.Settings.ClearGreen),
-		                                 float(Frame.Settings.ClearBlue), 1};
-		    Graph.Add(std::move(Clear));
-		    RenderSession->BuildViews(Graph, std::span(&Frame.View, 1), MaterialFrame);
-		    SceneStatistics = RenderSession->Statistics();
+		    ForwardPipeline->Build(
+		        Graph, Frame.View, MaterialFrame, ShadowSettings,
+		        {float(Frame.Settings.ClearRed), float(Frame.Settings.ClearGreen), float(Frame.Settings.ClearBlue), 1},
+		        [&](FRenderGraph& InGraph)
+		        {
+			        for (const auto& Plugin : Plugins->GetInstances())
+			        {
+				        if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
+				        {
+					        Render->Build(InGraph, Frame);
+				        }
+			        }
+		        });
+		    PipelineStatistics = ForwardPipeline->Statistics();
+		    SceneStatistics = PipelineStatistics.Views.back().Visibility;
+		    SceneStatistics.UpdateMilliseconds = PipelineStatistics.Spatial.UpdateMilliseconds;
+		    SceneStatistics.IndexRebuilds = PipelineStatistics.Spatial.IndexRebuilds;
+		    SceneStatistics.IndexRefits = PipelineStatistics.Spatial.IndexRefits;
 		    HYP_PERF_PLOT(Frame, SceneDraws, double(SceneStatistics.Draws));
-		    for (const auto& Plugin : Plugins->GetInstances())
-		    {
-			    if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
-			    {
-				    Render->Build(Graph, Frame);
-			    }
-		    }
 		    Screenshot = ExecuteGraph(Graph, Tasks, *Swapchain, InSize, Frame.Settings.bVsync, bInTakeCapture);
 #if HYP_ENABLE_RENDERDOC
 		    bRdcSucceeded = CaptureScope.Finish();

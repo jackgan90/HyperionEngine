@@ -182,8 +182,10 @@ void ApplyGraphicsState(D3D12_GRAPHICS_PIPELINE_STATE_DESC& OutPso, const FPipel
 			OutPso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 			break;
 	}
-	OutPso.NumRenderTargets = 1;
-	OutPso.RTVFormats[0] = InDesc.Target.bSrgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+	OutPso.NumRenderTargets = InDesc.Target.ColorCount;
+	OutPso.RTVFormats[0] = InDesc.Target.ColorCount == 0 ? DXGI_FORMAT_UNKNOWN
+	                       : InDesc.Target.bSrgb         ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+	                                                     : DXGI_FORMAT_R8G8B8A8_UNORM;
 	OutPso.DSVFormat = NativeDepthFormat(InDesc.Target.Depth);
 	OutPso.SampleDesc.Count = 1;
 	auto& Raster = OutPso.RasterizerState;

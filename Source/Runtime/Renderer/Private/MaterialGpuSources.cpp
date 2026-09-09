@@ -33,6 +33,7 @@ FSamplerDesc DescribeSampler(const FMaterialSampler& InSampler)
 	Result.bMagLinear = InSampler.bMagLinear;
 	Result.bMipLinear = InSampler.bMipLinear;
 	Result.bComparison = InSampler.bComparison;
+	Result.Compare = static_cast<ERHICompare>(InSampler.Compare);
 	Result.MipLodBias = InSampler.MipLodBias;
 	Result.MinLod = InSampler.MinLod;
 	Result.MaxLod = InSampler.MaxLod;
@@ -55,6 +56,11 @@ FTexture FMaterialGpuCache::FImpl::Texture(std::shared_ptr<const FMaterialTextur
 	if (!Entry.Resource)
 	{
 		Entry.Description = InSource;
+		if (const auto* Depth = InSource->GetDepthTarget())
+		{
+			Entry.Resource = Device.CreateDepthTexture({Depth->Width, Depth->Height, Depth->ClearDepth});
+			return Entry.Resource;
+		}
 		FTextureDesc Description;
 		Description.bSrgb = InSource->GetEncoding() == EMaterialTextureEncoding::Srgb;
 		for (const auto& Mip : InSource->GetMips())
@@ -71,6 +77,13 @@ FTexture FMaterialGpuCache::FImpl::Texture(std::shared_ptr<const FMaterialTextur
 		++Stats.TextureUploads;
 	}
 	return Entry.Resource;
+}
+
+FTexture FMaterialGpuCache::GetTexture(std::shared_ptr<const FMaterialTextureSource> InSource,
+                                       const FMaterialResourceOwners& InOwners)
+{
+	Impl->CheckOwner();
+	return Impl->Texture(std::move(InSource), InOwners);
 }
 
 FBuffer FMaterialGpuCache::FImpl::Buffer(std::shared_ptr<const FMaterialReadBufferSource> InSource,

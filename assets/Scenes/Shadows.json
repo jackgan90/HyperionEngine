@@ -1,0 +1,175 @@
+{
+  "type": "hyperion.scene",
+  "schema_version": 1,
+  "assets": [
+    {
+      "id": "cube",
+      "path": "../Models/Ground.gltf"
+    },
+    {
+      "id": "mask",
+      "path": "../Models/ShadowMask.gltf"
+    },
+    {
+      "id": "thin",
+      "path": "../Models/ShadowThin.gltf"
+    }
+  ],
+  "instances": [
+    {
+      "id": "receiver-ground",
+      "asset": "cube",
+      "translation": [
+        0,
+        -0.15,
+        -3
+      ],
+      "scale": [
+        22,
+        0.3,
+        24
+      ]
+    },
+    {
+      "id": "contact-column",
+      "asset": "cube",
+      "translation": [
+        -5,
+        1.5,
+        0
+      ],
+      "scale": [
+        1.1,
+        3,
+        1.1
+      ]
+    },
+    {
+      "id": "slender-contact",
+      "asset": "cube",
+      "translation": [
+        -3,
+        2,
+        2
+      ],
+      "scale": [
+        0.15,
+        4,
+        0.15
+      ]
+    },
+    {
+      "id": "uv1-alpha-card",
+      "asset": "mask",
+      "translation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "mirrored-alpha-card",
+      "asset": "mask",
+      "translation": [
+        4,
+        0,
+        -2
+      ],
+      "scale": [
+        -1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "thin-double-sided",
+      "asset": "thin",
+      "translation": [
+        -5,
+        0,
+        -5
+      ],
+      "scale": [
+        0.15,
+        1.4,
+        1
+      ]
+    },
+    {
+      "id": "sloped-receiver",
+      "asset": "cube",
+      "translation": [
+        0,
+        0.9,
+        -7
+      ],
+      "scale": [
+        5,
+        0.25,
+        5
+      ],
+      "rotation": [
+        0,
+        0,
+        0.13917310096006544,
+        0.9902680687415704
+      ]
+    },
+    {
+      "id": "sloped-occluder",
+      "asset": "cube",
+      "translation": [
+        0,
+        2,
+        -7
+      ],
+      "scale": [
+        0.6,
+        2,
+        0.6
+      ]
+    },
+    {
+      "id": "distant-caster",
+      "asset": "cube",
+      "translation": [
+        0,
+        2,
+        -35
+      ],
+      "scale": [
+        2,
+        4,
+        2
+      ]
+    },
+    {
+      "id": "distant-receiver",
+      "asset": "cube",
+      "translation": [
+        0,
+        -0.15,
+        -32
+      ],
+      "scale": [
+        12,
+        0.3,
+        28
+      ]
+    }
+  ],
+  "camera": {
+    "eye": [
+      9,
+      8,
+      14
+    ],
+    "target": [
+      0,
+      1,
+      -4
+    ],
+    "near": 0.05,
+    "far": 250
+  }
+}

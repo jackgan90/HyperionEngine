@@ -48,7 +48,18 @@ inline D3D12_RESOURCE_DESC BufferDesc(std::uint64_t InSize)
 
 inline D3D12_RESOURCE_STATES Native(EResourceState InState)
 {
-	return InState == EResourceState::Present ? D3D12_RESOURCE_STATE_PRESENT : D3D12_RESOURCE_STATE_RENDER_TARGET;
+	switch (InState)
+	{
+		case EResourceState::Present:
+			return D3D12_RESOURCE_STATE_PRESENT;
+		case EResourceState::RenderTarget:
+			return D3D12_RESOURCE_STATE_RENDER_TARGET;
+		case EResourceState::DepthWrite:
+			return D3D12_RESOURCE_STATE_DEPTH_WRITE;
+		case EResourceState::ShaderRead:
+			return D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+	}
+	throw std::invalid_argument("Unknown resource state");
 }
 
 inline void Transition(ID3D12GraphicsCommandList* InList, ID3D12Resource* InResource, D3D12_RESOURCE_STATES InFrom,

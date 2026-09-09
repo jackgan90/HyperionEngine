@@ -11,6 +11,7 @@ namespace
 FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot)
 {
 	FPreparedSceneDraws Result;
+	Result.bDepth = bool(InSnapshot.View.DepthTarget);
 	Result.Packets.resize(InSnapshot.Items.size());
 	Result.Srgb.resize(InSnapshot.Items.size());
 	for (const auto& Item : InSnapshot.Items)
@@ -71,6 +72,15 @@ FColorPass NewPass(const FRenderSceneSnapshot& InSnapshot, const FPreparedSceneD
 	Pass.Commands.DepthDomain = InSnapshot.View.Identity;
 	Pass.Commands.Viewport = InSnapshot.View.Viewport;
 	Pass.Commands.bSrgbTarget = bInSrgb;
+	if (InIndex == 0 && InSnapshot.View.ClearColor)
+	{
+		Pass.Load = EColorLoad::Clear;
+		Pass.Commands.ClearColor = *InSnapshot.View.ClearColor;
+	}
+	if (!InSnapshot.View.Name.empty())
+	{
+		Pass.Commands.Name = InSnapshot.View.Name + "/" + std::to_string(InIndex);
+	}
 	return Pass;
 }
 
@@ -97,6 +107,10 @@ std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPr
 			Passes.push_back(NewPass(InSnapshot, InPrepared, Passes.size(), InPrepared.Srgb[Index]));
 		}
 		Passes.back().Commands.Draws.push_back(std::move(*InPrepared.Packets[Index]));
+	}
+	if (Passes.empty() && (InSnapshot.View.DepthTarget || InSnapshot.View.ClearColor))
+	{
+		Passes.push_back(NewPass(InSnapshot, InPrepared, 0, false));
 	}
 	return Passes;
 }
@@ -153,6 +167,23 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 		}
 		Owner.Stats.Batches = Stats;
 		Passes = PublishDraws(InSnapshot, std::move(Prepared));
+		if (InSnapshot.View.DepthTarget || !InSnapshot.View.SampledDepth.empty())
+		{
+			Owner.EnsureMaterialCaches();
+			const FMaterialResourceOwners Owners{InSnapshot.View.TargetLifetime};
+			for (auto& Pass : Passes)
+			{
+				if (InSnapshot.View.DepthTarget)
+				{
+					Pass.Commands.bUseColor = false;
+					Pass.Commands.DepthTarget = Owner.MaterialGpu->GetTexture(InSnapshot.View.DepthTarget, Owners);
+				}
+				for (const auto& Source : InSnapshot.View.SampledDepth)
+				{
+					Pass.Commands.SampledDepth.push_back(Owner.MaterialGpu->GetTexture(Source, Owners));
+				}
+			}
+		}
 		if (Owner.MaterialGpu)
 		{
 			Owner.Stats.Materials = Owner.MaterialGpu->Statistics();

@@ -2,7 +2,7 @@
   "type": "hyperion.application-settings",
   "schema_version": 1,
   "properties": {
-    "title": "Hyperion | Scene Viewer",
+    "title": "Hyperion | Scene Viewer + Cascaded Shadows",
     "width": 1440,
     "height": 900,
     "scene_source": "assets/Scenes/Showcase.json",

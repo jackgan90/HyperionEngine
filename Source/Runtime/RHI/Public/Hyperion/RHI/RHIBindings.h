@@ -80,6 +80,7 @@ struct FResourceBindingSlot
 	std::uint32_t StructureByteStride{}; // Zero is unconstrained until a structured shader requires an exact stride.
 	std::uint32_t InstanceStride{}; // Nonzero: explicitly declared constant array indexed by the local instance ID.
 	std::uint32_t InstanceCapacity{};
+	bool bComparison{}; // Sampler kind is part of the reflected layout contract.
 	bool operator==(const FResourceBindingSlot&) const = default;
 };
 

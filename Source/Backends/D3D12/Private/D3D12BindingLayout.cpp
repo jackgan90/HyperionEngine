@@ -41,6 +41,10 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 	{
 		const FResourceBindingSlot& Slot = InDesc.Slots[Index];
 		NativeVisibility(Slot.Visibility);
+		if (Slot.bComparison && (Slot.Kind != ERHIBindingKind::Sampler || !InCaps.bComparisonSamplers))
+		{
+			throw std::invalid_argument("Invalid or unsupported comparison sampler slot");
+		}
 		if ((Slot.InstanceStride == 0) != (Slot.InstanceCapacity == 0) ||
 		    (Slot.InstanceStride &&
 		     (Slot.Kind != ERHIBindingKind::ConstantBuffer || Slot.InstanceStride % 16 ||

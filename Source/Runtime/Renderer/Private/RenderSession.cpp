@@ -1,5 +1,6 @@
 #include "Hyperion/Core/Profiling.h"
 #include "SessionMaterialsInternal.h"
+#include <chrono>
 #include <stdexcept>
 
 namespace Hyperion
@@ -9,7 +10,7 @@ namespace
 struct FPreparedViewFamily
 {
 	std::vector<FColorPass> Passes;
-	FRenderBatchStats Statistics;
+	std::vector<FRenderViewStatistics> Views;
 };
 } // namespace
 
@@ -66,7 +67,8 @@ std::size_t FRenderSession::Build(FRenderGraph& InGraph, FRenderView InView)
 }
 
 std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
-                                       std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily)
+                                       std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
+                                       bool bInSpatialPrepared)
 {
 	HYP_PERF_SCOPE_C(Render, BuildViews);
 	Tasks.Require({EDomain::Render});
@@ -79,41 +81,60 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 		InFrame = MaterialState->Frame(Resources, 0, {}, Scene.GetLogicalSceneIdentity());
 	}
 	const auto ViewIds = AdmitFamily(InViews, *InFrame, InFamily);
+	const auto SpatialStats = bInSpatialPrepared ? FSceneVisibilityStats{} : Scene.BeginViews();
 	std::vector<FRenderSceneSnapshot> Snapshots;
 	std::size_t Count{};
 	LastStatistics = {};
 	// Every Collect and provider evaluation finishes in this one Render task, before the first RHI wait.
 	for (const auto& View : InViews)
 	{
-		auto Snapshot = PrepareSceneSnapshot(Scene.Collect(View));
+		auto Snapshot = PrepareSceneSnapshot(Scene.Collect(View, false));
 		Snapshot.Frame = InFrame;
 		Snapshot.Family = InFamily;
-		Snapshot.DepthFormat = MaterialState->Depth;
+		Snapshot.DepthFormat = View.DepthTarget ? ERHIDepthFormat::D32 : MaterialState->Depth;
+		const auto MaterialStart = std::chrono::steady_clock::now();
 		PrepareMaterials(Snapshot);
+		Snapshot.Statistics.MaterialMilliseconds =
+		    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - MaterialStart).count();
 		Snapshot.Batches = Batches.Build(Snapshot, View.bInstanceBatching);
 		Count += Snapshot.Items.size();
-		LastStatistics = Snapshot.Statistics;
 		Snapshots.push_back(std::move(Snapshot));
 	}
-	auto Result = DispatchAsync<FPreparedViewFamily>(
-	    Tasks, {EDomain::Rhi, 0},
-	    [ResourceService = &Resources, Frames = std::move(Snapshots)]
-	    {
-		    FPreparedViewFamily Family;
-		    for (const auto& Frame : Frames)
-		    {
-			    auto Prepared = ResourceService->BuildPasses(Frame);
-			    Family.Passes.insert(Family.Passes.end(), std::make_move_iterator(Prepared.begin()),
-			                         std::make_move_iterator(Prepared.end()));
-			    Family.Statistics += ResourceService->Statistics().Batches;
-		    }
-		    return Family;
-	    });
-	Tasks.Wait(Result.Task());
-	LastStatistics.Batches = Result.GetReady()->Statistics;
-	for (auto Pass : Result.GetReady()->Passes)
+	FPreparedViewFamily Family;
+	const auto Preparation =
+	    Tasks.Dispatch({EDomain::Rhi, 0},
+	                   [ResourceService = &Resources, Frames = std::move(Snapshots), &Family]
+	                   {
+		                   for (const auto& Frame : Frames)
+		                   {
+			                   auto Prepared = ResourceService->BuildPasses(Frame);
+			                   auto Stats = Frame.Statistics;
+			                   Stats.Batches = ResourceService->Statistics().Batches;
+			                   for (const auto& Pass : Prepared)
+			                   {
+				                   Stats.Draws += Pass.Commands.Draws.size();
+			                   }
+			                   Family.Views.push_back({Frame.View.Identity, Frame.View.Usage, Stats});
+			                   Family.Passes.insert(Family.Passes.end(), std::make_move_iterator(Prepared.begin()),
+			                                        std::make_move_iterator(Prepared.end()));
+		                   }
+	                   });
+	Tasks.Wait(Preparation);
+	LastViews = std::move(Family.Views);
+	LastStatistics = LastViews.back().Visibility;
+	// Compatibility: Statistics reports the last view's visibility with family-wide draw/batch totals.
+	LastStatistics.Draws = 0;
+	LastStatistics.Batches = {};
+	for (const auto& View : LastViews)
 	{
-		LastStatistics.Draws += Pass.Commands.Draws.size();
+		LastStatistics.Draws += View.Visibility.Draws;
+		LastStatistics.Batches += View.Visibility.Batches;
+	}
+	LastStatistics.UpdateMilliseconds = SpatialStats.UpdateMilliseconds;
+	LastStatistics.IndexRebuilds = SpatialStats.IndexRebuilds;
+	LastStatistics.IndexRefits = SpatialStats.IndexRefits;
+	for (auto& Pass : Family.Passes)
+	{
 		InGraph.Add(std::move(Pass));
 	}
 	std::erase_if(MaterialState->Views,
@@ -156,6 +177,12 @@ FSceneVisibilityStats FRenderSession::Statistics() const
 {
 	Tasks.Require({EDomain::Render});
 	return LastStatistics;
+}
+
+const std::vector<FRenderViewStatistics>& FRenderSession::ViewStatistics() const
+{
+	Tasks.Require({EDomain::Render});
+	return LastViews;
 }
 
 FMaterialProviderStats FRenderSession::ProviderStatistics() const

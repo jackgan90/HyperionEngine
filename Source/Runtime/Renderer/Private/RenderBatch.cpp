@@ -105,7 +105,8 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildFresh(const FR
 			{
 				const bool bSrgb =
 				    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
-				Candidate = P.Describe(InSnapshot, Item, {bSrgb, Depth}, Result->Statistics);
+				Candidate = P.Describe(InSnapshot, Item, {bSrgb, Depth, InSnapshot.View.DepthTarget ? 0U : 1U},
+				                       Result->Statistics);
 				for (const auto& Strategy : P.Strategies)
 				{
 					const auto Decision = Strategy->Evaluate(*Candidate, P.Capabilities);

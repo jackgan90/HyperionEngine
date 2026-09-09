@@ -84,6 +84,15 @@ struct FRenderItem;
 struct FRenderView;
 struct FRenderSceneSnapshot;
 class FRenderResourceService;
+
+// One view preparation owns immutable engine scopes. Share their provider results across its objects.
+struct FViewMaterialProviders
+{
+	FMaterialProviderRegistry& Registry;
+	std::map<std::string, FMaterialProvidedValue, std::less<>> Shared;
+	FMaterialProvidedValue Evaluate(const FMaterialProviderInputs& InInputs, std::string_view InSemantic);
+};
+
 void FillMaterialObjectInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
                               const FRenderSceneSnapshot& InSnapshot, const FRenderResourceService& InResources);
 void FillMaterialDrawInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
@@ -91,5 +100,5 @@ void FillMaterialDrawInputs(FMaterialProviderInputs& InInputs, const FRenderItem
 bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& InSnapshot,
                                const FMaterialProviderInputs& InInputs, const FRenderResourceService& InResources,
                                const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
-                               FMaterialProviderRegistry& InProviders);
+                               FViewMaterialProviders& InProviders);
 } // namespace Hyperion

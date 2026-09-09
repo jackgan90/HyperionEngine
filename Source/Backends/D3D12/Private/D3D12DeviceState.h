@@ -28,6 +28,9 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	std::atomic_uint64_t GraphicsTableBinds{};
 	std::uint64_t PipelinesCreated{};
 	std::uint64_t ConstantBytesWritten{};
+	FGpuFrameTiming LastGpuTiming;
+	FGpuTimingCapture GpuTimingCapture;
+	std::size_t GpuTimingCapacity{};
 	ComPtr<IDXGIFactory6> Factory;
 	ComPtr<IDXGIAdapter1> Adapter;
 	ComPtr<ID3D12CommandQueue> Queue;
@@ -50,6 +53,7 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 		ComPtr<ID3D12GraphicsCommandList> List;
 		std::vector<ComPtr<ID3D12Resource>> Resources;
 		std::vector<ComPtr<D3D12MA::Allocation>> Allocations;
+		std::vector<ComPtr<ID3D12DescriptorHeap>> DescriptorHeaps;
 		std::uint64_t FenceValue = UINT64_MAX;
 	};
 

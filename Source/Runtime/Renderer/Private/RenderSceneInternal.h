@@ -35,7 +35,9 @@ public:
 	            const FRenderPrimitiveFactory& InFactory, std::shared_ptr<FRenderBindingResult> InResult);
 	void Update(std::vector<FRenderPrimitiveUpdate> InUpdates);
 	void Remove(FRenderPrimitiveHandle InHandle);
-	FRenderSceneSnapshot Collect(FRenderView InView);
+	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true);
+	FSceneVisibilityStats BeginViews();
+	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;
 
 private:
 	struct FEntry

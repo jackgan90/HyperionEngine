@@ -2,6 +2,7 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
+#include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "ViewerOptions.h"
@@ -43,6 +44,10 @@ private:
 	void ExerciseWindow(int InFrame);
 	void ExerciseBenchmarkCamera(int InFrame);
 	void SaveBenchmark();
+	void MatchBenchmarkTimings();
+	void InitializeShadowSettings();
+	void UpdateShadowLight(int InFrame);
+	void DrawShadowGui();
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
 	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
 	FRenderFrame UpdateScene(FSize InSize);
@@ -69,6 +74,12 @@ private:
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FShaderCompiler> Compiler;
 	std::unique_ptr<FRenderSession> RenderSession;
+	std::unique_ptr<FForwardRenderPipeline> ForwardPipeline;
+	FCascadedShadowSettings ShadowSettings;
+	FForwardPipelineStatistics PipelineStatistics;
+	FVec3 ShadowLight;
+	float LightAzimuth{};
+	float LightElevation{};
 	std::unique_ptr<FGui> Gui;
 	std::unique_ptr<FPluginSet> Plugins;
 	FDebugUiPlugin* GuiPlugin{};
@@ -83,9 +94,12 @@ private:
 		std::size_t Draws{};
 		std::size_t VisibleItems{};
 		FRenderBatchStats Batches;
+		FForwardPipelineStatistics Pipeline;
+		FDeviceStats Device;
 	};
 
 	std::vector<FBenchmarkFrame> BenchmarkFrames;
+	FGpuTimingCapture BenchmarkGpu;
 	FVec4 RdcButtonBounds;
 	bool bRdcMouseDown{};
 	bool bCaptured{};

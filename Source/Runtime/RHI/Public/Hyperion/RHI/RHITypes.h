@@ -33,7 +33,15 @@ struct FSamplerDesc
 	std::uint32_t MaxAnisotropy = 1;
 	std::array<float, 4> BorderColor{};
 	bool bComparison{};
+	ERHICompare Compare = ERHICompare::LessEqual;
 	bool operator==(const FSamplerDesc&) const = default;
+};
+
+struct FDepthTextureDesc
+{
+	std::uint32_t Width = 1;
+	std::uint32_t Height = 1;
+	float ClearDepth = 1;
 };
 
 struct FTextureMip
@@ -112,7 +120,16 @@ struct FDrawPacket
 enum class EResourceState
 {
 	Present,
-	RenderTarget
+	RenderTarget,
+	DepthWrite,
+	ShaderRead
+};
+
+struct FTextureTransition
+{
+	FTexture Texture;
+	EResourceState Before = EResourceState::ShaderRead;
+	EResourceState After = EResourceState::DepthWrite;
 };
 
 struct FPassCommands
@@ -134,6 +151,29 @@ struct FPassCommands
 	std::optional<FViewport> Viewport;
 	// View family builders set a new domain at each view boundary. Zero is the legacy full target domain.
 	std::uint64_t DepthDomain{};
+	bool bUseColor = true;
+	FTexture DepthTarget;
+	std::vector<FTexture> SampledDepth;
+	std::vector<FTextureTransition> TextureTransitions;
+};
+
+struct FGpuPassTiming
+{
+	std::string Name;
+	double Milliseconds{};
+};
+
+struct FGpuFrameTiming
+{
+	std::uint64_t Frame{};
+	std::vector<FGpuPassTiming> Passes;
+	std::shared_ptr<const void> Swapchain;
+};
+
+struct FGpuTimingCapture
+{
+	std::vector<FGpuFrameTiming> Frames;
+	std::uint64_t DroppedFrames{};
 };
 
 struct FDeviceStats
@@ -152,6 +192,7 @@ struct FDeviceStats
 	std::uint64_t GraphicsTableBinds{};
 	std::uint64_t PipelinesCreated{};
 	std::uint64_t ConstantBytesWritten{};
+	FGpuFrameTiming GpuTiming; // Last fence-complete sample; may lag the CPU frame.
 };
 
 } // namespace Hyperion

@@ -207,6 +207,7 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 		if (!ParseApplicationOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseCaptureOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseBenchmarkOption(Options, Arg, InArgc, InArgv, Index) &&
+		    !ParseShadowOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseProfilingOption(Options, Arg, InArgc, InArgv, Index))
 		{
 			throw std::invalid_argument("Unknown or incomplete option: " + Arg);

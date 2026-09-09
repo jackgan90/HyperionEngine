@@ -193,10 +193,6 @@ FMaterialParameterType ResourceType(const FShaderBinding& InBinding)
 			Kind = EMaterialValueKind::ReadBuffer;
 			break;
 		case EBindingKind::Sampler:
-			if (InBinding.bComparison)
-			{
-				throw std::invalid_argument("Unsupported material comparison sampler: " + InBinding.Name);
-			}
 			Kind = EMaterialValueKind::Sampler;
 			break;
 		default:

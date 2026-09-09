@@ -31,6 +31,7 @@ struct FSceneVisibilityStats
 	std::size_t IndexRefits{};
 	double UpdateMilliseconds{};
 	double QueryMilliseconds{};
+	double MaterialMilliseconds{};
 	FRenderBatchStats Batches;
 };
 

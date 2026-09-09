@@ -57,10 +57,13 @@ def verify_capture(document, experiment):
         elif name == 'ID3D12CommandQueue::ExecuteCommandLists':
             for submitted_list in node.findall("array[@name='ppCommandLists']/ResourceId"):
                 submitted.update(recorded.get(submitted_list.text, {}))
-    # Session/frame/family/view/usage/segment marker, distinct from GUI and arbitrary events.
+    # Ordinary sessions retain their structured identity. The forward pipeline owns stage names.
     scene_draws = sum(count for marker, count in submitted.items()
-                      if re.fullmatch(r'Scene [1-9]\d*/[1-9]\d*/[1-9]\d*/[1-9]\d*/Forward/\d+', marker))
+                      if re.fullmatch(r'(Scene [1-9]\d*/[1-9]\d*/[1-9]\d*/[1-9]\d*/Forward|Forward)/\d+', marker))
     assert scene_draws > 0, f'{experiment}: missing submitted session scene draws'
+    if experiment == 'Shadows':
+        for cascade in range(4):
+            assert submitted[f'Shadow cascade {cascade}/0'] > 0, f'missing cascade {cascade} draws'
     assert submitted['Debug UI'] > 0, f'{experiment}: missing submitted GUI draws'
     assert any('Present' in name for name in chunks), f'{experiment}: missing Present'
     assert any('CreateGraphicsPipeline' in name for name in chunks), f'{experiment}: missing pipeline'
@@ -91,6 +94,7 @@ def capture(experiment, frame_count, capture_frames):
 
 capture('Triangle', 24, [8, 16])
 capture('Model', 100, [80])
+capture('Shadows', 100, [80])
 
 missing = work / 'missing' / 'renderdoc.dll'
 text = run('missing-runtime', [viewer, '--frames', '8', '--hidden', '--renderdoc-library', missing])

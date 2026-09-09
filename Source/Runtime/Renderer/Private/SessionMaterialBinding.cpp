@@ -220,6 +220,7 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 	    {MaterialState->Identity, InSnapshot.Frame->Frame, {InSnapshot.Family, InSnapshot.View.Identity}},
 	    Resources.CreateScopeLifetime()};
 	Inputs.Values[ScopeIndex(EMaterialScope::Pass)] = InSnapshot.View.PassParameters;
+	FViewMaterialProviders ViewProviders{MaterialState->Providers};
 	for (auto& Item : InSnapshot.Items)
 	{
 		if (!Item.State.Surface)
@@ -240,7 +241,7 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 				Profile.Reused();
 				continue;
 			}
-			if (RefreshMaterialEvaluation(Item, InSnapshot, Inputs, Resources, Compiled, MaterialState->Providers))
+			if (RefreshMaterialEvaluation(Item, InSnapshot, Inputs, Resources, Compiled, ViewProviders))
 			{
 				Profile.Refreshed();
 				continue;
