@@ -161,6 +161,56 @@ void CheckDisableAndInvalid()
 		}
 	}
 }
+
+void CheckRetainedSetup()
+{
+	FCascadedShadowMap Shadows;
+	auto View = Camera();
+	FCascadedShadowSettings Settings;
+	FVec3 Light{.4f, .8f, .3f};
+	std::array<std::uint64_t, 2> State{1, 1};
+	unsigned Queries{};
+	const auto Query = [&](const ISceneVisibility&)
+	{
+		++Queries;
+		return std::vector<FBounds>{};
+	};
+	const auto Prepare = [&]
+	{
+		HYP_CHECK(Shadows.Prepare(View, Light, Settings, Query, State));
+	};
+	Prepare();
+	HYP_CHECK(Queries == 4);
+	const auto Before = Shadows.Cascades();
+	Prepare();
+	HYP_CHECK(Queries == 4 && Before[0].ViewProjection.Values == Shadows.Cascades()[0].ViewProjection.Values);
+	++State[0];
+	Prepare();
+	HYP_CHECK(Queries == 8);
+	++State[1];
+	Prepare();
+	HYP_CHECK(Queries == 12);
+	View.Eye.X = 1;
+	Prepare();
+	HYP_CHECK(Queries == 16);
+	View.Camera->Far = 200;
+	Prepare();
+	HYP_CHECK(Queries == 20);
+	Light.X = -.4f;
+	Prepare();
+	HYP_CHECK(Queries == 24);
+	Settings.Resolution = 1024;
+	Prepare();
+	HYP_CHECK(Queries == 28 && Shadows.TextureBytes() == 16 * 1024 * 1024);
+	Settings.bEnabled = false;
+	HYP_CHECK(!Shadows.Prepare(View, Light, Settings, Query, State));
+	Settings.bEnabled = true;
+	Prepare();
+	HYP_CHECK(Queries == 32);
+	HYP_CHECK(Shadows.Prepare(View, Light, Settings, Query));
+	HYP_CHECK(Shadows.Prepare(View, Light, Settings, Query));
+	HYP_CHECK(Queries == 40); // Custom/dynamic query clients without a stable scene token always execute.
+}
 } // namespace
 
 int main()
@@ -170,6 +220,7 @@ int main()
 		CheckDirectionsAndStability();
 		CheckOffscreenCasters();
 		CheckDisableAndInvalid();
+		CheckRetainedSetup();
 		std::cout << "Cascaded shadow projection and caster queries passed\n";
 		return 0;
 	}

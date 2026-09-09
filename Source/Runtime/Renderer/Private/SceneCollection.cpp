@@ -70,6 +70,7 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView, bool bInRefresh)
 	HYP_PERF_SCOPE_C(Render, CollectScene);
 	Tasks.Require({EDomain::Render});
 	FRenderSceneSnapshot Snapshot;
+	Snapshot.DrawFrame = std::make_shared<std::atomic_uint64_t>(0);
 	auto& Stats = Snapshot.Statistics;
 	if (bInRefresh)
 	{
@@ -108,12 +109,16 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView, bool bInRefresh)
 			Item.Ordinal = Index - Start;
 			Item.Lifetime = Entry.Lifetime;
 			Item.EvaluationCache = Entry.EvaluationCache;
-			Item.Report = [Result = Entry.Result](FRenderDrawResult InResult)
+			Item.Report = [Result = Entry.Result, Frame = Snapshot.DrawFrame](FRenderDrawResult InResult)
 			{
 				std::lock_guard Lock(Result->Mutex);
-				if (InResult.Revision == Result->Status.Revision && InResult.Frame >= Result->LastDraw.Frame)
+				const auto PreviousFrame = Result->LastDrawFrame
+				                               ? Result->LastDrawFrame->load(std::memory_order_acquire)
+				                               : Result->LastDraw.Frame;
+				if (InResult.Revision == Result->Status.Revision && InResult.Frame >= PreviousFrame)
 				{
 					Result->LastDraw = std::move(InResult);
+					Result->LastDrawFrame = Frame;
 				}
 			};
 		}

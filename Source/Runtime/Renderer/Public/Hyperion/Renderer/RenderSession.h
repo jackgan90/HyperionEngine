@@ -28,7 +28,9 @@ public:
 	std::size_t Build(FRenderGraph& InGraph, FRenderView InView);
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
 	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
-	                       bool bInSpatialPrepared = false);
+	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false);
+	// Render publishes deferred statistics after graph execution joins the RHI coordinator.
+	double CompleteViews();
 	std::shared_ptr<const FMaterialFrameContext> FreezeFrame(float InTime = 0,
 	                                                         FMaterialParameterValues InFrameValues = {});
 	void SetGlobalParameters(FMaterialParameterValues InValues);
@@ -41,7 +43,7 @@ public:
 	const std::vector<FRenderViewStatistics>& ViewStatistics() const;
 	FMaterialProviderStats ProviderStatistics() const; // Render only.
 	void AppendDepthPreview(FRenderGraph& InGraph, std::shared_ptr<const FMaterialTextureSource> InSource,
-	                        std::shared_ptr<const void> InLifetime, FViewport InViewport);
+	                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred = false);
 	void Close();
 
 private:
@@ -52,10 +54,18 @@ private:
 	bool bClosed{};
 	FSceneVisibilityStats LastStatistics;
 	std::vector<FRenderViewStatistics> LastViews;
+	struct FPreparedViewFamily;
+	std::shared_ptr<FPreparedViewFamily> PendingFamily;
 	struct FMaterialState;
 	std::unique_ptr<FMaterialState> MaterialState;
 	std::set<std::uint64_t> AdmitFamily(std::span<const FRenderView> InViews, const FMaterialFrameContext& InFrame,
 	                                    std::uint64_t InFamily);
 	void PrepareMaterials(FRenderSceneSnapshot& InSnapshot);
+	void InvalidatePreparedViews();
+	std::shared_ptr<const FRenderSceneSnapshot> PrepareView(const FRenderView& InView,
+	                                                        std::shared_ptr<const FMaterialFrameContext> InFrame,
+	                                                        std::uint64_t InFamily,
+	                                                        std::optional<std::uint64_t> InSceneRevision,
+	                                                        std::uint64_t InResourceRevision);
 };
 } // namespace Hyperion

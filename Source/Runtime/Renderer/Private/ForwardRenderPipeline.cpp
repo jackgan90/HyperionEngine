@@ -14,7 +14,7 @@ FForwardRenderPipeline::FForwardRenderPipeline(FRenderSession& InSession)
 void FForwardRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
                                    std::shared_ptr<const FMaterialFrameContext> InFrame,
                                    const FCascadedShadowSettings& InShadows, FVec4 InClear,
-                                   const std::function<void(FRenderGraph&)>& InExtensions)
+                                   const std::function<void(FRenderGraph&)>& InExtensions, bool bInDeferPreparation)
 {
 	HYP_PERF_SCOPE_C(Render, ForwardPipeline);
 	const auto Start = std::chrono::steady_clock::now();
@@ -31,11 +31,17 @@ void FForwardRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 		Light = {std::bit_cast<float>(Direction->Words[0]), std::bit_cast<float>(Direction->Words[1]),
 		         std::bit_cast<float>(Direction->Words[2])};
 	}
-	LastStatistics.bShadows = ShadowMaps.Prepare(InMain, Light, InShadows,
-	                                             [this](const ISceneVisibility& InVolume)
-	                                             {
-		                                             return Session.GetScene().QueryBounds(InVolume);
-	                                             });
+	const auto SceneRevision = Session.GetScene().GetCollectionRevision();
+	const auto SceneState =
+	    SceneRevision ? std::optional(std::array{*SceneRevision, Session.GetResources().GetPublicationRevision()})
+	                  : std::nullopt;
+	LastStatistics.bShadows = ShadowMaps.Prepare(
+	    InMain, Light, InShadows,
+	    [this](const ISceneVisibility& InVolume)
+	    {
+		    return Session.GetScene().QueryBounds(InVolume);
+	    },
+	    SceneState);
 	LastStatistics.ShadowSetupMilliseconds =
 	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
 	if (AllocatedShadowBytes != ShadowMaps.TextureBytes())
@@ -49,14 +55,16 @@ void FForwardRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 	InMain.ClearColor = InClear;
 	InMain.Name = "Forward";
 	Views.push_back(std::move(InMain));
-	Session.BuildViews(InGraph, Views, std::move(InFrame), 1, true);
+	Session.BuildViews(InGraph, Views, std::move(InFrame), 1, true, bInDeferPreparation);
+	bPending = bInDeferPreparation;
 	if (LastStatistics.bShadows && InShadows.DebugMode >= 2 && InShadows.DebugMode <= 5)
 	{
 		const auto& Main = Views.back();
 		const float Size = std::min({320.f, float(Main.Width), float(Main.Height)});
 		Session.AppendDepthPreview(InGraph, Main.SampledDepth.at(InShadows.DebugMode - 2), Lifetime,
 		                           InShadows.PreviewViewport.value_or(
-		                               FViewport{float(Main.Width) - Size, float(Main.Height) - Size, Size, Size}));
+		                               FViewport{float(Main.Width) - Size, float(Main.Height) - Size, Size, Size}),
+		                           bInDeferPreparation);
 	}
 	LastStatistics.Views = Session.ViewStatistics();
 	LastStatistics.ShadowTextureBytes = ShadowMaps.TextureBytes();
@@ -65,6 +73,16 @@ void FForwardRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 	if (InExtensions)
 	{
 		InExtensions(InGraph);
+	}
+}
+
+void FForwardRenderPipeline::Complete()
+{
+	if (bPending)
+	{
+		LastStatistics.PreparationMilliseconds += Session.CompleteViews();
+		LastStatistics.Views = Session.ViewStatistics();
+		bPending = false;
 	}
 }
 

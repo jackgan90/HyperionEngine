@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "SceneViewerInternal.h"
 #include <algorithm>
@@ -94,6 +95,12 @@ void FSceneViewerPlugin::FImpl::PollModels()
 
 void FSceneViewerPlugin::FImpl::UpdateStatus()
 {
+	HYP_PERF_SCOPE_C(Frame, UpdateSceneStatus);
+	const auto Revision = Bridge->GetStatusRevision();
+	if (bReady && StatusRevision == Revision)
+	{
+		return;
+	}
 	std::size_t ReadyCount{};
 	std::size_t FailedCount{};
 	for (const auto& Instance : Instances)
@@ -102,6 +109,7 @@ void FSceneViewerPlugin::FImpl::UpdateStatus()
 		FailedCount += !Loads.at(Instance.Asset).Error.empty() || !Bridge->GetError(Instance.Handle).empty() ? 1 : 0;
 	}
 	bReady = ReadyCount == Instances.size();
+	StatusRevision = Revision;
 	Status = std::to_string(ReadyCount) + "/" + std::to_string(Instances.size()) + " models ready | " +
 	         std::to_string(FailedCount) + " failed";
 }

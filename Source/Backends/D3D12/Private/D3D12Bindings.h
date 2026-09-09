@@ -17,7 +17,7 @@ struct FD3D12GraphicsBindingState
 };
 
 void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& InPipeline,
-                              const FD3D12DeviceState& InState);
+                              const FD3D12DeviceState& InState, std::uint64_t InCompletedFence);
 void RecordGraphicsBindings(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw,
                             const FD3D12Pipeline& InPipeline, const FD3D12DeviceState& InState,
                             FD3D12GraphicsBindingState& InBindings);

@@ -174,6 +174,30 @@ void CheckStencilAndCulling(FStateFixture& InFixture)
 	HYP_CHECK(std::abs(Front.Rgba[Center] - Mirrored.Rgba[Center]) < .012F);
 }
 
+void CheckStateReuse(FStateFixture& InFixture)
+{
+	auto Red = InFixture.Draw({}, {.8F, 0, 0, 1});
+	auto Blue = InFixture.Draw({}, {0, 0, .8F, 1});
+	Blue.Pipeline = Red.Pipeline;
+	const std::array<float, 6> Positions{-1, -1, 3, -1, -1, 3};
+	const std::array<std::uint32_t, 3> IndexData{0, 1, 2};
+	Blue.Vertices = InFixture.Device.CreateBuffer(std::as_bytes(std::span(Positions)));
+	Blue.Indices = InFixture.Device.CreateBuffer(std::as_bytes(std::span(IndexData)));
+	Red.Scissor = {0, 0, 32, 64};
+	Blue.Scissor = {32, 0, 64, 64};
+	for (int Frame = 0; Frame < 4; ++Frame)
+	{
+		const auto Before = InFixture.Device.Statistics();
+		const auto Image = InFixture.Render({Red, Red, Blue, Blue, Red});
+		const auto After = InFixture.Device.Statistics();
+		Pixel(Image, {.8F, 0, 0}, 16);
+		Pixel(Image, {0, 0, .8F}, 48);
+		HYP_CHECK(After.GraphicsPipelineBinds - Before.GraphicsPipelineBinds == 1);
+		HYP_CHECK(After.GraphicsGeometryBinds - Before.GraphicsGeometryBinds == 7);
+		HYP_CHECK(After.GraphicsDynamicBinds - Before.GraphicsDynamicBinds == 5);
+	}
+}
+
 void CheckStateRejections(FStateFixture& InFixture)
 {
 	const auto Reject = [&](const std::function<void(FPipelineDesc&)>& InChange)
@@ -307,6 +331,7 @@ void RunMaterialStateGpuTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	FStateFixture Fixture(InDevice, InSwapchain);
 	CheckDepthAndBlend(Fixture);
 	CheckStencilAndCulling(Fixture);
+	CheckStateReuse(Fixture);
 	CheckStateRejections(Fixture);
 	CheckGraphAttachmentInitialization();
 	HYP_CHECK(InDevice.Statistics().ValidationErrors == 0);

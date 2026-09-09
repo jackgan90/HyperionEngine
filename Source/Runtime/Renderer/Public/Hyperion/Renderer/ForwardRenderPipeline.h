@@ -21,7 +21,8 @@ public:
 	explicit FForwardRenderPipeline(FRenderSession& InSession);
 	void Build(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
-	           const std::function<void(FRenderGraph&)>& InExtensions = {});
+	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
+	void Complete(); // Render, after executing a deferred graph.
 	const FForwardPipelineStatistics& Statistics() const;
 	const FCascadedShadowMap& Shadows() const;
 
@@ -31,5 +32,6 @@ private:
 	std::shared_ptr<const void> Lifetime;
 	std::uint64_t AllocatedShadowBytes{};
 	FForwardPipelineStatistics LastStatistics;
+	bool bPending{};
 };
 } // namespace Hyperion

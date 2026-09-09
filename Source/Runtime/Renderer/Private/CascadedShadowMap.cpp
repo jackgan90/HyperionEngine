@@ -1,6 +1,8 @@
 #include "Hyperion/Renderer/CascadedShadowMap.h"
+#include "Hyperion/Core/Profiling.h"
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <cmath>
 
 namespace Hyperion
@@ -78,6 +80,41 @@ bool Valid(const FRenderView& InMain, FVec3 InLight, const FCascadedShadowSettin
 	       std::isfinite(InSettings.ReceiverBias) && std::isfinite(InSettings.BlendFraction) &&
 	       std::isfinite(InSettings.FadeFraction) && InMain.Width > 0 && InMain.Height > 0;
 }
+
+std::array<std::uint64_t, 26> PreparationKey(const FRenderView& InView, FVec3 InLight,
+                                             const FCascadedShadowSettings& InSettings,
+                                             const std::array<std::uint64_t, 2>& InSceneState)
+{
+	const auto& Camera = *InView.Camera;
+	const std::array Values{InView.Eye.X,
+	                        InView.Eye.Y,
+	                        InView.Eye.Z,
+	                        Camera.Forward.X,
+	                        Camera.Forward.Y,
+	                        Camera.Forward.Z,
+	                        Camera.Up.X,
+	                        Camera.Up.Y,
+	                        Camera.Up.Z,
+	                        Camera.Near,
+	                        Camera.Far,
+	                        Camera.VerticalRadians,
+	                        InLight.X,
+	                        InLight.Y,
+	                        InLight.Z,
+	                        InSettings.Distance,
+	                        InSettings.SplitLambda,
+	                        InSettings.NormalOffset,
+	                        InSettings.ReceiverBias,
+	                        InSettings.BlendFraction,
+	                        InSettings.FadeFraction};
+	std::array<std::uint64_t, 26> Result{InSceneState[0], InSceneState[1], InView.Width, InView.Height,
+	                                     InSettings.Resolution};
+	for (std::size_t Index = 0; Index < Values.size(); ++Index)
+	{
+		Result[Index + 5] = std::bit_cast<std::uint32_t>(Values[Index]);
+	}
+	return Result;
+}
 } // namespace
 
 FCascadedShadowMap::FCascadedShadowMap()
@@ -90,11 +127,14 @@ FCascadedShadowMap::FCascadedShadowMap()
 }
 
 bool FCascadedShadowMap::Prepare(const FRenderView& InMain, FVec3 InSurfaceToLight,
-                                 const FCascadedShadowSettings& InSettings, const FBoundsQuery& InQuery)
+                                 const FCascadedShadowSettings& InSettings, const FBoundsQuery& InQuery,
+                                 std::optional<std::array<std::uint64_t, 2>> InSceneState)
 {
+	HYP_PERF_SCOPE_C(Render, PrepareShadowCascades);
 	bEnabled = InSettings.bEnabled && Valid(InMain, InSurfaceToLight, InSettings);
 	if (!bEnabled)
 	{
+		PreparedKey.reset();
 		return false;
 	}
 	Settings = InSettings;
@@ -104,6 +144,15 @@ bool FCascadedShadowMap::Prepare(const FRenderView& InMain, FVec3 InSurfaceToLig
 	Settings.ReceiverBias = std::clamp(Settings.ReceiverBias, 0.f, 2.f);
 	Settings.BlendFraction = std::clamp(Settings.BlendFraction, .01f, .25f);
 	Settings.FadeFraction = std::clamp(Settings.FadeFraction, .01f, .5f);
+	const auto Key =
+	    InSceneState ? std::optional(PreparationKey(InMain, InSurfaceToLight, Settings, *InSceneState)) : std::nullopt;
+	if (Key && Key == PreparedKey)
+	{
+		HYP_PERF_PLOT(Render, ShadowSetupReuses, 1.0);
+		return true;
+	}
+	PreparedKey.reset();
+	HYP_PERF_PLOT(Render, ShadowSetupReuses, 0.0);
 	const auto Direction = Normalize(InSurfaceToLight);
 	if (Light.X != Direction.X || Light.Y != Direction.Y || Light.Z != Direction.Z)
 	{
@@ -144,6 +193,7 @@ bool FCascadedShadowMap::Prepare(const FRenderView& InMain, FVec3 InSurfaceToLig
 			    FMaterialDepthTexture{Settings.Resolution, Settings.Resolution, 1});
 		}
 	}
+	PreparedKey = Key;
 	return true;
 }
 

@@ -52,6 +52,9 @@ private:
 	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
 	FRenderFrame UpdateScene(FSize InSize);
 	FImage RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture);
+	FRenderGraph BuildRenderGraph(const FRenderFrame& InFrame, const FGuiDrawData& InGuiData,
+	                              std::shared_ptr<const FMaterialFrameContext> InMaterialFrame);
+	void UpdateRenderStatistics();
 	void UpdateCaptureStatus();
 	void HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled);
 	void SaveSettingsAsync(const std::filesystem::path& InPath);

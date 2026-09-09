@@ -48,7 +48,12 @@ FRenderDrawResult FRenderBinding::GetLastDrawResult() const
 		return {};
 	}
 	std::lock_guard Lock(Result->Mutex);
-	return Result->LastDraw;
+	auto Draw = Result->LastDraw;
+	if (Result->LastDrawFrame)
+	{
+		Draw.Frame = std::max(Draw.Frame, Result->LastDrawFrame->load(std::memory_order_acquire));
+	}
+	return Draw;
 }
 
 FRenderBindingStatus FRenderBinding::GetStatus() const
@@ -157,27 +162,39 @@ FTaskHandle FRenderBinding::Remove()
 }
 
 FRenderSceneClient::FRenderSceneClient(FTaskSystem& InTasks,
-                                       std::function<std::shared_ptr<const void>()> InScopeFactory)
+                                       std::function<std::shared_ptr<const void>()> InScopeFactory,
+                                       std::function<void()> InOnChanged)
     : Mailbox(std::make_shared<FRenderSceneMailbox>(InTasks))
 {
 	InTasks.Require({EDomain::Main});
-	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
-	                              [State = Mailbox, Factory = std::move(InScopeFactory)]() mutable
-	                              {
-		                              if (!Factory)
-		                              {
-			                              Factory = []
-			                              {
-				                              return std::make_shared<const int>(0);
-			                              };
-		                              }
-		                              State->Scene = std::make_unique<FRenderScene>(State->Tasks, std::move(Factory));
-	                              }));
+	InTasks.Wait(InTasks.Dispatch(
+	    {EDomain::Render},
+	    [State = Mailbox, Factory = std::move(InScopeFactory), Changed = std::move(InOnChanged)]() mutable
+	    {
+		    if (!Factory)
+		    {
+			    Factory = []
+			    {
+				    return std::make_shared<const int>(0);
+			    };
+		    }
+		    State->Scene = std::make_unique<FRenderScene>(State->Tasks, std::move(Factory), std::move(Changed));
+	    }));
 }
 
 FRenderSceneClient::~FRenderSceneClient()
 {
 	Close();
+}
+
+std::optional<std::uint64_t> FRenderSceneClient::GetCollectionRevision() const
+{
+	Mailbox->Tasks.Require({EDomain::Render});
+	if (!Mailbox->Scene)
+	{
+		throw std::logic_error("Render scene is closed");
+	}
+	return Mailbox->Scene->GetCollectionRevision();
 }
 
 void FRenderSceneClient::RequireMain() const

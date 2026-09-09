@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/MaterialInputValues.h"
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "Hyperion/Renderer/RenderResources.h"
@@ -199,8 +200,25 @@ void FRenderBatchSystem::FImpl::EraseChunk(std::map<FBatchItemKey, FChunkEntry>:
 	Chunks.erase(InEntry);
 }
 
-void FRenderBatchSystem::FImpl::Retire(const FRenderSceneSnapshot& InSnapshot)
+void FRenderBatchSystem::FImpl::RetireExpired()
 {
+	HYP_PERF_SCOPE_C(Detail, RetireBatchFamily);
+	for (auto It = Plans.begin(); It != Plans.end();)
+	{
+		if (std::any_of(It->second.Inputs.begin(), It->second.Inputs.end(),
+		                [](const auto& InItem)
+		                {
+			                return InItem.Lifetime.expired();
+		                }))
+		{
+			PlanItems -= It->second.Inputs.size();
+			It = Plans.erase(It);
+		}
+		else
+		{
+			++It;
+		}
+	}
 	for (auto It = Items.begin(); It != Items.end();)
 	{
 		if (It->second.Lifetime.expired())
@@ -215,9 +233,34 @@ void FRenderBatchSystem::FImpl::Retire(const FRenderSceneSnapshot& InSnapshot)
 	}
 	for (auto It = Chunks.begin(); It != Chunks.end();)
 	{
-		const bool bCurrentView =
-		    std::get<0>(It->first) == InSnapshot.View.Identity && std::get<1>(It->first) == InSnapshot.View.Usage;
-		if (!It->second.Data->IsLive() || (bCurrentView && It->second.Access != Access))
+		if (!It->second.Data->IsLive())
+		{
+			const auto Previous = It++;
+			EraseChunk(Previous);
+		}
+		else
+		{
+			++It;
+		}
+	}
+}
+
+void FRenderBatchSystem::FImpl::Retire(const FRenderSceneSnapshot& InSnapshot)
+{
+	const std::array Family{InSnapshot.Frame ? InSnapshot.Frame->Session : 0,
+	                        InSnapshot.Frame ? InSnapshot.Frame->Frame : 0, InSnapshot.Family};
+	if (!InSnapshot.Frame || Family != RetiredFamily)
+	{
+		RetireExpired();
+		RetiredFamily = Family;
+	}
+	// Only the current view's small chunk range needs visibility retirement after each build.
+	const FBatchItemKey First{InSnapshot.View.Identity, InSnapshot.View.Usage, 0, 0, 0, 0};
+	for (auto It = Chunks.lower_bound(First); It != Chunks.end() &&
+	                                          std::get<0>(It->first) == InSnapshot.View.Identity &&
+	                                          std::get<1>(It->first) == InSnapshot.View.Usage;)
+	{
+		if (It->second.Access != Access || !It->second.Data->IsLive())
 		{
 			const auto Previous = It++;
 			EraseChunk(Previous);

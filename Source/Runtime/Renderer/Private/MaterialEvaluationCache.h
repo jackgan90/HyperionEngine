@@ -31,7 +31,7 @@ struct FMaterialEvaluationCache
 		std::shared_ptr<const FMaterialSnapshot> Snapshot;
 		std::shared_ptr<const FCompiledMaterialDefinition> Compiled;
 		std::string Usage;
-		FMaterialProviderInputs Inputs;
+		std::shared_ptr<const FMaterialProviderInputs> Inputs;
 		FMaterialParameterValues Object;
 		FMaterialParameterValues Draw;
 		FMaterialParameterValues ObjectInputs;
@@ -40,6 +40,7 @@ struct FMaterialEvaluationCache
 		std::shared_ptr<const FResolvedMaterialParameters> Resolved;
 		std::uint32_t Dependencies{};
 		std::vector<std::size_t> ProviderParameters;
+		std::vector<std::size_t> SharedProviderParameters;
 		std::uint64_t AccessFrame{};
 
 		bool Matches(const FMaterialProviderInputs& InInputs, const FMaterialParameterValues& InObject,
@@ -67,9 +68,9 @@ struct FMaterialEvaluationCache
 					continue;
 				}
 				if ((Dependencies & ~InIgnoredScopes & (1U << Scope)) &&
-				    (Inputs.Scopes[Scope].Key != InInputs.Scopes[Scope].Key ||
-				     Inputs.Scopes[Scope].Lifetime != InInputs.Scopes[Scope].Lifetime ||
-				     Inputs.Values[Scope] != InInputs.Values[Scope]))
+				    (Inputs->Scopes[Scope].Key != InInputs.Scopes[Scope].Key ||
+				     Inputs->Scopes[Scope].Lifetime != InInputs.Scopes[Scope].Lifetime ||
+				     Inputs->Values[Scope] != InInputs.Values[Scope]))
 				{
 					return false;
 				}
@@ -88,9 +89,48 @@ class FRenderResourceService;
 // One view preparation owns immutable engine scopes. Share their provider results across its objects.
 struct FViewMaterialProviders
 {
+	struct FRefresh
+	{
+		std::shared_ptr<const FMaterialValueTable::FSharedValues> Values;
+		std::shared_ptr<const FMaterialDependencyTable::FSharedValues> Dependencies;
+	};
+
+	struct FRefreshKey
+	{
+		const FCompiledMaterialPass* Pass;
+		std::vector<std::size_t> Indices;
+	};
+
+	struct FRefreshLookup
+	{
+		const FCompiledMaterialPass* Pass;
+		std::span<const std::size_t> Indices;
+	};
+
+	struct FRefreshOrder
+	{
+		using is_transparent = void; // NOLINT(readability-identifier-naming): standard associative lookup contract.
+
+		template<typename TLeft, typename TRight> bool operator()(const TLeft& InLeft, const TRight& InRight) const
+		{
+			if (InLeft.Pass != InRight.Pass)
+			{
+				return std::less<const FCompiledMaterialPass*>{}(InLeft.Pass, InRight.Pass);
+			}
+			return std::lexicographical_compare(InLeft.Indices.begin(), InLeft.Indices.end(), InRight.Indices.begin(),
+			                                    InRight.Indices.end());
+		}
+	};
+
 	FMaterialProviderRegistry& Registry;
 	std::map<std::string, FMaterialProvidedValue, std::less<>> Shared;
+	std::map<FRefreshKey, FRefresh, FRefreshOrder> Refreshes;
+	std::map<std::uint32_t, std::shared_ptr<const FMaterialProviderInputs>> RetainedInputs;
+	std::shared_ptr<const FMaterialProviderInputs> RetainInputs(const FMaterialProviderInputs& InInputs,
+	                                                            std::uint32_t InDependencies);
 	FMaterialProvidedValue Evaluate(const FMaterialProviderInputs& InInputs, std::string_view InSemantic);
+	FRefresh PrepareShared(const FMaterialEvaluationCache::FEntry& InEntry, const FCompiledMaterialPass& InPass,
+	                       const FMaterialProviderInputs& InInputs);
 };
 
 void FillMaterialObjectInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,

@@ -41,6 +41,13 @@ void FDepthPreview::Collect()
 FGraphicsPass FRenderResourceService::BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
                                                         std::shared_ptr<const void> InLifetime, FViewport InViewport)
 {
+	return GetPreparation().BuildDepthPreview(std::move(InSource), std::move(InLifetime), InViewport);
+}
+
+FGraphicsPass FRenderResourcePreparation::BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
+                                                            std::shared_ptr<const void> InLifetime,
+                                                            FViewport InViewport) const
+{
 	auto& Owner = *Coordinator;
 	Owner.Tasks.Require({EDomain::Rhi, 0});
 	std::lock_guard Lock(Owner.Mutex);
@@ -49,6 +56,7 @@ FGraphicsPass FRenderResourceService::BuildDepthPreview(std::shared_ptr<const FM
 		throw std::invalid_argument("Depth preview requires a live depth target");
 	}
 	Owner.EnsureMaterialCaches();
+	Owner.TrackScope(InLifetime);
 	auto& Preview = Owner.DepthPreview;
 	if (!Preview.Draw.Pipeline)
 	{
@@ -74,9 +82,21 @@ FGraphicsPass FRenderResourceService::BuildDepthPreview(std::shared_ptr<const FM
 }
 
 void FRenderSession::AppendDepthPreview(FRenderGraph& InGraph, std::shared_ptr<const FMaterialTextureSource> InSource,
-                                        std::shared_ptr<const void> InLifetime, FViewport InViewport)
+                                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred)
 {
 	Tasks.Require({EDomain::Render});
+	if (bInDeferred)
+	{
+		InGraph.AddDeferred(
+		    [Preparation = Resources.GetPreparation(), Source = std::move(InSource), Lifetime = std::move(InLifetime),
+		     InViewport]
+		    {
+			    std::vector<FColorPass> Passes;
+			    Passes.push_back(Preparation.BuildDepthPreview(Source, Lifetime, InViewport));
+			    return Passes;
+		    });
+		return;
+	}
 	auto Result =
 	    DispatchAsync<FGraphicsPass>(Tasks, {EDomain::Rhi, 0},
 	                                 [this, Source = std::move(InSource), Lifetime = std::move(InLifetime), InViewport]

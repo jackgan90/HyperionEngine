@@ -1,4 +1,5 @@
 #include "RenderSceneInternal.h"
+#include <algorithm>
 #include <atomic>
 #include <exception>
 #include <set>
@@ -19,6 +20,7 @@ void FRenderBindingResult::Publish(ERenderPrimitiveStatus InState, std::uint64_t
 		Previous = std::move(Admitted);
 		Admitted = std::move(InAdmitted);
 		LastDraw = {};
+		LastDrawFrame.reset();
 		ValidatedSchema.reset();
 	}
 	// Lease destruction can notify the resource coordinator; never do it under the result mutex.
@@ -37,10 +39,35 @@ FRenderScene::~FRenderScene()
 	}
 }
 
+void FRenderScene::Invalidate()
+{
+	++Revision;
+	Cacheable.reset();
+	if (OnChanged)
+	{
+		OnChanged();
+	}
+}
+
+std::optional<std::uint64_t> FRenderScene::GetCollectionRevision() const
+{
+	Tasks.Require({EDomain::Render});
+	if (!Cacheable)
+	{
+		Cacheable = std::all_of(Entries.begin(), Entries.end(),
+		                        [](const auto& InEntry)
+		                        {
+			                        return InEntry.second.Primitive->IsStaticCollection();
+		                        });
+	}
+	return *Cacheable ? std::optional(Revision) : std::nullopt;
+}
+
 void FRenderScene::Create(FRenderPrimitiveHandle InHandle, FRenderPrimitiveState InState, std::uint64_t InGroup,
                           const FRenderPrimitiveFactory& InFactory, std::shared_ptr<FRenderBindingResult> InResult)
 {
 	Tasks.Require({EDomain::Render});
+	Invalidate();
 	try
 	{
 		ValidatePrimitiveState(InState);
@@ -101,6 +128,10 @@ void FRenderScene::Update(std::vector<FRenderPrimitiveUpdate> InUpdates)
 			throw std::invalid_argument("Duplicate primitive in update batch");
 		}
 	}
+	if (!InUpdates.empty())
+	{
+		Invalidate();
+	}
 	for (auto& Update : InUpdates)
 	{
 		auto& Entry = Entries.at(Update.Handle.Slot);
@@ -121,6 +152,7 @@ void FRenderScene::Remove(FRenderPrimitiveHandle InHandle)
 	const auto It = Entries.find(InHandle.Slot);
 	if (It != Entries.end() && It->second.Handle == InHandle)
 	{
+		Invalidate();
 		auto Result = It->second.Result;
 		const auto Group = It->second.Group;
 		Groups.at(Group).erase(InHandle.Slot);

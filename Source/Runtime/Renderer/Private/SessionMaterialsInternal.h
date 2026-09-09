@@ -15,6 +15,16 @@ struct FRenderSession::FMaterialState
 		FMaterialInputValues Values;
 	};
 
+	struct FPreparedView
+	{
+		std::shared_ptr<FRenderSceneSnapshot> Snapshot;
+		std::uint64_t SceneRevision{};
+		std::uint64_t ResourceRevision{};
+		std::uint32_t Dependencies{};
+		bool bValid{};
+		bool bDepthSorted{};
+	};
+
 	std::uint64_t Identity{};
 	std::atomic_uint64_t NextFrame{1};
 	ERHIDepthFormat Depth;
@@ -22,6 +32,7 @@ struct FRenderSession::FMaterialState
 	std::mutex Publication;
 	FMaterialProviderInputs Inputs;
 	std::map<std::uint64_t, FViewEntry> Views;
+	std::map<std::uint64_t, FPreparedView> PreparedViews;
 	std::uint64_t LastFrame{};
 	std::set<std::uint64_t> Families;
 

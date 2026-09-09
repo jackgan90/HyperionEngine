@@ -15,6 +15,7 @@ struct FRenderBindingResult
 	std::uint32_t Section{};
 	std::shared_ptr<const FRenderPrimitiveState> Admitted;
 	FRenderDrawResult LastDraw;
+	std::shared_ptr<const std::atomic_uint64_t> LastDrawFrame;
 	std::shared_ptr<const FMaterialParameterSchema> ValidatedSchema;
 	void Publish(ERenderPrimitiveStatus InState, std::uint64_t InRevision, std::string InError = {},
 	             std::shared_ptr<const FRenderResource> InResource = {}, std::uint32_t InSection = 0,
@@ -24,8 +25,9 @@ struct FRenderBindingResult
 class FRenderScene
 {
 public:
-	explicit FRenderScene(FTaskSystem& InTasks, std::function<std::shared_ptr<const void>()> InScopeFactory)
-	    : Tasks(InTasks), ScopeFactory(std::move(InScopeFactory))
+	explicit FRenderScene(FTaskSystem& InTasks, std::function<std::shared_ptr<const void>()> InScopeFactory,
+	                      std::function<void()> InOnChanged)
+	    : Tasks(InTasks), ScopeFactory(std::move(InScopeFactory)), OnChanged(std::move(InOnChanged))
 	{
 		Tasks.Require({EDomain::Render});
 	}
@@ -37,6 +39,7 @@ public:
 	void Remove(FRenderPrimitiveHandle InHandle);
 	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true);
 	FSceneVisibilityStats BeginViews();
+	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;
 
 private:
@@ -53,6 +56,10 @@ private:
 
 	FTaskSystem& Tasks;
 	std::function<std::shared_ptr<const void>()> ScopeFactory;
+	std::function<void()> OnChanged;
+	std::uint64_t Revision = 1;
+	mutable std::optional<bool> Cacheable;
+	void Invalidate();
 	std::map<std::uint32_t, FEntry> Entries;
 	std::map<std::uint64_t, std::set<std::uint32_t>> Groups;
 	std::set<std::uint64_t> DirtyGroups;

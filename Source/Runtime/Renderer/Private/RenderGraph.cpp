@@ -89,23 +89,6 @@ struct FGraphAttachments
 	}
 };
 
-void JoinRecordings(FTaskSystem& InTasks, std::span<const FTaskHandle> InRecordings, std::exception_ptr& OutError)
-{
-	for (const auto& Task : InRecordings)
-	{
-		try
-		{
-			InTasks.Wait(Task);
-		}
-		catch (...)
-		{
-			if (!OutError)
-			{
-				OutError = std::current_exception();
-			}
-		}
-	}
-}
 } // namespace
 
 std::size_t FRenderGraph::Add(FColorPass InPass)
@@ -125,7 +108,19 @@ void FRenderGraph::ImportDepth(FTexture InTexture)
 
 std::vector<FPassCommands> FRenderGraph::Compile() const
 {
+	auto Copy = *this;
+	auto Result = Copy.CompileAndConsume();
+	for (auto& Pass : Result)
+	{
+		Pass.MaterializeDraws();
+	}
+	return Result;
+}
+
+std::vector<FPassCommands> FRenderGraph::CompileAndConsume()
+{
 	HYP_PERF_SCOPE_C(Render, CompileRenderGraph);
+	ExpandPreparations();
 	if (Passes.empty())
 	{
 		throw std::runtime_error("Graph requires at least one color pass");
@@ -158,6 +153,7 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 		}
 	}
 	std::vector<FPassCommands> Result;
+	Result.reserve(Count + 1);
 	std::vector<bool> Visited(Count);
 	FGraphAttachments Attachments;
 	FGraphDepthResources DepthResources(ImportedDepth);
@@ -175,9 +171,9 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 			{
 				continue;
 			}
-			const auto& Pass = Passes[I];
+			auto& Pass = Passes[I];
 			Attachments.Validate(Pass);
-			auto Commands = Pass.Commands;
+			auto Commands = std::move(Pass.Commands);
 			Commands.bClear = Pass.Load == EColorLoad::Clear;
 			DepthResources.Compile(Commands);
 			if (Commands.bUseColor && !bColorStarted)
@@ -205,76 +201,9 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 	}
 	DepthResources.Finish(Present);
 	Result.push_back(std::move(Present));
+	Passes.clear();
+	ImportedDepth.clear();
 	return Result;
 }
 
-FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
-                    bool bInVsync, bool bInCapture)
-{
-	HYP_PERF_SCOPE_C(Render, ExecuteRenderGraph);
-	auto Commands = InGraph.Compile();
-	// Reject unsupported graphs before acquiring a frame or dispatching any recorder.
-	if (Commands.size() > InSwapchain.GetCapabilities().MaxRecordingContexts)
-	{
-		throw std::runtime_error("Graph exceeds backend recording context capacity");
-	}
-	if (bInCapture && !InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::Readback).bEnabled)
-	{
-		throw std::runtime_error("Backend does not enable image readback");
-	}
-	std::vector<FRecordedList> Lists(Commands.size());
-	std::vector<FTaskHandle> Recordings;
-	Recordings.reserve(Commands.size());
-	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
-	                              [&]
-	                              {
-		                              InSwapchain.BeginFrame(InSize);
-	                              }));
-	try
-	{
-		for (std::size_t I = 0; I < Commands.size(); ++I)
-		{
-			Recordings.push_back(InTasks.Dispatch(
-			    {EDomain::Rhi, InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).bEnabled
-			                       ? static_cast<std::uint32_t>(I % InTasks.RhiThreadCount())
-			                       : 0},
-			    [&, I]
-			    {
-				    Lists[I] = InSwapchain.Record(static_cast<std::uint32_t>(I), Commands[I]);
-			    }));
-		}
-		std::exception_ptr Error;
-		JoinRecordings(InTasks, Recordings, Error);
-		if (Error)
-		{
-			std::rethrow_exception(Error);
-		}
-		FImage Image;
-		InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
-		                              [&]
-		                              {
-			                              Image = InSwapchain.EndFrame(Lists, bInVsync, bInCapture);
-		                              }));
-		return Image;
-	}
-	catch (...)
-	{
-		auto Error = std::current_exception();
-		// Also covers failure while dispatching, before every recorder was admitted.
-		JoinRecordings(InTasks, Recordings, Error);
-		try
-		{
-			InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
-			                              [&]
-			                              {
-				                              InSwapchain.CancelFrame();
-			                              }));
-		}
-		catch (const std::exception& CleanupError)
-		{
-			Log(ELogLevel::Error, std::string("Frame cancellation failed: ") + CleanupError.what());
-		}
-		std::rethrow_exception(Error);
-	}
-}
 } // namespace Hyperion

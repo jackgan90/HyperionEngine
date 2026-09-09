@@ -39,7 +39,7 @@ void FD3D12DeviceState::Idle()
 	Uploads.clear();
 	for (const auto& Submission : Submissions)
 	{
-		CollectPassTimings(*this, Submission.Lists);
+		CollectPassTimings(*this, Submission.Lists, Submission.TimingCapture);
 	}
 #if HYP_ENABLE_PROFILING
 	for (const auto& Submission : Submissions)
@@ -63,7 +63,7 @@ void FD3D12DeviceState::CollectUploads()
 	              {
 		              if (Completed != UINT64_MAX && InSubmission.FenceValue <= Completed)
 		              {
-			              CollectPassTimings(*this, InSubmission.Lists);
+			              CollectPassTimings(*this, InSubmission.Lists, InSubmission.TimingCapture);
 		              }
 #if HYP_ENABLE_PROFILING
 		              if (Completed != UINT64_MAX && InSubmission.FenceValue <= Completed)

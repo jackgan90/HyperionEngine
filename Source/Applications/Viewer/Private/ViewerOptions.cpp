@@ -21,6 +21,15 @@ bool ParseBenchmarkOption(FOptions& InOptions, const std::string& InArg, int InA
 	{
 		InOptions.bBenchmarkCamera = true;
 	}
+	else if (InArg == "--benchmark-camera-step" && InIndex + 1 < InArgc)
+	{
+		InOptions.BenchmarkCameraStep = std::stof(InArgv[++InIndex]);
+		if (!std::isfinite(InOptions.BenchmarkCameraStep) || InOptions.BenchmarkCameraStep <= 0)
+		{
+			throw std::invalid_argument("--benchmark-camera-step must be finite and positive");
+		}
+		InOptions.bBenchmarkCamera = true;
+	}
 	else if (InArg == "--no-instance-batching")
 	{
 		InOptions.bNoInstanceBatching = true;

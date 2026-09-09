@@ -149,6 +149,7 @@ FResourceBindingLayout FD3D12RHIDevice::CreateBindingLayout(const FResourceBindi
 		if (Slot.Kind == ERHIBindingKind::ConstantBuffer)
 		{
 			auto& Parameter = Parameters[Layout->Slots[Index].RootParameter];
+			Layout->ConstantMask |= std::uint64_t{1} << Layout->Slots[Index].RootParameter;
 			Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 			Parameter.ShaderVisibility = NativeVisibility(Slot.Visibility);
 			Parameter.Descriptor = {Slot.Register, Slot.Space};

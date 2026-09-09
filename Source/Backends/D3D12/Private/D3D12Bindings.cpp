@@ -158,12 +158,15 @@ void ValidateConstant(const FConstantBinding& InBinding, const FResourceBindingS
 	{
 		throw std::invalid_argument("Invalid constant buffer slice alignment or range");
 	}
-	if (!std::any_of(Buffer.Published.begin(), Buffer.Published.end(),
-	                 [&Slice](const FD3D12Buffer::FPublishedSlice& InPublished)
-	                 {
-		                 return InPublished.Offset == Slice.Offset && InPublished.Size == Slice.Size &&
-		                        InPublished.Extent == Slice.Extent && InPublished.Publication == Slice.Publication;
-	                 }))
+	// Publication is append-only in increasing offset order, including after a sole-owner reset.
+	std::lock_guard Lock(Buffer.ConstantMutex);
+	const auto Published = std::lower_bound(Buffer.Published.begin(), Buffer.Published.end(), Slice.Offset,
+	                                        [](const FD3D12Buffer::FPublishedSlice& InPublished, std::uint64_t InOffset)
+	                                        {
+		                                        return InPublished.Offset < InOffset;
+	                                        });
+	if (Published == Buffer.Published.end() || Published->Offset != Slice.Offset || Published->Size != Slice.Size ||
+	    Published->Extent != Slice.Extent || Published->Publication != Slice.Publication)
 	{
 		throw std::invalid_argument("Unpublished or stale constant buffer slice");
 	}
@@ -252,6 +255,11 @@ FResourceBindingSet FD3D12RHIDevice::CreateBindingSet(const FResourceBindingSetD
 		auto& Arena = Table.bSampler ? State->SamplerTables : State->ResourceTables;
 		for (UINT Index = 0; Index < Entry.Values.size(); ++Index)
 		{
+			if (const auto* Texture = std::get_if<FTexture>(&Entry.Values[Index]))
+			{
+				Set->UploadFence = std::max(Set->UploadFence,
+				                            NativeResource<FD3D12Texture>(Texture->Payload, State.get()).UploadFence);
+			}
 			WriteDescriptor(*State, Arena.Cpu(Set->Tables[Slot.Table].Offset + Slot.Offset + Index),
 			                Entry.Values[Index], Layout.Description.Slots[Entry.Slot].Kind);
 		}
@@ -261,7 +269,7 @@ FResourceBindingSet FD3D12RHIDevice::CreateBindingSet(const FResourceBindingSetD
 }
 
 void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& InPipeline,
-                              const FD3D12DeviceState& InState)
+                              const FD3D12DeviceState& InState, std::uint64_t InCompletedFence)
 {
 	const FD3D12BindingLayout& Layout = NativeResource<FD3D12BindingLayout>(InPipeline.Layout.Payload, &InState);
 	if (InDraw.Bindings)
@@ -271,42 +279,35 @@ void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& I
 		{
 			throw std::invalid_argument("Incompatible pipeline/resource binding layout");
 		}
-		for (const FResourceBindingEntry& Entry : Set.Description.Entries)
+		// The immutable set validated every resource at publication. Its maximum upload fence covers all textures.
+		if (Set.UploadFence > InCompletedFence)
 		{
-			for (const FResourceBindingValue& Value : Entry.Values)
-			{
-				if (const auto* Texture = std::get_if<FTexture>(&Value))
-				{
-					const FD3D12Texture& Native = NativeResource<FD3D12Texture>(Texture->Payload, &InState);
-					if (Native.UploadFence > InState.Fence->GetCompletedValue())
-					{
-						throw std::invalid_argument("Texture upload is not ready for graphics binding");
-					}
-				}
-			}
+			throw std::invalid_argument("Texture upload is not ready for graphics binding");
 		}
 	}
 	else if (!Layout.Tables.empty())
 	{
 		throw std::invalid_argument("Missing graphics resource binding set");
 	}
-	std::vector<bool> Seen(Layout.Slots.size());
+	std::uint64_t Seen{};
 	for (const FConstantBinding& Constant : InDraw.ConstantBindings)
 	{
-		if (Constant.Slot >= Seen.size() || Seen[Constant.Slot] ||
+		if (Constant.Slot >= Layout.Slots.size() ||
 		    Layout.Description.Slots[Constant.Slot].Kind != ERHIBindingKind::ConstantBuffer)
 		{
 			throw std::invalid_argument("Invalid or duplicate dynamic constant binding");
 		}
-		Seen[Constant.Slot] = true;
+		const auto Bit = std::uint64_t{1} << Layout.Slots[Constant.Slot].RootParameter;
+		if (Seen & Bit)
+		{
+			throw std::invalid_argument("Invalid or duplicate dynamic constant binding");
+		}
+		Seen |= Bit;
 		ValidateConstant(Constant, Layout.Description.Slots[Constant.Slot], InState, InDraw.InstanceCount);
 	}
-	for (std::size_t Index = 0; Index < Seen.size(); ++Index)
+	if (Seen != Layout.ConstantMask)
 	{
-		if (!Seen[Index] && Layout.Description.Slots[Index].Kind == ERHIBindingKind::ConstantBuffer)
-		{
-			throw std::invalid_argument("Missing dynamic constant binding");
-		}
+		throw std::invalid_argument("Missing dynamic constant binding");
 	}
 }
 

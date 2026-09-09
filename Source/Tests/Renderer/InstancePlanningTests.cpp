@@ -135,6 +135,65 @@ void CheckStrategies(FFixture& InFixture)
 	                                              }));
 }
 
+void PublishShared(FRenderSceneSnapshot& InSnapshot, std::string_view InName, FMaterialValue InValue)
+{
+	const auto Schema = InSnapshot.Items.front().State.Surface->GetCompiled()->Interface.Schema;
+	std::vector<std::optional<std::shared_ptr<const FMaterialValue>>> Values(Schema->GetParameters().size());
+	Values[Schema->Find(InName).Index] = std::make_shared<const FMaterialValue>(std::move(InValue));
+	const auto Shared = std::make_shared<const FMaterialValueTable::FSharedValues>(std::move(Values));
+	for (auto& Item : InSnapshot.Items)
+	{
+		auto Updated = std::make_shared<FResolvedMaterialParameters>(*Item.ResolvedParameters);
+		Updated->Values.SetShared(Shared);
+		Item.ResolvedParameters = std::move(Updated);
+	}
+}
+
+void CheckSharedRefresh(FFixture& InFixture)
+{
+	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities());
+	auto Items = Snapshot(InFixture, 8);
+	PublishShared(Items, "SharedTint", FMaterialValue::Float(FVec4{1, 1, 1, 1}));
+	const auto Original = Plan(InFixture, Batches, Items);
+	const auto Frozen = Items;
+	const auto OldDraws = Prepare(InFixture, Batches, Items);
+	PublishShared(Items, "SharedTint", FMaterialValue::Float(FVec4{.25f, 1, 1, 1}));
+	const auto Refreshed = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Refreshed->Statistics.PlanReuses == 1 && Refreshed->Statistics.RebuiltChunks == 0);
+	HYP_CHECK(Refreshed->Batches[0].Instances == Original->Batches[0].Instances);
+	const auto NewDraws = Prepare(InFixture, Batches, Items);
+	HYP_CHECK(InFixture.Draw(OldDraws).Rgba != InFixture.Draw(NewDraws).Rgba);
+	const auto Tint = Items.Items[0].State.Surface->GetCompiled()->Interface.Schema->Find("SharedTint").Index;
+	HYP_CHECK(*Frozen.Items[0].ResolvedParameters->Values[Tint] == FMaterialValue::Float(FVec4{1, 1, 1, 1}));
+	// A different overlay in one member must split compatibility, even though every local page is unchanged.
+	Items.Items[1].ResolvedParameters = Frozen.Items[1].ResolvedParameters;
+	const auto Split = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Split->Statistics.PlanReuses == 0 && Split->Batches.size() > Refreshed->Batches.size());
+	// View-dependent data can also appear in an instance block; it must rebuild its payload.
+	PublishShared(Items, "Placement", FMaterialValue::Float(FVec4{0, 0, 0, 1}));
+	Plan(InFixture, Batches, Items);
+	PublishShared(Items, "Placement", FMaterialValue::Float(FVec4{.5f, 0, 0, 1}));
+	HYP_CHECK(Plan(InFixture, Batches, Items)->Statistics.RebuiltChunks > 0);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Batches.Clear();
+	                                              }));
+
+	FRenderBatchSystem Custom(InFixture.Tasks, InFixture.Device->GetCapabilities());
+	const auto Calls = std::make_shared<unsigned>(0);
+	Custom.Register(std::make_unique<FTwoItems>(Calls));
+	Items = Frozen;
+	Plan(InFixture, Custom, Items);
+	PublishShared(Items, "SharedTint", FMaterialValue::Float(FVec4{.5f, 1, 1, 1}));
+	HYP_CHECK(Plan(InFixture, Custom, Items)->Statistics.PlanReuses == 0 && *Calls == 16);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Custom.Clear();
+	                                              }));
+}
+
 void CheckBudget(FFixture& InFixture)
 {
 	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities(), {3, 1, 65536});
@@ -149,6 +208,62 @@ void CheckBudget(FFixture& InFixture)
 	Items.Items.clear();
 	Result = Plan(InFixture, Batches, Items);
 	HYP_CHECK(Result->Statistics.CachedChunks == 0);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Batches.Clear();
+	                                              }));
+}
+
+void CheckPlanValueRetirement(FFixture& InFixture, bool bInInvalidate)
+{
+	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities(), {16, 16, 65536});
+	std::weak_ptr<const FMaterialTextureSource> Released;
+	FRenderSceneSnapshot Retained;
+	{
+		auto Items = Snapshot(InFixture, 8);
+		const auto Source = std::make_shared<const FMaterialTextureSource>(
+		    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {200, 120, 80, 255}}});
+		Released = Source;
+		for (auto& Item : Items.Items)
+		{
+			const auto Compiled = Item.State.Surface->GetCompiled();
+			Item.Context.ObjectParameters.push_back(
+			    {"Maps",
+			     FMaterialValue::Array({FMaterialValue::FromTexture(Source), FMaterialValue::FromTexture(Source)})});
+			Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(ResolveMaterialBindingContext(
+			    Item.State.Surface->GetSnapshot(), *Compiled, Compiled->GetPass(), Item.Context));
+		}
+		HYP_CHECK(!Plan(InFixture, Batches, Items)->Batches.empty());
+		HYP_CHECK(Plan(InFixture, Batches, Items)->Statistics.PlanReuses == 1);
+		Retained = Items;
+	}
+	if (bInInvalidate)
+	{
+		InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+		                                              [&]
+		                                              {
+			                                              Batches.InvalidatePlans();
+		                                              }));
+		HYP_CHECK(!Released.expired()); // An independently retained frame keeps its original source.
+		Retained = {};
+		HYP_CHECK(Released.expired()); // No subsequent family/build is needed after invalidation.
+	}
+	else
+	{
+		Retained = {};
+		HYP_CHECK(!Released.expired());
+		auto OtherView = Snapshot(InFixture, 8);
+		++OtherView.View.Identity;
+		Plan(InFixture, Batches, OtherView);
+		HYP_CHECK(Released.expired());
+		auto ThirdView = Snapshot(InFixture, 8);
+		ThirdView.View.Identity = OtherView.View.Identity + 1;
+		Plan(InFixture, Batches, ThirdView);
+		// The two live views fit only if retirement returned the dead view's eight-item budget.
+		HYP_CHECK(Plan(InFixture, Batches, OtherView)->Statistics.PlanReuses == 1);
+		HYP_CHECK(Plan(InFixture, Batches, ThirdView)->Statistics.PlanReuses == 1);
+	}
 	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
 	                                              [&]
 	                                              {
@@ -206,7 +321,10 @@ void CheckCompatibility(FFixture& InFixture)
 void RunInstancePlanningTests(FFixture& InFixture)
 {
 	CheckStrategies(InFixture);
+	CheckSharedRefresh(InFixture);
 	CheckBudget(InFixture);
+	CheckPlanValueRetirement(InFixture, false);
+	CheckPlanValueRetirement(InFixture, true);
 	CheckCompatibility(InFixture);
 }
 } // namespace Hyperion::InstanceTests

@@ -194,6 +194,90 @@ void CheckIndexShadowValidation(IRHIDevice& InDevice, IRHISwapchain& InSwapchain
 	    });
 }
 
+void CheckRetainedDrawOwnership(IRHIDevice& InDevice, IRHISwapchain& InSwapchain, FDrawPacket InDraw,
+                                bool bInSharedDraws)
+{
+	const FSize Size{80, 48};
+	auto Page = InDevice.CreateBuffer({256, BufferUsage(ERHIBufferUsage::Constant)});
+	const auto Transform = Identity();
+	InDraw.ConstantBindings = {{0, InDevice.PublishConstantSlice(Page, 0, std::as_bytes(std::span(&Transform, 1)))}};
+	InDraw.Scissor = {0, 0, 80, 48};
+	auto Source = ClearCommands();
+	Source.Draws.push_back(std::move(InDraw));
+	if (bInSharedDraws)
+	{
+		Source.ShareDraws();
+	}
+	auto Commands = std::make_shared<const FPassCommands>(std::move(Source));
+	Page = {};
+	const auto& NestedPage = Commands->GetDraws()[0].ConstantBindings[0].Slice.Buffer;
+	HYP_CHECK(NestedPage.Payload.use_count() == 1);
+	FImage Reference;
+	for (unsigned Frame = 0; Frame < 4; ++Frame)
+	{
+		InSwapchain.BeginFrame(Size);
+		const std::array Lists{InSwapchain.RecordOwned(0, Commands), InSwapchain.Record(1, PresentCommands())};
+		HYP_CHECK(NestedPage.Payload.use_count() == 1);
+		Rejects(
+		    [&]
+		    {
+			    InDevice.ResetConstantBuffer(NestedPage);
+		    });
+		auto Image = InSwapchain.EndFrame(Lists, false, true);
+		if (Frame == 0)
+		{
+			Reference = std::move(Image);
+		}
+		else
+		{
+			HYP_CHECK(Reference.Rgba == Image.Rgba);
+		}
+	}
+	Rejects(
+	    [&]
+	    {
+		    InDevice.ResetConstantBuffer(NestedPage);
+	    });
+	InSwapchain.BeginFrame(Size);
+	if (bInSharedDraws)
+	{
+		auto Mixed = *Commands;
+		Mixed.Draws.emplace_back();
+		Rejects(
+		    [&]
+		    {
+			    InSwapchain.RecordOwned(0, std::make_shared<const FPassCommands>(Mixed));
+		    });
+	}
+	auto BadTarget = *Commands;
+	BadTarget.bSrgbTarget = !BadTarget.bSrgbTarget;
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.RecordOwned(0, std::make_shared<const FPassCommands>(BadTarget));
+	    });
+	auto BadGeometry = *Commands;
+	BadGeometry.MaterializeDraws();
+	BadGeometry.Draws[0].FirstIndex = UINT32_MAX;
+	BadGeometry.ShareDraws();
+	Rejects(
+	    [&]
+	    {
+		    InSwapchain.RecordOwned(0, std::make_shared<const FPassCommands>(BadGeometry));
+	    });
+	BadTarget = {};
+	BadGeometry = {};
+	{
+		// Borrowed callers receive a private packet copy even when their input uses shared storage.
+		const std::array Lists{InSwapchain.Record(0, *Commands), InSwapchain.Record(1, PresentCommands())};
+		HYP_CHECK(InSwapchain.EndFrame(Lists, false, true).Rgba == Reference.Rgba);
+	}
+	InSwapchain.WaitIdle();
+	Page = NestedPage;
+	Commands.reset();
+	InDevice.ResetConstantBuffer(Page); // Native planning cannot keep a dead stream or its constant page alive.
+}
+
 void CheckDeviceOwnership()
 {
 	FRHIBackendRegistry Registry;
@@ -273,6 +357,8 @@ void CheckDeviceOwnership()
 	                                                Swapchain->Record(1, PresentCommands())};
 	Image = Swapchain->EndFrame(ResizedLists, false, true);
 	HYP_CHECK(Image.Width == 80 && Image.Height == 48);
+	CheckRetainedDrawOwnership(*Device, *Swapchain, Draw, true);
+	CheckRetainedDrawOwnership(*Device, *Swapchain, Draw, false);
 	Device->WaitIdle();
 	OtherDevice->WaitIdle();
 	HYP_CHECK(Device->Statistics().ValidationErrors == 0 && OtherDevice->Statistics().ValidationErrors == 0);

@@ -6,15 +6,47 @@ namespace Hyperion
 std::shared_ptr<const void> FRenderResourceService::CreateScopeLifetime() const
 {
 	const std::weak_ptr<FRenderResourceCoordinator> Weak = Coordinator;
-	return std::shared_ptr<const void>(new int(0),
-	                                   [Weak](const void* InValue)
-	                                   {
-		                                   delete static_cast<const int*>(InValue);
-		                                   if (auto Owner = Weak.lock())
-		                                   {
-			                                   Owner->Schedule();
-		                                   }
-	                                   });
+	auto Scope = std::shared_ptr<FRenderResourceCoordinator::FScopeLifetime>(
+	    new FRenderResourceCoordinator::FScopeLifetime,
+	    [Weak](FRenderResourceCoordinator::FScopeLifetime* InScope)
+	    {
+		    if (auto Owner = Weak.lock())
+		    {
+			    Owner->ReleaseScope(InScope);
+		    }
+		    delete InScope;
+	    });
+	{
+		std::lock_guard Lock(Coordinator->ScopeMutex);
+		Coordinator->ScopeLifetimes.emplace(Scope.get(), Scope);
+	}
+	return Scope;
+}
+
+void FRenderResourceCoordinator::TrackScope(const std::shared_ptr<const void>& InScope)
+{
+	std::lock_guard Lock(ScopeMutex);
+	const auto It = ScopeLifetimes.find(InScope.get());
+	if (It != ScopeLifetimes.end())
+	{
+		if (const auto Scope = It->second.lock())
+		{
+			Scope->bUsed.store(true, std::memory_order_relaxed);
+		}
+	}
+}
+
+void FRenderResourceCoordinator::ReleaseScope(FScopeLifetime* InScope)
+{
+	{
+		std::lock_guard Lock(ScopeMutex);
+		ScopeLifetimes.erase(InScope);
+	}
+	// Merely freezing an unused Frame/Pass input must not schedule a cache/fence scan.
+	if (InScope->bUsed.load(std::memory_order_relaxed))
+	{
+		Schedule();
+	}
 }
 
 namespace

@@ -26,11 +26,17 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	std::atomic_uint64_t GraphicsHeapBinds{};
 	std::atomic_uint64_t GraphicsConstantBinds{};
 	std::atomic_uint64_t GraphicsTableBinds{};
+	std::atomic_uint64_t GraphicsPipelineBinds{};
+	std::atomic_uint64_t GraphicsGeometryBinds{};
+	std::atomic_uint64_t GraphicsDynamicBinds{};
+	std::atomic_uint64_t CommandListsCreated{};
+	std::atomic_uint64_t CommandListResets{};
 	std::uint64_t PipelinesCreated{};
 	std::uint64_t ConstantBytesWritten{};
 	FGpuFrameTiming LastGpuTiming;
 	FGpuTimingCapture GpuTimingCapture;
 	std::size_t GpuTimingCapacity{};
+	std::uint64_t GpuTimingEpoch{};
 	ComPtr<IDXGIFactory6> Factory;
 	ComPtr<IDXGIAdapter1> Adapter;
 	ComPtr<ID3D12CommandQueue> Queue;
@@ -63,6 +69,7 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	{
 		std::uint64_t FenceValue{};
 		std::vector<FRecordedList> Lists;
+		std::uint64_t TimingCapture{};
 	};
 
 	std::vector<FSubmission> Submissions;

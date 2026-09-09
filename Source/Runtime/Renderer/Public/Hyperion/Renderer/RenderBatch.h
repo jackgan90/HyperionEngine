@@ -106,6 +106,9 @@ public:
 	void Register(std::unique_ptr<IRenderBatchStrategy> InStrategy);
 	std::shared_ptr<const FRenderBatchPlan> Build(const FRenderSceneSnapshot& InSnapshot, bool bInEnabled = true);
 	void Clear();
+	// Scene invalidation releases plan parameter owners even when no later family is rendered.
+	void InvalidatePlans();
+	bool HasCustomStrategies() const;
 
 private:
 	struct FImpl;

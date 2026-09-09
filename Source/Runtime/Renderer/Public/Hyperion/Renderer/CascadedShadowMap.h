@@ -39,7 +39,7 @@ public:
 	using FBoundsQuery = std::function<std::vector<FBounds>(const ISceneVisibility&)>;
 	FCascadedShadowMap();
 	bool Prepare(const FRenderView& InMain, FVec3 InSurfaceToLight, const FCascadedShadowSettings& InSettings,
-	             const FBoundsQuery& InQuery);
+	             const FBoundsQuery& InQuery, std::optional<std::array<std::uint64_t, 2>> InSceneState = {});
 	std::vector<FRenderView> Views(const FRenderView& InMain, std::shared_ptr<const void> InLifetime) const;
 	void Bind(FRenderView& InMain, std::shared_ptr<const void> InLifetime) const;
 	const std::array<FShadowCascade, 4>& Cascades() const;
@@ -55,6 +55,7 @@ private:
 	FVec3 LightUp{0, 1, 0};
 	FVec3 Light{0, 0, 1};
 	bool bEnabled{};
+	std::optional<std::array<std::uint64_t, 26>> PreparedKey;
 	void PrepareCascade(std::size_t InIndex, const FRenderView& InMain, const FBoundsQuery& InQuery);
 };
 } // namespace Hyperion

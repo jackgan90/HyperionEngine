@@ -84,10 +84,9 @@ void FStaticMeshRenderPrimitive::Collect(const FRenderView&, std::vector<FRender
 	const auto& PrimitiveState = GetState();
 	if (PrimitiveState.bVisible)
 	{
-		FRenderItem Item;
+		auto& Item = OutItems.emplace_back();
 		Item.State = PrimitiveState;
 		Item.LocalItemId = 0;
-		OutItems.push_back(std::move(Item));
 	}
 }
 

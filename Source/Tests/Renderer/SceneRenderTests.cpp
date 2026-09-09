@@ -64,6 +64,8 @@ struct FSceneFixture
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;
+	FSceneVisibilityStats LastStatistics;
+	std::uint64_t FrameNumber{};
 
 	FSceneFixture()
 	{
@@ -92,10 +94,13 @@ struct FSceneFixture
 		                          }));
 	}
 
-	FImage Frame(std::size_t InExpectedItems, ESceneCullingMode InMode = ESceneCullingMode::Bvh)
+	FImage Frame(std::size_t InExpectedItems, ESceneCullingMode InMode = ESceneCullingMode::Bvh,
+	             const std::function<void(FRenderView&)>& InConfigure = {})
 	{
 		Window.Poll();
 		FImage Image;
+		const auto MaterialFrame = Session->FreezeFrame(0);
+		FrameNumber = MaterialFrame->Frame;
 		Tasks.Wait(Tasks.Dispatch(
 		    {EDomain::Render},
 		    [&]
@@ -108,9 +113,15 @@ struct FSceneFixture
 			    FRenderView View{
 			        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
 			    View.CullingMode = InMode;
-			    HYP_CHECK(Session->Build(Graph, View) == InExpectedItems);
-			    HYP_CHECK(Graph.Compile().size() <= 3);
-			    Image = ExecuteGraph(Graph, Tasks, *Swapchain, {320, 240}, false, true);
+			    if (InConfigure)
+			    {
+				    InConfigure(View);
+			    }
+			    HYP_CHECK(Session->BuildViews(Graph, std::span(&View, 1), MaterialFrame, 1, false, true) ==
+			              InExpectedItems);
+			    Image = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, {320, 240}, false, true);
+			    Session->CompleteViews();
+			    LastStatistics = Session->Statistics();
 		    }));
 		return Image;
 	}
@@ -424,6 +435,155 @@ void CheckLogicalAttachment(FSceneFixture& InFixture)
 	Pending.Close();
 	InFixture.AwaitRetirement(); // Removal and upload cleanup without another frame.
 }
+
+void CheckQueuedViews(FSceneFixture& InFixture)
+{
+	const auto First = InFixture.Session->FreezeFrame(0);
+	const auto Second = InFixture.Session->FreezeFrame(0);
+	std::array<FImage, 2> Images;
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    FRenderView View{
+		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
+		    View.CullingMode = ESceneCullingMode::None;
+		    View.ClearColor = FVec4{};
+		    std::array<FRenderGraph, 2> Graphs;
+		    InFixture.Session->BuildViews(Graphs[0], std::span(&View, 1), First, 1, false, true);
+		    View.ViewProjection = Multiply(Translation({1.2f, 0, 0}), View.ViewProjection);
+		    InFixture.Session->BuildViews(Graphs[1], std::span(&View, 1), Second, 1, false, true);
+		    Images[0] =
+		        ExecuteGraph(std::move(Graphs[0]), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, true);
+		    Images[1] =
+		        ExecuteGraph(std::move(Graphs[1]), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, true);
+		    InFixture.Session->CompleteViews();
+	    }));
+	Pixel(Images[0], 160, {1, 0, 0});
+	Pixel(Images[1], 160, {0, 0, 0}); // The second preparation cannot overwrite the first graph's constants.
+}
+
+void CheckRetainedViewChanges(FSceneFixture& InFixture)
+{
+	InFixture.Frame(1, ESceneCullingMode::None);
+	const auto Move = [](FRenderView& InView)
+	{
+		InView.Eye.X = .2f;
+		InView.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt(InView.Eye, {0, 0, 0}));
+	};
+	InFixture.Frame(1, ESceneCullingMode::None, Move);
+	HYP_CHECK(InFixture.LastStatistics.CollectionReuses == 1 && InFixture.LastStatistics.PreparationReuses == 0);
+	InFixture.Frame(1, ESceneCullingMode::None, Move);
+	HYP_CHECK(InFixture.LastStatistics.PreparationReuses == 1 && InFixture.LastStatistics.PacketReuses == 1);
+	const auto Viewport = [](FRenderView& InView)
+	{
+		InView.Viewport = FViewport{0, 0, 320, 240, .1f, .8f};
+	};
+	InFixture.Frame(1, ESceneCullingMode::None, Viewport);
+	HYP_CHECK(InFixture.LastStatistics.PacketReuses == 0);
+	InFixture.Frame(1, ESceneCullingMode::None, Viewport);
+	HYP_CHECK(InFixture.LastStatistics.PacketReuses == 1);
+	InFixture.Frame(1, ESceneCullingMode::None,
+	                [&](FRenderView& InView)
+	                {
+		                Viewport(InView);
+		                InView.Viewport->MaxDepth = .9f;
+	                });
+	HYP_CHECK(InFixture.LastStatistics.PacketReuses == 0);
+	InFixture.Frame(1);
+	InFixture.Frame(1, ESceneCullingMode::Bvh,
+	                [](FRenderView& InView)
+	                {
+		                InView.bInstanceBatching = false;
+	                });
+	HYP_CHECK(InFixture.LastStatistics.PreparationReuses == 0);
+}
+
+void CheckRetainedFrames(FSceneFixture& InFixture)
+{
+	FScene Scene;
+	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
+	FSceneModel Model{"retained", PrepareSceneModel(std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})))};
+	const auto Handle = Scene.Add(Model);
+	Bridge.Flush();
+	AwaitBridge(Bridge, Handle);
+	for (unsigned Index = 0; Index < 5; ++Index)
+	{
+		InFixture.Frame(1);
+	}
+	Bridge.Flush();
+	const auto StatusRevision = Bridge.GetStatusRevision();
+	const auto Warm = InFixture.Session->GetResources().Statistics();
+	for (unsigned Index = 0; Index < 6; ++Index)
+	{
+		Bridge.Flush();
+		Pixel(InFixture.Frame(1), 160, {1, 0, 0});
+		HYP_CHECK(InFixture.LastStatistics.CollectionReuses == 1);
+		HYP_CHECK(InFixture.LastStatistics.PreparationReuses == 1 && InFixture.LastStatistics.PacketReuses == 1);
+		HYP_CHECK(InFixture.LastStatistics.VisitedNodes == 0 && InFixture.LastStatistics.GroupTests == 0);
+		const auto Results = Bridge.GetDrawResults(Handle);
+		HYP_CHECK(Results.size() == 1 && Results[0].bReady && Results[0].Frame == InFixture.FrameNumber);
+		const auto Unused = InFixture.Session->FreezeFrame(0); // Unconsumed scope destruction must remain idle.
+	}
+	const auto Idle = InFixture.Session->GetResources().Statistics();
+	HYP_CHECK(Idle.MaintenanceTasks == Warm.MaintenanceTasks && Idle.MaintenanceTicks == Warm.MaintenanceTicks);
+	HYP_CHECK(Idle.Constants.UploadBytes == Warm.Constants.UploadBytes && Bridge.GetStatusRevision() == StatusRevision);
+	CheckRetainedViewChanges(InFixture);
+	CheckQueuedViews(InFixture);
+	Model.World = Translation({100, 0, 0});
+	Scene.Update(Handle, Model);
+	Bridge.Flush();
+	Pixel(InFixture.Frame(0), 160, {0, 0, 0});
+	HYP_CHECK(InFixture.LastStatistics.CollectionReuses == 0);
+	Scene.Clear();
+	Bridge.Flush();
+	Bridge.Close();
+	InFixture.AwaitRetirement();
+}
+
+void CheckReceiptViewChanges(FSceneFixture& InFixture)
+{
+	FModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(),
+	             std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	AwaitModel(Model);
+	const auto Run = [&](std::vector<std::uint64_t> InIds, bool bInExpectReuse)
+	{
+		const auto Frame = InFixture.Session->FreezeFrame(0);
+		InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+		    {EDomain::Render},
+		    [&]
+		    {
+			    std::vector<FRenderView> Views;
+			    for (const auto Id : InIds)
+			    {
+				    FRenderView View{
+				        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
+				    View.Identity = Id;
+				    View.CullingMode = ESceneCullingMode::None;
+				    View.ClearColor = FVec4{};
+				    Views.push_back(View);
+			    }
+			    FRenderGraph Graph;
+			    InFixture.Session->BuildViews(Graph, Views, Frame, 1, false, true);
+			    ExecuteGraph(std::move(Graph), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, false);
+			    InFixture.Session->CompleteViews();
+			    for (const auto& Stats : InFixture.Session->ViewStatistics())
+			    {
+				    HYP_CHECK(Stats.Visibility.PacketReuses == unsigned(bInExpectReuse));
+			    }
+		    }));
+		const auto Receipt = Model.GetDrawResults().at(0);
+		HYP_CHECK(Receipt.Frame == Frame->Frame && Receipt.View == InIds.back() && Receipt.Family == 1);
+		HYP_CHECK(Receipt.bReady && Receipt.Error.empty() && Receipt.Usage == "Forward");
+	};
+	Run({11, 22}, false);
+	Run({11, 22}, true);
+	Run({22, 11}, true);
+	Run({11}, true);
+	Run({11}, true);
+	Model.Remove();
+	InFixture.AwaitRetirement();
+}
 } // namespace
 
 int main()
@@ -437,6 +597,8 @@ int main()
 		CheckManyPrimitives(Fixture);
 		CheckLogicalAttachment(Fixture);
 		CheckSharedMaterialPublication(Fixture);
+		CheckRetainedFrames(Fixture);
+		CheckReceiptViewChanges(Fixture);
 		Fixture.Tasks.Wait(Fixture.Tasks.Dispatch({EDomain::Rhi, 0},
 		                                          [&]
 		                                          {

@@ -76,6 +76,7 @@ public:
 
 	// RHI coordinator. Opt-in bounded collection of completed submissions; neither operation waits.
 	// Frame IDs are local to each Swapchain. End after normal fence completion to include the final frame.
+	// Membership is fixed at submission; late completion from an earlier capture is never included in a new one.
 	virtual void BeginGpuTimingCapture(std::size_t)
 	{
 		throw std::runtime_error("Backend does not support GPU timing capture");

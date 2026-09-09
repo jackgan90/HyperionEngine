@@ -76,10 +76,31 @@ struct FRenderResourceStats
 	std::uint64_t Productions{};
 	std::uint64_t GeometryUploads{};
 	std::uint64_t Retired{};
+	std::uint64_t MaintenanceTasks{};
+	std::uint64_t MaintenanceTicks{};
 	std::size_t LiveResources{};
 	FMaterialConstantStats Constants;
 	FMaterialGpuStats Materials;
 	FRenderBatchStats Batches;
+};
+
+// Owned RHI preparation endpoint. Deferred work can outlive the service facade and rejects a closed coordinator.
+class FRenderResourcePreparation
+{
+public:
+	std::vector<FColorPass> BuildPasses(const FRenderSceneSnapshot& InSnapshot,
+	                                    FRenderBatchStats* OutStatistics = nullptr) const;
+	FGraphicsPass BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
+	                                std::shared_ptr<const void> InLifetime, FViewport InViewport) const;
+
+private:
+	explicit FRenderResourcePreparation(std::shared_ptr<FRenderResourceCoordinator> InCoordinator)
+	    : Coordinator(std::move(InCoordinator))
+	{
+	}
+
+	std::shared_ptr<FRenderResourceCoordinator> Coordinator;
+	friend class FRenderResourceService;
 };
 
 // One service per rendering device/session, shared by all its scene producers.
@@ -95,10 +116,13 @@ public:
 	                                                    std::uint64_t InVersion = 1);
 	std::shared_ptr<const FRenderMaterial> RequestMaterial(std::shared_ptr<const FMaterialSnapshot> InSnapshot);
 	std::shared_ptr<const void> CreateScopeLifetime() const;
+	// Changes only when resource readiness/error publication changes; safe to observe from Main or Render.
+	std::uint64_t GetPublicationRevision() const;
 	std::shared_ptr<const FRenderResource> Request(std::shared_ptr<const void> InIdentity, std::uint64_t InVersion,
 	                                               std::string InConfiguration,
 	                                               std::function<FRenderResourceDesc()> InPrepare);
 	std::vector<FColorPass> BuildPasses(const FRenderSceneSnapshot& InSnapshot);
+	FRenderResourcePreparation GetPreparation() const;
 	FGraphicsPass BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
 	                                std::shared_ptr<const void> InLifetime, FViewport InViewport);
 	FRenderResourceStats Statistics() const;

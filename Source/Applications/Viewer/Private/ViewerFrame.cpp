@@ -185,62 +185,85 @@ FRenderFrame FViewerApplication::UpdateScene(FSize InSize)
 	return Frame;
 }
 
+FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, const FGuiDrawData& InGuiData,
+                                                  std::shared_ptr<const FMaterialFrameContext> InMaterialFrame)
+{
+	FRenderGraph Graph;
+	ForwardPipeline->Build(
+	    Graph, InFrame.View, std::move(InMaterialFrame), ShadowSettings,
+	    {float(InFrame.Settings.ClearRed), float(InFrame.Settings.ClearGreen), float(InFrame.Settings.ClearBlue), 1},
+	    [&](FRenderGraph& InGraph)
+	    {
+		    for (const auto& Plugin : Plugins->GetInstances())
+		    {
+			    if (Plugin.get() == GuiPlugin)
+			    {
+				    GuiPlugin->BuildDeferred(InGraph, InGuiData);
+			    }
+			    else if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
+			    {
+				    Render->Build(InGraph, InFrame);
+			    }
+		    }
+	    },
+	    true);
+	return Graph;
+}
+
+void FViewerApplication::UpdateRenderStatistics()
+{
+	ForwardPipeline->Complete();
+	PipelineStatistics = ForwardPipeline->Statistics();
+	SceneStatistics = PipelineStatistics.Views.back().Visibility;
+	SceneStatistics.UpdateMilliseconds = PipelineStatistics.Spatial.UpdateMilliseconds;
+	SceneStatistics.IndexRebuilds = PipelineStatistics.Spatial.IndexRebuilds;
+	SceneStatistics.IndexRefits = PipelineStatistics.Spatial.IndexRefits;
+	HYP_PERF_PLOT(Frame, SceneDraws, double(SceneStatistics.Draws));
+}
+
 FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture)
 {
 	auto& Tasks = Services->Tasks;
 	const auto Frame = UpdateScene(InSize);
 	const auto MaterialFrame = RenderSession->FreezeFrame(float(ClockNanoseconds() / 1000000000.0));
 	FImage Screenshot;
+	FRenderGraphCallbacks Callbacks;
 #if HYP_ENABLE_RENDERDOC
 	const auto Surface = Window->Surface();
 	bool bRdcSucceeded = false;
+	std::unique_ptr<FFrameCaptureScope> CaptureScope;
+	Callbacks.BeforePrepare = [&]
+	{
+		if (FrameCapture)
+		{
+			CaptureScope = std::make_unique<FFrameCaptureScope>(Tasks, FrameCapture, Surface);
+		}
+	};
+	Callbacks.OnFailure = [&]
+	{
+		CaptureScope.reset();
+	};
 #endif
-	Tasks.Wait(Tasks.Dispatch(
-	    {EDomain::Render},
-	    [&, Frame, MaterialFrame, GuiData = InGuiData]
-	    {
-		    HYP_PERF_SCOPE_C(Render, RenderFrame);
+	Callbacks.AfterSubmit = [&]
+	{
+		Metrics.Device = Device->Statistics();
 #if HYP_ENABLE_RENDERDOC
-		    FFrameCaptureScope CaptureScope(Tasks, FrameCapture, Surface);
+		if (CaptureScope)
+		{
+			bRdcSucceeded = CaptureScope->Finish();
+			CaptureScope.reset();
+		}
 #endif
-		    if (GuiPlugin)
-		    {
-			    Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-			                              [&]
-			                              {
-				                              GuiPlugin->Prepare(GuiData);
-			                              }));
-		    }
-		    FRenderGraph Graph;
-		    ForwardPipeline->Build(
-		        Graph, Frame.View, MaterialFrame, ShadowSettings,
-		        {float(Frame.Settings.ClearRed), float(Frame.Settings.ClearGreen), float(Frame.Settings.ClearBlue), 1},
-		        [&](FRenderGraph& InGraph)
-		        {
-			        for (const auto& Plugin : Plugins->GetInstances())
-			        {
-				        if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
-				        {
-					        Render->Build(InGraph, Frame);
-				        }
-			        }
-		        });
-		    PipelineStatistics = ForwardPipeline->Statistics();
-		    SceneStatistics = PipelineStatistics.Views.back().Visibility;
-		    SceneStatistics.UpdateMilliseconds = PipelineStatistics.Spatial.UpdateMilliseconds;
-		    SceneStatistics.IndexRebuilds = PipelineStatistics.Spatial.IndexRebuilds;
-		    SceneStatistics.IndexRefits = PipelineStatistics.Spatial.IndexRefits;
-		    HYP_PERF_PLOT(Frame, SceneDraws, double(SceneStatistics.Draws));
-		    Screenshot = ExecuteGraph(Graph, Tasks, *Swapchain, InSize, Frame.Settings.bVsync, bInTakeCapture);
-#if HYP_ENABLE_RENDERDOC
-		    bRdcSucceeded = CaptureScope.Finish();
-#endif
-		    Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-		                              [&]
-		                              {
-			                              Metrics.Device = Device->Statistics();
-		                              }));
-	    }));
+	};
+	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+	                          [&, Frame, MaterialFrame, GuiData = InGuiData]
+	                          {
+		                          HYP_PERF_SCOPE_C(Render, RenderFrame);
+		                          auto Graph = BuildRenderGraph(Frame, GuiData, MaterialFrame);
+		                          Screenshot = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, InSize,
+		                                                    Frame.Settings.bVsync, bInTakeCapture, Callbacks);
+		                          UpdateRenderStatistics();
+	                          }));
 #if HYP_ENABLE_RENDERDOC
 	if (bRdcSucceeded && Settings.bRenderDocAutoOpen)
 	{

@@ -12,6 +12,7 @@ void FRenderResourceCoordinator::CloseNativeResources()
 	{
 		std::lock_guard Lock(Mutex);
 		PreparedDraws.clear();
+		PreparedViews.clear();
 		DepthPreview = {};
 		for (const auto& [Key, Entry] : Entries)
 		{

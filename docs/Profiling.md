@@ -91,3 +91,7 @@ out/build/profile/bin/profiling_tests.exe --microbenchmark
 ```
 
 测量结果和完整回归记录见本次 [实施证据](../openspec/changes/archive/2026-09-08-add-runtime-performance-profiling/implementation.md)。基准采用优化构建并对照实际 draw 数；短运行的单次差异不能作为开销保证。
+
+Renderer 的普通 draw 数扫描、独立 RHI 录制基准与逐视图阶段归因见 [RendererCpuPerformance.md](RendererCpuPerformance.md)。
+
+静止准备复用、共享 scope 更新、每帧同步收拢及按 task identity 拆分的 Wait 分析见 [RetainedRenderFrames.md](RetainedRenderFrames.md)。GPU timing capture 按 submission 的 capture epoch 归属，较晚完成的旧提交不会混入新 capture；正常 GPU 统计仍处理全部完成结果。

@@ -19,7 +19,7 @@ struct FMaterialProgramRecord
 struct FRenderMaterialRecord
 {
 	FTaskSystem& Tasks;
-	const void* Owner{};
+	FRenderResourceCoordinator* Owner{};
 	std::shared_ptr<FMaterialProgramRecord> Program;
 	std::shared_ptr<const FMaterialSnapshot> StaticSnapshot;
 	FMaterialParameterValues ResourceSignature;
@@ -43,7 +43,7 @@ struct FRenderResourceRecord
 {
 	FTaskSystem& Tasks;
 	std::uint64_t Identity{};
-	const void* Owner{};
+	FRenderResourceCoordinator* Owner{};
 	std::shared_ptr<const void> Asset;
 	TAsyncResult<FRenderResourceDesc> Preparation;
 	mutable std::mutex Publication;
@@ -98,6 +98,20 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 
 	using FDrawKey = std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string, bool>;
 	std::map<FDrawKey, FPreparedDraw> PreparedDraws;
+
+	struct FPreparedViewPasses
+	{
+		std::weak_ptr<const void> Contents;
+		std::uint64_t ResourceRevision{};
+		std::vector<FColorPass> Passes;
+		FRenderBatchStats Statistics;
+	};
+
+	using FViewKey = std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>;
+	std::map<FViewKey, FPreparedViewPasses> PreparedViews;
+	bool ReuseViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& OutPasses);
+	void CacheViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& InPasses);
+	void CollectViewPasses();
 	void CollectPreparedDraws();
 	FTaskSystem& Tasks;
 	IRHIDevice& Device;
@@ -105,6 +119,17 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	bool bClosed{};
 	bool bNativeClosed{};
 	bool bScheduled{};
+	std::atomic_uint64_t PublicationRevision{1};
+
+	struct FScopeLifetime
+	{
+		std::atomic<bool> bUsed{};
+	};
+
+	std::mutex ScopeMutex;
+	std::map<const void*, std::weak_ptr<FScopeLifetime>> ScopeLifetimes;
+	void TrackScope(const std::shared_ptr<const void>& InScope);
+	void ReleaseScope(FScopeLifetime* InScope);
 	FTaskHandle Progress;
 	std::map<FKey, FEntry> Entries;
 	std::map<FProgramKey, std::shared_ptr<FMaterialProgramRecord>> Programs;

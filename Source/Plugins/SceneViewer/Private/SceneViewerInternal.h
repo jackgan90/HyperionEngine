@@ -41,6 +41,7 @@ struct FSceneViewerPlugin::FImpl
 	std::size_t Selected{};
 	bool bStopped{};
 	bool bReady{};
+	std::pair<std::uint64_t, std::uint64_t> StatusRevision;
 	bool bDragging{};
 	bool bFrozen{};
 	bool bBounds{};

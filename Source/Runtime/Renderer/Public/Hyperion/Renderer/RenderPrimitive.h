@@ -5,6 +5,7 @@
 #include "Hyperion/Renderer/SceneSpatialIndex.h"
 #include "Hyperion/Scene/Scene.h"
 #include "Hyperion/Tasks/TaskSystem.h"
+#include <atomic>
 #include <optional>
 
 namespace Hyperion
@@ -100,6 +101,9 @@ struct FRenderSceneSnapshot
 	std::uint64_t Family = 1;
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
 	std::shared_ptr<const FRenderBatchPlan> Batches;
+	// Renderer-owned identities: immutable prepared contents and the current preparation receipt frame.
+	std::shared_ptr<const void> ContentIdentity;
+	std::shared_ptr<std::atomic_uint64_t> DrawFrame;
 };
 
 // All instance methods, including construction/destruction, belong to Render.
@@ -116,6 +120,12 @@ public:
 	virtual FBounds GetWorldBounds() const;
 	virtual void Collect(const FRenderView& InView, std::vector<FRenderItem>& OutItems) const = 0;
 
+	// Opt-in: Collect and bounds depend only on published state/resource versions, never on view or time.
+	virtual bool IsStaticCollection() const
+	{
+		return false;
+	}
+
 protected:
 	FTaskSystem& Tasks;
 
@@ -129,6 +139,11 @@ public:
 	using IRenderPrimitive::IRenderPrimitive;
 	FBounds GetWorldBounds() const override;
 	void Collect(const FRenderView& InView, std::vector<FRenderItem>& OutItems) const override;
+
+	bool IsStaticCollection() const override
+	{
+		return true;
+	}
 };
 
 void ValidatePrimitiveState(const FRenderPrimitiveState& InState);

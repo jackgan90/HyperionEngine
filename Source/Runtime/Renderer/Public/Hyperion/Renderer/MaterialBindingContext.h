@@ -50,6 +50,81 @@ struct FMaterialScopeInput
 	std::shared_ptr<const void> Lifetime;
 };
 
+// Local Object/Material/Draw scopes and shared engine scopes have independent immutable ownership.
+// Camera refreshes replace one shared input block without copying every object's scope keys and tokens.
+class FMaterialResolvedScopes
+{
+public:
+	using FValues = std::array<FMaterialScopeInput, MaterialScopeCount>;
+	static constexpr std::uint32_t EngineMask =
+	    MaterialScopeBit(EMaterialScope::Global) | MaterialScopeBit(EMaterialScope::Frame) |
+	    MaterialScopeBit(EMaterialScope::Scene) | MaterialScopeBit(EMaterialScope::View) |
+	    MaterialScopeBit(EMaterialScope::Pass);
+
+	FMaterialResolvedScopes& operator=(const FValues& InValues)
+	{
+		Local = std::make_shared<FValues>(InValues);
+		Engine.reset();
+		return *this;
+	}
+
+	const FMaterialScopeInput& operator[](std::size_t InIndex) const
+	{
+		if (InIndex >= MaterialScopeCount)
+		{
+			throw std::out_of_range("Material scope index");
+		}
+		if (Engine && (EngineMask & (1U << InIndex)))
+		{
+			return (*Engine)[InIndex];
+		}
+		static const FMaterialScopeInput Empty;
+		return Local ? (*Local)[InIndex] : Empty;
+	}
+
+	void Set(std::size_t InIndex, FMaterialScopeInput InValue)
+	{
+		if (InIndex >= MaterialScopeCount || (Engine && (EngineMask & (1U << InIndex))))
+		{
+			throw std::invalid_argument("Shared material engine scopes require a complete input block");
+		}
+		MakeLocal();
+		(*Local)[InIndex] = std::move(InValue);
+	}
+
+	void ShareEngine(std::shared_ptr<const FValues> InEngine)
+	{
+		if (!InEngine)
+		{
+			throw std::invalid_argument("Missing shared material engine scopes");
+		}
+		if (!Engine)
+		{
+			MakeLocal();
+			for (std::size_t Index = 0; Index < MaterialScopeCount; ++Index)
+			{
+				if (EngineMask & (1U << Index))
+				{
+					(*Local)[Index] = {};
+				}
+			}
+		}
+		Engine = std::move(InEngine);
+	}
+
+private:
+	std::shared_ptr<FValues> Local;
+	std::shared_ptr<const FValues> Engine;
+
+	void MakeLocal()
+	{
+		if (!Local || Local.use_count() != 1)
+		{
+			Local = Local ? std::make_shared<FValues>(*Local) : std::make_shared<FValues>();
+		}
+	}
+};
+
 class FMaterialSharedValue
 {
 public:
@@ -118,7 +193,7 @@ struct FResolvedMaterialParameters
 	FMaterialValueTable Values;
 	FMaterialDependencyTable Dependencies;
 	std::uint32_t DependenciesMask{};
-	std::array<FMaterialScopeInput, MaterialScopeCount> Scopes;
+	FMaterialResolvedScopes Scopes;
 	// Owns a resource-value epoch across numeric refreshes; replaced when a resource value changes.
 	std::shared_ptr<const void> ResourceIdentity;
 };

@@ -1,5 +1,5 @@
 #include "D3D12RHISwapchain.h"
-#include "D3D12Bindings.h"
+#include "D3D12Draws.h"
 #include "D3D12GraphicsState.h"
 #include "D3D12PassTimings.h"
 #include "D3D12Resources.h"
@@ -13,98 +13,11 @@ namespace Hyperion
 {
 namespace
 {
-std::pair<std::uint32_t, std::uint32_t> IndexBounds(const FDrawPacket& InDraw, const FD3D12Buffer& InIndices)
-{
-	HYP_PERF_SCOPE_C(Detail, ValidateIndexBounds);
-	std::lock_guard Lock(InIndices.IndexRangesMutex);
-	for (const auto& Range : InIndices.IndexRanges)
-	{
-		if (Range[0] == InDraw.FirstIndex && Range[1] == InDraw.IndexCount)
-		{
-			return {Range[2], Range[3]};
-		}
-	}
-	const auto& Indices = InIndices.IndexData;
-	std::uint32_t Minimum = UINT_MAX;
-	std::uint32_t Maximum{};
-	for (std::uint32_t Index = 0; Index < InDraw.IndexCount; ++Index)
-	{
-		Minimum = std::min(Minimum, Indices[InDraw.FirstIndex + Index]);
-		Maximum = std::max(Maximum, Indices[InDraw.FirstIndex + Index]);
-	}
-	if (InIndices.IndexRanges.size() < 32)
-	{
-		InIndices.IndexRanges.push_back({InDraw.FirstIndex, InDraw.IndexCount, Minimum, Maximum});
-	}
-	return {Minimum, Maximum};
-}
-
-void ValidateIndexRange(const FDrawPacket& InDraw, const FD3D12Buffer& InVertices, const FD3D12Buffer& InIndices)
-{
-	if (!InDraw.IndexCount)
-	{
-		return;
-	}
-	const auto [Minimum, Maximum] = IndexBounds(InDraw, InIndices);
-	const std::int64_t First = static_cast<std::int64_t>(Minimum) + InDraw.VertexOffset;
-	const std::int64_t Last = static_cast<std::int64_t>(Maximum) + InDraw.VertexOffset;
-	if (First < 0 || static_cast<std::uint64_t>(Last) >= InVertices.Size / InDraw.VertexStride)
-	{
-		throw std::invalid_argument("Draw index references a vertex outside the geometry buffer");
-	}
-}
-
-void ValidateDraws(const FD3D12DeviceState* InState, const FPassCommands& InCommands)
-{
-	HYP_PERF_SCOPE_C(Rhi, ValidateDraws);
-	for (const auto& Draw : InCommands.Draws)
-	{
-		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, InState);
-		const auto& Vertices = NativeResource<FD3D12Buffer>(Draw.Vertices.Payload, InState);
-		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, InState);
-		if (!Draw.InstanceCount || !Draw.VertexStride || Vertices.Size > UINT_MAX || Indices.Size > UINT_MAX ||
-		    (Vertices.Usage & BufferUsage(ERHIBufferUsage::Vertex)) == 0 ||
-		    (Indices.Usage & BufferUsage(ERHIBufferUsage::Index)) == 0 ||
-		    (std::uint64_t(Draw.FirstIndex) + Draw.IndexCount) * 4 > Indices.Size)
-		{
-			throw std::invalid_argument("Invalid draw packet");
-		}
-
-		ValidateIndexRange(Draw, Vertices, Indices);
-		const ERHIDepthFormat Depth =
-		    (InCommands.bUseDepth || InCommands.bUseStencil) ? InCommands.DepthFormat : ERHIDepthFormat::None;
-		if (Draw.VertexStride != Pipeline.VertexStride || Pipeline.Target.bSrgb != InCommands.bSrgbTarget ||
-		    Pipeline.Target.ColorCount != (InCommands.bUseColor ? 1U : 0U) || Pipeline.Target.Depth != Depth ||
-		    (Pipeline.GraphicsState.bDepthTest && !InCommands.bUseDepth) ||
-		    (Pipeline.GraphicsState.bStencil && !InCommands.bUseStencil))
-		{
-			throw std::invalid_argument("Draw geometry or target is incompatible with pipeline");
-		}
-		ValidateGraphicsDynamicState(Draw.DynamicState);
-		ValidateGraphicsBindings(Draw, Pipeline, *InState);
-		if (InCommands.DepthTarget && Draw.Bindings)
-		{
-			const auto& Set = NativeResource<FD3D12BindingSet>(Draw.Bindings.Payload, InState);
-			for (const auto& Entry : Set.Description.Entries)
-			{
-				for (const auto& Value : Entry.Values)
-				{
-					if (const auto* Texture = std::get_if<FTexture>(&Value);
-					    Texture && *Texture == InCommands.DepthTarget)
-					{
-						throw std::invalid_argument("A draw cannot sample its writable depth target");
-					}
-				}
-			}
-		}
-	}
-}
-
 FSize ValidatePass(const FD3D12DeviceState& InState, const FPassCommands& InCommands, FSize InSize,
                    ERHIDepthFormat InDepthFormat)
 {
 	if ((!InCommands.bUseColor && InCommands.bClear) ||
-	    (!InCommands.bUseColor && !InCommands.bUseDepth && !InCommands.Draws.empty()))
+	    (!InCommands.bUseColor && !InCommands.bUseDepth && !InCommands.GetDraws().empty()))
 	{
 		throw std::invalid_argument("Pass color clear/draw has no compatible attachment");
 	}
@@ -197,18 +110,26 @@ struct FD3D12RHISwapchain::FImpl
 
 	struct FFrame
 	{
+		struct FRecordingStorage
+		{
+			ComPtr<ID3D12GraphicsCommandList> List;
+			std::weak_ptr<const FD3D12RecordedList> Owner;
+		};
+
 		std::shared_ptr<FD3D12PassQueries> TimingQueries;
 		bool bTimeFrame{};
 #if HYP_ENABLE_PROFILING
 		std::shared_ptr<FD3D12ProfileQueries> ProfileQueries;
 #endif
 		std::array<ComPtr<ID3D12CommandAllocator>, ContextCount> Allocators;
+		std::array<FRecordingStorage, ContextCount> Recordings;
 		std::array<std::atomic<bool>, ContextCount> Recorded{};
 		std::vector<FRecordedList> Retained;
 		std::uint64_t FenceValue{};
 	};
 
 	std::array<FFrame, FrameCount> Frames;
+	std::array<FD3D12DrawCache, ContextCount> DrawCaches;
 #if HYP_ENABLE_PROFILING
 	FD3D12ProfileState Profiling;
 #endif
@@ -221,12 +142,46 @@ struct FD3D12RHISwapchain::FImpl
 	bool bSubmissionStarted{};
 	bool bGpuTiming{};
 
+	std::shared_ptr<FD3D12RecordedList> PrepareRecording(std::uint32_t InContext,
+	                                                     std::shared_ptr<const FPassCommands> InCommands)
+	{
+		HYP_PERF_SCOPE_C(Detail, PrepareRecordingStorage);
+		auto Result = std::make_shared<FD3D12RecordedList>();
+		Result->State = State;
+		Result->Frame = Serial;
+		Result->Context = InContext;
+		Result->Owner = Identity;
+		Result->Name = InCommands->Name;
+		Result->Commands = std::move(InCommands);
+		auto& Frame = Frames[FrameIndex];
+		auto& Cached = Frame.Recordings[InContext];
+		Check(Frame.Allocators[InContext]->Reset(), "Reset command allocator");
+		if (Cached.List && Cached.Owner.expired())
+		{
+			HYP_PERF_SCOPE_C(Rhi, ResetNativeCommandList);
+			// BeginFrame waited for this slot's fence. A retained logical recording prevents native list reuse.
+			// Remove from the pool until Close succeeds so a failed recording cannot leave an open cached list.
+			Result->List = std::move(Cached.List);
+			Check(Result->List->Reset(Frame.Allocators[InContext].Get(), nullptr), "Reset recording list");
+			++State->CommandListResets;
+		}
+		else
+		{
+			HYP_PERF_SCOPE_C(Rhi, CreateNativeCommandList);
+			Check(State->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frame.Allocators[InContext].Get(),
+			                                       nullptr, IID_PPV_ARGS(&Result->List)),
+			      "Create recording list");
+			++State->CommandListsCreated;
+		}
+		return Result;
+	}
+
 	void Idle()
 	{
 		State->Idle();
 		for (auto& Frame : Frames)
 		{
-			CollectPassTimings(*State, Frame.Retained);
+			CollectPassTimings(*State, Frame.Retained, 0);
 #if HYP_ENABLE_PROFILING
 			CollectD3D12Profiles(Frame.Retained);
 #endif
@@ -391,40 +346,30 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 
 FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCommands& InCommands)
 {
+	auto Copy = InCommands;
+	Copy.MaterializeDraws();
+	return RecordOwned(InContext, std::make_shared<const FPassCommands>(std::move(Copy)));
+}
+
+FRecordedList FD3D12RHISwapchain::RecordOwned(std::uint32_t InContext,
+                                              std::shared_ptr<const FPassCommands> InOwnedCommands)
+{
 	HYP_PERF_SCOPE_C(Rhi, RecordPass);
 	auto& P = *Impl;
-	if (!P.bActive || InContext >= ContextCount)
+	if (!P.bActive || InContext >= ContextCount || !InOwnedCommands)
 	{
 		throw std::invalid_argument("Invalid recording context");
 	}
+	const auto& InCommands = *InOwnedCommands;
 	const auto TargetSize = ValidatePass(*P.State, InCommands, P.Size, P.DepthFormat);
-	ValidateDraws(P.State.get(), InCommands);
+	const auto DrawPlan = PrepareNativeDraws(*P.State, InOwnedCommands, P.DrawCaches[InContext]);
 	auto& Frame = P.Frames[P.FrameIndex];
 	if (Frame.Recorded[InContext].exchange(true))
 	{
 		throw std::logic_error("Command context already recorded this frame");
 	}
 	HYP_PERF_SCOPE_C(Rhi, RecordCommands);
-	Check(Frame.Allocators[InContext]->Reset(), "Reset command allocator");
-	auto R = std::make_shared<FD3D12RecordedList>();
-	R->State = P.State;
-	R->Frame = P.Serial;
-	R->Context = InContext;
-	R->Owner = P.Identity;
-	R->Name = InCommands.Name;
-	R->Retained = InCommands.Draws;
-	R->Textures = InCommands.SampledDepth;
-	if (InCommands.DepthTarget)
-	{
-		R->Textures.push_back(InCommands.DepthTarget);
-	}
-	for (const auto& Barrier : InCommands.TextureTransitions)
-	{
-		R->Textures.push_back(Barrier.Texture);
-	}
-	Check(P.State->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Frame.Allocators[InContext].Get(),
-	                                         nullptr, IID_PPV_ARGS(&R->List)),
-	      "Create recording list");
+	auto R = P.PrepareRecording(InContext, std::move(InOwnedCommands));
 	auto List = R->List.Get();
 	if (Frame.bTimeFrame)
 	{
@@ -453,41 +398,21 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 		          .DepthViews->GetCPUDescriptorHandleForHeapStart();
 	}
 	RecordAttachments(*List, InCommands, TargetSize, Rtv, Dsv);
-	FD3D12GraphicsBindingState BindingState;
-	for (const auto& Draw : InCommands.Draws)
+	if (DrawPlan)
 	{
-		const auto& Pipeline = NativeResource<FD3D12Pipeline>(Draw.Pipeline.Payload, P.State.get());
-		const auto& Vertices = NativeResource<FD3D12Buffer>(Draw.Vertices.Payload, P.State.get());
-		const auto& Indices = NativeResource<FD3D12Buffer>(Draw.Indices.Payload, P.State.get());
-		List->SetPipelineState(Pipeline.Pipeline.Get());
-		List->IASetPrimitiveTopology(NativeTopology(Pipeline.Topology));
-		List->OMSetStencilRef(Draw.DynamicState.StencilReference);
-		List->OMSetBlendFactor(Draw.DynamicState.BlendConstants.data());
-		RecordGraphicsBindings(*List, Draw, Pipeline, *P.State, BindingState);
-		D3D12_VERTEX_BUFFER_VIEW Vb{Vertices.Resource->GetGPUVirtualAddress(), static_cast<UINT>(Vertices.Size),
-		                            Draw.VertexStride};
-		D3D12_INDEX_BUFFER_VIEW Ib{Indices.Resource->GetGPUVirtualAddress(), static_cast<UINT>(Indices.Size),
-		                           DXGI_FORMAT_R32_UINT};
-		List->IASetVertexBuffers(0, 1, &Vb);
-		List->IASetIndexBuffer(&Ib);
-		D3D12_RECT Rect{Draw.Scissor.Left, Draw.Scissor.Top, Draw.Scissor.Right, Draw.Scissor.Bottom};
-		List->RSSetScissorRects(1, &Rect);
-		List->DrawIndexedInstanced(Draw.IndexCount, Draw.InstanceCount, Draw.FirstIndex, Draw.VertexOffset, 0);
+		RecordNativeDrawPlan(*List, *DrawPlan, *P.State);
+	}
+	else
+	{
+		RecordDraws(*List, InCommands, *P.State);
 	}
 	List->EndEvent();
-	P.State->GraphicsRootBinds += BindingState.RootBinds;
-	P.State->GraphicsHeapBinds += BindingState.HeapBinds;
-	P.State->GraphicsConstantBinds += BindingState.ConstantBinds;
-	P.State->GraphicsTableBinds += BindingState.TableBinds;
-	HYP_PERF_PLOT(Rhi, GraphicsRootBinds, double(BindingState.RootBinds));
-	HYP_PERF_PLOT(Rhi, GraphicsHeapBinds, double(BindingState.HeapBinds));
-	HYP_PERF_PLOT(Rhi, GraphicsConstantBinds, double(BindingState.ConstantBinds));
-	HYP_PERF_PLOT(Rhi, GraphicsTableBinds, double(BindingState.TableBinds));
 #if HYP_ENABLE_PROFILING
 	EndD3D12Profile(*R);
 #endif
 	EndPassTiming(*R);
 	Check(List->Close(), "Close recording list");
+	Frame.Recordings[InContext] = {R->List, R};
 	return {std::move(R)};
 }
 
@@ -571,7 +496,8 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 	Frame.FenceValue = P.State->Signal();
 	// Device-level retention also progresses when no further frame is presented.
 	// Keep the frame copy until publishing the submission succeeds (including allocation failure).
-	P.State->Submissions.push_back({Frame.FenceValue, Frame.Retained});
+	P.State->Submissions.push_back(
+	    {Frame.FenceValue, Frame.Retained, P.State->GpuTimingCapacity ? P.State->GpuTimingEpoch : 0});
 	Frame.Retained.clear();
 	++P.State->Submitted;
 	// A failed Present must remain cancellable until submitted work has drained.

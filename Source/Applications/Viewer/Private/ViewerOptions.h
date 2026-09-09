@@ -16,6 +16,7 @@ struct FOptions
 	std::filesystem::path Benchmark;
 	int BenchmarkWarmup = 60;
 	bool bBenchmarkCamera{};
+	float BenchmarkCameraStep = .1f;
 	bool bNoVsync{};
 	bool bNoInstanceBatching{};
 	FCascadedShadowSettings Shadows;

@@ -58,10 +58,11 @@ public:
 	void Stop() noexcept override;
 	void Prepare(const FGuiDrawData& InData);
 	void Build(FRenderGraph& InGraph, const FRenderFrame& InFrame) override;
+	void BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData);
 
 private:
 	struct FImpl;
-	std::unique_ptr<FImpl> Impl;
+	std::shared_ptr<FImpl> Impl;
 };
 
 void RegisterDebugUiPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,

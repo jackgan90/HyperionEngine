@@ -46,10 +46,13 @@ struct FRenderBatchSystem::FImpl
 		std::weak_ptr<const FRenderResource> Resource;
 		std::weak_ptr<const FRenderMaterial> Surface;
 		std::weak_ptr<const FResolvedMaterialParameters> Values;
+		FMaterialValueTable ParameterValues;
+		std::weak_ptr<const void> Resources;
+		std::vector<std::size_t> InstanceParameters;
 		std::uint32_t Section{};
 		bool bMirrored{};
 		std::optional<FMaterialDynamicState> Dynamic;
-		bool Matches(const FRenderItem& InItem) const;
+		bool Matches(const FRenderItem& InItem, bool bInSharedRefresh) const;
 	};
 
 	struct FPlanEntry
@@ -74,6 +77,7 @@ struct FRenderBatchSystem::FImpl
 	bool bStarted{};
 	std::map<std::pair<std::uint64_t, std::string>, FPlanEntry> Plans;
 	std::size_t PlanItems{};
+	std::array<std::uint64_t, 3> RetiredFamily{};
 
 	FImpl(FTaskSystem& InTasks, FRHICapabilities InCapabilities, FRenderBatchLimits InLimits)
 	    : Tasks(InTasks), Capabilities(std::move(InCapabilities)), Limits(InLimits)
@@ -90,6 +94,7 @@ struct FRenderBatchSystem::FImpl
 	std::shared_ptr<FRenderBatchPlan> ReusePlan(const FRenderSceneSnapshot& InSnapshot);
 	void CachePlan(const FRenderSceneSnapshot& InSnapshot, const FRenderBatchPlan& InPlan);
 	void Retire(const FRenderSceneSnapshot& InSnapshot);
+	void RetireExpired();
 	void EraseChunk(std::map<FBatchItemKey, FChunkEntry>::iterator InEntry);
 };
 } // namespace Hyperion

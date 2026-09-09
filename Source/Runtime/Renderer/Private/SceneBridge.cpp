@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/SceneBridge.h"
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/RenderSession.h"
 
 namespace Hyperion
@@ -47,11 +48,13 @@ void FSceneRenderBridge::Observe(bool bInWait)
 			}
 		}
 		It = Receipts.erase(It);
+		++StatusRevision;
 	}
 }
 
 void FSceneRenderBridge::Flush()
 {
+	HYP_PERF_SCOPE_C(Frame, FlushSceneBridge);
 	Tasks.Require({EDomain::Main});
 	if (bClosed)
 	{
@@ -59,36 +62,64 @@ void FSceneRenderBridge::Flush()
 	}
 	Observe(false);
 	const auto Changes = Scene.GetChanges();
-	auto Pending = PrepareChanges(Changes);
-	PublishChanges(Pending);
+	if (Changes.empty() && EditableModels.empty())
+	{
+		return;
+	}
+	std::set<FSceneHandle> Affected;
+	auto Pending = PrepareChanges(Changes, Affected);
+	if (!Affected.empty())
+	{
+		PublishChanges(Pending, Affected);
+		++StatusRevision;
+	}
 	for (const auto& Change : Changes)
 	{
 		Scene.Acknowledge(Change.Revision);
 	}
 }
 
-std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(const std::vector<FSceneChange>& InChanges)
+std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(const std::vector<FSceneChange>& InChanges,
+                                                                             std::set<FSceneHandle>& OutAffected)
 {
 	std::map<FSceneHandle, std::uint64_t> Changed;
 	for (const auto& Change : InChanges)
 	{
 		Changed.emplace(Change.Handle, Change.Revision);
+		OutAffected.insert(Change.Handle);
+	}
+	for (const auto Handle : EditableModels)
+	{
+		for (const auto& [Material, Revision] : Attachments.at(Handle).EditableMaterials)
+		{
+			if (Material->GetRevision() != Revision)
+			{
+				OutAffected.insert(Handle);
+				break;
+			}
+		}
 	}
 
 	FModel::FFrozenMaterials Frozen;
 	std::vector<FPending> Pending;
-	for (const auto Handle : Scene.GetHandles())
+	for (const auto Handle : OutAffected)
 	{
-		const auto& State = *Scene.Find(Handle);
-		if (!State.Data)
+		const auto* ModelState = Scene.Find(Handle);
+		if (!ModelState || !ModelState->Data)
 		{
 			continue;
 		}
+		const auto& State = *ModelState;
 		std::vector<std::pair<std::uint64_t, std::uint64_t>> Versions;
+		std::vector<std::pair<std::shared_ptr<FMaterialInstance>, std::uint64_t>> EditableMaterials;
 		const auto Freeze = [&](const FSceneMaterialSelection& InSelection)
 		{
 			const auto Snapshot = FModel::FreezeSelection(InSelection, Frozen);
 			Versions.emplace_back(Snapshot ? Snapshot->Identity : 0, Snapshot ? Snapshot->Revision : 0);
+			if (InSelection.Instance)
+			{
+				EditableMaterials.emplace_back(InSelection.Instance, InSelection.Instance->GetRevision());
+			}
 		};
 		Freeze(State.Surface);
 		for (const auto& [Section, Selection] : State.SectionSurfaces)
@@ -116,12 +147,13 @@ std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(con
 		}
 		Work.Update = Work.Model->PrepareState(State, Frozen);
 		Work.Versions = std::move(Versions);
+		Work.EditableMaterials = std::move(EditableMaterials);
 		Pending.push_back(std::move(Work));
 	}
 	return Pending;
 }
 
-void FSceneRenderBridge::PublishChanges(std::vector<FPending>& InPending)
+void FSceneRenderBridge::PublishChanges(std::vector<FPending>& InPending, const std::set<FSceneHandle>& InAffected)
 {
 	std::vector<std::vector<FRenderPrimitiveState>> Groups;
 	std::vector<FRenderPrimitiveUpdate> Updates;
@@ -141,8 +173,14 @@ void FSceneRenderBridge::PublishChanges(std::vector<FPending>& InPending)
 		}
 	}
 	std::vector<FRenderPrimitiveHandle> Removals;
-	for (const auto& [Handle, Entry] : Attachments)
+	for (const auto Handle : InAffected)
 	{
+		const auto Existing = Attachments.find(Handle);
+		if (Existing == Attachments.end())
+		{
+			continue;
+		}
+		const auto& Entry = Existing->second;
 		const auto State = Scene.Find(Handle);
 		if (!State || !State->Data || State->Data != Entry.Data)
 		{
@@ -154,11 +192,16 @@ void FSceneRenderBridge::PublishChanges(std::vector<FPending>& InPending)
 	}
 	// All snapshots, schemas and overrides are prepared before any related Render publication.
 	std::map<FSceneHandle, FAttachment> NewAttachments;
+	std::set<FSceneHandle> NewEditableModels;
 	for (const auto& Work : InPending)
 	{
 		if (!Attachments.contains(Work.Handle))
 		{
 			NewAttachments.try_emplace(Work.Handle);
+		}
+		if (!Work.EditableMaterials.empty() && !EditableModels.contains(Work.Handle))
+		{
+			NewEditableModels.insert(Work.Handle);
 		}
 	}
 	Receipts.reserve(Receipts.size() + InPending.size());
@@ -167,10 +210,12 @@ void FSceneRenderBridge::PublishChanges(std::vector<FPending>& InPending)
 	        ? FRenderScenePublication{}
 	        : Session.GetScene().PublishGroups(std::move(Groups), std::move(Updates), std::move(Removals));
 	Attachments.merge(NewAttachments); // Preallocated nodes; no allocation after admission.
-	CommitChanges(InPending, Publication);
+	EditableModels.merge(NewEditableModels);
+	CommitChanges(InPending, Publication, InAffected);
 }
 
-void FSceneRenderBridge::CommitChanges(std::vector<FPending>& InPending, FRenderScenePublication& InPublication)
+void FSceneRenderBridge::CommitChanges(std::vector<FPending>& InPending, FRenderScenePublication& InPublication,
+                                       const std::set<FSceneHandle>& InAffected)
 {
 	std::size_t GroupIndex{};
 	for (auto& Work : InPending)
@@ -188,21 +233,24 @@ void FSceneRenderBridge::CommitChanges(std::vector<FPending>& InPending, FRender
 		}
 		Entry.Model->CommitState(std::move(Work.Update));
 		Entry.MaterialVersions = std::move(Work.Versions);
+		Entry.EditableMaterials = std::move(Work.EditableMaterials);
+		if (Entry.EditableMaterials.empty())
+		{
+			EditableModels.erase(Work.Handle);
+		}
 		Entry.Revision = ++NextPublication;
 		Entry.Error.clear();
 		Receipts.push_back({Work.Handle, InPublication.Task, Entry.Revision});
 	}
-	for (auto It = Attachments.begin(); It != Attachments.end();)
+	for (const auto Handle : InAffected)
 	{
-		const auto State = Scene.Find(It->first);
-		if (!State || !State->Data)
+		const auto It = Attachments.find(Handle);
+		const auto State = Scene.Find(Handle);
+		if (It != Attachments.end() && (!State || !State->Data))
 		{
 			It->second.Model->Remove();
-			It = Attachments.erase(It);
-		}
-		else
-		{
-			++It;
+			EditableModels.erase(Handle);
+			Attachments.erase(It);
 		}
 	}
 }
@@ -220,6 +268,7 @@ void FSceneRenderBridge::Close()
 	}
 	Observe(true);
 	Attachments.clear();
+	EditableModels.clear();
 	Tasks.Wait(Session.GetScene().Flush());
 	Session.GetScene().DetachLogicalScene(Scene.GetIdentity());
 	Scene.EndSynchronization();
@@ -231,6 +280,12 @@ bool FSceneRenderBridge::IsReady(FSceneHandle InHandle) const
 	Tasks.Require({EDomain::Main});
 	const auto It = Attachments.find(InHandle);
 	return It != Attachments.end() && It->second.Error.empty() && It->second.Model->IsReady();
+}
+
+std::pair<std::uint64_t, std::uint64_t> FSceneRenderBridge::GetStatusRevision() const
+{
+	Tasks.Require({EDomain::Main});
+	return {StatusRevision, Session.GetResources().GetPublicationRevision()};
 }
 
 std::string FSceneRenderBridge::GetError(FSceneHandle InHandle) const

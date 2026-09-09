@@ -73,14 +73,14 @@ void FViewerApplication::ExerciseBenchmarkCamera(int InFrame)
 	{
 		return;
 	}
-	// A small orbit exercises View invalidation every frame while preserving the visible workload.
+	// The default small orbit preserves coverage; a larger step stresses visibility/CSM invalidation.
 	const int Phase = InFrame % 40;
 	std::array<FInputEvent, 3> Events;
 	Events[0].Type = EEventType::MouseButton;
 	Events[0].Button = 1;
 	Events[0].bDown = true;
 	Events[1].Type = EEventType::MouseMove;
-	Events[1].X = float(Phase < 20 ? Phase : 40 - Phase) * .1f;
+	Events[1].X = float(Phase < 20 ? Phase : 40 - Phase) * Options.BenchmarkCameraStep;
 	Events[2].Type = EEventType::MouseButton;
 	Events[2].Button = 1;
 	Events[2].bDown = false;
@@ -153,7 +153,10 @@ void FViewerApplication::SaveBenchmark()
 	       "cascade2_gpu_ms,cascade3_gpu_ms,gpu_allocation_bytes,descriptor_allocations,pipelines_created,constant_"
 	       "bytes_written,"
 	       "shadow_material_ms,shadow_plan_ms,shadow_prepare_ms";
-	Output << '\n' << std::fixed << std::setprecision(6);
+	Output << ",plan_reuses,material_ms,native_lists_created,native_list_resets,pipeline_binds,geometry_binds,dynamic_"
+	          "binds"
+	       << '\n'
+	       << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
 	for (const auto& Frame : BenchmarkFrames)
@@ -170,6 +173,15 @@ void FViewerApplication::SaveBenchmark()
 			Output << ',' << Count;
 		}
 		WriteShadowBenchmark(Output, Frame.Pipeline, Frame.Device);
+		double MaterialTime{};
+		for (const auto& View : Frame.Pipeline.Views)
+		{
+			MaterialTime += View.Visibility.MaterialMilliseconds;
+		}
+		Output << ',' << Frame.Batches.PlanReuses << ',' << MaterialTime;
+		Output << ',' << Frame.Device.CommandListsCreated << ',' << Frame.Device.CommandListResets << ','
+		       << Frame.Device.GraphicsPipelineBinds << ',' << Frame.Device.GraphicsGeometryBinds << ','
+		       << Frame.Device.GraphicsDynamicBinds;
 		Output << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}

@@ -48,7 +48,8 @@ void EndPassTiming(FD3D12RecordedList& InList)
 	}
 }
 
-void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedList> InLists)
+void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedList> InLists,
+                        std::uint64_t InCaptureEpoch)
 {
 	FGpuFrameTiming Result;
 	std::size_t Expected{};
@@ -78,7 +79,7 @@ void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedLi
 			Queries->Readback->Unmap(0, &Written);
 		}
 	}
-	if (Expected && InDevice.GpuTimingCapacity)
+	if (Expected && InDevice.GpuTimingCapacity && InCaptureEpoch == InDevice.GpuTimingEpoch)
 	{
 		if (Result.Passes.size() == Expected && InDevice.GpuTimingCapture.Frames.size() < InDevice.GpuTimingCapacity)
 		{

@@ -32,6 +32,8 @@ struct FRenderBatchStats
 	std::uint64_t GpuReuses{};
 	std::uint64_t CompatibilityReuses{};
 	std::uint64_t CompatibilityBuilds{};
+	std::uint64_t PlanReuses{};
+	std::uint64_t PacketReuses{};
 	std::uint64_t Evictions{};
 	std::size_t CachedChunks{};
 	std::size_t CachedBytes{};

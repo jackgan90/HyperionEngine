@@ -67,7 +67,8 @@ struct FRenderScenePublication
 class FRenderSceneClient
 {
 public:
-	explicit FRenderSceneClient(FTaskSystem& InTasks, std::function<std::shared_ptr<const void>()> InScopeFactory = {});
+	explicit FRenderSceneClient(FTaskSystem& InTasks, std::function<std::shared_ptr<const void>()> InScopeFactory = {},
+	                            std::function<void()> InOnChanged = {});
 	~FRenderSceneClient();
 	FRenderSceneClient(const FRenderSceneClient&) = delete;
 	FRenderSceneClient& operator=(const FRenderSceneClient&) = delete;
@@ -89,6 +90,7 @@ public:
 	// Render only. The result owns all state required by subsequent frame work.
 	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true) const;
 	FSceneVisibilityStats BeginViews() const;
+	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;
 
 private:

@@ -102,6 +102,13 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	// Keeping an obsolete View owner here would turn a live cached set into perpetual pending retirement.
 	const FMaterialResourceOwners Owners{MaterialRecord.GpuLifetime, ResourceIdentity};
 	EnsureMaterialCaches();
+	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
+	{
+		if (Values.DependenciesMask & (1U << Scope))
+		{
+			TrackScope(Values.Scopes[Scope].Lifetime);
+		}
+	}
 	const auto Bindings = MaterialGpu->BindResources(Program, Values.Values, Owners);
 	if (!Bindings.bReady)
 	{

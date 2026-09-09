@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/RenderResources.h"
 #include <algorithm>
 #include <cmath>
@@ -6,8 +7,39 @@
 
 namespace Hyperion
 {
+namespace
+{
+bool IsItemVisible(const FRenderItem& InItem, const FRenderView& InView, const FBounds& InBounds, bool bInConservative)
+{
+	if (InView.CullingMode == ESceneCullingMode::None || (bInConservative && !InItem.State.bConservativeBounds))
+	{
+		return true;
+	}
+	const auto Clip = InItem.State.bClipSpace
+	                      ? InItem.State.World
+	                      : Multiply(InView.CullingViewProjection.value_or(InView.ViewProjection), InItem.State.World);
+	return FFrustum(Clip).Intersects(IsUsable(InItem.State.LocalBounds) ? InItem.State.LocalBounds : InBounds);
+}
+
+float SortDepth(const FRenderItem& InItem, const FRenderView& InView, const FBounds& InBounds, EMaterialQueue InQueue)
+{
+	if (InQueue != EMaterialQueue::Transparent)
+	{
+		return 0;
+	}
+	const auto Clip =
+	    InItem.State.bClipSpace ? InItem.State.World : Multiply(InView.ViewProjection, InItem.State.World);
+	const auto Center = ScaleVector(Add(InBounds.Minimum, InBounds.Maximum), .5f);
+	const auto Projected = Transform(Clip, {Center.X, Center.Y, Center.Z, 1});
+	const float Depth = Projected.W > 0 ? Projected.Z / Projected.W : std::numeric_limits<float>::lowest();
+	return std::isfinite(Depth) ? Depth : std::numeric_limits<float>::lowest();
+}
+} // namespace
+
 FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 {
+	HYP_PERF_SCOPE_C(Render, PrepareSceneSnapshot);
+
 	struct FOrderedItem
 	{
 		std::size_t Index{};
@@ -54,37 +86,23 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 		{
 			continue;
 		}
-		const bool bClipSpace = Item.State.bClipSpace;
-		const bool bConservative = Surface && std::any_of(Surface->Definition->GetDescription().Passes.begin(),
-		                                                  Surface->Definition->GetDescription().Passes.end(),
-		                                                  [](const auto& InPass)
-		                                                  {
-			                                                  return InPass.bRequiresConservativeBounds;
-		                                                  });
-		const auto Clip = bClipSpace ? Item.State.World : Multiply(InSnapshot.View.ViewProjection, Item.State.World);
-		const auto CullingClip =
-		    bClipSpace ? Item.State.World
-		               : Multiply(InSnapshot.View.CullingViewProjection.value_or(InSnapshot.View.ViewProjection),
-		                          Item.State.World);
-		if (InSnapshot.View.CullingMode != ESceneCullingMode::None &&
-		    (!bConservative || Item.State.bConservativeBounds) &&
-		    !FFrustum(CullingClip)
-		         .Intersects(IsUsable(Item.State.LocalBounds) ? Item.State.LocalBounds : Geometry.Bounds))
+		const bool bConservative = InSnapshot.View.CullingMode != ESceneCullingMode::None &&
+		                           !Item.State.bConservativeBounds && Surface &&
+		                           std::any_of(Surface->Definition->GetDescription().Passes.begin(),
+		                                       Surface->Definition->GetDescription().Passes.end(),
+		                                       [](const auto& InPass)
+		                                       {
+			                                       return InPass.bRequiresConservativeBounds;
+		                                       });
+		if (!IsItemVisible(Item, InSnapshot.View, Geometry.Bounds, bConservative))
 		{
 			continue;
-		}
-		const auto Center = ScaleVector(Add(Geometry.Bounds.Minimum, Geometry.Bounds.Maximum), .5f);
-		const auto Projected = Transform(Clip, {Center.X, Center.Y, Center.Z, 1});
-		float Depth = Projected.W > 0 ? Projected.Z / Projected.W : std::numeric_limits<float>::lowest();
-		if (!std::isfinite(Depth))
-		{
-			Depth = std::numeric_limits<float>::lowest();
 		}
 		const auto Queue = Surface && Surface->Definition->HasPass(InSnapshot.View.Usage)
 		                       ? Surface->Definition->GetPass(InSnapshot.View.Usage).Queue
 		                       : EMaterialQueue::Opaque;
 		const unsigned Bucket = Queue == EMaterialQueue::Overlay ? 2 : Queue == EMaterialQueue::Transparent ? 1 : 0;
-		Ordered.push_back({Index, Bucket, Depth});
+		Ordered.push_back({Index, Bucket, SortDepth(Item, InSnapshot.View, Geometry.Bounds, Queue)});
 	}
 	std::stable_sort(Ordered.begin(), Ordered.end(),
 	                 [](const FOrderedItem& InA, const FOrderedItem& InB)

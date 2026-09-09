@@ -53,8 +53,13 @@ FRenderMaterialRecord::~FRenderMaterialRecord()
 void FRenderMaterialRecord::Publish(ERenderMaterialStatus InStatus, std::string InError)
 {
 	std::lock_guard Lock(Publication);
+	const bool bChanged = Status != InStatus || Error != InError;
 	Status = InStatus;
 	Error = std::move(InError);
+	if (bChanged)
+	{
+		Owner->PublicationRevision.fetch_add(1, std::memory_order_release);
+	}
 }
 
 void FRenderMaterialRecord::Release()

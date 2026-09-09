@@ -10,8 +10,29 @@ namespace Hyperion
 template<typename TValue> class TMaterialParameterTable
 {
 public:
+	// One flat immutable overlay, shared by compatible scope refreshes. It never references an older table.
+	struct FSharedValues
+	{
+		explicit FSharedValues(std::vector<std::optional<TValue>> InValues) : Values(std::move(InValues))
+		{
+			for (std::size_t Index = 0; Index < Values.size(); ++Index)
+			{
+				if (Values[Index])
+				{
+					Indices.push_back(Index);
+				}
+			}
+		}
+
+	private:
+		friend class TMaterialParameterTable;
+		std::vector<std::optional<TValue>> Values;
+		std::vector<std::size_t> Indices;
+	};
+
 	void Reset(std::size_t InSize, const TValue& InValue = {})
 	{
+		Shared.reset();
 		Count = InSize;
 		InlinePages = {};
 		OverflowPages.clear();
@@ -44,6 +65,10 @@ public:
 		{
 			throw std::out_of_range("Material parameter index");
 		}
+		if (Shared && Shared->Values[InIndex])
+		{
+			return *Shared->Values[InIndex];
+		}
 		return (*GetPage(InIndex / PageSize))[InIndex % PageSize];
 	}
 
@@ -53,6 +78,47 @@ public:
 		{
 			return;
 		}
+		if (Shared && Shared->Values[InIndex])
+		{
+			MaterializeShared();
+		}
+		SetBase(InIndex, std::move(InValue));
+	}
+
+	void SetShared(std::shared_ptr<const FSharedValues> InShared)
+	{
+		if (InShared && InShared->Values.size() != Count)
+		{
+			throw std::invalid_argument("Material shared parameter size");
+		}
+		if (Shared && (!InShared || Shared->Indices != InShared->Indices))
+		{
+			MaterializeShared();
+		}
+		Shared = std::move(InShared);
+	}
+
+	const void* GetSharedIdentity() const
+	{
+		return Shared.get();
+	}
+
+	bool SharesLocalValues(const TMaterialParameterTable& InOther) const
+	{
+		return Count == InOther.Count && InlinePages == InOther.InlinePages && OverflowPages == InOther.OverflowPages &&
+		       Shared && InOther.Shared && Shared->Indices == InOther.Shared->Indices;
+	}
+
+	const void* GetPageIdentity(std::size_t InIndex) const
+	{
+		Get(InIndex);
+		return Shared && Shared->Values[InIndex] ? static_cast<const void*>(Shared.get())
+		                                         : GetPage(InIndex / PageSize).get();
+	}
+
+private:
+	void SetBase(std::size_t InIndex, TValue InValue)
+	{
 		auto& Page = GetPage(InIndex / PageSize);
 		if (Page.use_count() != 1)
 		{
@@ -61,18 +127,24 @@ public:
 		(*Page)[InIndex % PageSize] = std::move(InValue);
 	}
 
-	const void* GetPageIdentity(std::size_t InIndex) const
+	void MaterializeShared()
 	{
-		Get(InIndex);
-		return GetPage(InIndex / PageSize).get();
+		// Construct before publishing so an allocation failure leaves the table intact.
+		auto Materialized = *this;
+		for (const auto Index : Shared->Indices)
+		{
+			Materialized.SetBase(Index, *Shared->Values[Index]);
+		}
+		Materialized.Shared.reset();
+		*this = std::move(Materialized);
 	}
 
-private:
 	static constexpr std::size_t PageSize = 8;
 	using FPage = std::array<TValue, PageSize>;
 	std::array<std::shared_ptr<FPage>, 4> InlinePages;
 	std::vector<std::shared_ptr<FPage>> OverflowPages;
 	std::size_t Count{};
+	std::shared_ptr<const FSharedValues> Shared;
 
 	std::shared_ptr<FPage>& GetPage(std::size_t InIndex)
 	{

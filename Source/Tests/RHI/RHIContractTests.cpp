@@ -1,5 +1,7 @@
+#include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/RHI/RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "Hyperion/Renderer/RenderSession.h"
 #include "Support/TestSupport.h"
 #include <atomic>
 #include <chrono>
@@ -138,12 +140,19 @@ public:
 
 	void WaitIdle() override
 	{
+		if (bFailNextIdle)
+		{
+			bFailNextIdle = false;
+			throw std::runtime_error("injected one-time WaitIdle failure");
+		}
 	}
 
 	FDeviceStats Statistics() const override
 	{
 		return {};
 	}
+
+	bool bFailNextIdle{};
 
 private:
 	FRHICapabilities Capabilities;
@@ -213,6 +222,162 @@ void CheckFrameErrors(const FRHICapabilities& InCapabilities)
 	Execute();
 	HYP_CHECK(Swapchain.Submitted == 2);
 	Tasks.Shutdown();
+}
+
+void CheckFrameCoordinator(const FRHICapabilities& InCapabilities)
+{
+	FTaskSystem Tasks(1, 2);
+	FTestSwapchain Swapchain(InCapabilities);
+	Swapchain.Capabilities.MaxRecordingContexts = 8;
+	Swapchain.Capabilities.Features[static_cast<std::size_t>(ERHIFeature::ConcurrentRecording)] = {true, true};
+	unsigned Stage{};
+	bool bFailPreparation = false;
+	unsigned Failures{};
+	FRenderGraphCallbacks Callbacks;
+	Callbacks.BeforePrepare = [&]
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+		HYP_CHECK(Stage == 0 && !Swapchain.bActive);
+		Stage = 1;
+	};
+	Callbacks.AfterSubmit = [&]
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+		HYP_CHECK(Stage == 2 && !Swapchain.bActive && Swapchain.Recorded == 6);
+		Stage = 3;
+	};
+	Callbacks.OnFailure = [&]
+	{
+		Tasks.Require({EDomain::Rhi, 0});
+		++Failures;
+	};
+	Swapchain.OnRecord = [&](std::uint32_t InContext)
+	{
+		Tasks.Require({EDomain::Rhi, InContext % 2});
+		HYP_CHECK(Stage == 2);
+	};
+	const auto Execute = [&]
+	{
+		Stage = 0;
+		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+		                          [&]
+		                          {
+			                          FRenderGraph Graph;
+			                          Graph.AddDeferred(
+			                              [&]
+			                              {
+				                              Tasks.Require({EDomain::Rhi, 0});
+				                              HYP_CHECK(Stage == 1 && !Swapchain.bActive);
+				                              if (bFailPreparation)
+				                              {
+					                              throw std::runtime_error("injected deferred preparation failure");
+				                              }
+				                              std::vector<FColorPass> Passes(5);
+				                              Passes[0].Load = EColorLoad::Clear;
+				                              for (std::size_t Index = 0; Index < Passes.size(); ++Index)
+				                              {
+					                              Passes[Index].Commands.Name = std::to_string(Index);
+				                              }
+				                              Stage = 2;
+				                              return Passes;
+			                              });
+			                          ExecuteGraph(std::move(Graph), Tasks, Swapchain, {32, 32}, false, false,
+			                                       Callbacks);
+		                          }));
+	};
+	Execute();
+	HYP_CHECK(Stage == 3 && Swapchain.Submitted == 1);
+	bFailPreparation = true;
+	Rejects(Execute);
+	HYP_CHECK(Failures == 1 && Swapchain.Begun == 1 && Swapchain.Cancelled == 0);
+	bFailPreparation = false;
+	Execute();
+	HYP_CHECK(Stage == 3 && Swapchain.Submitted == 2);
+}
+
+void CheckDeferredOwnerLifetime(bool bInDestroy, bool bInDepthPreview)
+{
+	FTaskSystem Tasks(1, 2);
+	FTestDevice Device;
+	FTestSwapchain Swapchain(Device.GetCapabilities());
+	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "deferred-owner-shader-cache");
+	auto Session = std::make_unique<FRenderSession>(Tasks, Device, Compiler);
+	FRenderGraph Graph;
+	const auto Frame = Session->FreezeFrame(0);
+	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+	                          [&]
+	                          {
+		                          if (bInDepthPreview)
+		                          {
+			                          auto Source =
+			                              std::make_shared<const FMaterialTextureSource>(FMaterialDepthTexture{32, 32});
+			                          Session->AppendDepthPreview(Graph, Source,
+			                                                      Session->GetResources().CreateScopeLifetime(),
+			                                                      {0, 0, 32, 32}, true);
+		                          }
+		                          else
+		                          {
+			                          FRenderView View;
+			                          View.ClearColor = FVec4{};
+			                          Session->BuildViews(Graph, std::span(&View, 1), Frame, 1, false, true);
+		                          }
+	                          }));
+	Session->Close();
+	if (bInDestroy)
+	{
+		Session.reset();
+	}
+	Rejects(
+	    [&]
+	    {
+		    ExecuteGraph(std::move(Graph), Tasks, Swapchain, {32, 32}, false, false);
+	    });
+	HYP_CHECK(Swapchain.Begun == 0); // Owner failure is reported before acquiring a GPU frame.
+}
+
+void CheckSessionCloseRetry()
+{
+	FTaskSystem Tasks(1, 2);
+	FTestDevice Device;
+	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "close-retry-shader-cache");
+	auto Session = std::make_unique<FRenderSession>(Tasks, Device, Compiler);
+	Device.bFailNextIdle = true;
+	Rejects(
+	    [&]
+	    {
+		    Session->Close();
+	    });
+	Session->Close();
+	Session->Close();
+	Session.reset();
+}
+
+void CheckDeferredGuiOwner(bool bInDestroy)
+{
+	FTaskSystem Tasks(1, 2);
+	FTestDevice Device;
+	FTestSwapchain Swapchain(Device.GetCapabilities());
+	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "deferred-gui-shader-cache");
+	auto Plugin = std::make_unique<FDebugUiPlugin>(Device, Compiler, Tasks, FImage{});
+	FRenderGraph Graph;
+	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+	                          [&]
+	                          {
+		                          FGuiDrawData Data;
+		                          Data.Commands.resize(1);
+		                          Plugin->BuildDeferred(Graph, std::move(Data));
+	                          }));
+	Plugin->Stop();
+	if (bInDestroy)
+	{
+		Plugin.reset();
+	}
+	Rejects(
+	    [&]
+	    {
+		    ExecuteGraph(std::move(Graph), Tasks, Swapchain, {32, 32}, false, false);
+	    });
+	HYP_CHECK(Swapchain.Begun == 0);
 }
 } // namespace
 
@@ -297,6 +462,14 @@ int main()
 		HYP_CHECK(Test.Begun == 1);
 		Tasks.Shutdown();
 		CheckFrameErrors(Device->GetCapabilities());
+		CheckFrameCoordinator(Device->GetCapabilities());
+		for (const bool bDestroy : {false, true})
+		{
+			CheckDeferredOwnerLifetime(bDestroy, false);
+			CheckDeferredOwnerLifetime(bDestroy, true);
+			CheckDeferredGuiOwner(bDestroy);
+		}
+		CheckSessionCloseRetry();
 		std::cout << "Independent RHI provider and renderer contracts passed\n";
 		return 0;
 	}

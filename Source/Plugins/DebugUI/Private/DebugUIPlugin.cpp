@@ -144,10 +144,11 @@ struct FDebugUiPlugin::FImpl
 	FTexture Texture;
 	std::vector<FDrawPacket> Draws;
 	FResourceBindingSet Bindings;
+	void Prepare(const FGuiDrawData& InData);
 };
 
 FDebugUiPlugin::FDebugUiPlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont)
-    : Impl(std::make_unique<FImpl>(FImpl{InDevice, InCompiler, InTasks, std::move(InFont), {}, {}, {}}))
+    : Impl(std::make_shared<FImpl>(FImpl{InDevice, InCompiler, InTasks, std::move(InFont), {}, {}, {}}))
 {
 }
 
@@ -208,9 +209,18 @@ void FDebugUiPlugin::Stop() noexcept
 
 void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 {
+	Impl->Prepare(InData);
+}
+
+void FDebugUiPlugin::FImpl::Prepare(const FGuiDrawData& InData)
+{
 	HYP_PERF_SCOPE_C(Rhi, PrepareGuiResources);
-	auto& P = *Impl;
+	auto& P = *this;
 	P.Tasks.Require({EDomain::Rhi, 0});
+	if (!P.Pipeline)
+	{
+		throw std::logic_error("Debug UI preparation requires a started plugin");
+	}
 	P.Draws.clear();
 	if (InData.Vertices.empty() || InData.Indices.empty())
 	{
@@ -271,6 +281,34 @@ void FDebugUiPlugin::Build(FRenderGraph& InGraph, const FRenderFrame&)
 	Pass.Commands.Name = "Debug UI";
 	Pass.Commands.Draws = Impl->Draws;
 	InGraph.Add(std::move(Pass));
+}
+
+void FDebugUiPlugin::BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData)
+{
+	Impl->Tasks.Require({EDomain::Render});
+	if (InData.Commands.empty())
+	{
+		return;
+	}
+	InGraph.AddDeferred(
+	    [Owner = std::weak_ptr<FImpl>(Impl), Data = std::move(InData)]
+	    {
+		    const auto State = Owner.lock();
+		    if (!State)
+		    {
+			    throw std::logic_error("Debug UI preparation owner has been destroyed");
+		    }
+		    State->Prepare(Data);
+		    std::vector<FColorPass> Passes;
+		    if (!State->Draws.empty())
+		    {
+			    FColorPass Pass;
+			    Pass.Commands.Name = "Debug UI";
+			    Pass.Commands.Draws = std::move(State->Draws);
+			    Passes.push_back(std::move(Pass));
+		    }
+		    return Passes;
+	    });
 }
 
 void RegisterDebugUiPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,

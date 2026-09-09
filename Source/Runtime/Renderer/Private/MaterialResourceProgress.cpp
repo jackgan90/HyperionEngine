@@ -64,6 +64,11 @@ void FRenderResourceCoordinator::EnsureMaterialCaches()
 	if (!MaterialConstants)
 	{
 		MaterialConstants = std::make_unique<FMaterialConstantCache>(Device);
+		MaterialConstants->SetScopeTracker(
+		    [this](const std::shared_ptr<const void>& InScope)
+		    {
+			    TrackScope(InScope);
+		    });
 	}
 }
 

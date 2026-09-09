@@ -49,6 +49,7 @@ FBufferSlice FD3D12RHIDevice::PublishConstantSlice(const FBuffer& InBuffer, std:
 	HYP_PERF_SCOPE_C(Detail, UploadConstantSlice);
 	NativeResource<FD3D12Buffer>(InBuffer.Payload, State.get());
 	auto& Buffer = *static_cast<FD3D12Buffer*>(InBuffer.Payload.get());
+	std::lock_guard Lock(Buffer.ConstantMutex);
 	if (Buffer.Usage != BufferUsage(ERHIBufferUsage::Constant) || InBytes.empty() || InBytes.size() > 65536 ||
 	    InOffset % 256 != 0 || InOffset < Buffer.PublishedEnd || InOffset > Buffer.Size)
 	{
@@ -61,7 +62,10 @@ FBufferSlice FD3D12RHIDevice::PublishConstantSlice(const FBuffer& InBuffer, std:
 		throw std::invalid_argument("Constant slice exceeds page or publication identity limit");
 	}
 	// Reserve metadata before touching bytes, so allocation failure cannot partially publish a slice.
-	Buffer.Published.reserve(Buffer.Published.size() + 1);
+	if (Buffer.Published.size() == Buffer.Published.capacity())
+	{
+		Buffer.Published.reserve(std::max<std::size_t>(8, Buffer.Published.size() * 2));
+	}
 	void* Mapped{};
 	D3D12_RANGE Read{0, 0};
 	Check(Buffer.Resource->Map(0, &Read, &Mapped), "Map constant page");
@@ -81,7 +85,14 @@ void FD3D12RHIDevice::ResetConstantBuffer(const FBuffer& InBuffer)
 {
 	NativeResource<FD3D12Buffer>(InBuffer.Payload, State.get());
 	auto& Buffer = *static_cast<FD3D12Buffer*>(InBuffer.Payload.get());
-	if (Buffer.Usage != BufferUsage(ERHIBufferUsage::Constant) || InBuffer.Payload.use_count() != 1)
+	std::lock_guard Lock(Buffer.ConstantMutex);
+	std::erase_if(Buffer.ConstantOwners,
+	              [](const auto& InOwner)
+	              {
+		              return InOwner.expired();
+	              });
+	if (Buffer.Usage != BufferUsage(ERHIBufferUsage::Constant) || InBuffer.Payload.use_count() != 1 ||
+	    !Buffer.ConstantOwners.empty())
 	{
 		throw std::logic_error("Constant page reset requires sole ownership after all slice/GPU users finish");
 	}

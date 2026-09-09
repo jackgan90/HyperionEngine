@@ -25,6 +25,40 @@ void CheckSharedParameterPages()
 	HYP_CHECK(Values.GetPageIdentity(32) == Page);
 }
 
+void CheckSharedParameterRefresh()
+{
+	FMaterialDependencyTable First;
+	First.Reset(65, 3);
+	auto Second = First;
+	Second.Set(33, 7);
+	std::vector<std::optional<std::uint32_t>> Updates(65);
+	Updates[0] = 11;
+	Updates[64] = 12;
+	const auto Shared = std::make_shared<const FMaterialDependencyTable::FSharedValues>(Updates);
+	First.SetShared(Shared);
+	Second.SetShared(Shared);
+	const auto Frozen = First;
+	HYP_CHECK(First.GetSharedIdentity() == Second.GetSharedIdentity());
+	HYP_CHECK(First[33] == 3 && Second[33] == 7 && First[0] == 11 && Second[64] == 12);
+	Updates[0] = 21;
+	First.SetShared(std::make_shared<const FMaterialDependencyTable::FSharedValues>(Updates));
+	HYP_CHECK(First.SharesLocalValues(Frozen) && First[0] == 21 && Frozen[0] == 11);
+	First.Set(33, 9);
+	HYP_CHECK(!First.SharesLocalValues(Frozen) && Frozen[33] == 3 && First[64] == 12);
+	First.Set(0, 31);
+	HYP_CHECK(First[0] == 31 && First[64] == 12 && Frozen[0] == 11);
+	Updates[0].reset();
+	First.SetShared(std::make_shared<const FMaterialDependencyTable::FSharedValues>(Updates));
+	First.SetShared({});
+	HYP_CHECK(First[0] == 31 && First[64] == 12);
+	for (std::uint32_t Frame = 0; Frame < 1000; ++Frame)
+	{
+		Updates[64] = Frame;
+		First.SetShared(std::make_shared<const FMaterialDependencyTable::FSharedValues>(Updates));
+		HYP_CHECK(First[64] == Frame && First[0] == 31 && Frozen[64] == 12);
+	}
+}
+
 void SetScope(FMaterialProviderInputs& InInputs, EMaterialScope InScope, std::uint64_t InId,
               FMaterialParameterValues InValues)
 {
@@ -259,6 +293,7 @@ void CheckDefaultProviderCacheValidation()
 void RunMaterialProviderTests()
 {
 	CheckSharedParameterPages();
+	CheckSharedParameterRefresh();
 	CheckProviderBudget({8, 16384});
 	CheckProviderBudget({4096, 4096});
 	CheckProviderBudget({4096, 16 * 1024 * 1024}, 5120);

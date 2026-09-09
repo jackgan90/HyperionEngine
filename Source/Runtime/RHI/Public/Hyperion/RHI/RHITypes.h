@@ -6,6 +6,7 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
 #include <optional>
 #include <span>
+#include <stdexcept>
 
 namespace Hyperion
 {
@@ -155,6 +156,36 @@ struct FPassCommands
 	FTexture DepthTarget;
 	std::vector<FTexture> SampledDepth;
 	std::vector<FTextureTransition> TextureTransitions;
+	// Immutable publication; authors relinquish every mutable alias before sharing.
+	std::shared_ptr<const std::vector<FDrawPacket>> SharedDraws;
+
+	std::span<const FDrawPacket> GetDraws() const
+	{
+		if (SharedDraws && !Draws.empty())
+		{
+			throw std::invalid_argument("Pass cannot mix owned and shared draw storage");
+		}
+		return SharedDraws ? std::span<const FDrawPacket>(*SharedDraws) : std::span<const FDrawPacket>(Draws);
+	}
+
+	void ShareDraws()
+	{
+		(void)GetDraws();
+		if (!SharedDraws)
+		{
+			SharedDraws = std::make_shared<const std::vector<FDrawPacket>>(std::move(Draws));
+		}
+	}
+
+	void MaterializeDraws()
+	{
+		if (SharedDraws)
+		{
+			const auto Source = GetDraws();
+			Draws.assign(Source.begin(), Source.end());
+			SharedDraws.reset();
+		}
+	}
 };
 
 struct FGpuPassTiming
@@ -193,6 +224,11 @@ struct FDeviceStats
 	std::uint64_t PipelinesCreated{};
 	std::uint64_t ConstantBytesWritten{};
 	FGpuFrameTiming GpuTiming; // Last fence-complete sample; may lag the CPU frame.
+	std::uint64_t GraphicsPipelineBinds{};
+	std::uint64_t GraphicsGeometryBinds{};
+	std::uint64_t GraphicsDynamicBinds{};
+	std::uint64_t CommandListsCreated{};
+	std::uint64_t CommandListResets{};
 };
 
 } // namespace Hyperion

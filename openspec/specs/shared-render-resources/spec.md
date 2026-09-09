@@ -95,3 +95,14 @@ Compiled materials, layouts, samplers, binding sets, constant pages and their de
 #### Scenario: New binding resources outlive primitives
 - **WHEN** all primitives using a material are removed while a recorded or submitted frame retains its bindings
 - **THEN** the bindings remain valid and final managed native destruction occurs on RHI 0 after required completion, without ordinary WaitIdle
+
+### Requirement: Ready view preparation does not schedule maintenance
+Resource maintenance SHALL be requested by production, publication, owner release or unresolved completion/retirement work. Preparing a view containing only already-ready retained resources SHALL NOT by itself create an asynchronous maintenance task. Resource failures and no-frame retirement SHALL continue to progress.
+
+#### Scenario: Repeated ready frames
+- **WHEN** an unchanged ready scene renders repeated views
+- **THEN** view preparation alone schedules no worker delay or RHI cache scan
+
+#### Scenario: Last user releases without rendering
+- **WHEN** the last scene/frame owner releases resources and no new frame is rendered
+- **THEN** necessary completion polling and final RHI retirement still complete through the resource coordinator

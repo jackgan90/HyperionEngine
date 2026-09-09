@@ -65,6 +65,7 @@ public:
 
 private:
 	friend struct FRenderResourceCoordinator;
+	void SetScopeTracker(std::function<void(const std::shared_ptr<const void>&)> InTracker);
 	// Only the coordinator can use identities from the engine's immutable preparation pipeline.
 	std::vector<FConstantBinding> BindPrepared(std::shared_ptr<const FCompiledMaterialDefinition> InProgram,
 	                                           const FCompiledMaterialPass& InPass,

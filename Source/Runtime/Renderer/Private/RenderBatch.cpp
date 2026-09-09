@@ -74,6 +74,19 @@ FRenderBatchSystem::FRenderBatchSystem(FTaskSystem& InTasks, FRHICapabilities In
 
 FRenderBatchSystem::~FRenderBatchSystem() = default;
 
+void FRenderBatchSystem::InvalidatePlans()
+{
+	Impl->Tasks.Require({EDomain::Render});
+	Impl->Plans.clear();
+	Impl->PlanItems = 0;
+}
+
+bool FRenderBatchSystem::HasCustomStrategies() const
+{
+	Impl->Tasks.Require({EDomain::Render});
+	return Impl->Strategies.size() != 1;
+}
+
 void FRenderBatchSystem::Register(std::unique_ptr<IRenderBatchStrategy> InStrategy)
 {
 	Impl->Tasks.Require({EDomain::Main});
@@ -88,6 +101,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildFresh(const FR
                                                                         bool bInEnabled)
 {
 	auto& P = *this;
+	HYP_PERF_SCOPE_C(Detail, BuildFreshBatchPlan);
 	auto Result = std::make_shared<FRenderBatchPlan>();
 	const auto Depth = BatchDepth(InSnapshot);
 	std::multimap<std::size_t, FBatchGroup> Groups;
@@ -177,6 +191,7 @@ std::shared_ptr<const FRenderBatchPlan> FRenderBatchSystem::Build(const FRenderS
 		}
 	}
 	P.Retire(InSnapshot);
+	HYP_PERF_PLOT(Render, BatchPlanReuses, double(Result->Statistics.PlanReuses));
 	Result->Statistics.CachedChunks = P.Chunks.size();
 	Result->Statistics.CachedBytes = P.ChunkBytes;
 	Result->Statistics.PlanningMilliseconds =
@@ -194,5 +209,6 @@ void FRenderBatchSystem::Clear()
 	Impl->ChunkBytes = 0;
 	Impl->Plans.clear();
 	Impl->PlanItems = 0;
+	Impl->RetiredFamily = {};
 }
 } // namespace Hyperion

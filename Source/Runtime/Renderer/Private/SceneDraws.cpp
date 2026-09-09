@@ -118,9 +118,21 @@ std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPr
 
 std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSnapshot& InSnapshot)
 {
+	return GetPreparation().BuildPasses(InSnapshot);
+}
+
+std::vector<FColorPass> FRenderResourcePreparation::BuildPasses(const FRenderSceneSnapshot& InSnapshot,
+                                                                FRenderBatchStats* OutStatistics) const
+{
 	HYP_PERF_SCOPE_C(Rhi, PrepareDraws);
 	auto& Owner = *Coordinator;
 	Owner.Tasks.Require({EDomain::Rhi, 0});
+	if (InSnapshot.DrawFrame)
+	{
+		const auto Frame = InSnapshot.Frame ? InSnapshot.Frame->Frame : 0;
+		InSnapshot.DrawFrame->store(std::max(Frame, InSnapshot.DrawFrame->load(std::memory_order_relaxed)),
+		                            std::memory_order_release);
+	}
 	std::vector<FColorPass> Passes;
 	{
 		std::lock_guard Lock(Owner.Mutex);
@@ -128,6 +140,16 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 		{
 			throw std::logic_error("Render resource service is closed");
 		}
+		if (Owner.ReuseViewPasses(InSnapshot, Passes))
+		{
+			if (OutStatistics)
+			{
+				*OutStatistics = Owner.Stats.Batches;
+			}
+			HYP_PERF_PLOT(Rhi, ViewPacketReuses, 1.0);
+			return Passes;
+		}
+		HYP_PERF_PLOT(Rhi, ViewPacketReuses, 0.0);
 #if HYP_ENABLE_PROFILING
 		FRenderResourceStats Before;
 		const bool bProfile = IsProfilingEnabled(EProfileCategory::Material);
@@ -166,10 +188,15 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 			Stats.GpuReuses = After.InstanceReuses - BeforeInstances.InstanceReuses;
 		}
 		Owner.Stats.Batches = Stats;
+		if (OutStatistics)
+		{
+			*OutStatistics = Stats;
+		}
 		Passes = PublishDraws(InSnapshot, std::move(Prepared));
 		if (InSnapshot.View.DepthTarget || !InSnapshot.View.SampledDepth.empty())
 		{
 			Owner.EnsureMaterialCaches();
+			Owner.TrackScope(InSnapshot.View.TargetLifetime);
 			const FMaterialResourceOwners Owners{InSnapshot.View.TargetLifetime};
 			for (auto& Pass : Passes)
 			{
@@ -184,6 +211,7 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 				}
 			}
 		}
+		Owner.CacheViewPasses(InSnapshot, Passes);
 		if (Owner.MaterialGpu)
 		{
 			Owner.Stats.Materials = Owner.MaterialGpu->Statistics();
@@ -196,7 +224,6 @@ std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSn
 #endif
 		}
 	}
-	Owner.Schedule();
 	return Passes;
 }
 } // namespace Hyperion

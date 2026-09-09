@@ -1,4 +1,5 @@
 add_library(hyperion_render STATIC Private/RenderGraph.cpp Private/RenderGraphResources.cpp
+  Private/RenderGraphPreparation.cpp Private/RenderGraphExecution.cpp
   Private/CascadedShadowMap.cpp Private/ShadowParameters.cpp Private/ForwardRenderPipeline.cpp Private/DepthPreview.cpp
   Private/MaterialInterface.cpp Private/MaterialPreparation.cpp Private/MaterialPipeline.cpp Private/MaterialPacking.cpp Private/MaterialBlocks.cpp Private/MaterialInstances.cpp
   Private/MaterialBindingContext.cpp Private/MaterialProfiling.cpp
@@ -8,6 +9,8 @@ add_library(hyperion_render STATIC Private/RenderGraph.cpp Private/RenderGraphRe
   Private/MaterialGpuCache.cpp Private/MaterialGpuSources.cpp Private/MaterialGpuLifetime.cpp
   Private/RenderMaterial.cpp Private/MaterialResourceService.cpp Private/MaterialResourceProgress.cpp
   Private/RenderResourceClose.cpp Private/SessionMaterialFrame.cpp Private/SessionMaterialBinding.cpp Private/SessionMaterialEvaluation.cpp
+  Private/SessionViewCache.cpp
+  Private/ScenePassCache.cpp
   Private/RenderPrimitive.cpp Private/PrimitiveMaterialParameters.cpp Private/RenderScene.cpp Private/RenderSceneClient.cpp
   Private/ModelPreparation.cpp Private/ModelResources.cpp Private/ModelMaterials.cpp Private/RenderResourceLifetime.cpp
   Private/RenderResourceService.cpp Private/SceneVisibility.cpp Private/SceneDraws.cpp Private/SceneBatchDraws.cpp Private/MaterialDraw.cpp

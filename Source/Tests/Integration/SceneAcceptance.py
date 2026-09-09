@@ -46,7 +46,9 @@ for mode in ("none", "linear", "bvh"):
     statistics[mode] = tuple(map(int, values.groups()))
     images.append(capture.read_bytes())
 assert images[0] == images[1] == images[2], "Spatial culling changed the rendered image"
-assert statistics["bvh"][1] < statistics["linear"][2] // 4, statistics
+# SpatialTests checks cold BVH efficiency. The warmed static integration path must reuse
+# the exact collection, avoiding both tree visits and linear group tests in every mode.
+assert all(values[1] == values[2] == 0 for values in statistics.values()), statistics
 assert statistics["bvh"][3] == statistics["linear"][3] < statistics["none"][3], statistics
 code, log, capture = run("gui", show_ui=True)
 assert code == 0 and capture.stat().st_size > 10000, log

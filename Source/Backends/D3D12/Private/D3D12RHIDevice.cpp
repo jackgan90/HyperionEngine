@@ -323,6 +323,11 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 	Stats.GraphicsHeapBinds = P.GraphicsHeapBinds.load();
 	Stats.GraphicsConstantBinds = P.GraphicsConstantBinds.load();
 	Stats.GraphicsTableBinds = P.GraphicsTableBinds.load();
+	Stats.GraphicsPipelineBinds = P.GraphicsPipelineBinds.load();
+	Stats.GraphicsGeometryBinds = P.GraphicsGeometryBinds.load();
+	Stats.GraphicsDynamicBinds = P.GraphicsDynamicBinds.load();
+	Stats.CommandListsCreated = P.CommandListsCreated.load();
+	Stats.CommandListResets = P.CommandListResets.load();
 	Stats.PipelinesCreated = P.PipelinesCreated;
 	Stats.ConstantBytesWritten = P.ConstantBytesWritten;
 	Stats.GpuTiming = P.LastGpuTiming;
@@ -351,12 +356,13 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 
 void FD3D12RHIDevice::BeginGpuTimingCapture(std::size_t InCapacity)
 {
-	if (!InCapacity || State->GpuTimingCapacity)
+	if (!InCapacity || State->GpuTimingCapacity || State->GpuTimingEpoch == UINT64_MAX)
 	{
 		throw std::invalid_argument("GPU timing capture needs a positive capacity and no active capture");
 	}
 	State->GpuTimingCapture = {};
 	State->GpuTimingCapture.Frames.reserve(InCapacity);
+	++State->GpuTimingEpoch;
 	State->GpuTimingCapacity = InCapacity;
 }
 

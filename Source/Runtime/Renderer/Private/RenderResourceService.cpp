@@ -15,6 +15,16 @@ FRenderResourceService::~FRenderResourceService()
 	Close();
 }
 
+FRenderResourcePreparation FRenderResourceService::GetPreparation() const
+{
+	return FRenderResourcePreparation(Coordinator);
+}
+
+std::uint64_t FRenderResourceService::GetPublicationRevision() const
+{
+	return Coordinator->PublicationRevision.load(std::memory_order_acquire);
+}
+
 std::shared_ptr<const FRenderResource> FRenderResourceService::RequestModel(std::shared_ptr<const FModelAsset> InAsset,
                                                                             std::uint64_t InVersion)
 {

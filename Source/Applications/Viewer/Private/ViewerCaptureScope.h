@@ -14,13 +14,10 @@ struct FFrameCaptureScope
 	FFrameCaptureScope(FTaskSystem& InTasks, FFrameCapture* InCapture, FNativeSurface InSurface)
 	    : Tasks(InTasks), Capture(InCapture)
 	{
+		Tasks.Require({EDomain::Rhi, 0});
 		if (Capture)
 		{
-			Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-			                          [&]
-			                          {
-				                          bActive = Capture->BeginFrame(InSurface);
-			                          }));
+			bActive = Capture->BeginFrame(InSurface);
 		}
 	}
 
@@ -30,11 +27,7 @@ struct FFrameCaptureScope
 		{
 			try
 			{
-				Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-				                          [&]
-				                          {
-					                          Capture->Cancel();
-				                          }));
+				Capture->Cancel();
 			}
 			catch (...)
 			{
@@ -47,11 +40,7 @@ struct FFrameCaptureScope
 		bool bSuccess = false;
 		if (bActive)
 		{
-			Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-			                          [&]
-			                          {
-				                          bSuccess = Capture->EndFrame();
-			                          }));
+			bSuccess = Capture->EndFrame();
 			bActive = false;
 		}
 		return bSuccess;

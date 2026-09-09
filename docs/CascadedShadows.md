@@ -80,3 +80,7 @@ python tools/MeasureShadows.py --resolution 1024 --output out/shadow-performance
 - 审计修复集通过 Debug 全量 CTest 48/48（含 RenderDoc）、Release 全量 CTest 43/43（未编入 RenderDoc）；最后补齐 Pass 白名单后，两配置全量构建及相关 8/8 回归通过，独立 reviewer 另行运行最终 GPU 回归通过。286 个自有源码的路径/格式检查、177 个翻译单元的语义命名、277 个源码/25 模块的边界检查以及 OpenSpec strict validation 通过。审计日志位于 `out/audit-csm`；此前图像证据仍位于 `out/captures/Shadow*`，均不纳入源码提交。
 
 OpenSpec 已同步主规范并归档至 [2026-09-09-add-cascaded-shadow-maps](../openspec/changes/archive/2026-09-09-add-cascaded-shadow-maps/proposal.md)。
+
+后续材质、批次和原生录制优化的完整 A/B 数据与剩余 CPU 目标差距见 [RendererCpuPerformance.md](RendererCpuPerformance.md)。
+
+静止 CSM setup/view/packet 复用、统一 RHI 帧协调以及第二轮相机运动对照见 [RetainedRenderFrames.md](RetainedRenderFrames.md)。setup 复用依赖真实 camera/light/settings 和稳定 scene/resource revision；四级阴影仍逐帧渲染，动态查询客户端保持保守回退。

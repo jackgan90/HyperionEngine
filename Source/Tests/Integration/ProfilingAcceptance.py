@@ -87,7 +87,12 @@ def check_viewer(profile, viewer, output, mode):
     frames = [event for event in events if event["name"] == "ApplicationFrame"]
     assert len(frames) == 120 and sorted(int(event["value"].split()[0]) for event in frames) == list(range(120, 240))
     names = {event["name"] for event in events}
-    assert {"PrepareMaterials", "PrepareDraws", "ValidateDraws", "RecordCommands", "SubmitCommandLists", "PresentWait"} <= names
+    assert {"PrepareMaterials", "PrepareDraws", "PrepareSceneSnapshot", "ValidateDraws", "RecordCommands",
+            "RecordNativeDraws", "ResetNativeCommandList", "SubmitCommandLists", "PresentWait"} <= names
+    # Material counters are per view: the forward view plus four CSM cascades when enabled.
+    view_count = sum(5 if int(row["shadows"]) else 1 for row in rows(folder / "Frames.csv"))
+    material_count = sum(event["name"] == "PrepareMaterials" for event in events)
+    assert sum(event["name"] == "PrepareDraws" for event in events) == view_count
     if mode == "basic":
         assert "BindMaterialConstants" not in names and not rows(folder / "Gpu.csv")
     else:
@@ -99,10 +104,20 @@ def check_viewer(profile, viewer, output, mode):
     for event in rows(folder / "EventsAndPlots.csv"):
         if not event["src_file"]:
             plots[event["name"]].append(float(event["value"]))
-    for name in ("SceneDraws", "MaterialEvaluationFull", "MaterialEvaluationReuses", "MaterialEvaluationRefreshes",
-                 "ProviderEvaluations", "ProviderReuses", "ConstantPacks", "ConstantUploadBytes", "ConstantReuses",
-                 "BindingSetsCreated", "BindingSetReuses", "PipelinesCreated", "PipelineReuses"):
-        assert len(plots[name]) == 120 and min(plots[name]) >= 0, (name, len(plots[name]))
+    assert len(plots["SceneDraws"]) == 120 and min(plots["SceneDraws"]) > 0
+    for name in ("SceneCollectionReuses", "ViewPreparationReuses", "ViewPacketReuses"):
+        assert len(plots[name]) == view_count and set(plots[name]) <= {0, 1}, name
+    assert material_count + sum(plots["ViewPreparationReuses"]) == view_count
+    packet_count = view_count - sum(plots["ViewPacketReuses"])
+    for name in ("MaterialEvaluationFull", "MaterialEvaluationReuses", "MaterialEvaluationRefreshes",
+                 "ProviderEvaluations", "ProviderReuses", "BatchPlanReuses"):
+        assert len(plots[name]) == material_count and min(plots[name]) >= 0, (name, len(plots[name]))
+    for name in ("ConstantPacks", "ConstantUploadBytes", "ConstantReuses", "BindingSetsCreated",
+                 "BindingSetReuses", "PipelinesCreated", "PipelineReuses"):
+        assert len(plots[name]) == packet_count and min(plots[name]) >= 0, (name, len(plots[name]))
+    recording_count = sum(event["name"] == "RecordCommands" for event in events)
+    for name in ("GraphicsPipelineBinds", "GraphicsGeometryBinds", "GraphicsDynamicBinds"):
+        assert len(plots[name]) == recording_count and min(plots[name]) >= 0, (name, len(plots[name]))
     assert sum(plots["MaterialEvaluationRefreshes"]) > 0 and max(plots["SceneDraws"]) <= 210
     return summary
 

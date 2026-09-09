@@ -157,6 +157,56 @@ void CheckDirectRhiCollection(FFrameFixture& InFixture, const FRenderGraph& InGr
 	}
 }
 
+void CheckRecordingStorage(FFrameFixture& InFixture, const FRenderGraph& InGraph)
+{
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Rhi, 0},
+	    [&]
+	    {
+		    const auto Commands = InGraph.Compile();
+		    std::shared_ptr<const FD3D12RecordedList> Retained;
+		    std::uint64_t FirstFrame{};
+		    const auto Before = InFixture.Device->Statistics();
+		    for (unsigned Frame = 0; Frame < 12; ++Frame)
+		    {
+			    InFixture.Swapchain->BeginFrame({64, 64});
+			    std::vector<FRecordedList> Lists;
+			    for (std::uint32_t Index = 0; Index < Commands.size(); ++Index)
+			    {
+				    auto Owned = std::make_shared<const FPassCommands>(Commands[Index]);
+				    Lists.push_back(InFixture.Swapchain->RecordOwned(Index, Owned));
+				    const auto Native = std::dynamic_pointer_cast<const FD3D12RecordedList>(Lists.back().Payload);
+				    CheckCondition(Native->Commands == Owned);
+			    }
+			    const auto Current = std::dynamic_pointer_cast<const FD3D12RecordedList>(Lists.front().Payload);
+			    if (Frame == 0)
+			    {
+				    Retained = Current;
+				    FirstFrame = Retained->Frame;
+			    }
+			    else
+			    {
+				    CheckCondition(Current->List.Get() != Retained->List.Get());
+				    CheckCondition(Retained->Frame == FirstFrame && Retained->Name == Commands.front().Name);
+				    CheckCondition(Retained->Commands->Name == Commands.front().Name);
+			    }
+			    if (Frame == 6)
+			    {
+				    InFixture.Swapchain->CancelFrame();
+			    }
+			    else
+			    {
+				    InFixture.Swapchain->EndFrame(Lists, false);
+			    }
+			    InFixture.Swapchain->WaitIdle();
+		    }
+		    const auto After = InFixture.Device->Statistics();
+		    CheckCondition(After.CommandListResets > Before.CommandListResets + 12);
+		    CheckCondition(After.CommandListsCreated - Before.CommandListsCreated <= FrameCount * Commands.size() + 1);
+		    CheckCondition(After.ValidationErrors == 0);
+	    }));
+}
+
 #if HYP_ENABLE_PROFILING
 void CheckProfileQueryLifetime(FFrameFixture& InFixture, const FRenderGraph& InGraph)
 {
@@ -399,6 +449,160 @@ void CheckPrimitiveFenceRetirement(FFrameFixture& InFixture)
 	Session.Close();
 	CheckCondition(Constants.expired());
 }
+
+void CheckTimingCaptureBoundary(FFrameFixture& InFixture, const FRenderGraph& InGraph)
+{
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Rhi, 0},
+	    [&]
+	    {
+		    auto& Device = *InFixture.Device;
+		    auto& Swapchain = *InFixture.Swapchain;
+		    auto& State = *InFixture.State;
+		    Device.WaitIdle();
+		    Swapchain.SetGpuTimingEnabled(true);
+		    const auto Commands = InGraph.Compile();
+		    const auto Submit = [&]
+		    {
+			    Swapchain.BeginFrame({64, 64});
+			    const std::array Lists{Swapchain.Record(0, Commands[0]), Swapchain.Record(1, Commands[1])};
+			    Swapchain.EndFrame(Lists, false, false);
+		    };
+		    for (const bool bPreviousCapture : {false, true})
+		    {
+			    ComPtr<ID3D12Fence> Gate;
+			    Check(State.Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Gate)), "Create timing gate");
+			    struct FReleaseGate
+			    {
+				    ComPtr<ID3D12Fence> Gate;
+				    ~FReleaseGate()
+				    {
+					    Gate->Signal(1);
+					    bSkipPresent = false;
+				    }
+			    } Release{Gate};
+			    bSkipPresent = true;
+			    Check(State.Queue->Wait(Gate.Get(), 1), "Block timing submission");
+			    if (bPreviousCapture)
+			    {
+				    Device.BeginGpuTimingCapture(2);
+			    }
+			    Submit();
+			    CheckCondition(State.Fence->GetCompletedValue() < State.Submissions.back().FenceValue);
+			    if (bPreviousCapture)
+			    {
+				    CheckCondition(Device.EndGpuTimingCapture().Frames.empty());
+			    }
+			    Device.BeginGpuTimingCapture(2);
+			    Check(Gate->Signal(1), "Release timing submission");
+			    Device.WaitIdle();
+			    const auto Empty = Device.EndGpuTimingCapture();
+			    CheckCondition(Empty.Frames.empty() && Empty.DroppedFrames == 0);
+			    CheckCondition(State.LastGpuTiming.Passes.size() == 2);
+		    }
+		    Device.BeginGpuTimingCapture(2);
+		    Submit();
+		    Device.WaitIdle();
+		    const auto Current = Device.EndGpuTimingCapture();
+		    CheckCondition(Current.Frames.size() == 1 && Current.Frames[0].Passes.size() == 2);
+		    Swapchain.SetGpuTimingEnabled(false);
+	    }));
+}
+
+std::shared_ptr<const FPassCommands> OwnedConstantCommands(IRHIDevice& InDevice, bool bInSharedDraws)
+{
+	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
+	                         std::filesystem::absolute("frame-failure-shader-cache"));
+	FPipelineDesc Pipeline;
+	Pipeline.Vertex = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
+	Pipeline.Pixel = Compiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);
+	Pipeline.Attributes = {{"POSITION", 0, EVertexFormat::Float3, offsetof(FVertex, Position)},
+	                       {"COLOR", 0, EVertexFormat::Float4, offsetof(FVertex, Color)},
+	                       {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FVertex, Uv)}};
+	Pipeline.VertexStride = sizeof(FVertex);
+	Pipeline.Layout =
+	    InDevice.CreateBindingLayout({{{ERHIBindingKind::ConstantBuffer, ERHIShaderVisibility::Vertex, 0, 0, 1, 64},
+	                                   {ERHIBindingKind::Texture2D, ERHIShaderVisibility::Pixel, 0}}});
+	const std::array<FVertex, 3> Vertices{
+	    {{{0, .5f, 0}, {1, 0, 0, 1}, {}}, {{-.5f, -.5f, 0}, {0, 1, 0, 1}, {}}, {{.5f, -.5f, 0}, {0, 0, 1, 1}, {}}}};
+	const std::array<std::uint32_t, 3> Indices{0, 1, 2};
+	FDrawPacket Draw;
+	Draw.Pipeline = InDevice.CreatePipeline(Pipeline);
+	Draw.Vertices = InDevice.CreateBuffer(std::as_bytes(std::span(Vertices)));
+	Draw.Indices = InDevice.CreateBuffer(std::as_bytes(std::span(Indices)));
+	Draw.VertexStride = sizeof(FVertex);
+	Draw.IndexCount = 3;
+	Draw.Scissor = {0, 0, 64, 64};
+	const auto Texture = InDevice.CreateTexture({1, 1, EColorSpace::Linear, {1, 1, 1, 1}});
+	Draw.Bindings = InDevice.CreateBindingSet({Pipeline.Layout, {{1, {Texture}}}});
+	const auto Page = InDevice.CreateBuffer({256, BufferUsage(ERHIBufferUsage::Constant)});
+	const auto Transform = Identity();
+	Draw.ConstantBindings = {{0, InDevice.PublishConstantSlice(Page, 0, std::as_bytes(std::span(&Transform, 1)))}};
+	FPassCommands Commands;
+	Commands.Name = "Owned constants";
+	Commands.bClear = true;
+	Commands.TransitionFrom = EResourceState::Present;
+	Commands.TransitionTo = EResourceState::RenderTarget;
+	Commands.Draws.push_back(std::move(Draw));
+	if (bInSharedDraws)
+	{
+		Commands.ShareDraws();
+	}
+	return std::make_shared<const FPassCommands>(std::move(Commands));
+}
+
+void CheckOwnedConstantSubmission(FFrameFixture& InFixture, bool bInSharedDraws)
+{
+	auto& Device = *InFixture.Device;
+	auto& Swapchain = *InFixture.Swapchain;
+	auto& State = *InFixture.State;
+	auto Commands = OwnedConstantCommands(Device, bInSharedDraws);
+	const auto& NestedPage = Commands->GetDraws()[0].ConstantBindings[0].Slice.Buffer;
+	Device.WaitIdle();
+	Swapchain.BeginFrame({64, 64});
+	ComPtr<ID3D12Fence> Gate;
+	Check(State.Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Gate)), "Create constant ownership gate");
+
+	struct FReleaseGate
+	{
+		ComPtr<ID3D12Fence> Gate;
+
+		~FReleaseGate()
+		{
+			Gate->Signal(1);
+			bSkipPresent = false;
+		}
+	} Release{Gate};
+
+	bSkipPresent = true;
+	Check(State.Queue->Wait(Gate.Get(), 1), "Block constant ownership submission");
+	{
+		FPassCommands Present;
+		Present.TransitionFrom = EResourceState::RenderTarget;
+		Present.TransitionTo = EResourceState::Present;
+		const std::array Lists{Swapchain.RecordOwned(0, Commands), Swapchain.Record(1, Present)};
+		Swapchain.EndFrame(Lists, false, false);
+	}
+	Commands.reset(); // Only native submission/frame owners now keep the nested page reference valid.
+	CheckCondition(State.Fence->GetCompletedValue() < State.Submissions.back().FenceValue);
+	CheckCondition(NestedPage.Payload.use_count() == 1);
+	bool bRejected = false;
+	try
+	{
+		Device.ResetConstantBuffer(NestedPage);
+	}
+	catch (const std::logic_error&)
+	{
+		bRejected = true;
+	}
+	CheckCondition(bRejected);
+	const auto ReusablePage = NestedPage;
+	Check(Gate->Signal(1), "Release constant ownership submission");
+	Swapchain.WaitIdle();
+	CheckCondition(ReusablePage.Payload.use_count() == 1);
+	Device.ResetConstantBuffer(ReusablePage);
+	CheckCondition(Device.Statistics().ValidationErrors == 0);
+}
 } // namespace
 
 HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval)
@@ -436,6 +640,14 @@ int main(int InArgc, char** InArgv)
 		Hyperion::CheckSubmittedFailure(Fixture, Graph);
 		Hyperion::CheckRecovery(Fixture, Graph);
 		Hyperion::CheckDirectRhiCollection(Fixture, Graph);
+		Hyperion::CheckRecordingStorage(Fixture, Graph);
+		Hyperion::CheckTimingCaptureBoundary(Fixture, Graph);
+		Fixture.Tasks.Wait(Fixture.Tasks.Dispatch({Hyperion::EDomain::Rhi, 0},
+		                                          [&]
+		                                          {
+			                                          Hyperion::CheckOwnedConstantSubmission(Fixture, true);
+			                                          Hyperion::CheckOwnedConstantSubmission(Fixture, false);
+		                                          }));
 		Hyperion::CheckPrimitiveFenceRetirement(Fixture);
 #if HYP_ENABLE_PROFILING
 		Hyperion::CheckProfileQueryLifetime(Fixture, Graph);

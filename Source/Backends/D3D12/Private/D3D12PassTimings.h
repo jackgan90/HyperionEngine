@@ -16,5 +16,6 @@ struct FD3D12PassQueries
 std::shared_ptr<FD3D12PassQueries> CreatePassQueries(FD3D12DeviceState& InDevice);
 void BeginPassTiming(FD3D12RecordedList& InList, const std::shared_ptr<FD3D12PassQueries>& InQueries);
 void EndPassTiming(FD3D12RecordedList& InList);
-void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedList> InLists);
+void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedList> InLists,
+                        std::uint64_t InCaptureEpoch);
 } // namespace Hyperion

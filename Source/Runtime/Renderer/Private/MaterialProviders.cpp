@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/MaterialProviders.h"
+#include "Hyperion/Core/Profiling.h"
 #include <algorithm>
 #include <atomic>
 #include <list>
@@ -379,6 +380,7 @@ FMaterialProvidedValue FMaterialProviderRegistry::EvaluateOne(const FMaterialPro
 
 void FMaterialProviderRegistry::Collect()
 {
+	HYP_PERF_SCOPE_C(Material, CollectMaterialProviders);
 	for (auto It = Impl->Cache.begin(); It != Impl->Cache.end();)
 	{
 		std::erase_if(It->second,

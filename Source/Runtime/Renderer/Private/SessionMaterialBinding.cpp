@@ -95,7 +95,8 @@ bool ReuseEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 }
 
 void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMaterialProviderInputs& InInputs,
-                     const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled)
+                     const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
+                     FViewMaterialProviders& InProviders)
 {
 	if (!InItem.EvaluationCache || !InItem.LocalItemId)
 	{
@@ -143,22 +144,36 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 		if (!Overridden[Index] &&
 		    InCompiled->Interface.Schema->GetParameters()[Index].Source == EMaterialParameterSource::Semantic)
 		{
-			Entry.ProviderParameters.push_back(Index);
+			constexpr auto PerItem = MaterialScopeBit(EMaterialScope::Object) |
+			                         MaterialScopeBit(EMaterialScope::Material) |
+			                         MaterialScopeBit(EMaterialScope::Draw);
+			if ((InItem.ResolvedParameters->Dependencies[Index] & PerItem) == 0)
+			{
+				Entry.SharedProviderParameters.push_back(Index);
+			}
+			else
+			{
+				Entry.ProviderParameters.push_back(Index);
+			}
 		}
 	}
 	FResolvedMaterialParameters Values = *InItem.ResolvedParameters;
+	Entry.Resolved = InItem.ResolvedParameters;
+	if (!Entry.SharedProviderParameters.empty())
+	{
+		const auto Shared = InProviders.PrepareShared(Entry, InCompiled->GetPass(InView.Usage), InInputs);
+		Values.Values.SetShared(Shared.Values);
+		Values.Dependencies.SetShared(Shared.Dependencies);
+	}
+	Entry.Inputs = InProviders.RetainInputs(InInputs, Entry.Dependencies);
 	for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
 	{
-		if (Entry.Dependencies & (1U << Scope))
+		if ((Entry.Dependencies & (1U << Scope)) == 0)
 		{
-			Entry.Inputs.Scopes[Scope] = InInputs.Scopes[Scope];
-			Entry.Inputs.Values[Scope] = InInputs.Values[Scope];
-		}
-		else
-		{
-			Values.Scopes[Scope] = {};
+			Values.Scopes.Set(Scope, {});
 		}
 	}
+	Values.Scopes.ShareEngine({Entry.Inputs, &Entry.Inputs->Scopes});
 	Entry.Resolved = std::make_shared<const FResolvedMaterialParameters>(std::move(Values));
 	InItem.ResolvedParameters = Entry.Resolved;
 	Entries.insert_or_assign(Key, std::move(Entry));
@@ -266,7 +281,7 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 			// Validate the complete logical draw before dispatching any native work for the family.
 			Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(
 			    ResolveMaterialBindingContext(Item.State.Surface->GetSnapshot(), *Compiled, Pass, Item.Context));
-			CacheEvaluation(Item, InSnapshot.View, Inputs, Compiled);
+			CacheEvaluation(Item, InSnapshot.View, Inputs, Compiled, ViewProviders);
 		}
 		catch (const std::exception& Error)
 		{

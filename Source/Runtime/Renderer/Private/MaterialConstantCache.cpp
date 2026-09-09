@@ -211,6 +211,7 @@ struct FMaterialConstantCache::FImpl
 	std::vector<FPage> Pages;
 	FMaterialConstantStats Stats;
 	FMaterialConstantLimits Limits;
+	std::function<void(const std::shared_ptr<const void>&)> TrackScope;
 	std::uint64_t Access{};
 	std::map<std::pair<const FCompiledMaterialDefinition*, const FMaterialProgramBinding*>, FPreparedBlock> Prepared;
 	std::map<const FInstanceBatchData*, FInstanceEntry> Instances;
@@ -388,6 +389,13 @@ struct FMaterialConstantCache::FImpl
 			}
 		}
 		FCacheEntry Entry = MakeEntry(InBinding, InFormat, InSchema, InParameters);
+		if (TrackScope)
+		{
+			for (const auto& OwnerScope : Entry.Owners)
+			{
+				TrackScope(OwnerScope.lock());
+			}
+		}
 		bool bTransient = false;
 		for (const auto& [Scope, Key] : Entry.Key.Scopes)
 		{
@@ -442,6 +450,11 @@ FMaterialConstantCache::FMaterialConstantCache(IRHIDevice& InDevice, std::uint32
 }
 
 FMaterialConstantCache::~FMaterialConstantCache() = default;
+
+void FMaterialConstantCache::SetScopeTracker(std::function<void(const std::shared_ptr<const void>&)> InTracker)
+{
+	Impl->TrackScope = std::move(InTracker);
+}
 
 std::vector<FConstantBinding> FMaterialConstantCache::Bind(const FCompiledMaterialPass& InPass,
                                                            const FMaterialParameterSchema& InSchema,
@@ -537,6 +550,13 @@ std::vector<FConstantBinding> FMaterialConstantCache::BindInstances(std::shared_
 	}
 	FImpl::FInstanceEntry Entry;
 	Entry.Data = InData;
+	if (Impl->TrackScope)
+	{
+		for (const auto& Owner : InData->Owners)
+		{
+			Impl->TrackScope(Owner.lock());
+		}
+	}
 	for (const auto& Block : InData->Constants)
 	{
 		auto Slice = Impl->Publish(Block.Bytes, false);

@@ -29,6 +29,9 @@ struct FD3D12Buffer final : IRHIBuffer
 	};
 
 	std::vector<FPublishedSlice> Published;
+	// Shared command fields need explicit use evidence in addition to buffer handle reference counts.
+	mutable std::mutex ConstantMutex;
+	mutable std::vector<std::weak_ptr<const void>> ConstantOwners;
 	// Upload heaps are write-combined. Validate immutable indices from ordinary CPU memory.
 	std::vector<std::uint32_t> IndexData;
 	// Immutable index data: cache bounded range min/max results across repeated draws and recording contexts.
@@ -98,6 +101,7 @@ struct FD3D12BindingLayout final : IRHIResourceBindingLayout
 
 	std::vector<FSlot> Slots;
 	std::vector<FTable> Tables;
+	std::uint64_t ConstantMask{};
 
 	const void* GetDeviceIdentity() const noexcept override
 	{
@@ -110,6 +114,7 @@ struct FD3D12BindingSet final : IRHIResourceBindingSet
 	std::shared_ptr<FD3D12DeviceState> State;
 	FResourceBindingSetDesc Description;
 	std::vector<FD3D12DescriptorRange> Tables;
+	std::uint64_t UploadFence{};
 
 	const void* GetDeviceIdentity() const noexcept override
 	{
@@ -160,8 +165,7 @@ struct FD3D12RecordedList final : IRHIRecordedList
 	}
 
 	ComPtr<ID3D12GraphicsCommandList> List;
-	std::vector<FDrawPacket> Retained;
-	std::vector<FTexture> Textures;
+	std::shared_ptr<const FPassCommands> Commands;
 	std::uint64_t Frame{};
 	UINT Context{};
 	std::shared_ptr<const FD3D12SwapchainIdentity> Owner;

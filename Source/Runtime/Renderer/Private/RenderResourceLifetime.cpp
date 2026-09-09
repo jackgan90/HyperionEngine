@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "RenderResourcesInternal.h"
 #include <algorithm>
 #include <chrono>
@@ -51,8 +52,13 @@ FRenderResourceRecord::~FRenderResourceRecord()
 void FRenderResourceRecord::Publish(ERenderResourceStatus InStatus, std::string InError)
 {
 	std::lock_guard Lock(Publication);
+	const bool bChanged = Status != InStatus || Error != InError;
 	Status = InStatus;
 	Error = std::move(InError);
+	if (bChanged)
+	{
+		Owner->PublicationRevision.fetch_add(1, std::memory_order_release);
+	}
 }
 
 bool FRenderResourceRecord::CanRelease() const
@@ -115,6 +121,7 @@ void FRenderResourceCoordinator::Schedule()
 		return;
 	}
 	bScheduled = true;
+	++Stats.MaintenanceTasks;
 	try
 	{
 		Progress = Tasks.Dispatch({EDomain::Worker},
@@ -222,6 +229,7 @@ bool FRenderResourceCoordinator::CollectCompleted()
 
 void FRenderResourceCoordinator::Tick()
 {
+	HYP_PERF_SCOPE_C(Rhi, ResourceMaintenance);
 	Tasks.Require({EDomain::Rhi, 0});
 	bool bAgain = false;
 	std::vector<std::shared_ptr<const FRenderMaterial>> ReleasedMaterials;
@@ -232,8 +240,10 @@ void FRenderResourceCoordinator::Tick()
 		{
 			return;
 		}
+		++Stats.MaintenanceTicks;
 		const bool bCompleted = CollectCompleted();
 		CollectPreparedDraws();
+		CollectViewPasses();
 		bAgain = !bCompleted;
 		if (bCompleted)
 		{
