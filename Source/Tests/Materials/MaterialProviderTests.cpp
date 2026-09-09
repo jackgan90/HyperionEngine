@@ -27,6 +27,14 @@ void CheckSharedParameterPages()
 
 void CheckSharedParameterRefresh()
 {
+	FMaterialDependencyTable Unique;
+	Unique.Reset(1, 0);
+	Unique.SetShared(
+	    std::make_shared<const FMaterialDependencyTable::FSharedValues>(std::vector<std::optional<std::uint32_t>>(1)));
+	const auto UniqueIdentity = Unique.GetLocalIdentity();
+	HYP_CHECK(UniqueIdentity.Matches(Unique));
+	Unique.Set(0, 1);
+	HYP_CHECK(!UniqueIdentity.Matches(Unique)); // Weak proofs must detect writes without a second page owner.
 	FMaterialDependencyTable First;
 	First.Reset(65, 3);
 	auto Second = First;
@@ -38,13 +46,16 @@ void CheckSharedParameterRefresh()
 	First.SetShared(Shared);
 	Second.SetShared(Shared);
 	const auto Frozen = First;
+	const auto LocalIdentity = First.GetLocalIdentity();
 	HYP_CHECK(First.GetSharedIdentity() == Second.GetSharedIdentity());
 	HYP_CHECK(First[33] == 3 && Second[33] == 7 && First[0] == 11 && Second[64] == 12);
 	Updates[0] = 21;
 	First.SetShared(std::make_shared<const FMaterialDependencyTable::FSharedValues>(Updates));
 	HYP_CHECK(First.SharesLocalValues(Frozen) && First[0] == 21 && Frozen[0] == 11);
+	HYP_CHECK(LocalIdentity.Matches(First));
 	First.Set(33, 9);
 	HYP_CHECK(!First.SharesLocalValues(Frozen) && Frozen[33] == 3 && First[64] == 12);
+	HYP_CHECK(!LocalIdentity.Matches(First));
 	First.Set(0, 31);
 	HYP_CHECK(First[0] == 31 && First[64] == 12 && Frozen[0] == 11);
 	Updates[0].reset();

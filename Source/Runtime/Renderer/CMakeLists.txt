@@ -4,7 +4,7 @@ add_library(hyperion_render STATIC Private/RenderGraph.cpp Private/RenderGraphRe
   Private/MaterialInterface.cpp Private/MaterialPreparation.cpp Private/MaterialPipeline.cpp Private/MaterialPacking.cpp Private/MaterialBlocks.cpp Private/MaterialInstances.cpp
   Private/MaterialBindingContext.cpp Private/MaterialProfiling.cpp
   Private/MaterialConstantCache.cpp
-  Private/RenderBatch.cpp Private/RenderBatchStats.cpp Private/BatchCache.cpp Private/BatchPlanCache.cpp Private/BatchCompatibility.cpp Private/InstanceBatchData.cpp
+  Private/RenderBatch.cpp Private/RenderBatchStats.cpp Private/BatchCache.cpp Private/BatchPlanCache.cpp Private/BatchPreparation.cpp Private/BatchCompatibility.cpp Private/InstanceBatchData.cpp
   Private/MaterialProviders.cpp Private/MaterialInputValues.cpp
   Private/MaterialGpuCache.cpp Private/MaterialGpuSources.cpp Private/MaterialGpuLifetime.cpp
   Private/RenderMaterial.cpp Private/MaterialResourceService.cpp Private/MaterialResourceProgress.cpp

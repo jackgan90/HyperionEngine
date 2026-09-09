@@ -102,6 +102,7 @@ struct FRenderBatchLimits
 {
 	std::size_t MaxItems = 4096;
 	std::size_t MaxChunks = 512;
+	// Instance payload caches use this byte budget; non-owning planning metadata is bounded by MaxItems.
 	std::size_t MaxBytes = 16 * 1024 * 1024;
 };
 
@@ -115,7 +116,7 @@ public:
 	void Register(std::unique_ptr<IRenderBatchStrategy> InStrategy);
 	std::shared_ptr<const FRenderBatchPlan> Build(const FRenderSceneSnapshot& InSnapshot, bool bInEnabled = true);
 	void Clear();
-	// Scene invalidation releases plan parameter owners even when no later family is rendered.
+	// Explicitly discard cached grouping; prepared numeric inputs never keep native source leases alive.
 	void InvalidatePlans();
 	bool HasCustomStrategies() const;
 

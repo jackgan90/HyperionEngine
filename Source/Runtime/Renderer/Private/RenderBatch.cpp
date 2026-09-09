@@ -104,6 +104,10 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildFresh(const FR
 	auto& P = *this;
 	HYP_PERF_SCOPE_C(Detail, BuildFreshBatchPlan);
 	auto Result = std::make_shared<FRenderBatchPlan>();
+	if (bInEnabled)
+	{
+		PrepareInputs(InSnapshot, Result->Statistics);
+	}
 	const auto Depth = BatchDepth(InSnapshot);
 	std::multimap<std::size_t, FBatchGroup> Groups;
 	FSharedBatchValueCache Shared;
@@ -193,9 +197,21 @@ std::shared_ptr<const FRenderBatchPlan> FRenderBatchSystem::Build(const FRenderS
 		}
 	}
 	P.Retire(InSnapshot);
+	P.CurrentInputs.clear();
+	if (P.CurrentInputs.capacity() > P.Limits.MaxItems)
+	{
+		P.CurrentInputs.shrink_to_fit();
+	}
 	HYP_PERF_PLOT(Render, BatchPlanReuses, double(Result->Statistics.PlanReuses));
+	HYP_PERF_PLOT(Render, BatchPreparedInputBuilds, double(Result->Statistics.PreparedInputBuilds));
+	HYP_PERF_PLOT(Render, BatchPreparedInputReuses, double(Result->Statistics.PreparedInputReuses));
+	HYP_PERF_PLOT(Render, BatchInstanceContractBuilds, double(Result->Statistics.InstanceContractBuilds));
+	Result->Statistics.CachedInputs = P.Prepared.size();
+	Result->Statistics.CachedInputBytes = P.PreparedMetadataBytes;
 	Result->Statistics.CachedChunks = P.Chunks.size();
 	Result->Statistics.CachedBytes = P.ChunkBytes + P.Packing.ByteSize();
+	HYP_PERF_PLOT(Render, BatchCachedInputs, double(Result->Statistics.CachedInputs));
+	HYP_PERF_PLOT(Render, BatchCachedInputBytes, double(Result->Statistics.CachedInputBytes));
 	Result->Statistics.PlanningMilliseconds =
 	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
 	return Result;
@@ -209,6 +225,12 @@ void FRenderBatchSystem::Clear()
 	Impl->RecentItems.clear();
 	Impl->Chunks.clear();
 	Impl->RecentChunks.clear();
+	Impl->Contracts.clear();
+	Impl->Prepared.clear();
+	Impl->RecentPrepared.clear();
+	Impl->CurrentInputs.clear();
+	Impl->PreparedMetadataBytes = 0;
+	Impl->PreparedCursor.reset();
 	Impl->ChunkBytes = 0;
 	Impl->Plans.clear();
 	Impl->PlanItems = 0;

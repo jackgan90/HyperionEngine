@@ -4,6 +4,58 @@
 
 namespace Hyperion::InstanceTests
 {
+FRenderSceneSnapshot Snapshot(FFixture& InFixture, std::size_t InCount)
+{
+	FRenderSceneSnapshot Result;
+	Result.View = InFixture.View;
+	Result.DepthFormat = ERHIDepthFormat::D32S8;
+	for (std::size_t Index = 0; Index < InCount; ++Index)
+	{
+		FRenderItem Item;
+		Item.State.Resource = InFixture.Resource;
+		Item.State.Surface = InFixture.Resource->GetMaterial(0);
+		Item.Primitive = {99, static_cast<std::uint32_t>(Index), 1};
+		Item.Group = Index;
+		Item.LocalItemId = 0;
+		Item.Lifetime = std::make_shared<int>(0);
+		Item.Context.Scopes[static_cast<std::size_t>(EMaterialScope::Object)] = {{99, 1, {Index}}, Item.Lifetime};
+		Item.Context.ObjectParameters = {
+		    {"Placement",
+		     FMaterialValue::Float(FVec4{-.75f + float(Index % 4) * .5f, -.45f + float(Index / 4) * .9f, 0, 1})}};
+		const auto Compiled = Item.State.Surface->GetCompiled();
+		Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(ResolveMaterialBindingContext(
+		    Item.State.Surface->GetSnapshot(), *Compiled, Compiled->GetPass(), Item.Context));
+		Result.Items.PushBack(std::move(Item));
+	}
+	return Result;
+}
+
+std::vector<FPassCommands> Prepare(FFixture& InFixture, FRenderBatchSystem& InBatches, FRenderSceneSnapshot InSnapshot)
+{
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              InSnapshot.Batches = InBatches.Build(InSnapshot);
+	                                              }));
+	std::vector<FColorPass> Passes;
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Rhi, 0},
+	                                              [&]
+	                                              {
+		                                              Passes =
+		                                                  InFixture.Session->GetResources().BuildPasses(InSnapshot);
+	                                              }));
+	FRenderGraph Graph;
+	FColorPass Clear;
+	Clear.Commands.Name = "Clear planning";
+	Clear.Load = EColorLoad::Clear;
+	Graph.Add(std::move(Clear));
+	for (auto& Pass : Passes)
+	{
+		Graph.Add(std::move(Pass));
+	}
+	return Graph.Compile();
+}
+
 FMaterialValue Payload(float InRed)
 {
 	FMaterialValue Value;

@@ -35,6 +35,60 @@ public:
 		std::vector<std::size_t> Indices;
 	};
 
+	// Identity-only proof of the local pages and overlay mask. It does not retain parameter/resource values.
+	class FLocalIdentity
+	{
+	public:
+		bool Matches(const TMaterialParameterTable& InTable) const
+		{
+			if (Count != InTable.Count || !bShared || !InTable.Shared || Indices != InTable.Shared->Indices)
+			{
+				return false;
+			}
+			for (std::size_t Index = 0; Index < Pages.size(); ++Index)
+			{
+				const auto& Page = InTable.GetPage(Index);
+				if (Pages[Index].Owner.owner_before(Page) || Page.owner_before(Pages[Index].Owner) ||
+				    Pages[Index].Revision != Page->Revision)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+	private:
+		friend class TMaterialParameterTable;
+
+		struct FLocalPage
+		{
+			std::weak_ptr<const void> Owner;
+			std::uint64_t Revision{};
+		};
+
+		std::size_t Count{};
+		bool bShared{};
+		std::vector<FLocalPage> Pages;
+		std::vector<std::size_t> Indices;
+	};
+
+	FLocalIdentity GetLocalIdentity() const
+	{
+		FLocalIdentity Result;
+		Result.Count = Count;
+		Result.bShared = bool(Shared);
+		if (Shared)
+		{
+			Result.Indices = Shared->Indices;
+		}
+		for (std::size_t Index = 0; Index < Count; Index += PageSize)
+		{
+			const auto& Page = GetPage(Index / PageSize);
+			Result.Pages.push_back({Page, Page->Revision});
+		}
+		return Result;
+	}
+
 	void Reset(std::size_t InSize, const TValue& InValue = {})
 	{
 		Shared.reset();
@@ -49,7 +103,7 @@ public:
 		for (std::size_t Index = 0; Index < Count; Index += PageSize)
 		{
 			auto Page = std::make_shared<FPage>();
-			Page->fill(InValue);
+			Page->Values.fill(InValue);
 			GetPage(Index / PageSize) = std::move(Page);
 		}
 	}
@@ -74,7 +128,7 @@ public:
 		{
 			return *Shared->Values[InIndex];
 		}
-		return (*GetPage(InIndex / PageSize))[InIndex % PageSize];
+		return GetPage(InIndex / PageSize)->Values[InIndex % PageSize];
 	}
 
 	void Set(std::size_t InIndex, TValue InValue)
@@ -129,7 +183,8 @@ private:
 		{
 			Page = std::make_shared<FPage>(*Page);
 		}
-		(*Page)[InIndex % PageSize] = std::move(InValue);
+		Page->Values[InIndex % PageSize] = std::move(InValue);
+		++Page->Revision;
 	}
 
 	void MaterializeShared()
@@ -145,7 +200,13 @@ private:
 	}
 
 	static constexpr std::size_t PageSize = 8;
-	using FPage = std::array<TValue, PageSize>;
+
+	struct FPage
+	{
+		std::array<TValue, PageSize> Values;
+		std::uint64_t Revision{};
+	};
+
 	std::array<std::shared_ptr<FPage>, 4> InlinePages;
 	std::vector<std::shared_ptr<FPage>> OverflowPages;
 	std::size_t Count{};

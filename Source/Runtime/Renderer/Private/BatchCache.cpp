@@ -95,7 +95,7 @@ std::shared_ptr<const FRenderBatchCandidate> FRenderBatchSystem::FImpl::Describe
 	{
 		auto& Entry = Existing->second;
 		const bool bSameValues =
-		    Entry.Values.lock() == InItem.ResolvedParameters && Entry.Shared.lock() == InItem.SharedParameters;
+		    Entry.Values.lock() == InItem.ResolvedParameters && SameBatchOwner(Entry.Shared, InItem.SharedParameters);
 		const bool bSameResources =
 		    bSameValues || (InItem.ResolvedParameters->ResourceIdentity &&
 		                    Entry.Resources.lock() == InItem.ResolvedParameters->ResourceIdentity);
@@ -141,66 +141,28 @@ std::shared_ptr<const FRenderBatchCandidate> FRenderBatchSystem::FImpl::Describe
 	return Result;
 }
 
-namespace
-{
-std::vector<std::shared_ptr<const FMaterialValue>> InstanceValues(const FRenderSceneSnapshot& InSnapshot,
-                                                                  const FRenderBatch& InBatch)
-{
-	std::vector<std::shared_ptr<const FMaterialValue>> Result;
-	for (const auto Index : InBatch.Items)
-	{
-		const auto& Item = InSnapshot.Items[Index];
-		const auto Program = Item.State.Surface->GetCompiled();
-		for (const auto& Binding : Program->GetPass(InSnapshot.View.Usage, "Instance").Bindings)
-		{
-			if (Binding.InstanceStride)
-			{
-				for (const auto& Member : Binding.Members)
-				{
-					Result.push_back(Item.GetMaterialValue(Member.ParameterIndex));
-				}
-			}
-		}
-	}
-	return Result;
-}
-
-bool SameValues(const std::vector<std::shared_ptr<const FMaterialValue>>& InA,
-                const std::vector<std::shared_ptr<const FMaterialValue>>& InB)
-{
-	return InA.size() == InB.size() && std::equal(InA.begin(), InA.end(), InB.begin(),
-	                                              [](const auto& InLeft, const auto& InRight)
-	                                              {
-		                                              return SameMaterialValue(InLeft, InRight);
-	                                              });
-}
-} // namespace
-
 std::shared_ptr<const FInstanceBatchData> FRenderBatchSystem::FImpl::Data(const FRenderSceneSnapshot& InSnapshot,
                                                                           const FRenderBatch& InBatch,
                                                                           FRenderBatchStats& OutStats)
 {
 	HYP_PERF_SCOPE_C(Detail, PrepareBatchInstanceData);
-	const auto& First = InSnapshot.Items[InBatch.Items.front()];
-	const auto Program = First.State.Surface->GetCompiled();
-	const auto& Pass = Program->GetPass(InSnapshot.View.Usage, "Instance");
-	const auto Layout = DescribeMaterialLayout(Pass);
-	std::vector<FBatchItemKey> Members;
+	const auto Key = BatchItemKey(InSnapshot, InSnapshot.Items[InBatch.Items.front()]);
+	const auto Existing = Chunks.find(Key);
 	bool bStable = true;
 	for (const auto Index : InBatch.Items)
 	{
 		const auto& Item = InSnapshot.Items[Index];
-		Members.push_back(BatchItemKey(InSnapshot, Item));
-		bStable &= Item.LocalItemId.has_value() && bool(Item.Lifetime);
+		bStable &= Item.LocalItemId.has_value() && bool(Item.Lifetime) && bool(CurrentInputs[Index]);
 	}
-	auto Values = InstanceValues(InSnapshot, InBatch);
-	const auto Key = Members.front();
-	const auto Existing = Chunks.find(Key);
 	if (bStable && Existing != Chunks.end())
 	{
 		auto& Entry = Existing->second;
-		if (Entry.Members == Members && Entry.Vertex == Pass.Vertex.CacheKey && Entry.Pixel == Pass.Pixel.CacheKey &&
-		    Entry.Layout == Layout && Entry.Data->IsLive() && SameValues(Entry.Values, Values))
+		if (Entry.Members.size() == InBatch.Items.size() && Entry.Data->IsLive() &&
+		    std::equal(Entry.Members.begin(), Entry.Members.end(), InBatch.Items.begin(),
+		               [&](const auto& InMember, auto InIndex)
+		               {
+			               return InMember.Get() == CurrentInputs[InIndex].get();
+		               }))
 		{
 			++OutStats.ReusedChunks;
 			Entry.Access = Access;
@@ -210,12 +172,8 @@ std::shared_ptr<const FInstanceBatchData> FRenderBatchSystem::FImpl::Data(const 
 	}
 	auto Result = Packing.Pack(InSnapshot, InBatch.Items, OutStats);
 	++OutStats.RebuiltChunks;
-	std::size_t Bytes = sizeof(FChunkEntry) + Result->ByteSize() + Members.capacity() * sizeof(FBatchItemKey) +
-	                    Values.capacity() * sizeof(std::shared_ptr<const FMaterialValue>);
-	for (const auto& Value : Values)
-	{
-		Bytes += Value ? MaterialValueStorageBytes(*Value) : 0;
-	}
+	const std::size_t Bytes =
+	    sizeof(FChunkEntry) + Result->ByteSize() + InBatch.Items.size() * sizeof(FPreparedReference);
 	if (Existing != Chunks.end())
 	{
 		EraseChunk(Existing);
@@ -223,14 +181,24 @@ std::shared_ptr<const FInstanceBatchData> FRenderBatchSystem::FImpl::Data(const 
 	const auto ChunkBudget = Limits.MaxBytes / 2;
 	if (bStable && Limits.MaxChunks && Bytes <= ChunkBudget)
 	{
-		while (!RecentChunks.empty() && (Chunks.size() >= Limits.MaxChunks || ChunkBytes + Bytes > ChunkBudget))
+		while (Chunks.size() >= Limits.MaxChunks)
 		{
 			EraseChunk(Chunks.find(RecentChunks.front()));
 			++OutStats.Evictions;
 		}
+		ReserveChunkBytes(Bytes, OutStats);
+		FChunkEntry Entry;
+		Entry.Members.reserve(InBatch.Items.size());
+		for (const auto Index : InBatch.Items)
+		{
+			Entry.Members.push_back(CurrentInputs[Index]);
+		}
+		Entry.Data = Result;
+		Entry.Bytes = Bytes;
+		Entry.Access = Access;
 		RecentChunks.push_back(Key);
-		Chunks.emplace(Key, FChunkEntry{std::move(Members), Pass.Vertex.CacheKey, Pass.Pixel.CacheKey, Layout,
-		                                std::move(Values), Result, Bytes, Access, std::prev(RecentChunks.end())});
+		Entry.Recent = std::prev(RecentChunks.end());
+		Chunks.emplace(Key, std::move(Entry));
 		ChunkBytes += Bytes;
 	}
 	return Result;
@@ -243,6 +211,15 @@ void FRenderBatchSystem::FImpl::EraseChunk(std::map<FBatchItemKey, FChunkEntry>:
 	Chunks.erase(InEntry);
 }
 
+void FRenderBatchSystem::FImpl::ReserveChunkBytes(std::size_t InBytes, FRenderBatchStats& OutStats)
+{
+	while (!Chunks.empty() && ChunkBytes + InBytes > Limits.MaxBytes / 2)
+	{
+		EraseChunk(Chunks.find(RecentChunks.front()));
+		++OutStats.Evictions;
+	}
+}
+
 void FRenderBatchSystem::FImpl::RetireExpired()
 {
 	HYP_PERF_SCOPE_C(Detail, RetireBatchFamily);
@@ -251,13 +228,20 @@ void FRenderBatchSystem::FImpl::RetireExpired()
 	              {
 		              return InEntry.second.expired();
 	              });
+	std::erase_if(Contracts,
+	              [](const auto& InEntry)
+	              {
+		              return InEntry.second->Program.expired();
+	              });
+	CollectPrepared();
 	Packing.Collect();
 	for (auto It = Plans.begin(); It != Plans.end();)
 	{
 		if (std::any_of(It->second.Inputs.begin(), It->second.Inputs.end(),
 		                [](const auto& InItem)
 		                {
-			                return InItem.Lifetime.expired();
+			                const auto* Input = InItem.Input.Get();
+			                return !Input || Input->Lifetime.expired();
 		                }))
 		{
 			PlanItems -= It->second.Inputs.size();
@@ -272,6 +256,11 @@ void FRenderBatchSystem::FImpl::RetireExpired()
 	{
 		if (It->second.Lifetime.expired())
 		{
+			const auto Input = Prepared.find(It->first);
+			if (Input != Prepared.end() && Input->second.Input->Lifetime.expired())
+			{
+				ErasePrepared(Input);
+			}
 			RecentItems.erase(It->second.Recent);
 			It = Items.erase(It);
 		}

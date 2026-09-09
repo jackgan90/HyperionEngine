@@ -7,46 +7,20 @@ namespace Hyperion
 {
 bool FRenderBatchSystem::FImpl::FPlanItem::Matches(const FRenderItem& InItem, bool bInSharedRefresh) const
 {
-	if (!InItem.PreparationError.empty() || InItem.Primitive != Primitive || InItem.LocalItemId != LocalId ||
-	    !InItem.Lifetime || Lifetime.lock() != InItem.Lifetime || Resource.lock() != InItem.State.Resource ||
-	    Surface.lock() != InItem.State.Surface || Section != InItem.State.Section ||
-	    bMirrored != (Determinant(InItem.State.World) < 0) || Dynamic != InItem.DynamicState)
+	const auto* PreparedInput = Input.Get();
+	if (!PreparedInput || !PreparedInput->MatchesState(InItem))
 	{
 		return false;
 	}
 	if (Values.lock() == InItem.ResolvedParameters)
 	{
-		if (Shared.lock() == InItem.SharedParameters)
+		if (SameBatchOwner(Shared, InItem.SharedParameters))
 		{
 			return true;
 		}
-		if (!bInSharedRefresh)
-		{
-			return false;
-		}
-		for (const auto Index : InstanceParameters)
-		{
-			if (!SameMaterialValue(ParameterValues[Index], InItem.GetMaterialValue(Index)))
-			{
-				return false;
-			}
-		}
-		return true;
+		return bInSharedRefresh && PreparedInput->MatchesInstances(InItem);
 	}
-	if (!bInSharedRefresh || !InItem.ResolvedParameters || !InItem.ResolvedParameters->ResourceIdentity ||
-	    Resources.lock() != InItem.ResolvedParameters->ResourceIdentity ||
-	    !ParameterValues.SharesLocalValues(InItem.ResolvedParameters->Values))
-	{
-		return false;
-	}
-	for (const auto Index : InstanceParameters)
-	{
-		if (!SameMaterialValue(ParameterValues[Index], InItem.GetMaterialValue(Index)))
-		{
-			return false;
-		}
-	}
-	return true;
+	return bInSharedRefresh && PreparedInput->MatchesValues(InItem);
 }
 
 std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRenderSceneSnapshot& InSnapshot)
@@ -82,7 +56,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRe
 			    [&](const auto InIndex)
 			    {
 				    return Entry.Inputs[InIndex].Values.lock() != InSnapshot.Items[InIndex].ResolvedParameters ||
-				           Entry.Inputs[InIndex].Shared.lock() != InSnapshot.Items[InIndex].SharedParameters;
+				           !SameBatchOwner(Entry.Inputs[InIndex].Shared, InSnapshot.Items[InIndex].SharedParameters);
 			    });
 			if (bChanged)
 			{
@@ -144,45 +118,18 @@ void FRenderBatchSystem::FImpl::CachePlan(const FRenderSceneSnapshot& InSnapshot
 	Entry.Depth = InSnapshot.DepthFormat;
 	Entry.Access = Access;
 	Entry.Statistics = InPlan.Statistics;
-	for (const auto& Item : InSnapshot.Items)
+	Entry.Inputs.reserve(CurrentInputs.size());
+	for (std::size_t Index = 0; Index < CurrentInputs.size(); ++Index)
 	{
-		if (!Item.LocalItemId || !Item.Lifetime || !Item.State.Surface || !Item.State.Resource ||
-		    !Item.ResolvedParameters || !Item.PreparationError.empty())
+		const auto& Item = InSnapshot.Items[Index];
+		const auto& Input = CurrentInputs[Index];
+		if (!Input || !Item.LocalItemId || !Item.Lifetime)
 		{
 			return;
 		}
-		FPlanItem Input{Item.Primitive,
-		                *Item.LocalItemId,
-		                Item.Lifetime,
-		                Item.State.Resource,
-		                Item.State.Surface,
-		                Item.ResolvedParameters,
-		                Item.ResolvedParameters->Values,
-		                Item.ResolvedParameters->ResourceIdentity};
-		Input.Section = Item.State.Section;
-		Input.bMirrored = Determinant(Item.State.World) < 0;
-		Input.Dynamic = Item.DynamicState;
-		Input.Shared = Item.SharedParameters;
-		if (Item.SharedParameters)
-		{
-			Input.ParameterValues.SetShared(Item.SharedParameters->Values);
-		}
-		const auto Program = Item.State.Surface->GetCompiled();
-		if (const auto* Pass = Program->FindInstancePass(InSnapshot.View.Usage))
-		{
-			for (const auto& Binding : Pass->Bindings)
-			{
-				if (Binding.InstanceStride)
-				{
-					for (const auto& Member : Binding.Members)
-					{
-						Input.InstanceParameters.push_back(Member.ParameterIndex);
-					}
-				}
-			}
-		}
-		Entry.Inputs.push_back(std::move(Input));
+		Entry.Inputs.push_back({Input, Item.ResolvedParameters, Item.SharedParameters});
 	}
+
 	for (const auto& Batch : InPlan.Batches)
 	{
 		if (Batch.Items.size() > 1 && !Batch.Instances)

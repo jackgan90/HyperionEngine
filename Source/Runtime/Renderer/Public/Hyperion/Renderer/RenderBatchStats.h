@@ -37,9 +37,14 @@ struct FRenderBatchStats
 	std::uint64_t GpuReuses{};
 	std::uint64_t CompatibilityReuses{};
 	std::uint64_t CompatibilityBuilds{};
+	std::uint64_t InstanceContractBuilds{};
+	std::uint64_t PreparedInputBuilds{};
+	std::uint64_t PreparedInputReuses{};
 	std::uint64_t PlanReuses{};
 	std::uint64_t PacketReuses{};
 	std::uint64_t Evictions{};
+	std::size_t CachedInputs{};
+	std::size_t CachedInputBytes{}; // Estimate of count-bounded weak planning metadata, separate from payload bytes.
 	std::size_t CachedChunks{};
 	std::size_t CachedBytes{};
 	double PlanningMilliseconds{};

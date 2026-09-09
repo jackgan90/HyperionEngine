@@ -155,7 +155,8 @@ void FViewerApplication::SaveBenchmark()
 	       "shadow_material_ms,shadow_plan_ms,shadow_prepare_ms";
 	Output << ",plan_reuses,material_ms,native_lists_created,native_list_resets,pipeline_binds,geometry_binds,dynamic_"
 	          "binds,shared_material_updates,item_preparation_reuses,item_storage_reuses,collection_reuses,"
-	          "view_preparation_reuses,packed_records,reused_records,assembled_blocks,reused_blocks,assembled_bytes"
+	          "view_preparation_reuses,packed_records,reused_records,assembled_blocks,reused_blocks,assembled_bytes,"
+	          "batch_input_builds,batch_input_reuses,batch_contract_builds,batch_cached_inputs,batch_input_bytes"
 	       << '\n'
 	       << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
@@ -200,7 +201,9 @@ void FViewerApplication::SaveBenchmark()
 		}
 		Output << ',' << SharedUpdates << ',' << ItemReuses << ',' << StorageReuses << ',' << CollectionReuses << ','
 		       << PreparationReuses << ',' << Packing.PackedRecords << ',' << Packing.ReusedRecords << ','
-		       << Packing.AssembledBlocks << ',' << Packing.ReusedBlocks << ',' << Packing.AssembledBytes;
+		       << Packing.AssembledBlocks << ',' << Packing.ReusedBlocks << ',' << Packing.AssembledBytes << ','
+		       << Packing.PreparedInputBuilds << ',' << Packing.PreparedInputReuses << ','
+		       << Packing.InstanceContractBuilds << ',' << Packing.CachedInputs << ',' << Packing.CachedInputBytes;
 		Output << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}

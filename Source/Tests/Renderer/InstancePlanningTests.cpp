@@ -3,57 +3,6 @@
 
 namespace Hyperion::InstanceTests
 {
-FRenderSceneSnapshot Snapshot(FFixture& InFixture, std::size_t InCount)
-{
-	FRenderSceneSnapshot Result;
-	Result.View = InFixture.View;
-	Result.DepthFormat = ERHIDepthFormat::D32S8;
-	for (std::size_t Index = 0; Index < InCount; ++Index)
-	{
-		FRenderItem Item;
-		Item.State.Resource = InFixture.Resource;
-		Item.State.Surface = InFixture.Resource->GetMaterial(0);
-		Item.Primitive = {99, static_cast<std::uint32_t>(Index), 1};
-		Item.Group = Index;
-		Item.LocalItemId = 0;
-		Item.Lifetime = std::make_shared<int>(0);
-		Item.Context.Scopes[static_cast<std::size_t>(EMaterialScope::Object)] = {{99, 1, {Index}}, Item.Lifetime};
-		Item.Context.ObjectParameters = {
-		    {"Placement",
-		     FMaterialValue::Float(FVec4{-.75f + float(Index % 4) * .5f, -.45f + float(Index / 4) * .9f, 0, 1})}};
-		const auto Compiled = Item.State.Surface->GetCompiled();
-		Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(ResolveMaterialBindingContext(
-		    Item.State.Surface->GetSnapshot(), *Compiled, Compiled->GetPass(), Item.Context));
-		Result.Items.PushBack(std::move(Item));
-	}
-	return Result;
-}
-
-std::vector<FPassCommands> Prepare(FFixture& InFixture, FRenderBatchSystem& InBatches, FRenderSceneSnapshot InSnapshot)
-{
-	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
-	                                              [&]
-	                                              {
-		                                              InSnapshot.Batches = InBatches.Build(InSnapshot);
-	                                              }));
-	std::vector<FColorPass> Passes;
-	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Rhi, 0},
-	                                              [&]
-	                                              {
-		                                              Passes =
-		                                                  InFixture.Session->GetResources().BuildPasses(InSnapshot);
-	                                              }));
-	FRenderGraph Graph;
-	FColorPass Clear;
-	Clear.Commands.Name = "Clear planning";
-	Clear.Load = EColorLoad::Clear;
-	Graph.Add(std::move(Clear));
-	for (auto& Pass : Passes)
-	{
-		Graph.Add(std::move(Pass));
-	}
-	return Graph.Compile();
-}
 
 namespace
 {
@@ -208,12 +157,82 @@ void CheckSharedRefresh(FFixture& InFixture, bool bInSeparate)
 	                                              }));
 }
 
+void CheckPreparedInputs(FFixture& InFixture)
+{
+	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities());
+	auto Items = Snapshot(InFixture, 12);
+	const auto All = Plan(InFixture, Batches, Items);
+	HYP_CHECK(All->Statistics.PreparedInputBuilds == 12 && All->Statistics.InstanceContractBuilds == 1);
+	const auto Hidden = Items.Items[0];
+	Items.Items.Erase(Items.Items.begin(), Items.Items.begin() + 1);
+	const auto Visible = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Visible->Statistics.PreparedInputBuilds == 0 && Visible->Statistics.PreparedInputReuses == 11);
+	HYP_CHECK(Visible->Statistics.InstanceContractBuilds == 0);
+	// A new resolved object with identical effective instance values keeps the same prepared payload.
+	Items.Items[4].ResolvedParameters =
+	    std::make_shared<const FResolvedMaterialParameters>(*Items.Items[4].ResolvedParameters);
+	const auto Republished = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Republished->Statistics.PreparedInputBuilds == 0 && Republished->Statistics.ReusedChunks == 3);
+	const auto Placement = Items.Items[4].State.Surface->GetCompiled()->Interface.Schema->Find("Placement").Index;
+	auto Equivalent = std::make_shared<FResolvedMaterialParameters>(*Items.Items[4].ResolvedParameters);
+	Equivalent->Values.Set(Placement,
+	                       std::make_shared<const FMaterialValue>(*Items.Items[4].GetMaterialValue(Placement)));
+	Items.Items[4].ResolvedParameters = std::move(Equivalent);
+	const auto EqualValue = Plan(InFixture, Batches, Items);
+	HYP_CHECK(EqualValue->Statistics.PreparedInputBuilds == 0 && EqualValue->Statistics.ReusedChunks == 3);
+	auto Values = std::make_shared<FResolvedMaterialParameters>(*Items.Items[4].ResolvedParameters);
+	Values->Values.Set(Placement, std::make_shared<const FMaterialValue>(FMaterialValue::Float(FVec4{.5f, 0, 0, 1})));
+	Items.Items[4].ResolvedParameters = Values;
+	const auto Changed = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Changed->Statistics.PreparedInputBuilds == 1 && Changed->Statistics.PreparedInputReuses == 10);
+	HYP_CHECK(Changed->Statistics.RebuiltChunks == 1 && Changed->Statistics.ReusedChunks == 2);
+	Items.Items.PushBack(Hidden);
+	const auto Returned = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Returned->Statistics.PreparedInputBuilds == 0 && Returned->Statistics.PreparedInputReuses == 12);
+	++Items.Items[0].Primitive.Generation;
+	HYP_CHECK(Plan(InFixture, Batches, Items)->Statistics.PreparedInputBuilds == 1);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Batches.Clear();
+	                                              }));
+}
+
+void CheckRemovedOverlay(FFixture& InFixture)
+{
+	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities());
+	auto Items = Snapshot(InFixture, 8);
+	PublishShared(Items, "Placement", FMaterialValue::Float(FVec4{.5f, 0, 0, 1}), true);
+	const auto Original = Plan(InFixture, Batches, Items);
+	std::weak_ptr<const FMaterialSharedParameters> Old = Items.Items[0].SharedParameters;
+	for (auto& Item : Items.Items)
+	{
+		Item.SharedParameters.reset();
+	}
+	HYP_CHECK(Old.expired());
+	const auto Removed = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Removed->Statistics.PlanReuses == 0 && Removed->Statistics.RebuiltChunks == 2);
+	for (const auto& Batch : Removed->Batches)
+	{
+		const auto Expected = PackInstanceBatch(Items, Batch.Items);
+		HYP_CHECK(*Expected->Constants[0].Bytes == *Batch.Instances->Constants[0].Bytes);
+	}
+	HYP_CHECK(*Original->Batches[0].Instances->Constants[0].Bytes !=
+	          *Removed->Batches[0].Instances->Constants[0].Bytes);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Batches.Clear();
+	                                              }));
+}
+
 void CheckBudget(FFixture& InFixture)
 {
 	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities(), {3, 1, 65536});
 	auto Items = Snapshot(InFixture, 8);
 	auto Result = Plan(InFixture, Batches, Items);
-	HYP_CHECK(Result->Statistics.CachedChunks <= 1 && Result->Statistics.CachedBytes <= 65536);
+	HYP_CHECK(Result->Statistics.CachedInputs <= 3 && Result->Statistics.CachedChunks <= 1 &&
+	          Result->Statistics.CachedBytes <= 65536);
 	Result = Plan(InFixture, Batches, Items);
 	HYP_CHECK(Result->Statistics.CachedChunks <= 1 && Result->Statistics.Evictions > 0);
 	Items.Items.Erase(Items.Items.begin(), Items.Items.begin() + 4);
@@ -229,9 +248,114 @@ void CheckBudget(FFixture& InFixture)
 	                                              }));
 }
 
+void CheckPlanningMetadataBudget(FFixture& InFixture)
+{
+	struct FCase
+	{
+		std::size_t Count;
+		std::size_t Bytes;
+		bool bDevice;
+		bool bOrdering;
+	};
+
+	// Stable numeric proofs must survive payload pressure, including ordinary-only plans with no payload at all.
+	for (const auto Case : {FCase{2048, 16 * 1024 * 1024, true, true}, FCase{1024, 65536, false, true},
+	                        FCase{1024, 65536, true, false}, FCase{1024, 0, false, true}})
+	{
+		auto Caps = InFixture.Device->GetCapabilities();
+		Caps.Features[static_cast<std::size_t>(ERHIFeature::InstancedDrawing)].bEnabled = Case.bDevice;
+		FRenderBatchLimits Limits;
+		Limits.MaxBytes = Case.Bytes;
+		FRenderBatchSystem Batches(InFixture.Tasks, Caps, Limits);
+		auto Items = Snapshot(InFixture, Case.Count);
+		if (!Case.bOrdering)
+		{
+			auto Description = Items.Items[0].State.Surface->GetSnapshot()->Definition->GetDescription();
+			Description.Passes[0].bAllowBatchReordering = false;
+			const auto Surface = InFixture.Material(std::move(Description));
+			const auto Program = Surface->GetCompiled();
+			for (auto& Item : Items.Items)
+			{
+				Item.State.Surface = Surface;
+				Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(
+				    ResolveMaterialBindingContext(Surface->GetSnapshot(), *Program, Program->GetPass(), Item.Context));
+			}
+		}
+		const auto First = Plan(InFixture, Batches, Items);
+		HYP_CHECK(First->Statistics.CachedInputs == Case.Count && First->Statistics.CachedBytes <= Case.Bytes);
+		for (unsigned Iteration = 0; Iteration < 4; ++Iteration)
+		{
+			const auto Reused = Plan(InFixture, Batches, Items);
+			HYP_CHECK(Reused->Statistics.PlanReuses == 1 && Reused->Statistics.PreparedInputBuilds == 0);
+			HYP_CHECK(Reused->Statistics.RebuiltChunks == 0 && Reused->Statistics.CachedBytes <= Case.Bytes);
+			HYP_CHECK(Reused->Statistics.CachedInputs == Case.Count && Reused->Statistics.CachedInputBytes > 0);
+			HYP_CHECK(Reused->Batches.size() == First->Batches.size());
+		}
+		InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+		                                              [&]
+		                                              {
+			                                              Batches.Clear();
+		                                              }));
+	}
+}
+
+void CheckWeakInstanceValues(FFixture& InFixture)
+{
+	auto Caps = InFixture.Device->GetCapabilities();
+	Caps.Features[static_cast<std::size_t>(ERHIFeature::InstancedDrawing)].bEnabled = false;
+	FRenderBatchSystem Batches(InFixture.Tasks, Caps, {16, 16, 0});
+	auto Items = Snapshot(InFixture, 4);
+	const auto Placement = Items.Items[0].State.Surface->GetCompiled()->Interface.Schema->Find("Placement").Index;
+	const std::weak_ptr<const FMaterialValue> Old = Items.Items[0].GetMaterialValue(Placement);
+	Plan(InFixture, Batches, Items);
+	{
+		auto Values = std::make_shared<FResolvedMaterialParameters>(*Items.Items[0].ResolvedParameters);
+		Values->Values.Set(Placement, {});
+		Items.Items[0].ResolvedParameters = std::move(Values);
+	}
+	HYP_CHECK(Old.expired()); // Neither a plan nor its preparation may retain the obsolete numeric tree.
+	const auto Missing = Plan(InFixture, Batches, Items);
+	HYP_CHECK(Missing->Statistics.PreparedInputBuilds == 1 && Missing->Statistics.PreparedInputReuses == 3);
+	HYP_CHECK(Missing->Statistics.CachedInputs == 4 && Missing->Statistics.CachedBytes == 0);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Batches.Clear();
+	                                              }));
+}
+
+void CheckOrphanedPreparations(FFixture& InFixture)
+{
+	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities());
+	std::size_t Inputs{};
+	{
+		auto Items = Snapshot(InFixture, 128);
+		for (auto& Item : Items.Items)
+		{
+			Item.State.Section = UINT32_MAX; // Input values can be prepared, but no candidate can be cached.
+		}
+		const auto Failed = Plan(InFixture, Batches, Items);
+		Inputs = Failed->Statistics.CachedInputs;
+		HYP_CHECK(Inputs == 128 &&
+		          Failed->Statistics.Fallbacks[static_cast<std::size_t>(ERenderBatchFallback::Preparation)] == 128);
+	}
+	const auto Empty = Snapshot(InFixture, 0);
+	HYP_CHECK(Plan(InFixture, Batches, Empty)->Statistics.CachedInputs < Inputs);
+	for (unsigned Frame = 0; Frame < 4; ++Frame)
+	{
+		Inputs = Plan(InFixture, Batches, Empty)->Statistics.CachedInputs;
+	}
+	HYP_CHECK(Inputs == 0);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Batches.Clear();
+	                                              }));
+}
+
 void CheckPlanValueRetirement(FFixture& InFixture, bool bInInvalidate)
 {
-	// Isolate the sixteen-item plan budget from the separate packed record/block byte budgets.
+	// Isolate the sixteen-item metadata budget from the separate instance chunk/record/block byte budgets.
 	FRenderBatchSystem Batches(InFixture.Tasks, InFixture.Device->GetCapabilities(), {16, 16, 262144});
 	std::weak_ptr<const FMaterialTextureSource> Released;
 	FRenderSceneSnapshot Retained;
@@ -267,7 +391,7 @@ void CheckPlanValueRetirement(FFixture& InFixture, bool bInInvalidate)
 	else
 	{
 		Retained = {};
-		HYP_CHECK(!Released.expired());
+		HYP_CHECK(Released.expired()); // Prepared plans retain only weak value and local-page identities.
 		auto OtherView = Snapshot(InFixture, 8);
 		++OtherView.View.Identity;
 		Plan(InFixture, Batches, OtherView);
@@ -338,7 +462,12 @@ void RunInstancePlanningTests(FFixture& InFixture)
 	CheckStrategies(InFixture);
 	CheckSharedRefresh(InFixture, false);
 	CheckSharedRefresh(InFixture, true);
+	CheckPreparedInputs(InFixture);
+	CheckRemovedOverlay(InFixture);
 	CheckBudget(InFixture);
+	CheckPlanningMetadataBudget(InFixture);
+	CheckWeakInstanceValues(InFixture);
+	CheckOrphanedPreparations(InFixture);
 	CheckPlanValueRetirement(InFixture, false);
 	CheckPlanValueRetirement(InFixture, true);
 	CheckCompatibility(InFixture);
