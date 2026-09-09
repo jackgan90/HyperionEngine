@@ -32,6 +32,9 @@ struct FSceneVisibilityStats
 	std::size_t CollectionReuses{};
 	std::size_t PreparationReuses{};
 	std::size_t PacketReuses{};
+	std::size_t ItemPreparationReuses{};
+	std::size_t ItemStorageReuses{};
+	std::size_t SharedMaterialUpdates{};
 	double UpdateMilliseconds{};
 	double QueryMilliseconds{};
 	double MaterialMilliseconds{};

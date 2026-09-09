@@ -28,6 +28,11 @@ struct FRenderBatchStats
 	std::uint64_t ReusedChunks{};
 	std::uint64_t RebuiltChunks{};
 	std::uint64_t PackedBytes{};
+	std::uint64_t PackedRecords{};
+	std::uint64_t ReusedRecords{};
+	std::uint64_t AssembledBlocks{};
+	std::uint64_t ReusedBlocks{};
+	std::uint64_t AssembledBytes{};
 	std::uint64_t UploadBytes{};
 	std::uint64_t GpuReuses{};
 	std::uint64_t CompatibilityReuses{};

@@ -13,6 +13,7 @@ struct FRenderSession::FMaterialState
 	{
 		FMaterialScopeInput Scope;
 		FMaterialInputValues Values;
+		std::uint64_t AccessFrame{};
 	};
 
 	struct FPreparedView
@@ -23,6 +24,7 @@ struct FRenderSession::FMaterialState
 		std::uint32_t Dependencies{};
 		bool bValid{};
 		bool bDepthSorted{};
+		std::uint64_t AccessFrame{};
 	};
 
 	std::uint64_t Identity{};

@@ -12,8 +12,8 @@ FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRen
 {
 	FPreparedSceneDraws Result;
 	Result.bDepth = bool(InSnapshot.View.DepthTarget);
-	Result.Packets.resize(InSnapshot.Items.size());
-	Result.Srgb.resize(InSnapshot.Items.size());
+	Result.Packets.resize(InSnapshot.Items.Size());
+	Result.Srgb.resize(InSnapshot.Items.Size());
 	for (const auto& Item : InSnapshot.Items)
 	{
 		if (Item.PreparationError.empty() && Item.State.Surface &&
@@ -30,7 +30,7 @@ FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRen
 		PrepareBatchedDraws(InOwner, InSnapshot, Result);
 		return Result;
 	}
-	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{
 		const auto& Item = InSnapshot.Items[Index];
 		try
@@ -87,7 +87,7 @@ FColorPass NewPass(const FRenderSceneSnapshot& InSnapshot, const FPreparedSceneD
 std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPreparedSceneDraws InPrepared)
 {
 	std::vector<FColorPass> Passes;
-	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{
 		const auto& Item = InSnapshot.Items[Index];
 		const auto Failed = InPrepared.Failures.find({Item.Primitive.Scene, Item.Group});
@@ -164,7 +164,7 @@ std::vector<FColorPass> FRenderResourcePreparation::BuildPasses(const FRenderSce
 		    Owner.MaterialConstants ? Owner.MaterialConstants->Statistics() : FMaterialConstantStats{};
 		auto Prepared = PrepareDraws(Owner, InSnapshot);
 		auto& Stats = Prepared.Statistics;
-		for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+		for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 		{
 			const auto& Item = InSnapshot.Items[Index];
 			if (Prepared.Failures.contains({Item.Primitive.Scene, Item.Group}))

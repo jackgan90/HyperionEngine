@@ -3,20 +3,23 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <source_location>
 #include <thread>
 
 using namespace Hyperion;
 
 namespace
 {
-void WaitFor(const std::function<bool()>& InCondition)
+void WaitFor(const std::function<bool()>& InCondition,
+             const std::source_location& InLocation = std::source_location::current())
 {
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 	while (!InCondition())
 	{
 		if (std::chrono::steady_clock::now() > Deadline)
 		{
-			throw std::runtime_error("Material session readiness timed out");
+			throw std::runtime_error("Material session readiness timed out at line " +
+			                         std::to_string(InLocation.line()));
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
@@ -255,7 +258,8 @@ void CheckChangingObjectRetirement(FTaskSystem& InTasks, FRenderSession& InSessi
 	WaitFor(
 	    [&]
 	    {
-		    return InSession.GetResources().Statistics().Constants.CachedBlocks <= 6;
+		    // The independent second view retains one additional View block.
+		    return InSession.GetResources().Statistics().Constants.CachedBlocks <= 7;
 	    });
 	HYP_CHECK(Binding.GetStatus().Revision == InState.Revision);
 	InTasks.Wait(Binding.Remove());
@@ -325,6 +329,45 @@ void CheckFamilyValidation(FTaskSystem& InTasks, FRenderSession& InSession, FRen
 			                              bRejected = true;
 		                              }
 		                              HYP_CHECK(bRejected);
+	                              }));
+}
+
+void CheckIndependentFamilies(FTaskSystem& InTasks, FRenderSession& InSession, std::array<FRenderView, 2> InViews)
+{
+	for (unsigned Iteration = 0; Iteration < 3; ++Iteration)
+	{
+		const auto Frame = InSession.FreezeFrame();
+		InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+		                              [&]
+		                              {
+			                              for (std::size_t Index = 0; Index < InViews.size(); ++Index)
+			                              {
+				                              FRenderGraph Graph;
+				                              InSession.BuildViews(Graph, std::span(&InViews[Index], 1), Frame,
+				                                                   100 + Index);
+				                              if (Iteration)
+				                              {
+					                              HYP_CHECK(InSession.Statistics().PreparationReuses == 1);
+					                              HYP_CHECK(InSession.Statistics().PacketReuses == 1);
+				                              }
+			                              }
+		                              }));
+	}
+	for (auto& View : InViews)
+	{
+		View.ViewProjection = Scale({.98f, .98f, 1});
+		View.Eye.X += .02f;
+	}
+	Build(InTasks, InSession, InViews);
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              for (const auto& View : InSession.ViewStatistics())
+		                              {
+			                              HYP_CHECK(View.Visibility.ItemPreparationReuses == 2);
+			                              HYP_CHECK(View.Visibility.ItemStorageReuses == 2);
+			                              HYP_CHECK(View.Visibility.SharedMaterialUpdates == 2);
+		                              }
 	                              }));
 }
 
@@ -566,6 +609,7 @@ void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	HYP_CHECK(Session.GetResources().Statistics().Constants.Packs == Warm.Constants.Packs + 1);
 	HYP_CHECK(Session.GetResources().Statistics().Materials.SetsCreated == Warm.Materials.SetsCreated);
 	CheckMovingViews(Tasks, Session, InSwapchain, Views);
+	CheckIndependentFamilies(Tasks, Session, Views);
 	auto Required = Session.GetResources().RequestMaterial(Surface(Semantics, true));
 	WaitFor(
 	    [&]

@@ -16,6 +16,21 @@ bool FRenderBatchSystem::FImpl::FPlanItem::Matches(const FRenderItem& InItem, bo
 	}
 	if (Values.lock() == InItem.ResolvedParameters)
 	{
+		if (Shared.lock() == InItem.SharedParameters)
+		{
+			return true;
+		}
+		if (!bInSharedRefresh)
+		{
+			return false;
+		}
+		for (const auto Index : InstanceParameters)
+		{
+			if (!SameMaterialValue(ParameterValues[Index], InItem.GetMaterialValue(Index)))
+			{
+				return false;
+			}
+		}
 		return true;
 	}
 	if (!bInSharedRefresh || !InItem.ResolvedParameters || !InItem.ResolvedParameters->ResourceIdentity ||
@@ -26,7 +41,7 @@ bool FRenderBatchSystem::FImpl::FPlanItem::Matches(const FRenderItem& InItem, bo
 	}
 	for (const auto Index : InstanceParameters)
 	{
-		if (!SameMaterialValue(ParameterValues[Index], InItem.ResolvedParameters->Values[Index]))
+		if (!SameMaterialValue(ParameterValues[Index], InItem.GetMaterialValue(Index)))
 		{
 			return false;
 		}
@@ -43,7 +58,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRe
 		return {};
 	}
 	auto& Entry = Existing->second;
-	if (Entry.Depth != InSnapshot.DepthFormat || Entry.Inputs.size() != InSnapshot.Items.size() ||
+	if (Entry.Depth != InSnapshot.DepthFormat || Entry.Inputs.size() != InSnapshot.Items.Size() ||
 	    !std::equal(Entry.Inputs.begin(), Entry.Inputs.end(), InSnapshot.Items.begin(),
 	                [this](const auto& InCached, const auto& InItem)
 	                {
@@ -62,24 +77,28 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRe
 		FRenderBatch Batch{Members};
 		if (Members.size() > 1)
 		{
-			const bool bChanged = std::any_of(Members.begin(), Members.end(),
-			                                  [&](const auto InIndex)
-			                                  {
-				                                  return Entry.Inputs[InIndex].Values.lock() !=
-				                                         InSnapshot.Items[InIndex].ResolvedParameters;
-			                                  });
+			const bool bChanged = std::any_of(
+			    Members.begin(), Members.end(),
+			    [&](const auto InIndex)
+			    {
+				    return Entry.Inputs[InIndex].Values.lock() != InSnapshot.Items[InIndex].ResolvedParameters ||
+				           Entry.Inputs[InIndex].Shared.lock() != InSnapshot.Items[InIndex].SharedParameters;
+			    });
 			if (bChanged)
 			{
-				const auto Shared = InSnapshot.Items[Members.front()].ResolvedParameters->Values.GetSharedIdentity();
+				const auto SharedIdentity = [](const FRenderItem& InItem) -> const void*
+				{
+					return InItem.SharedParameters ? static_cast<const void*>(InItem.SharedParameters.get())
+					                               : InItem.ResolvedParameters->Values.GetSharedIdentity();
+				};
+				const auto Shared = SharedIdentity(InSnapshot.Items[Members.front()]);
 				// Local values and resources match the old proof. Identical overlays preserve equality within
 				// this group, including shared constants; differing override masks require full regrouping.
-				if (!Shared ||
-				    !std::all_of(Members.begin(), Members.end(),
-				                 [&](const auto InIndex)
-				                 {
-					                 return InSnapshot.Items[InIndex].ResolvedParameters->Values.GetSharedIdentity() ==
-					                        Shared;
-				                 }))
+				if (!Shared || !std::all_of(Members.begin(), Members.end(),
+				                            [&](const auto InIndex)
+				                            {
+					                            return SharedIdentity(InSnapshot.Items[InIndex]) == Shared;
+				                            }))
 				{
 					return {};
 				}
@@ -100,6 +119,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRe
 	for (std::size_t Index = 0; Index < Entry.Inputs.size(); ++Index)
 	{
 		Entry.Inputs[Index].Values = InSnapshot.Items[Index].ResolvedParameters;
+		Entry.Inputs[Index].Shared = InSnapshot.Items[Index].SharedParameters;
 	}
 	Result->Statistics.PlanReuses = 1;
 	Entry.Access = Access;
@@ -108,6 +128,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRe
 
 void FRenderBatchSystem::FImpl::CachePlan(const FRenderSceneSnapshot& InSnapshot, const FRenderBatchPlan& InPlan)
 {
+	HYP_PERF_SCOPE_C(Detail, CacheBatchPlan);
 	const auto Key = std::pair{InSnapshot.View.Identity, InSnapshot.View.Usage};
 	const auto Existing = Plans.find(Key);
 	if (Existing != Plans.end())
@@ -115,7 +136,7 @@ void FRenderBatchSystem::FImpl::CachePlan(const FRenderSceneSnapshot& InSnapshot
 		PlanItems -= Existing->second.Inputs.size();
 		Plans.erase(Existing);
 	}
-	if (InSnapshot.Items.empty() || InSnapshot.Items.size() > Limits.MaxItems)
+	if (InSnapshot.Items.IsEmpty() || InSnapshot.Items.Size() > Limits.MaxItems)
 	{
 		return;
 	}
@@ -141,6 +162,11 @@ void FRenderBatchSystem::FImpl::CachePlan(const FRenderSceneSnapshot& InSnapshot
 		Input.Section = Item.State.Section;
 		Input.bMirrored = Determinant(Item.State.World) < 0;
 		Input.Dynamic = Item.DynamicState;
+		Input.Shared = Item.SharedParameters;
+		if (Item.SharedParameters)
+		{
+			Input.ParameterValues.SetShared(Item.SharedParameters->Values);
+		}
 		const auto Program = Item.State.Surface->GetCompiled();
 		if (const auto* Pass = Program->FindInstancePass(InSnapshot.View.Usage))
 		{

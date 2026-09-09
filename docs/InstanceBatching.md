@@ -53,15 +53,15 @@ Model 的 Object/Surface 数值使用实例数组，View/Scene 数据仍为共�
 - texture 来源/版本/编码，buffer 来源/版本/视图范围/stride，完整 sampler 值和资源数组顺序。
 - 非实例 block 的有效数值。实例 block 内的不同数值不阻止合批。
 
-哈希只定位候选，全量比较决定兼容。仅显式允许重排、启用 depth test/write、无 blend/stencil 的 opaque/masked pass 可使用当前策略。其他 item 构成排序屏障；不会跨越 transparent、overlay 或其他有序工作。每个 view/usage 独立规划，不跨 view 合成 draw。
+`FRenderBatchSignature` 引用不可变的 `FRenderBatchStructure` 与共享数值列表。结构包含上述几何、程序、布局、状态和资源信息，只有经过完整比较才合并引用；哈希只定位候选。当前 view 的共享更新覆盖全部非实例数值成员时，兼容候选还可共享同一数值列表，否则逐项建立并比较有效值。仅显式允许重排、启用 depth test/write、无 blend/stencil 的 opaque/masked pass 可使用当前策略。其他 item 构成排序屏障；不会跨越 transparent、overlay 或其他有序工作。每个 view/usage 独立规划，不跨 view 合成 draw。
 
 ## 缓存与生命周期
 
 稳定 item 身份为 Scene/Slot/Generation/LocalItemId。匿名 item 可在当前帧合批，但不跨帧复用数据。原语 revision 不是唯一失效依据：实际 emitted item、最终参数、成员顺序、可见集合、布局和资源都参与判断。
 
-系统缓存兼容性描述、完整的静态计划和不可变的紧凑实例记录。成员和数值不变时复用 CPU 数据及 GPU slice；剔除、成员排序或实例值改变时只重新填充受影响的 chunk。共享 View 常量变化不要求重新上传 Object/Surface 实例记录。当前采用紧凑可见列表，没有持久 slot 间接索引。
+系统分别保留兼容性描述、完整计划、已打包单条记录和独立的不可变实例块。记录键验证 shader format、stride、完整成员反射、参数名称/semantic 映射及有效值。成员变化时，已有记录无需重新打包，但当前连续 CBV 数组仍需重新拼装受影响的 block；未变的独立 block 可以继续复用。Object 变更不要求重打包或上传 Surface block。完整记录布局、顺序及值一致时，可以跨 view/兼容 pass 复用 CPU block 与 GPU slice；draw 仍按 view 独立提交。当前没有持久 GPU slot 或可见索引间接寻址。
 
-默认兼容性条目上限 4096；静态计划最多 16 个 view/usage，合计不超过 4096 个输入条目。实例 chunk 最多 512 个，记录及保留数值树按保守估算受 16 MiB 预算限制。GPU instance slice 缓存另有 512 条目/16 MiB 上限。缓存条目不保留 native geometry/texture lease；旧 packet/list/fence 独立保留其引用的 native 页面。`MaterialConstantStats::InstanceBlocks/InstanceBytes` 单独报告实例缓存，原有 `CachedBlocks/CachedBytes` 保持原语义。
+默认兼容性条目及结构弱引用各最多 4096；静态计划最多 16 个 view/usage，合计不超过 4096 个输入条目。CPU 实例历史的 16 MiB 估算预算中，一半用于 whole-chunk history，另一半再均分给已打包记录和独立 block；chunk/block 各最多 512 条，record 最多 4096 条。记录布局关联另外限制为 256 份。估算包括相应数据与保留值树，不代表整个 Renderer 的内存硬上限。GPU instance slice 按不可变 block 字节身份缓存，另有 512 block/16 MiB 对齐 extent 上限。缓存条目不保留 native geometry/texture lease；旧 packet/list/fence 独立保留其引用的 native 页面。`MaterialConstantStats::InstanceBlocks/InstanceBytes` 分别报告缓存的独立 GPU block 数量和对齐 slice extent，原有 `CachedBlocks/CachedBytes` 保持原语义。
 
 发布后的常量字节不被覆盖。删除对象后，过期 owner 触发资源收集；CPU 缓存在下一次规划时清理。关闭 session 时先在 Render 清空批次缓存，再关闭 Scene 和 RHI 资源。失败 Present、取消录制和旧帧仍按已有 fence 退休规则处理。
 
@@ -78,3 +78,5 @@ Render 在剔除和材质求值后创建计划。RHI 预检所有源 item，再�
 `instance_batching` 覆盖 DXIL/SPIR-V/MSL 反射、类型打包、真实 GPU 图像、容量/短切片拒绝、策略独占、资源/状态拆批、缓存预算、成员变化、多视图、整组失败修复与旧帧保留。`scene_moving_camera` 用同一 Viewer 分别开启/关闭合批，检查图像和可见数量一致、draw 显著减少、上传量有界。
 
 Viewer CSV 保留 `frame/frame_ms/scene_draws`，新增可见 item、实例/普通 draw、失败数量、chunk 复用/重建、打包/上传字节、GPU slice 复用以及规划/准备耗时。末尾的 `fallback_disabled/shader/device/ordering/singleton/preparation` 六列分别记录对应原因；界面显示非零原因及数量。回退计数反映规划和准备阶段事件，应使用 `single_draws` 判断最终普通 draw 数。多 view family 的批次事件与耗时累计，缓存存量取最后一次观察值。性能结果及复现命令见 [InstanceBatchPerformance.md](InstanceBatchPerformance.md)。
+
+新增 Viewer CSV 列按整个 view family 汇总：`shared_material_updates`、`item_preparation_reuses`、`item_storage_reuses`、`collection_reuses`、`view_preparation_reuses`，以及 `packed_records`、`reused_records`、`assembled_blocks`、`reused_blocks`、`assembled_bytes`。记录/块计数反映实际进入实例打包缓存的工作；完整计划或 view packet 命中会跳过打包，所以这些计数为零并不代表没有复用。`packed_bytes` 记录新打包记录字节（失败修复路径仍计整次重新打包），`assembled_bytes` 记录拼装连续块复制的字节，GPU 上传另看原有 upload 列。最新增量更新实现与测量见 [IncrementalRenderUpdates.md](IncrementalRenderUpdates.md)。

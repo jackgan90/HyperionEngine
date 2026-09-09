@@ -12,6 +12,7 @@ void RunInstanceCacheTests(FFixture& InFixture)
 	InFixture.Emission->Changed = 6;
 	const auto Changed = InFixture.Build();
 	HYP_CHECK(InFixture.Statistics.Batches.ReusedChunks == 1 && InFixture.Statistics.Batches.RebuiltChunks == 1);
+	HYP_CHECK(InFixture.Statistics.Batches.PackedRecords == 1 && InFixture.Statistics.Batches.ReusedRecords == 3);
 	HYP_CHECK(InFixture.Draw(Changed).Rgba != Pixels.Rgba);
 	HYP_CHECK(InFixture.Draw(Original).Rgba == Pixels.Rgba);
 	HYP_CHECK(InFixture.Draw(Changed).Rgba == InFixture.Draw(InFixture.Build(false)).Rgba);
@@ -20,6 +21,7 @@ void RunInstanceCacheTests(FFixture& InFixture)
 	const auto Hidden = InFixture.Build();
 	HYP_CHECK(InstanceCount(Hidden) == 7 && DrawCount(Hidden) == 2);
 	HYP_CHECK(InFixture.Statistics.Batches.RebuiltChunks == 1);
+	HYP_CHECK(InFixture.Statistics.Batches.PackedRecords == 0 && InFixture.Statistics.Batches.ReusedRecords == 3);
 	HYP_CHECK(InFixture.Draw(Hidden).Rgba == InFixture.Draw(InFixture.Build(false)).Rgba);
 	InFixture.Emission->Hidden.reset();
 	InFixture.Emission->Changed.reset();
@@ -42,5 +44,13 @@ void RunInstanceCacheTests(FFixture& InFixture)
 	const auto Multi = InFixture.Build(true, Views);
 	HYP_CHECK(InstanceCount(Multi) == 16 && DrawCount(Multi) == 4);
 	HYP_CHECK(InFixture.Statistics.Batches.InstancedItems == 16);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    const auto& SecondView = InFixture.Session->ViewStatistics().at(1).Visibility.Batches;
+		    HYP_CHECK(SecondView.ReusedRecords == 8 && SecondView.ReusedBlocks == 2);
+		    HYP_CHECK(SecondView.UploadBytes == 0 && SecondView.GpuReuses == 2);
+	    }));
 }
 } // namespace Hyperion::InstanceTests

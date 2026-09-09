@@ -2,9 +2,12 @@
 #include "Hyperion/Renderer/MaterialProviders.h"
 #include <bit>
 #include <map>
+#include <set>
 
 namespace Hyperion
 {
+struct FSceneItemPreparation;
+
 // Render-owned by the primitive. Replaced on publication; frames receive immutable resolved values.
 struct FMaterialEvaluationCache
 {
@@ -38,10 +41,34 @@ struct FMaterialEvaluationCache
 		FMat4 World;
 		bool bClipSpace{};
 		std::shared_ptr<const FResolvedMaterialParameters> Resolved;
+		std::shared_ptr<const FMaterialSharedParameters> Shared;
+		std::vector<std::size_t> SharedResources;
+		bool bSeparateShared{};
 		std::uint32_t Dependencies{};
 		std::vector<std::size_t> ProviderParameters;
 		std::vector<std::size_t> SharedProviderParameters;
+		std::shared_ptr<const std::vector<std::size_t>> SharedGroup;
+		std::weak_ptr<const FSceneItemPreparation> Preparation;
 		std::uint64_t AccessFrame{};
+
+		bool MatchesEngine(const FMaterialProviderInputs& InInputs, std::uint32_t InIgnoredScopes = 0) const
+		{
+			if (Dependencies & ~InIgnoredScopes & MaterialScopeBit(EMaterialScope::Draw))
+			{
+				return false;
+			}
+			for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
+			{
+				if ((FMaterialResolvedScopes::EngineMask & Dependencies & ~InIgnoredScopes & (1U << Scope)) &&
+				    (Inputs->Scopes[Scope].Key != InInputs.Scopes[Scope].Key ||
+				     Inputs->Scopes[Scope].Lifetime != InInputs.Scopes[Scope].Lifetime ||
+				     Inputs->Values[Scope] != InInputs.Values[Scope]))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
 
 		bool Matches(const FMaterialProviderInputs& InInputs, const FMaterialParameterValues& InObject,
 		             const FMaterialParameterValues& InDraw, const FMat4& InWorld, bool bInClipSpace,
@@ -93,6 +120,8 @@ struct FViewMaterialProviders
 	{
 		std::shared_ptr<const FMaterialValueTable::FSharedValues> Values;
 		std::shared_ptr<const FMaterialDependencyTable::FSharedValues> Dependencies;
+		std::shared_ptr<const FMaterialSharedParameters> Parameters;
+		std::shared_ptr<const std::vector<std::size_t>> Group;
 	};
 
 	struct FRefreshKey
@@ -125,12 +154,15 @@ struct FViewMaterialProviders
 	FMaterialProviderRegistry& Registry;
 	std::map<std::string, FMaterialProvidedValue, std::less<>> Shared;
 	std::map<FRefreshKey, FRefresh, FRefreshOrder> Refreshes;
+	std::map<const std::vector<std::size_t>*, FRefresh> GroupRefreshes;
+	std::set<const void*> ValidatedSharedBases;
 	std::map<std::uint32_t, std::shared_ptr<const FMaterialProviderInputs>> RetainedInputs;
+	FRefresh UncachedRefresh;
 	std::shared_ptr<const FMaterialProviderInputs> RetainInputs(const FMaterialProviderInputs& InInputs,
 	                                                            std::uint32_t InDependencies);
 	FMaterialProvidedValue Evaluate(const FMaterialProviderInputs& InInputs, std::string_view InSemantic);
-	FRefresh PrepareShared(const FMaterialEvaluationCache::FEntry& InEntry, const FCompiledMaterialPass& InPass,
-	                       const FMaterialProviderInputs& InInputs);
+	const FRefresh& PrepareShared(const FMaterialEvaluationCache::FEntry& InEntry, const FCompiledMaterialPass& InPass,
+	                              const FMaterialProviderInputs& InInputs);
 };
 
 void FillMaterialObjectInputs(FMaterialProviderInputs& InInputs, const FRenderItem& InItem,
@@ -141,4 +173,9 @@ bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& 
                                const FMaterialProviderInputs& InInputs, const FRenderResourceService& InResources,
                                const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
                                FViewMaterialProviders& InProviders);
+void PrepareSharedMaterialEligibility(FMaterialEvaluationCache::FEntry& InEntry);
+bool ShareMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& InSnapshot,
+                             const FMaterialProviderInputs& InInputs,
+                             const std::shared_ptr<const FCompiledMaterialDefinition>& InCompiled,
+                             FViewMaterialProviders& InProviders);
 } // namespace Hyperion

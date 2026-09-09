@@ -6,6 +6,17 @@
 
 namespace Hyperion
 {
+FResolvedMaterialParameters ComposeMaterialParameters(const FResolvedMaterialParameters& InLocal,
+                                                      const FMaterialSharedParameters& InShared)
+{
+	auto Result = InLocal;
+	Result.Values.SetShared(InShared.Values);
+	Result.Dependencies.SetShared(InShared.Dependencies);
+	Result.Scopes.ShareEngine(InShared.Scopes);
+	Result.DependenciesMask = InLocal.LocalDependenciesMask | InShared.DependenciesMask;
+	return Result;
+}
+
 namespace
 {
 void ApplyDependencyOverrides(FResolvedMaterialParameters& InResult, const FMaterialParameterSchema& InSchema,
@@ -106,6 +117,7 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
 	{
 		Result.DependenciesMask |= Result.Dependencies[Index];
 	}
+	Result.LocalDependenciesMask = Result.DependenciesMask;
 	return Result;
 }
 } // namespace Hyperion

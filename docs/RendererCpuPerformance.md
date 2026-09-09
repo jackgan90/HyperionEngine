@@ -2,6 +2,8 @@
 
 本轮对应 OpenSpec `optimize-renderer-cpu-submission`，基线为 `144c1e5`。实现顺序为测量基准、材质与批次刷新、D3D12 录制、数据所有权与任务调度。原始分析见本机 [Analysis.md](../out/cpu-analysis-20260909/Analysis.md)。
 
+后续以 `5895bd7` 为基线的共享参数、稳定 item 存储和独立实例块优化，见 [IncrementalRenderUpdates.md](IncrementalRenderUpdates.md)。本页保留上一轮的历史实现与测量条件，不能与后续轮次混作同一组 A/B。
+
 ## 实现
 
 - 材质求值按实际依赖预备参数索引。仅依赖 Global/Frame/Scene/View/Pass 的兼容语义使用同一视图内共享的不可变值覆盖层；Object/Material/Draw、混合依赖、覆盖和默认值仍按各自契约处理。覆盖层是平坦存储，不串联历史帧。

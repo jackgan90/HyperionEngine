@@ -94,6 +94,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 		bool bMirrored{};
 		FDrawPacket Packet;
 		FMaterialConstantState Constants;
+		std::weak_ptr<const FMaterialSharedParameters> Shared;
 	};
 
 	using FDrawKey = std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string, bool>;

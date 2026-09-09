@@ -112,7 +112,16 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	                               SameEngineInputs(*Cached.Snapshot->Frame, *InFrame, Cached.Dependencies);
 	if (!bReuseCollection)
 	{
-		Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(PrepareSceneSnapshot(Scene.Collect(InView, false)));
+		const bool bReuseItems = InSceneRevision && Cached.Snapshot && Cached.bValid &&
+		                         Cached.SceneRevision == *InSceneRevision &&
+		                         Cached.ResourceRevision == InResourceRevision;
+		if (bReuseItems && Cached.Snapshot.use_count() != 1)
+		{
+			Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(*Cached.Snapshot);
+		}
+		Cached.bValid = false;
+		Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(PrepareSceneSnapshot(
+		    Scene.Collect(InView, false, InResourceRevision, bReuseItems ? Cached.Snapshot.get() : nullptr)));
 		Cached.bDepthSorted = HasDepthSortedItems(*Cached.Snapshot);
 	}
 	else if (Cached.Snapshot.use_count() != 1)
@@ -128,8 +137,11 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	Snapshot.Statistics.CollectionReuses = bReuseCollection;
 	Snapshot.Statistics.PreparationReuses = bReusePreparation;
 	Snapshot.Statistics.MaterialMilliseconds = 0;
+	Snapshot.Statistics.SharedMaterialUpdates = 0;
 	if (bReuseCollection)
 	{
+		Snapshot.Statistics.ItemPreparationReuses = Snapshot.Items.Size();
+		Snapshot.Statistics.ItemStorageReuses = Snapshot.Items.Size();
 		Snapshot.Statistics.QueryMilliseconds = 0;
 		Snapshot.Statistics.VisitedNodes = 0;
 		Snapshot.Statistics.GroupTests = 0;
@@ -152,6 +164,11 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	}
 	Cached.SceneRevision = InSceneRevision.value_or(0);
 	Cached.ResourceRevision = InResourceRevision;
+	Cached.AccessFrame = Snapshot.Frame->Frame;
+	if (const auto It = MaterialState->Views.find(InView.Identity); It != MaterialState->Views.end())
+	{
+		It->second.AccessFrame = Snapshot.Frame->Frame;
+	}
 	HYP_PERF_PLOT(Render, SceneCollectionReuses, double(bReuseCollection));
 	HYP_PERF_PLOT(Render, ViewPreparationReuses, double(bReusePreparation));
 	return Cached.Snapshot;

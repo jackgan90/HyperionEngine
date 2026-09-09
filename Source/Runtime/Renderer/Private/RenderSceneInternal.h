@@ -37,7 +37,8 @@ public:
 	            const FRenderPrimitiveFactory& InFactory, std::shared_ptr<FRenderBindingResult> InResult);
 	void Update(std::vector<FRenderPrimitiveUpdate> InUpdates);
 	void Remove(FRenderPrimitiveHandle InHandle);
-	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true);
+	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true, std::uint64_t InResourceRevision = 0,
+	                             FRenderSceneSnapshot* InPrevious = nullptr);
 	FSceneVisibilityStats BeginViews();
 	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;
@@ -52,6 +53,9 @@ private:
 		FBounds Bounds;
 		std::shared_ptr<const void> Lifetime;
 		std::shared_ptr<FMaterialEvaluationCache> EvaluationCache = std::make_shared<FMaterialEvaluationCache>();
+		std::optional<std::vector<FRenderItem>> Collection;
+		std::uint64_t ResourceRevision{};
+		std::vector<FRenderItem> Collect(const FRenderView& InView, std::uint64_t InResourceRevision);
 	};
 
 	FTaskSystem& Tasks;

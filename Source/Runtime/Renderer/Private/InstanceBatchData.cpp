@@ -20,7 +20,7 @@ std::size_t FInstanceBatchData::ByteSize() const
 	std::size_t Result{};
 	for (const auto& Constant : Constants)
 	{
-		Result += Constant.Bytes.size();
+		Result += Constant.Bytes ? Constant.Bytes->size() : 0;
 	}
 	return Result;
 }
@@ -34,7 +34,7 @@ std::shared_ptr<const FInstanceBatchData> PackInstanceBatch(const FRenderSceneSn
 	}
 	auto Result = std::make_shared<FInstanceBatchData>();
 	Result->InstanceCount = static_cast<std::uint32_t>(InItems.size());
-	const auto& First = InSnapshot.Items.at(InItems.front());
+	const auto& First = InSnapshot.Items.At(InItems.front());
 	const auto Program = First.State.Surface->GetCompiled();
 	const auto& Pass = Program->GetPass(InSnapshot.View.Usage, "Instance");
 	for (std::uint32_t Slot = 0; Slot < Pass.Bindings.size(); ++Slot)
@@ -49,24 +49,29 @@ std::shared_ptr<const FInstanceBatchData> PackInstanceBatch(const FRenderSceneSn
 			throw std::invalid_argument("Instance batch exceeds shader capacity");
 		}
 		FInstanceConstantBlock Block{Slot};
-		Block.Bytes.reserve(InItems.size() * Binding.InstanceStride);
+		auto Packed = std::make_shared<std::vector<std::byte>>();
+		Packed->reserve(InItems.size() * Binding.InstanceStride);
 		for (const auto Index : InItems)
 		{
-			const auto& Item = InSnapshot.Items.at(Index);
+			const auto& Item = InSnapshot.Items.At(Index);
 			const auto ItemProgram = Item.State.Surface->GetCompiled();
 			const auto& ItemBinding = ItemProgram->GetPass(InSnapshot.View.Usage, "Instance").Bindings.at(Slot);
 			if (ItemBinding.InstanceStride != Binding.InstanceStride)
 			{
 				throw std::invalid_argument("Incompatible instance record layout");
 			}
-			const auto Bytes = PackMaterialConstants(ItemBinding, Item.ResolvedParameters->Values);
-			Block.Bytes.insert(Block.Bytes.end(), Bytes.begin(), Bytes.end());
+			const auto Values = Item.SharedParameters
+			                        ? ComposeMaterialParameters(*Item.ResolvedParameters, *Item.SharedParameters)
+			                        : *Item.ResolvedParameters;
+			const auto Bytes = PackMaterialConstants(ItemBinding, Values.Values);
+			Packed->insert(Packed->end(), Bytes.begin(), Bytes.end());
 		}
+		Block.Bytes = std::move(Packed);
 		Result->Constants.push_back(std::move(Block));
 	}
 	for (const auto Index : InItems)
 	{
-		const auto& Item = InSnapshot.Items.at(Index);
+		const auto& Item = InSnapshot.Items.At(Index);
 		Result->Owners.push_back(Item.Lifetime ? Item.Lifetime : Item.State.Resource);
 	}
 	return Result;

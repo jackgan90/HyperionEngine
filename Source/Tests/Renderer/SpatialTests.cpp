@@ -123,24 +123,24 @@ void CheckCollection()
 	};
 	Collect();
 	HYP_CHECK(Snapshot.Statistics.Groups == 3 && Snapshot.Statistics.CollectedPrimitives == 2 &&
-	          Snapshot.Items.size() == 6);
+	          Snapshot.Items.Size() == 6);
 	HYP_CHECK(Snapshot.Items[0].Primitive == Visible.GetHandle() && Snapshot.Items[3].Primitive == Unknown.GetHandle());
 	State.World = Identity();
 	State.Revision = 2;
 	Tasks.Wait(Client.Update({{Group[0].GetHandle(), State}, {Group[1].GetHandle(), State}}));
 	Collect();
-	HYP_CHECK(Snapshot.Statistics.CollectedPrimitives == 4 && Snapshot.Items.size() == 12);
+	HYP_CHECK(Snapshot.Statistics.CollectedPrimitives == 4 && Snapshot.Items.Size() == 12);
 	const auto Old = Snapshot;
 	Tasks.Wait(Client.RemoveBatch(Group));
 	Collect();
-	HYP_CHECK(Snapshot.Items.size() == 6 && Old.Items.size() == 12);
+	HYP_CHECK(Snapshot.Items.Size() == 6 && Old.Items.Size() == 12);
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 	                          [&]
 	                          {
 		                          FRenderView Other;
 		                          Other.ViewProjection = Translation({-30, 0, 0});
-		                          HYP_CHECK(Client.Collect(Other).Items.size() == 3);
-		                          HYP_CHECK(Client.Collect({}).Items.size() == 6);
+		                          HYP_CHECK(Client.Collect(Other).Items.Size() == 3);
+		                          HYP_CHECK(Client.Collect({}).Items.Size() == 6);
 	                          }));
 	Client.Close();
 }

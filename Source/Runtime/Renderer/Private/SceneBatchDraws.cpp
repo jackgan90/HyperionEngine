@@ -148,7 +148,7 @@ void PrepareBatchedDraws(FRenderResourceCoordinator& InOwner, const FRenderScene
                          FPreparedSceneDraws& OutPrepared)
 {
 	OutPrepared.Statistics = InSnapshot.Batches->Statistics;
-	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{
 		const auto& Item = InSnapshot.Items[Index];
 		try

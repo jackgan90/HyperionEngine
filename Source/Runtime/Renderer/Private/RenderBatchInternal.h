@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/RenderBatch.h"
+#include "InstanceDataCache.h"
 #include <list>
 #include <map>
 #include <tuple>
@@ -11,6 +12,19 @@ using FBatchItemKey =
 
 FBatchItemKey BatchItemKey(const FRenderSceneSnapshot& InSnapshot, const FRenderItem& InItem);
 
+// Temporary per-view sharing. Only parameters covered by one complete shared overlay may use this proof.
+struct FSharedBatchValueCache
+{
+	struct FEntry
+	{
+		std::shared_ptr<const FMaterialSharedParameters> Update;
+		std::shared_ptr<const FRenderBatchValues> Values;
+	};
+
+	std::map<std::pair<const FCompiledMaterialPass*, const FMaterialSharedParameters*>, FEntry> Entries;
+	std::shared_ptr<const FRenderBatchValues> Get(const FCompiledMaterialPass& InPass, const FRenderItem& InItem);
+};
+
 struct FRenderBatchSystem::FImpl
 {
 	struct FItemEntry
@@ -18,11 +32,12 @@ struct FRenderBatchSystem::FImpl
 		std::weak_ptr<const FResolvedMaterialParameters> Values;
 		std::weak_ptr<const void> Resources;
 		std::weak_ptr<const void> Lifetime;
-		std::shared_ptr<const FRenderBatchCandidate> Candidate;
+		std::shared_ptr<FRenderBatchCandidate> Candidate;
 		std::uint32_t Section{};
 		bool bMirrored{};
 		std::optional<FMaterialDynamicState> Dynamic;
 		std::list<FBatchItemKey>::iterator Recent;
+		std::weak_ptr<const FMaterialSharedParameters> Shared;
 	};
 
 	struct FChunkEntry
@@ -53,6 +68,7 @@ struct FRenderBatchSystem::FImpl
 		bool bMirrored{};
 		std::optional<FMaterialDynamicState> Dynamic;
 		bool Matches(const FRenderItem& InItem, bool bInSharedRefresh) const;
+		std::weak_ptr<const FMaterialSharedParameters> Shared;
 	};
 
 	struct FPlanEntry
@@ -67,8 +83,10 @@ struct FRenderBatchSystem::FImpl
 	FTaskSystem& Tasks;
 	FRHICapabilities Capabilities;
 	FRenderBatchLimits Limits;
+	FInstanceDataCache Packing;
 	std::vector<std::unique_ptr<IRenderBatchStrategy>> Strategies;
 	std::map<FBatchItemKey, FItemEntry> Items;
+	std::multimap<std::size_t, std::weak_ptr<const FRenderBatchStructure>> Structures;
 	std::list<FBatchItemKey> RecentItems;
 	std::map<FBatchItemKey, FChunkEntry> Chunks;
 	std::list<FBatchItemKey> RecentChunks;
@@ -80,14 +98,17 @@ struct FRenderBatchSystem::FImpl
 	std::array<std::uint64_t, 3> RetiredFamily{};
 
 	FImpl(FTaskSystem& InTasks, FRHICapabilities InCapabilities, FRenderBatchLimits InLimits)
-	    : Tasks(InTasks), Capabilities(std::move(InCapabilities)), Limits(InLimits)
+	    : Tasks(InTasks), Capabilities(std::move(InCapabilities)), Limits(InLimits),
+	      Packing({InLimits.MaxItems, InLimits.MaxChunks, InLimits.MaxBytes / 2})
 	{
 		Strategies.push_back(std::make_unique<FInstanceBatchStrategy>());
 	}
 
 	std::shared_ptr<const FRenderBatchCandidate> Describe(const FRenderSceneSnapshot& InSnapshot,
 	                                                      const FRenderItem& InItem, FGraphicsTarget InTarget,
-	                                                      FRenderBatchStats& OutStats);
+	                                                      FRenderBatchStats& OutStats,
+	                                                      FSharedBatchValueCache& InShared);
+	void CanonicalizeStructure(FRenderBatchSignature& InSignature);
 	std::shared_ptr<const FInstanceBatchData> Data(const FRenderSceneSnapshot& InSnapshot, const FRenderBatch& InBatch,
 	                                               FRenderBatchStats& OutStats);
 	std::shared_ptr<FRenderBatchPlan> BuildFresh(const FRenderSceneSnapshot& InSnapshot, bool bInEnabled);

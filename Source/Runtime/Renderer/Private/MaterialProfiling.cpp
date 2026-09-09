@@ -21,6 +21,7 @@ FMaterialPreparationProfile::~FMaterialPreparationProfile()
 		ProfilePlot("MaterialEvaluationReuses", double(Reuses));
 		ProfilePlot("MaterialEvaluationRefreshes", double(Refreshes));
 		ProfilePlot("MaterialEvaluationFull", double(Full));
+		ProfilePlot("MaterialSharedUpdates", double(SharedUpdates));
 		ProfilePlot("ProviderReuses", double(After.Reuses - Before.Reuses));
 		ProfilePlot("ProviderCachedEntries", double(After.CachedEntries));
 		ProfilePlot("ProviderCachedValueBytes", double(After.CachedValueBytes));

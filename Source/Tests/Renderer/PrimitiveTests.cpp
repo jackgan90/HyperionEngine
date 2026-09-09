@@ -67,7 +67,7 @@ void CheckOwnedMessages(FTaskSystem& InTasks)
 	Gate.set_value();
 	InTasks.Wait(Blocker);
 	auto First = Snapshot(InTasks, Client);
-	HYP_CHECK(First.Items.size() == 1);
+	HYP_CHECK(First.Items.Size() == 1);
 	HYP_CHECK(First.Items[0].State.World.Values[12] == 1);
 	State.Revision = 2;
 	InTasks.Wait(Client.Update({{Binding.GetHandle(), State}}));
@@ -75,7 +75,7 @@ void CheckOwnedMessages(FTaskSystem& InTasks)
 	HYP_CHECK(First.Items[0].State.World.Values[12] == 1);
 	InTasks.Wait(Binding.Remove());
 	InTasks.Wait(Binding.Remove());
-	HYP_CHECK(Snapshot(InTasks, Client).Items.empty());
+	HYP_CHECK(Snapshot(InTasks, Client).Items.IsEmpty());
 	HYP_CHECK(First.Items[0].State.World.Values[12] == 1);
 	HYP_CHECK(Binding.GetStatus().State == ERenderPrimitiveStatus::Removed);
 }
@@ -91,7 +91,7 @@ void CheckBatchesAndIdentity(FTaskSystem& InTasks)
 	State.World = Translation({4, 0, 0});
 	InTasks.Wait(Client.Update({{A.GetHandle(), State}, {B.GetHandle(), State}}));
 	auto Both = Snapshot(InTasks, Client);
-	HYP_CHECK(Both.Items.size() == 2);
+	HYP_CHECK(Both.Items.Size() == 2);
 	HYP_CHECK(Both.Items[0].State.World.Values[12] == 4 && Both.Items[1].State.World.Values[12] == 4);
 	State.Revision = 3;
 	auto Invalid = State;
@@ -138,7 +138,7 @@ void CheckPublishedRemovalGeneration(FTaskSystem& InTasks)
 	auto Next = Client.Create({});
 	HYP_CHECK(Replacement.GetHandle().Slot != Next.GetHandle().Slot);
 	const auto Current = Snapshot(InTasks, Client);
-	HYP_CHECK(Current.Items.size() == 2 && Current.Items[0].Primitive != Current.Items[1].Primitive);
+	HYP_CHECK(Current.Items.Size() == 2 && Current.Items[0].Primitive != Current.Items[1].Primitive);
 }
 
 void CheckFailureAndClose(FTaskSystem& InTasks)
@@ -164,8 +164,8 @@ void CheckFailureAndClose(FTaskSystem& InTasks)
 		                            });
 		InTasks.Wait(Client.Flush());
 		HYP_CHECK(Failed.GetStatus().Error == "Expected factory failure");
-		HYP_CHECK(Snapshot(InTasks, Client).Items.size() == 2);
-		HYP_CHECK(Snapshot(InTasks, Client).Items.size() == 2);
+		HYP_CHECK(Snapshot(InTasks, Client).Items.Size() == 2);
+		HYP_CHECK(Snapshot(InTasks, Client).Items.Size() == 2);
 		InTasks.Wait(Failed.Remove());
 		Client.Close(); // No GPU frame was ever produced.
 		HYP_CHECK(Destroyed == 2);

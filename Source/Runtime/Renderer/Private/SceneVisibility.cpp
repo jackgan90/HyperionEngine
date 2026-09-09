@@ -1,5 +1,5 @@
 #include "Hyperion/Core/Profiling.h"
-#include "Hyperion/Renderer/RenderResources.h"
+#include "SceneItemPreparation.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -11,6 +11,7 @@ namespace
 {
 bool IsItemVisible(const FRenderItem& InItem, const FRenderView& InView, const FBounds& InBounds, bool bInConservative)
 {
+	HYP_PERF_SCOPE_C(Detail, CullSceneItem);
 	if (InView.CullingMode == ESceneCullingMode::None || (bInConservative && !InItem.State.bConservativeBounds))
 	{
 		return true;
@@ -36,6 +37,54 @@ float SortDepth(const FRenderItem& InItem, const FRenderView& InView, const FBou
 }
 } // namespace
 
+bool PrepareSceneItem(FRenderItem& InItem)
+{
+	if (!InItem.State.Resource)
+	{
+		return false;
+	}
+	const auto Description = InItem.State.Resource->GetDescription();
+	if (!Description || InItem.State.Section >= Description->Sections.size())
+	{
+		InItem.PreparationError = Description ? "Invalid primitive section" : "Geometry resources are not ready";
+		return false;
+	}
+	if (!InItem.State.Surface)
+	{
+		InItem.State.Surface = InItem.State.Resource->GetMaterial(InItem.State.Section);
+	}
+	const auto Program = InItem.State.Surface ? InItem.State.Surface->GetCompiled() : nullptr;
+	auto Result = std::make_shared<FSceneItemPreparation>();
+	Result->Program = Program && InItem.State.Surface->GetStatus() == ERenderMaterialStatus::Ready ? Program : nullptr;
+	Result->GeometryBounds = Description->Geometries[Description->Sections[InItem.State.Section].Geometry].Bounds;
+	if (InItem.State.Surface)
+	{
+		const auto& Passes = InItem.State.Surface->GetSnapshot()->Definition->GetDescription().Passes;
+		Result->bRequiresConservativeBounds = std::any_of(Passes.begin(), Passes.end(),
+		                                                  [](const auto& InPass)
+		                                                  {
+			                                                  return InPass.bRequiresConservativeBounds;
+		                                                  });
+	}
+	if (!Result->Program)
+	{
+		InItem.Preparation = std::move(Result);
+		return false;
+	}
+	try
+	{
+		InItem.Context.ObjectParameters = GetPrimitiveMaterialOverrides(InItem.State, *Program->Interface.Schema);
+	}
+	catch (const std::exception&)
+	{
+		Result->Program.reset();
+		InItem.Preparation = std::move(Result);
+		return false; // Preserve ordinary material preparation's per-item failure publication.
+	}
+	InItem.Preparation = std::move(Result);
+	return true;
+}
+
 FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 {
 	HYP_PERF_SCOPE_C(Render, PrepareSceneSnapshot);
@@ -48,53 +97,30 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 	};
 
 	std::vector<FOrderedItem> Ordered;
-	Ordered.reserve(InSnapshot.Items.size());
-	std::map<const FRenderResource*, std::shared_ptr<const FRenderResourceDesc>> Descriptions;
-	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+	Ordered.reserve(InSnapshot.Items.Size());
+	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{
 		auto& Item = InSnapshot.Items[Index];
 		if (!Item.State.bVisible || !Item.State.Resource)
 		{
 			continue;
 		}
-		auto [It, bInserted] = Descriptions.try_emplace(Item.State.Resource.get());
-		if (bInserted)
+		if (!Item.Preparation)
 		{
-			It->second = Item.State.Resource->GetDescription();
+			PrepareSceneItem(Item);
 		}
-		const auto& Desc = It->second;
-		if (!Desc)
+		if (!Item.Preparation)
 		{
-			Item.PreparationError = "Geometry resources are not ready";
 			Ordered.push_back({Index, 0, 0});
 			continue;
 		}
-		if (Item.State.Section >= Desc->Sections.size())
-		{
-			Item.PreparationError = "Invalid primitive section";
-			Ordered.push_back({Index, 0, 0});
-			continue;
-		}
-		const auto& Section = Desc->Sections[Item.State.Section];
-		const auto& Geometry = Desc->Geometries[Section.Geometry];
-		if (!Item.State.Surface)
-		{
-			Item.State.Surface = Item.State.Resource->GetMaterial(Item.State.Section);
-		}
+		const auto& Preparation = *Item.Preparation;
 		const auto Surface = Item.State.Surface ? Item.State.Surface->GetSnapshot() : nullptr;
 		if (InSnapshot.View.bSkipMissingPass && (!Surface || !Surface->Definition->HasPass(InSnapshot.View.Usage)))
 		{
 			continue;
 		}
-		const bool bConservative = InSnapshot.View.CullingMode != ESceneCullingMode::None &&
-		                           !Item.State.bConservativeBounds && Surface &&
-		                           std::any_of(Surface->Definition->GetDescription().Passes.begin(),
-		                                       Surface->Definition->GetDescription().Passes.end(),
-		                                       [](const auto& InPass)
-		                                       {
-			                                       return InPass.bRequiresConservativeBounds;
-		                                       });
-		if (!IsItemVisible(Item, InSnapshot.View, Geometry.Bounds, bConservative))
+		if (!IsItemVisible(Item, InSnapshot.View, Preparation.GeometryBounds, Preparation.bRequiresConservativeBounds))
 		{
 			continue;
 		}
@@ -102,8 +128,9 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 		                       ? Surface->Definition->GetPass(InSnapshot.View.Usage).Queue
 		                       : EMaterialQueue::Opaque;
 		const unsigned Bucket = Queue == EMaterialQueue::Overlay ? 2 : Queue == EMaterialQueue::Transparent ? 1 : 0;
-		Ordered.push_back({Index, Bucket, SortDepth(Item, InSnapshot.View, Geometry.Bounds, Queue)});
+		Ordered.push_back({Index, Bucket, SortDepth(Item, InSnapshot.View, Preparation.GeometryBounds, Queue)});
 	}
+	HYP_PERF_SCOPE_C(Detail, PublishOrderedSceneItems);
 	std::stable_sort(Ordered.begin(), Ordered.end(),
 	                 [](const FOrderedItem& InA, const FOrderedItem& InB)
 	                 {
@@ -111,14 +138,14 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 		                                               : InA.Queue == 1 && InA.Depth > InB.Depth;
 	                 });
 	// Sort indices so parameter containers move only once, preserving stable queue/depth ordering.
-	std::vector<FRenderItem> Items;
-	Items.reserve(Ordered.size());
+	FRenderItemList Items;
+	Items.Reserve(Ordered.size());
 	for (const auto& Item : Ordered)
 	{
-		Items.push_back(std::move(InSnapshot.Items[Item.Index]));
+		Items.MoveFrom(InSnapshot.Items, Item.Index);
 	}
 	InSnapshot.Items = std::move(Items);
-	InSnapshot.Statistics.VisibleItems = InSnapshot.Items.size();
+	InSnapshot.Statistics.VisibleItems = InSnapshot.Items.Size();
 	return InSnapshot;
 }
 } // namespace Hyperion

@@ -2,6 +2,7 @@
 #include "Hyperion/Materials/MaterialParameters.h"
 #include "Hyperion/RHI/RHIGraphicsState.h"
 #include "Hyperion/Renderer/MaterialFrame.h"
+#include "Hyperion/Renderer/RenderItemList.h"
 #include "Hyperion/Renderer/SceneSpatialIndex.h"
 #include "Hyperion/Scene/Scene.h"
 #include "Hyperion/Tasks/TaskSystem.h"
@@ -14,6 +15,7 @@ class FRenderResource;
 class FRenderMaterial;
 struct FMaterialEvaluationCache;
 struct FRenderBatchPlan;
+struct FSceneItemPreparation;
 
 struct FRenderPrimitiveHandle
 {
@@ -90,12 +92,27 @@ struct FRenderItem
 	FMaterialParameterValues DrawInputs;               // Semantic provider inputs; DrawParameters are name overrides.
 	std::shared_ptr<FMaterialEvaluationCache> EvaluationCache; // Renderer-owned; collection must not edit it.
 	std::shared_ptr<const FResolvedMaterialParameters> ResolvedParameters;
+	std::shared_ptr<const FMaterialSharedParameters> SharedParameters;
+	std::shared_ptr<const FSceneItemPreparation> Preparation; // Renderer-owned immutable collection metadata.
+
+	const std::shared_ptr<const FMaterialValue>& GetMaterialValue(std::size_t InIndex) const
+	{
+		if (SharedParameters)
+		{
+			const auto& Value = SharedParameters->Values->Get(InIndex);
+			if (Value)
+			{
+				return *Value;
+			}
+		}
+		return ResolvedParameters->Values[InIndex];
+	}
 };
 
 struct FRenderSceneSnapshot
 {
 	FRenderView View;
-	std::vector<FRenderItem> Items;
+	FRenderItemList Items;
 	FSceneVisibilityStats Statistics;
 	std::shared_ptr<const FMaterialFrameContext> Frame;
 	std::uint64_t Family = 1;

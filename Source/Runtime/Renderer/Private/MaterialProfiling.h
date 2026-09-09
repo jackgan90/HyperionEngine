@@ -14,6 +14,7 @@ struct FMaterialPreparationProfile
 	std::uint64_t Reuses{};
 	std::uint64_t Refreshes{};
 	std::uint64_t Full{};
+	std::uint64_t SharedUpdates{};
 	explicit FMaterialPreparationProfile(FMaterialProviderRegistry& InProviders);
 	~FMaterialPreparationProfile();
 
@@ -31,6 +32,11 @@ struct FMaterialPreparationProfile
 	{
 		Full += bEnabled;
 	}
+
+	void SharedUpdate()
+	{
+		SharedUpdates += bEnabled;
+	}
 #else
 	explicit FMaterialPreparationProfile(FMaterialProviderRegistry&)
 	{
@@ -45,6 +51,10 @@ struct FMaterialPreparationProfile
 	}
 
 	void Evaluated()
+	{
+	}
+
+	void SharedUpdate()
 	{
 	}
 #endif

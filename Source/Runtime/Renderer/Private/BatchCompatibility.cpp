@@ -53,18 +53,21 @@ void ResourceKey(const FMaterialValue& InValue, std::vector<std::uint64_t>& OutW
 
 bool FRenderBatchSignature::operator==(const FRenderBatchSignature& InOther) const
 {
-	if (GeometryIdentity != InOther.GeometryIdentity || GeometryIndex != InOther.GeometryIndex ||
-	    FirstIndex != InOther.FirstIndex || IndexCount != InOther.IndexCount || VertexStride != InOther.VertexStride ||
-	    Topology != InOther.Topology || Attributes != InOther.Attributes || VertexProgram != InOther.VertexProgram ||
-	    PixelProgram != InOther.PixelProgram || State != InOther.State || DynamicState != InOther.DynamicState ||
-	    Target != InOther.Target || Layout != InOther.Layout || Resources != InOther.Resources ||
-	    SharedValues.size() != InOther.SharedValues.size())
+	if (Structure != InOther.Structure && (!Structure || !InOther.Structure || *Structure != *InOther.Structure))
 	{
 		return false;
 	}
-	for (std::size_t Index = 0; Index < SharedValues.size(); ++Index)
+	if (SharedValues == InOther.SharedValues)
 	{
-		if (!SameMaterialValue(SharedValues[Index], InOther.SharedValues[Index]))
+		return true;
+	}
+	if (!SharedValues || !InOther.SharedValues || SharedValues->size() != InOther.SharedValues->size())
+	{
+		return false;
+	}
+	for (std::size_t Index = 0; Index < SharedValues->size(); ++Index)
+	{
+		if (!SameMaterialValue((*SharedValues)[Index], (*InOther.SharedValues)[Index]))
 		{
 			return false;
 		}
@@ -73,6 +76,11 @@ bool FRenderBatchSignature::operator==(const FRenderBatchSignature& InOther) con
 }
 
 std::size_t FRenderBatchSignature::Hash() const
+{
+	return Structure ? Structure->Hash() : 0;
+}
+
+std::size_t FRenderBatchStructure::Hash() const
 {
 	std::size_t Hash = GeometryIdentity;
 	for (const auto Value : {GeometryIndex, FirstIndex, IndexCount, VertexStride})
@@ -106,7 +114,9 @@ FRenderBatchCandidate DescribeBatchCandidate(const FRenderItem& InItem, const FR
 	const auto Description = InItem.State.Resource->GetDescription();
 	const auto& Section = Description->Sections.at(InItem.State.Section);
 	const auto& Geometry = Description->Geometries.at(Section.Geometry);
-	auto& Signature = Result.Signature;
+	auto Structure = std::make_shared<FRenderBatchStructure>();
+	auto SharedValues = std::make_shared<FRenderBatchValues>();
+	auto& Signature = *Structure;
 	Signature.GeometryIdentity = InItem.State.Resource->GetIdentity();
 	Signature.GeometryIndex = Section.Geometry;
 	Signature.FirstIndex = Section.FirstIndex;
@@ -127,16 +137,17 @@ FRenderBatchCandidate DescribeBatchCandidate(const FRenderItem& InItem, const FR
 	{
 		if (Binding.ResourceParameter)
 		{
-			ResourceKey(*InItem.ResolvedParameters->Values[*Binding.ResourceParameter], Signature.Resources);
+			ResourceKey(*InItem.GetMaterialValue(*Binding.ResourceParameter), Signature.Resources);
 		}
 		else if (!Binding.InstanceStride)
 		{
 			for (const auto& Member : Binding.Members)
 			{
-				Signature.SharedValues.push_back(InItem.ResolvedParameters->Values[Member.ParameterIndex]);
+				SharedValues->push_back(InItem.GetMaterialValue(Member.ParameterIndex));
 			}
 		}
 	}
+	Result.Signature = {std::move(Structure), std::move(SharedValues)};
 	Result.CompatibilityHash = Result.Signature.Hash();
 	return Result;
 }

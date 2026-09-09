@@ -1,6 +1,7 @@
 #include "Hyperion/Core/Profiling.h"
 #include "MaterialEvaluationCache.h"
 #include "MaterialProfiling.h"
+#include "SceneItemPreparation.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
 #include <bit>
@@ -81,17 +82,53 @@ bool ReuseEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 		return false;
 	}
 	auto& Entry = It->second;
+	const bool bSameLocal = InItem.Preparation && Entry.Preparation.lock() == InItem.Preparation;
 	if (Entry.Snapshot != InItem.State.Surface->GetSnapshot() || Entry.Compiled != InCompiled ||
 	    Entry.Usage != InView.Usage ||
-	    !Entry.Matches(InInputs, InItem.Context.ObjectParameters, InItem.DrawParameters, InItem.State.World,
-	                   InItem.State.bClipSpace, InItem.State.ObjectInputs))
+	    !(bSameLocal ? Entry.MatchesEngine(InInputs)
+	                 : Entry.Matches(InInputs, InItem.Context.ObjectParameters, InItem.DrawParameters,
+	                                 InItem.State.World, InItem.State.bClipSpace, InItem.State.ObjectInputs)))
 	{
 		return false;
 	}
 	InItem.ResolvedParameters = Entry.Resolved;
+	InItem.SharedParameters = Entry.Shared;
 	Entry.AccessFrame = InInputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Key.Revision;
 	InItem.EvaluationCache->TouchObject(*InItem.LocalItemId, Entry.AccessFrame);
 	return true;
+}
+
+void ClassifyMaterialProviders(FMaterialEvaluationCache::FEntry& InEntry)
+{
+	std::vector<bool> Overridden(InEntry.Compiled->Interface.Schema->GetParameters().size());
+	const std::array<const FMaterialParameterValues*, 3> OverrideSets{&InEntry.Snapshot->Overrides, &InEntry.Object,
+	                                                                  &InEntry.Draw};
+	for (const auto* Overrides : OverrideSets)
+	{
+		for (const auto& Override : *Overrides)
+		{
+			Overridden[InEntry.Compiled->Interface.Schema->Find(Override.Name).Index] = true;
+		}
+	}
+	for (const auto Index : InEntry.Compiled->GetPass(InEntry.Usage).ActiveParameters)
+	{
+		InEntry.Dependencies |= InEntry.Resolved->Dependencies[Index];
+		if (!Overridden[Index] &&
+		    InEntry.Compiled->Interface.Schema->GetParameters()[Index].Source == EMaterialParameterSource::Semantic)
+		{
+			constexpr auto PerItem = MaterialScopeBit(EMaterialScope::Object) |
+			                         MaterialScopeBit(EMaterialScope::Material) |
+			                         MaterialScopeBit(EMaterialScope::Draw);
+			if ((InEntry.Resolved->Dependencies[Index] & PerItem) == 0)
+			{
+				InEntry.SharedProviderParameters.push_back(Index);
+			}
+			else
+			{
+				InEntry.ProviderParameters.push_back(Index);
+			}
+		}
+	}
 }
 
 void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMaterialProviderInputs& InInputs,
@@ -128,40 +165,24 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	Entry.World = InItem.State.World;
 	Entry.bClipSpace = InItem.State.bClipSpace;
 	Entry.ObjectInputs = InItem.State.ObjectInputs;
-	std::vector<bool> Overridden(InCompiled->Interface.Schema->GetParameters().size());
-	const std::array<const FMaterialParameterValues*, 3> OverrideSets{&Entry.Snapshot->Overrides, &Entry.Object,
-	                                                                  &Entry.Draw};
-	for (const auto* Overrides : OverrideSets)
-	{
-		for (const auto& Override : *Overrides)
-		{
-			Overridden[InCompiled->Interface.Schema->Find(Override.Name).Index] = true;
-		}
-	}
+	Entry.Preparation = InItem.Preparation;
+	Entry.Resolved = InItem.ResolvedParameters;
+	ClassifyMaterialProviders(Entry);
+	FResolvedMaterialParameters Values = *InItem.ResolvedParameters;
+	Values.LocalDependenciesMask = 0;
 	for (const auto Index : InCompiled->GetPass(InView.Usage).ActiveParameters)
 	{
-		Entry.Dependencies |= InItem.ResolvedParameters->Dependencies[Index];
-		if (!Overridden[Index] &&
-		    InCompiled->Interface.Schema->GetParameters()[Index].Source == EMaterialParameterSource::Semantic)
+		if (std::find(Entry.SharedProviderParameters.begin(), Entry.SharedProviderParameters.end(), Index) ==
+		    Entry.SharedProviderParameters.end())
 		{
-			constexpr auto PerItem = MaterialScopeBit(EMaterialScope::Object) |
-			                         MaterialScopeBit(EMaterialScope::Material) |
-			                         MaterialScopeBit(EMaterialScope::Draw);
-			if ((InItem.ResolvedParameters->Dependencies[Index] & PerItem) == 0)
-			{
-				Entry.SharedProviderParameters.push_back(Index);
-			}
-			else
-			{
-				Entry.ProviderParameters.push_back(Index);
-			}
+			Values.LocalDependenciesMask |= Values.Dependencies[Index];
 		}
 	}
-	FResolvedMaterialParameters Values = *InItem.ResolvedParameters;
 	Entry.Resolved = InItem.ResolvedParameters;
 	if (!Entry.SharedProviderParameters.empty())
 	{
-		const auto Shared = InProviders.PrepareShared(Entry, InCompiled->GetPass(InView.Usage), InInputs);
+		const auto& Shared = InProviders.PrepareShared(Entry, InCompiled->GetPass(InView.Usage), InInputs);
+		Entry.SharedGroup = Shared.Group;
 		Values.Values.SetShared(Shared.Values);
 		Values.Dependencies.SetShared(Shared.Dependencies);
 	}
@@ -175,7 +196,9 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	}
 	Values.Scopes.ShareEngine({Entry.Inputs, &Entry.Inputs->Scopes});
 	Entry.Resolved = std::make_shared<const FResolvedMaterialParameters>(std::move(Values));
+	PrepareSharedMaterialEligibility(Entry);
 	InItem.ResolvedParameters = Entry.Resolved;
+	InItem.SharedParameters.reset();
 	Entries.insert_or_assign(Key, std::move(Entry));
 }
 
@@ -216,6 +239,7 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 	FMaterialPreparationProfile Profile(MaterialState->Providers);
 	auto Inputs = InSnapshot.Frame->Inputs;
 	auto& View = MaterialState->Views[InSnapshot.View.Identity];
+	View.AccessFrame = InSnapshot.Frame->Frame;
 	FMaterialParameterValues ViewValues{
 	    {"Engine.View.ViewProjection", FMaterialValue::Matrix(InSnapshot.View.ViewProjection)},
 	    {"Engine.View.CameraPosition", FMaterialValue::Float(InSnapshot.View.Eye)}};
@@ -244,16 +268,27 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 		}
 		try
 		{
-			const auto Compiled = Item.State.Surface->GetCompiled();
-			if (Item.State.Surface->GetStatus() != ERenderMaterialStatus::Ready || !Compiled)
+			const auto Compiled = Item.Preparation && Item.Preparation->Program ? Item.Preparation->Program
+			                                                                    : Item.State.Surface->GetCompiled();
+			if (((!Item.Preparation || !Item.Preparation->Program) &&
+			     Item.State.Surface->GetStatus() != ERenderMaterialStatus::Ready) ||
+			    !Compiled)
 			{
 				throw std::runtime_error("Material resources are not ready: " + Item.State.Surface->GetError());
 			}
-			const auto& Pass = Compiled->GetPass(InSnapshot.View.Usage);
-			Item.Context.ObjectParameters = GetPrimitiveMaterialOverrides(Item.State, *Compiled->Interface.Schema);
+			if (!Item.Preparation || !Item.Preparation->Program)
+			{
+				Item.Context.ObjectParameters = GetPrimitiveMaterialOverrides(Item.State, *Compiled->Interface.Schema);
+			}
 			if (ReuseEvaluation(Item, InSnapshot.View, Inputs, Compiled))
 			{
 				Profile.Reused();
+				continue;
+			}
+			if (ShareMaterialEvaluation(Item, InSnapshot, Inputs, Compiled, ViewProviders))
+			{
+				Profile.SharedUpdate();
+				++InSnapshot.Statistics.SharedMaterialUpdates;
 				continue;
 			}
 			if (RefreshMaterialEvaluation(Item, InSnapshot, Inputs, Resources, Compiled, ViewProviders))
@@ -263,6 +298,7 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 			}
 			Profile.Evaluated();
 			HYP_PERF_SCOPE_C(Detail, FullMaterialEvaluation);
+			const auto& Pass = Compiled->GetPass(InSnapshot.View.Usage);
 			FillMaterialObjectInputs(Inputs, Item, InSnapshot, Resources);
 			FillMaterialDrawInputs(Inputs, Item, InSnapshot);
 			std::vector<std::string> Semantics;

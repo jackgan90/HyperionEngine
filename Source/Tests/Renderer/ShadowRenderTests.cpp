@@ -382,7 +382,7 @@ struct FCountingShadowStrategy final : IRenderBatchStrategy
 	FRenderBatchDecision Evaluate(const FRenderBatchCandidate& InCandidate,
 	                              const FRHICapabilities& InCapabilities) const override
 	{
-		ShadowEvaluations += InCandidate.Signature.Target.ColorCount == 0;
+		ShadowEvaluations += InCandidate.Signature.Structure->Target.ColorCount == 0;
 		return Delegate.Evaluate(InCandidate, InCapabilities);
 	}
 

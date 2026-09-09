@@ -70,7 +70,7 @@ private:
 	std::vector<FConstantBinding> BindPrepared(std::shared_ptr<const FCompiledMaterialDefinition> InProgram,
 	                                           const FCompiledMaterialPass& InPass,
 	                                           const FResolvedMaterialParameters& InParameters,
-	                                           FMaterialConstantState& InState);
+	                                           FMaterialConstantState& InState, bool bInInstance = false);
 	std::vector<FConstantBinding> BindInstances(std::shared_ptr<const FInstanceBatchData> InData);
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;

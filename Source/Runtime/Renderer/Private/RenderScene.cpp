@@ -139,6 +139,7 @@ void FRenderScene::Update(std::vector<FRenderPrimitiveUpdate> InUpdates)
 		const bool bPending = bool(Update.State.Resource);
 		Entry.Lifetime = std::move(Lifetimes.at(Update.Handle.Slot));
 		Entry.EvaluationCache = std::move(Caches.at(Update.Handle.Slot));
+		Entry.Collection.reset();
 		Entry.Primitive->Apply(std::move(Update.State));
 		const auto& State = Entry.Primitive->GetState();
 		Entry.Result->Publish(bPending ? ERenderPrimitiveStatus::PendingResources : ERenderPrimitiveStatus::Ready,

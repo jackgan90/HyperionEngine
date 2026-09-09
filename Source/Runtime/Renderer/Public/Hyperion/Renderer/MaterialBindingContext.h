@@ -196,7 +196,20 @@ struct FResolvedMaterialParameters
 	FMaterialResolvedScopes Scopes;
 	// Owns a resource-value epoch across numeric refreshes; replaced when a resource value changes.
 	std::shared_ptr<const void> ResourceIdentity;
+	std::uint32_t LocalDependenciesMask{};
 };
+
+// One immutable update shared by compatible items; local evaluation keeps its identity across camera changes.
+struct FMaterialSharedParameters
+{
+	std::shared_ptr<const FMaterialValueTable::FSharedValues> Values;
+	std::shared_ptr<const FMaterialDependencyTable::FSharedValues> Dependencies;
+	std::shared_ptr<const FMaterialResolvedScopes::FValues> Scopes;
+	std::uint32_t DependenciesMask{};
+};
+
+FResolvedMaterialParameters ComposeMaterialParameters(const FResolvedMaterialParameters& InLocal,
+                                                      const FMaterialSharedParameters& InShared);
 
 inline bool SameMaterialValue(const std::shared_ptr<const FMaterialValue>& InA,
                               const std::shared_ptr<const FMaterialValue>& InB)

@@ -5,6 +5,27 @@
 
 namespace Hyperion
 {
+namespace
+{
+template<typename TEntry> void RetireViewHistory(std::map<std::uint64_t, TEntry>& InEntries, std::uint64_t InFrame)
+{
+	std::erase_if(InEntries,
+	              [&](const auto& InEntry)
+	              {
+		              return InFrame > InEntry.second.AccessFrame && InFrame - InEntry.second.AccessFrame > 120;
+	              });
+	while (InEntries.size() > 64)
+	{
+		const auto Oldest = std::min_element(InEntries.begin(), InEntries.end(),
+		                                     [](const auto& InA, const auto& InB)
+		                                     {
+			                                     return InA.second.AccessFrame < InB.second.AccessFrame;
+		                                     });
+		InEntries.erase(Oldest);
+	}
+}
+} // namespace
+
 struct FRenderSession::FPreparedViewFamily
 {
 	std::vector<FRenderViewStatistics> Views;
@@ -113,7 +134,7 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 	{
 		InFrame = MaterialState->Frame(Resources, 0, {}, Scene.GetLogicalSceneIdentity());
 	}
-	const auto ViewIds = AdmitFamily(InViews, *InFrame, InFamily);
+	AdmitFamily(InViews, *InFrame, InFamily);
 	const auto SpatialStats = bInSpatialPrepared ? FSceneVisibilityStats{} : Scene.BeginViews();
 	std::vector<std::shared_ptr<const FRenderSceneSnapshot>> Snapshots;
 	const auto SceneRevision = Scene.GetCollectionRevision();
@@ -126,7 +147,7 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 	{
 		auto Snapshot = PrepareView(View, InFrame, InFamily, SceneRevision, ResourceRevision);
 		bRefreshed |= Snapshot->Statistics.PreparationReuses == 0;
-		Count += Snapshot->Items.size();
+		Count += Snapshot->Items.Size();
 		Snapshots.push_back(std::move(Snapshot));
 	}
 	PendingFamily = std::make_shared<FPreparedViewFamily>();
@@ -154,20 +175,12 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 		}
 		CompleteViews();
 	}
-	std::erase_if(MaterialState->Views,
-	              [&](const auto& InEntry)
-	              {
-		              return !ViewIds.contains(InEntry.first);
-	              });
+	RetireViewHistory(MaterialState->Views, InFrame->Frame);
 	if (bRefreshed)
 	{
 		MaterialState->Providers.Collect();
 	}
-	std::erase_if(MaterialState->PreparedViews,
-	              [&](const auto& InEntry)
-	              {
-		              return !ViewIds.contains(InEntry.first);
-	              });
+	RetireViewHistory(MaterialState->PreparedViews, InFrame->Frame);
 	return Count;
 }
 

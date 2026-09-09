@@ -595,7 +595,7 @@ void CheckSectionTransactions(FTaskSystem& InTasks, FTestDevice& InDevice, FShad
 	                              [&]
 	                              {
 		                              const auto Snapshot = PrepareSceneSnapshot(Session.GetScene().Collect({}));
-		                              HYP_CHECK(Snapshot.Items.size() == 2);
+		                              HYP_CHECK(Snapshot.Items.Size() == 2);
 		                              for (const auto& Item : Snapshot.Items)
 		                              {
 			                              HYP_CHECK(Item.State.Revision == 1 && Item.State.World.Values[12] == 0 &&
@@ -665,7 +665,7 @@ void CheckPendingSection(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	    [&]
 	    {
 		    const auto Snapshot = PrepareSceneSnapshot(Session.GetScene().Collect({}));
-		    HYP_CHECK(Snapshot.Items.size() == 2 && Snapshot.Items[0].Primitive == Valid.GetHandle());
+		    HYP_CHECK(Snapshot.Items.Size() == 2 && Snapshot.Items[0].Primitive == Valid.GetHandle());
 		    InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
 		                                  [&]
 		                                  {
@@ -718,10 +718,10 @@ void CheckVisibilityAndAggregation(FTaskSystem& InTasks, FTestDevice& InDevice, 
 		                              Raw.View.CullingMode = ESceneCullingMode::Linear;
 		                              const auto First = PrepareSceneSnapshot(Raw);
 		                              const auto Second = PrepareSceneSnapshot(Raw);
-		                              HYP_CHECK(First.Items.size() == 41 && Second.Items.size() == 41);
+		                              HYP_CHECK(First.Items.Size() == 41 && Second.Items.Size() == 41);
 		                              auto Alternate = Raw;
 		                              Alternate.View.ViewProjection = Translation({-3.1f, 0, 0});
-		                              HYP_CHECK(PrepareSceneSnapshot(Alternate).Items.size() == 1);
+		                              HYP_CHECK(PrepareSceneSnapshot(Alternate).Items.Size() == 1);
 		                              HYP_CHECK(First.Items[0].State.Revision == Second.Items[0].State.Revision);
 		                              InTasks.Wait(InTasks.Dispatch(
 		                                  {EDomain::Rhi, 0},
@@ -751,7 +751,7 @@ void CheckBoundsReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCo
 	                              [&]
 	                              {
 		                              const auto Frame = Session.GetScene().Collect({});
-		                              HYP_CHECK(Frame.Statistics.UnboundedGroups == 1 && Frame.Items.size() == 1);
+		                              HYP_CHECK(Frame.Statistics.UnboundedGroups == 1 && Frame.Items.Size() == 1);
 	                              }));
 	InDevice.bUploadComplete = true;
 	Await(
@@ -762,10 +762,10 @@ void CheckBoundsReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCo
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
 	                              {
-		                              HYP_CHECK(Session.GetScene().Collect({}).Items.empty());
+		                              HYP_CHECK(Session.GetScene().Collect({}).Items.IsEmpty());
 		                              FRenderView View;
 		                              View.ViewProjection = Translation({-30, 0, 0});
-		                              HYP_CHECK(Session.GetScene().Collect(View).Items.size() == 1);
+		                              HYP_CHECK(Session.GetScene().Collect(View).Items.Size() == 1);
 	                              }));
 	auto ClipResource = Session.GetResources().Request(std::make_shared<const int>(10), 1, "clip-bounds",
 	                                                   []
@@ -787,7 +787,7 @@ void CheckBoundsReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCo
 	                              [&]
 	                              {
 		                              const auto Frame = Session.GetScene().Collect({});
-		                              HYP_CHECK(Frame.Items.size() == 1 &&
+		                              HYP_CHECK(Frame.Items.Size() == 1 &&
 		                                        Frame.Items[0].Primitive == Clip.GetHandle());
 		                              HYP_CHECK(Frame.Statistics.UnboundedGroups == 1);
 	                              }));

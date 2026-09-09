@@ -36,6 +36,7 @@ void AppendGroup(FRenderBatchPlan& InPlan, std::multimap<std::size_t, FBatchGrou
                  std::shared_ptr<const FRenderBatchCandidate> InCandidate, const IRenderBatchStrategy* InStrategy,
                  std::uint32_t InCapacity, std::size_t InItem)
 {
+	HYP_PERF_SCOPE_C(Detail, GroupBatchItem);
 	const auto Hash = InCandidate->CompatibilityHash;
 	auto& Singletons = InPlan.Statistics.Fallbacks[static_cast<std::size_t>(ERenderBatchFallback::Singleton)];
 	const auto [Begin, End] = InGroups.equal_range(Hash);
@@ -105,7 +106,8 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildFresh(const FR
 	auto Result = std::make_shared<FRenderBatchPlan>();
 	const auto Depth = BatchDepth(InSnapshot);
 	std::multimap<std::size_t, FBatchGroup> Groups;
-	for (std::size_t Index = 0; Index < InSnapshot.Items.size(); ++Index)
+	FSharedBatchValueCache Shared;
+	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{
 		const auto& Item = InSnapshot.Items[Index];
 		ERenderBatchFallback Reason = bInEnabled ? ERenderBatchFallback::Preparation : ERenderBatchFallback::Disabled;
@@ -120,7 +122,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildFresh(const FR
 				const bool bSrgb =
 				    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
 				Candidate = P.Describe(InSnapshot, Item, {bSrgb, Depth, InSnapshot.View.DepthTarget ? 0U : 1U},
-				                       Result->Statistics);
+				                       Result->Statistics, Shared);
 				for (const auto& Strategy : P.Strategies)
 				{
 					const auto Decision = Strategy->Evaluate(*Candidate, P.Capabilities);
@@ -193,7 +195,7 @@ std::shared_ptr<const FRenderBatchPlan> FRenderBatchSystem::Build(const FRenderS
 	P.Retire(InSnapshot);
 	HYP_PERF_PLOT(Render, BatchPlanReuses, double(Result->Statistics.PlanReuses));
 	Result->Statistics.CachedChunks = P.Chunks.size();
-	Result->Statistics.CachedBytes = P.ChunkBytes;
+	Result->Statistics.CachedBytes = P.ChunkBytes + P.Packing.ByteSize();
 	Result->Statistics.PlanningMilliseconds =
 	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
 	return Result;
@@ -203,6 +205,7 @@ void FRenderBatchSystem::Clear()
 {
 	Impl->Tasks.Require({EDomain::Render});
 	Impl->Items.clear();
+	Impl->Structures.clear();
 	Impl->RecentItems.clear();
 	Impl->Chunks.clear();
 	Impl->RecentChunks.clear();
@@ -210,5 +213,6 @@ void FRenderBatchSystem::Clear()
 	Impl->Plans.clear();
 	Impl->PlanItems = 0;
 	Impl->RetiredFamily = {};
+	Impl->Packing.Clear();
 }
 } // namespace Hyperion

@@ -92,7 +92,9 @@ def run(args, label, viewer, trial, count, moving, shadows):
         command += ["--scene", str(args.output / f"Triangles-{count}.json"),
                     "--scene-culling", "none", "--no-instance-batching"]
     if moving:
-        command.append("--benchmark-camera")
+        command += ["--benchmark-camera", "--benchmark-camera-step", str(getattr(args, "camera_step", .1))]
+    if getattr(args, "fixed_visibility", False):
+        command += ["--scene-culling", "none"]
     if not shadows:
         command.append("--no-shadows")
     startup = None
@@ -100,8 +102,14 @@ def run(args, label, viewer, trial, count, moving, shadows):
         startup = subprocess.STARTUPINFO()
         startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startup.wShowWindow = 0
-    completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
-                               timeout=args.timeout, startupinfo=startup)
+    try:
+        completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
+                                   timeout=args.timeout, startupinfo=startup)
+    except subprocess.TimeoutExpired as error:
+        def text(value):
+            return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+        (args.output / f"{name}.log").write_text(text(error.stdout) + text(error.stderr), encoding="utf-8")
+        raise RuntimeError(f"Benchmark timed out: {name}; see log") from error
     log = completed.stdout + completed.stderr
     (args.output / f"{name}.log").write_text(log, encoding="utf-8")
     if completed.returncode:
@@ -127,11 +135,16 @@ def main():
     parser.add_argument("--samples", type=int, default=400)
     parser.add_argument("--trials", type=int, default=2)
     parser.add_argument("--timeout", type=int, default=240)
+    parser.add_argument("--camera-step", type=float, default=.1, help="Input-driven orbit step in pixels")
+    parser.add_argument("--fixed-visibility", action="store_true", help="Disable culling for scene workloads")
+    parser.add_argument("--scene-shadows", choices=["both", "on", "off"], default="both")
     parser.add_argument("--visible", action="store_true")
     parser.add_argument("--ui", action="store_true")
     args = parser.parse_args()
     if min(args.warmup, args.samples, args.trials) < 1 or any(count < 0 for count in args.counts):
         parser.error("Positive warmup/samples/trials and nonnegative counts are required")
+    if not math.isfinite(args.camera_step) or args.camera_step <= 0:
+        parser.error("camera-step must be finite and positive")
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     generate(args.output, args.counts)
@@ -148,7 +161,8 @@ def main():
             (args.output / f"{label}-CMakeCache.txt").write_bytes(cache.read_bytes())
     workloads = [(count, False) for count in args.counts]
     if args.scene:
-        workloads += [(None, False), (None, True)]
+        workloads += [(None, shadows) for shadows in ([False, True] if args.scene_shadows == "both"
+                                                     else [args.scene_shadows == "on"])]
     try:
         for count, shadows in workloads:
             for moving in ([False, True] if args.motion == "both" else [args.motion == "moving"]):

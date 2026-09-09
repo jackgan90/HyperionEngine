@@ -197,10 +197,11 @@ struct FMaterialConstantCache::FImpl
 
 	struct FInstanceEntry
 	{
-		std::weak_ptr<const FInstanceBatchData> Data;
-		std::vector<FConstantBinding> Bindings;
+		std::weak_ptr<const std::vector<std::byte>> Data;
+		std::vector<std::weak_ptr<const void>> Owners;
+		FBufferSlice Slice;
 		std::size_t Bytes{};
-		std::list<const FInstanceBatchData*>::iterator Recent;
+		std::list<const std::vector<std::byte>*>::iterator Recent;
 	};
 
 	IRHIDevice& Device;
@@ -214,8 +215,8 @@ struct FMaterialConstantCache::FImpl
 	std::function<void(const std::shared_ptr<const void>&)> TrackScope;
 	std::uint64_t Access{};
 	std::map<std::pair<const FCompiledMaterialDefinition*, const FMaterialProgramBinding*>, FPreparedBlock> Prepared;
-	std::map<const FInstanceBatchData*, FInstanceEntry> Instances;
-	std::list<const FInstanceBatchData*> RecentInstances;
+	std::map<const std::vector<std::byte>*, FInstanceEntry> Instances;
+	std::list<const std::vector<std::byte>*> RecentInstances;
 	std::size_t InstanceBytes{};
 
 	FImpl(IRHIDevice& InDevice, std::uint32_t InPageSize, FMaterialConstantLimits InLimits)
@@ -265,7 +266,7 @@ struct FMaterialConstantCache::FImpl
 		--Stats.CachedBlocks;
 	}
 
-	void EraseInstance(std::map<const FInstanceBatchData*, FInstanceEntry>::iterator InEntry)
+	void EraseInstance(std::map<const std::vector<std::byte>*, FInstanceEntry>::iterator InEntry)
 	{
 		InstanceBytes -= InEntry->second.Bytes;
 		RecentInstances.erase(InEntry->second.Recent);
@@ -476,7 +477,7 @@ std::vector<FConstantBinding> FMaterialConstantCache::Bind(const FCompiledMateri
 
 std::vector<FConstantBinding> FMaterialConstantCache::BindPrepared(
     std::shared_ptr<const FCompiledMaterialDefinition> InProgram, const FCompiledMaterialPass& InPass,
-    const FResolvedMaterialParameters& InParameters, FMaterialConstantState& InState)
+    const FResolvedMaterialParameters& InParameters, FMaterialConstantState& InState, bool bInInstance)
 {
 	HYP_PERF_SCOPE_C(Detail, BindMaterialConstants);
 	Impl->CheckOwner();
@@ -504,6 +505,13 @@ std::vector<FConstantBinding> FMaterialConstantCache::BindPrepared(
 			continue;
 		}
 		bool bSame = bSameProgram && ConstantIndex < InState.Bindings.size();
+		if (bInInstance && Binding.InstanceStride)
+		{
+			// Reserved for BindInstances before the packet can reach native validation/submission.
+			Result.push_back({Index, {}});
+			++ConstantIndex;
+			continue;
+		}
 		for (const auto& Member : Binding.Members)
 		{
 			if (!bSame)
@@ -536,20 +544,6 @@ std::vector<FConstantBinding> FMaterialConstantCache::BindInstances(std::shared_
 	{
 		throw std::invalid_argument("Missing instance constant data");
 	}
-	const auto Key = InData.get();
-	const auto Existing = Impl->Instances.find(Key);
-	if (Existing != Impl->Instances.end())
-	{
-		if (Existing->second.Data.lock() == InData && InData->IsLive())
-		{
-			Impl->RecentInstances.splice(Impl->RecentInstances.end(), Impl->RecentInstances, Existing->second.Recent);
-			Impl->Stats.InstanceReuses += Existing->second.Bindings.size();
-			return Existing->second.Bindings;
-		}
-		Impl->EraseInstance(Existing);
-	}
-	FImpl::FInstanceEntry Entry;
-	Entry.Data = InData;
 	if (Impl->TrackScope)
 	{
 		for (const auto& Owner : InData->Owners)
@@ -557,27 +551,49 @@ std::vector<FConstantBinding> FMaterialConstantCache::BindInstances(std::shared_
 			Impl->TrackScope(Owner.lock());
 		}
 	}
+	std::vector<FConstantBinding> Result;
 	for (const auto& Block : InData->Constants)
 	{
-		auto Slice = Impl->Publish(Block.Bytes, false);
-		Entry.Bytes += Slice.Extent;
-		Entry.Bindings.push_back({Block.Slot, std::move(Slice)});
-		Impl->Stats.InstanceUploadBytes += Block.Bytes.size();
-		++Impl->Stats.Packs;
-	}
-	const auto Result = Entry.Bindings;
-	if (InData->IsLive() && Impl->Limits.MaxPreparedBlocks && Entry.Bytes <= Impl->Limits.MaxBytes)
-	{
-		while (!Impl->RecentInstances.empty() && (Impl->Instances.size() >= Impl->Limits.MaxPreparedBlocks ||
-		                                          Impl->InstanceBytes + Entry.Bytes > Impl->Limits.MaxBytes))
+		if (!Block.Bytes || Block.Bytes->empty())
 		{
-			Impl->EraseInstance(Impl->Instances.find(Impl->RecentInstances.front()));
-			++Impl->Stats.Evictions;
+			throw std::invalid_argument("Missing instance block bytes");
 		}
-		Impl->RecentInstances.push_back(Key);
-		Entry.Recent = std::prev(Impl->RecentInstances.end());
-		Impl->InstanceBytes += Entry.Bytes;
-		Impl->Instances.emplace(Key, std::move(Entry));
+		const auto Key = Block.Bytes.get();
+		const auto Existing = Impl->Instances.find(Key);
+		if (Existing != Impl->Instances.end())
+		{
+			if (Existing->second.Data.lock() == Block.Bytes)
+			{
+				Existing->second.Owners = InData->Owners;
+				Impl->RecentInstances.splice(Impl->RecentInstances.end(), Impl->RecentInstances,
+				                             Existing->second.Recent);
+				++Impl->Stats.InstanceReuses;
+				Result.push_back({Block.Slot, Existing->second.Slice});
+				continue;
+			}
+			Impl->EraseInstance(Existing);
+		}
+		FImpl::FInstanceEntry Entry;
+		Entry.Data = Block.Bytes;
+		Entry.Owners = InData->Owners;
+		Entry.Slice = Impl->Publish(*Block.Bytes, false);
+		Entry.Bytes = Entry.Slice.Extent;
+		Result.push_back({Block.Slot, Entry.Slice});
+		Impl->Stats.InstanceUploadBytes += Block.Bytes->size();
+		++Impl->Stats.Packs;
+		if (InData->IsLive() && Impl->Limits.MaxPreparedBlocks && Entry.Bytes <= Impl->Limits.MaxBytes)
+		{
+			while (!Impl->RecentInstances.empty() && (Impl->Instances.size() >= Impl->Limits.MaxPreparedBlocks ||
+			                                          Impl->InstanceBytes + Entry.Bytes > Impl->Limits.MaxBytes))
+			{
+				Impl->EraseInstance(Impl->Instances.find(Impl->RecentInstances.front()));
+				++Impl->Stats.Evictions;
+			}
+			Impl->RecentInstances.push_back(Key);
+			Entry.Recent = std::prev(Impl->RecentInstances.end());
+			Impl->InstanceBytes += Entry.Bytes;
+			Impl->Instances.emplace(Key, std::move(Entry));
+		}
 	}
 	return Result;
 }
@@ -588,7 +604,11 @@ bool FMaterialConstantCache::Collect()
 	for (auto It = Impl->Instances.begin(); It != Impl->Instances.end();)
 	{
 		const auto Data = It->second.Data.lock();
-		if (!Data || !Data->IsLive())
+		if (!Data || std::any_of(It->second.Owners.begin(), It->second.Owners.end(),
+		                         [](const auto& InOwner)
+		                         {
+			                         return InOwner.expired();
+		                         }))
 		{
 			const auto Previous = It++;
 			Impl->EraseInstance(Previous);
@@ -659,10 +679,7 @@ bool FMaterialConstantCache::Collect()
 	}
 	for (const auto& [Key, Entry] : Impl->Instances)
 	{
-		for (const auto& Binding : Entry.Bindings)
-		{
-			UsedPages.insert(Binding.Slice.Buffer.Payload.get());
-		}
+		UsedPages.insert(Entry.Slice.Buffer.Payload.get());
 	}
 	for (const auto& Page : Impl->Pages)
 	{

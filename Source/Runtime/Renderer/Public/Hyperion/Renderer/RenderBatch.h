@@ -7,7 +7,7 @@
 
 namespace Hyperion
 {
-struct FRenderBatchSignature
+struct FRenderBatchStructure
 {
 	std::uint64_t GeometryIdentity{};
 	std::uint32_t GeometryIndex{};
@@ -23,7 +23,16 @@ struct FRenderBatchSignature
 	FGraphicsTarget Target;
 	FResourceBindingLayoutDesc Layout;
 	std::vector<std::uint64_t> Resources;
-	std::vector<std::shared_ptr<const FMaterialValue>> SharedValues;
+	bool operator==(const FRenderBatchStructure& InOther) const = default;
+	std::size_t Hash() const;
+};
+
+using FRenderBatchValues = std::vector<std::shared_ptr<const FMaterialValue>>;
+
+struct FRenderBatchSignature
+{
+	std::shared_ptr<const FRenderBatchStructure> Structure;
+	std::shared_ptr<const FRenderBatchValues> SharedValues;
 	bool operator==(const FRenderBatchSignature& InOther) const;
 	std::size_t Hash() const;
 };
@@ -65,7 +74,7 @@ public:
 struct FInstanceConstantBlock
 {
 	std::uint32_t Slot{};
-	std::vector<std::byte> Bytes;
+	std::shared_ptr<const std::vector<std::byte>> Bytes;
 };
 
 struct FInstanceBatchData

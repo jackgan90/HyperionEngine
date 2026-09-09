@@ -88,7 +88,8 @@ public:
 	FTaskHandle Flush();
 	void Close();
 	// Render only. The result owns all state required by subsequent frame work.
-	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true) const;
+	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true, std::uint64_t InResourceRevision = 0,
+	                             FRenderSceneSnapshot* InPrevious = nullptr) const;
 	FSceneVisibilityStats BeginViews() const;
 	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;

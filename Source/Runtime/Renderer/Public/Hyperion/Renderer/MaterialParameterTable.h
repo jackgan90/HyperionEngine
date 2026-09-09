@@ -24,6 +24,11 @@ public:
 			}
 		}
 
+		const std::optional<TValue>& Get(std::size_t InIndex) const
+		{
+			return Values.at(InIndex);
+		}
+
 	private:
 		friend class TMaterialParameterTable;
 		std::vector<std::optional<TValue>> Values;

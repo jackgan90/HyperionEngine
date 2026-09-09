@@ -161,6 +161,22 @@ void CheckSharedModels(FSceneFixture& InFixture)
 	auto Image = InFixture.Frame(2);
 	Pixel(Image, 110, {1, 0, 0});
 	Pixel(Image, 210, {0, 0, 1});
+	Left.SetTransform(Multiply(Translation({-.65f, 0, 0}), Scale({.4f, .4f, 1})));
+	InFixture.Frame(2);
+	HYP_CHECK(InFixture.LastStatistics.Batches.PackedRecords == 1);
+	HYP_CHECK(InFixture.LastStatistics.Batches.AssembledBlocks == 1);
+	HYP_CHECK(InFixture.LastStatistics.Batches.ReusedBlocks == 1);
+	const auto Compiled = Left.GetResource()->GetMaterial(0)->GetCompiled();
+	const auto& Bindings = Compiled->GetPass("Forward", "Instance").Bindings;
+	std::size_t ObjectBytes{};
+	for (const auto& Binding : Bindings)
+	{
+		if (Binding.InstanceStride && Binding.Resource.Name == "HyperionObjectV1")
+		{
+			ObjectBytes = Binding.InstanceStride * 2;
+		}
+	}
+	HYP_CHECK(ObjectBytes && InFixture.LastStatistics.Batches.UploadBytes == ObjectBytes);
 	Left.SetVisible(false);
 	Image = InFixture.Frame(1);
 	Pixel(Image, 110, {0, 0, 0});
@@ -261,7 +277,9 @@ std::vector<FRenderItem> CollectItems(FSceneFixture& InFixture)
 	                                              {
 		                                              FRenderView View;
 		                                              View.CullingMode = ESceneCullingMode::None;
-		                                              Result = InFixture.Session->GetScene().Collect(View).Items;
+		                                              const auto Collected =
+		                                                  InFixture.Session->GetScene().Collect(View);
+		                                              Result.assign(Collected.Items.begin(), Collected.Items.end());
 	                                              }));
 	return Result;
 }

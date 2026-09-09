@@ -342,14 +342,15 @@ std::uint64_t FRenderSceneClient::GetLogicalSceneIdentity() const
 	return Mailbox->LogicalScene;
 }
 
-FRenderSceneSnapshot FRenderSceneClient::Collect(FRenderView InView, bool bInRefresh) const
+FRenderSceneSnapshot FRenderSceneClient::Collect(FRenderView InView, bool bInRefresh, std::uint64_t InResourceRevision,
+                                                 FRenderSceneSnapshot* InPrevious) const
 {
 	Mailbox->Tasks.Require({EDomain::Render});
 	if (!Mailbox->Scene)
 	{
 		throw std::logic_error("Render scene is closed");
 	}
-	return Mailbox->Scene->Collect(std::move(InView), bInRefresh);
+	return Mailbox->Scene->Collect(std::move(InView), bInRefresh, InResourceRevision, InPrevious);
 }
 
 FSceneVisibilityStats FRenderSceneClient::BeginViews() const

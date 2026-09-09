@@ -73,6 +73,10 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	                          ? InItem.ResolvedParameters
 	                          : std::make_shared<const FResolvedMaterialParameters>(
 	                                ResolveMaterialBindingContext(Snapshot, Compiled, Program, InItem.Context));
+	const auto Shared = InItem.SharedParameters
+	                        ? std::optional(ComposeMaterialParameters(*Resolved, *InItem.SharedParameters))
+	                        : std::nullopt;
+	const auto& Values = Shared ? *Shared : *Resolved;
 	const bool bMirrored = Determinant(InItem.State.World) < 0;
 	const std::shared_ptr<const void> ResourceIdentity =
 	    Resolved->ResourceIdentity ? Resolved->ResourceIdentity : Resolved;
@@ -82,22 +86,22 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	if (Existing != PreparedDraws.end())
 	{
 		auto& Cached = Existing->second;
-		const bool bSameParameters = Cached.Parameters.lock() == Resolved;
+		const bool bSameParameters =
+		    Cached.Parameters.lock() == Resolved && Cached.Shared.lock() == InItem.SharedParameters;
 		if (Cached.Resources.lock() == ResourceIdentity && Cached.Geometry.lock() == InItem.State.Resource &&
 		    Cached.Surface.lock() == InItem.State.Surface && Cached.Target == InTarget &&
-		    Cached.bMirrored == bMirrored &&
-		    (bSameParameters || SameResources(Cached.ResourceValues, Program, *Resolved)))
+		    Cached.bMirrored == bMirrored && (bSameParameters || SameResources(Cached.ResourceValues, Program, Values)))
 		{
 			if (!bSameParameters)
 			{
-				Cached.Packet.ConstantBindings =
-				    MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program, *Resolved, Cached.Constants);
+				Cached.Packet.ConstantBindings = MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program,
+				                                                                 Values, Cached.Constants, bInInstance);
 				Cached.Parameters = Resolved;
+				Cached.Shared = InItem.SharedParameters;
 			}
 			return FinalizeDraw(Cached.Packet, InItem, InView, Pass);
 		}
 	}
-	const auto& Values = *Resolved;
 	// The resource-value epoch survives numeric scope changes, and expires when its last evaluation retires.
 	// Keeping an obsolete View owner here would turn a live cached set into perpetual pending retirement.
 	const FMaterialResourceOwners Owners{MaterialRecord.GpuLifetime, ResourceIdentity};
@@ -127,19 +131,20 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	Result.IndexCount = Section.IndexCount;
 	Result.Bindings = Bindings.Set;
 	FMaterialConstantState Constants;
-	Result.ConstantBindings = MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program, Values, Constants);
+	Result.ConstantBindings =
+	    MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program, Values, Constants, bInInstance);
 	Result = FinalizeDraw(std::move(Result), InItem, InView, Pass);
 	std::vector<std::shared_ptr<const FMaterialValue>> ResourceValues;
 	for (const auto& Binding : Program.Bindings)
 	{
 		if (Binding.ResourceParameter)
 		{
-			ResourceValues.push_back(Resolved->Values.Get(*Binding.ResourceParameter));
+			ResourceValues.push_back(Values.Values.Get(*Binding.ResourceParameter));
 		}
 	}
 	PreparedDraws.insert_or_assign(Key, FPreparedDraw{Resolved, ResourceIdentity, std::move(ResourceValues),
 	                                                  InItem.State.Resource, InItem.State.Surface, InTarget, bMirrored,
-	                                                  Result, std::move(Constants)});
+	                                                  Result, std::move(Constants), InItem.SharedParameters});
 	return Result;
 }
 } // namespace Hyperion

@@ -95,7 +95,11 @@ provider 返回空值仍保留全部声明依赖，保证原先采用 default �
 
 常量候选缓存默认最多 4096 块、16 MiB 对齐 slice extent；同一完整逻辑 key 的新值替换旧记录，超限按最近最少访问淘汰。跨 draw 准备快表最多 512 块，每个活跃 prepared draw 只保存当前块状态；它们不保留 scope token 或解析历史链。64 KiB 页面将 View/Pass/Frame/Draw 与长期输入分组。发布的常量区域不可覆写，淘汰只释放缓存引用，旧 frame/fence 继续持有旧 slice；空闲整页在无引用时回收，最多保留一页。`Resources.Statistics().Constants` 提供 `FullLookups/PreparedReuses/Evictions/CachedBlocks/CachedBytes/PreparedBlocks/PageBytes`。候选预算不限制外部保存帧、活跃 draw 或 GPU 在途页面，`PageBytes` 才是实际页面容量。
 
-稳定 `LocalItemId` 的 primitive 持有有界的 CPU 参数解析缓存（最多 64 个 item/view 组合），键检查 snapshot、接口、usage、全部有效依赖的 identity/revision/内容，以及名称覆盖；稳定输入先检查，再构造派生矩阵/参数，World 按位比较以保留 shader 可观察的正负零差异；primitive 发布更新会替换缓存。Object scope 另按稳定 item 的实际 World、provider inputs 和名称覆盖维护有界 token，即使自定义发射器不改变 primitive revision，内容变化也会退休旧 token。RHI coordinator 用弱 CPU ownership 关联已准备的 draw packet，目标、镜像方向、geometry section 和材质不匹配时重新准备，动态状态和 scissor 每次应用。依赖 Draw/Frame/Pass 的值仍按相应频率失效。场景队列排序只移动索引，最终一次性移动完整 item，保持透明及等深稳定次序。
+稳定 `LocalItemId` 的 primitive 持有有界的 CPU 参数解析缓存（最多 64 个 item/view 组合），键检查 snapshot、接口、usage、全部有效依赖的 identity/revision/内容，以及名称覆盖；稳定输入先检查，再构造派生矩阵/参数，World 按位比较以保留 shader 可观察的正负零差异；primitive 发布更新会替换缓存。Object scope 另按稳定 item 的实际 World、provider inputs 和名称覆盖维护有界 token，即使自定义发射器不改变 primitive revision，内容变化也会退休旧 token。RHI coordinator 用弱 CPU ownership 关联已准备的 draw packet，目标、镜像方向、geometry section 和材质不匹配时重新准备，动态状态和 scissor 每次应用。依赖 Draw/Frame/Pass 的值仍按相应频率失效。场景快照的 `FRenderItemList` 持有稳定 item 存储；裁剪和排序移动拥有句柄，保持透明及等深稳定次序。显式复制列表会深拷贝 item，避免修改独立排队的旧快照；自定义 `Collect` 仍向 `std::vector<FRenderItem>` 发射。
+
+可分离的共享 engine 参数由 `FMaterialSharedParameters` 一次发布给同一 pass/参数掩码组，稳定 local `FResolvedMaterialParameters` 不随相机重复发布。批次兼容性、实例记录和 draw 常量都读取有效 shared/local 值；在实际 draw、需要重新打包记录或保守 fallback 时临时组合参数。View 与 Object 混合依赖、Draw 依赖、default/缺失输入、资源变化及实例成员中的共享值变化保留完整检查和增量 fallback。共享更新及 local 结果均不可变，旧 frame 保留自己的值与 GPU slice。
+
+静态 collection 只缓存完整就绪且不超过 64 个 item 的原语输出；发布状态或资源就绪版本改变后重新准备。只有显式 `IsStaticCollection()` 的原语可使用这条路径；bounds、裁剪和透明排序仍按当前 view 计算。独立 view 状态最多保留 64 份及 120 个未使用 frame，场景发布仍会使 prepared view/plan 失效。
 
 正常 session 自动安排缓存回收。独立使用 `FMaterialConstantCache` 时，调用方需在 scope 退休和 GPU 完成资源采集后调用 `Collect()`；返回 true 表示还有无 CPU cache owner 的页面被 packet/fence 保留，需要继续采集。`Bind()` 不扫描无关条目，仍活跃的 scope 不触发持续空闲轮询。
 

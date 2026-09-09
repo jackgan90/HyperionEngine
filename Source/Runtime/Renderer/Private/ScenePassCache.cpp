@@ -32,6 +32,11 @@ bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InS
 	Stats.Batches.ReusedChunks = Stats.Batches.InstancedDraws;
 	Stats.Batches.RebuiltChunks = 0;
 	Stats.Batches.PackedBytes = 0;
+	Stats.Batches.PackedRecords = 0;
+	Stats.Batches.ReusedRecords = 0;
+	Stats.Batches.AssembledBlocks = 0;
+	Stats.Batches.ReusedBlocks = 0;
+	Stats.Batches.AssembledBytes = 0;
 	Stats.Batches.UploadBytes = 0;
 	Stats.Batches.GpuReuses = 0;
 	Stats.Batches.CompatibilityReuses = 0;

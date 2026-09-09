@@ -18,7 +18,7 @@ FMaterialValue& Default(FMaterialDescription& InDescription, const std::string& 
 
 FRenderBatchCandidate Candidate(FFixture& InFixture, FMaterialDescription InDescription)
 {
-	auto Item = Snapshot(InFixture, 1).Items.front();
+	auto Item = Snapshot(InFixture, 1).Items.Front();
 	Item.State.Surface = InFixture.Material(std::move(InDescription));
 	const auto Compiled = Item.State.Surface->GetCompiled();
 	Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(

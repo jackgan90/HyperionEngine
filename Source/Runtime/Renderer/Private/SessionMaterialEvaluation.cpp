@@ -36,9 +36,15 @@ void CommitEvaluation(FMaterialEvaluationCache::FEntry& InEntry, const FMaterial
 {
 	HYP_PERF_SCOPE_C(Detail, CommitMaterialEvaluation);
 	std::uint32_t Dependencies{};
+	InValues.LocalDependenciesMask = 0;
 	for (const auto Index : InPass.ActiveParameters)
 	{
 		Dependencies |= InValues.Dependencies[Index];
+		if (std::find(InEntry.SharedProviderParameters.begin(), InEntry.SharedProviderParameters.end(), Index) ==
+		    InEntry.SharedProviderParameters.end())
+		{
+			InValues.LocalDependenciesMask |= InValues.Dependencies[Index];
+		}
 	}
 	InValues.DependenciesMask = Dependencies;
 	const auto Inputs = InProviders.RetainInputs(InInputs, Dependencies);
@@ -67,6 +73,8 @@ void CommitEvaluation(FMaterialEvaluationCache::FEntry& InEntry, const FMaterial
 	InEntry.Inputs = Inputs;
 	InEntry.Dependencies = Dependencies;
 	InEntry.Resolved = std::move(Resolved);
+	InEntry.Shared.reset();
+	PrepareSharedMaterialEligibility(InEntry);
 }
 
 struct FMaterialInputRefresh
@@ -127,10 +135,11 @@ FResolvedMaterialParameters EvaluateChangedParameters(const FMaterialEvaluationC
 {
 	HYP_PERF_SCOPE_C(Detail, EvaluateChangedParameters);
 	const auto& Parameters = InSchema.GetParameters();
-	FResolvedMaterialParameters Values = *InEntry.Resolved;
+	FResolvedMaterialParameters Values =
+	    InEntry.Shared ? ComposeMaterialParameters(*InEntry.Resolved, *InEntry.Shared) : *InEntry.Resolved;
 	if (!InEntry.SharedProviderParameters.empty())
 	{
-		const auto Shared = InProviders.PrepareShared(InEntry, InPass, InInputs);
+		const auto& Shared = InProviders.PrepareShared(InEntry, InPass, InInputs);
 		Values.Values.SetShared(Shared.Values);
 		Values.Dependencies.SetShared(Shared.Dependencies);
 	}
@@ -201,23 +210,39 @@ std::shared_ptr<const FMaterialProviderInputs> FViewMaterialProviders::RetainInp
 	return Result;
 }
 
-FViewMaterialProviders::FRefresh FViewMaterialProviders::PrepareShared(const FMaterialEvaluationCache::FEntry& InEntry,
-                                                                       const FCompiledMaterialPass& InPass,
-                                                                       const FMaterialProviderInputs& InInputs)
+const FViewMaterialProviders::FRefresh& FViewMaterialProviders::PrepareShared(
+    const FMaterialEvaluationCache::FEntry& InEntry, const FCompiledMaterialPass& InPass,
+    const FMaterialProviderInputs& InInputs)
 {
 	HYP_PERF_SCOPE_C(Detail, SharedMaterialRefresh);
+	if (InEntry.SharedGroup)
+	{
+		if (const auto Found = GroupRefreshes.find(InEntry.SharedGroup.get()); Found != GroupRefreshes.end())
+		{
+			return Found->second;
+		}
+	}
 	const FRefreshLookup Key{&InPass, InEntry.SharedProviderParameters};
 	if (const auto Found = Refreshes.find(Key); Found != Refreshes.end())
 	{
+		if (InEntry.SharedGroup && GroupRefreshes.size() < 128)
+		{
+			auto Result = Found->second;
+			Result.Group = InEntry.SharedGroup;
+			return GroupRefreshes.emplace(InEntry.SharedGroup.get(), std::move(Result)).first->second;
+		}
 		return Found->second;
 	}
 	const auto& Parameters = InEntry.Compiled->Interface.Schema->GetParameters();
 	std::vector<std::optional<std::shared_ptr<const FMaterialValue>>> Values(Parameters.size());
 	std::vector<std::optional<std::uint32_t>> Dependencies(Parameters.size());
+	std::uint32_t SharedMask{};
+	bool bProvided = true;
 	for (const auto Index : InEntry.SharedProviderParameters)
 	{
 		const auto& Parameter = Parameters[Index];
 		const auto Provider = Evaluate(InInputs, Parameter.Semantic);
+		bProvided &= bool(Provider.Value);
 		const auto Value =
 		    Provider.Value ? Provider.Value.Share()
 		                   : (Parameter.Default ? std::make_shared<const FMaterialValue>(*Parameter.Default) : nullptr);
@@ -230,15 +255,28 @@ FViewMaterialProviders::FRefresh FViewMaterialProviders::PrepareShared(const FMa
 		    SameMaterialValue(InEntry.Resolved->Values[Index], Value) ? InEntry.Resolved->Values[Index] : Value;
 		Dependencies[Index] =
 		    Provider.Dependencies | (Provider.Value ? 0U : MaterialScopeBit(EMaterialScope::Material));
+		SharedMask |= *Dependencies[Index];
 	}
 	FRefresh Result{std::make_shared<const FMaterialValueTable::FSharedValues>(std::move(Values)),
 	                std::make_shared<const FMaterialDependencyTable::FSharedValues>(std::move(Dependencies))};
+	Result.Group = InEntry.SharedGroup
+	                   ? InEntry.SharedGroup
+	                   : std::make_shared<const std::vector<std::size_t>>(InEntry.SharedProviderParameters);
+	if (bProvided)
+	{
+		const auto Inputs = RetainInputs(InInputs, SharedMask);
+		Result.Parameters = std::make_shared<const FMaterialSharedParameters>(
+		    FMaterialSharedParameters{Result.Values, Result.Dependencies, {Inputs, &Inputs->Scopes}, SharedMask});
+	}
 	// Temporary per-view history is bounded; published overlays live only as long as their current items/frames.
 	if (Refreshes.size() < 128)
 	{
 		Refreshes.emplace(FRefreshKey{&InPass, InEntry.SharedProviderParameters}, Result);
+		const auto* Group = Result.Group.get();
+		return GroupRefreshes.emplace(Group, std::move(Result)).first->second;
 	}
-	return Result;
+	UncachedRefresh = std::move(Result);
+	return UncachedRefresh;
 }
 
 FMaterialProvidedValue FViewMaterialProviders::Evaluate(const FMaterialProviderInputs& InInputs,
@@ -302,6 +340,7 @@ bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& 
 		Entry.ObjectInputs = std::move(*ObjectInputs);
 	}
 	InItem.ResolvedParameters = Entry.Resolved;
+	InItem.SharedParameters.reset();
 	return true;
 }
 } // namespace Hyperion

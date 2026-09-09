@@ -109,7 +109,7 @@ def check_viewer(profile, viewer, output, mode):
         assert len(plots[name]) == view_count and set(plots[name]) <= {0, 1}, name
     assert material_count + sum(plots["ViewPreparationReuses"]) == view_count
     packet_count = view_count - sum(plots["ViewPacketReuses"])
-    for name in ("MaterialEvaluationFull", "MaterialEvaluationReuses", "MaterialEvaluationRefreshes",
+    for name in ("MaterialEvaluationFull", "MaterialEvaluationReuses", "MaterialEvaluationRefreshes", "MaterialSharedUpdates",
                  "ProviderEvaluations", "ProviderReuses", "BatchPlanReuses"):
         assert len(plots[name]) == material_count and min(plots[name]) >= 0, (name, len(plots[name]))
     for name in ("ConstantPacks", "ConstantUploadBytes", "ConstantReuses", "BindingSetsCreated",
@@ -118,7 +118,8 @@ def check_viewer(profile, viewer, output, mode):
     recording_count = sum(event["name"] == "RecordCommands" for event in events)
     for name in ("GraphicsPipelineBinds", "GraphicsGeometryBinds", "GraphicsDynamicBinds"):
         assert len(plots[name]) == recording_count and min(plots[name]) >= 0, (name, len(plots[name]))
-    assert sum(plots["MaterialEvaluationRefreshes"]) > 0 and max(plots["SceneDraws"]) <= 210
+    assert sum(plots["MaterialEvaluationRefreshes"]) + sum(plots["MaterialSharedUpdates"]) > 0
+    assert max(plots["SceneDraws"]) <= 210
     return summary
 
 
