@@ -139,6 +139,10 @@ public:
 	{
 	}
 
+	explicit FMaterialSharedValue(std::shared_ptr<const FMaterialValue> InValue) : Value(std::move(InValue))
+	{
+	}
+
 	explicit operator bool() const
 	{
 		return bool(Value);

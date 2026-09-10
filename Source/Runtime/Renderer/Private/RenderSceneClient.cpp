@@ -178,7 +178,8 @@ FRenderSceneClient::FRenderSceneClient(FTaskSystem& InTasks,
 				    return std::make_shared<const int>(0);
 			    };
 		    }
-		    State->Scene = std::make_unique<FRenderScene>(State->Tasks, std::move(Factory), std::move(Changed));
+		    State->Scene =
+		        std::make_unique<FRenderScene>(State->Tasks, State->Identity, std::move(Factory), std::move(Changed));
 	    }));
 }
 

@@ -1,4 +1,5 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
+#include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
@@ -161,6 +162,15 @@ void CheckSharedModels(FSceneFixture& InFixture)
 	auto Image = InFixture.Frame(2);
 	Pixel(Image, 110, {1, 0, 0});
 	Pixel(Image, 210, {0, 0, 1});
+	// Exact incremental upload counts require the previous GPU cache's owners to remain live.
+	FRenderSceneSnapshot Previous;
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              FRenderView View;
+		                                              View.CullingMode = ESceneCullingMode::None;
+		                                              Previous = Scene.Collect(View);
+	                                              }));
 	Left.SetTransform(Multiply(Translation({-.65f, 0, 0}), Scale({.4f, .4f, 1})));
 	InFixture.Frame(2);
 	HYP_CHECK(InFixture.LastStatistics.Batches.PackedRecords == 1);
@@ -177,6 +187,7 @@ void CheckSharedModels(FSceneFixture& InFixture)
 		}
 	}
 	HYP_CHECK(ObjectBytes && InFixture.LastStatistics.Batches.UploadBytes == ObjectBytes);
+	Previous = {};
 	Left.SetVisible(false);
 	Image = InFixture.Frame(1);
 	Pixel(Image, 110, {0, 0, 0});
@@ -517,6 +528,121 @@ void CheckRetainedViewChanges(FSceneFixture& InFixture)
 	HYP_CHECK(InFixture.LastStatistics.PreparationReuses == 0);
 }
 
+void CheckVisibilityReturn(FSceneFixture& InFixture)
+{
+	const auto Parameters = [](FRenderView& InView)
+	{
+		InView.Parameters = DefaultShadowParameters();
+	};
+	InFixture.Frame(1, ESceneCullingMode::Bvh, Parameters);
+	const auto Original = InFixture.Frame(1, ESceneCullingMode::Bvh, Parameters);
+	for (unsigned Index = 0; Index < 3; ++Index)
+	{
+		Pixel(InFixture.Frame(0, ESceneCullingMode::Bvh,
+		                      [&](FRenderView& InView)
+		                      {
+			                      Parameters(InView);
+			                      InView.ViewProjection = Multiply(Translation({10, 0, 0}), InView.ViewProjection);
+		                      }),
+		      160, {0, 0, 0});
+		HYP_CHECK(InFixture.LastStatistics.RetainedSceneItems == 1);
+		const auto Restored = InFixture.Frame(1, ESceneCullingMode::Bvh, Parameters);
+		HYP_CHECK(Restored.Rgba == Original.Rgba);
+		HYP_CHECK(InFixture.LastStatistics.RetainedItemRestores == 1);
+	}
+}
+
+void CheckLocalPackets(FSceneFixture& InFixture)
+{
+	const auto Asset = std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1}));
+	FModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	A.SetTransform(Multiply(Translation({-.7f, 0, 0}), Scale({.4f, .4f, 1})));
+	B.SetTransform(Multiply(Translation({.7f, 0, 0}), Scale({.4f, .4f, 1})));
+	AwaitModel(A);
+	AwaitModel(B);
+	const auto Parameters = [](FRenderView& InView)
+	{
+		InView.Parameters = DefaultShadowParameters();
+	};
+	InFixture.Frame(2, ESceneCullingMode::None, Parameters);
+	InFixture.Frame(2, ESceneCullingMode::None, Parameters);
+	const auto Moving = [&](FRenderView& InView)
+	{
+		Parameters(InView);
+		InView.Eye.X = .01f;
+		InView.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt(InView.Eye, {0, 0, 0}));
+	};
+	const auto Batched = InFixture.Frame(2, ESceneCullingMode::None, Moving);
+	HYP_CHECK(InFixture.LastStatistics.Batches.LocalPlanReuses == 1);
+	HYP_CHECK(InFixture.LastStatistics.Batches.LocalPacketReuses == 1);
+	HYP_CHECK(InFixture.LastStatistics.Batches.InstancedItems == 2 && InFixture.LastStatistics.Draws == 1);
+	const auto Ordinary = InFixture.Frame(2, ESceneCullingMode::None,
+	                                      [&](FRenderView& InView)
+	                                      {
+		                                      Moving(InView);
+		                                      InView.bInstanceBatching = false;
+	                                      });
+	HYP_CHECK(Batched.Rgba == Ordinary.Rgba && InFixture.LastStatistics.Batches.LocalPacketReuses == 0);
+	FMaterialOverride Blue;
+	Blue.BaseColor = FVec4{0, 0, 1, 1};
+	B.SetMaterial(Blue);
+	Pixel(InFixture.Frame(2, ESceneCullingMode::None, Moving), 210, {0, 0, 1});
+	HYP_CHECK(InFixture.LastStatistics.Batches.LocalPacketReuses == 0);
+	A.Remove();
+	B.Remove();
+	InFixture.AwaitRetirement();
+}
+
+void CheckLocalVisibilityInputs(FSceneFixture& InFixture)
+{
+	const auto Asset = std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1}));
+	std::array<std::unique_ptr<FModel>, 3> Models;
+	for (std::size_t Index = 0; Index < Models.size(); ++Index)
+	{
+		Models[Index] =
+		    std::make_unique<FModel>(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+		Models[Index]->SetTransform(Multiply(Translation({(float(Index) - 1) * .8f, 0, 0}), Scale({.2f, .2f, 1})));
+		AwaitModel(*Models[Index]);
+	}
+	const auto Full = [](FRenderView& InView)
+	{
+		InView.Parameters = DefaultShadowParameters();
+		InView.CullingViewProjection = Identity();
+	};
+	const auto Partial = [&](FRenderView& InView)
+	{
+		Full(InView);
+		InView.CullingViewProjection = Translation({-.5f, 0, 0});
+	};
+	InFixture.Frame(3, ESceneCullingMode::Bvh, Full);
+	const auto Original = InFixture.Frame(3, ESceneCullingMode::Bvh, Full);
+	for (unsigned Iteration = 0; Iteration < 4; ++Iteration)
+	{
+		InFixture.Frame(2, ESceneCullingMode::Bvh, Partial);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalInputReuses == 2);
+		HYP_CHECK(InFixture.LastStatistics.SharedMaterialGroups == 1);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalCompatibilityReuses == 2);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalRecordReuses > 0);
+		HYP_CHECK(InFixture.LastStatistics.RetainedSceneItems == 1);
+		const auto Restored = InFixture.Frame(3, ESceneCullingMode::Bvh, Full);
+		HYP_CHECK(Restored.Rgba == Original.Rgba);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalInputReuses == 3);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalCompatibilityReuses == 3);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalRecordReuses > 0);
+		HYP_CHECK(InFixture.LastStatistics.Batches.PackedRecords == 0);
+		HYP_CHECK(InFixture.LastStatistics.RetainedItemRestores == 1);
+	}
+	FMaterialOverride Blue;
+	Blue.BaseColor = FVec4{0, 0, 1, 1};
+	Models[1]->SetMaterial(Blue);
+	Pixel(InFixture.Frame(3, ESceneCullingMode::Bvh, Full), 160, {0, 0, 1});
+	HYP_CHECK(InFixture.LastStatistics.Batches.LocalInputReuses == 0);
+	HYP_CHECK(InFixture.LastStatistics.Batches.LocalRecordReuses == 0);
+	Models = {};
+	InFixture.AwaitRetirement();
+}
+
 void CheckRetainedFrames(FSceneFixture& InFixture)
 {
 	FScene Scene;
@@ -547,6 +673,7 @@ void CheckRetainedFrames(FSceneFixture& InFixture)
 	HYP_CHECK(Idle.MaintenanceTasks == Warm.MaintenanceTasks && Idle.MaintenanceTicks == Warm.MaintenanceTicks);
 	HYP_CHECK(Idle.Constants.UploadBytes == Warm.Constants.UploadBytes && Bridge.GetStatusRevision() == StatusRevision);
 	CheckRetainedViewChanges(InFixture);
+	CheckVisibilityReturn(InFixture);
 	CheckQueuedViews(InFixture);
 	Model.World = Translation({100, 0, 0});
 	Scene.Update(Handle, Model);
@@ -617,6 +744,8 @@ int main()
 		CheckSharedMaterialPublication(Fixture);
 		CheckRetainedFrames(Fixture);
 		CheckReceiptViewChanges(Fixture);
+		CheckLocalPackets(Fixture);
+		CheckLocalVisibilityInputs(Fixture);
 		Fixture.Tasks.Wait(Fixture.Tasks.Dispatch({EDomain::Rhi, 0},
 		                                          [&]
 		                                          {

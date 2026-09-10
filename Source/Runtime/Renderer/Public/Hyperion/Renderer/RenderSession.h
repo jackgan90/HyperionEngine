@@ -60,7 +60,8 @@ private:
 	std::unique_ptr<FMaterialState> MaterialState;
 	std::set<std::uint64_t> AdmitFamily(std::span<const FRenderView> InViews, const FMaterialFrameContext& InFrame,
 	                                    std::uint64_t InFamily);
-	void PrepareMaterials(FRenderSceneSnapshot& InSnapshot);
+	void PrepareMaterials(FRenderSceneSnapshot& InSnapshot, bool bInStableCollection);
+	FMaterialProviderInputs PrepareViewInputs(const FRenderSceneSnapshot& InSnapshot);
 	void InvalidatePreparedViews();
 	std::shared_ptr<const FRenderSceneSnapshot> PrepareView(const FRenderView& InView,
 	                                                        std::shared_ptr<const FMaterialFrameContext> InFrame,

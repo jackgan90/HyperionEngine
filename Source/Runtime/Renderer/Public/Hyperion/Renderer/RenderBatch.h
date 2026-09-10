@@ -96,6 +96,7 @@ struct FRenderBatchPlan
 {
 	std::vector<FRenderBatch> Batches;
 	FRenderBatchStats Statistics;
+	std::shared_ptr<const void> StructureIdentity; // Immutable ordered membership and instance data publication.
 };
 
 struct FRenderBatchLimits

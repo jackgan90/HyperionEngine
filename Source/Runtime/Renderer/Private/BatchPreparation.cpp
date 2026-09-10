@@ -119,10 +119,18 @@ std::shared_ptr<const FRenderBatchSystem::FImpl::FPreparedItem> FRenderBatchSyst
 	if (InItem.LocalItemId && Existing != Prepared.end())
 	{
 		const auto& Entry = Existing->second;
+		if (InItem.LocalPreparation && Entry.Input->LocalPreparation.lock() == InItem.LocalPreparation)
+		{
+			++OutStats.PreparedInputReuses;
+			++OutStats.LocalInputReuses;
+			RecentPrepared.splice(RecentPrepared.end(), RecentPrepared, Entry.Recent);
+			return Entry.Input;
+		}
 		if (Entry.Input->MatchesSource(InItem) &&
 		    (Entry.Input->MatchesValues(InItem) || Entry.Input->MatchesInstances(InItem)))
 		{
 			Entry.Input->RefreshValues(InItem);
+			Entry.Input->LocalPreparation = InItem.LocalPreparation;
 			++OutStats.PreparedInputReuses;
 			RecentPrepared.splice(RecentPrepared.end(), RecentPrepared, Entry.Recent);
 			return Entry.Input;
@@ -142,6 +150,7 @@ std::shared_ptr<const FRenderBatchSystem::FImpl::FPreparedItem> FRenderBatchSyst
 	Result->bMirrored = Determinant(InItem.State.World) < 0;
 	Result->Dynamic = InItem.DynamicState;
 	Result->Shared = InItem.SharedParameters;
+	Result->LocalPreparation = InItem.LocalPreparation;
 	Result->InstanceValues.reserve(Result->Contract->Parameters.size());
 	// These count-bounded proofs own no numeric trees. Track their metadata separately from packed data,
 	// so a small payload budget cannot destroy otherwise reusable ordinary-draw plans.
@@ -202,7 +211,7 @@ void FRenderBatchSystem::FImpl::PrepareInputs(const FRenderSceneSnapshot& InSnap
 	}
 }
 
-void FRenderBatchSystem::FImpl::ErasePrepared(std::map<FBatchItemKey, FPreparedEntry>::iterator InEntry)
+void FRenderBatchSystem::FImpl::ErasePrepared(FPreparedEntries::iterator InEntry)
 {
 	PreparedMetadataBytes -= InEntry->second.Input->MetadataBytes;
 	RecentPrepared.erase(InEntry->second.Recent);
@@ -214,22 +223,16 @@ void FRenderBatchSystem::FImpl::CollectPrepared()
 	// The existing candidate retirement scan removes matching dead inputs immediately. Sweep a bounded
 	// portion here for orphaned preparations whose candidate was evicted earlier. These own only weak value
 	// proofs; insertion-time item eviction always enforces the metadata count limit independently of this sweep.
-	auto It = PreparedCursor ? Prepared.lower_bound(*PreparedCursor) : Prepared.begin();
-	if (It == Prepared.end())
+	const auto Previous = PreparedCursor ? Prepared.find(*PreparedCursor) : Prepared.end();
+	auto It = Previous != Prepared.end() ? Previous->second.Recent : RecentPrepared.begin();
+	for (std::size_t Count = 0; Count < 64 && It != RecentPrepared.end(); ++Count)
 	{
-		It = Prepared.begin();
-	}
-	for (std::size_t Count = 0; Count < 64 && It != Prepared.end(); ++Count)
-	{
-		if (It->second.Input->Lifetime.expired())
+		const auto Entry = Prepared.find(*It++);
+		if (Entry->second.Input->Lifetime.expired())
 		{
-			ErasePrepared(It++);
-		}
-		else
-		{
-			++It;
+			ErasePrepared(Entry);
 		}
 	}
-	PreparedCursor = It == Prepared.end() ? std::nullopt : std::optional<FBatchItemKey>(It->first);
+	PreparedCursor = It == RecentPrepared.end() ? std::nullopt : std::optional<FBatchItemKey>(*It);
 }
 } // namespace Hyperion

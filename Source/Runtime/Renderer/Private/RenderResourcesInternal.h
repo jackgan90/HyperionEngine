@@ -100,18 +100,30 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	using FDrawKey = std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string, bool>;
 	std::map<FDrawKey, FPreparedDraw> PreparedDraws;
 
+	struct FPreparedViewDraw
+	{
+		std::size_t Item{};
+		std::optional<std::size_t> Batch;
+	};
+
 	struct FPreparedViewPasses
 	{
 		std::weak_ptr<const void> Contents;
 		std::uint64_t ResourceRevision{};
 		std::vector<FColorPass> Passes;
 		FRenderBatchStats Statistics;
+		std::weak_ptr<const void> LocalContents;
+		std::weak_ptr<const void> BatchStructure;
+		std::vector<FPreparedViewDraw> Sources;
 	};
 
 	using FViewKey = std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>;
 	std::map<FViewKey, FPreparedViewPasses> PreparedViews;
 	bool ReuseViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& OutPasses);
-	void CacheViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& InPasses);
+	void CacheViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& InPasses,
+	                     std::vector<FPreparedViewDraw> InSources);
+	bool RefreshViewPasses(const FRenderSceneSnapshot& InSnapshot, FPreparedViewPasses& InCached,
+	                       std::vector<FColorPass>& OutPasses);
 	void CollectViewPasses();
 	void CollectPreparedDraws();
 	FTaskSystem& Tasks;

@@ -4,6 +4,7 @@
 #include <list>
 #include <map>
 #include <tuple>
+#include <unordered_map>
 
 namespace Hyperion
 {
@@ -11,6 +12,20 @@ using FBatchItemKey =
     std::tuple<std::uint64_t, std::string, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t>;
 
 FBatchItemKey BatchItemKey(const FRenderSceneSnapshot& InSnapshot, const FRenderItem& InItem);
+
+struct FBatchItemKeyHash
+{
+	std::size_t operator()(const FBatchItemKey& InKey) const
+	{
+		std::size_t Hash = std::hash<std::string>{}(std::get<1>(InKey));
+		for (const auto Word : {std::get<0>(InKey), std::get<2>(InKey), std::uint64_t(std::get<3>(InKey)),
+		                        std::get<4>(InKey), std::get<5>(InKey)})
+		{
+			Hash = Hash * 16777619U ^ std::hash<std::uint64_t>{}(Word);
+		}
+		return Hash;
+	}
+};
 
 template<typename TValue>
 bool SameBatchOwner(const std::weak_ptr<const TValue>& InWeak, const std::shared_ptr<const TValue>& InStrong)
@@ -45,6 +60,7 @@ struct FRenderBatchSystem::FImpl
 		std::optional<FMaterialDynamicState> Dynamic;
 		std::list<FBatchItemKey>::iterator Recent;
 		std::weak_ptr<const FMaterialSharedParameters> Shared;
+		std::weak_ptr<const FLocalMaterialItem> LocalPreparation;
 	};
 
 	struct FInstanceContract
@@ -85,6 +101,7 @@ struct FRenderBatchSystem::FImpl
 		bool bMirrored{};
 		std::optional<FMaterialDynamicState> Dynamic;
 		std::weak_ptr<const FMaterialSharedParameters> Shared;
+		std::weak_ptr<const FLocalMaterialItem> LocalPreparation;
 		std::size_t MetadataBytes{};
 		bool MatchesSource(const FRenderItem& InItem) const;
 		bool MatchesState(const FRenderItem& InItem) const;
@@ -141,6 +158,8 @@ struct FRenderBatchSystem::FImpl
 		FRenderBatchStats Statistics;
 		ERHIDepthFormat Depth{};
 		std::uint64_t Access{};
+		std::weak_ptr<const void> LocalContents;
+		std::shared_ptr<const void> StructureIdentity;
 	};
 
 	FTaskSystem& Tasks;
@@ -148,14 +167,15 @@ struct FRenderBatchSystem::FImpl
 	FRenderBatchLimits Limits;
 	FInstanceDataCache Packing;
 	std::vector<std::unique_ptr<IRenderBatchStrategy>> Strategies;
-	std::map<FBatchItemKey, FItemEntry> Items;
+	std::unordered_map<FBatchItemKey, FItemEntry, FBatchItemKeyHash> Items;
 	std::multimap<std::size_t, std::weak_ptr<const FRenderBatchStructure>> Structures;
 	std::list<FBatchItemKey> RecentItems;
 	std::map<FBatchItemKey, FChunkEntry> Chunks;
 	std::list<FBatchItemKey> RecentChunks;
 	std::map<std::pair<const FCompiledMaterialDefinition*, std::string>, std::shared_ptr<const FInstanceContract>>
 	    Contracts;
-	std::map<FBatchItemKey, FPreparedEntry> Prepared;
+	using FPreparedEntries = std::unordered_map<FBatchItemKey, FPreparedEntry, FBatchItemKeyHash>;
+	FPreparedEntries Prepared;
 	std::list<FBatchItemKey> RecentPrepared;
 	std::vector<std::shared_ptr<const FPreparedItem>> CurrentInputs;
 	std::size_t PreparedMetadataBytes{};
@@ -183,7 +203,7 @@ struct FRenderBatchSystem::FImpl
 	void PrepareInputs(const FRenderSceneSnapshot& InSnapshot, FRenderBatchStats& OutStats);
 	std::shared_ptr<const FPreparedItem> PrepareInput(const FRenderSceneSnapshot& InSnapshot, const FRenderItem& InItem,
 	                                                  FRenderBatchStats& OutStats);
-	void ErasePrepared(std::map<FBatchItemKey, FPreparedEntry>::iterator InEntry);
+	void ErasePrepared(FPreparedEntries::iterator InEntry);
 	void ReserveChunkBytes(std::size_t InBytes, FRenderBatchStats& OutStats);
 	void CollectPrepared();
 	void CanonicalizeStructure(FRenderBatchSignature& InSignature);

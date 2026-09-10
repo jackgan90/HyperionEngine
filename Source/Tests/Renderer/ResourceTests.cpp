@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Support/TestSupport.h"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <future>
@@ -709,6 +710,15 @@ void CheckVisibilityAndAggregation(FTaskSystem& InTasks, FTestDevice& InDevice, 
 	Bindings.push_back(Session.GetScene().Create(State)); // Mirrored, non-uniform and intersecting.
 	State.bVisible = false;
 	Bindings.push_back(Session.GetScene().Create(State));
+	Await(
+	    [&]
+	    {
+		    return std::all_of(Bindings.begin(), Bindings.end(),
+		                       [](const auto& InBinding)
+		                       {
+			                       return InBinding.GetStatus().State == ERenderPrimitiveStatus::Ready;
+		                       });
+	    });
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
 	                              {

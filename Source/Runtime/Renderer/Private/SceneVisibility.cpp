@@ -144,8 +144,13 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 	{
 		Items.MoveFrom(InSnapshot.Items, Item.Index);
 	}
+	if (InSnapshot.bRetainCulledItems)
+	{
+		InSnapshot.RetainedItems.MoveRemainingFrom(InSnapshot.Items, FRenderSceneSnapshot::RetainedItemLimit);
+	}
 	InSnapshot.Items = std::move(Items);
 	InSnapshot.Statistics.VisibleItems = InSnapshot.Items.Size();
+	InSnapshot.Statistics.RetainedSceneItems = InSnapshot.RetainedItems.Size();
 	return InSnapshot;
 }
 } // namespace Hyperion

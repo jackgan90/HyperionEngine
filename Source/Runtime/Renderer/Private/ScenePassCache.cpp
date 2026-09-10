@@ -1,3 +1,5 @@
+#include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Renderer/RenderBatch.h"
 #include "RenderResourcesInternal.h"
 #include <algorithm>
 
@@ -6,14 +8,19 @@ namespace Hyperion
 bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InSnapshot,
                                                  std::vector<FColorPass>& OutPasses)
 {
+	HYP_PERF_SCOPE_C(Detail, ReuseScenePasses);
 	if (!InSnapshot.ContentIdentity || !InSnapshot.Frame)
 	{
 		return false;
 	}
 	const FViewKey Key{InSnapshot.Frame->Session, InSnapshot.Family, InSnapshot.View.Identity};
 	const auto It = PreparedViews.find(Key);
-	if (It == PreparedViews.end() || It->second.Contents.lock() != InSnapshot.ContentIdentity ||
-	    It->second.ResourceRevision != PublicationRevision.load(std::memory_order_acquire))
+	if (It == PreparedViews.end() || It->second.ResourceRevision != PublicationRevision.load(std::memory_order_acquire))
+	{
+		return false;
+	}
+	const bool bSameContents = It->second.Contents.lock() == InSnapshot.ContentIdentity;
+	if (!bSameContents && !RefreshViewPasses(InSnapshot, It->second, OutPasses))
 	{
 		return false;
 	}
@@ -29,23 +36,34 @@ bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InS
 		}
 	}
 	Stats.Batches = It->second.Statistics;
-	Stats.Batches.ReusedChunks = Stats.Batches.InstancedDraws;
-	Stats.Batches.RebuiltChunks = 0;
-	Stats.Batches.PackedBytes = 0;
-	Stats.Batches.PackedRecords = 0;
-	Stats.Batches.ReusedRecords = 0;
-	Stats.Batches.AssembledBlocks = 0;
-	Stats.Batches.ReusedBlocks = 0;
-	Stats.Batches.AssembledBytes = 0;
-	Stats.Batches.UploadBytes = 0;
-	Stats.Batches.GpuReuses = 0;
-	Stats.Batches.CompatibilityReuses = 0;
-	Stats.Batches.CompatibilityBuilds = 0;
-	Stats.Batches.PlanReuses = 1;
-	Stats.Batches.PacketReuses = 1;
-	Stats.Batches.Evictions = 0;
-	Stats.Batches.PlanningMilliseconds = 0;
-	Stats.Batches.PreparationMilliseconds = 0;
+	if (bSameContents)
+	{
+		Stats.Batches.ReusedChunks = Stats.Batches.InstancedDraws;
+		Stats.Batches.RebuiltChunks = 0;
+		Stats.Batches.PackedBytes = 0;
+		Stats.Batches.PackedRecords = 0;
+		Stats.Batches.ReusedRecords = 0;
+		Stats.Batches.AssembledBlocks = 0;
+		Stats.Batches.ReusedBlocks = 0;
+		Stats.Batches.AssembledBytes = 0;
+		Stats.Batches.UploadBytes = 0;
+		Stats.Batches.GpuReuses = 0;
+		Stats.Batches.CompatibilityReuses = 0;
+		Stats.Batches.CompatibilityBuilds = 0;
+		Stats.Batches.PlanReuses = 1;
+		Stats.Batches.PacketReuses = 1;
+		Stats.Batches.Evictions = 0;
+		Stats.Batches.PlanningMilliseconds = 0;
+		Stats.Batches.PreparationMilliseconds = 0;
+		Stats.Batches.LocalPlanReuses = 0;
+		Stats.Batches.LocalPacketReuses = 0;
+		Stats.Batches.LocalInputReuses = 0;
+		Stats.Batches.LocalCompatibilityReuses = 0;
+		Stats.Batches.LocalRecordReuses = 0;
+		Stats.Batches.PreparedInputBuilds = 0;
+		Stats.Batches.PreparedInputReuses = 0;
+		Stats.Batches.InstanceContractBuilds = 0;
+	}
 	// Reused packets still publish this view's receipts in the current family order.
 	// Cache entries are published only after every item's preparation succeeds.
 	for (const auto& Item : InSnapshot.Items)
@@ -61,8 +79,10 @@ bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InS
 }
 
 void FRenderResourceCoordinator::CacheViewPasses(const FRenderSceneSnapshot& InSnapshot,
-                                                 std::vector<FColorPass>& InPasses)
+                                                 std::vector<FColorPass>& InPasses,
+                                                 std::vector<FPreparedViewDraw> InSources)
 {
+	HYP_PERF_SCOPE_C(Detail, CacheScenePasses);
 	if (!InSnapshot.ContentIdentity || !InSnapshot.Frame || Stats.Batches.FailedItems)
 	{
 		return;
@@ -80,10 +100,12 @@ void FRenderResourceCoordinator::CacheViewPasses(const FRenderSceneSnapshot& InS
 	{
 		Pass.Commands.ShareDraws();
 	}
-	TrackScope(InSnapshot.ContentIdentity);
-	PreparedViews.insert_or_assign(Key, FPreparedViewPasses{InSnapshot.ContentIdentity,
-	                                                        PublicationRevision.load(std::memory_order_acquire),
-	                                                        InPasses, Stats.Batches});
+	TrackScope(InSnapshot.LocalContentIdentity ? InSnapshot.LocalContentIdentity : InSnapshot.ContentIdentity);
+	PreparedViews.insert_or_assign(
+	    Key, FPreparedViewPasses{InSnapshot.ContentIdentity, PublicationRevision.load(std::memory_order_acquire),
+	                             InPasses, Stats.Batches, InSnapshot.LocalContentIdentity,
+	                             InSnapshot.Batches ? InSnapshot.Batches->StructureIdentity : nullptr,
+	                             std::move(InSources)});
 }
 
 void FRenderResourceCoordinator::CollectViewPasses()
@@ -91,7 +113,7 @@ void FRenderResourceCoordinator::CollectViewPasses()
 	std::erase_if(PreparedViews,
 	              [](const auto& InEntry)
 	              {
-		              return InEntry.second.Contents.expired();
+		              return InEntry.second.Contents.expired() && InEntry.second.LocalContents.expired();
 	              });
 }
 } // namespace Hyperion

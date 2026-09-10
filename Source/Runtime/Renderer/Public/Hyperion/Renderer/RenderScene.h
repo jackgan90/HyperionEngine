@@ -88,6 +88,7 @@ public:
 	FTaskHandle Flush();
 	void Close();
 	// Render only. The result owns all state required by subsequent frame work.
+	// Reuse requires the same scene identity and scene/resource revisions; mismatched InPrevious is left intact.
 	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true, std::uint64_t InResourceRevision = 0,
 	                             FRenderSceneSnapshot* InPrevious = nullptr) const;
 	FSceneVisibilityStats BeginViews() const;

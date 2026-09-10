@@ -90,17 +90,25 @@ std::shared_ptr<const FRenderBatchCandidate> FRenderBatchSystem::FImpl::Describe
 	HYP_PERF_SCOPE_C(Detail, DescribeCachedBatchItem);
 	const auto Key = BatchItemKey(InSnapshot, InItem);
 	const auto Existing = Items.find(Key);
-	const bool bMirrored = Determinant(InItem.State.World) < 0;
 	if (InItem.LocalItemId && Existing != Items.end())
 	{
 		auto& Entry = Existing->second;
+		if (InItem.LocalPreparation && Entry.LocalPreparation.lock() == InItem.LocalPreparation &&
+		    Entry.Candidate->Signature.Structure->Target == InTarget)
+		{
+			RefreshSharedValues(Entry.Candidate, InItem, InShared);
+			++OutStats.CompatibilityReuses;
+			++OutStats.LocalCompatibilityReuses;
+			RecentItems.splice(RecentItems.end(), RecentItems, Entry.Recent);
+			return Entry.Candidate;
+		}
 		const bool bSameValues =
 		    Entry.Values.lock() == InItem.ResolvedParameters && SameBatchOwner(Entry.Shared, InItem.SharedParameters);
 		const bool bSameResources =
 		    bSameValues || (InItem.ResolvedParameters->ResourceIdentity &&
 		                    Entry.Resources.lock() == InItem.ResolvedParameters->ResourceIdentity);
 		if (Entry.Lifetime.lock() == InItem.Lifetime && bSameResources && Entry.Section == InItem.State.Section &&
-		    Entry.bMirrored == bMirrored && Entry.Dynamic == InItem.DynamicState &&
+		    Entry.bMirrored == (Determinant(InItem.State.World) < 0) && Entry.Dynamic == InItem.DynamicState &&
 		    Entry.Candidate->Program == InItem.State.Surface->GetCompiled() &&
 		    Entry.Candidate->Signature.Structure->GeometryIdentity == InItem.State.Resource->GetIdentity() &&
 		    Entry.Candidate->Signature.Structure->Target == InTarget)
@@ -112,6 +120,7 @@ std::shared_ptr<const FRenderBatchCandidate> FRenderBatchSystem::FImpl::Describe
 				Entry.Shared = InItem.SharedParameters;
 			}
 			++OutStats.CompatibilityReuses;
+			Entry.LocalPreparation = InItem.LocalPreparation;
 			RecentItems.splice(RecentItems.end(), RecentItems, Entry.Recent);
 			return Entry.Candidate;
 		}
@@ -135,8 +144,9 @@ std::shared_ptr<const FRenderBatchCandidate> FRenderBatchSystem::FImpl::Describe
 		}
 		RecentItems.push_back(Key);
 		Items.emplace(Key, FItemEntry{InItem.ResolvedParameters, InItem.ResolvedParameters->ResourceIdentity,
-		                              InItem.Lifetime, Result, InItem.State.Section, bMirrored, InItem.DynamicState,
-		                              std::prev(RecentItems.end()), InItem.SharedParameters});
+		                              InItem.Lifetime, Result, InItem.State.Section,
+		                              Determinant(InItem.State.World) < 0, InItem.DynamicState,
+		                              std::prev(RecentItems.end()), InItem.SharedParameters, InItem.LocalPreparation});
 	}
 	return Result;
 }

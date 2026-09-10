@@ -197,6 +197,8 @@ public:
 	void Clear();
 	// Consumes a source slot. The source is only cleared/replaced after the current ordering transaction.
 	void MoveFrom(FRenderItemList& InSource, std::size_t InIndex);
+	void Discard(std::size_t InIndex);
+	void MoveRemainingFrom(FRenderItemList& InSource, std::size_t InLimit);
 
 private:
 	FStorage Storage;

@@ -6,6 +6,7 @@
 #include "Hyperion/Renderer/SceneSpatialIndex.h"
 #include "Hyperion/Scene/Scene.h"
 #include "Hyperion/Tasks/TaskSystem.h"
+#include <array>
 #include <atomic>
 #include <optional>
 
@@ -14,6 +15,8 @@ namespace Hyperion
 class FRenderResource;
 class FRenderMaterial;
 struct FMaterialEvaluationCache;
+struct FMaterialSharedBinding;
+struct FLocalMaterialItem;
 struct FRenderBatchPlan;
 struct FSceneItemPreparation;
 
@@ -93,7 +96,9 @@ struct FRenderItem
 	std::shared_ptr<FMaterialEvaluationCache> EvaluationCache; // Renderer-owned; collection must not edit it.
 	std::shared_ptr<const FResolvedMaterialParameters> ResolvedParameters;
 	std::shared_ptr<const FMaterialSharedParameters> SharedParameters;
-	std::shared_ptr<const FSceneItemPreparation> Preparation; // Renderer-owned immutable collection metadata.
+	std::shared_ptr<const FSceneItemPreparation> Preparation;    // Renderer-owned immutable collection metadata.
+	std::shared_ptr<const FMaterialSharedBinding> SharedBinding; // Renderer-owned local dependency proof.
+	std::shared_ptr<const FLocalMaterialItem> LocalPreparation;  // Stable local values across visibility changes.
 
 	const std::shared_ptr<const FMaterialValue>& GetMaterialValue(std::size_t InIndex) const
 	{
@@ -111,8 +116,11 @@ struct FRenderItem
 
 struct FRenderSceneSnapshot
 {
+	static constexpr std::size_t RetainedItemLimit = 2048;
 	FRenderView View;
 	FRenderItemList Items;
+	FRenderItemList RetainedItems; // Bounded static preparation outside the current visible set; never submitted.
+	bool bRetainCulledItems{};
 	FSceneVisibilityStats Statistics;
 	std::shared_ptr<const FMaterialFrameContext> Frame;
 	std::uint64_t Family = 1;
@@ -120,7 +128,10 @@ struct FRenderSceneSnapshot
 	std::shared_ptr<const FRenderBatchPlan> Batches;
 	// Renderer-owned identities: immutable prepared contents and the current preparation receipt frame.
 	std::shared_ptr<const void> ContentIdentity;
+	std::shared_ptr<const void> LocalContentIdentity; // Ordered local draw state; shared numeric inputs may change.
 	std::shared_ptr<std::atomic_uint64_t> DrawFrame;
+	// Renderer-owned collection provenance: scene identity, scene revision and resource publication revision.
+	std::array<std::uint64_t, 3> CollectionKey{};
 };
 
 // All instance methods, including construction/destruction, belong to Render.

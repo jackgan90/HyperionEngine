@@ -8,8 +8,39 @@ namespace Hyperion
 {
 namespace
 {
+std::vector<FRenderResourceCoordinator::FPreparedViewDraw> PrepareDrawSources(const FRenderSceneSnapshot& InSnapshot,
+                                                                              const FPreparedSceneDraws& InPrepared)
+{
+	std::vector<FRenderResourceCoordinator::FPreparedViewDraw> Result;
+	if (!InSnapshot.LocalContentIdentity || !InPrepared.Failures.empty())
+	{
+		return Result;
+	}
+	std::vector<std::optional<std::size_t>> Batches(InSnapshot.Items.Size());
+	if (InSnapshot.Batches)
+	{
+		for (std::size_t Index = 0; Index < InSnapshot.Batches->Batches.size(); ++Index)
+		{
+			const auto& Batch = InSnapshot.Batches->Batches[Index];
+			if (Batch.Instances && Batch.Items.size() > 1)
+			{
+				Batches[Batch.Items.front()] = Index;
+			}
+		}
+	}
+	for (std::size_t Index = 0; Index < InPrepared.Packets.size(); ++Index)
+	{
+		if (InPrepared.Packets[Index])
+		{
+			Result.push_back({Index, InPrepared.Packets[Index]->InstanceCount > 1 ? Batches[Index] : std::nullopt});
+		}
+	}
+	return Result;
+}
+
 FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot)
 {
+	HYP_PERF_SCOPE_C(Detail, PrepareSceneDrawPackets);
 	FPreparedSceneDraws Result;
 	Result.bDepth = bool(InSnapshot.View.DepthTarget);
 	Result.Packets.resize(InSnapshot.Items.Size());
@@ -86,6 +117,7 @@ FColorPass NewPass(const FRenderSceneSnapshot& InSnapshot, const FPreparedSceneD
 
 std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPreparedSceneDraws InPrepared)
 {
+	HYP_PERF_SCOPE_C(Detail, PublishSceneDrawReceipts);
 	std::vector<FColorPass> Passes;
 	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{
@@ -113,6 +145,49 @@ std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPr
 		Passes.push_back(NewPass(InSnapshot, InPrepared, 0, false));
 	}
 	return Passes;
+}
+
+void CountPreparedDraws(const FRenderSceneSnapshot& InSnapshot, FPreparedSceneDraws& InPrepared)
+{
+	auto& Stats = InPrepared.Statistics;
+	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
+	{
+		const auto& Item = InSnapshot.Items[Index];
+		if (InPrepared.Failures.contains({Item.Primitive.Scene, Item.Group}))
+		{
+			++Stats.FailedItems;
+		}
+		else if (InPrepared.Packets[Index])
+		{
+			const auto Count = InPrepared.Packets[Index]->InstanceCount;
+			Stats.InstancedDraws += Count > 1;
+			Stats.InstancedItems += Count > 1 ? Count : 0;
+			Stats.SingleDraws += Count == 1;
+		}
+	}
+}
+
+void BindViewDepth(FRenderResourceCoordinator& InOwner, const FRenderView& InView, std::vector<FColorPass>& InPasses)
+{
+	if (!InView.DepthTarget && InView.SampledDepth.empty())
+	{
+		return;
+	}
+	InOwner.EnsureMaterialCaches();
+	InOwner.TrackScope(InView.TargetLifetime);
+	const FMaterialResourceOwners Owners{InView.TargetLifetime};
+	for (auto& Pass : InPasses)
+	{
+		if (InView.DepthTarget)
+		{
+			Pass.Commands.bUseColor = false;
+			Pass.Commands.DepthTarget = InOwner.MaterialGpu->GetTexture(InView.DepthTarget, Owners);
+		}
+		for (const auto& Source : InView.SampledDepth)
+		{
+			Pass.Commands.SampledDepth.push_back(InOwner.MaterialGpu->GetTexture(Source, Owners));
+		}
+	}
 }
 } // namespace
 
@@ -164,21 +239,7 @@ std::vector<FColorPass> FRenderResourcePreparation::BuildPasses(const FRenderSce
 		    Owner.MaterialConstants ? Owner.MaterialConstants->Statistics() : FMaterialConstantStats{};
 		auto Prepared = PrepareDraws(Owner, InSnapshot);
 		auto& Stats = Prepared.Statistics;
-		for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
-		{
-			const auto& Item = InSnapshot.Items[Index];
-			if (Prepared.Failures.contains({Item.Primitive.Scene, Item.Group}))
-			{
-				++Stats.FailedItems;
-			}
-			else if (Prepared.Packets[Index])
-			{
-				const auto Count = Prepared.Packets[Index]->InstanceCount;
-				Stats.InstancedDraws += Count > 1;
-				Stats.InstancedItems += Count > 1 ? Count : 0;
-				Stats.SingleDraws += Count == 1;
-			}
-		}
+		CountPreparedDraws(InSnapshot, Prepared);
 		Stats.PreparationMilliseconds =
 		    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
 		if (Owner.MaterialConstants)
@@ -192,26 +253,10 @@ std::vector<FColorPass> FRenderResourcePreparation::BuildPasses(const FRenderSce
 		{
 			*OutStatistics = Stats;
 		}
+		auto Sources = PrepareDrawSources(InSnapshot, Prepared);
 		Passes = PublishDraws(InSnapshot, std::move(Prepared));
-		if (InSnapshot.View.DepthTarget || !InSnapshot.View.SampledDepth.empty())
-		{
-			Owner.EnsureMaterialCaches();
-			Owner.TrackScope(InSnapshot.View.TargetLifetime);
-			const FMaterialResourceOwners Owners{InSnapshot.View.TargetLifetime};
-			for (auto& Pass : Passes)
-			{
-				if (InSnapshot.View.DepthTarget)
-				{
-					Pass.Commands.bUseColor = false;
-					Pass.Commands.DepthTarget = Owner.MaterialGpu->GetTexture(InSnapshot.View.DepthTarget, Owners);
-				}
-				for (const auto& Source : InSnapshot.View.SampledDepth)
-				{
-					Pass.Commands.SampledDepth.push_back(Owner.MaterialGpu->GetTexture(Source, Owners));
-				}
-			}
-		}
-		Owner.CacheViewPasses(InSnapshot, Passes);
+		BindViewDepth(Owner, InSnapshot.View, Passes);
+		Owner.CacheViewPasses(InSnapshot, Passes, std::move(Sources));
 		if (Owner.MaterialGpu)
 		{
 			Owner.Stats.Materials = Owner.MaterialGpu->Statistics();

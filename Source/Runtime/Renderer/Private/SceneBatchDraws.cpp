@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/RHI/RHIPipeline.h"
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "SceneDrawsInternal.h"
@@ -147,6 +148,7 @@ void RepairBatches(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapsh
 void PrepareBatchedDraws(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot,
                          FPreparedSceneDraws& OutPrepared)
 {
+	HYP_PERF_SCOPE_C(Detail, PrepareBatchedDrawPackets);
 	OutPrepared.Statistics = InSnapshot.Batches->Statistics;
 	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{

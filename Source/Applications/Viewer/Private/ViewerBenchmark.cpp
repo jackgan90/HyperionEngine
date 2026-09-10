@@ -65,6 +65,42 @@ void WriteShadowBenchmark(std::ostream& InOutput, const FForwardPipelineStatisti
 	         << InDevice.PipelinesCreated << ',' << InDevice.ConstantBytesWritten << ',' << ShadowMaterial << ','
 	         << ShadowPlan << ',' << ShadowPrepare;
 }
+
+void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline)
+{
+	std::size_t SharedUpdates{};
+	std::size_t SharedGroups{};
+	std::size_t RetainedMaterials{};
+	std::size_t RetainedItems{};
+	std::size_t RestoredItems{};
+	std::size_t ItemReuses{};
+	std::size_t StorageReuses{};
+	std::size_t CollectionReuses{};
+	std::size_t PreparationReuses{};
+	FRenderBatchStats Packing;
+	for (const auto& View : InPipeline.Views)
+	{
+		SharedUpdates += View.Visibility.SharedMaterialUpdates;
+		SharedGroups += View.Visibility.SharedMaterialGroups;
+		RetainedMaterials += View.Visibility.RetainedMaterialItems;
+		RetainedItems += View.Visibility.RetainedSceneItems;
+		RestoredItems += View.Visibility.RetainedItemRestores;
+		ItemReuses += View.Visibility.ItemPreparationReuses;
+		StorageReuses += View.Visibility.ItemStorageReuses;
+		CollectionReuses += View.Visibility.CollectionReuses;
+		PreparationReuses += View.Visibility.PreparationReuses;
+		Packing += View.Visibility.Batches;
+	}
+	InOutput << ',' << SharedUpdates << ',' << ItemReuses << ',' << StorageReuses << ',' << CollectionReuses << ','
+	         << PreparationReuses << ',' << Packing.PackedRecords << ',' << Packing.ReusedRecords << ','
+	         << Packing.AssembledBlocks << ',' << Packing.ReusedBlocks << ',' << Packing.AssembledBytes << ','
+	         << Packing.PreparedInputBuilds << ',' << Packing.PreparedInputReuses << ','
+	         << Packing.InstanceContractBuilds << ',' << Packing.CachedInputs << ',' << Packing.CachedInputBytes;
+	InOutput << ',' << Packing.LocalInputReuses << ',' << Packing.LocalCompatibilityReuses << ','
+	         << Packing.LocalRecordReuses;
+	InOutput << ',' << SharedGroups << ',' << RetainedMaterials << ',' << Packing.LocalPlanReuses << ','
+	         << Packing.LocalPacketReuses << ',' << RetainedItems << ',' << RestoredItems << '\n';
+}
 } // namespace
 
 void FViewerApplication::ExerciseBenchmarkCamera(int InFrame)
@@ -157,7 +193,9 @@ void FViewerApplication::SaveBenchmark()
 	          "binds,shared_material_updates,item_preparation_reuses,item_storage_reuses,collection_reuses,"
 	          "view_preparation_reuses,packed_records,reused_records,assembled_blocks,reused_blocks,assembled_bytes,"
 	          "batch_input_builds,batch_input_reuses,batch_contract_builds,batch_cached_inputs,batch_input_bytes"
-	       << '\n'
+	       << ",local_input_reuses,local_compatibility_reuses,local_record_reuses"
+	       << ",shared_material_groups,retained_material_items,local_plan_reuses,local_packet_reuses,retained_scene_"
+	          "items,retained_item_restores\n"
 	       << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
@@ -184,27 +222,7 @@ void FViewerApplication::SaveBenchmark()
 		Output << ',' << Frame.Device.CommandListsCreated << ',' << Frame.Device.CommandListResets << ','
 		       << Frame.Device.GraphicsPipelineBinds << ',' << Frame.Device.GraphicsGeometryBinds << ','
 		       << Frame.Device.GraphicsDynamicBinds;
-		std::size_t SharedUpdates{};
-		std::size_t ItemReuses{};
-		std::size_t StorageReuses{};
-		std::size_t CollectionReuses{};
-		std::size_t PreparationReuses{};
-		FRenderBatchStats Packing;
-		for (const auto& View : Frame.Pipeline.Views)
-		{
-			SharedUpdates += View.Visibility.SharedMaterialUpdates;
-			ItemReuses += View.Visibility.ItemPreparationReuses;
-			StorageReuses += View.Visibility.ItemStorageReuses;
-			CollectionReuses += View.Visibility.CollectionReuses;
-			PreparationReuses += View.Visibility.PreparationReuses;
-			Packing += View.Visibility.Batches;
-		}
-		Output << ',' << SharedUpdates << ',' << ItemReuses << ',' << StorageReuses << ',' << CollectionReuses << ','
-		       << PreparationReuses << ',' << Packing.PackedRecords << ',' << Packing.ReusedRecords << ','
-		       << Packing.AssembledBlocks << ',' << Packing.ReusedBlocks << ',' << Packing.AssembledBytes << ','
-		       << Packing.PreparedInputBuilds << ',' << Packing.PreparedInputReuses << ','
-		       << Packing.InstanceContractBuilds << ',' << Packing.CachedInputs << ',' << Packing.CachedInputBytes;
-		Output << '\n';
+		WritePreparationBenchmark(Output, Frame.Pipeline);
 		Times.push_back(Frame.Milliseconds);
 	}
 	Output.close();

@@ -7,6 +7,8 @@
 
 namespace Hyperion
 {
+struct FLocalMaterialPreparation;
+
 struct FRenderSession::FMaterialState
 {
 	struct FViewEntry
@@ -19,6 +21,7 @@ struct FRenderSession::FMaterialState
 	struct FPreparedView
 	{
 		std::shared_ptr<FRenderSceneSnapshot> Snapshot;
+		std::shared_ptr<const FLocalMaterialPreparation> LocalPreparation;
 		std::uint64_t SceneRevision{};
 		std::uint64_t ResourceRevision{};
 		std::uint32_t Dependencies{};
@@ -31,6 +34,7 @@ struct FRenderSession::FMaterialState
 	std::atomic_uint64_t NextFrame{1};
 	ERHIDepthFormat Depth;
 	FMaterialProviderRegistry Providers;
+	std::vector<std::weak_ptr<const FMaterialSharedBinding>> SharedBindings;
 	std::mutex Publication;
 	FMaterialProviderInputs Inputs;
 	std::map<std::uint64_t, FViewEntry> Views;

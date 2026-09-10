@@ -1,76 +1,12 @@
 #include "Hyperion/Core/Profiling.h"
 #include "RenderSceneInternal.h"
+#include "SceneCollectionReuse.h"
 #include "SceneItemPreparation.h"
 #include <algorithm>
 #include <chrono>
 
 namespace Hyperion
 {
-namespace
-{
-class FCollectionReuse
-{
-	struct FEntry
-	{
-		std::uint32_t Slot{};
-		std::uint64_t Ordinal{};
-		std::size_t Index{};
-	};
-
-public:
-	explicit FCollectionReuse(FRenderSceneSnapshot* InPrevious) : Previous(InPrevious)
-	{
-		if (Previous)
-		{
-			Items.reserve(Previous->Items.Size());
-			for (std::size_t Index = 0; Index < Previous->Items.Size(); ++Index)
-			{
-				const auto& Item = Previous->Items[Index];
-				Items.push_back({Item.Primitive.Slot, Item.Ordinal, Index});
-			}
-			std::sort(Items.begin(), Items.end(), Earlier);
-		}
-	}
-
-	void Append(FRenderSceneSnapshot& OutSnapshot, std::span<const FRenderItem> InItems,
-	            FRenderPrimitiveHandle InHandle)
-	{
-		for (std::size_t Ordinal = 0; Ordinal < InItems.size(); ++Ordinal)
-		{
-			const auto It = std::lower_bound(Items.begin(), Items.end(), FEntry{InHandle.Slot, Ordinal}, Earlier);
-			if (It != Items.end() && It->Slot == InHandle.Slot && It->Ordinal == Ordinal)
-			{
-				auto& Item = Previous->Items[It->Index];
-				if (Item.Primitive == InHandle && Item.Preparation == InItems[Ordinal].Preparation)
-				{
-					OutSnapshot.Items.MoveFrom(Previous->Items, It->Index);
-					Reused.resize(OutSnapshot.Items.Size());
-					Reused.back() = true;
-					++OutSnapshot.Statistics.ItemStorageReuses;
-					continue;
-				}
-			}
-			OutSnapshot.Items.PushBack(InItems[Ordinal]);
-		}
-	}
-
-	bool IsReused(std::size_t InIndex) const
-	{
-		return InIndex < Reused.size() && Reused[InIndex];
-	}
-
-private:
-	static bool Earlier(const FEntry& InA, const FEntry& InB)
-	{
-		return InA.Slot != InB.Slot ? InA.Slot < InB.Slot : InA.Ordinal < InB.Ordinal;
-	}
-
-	FRenderSceneSnapshot* Previous{};
-	std::vector<FEntry> Items;
-	std::vector<bool> Reused;
-};
-} // namespace
-
 std::vector<FRenderItem> FRenderScene::FEntry::Collect(const FRenderView& InView, std::uint64_t InResourceRevision)
 {
 	std::vector<FRenderItem> Items;
@@ -157,8 +93,12 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView, bool bInRefresh, 
 	HYP_PERF_SCOPE_C(Render, CollectScene);
 	Tasks.Require({EDomain::Render});
 	FRenderSceneSnapshot Snapshot;
-	Snapshot.DrawFrame = InPrevious ? InPrevious->DrawFrame : std::make_shared<std::atomic_uint64_t>(0);
-	FCollectionReuse Reuse(InPrevious);
+	Snapshot.CollectionKey = {Identity, Revision, InResourceRevision};
+	FRenderSceneSnapshot* Previous =
+	    InPrevious && InPrevious->CollectionKey == Snapshot.CollectionKey ? InPrevious : nullptr;
+	Snapshot.DrawFrame = Previous ? Previous->DrawFrame : std::make_shared<std::atomic_uint64_t>(0);
+	Snapshot.bRetainCulledItems = InResourceRevision && GetCollectionRevision().has_value();
+	FSceneCollectionReuse Reuse(Previous);
 	auto& Stats = Snapshot.Statistics;
 	if (bInRefresh)
 	{
@@ -196,6 +136,8 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView, bool bInRefresh, 
 		else
 		{
 			Snapshot.Items.Append(Entry.Collect(InView, InResourceRevision));
+			// Uncacheable emissions must not retain an older copy of the same local item.
+			Snapshot.bRetainCulledItems &= Entry.Collection.has_value() && Entry.ResourceRevision == InResourceRevision;
 		}
 		for (auto Index = Start; Index < Snapshot.Items.Size(); ++Index)
 		{
@@ -223,6 +165,7 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView, bool bInRefresh, 
 			};
 		}
 	}
+	Reuse.RetainUnselected(Snapshot);
 	Stats.EmittedItems = Snapshot.Items.Size();
 	Snapshot.View = std::move(InView);
 	return Snapshot;

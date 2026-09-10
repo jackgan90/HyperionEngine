@@ -6,6 +6,7 @@
 #include <list>
 #include <map>
 #include <tuple>
+#include <unordered_map>
 
 namespace Hyperion
 {
@@ -35,6 +36,33 @@ struct FPackedRecord
 using FRecordKey = std::tuple<std::uint64_t, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t>;
 using FBlockKey = std::pair<std::uint64_t, std::vector<std::uint64_t>>;
 
+struct FRecordKeyHash
+{
+	std::size_t operator()(const FRecordKey& InKey) const
+	{
+		std::size_t Hash{};
+		for (const auto Word : {std::get<0>(InKey), std::get<1>(InKey), std::uint64_t(std::get<2>(InKey)),
+		                        std::get<3>(InKey), std::get<4>(InKey)})
+		{
+			Hash = Hash * 16777619U ^ std::hash<std::uint64_t>{}(Word);
+		}
+		return Hash;
+	}
+};
+
+struct FBlockKeyHash
+{
+	std::size_t operator()(const FBlockKey& InKey) const
+	{
+		std::size_t Hash = std::hash<std::uint64_t>{}(InKey.first);
+		for (std::size_t Index = 0; Index < InKey.second.size(); ++Index)
+		{
+			Hash = Hash * 16777619U ^ std::hash<std::uint64_t>{}(InKey.second[Index]);
+		}
+		return Hash;
+	}
+};
+
 bool SameValues(const std::vector<std::shared_ptr<const FMaterialValue>>& InA,
                 const std::vector<std::shared_ptr<const FMaterialValue>>& InB)
 {
@@ -57,6 +85,40 @@ struct FInstanceDataCache::FImpl
 		std::weak_ptr<const void> Owner;
 		std::size_t Bytes{};
 		std::list<FRecordKey>::iterator Recent;
+		std::array<std::weak_ptr<const FLocalMaterialItem>, 8> LocalPreparations;
+
+		bool MatchesLocal(const FRenderItem& InItem) const
+		{
+			if (!InItem.LocalPreparation)
+			{
+				return false;
+			}
+			for (std::size_t Index = 0; Index < LocalPreparations.size(); ++Index)
+			{
+				const auto& Proof = LocalPreparations[Index];
+				if (!Proof.owner_before(InItem.LocalPreparation) && !InItem.LocalPreparation.owner_before(Proof))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		void RetainLocal(const FRenderItem& InItem)
+		{
+			if (!InItem.LocalPreparation)
+			{
+				return;
+			}
+			for (std::size_t Index = 0; Index < LocalPreparations.size(); ++Index)
+			{
+				if (LocalPreparations[Index].expired())
+				{
+					LocalPreparations[Index] = InItem.LocalPreparation;
+					return;
+				}
+			}
+		}
 	};
 
 	struct FBlock
@@ -70,9 +132,11 @@ struct FInstanceDataCache::FImpl
 	FRenderBatchLimits Limits;
 	std::uint64_t NextIdentity{};
 	std::map<std::pair<const FCompiledMaterialDefinition*, const FMaterialProgramBinding*>, FProgramLayout> Layouts;
-	std::map<FRecordKey, FRecord> Records;
+	using FRecords = std::unordered_map<FRecordKey, FRecord, FRecordKeyHash>;
+	FRecords Records;
 	std::list<FRecordKey> RecentRecords;
-	std::map<FBlockKey, FBlock> Blocks;
+	using FBlocks = std::unordered_map<FBlockKey, FBlock, FBlockKeyHash>;
+	FBlocks Blocks;
 	std::list<FBlockKey> RecentBlocks;
 	std::size_t RecordBytes{};
 	std::size_t BlockBytes{};
@@ -121,14 +185,14 @@ struct FInstanceDataCache::FImpl
 		return Result;
 	}
 
-	void EraseRecord(std::map<FRecordKey, FRecord>::iterator InEntry)
+	void EraseRecord(FRecords::iterator InEntry)
 	{
 		RecordBytes -= InEntry->second.Bytes;
 		RecentRecords.erase(InEntry->second.Recent);
 		Records.erase(InEntry);
 	}
 
-	void EraseBlock(std::map<FBlockKey, FBlock>::iterator InEntry)
+	void EraseBlock(FBlocks::iterator InEntry)
 	{
 		BlockBytes -= InEntry->second.Bytes;
 		RecentBlocks.erase(InEntry->second.Recent);
@@ -140,16 +204,24 @@ struct FInstanceDataCache::FImpl
 	{
 		const FRecordKey Key{InLayout.Identity, InItem.Primitive.Scene, InItem.Primitive.Slot,
 		                     InItem.Primitive.Generation, InItem.LocalItemId.value_or(InItem.Ordinal)};
+		const bool bStable = InItem.LocalItemId.has_value() && bool(InItem.Lifetime);
+		const auto Existing = Records.find(Key);
+		if (bStable && Existing != Records.end() && Existing->second.MatchesLocal(InItem))
+		{
+			RecentRecords.splice(RecentRecords.end(), RecentRecords, Existing->second.Recent);
+			++OutStats.ReusedRecords;
+			++OutStats.LocalRecordReuses;
+			return Existing->second.Packed;
+		}
 		std::vector<std::shared_ptr<const FMaterialValue>> Values;
 		for (const auto& Member : InBinding.Members)
 		{
 			Values.push_back(InItem.GetMaterialValue(Member.ParameterIndex));
 		}
-		const bool bStable = InItem.LocalItemId.has_value() && bool(InItem.Lifetime);
-		const auto Existing = Records.find(Key);
 		if (bStable && Existing != Records.end() && SameValues(Existing->second.Values, Values))
 		{
 			Existing->second.Owner = InItem.Lifetime;
+			Existing->second.RetainLocal(InItem);
 			RecentRecords.splice(RecentRecords.end(), RecentRecords, Existing->second.Recent);
 			++OutStats.ReusedRecords;
 			return Existing->second.Packed;
@@ -179,8 +251,9 @@ struct FInstanceDataCache::FImpl
 				++OutStats.Evictions;
 			}
 			RecentRecords.push_back(Key);
-			Records.emplace(Key,
-			                FRecord{Result, std::move(Values), InItem.Lifetime, Bytes, std::prev(RecentRecords.end())});
+			FRecord Entry{Result, std::move(Values), InItem.Lifetime, Bytes, std::prev(RecentRecords.end())};
+			Entry.RetainLocal(InItem);
+			Records.emplace(Key, std::move(Entry));
 			RecordBytes += Bytes;
 		}
 		return Result;
@@ -192,6 +265,7 @@ struct FInstanceDataCache::FImpl
 	                                                    bool bInStable, FRenderBatchStats& OutStats)
 	{
 		FBlockKey Key{InLayout.Identity, {}};
+		Key.second.reserve(InRecords.size());
 		for (const auto& Record : InRecords)
 		{
 			Key.second.push_back(Record.Identity);

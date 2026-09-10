@@ -1,4 +1,5 @@
 #include "Hyperion/Core/Profiling.h"
+#include "LocalMaterialPreparation.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
 #include <bit>
@@ -24,7 +25,7 @@ bool SameCollectionView(const FRenderView& InA, const FRenderView& InB, bool bIn
 	       (!bInDepthSorted || SameMatrix(InA.ViewProjection, InB.ViewProjection));
 }
 
-bool SamePreparedView(const FRenderView& InA, const FRenderView& InB)
+bool SamePassEnvironment(const FRenderView& InA, const FRenderView& InB)
 {
 	const auto Viewport = [](const FRenderView& InView)
 	{
@@ -36,15 +37,20 @@ bool SamePreparedView(const FRenderView& InA, const FRenderView& InB)
 		const auto Value = InView.ClearColor.value_or(FVec4{});
 		return std::array{Value.X, Value.Y, Value.Z, Value.W};
 	};
-	return InA.Identity == InB.Identity && InA.Revision == InB.Revision && InA.Usage == InB.Usage &&
-	       SameMatrix(InA.ViewProjection, InB.ViewProjection) &&
-	       std::array{InA.Eye.X, InA.Eye.Y, InA.Eye.Z} == std::array{InB.Eye.X, InB.Eye.Y, InB.Eye.Z} &&
-	       InA.Width == InB.Width && InA.Height == InB.Height && InA.Viewport.has_value() == InB.Viewport.has_value() &&
-	       Viewport(InA) == Viewport(InB) && InA.Parameters == InB.Parameters &&
-	       InA.PassParameters == InB.PassParameters && InA.bInstanceBatching == InB.bInstanceBatching &&
+	return InA.Identity == InB.Identity && InA.Usage == InB.Usage && InA.Width == InB.Width &&
+	       InA.Height == InB.Height && InA.Viewport.has_value() == InB.Viewport.has_value() &&
+	       Viewport(InA) == Viewport(InB) && InA.bInstanceBatching == InB.bInstanceBatching &&
 	       InA.DepthTarget == InB.DepthTarget && InA.SampledDepth == InB.SampledDepth &&
 	       InA.TargetLifetime == InB.TargetLifetime && InA.Name == InB.Name &&
 	       InA.ClearColor.has_value() == InB.ClearColor.has_value() && Clear(InA) == Clear(InB);
+}
+
+bool SamePreparedView(const FRenderView& InA, const FRenderView& InB)
+{
+	return SamePassEnvironment(InA, InB) && InA.Revision == InB.Revision &&
+	       SameMatrix(InA.ViewProjection, InB.ViewProjection) &&
+	       std::array{InA.Eye.X, InA.Eye.Y, InA.Eye.Z} == std::array{InB.Eye.X, InB.Eye.Y, InB.Eye.Z} &&
+	       InA.Parameters == InB.Parameters && InA.PassParameters == InB.PassParameters;
 }
 
 bool SameEngineInputs(const FMaterialFrameContext& InA, const FMaterialFrameContext& InB, std::uint32_t InDependencies)
@@ -81,6 +87,26 @@ bool HasDepthSortedItems(const FRenderSceneSnapshot& InSnapshot)
 		               EMaterialQueue::Transparent;
 	    });
 }
+
+void ResetViewStatistics(FRenderSceneSnapshot& InSnapshot, bool bInReuseCollection, bool bInReusePreparation)
+{
+	auto& Stats = InSnapshot.Statistics;
+	Stats.CollectionReuses = bInReuseCollection;
+	Stats.PreparationReuses = bInReusePreparation;
+	Stats.MaterialMilliseconds = 0;
+	Stats.SharedMaterialUpdates = 0;
+	Stats.SharedMaterialGroups = 0;
+	Stats.RetainedMaterialItems = 0;
+	if (bInReuseCollection)
+	{
+		Stats.RetainedItemRestores = 0;
+		Stats.ItemPreparationReuses = InSnapshot.Items.Size();
+		Stats.ItemStorageReuses = InSnapshot.Items.Size();
+		Stats.QueryMilliseconds = 0;
+		Stats.VisitedNodes = 0;
+		Stats.GroupTests = 0;
+	}
+}
 } // namespace
 
 void FRenderSession::InvalidatePreparedViews()
@@ -110,18 +136,20 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	                               Cached.Snapshot->Family == InFamily &&
 	                               SamePreparedView(Cached.Snapshot->View, InView) &&
 	                               SameEngineInputs(*Cached.Snapshot->Frame, *InFrame, Cached.Dependencies);
+	const bool bStableCollection = InSceneRevision && Cached.Snapshot && Cached.bValid &&
+	                               Cached.SceneRevision == *InSceneRevision &&
+	                               Cached.ResourceRevision == InResourceRevision;
+	const bool bSameLocalEnvironment =
+	    bStableCollection && Cached.Snapshot->Family == InFamily && SamePassEnvironment(Cached.Snapshot->View, InView);
 	if (!bReuseCollection)
 	{
-		const bool bReuseItems = InSceneRevision && Cached.Snapshot && Cached.bValid &&
-		                         Cached.SceneRevision == *InSceneRevision &&
-		                         Cached.ResourceRevision == InResourceRevision;
-		if (bReuseItems && Cached.Snapshot.use_count() != 1)
+		if (bStableCollection && Cached.Snapshot.use_count() != 1)
 		{
 			Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(*Cached.Snapshot);
 		}
 		Cached.bValid = false;
 		Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(PrepareSceneSnapshot(
-		    Scene.Collect(InView, false, InResourceRevision, bReuseItems ? Cached.Snapshot.get() : nullptr)));
+		    Scene.Collect(InView, false, InResourceRevision, bStableCollection ? Cached.Snapshot.get() : nullptr)));
 		Cached.bDepthSorted = HasDepthSortedItems(*Cached.Snapshot);
 	}
 	else if (Cached.Snapshot.use_count() != 1)
@@ -134,24 +162,19 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	Snapshot.Frame = std::move(InFrame);
 	Snapshot.Family = InFamily;
 	Snapshot.DepthFormat = InView.DepthTarget ? ERHIDepthFormat::D32 : MaterialState->Depth;
-	Snapshot.Statistics.CollectionReuses = bReuseCollection;
-	Snapshot.Statistics.PreparationReuses = bReusePreparation;
-	Snapshot.Statistics.MaterialMilliseconds = 0;
-	Snapshot.Statistics.SharedMaterialUpdates = 0;
-	if (bReuseCollection)
-	{
-		Snapshot.Statistics.ItemPreparationReuses = Snapshot.Items.Size();
-		Snapshot.Statistics.ItemStorageReuses = Snapshot.Items.Size();
-		Snapshot.Statistics.QueryMilliseconds = 0;
-		Snapshot.Statistics.VisitedNodes = 0;
-		Snapshot.Statistics.GroupTests = 0;
-	}
+	ResetViewStatistics(Snapshot, bReuseCollection, bReusePreparation);
 	if (!bReusePreparation)
 	{
 		const auto Start = std::chrono::steady_clock::now();
-		PrepareMaterials(Snapshot);
+		PrepareMaterials(Snapshot, bStableCollection);
 		Snapshot.Statistics.MaterialMilliseconds =
 		    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
+		Cached.LocalPreparation =
+		    InSceneRevision && !Batches.HasCustomStrategies()
+		        ? PrepareLocalMaterials(Snapshot, bSameLocalEnvironment ? Cached.LocalPreparation : nullptr, Resources,
+		                                bStableCollection)
+		        : nullptr;
+		Snapshot.LocalContentIdentity = Cached.LocalPreparation ? Cached.LocalPreparation->Lifetime : nullptr;
 		Snapshot.Batches = Batches.Build(Snapshot, InView.bInstanceBatching);
 		Cached.Dependencies = 0;
 		Cached.bValid = true;

@@ -73,4 +73,25 @@ void FRenderItemList::MoveFrom(FRenderItemList& InSource, std::size_t InIndex)
 	}
 	Storage.push_back(std::move(InSource.Storage[InIndex]));
 }
+
+void FRenderItemList::MoveRemainingFrom(FRenderItemList& InSource, std::size_t InLimit)
+{
+	if (&InSource == this)
+	{
+		throw std::invalid_argument("Render item retention requires a different source list");
+	}
+	for (auto& Item : InSource.Storage)
+	{
+		if (Item && Storage.size() < InLimit)
+		{
+			Storage.push_back(std::move(Item));
+		}
+	}
+	InSource.Clear();
+}
+
+void FRenderItemList::Discard(std::size_t InIndex)
+{
+	Storage.at(InIndex).reset();
+}
 } // namespace Hyperion

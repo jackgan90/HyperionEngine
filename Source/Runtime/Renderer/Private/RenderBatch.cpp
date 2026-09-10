@@ -191,6 +191,7 @@ std::shared_ptr<const FRenderBatchPlan> FRenderBatchSystem::Build(const FRenderS
 	if (!Result || !bInEnabled)
 	{
 		Result = P.BuildFresh(InSnapshot, bInEnabled);
+		Result->StructureIdentity = std::make_shared<const int>(0);
 		if (bInEnabled)
 		{
 			P.CachePlan(InSnapshot, *Result);

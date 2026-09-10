@@ -153,4 +153,5 @@ target_sources(material_gpu_tests PRIVATE Materials/MaterialGpuCacheTests.cpp)
 target_sources(material_gpu_tests PRIVATE Materials/MaterialResourceTests.cpp)
 
 target_sources(material_gpu_tests PRIVATE Materials/MaterialSessionTests.cpp)
+target_sources(material_gpu_tests PRIVATE Renderer/SceneRetentionTests.cpp)
 target_sources(material_gpu_tests PRIVATE Materials/MaterialFrequencyTests.cpp)

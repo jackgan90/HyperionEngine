@@ -13,6 +13,7 @@ constexpr std::size_t DrawCount = 24;
 
 struct FFrequencyInputs
 {
+	bool bStaticCollection{};
 	float Object{};
 	float Draw{};
 	std::size_t Count = DrawCount;
@@ -25,6 +26,11 @@ public:
 	FFrequencyPrimitive(FTaskSystem& InTasks, std::shared_ptr<FFrequencyInputs> InInputs)
 	    : IRenderPrimitive(InTasks), Inputs(std::move(InInputs))
 	{
+	}
+
+	bool IsStaticCollection() const override
+	{
+		return Inputs->bStaticCollection;
 	}
 
 	void Collect(const FRenderView&, std::vector<FRenderItem>& OutItems) const override
@@ -146,9 +152,10 @@ struct FFrequencyFixture
 	float Time{};
 	float Pass{};
 
-	explicit FFrequencyFixture(IRHIDevice& InDevice)
+	explicit FFrequencyFixture(IRHIDevice& InDevice, bool bInStaticCollection = false)
 	    : Session(Tasks, InDevice, Compiler, ERHIDepthFormat::D32S8, Registry)
 	{
+		Inputs->bStaticCollection = bInStaticCollection;
 		Session.GetProviders().Register(
 		    {"Test.Draw", MaterialScopeBit(EMaterialScope::Draw), [this](const auto& InInputs)
 		     {
@@ -316,6 +323,31 @@ void CheckFrequencyChanges(FFrequencyFixture& InFixture, IRHISwapchain& InSwapch
 	HYP_CHECK(Before->Inputs.Scopes[Global].Lifetime == After->Inputs.Scopes[Global].Lifetime);
 	HYP_CHECK(Before->Inputs.Values[Global].GetIdentity() == After->Inputs.Values[Global].GetIdentity());
 }
+
+void CheckStaticMixedInputs(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
+{
+	FFrequencyFixture Fixture(InDevice, true);
+	const auto Original = Fixture.Build();
+	const auto OriginalKeys = Fixture.DrawKeys;
+	Fixture.DrawKeys.clear();
+	Fixture.View.Parameters = {{"Test.View", FMaterialValue::Float(.02f)}};
+	Fixture.View.ViewProjection.Values[0] = 2;
+	const auto Changed = Fixture.Build();
+	HYP_CHECK(Fixture.DrawKeys.size() == DrawCount && Fixture.DrawKeys[0] != OriginalKeys[0]);
+	Fixture.Tasks.Wait(Fixture.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    const auto Stats = Fixture.Session.Statistics();
+		    HYP_CHECK(Stats.CollectionReuses == 1 && Stats.RetainedMaterialItems == 0);
+		    HYP_CHECK(Stats.Batches.LocalPlanReuses == 0 && Stats.Batches.LocalPacketReuses == 0);
+		    HYP_CHECK(Stats.Batches.LocalInputReuses == 0 && Stats.Batches.LocalRecordReuses == 0);
+	    }));
+	const auto OriginalPixel = Fixture.Render(InSwapchain, Original);
+	const auto ChangedPixel = Fixture.Render(InSwapchain, Changed);
+	HYP_CHECK(std::abs(ChangedPixel - OriginalPixel - .03f) < .01f);
+	HYP_CHECK(Fixture.Render(InSwapchain, Original) == OriginalPixel);
+}
 } // namespace
 
 void RunMaterialFrequencyTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
@@ -323,5 +355,6 @@ void RunMaterialFrequencyTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	FFrequencyFixture Fixture(InDevice);
 	CheckFrequencyChanges(Fixture, InSwapchain);
 	CheckDrawIdentity(Fixture);
+	CheckStaticMixedInputs(InDevice, InSwapchain);
 	HYP_CHECK(InDevice.Statistics().ValidationErrors == 0);
 }

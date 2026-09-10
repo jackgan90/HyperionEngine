@@ -137,12 +137,15 @@ def main():
     parser.add_argument("--frames", type=int, default=600)
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--static", action="store_true")
+    parser.add_argument("--camera-step", type=float, default=.1, help="Input-driven orbit step in pixels")
     parser.add_argument("--no-instance-batching", action="store_true")
     parser.add_argument("--visible", action="store_true")
     parser.add_argument("--no-build", action="store_true")
     args = parser.parse_args()
     if args.warmup < 0 or args.frames <= 0 or args.timeout <= 0:
         parser.error("warmup must be nonnegative; frames and timeout must be positive")
+    if not math.isfinite(args.camera_step) or args.camera_step <= 0:
+        parser.error("camera-step must be finite and positive")
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
     if not args.no_build:
@@ -157,7 +160,7 @@ def main():
     command = [str(viewer), "--config", str(args.config.resolve()), "--frames", str(args.warmup + args.frames),
                "--benchmark-warmup", str(args.warmup), "--benchmark", str(output / "Frames.csv"), "--no-vsync"]
     if not args.static:
-        command.append("--benchmark-camera")
+        command += ["--benchmark-camera", "--benchmark-camera-step", str(args.camera_step)]
     if args.no_instance_batching:
         command.append("--no-instance-batching")
     if not args.visible:

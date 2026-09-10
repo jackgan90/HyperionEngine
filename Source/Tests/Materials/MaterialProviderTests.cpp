@@ -210,12 +210,16 @@ void CheckUnusedProviderResourceRetirement()
 	const auto View = static_cast<std::size_t>(EMaterialScope::View);
 	Inputs.Values[View] = {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{1, 2, 3})},
 	                       {"Unused", FMaterialValue::FromBuffer({Source, EMaterialBufferViewKind::Raw, 0, 4, 0})}};
-	Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition");
+	const auto Frozen = Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition").Value;
 	Source.reset();
 	Inputs.Values[View] = {{"Engine.View.CameraPosition", FMaterialValue::Float(FVec3{1, 2, 3})}};
 	HYP_CHECK(Released.expired());
 	Providers.EvaluateOne(Inputs, "Engine.View.CameraPosition");
 	HYP_CHECK(Providers.Statistics().Evaluations[View] == 1);
+	Inputs.Scopes[View] = {};
+	Providers.Collect();
+	HYP_CHECK(Providers.Statistics().CachedEntries == 0);
+	HYP_CHECK(Frozen == FMaterialValue::Float(FVec3{1, 2, 3}));
 }
 
 void CheckAbsentProviderDependencies()

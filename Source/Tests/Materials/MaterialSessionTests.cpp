@@ -8,6 +8,8 @@
 
 using namespace Hyperion;
 
+void RunSceneRetentionTests(FTaskSystem& InTasks, const std::shared_ptr<const FRenderResource>& InResource);
+
 namespace
 {
 void WaitFor(const std::function<bool()>& InCondition,
@@ -472,6 +474,12 @@ void CheckMovingViews(FTaskSystem& InTasks, FRenderSession& InSession, IRHISwapc
 	{
 		InViews[0].Eye.X = .2f + float(Index % 20) * .01f;
 		Current = Build(InTasks, InSession, InViews);
+		InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+		                              [&]
+		                              {
+			                              const auto& View = InSession.ViewStatistics().front().Visibility;
+			                              HYP_CHECK(View.RetainedMaterialItems == 2 && View.SharedMaterialGroups == 1);
+		                              }));
 		HYP_CHECK(Current[1].Draws.size() == 2 && Current[2].Draws.size() == 2);
 		for (std::size_t Draw = 0; Draw < 2; ++Draw)
 		{
@@ -643,6 +651,7 @@ void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	CheckBoundsContract(Tasks, Session, Resource, Views[0]);
 	CheckProviderFallback(Tasks, Session, InSwapchain, Semantics, Resource, Views[0]);
 	CheckViewResourceRefresh(Tasks, Session, InSwapchain, Semantics, Resource, Views[0]);
+	RunSceneRetentionTests(Tasks, Resource);
 	State = {};
 	Independent = {};
 	Required.reset();

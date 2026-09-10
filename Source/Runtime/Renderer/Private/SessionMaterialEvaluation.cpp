@@ -341,6 +341,8 @@ bool RefreshMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& 
 	}
 	InItem.ResolvedParameters = Entry.Resolved;
 	InItem.SharedParameters.reset();
+	Entry.SharedBinding = InProviders.RetainSharedBinding(Entry);
+	InItem.SharedBinding = Entry.SharedBinding;
 	return true;
 }
 } // namespace Hyperion

@@ -25,9 +25,11 @@ struct FRenderBindingResult
 class FRenderScene
 {
 public:
-	explicit FRenderScene(FTaskSystem& InTasks, std::function<std::shared_ptr<const void>()> InScopeFactory,
+	explicit FRenderScene(FTaskSystem& InTasks, std::uint64_t InIdentity,
+	                      std::function<std::shared_ptr<const void>()> InScopeFactory,
 	                      std::function<void()> InOnChanged)
-	    : Tasks(InTasks), ScopeFactory(std::move(InScopeFactory)), OnChanged(std::move(InOnChanged))
+	    : Tasks(InTasks), Identity(InIdentity), ScopeFactory(std::move(InScopeFactory)),
+	      OnChanged(std::move(InOnChanged))
 	{
 		Tasks.Require({EDomain::Render});
 	}
@@ -59,6 +61,7 @@ private:
 	};
 
 	FTaskSystem& Tasks;
+	std::uint64_t Identity{};
 	std::function<std::shared_ptr<const void>()> ScopeFactory;
 	std::function<void()> OnChanged;
 	std::uint64_t Revision = 1;

@@ -3,10 +3,12 @@
 #include <bit>
 #include <map>
 #include <set>
+#include <tuple>
 
 namespace Hyperion
 {
 struct FSceneItemPreparation;
+struct FMaterialSharedBinding;
 
 // Render-owned by the primitive. Replaced on publication; frames receive immutable resolved values.
 struct FMaterialEvaluationCache
@@ -42,6 +44,7 @@ struct FMaterialEvaluationCache
 		bool bClipSpace{};
 		std::shared_ptr<const FResolvedMaterialParameters> Resolved;
 		std::shared_ptr<const FMaterialSharedParameters> Shared;
+		std::shared_ptr<const FMaterialSharedBinding> SharedBinding;
 		std::vector<std::size_t> SharedResources;
 		bool bSeparateShared{};
 		std::uint32_t Dependencies{};
@@ -158,6 +161,17 @@ struct FViewMaterialProviders
 	std::set<const void*> ValidatedSharedBases;
 	std::map<std::uint32_t, std::shared_ptr<const FMaterialProviderInputs>> RetainedInputs;
 	FRefresh UncachedRefresh;
+	using FBindingKey = std::tuple<const FCompiledMaterialPass*, const void*, const void*>;
+	std::map<FBindingKey, std::shared_ptr<const FMaterialSharedBinding>> SharedBindings;
+	std::vector<
+	    std::pair<std::shared_ptr<const FMaterialSharedBinding>, std::shared_ptr<const FMaterialSharedParameters>>>
+	    BindingUpdates;
+	std::shared_ptr<const FMaterialSharedParameters> UncachedBindingUpdate;
+	std::size_t BindingEvaluations{};
+	std::vector<std::weak_ptr<const FMaterialSharedBinding>>* BindingHistory{};
+	std::shared_ptr<const FMaterialSharedBinding> RetainSharedBinding(const FMaterialEvaluationCache::FEntry& InEntry);
+	const std::shared_ptr<const FMaterialSharedParameters>& UpdateSharedBinding(
+	    const std::shared_ptr<const FMaterialSharedBinding>& InBinding, const FMaterialProviderInputs& InInputs);
 	std::shared_ptr<const FMaterialProviderInputs> RetainInputs(const FMaterialProviderInputs& InInputs,
 	                                                            std::uint32_t InDependencies);
 	FMaterialProvidedValue Evaluate(const FMaterialProviderInputs& InInputs, std::string_view InSemantic);

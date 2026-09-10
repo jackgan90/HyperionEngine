@@ -36,11 +36,14 @@ struct FMaterialProviderRegistry::FImpl
 
 		bool IsExpired() const
 		{
-			return std::any_of(Owners.begin(), Owners.end(),
-			                   [](const auto& InOwner)
-			                   {
-				                   return InOwner.expired();
-			                   });
+			for (std::size_t Index = 0; Index < Owners.size(); ++Index)
+			{
+				if (Owners[Index].expired())
+				{
+					return true;
+				}
+			}
+			return false;
 		}
 	};
 
@@ -214,6 +217,7 @@ struct FMaterialProviderRegistry::FImpl
 	                    bool bInDefault)
 	{
 		FEntry Entry;
+		const auto& Semantic = Semantics->Find(InProvider.Semantic);
 		FMaterialProviderInputs DeclaredInputs;
 		for (std::size_t Scope = 0; Scope < MaterialScopeCount; ++Scope)
 		{
@@ -221,8 +225,6 @@ struct FMaterialProviderRegistry::FImpl
 			{
 				continue;
 			}
-			DeclaredInputs.Scopes[Scope] = InInputs.Scopes[Scope];
-			DeclaredInputs.Values[Scope] = InInputs.Values[Scope];
 			Entry.Keys.push_back(InInputs.Scopes[Scope].Key);
 			Entry.Sources.push_back(InInputs.Values[Scope].Share());
 			if (bInDefault)
@@ -230,26 +232,41 @@ struct FMaterialProviderRegistry::FImpl
 				const auto* Value = InInputs.Find(static_cast<EMaterialScope>(Scope), InProvider.Semantic);
 				Entry.Inputs.push_back(Value ? FMaterialInputValues{{InProvider.Semantic, *Value}}
 				                             : FMaterialInputValues{});
+				if (Value && Scope == static_cast<std::size_t>(Semantic.Scope))
+				{
+					// The selected input was validated on publication. Own only this single semantic, so unrelated
+					// textures/buffers in the original scope are neither copied nor retained by its numeric provider.
+					const auto& Selected = Entry.Inputs.back();
+					Entry.Value = FMaterialSharedValue(
+					    std::shared_ptr<const FMaterialValue>(Selected.Share(), &Selected.Get().front().Value));
+				}
 			}
 			else
 			{
+				DeclaredInputs.Scopes[Scope] = InInputs.Scopes[Scope];
+				DeclaredInputs.Values[Scope] = InInputs.Values[Scope];
 				Entry.Inputs.push_back(InInputs.Values[Scope]);
 			}
 			Entry.Bytes += Entry.Inputs.back().GetStorageBytes() +
 			               InInputs.Scopes[Scope].Key.GetQualifiers().capacity() * sizeof(std::uint64_t);
 			Entry.Owners.push_back(InInputs.Scopes[Scope].Lifetime);
 		}
-		Entry.Value = InProvider.Evaluate(DeclaredInputs);
-		const auto& Semantic = Semantics->Find(InProvider.Semantic);
+		if (!bInDefault)
+		{
+			Entry.Value = InProvider.Evaluate(DeclaredInputs);
+		}
 		if (Entry.Value)
 		{
-			Entry.Value->Validate();
+			if (!bInDefault)
+			{
+				Entry.Value->Validate();
+			}
 			if (Entry.Value->Type != Semantic.Type)
 			{
 				throw std::invalid_argument("Material provider result type mismatch: " + Semantic.Name);
 			}
 		}
-		Entry.Bytes += sizeof(FEntry) + (Entry.Value ? MaterialValueStorageBytes(*Entry.Value) : 0);
+		Entry.Bytes += sizeof(FEntry) + (!bInDefault && Entry.Value ? MaterialValueStorageBytes(*Entry.Value) : 0);
 		return Entry;
 	}
 
@@ -381,25 +398,21 @@ FMaterialProvidedValue FMaterialProviderRegistry::EvaluateOne(const FMaterialPro
 void FMaterialProviderRegistry::Collect()
 {
 	HYP_PERF_SCOPE_C(Material, CollectMaterialProviders);
-	for (auto It = Impl->Cache.begin(); It != Impl->Cache.end();)
+	// Walk the existing entry index once. Bucket lookup is needed only for an actual retirement.
+	for (auto It = Impl->Recent.begin(); It != Impl->Recent.end();)
 	{
-		std::erase_if(It->second,
-		              [&](const FImpl::FEntry& InEntry)
-		              {
-			              if (!InEntry.IsExpired())
-			              {
-				              return false;
-			              }
-			              Impl->Untrack(InEntry);
-			              return true;
-		              });
-		if (It->second.empty())
+		const auto* Entry = *It++;
+		if (!Entry->IsExpired())
 		{
-			It = Impl->Cache.erase(It);
+			continue;
 		}
-		else
+		const auto Bucket = Impl->Cache.find(*Entry->BucketKey);
+		const auto Location = Entry->Location;
+		Impl->Untrack(*Entry);
+		Bucket->second.erase(Location);
+		if (Bucket->second.empty())
 		{
-			++It;
+			Impl->Cache.erase(Bucket);
 		}
 	}
 }

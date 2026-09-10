@@ -7,6 +7,7 @@ namespace Hyperion
 {
 void PrepareSharedMaterialEligibility(FMaterialEvaluationCache::FEntry& InEntry)
 {
+	InEntry.SharedBinding.reset();
 	InEntry.SharedResources.clear();
 	InEntry.bSeparateShared =
 	    !InEntry.SharedProviderParameters.empty() && !(InEntry.Dependencies & MaterialScopeBit(EMaterialScope::Draw));
@@ -100,6 +101,8 @@ bool ShareMaterialEvaluation(FRenderItem& InItem, const FRenderSceneSnapshot& In
 	InItem.EvaluationCache->TouchObject(*InItem.LocalItemId, Entry.AccessFrame);
 	InItem.ResolvedParameters = Entry.Resolved;
 	InItem.SharedParameters = Entry.Shared;
+	Entry.SharedBinding = InProviders.RetainSharedBinding(Entry);
+	InItem.SharedBinding = Entry.SharedBinding;
 	return true;
 }
 } // namespace Hyperion

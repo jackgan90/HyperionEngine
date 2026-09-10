@@ -1,6 +1,7 @@
 #include "Hyperion/Core/Profiling.h"
 #include "MaterialEvaluationCache.h"
 #include "MaterialProfiling.h"
+#include "MaterialSharedBinding.h"
 #include "SceneItemPreparation.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
@@ -93,6 +94,7 @@ bool ReuseEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	}
 	InItem.ResolvedParameters = Entry.Resolved;
 	InItem.SharedParameters = Entry.Shared;
+	InItem.SharedBinding = Entry.SharedBinding;
 	Entry.AccessFrame = InInputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Key.Revision;
 	InItem.EvaluationCache->TouchObject(*InItem.LocalItemId, Entry.AccessFrame);
 	return true;
@@ -197,8 +199,10 @@ void CacheEvaluation(FRenderItem& InItem, const FRenderView& InView, const FMate
 	Values.Scopes.ShareEngine({Entry.Inputs, &Entry.Inputs->Scopes});
 	Entry.Resolved = std::make_shared<const FResolvedMaterialParameters>(std::move(Values));
 	PrepareSharedMaterialEligibility(Entry);
+	Entry.SharedBinding = InProviders.RetainSharedBinding(Entry);
 	InItem.ResolvedParameters = Entry.Resolved;
 	InItem.SharedParameters.reset();
+	InItem.SharedBinding = Entry.SharedBinding;
 	Entries.insert_or_assign(Key, std::move(Entry));
 }
 
@@ -233,10 +237,8 @@ void FillMaterialDrawInputs(FMaterialProviderInputs& InInputs, const FRenderItem
 	InInputs.Values[ScopeIndex(EMaterialScope::Draw)] = InItem.DrawInputs;
 }
 
-void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
+FMaterialProviderInputs FRenderSession::PrepareViewInputs(const FRenderSceneSnapshot& InSnapshot)
 {
-	HYP_PERF_SCOPE_C(Material, PrepareMaterials);
-	FMaterialPreparationProfile Profile(MaterialState->Providers);
 	auto Inputs = InSnapshot.Frame->Inputs;
 	auto& View = MaterialState->Views[InSnapshot.View.Identity];
 	View.AccessFrame = InSnapshot.Frame->Frame;
@@ -259,7 +261,17 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 	    {MaterialState->Identity, InSnapshot.Frame->Frame, {InSnapshot.Family, InSnapshot.View.Identity}},
 	    Resources.CreateScopeLifetime()};
 	Inputs.Values[ScopeIndex(EMaterialScope::Pass)] = InSnapshot.View.PassParameters;
+	return Inputs;
+}
+
+void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot, bool bInStableCollection)
+{
+	HYP_PERF_SCOPE_C(Material, PrepareMaterials);
+	FMaterialPreparationProfile Profile(MaterialState->Providers);
+	auto Inputs = PrepareViewInputs(InSnapshot);
 	FViewMaterialProviders ViewProviders{MaterialState->Providers};
+	ViewProviders.BindingHistory = &MaterialState->SharedBindings;
+	const bool bRetainLocal = bInStableCollection && !Batches.HasCustomStrategies();
 	for (auto& Item : InSnapshot.Items)
 	{
 		if (!Item.State.Surface)
@@ -268,6 +280,19 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 		}
 		try
 		{
+			if (bRetainLocal && Item.SharedBinding && Item.ResolvedParameters &&
+			    Item.SharedBinding->Pass->Usage == InSnapshot.View.Usage)
+			{
+				const auto& Update = ViewProviders.UpdateSharedBinding(Item.SharedBinding, Inputs);
+				if (Update)
+				{
+					Item.SharedParameters = Update;
+					Profile.SharedUpdate();
+					++InSnapshot.Statistics.SharedMaterialUpdates;
+					++InSnapshot.Statistics.RetainedMaterialItems;
+					continue;
+				}
+			}
 			const auto Compiled = Item.Preparation && Item.Preparation->Program ? Item.Preparation->Program
 			                                                                    : Item.State.Surface->GetCompiled();
 			if (((!Item.Preparation || !Item.Preparation->Program) &&
@@ -324,5 +349,7 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot)
 			Item.PreparationError = Error.what();
 		}
 	}
+	InSnapshot.Statistics.SharedMaterialGroups = ViewProviders.BindingEvaluations;
+	HYP_PERF_PLOT(Material, SharedMaterialGroupUpdates, double(ViewProviders.BindingEvaluations));
 }
 } // namespace Hyperion
