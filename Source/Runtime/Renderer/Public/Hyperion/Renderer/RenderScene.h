@@ -91,6 +91,8 @@ public:
 	// Reuse requires the same scene identity and scene/resource revisions; mismatched InPrevious is left intact.
 	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true, std::uint64_t InResourceRevision = 0,
 	                             FRenderSceneSnapshot* InPrevious = nullptr) const;
+	FRenderSceneSnapshot CollectPrepared(FRenderView InView, std::uint64_t InResourceRevision,
+	                                     FRenderSceneSnapshot* InPrevious = nullptr) const;
 	FSceneVisibilityStats BeginViews() const;
 	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;

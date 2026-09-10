@@ -90,6 +90,7 @@ struct FRenderBatch
 {
 	std::vector<std::size_t> Items;
 	std::shared_ptr<const FInstanceBatchData> Instances; // Null means ordinary draws for these items.
+	std::shared_ptr<const void> LocalContentIdentity;    // Immutable source membership/local values of this block.
 };
 
 struct FRenderBatchPlan
@@ -118,7 +119,7 @@ public:
 	std::shared_ptr<const FRenderBatchPlan> Build(const FRenderSceneSnapshot& InSnapshot, bool bInEnabled = true);
 	void Clear();
 	// Explicitly discard cached grouping; prepared numeric inputs never keep native source leases alive.
-	void InvalidatePlans();
+	void InvalidatePlans(bool bInRetainLocalHistory = false);
 	bool HasCustomStrategies() const;
 
 private:

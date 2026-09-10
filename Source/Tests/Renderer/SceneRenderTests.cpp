@@ -245,6 +245,13 @@ void CheckGlobalBlend(FSceneFixture& InFixture)
 		return 1.055f * std::pow(InValue, 1 / 2.4f) - .055f;
 	};
 	Pixel(InFixture.Frame(4), 160, {Srgb(.5625f), Srgb(.1875f), Srgb(.25f)});
+	InFixture.Frame(4, ESceneCullingMode::Bvh,
+	                [](FRenderView& InView)
+	                {
+		                InView.ViewProjection = Multiply(Translation({.01f, 0, 0}), InView.ViewProjection);
+	                });
+	HYP_CHECK(InFixture.LastStatistics.MembershipReuses == 0);
+	HYP_CHECK(InFixture.LastStatistics.Batches.IncrementalItemReuses == 0);
 	A.Remove();
 	B.Remove();
 	InFixture.AwaitRetirement();
@@ -622,13 +629,15 @@ void CheckLocalVisibilityInputs(FSceneFixture& InFixture)
 		InFixture.Frame(2, ESceneCullingMode::Bvh, Partial);
 		HYP_CHECK(InFixture.LastStatistics.Batches.LocalInputReuses == 2);
 		HYP_CHECK(InFixture.LastStatistics.SharedMaterialGroups == 1);
-		HYP_CHECK(InFixture.LastStatistics.Batches.LocalCompatibilityReuses == 2);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalCompatibilityReuses == 0);
+		HYP_CHECK(InFixture.LastStatistics.Batches.IncrementalItemReuses == 2);
 		HYP_CHECK(InFixture.LastStatistics.Batches.LocalRecordReuses > 0);
 		HYP_CHECK(InFixture.LastStatistics.RetainedSceneItems == 1);
 		const auto Restored = InFixture.Frame(3, ESceneCullingMode::Bvh, Full);
 		HYP_CHECK(Restored.Rgba == Original.Rgba);
 		HYP_CHECK(InFixture.LastStatistics.Batches.LocalInputReuses == 3);
-		HYP_CHECK(InFixture.LastStatistics.Batches.LocalCompatibilityReuses == 3);
+		HYP_CHECK(InFixture.LastStatistics.Batches.LocalCompatibilityReuses == 1);
+		HYP_CHECK(InFixture.LastStatistics.Batches.IncrementalItemReuses == 2);
 		HYP_CHECK(InFixture.LastStatistics.Batches.LocalRecordReuses > 0);
 		HYP_CHECK(InFixture.LastStatistics.Batches.PackedRecords == 0);
 		HYP_CHECK(InFixture.LastStatistics.RetainedItemRestores == 1);
@@ -640,6 +649,360 @@ void CheckLocalVisibilityInputs(FSceneFixture& InFixture)
 	HYP_CHECK(InFixture.LastStatistics.Batches.LocalInputReuses == 0);
 	HYP_CHECK(InFixture.LastStatistics.Batches.LocalRecordReuses == 0);
 	Models = {};
+	InFixture.AwaitRetirement();
+}
+
+void CheckQueuedMembership(FSceneFixture& InFixture, std::size_t InCount,
+                           const std::function<void(FRenderView&)>& InFull,
+                           const std::function<void(FRenderView&)>& InPartial, const FImage& InExpectedFull,
+                           const FImage& InExpectedPartial)
+{
+	const auto First = InFixture.Session->FreezeFrame(0);
+	const auto Second = InFixture.Session->FreezeFrame(0);
+	std::array<FImage, 2> Images;
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    FRenderView View{
+		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
+		    View.ClearColor = FVec4{};
+		    std::array<FRenderGraph, 2> Graphs;
+		    InFull(View);
+		    HYP_CHECK(InFixture.Session->BuildViews(Graphs[0], std::span(&View, 1), First, 1, false, true) == InCount);
+		    InPartial(View);
+		    HYP_CHECK(InFixture.Session->BuildViews(Graphs[1], std::span(&View, 1), Second, 1, false, true) ==
+		              InCount - 1);
+		    Images[1] =
+		        ExecuteGraph(std::move(Graphs[1]), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, true);
+		    Images[0] =
+		        ExecuteGraph(std::move(Graphs[0]), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, true);
+		    InFixture.Session->CompleteViews();
+	    }));
+	HYP_CHECK(Images[0].Rgba == InExpectedFull.Rgba && Images[1].Rgba == InExpectedPartial.Rgba);
+}
+
+std::shared_ptr<const FRenderMaterial> RetirementMaterial(FSceneFixture& InFixture, const FRenderMaterial& InOriginal,
+                                                          std::weak_ptr<const FMaterialTextureSource>& OutTexture)
+{
+	auto Description = InOriginal.GetSnapshot()->Definition->GetDescription();
+	Description.Name = "Incremental retirement test";
+	const auto Texture = std::make_shared<const FMaterialTextureSource>(
+	    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {100, 150, 200, 255}}});
+	OutTexture = Texture;
+	FMaterialParameterDeclaration Parameter;
+	Parameter.Name = "Retirement.DefaultTexture";
+	Parameter.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
+	Parameter.bRequired = false;
+	Parameter.bActive = false;
+	Parameter.Default = FMaterialValue::FromTexture(Texture);
+	Description.Parameters.push_back(std::move(Parameter));
+	FMaterialInstance Instance(std::make_shared<const FMaterialDefinition>(std::move(Description)));
+	for (const auto& Override : InOriginal.GetSnapshot()->Overrides)
+	{
+		Instance.Set(Override.Name, Override.Value);
+	}
+	auto Result = InFixture.Session->GetResources().RequestMaterial(Instance.Freeze());
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	while (Result->GetStatus() != ERenderMaterialStatus::Ready &&
+	       Result->GetStatus() != ERenderMaterialStatus::Failed && std::chrono::steady_clock::now() < Deadline)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	HYP_CHECK(Result->GetStatus() == ERenderMaterialStatus::Ready);
+	return Result;
+}
+
+void CheckIncrementalRetirement(FSceneFixture& InFixture)
+{
+	auto& Scene = InFixture.Session->GetScene();
+	auto& Batches = InFixture.Session->GetBatchSystem();
+	FModel Template(Scene, InFixture.Session->GetResources(), std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	AwaitModel(Template);
+	auto Resource = Template.GetResource();
+	Template.Remove();
+	std::weak_ptr<const FMaterialTextureSource> Texture;
+	auto Surface = RetirementMaterial(InFixture, *Resource->GetMaterial(0), Texture);
+	const std::weak_ptr<const FCompiledMaterialDefinition> Program = Surface->GetCompiled();
+	std::vector<FRenderPrimitiveState> States(2);
+	for (auto& State : States)
+	{
+		State.Resource = Resource;
+		State.Surface = Surface;
+		State.World = Scale({.2f, .2f, 1});
+	}
+	auto Bindings = Scene.CreateBatch(States);
+	InFixture.Tasks.Wait(Scene.Flush());
+	const auto Configure = [](FRenderView& InView)
+	{
+		InView.Identity = 7101;
+		InView.Parameters = DefaultShadowParameters();
+	};
+	const auto Original = InFixture.Frame(2, ESceneCullingMode::None, Configure);
+	HYP_CHECK(InFixture.LastStatistics.Batches.AffectedBatches == 1);
+	FRenderGraph Retained;
+	const auto Frame = InFixture.Session->FreezeFrame(0);
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    FRenderView View{
+		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
+		    Configure(View);
+		    View.CullingMode = ESceneCullingMode::None;
+		    View.ClearColor = FVec4{};
+		    HYP_CHECK(InFixture.Session->BuildViews(Retained, std::span(&View, 1), Frame, 1, false, true) == 2);
+	    }));
+	Bindings.clear();
+	States.clear();
+	Surface.reset();
+	Resource.reset();
+	InFixture.Tasks.Wait(Scene.Flush());
+	InFixture.Frame(0, ESceneCullingMode::None,
+	                [](FRenderView& InView)
+	                {
+		                InView.Identity = 7102;
+	                });
+	HYP_CHECK(!Texture.expired() && !Program.expired());
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              const auto Image =
+		                                                  ExecuteGraph(std::move(Retained), InFixture.Tasks,
+		                                                               *InFixture.Swapchain, {320, 240}, false, true);
+		                                              HYP_CHECK(Image.Rgba == Original.Rgba);
+		                                              // The old graph has now relinquished its valid ownership. Force
+		                                              // the existing complete sweep through another view to isolate
+		                                              // persistent history from candidate/input/chunk retirement.
+		                                              FRenderSceneSnapshot Empty;
+		                                              Empty.View.Identity = 7102;
+		                                              Batches.Build(Empty);
+	                                              }));
+	InFixture.AwaitRetirement();
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+	while ((!Texture.expired() || !Program.expired()) && std::chrono::steady_clock::now() < Deadline)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	HYP_CHECK(Texture.expired() && Program.expired());
+}
+
+void CheckIncrementalHistoryCapacity(FSceneFixture& InFixture, std::size_t InCount,
+                                     const std::function<void(FRenderView&)>& InConfigure)
+{
+	const auto Reference = InFixture.Frame(InCount, ESceneCullingMode::Bvh, InConfigure);
+	for (std::uint64_t ViewId = 100; ViewId < 124; ++ViewId)
+	{
+		const auto Current = InFixture.Frame(InCount, ESceneCullingMode::Bvh,
+		                                     [&](FRenderView& InView)
+		                                     {
+			                                     InConfigure(InView);
+			                                     InView.Identity = ViewId;
+		                                     });
+		HYP_CHECK(Current.Rgba == Reference.Rgba);
+		HYP_CHECK(InFixture.LastStatistics.Batches.CachedPlanItems <= 4096);
+		HYP_CHECK(InFixture.LastStatistics.Batches.CachedPlanBlocks <= 512);
+		HYP_CHECK(InFixture.LastStatistics.Batches.CachedBytes <= 16 * 1024 * 1024);
+	}
+	const auto Revisited = InFixture.Frame(InCount, ESceneCullingMode::Bvh,
+	                                       [&](FRenderView& InView)
+	                                       {
+		                                       InConfigure(InView);
+		                                       ++InView.Revision; // Re-enter planning after history eviction.
+	                                       });
+	HYP_CHECK(Revisited.Rgba == Reference.Rgba);
+	HYP_CHECK(InFixture.LastStatistics.Batches.AffectedBatches == 3);
+}
+
+void CheckIncrementalBlocks(FSceneFixture& InFixture)
+{
+	auto& Scene = InFixture.Session->GetScene();
+	FModel Template(Scene, InFixture.Session->GetResources(), std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	AwaitModel(Template);
+	auto Resource = Template.GetResource();
+	const auto* Pass = Resource->GetMaterial(0)->GetCompiled()->FindInstancePass("Forward");
+	HYP_CHECK(Pass && Pass->InstanceCapacity >= 2);
+	const auto Capacity = Pass->InstanceCapacity;
+	const auto Count = std::size_t(Capacity) * 3;
+	Template.Remove();
+	FRenderPrimitiveState State;
+	State.Resource = Resource;
+	std::vector<FRenderPrimitiveState> States(Count, State);
+	const auto Center = [](std::size_t InIndex)
+	{
+		return Multiply(Translation({(float(InIndex % 16) - 8) * .03f, (float(InIndex / 16) - 8) * .02f, .5f}),
+		                Scale({.025f, .025f, 1}));
+	};
+	for (std::size_t Index = 0; Index < Count; ++Index)
+	{
+		States[Index].World = Center(Index);
+	}
+	auto Bindings = Scene.CreateBatch(States);
+	InFixture.Tasks.Wait(Scene.Flush());
+	const auto Full = [](FRenderView& InView)
+	{
+		InView.Parameters = DefaultShadowParameters();
+		InView.CullingViewProjection = Identity();
+	};
+	const auto Partial = [&](FRenderView& InView)
+	{
+		Full(InView);
+		InView.CullingViewProjection = Translation({.15f, 0, 0});
+	};
+	std::size_t Previous{};
+	for (const auto Selected : {std::size_t(0), Count / 2, Count - 1})
+	{
+		States[Previous].World = Center(Previous);
+		++States[Previous].Revision;
+		InFixture.Tasks.Wait(Scene.Update({{Bindings[Previous].GetHandle(), States[Previous]}}));
+		States[Selected].World = Multiply(Translation({.98f, 0, .5f}), Scale({.025f, .025f, 1}));
+		++States[Selected].Revision;
+		InFixture.Tasks.Wait(Scene.Update({{Bindings[Selected].GetHandle(), States[Selected]}}));
+		InFixture.Frame(Count, ESceneCullingMode::Bvh, Full);
+		const auto Original = InFixture.Frame(Count, ESceneCullingMode::Bvh, Full);
+		HYP_CHECK(InFixture.LastStatistics.Batches.InstancedDraws == 3);
+		HYP_CHECK(InFixture.LastStatistics.Batches.CapacitySplits == 2);
+		const auto Culled = InFixture.Frame(Count - 1, ESceneCullingMode::Bvh, Partial);
+		const auto& Stats = InFixture.LastStatistics;
+		HYP_CHECK(Stats.MembershipRemoved == 1 && Stats.MembershipAdded == 0);
+		std::cout << "Incremental member " << Selected << "/" << Count
+		          << ": updates=" << Stats.Batches.IncrementalPlanUpdates
+		          << " retained items=" << Stats.Batches.IncrementalItemReuses
+		          << " affected blocks=" << Stats.Batches.AffectedBatches
+		          << " retained blocks=" << Stats.Batches.RetainedBatches
+		          << " input builds=" << Stats.Batches.PreparedInputBuilds
+		          << " compatibility builds=" << Stats.Batches.CompatibilityBuilds << '\n';
+		HYP_CHECK(Stats.Batches.IncrementalPlanUpdates == 1 && Stats.Batches.IncrementalItemReuses == Count - 1);
+		HYP_CHECK(Stats.Batches.AffectedBatches == 1 && Stats.Batches.RetainedBatches == 2);
+		HYP_CHECK(Stats.Batches.RebuiltChunks == 1 && Stats.Batches.ReusedChunks == 2);
+		HYP_CHECK(Stats.Batches.CapacitySplits == 2);
+		HYP_CHECK(Stats.Batches.BatchAdmissionReuses == 2 && Stats.Batches.PackedRecords == 0);
+		const auto Restored = InFixture.Frame(Count, ESceneCullingMode::Bvh, Full);
+		HYP_CHECK(Restored.Rgba == Original.Rgba);
+		HYP_CHECK(InFixture.LastStatistics.Batches.AffectedBatches == 1);
+		HYP_CHECK(InFixture.LastStatistics.Batches.RetainedBatches == 2);
+		HYP_CHECK(InFixture.LastStatistics.Batches.CapacitySplits == 2);
+		CheckQueuedMembership(InFixture, Count, Full, Partial, Original, Culled);
+		const auto Ordinary = InFixture.Frame(Count - 1, ESceneCullingMode::Bvh,
+		                                      [&](FRenderView& InView)
+		                                      {
+			                                      Partial(InView);
+			                                      InView.bInstanceBatching = false;
+		                                      });
+		HYP_CHECK(Ordinary.Rgba == Culled.Rgba);
+		Previous = Selected;
+	}
+	CheckIncrementalHistoryCapacity(InFixture, Count, Full);
+	for (std::size_t Block = 0; Block < 3; ++Block)
+	{
+		for (std::size_t Index = Block * Capacity; Index < (Block + 1) * Capacity; ++Index)
+		{
+			Bindings[Index].Remove();
+		}
+		InFixture.Tasks.Wait(Scene.Flush());
+		const auto Remaining = Count - (Block + 1) * Capacity;
+		InFixture.Frame(Remaining, ESceneCullingMode::Bvh, Full);
+		HYP_CHECK(InFixture.LastStatistics.Batches.CapacitySplits == (Remaining ? Remaining / Capacity - 1 : 0));
+	}
+	Bindings.clear();
+	States.clear();
+	State = {};
+	Resource.reset();
+	InFixture.AwaitRetirement();
+}
+
+std::shared_ptr<const FRenderMaterial> SharedOverrideMaterial(FSceneFixture& InFixture,
+                                                              const FRenderMaterial& InOriginal)
+{
+	auto Description = InOriginal.GetSnapshot()->Definition->GetDescription();
+	Description.Name = "Shared split test";
+	Description.Parameters = InOriginal.GetCompiled()->Interface.Schema->GetParameters();
+	for (auto& Parameter : Description.Parameters)
+	{
+		if (Parameter.Name == "Engine.View.ViewProjection")
+		{
+			Parameter.OverridePolicy = EMaterialOverridePolicy::AllowOverride;
+			Parameter.OverrideScopes = MaterialScopeBit(EMaterialScope::Object);
+		}
+	}
+	FMaterialInstance Instance(std::make_shared<const FMaterialDefinition>(std::move(Description)));
+	for (const auto& Override : InOriginal.GetSnapshot()->Overrides)
+	{
+		Instance.Set(Override.Name, Override.Value);
+	}
+	auto Result = InFixture.Session->GetResources().RequestMaterial(Instance.Freeze());
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	while (Result->GetStatus() != ERenderMaterialStatus::Ready &&
+	       Result->GetStatus() != ERenderMaterialStatus::Failed && std::chrono::steady_clock::now() < Deadline)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	if (!Result->GetError().empty())
+	{
+		throw std::runtime_error(Result->GetError());
+	}
+	HYP_CHECK(Result->GetStatus() == ERenderMaterialStatus::Ready);
+	return Result;
+}
+
+void CheckIncrementalSharedSplit(FSceneFixture& InFixture)
+{
+	auto& Scene = InFixture.Session->GetScene();
+	FModel Template(Scene, InFixture.Session->GetResources(), std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	AwaitModel(Template);
+	auto Resource = Template.GetResource();
+	Template.Remove();
+	auto Surface = SharedOverrideMaterial(InFixture, *Resource->GetMaterial(0));
+	const auto InitialView = Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0}));
+	std::vector<FRenderPrimitiveState> States(2);
+	for (std::size_t Index = 0; Index < States.size(); ++Index)
+	{
+		States[Index].Resource = Resource;
+		States[Index].Surface = Surface;
+		States[Index].World = Multiply(Translation({Index ? .7f : -.7f, 0, 0}), Scale({.25f, .25f, 1}));
+	}
+	States[0].ObjectParameters = {{"Engine.View.ViewProjection", FMaterialValue::Matrix(InitialView)}};
+	auto Bindings = Scene.CreateBatch(States);
+	InFixture.Tasks.Wait(Scene.Flush());
+	for (const auto& Binding : Bindings)
+	{
+		const auto Status = Binding.GetStatus();
+		if (!Status.Error.empty())
+		{
+			throw std::runtime_error(Status.Error);
+		}
+		HYP_CHECK(Status.State == ERenderPrimitiveStatus::Ready);
+	}
+	const auto Initial = [](FRenderView& InView)
+	{
+		InView.Parameters = DefaultShadowParameters();
+	};
+	const auto Changed = [&](FRenderView& InView)
+	{
+		Initial(InView);
+		InView.ViewProjection = Multiply(Translation({.2f, 0, 0}), InitialView);
+	};
+	InFixture.Frame(2, ESceneCullingMode::None, Initial);
+	const auto Original = InFixture.Frame(2, ESceneCullingMode::None, Initial);
+	HYP_CHECK(InFixture.LastStatistics.Batches.InstancedDraws == 1);
+	// These sources share equal numeric view values initially, but only one follows the next camera.
+	const auto Split = InFixture.Frame(2, ESceneCullingMode::None, Changed);
+	HYP_CHECK(InFixture.LastStatistics.Batches.InstancedDraws == 0);
+	HYP_CHECK(InFixture.LastStatistics.Batches.IncrementalItemReuses == 0);
+	HYP_CHECK(Split.Rgba != Original.Rgba);
+	const auto Ordinary = InFixture.Frame(2, ESceneCullingMode::None,
+	                                      [&](FRenderView& InView)
+	                                      {
+		                                      Changed(InView);
+		                                      InView.bInstanceBatching = false;
+	                                      });
+	HYP_CHECK(Ordinary.Rgba == Split.Rgba);
+	const auto Restored = InFixture.Frame(2, ESceneCullingMode::None, Initial);
+	HYP_CHECK(Restored.Rgba == Original.Rgba && InFixture.LastStatistics.Batches.InstancedDraws == 1);
+	Bindings.clear();
+	States = {};
+	Resource.reset();
+	Surface.reset();
 	InFixture.AwaitRetirement();
 }
 
@@ -746,6 +1109,9 @@ int main()
 		CheckReceiptViewChanges(Fixture);
 		CheckLocalPackets(Fixture);
 		CheckLocalVisibilityInputs(Fixture);
+		CheckIncrementalRetirement(Fixture);
+		CheckIncrementalBlocks(Fixture);
+		CheckIncrementalSharedSplit(Fixture);
 		Fixture.Tasks.Wait(Fixture.Tasks.Dispatch({EDomain::Rhi, 0},
 		                                          [&]
 		                                          {

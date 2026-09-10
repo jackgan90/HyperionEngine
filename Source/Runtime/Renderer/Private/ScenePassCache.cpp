@@ -63,6 +63,11 @@ bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InS
 		Stats.Batches.PreparedInputBuilds = 0;
 		Stats.Batches.PreparedInputReuses = 0;
 		Stats.Batches.InstanceContractBuilds = 0;
+		Stats.Batches.IncrementalPlanUpdates = 0;
+		Stats.Batches.IncrementalItemReuses = 0;
+		Stats.Batches.AffectedBatches = 0;
+		Stats.Batches.RetainedBatches = 0;
+		Stats.Batches.BatchAdmissionReuses = 0;
 	}
 	// Reused packets still publish this view's receipts in the current family order.
 	// Cache entries are published only after every item's preparation succeeds.

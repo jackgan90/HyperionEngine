@@ -23,6 +23,7 @@ class FFrustum
 public:
 	explicit FFrustum(const FMat4& InViewProjection);
 	bool Intersects(const FBounds& InBounds) const;
+	bool Contains(const FBounds& InBounds) const;
 
 private:
 	std::array<FVec4, 6> Planes;

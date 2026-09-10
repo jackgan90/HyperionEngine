@@ -19,6 +19,7 @@ struct FMaterialSharedBinding;
 struct FLocalMaterialItem;
 struct FRenderBatchPlan;
 struct FSceneItemPreparation;
+struct FMaterialBindingGroups;
 
 struct FRenderPrimitiveHandle
 {
@@ -126,6 +127,7 @@ struct FRenderSceneSnapshot
 	std::uint64_t Family = 1;
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
 	std::shared_ptr<const FRenderBatchPlan> Batches;
+	std::shared_ptr<const FMaterialBindingGroups> SharedBindingGroups; // Immutable indices for this ordered membership.
 	// Renderer-owned identities: immutable prepared contents and the current preparation receipt frame.
 	std::shared_ptr<const void> ContentIdentity;
 	std::shared_ptr<const void> LocalContentIdentity; // Ordered local draw state; shared numeric inputs may change.

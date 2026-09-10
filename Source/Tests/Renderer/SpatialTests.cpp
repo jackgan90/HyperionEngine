@@ -2,6 +2,7 @@
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <iostream>
+#include <limits>
 #include <random>
 
 namespace
@@ -19,6 +20,34 @@ void Compare(ISceneSpatialIndex& InIndex, const FMat4& InView)
 	std::sort(Bvh.begin(), Bvh.end());
 	HYP_CHECK(Linear == Bvh);
 	HYP_CHECK(std::adjacent_find(Bvh.begin(), Bvh.end()) == Bvh.end());
+}
+
+void CheckContainment()
+{
+	const FFrustum Frustum(Identity());
+	const FBounds Inside{{-.2f, -.2f, .2f}, {.2f, .2f, .8f}, true};
+	HYP_CHECK(Frustum.Contains(Inside));
+	HYP_CHECK(!Frustum.Contains({}));
+	HYP_CHECK(!Frustum.Contains({{-1, -1, 0}, {1, 1, 1}, true}));
+	HYP_CHECK(!Frustum.Contains({{2, 0, .2f}, {3, 1, .8f}, true}));
+	auto Invalid = Identity();
+	Invalid.Values[0] = std::numeric_limits<float>::quiet_NaN();
+	HYP_CHECK(!FFrustum(Invalid).Contains(Inside));
+	std::mt19937 Random(816);
+	std::uniform_real_distribution<float> Offset(-3, 3);
+	std::size_t Contained{};
+	for (unsigned Iteration = 0; Iteration < 2000; ++Iteration)
+	{
+		const auto View = Multiply(Perspective(1, 1.3f, .1f, 100), LookAt({Offset(Random), 2, 6}, {0, 0, 0}));
+		const auto World = Multiply(Translation({Offset(Random), Offset(Random), Offset(Random)}),
+		                            Scale({Iteration % 2 ? -.7f : .7f, .8f, 1.1f}));
+		if (FFrustum(View).Contains(TransformBounds(Inside, World)))
+		{
+			++Contained;
+			HYP_CHECK(FFrustum(Multiply(View, World)).Intersects(Inside));
+		}
+	}
+	HYP_CHECK(Contained > 500);
 }
 
 void CheckSpatial()
@@ -150,6 +179,7 @@ int main()
 {
 	try
 	{
+		CheckContainment();
 		CheckSpatial();
 		CheckCollection();
 		std::cout << "BVH differential, incremental updates, conservative early collection and view isolation passed\n";

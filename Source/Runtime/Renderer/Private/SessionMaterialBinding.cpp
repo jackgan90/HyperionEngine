@@ -1,4 +1,5 @@
 #include "Hyperion/Core/Profiling.h"
+#include "MaterialBindingGroups.h"
 #include "MaterialEvaluationCache.h"
 #include "MaterialProfiling.h"
 #include "MaterialSharedBinding.h"
@@ -264,6 +265,89 @@ FMaterialProviderInputs FRenderSession::PrepareViewInputs(const FRenderSceneSnap
 	return Inputs;
 }
 
+namespace
+{
+void PrepareMaterialItem(FRenderItem& InItem, FRenderSceneSnapshot& InSnapshot, FMaterialProviderInputs& InInputs,
+                         FViewMaterialProviders& InProviders, const FRenderResourceService& InResources,
+                         FMaterialPreparationProfile& InProfile, bool bInRetainLocal)
+{
+	if (!InItem.State.Surface)
+	{
+		return;
+	}
+	try
+	{
+		if (bInRetainLocal && InItem.SharedBinding && InItem.ResolvedParameters &&
+		    InItem.SharedBinding->Pass->Usage == InSnapshot.View.Usage)
+		{
+			const auto& Update = InProviders.UpdateSharedBinding(InItem.SharedBinding, InInputs);
+			if (Update)
+			{
+				InItem.SharedParameters = Update;
+				InProfile.SharedUpdate();
+				++InSnapshot.Statistics.SharedMaterialUpdates;
+				++InSnapshot.Statistics.RetainedMaterialItems;
+				return;
+			}
+		}
+		const auto Compiled = InItem.Preparation && InItem.Preparation->Program ? InItem.Preparation->Program
+		                                                                        : InItem.State.Surface->GetCompiled();
+		if (((!InItem.Preparation || !InItem.Preparation->Program) &&
+		     InItem.State.Surface->GetStatus() != ERenderMaterialStatus::Ready) ||
+		    !Compiled)
+		{
+			throw std::runtime_error("Material resources are not ready: " + InItem.State.Surface->GetError());
+		}
+		if (!InItem.Preparation || !InItem.Preparation->Program)
+		{
+			InItem.Context.ObjectParameters = GetPrimitiveMaterialOverrides(InItem.State, *Compiled->Interface.Schema);
+		}
+		if (ReuseEvaluation(InItem, InSnapshot.View, InInputs, Compiled))
+		{
+			InProfile.Reused();
+			return;
+		}
+		if (ShareMaterialEvaluation(InItem, InSnapshot, InInputs, Compiled, InProviders))
+		{
+			InProfile.SharedUpdate();
+			++InSnapshot.Statistics.SharedMaterialUpdates;
+			return;
+		}
+		if (RefreshMaterialEvaluation(InItem, InSnapshot, InInputs, InResources, Compiled, InProviders))
+		{
+			InProfile.Refreshed();
+			return;
+		}
+		InProfile.Evaluated();
+		HYP_PERF_SCOPE_C(Detail, FullMaterialEvaluation);
+		const auto& Pass = Compiled->GetPass(InSnapshot.View.Usage);
+		FillMaterialObjectInputs(InInputs, InItem, InSnapshot, InResources);
+		FillMaterialDrawInputs(InInputs, InItem, InSnapshot);
+		std::vector<std::string> Semantics;
+		for (const auto Index : Pass.ActiveParameters)
+		{
+			const auto& Parameter = Compiled->Interface.Schema->GetParameters()[Index];
+			if (Parameter.Source == EMaterialParameterSource::Semantic)
+			{
+				Semantics.push_back(Parameter.Semantic);
+			}
+		}
+		InItem.Context.Scopes = InInputs.Scopes;
+		InItem.Context.Providers = InProviders.Registry.Evaluate(InInputs, Semantics);
+		InItem.Context.ObjectParameters = GetPrimitiveMaterialOverrides(InItem.State, *Compiled->Interface.Schema);
+		InItem.Context.DrawParameters = InItem.DrawParameters;
+		// Validate the complete logical draw before dispatching any native work for the family.
+		InItem.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(
+		    ResolveMaterialBindingContext(InItem.State.Surface->GetSnapshot(), *Compiled, Pass, InItem.Context));
+		CacheEvaluation(InItem, InSnapshot.View, InInputs, Compiled, InProviders);
+	}
+	catch (const std::exception& Error)
+	{
+		InItem.PreparationError = Error.what();
+	}
+}
+} // namespace
+
 void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot, bool bInStableCollection)
 {
 	HYP_PERF_SCOPE_C(Material, PrepareMaterials);
@@ -272,82 +356,33 @@ void FRenderSession::PrepareMaterials(FRenderSceneSnapshot& InSnapshot, bool bIn
 	FViewMaterialProviders ViewProviders{MaterialState->Providers};
 	ViewProviders.BindingHistory = &MaterialState->SharedBindings;
 	const bool bRetainLocal = bInStableCollection && !Batches.HasCustomStrategies();
-	for (auto& Item : InSnapshot.Items)
+	const bool bGrouped = bRetainLocal && UpdateMaterialBindingGroups(InSnapshot, ViewProviders, Inputs);
+	bool bRegroup = !bGrouped;
+	if (bGrouped)
 	{
-		if (!Item.State.Surface)
+		const auto& Groups = *InSnapshot.SharedBindingGroups;
+		Profile.SharedUpdate(Groups.ItemCount - Groups.Ungrouped.size());
+		for (const auto Index : Groups.Ungrouped)
 		{
-			continue;
+			auto& Item = InSnapshot.Items[Index];
+			PrepareMaterialItem(Item, InSnapshot, Inputs, ViewProviders, Resources, Profile, bRetainLocal);
+			bRegroup |= bool(Item.SharedBinding);
 		}
-		try
+	}
+	else
+	{
+		for (auto& Item : InSnapshot.Items)
 		{
-			if (bRetainLocal && Item.SharedBinding && Item.ResolvedParameters &&
-			    Item.SharedBinding->Pass->Usage == InSnapshot.View.Usage)
-			{
-				const auto& Update = ViewProviders.UpdateSharedBinding(Item.SharedBinding, Inputs);
-				if (Update)
-				{
-					Item.SharedParameters = Update;
-					Profile.SharedUpdate();
-					++InSnapshot.Statistics.SharedMaterialUpdates;
-					++InSnapshot.Statistics.RetainedMaterialItems;
-					continue;
-				}
-			}
-			const auto Compiled = Item.Preparation && Item.Preparation->Program ? Item.Preparation->Program
-			                                                                    : Item.State.Surface->GetCompiled();
-			if (((!Item.Preparation || !Item.Preparation->Program) &&
-			     Item.State.Surface->GetStatus() != ERenderMaterialStatus::Ready) ||
-			    !Compiled)
-			{
-				throw std::runtime_error("Material resources are not ready: " + Item.State.Surface->GetError());
-			}
-			if (!Item.Preparation || !Item.Preparation->Program)
-			{
-				Item.Context.ObjectParameters = GetPrimitiveMaterialOverrides(Item.State, *Compiled->Interface.Schema);
-			}
-			if (ReuseEvaluation(Item, InSnapshot.View, Inputs, Compiled))
-			{
-				Profile.Reused();
-				continue;
-			}
-			if (ShareMaterialEvaluation(Item, InSnapshot, Inputs, Compiled, ViewProviders))
-			{
-				Profile.SharedUpdate();
-				++InSnapshot.Statistics.SharedMaterialUpdates;
-				continue;
-			}
-			if (RefreshMaterialEvaluation(Item, InSnapshot, Inputs, Resources, Compiled, ViewProviders))
-			{
-				Profile.Refreshed();
-				continue;
-			}
-			Profile.Evaluated();
-			HYP_PERF_SCOPE_C(Detail, FullMaterialEvaluation);
-			const auto& Pass = Compiled->GetPass(InSnapshot.View.Usage);
-			FillMaterialObjectInputs(Inputs, Item, InSnapshot, Resources);
-			FillMaterialDrawInputs(Inputs, Item, InSnapshot);
-			std::vector<std::string> Semantics;
-			for (const auto Index : Pass.ActiveParameters)
-			{
-				const auto& Parameter = Compiled->Interface.Schema->GetParameters()[Index];
-				if (Parameter.Source == EMaterialParameterSource::Semantic)
-				{
-					Semantics.push_back(Parameter.Semantic);
-				}
-			}
-			Item.Context.Scopes = Inputs.Scopes;
-			Item.Context.Providers = MaterialState->Providers.Evaluate(Inputs, Semantics);
-			Item.Context.ObjectParameters = GetPrimitiveMaterialOverrides(Item.State, *Compiled->Interface.Schema);
-			Item.Context.DrawParameters = Item.DrawParameters;
-			// Validate the complete logical draw before dispatching any native work for the family.
-			Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(
-			    ResolveMaterialBindingContext(Item.State.Surface->GetSnapshot(), *Compiled, Pass, Item.Context));
-			CacheEvaluation(Item, InSnapshot.View, Inputs, Compiled, ViewProviders);
+			PrepareMaterialItem(Item, InSnapshot, Inputs, ViewProviders, Resources, Profile, bRetainLocal);
 		}
-		catch (const std::exception& Error)
-		{
-			Item.PreparationError = Error.what();
-		}
+	}
+	if (bRegroup)
+	{
+		// Build an index only after a view demonstrates stable membership. Churning views still use the
+		// per-item shared-update path, without paying to construct a group index that expires next frame.
+		const bool bStableMembers = InSnapshot.Statistics.CollectionReuses || InSnapshot.Statistics.MembershipReuses;
+		InSnapshot.SharedBindingGroups =
+		    bRetainLocal && bStableMembers ? RetainMaterialBindingGroups(InSnapshot) : nullptr;
 	}
 	InSnapshot.Statistics.SharedMaterialGroups = ViewProviders.BindingEvaluations;
 	HYP_PERF_PLOT(Material, SharedMaterialGroupUpdates, double(ViewProviders.BindingEvaluations));

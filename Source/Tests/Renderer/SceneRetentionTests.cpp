@@ -41,6 +41,66 @@ FRenderSceneSnapshot Collect(FTaskSystem& InTasks, const FRenderSceneClient& InS
 	return Result;
 }
 
+FRenderSceneSnapshot CollectPrepared(FTaskSystem& InTasks, const FRenderSceneClient& InScene, FRenderView InView,
+                                     FRenderSceneSnapshot* InPrevious = nullptr)
+{
+	FRenderSceneSnapshot Result;
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              InScene.BeginViews();
+		                              Result = InScene.CollectPrepared(InView, 1, InPrevious);
+	                              }));
+	return Result;
+}
+
+void CheckPreparedMembership(FTaskSystem& InTasks, const std::shared_ptr<const FRenderResource>& InResource)
+{
+	FRenderSceneClient Scene(InTasks);
+	FRenderPrimitiveState State;
+	State.Resource = InResource;
+	State.LocalBounds = {{-.08f, -.08f, .4f}, {.08f, .08f, .6f}, true};
+	std::vector<FRenderPrimitiveState> States(5, State);
+	for (std::size_t Index = 0; Index < States.size(); ++Index)
+	{
+		States[Index].World = Translation({(float(Index) - 2) * .4f, 0, 0});
+	}
+	auto Bindings = Scene.CreateBatch(std::move(States));
+	InTasks.Wait(Scene.Flush());
+	FRenderView View;
+	auto Previous = CollectPrepared(InTasks, Scene, View);
+	HYP_CHECK(Previous.Items.Size() == 5);
+	const auto* Middle = &Previous.Items[2];
+	View.ViewProjection = Translation({.01f, 0, 0});
+	auto Current = CollectPrepared(InTasks, Scene, View, &Previous);
+	HYP_CHECK(Current.Statistics.MembershipReuses == 1 && &Current.Items[2] == Middle);
+	HYP_CHECK(Current.Statistics.ContainedItemTests == 5);
+	auto Independent = Current;
+	for (unsigned Iteration = 0; Iteration < 60; ++Iteration)
+	{
+		View.ViewProjection = Translation({(float(Iteration % 13) - 6) * .21f, 0, 0});
+		auto Expected = PrepareSceneSnapshot(Collect(InTasks, Scene, View));
+		auto Next = CollectPrepared(InTasks, Scene, View, &Current);
+		HYP_CHECK(Next.Items.Size() == Expected.Items.Size());
+		for (std::size_t Index = 0; Index < Next.Items.Size(); ++Index)
+		{
+			HYP_CHECK(Next.Items[Index].Primitive == Expected.Items[Index].Primitive);
+			HYP_CHECK(Next.Items[Index].Ordinal == Expected.Items[Index].Ordinal);
+		}
+		HYP_CHECK(Next.Statistics.MembershipAdded <= 5 && Next.Statistics.MembershipRemoved <= 5);
+		HYP_CHECK(Next.Items.Size() + Next.RetainedItems.Size() == 5);
+		HYP_CHECK(Independent.Items.Size() == 5 && Independent.View.ViewProjection.Values[12] == .01f);
+		Current = std::move(Next);
+	}
+	// Provenance mismatch must leave the foreign prepared snapshot and its owners untouched.
+	FRenderSceneClient Other(InTasks);
+	auto Foreign = CollectPrepared(InTasks, Other, View, &Current);
+	HYP_CHECK(Foreign.Items.IsEmpty() && Foreign.RetainedItems.IsEmpty());
+	HYP_CHECK(Foreign.DrawFrame != Current.DrawFrame);
+	Other.Close();
+	Scene.Close();
+}
+
 void CheckLookup(FTaskSystem& InTasks, const std::shared_ptr<const FRenderResource>& InResource, bool bInSparse)
 {
 	FRenderSceneClient Scene(InTasks);
@@ -231,6 +291,7 @@ void CheckForeignScene(FTaskSystem& InTasks, const std::shared_ptr<const FRender
 
 void RunSceneRetentionTests(FTaskSystem& InTasks, const std::shared_ptr<const FRenderResource>& InResource)
 {
+	CheckPreparedMembership(InTasks, InResource);
 	CheckLookup(InTasks, InResource, false);
 	CheckLookup(InTasks, InResource, true);
 	CheckLargeEmission(InTasks, InResource);

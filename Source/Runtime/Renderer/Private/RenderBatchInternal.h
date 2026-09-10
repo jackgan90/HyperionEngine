@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/RenderBatch.h"
+#include "IncrementalBatchHistory.h"
 #include "InstanceDataCache.h"
 #include <list>
 #include <map>
@@ -185,7 +186,10 @@ struct FRenderBatchSystem::FImpl
 	bool bStarted{};
 	std::map<std::pair<std::uint64_t, std::string>, FPlanEntry> Plans;
 	std::size_t PlanItems{};
+	std::map<std::pair<std::uint64_t, std::string>, FIncrementalBatchHistory> IncrementalPlans;
 	std::array<std::uint64_t, 3> RetiredFamily{};
+	std::array<std::uint64_t, 3> RetiredCollection{};
+	std::uint32_t RetainedFamilies{};
 
 	FImpl(FTaskSystem& InTasks, FRHICapabilities InCapabilities, FRenderBatchLimits InLimits)
 	    : Tasks(InTasks), Capabilities(std::move(InCapabilities)), Limits(InLimits),
@@ -211,6 +215,14 @@ struct FRenderBatchSystem::FImpl
 	                                               FRenderBatchStats& OutStats);
 	std::shared_ptr<FRenderBatchPlan> BuildFresh(const FRenderSceneSnapshot& InSnapshot, bool bInEnabled);
 	std::shared_ptr<FRenderBatchPlan> ReusePlan(const FRenderSceneSnapshot& InSnapshot);
+	std::shared_ptr<FRenderBatchPlan> BuildIncremental(const FRenderSceneSnapshot& InSnapshot);
+	void AdmitIncremental(const FRenderSceneSnapshot& InSnapshot, FIncrementalBatchHistory& InHistory,
+	                      std::span<const std::size_t> InAdded, std::vector<FRenderBatchSignature>& InSignatures,
+	                      FRenderBatchStats& OutStats);
+	std::shared_ptr<FRenderBatchPlan> PublishIncremental(const FRenderSceneSnapshot& InSnapshot,
+	                                                     FIncrementalBatchHistory& InHistory,
+	                                                     FRenderBatchStats InStats);
+	void LimitIncrementalHistory();
 	void CachePlan(const FRenderSceneSnapshot& InSnapshot, const FRenderBatchPlan& InPlan);
 	void Retire(const FRenderSceneSnapshot& InSnapshot);
 	void RetireExpired();

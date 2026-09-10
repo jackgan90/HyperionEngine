@@ -41,6 +41,8 @@ public:
 	void Remove(FRenderPrimitiveHandle InHandle);
 	FRenderSceneSnapshot Collect(FRenderView InView, bool bInRefresh = true, std::uint64_t InResourceRevision = 0,
 	                             FRenderSceneSnapshot* InPrevious = nullptr);
+	FRenderSceneSnapshot CollectPrepared(FRenderView InView, std::uint64_t InResourceRevision,
+	                                     FRenderSceneSnapshot* InPrevious = nullptr);
 	FSceneVisibilityStats BeginViews();
 	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;
@@ -58,7 +60,20 @@ private:
 		std::optional<std::vector<FRenderItem>> Collection;
 		std::uint64_t ResourceRevision{};
 		std::vector<FRenderItem> Collect(const FRenderView& InView, std::uint64_t InResourceRevision);
+		void BindItem(FRenderItem& InItem, std::size_t InOrdinal,
+		              const std::shared_ptr<std::atomic_uint64_t>& InDrawFrame) const;
 	};
+
+	struct FVisibleItem
+	{
+		FEntry* Entry{};
+		std::size_t Ordinal{};
+	};
+
+	bool SelectPrepared(const FRenderView& InView, std::uint64_t InResourceRevision,
+	                    std::vector<FVisibleItem>& OutItems, FSceneVisibilityStats& OutStats);
+	void MaterializePrepared(FRenderSceneSnapshot& OutSnapshot, const std::vector<FVisibleItem>& InItems,
+	                         FRenderSceneSnapshot* InPrevious);
 
 	FTaskSystem& Tasks;
 	std::uint64_t Identity{};

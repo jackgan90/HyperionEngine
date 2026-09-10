@@ -47,7 +47,14 @@ struct FRenderBatchStats
 	std::uint64_t LocalInputReuses{};
 	std::uint64_t LocalCompatibilityReuses{};
 	std::uint64_t LocalRecordReuses{};
+	std::uint64_t IncrementalPlanUpdates{};
+	std::uint64_t IncrementalItemReuses{};
+	std::uint64_t AffectedBatches{};
+	std::uint64_t RetainedBatches{};
+	std::uint64_t BatchAdmissionReuses{};
 	std::uint64_t Evictions{};
+	std::size_t CachedPlanItems{};
+	std::size_t CachedPlanBlocks{};
 	std::size_t CachedInputs{};
 	std::size_t CachedInputBytes{}; // Estimate of count-bounded weak planning metadata, separate from payload bytes.
 	std::size_t CachedChunks{};

@@ -75,11 +75,18 @@ FRenderBatchSystem::FRenderBatchSystem(FTaskSystem& InTasks, FRHICapabilities In
 
 FRenderBatchSystem::~FRenderBatchSystem() = default;
 
-void FRenderBatchSystem::InvalidatePlans()
+void FRenderBatchSystem::InvalidatePlans(bool bInRetainLocalHistory)
 {
 	Impl->Tasks.Require({EDomain::Render});
 	Impl->Plans.clear();
 	Impl->PlanItems = 0;
+	Impl->RetiredFamily = {};
+	Impl->RetiredCollection = {};
+	Impl->RetainedFamilies = 0;
+	if (!bInRetainLocalHistory)
+	{
+		Impl->IncrementalPlans.clear();
+	}
 }
 
 bool FRenderBatchSystem::HasCustomStrategies() const
@@ -186,7 +193,11 @@ std::shared_ptr<const FRenderBatchPlan> FRenderBatchSystem::Build(const FRenderS
 	std::shared_ptr<FRenderBatchPlan> Result;
 	if (bInEnabled)
 	{
-		Result = P.ReusePlan(InSnapshot);
+		Result = P.BuildIncremental(InSnapshot);
+		if (!Result)
+		{
+			Result = P.ReusePlan(InSnapshot);
+		}
 	}
 	if (!Result || !bInEnabled)
 	{
@@ -207,6 +218,11 @@ std::shared_ptr<const FRenderBatchPlan> FRenderBatchSystem::Build(const FRenderS
 	HYP_PERF_PLOT(Render, BatchPreparedInputBuilds, double(Result->Statistics.PreparedInputBuilds));
 	HYP_PERF_PLOT(Render, BatchPreparedInputReuses, double(Result->Statistics.PreparedInputReuses));
 	HYP_PERF_PLOT(Render, BatchInstanceContractBuilds, double(Result->Statistics.InstanceContractBuilds));
+	for (const auto& [Key, History] : P.IncrementalPlans)
+	{
+		Result->Statistics.CachedPlanItems += History.Sources.size();
+		Result->Statistics.CachedPlanBlocks += History.Blocks.size();
+	}
 	Result->Statistics.CachedInputs = P.Prepared.size();
 	Result->Statistics.CachedInputBytes = P.PreparedMetadataBytes;
 	Result->Statistics.CachedChunks = P.Chunks.size();
@@ -235,7 +251,10 @@ void FRenderBatchSystem::Clear()
 	Impl->ChunkBytes = 0;
 	Impl->Plans.clear();
 	Impl->PlanItems = 0;
+	Impl->IncrementalPlans.clear();
 	Impl->RetiredFamily = {};
+	Impl->RetiredCollection = {};
+	Impl->RetainedFamilies = 0;
 	Impl->Packing.Clear();
 }
 } // namespace Hyperion

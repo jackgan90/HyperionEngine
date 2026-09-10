@@ -299,8 +299,19 @@ void FRenderBatchSystem::FImpl::Retire(const FRenderSceneSnapshot& InSnapshot)
 	                        InSnapshot.Frame ? InSnapshot.Frame->Frame : 0, InSnapshot.Family};
 	if (!InSnapshot.Frame || Family != RetiredFamily)
 	{
-		RetireExpired();
+		const bool bStableSources = InSnapshot.Frame && InSnapshot.LocalContentIdentity &&
+		                            InSnapshot.CollectionKey[0] && InSnapshot.CollectionKey[1] &&
+		                            InSnapshot.CollectionKey[2] && InSnapshot.CollectionKey == RetiredCollection;
+		// Static published sources keep their source leases and local proofs. Bound redundant CPU sweeps;
+		// source/publication changes and unproven inputs still sweep immediately. Lookups, payload limits,
+		// per-view chunk retirement below and native fence collection remain active on every use.
+		if (!bStableSources || ++RetainedFamilies >= 64)
+		{
+			RetireExpired();
+			RetainedFamilies = 0;
+		}
 		RetiredFamily = Family;
+		RetiredCollection = InSnapshot.CollectionKey;
 	}
 	// Only the current view's small chunk range needs visibility retirement after each build.
 	const FBatchItemKey First{InSnapshot.View.Identity, InSnapshot.View.Usage, 0, 0, 0, 0};

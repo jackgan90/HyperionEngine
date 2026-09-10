@@ -10,6 +10,8 @@ public:
 	explicit FSceneCollectionReuse(FRenderSceneSnapshot* InPrevious);
 	void Append(FRenderSceneSnapshot& OutSnapshot, std::span<const FRenderItem> InItems,
 	            FRenderPrimitiveHandle InHandle);
+	void AppendItem(FRenderSceneSnapshot& OutSnapshot, const FRenderItem& InItem, FRenderPrimitiveHandle InHandle,
+	                std::size_t InOrdinal);
 	bool IsReused(std::size_t InIndex) const;
 	void RetainUnselected(FRenderSceneSnapshot& OutSnapshot);
 

@@ -27,6 +27,27 @@ std::vector<FRenderItem> FRenderScene::FEntry::Collect(const FRenderView& InView
 	return Items;
 }
 
+void FRenderScene::FEntry::BindItem(FRenderItem& InItem, std::size_t InOrdinal,
+                                    const std::shared_ptr<std::atomic_uint64_t>& InDrawFrame) const
+{
+	InItem.Primitive = Handle;
+	InItem.Group = Group;
+	InItem.Ordinal = InOrdinal;
+	InItem.Lifetime = Lifetime;
+	InItem.EvaluationCache = EvaluationCache;
+	InItem.Report = [Result = Result, Frame = InDrawFrame](FRenderDrawResult InResult)
+	{
+		std::lock_guard Lock(Result->Mutex);
+		const auto PreviousFrame =
+		    Result->LastDrawFrame ? Result->LastDrawFrame->load(std::memory_order_acquire) : Result->LastDraw.Frame;
+		if (InResult.Revision == Result->Status.Revision && InResult.Frame >= PreviousFrame)
+		{
+			Result->LastDraw = std::move(InResult);
+			Result->LastDrawFrame = Frame;
+		}
+	};
+}
+
 void FRenderScene::RefreshSpatial(FSceneVisibilityStats& OutStats)
 {
 	HYP_PERF_SCOPE_C(Render, RefreshSpatial);
@@ -145,24 +166,7 @@ FRenderSceneSnapshot FRenderScene::Collect(FRenderView InView, bool bInRefresh, 
 			{
 				continue; // Reused storage retains the same primitive, lifetime and receipt ownership.
 			}
-			auto& Item = Snapshot.Items[Index];
-			Item.Primitive = Entry.Handle;
-			Item.Group = Entry.Group;
-			Item.Ordinal = Index - Start;
-			Item.Lifetime = Entry.Lifetime;
-			Item.EvaluationCache = Entry.EvaluationCache;
-			Item.Report = [Result = Entry.Result, Frame = Snapshot.DrawFrame](FRenderDrawResult InResult)
-			{
-				std::lock_guard Lock(Result->Mutex);
-				const auto PreviousFrame = Result->LastDrawFrame
-				                               ? Result->LastDrawFrame->load(std::memory_order_acquire)
-				                               : Result->LastDraw.Frame;
-				if (InResult.Revision == Result->Status.Revision && InResult.Frame >= PreviousFrame)
-				{
-					Result->LastDraw = std::move(InResult);
-					Result->LastDrawFrame = Frame;
-				}
-			};
+			Entry.BindItem(Snapshot.Items[Index], Index - Start, Snapshot.DrawFrame);
 		}
 	}
 	Reuse.RetainUnselected(Snapshot);

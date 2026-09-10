@@ -77,6 +77,10 @@ void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineSta
 	std::size_t StorageReuses{};
 	std::size_t CollectionReuses{};
 	std::size_t PreparationReuses{};
+	std::size_t MembershipReuses{};
+	std::size_t MembershipAdded{};
+	std::size_t MembershipRemoved{};
+	std::size_t ContainedItems{};
 	FRenderBatchStats Packing;
 	for (const auto& View : InPipeline.Views)
 	{
@@ -89,6 +93,10 @@ void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineSta
 		StorageReuses += View.Visibility.ItemStorageReuses;
 		CollectionReuses += View.Visibility.CollectionReuses;
 		PreparationReuses += View.Visibility.PreparationReuses;
+		MembershipReuses += View.Visibility.MembershipReuses;
+		MembershipAdded += View.Visibility.MembershipAdded;
+		MembershipRemoved += View.Visibility.MembershipRemoved;
+		ContainedItems += View.Visibility.ContainedItemTests;
 		Packing += View.Visibility.Batches;
 	}
 	InOutput << ',' << SharedUpdates << ',' << ItemReuses << ',' << StorageReuses << ',' << CollectionReuses << ','
@@ -99,7 +107,11 @@ void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineSta
 	InOutput << ',' << Packing.LocalInputReuses << ',' << Packing.LocalCompatibilityReuses << ','
 	         << Packing.LocalRecordReuses;
 	InOutput << ',' << SharedGroups << ',' << RetainedMaterials << ',' << Packing.LocalPlanReuses << ','
-	         << Packing.LocalPacketReuses << ',' << RetainedItems << ',' << RestoredItems << '\n';
+	         << Packing.LocalPacketReuses << ',' << RetainedItems << ',' << RestoredItems;
+	InOutput << ',' << MembershipReuses << ',' << MembershipAdded << ',' << MembershipRemoved << ',' << ContainedItems;
+	InOutput << ',' << Packing.IncrementalPlanUpdates << ',' << Packing.IncrementalItemReuses << ','
+	         << Packing.AffectedBatches << ',' << Packing.RetainedBatches << ',' << Packing.BatchAdmissionReuses << ','
+	         << Packing.CachedPlanItems << ',' << Packing.CachedPlanBlocks << '\n';
 }
 } // namespace
 
@@ -189,14 +201,18 @@ void FViewerApplication::SaveBenchmark()
 	       "cascade2_gpu_ms,cascade3_gpu_ms,gpu_allocation_bytes,descriptor_allocations,pipelines_created,constant_"
 	       "bytes_written,"
 	       "shadow_material_ms,shadow_plan_ms,shadow_prepare_ms";
-	Output << ",plan_reuses,material_ms,native_lists_created,native_list_resets,pipeline_binds,geometry_binds,dynamic_"
-	          "binds,shared_material_updates,item_preparation_reuses,item_storage_reuses,collection_reuses,"
-	          "view_preparation_reuses,packed_records,reused_records,assembled_blocks,reused_blocks,assembled_bytes,"
-	          "batch_input_builds,batch_input_reuses,batch_contract_builds,batch_cached_inputs,batch_input_bytes"
-	       << ",local_input_reuses,local_compatibility_reuses,local_record_reuses"
-	       << ",shared_material_groups,retained_material_items,local_plan_reuses,local_packet_reuses,retained_scene_"
-	          "items,retained_item_restores\n"
-	       << std::fixed << std::setprecision(6);
+	Output
+	    << ",plan_reuses,material_ms,native_lists_created,native_list_resets,pipeline_binds,geometry_binds,dynamic_"
+	       "binds,shared_material_updates,item_preparation_reuses,item_storage_reuses,collection_reuses,"
+	       "view_preparation_reuses,packed_records,reused_records,assembled_blocks,reused_blocks,assembled_bytes,"
+	       "batch_input_builds,batch_input_reuses,batch_contract_builds,batch_cached_inputs,batch_input_bytes"
+	    << ",local_input_reuses,local_compatibility_reuses,local_record_reuses"
+	    << ",shared_material_groups,retained_material_items,local_plan_reuses,local_packet_reuses,retained_scene_"
+	       "items,retained_item_restores"
+	    << ",membership_reuses,membership_added,membership_removed,contained_item_tests"
+	    << ",incremental_plan_updates,incremental_item_reuses,affected_batches,retained_batches,batch_admission_reuses,"
+	       "cached_plan_items,cached_plan_blocks\n"
+	    << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
 	for (const auto& Frame : BenchmarkFrames)

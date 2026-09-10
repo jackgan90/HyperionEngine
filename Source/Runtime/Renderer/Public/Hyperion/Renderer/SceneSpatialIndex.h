@@ -29,6 +29,10 @@ struct FSceneVisibilityStats
 	std::size_t Draws{};
 	std::size_t IndexRebuilds{};
 	std::size_t IndexRefits{};
+	std::size_t MembershipReuses{};
+	std::size_t MembershipAdded{};
+	std::size_t MembershipRemoved{};
+	std::size_t ContainedItemTests{};
 	std::size_t CollectionReuses{};
 	std::size_t PreparationReuses{};
 	std::size_t PacketReuses{};

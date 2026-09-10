@@ -119,6 +119,16 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 
 	using FViewKey = std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>;
 	std::map<FViewKey, FPreparedViewPasses> PreparedViews;
+
+	struct FBatchAdmission
+	{
+		std::weak_ptr<const void> Contents;
+		std::uint64_t ResourceRevision{};
+		std::string Usage;
+		bool bSrgb{};
+	};
+
+	std::map<const void*, FBatchAdmission> BatchAdmissions;
 	bool ReuseViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& OutPasses);
 	void CacheViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& InPasses,
 	                     std::vector<FPreparedViewDraw> InSources);

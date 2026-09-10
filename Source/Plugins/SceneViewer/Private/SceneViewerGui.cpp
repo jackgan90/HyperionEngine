@@ -30,7 +30,13 @@ void DrawStatistics(FGui& InGui, const FSceneVisibilityStats& InStats)
 	           std::to_string(InStats.EmittedItems));
 	InGui.Text("Visible items " + std::to_string(InStats.VisibleItems) + " | scene draws " +
 	           std::to_string(InStats.Draws));
+	InGui.Text("Membership reused " + std::to_string(InStats.MembershipReuses) + " | entered/left " +
+	           std::to_string(InStats.MembershipAdded) + "/" + std::to_string(InStats.MembershipRemoved));
 	const auto& Batch = InStats.Batches;
+	InGui.Text("Incremental updates " + std::to_string(Batch.IncrementalPlanUpdates) + " | affected/retained blocks " +
+	           std::to_string(Batch.AffectedBatches) + "/" + std::to_string(Batch.RetainedBatches));
+	InGui.Text("Batch admissions reused " + std::to_string(Batch.BatchAdmissionReuses) + " | cached members/blocks " +
+	           std::to_string(Batch.CachedPlanItems) + "/" + std::to_string(Batch.CachedPlanBlocks));
 	InGui.Text("Instanced " + std::to_string(Batch.InstancedItems) + " in " + std::to_string(Batch.InstancedDraws) +
 	           " draws | singles " + std::to_string(Batch.SingleDraws));
 	std::string Fallbacks;

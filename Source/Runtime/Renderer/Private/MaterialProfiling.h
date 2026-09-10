@@ -33,9 +33,9 @@ struct FMaterialPreparationProfile
 		Full += bEnabled;
 	}
 
-	void SharedUpdate()
+	void SharedUpdate(std::uint64_t InCount = 1)
 	{
-		SharedUpdates += bEnabled;
+		SharedUpdates += bEnabled ? InCount : 0;
 	}
 #else
 	explicit FMaterialPreparationProfile(FMaterialProviderRegistry&)
@@ -54,7 +54,7 @@ struct FMaterialPreparationProfile
 	{
 	}
 
-	void SharedUpdate()
+	void SharedUpdate(std::uint64_t = 1)
 	{
 	}
 #endif

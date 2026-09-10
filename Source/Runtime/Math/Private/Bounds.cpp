@@ -118,4 +118,27 @@ bool FFrustum::Intersects(const FBounds& InBounds) const
 	}
 	return true;
 }
+
+bool FFrustum::Contains(const FBounds& InBounds) const
+{
+	if (!bValid || !IsUsable(InBounds))
+	{
+		return false;
+	}
+	for (const auto& Plane : Planes)
+	{
+		const auto P =
+		    BoundsCorner(InBounds, (Plane.X < 0 ? 1u : 0u) | (Plane.Y < 0 ? 2u : 0u) | (Plane.Z < 0 ? 4u : 0u));
+		const double X = double(Plane.X) * P.X;
+		const double Y = double(Plane.Y) * P.Y;
+		const double Z = double(Plane.Z) * P.Z;
+		const double Distance = X + Y + Z + Plane.W;
+		const double Epsilon = 1e-5 * (1 + std::abs(X) + std::abs(Y) + std::abs(Z) + std::abs(double(Plane.W)));
+		if (!std::isfinite(Distance) || Distance <= Epsilon)
+		{
+			return false;
+		}
+	}
+	return true;
+}
 } // namespace Hyperion

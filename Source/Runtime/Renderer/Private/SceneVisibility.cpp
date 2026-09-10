@@ -57,6 +57,11 @@ bool PrepareSceneItem(FRenderItem& InItem)
 	auto Result = std::make_shared<FSceneItemPreparation>();
 	Result->Program = Program && InItem.State.Surface->GetStatus() == ERenderMaterialStatus::Ready ? Program : nullptr;
 	Result->GeometryBounds = Description->Geometries[Description->Sections[InItem.State.Section].Geometry].Bounds;
+	if (!InItem.State.bClipSpace)
+	{
+		Result->WorldBounds = TransformBounds(
+		    IsUsable(InItem.State.LocalBounds) ? InItem.State.LocalBounds : Result->GeometryBounds, InItem.State.World);
+	}
 	if (InItem.State.Surface)
 	{
 		const auto& Passes = InItem.State.Surface->GetSnapshot()->Definition->GetDescription().Passes;
@@ -83,6 +88,18 @@ bool PrepareSceneItem(FRenderItem& InItem)
 	}
 	InItem.Preparation = std::move(Result);
 	return true;
+}
+
+bool IsPreparedSceneItemVisible(const FRenderItem& InItem, const FRenderView& InView, const FFrustum& InFrustum,
+                                FSceneVisibilityStats& OutStats)
+{
+	const auto& Preparation = *InItem.Preparation;
+	if (InFrustum.Contains(Preparation.WorldBounds))
+	{
+		++OutStats.ContainedItemTests;
+		return true;
+	}
+	return IsItemVisible(InItem, InView, Preparation.GeometryBounds, Preparation.bRequiresConservativeBounds);
 }
 
 FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)

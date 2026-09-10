@@ -99,6 +99,10 @@ void ResetViewStatistics(FRenderSceneSnapshot& InSnapshot, bool bInReuseCollecti
 	Stats.RetainedMaterialItems = 0;
 	if (bInReuseCollection)
 	{
+		Stats.MembershipReuses = 0;
+		Stats.MembershipAdded = 0;
+		Stats.MembershipRemoved = 0;
+		Stats.ContainedItemTests = 0;
 		Stats.RetainedItemRestores = 0;
 		Stats.ItemPreparationReuses = InSnapshot.Items.Size();
 		Stats.ItemStorageReuses = InSnapshot.Items.Size();
@@ -111,7 +115,7 @@ void ResetViewStatistics(FRenderSceneSnapshot& InSnapshot, bool bInReuseCollecti
 
 void FRenderSession::InvalidatePreparedViews()
 {
-	Batches.InvalidatePlans();
+	Batches.InvalidatePlans(true);
 	// A failed native Close may be retried after the material state was already released.
 	if (MaterialState)
 	{
@@ -148,8 +152,8 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 			Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(*Cached.Snapshot);
 		}
 		Cached.bValid = false;
-		Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(PrepareSceneSnapshot(
-		    Scene.Collect(InView, false, InResourceRevision, bStableCollection ? Cached.Snapshot.get() : nullptr)));
+		Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(
+		    Scene.CollectPrepared(InView, InResourceRevision, bStableCollection ? Cached.Snapshot.get() : nullptr));
 		Cached.bDepthSorted = HasDepthSortedItems(*Cached.Snapshot);
 	}
 	else if (Cached.Snapshot.use_count() != 1)

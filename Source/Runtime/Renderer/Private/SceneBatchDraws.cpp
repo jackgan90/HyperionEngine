@@ -79,6 +79,63 @@ std::vector<std::size_t> Survivors(const FRenderSceneSnapshot& InSnapshot, std::
 	return Result;
 }
 
+void ValidateBatch(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot,
+                   const FRenderBatch& InBatch, FPreparedSceneDraws& OutPrepared)
+{
+	const auto Revision = InOwner.PublicationRevision.load(std::memory_order_acquire);
+	const auto Existing = InOwner.BatchAdmissions.find(InBatch.LocalContentIdentity.get());
+	if (InBatch.LocalContentIdentity && Existing != InOwner.BatchAdmissions.end() &&
+	    Existing->second.Contents.lock() == InBatch.LocalContentIdentity &&
+	    Existing->second.ResourceRevision == Revision && Existing->second.Usage == InSnapshot.View.Usage)
+	{
+		for (const auto Index : InBatch.Items)
+		{
+			OutPrepared.Srgb[Index] = Existing->second.bSrgb;
+		}
+		++OutPrepared.Statistics.BatchAdmissionReuses;
+		return;
+	}
+	bool bReady = !InBatch.Items.empty();
+	bool bSrgb{};
+	for (const auto Index : InBatch.Items)
+	{
+		const auto& Item = InSnapshot.Items[Index];
+		try
+		{
+			InOwner.ValidateDrawItem(Item, InSnapshot.View);
+			const bool bCurrentSrgb =
+			    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
+			bReady &= Index == InBatch.Items.front() || bSrgb == bCurrentSrgb;
+			bSrgb = bCurrentSrgb;
+			OutPrepared.Srgb[Index] = bSrgb;
+		}
+		catch (const std::exception& Error)
+		{
+			bReady = false;
+			OutPrepared.Failures[GroupKey(Item)] = Error.what();
+		}
+	}
+	if (!bReady || !InBatch.LocalContentIdentity)
+	{
+		return;
+	}
+	if (InOwner.BatchAdmissions.size() >= 1024)
+	{
+		std::erase_if(InOwner.BatchAdmissions,
+		              [&](const auto& InEntry)
+		              {
+			              return InEntry.second.Contents.expired() || InEntry.second.ResourceRevision != Revision;
+		              });
+	}
+	if (InOwner.BatchAdmissions.size() < 1024)
+	{
+		InOwner.BatchAdmissions.insert_or_assign(
+		    InBatch.LocalContentIdentity.get(),
+		    FRenderResourceCoordinator::FBatchAdmission{InBatch.LocalContentIdentity, Revision, InSnapshot.View.Usage,
+		                                                bSrgb});
+	}
+}
+
 void PrepareSingles(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot,
                     std::span<const std::size_t> InItems, FPreparedSceneDraws& OutPrepared)
 {
@@ -150,19 +207,9 @@ void PrepareBatchedDraws(FRenderResourceCoordinator& InOwner, const FRenderScene
 {
 	HYP_PERF_SCOPE_C(Detail, PrepareBatchedDrawPackets);
 	OutPrepared.Statistics = InSnapshot.Batches->Statistics;
-	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
+	for (const auto& Batch : InSnapshot.Batches->Batches)
 	{
-		const auto& Item = InSnapshot.Items[Index];
-		try
-		{
-			InOwner.ValidateDrawItem(Item, InSnapshot.View);
-			OutPrepared.Srgb[Index] =
-			    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
-		}
-		catch (const std::exception& Error)
-		{
-			OutPrepared.Failures[GroupKey(Item)] = Error.what();
-		}
+		ValidateBatch(InOwner, InSnapshot, Batch, OutPrepared);
 	}
 	std::vector<FPendingBatch> Pending;
 	for (const auto& Batch : InSnapshot.Batches->Batches)

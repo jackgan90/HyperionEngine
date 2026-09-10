@@ -88,23 +88,29 @@ void FSceneCollectionReuse::Append(FRenderSceneSnapshot& OutSnapshot, std::span<
 	HYP_PERF_SCOPE_C(Detail, AppendRetainedSceneItems);
 	for (std::size_t Ordinal = 0; Ordinal < InItems.size(); ++Ordinal)
 	{
-		const auto Source = Find(InHandle.Slot, Ordinal);
-		if (Source.Items)
-		{
-			const auto& Item = (*Source.Items)[Source.Index];
-			if (Item.Primitive == InHandle && Item.Preparation == InItems[Ordinal].Preparation)
-			{
-				OutSnapshot.Items.MoveFrom(*Source.Items, Source.Index);
-				Reused.resize(OutSnapshot.Items.Size());
-				Reused.back() = true;
-				++OutSnapshot.Statistics.ItemStorageReuses;
-				OutSnapshot.Statistics.RetainedItemRestores += Source.Items == &Previous->RetainedItems;
-				continue;
-			}
-			Source.Items->Discard(Source.Index);
-		}
-		OutSnapshot.Items.PushBack(InItems[Ordinal]);
+		AppendItem(OutSnapshot, InItems[Ordinal], InHandle, Ordinal);
 	}
+}
+
+void FSceneCollectionReuse::AppendItem(FRenderSceneSnapshot& OutSnapshot, const FRenderItem& InItem,
+                                       FRenderPrimitiveHandle InHandle, std::size_t InOrdinal)
+{
+	const auto Source = Find(InHandle.Slot, InOrdinal);
+	if (Source.Items)
+	{
+		const auto& Item = (*Source.Items)[Source.Index];
+		if (Item.Primitive == InHandle && Item.Preparation == InItem.Preparation)
+		{
+			OutSnapshot.Items.MoveFrom(*Source.Items, Source.Index);
+			Reused.resize(OutSnapshot.Items.Size());
+			Reused.back() = true;
+			++OutSnapshot.Statistics.ItemStorageReuses;
+			OutSnapshot.Statistics.RetainedItemRestores += Source.Items == &Previous->RetainedItems;
+			return;
+		}
+		Source.Items->Discard(Source.Index);
+	}
+	OutSnapshot.Items.PushBack(InItem);
 }
 
 bool FSceneCollectionReuse::IsReused(std::size_t InIndex) const
