@@ -1,73 +1,133 @@
 #include "RenderGraphResources.h"
+#include <cmath>
+#include <set>
 #include <stdexcept>
 
 namespace Hyperion
 {
-FGraphDepthResource& FGraphDepthResources::Find(const FTexture& InTexture)
+namespace
 {
-	if (!InTexture)
+std::optional<FViewport> AttachmentRegion(const std::optional<FViewport>& InViewport)
+{
+	if (!InViewport)
 	{
-		throw std::invalid_argument("Empty graph depth resource");
+		return {};
 	}
-	auto& Resource = Textures[InTexture.Payload.get()];
-	Resource.Texture = InTexture;
-	return Resource;
+	const auto Left = std::floor(InViewport->X);
+	const auto Top = std::floor(InViewport->Y);
+	return FViewport{Left, Top, std::ceil(InViewport->X + InViewport->Width) - Left,
+	                 std::ceil(InViewport->Y + InViewport->Height) - Top};
+}
+} // namespace
+
+std::vector<FGraphResourceState> ResolveGraphResources(std::span<const FGraphTextureImport> InResources)
+{
+	std::vector<FGraphResourceState> Result;
+	std::set<const IRHITexture*> Textures;
+	for (const auto& Import : InResources)
+	{
+		auto Target = Import.Target;
+		if (Import.Resolve)
+		{
+			Target.Texture = Import.Resolve();
+			if (!Target.Texture)
+			{
+				throw std::invalid_argument("Graph import resolved an empty texture");
+			}
+		}
+		if (Target.Kind == ERenderTargetKind::Texture)
+		{
+			const auto Info = Target.Texture.Payload->GetInfo();
+			if (Info.Width != Import.Size.Width || Info.Height != Import.Size.Height ||
+			    Info.DepthFormat != Import.DepthFormat)
+			{
+				throw std::invalid_argument("Graph import differs from the physical texture description");
+			}
+		}
+		if (Target.Kind == ERenderTargetKind::Texture && !Textures.insert(Target.Texture.Payload.get()).second)
+		{
+			throw std::invalid_argument("Different graph identities resolve to the same texture");
+		}
+		Result.push_back(
+		    {Target, Import.InitialState, {Import.bInitialized}, {Import.bInitialized}, {Import.bInitialized}});
+	}
+	return Result;
 }
 
-FGraphDepthResources::FGraphDepthResources(std::span<const FTexture> InImports)
-{
-	for (const auto& Texture : InImports)
-	{
-		Find(Texture).bInitialized = true;
-	}
-}
-
-void FGraphDepthResources::Transition(FGraphDepthResource& InResource, EResourceState InState,
-                                      FPassCommands& InCommands)
+void TransitionGraphResource(FGraphResourceState& InResource, EResourceState InState, FPassCommands& OutCommands)
 {
 	if (InResource.State != InState)
 	{
-		InCommands.TextureTransitions.push_back({InResource.Texture, InResource.State, InState});
+		OutCommands.Transitions.push_back({InResource.Target, InResource.State, InState});
 		InResource.State = InState;
 	}
 }
 
-void FGraphDepthResources::Compile(FPassCommands& InCommands)
+void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+                    std::vector<FGraphResourceState>& InStates, FPassCommands& OutCommands)
 {
-	if (InCommands.DepthTarget)
+	OutCommands.Viewport = InPass.Viewport;
+	const auto Region = AttachmentRegion(InPass.Viewport);
+	if (InPass.Color)
 	{
-		if (!InCommands.bUseDepth || InCommands.bUseStencil || InCommands.DepthFormat != ERHIDepthFormat::D32)
-		{
-			throw std::invalid_argument("Explicit depth target requires D32 depth without stencil");
-		}
-		auto& Resource = Find(InCommands.DepthTarget);
-		if (!Resource.bInitialized && (!InCommands.bClearDepth || InCommands.Viewport))
-		{
-			throw std::invalid_argument("Graph must initialize the whole depth texture before loading or sampling");
-		}
-		Resource.bInitialized |= InCommands.bClearDepth && !InCommands.Viewport;
-		Transition(Resource, EResourceState::DepthWrite, InCommands);
+		const auto& Attachment = *InPass.Color;
+		auto& State = InStates[Attachment.Texture.Index];
+		State.Color.Load(Attachment.Actions.Load, Region, InResources[Attachment.Texture.Index].Size);
+		TransitionGraphResource(State, EResourceState::RenderTarget, OutCommands);
+		OutCommands.Color = FColorAttachment{State.Target, Attachment.Actions, Attachment.Clear,
+		                                     Attachment.View == EGraphColorView::Srgb};
 	}
-	for (const auto& Texture : InCommands.SampledDepth)
+	if (InPass.DepthStencil)
 	{
-		if (Texture == InCommands.DepthTarget)
+		const auto& Attachment = *InPass.DepthStencil;
+		const auto& Resource = InResources[Attachment.Texture.Index];
+		auto& State = InStates[Attachment.Texture.Index];
+		if (Attachment.Depth)
 		{
-			throw std::invalid_argument("Graph cannot sample its writable depth attachment");
+			State.Depth.Load(Attachment.Depth->Load, Region, Resource.Size);
 		}
-		auto& Resource = Find(Texture);
-		if (!Resource.bInitialized)
+		if (Attachment.Stencil)
 		{
-			throw std::invalid_argument("Graph samples undefined depth contents");
+			State.Stencil.Load(Attachment.Stencil->Load, Region, Resource.Size);
 		}
-		Transition(Resource, EResourceState::ShaderRead, InCommands);
+		TransitionGraphResource(State, EResourceState::DepthWrite, OutCommands);
+		OutCommands.DepthStencil =
+		    FDepthStencilAttachment{State.Target,       Resource.DepthFormat,  Attachment.Depth,
+		                            Attachment.Stencil, Attachment.ClearDepth, Attachment.ClearStencil};
+	}
+	for (const auto Read : InPass.Reads)
+	{
+		auto& State = InStates[Read.Index];
+		if (!State.Depth.Contains({}, InResources[Read.Index].Size))
+		{
+			throw std::invalid_argument("Graph samples undefined texture contents");
+		}
+		TransitionGraphResource(State, EResourceState::ShaderRead, OutCommands);
+		OutCommands.SampledTextures.push_back(State.Target.Texture);
 	}
 }
 
-void FGraphDepthResources::Finish(FPassCommands& InCommands)
+void FinishGraphAttachments(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+                            std::vector<FGraphResourceState>& InStates)
 {
-	for (auto& [Identity, Resource] : Textures)
+	const auto Region = AttachmentRegion(InPass.Viewport);
+	if (InPass.Color)
 	{
-		Transition(Resource, EResourceState::ShaderRead, InCommands);
+		const auto Index = InPass.Color->Texture.Index;
+		InStates[Index].Color.Store(InPass.Color->Actions.Store, Region, InResources[Index].Size);
+	}
+	if (InPass.DepthStencil)
+	{
+		const auto& Attachment = *InPass.DepthStencil;
+		const auto Index = Attachment.Texture.Index;
+		if (Attachment.Depth)
+		{
+			InStates[Index].Depth.Store(Attachment.Depth->Store, Region, InResources[Index].Size);
+		}
+		if (Attachment.Stencil)
+		{
+			InStates[Index].Stencil.Store(Attachment.Stencil->Store, Region, InResources[Index].Size);
+		}
 	}
 }
 } // namespace Hyperion

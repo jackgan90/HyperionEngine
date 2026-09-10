@@ -6,7 +6,7 @@
 namespace Hyperion
 {
 bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InSnapshot,
-                                                 std::vector<FColorPass>& OutPasses)
+                                                 std::vector<FGraphicsDrawBatch>& OutPasses)
 {
 	HYP_PERF_SCOPE_C(Detail, ReuseScenePasses);
 	if (!InSnapshot.ContentIdentity || !InSnapshot.Frame)
@@ -25,16 +25,6 @@ bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InS
 		return false;
 	}
 	OutPasses = It->second.Passes;
-	if (InSnapshot.View.Name.empty())
-	{
-		for (std::size_t Index = 0; Index < OutPasses.size(); ++Index)
-		{
-			OutPasses[Index].Commands.Name =
-			    "Scene " + std::to_string(InSnapshot.Frame->Session) + "/" + std::to_string(InSnapshot.Frame->Frame) +
-			    "/" + std::to_string(InSnapshot.Family) + "/" + std::to_string(InSnapshot.View.Identity) + "/" +
-			    InSnapshot.View.Usage + "/" + std::to_string(Index);
-		}
-	}
 	Stats.Batches = It->second.Statistics;
 	if (bSameContents)
 	{
@@ -84,7 +74,7 @@ bool FRenderResourceCoordinator::ReuseViewPasses(const FRenderSceneSnapshot& InS
 }
 
 void FRenderResourceCoordinator::CacheViewPasses(const FRenderSceneSnapshot& InSnapshot,
-                                                 std::vector<FColorPass>& InPasses,
+                                                 std::vector<FGraphicsDrawBatch>& InPasses,
                                                  std::vector<FPreparedViewDraw> InSources)
 {
 	HYP_PERF_SCOPE_C(Detail, CacheScenePasses);

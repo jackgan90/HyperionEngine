@@ -33,20 +33,20 @@ public:
 FPassCommands ClearCommands()
 {
 	FPassCommands Commands;
+	Commands.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Commands.Name = "clear";
-	Commands.bClear = true;
-	Commands.ClearColor = {.25f, .5f, .75f, 1};
-	Commands.TransitionFrom = EResourceState::Present;
-	Commands.TransitionTo = EResourceState::RenderTarget;
+	Commands.Color->Actions.Load = EAttachmentLoad::Clear;
+	Commands.Color->Clear = {.25f, .5f, .75f, 1};
+	Commands.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
 	return Commands;
 }
 
 FPassCommands PresentCommands()
 {
 	FPassCommands Commands;
+	Commands.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Commands.Name = "present";
-	Commands.TransitionFrom = EResourceState::RenderTarget;
-	Commands.TransitionTo = EResourceState::Present;
+	Commands.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 	return Commands;
 }
 
@@ -250,7 +250,7 @@ void CheckRetainedDrawOwnership(IRHIDevice& InDevice, IRHISwapchain& InSwapchain
 		    });
 	}
 	auto BadTarget = *Commands;
-	BadTarget.bSrgbTarget = !BadTarget.bSrgbTarget;
+	BadTarget.Color->bSrgb = !BadTarget.Color->bSrgb;
 	Rejects(
 	    [&]
 	    {

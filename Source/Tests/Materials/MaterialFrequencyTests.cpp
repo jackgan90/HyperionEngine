@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <bit>
 #include <chrono>
@@ -215,11 +216,11 @@ struct FFrequencyFixture
 		                          [&]
 		                          {
 			                          FRenderGraph Graph;
-			                          FColorPass Clear;
-			                          Clear.Commands.Name = "Frequency clear";
-			                          Clear.Load = EColorLoad::Clear;
+			                          auto Clear = MakeColorPass(Graph, "pending");
+			                          Clear.Name = "Frequency clear";
+			                          Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 			                          Graph.Add(std::move(Clear));
-			                          Session.BuildViews(Graph, std::span(&View, 1), Frame);
+			                          Session.BuildViews(Graph, std::span(&View, 1), Session.FrameTargets(), Frame);
 			                          Result = Graph.Compile();
 		                          }));
 		HYP_CHECK(Result.size() == 3 && Result[1].Draws.size() == InExpectedDraws);

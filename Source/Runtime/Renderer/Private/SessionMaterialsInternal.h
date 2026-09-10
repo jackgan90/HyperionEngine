@@ -22,6 +22,7 @@ struct FRenderSession::FMaterialState
 	{
 		std::shared_ptr<FRenderSceneSnapshot> Snapshot;
 		std::shared_ptr<const FLocalMaterialPreparation> LocalPreparation;
+		std::vector<FRenderTargetSource> GraphReads;
 		std::uint64_t SceneRevision{};
 		std::uint64_t ResourceRevision{};
 		std::uint32_t Dependencies{};

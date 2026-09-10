@@ -88,10 +88,13 @@ struct FRenderResourceStats
 class FRenderResourcePreparation
 {
 public:
-	std::vector<FColorPass> BuildPasses(const FRenderSceneSnapshot& InSnapshot,
-	                                    FRenderBatchStats* OutStatistics = nullptr) const;
-	FGraphicsPass BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
-	                                std::shared_ptr<const void> InLifetime, FViewport InViewport) const;
+	FGraphicsPass DeclarePass(FRenderGraph& InGraph, const FRenderSceneSnapshot& InSnapshot) const;
+	FTexture ResolveTexture(std::shared_ptr<const FMaterialTextureSource> InSource,
+	                        std::shared_ptr<const void> InLifetime) const;
+	std::vector<FGraphicsDrawBatch> BuildDraws(const FRenderSceneSnapshot& InSnapshot,
+	                                           FRenderBatchStats* OutStatistics = nullptr) const;
+	FGraphicsDrawBatch BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
+	                                     std::shared_ptr<const void> InLifetime, FViewport InViewport) const;
 
 private:
 	explicit FRenderResourcePreparation(std::shared_ptr<FRenderResourceCoordinator> InCoordinator)
@@ -101,10 +104,13 @@ private:
 
 	std::shared_ptr<FRenderResourceCoordinator> Coordinator;
 	friend class FRenderResourceService;
+	friend class FRenderSession;
+	FGraphicsPass DeclarePass(FRenderGraph& InGraph, const FRenderSceneSnapshot& InSnapshot,
+	                          std::span<const FRenderTargetSource> InReads) const;
 };
 
 // One service per rendering device/session, shared by all its scene producers.
-// Request/Close: Main. BuildPasses: RHI 0. Queries: any domain.
+// Request/Close: Main. BuildDraws: RHI 0. Queries: any domain.
 class FRenderResourceService
 {
 public:
@@ -121,10 +127,10 @@ public:
 	std::shared_ptr<const FRenderResource> Request(std::shared_ptr<const void> InIdentity, std::uint64_t InVersion,
 	                                               std::string InConfiguration,
 	                                               std::function<FRenderResourceDesc()> InPrepare);
-	std::vector<FColorPass> BuildPasses(const FRenderSceneSnapshot& InSnapshot);
+	std::vector<FGraphicsDrawBatch> BuildDraws(const FRenderSceneSnapshot& InSnapshot);
 	FRenderResourcePreparation GetPreparation() const;
-	FGraphicsPass BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
-	                                std::shared_ptr<const void> InLifetime, FViewport InViewport);
+	FGraphicsDrawBatch BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
+	                                     std::shared_ptr<const void> InLifetime, FViewport InViewport);
 	FRenderResourceStats Statistics() const;
 	void Close();
 

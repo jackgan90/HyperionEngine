@@ -61,7 +61,7 @@ D3D12 上传批次由上传 fence 保活；成功提交的录制列表进入设�
 
 Render 先冻结资源组就绪状态，过滤隐藏和未就绪 item，以局部 AABB 的八角做保守视锥测试；缺少有效 bounds 或无法得出有限结果时保留。镜像及非均匀变换直接体现在 clip 变换中。opaque/mask 在前，blend 按全场景中心投影深度稳定排序，不做每模型局部排序。中心排序不能解决相交透明面。
 
-兼容的 item 聚合到场景 pass，每个 view 的 depth/stencil 在首次使用时独立初始化。depth 开关由各 draw 的 pipeline 控制；pass 只因 view/viewport、linear/sRGB 目标或显式用途边界分开，不能按 Model/primitive 数量创建。RHI 0 按真实反射布局打包并共享各 scope 的不可变常量 slice，沿用 RenderGraph 验证、并行录制、提交和错误取消。队列排序仅移动索引，保持 opaque/mask 等深次序与全场景透明顺序。
+兼容的 item 聚合到场景 pass，每个 view 的输出由独立的 `FRenderPassTargets` 声明，depth/stencil 的初始化来自显式 load action。depth 开关由各 draw 的 pipeline 控制；pass 只因 view/viewport、linear/sRGB 目标或显式用途边界分开，不能按 Model/primitive 数量创建。RHI 0 按真实反射布局打包并共享各 scope 的不可变常量 slice，沿用 RenderGraph 验证、并行录制、提交和错误取消。队列排序仅移动索引，保持 opaque/mask 等深次序与全场景透明顺序。
 
 场景插件实现 `IScenePlugin`：`Start/Update/Stop` 在 Main 执行，注册资源和 binding；`Update` 可生成 owned view/settings snapshot。ModelViewer 管理加载、相机与 `FModel`；Triangle 使用通用 geometry/material 描述和自己的 shader。Renderer 不识别它们的类型或 ID。非场景插件实现 `IRenderPlugin::Build`，在 Render 添加 GUI 等 pass；其 Main 生命周期自行 dispatch RHI 资源工作。
 
@@ -80,3 +80,9 @@ Render 先冻结资源组就绪状态，过滤隐藏和未就绪 item，以局�
 `LocalItemId` 为自定义多 item primitive 提供稳定身份；省略时 ordinal 仅在当前 collection 有效，不能跨 collection 共享 Object/Draw 参数。cache key 同时包含实际 World/参数内容，不能仅以 primitive revision 代替。clip-space 在 primitive 上声明；shader 位移材质未提供保守 bounds 时，组、pre-collection 和 item 层均保持保守。
 
 `FRenderBinding.GetStatus()` 表示静态 readiness，`GetLastDrawResult()` 单独报告带 frame/view/material revision 的上下文准备结果。同一 group 的 packets 全部准备成功才输出，其他 group 继续。Model/Scene bridge 提供 `GetDrawResults()` 给上层 UI。静态 Ready 可在零帧条件达成，缺少动态 provider 的错误可在下一有效 frame 中恢复。
+
+## 显式 pass 与 view
+
+`FRenderView` 只保留相机、剔除、材质 usage/参数及视图标识。`FRenderPassTargets` 单独描述颜色、深度/模板附件和 sampled reads；`Session.FrameTargets(clear)` 生成当前 session 格式的显式帧附件。`Build`/`BuildViews` 同时接收 view 和 targets。直接构造 `FRenderSceneSnapshot` 的调用方也必须填写 `Targets`。
+
+Render 阶段先声明完整的图资源与 graphics pass，再冻结 draw preparation 回调。回调仅返回 `FGraphicsDrawBatch`。材质 pipeline/batch signature 由附件的 ColorCount/DepthFormat 推导；linear/sRGB 分段保持原有顺序及共享 draw 数据。图编译在 RHI 0 解析资源并准备 draw，正常 Viewer 保留单次帧协调边界。规则见 [RenderGraph](RenderGraph.md)。

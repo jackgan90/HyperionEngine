@@ -134,17 +134,24 @@ struct FShadowFixture
 		                          {
 			                          FRenderGraph Graph;
 			                          Pipeline->Build(Graph, View, Frame, Settings, {0, 0, 0, 1});
-			                          const auto Plan = Graph.Compile();
+			                          std::vector<FPassCommands> Plan;
+			                          Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+			                                                    [&]
+			                                                    {
+				                                                    Plan = Graph.Compile();
+			                                                    }));
 			                          HYP_CHECK(Plan.size() <= 8);
 			                          if (Pipeline->Statistics().bShadows)
 			                          {
 				                          for (unsigned Index = 0; Index < 4; ++Index)
 				                          {
-					                          HYP_CHECK(!Plan[Index].bUseColor && Plan[Index].bClearDepth &&
-					                                    Plan[Index].DepthTarget);
+					                          HYP_CHECK(!Plan[Index].HasColor() &&
+					                                    Plan[Index].DepthStencil->Depth->Load ==
+					                                        EAttachmentLoad::Clear &&
+					                                    Plan[Index].GetDepthTexture());
 					                          HYP_CHECK(Plan[Index].Draws.empty() || Plan[Index].Draws[0].Pipeline);
 				                          }
-				                          HYP_CHECK(Plan[4].bUseColor && Plan[4].SampledDepth.size() == 4);
+				                          HYP_CHECK(Plan[4].HasColor() && Plan[4].SampledTextures.size() == 4);
 			                          }
 			                          Statistics = Pipeline->Statistics();
 			                          for (const auto& Stats : Statistics.Views)

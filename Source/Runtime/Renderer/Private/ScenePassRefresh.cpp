@@ -10,7 +10,7 @@ namespace
 {
 void RefreshDrawPackets(FRenderResourceCoordinator& InOwner, const FRenderSceneSnapshot& InSnapshot,
                         const FRenderResourceCoordinator::FPreparedViewPasses& InCached,
-                        std::vector<FColorPass>& OutPasses)
+                        std::vector<FGraphicsDrawBatch>& OutPasses)
 {
 	OutPasses = InCached.Passes;
 	std::size_t Index{};
@@ -22,7 +22,8 @@ void RefreshDrawPackets(FRenderResourceCoordinator& InOwner, const FRenderSceneS
 			const auto& Source = InCached.Sources.at(Index++);
 			Draw =
 			    InOwner.DrawMaterial(InSnapshot.Items.At(Source.Item), InSnapshot.View,
-			                         {Pass.Commands.bSrgbTarget, Pass.Commands.DepthFormat}, Source.Batch.has_value());
+			                         {Pass.bSrgb, InSnapshot.Targets.GetDepthFormat(), InSnapshot.Targets.ColorCount()},
+			                         Source.Batch.has_value());
 			if (Source.Batch)
 			{
 				const auto& Data = InSnapshot.Batches->Batches.at(*Source.Batch).Instances;
@@ -43,7 +44,8 @@ void RefreshDrawPackets(FRenderResourceCoordinator& InOwner, const FRenderSceneS
 } // namespace
 
 bool FRenderResourceCoordinator::RefreshViewPasses(const FRenderSceneSnapshot& InSnapshot,
-                                                   FPreparedViewPasses& InCached, std::vector<FColorPass>& OutPasses)
+                                                   FPreparedViewPasses& InCached,
+                                                   std::vector<FGraphicsDrawBatch>& OutPasses)
 {
 	if (!InSnapshot.LocalContentIdentity || InCached.LocalContents.lock() != InSnapshot.LocalContentIdentity ||
 	    !InSnapshot.Batches || !InSnapshot.Batches->StructureIdentity ||

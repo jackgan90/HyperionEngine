@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/ModelPreparation.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <atomic>
@@ -120,6 +121,7 @@ FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset I
 	}
 	HYP_CHECK(Model.IsReady());
 	FPassCommands PreparedDraw;
+	PreparedDraw.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	InContext.Tasks.Wait(InContext.Tasks.Dispatch(
 	    {EDomain::Render},
 	    [&]
@@ -127,12 +129,17 @@ FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset I
 		    FRenderView View{
 		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
 		    FRenderGraph Graph;
-		    FColorPass Clear;
-		    Clear.Commands.Name = "Clear model";
-		    Clear.Load = EColorLoad::Clear;
+		    auto Clear = MakeColorPass(Graph, "pending");
+		    Clear.Name = "Clear model";
+		    Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 		    Graph.Add(std::move(Clear));
-		    InContext.Session.Build(Graph, View);
-		    const auto Passes = Graph.Compile();
+		    InContext.Session.Build(Graph, View, InContext.Session.FrameTargets());
+		    std::vector<FPassCommands> Passes;
+		    InContext.Tasks.Wait(InContext.Tasks.Dispatch({EDomain::Rhi, 0},
+		                                                  [&]
+		                                                  {
+			                                                  Passes = Graph.Compile();
+		                                                  }));
 		    HYP_CHECK(Passes.size() == 3);
 		    PreparedDraw = Passes[1];
 	    }));
@@ -143,9 +150,8 @@ FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset I
 	    {
 		    auto Draw = std::move(PreparedDraw);
 		    Draw.Name = "Known material pixels";
-		    Draw.bClear = true;
-		    Draw.TransitionFrom = EResourceState::Present;
-		    Draw.TransitionTo = EResourceState::RenderTarget;
+		    Draw.Color->Actions.Load = EAttachmentLoad::Clear;
+		    Draw.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
 		    InContext.Swapchain.BeginFrame({320, 240});
 		    if (bInCheckConstantRanges)
 		    {
@@ -167,8 +173,8 @@ FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset I
 		    }
 		    FPassCommands Present;
 		    Present.Name = "Present";
-		    Present.TransitionFrom = EResourceState::RenderTarget;
-		    Present.TransitionTo = EResourceState::Present;
+		    Present.Transitions = {
+		        {FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 		    const std::array Lists{InContext.Swapchain.Record(0, Draw), InContext.Swapchain.Record(1, Present)};
 		    Image = InContext.Swapchain.EndFrame(Lists, false, true);
 	    }));
@@ -235,11 +241,11 @@ FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain&
 	                              [&]
 	                              {
 		                              FRenderGraph Graph;
-		                              FColorPass Clear;
-		                              Clear.Load = EColorLoad::Clear;
-		                              Clear.Commands.Name = "Background";
+		                              auto Clear = MakeColorPass(Graph, "pending");
+		                              Clear.Color->Actions.Load = EAttachmentLoad::Clear;
+		                              Clear.Name = "Background";
 		                              Graph.Add(std::move(Clear));
-		                              InSession.Build(Graph, Frame.View);
+		                              InSession.Build(Graph, Frame.View, InSession.FrameTargets());
 		                              Image = ExecuteGraph(Graph, InTasks, InSwapchain, InSize, false, true);
 	                              }));
 	return Image;

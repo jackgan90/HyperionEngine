@@ -135,14 +135,14 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		}
 		InGui.TextWrapped("Drag: orbit | Wheel: dolly | Arrows: move | Page Up/Down: elevate | Tab: panels");
 		InGui.Separator();
-		if (!P.Instances.empty())
+		if (!P.Scene.GetModels().empty())
 		{
-			P.Selected %= P.Instances.size();
-			const auto Handle = P.Instances[P.Selected].Handle;
+			P.Selected %= P.Scene.GetModels().size();
+			const auto Handle = P.Scene.GetModels()[P.Selected].Handle;
 			InGui.Text("Selected: " + P.Scene.Find(Handle)->Name);
 			if (InGui.Button("Next model"))
 			{
-				P.Selected = (P.Selected + 1) % P.Instances.size();
+				P.Selected = (P.Selected + 1) % P.Scene.GetModels().size();
 			}
 			if (InGui.Button("Duplicate [Insert]"))
 			{
@@ -170,18 +170,18 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		{
 			AddModel();
 		}
-		for (const auto& [Id, Load] : P.Loads)
+		for (const auto& Asset : P.Scene.GetAssets())
 		{
-			if (!Load.Error.empty())
+			if (!Asset.Error.empty())
 			{
-				InGui.TextWrapped(Id + ": " + Load.Error);
+				InGui.TextWrapped(Asset.Id + ": " + Asset.Error);
 			}
 		}
-		for (const auto& Instance : P.Instances)
+		for (const auto& Instance : P.Scene.GetModels())
 		{
-			if (P.Bridge)
+			if (!P.Scene.GetStatus().bClosed)
 			{
-				for (const auto& Draw : P.Bridge->GetDrawResults(Instance.Handle))
+				for (const auto& Draw : P.Scene.GetDrawResults(Instance.Handle))
 				{
 					if (!Draw.Error.empty())
 					{
@@ -190,7 +190,7 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 					}
 				}
 			}
-			const auto Error = P.Bridge ? P.Bridge->GetError(Instance.Handle) : std::string{};
+			const auto Error = P.Scene.GetError(Instance.Handle);
 			if (!Error.empty())
 			{
 				InGui.TextWrapped(P.Scene.Find(Instance.Handle)->Name + ": " + Error);

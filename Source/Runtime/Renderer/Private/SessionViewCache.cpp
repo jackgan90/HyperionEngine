@@ -1,5 +1,6 @@
 #include "Hyperion/Core/Profiling.h"
 #include "LocalMaterialPreparation.h"
+#include "RenderPassDeclaration.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
 #include <bit>
@@ -32,17 +33,9 @@ bool SamePassEnvironment(const FRenderView& InA, const FRenderView& InB)
 		const auto Value = InView.Viewport.value_or(FViewport{0, 0, float(InView.Width), float(InView.Height)});
 		return std::array{Value.X, Value.Y, Value.Width, Value.Height, Value.MinDepth, Value.MaxDepth};
 	};
-	const auto Clear = [](const FRenderView& InView)
-	{
-		const auto Value = InView.ClearColor.value_or(FVec4{});
-		return std::array{Value.X, Value.Y, Value.Z, Value.W};
-	};
 	return InA.Identity == InB.Identity && InA.Usage == InB.Usage && InA.Width == InB.Width &&
 	       InA.Height == InB.Height && InA.Viewport.has_value() == InB.Viewport.has_value() &&
-	       Viewport(InA) == Viewport(InB) && InA.bInstanceBatching == InB.bInstanceBatching &&
-	       InA.DepthTarget == InB.DepthTarget && InA.SampledDepth == InB.SampledDepth &&
-	       InA.TargetLifetime == InB.TargetLifetime && InA.Name == InB.Name &&
-	       InA.ClearColor.has_value() == InB.ClearColor.has_value() && Clear(InA) == Clear(InB);
+	       Viewport(InA) == Viewport(InB) && InA.bInstanceBatching == InB.bInstanceBatching;
 }
 
 bool SamePreparedView(const FRenderView& InA, const FRenderView& InB)
@@ -124,8 +117,10 @@ void FRenderSession::InvalidatePreparedViews()
 }
 
 std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
-    const FRenderView& InView, std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
-    std::optional<std::uint64_t> InSceneRevision, std::uint64_t InResourceRevision)
+    const FRenderView& InView, const FRenderPassTargets& InTargets,
+    std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
+    std::optional<std::uint64_t> InSceneRevision, std::uint64_t InResourceRevision,
+    std::vector<FRenderTargetSource>& OutReads)
 {
 	HYP_PERF_SCOPE_C(Render, PrepareRetainedView);
 	FMaterialState::FPreparedView Uncached;
@@ -136,15 +131,16 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	                              Cached.SceneRevision == *InSceneRevision &&
 	                              Cached.ResourceRevision == InResourceRevision &&
 	                              SameCollectionView(Cached.Snapshot->View, InView, Cached.bDepthSorted);
-	const bool bReusePreparation = bReuseCollection && !Batches.HasCustomStrategies() &&
-	                               Cached.Snapshot->Family == InFamily &&
-	                               SamePreparedView(Cached.Snapshot->View, InView) &&
-	                               SameEngineInputs(*Cached.Snapshot->Frame, *InFrame, Cached.Dependencies);
+	const bool bReusePreparation =
+	    bReuseCollection && !Batches.HasCustomStrategies() && Cached.Snapshot->Family == InFamily &&
+	    SamePreparedView(Cached.Snapshot->View, InView) && Cached.Snapshot->Targets == InTargets &&
+	    SameEngineInputs(*Cached.Snapshot->Frame, *InFrame, Cached.Dependencies);
 	const bool bStableCollection = InSceneRevision && Cached.Snapshot && Cached.bValid &&
 	                               Cached.SceneRevision == *InSceneRevision &&
 	                               Cached.ResourceRevision == InResourceRevision;
-	const bool bSameLocalEnvironment =
-	    bStableCollection && Cached.Snapshot->Family == InFamily && SamePassEnvironment(Cached.Snapshot->View, InView);
+	const bool bSameLocalEnvironment = bStableCollection && Cached.Snapshot->Family == InFamily &&
+	                                   SamePassEnvironment(Cached.Snapshot->View, InView) &&
+	                                   Cached.Snapshot->Targets == InTargets;
 	if (!bReuseCollection)
 	{
 		if (bStableCollection && Cached.Snapshot.use_count() != 1)
@@ -165,7 +161,7 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	Snapshot.View = InView;
 	Snapshot.Frame = std::move(InFrame);
 	Snapshot.Family = InFamily;
-	Snapshot.DepthFormat = InView.DepthTarget ? ERHIDepthFormat::D32 : MaterialState->Depth;
+	Snapshot.Targets = InTargets;
 	ResetViewStatistics(Snapshot, bReuseCollection, bReusePreparation);
 	if (!bReusePreparation)
 	{
@@ -188,6 +184,7 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 			Cached.Dependencies |= Item.ResolvedParameters ? Item.ResolvedParameters->DependenciesMask : 0;
 		}
 		Snapshot.ContentIdentity = Cached.bValid ? Resources.CreateScopeLifetime() : nullptr;
+		Cached.GraphReads = CollectMaterialReads(Snapshot);
 	}
 	Cached.SceneRevision = InSceneRevision.value_or(0);
 	Cached.ResourceRevision = InResourceRevision;
@@ -198,6 +195,7 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	}
 	HYP_PERF_PLOT(Render, SceneCollectionReuses, double(bReuseCollection));
 	HYP_PERF_PLOT(Render, ViewPreparationReuses, double(bReusePreparation));
+	OutReads = Cached.GraphReads;
 	return Cached.Snapshot;
 }
 } // namespace Hyperion

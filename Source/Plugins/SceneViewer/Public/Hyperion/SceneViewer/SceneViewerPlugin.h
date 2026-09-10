@@ -36,7 +36,6 @@ private:
 	std::unique_ptr<FImpl> Impl;
 };
 
-void RegisterSceneManifestLoader(FAssetService& InAssets);
 void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, FTaskSystem& InTasks,
                                FAssetService& InAssets, const std::filesystem::path& InPath);
 } // namespace Hyperion

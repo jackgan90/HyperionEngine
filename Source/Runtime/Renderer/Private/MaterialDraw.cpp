@@ -57,7 +57,6 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
                                                      FGraphicsTarget InTarget, bool bInInstance)
 {
 	HYP_PERF_SCOPE_C(Detail, DrawMaterial);
-	InTarget.ColorCount = InView.DepthTarget ? 0 : 1;
 	const auto& GeometryRecord = *InItem.State.Resource->Record;
 	const auto& MaterialRecord = *InItem.State.Surface->Record;
 	if (GeometryRecord.Owner != this || MaterialRecord.Owner != this ||

@@ -126,37 +126,86 @@ enum class EResourceState
 	ShaderRead
 };
 
-struct FTextureTransition
+enum class ERenderTargetKind
 {
+	None,
+	Backbuffer,
+	FrameDepth,
+	Texture
+};
+
+struct FRenderTarget
+{
+	ERenderTargetKind Kind = ERenderTargetKind::None;
 	FTexture Texture;
+
+	static FRenderTarget Backbuffer()
+	{
+		return {ERenderTargetKind::Backbuffer, {}};
+	}
+
+	static FRenderTarget FrameDepth()
+	{
+		return {ERenderTargetKind::FrameDepth, {}};
+	}
+
+	static FRenderTarget FromTexture(FTexture InTexture)
+	{
+		return {ERenderTargetKind::Texture, std::move(InTexture)};
+	}
+
+	bool operator==(const FRenderTarget&) const = default;
+};
+
+enum class EAttachmentLoad
+{
+	Load,
+	Clear,
+	Discard
+};
+
+enum class EAttachmentStore
+{
+	Store,
+	Discard
+};
+
+struct FAttachmentActions
+{
+	EAttachmentLoad Load = EAttachmentLoad::Load;
+	EAttachmentStore Store = EAttachmentStore::Store;
+	bool operator==(const FAttachmentActions&) const = default;
+};
+
+struct FColorAttachment
+{
+	FRenderTarget Target;
+	FAttachmentActions Actions;
+	FVec4 Clear;
+	bool bSrgb{};
+};
+
+struct FDepthStencilAttachment
+{
+	FRenderTarget Target;
+	ERHIDepthFormat Format = ERHIDepthFormat::None;
+	std::optional<FAttachmentActions> Depth;
+	std::optional<FAttachmentActions> Stencil;
+	float ClearDepth = 1;
+	std::uint8_t ClearStencil{};
+};
+
+struct FResourceTransition
+{
+	FRenderTarget Target;
 	EResourceState Before = EResourceState::ShaderRead;
 	EResourceState After = EResourceState::DepthWrite;
 };
 
-struct FPassCommands
+// Immutable publication: authors relinquish mutable aliases before sharing.
+struct FDrawCommands
 {
-	std::string Name;
-	std::optional<EResourceState> TransitionFrom;
-	std::optional<EResourceState> TransitionTo;
-	bool bClear{};
-	FVec4 ClearColor;
 	std::vector<FDrawPacket> Draws;
-	bool bUseDepth{};
-	bool bSrgbTarget{};
-	bool bClearDepth{};
-	bool bUseStencil{};
-	bool bClearStencil{};
-	float ClearDepth = 1;
-	std::uint8_t ClearStencil{};
-	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
-	std::optional<FViewport> Viewport;
-	// View family builders set a new domain at each view boundary. Zero is the legacy full target domain.
-	std::uint64_t DepthDomain{};
-	bool bUseColor = true;
-	FTexture DepthTarget;
-	std::vector<FTexture> SampledDepth;
-	std::vector<FTextureTransition> TextureTransitions;
-	// Immutable publication; authors relinquish every mutable alias before sharing.
 	std::shared_ptr<const std::vector<FDrawPacket>> SharedDraws;
 
 	std::span<const FDrawPacket> GetDraws() const
@@ -185,6 +234,46 @@ struct FPassCommands
 			Draws.assign(Source.begin(), Source.end());
 			SharedDraws.reset();
 		}
+	}
+};
+
+struct FPassCommands : FDrawCommands
+{
+	std::string Name;
+	std::optional<FColorAttachment> Color;
+	std::optional<FDepthStencilAttachment> DepthStencil;
+	std::optional<FViewport> Viewport;
+	std::vector<FTexture> SampledTextures;
+	std::vector<FResourceTransition> Transitions;
+
+	bool HasColor() const
+	{
+		return Color.has_value();
+	}
+
+	bool HasDepth() const
+	{
+		return DepthStencil && DepthStencil->Depth.has_value();
+	}
+
+	bool HasStencil() const
+	{
+		return DepthStencil && DepthStencil->Stencil.has_value();
+	}
+
+	bool IsSrgb() const
+	{
+		return Color && Color->bSrgb;
+	}
+
+	ERHIDepthFormat GetDepthFormat() const
+	{
+		return DepthStencil ? DepthStencil->Format : ERHIDepthFormat::None;
+	}
+
+	FTexture GetDepthTexture() const
+	{
+		return DepthStencil ? DepthStencil->Target.Texture : FTexture{};
 	}
 };
 

@@ -11,7 +11,8 @@ struct FD3D12DrawCache
 	std::mutex Mutex;
 	std::weak_ptr<const std::vector<FDrawPacket>> Owner;
 	std::weak_ptr<IRHITexture> DepthTarget;
-	std::array<unsigned, 5> Target{};
+	std::vector<std::weak_ptr<IRHITexture>> Reads;
+	std::array<unsigned, 7> Target{};
 	std::shared_ptr<const FD3D12DrawPlan> Plan;
 };
 

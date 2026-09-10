@@ -4,11 +4,16 @@
 Define Renderer-owned shadow, forward and extension pass orchestration over a frozen scene view family with shared resources and independent per-view data and diagnostics.
 ## Requirements
 ### Requirement: Renderer-owned pass orchestration
-A dedicated Renderer pipeline class SHALL express the frame sequence shadow depth, forward scene, extension passes and presentation. Viewer SHALL supply frame inputs and invoke that pipeline without owning scene pass ordering.
+
+A dedicated Renderer pipeline class SHALL express shadow depth, forward scene, extension passes and presentation through explicit graph attachment and read declarations. View camera/culling data SHALL be separate from pass target descriptions. Pipeline target compatibility SHALL derive from declared attachment signatures, not depth-target presence. Viewer SHALL supply frame inputs and invoke that pipeline without owning scene pass ordering.
 
 #### Scenario: Shadowed frame with GUI
 - **WHEN** SceneViewer renders with shadows and GUI enabled
-- **THEN** all shadow writes precede forward reads and GUI follows scene rendering with unchanged overlay semantics
+- **THEN** explicit shadow writes precede forward reads and GUI loads scene color with unchanged overlay semantics
+
+#### Scenario: Empty shadow view
+- **WHEN** a shadow view contains no drawable casters
+- **THEN** its declared depth attachment is still cleared and stored for valid forward sampling
 
 ### Requirement: Shared scene view family
 Renderer SHALL prepare the main view and several shadow views from one frozen scene/frame boundary with unique stable identities, independent attachments and per-view statistics. Spatial maintenance SHALL occur once per family before read-only view queries.

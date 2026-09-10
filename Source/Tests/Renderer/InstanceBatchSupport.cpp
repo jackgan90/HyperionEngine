@@ -1,4 +1,5 @@
 #include "Renderer/InstanceBatchSupport.h"
+#include "Support/GraphTestSupport.h"
 #include <chrono>
 #include <thread>
 
@@ -8,7 +9,7 @@ FRenderSceneSnapshot Snapshot(FFixture& InFixture, std::size_t InCount)
 {
 	FRenderSceneSnapshot Result;
 	Result.View = InFixture.View;
-	Result.DepthFormat = ERHIDepthFormat::D32S8;
+	Result.Targets = FRenderPassTargets::Frame(ERHIDepthFormat::D32S8);
 	for (std::size_t Index = 0; Index < InCount; ++Index)
 	{
 		FRenderItem Item;
@@ -32,28 +33,28 @@ FRenderSceneSnapshot Snapshot(FFixture& InFixture, std::size_t InCount)
 
 std::vector<FPassCommands> Prepare(FFixture& InFixture, FRenderBatchSystem& InBatches, FRenderSceneSnapshot InSnapshot)
 {
-	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
-	                                              [&]
-	                                              {
-		                                              InSnapshot.Batches = InBatches.Build(InSnapshot);
-	                                              }));
-	std::vector<FColorPass> Passes;
+	FRenderGraph Graph;
+	InFixture.Tasks.Wait(
+	    InFixture.Tasks.Dispatch({EDomain::Render},
+	                             [&]
+	                             {
+		                             InSnapshot.Batches = InBatches.Build(InSnapshot);
+		                             Graph.Add(MakeColorPass(Graph, "Clear planning", EAttachmentLoad::Clear));
+		                             auto Preparation = InFixture.Session->GetResources().GetPreparation();
+		                             auto Pass = Preparation.DeclarePass(Graph, InSnapshot);
+		                             Pass.Prepare = [Preparation, InSnapshot]
+		                             {
+			                             return Preparation.BuildDraws(InSnapshot);
+		                             };
+		                             Graph.Add(std::move(Pass));
+	                             }));
+	std::vector<FPassCommands> Result;
 	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Rhi, 0},
 	                                              [&]
 	                                              {
-		                                              Passes =
-		                                                  InFixture.Session->GetResources().BuildPasses(InSnapshot);
+		                                              Result = Graph.Compile();
 	                                              }));
-	FRenderGraph Graph;
-	FColorPass Clear;
-	Clear.Commands.Name = "Clear planning";
-	Clear.Load = EColorLoad::Clear;
-	Graph.Add(std::move(Clear));
-	for (auto& Pass : Passes)
-	{
-		Graph.Add(std::move(Pass));
-	}
-	return Graph.Compile();
+	return Result;
 }
 
 FMaterialValue Payload(float InRed)
@@ -279,11 +280,11 @@ std::vector<FPassCommands> FFixture::Build(bool bInBatch, std::span<const FRende
 	                          [&]
 	                          {
 		                          FRenderGraph Graph;
-		                          FColorPass Clear;
-		                          Clear.Commands.Name = "Clear instances";
-		                          Clear.Load = EColorLoad::Clear;
+		                          auto Clear = MakeColorPass(Graph, "Clear");
+		                          Clear.Name = "Clear instances";
+		                          Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 		                          Graph.Add(std::move(Clear));
-		                          Session->BuildViews(Graph, Views, Frame);
+		                          Session->BuildViews(Graph, Views, Session->FrameTargets(), Frame);
 		                          Statistics = Session->Statistics();
 		                          Result = Graph.Compile();
 	                          }));

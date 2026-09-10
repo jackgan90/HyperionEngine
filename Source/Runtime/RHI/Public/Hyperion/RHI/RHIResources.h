@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RHI/RHIGraphicsState.h"
 #include <memory>
 
 namespace Hyperion
@@ -16,8 +17,18 @@ class IRHIBuffer : public IRHIResource
 {
 };
 
+// Immutable physical description of the base level; no native handles are exposed.
+struct FRHITextureInfo
+{
+	std::uint32_t Width{};
+	std::uint32_t Height{};
+	ERHIDepthFormat DepthFormat = ERHIDepthFormat::None;
+};
+
 class IRHITexture : public IRHIResource
 {
+public:
+	virtual FRHITextureInfo GetInfo() const noexcept = 0;
 };
 
 class IRHIPipeline : public IRHIResource

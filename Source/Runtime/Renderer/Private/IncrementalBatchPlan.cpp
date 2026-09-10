@@ -20,7 +20,7 @@ void FRenderBatchSystem::FImpl::AdmitIncremental(const FRenderSceneSnapshot& InS
 		CurrentInputs[Index] = PrepareInput(InSnapshot, Item, OutStats);
 		const bool bSrgb = Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
 		const auto Candidate = Describe(
-		    InSnapshot, Item, {bSrgb, InSnapshot.DepthFormat, InHistory.bDepthTarget ? 0U : 1U}, OutStats, Shared);
+		    InSnapshot, Item, {bSrgb, InSnapshot.Targets.GetDepthFormat(), InHistory.ColorCount}, OutStats, Shared);
 		const auto Decision = Strategies.front()->Evaluate(*Candidate, Capabilities);
 		if (!Candidate->bReorderable || Decision.Capacity < 2 ||
 		    !InHistory.Insert(InSnapshot, Index, Candidate->Signature, Decision.Capacity, Limits.MaxChunks,
@@ -159,13 +159,14 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildIncremental(co
 	{
 		auto& History = IncrementalPlans[Key];
 		if (History.Scene != InSnapshot.CollectionKey[0] || History.ResourceRevision != InSnapshot.CollectionKey[2] ||
-		    History.Depth != InSnapshot.DepthFormat || History.bDepthTarget != bool(InSnapshot.View.DepthTarget))
+		    History.Depth != InSnapshot.Targets.GetDepthFormat() ||
+		    History.ColorCount != InSnapshot.Targets.ColorCount())
 		{
 			History = {};
 			History.Scene = InSnapshot.CollectionKey[0];
 			History.ResourceRevision = InSnapshot.CollectionKey[2];
-			History.Depth = InSnapshot.DepthFormat;
-			History.bDepthTarget = bool(InSnapshot.View.DepthTarget);
+			History.Depth = InSnapshot.Targets.GetDepthFormat();
+			History.ColorCount = InSnapshot.Targets.ColorCount();
 		}
 		FRenderBatchStats Statistics;
 		std::vector<std::size_t> Added;

@@ -1,88 +1,96 @@
-#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "RenderGraphResources.h"
+#include <algorithm>
+#include <set>
 #include <stdexcept>
 
 namespace Hyperion
 {
-std::size_t FRenderGraph::AddDeferred(std::function<std::vector<FColorPass>()> InPrepare,
-                                      std::vector<std::size_t> InAfter)
+std::vector<std::size_t> FRenderGraph::Order() const
 {
-	if (!InPrepare)
+	if (Passes.empty())
 	{
-		throw std::invalid_argument("Deferred graph preparation requires an owned function");
+		throw std::invalid_argument("Graph requires at least one graphics pass");
 	}
-	FColorPass Entry;
-	Entry.After = std::move(InAfter);
-	Preparations.emplace_back(Passes.size(), std::move(InPrepare));
-	try
-	{
-		return Add(std::move(Entry));
-	}
-	catch (...)
-	{
-		Preparations.pop_back();
-		throw;
-	}
-}
 
-void FRenderGraph::ExpandPreparations()
-{
-	if (Preparations.empty())
+	struct FHazard
 	{
-		return;
-	}
-	HYP_PERF_SCOPE_C(Rhi, PrepareGraphPasses);
+		std::optional<std::size_t> Writer;
+		std::set<std::size_t> Readers;
+	};
+
+	std::vector<FHazard> Hazards(Resources.size());
+	std::vector<std::set<std::size_t>> Dependencies(Passes.size());
+	std::set<std::string> Names;
 	for (std::size_t Index = 0; Index < Passes.size(); ++Index)
 	{
-		for (const auto Dependency : Passes[Index].After)
+		const auto& Pass = Passes[Index];
+		ValidateGraphPass(Pass, Resources, Identity);
+		if (Pass.Name.empty() || !Names.insert(Pass.Name).second || (Pass.Prepare && !Pass.Batches.empty()))
 		{
-			// Pipeline order makes a self/forward dependency cyclic, including an empty expansion.
-			if (Dependency >= Index)
+			throw std::invalid_argument("Invalid graph pass identity or mixed draw preparation");
+		}
+		for (const auto After : Pass.After)
+		{
+			if (After >= Passes.size())
 			{
-				throw std::runtime_error("Unknown or cyclic deferred graph dependency");
+				throw std::invalid_argument("Unknown graph pass dependency");
 			}
+			Dependencies[Index].insert(After);
+		}
+		for (const auto Read : Pass.Reads)
+		{
+			auto& Hazard = Hazards[ResourceIndex(Read)];
+			if (Hazard.Writer)
+			{
+				Dependencies[Index].insert(*Hazard.Writer);
+			}
+			Hazard.Readers.insert(Index);
+		}
+		std::vector<FGraphTexture> Writes;
+		if (Pass.Color)
+		{
+			Writes.push_back(Pass.Color->Texture);
+		}
+		if (Pass.DepthStencil)
+		{
+			Writes.push_back(Pass.DepthStencil->Texture);
+		}
+		for (const auto Write : Writes)
+		{
+			auto& Hazard = Hazards[ResourceIndex(Write)];
+			if (Hazard.Writer)
+			{
+				Dependencies[Index].insert(*Hazard.Writer);
+			}
+			Dependencies[Index].insert(Hazard.Readers.begin(), Hazard.Readers.end());
+			Hazard.Readers.clear();
+			Hazard.Writer = Index;
 		}
 	}
-	std::vector<FColorPass> Expanded;
-	std::vector<std::optional<std::size_t>> Ends;
-	auto Preparation = Preparations.begin();
-	for (std::size_t Index = 0; Index < Passes.size(); ++Index)
+	std::vector<std::size_t> Result;
+	std::vector<bool> Visited(Passes.size());
+	while (Result.size() < Passes.size())
 	{
-		auto& Entry = Passes[Index];
-		std::vector<std::size_t> Dependencies;
-		for (const auto Dependency : Entry.After)
+		const auto Before = Result.size();
+		for (std::size_t Index = 0; Index < Passes.size(); ++Index)
 		{
-			if (Ends[Dependency])
+			if (!Visited[Index] && std::all_of(Dependencies[Index].begin(), Dependencies[Index].end(),
+			                                   [&](auto InDependency)
+			                                   {
+				                                   return Visited[InDependency];
+			                                   }))
 			{
-				Dependencies.push_back(*Ends[Dependency]);
+				Visited[Index] = true;
+				Result.push_back(Index);
+				break; // Stable choice among all currently runnable passes.
 			}
 		}
-		if (Preparation != Preparations.end() && Preparation->first == Index)
+		if (Before == Result.size())
 		{
-			auto Group = Preparation++->second();
-			const auto Base = Expanded.size();
-			for (auto& Pass : Group)
-			{
-				for (auto& Dependency : Pass.After)
-				{
-					if (Dependency >= Group.size())
-					{
-						throw std::runtime_error("Unknown dependency within deferred graph preparation");
-					}
-					Dependency += Base;
-				}
-				Pass.After.insert(Pass.After.end(), Dependencies.begin(), Dependencies.end());
-				Expanded.push_back(std::move(Pass));
-			}
+			throw std::invalid_argument("Graph dependency cycle");
 		}
-		else
-		{
-			Entry.After = std::move(Dependencies);
-			Expanded.push_back(std::move(Entry));
-		}
-		Ends.push_back(Expanded.empty() ? std::nullopt : std::optional(Expanded.size() - 1));
 	}
-	Passes = std::move(Expanded);
-	Preparations.clear();
+	return Result;
 }
 } // namespace Hyperion

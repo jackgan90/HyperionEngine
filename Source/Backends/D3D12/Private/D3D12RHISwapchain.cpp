@@ -1,6 +1,7 @@
 #include "D3D12RHISwapchain.h"
 #include "D3D12Draws.h"
 #include "D3D12GraphicsState.h"
+#include "D3D12PassAttachments.h"
 #include "D3D12PassTimings.h"
 #include "D3D12Resources.h"
 #include "Hyperion/Core/Core.h"
@@ -11,86 +12,6 @@
 
 namespace Hyperion
 {
-namespace
-{
-FSize ValidatePass(const FD3D12DeviceState& InState, const FPassCommands& InCommands, FSize InSize,
-                   ERHIDepthFormat InDepthFormat)
-{
-	if ((!InCommands.bUseColor && InCommands.bClear) ||
-	    (!InCommands.bUseColor && !InCommands.bUseDepth && !InCommands.GetDraws().empty()))
-	{
-		throw std::invalid_argument("Pass color clear/draw has no compatible attachment");
-	}
-	if (InCommands.DepthTarget)
-	{
-		const auto& Texture = NativeResource<FD3D12Texture>(InCommands.DepthTarget.Payload, &InState);
-		if (!Texture.DepthViews || !InCommands.bUseDepth ||
-		    (InCommands.bUseColor &&
-		     (Texture.DepthSize.Width != InSize.Width || Texture.DepthSize.Height != InSize.Height)))
-		{
-			throw std::invalid_argument("Invalid depth target type or color/depth dimensions");
-		}
-		InSize = Texture.DepthSize;
-		InDepthFormat = ERHIDepthFormat::D32;
-	}
-	for (const auto& Texture : InCommands.SampledDepth)
-	{
-		if (!NativeResource<FD3D12Texture>(Texture.Payload, &InState).DepthViews || Texture == InCommands.DepthTarget)
-		{
-			throw std::invalid_argument("Invalid sampled depth resource");
-		}
-	}
-	for (const auto& Barrier : InCommands.TextureTransitions)
-	{
-		if (!NativeResource<FD3D12Texture>(Barrier.Texture.Payload, &InState).DepthViews ||
-		    (Barrier.Before != EResourceState::ShaderRead && Barrier.Before != EResourceState::DepthWrite) ||
-		    (Barrier.After != EResourceState::ShaderRead && Barrier.After != EResourceState::DepthWrite))
-		{
-			throw std::invalid_argument("Invalid depth resource transition");
-		}
-	}
-	if ((InCommands.bClearDepth && !InCommands.bUseDepth) || (InCommands.bClearStencil && !InCommands.bUseStencil) ||
-	    ((InCommands.bUseDepth || InCommands.bUseStencil) &&
-	     (InCommands.DepthFormat != InDepthFormat || InDepthFormat == ERHIDepthFormat::None)) ||
-	    (InCommands.bUseStencil && InDepthFormat != ERHIDepthFormat::D32S8) || !std::isfinite(InCommands.ClearDepth) ||
-	    InCommands.ClearDepth < 0 || InCommands.ClearDepth > 1)
-	{
-		throw std::invalid_argument("Invalid depth/stencil pass attachment or clear");
-	}
-	if (InCommands.Viewport)
-	{
-		ValidateViewport(*InCommands.Viewport, InSize);
-	}
-	return InSize;
-}
-
-void RecordAttachments(ID3D12GraphicsCommandList& InList, const FPassCommands& InCommands, FSize InSize,
-                       D3D12_CPU_DESCRIPTOR_HANDLE InRtv, D3D12_CPU_DESCRIPTOR_HANDLE InDsv)
-{
-	InList.OMSetRenderTargets(InCommands.bUseColor ? 1 : 0, InCommands.bUseColor ? &InRtv : nullptr, FALSE,
-	                          (InCommands.bUseDepth || InCommands.bUseStencil) ? &InDsv : nullptr);
-	const FViewport View = InCommands.Viewport.value_or(
-	    FViewport{0, 0, static_cast<float>(InSize.Width), static_cast<float>(InSize.Height), 0, 1});
-	D3D12_RECT ClearRect{static_cast<LONG>(std::floor(View.X)), static_cast<LONG>(std::floor(View.Y)),
-	                     static_cast<LONG>(std::ceil(View.X + View.Width)),
-	                     static_cast<LONG>(std::ceil(View.Y + View.Height))};
-	if (InCommands.bClearDepth || InCommands.bClearStencil)
-	{
-		const auto Flags = static_cast<D3D12_CLEAR_FLAGS>((InCommands.bClearDepth ? D3D12_CLEAR_FLAG_DEPTH : 0) |
-		                                                  (InCommands.bClearStencil ? D3D12_CLEAR_FLAG_STENCIL : 0));
-		InList.ClearDepthStencilView(InDsv, Flags, InCommands.ClearDepth, InCommands.ClearStencil, 1, &ClearRect);
-	}
-	if (InCommands.bClear)
-	{
-		float Color[]{InCommands.ClearColor.X, InCommands.ClearColor.Y, InCommands.ClearColor.Z,
-		              InCommands.ClearColor.W};
-		InList.ClearRenderTargetView(InRtv, Color, 1, &ClearRect);
-	}
-	D3D12_VIEWPORT Viewport{View.X, View.Y, View.Width, View.Height, View.MinDepth, View.MaxDepth};
-	InList.RSSetViewports(1, &Viewport);
-}
-} // namespace
-
 #if defined(HYP_TEST_D3D12_PRESENT)
 // Linked only by the native fault-injection test target; normal builds call DXGI directly.
 HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval);
@@ -361,7 +282,18 @@ FRecordedList FD3D12RHISwapchain::RecordOwned(std::uint32_t InContext,
 		throw std::invalid_argument("Invalid recording context");
 	}
 	const auto& InCommands = *InOwnedCommands;
-	const auto TargetSize = ValidatePass(*P.State, InCommands, P.Size, P.DepthFormat);
+	auto ColorView = P.Rtvs->GetCPUDescriptorHandleForHeapStart();
+	ColorView.ptr += std::size_t(P.FrameIndex) * P.RtvStep;
+	auto SrgbView = ColorView;
+	SrgbView.ptr += std::size_t(FrameCount) * P.RtvStep;
+	const FD3D12FrameTargets Targets{P.Backbuffers[P.FrameIndex].Get(),
+	                                 P.Depth.Get(),
+	                                 ColorView,
+	                                 SrgbView,
+	                                 P.Dsvs->GetCPUDescriptorHandleForHeapStart(),
+	                                 P.Size,
+	                                 P.DepthFormat};
+	const auto TargetSize = ValidatePassAttachments(*P.State, InCommands, Targets);
 	const auto DrawPlan = PrepareNativeDraws(*P.State, InOwnedCommands, P.DrawCaches[InContext]);
 	auto& Frame = P.Frames[P.FrameIndex];
 	if (Frame.Recorded[InContext].exchange(true))
@@ -379,25 +311,7 @@ FRecordedList FD3D12RHISwapchain::RecordOwned(std::uint32_t InContext,
 	BeginD3D12Profile(*R, P.Profiling, Frame.ProfileQueries);
 #endif
 	List->BeginEvent(1, InCommands.Name.c_str(), static_cast<UINT>(InCommands.Name.size() + 1));
-	if (InCommands.TransitionFrom && InCommands.TransitionTo)
-	{
-		Transition(List, P.Backbuffers[P.FrameIndex].Get(), Native(*InCommands.TransitionFrom),
-		           Native(*InCommands.TransitionTo));
-	}
-	for (const auto& Barrier : InCommands.TextureTransitions)
-	{
-		const auto& Texture = NativeResource<FD3D12Texture>(Barrier.Texture.Payload, P.State.get());
-		Transition(List, Texture.Resource.Get(), Native(Barrier.Before), Native(Barrier.After));
-	}
-	auto Rtv = P.Rtvs->GetCPUDescriptorHandleForHeapStart();
-	Rtv.ptr += std::size_t(P.FrameIndex + (InCommands.bSrgbTarget ? FrameCount : 0)) * P.RtvStep;
-	auto Dsv = P.Dsvs->GetCPUDescriptorHandleForHeapStart();
-	if (InCommands.DepthTarget)
-	{
-		Dsv = NativeResource<FD3D12Texture>(InCommands.DepthTarget.Payload, P.State.get())
-		          .DepthViews->GetCPUDescriptorHandleForHeapStart();
-	}
-	RecordAttachments(*List, InCommands, TargetSize, Rtv, Dsv);
+	RecordPassBegin(*List, *P.State, InCommands, Targets, TargetSize);
 	if (DrawPlan)
 	{
 		RecordNativeDrawPlan(*List, *DrawPlan, *P.State);
@@ -406,6 +320,7 @@ FRecordedList FD3D12RHISwapchain::RecordOwned(std::uint32_t InContext,
 	{
 		RecordDraws(*List, InCommands, *P.State);
 	}
+	RecordPassEnd(*List, *P.State, InCommands, Targets, TargetSize);
 	List->EndEvent();
 #if HYP_ENABLE_PROFILING
 	EndD3D12Profile(*R);

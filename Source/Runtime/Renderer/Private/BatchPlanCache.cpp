@@ -55,7 +55,8 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRe
 	auto& Entry = Existing->second;
 	const bool bLocalProof = Strategies.size() == 1 && InSnapshot.LocalContentIdentity &&
 	                         Entry.LocalContents.lock() == InSnapshot.LocalContentIdentity;
-	if (Entry.Depth != InSnapshot.DepthFormat || Entry.Inputs.size() != InSnapshot.Items.Size() ||
+	if (Entry.Depth != InSnapshot.Targets.GetDepthFormat() || Entry.ColorCount != InSnapshot.Targets.ColorCount() ||
+	    Entry.Inputs.size() != InSnapshot.Items.Size() ||
 	    (!bLocalProof && !std::equal(Entry.Inputs.begin(), Entry.Inputs.end(), InSnapshot.Items.begin(),
 	                                 [this](const auto& InCached, const auto& InItem)
 	                                 {
@@ -128,7 +129,8 @@ void FRenderBatchSystem::FImpl::CachePlan(const FRenderSceneSnapshot& InSnapshot
 		return;
 	}
 	FPlanEntry Entry;
-	Entry.Depth = InSnapshot.DepthFormat;
+	Entry.Depth = InSnapshot.Targets.GetDepthFormat();
+	Entry.ColorCount = InSnapshot.Targets.ColorCount();
 	Entry.Access = Access;
 	Entry.Statistics = InPlan.Statistics;
 	Entry.LocalContents = InSnapshot.LocalContentIdentity;

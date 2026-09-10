@@ -110,7 +110,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	{
 		std::weak_ptr<const void> Contents;
 		std::uint64_t ResourceRevision{};
-		std::vector<FColorPass> Passes;
+		std::vector<FGraphicsDrawBatch> Passes;
 		FRenderBatchStats Statistics;
 		std::weak_ptr<const void> LocalContents;
 		std::weak_ptr<const void> BatchStructure;
@@ -129,11 +129,11 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	};
 
 	std::map<const void*, FBatchAdmission> BatchAdmissions;
-	bool ReuseViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& OutPasses);
-	void CacheViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FColorPass>& InPasses,
+	bool ReuseViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FGraphicsDrawBatch>& OutPasses);
+	void CacheViewPasses(const FRenderSceneSnapshot& InSnapshot, std::vector<FGraphicsDrawBatch>& InPasses,
 	                     std::vector<FPreparedViewDraw> InSources);
 	bool RefreshViewPasses(const FRenderSceneSnapshot& InSnapshot, FPreparedViewPasses& InCached,
-	                       std::vector<FColorPass>& OutPasses);
+	                       std::vector<FGraphicsDrawBatch>& OutPasses);
 	void CollectViewPasses();
 	void CollectPreparedDraws();
 	FTaskSystem& Tasks;

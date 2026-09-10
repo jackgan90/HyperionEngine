@@ -38,15 +38,16 @@ void FDepthPreview::Collect()
 	}
 }
 
-FGraphicsPass FRenderResourceService::BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
-                                                        std::shared_ptr<const void> InLifetime, FViewport InViewport)
+FGraphicsDrawBatch FRenderResourceService::BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
+                                                             std::shared_ptr<const void> InLifetime,
+                                                             FViewport InViewport)
 {
 	return GetPreparation().BuildDepthPreview(std::move(InSource), std::move(InLifetime), InViewport);
 }
 
-FGraphicsPass FRenderResourcePreparation::BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
-                                                            std::shared_ptr<const void> InLifetime,
-                                                            FViewport InViewport) const
+FGraphicsDrawBatch FRenderResourcePreparation::BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,
+                                                                 std::shared_ptr<const void> InLifetime,
+                                                                 FViewport InViewport) const
 {
 	auto& Owner = *Coordinator;
 	Owner.Tasks.Require({EDomain::Rhi, 0});
@@ -69,10 +70,7 @@ FGraphicsPass FRenderResourcePreparation::BuildDepthPreview(std::shared_ptr<cons
 		Preview.Draw.Bindings = Owner.Device.CreateBindingSet({Preview.Layout, {{0, {Texture}}}});
 		Preview.Texture = Texture;
 	}
-	FGraphicsPass Pass;
-	Pass.Commands.Name = "Shadow depth preview";
-	Pass.Commands.Viewport = InViewport;
-	Pass.Commands.SampledDepth = {Texture};
+	FGraphicsDrawBatch Pass;
 	auto Draw = Preview.Draw;
 	Draw.Scissor = {static_cast<int>(InViewport.X), static_cast<int>(InViewport.Y),
 	                static_cast<int>(InViewport.X + InViewport.Width),
@@ -85,25 +83,29 @@ void FRenderSession::AppendDepthPreview(FRenderGraph& InGraph, std::shared_ptr<c
                                         std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred)
 {
 	Tasks.Require({EDomain::Render});
-	if (bInDeferred)
+	FRenderSceneSnapshot Snapshot;
+	Snapshot.View.Viewport = InViewport;
+	Snapshot.Targets = FRenderPassTargets::ColorOnly();
+	Snapshot.Targets.Name = "Shadow depth preview";
+	Snapshot.Targets.Reads = {{ERenderTargetKind::Texture, InSource, InLifetime, false}};
+	auto Preparation = Resources.GetPreparation();
+	auto Pass = Preparation.DeclarePass(InGraph, Snapshot);
+	Pass.Prepare = [Preparation, Source = std::move(InSource), Lifetime = std::move(InLifetime), InViewport]
 	{
-		InGraph.AddDeferred(
-		    [Preparation = Resources.GetPreparation(), Source = std::move(InSource), Lifetime = std::move(InLifetime),
-		     InViewport]
-		    {
-			    std::vector<FColorPass> Passes;
-			    Passes.push_back(Preparation.BuildDepthPreview(Source, Lifetime, InViewport));
-			    return Passes;
-		    });
-		return;
+		std::vector<FGraphicsDrawBatch> Batches;
+		Batches.push_back(Preparation.BuildDepthPreview(Source, Lifetime, InViewport));
+		return Batches;
+	};
+	if (!bInDeferred)
+	{
+		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+		                          [&]
+		                          {
+			                          Pass.Batches = Pass.Prepare();
+		                          }));
+		Pass.Prepare = {};
 	}
-	auto Result =
-	    DispatchAsync<FGraphicsPass>(Tasks, {EDomain::Rhi, 0},
-	                                 [this, Source = std::move(InSource), Lifetime = std::move(InLifetime), InViewport]
-	                                 {
-		                                 return Resources.BuildDepthPreview(Source, Lifetime, InViewport);
-	                                 });
-	Tasks.Wait(Result.Task());
-	InGraph.Add(*Result.GetReady());
+	InGraph.Add(std::move(Pass));
 }
+
 } // namespace Hyperion

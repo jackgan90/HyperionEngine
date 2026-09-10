@@ -47,11 +47,11 @@ void Measure(IRHISwapchain& InSwapchain, const FDrawPacket& InDraw, std::size_t 
              std::ostream& InOutput, bool bInOwned)
 {
 	FPassCommands Commands;
+	Commands.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Commands.Name = "Prepared triangles";
-	Commands.bClear = true;
-	Commands.ClearColor = {.025f, .035f, .065f, 1};
-	Commands.TransitionFrom = EResourceState::Present;
-	Commands.TransitionTo = EResourceState::RenderTarget;
+	Commands.Color->Actions.Load = EAttachmentLoad::Clear;
+	Commands.Color->Clear = {.025f, .035f, .065f, 1};
+	Commands.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
 	Commands.Draws.assign(InCount, InDraw);
 	if (bInOwned)
 	{
@@ -60,8 +60,7 @@ void Measure(IRHISwapchain& InSwapchain, const FDrawPacket& InDraw, std::size_t 
 	const auto Owned = std::make_shared<const FPassCommands>(std::move(Commands));
 	FPassCommands Present;
 	Present.Name = "Present";
-	Present.TransitionFrom = EResourceState::RenderTarget;
-	Present.TransitionTo = EResourceState::Present;
+	Present.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 	for (int Frame = 0; Frame < InWarmup + InSamples; ++Frame)
 	{
 		InSwapchain.BeginFrame({1440, 900});

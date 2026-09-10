@@ -33,14 +33,13 @@ FImage Render(IRHISwapchain& InSwapchain, FDrawPacket InDraw)
 {
 	InSwapchain.BeginFrame({64, 64});
 	FPassCommands Pass;
+	Pass.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Pass.Name = "Cached material resources";
-	Pass.TransitionFrom = EResourceState::Present;
-	Pass.TransitionTo = EResourceState::RenderTarget;
-	Pass.bClear = true;
+	Pass.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
+	Pass.Color->Actions.Load = EAttachmentLoad::Clear;
 	Pass.Draws = {std::move(InDraw)};
 	FPassCommands Present;
-	Present.TransitionFrom = EResourceState::RenderTarget;
-	Present.TransitionTo = EResourceState::Present;
+	Present.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 	const std::array Lists{InSwapchain.Record(0, Pass), InSwapchain.Record(1, Present)};
 	return InSwapchain.EndFrame(Lists, false, true);
 }

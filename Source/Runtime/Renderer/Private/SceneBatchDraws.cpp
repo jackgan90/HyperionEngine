@@ -144,8 +144,8 @@ void PrepareSingles(FRenderResourceCoordinator& InOwner, const FRenderSceneSnaps
 		const auto& Item = InSnapshot.Items[Index];
 		try
 		{
-			OutPrepared.Packets[Index] =
-			    InOwner.DrawMaterial(Item, InSnapshot.View, {OutPrepared.Srgb[Index], OutPrepared.Depth});
+			OutPrepared.Packets[Index] = InOwner.DrawMaterial(
+			    Item, InSnapshot.View, {OutPrepared.Srgb[Index], OutPrepared.Depth, InSnapshot.Targets.ColorCount()});
 		}
 		catch (const std::exception& Error)
 		{
@@ -227,8 +227,9 @@ void PrepareBatchedDraws(FRenderResourceCoordinator& InOwner, const FRenderScene
 		try
 		{
 			const auto Index = Items.front();
-			auto Packet = InOwner.DrawMaterial(InSnapshot.Items[Index], InSnapshot.View,
-			                                   {OutPrepared.Srgb[Index], OutPrepared.Depth}, true);
+			auto Packet = InOwner.DrawMaterial(
+			    InSnapshot.Items[Index], InSnapshot.View,
+			    {OutPrepared.Srgb[Index], OutPrepared.Depth, InSnapshot.Targets.ColorCount()}, true);
 			const auto Data = Items == Batch.Items ? Batch.Instances : PackInstanceBatch(InSnapshot, Items);
 			if (Items != Batch.Items)
 			{

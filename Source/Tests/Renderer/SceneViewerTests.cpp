@@ -1,7 +1,9 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <iostream>
@@ -78,11 +80,11 @@ struct FViewerFixture
 		                          [&]
 		                          {
 			                          FRenderGraph Graph;
-			                          FColorPass Clear;
-			                          Clear.Load = EColorLoad::Clear;
-			                          Clear.Commands.Name = "Clear";
+			                          auto Clear = MakeColorPass(Graph, "pending");
+			                          Clear.Color->Actions.Load = EAttachmentLoad::Clear;
+			                          Clear.Name = "Clear";
 			                          Graph.Add(Clear);
-			                          Session->Build(Graph, Frame.View);
+			                          Session->Build(Graph, Frame.View, Session->FrameTargets());
 			                          Statistics = Session->Statistics();
 			                          Image = ExecuteGraph(Graph, Tasks, *Swapchain, {640, 480}, false, true);
 		                          }));

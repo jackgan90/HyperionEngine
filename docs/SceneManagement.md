@@ -44,6 +44,14 @@ Paths resolve relative to the manifest. Asset and instance IDs are nonempty and 
 
 Scene owns the validated record schema and private JSON adapter. `RegisterSceneManifestLoader` registers the codec with AssetService before requests start; model files use the existing glTF importer. Reflected `.hasset` manifests also work through AssetService. The adapter privately uses the existing JSON dependency.
 
+## Runtime scene entity
+
+`FSceneInstance` is the Main-owned Renderer entity alongside `FModel`. Construct it with a render session, task system and asset service; call `Load(path)`, `Tick()` on every Main tick (including minimized frames), then `Close()` before closing the session. It owns the logical `FScene`, its `FSceneRenderBridge`, asynchronous manifest/model requests and instance-to-asset bookkeeping. Register `RegisterSceneManifestLoader` from the Renderer runtime before loading.
+
+`Add`, `Update`, `Remove`, `Find` and `GetHandles` use generation-checked handles. Add can use ready model data or an asset ID from the loaded manifest. Transform/visibility edits and removal during loading survive completion; explicit data replacement detaches the pending asset association. `GetModels`, `GetAssets`, `GetManifest`, `GetStatus`, `GetError` and `GetDrawResults` expose structured data without GUI strings. Per-handle errors include associated asset loading failures and reject stale generations. Close cancels requests and joins all admitted preparation before detaching; it is idempotent, and a later Load creates a fresh attachment. After Close, repeated Close and destruction do not access the external dependencies.
+
+SceneViewer now owns this entity and keeps camera, input, selection, visualization and the original fixed-step demo animation. ModelViewer continues using `FModel`. CPU Scene remains independent of Renderer/RHI; no gameplay object hierarchy is introduced.
+
 ## Ownership and synchronization
 
 Construct/use `FScene` on Main. It owns flat `FSceneModel` values with name, transform, visibility, material overrides and optional immutable `FSceneModelData`. Null data represents a placeholder. `PrepareSceneModel` validates assets and computes node occurrences/bounds on a loading Worker; instances share that metadata. Scene depends on Math/Reflection, not Renderer/RHI.
@@ -79,6 +87,7 @@ None disables spatial rejection but retains hidden/resource validation. Linear/B
 
 ## Verification
 
+- `scene_runtime_instance`: plugin-free loading, shared data, loading-time edits/removal/replacement, failures, reload and pending close.
 - `scene_management`: independent clip-corner oracle, Main ownership, generations, snapshots and manifest validation.
 - `scene_spatial_visibility`: 4097 groups, randomized updates/removal, BVH/linear equivalence and multi-item early collection.
 - `scene_rendering`: real GPU bridge sharing, initial transform, reattachment and no-frame removal.

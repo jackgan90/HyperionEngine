@@ -65,10 +65,13 @@ struct FFrameFixture
 FRenderGraph ClearGraph()
 {
 	FRenderGraph Graph;
-	FColorPass Clear;
-	Clear.Commands.Name = "Clear";
-	Clear.Load = EColorLoad::Clear;
-	Clear.Commands.ClearColor = {.25f, .5f, .75f, 1};
+	const auto Color = Graph.ImportBackbuffer();
+	Graph.Export(Color, EResourceState::Present);
+	FGraphicsPass Clear;
+	Clear.Color = FGraphColorAttachment{Color};
+	Clear.Name = "Clear";
+	Clear.Color->Actions.Load = EAttachmentLoad::Clear;
+	Clear.Color->Clear = {.25f, .5f, .75f, 1};
 	Graph.Add(Clear);
 	return Graph;
 }
@@ -388,7 +391,7 @@ void CheckPrimitiveFenceRetirement(FFrameFixture& InFixture)
 	                          [&]
 	                          {
 		                          FailedGraph = ClearGraph();
-		                          Session.Build(FailedGraph, {Identity(), {}, 64, 64});
+		                          Session.Build(FailedGraph, {Identity(), {}, 64, 64}, Session.FrameTargets());
 	                          }));
 	CheckSubmittedFailure(InFixture, FailedGraph); // Descriptor tables and CBV pages survive failed Present.
 	FailedGraph = {};
@@ -423,7 +426,8 @@ void CheckPrimitiveFenceRetirement(FFrameFixture& InFixture)
 	                          [&]
 	                          {
 		                          auto Graph = ClearGraph();
-		                          CheckCondition(Session.Build(Graph, {Identity(), {}, 64, 64}) == 1);
+		                          CheckCondition(
+		                              Session.Build(Graph, {Identity(), {}, 64, 64}, Session.FrameTargets()) == 1);
 		                          const auto Draw = Graph.Compile()[1].Draws[0];
 		                          Vertices = Draw.Vertices.Payload;
 		                          Constants = Draw.ConstantBindings[0].Slice.Buffer.Payload;
@@ -539,10 +543,10 @@ std::shared_ptr<const FPassCommands> OwnedConstantCommands(IRHIDevice& InDevice,
 	const auto Transform = Identity();
 	Draw.ConstantBindings = {{0, InDevice.PublishConstantSlice(Page, 0, std::as_bytes(std::span(&Transform, 1)))}};
 	FPassCommands Commands;
+	Commands.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Commands.Name = "Owned constants";
-	Commands.bClear = true;
-	Commands.TransitionFrom = EResourceState::Present;
-	Commands.TransitionTo = EResourceState::RenderTarget;
+	Commands.Color->Actions.Load = EAttachmentLoad::Clear;
+	Commands.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
 	Commands.Draws.push_back(std::move(Draw));
 	if (bInSharedDraws)
 	{
@@ -578,8 +582,7 @@ void CheckOwnedConstantSubmission(FFrameFixture& InFixture, bool bInSharedDraws)
 	Check(State.Queue->Wait(Gate.Get(), 1), "Block constant ownership submission");
 	{
 		FPassCommands Present;
-		Present.TransitionFrom = EResourceState::RenderTarget;
-		Present.TransitionTo = EResourceState::Present;
+		Present.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 		const std::array Lists{Swapchain.RecordOwned(0, Commands), Swapchain.Record(1, Present)};
 		Swapchain.EndFrame(Lists, false, false);
 	}

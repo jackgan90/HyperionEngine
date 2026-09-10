@@ -3,10 +3,12 @@
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <source_location>
 #include <thread>
 
 namespace
@@ -48,9 +50,18 @@ void AwaitModel(const FModel& InModel)
 	HYP_CHECK(InModel.IsReady());
 }
 
-void Pixel(const FImage& InImage, unsigned InX, FVec3 InExpected)
+void Pixel(const FImage& InImage, unsigned InX, FVec3 InExpected,
+           std::source_location InLocation = std::source_location::current())
 {
 	const auto Offset = (std::size_t(120) * InImage.Width + InX) * 4;
+	if (std::abs(InImage.Rgba[Offset] - InExpected.X) >= .025f ||
+	    std::abs(InImage.Rgba[Offset + 1] - InExpected.Y) >= .025f ||
+	    std::abs(InImage.Rgba[Offset + 2] - InExpected.Z) >= .025f)
+	{
+		std::cerr << "Pixel caller line " << InLocation.line() << ": actual " << InImage.Rgba[Offset] << ','
+		          << InImage.Rgba[Offset + 1] << ',' << InImage.Rgba[Offset + 2] << " expected " << InExpected.X << ','
+		          << InExpected.Y << ',' << InExpected.Z << '\n';
+	}
 	HYP_CHECK(std::abs(InImage.Rgba[Offset] - InExpected.X) < .025f);
 	HYP_CHECK(std::abs(InImage.Rgba[Offset + 1] - InExpected.Y) < .025f);
 	HYP_CHECK(std::abs(InImage.Rgba[Offset + 2] - InExpected.Z) < .025f);
@@ -107,9 +118,9 @@ struct FSceneFixture
 		    [&]
 		    {
 			    FRenderGraph Graph;
-			    FColorPass Clear;
-			    Clear.Load = EColorLoad::Clear;
-			    Clear.Commands.Name = "Clear";
+			    auto Clear = MakeColorPass(Graph, "pending");
+			    Clear.Color->Actions.Load = EAttachmentLoad::Clear;
+			    Clear.Name = "Clear";
 			    Graph.Add(Clear);
 			    FRenderView View{
 			        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
@@ -118,8 +129,8 @@ struct FSceneFixture
 			    {
 				    InConfigure(View);
 			    }
-			    HYP_CHECK(Session->BuildViews(Graph, std::span(&View, 1), MaterialFrame, 1, false, true) ==
-			              InExpectedItems);
+			    HYP_CHECK(Session->BuildViews(Graph, std::span(&View, 1), Session->FrameTargets(), MaterialFrame, 1,
+			                                  false, true) == InExpectedItems);
 			    Image = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, {320, 240}, false, true);
 			    Session->CompleteViews();
 			    LastStatistics = Session->Statistics();
@@ -484,11 +495,12 @@ void CheckQueuedViews(FSceneFixture& InFixture)
 		    FRenderView View{
 		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
 		    View.CullingMode = ESceneCullingMode::None;
-		    View.ClearColor = FVec4{};
 		    std::array<FRenderGraph, 2> Graphs;
-		    InFixture.Session->BuildViews(Graphs[0], std::span(&View, 1), First, 1, false, true);
+		    InFixture.Session->BuildViews(Graphs[0], std::span(&View, 1), InFixture.Session->FrameTargets(FVec4{}),
+		                                  First, 1, false, true);
 		    View.ViewProjection = Multiply(Translation({1.2f, 0, 0}), View.ViewProjection);
-		    InFixture.Session->BuildViews(Graphs[1], std::span(&View, 1), Second, 1, false, true);
+		    InFixture.Session->BuildViews(Graphs[1], std::span(&View, 1), InFixture.Session->FrameTargets(FVec4{}),
+		                                  Second, 1, false, true);
 		    Images[0] =
 		        ExecuteGraph(std::move(Graphs[0]), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, true);
 		    Images[1] =
@@ -666,13 +678,15 @@ void CheckQueuedMembership(FSceneFixture& InFixture, std::size_t InCount,
 	    {
 		    FRenderView View{
 		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
-		    View.ClearColor = FVec4{};
 		    std::array<FRenderGraph, 2> Graphs;
 		    InFull(View);
-		    HYP_CHECK(InFixture.Session->BuildViews(Graphs[0], std::span(&View, 1), First, 1, false, true) == InCount);
+		    HYP_CHECK(InFixture.Session->BuildViews(Graphs[0], std::span(&View, 1),
+		                                            InFixture.Session->FrameTargets(FVec4{}), First, 1, false,
+		                                            true) == InCount);
 		    InPartial(View);
-		    HYP_CHECK(InFixture.Session->BuildViews(Graphs[1], std::span(&View, 1), Second, 1, false, true) ==
-		              InCount - 1);
+		    HYP_CHECK(InFixture.Session->BuildViews(Graphs[1], std::span(&View, 1),
+		                                            InFixture.Session->FrameTargets(FVec4{}), Second, 1, false,
+		                                            true) == InCount - 1);
 		    Images[1] =
 		        ExecuteGraph(std::move(Graphs[1]), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, true);
 		    Images[0] =
@@ -750,8 +764,9 @@ void CheckIncrementalRetirement(FSceneFixture& InFixture)
 		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
 		    Configure(View);
 		    View.CullingMode = ESceneCullingMode::None;
-		    View.ClearColor = FVec4{};
-		    HYP_CHECK(InFixture.Session->BuildViews(Retained, std::span(&View, 1), Frame, 1, false, true) == 2);
+		    HYP_CHECK(InFixture.Session->BuildViews(Retained, std::span(&View, 1),
+		                                            InFixture.Session->FrameTargets(FVec4{}), Frame, 1, false,
+		                                            true) == 2);
 	    }));
 	Bindings.clear();
 	States.clear();
@@ -1068,11 +1083,11 @@ void CheckReceiptViewChanges(FSceneFixture& InFixture)
 				        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
 				    View.Identity = Id;
 				    View.CullingMode = ESceneCullingMode::None;
-				    View.ClearColor = FVec4{};
 				    Views.push_back(View);
 			    }
 			    FRenderGraph Graph;
-			    InFixture.Session->BuildViews(Graph, Views, Frame, 1, false, true);
+			    InFixture.Session->BuildViews(Graph, Views, InFixture.Session->FrameTargets(FVec4{}), Frame, 1, false,
+			                                  true);
 			    ExecuteGraph(std::move(Graph), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, false);
 			    InFixture.Session->CompleteViews();
 			    for (const auto& Stats : InFixture.Session->ViewStatistics())

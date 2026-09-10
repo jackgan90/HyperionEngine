@@ -1,8 +1,8 @@
 #include "Hyperion/Renderer/RenderGraph.h"
-#include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
 #include "RenderGraphResources.h"
 #include <algorithm>
+#include <atomic>
 #include <set>
 #include <stdexcept>
 
@@ -10,104 +10,192 @@ namespace Hyperion
 {
 namespace
 {
-struct FAttachmentInitialization
+std::uint64_t NextGraphIdentity()
 {
-	bool bFull{};
-	std::vector<FViewport> Regions;
+	static std::atomic<std::uint64_t> Next{1};
+	return Next.fetch_add(1, std::memory_order_relaxed);
+}
 
-	void Use(const std::optional<FViewport>& InViewport, bool bInInitialize, const char* InName)
-	{
-		if (bInInitialize)
-		{
-			if (InViewport)
-			{
-				Regions.push_back(*InViewport);
-			}
-			else
-			{
-				bFull = true;
-			}
-			return;
-		}
-		if (bFull)
-		{
-			return;
-		}
-		if (InViewport && std::any_of(Regions.begin(), Regions.end(),
-		                              [&](const FViewport& InRegion)
-		                              {
-			                              return InRegion.X <= InViewport->X && InRegion.Y <= InViewport->Y &&
-			                                     InRegion.X + InRegion.Width >= InViewport->X + InViewport->Width &&
-			                                     InRegion.Y + InRegion.Height >= InViewport->Y + InViewport->Height;
-		                              }))
-		{
-			return;
-		}
-		throw std::runtime_error(std::string("Graph loads undefined ") + InName);
-	}
-};
-
-struct FGraphAttachments
+bool SameImport(const FGraphTextureImport& InA, const FGraphTextureImport& InB)
 {
-	FAttachmentInitialization Color;
-	FAttachmentInitialization Depth;
-	FAttachmentInitialization Stencil;
-	std::optional<std::pair<std::uint64_t, ERHIDepthFormat>> DepthOwner;
+	return InA.Target == InB.Target && InA.Size.Width == InB.Size.Width && InA.Size.Height == InB.Size.Height &&
+	       InA.DepthFormat == InB.DepthFormat && InA.InitialState == InB.InitialState &&
+	       InA.bInitialized == InB.bInitialized && InA.Identity == InB.Identity &&
+	       bool(InA.Resolve) == bool(InB.Resolve);
+}
 
-	void Validate(const FColorPass& InPass)
+std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCommands)
+{
+	auto Batches = InPass.Prepare ? InPass.Prepare() : std::move(InPass.Batches);
+	if (Batches.empty())
 	{
-		const auto& Commands = InPass.Commands;
-		if ((Commands.bClearDepth && !Commands.bUseDepth) || (Commands.bClearStencil && !Commands.bUseStencil) ||
-		    (Commands.bUseDepth && Commands.DepthFormat == ERHIDepthFormat::None) ||
-		    (Commands.bUseStencil && Commands.DepthFormat != ERHIDepthFormat::D32S8))
+		Batches.push_back({}); // Clear/store and resource dependencies survive an empty draw list.
+		if (InPass.Color)
 		{
-			throw std::runtime_error("Invalid graph depth/stencil attachment or clear");
-		}
-		const auto Key = std::make_pair(Commands.DepthDomain, Commands.DepthFormat);
-		if ((Commands.bUseDepth || Commands.bUseStencil) && DepthOwner != Key)
-		{
-			Depth = {};
-			Stencil = {};
-			DepthOwner = Key;
-		}
-		if (Commands.bUseDepth && !Commands.DepthTarget)
-		{
-			Depth.Use(Commands.Viewport, Commands.bClearDepth, "depth");
-		}
-		if (Commands.bUseStencil)
-		{
-			Stencil.Use(Commands.Viewport, Commands.bClearStencil, "stencil");
-		}
-		if (Commands.bUseColor)
-		{
-			Color.Use(Commands.Viewport, InPass.Load != EColorLoad::Load, "color contents");
-		}
-		else if (InPass.Load != EColorLoad::Load)
-		{
-			throw std::invalid_argument("Color load operation requires a color attachment");
+			Batches.back().bSrgb = InPass.Color->View == EGraphColorView::Srgb;
 		}
 	}
-};
-
+	std::vector<FPassCommands> Result;
+	Result.reserve(Batches.size());
+	for (std::size_t Index = 0; Index < Batches.size(); ++Index)
+	{
+		auto Commands = InCommands;
+		Commands.Name = InPass.Name + "/" + std::to_string(Index);
+		static_cast<FDrawCommands&>(Commands) = std::move(Batches[Index].Commands);
+		if (Commands.Color)
+		{
+			if (InPass.Color->View != EGraphColorView::DrawBatch &&
+			    Batches[Index].bSrgb != (InPass.Color->View == EGraphColorView::Srgb))
+			{
+				throw std::invalid_argument("Draw batch uses an undeclared color view");
+			}
+			Commands.Color->bSrgb = Batches[Index].bSrgb;
+			Commands.Color->Actions.Load = Index == 0 ? Commands.Color->Actions.Load : EAttachmentLoad::Load;
+			Commands.Color->Actions.Store =
+			    Index + 1 == Batches.size() ? Commands.Color->Actions.Store : EAttachmentStore::Store;
+		}
+		if (Commands.DepthStencil)
+		{
+			for (auto* Actions : {&Commands.DepthStencil->Depth, &Commands.DepthStencil->Stencil})
+			{
+				if (*Actions)
+				{
+					(*Actions)->Load = Index == 0 ? (*Actions)->Load : EAttachmentLoad::Load;
+					(*Actions)->Store = Index + 1 == Batches.size() ? (*Actions)->Store : EAttachmentStore::Store;
+				}
+			}
+		}
+		if (Index)
+		{
+			Commands.Transitions.clear();
+		}
+		(void)Commands.GetDraws();
+		if (!Commands.Color && !Commands.DepthStencil && !Commands.GetDraws().empty())
+		{
+			throw std::invalid_argument("Draw batch requires declared attachments");
+		}
+		Result.push_back(std::move(Commands));
+	}
+	return Result;
+}
 } // namespace
 
-std::size_t FRenderGraph::Add(FColorPass InPass)
+FRenderGraph::FRenderGraph() : Identity(NextGraphIdentity())
 {
+}
+
+FRenderGraph::FRenderGraph(const FRenderGraph& InOther) : FRenderGraph()
+{
+	InOther.CheckMutable();
+	Identity = InOther.Identity;
+	Resources = InOther.Resources;
+	Exports = InOther.Exports;
+	Passes = InOther.Passes;
+}
+
+FRenderGraph::FRenderGraph(FRenderGraph&& InOther) : FRenderGraph()
+{
+	*this = std::move(InOther);
+}
+
+FRenderGraph& FRenderGraph::operator=(const FRenderGraph& InOther)
+{
+	CheckMutable();
+	InOther.CheckMutable();
+	if (this != &InOther)
+	{
+		auto Copy = InOther;
+		*this = std::move(Copy);
+	}
+	return *this;
+}
+
+FRenderGraph& FRenderGraph::operator=(FRenderGraph&& InOther)
+{
+	CheckMutable();
+	InOther.CheckMutable();
+	if (this != &InOther)
+	{
+		Identity = InOther.Identity;
+		Resources = std::move(InOther.Resources);
+		Exports = std::move(InOther.Exports);
+		Passes = std::move(InOther.Passes);
+		InOther.Reset();
+	}
+	return *this;
+}
+
+std::size_t FRenderGraph::ResourceIndex(FGraphTexture InTexture) const
+{
+	if (InTexture.Graph != Identity || InTexture.Index >= Resources.size())
+	{
+		throw std::invalid_argument("Foreign or stale graph texture handle");
+	}
+	return InTexture.Index;
+}
+
+FGraphTexture FRenderGraph::Import(FGraphTextureImport InResource)
+{
+	CheckMutable();
+	ValidateGraphImport(InResource);
+	for (std::size_t Index = 0; Index < Resources.size(); ++Index)
+	{
+		const auto& Existing = Resources[Index];
+		const bool bSameIdentity = InResource.Target.Kind == Existing.Target.Kind &&
+		                           (InResource.Target.Kind != ERenderTargetKind::Texture ||
+		                            (InResource.Identity ? InResource.Identity == Existing.Identity
+		                                                 : InResource.Target.Texture == Existing.Target.Texture));
+		if (bSameIdentity)
+		{
+			if (!SameImport(Existing, InResource))
+			{
+				throw std::invalid_argument("Conflicting graph import description");
+			}
+			return {Identity, Index};
+		}
+	}
+	Resources.push_back(std::move(InResource));
+	return {Identity, Resources.size() - 1};
+}
+
+FGraphTexture FRenderGraph::ImportBackbuffer(FSize InSize)
+{
+	return Import({"Backbuffer", FRenderTarget::Backbuffer(), InSize, ERHIDepthFormat::None, EResourceState::Present});
+}
+
+FGraphTexture FRenderGraph::ImportFrameDepth(ERHIDepthFormat InFormat, FSize InSize)
+{
+	return Import({"Frame depth", FRenderTarget::FrameDepth(), InSize, InFormat, EResourceState::DepthWrite});
+}
+
+void FRenderGraph::Export(FGraphTexture InTexture, EResourceState InState)
+{
+	CheckMutable();
+	ValidateGraphState(Resources[ResourceIndex(InTexture)], InState);
+	for (const auto& Existing : Exports)
+	{
+		if (Existing.first == InTexture)
+		{
+			if (Existing.second != InState)
+			{
+				throw std::invalid_argument("Conflicting graph export states");
+			}
+			return;
+		}
+	}
+	Exports.emplace_back(InTexture, InState);
+}
+
+std::size_t FRenderGraph::Add(FGraphicsPass InPass)
+{
+	CheckMutable();
 	Passes.push_back(std::move(InPass));
 	return Passes.size() - 1;
 }
 
-void FRenderGraph::ImportDepth(FTexture InTexture)
-{
-	if (!InTexture)
-	{
-		throw std::invalid_argument("Cannot import an empty graph texture");
-	}
-	ImportedDepth.push_back(std::move(InTexture));
-}
-
 std::vector<FPassCommands> FRenderGraph::Compile() const
 {
+	CheckMutable();
 	auto Copy = *this;
 	auto Result = Copy.CompileAndConsume();
 	for (auto& Pass : Result)
@@ -117,93 +205,76 @@ std::vector<FPassCommands> FRenderGraph::Compile() const
 	return Result;
 }
 
+void FRenderGraph::CheckMutable() const
+{
+	if (bCompiling)
+	{
+		throw std::logic_error("Graph declarations cannot change during compilation");
+	}
+}
+
+void FRenderGraph::Reset()
+{
+	Passes.clear();
+	Resources.clear();
+	Exports.clear();
+	Identity = NextGraphIdentity();
+}
+
 std::vector<FPassCommands> FRenderGraph::CompileAndConsume()
 {
 	HYP_PERF_SCOPE_C(Render, CompileRenderGraph);
-	ExpandPreparations();
-	if (Passes.empty())
+	CheckMutable();
+
+	struct FCompileGuard
 	{
-		throw std::runtime_error("Graph requires at least one color pass");
-	}
-	const auto Count = Passes.size();
-	std::vector<std::set<std::size_t>> Deps(Count);
-	std::set<std::string> Names;
-	for (std::size_t I = 0; I < Count; ++I)
+		bool& bActive;
+
+		~FCompileGuard()
+		{
+			bActive = false;
+		}
+	} Guard{bCompiling};
+
+	bCompiling = true;
+	const auto Sequence = Order(); // Validate topology and attachments before running any preparation.
+	// Validate content lifetime independently of native resource resolution and deferred callbacks.
+	std::vector<FGraphResourceState> Validation;
+	for (const auto& Resource : Resources)
 	{
-		if (Passes[I].Commands.Name.empty() || !Names.insert(Passes[I].Commands.Name).second)
-		{
-			throw std::runtime_error("Graph pass names must be unique and nonempty");
-		}
-		if (Passes[I].Commands.TransitionFrom || Passes[I].Commands.TransitionTo ||
-		    !Passes[I].Commands.TextureTransitions.empty())
-		{
-			throw std::runtime_error("Graph owns resource transitions");
-		}
-		if (I)
-		{
-			Deps[I].insert(I - 1); // Preserve pipeline order, including explicit depth producer/consumer hazards.
-		}
-		for (auto Dependency : Passes[I].After)
-		{
-			if (Dependency >= Count)
-			{
-				throw std::runtime_error("Unknown graph dependency");
-			}
-			Deps[I].insert(Dependency);
-		}
+		Validation.push_back({Resource.Target,
+		                      Resource.InitialState,
+		                      {Resource.bInitialized},
+		                      {Resource.bInitialized},
+		                      {Resource.bInitialized}});
 	}
+	for (const auto Index : Sequence)
+	{
+		FPassCommands Unused;
+		ApplyGraphPass(Passes[Index], Resources, Validation, Unused);
+		FinishGraphAttachments(Passes[Index], Resources, Validation);
+	}
+	auto States = ResolveGraphResources(Resources);
 	std::vector<FPassCommands> Result;
-	Result.reserve(Count + 1);
-	std::vector<bool> Visited(Count);
-	FGraphAttachments Attachments;
-	FGraphDepthResources DepthResources(ImportedDepth);
-	bool bColorStarted = false;
-	while (Result.size() < Count)
+	for (const auto Index : Sequence)
 	{
-		bool bProgress = false;
-		for (std::size_t I = 0; I < Count; ++I)
-		{
-			if (Visited[I] || !std::all_of(Deps[I].begin(), Deps[I].end(),
-			                               [&](auto InD)
-			                               {
-				                               return Visited[InD];
-			                               }))
-			{
-				continue;
-			}
-			auto& Pass = Passes[I];
-			Attachments.Validate(Pass);
-			auto Commands = std::move(Pass.Commands);
-			Commands.bClear = Pass.Load == EColorLoad::Clear;
-			DepthResources.Compile(Commands);
-			if (Commands.bUseColor && !bColorStarted)
-			{
-				bColorStarted = true;
-				Commands.TransitionFrom = EResourceState::Present;
-				Commands.TransitionTo = EResourceState::RenderTarget;
-			}
-			Result.push_back(std::move(Commands));
-			Visited[I] = true;
-			bProgress = true;
-		}
-		if (!bProgress)
-		{
-			throw std::runtime_error("Graph dependency cycle");
-		}
+		FPassCommands Commands;
+		ApplyGraphPass(Passes[Index], Resources, States, Commands);
+		auto Batches = PreparePass(Passes[Index], std::move(Commands));
+		Result.insert(Result.end(), std::make_move_iterator(Batches.begin()), std::make_move_iterator(Batches.end()));
+		FinishGraphAttachments(Passes[Index], Resources, States);
 	}
-	FPassCommands Present;
-	Present.Name = "Present transition";
-	Present.bUseColor = false;
-	if (bColorStarted)
+	FPassCommands Final;
+	Final.Name = "Graph exports";
+	for (const auto& [Texture, State] : Exports)
 	{
-		Present.TransitionFrom = EResourceState::RenderTarget;
-		Present.TransitionTo = EResourceState::Present;
+		TransitionGraphResource(States[ResourceIndex(Texture)], State, Final);
 	}
-	DepthResources.Finish(Present);
-	Result.push_back(std::move(Present));
-	Passes.clear();
-	ImportedDepth.clear();
+	if (!Final.Transitions.empty())
+	{
+		Result.push_back(std::move(Final));
+	}
+	Reset();
 	return Result;
 }
-
 } // namespace Hyperion

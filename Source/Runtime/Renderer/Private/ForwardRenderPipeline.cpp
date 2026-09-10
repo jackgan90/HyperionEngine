@@ -50,18 +50,22 @@ void FForwardRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 		Lifetime = Session.GetResources().CreateScopeLifetime();
 		AllocatedShadowBytes = ShadowMaps.TextureBytes();
 	}
-	auto Views = ShadowMaps.Views(InMain, Lifetime);
-	ShadowMaps.Bind(InMain, Lifetime);
-	InMain.ClearColor = InClear;
-	InMain.Name = "Forward";
+	auto Views = ShadowMaps.Views(InMain);
+	auto Targets = ShadowMaps.Targets(Lifetime);
+	auto MainTargets = Session.FrameTargets();
+	MainTargets.Color->Actions.Load = EAttachmentLoad::Clear;
+	MainTargets.Color->Clear = InClear;
+	MainTargets.Name = "Forward";
+	ShadowMaps.Bind(InMain, MainTargets, Lifetime);
+	Targets.push_back(std::move(MainTargets));
 	Views.push_back(std::move(InMain));
-	Session.BuildViews(InGraph, Views, std::move(InFrame), 1, true, bInDeferPreparation);
+	Session.BuildViews(InGraph, Views, Targets, std::move(InFrame), 1, true, bInDeferPreparation);
 	bPending = bInDeferPreparation;
 	if (LastStatistics.bShadows && InShadows.DebugMode >= 2 && InShadows.DebugMode <= 5)
 	{
 		const auto& Main = Views.back();
 		const float Size = std::min({320.f, float(Main.Width), float(Main.Height)});
-		Session.AppendDepthPreview(InGraph, Main.SampledDepth.at(InShadows.DebugMode - 2), Lifetime,
+		Session.AppendDepthPreview(InGraph, Targets.back().Reads.at(InShadows.DebugMode - 2).Texture, Lifetime,
 		                           InShadows.PreviewViewport.value_or(
 		                               FViewport{float(Main.Width) - Size, float(Main.Height) - Size, Size, Size}),
 		                           bInDeferPreparation);

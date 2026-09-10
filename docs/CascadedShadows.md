@@ -18,13 +18,13 @@ CLI 对应参数：`--no-shadows`、`--shadow-resolution 1024|2048`、`--shadow-
 
 `FForwardRenderPipeline` 在 Renderer 内集中组织一帧：共享场景空间索引维护 → 四个 `ShadowDepth` view → `Forward` 主 view → 可选深度预览 → 扩展/plugin passes。所有 view 使用同一个冻结材质 frame，一次 Render 准备完成后再交给 RHI 0；空间索引每个 family 更新一次。`FRenderSession::ViewStatistics()` 分别报告各 view；原 `Statistics()` 保留“最后 view 的可见性、family 总 draw/batch 数”的兼容语义。
 
-`FCascadedShadowMap` 持有稳定 view identity 和纹理 source。主相机的 forward、up、FOV、near/far 显式放入 `FRenderView::Camera`。当前 pipeline 接受单个透视主相机和单个方向光；普通 `BuildViews` 仍可单独使用。
+`FCascadedShadowMap` 持有稳定 view identity 和纹理 source。`Views()` 提供相机/剔除输入，`Targets(lifetime)` 单独提供各级深度附件，`Bind(main, targets, lifetime)` 声明 Forward 的 sampled reads 和材质参数。主相机的 forward、up、FOV、near/far 显式放入 `FRenderView::Camera`。当前 pipeline 接受单个透视主相机和单个方向光；普通 `BuildViews` 仍可单独使用。
 
 方向光通过冻结 frame 的 semantic provider 解析，与 Forward 的材质求值使用同一注册规则；允许 Global/Scene/Frame 依赖。若该 provider 依赖 Material/View/Pass/Object/Draw，则保留 Forward 的局部光照求值并关闭全局 CSM，避免一套投影对应多个光源。各阴影视图使用光相机的量化 near-plane origin 作为 Eye；主相机的亚 texel 移动不会单独刷新其 View scope。光方向不变时复用已有正交 basis，避免反复归一化产生浮点漂移。
 
 `FMaterialDepthTexture` 是没有原生依赖的 CPU 描述。Renderer 的材质 GPU cache 将 source identity 解析为同一张 RHI texture，既供 attachment 写入，也供材质反射绑定采样。D3D12 使用 R32_TYPELESS resource、D32_FLOAT DSV 和 R32_FLOAT SRV，支持独立 comparison sampler 及比较函数。四张 2048 贴图的像素 payload 为 64 MiB，1024 为 16 MiB；实际设备统计还包括对齐、常量页及其他场景资源。关闭阴影会保留当前贴图供重新启用；切换分辨率会在引用和 fence 释放后回收旧集合。
 
-`FGraphicsPass` 显式声明颜色使用、深度 attachment 和 sampled depth。Graph 检查初始化、读写冲突与依赖，并生成 `ShaderRead → DepthWrite → ShaderRead` 转换；空 cascade 仍整张清到 1。外部已初始化深度通过 `ImportDepth` 声明。未提交帧取消不会改变 GPU 资源状态，已提交帧及 clear-only pass 都保留纹理直到原有 fence 完成。初始 clear 排入同一 graphics queue，不增加 CPU idle。没有每帧 shadow texture 创建、深度读回或 profiling 专用同步；深度预览直接在 GPU 采样。
+`FGraphicsPass` 显式声明颜色使用、深度 attachment 和 sampled depth。Graph 检查初始化、读写冲突与依赖，并生成 `ShaderRead → DepthWrite → ShaderRead` 转换；空 cascade 仍整张清到 1。外部已初始化深度通过 `Import(FGraphTextureImport)` 的状态及内容有效性声明，结束状态通过 `Export` 声明。未提交帧取消不会改变 GPU 资源状态，已提交帧及 clear-only pass 都保留纹理直到原有 fence 完成。初始 clear 排入同一 graphics queue，不增加 CPU idle。没有每帧 shadow texture 创建、深度读回或 profiling 专用同步；深度预览直接在 GPU 采样。
 
 显式 sampled-depth attachment 按自身的 D32 格式准备 PSO 和 pass；主视图可独立使用 D32S8。深度预览的纹理与 binding set 跟随 attachment lifetime，隐藏预览后切换分辨率也会在 RHI 回收旧引用；预览的 PSO 和几何继续复用。
 

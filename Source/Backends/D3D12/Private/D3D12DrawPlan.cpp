@@ -287,11 +287,23 @@ std::shared_ptr<const FD3D12DrawPlan> PrepareNativeDraws(const FD3D12DeviceState
 {
 	const auto& InCommands = *InOwnedCommands;
 	InCommands.GetDraws(); // Validate command-shell storage even when its shared stream has a cached plan.
-	const std::array<unsigned, 5> Target{InCommands.bSrgbTarget, InCommands.bUseColor, InCommands.bUseDepth,
-	                                     InCommands.bUseStencil, unsigned(InCommands.DepthFormat)};
+	const std::array<unsigned, 7> Target{
+	    InCommands.IsSrgb(),
+	    InCommands.HasColor(),
+	    InCommands.HasDepth(),
+	    InCommands.HasStencil(),
+	    unsigned(InCommands.GetDepthFormat()),
+	    unsigned(InCommands.Color ? InCommands.Color->Target.Kind : ERenderTargetKind::None),
+	    unsigned(InCommands.DepthStencil ? InCommands.DepthStencil->Target.Kind : ERenderTargetKind::None)};
 	std::lock_guard Lock(InCache.Mutex);
 	if (InCommands.SharedDraws && InCache.Owner.lock() == InCommands.SharedDraws && InCache.Target == Target &&
-	    InCache.DepthTarget.lock() == InCommands.DepthTarget.Payload)
+	    InCache.DepthTarget.lock() == InCommands.GetDepthTexture().Payload &&
+	    InCache.Reads.size() == InCommands.SampledTextures.size() &&
+	    std::equal(InCache.Reads.begin(), InCache.Reads.end(), InCommands.SampledTextures.begin(),
+	               [](const auto& InWeak, const auto& InTexture)
+	               {
+		               return InWeak.lock() == InTexture.Payload;
+	               }))
 	{
 		// The validated stream has registered constant-page ownership. Reset remains blocked until it expires,
 		// including when recordings/submissions share the stream's sole nested buffer handle.
@@ -309,7 +321,12 @@ std::shared_ptr<const FD3D12DrawPlan> PrepareNativeDraws(const FD3D12DeviceState
 	InCache.Plan.reset();
 	InCache.Owner = InCommands.SharedDraws;
 	InCache.Target = Target;
-	InCache.DepthTarget = InCommands.DepthTarget.Payload;
+	InCache.DepthTarget = InCommands.GetDepthTexture().Payload;
+	InCache.Reads.clear();
+	for (const auto& Texture : InCommands.SampledTextures)
+	{
+		InCache.Reads.push_back(Texture.Payload);
+	}
 	HYP_PERF_PLOT(Rhi, NativeDrawPlanReuses, 0.0);
 	return {};
 }

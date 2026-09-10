@@ -67,30 +67,30 @@ void FSceneViewerPlugin::DuplicateSelected()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.Instances.empty())
+	if (P.Scene.GetModels().empty())
 	{
 		return;
 	}
-	const auto Source = P.Instances[P.Selected % P.Instances.size()];
+	const auto Source = P.Scene.GetModels()[P.Selected % P.Scene.GetModels().size()];
 	auto Model = *P.Scene.Find(Source.Handle);
 	Model.Name += " copy";
 	Model.World = Multiply(Translation({2, 0, 0}), Model.World);
-	P.Instances.push_back({P.Scene.Add(std::move(Model)), Source.Asset});
-	P.Selected = P.Instances.size() - 1;
+	P.Scene.Add(std::move(Model), Source.Asset);
+	P.Selected = P.Scene.GetModels().size() - 1;
 }
 
 void FSceneViewerPlugin::AddModel()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	for (const auto& [Id, Load] : P.Loads)
+	for (const auto& Asset : P.Scene.GetAssets())
 	{
-		if (Load.bComplete && Load.Error.empty())
+		if (Asset.Data && Asset.Error.empty())
 		{
-			FSceneModel Model{"Added model", Load.Preparation.GetReady()};
+			FSceneModel Model{"Added model", Asset.Data};
 			Model.World = Translation(P.Target);
-			P.Instances.push_back({P.Scene.Add(std::move(Model)), Id});
-			P.Selected = P.Instances.size() - 1;
+			P.Scene.Add(std::move(Model), Asset.Id);
+			P.Selected = P.Scene.GetModels().size() - 1;
 			return;
 		}
 	}
@@ -100,13 +100,12 @@ void FSceneViewerPlugin::RemoveSelected()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.Instances.empty())
+	if (P.Scene.GetModels().empty())
 	{
 		return;
 	}
-	P.Selected %= P.Instances.size();
-	P.Scene.Remove(P.Instances[P.Selected].Handle);
-	P.Instances.erase(P.Instances.begin() + P.Selected);
+	P.Selected %= P.Scene.GetModels().size();
+	P.Scene.Remove(P.Scene.GetModels()[P.Selected].Handle);
 	P.Selected = 0;
 }
 
@@ -114,11 +113,11 @@ void FSceneViewerPlugin::ToggleSelected()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.Instances.empty())
+	if (P.Scene.GetModels().empty())
 	{
 		return;
 	}
-	const auto Handle = P.Instances[P.Selected % P.Instances.size()].Handle;
+	const auto Handle = P.Scene.GetModels()[P.Selected % P.Scene.GetModels().size()].Handle;
 	auto Model = *P.Scene.Find(Handle);
 	Model.bVisible = !Model.bVisible;
 	P.Scene.Update(Handle, std::move(Model));
@@ -128,11 +127,11 @@ void FSceneViewerPlugin::MoveSelected(float InOffset)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.Instances.empty())
+	if (P.Scene.GetModels().empty())
 	{
 		return;
 	}
-	const auto Handle = P.Instances[P.Selected % P.Instances.size()].Handle;
+	const auto Handle = P.Scene.GetModels()[P.Selected % P.Scene.GetModels().size()].Handle;
 	auto Model = *P.Scene.Find(Handle);
 	Model.World = Multiply(Translation({InOffset, 0, 0}), Model.World);
 	P.Scene.Update(Handle, std::move(Model));

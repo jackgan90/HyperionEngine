@@ -21,6 +21,17 @@ template<class Predicate> void Await(const Predicate& InPredicate)
 	HYP_CHECK(InPredicate());
 }
 
+class ITestTexture : public IRHITexture
+{
+public:
+	FRHITextureInfo Info;
+
+	FRHITextureInfo GetInfo() const noexcept override
+	{
+		return Info;
+	}
+};
+
 template<class Interface> class TTrackedResource final : public Interface
 {
 public:
@@ -76,10 +87,12 @@ public:
 		return {std::make_shared<TTrackedResource<IRHIBuffer>>(Tasks, Alive)};
 	}
 
-	FTexture CreateTexture(const FImage&) override
+	FTexture CreateTexture(const FImage& InImage) override
 	{
 		Tasks.Require({EDomain::Rhi, 0});
-		return {std::make_shared<TTrackedResource<IRHITexture>>(Tasks, Alive)};
+		auto Texture = std::make_shared<TTrackedResource<ITestTexture>>(Tasks, Alive);
+		Texture->Info = {InImage.Width, InImage.Height};
+		return {std::move(Texture)};
 	}
 
 	std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc> InTextures) override
@@ -204,7 +217,7 @@ public:
 	std::atomic<bool> bFailBinding{};
 	std::atomic<bool> bFailCollection{};
 	std::atomic_int IdleCalls{};
-	std::vector<FColorPass> Retained;
+	std::vector<FGraphicsDrawBatch> Retained;
 	std::uint64_t Publication{};
 };
 
@@ -302,13 +315,15 @@ void CheckSharedUpload(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompi
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
 	                              {
-		                              const auto Snapshot = PrepareSceneSnapshot(Session.GetScene().Collect({}));
-		                              InTasks.Wait(InTasks.Dispatch(
-		                                  {EDomain::Rhi, 0},
-		                                  [&]
-		                                  {
-			                                  InDevice.Retained = Session.GetResources().BuildPasses(Snapshot);
-		                                  }));
+		                              auto RawSnapshot = Session.GetScene().Collect({});
+		                              RawSnapshot.Targets = Session.FrameTargets();
+		                              const auto Snapshot = PrepareSceneSnapshot(RawSnapshot);
+		                              InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
+		                                                            [&]
+		                                                            {
+			                                                            InDevice.Retained =
+			                                                                Session.GetResources().BuildDraws(Snapshot);
+		                                                            }));
 	                              }));
 	InTasks.Wait(B.Remove());
 	Second.reset();
@@ -595,7 +610,9 @@ void CheckSectionTransactions(FTaskSystem& InTasks, FTestDevice& InDevice, FShad
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
 	                              {
-		                              const auto Snapshot = PrepareSceneSnapshot(Session.GetScene().Collect({}));
+		                              auto RawSnapshot = Session.GetScene().Collect({});
+		                              RawSnapshot.Targets = Session.FrameTargets();
+		                              const auto Snapshot = PrepareSceneSnapshot(RawSnapshot);
 		                              HYP_CHECK(Snapshot.Items.Size() == 2);
 		                              for (const auto& Item : Snapshot.Items)
 		                              {
@@ -665,12 +682,14 @@ void CheckPendingSection(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	    {EDomain::Render},
 	    [&]
 	    {
-		    const auto Snapshot = PrepareSceneSnapshot(Session.GetScene().Collect({}));
+		    auto RawSnapshot = Session.GetScene().Collect({});
+		    RawSnapshot.Targets = Session.FrameTargets();
+		    const auto Snapshot = PrepareSceneSnapshot(RawSnapshot);
 		    HYP_CHECK(Snapshot.Items.Size() == 2 && Snapshot.Items[0].Primitive == Valid.GetHandle());
 		    InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
 		                                  [&]
 		                                  {
-			                                  const auto Passes = Session.GetResources().BuildPasses(Snapshot);
+			                                  const auto Passes = Session.GetResources().BuildDraws(Snapshot);
 			                                  HYP_CHECK(Passes.size() == 1 && Passes[0].Commands.Draws.size() == 1);
 		                                  }));
 	    }));
@@ -725,6 +744,7 @@ void CheckVisibilityAndAggregation(FTaskSystem& InTasks, FTestDevice& InDevice, 
 		                              FRenderView Unculled;
 		                              Unculled.CullingMode = ESceneCullingMode::None;
 		                              auto Raw = Session.GetScene().Collect(Unculled);
+		                              Raw.Targets = Session.FrameTargets();
 		                              Raw.View.CullingMode = ESceneCullingMode::Linear;
 		                              const auto First = PrepareSceneSnapshot(Raw);
 		                              const auto Second = PrepareSceneSnapshot(Raw);
@@ -737,9 +757,10 @@ void CheckVisibilityAndAggregation(FTaskSystem& InTasks, FTestDevice& InDevice, 
 		                                  {EDomain::Rhi, 0},
 		                                  [&]
 		                                  {
-			                                  const auto Passes = Session.GetResources().BuildPasses(First);
+			                                  const auto Passes = Session.GetResources().BuildDraws(First);
 			                                  HYP_CHECK(Passes.size() == 1 && Passes[0].Commands.Draws.size() == 41);
-			                                  HYP_CHECK(Passes[0].Commands.bClearDepth);
+			                                  HYP_CHECK(First.Targets.DepthStencil->Depth->Load ==
+			                                            EAttachmentLoad::Clear);
 		                                  }));
 	                              }));
 }

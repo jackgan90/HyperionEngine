@@ -27,7 +27,8 @@ FMaterialParameterValues DefaultShadowParameters()
 	return Result;
 }
 
-void FCascadedShadowMap::Bind(FRenderView& InMain, std::shared_ptr<const void> InLifetime) const
+void FCascadedShadowMap::Bind(FRenderView& InMain, FRenderPassTargets& InTargets,
+                              std::shared_ptr<const void> InLifetime) const
 {
 	auto Parameters = DefaultShadowParameters();
 	const auto Set = [&Parameters](std::string InName, FMaterialValue InValue)
@@ -57,9 +58,8 @@ void FCascadedShadowMap::Bind(FRenderView& InMain, std::shared_ptr<const void> I
 		{
 			Set("ShadowMatrix" + std::to_string(Index), FMaterialValue::Matrix(Data[Index].ViewProjection));
 			Set("ShadowDepth" + std::to_string(Index), FMaterialValue::FromTexture(Textures[Index]));
-			InMain.SampledDepth.push_back(Textures[Index]);
+			InTargets.Reads.push_back({ERenderTargetKind::Texture, Textures[Index], InLifetime, false});
 		}
-		InMain.TargetLifetime = std::move(InLifetime);
 	}
 	for (auto& Parameter : Parameters)
 	{

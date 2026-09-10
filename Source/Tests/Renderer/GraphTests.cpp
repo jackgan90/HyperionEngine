@@ -1,197 +1,459 @@
-#include "Hyperion/Renderer/RenderGraph.h"
+#include "Support/GraphTestSupport.h"
+#include "Support/TestSupport.h"
 #include <iostream>
-#include <stdexcept>
+
+using namespace Hyperion;
 
 namespace
 {
-using namespace Hyperion;
-
-void Check(bool bInB, const char* InM)
+template<class Callable> void Rejects(const Callable& InAction)
 {
-	if (!bInB)
-	{
-		throw std::runtime_error(InM);
-	}
-}
-
-template<class F> void Rejects(F InF)
-{
-	bool bFailed = false;
 	try
 	{
-		InF();
+		InAction();
 	}
-	catch (const std::runtime_error&)
+	catch (const std::exception&)
 	{
-		bFailed = true;
+		return;
 	}
-	Check(bFailed, "Invalid graph accepted");
+	throw std::runtime_error("Invalid graph accepted");
 }
 
-FColorPass Pass(const char* InName, EColorLoad InLoad = EColorLoad::Load)
+class FTestTexture final : public IRHITexture
 {
-	FColorPass P;
-	P.Commands.Name = InName;
-	P.Load = InLoad;
-	return P;
+public:
+	FRHITextureInfo GetInfo() const noexcept override
+	{
+		return {64, 64, ERHIDepthFormat::D32};
+	}
+
+	const void* GetDeviceIdentity() const noexcept override
+	{
+		return this;
+	}
+};
+
+FGraphTexture Depth(FRenderGraph& InGraph, bool bInInitialized = false)
+{
+	return InGraph.Import({"depth",
+	                       FRenderTarget::FromTexture({std::make_shared<FTestTexture>()}),
+	                       {64, 64},
+	                       ERHIDepthFormat::D32,
+	                       EResourceState::ShaderRead,
+	                       bInInitialized});
+}
+
+FGraphicsPass DepthPass(FGraphTexture InTexture, std::string InName, EAttachmentLoad InLoad)
+{
+	FGraphicsPass Pass;
+	Pass.Name = std::move(InName);
+	Pass.DepthStencil = FGraphDepthStencilAttachment{InTexture, FAttachmentActions{InLoad}};
+	return Pass;
 }
 
 void CheckPacketOwnership()
 {
 	FRenderGraph Graph;
-	auto Source = Pass("owned packets", EColorLoad::Clear);
-	Source.Commands.Draws.resize(8);
-	Source.Commands.Draws.front().IndexCount = 17;
-	const auto Storage = Source.Commands.Draws.data();
+	auto Source = MakeColorPass(Graph, "owned", EAttachmentLoad::Clear);
+	auto& Draws = Source.Batches[0].Commands.Draws;
+	Draws.resize(8);
+	Draws[0].IndexCount = 17;
+	const auto Storage = Draws.data();
 	Graph.Add(std::move(Source));
 	auto Borrowed = Graph.Compile();
-	Check(Borrowed.front().Draws.data() != Storage, "Borrowed compilation must snapshot packets");
-	Borrowed.front().Draws.front().IndexCount = 23;
+	HYP_CHECK(Borrowed[0].Draws.data() != Storage);
+	Borrowed[0].Draws[0].IndexCount = 23;
 	auto Owned = Graph.CompileAndConsume();
-	Check(Owned.front().Draws.data() == Storage, "Consuming compilation should transfer packet storage");
-	Check(Owned.front().Draws.front().IndexCount == 17, "Compilation copies must remain independent");
-	Graph.Add(Pass("reused graph", EColorLoad::Clear));
-	Check(Graph.Compile().size() == 2, "Consumed graph should be reusable");
-	Check(Owned.front().Draws.front().IndexCount == 17, "Compiled packets must outlive the graph");
+	HYP_CHECK(Owned[0].Draws.data() == Storage && Owned[0].Draws[0].IndexCount == 17);
+	Graph.Add(MakeColorPass(Graph, "reuse", EAttachmentLoad::Clear));
+	HYP_CHECK(Graph.Compile().size() == 2 && Owned[0].Draws[0].IndexCount == 17);
+	Graph = {};
+	Source = MakeColorPass(Graph, "shared", EAttachmentLoad::Clear);
+	Source.Batches[0].Commands.Draws.resize(3);
+	Source.Batches[0].Commands.Draws[0].IndexCount = 9;
+	Source.Batches[0].Commands.ShareDraws();
+	const auto Shared = Source.Batches[0].Commands.SharedDraws;
+	Graph.Add(std::move(Source));
+	Borrowed = Graph.Compile();
+	HYP_CHECK(!Borrowed[0].SharedDraws && Borrowed[0].Draws[0].IndexCount == 9);
+	Borrowed[0].Draws[0].IndexCount = 12;
+	Owned = Graph.CompileAndConsume();
+	HYP_CHECK(Owned[0].SharedDraws == Shared && Owned[0].GetDraws()[0].IndexCount == 9);
 }
 
 void CheckDeferredPreparation()
 {
 	FRenderGraph Graph;
-	Graph.Add(Pass("clear", EColorLoad::Clear));
 	unsigned Prepared{};
-	Graph.AddDeferred(
-	    [&]
-	    {
-		    ++Prepared;
-		    auto Second = Pass("second");
-		    Second.After = {0};
-		    return std::vector{Pass("first"), Second};
-	    },
-	    {0});
-	Graph.AddDeferred(
-	    []
-	    {
-		    return std::vector<FColorPass>{};
-	    },
-	    {1});
-	auto Overlay = Pass("overlay");
-	Overlay.After = {1, 2};
-	Graph.Add(Overlay);
-	Check(Prepared == 0, "Deferred work ran before graph compilation");
-	const auto Plan = Graph.CompileAndConsume();
-	Check(Prepared == 1 && Plan.size() == 5 && Plan[1].Name == "first" && Plan[2].Name == "second" &&
-	          Plan[3].Name == "overlay",
-	      "Deferred expansion order/dependency remapping");
-	FRenderGraph Cycle;
-	Cycle.AddDeferred(
-	    [&]
-	    {
-		    ++Prepared;
-		    return std::vector{Pass("bad", EColorLoad::Clear)};
-	    },
-	    {1});
-	Cycle.Add(Pass("later"));
+	auto Deferred = MakeColorPass(Graph, "deferred", EAttachmentLoad::Clear);
+	Deferred.Color->View = EGraphColorView::DrawBatch;
+	Deferred.Color->Actions.Store = EAttachmentStore::Discard;
+	Deferred.Batches.clear();
+	Deferred.Prepare = [&]
+	{
+		++Prepared;
+		std::vector<FGraphicsDrawBatch> Batches(2);
+		Batches[1].bSrgb = true;
+		return Batches;
+	};
+	Graph.Add(Deferred);
+	HYP_CHECK(Prepared == 0);
+	const auto Plan = Graph.Compile();
+	HYP_CHECK(Prepared == 1 && Plan.size() == 3);
+	HYP_CHECK(Plan[0].Color->Actions.Load == EAttachmentLoad::Clear);
+	HYP_CHECK(Plan[0].Color->Actions.Store == EAttachmentStore::Store);
+	HYP_CHECK(Plan[1].Color->Actions.Load == EAttachmentLoad::Load && Plan[1].IsSrgb());
+	HYP_CHECK(Plan[1].Color->Actions.Store == EAttachmentStore::Discard);
+	Graph.Add(MakeColorPass(Graph, "undefined"));
 	Rejects(
 	    [&]
 	    {
-		    Cycle.Compile();
+		    Graph.Compile();
 	    });
-	Check(Prepared == 1, "Invalid outer dependency must fail before deferred preparation");
-	FRenderGraph InnerCycle;
-	InnerCycle.AddDeferred(
-	    []
-	    {
-		    auto First = Pass("bad first", EColorLoad::Clear);
-		    First.After = {1};
-		    return std::vector{First, Pass("bad second")};
-	    });
+	HYP_CHECK(Prepared == 1); // Content errors must precede any resource or draw preparation.
+	Graph = {};
+	Deferred = MakeColorPass(Graph, "cycle", EAttachmentLoad::Clear);
+	Deferred.After = {1};
+	Deferred.Batches.clear();
+	Deferred.Prepare = [&]
+	{
+		++Prepared;
+		return std::vector<FGraphicsDrawBatch>{};
+	};
+	Graph.Add(Deferred);
+	Graph.Add(MakeColorPass(Graph, "later"));
 	Rejects(
 	    [&]
 	    {
-		    InnerCycle.Compile();
+		    Graph.Compile();
+	    });
+	HYP_CHECK(Prepared == 1);
+}
+
+void CheckResourceHazards()
+{
+	FRenderGraph Graph;
+	const auto Texture = Depth(Graph);
+	Graph.Add(DepthPass(Texture, "producer", EAttachmentLoad::Clear));
+	auto Read = MakeColorPass(Graph, "consumer", EAttachmentLoad::Clear);
+	Read.Reads = {Texture};
+	Graph.Add(Read);
+	Graph.Export(Texture, EResourceState::ShaderRead);
+	auto Plan = Graph.Compile();
+	HYP_CHECK(!Plan[0].HasColor() && Plan[0].HasDepth());
+	HYP_CHECK(Plan[0].Transitions[0].After == EResourceState::DepthWrite);
+	HYP_CHECK(Plan[1].SampledTextures.size() == 1);
+	HYP_CHECK(Plan[1].Transitions.back().After == EResourceState::ShaderRead);
+	HYP_CHECK(Plan.back().Transitions[0].After == EResourceState::Present);
+	// WAR: after a read, a later write must stay behind it even if extra edges try to reverse them.
+	auto Write = DepthPass(Texture, "rewrite", EAttachmentLoad::Clear);
+	Graph.Add(Write);
+	Read.Name = "cyclic read";
+	Read.After = {4};
+	Graph.Add(Read);
+	Write.Name = "last write";
+	Graph.Add(Write);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	// Independent targets can be explicitly reordered without an artificial chain.
+	Graph = {};
+	const auto A = Depth(Graph);
+	const auto B = Depth(Graph);
+	auto First = DepthPass(A, "first", EAttachmentLoad::Clear);
+	First.After = {1};
+	Graph.Add(First);
+	Graph.Add(DepthPass(B, "second", EAttachmentLoad::Clear));
+	Plan = Graph.Compile();
+	HYP_CHECK(Plan[0].Name == "second/0" && Plan[1].Name == "first/0");
+}
+
+void CheckContents()
+{
+	FRenderGraph Graph;
+	const auto Texture = Depth(Graph);
+	auto Producer = DepthPass(Texture, "left", EAttachmentLoad::Clear);
+	Producer.Viewport = FViewport{0, 0, 32, 64};
+	Graph.Add(Producer);
+	auto Read = MakeColorPass(Graph, "read", EAttachmentLoad::Clear);
+	Read.Reads = {Texture};
+	auto Invalid = Graph;
+	Invalid.Add(Read);
+	Rejects(
+	    [&]
+	    {
+		    Invalid.Compile();
+	    });
+	Producer.Name = "right";
+	Producer.Viewport = FViewport{32, 0, 32, 64};
+	Graph.Add(Producer);
+	Graph.Add(Read);
+	HYP_CHECK(Graph.Compile().size() == 4); // Both halves prove whole-resource initialization.
+	Producer.Name = "discard right";
+	Producer.DepthStencil->Depth->Load = EAttachmentLoad::Load;
+	Producer.DepthStencil->Depth->Store = EAttachmentStore::Discard;
+	Graph.Add(Producer);
+	auto LoadLeft = DepthPass(Texture, "load left", EAttachmentLoad::Load);
+	LoadLeft.Viewport = FViewport{0, 0, 32, 64};
+	Graph.Add(LoadLeft);
+	HYP_CHECK(!Graph.Compile().empty()); // Discarding the right half preserves the left.
+	Read.Name = "discarded read";
+	Graph.Add(Read);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	Graph = {};
+	auto Discard = MakeColorPass(Graph, "discard", EAttachmentLoad::Discard);
+	Graph.Add(Discard);
+	Graph.Add(MakeColorPass(Graph, "undefined load"));
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
 	    });
 }
 
-void CheckSharedPackets()
+void CheckFractionalRegions()
 {
 	FRenderGraph Graph;
-	auto Source = Pass("shared", EColorLoad::Clear);
-	Source.Commands.Draws.resize(3);
-	Source.Commands.Draws[0].IndexCount = 9;
-	Source.Commands.ShareDraws();
-	const auto Storage = Source.Commands.SharedDraws;
-	Graph.Add(std::move(Source));
-	auto Copy = Graph.Compile();
-	Check(!Copy[0].SharedDraws && Copy[0].Draws[0].IndexCount == 9, "Borrowed compile materializes shared packets");
-	Copy[0].Draws[0].IndexCount = 12;
-	const auto Owned = Graph.CompileAndConsume();
-	Check(Owned[0].SharedDraws == Storage && Owned[0].GetDraws()[0].IndexCount == 9,
-	      "Owned compile preserves immutable storage and independent borrowed edits");
+	const auto Color = Graph.ImportBackbuffer({64, 64});
+	FGraphicsPass Pass;
+	Pass.Name = "Clear all";
+	Pass.Color = FGraphColorAttachment{Color, {EAttachmentLoad::Clear}};
+	Graph.Add(Pass);
+	Pass.Name = "Discard fractional area";
+	Pass.Color->Actions = {EAttachmentLoad::Discard, EAttachmentStore::Discard};
+	Pass.Viewport = FViewport{.5f, 0, 31, 64};
+	Graph.Add(Pass);
+	Pass.Name = "Load discarded edge pixel";
+	Pass.Color->Actions = {EAttachmentLoad::Load};
+	Pass.Viewport = FViewport{0, 0, .25f, 64};
+	Graph.Add(Pass);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	Graph = {};
+	auto Invalid = MakeColorPass(Graph, "Invalid viewport", EAttachmentLoad::Clear);
+	Invalid.Viewport = FViewport{0, 0, -1, 64};
+	Graph.Add(Invalid);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+}
+
+void CheckCompilationMutation()
+{
+	FRenderGraph Graph;
+	auto Pass = MakeColorPass(Graph, "mutation", EAttachmentLoad::Clear);
+	Pass.Batches.clear();
+	Pass.Prepare = [&]() -> std::vector<FGraphicsDrawBatch>
+	{
+		Rejects(
+		    [&]
+		    {
+			    Graph.Add({});
+		    });
+		Rejects(
+		    [&]
+		    {
+			    Graph.ImportBackbuffer();
+		    });
+		Rejects(
+		    [&]
+		    {
+			    Graph.CompileAndConsume();
+		    });
+		FRenderGraph Other;
+		Rejects(
+		    [&]
+		    {
+			    Graph = Other;
+		    });
+		Rejects(
+		    [&]
+		    {
+			    Graph = FRenderGraph{};
+		    });
+		Rejects(
+		    [&]
+		    {
+			    Other = Graph;
+		    });
+		Rejects(
+		    [&]
+		    {
+			    Other = std::move(Graph);
+		    });
+		Rejects(
+		    [&]
+		    {
+			    FRenderGraph Copy(Graph);
+		    });
+		Rejects(
+		    [&]
+		    {
+			    FRenderGraph Moved(std::move(Graph));
+		    });
+		return {};
+	};
+	Graph.Add(std::move(Pass));
+	HYP_CHECK(Graph.CompileAndConsume().size() == 2);
+	Graph.Add(MakeColorPass(Graph, "again", EAttachmentLoad::Clear));
+	HYP_CHECK(Graph.CompileAndConsume().size() == 2);
+}
+
+void CheckPhysicalImports()
+{
+	for (const bool bDeferred : {false, true})
+	{
+		FRenderGraph Graph;
+		const FTexture Native{std::make_shared<FTestTexture>()};
+		FGraphTextureImport Import{"mismatched physical extent",
+		                           FRenderTarget::FromTexture(Native),
+		                           {32, 64},
+		                           ERHIDepthFormat::D32,
+		                           EResourceState::ShaderRead};
+		if (bDeferred)
+		{
+			Import.Target.Texture = {};
+			Import.Identity = Native.Payload;
+			Import.Resolve = [Native]
+			{
+				return Native;
+			};
+		}
+		auto Pass = DepthPass(Graph.Import(Import), "clear declared extent", EAttachmentLoad::Clear);
+		bool bPrepared = false;
+		Pass.Prepare = [&]
+		{
+			bPrepared = true;
+			return std::vector<FGraphicsDrawBatch>{};
+		};
+		Graph.Add(Pass);
+		Rejects(
+		    [&]
+		    {
+			    Graph.CompileAndConsume();
+		    });
+		HYP_CHECK(!bPrepared);
+	}
+}
+
+void CheckGraphMoves()
+{
+	FRenderGraph Original;
+	const auto Color = Original.ImportBackbuffer();
+	Original.Add(MakeColorPass(Original, "move", EAttachmentLoad::Clear));
+	FRenderGraph Moved(std::move(Original));
+	HYP_CHECK(Moved.Compile().size() == 2);
+	HYP_CHECK(Original.ImportBackbuffer().Graph != Color.Graph);
+	FRenderGraph Assigned;
+	Assigned = std::move(Moved);
+	HYP_CHECK(Assigned.CompileAndConsume().size() == 2);
+	HYP_CHECK(Moved.ImportBackbuffer().Graph != Color.Graph);
+}
+
+void CheckInvalidDeclarations()
+{
+	FRenderGraph Graph;
+	Graph.Add(MakeColorPass(Graph, "undefined"));
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	FRenderGraph Foreign;
+	auto Wrong = MakeColorPass(Foreign, "foreign", EAttachmentLoad::Clear);
+	Graph.Add(Wrong);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	Graph = {};
+	auto Pass = MakeColorPass(Graph, "same", EAttachmentLoad::Clear);
+	Graph.Add(Pass);
+	Graph.Add(Pass);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	Graph = {};
+	Pass = MakeColorPass(Graph, "unknown", EAttachmentLoad::Clear);
+	Pass.After = {9};
+	Graph.Add(Pass);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	Graph = {};
+	const auto Texture = Depth(Graph);
+	Pass = DepthPass(Texture, "feedback", EAttachmentLoad::Clear);
+	Pass.Reads = {Texture};
+	Graph.Add(Pass);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	Graph = {};
+	Pass = MakeColorPass(Graph, "stale", EAttachmentLoad::Clear);
+	Graph.Add(Pass);
+	Graph.CompileAndConsume();
+	Graph.Add(Pass);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	Graph = {};
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    });
+	const auto Color = Graph.ImportBackbuffer({64, 64});
+	Rejects(
+	    [&]
+	    {
+		    Graph.ImportBackbuffer({32, 64});
+	    });
+	Rejects(
+	    [&]
+	    {
+		    Graph.Export(Color, EResourceState::DepthWrite);
+	    });
 }
 } // namespace
 
 int main()
 {
-	using namespace Hyperion;
 	try
 	{
 		CheckPacketOwnership();
 		CheckDeferredPreparation();
-		CheckSharedPackets();
-		FRenderGraph Valid;
-		Valid.Add(Pass("clear", EColorLoad::Clear));
-		Valid.Add(Pass("triangle"));
-		auto Plan = Valid.Compile();
-		Check(Plan.size() == 3 && Plan[0].bClear && Plan[0].TransitionFrom == EResourceState::Present &&
-		          Plan[2].TransitionTo == EResourceState::Present,
-		      "Graph transitions");
-		FRenderGraph Undefined;
-		Undefined.Add(Pass("load"));
-		Rejects(
-		    [&]
-		    {
-			    Undefined.Compile();
-		    });
-		FRenderGraph Cycle;
-		auto First = Pass("first", EColorLoad::Clear);
-		First.After = {1};
-		Cycle.Add(First);
-		Cycle.Add(Pass("second"));
-		Rejects(
-		    [&]
-		    {
-			    Cycle.Compile();
-		    });
-		FRenderGraph Duplicate;
-		Duplicate.Add(Pass("same", EColorLoad::Clear));
-		Duplicate.Add(Pass("same"));
-		Rejects(
-		    [&]
-		    {
-			    Duplicate.Compile();
-		    });
-		FRenderGraph Unknown;
-		auto Bad = Pass("bad", EColorLoad::Clear);
-		Bad.After = {9};
-		Unknown.Add(Bad);
-		Rejects(
-		    [&]
-		    {
-			    Unknown.Compile();
-		    });
-		FRenderGraph Empty;
-		Rejects(
-		    [&]
-		    {
-			    Empty.Compile();
-		    });
-		std::cout << "Graph validation passed\n";
-		return 0;
+		CheckResourceHazards();
+		CheckContents();
+		CheckInvalidDeclarations();
+		CheckCompilationMutation();
+		CheckPhysicalImports();
+		CheckGraphMoves();
+		CheckFractionalRegions();
+		std::cout << "Explicit graph attachments, hazards, content lifetime and packet ownership passed\n";
 	}
-	catch (const std::exception& E)
+	catch (const std::exception& Error)
 	{
-		std::cerr << E.what() << '\n';
+		std::cerr << Error.what() << '\n';
 		return 1;
 	}
 }

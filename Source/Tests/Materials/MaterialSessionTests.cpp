@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <fstream>
@@ -80,11 +81,11 @@ std::vector<FPassCommands> Build(FTaskSystem& InTasks, FRenderSession& InSession
 	                              [&]
 	                              {
 		                              FRenderGraph Graph;
-		                              FColorPass Clear;
-		                              Clear.Commands.Name = "Clear session";
-		                              Clear.Load = EColorLoad::Clear;
+		                              auto Clear = MakeColorPass(Graph, "pending");
+		                              Clear.Name = "Clear session";
+		                              Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 		                              Graph.Add(std::move(Clear));
-		                              InSession.BuildViews(Graph, InViews, Frame);
+		                              InSession.BuildViews(Graph, InViews, InSession.FrameTargets(), Frame);
 		                              Result = Graph.Compile();
 	                              }));
 	return Result;
@@ -175,7 +176,7 @@ void CheckMultipleItems(FTaskSystem& InTasks, FRenderSession& InSession, FRender
 	HYP_CHECK(Anonymous[1].Draws[0].ConstantBindings[1].Slice != Again[1].Draws[0].ConstantBindings[1].Slice);
 	Emission->bDynamic = true;
 	const auto Denied = Build(InTasks, InSession, std::span(&InView, 1));
-	HYP_CHECK(Denied.size() == 2 && !Binding.GetLastDrawResult().Error.empty());
+	HYP_CHECK(Denied.size() == 3 && Denied[1].GetDraws().empty() && !Binding.GetLastDrawResult().Error.empty());
 	auto Description = InState.Resource->GetMaterial(0)->GetSnapshot()->Definition->GetDescription();
 	Description.Passes[0].bAllowDynamicOverrides = true;
 	InState.Surface = InSession.GetResources().RequestMaterial(
@@ -275,7 +276,7 @@ void CheckBoundsContract(FTaskSystem& InTasks, FRenderSession& InSession,
 	State.World = Translation({100, 0, 0});
 	auto Binding = InSession.GetScene().Create(State);
 	InTasks.Wait(InSession.GetScene().Flush());
-	HYP_CHECK(Build(InTasks, InSession, std::span(&InView, 1)).size() == 2);
+	HYP_CHECK(Build(InTasks, InSession, std::span(&InView, 1))[1].GetDraws().empty());
 	auto Description = InResource->GetMaterial(0)->GetSnapshot()->Definition->GetDescription();
 	Description.Passes[0].bRequiresConservativeBounds = true;
 	auto Displaced = FMaterialInstance(std::make_shared<const FMaterialDefinition>(Description)).Freeze();
@@ -291,7 +292,7 @@ void CheckBoundsContract(FTaskSystem& InTasks, FRenderSession& InSession,
 	State.bConservativeBounds = true;
 	State.Revision++;
 	InTasks.Wait(InSession.GetScene().Update({{Binding.GetHandle(), State}}));
-	HYP_CHECK(Build(InTasks, InSession, std::span(&InView, 1)).size() == 2);
+	HYP_CHECK(Build(InTasks, InSession, std::span(&InView, 1))[1].GetDraws().empty());
 	State.Surface.reset();
 	State.World = Identity();
 	State.bClipSpace = true;
@@ -305,33 +306,34 @@ void CheckBoundsContract(FTaskSystem& InTasks, FRenderSession& InSession,
 void CheckFamilyValidation(FTaskSystem& InTasks, FRenderSession& InSession, FRenderView InView)
 {
 	const auto Frame = InSession.FreezeFrame();
-	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
-	                              [&]
-	                              {
-		                              FRenderGraph Graph;
-		                              const std::array Duplicate{InView, InView};
-		                              bool bRejected{};
-		                              try
-		                              {
-			                              InSession.BuildViews(Graph, Duplicate, Frame);
-		                              }
-		                              catch (const std::invalid_argument&)
-		                              {
-			                              bRejected = true;
-		                              }
-		                              HYP_CHECK(bRejected);
-		                              InSession.BuildViews(Graph, std::span(&InView, 1), Frame);
-		                              bRejected = false;
-		                              try
-		                              {
-			                              InSession.BuildViews(Graph, std::span(&InView, 1), Frame);
-		                              }
-		                              catch (const std::invalid_argument&)
-		                              {
-			                              bRejected = true;
-		                              }
-		                              HYP_CHECK(bRejected);
-	                              }));
+	InTasks.Wait(
+	    InTasks.Dispatch({EDomain::Render},
+	                     [&]
+	                     {
+		                     FRenderGraph Graph;
+		                     const std::array Duplicate{InView, InView};
+		                     bool bRejected{};
+		                     try
+		                     {
+			                     InSession.BuildViews(Graph, Duplicate, InSession.FrameTargets(), Frame);
+		                     }
+		                     catch (const std::invalid_argument&)
+		                     {
+			                     bRejected = true;
+		                     }
+		                     HYP_CHECK(bRejected);
+		                     InSession.BuildViews(Graph, std::span(&InView, 1), InSession.FrameTargets(), Frame);
+		                     bRejected = false;
+		                     try
+		                     {
+			                     InSession.BuildViews(Graph, std::span(&InView, 1), InSession.FrameTargets(), Frame);
+		                     }
+		                     catch (const std::invalid_argument&)
+		                     {
+			                     bRejected = true;
+		                     }
+		                     HYP_CHECK(bRejected);
+	                     }));
 }
 
 void CheckIndependentFamilies(FTaskSystem& InTasks, FRenderSession& InSession, std::array<FRenderView, 2> InViews)
@@ -345,8 +347,8 @@ void CheckIndependentFamilies(FTaskSystem& InTasks, FRenderSession& InSession, s
 			                              for (std::size_t Index = 0; Index < InViews.size(); ++Index)
 			                              {
 				                              FRenderGraph Graph;
-				                              InSession.BuildViews(Graph, std::span(&InViews[Index], 1), Frame,
-				                                                   100 + Index);
+				                              InSession.BuildViews(Graph, std::span(&InViews[Index], 1),
+				                                                   InSession.FrameTargets(), Frame, 100 + Index);
 				                              if (Iteration)
 				                              {
 					                              HYP_CHECK(InSession.Statistics().PreparationReuses == 1);
@@ -551,7 +553,7 @@ void CheckViewResourceRefresh(FTaskSystem& InTasks, FRenderSession& InSession, I
 	Pixel(Image, 16, 0);
 	HYP_CHECK(std::abs(Image.Rgba[(32 * 64 + 16) * 4 + 1] - .1f) < .01f);
 	InView.Parameters.clear();
-	HYP_CHECK(Build(InTasks, InSession, std::span(&InView, 1)).size() == 2);
+	HYP_CHECK(Build(InTasks, InSession, std::span(&InView, 1))[1].GetDraws().empty());
 	HYP_CHECK(!Binding.GetLastDrawResult().bReady);
 	InView.Parameters = {{"Test.View.Texture", Red}};
 	Changed = Ready();

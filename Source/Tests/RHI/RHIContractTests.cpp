@@ -2,6 +2,7 @@
 #include "Hyperion/RHI/RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <atomic>
 #include <chrono>
@@ -178,9 +179,9 @@ void CheckFrameErrors(const FRHICapabilities& InCapabilities)
 	Swapchain.Capabilities.Features[static_cast<std::size_t>(ERHIFeature::ConcurrentRecording)] = {true, true};
 	FTaskSystem Tasks(1, 2);
 	FRenderGraph Graph;
-	FColorPass Clear;
-	Clear.Commands.Name = "clear";
-	Clear.Load = EColorLoad::Clear;
+	auto Clear = MakeColorPass(Graph, "pending");
+	Clear.Name = "clear";
+	Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 	Graph.Add(Clear);
 	std::atomic<bool> bPeerStarted{};
 	std::atomic<bool> bPeerFinished{};
@@ -259,31 +260,31 @@ void CheckFrameCoordinator(const FRHICapabilities& InCapabilities)
 	const auto Execute = [&]
 	{
 		Stage = 0;
-		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-		                          [&]
-		                          {
-			                          FRenderGraph Graph;
-			                          Graph.AddDeferred(
-			                              [&]
-			                              {
-				                              Tasks.Require({EDomain::Rhi, 0});
-				                              HYP_CHECK(Stage == 1 && !Swapchain.bActive);
-				                              if (bFailPreparation)
-				                              {
-					                              throw std::runtime_error("injected deferred preparation failure");
-				                              }
-				                              std::vector<FColorPass> Passes(5);
-				                              Passes[0].Load = EColorLoad::Clear;
-				                              for (std::size_t Index = 0; Index < Passes.size(); ++Index)
-				                              {
-					                              Passes[Index].Commands.Name = std::to_string(Index);
-				                              }
-				                              Stage = 2;
-				                              return Passes;
-			                              });
-			                          ExecuteGraph(std::move(Graph), Tasks, Swapchain, {32, 32}, false, false,
-			                                       Callbacks);
-		                          }));
+		Tasks.Wait(Tasks.Dispatch(
+		    {EDomain::Render},
+		    [&]
+		    {
+			    FRenderGraph Graph;
+			    for (std::size_t Index = 0; Index < 5; ++Index)
+			    {
+				    auto Pass = MakeColorPass(Graph, std::to_string(Index),
+				                              Index == 0 ? EAttachmentLoad::Clear : EAttachmentLoad::Load);
+				    Pass.Batches.clear();
+				    Pass.Prepare = [&, Index]
+				    {
+					    Tasks.Require({EDomain::Rhi, 0});
+					    HYP_CHECK(Stage == (Index == 0 ? 1U : 2U) && !Swapchain.bActive);
+					    if (bFailPreparation)
+					    {
+						    throw std::runtime_error("injected deferred preparation failure");
+					    }
+					    Stage = 2;
+					    return std::vector<FGraphicsDrawBatch>{};
+				    };
+				    Graph.Add(std::move(Pass));
+			    }
+			    ExecuteGraph(std::move(Graph), Tasks, Swapchain, {32, 32}, false, false, Callbacks);
+		    }));
 	};
 	Execute();
 	HYP_CHECK(Stage == 3 && Swapchain.Submitted == 1);
@@ -311,15 +312,23 @@ void CheckDeferredOwnerLifetime(bool bInDestroy, bool bInDepthPreview)
 		                          {
 			                          auto Source =
 			                              std::make_shared<const FMaterialTextureSource>(FMaterialDepthTexture{32, 32});
-			                          Session->AppendDepthPreview(Graph, Source,
-			                                                      Session->GetResources().CreateScopeLifetime(),
-			                                                      {0, 0, 32, 32}, true);
+			                          const auto Lifetime = Session->GetResources().CreateScopeLifetime();
+			                          Graph.Add(MakeColorPass(Graph, "Owner test clear", EAttachmentLoad::Clear));
+			                          FRenderSceneSnapshot Snapshot;
+			                          Snapshot.Targets.Name = "Owner test depth producer";
+			                          FRenderDepthTarget Depth;
+			                          Depth.Source = {ERenderTargetKind::Texture, Source, Lifetime, false};
+			                          Depth.Format = ERHIDepthFormat::D32;
+			                          Depth.Depth = FAttachmentActions{EAttachmentLoad::Clear};
+			                          Snapshot.Targets.DepthStencil = Depth;
+			                          Graph.Add(Session->GetResources().GetPreparation().DeclarePass(Graph, Snapshot));
+			                          Session->AppendDepthPreview(Graph, Source, Lifetime, {0, 0, 32, 32}, true);
 		                          }
 		                          else
 		                          {
 			                          FRenderView View;
-			                          View.ClearColor = FVec4{};
-			                          Session->BuildViews(Graph, std::span(&View, 1), Frame, 1, false, true);
+			                          Session->BuildViews(Graph, std::span(&View, 1), Session->FrameTargets(FVec4{}),
+			                                              Frame, 1, false, true);
 		                          }
 	                          }));
 	Session->Close();
@@ -439,9 +448,9 @@ int main()
 		auto& Test = dynamic_cast<FTestSwapchain&>(*Swapchain);
 		FTaskSystem Tasks(1, 2);
 		FRenderGraph Graph;
-		FColorPass Clear;
-		Clear.Commands.Name = "clear";
-		Clear.Load = EColorLoad::Clear;
+		auto Clear = MakeColorPass(Graph, "pending");
+		Clear.Name = "clear";
+		Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 		Graph.Add(Clear);
 		auto Image = ExecuteGraph(Graph, Tasks, *Swapchain, {32, 32}, false, true);
 		HYP_CHECK(Image.Width == 1 && Test.Submitted == 1 && Test.Recorded == 2);

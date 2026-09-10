@@ -74,16 +74,19 @@ void CheckDirectionsAndStability()
 	auto View = Camera();
 	HYP_CHECK(Shadows.Prepare(View, {.4f, .8f, .3f}, {}, Query));
 	const auto Before = Shadows.Cascades();
-	const auto InitialViews = Shadows.Views(View, std::make_shared<int>(0));
+	const auto InitialViews = Shadows.Views(View);
+	const auto InitialTargets = Shadows.Targets(std::make_shared<int>(0));
 	HYP_CHECK(InitialViews.size() == 4 && Shadows.TextureBytes() == 64 * 1024 * 1024);
 	View.Eye = Add(View.Eye, ScaleVector(Normalize(Row(Before[0].ViewProjection, 0)), Before[0].WorldTexel * .0001f));
 	HYP_CHECK(Shadows.Prepare(View, {.4f, .8f, .3f}, {}, Query));
 	HYP_CHECK(std::abs(Shadows.Cascades()[0].ViewProjection.Values[12] - Before[0].ViewProjection.Values[12]) < 1e-6f);
-	const auto LaterViews = Shadows.Views(View, {});
+	const auto LaterViews = Shadows.Views(View);
+	const auto LaterTargets = Shadows.Targets(std::make_shared<int>(0));
 	for (unsigned Index = 0; Index < 4; ++Index)
 	{
 		HYP_CHECK(InitialViews[Index].Identity == LaterViews[Index].Identity);
-		HYP_CHECK(InitialViews[Index].DepthTarget == LaterViews[Index].DepthTarget);
+		HYP_CHECK(InitialTargets[Index].DepthStencil->Source.Texture ==
+		          LaterTargets[Index].DepthStencil->Source.Texture);
 		HYP_CHECK(LaterViews[Index].Usage == "ShadowDepth" && LaterViews[Index].bSkipMissingPass);
 	}
 	for (int Step = -20; Step <= 20; ++Step)
@@ -136,7 +139,7 @@ void CheckDisableAndInvalid()
 	HYP_CHECK(Shadows.TextureBytes() == 16 * 1024 * 1024);
 	Settings.bEnabled = false;
 	HYP_CHECK(!Shadows.Prepare(Camera(), {0, 1, 0}, Settings, Query));
-	HYP_CHECK(Shadows.Views(Camera(), {}).empty());
+	HYP_CHECK(Shadows.Views(Camera()).empty());
 	HYP_CHECK(!Shadows.Prepare(Camera(), {}, {}, Query));
 	HYP_CHECK(!Shadows.Prepare(Camera(), {0, std::numeric_limits<float>::quiet_NaN(), 0}, {}, Query));
 	auto View = Camera();

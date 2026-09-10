@@ -277,9 +277,10 @@ void FDebugUiPlugin::Build(FRenderGraph& InGraph, const FRenderFrame&)
 	{
 		return;
 	}
-	FColorPass Pass;
-	Pass.Commands.Name = "Debug UI";
-	Pass.Commands.Draws = Impl->Draws;
+	FGraphicsPass Pass;
+	Pass.Name = "Debug UI";
+	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer()};
+	Pass.Batches.push_back({{Impl->Draws}});
 	InGraph.Add(std::move(Pass));
 }
 
@@ -290,25 +291,22 @@ void FDebugUiPlugin::BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData)
 	{
 		return;
 	}
-	InGraph.AddDeferred(
-	    [Owner = std::weak_ptr<FImpl>(Impl), Data = std::move(InData)]
-	    {
-		    const auto State = Owner.lock();
-		    if (!State)
-		    {
-			    throw std::logic_error("Debug UI preparation owner has been destroyed");
-		    }
-		    State->Prepare(Data);
-		    std::vector<FColorPass> Passes;
-		    if (!State->Draws.empty())
-		    {
-			    FColorPass Pass;
-			    Pass.Commands.Name = "Debug UI";
-			    Pass.Commands.Draws = std::move(State->Draws);
-			    Passes.push_back(std::move(Pass));
-		    }
-		    return Passes;
-	    });
+	FGraphicsPass Pass;
+	Pass.Name = "Debug UI";
+	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer()};
+	Pass.Prepare = [Owner = std::weak_ptr<FImpl>(Impl), Data = std::move(InData)]
+	{
+		const auto State = Owner.lock();
+		if (!State)
+		{
+			throw std::logic_error("Debug UI preparation owner has been destroyed");
+		}
+		State->Prepare(Data);
+		std::vector<FGraphicsDrawBatch> Batches;
+		Batches.push_back({{std::move(State->Draws)}});
+		return Batches;
+	};
+	InGraph.Add(std::move(Pass));
 }
 
 void RegisterDebugUiPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,

@@ -1,4 +1,4 @@
-add_library(hyperion_render STATIC Private/RenderGraph.cpp Private/RenderGraphResources.cpp
+add_library(hyperion_render STATIC Private/SceneInstance.cpp Private/SceneInstanceLoading.cpp Private/RenderPass.cpp Private/RenderPassDeclaration.cpp Private/RenderGraph.cpp Private/RenderGraphResources.cpp Private/RenderGraphValidation.cpp Private/RenderGraphContent.cpp
   Private/RenderGraphPreparation.cpp Private/RenderGraphExecution.cpp
   Private/CascadedShadowMap.cpp Private/ShadowParameters.cpp Private/ForwardRenderPipeline.cpp Private/DepthPreview.cpp
   Private/MaterialInterface.cpp Private/MaterialPreparation.cpp Private/MaterialPipeline.cpp Private/MaterialPacking.cpp Private/MaterialBlocks.cpp Private/MaterialInstances.cpp
@@ -17,4 +17,4 @@ add_library(hyperion_render STATIC Private/RenderGraph.cpp Private/RenderGraphRe
   Private/RenderResourceService.cpp Private/SceneVisibility.cpp Private/SceneDraws.cpp Private/SceneBatchDraws.cpp Private/MaterialDraw.cpp
   Private/Model.cpp Private/RenderSession.cpp Private/SceneBvh.cpp Private/SceneCollection.cpp Private/ScenePreparedCollection.cpp Private/SceneCollectionReuse.cpp Private/SceneRemoval.cpp Private/SceneBridge.cpp Private/SceneMaterialPublication.cpp)
 hyp_module(hyperion_render)
-target_link_libraries(hyperion_render PUBLIC hyperion_rhi hyperion_tasks hyperion_plugins hyperion_config hyperion_scene hyperion_math hyperion_materials hyperion_shaders PRIVATE hyperion_core)
+target_link_libraries(hyperion_render PUBLIC hyperion_rhi hyperion_tasks hyperion_plugins hyperion_config hyperion_scene hyperion_math hyperion_materials hyperion_shaders PRIVATE hyperion_core hyperion_assets)

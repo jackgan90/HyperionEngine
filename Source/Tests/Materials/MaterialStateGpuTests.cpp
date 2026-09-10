@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <cmath>
 #include <fstream>
@@ -80,19 +81,21 @@ float4 PSMain() : SV_Target0 { return Color; }
 	{
 		Swapchain.BeginFrame({64, 64});
 		FPassCommands Pass;
+		Pass.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 		Pass.Name = "Graphics states";
-		Pass.TransitionFrom = EResourceState::Present;
-		Pass.TransitionTo = EResourceState::RenderTarget;
-		Pass.bClear = true;
-		Pass.ClearColor = {0, 0, 0, 1};
-		Pass.bUseDepth = Pass.bClearDepth = true;
-		Pass.bUseStencil = Pass.bClearStencil = bInStencil;
-		Pass.DepthFormat = ERHIDepthFormat::D32S8;
+		Pass.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
+		Pass.Color->Actions.Load = EAttachmentLoad::Clear;
+		Pass.Color->Clear = {0, 0, 0, 1};
+		Pass.DepthStencil = FDepthStencilAttachment{FRenderTarget::FrameDepth(), ERHIDepthFormat::D32S8,
+		                                            FAttachmentActions{EAttachmentLoad::Clear}};
+		if (bInStencil)
+		{
+			Pass.DepthStencil->Stencil = FAttachmentActions{EAttachmentLoad::Clear};
+		}
 		Pass.Draws = std::move(InDraws);
 		FPassCommands Present;
 		Present.Name = "Present";
-		Present.TransitionFrom = EResourceState::RenderTarget;
-		Present.TransitionTo = EResourceState::Present;
+		Present.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 		try
 		{
 			const std::array Lists{Swapchain.Record(0, Pass), Swapchain.Record(1, Present)};
@@ -278,29 +281,44 @@ void CheckStateRejections(FStateFixture& InFixture)
 	    });
 }
 
+void CheckAttachmentDiscardGpu(IRHISwapchain& InSwapchain)
+{
+	FRenderGraph Graph;
+	auto Pass = MakeColorPass(Graph, "Discard attachment planes", EAttachmentLoad::Discard);
+	Pass.Color->Actions.Store = EAttachmentStore::Discard;
+	Pass.DepthStencil =
+	    FGraphDepthStencilAttachment{Graph.ImportFrameDepth(ERHIDepthFormat::D32S8),
+	                                 FAttachmentActions{EAttachmentLoad::Discard, EAttachmentStore::Discard},
+	                                 FAttachmentActions{EAttachmentLoad::Discard, EAttachmentStore::Discard}};
+	Graph.Add(Pass);
+	Pass.Name = "Initialize after discard";
+	Pass.Color->Actions = {EAttachmentLoad::Clear};
+	Pass.Color->Clear = {.25f, .5f, .75f, 1};
+	Pass.DepthStencil->Depth = FAttachmentActions{EAttachmentLoad::Clear};
+	Pass.DepthStencil->Stencil = FAttachmentActions{EAttachmentLoad::Clear};
+	Graph.Add(Pass);
+	const auto Commands = Graph.CompileAndConsume();
+	InSwapchain.BeginFrame({64, 64});
+	std::vector<FRecordedList> Lists;
+	for (const auto& Command : Commands)
+	{
+		Lists.push_back(InSwapchain.Record(static_cast<std::uint32_t>(Lists.size()), Command));
+	}
+	const auto Image = InSwapchain.EndFrame(Lists, false, true);
+	const auto Pixel = (32 * Image.Width + 32) * 4;
+	HYP_CHECK(std::abs(Image.Rgba[Pixel] - .25f) < .01f);
+	HYP_CHECK(std::abs(Image.Rgba[Pixel + 1] - .5f) < .01f);
+}
+
 void CheckGraphAttachmentInitialization()
 {
-	FColorPass Pass;
-	Pass.Commands.Name = "First view";
-	Pass.Load = EColorLoad::Clear;
-	Pass.Commands.bUseDepth = Pass.Commands.bClearDepth = true;
-	Pass.Commands.DepthFormat = ERHIDepthFormat::D32S8;
 	FRenderGraph Graph;
+	auto Pass = MakeColorPass(Graph, "First view", EAttachmentLoad::Clear);
+	Pass.DepthStencil = FGraphDepthStencilAttachment{Graph.ImportFrameDepth(ERHIDepthFormat::D32S8),
+	                                                 FAttachmentActions{EAttachmentLoad::Clear}};
 	Graph.Add(Pass);
-	Pass.Commands.Name = "Undefined stencil";
-	Pass.Commands.bUseStencil = true;
-	Graph.Add(Pass);
-	Rejects(
-	    [&]
-	    {
-		    Graph.Compile();
-	    });
-	Graph = {};
-	Pass.Commands.bClearStencil = true;
-	Graph.Add(Pass);
-	Pass.Commands.Name = "Second view";
-	Pass.Commands.DepthDomain = 2;
-	Pass.Commands.bClearDepth = false;
+	Pass.Name = "Undefined stencil";
+	Pass.DepthStencil->Stencil = FAttachmentActions{};
 	Graph.Add(Pass);
 	Rejects(
 	    [&]
@@ -308,15 +326,34 @@ void CheckGraphAttachmentInitialization()
 		    Graph.Compile();
 	    });
 	Graph = {};
-	Pass.Commands.bClearDepth = true;
+	Pass = MakeColorPass(Graph, "First view", EAttachmentLoad::Clear);
+	Pass.DepthStencil =
+	    FGraphDepthStencilAttachment{Graph.ImportFrameDepth(ERHIDepthFormat::D32S8),
+	                                 FAttachmentActions{EAttachmentLoad::Clear, EAttachmentStore::Discard},
+	                                 FAttachmentActions{EAttachmentLoad::Clear}};
+	Graph.Add(Pass);
+	Pass.Name = "Second view";
+	Pass.DepthStencil->Depth->Load = EAttachmentLoad::Load;
+	Graph.Add(Pass);
+	Rejects(
+	    [&]
+	    {
+		    Graph.Compile();
+	    }); // A new view cannot load explicitly discarded depth.
+	Graph = {};
+	Pass = MakeColorPass(Graph, "Initialized", EAttachmentLoad::Clear);
+	Pass.DepthStencil = FGraphDepthStencilAttachment{Graph.ImportFrameDepth(ERHIDepthFormat::D32S8),
+	                                                 FAttachmentActions{EAttachmentLoad::Clear},
+	                                                 FAttachmentActions{EAttachmentLoad::Clear}};
 	Graph.Add(Pass);
 	HYP_CHECK(Graph.Compile().size() == 2);
 	Graph = {};
-	Pass.Commands.Viewport = FViewport{0, 0, 32, 64};
+	Pass = MakeColorPass(Graph, "Left", EAttachmentLoad::Clear);
+	Pass.Viewport = FViewport{0, 0, 32, 64};
 	Graph.Add(Pass);
-	Pass.Commands.Name = "Uninitialized color region";
-	Pass.Load = EColorLoad::Load;
-	Pass.Commands.Viewport = FViewport{32, 0, 32, 64};
+	Pass.Name = "Uninitialized color region";
+	Pass.Color->Actions.Load = EAttachmentLoad::Load;
+	Pass.Viewport = FViewport{32, 0, 32, 64};
 	Graph.Add(Pass);
 	Rejects(
 	    [&]
@@ -329,6 +366,7 @@ void CheckGraphAttachmentInitialization()
 void RunMaterialStateGpuTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 {
 	FStateFixture Fixture(InDevice, InSwapchain);
+	CheckAttachmentDiscardGpu(InSwapchain);
 	CheckDepthAndBlend(Fixture);
 	CheckStencilAndCulling(Fixture);
 	CheckStateReuse(Fixture);

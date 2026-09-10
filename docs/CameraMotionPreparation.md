@@ -6,7 +6,7 @@
 
 这解释了静止与运动的突变：静止时可跳过整条准备链；运动时，虽然实际只有约 30 个场景/阴影 draw，CPU 仍按约 838 个可见 source items 工作。基线小幅运动的共享材质刷新平均进入约 713 次/帧，通常只需更新几个共享常量块。GPU 阴影与 Forward 合计约 0.12 ms，原生 draw 记录约 0.3 ms，主要成本在 CPU 准备阶段。
 
-调用链为 `ForwardRenderPipeline → RenderSession::BuildViews → PrepareView → Collect / PrepareSceneSnapshot / PrepareMaterials / Batches.Build`；延迟图编译在 RHI 域调用 `BuildPasses`，再次做源项准入和回执发布。`TaskWait` 与嵌套 scope 的时间不能作为独立 CPU 成本累加。
+调用链为 `ForwardRenderPipeline → RenderSession::BuildViews → PrepareView → Collect / PrepareSceneSnapshot / PrepareMaterials / Batches.Build`；延迟图编译在 RHI 域调用 `BuildDraws`（重构前为 `BuildPasses`），再次做源项准入和回执发布。`TaskWait` 与嵌套 scope 的时间不能作为独立 CPU 成本累加。
 
 ## 实现
 

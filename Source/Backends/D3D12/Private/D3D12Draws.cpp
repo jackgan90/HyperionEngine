@@ -76,16 +76,22 @@ void ValidateGeometry(const FDrawPacket& InDraw, const FD3D12Buffer& InVertices,
 
 void ValidateDepthBindings(const FD3D12DeviceState& InState, const FPassCommands& InCommands, const FDrawPacket& InDraw)
 {
-	if (InCommands.DepthTarget && InDraw.Bindings)
+	if (InDraw.Bindings)
 	{
 		const auto& Set = NativeResource<FD3D12BindingSet>(InDraw.Bindings.Payload, &InState);
 		for (const auto& Entry : Set.Description.Entries)
 		{
 			for (const auto& Value : Entry.Values)
 			{
-				if (const auto* Texture = std::get_if<FTexture>(&Value); Texture && *Texture == InCommands.DepthTarget)
+				if (const auto* Texture = std::get_if<FTexture>(&Value);
+				    Texture && NativeResource<FD3D12Texture>(Texture->Payload, &InState).DepthViews)
 				{
-					throw std::invalid_argument("A draw cannot sample its writable depth target");
+					if (*Texture == InCommands.GetDepthTexture() ||
+					    std::find(InCommands.SampledTextures.begin(), InCommands.SampledTextures.end(), *Texture) ==
+					        InCommands.SampledTextures.end())
+					{
+						throw std::invalid_argument("A sampled depth texture must be declared and cannot be writable");
+					}
 				}
 			}
 		}
@@ -181,11 +187,11 @@ void ValidateDraws(const FD3D12DeviceState& InState, const FPassCommands& InComm
 		const auto& Indices = ResolveNative(Draw.Indices.Payload, InState, Resources.Indices);
 		ValidateGeometry(Draw, Vertices, Indices);
 		const ERHIDepthFormat Depth =
-		    (InCommands.bUseDepth || InCommands.bUseStencil) ? InCommands.DepthFormat : ERHIDepthFormat::None;
-		if (Draw.VertexStride != Pipeline.VertexStride || Pipeline.Target.bSrgb != InCommands.bSrgbTarget ||
-		    Pipeline.Target.ColorCount != (InCommands.bUseColor ? 1U : 0U) || Pipeline.Target.Depth != Depth ||
-		    (Pipeline.GraphicsState.bDepthTest && !InCommands.bUseDepth) ||
-		    (Pipeline.GraphicsState.bStencil && !InCommands.bUseStencil))
+		    (InCommands.HasDepth() || InCommands.HasStencil()) ? InCommands.GetDepthFormat() : ERHIDepthFormat::None;
+		if (Draw.VertexStride != Pipeline.VertexStride || Pipeline.Target.bSrgb != InCommands.IsSrgb() ||
+		    Pipeline.Target.ColorCount != (InCommands.HasColor() ? 1U : 0U) || Pipeline.Target.Depth != Depth ||
+		    (Pipeline.GraphicsState.bDepthTest && !InCommands.HasDepth()) ||
+		    (Pipeline.GraphicsState.bStencil && !InCommands.HasStencil()))
 		{
 			throw std::invalid_argument("Draw geometry or target is incompatible with pipeline");
 		}

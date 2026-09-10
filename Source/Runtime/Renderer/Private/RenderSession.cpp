@@ -1,6 +1,7 @@
 #include "Hyperion/Core/Profiling.h"
 #include "SessionMaterialsInternal.h"
 #include <chrono>
+#include <numeric>
 #include <stdexcept>
 
 namespace Hyperion
@@ -29,39 +30,53 @@ template<typename TEntry> void RetireViewHistory(std::map<std::uint64_t, TEntry>
 struct FRenderSession::FPreparedViewFamily
 {
 	std::vector<FRenderViewStatistics> Views;
+	std::vector<double> Times;
+	std::vector<bool> Prepared;
 	FSceneVisibilityStats Spatial;
 	double Milliseconds{};
 	bool bReady{};
-	std::vector<FColorPass> Prepare(const FRenderResourcePreparation& InResources,
-	                                std::span<const std::shared_ptr<const FRenderSceneSnapshot>> InSnapshots);
+	std::vector<FGraphicsDrawBatch> Prepare(const FRenderResourcePreparation& InResources,
+	                                        const FRenderSceneSnapshot& InSnapshot, std::size_t InIndex);
 };
 
-std::vector<FColorPass> FRenderSession::FPreparedViewFamily::Prepare(
-    const FRenderResourcePreparation& InResources,
-    std::span<const std::shared_ptr<const FRenderSceneSnapshot>> InSnapshots)
+std::vector<FGraphicsDrawBatch> FRenderSession::FPreparedViewFamily::Prepare(
+    const FRenderResourcePreparation& InResources, const FRenderSceneSnapshot& InSnapshot, std::size_t InIndex)
 {
-	bReady = false;
 	const auto Start = std::chrono::steady_clock::now();
-	std::vector<FColorPass> Passes;
-	std::vector<FRenderViewStatistics> PreparedViews;
-	for (const auto& Snapshot : InSnapshots)
+	auto Stats = InSnapshot.Statistics;
+	auto DrawBatches = InResources.BuildDraws(InSnapshot, &Stats.Batches);
+	Stats.PacketReuses = Stats.Batches.PacketReuses;
+	for (const auto& Batch : DrawBatches)
 	{
-		const auto& Frame = *Snapshot;
-		auto Stats = Frame.Statistics;
-		auto Prepared = InResources.BuildPasses(Frame, &Stats.Batches);
-		Stats.PacketReuses = Stats.Batches.PacketReuses;
-		for (const auto& Pass : Prepared)
-		{
-			Stats.Draws += Pass.Commands.GetDraws().size();
-		}
-		PreparedViews.push_back({Frame.View.Identity, Frame.View.Usage, Stats});
-		Passes.insert(Passes.end(), std::make_move_iterator(Prepared.begin()), std::make_move_iterator(Prepared.end()));
+		Stats.Draws += Batch.Commands.GetDraws().size();
 	}
-	Views = std::move(PreparedViews);
-	Milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
-	bReady = true;
-	return Passes;
+	Views[InIndex] = {InSnapshot.View.Identity, InSnapshot.View.Usage, Stats};
+	Times[InIndex] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
+	Prepared[InIndex] = true;
+	Milliseconds = std::accumulate(Times.begin(), Times.end(), 0.0);
+	bReady = std::all_of(Prepared.begin(), Prepared.end(),
+	                     [](bool bInReady)
+	                     {
+		                     return bInReady;
+	                     });
+	return DrawBatches;
 }
+
+namespace
+{
+void PrepareImmediate(FTaskSystem& InTasks, std::vector<FGraphicsPass>& InPasses)
+{
+	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
+	                              [&]
+	                              {
+		                              for (auto& Pass : InPasses)
+		                              {
+			                              Pass.Batches = Pass.Prepare();
+			                              Pass.Prepare = {};
+		                              }
+	                              }));
+}
+} // namespace
 
 FRenderSession::FRenderSession(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler)
     : FRenderSession(InTasks, InDevice, InCompiler, ERHIDepthFormat::D32, GetStandardMaterialSemantics())
@@ -115,20 +130,39 @@ FRenderBatchSystem& FRenderSession::GetBatchSystem()
 	return Batches;
 }
 
-std::size_t FRenderSession::Build(FRenderGraph& InGraph, FRenderView InView)
+FRenderPassTargets FRenderSession::FrameTargets(std::optional<FVec4> InClear) const
 {
-	return BuildViews(InGraph, std::span(&InView, 1));
+	if (bClosed)
+	{
+		throw std::logic_error("Closed render session");
+	}
+	return FRenderPassTargets::Frame(MaterialState->Depth, InClear);
+}
+
+std::size_t FRenderSession::Build(FRenderGraph& InGraph, FRenderView InView, FRenderPassTargets InTargets)
+{
+	return BuildViews(InGraph, std::span(&InView, 1), std::span(&InTargets, 1));
 }
 
 std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
+                                       const FRenderPassTargets& InTargets,
+                                       std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
+                                       bool bInSpatialPrepared, bool bInDeferPreparation)
+{
+	const std::vector<FRenderPassTargets> Targets(InViews.size(), InTargets);
+	return BuildViews(InGraph, InViews, Targets, std::move(InFrame), InFamily, bInSpatialPrepared, bInDeferPreparation);
+}
+
+std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
+                                       std::span<const FRenderPassTargets> InTargets,
                                        std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
                                        bool bInSpatialPrepared, bool bInDeferPreparation)
 {
 	HYP_PERF_SCOPE_C(Render, BuildViews);
 	Tasks.Require({EDomain::Render});
-	if (bClosed || InViews.empty() || InFamily == 0)
+	if (bClosed || InViews.empty() || InFamily == 0 || InTargets.size() != InViews.size())
 	{
-		throw std::invalid_argument("Invalid or closed material view family");
+		throw std::invalid_argument("Invalid or closed material view family and explicit targets");
 	}
 	if (!InFrame)
 	{
@@ -136,44 +170,41 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 	}
 	AdmitFamily(InViews, *InFrame, InFamily);
 	const auto SpatialStats = bInSpatialPrepared ? FSceneVisibilityStats{} : Scene.BeginViews();
-	std::vector<std::shared_ptr<const FRenderSceneSnapshot>> Snapshots;
 	const auto SceneRevision = Scene.GetCollectionRevision();
 	const auto ResourceRevision = Resources.GetPublicationRevision();
 	std::size_t Count{};
 	bool bRefreshed = false;
 	LastStatistics = {};
-	// Every Collect and provider evaluation finishes in this one Render task, before the first RHI wait.
-	for (const auto& View : InViews)
-	{
-		auto Snapshot = PrepareView(View, InFrame, InFamily, SceneRevision, ResourceRevision);
-		bRefreshed |= Snapshot->Statistics.PreparationReuses == 0;
-		Count += Snapshot->Items.Size();
-		Snapshots.push_back(std::move(Snapshot));
-	}
 	PendingFamily = std::make_shared<FPreparedViewFamily>();
 	PendingFamily->Spatial = SpatialStats;
-	auto Prepare =
-	    [ResourcePreparation = Resources.GetPreparation(), Frames = std::move(Snapshots), Family = PendingFamily]
+	PendingFamily->Views.resize(InViews.size());
+	PendingFamily->Times.resize(InViews.size());
+	PendingFamily->Prepared.resize(InViews.size());
+	std::vector<FGraphicsPass> Passes;
+	// All collection, providers and graph declarations finish on Render before RHI preparation.
+	for (std::size_t Index = 0; Index < InViews.size(); ++Index)
 	{
-		return Family->Prepare(ResourcePreparation, Frames);
-	};
-	if (bInDeferPreparation)
-	{
-		InGraph.AddDeferred(std::move(Prepare));
-	}
-	else
-	{
-		std::vector<FColorPass> Passes;
-		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-		                          [&]
-		                          {
-			                          Passes = Prepare();
-		                          }));
-		for (auto& Pass : Passes)
+		std::vector<FRenderTargetSource> Reads;
+		auto Snapshot =
+		    PrepareView(InViews[Index], InTargets[Index], InFrame, InFamily, SceneRevision, ResourceRevision, Reads);
+		bRefreshed |= Snapshot->Statistics.PreparationReuses == 0;
+		Count += Snapshot->Items.Size();
+		auto Preparation = Resources.GetPreparation();
+		auto Pass = Preparation.DeclarePass(InGraph, *Snapshot, Reads);
+		Pass.Prepare = [Preparation, Snapshot = std::move(Snapshot), Family = PendingFamily, Index]
 		{
-			InGraph.Add(std::move(Pass));
-		}
+			return Family->Prepare(Preparation, *Snapshot, Index);
+		};
+		Passes.push_back(std::move(Pass));
+	}
+	if (!bInDeferPreparation)
+	{
+		PrepareImmediate(Tasks, Passes);
 		CompleteViews();
+	}
+	for (auto& Pass : Passes)
+	{
+		InGraph.Add(std::move(Pass));
 	}
 	RetireViewHistory(MaterialState->Views, InFrame->Frame);
 	if (bRefreshed)

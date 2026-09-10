@@ -25,8 +25,14 @@ public:
 	FRenderSession& operator=(const FRenderSession&) = delete;
 	FRenderSceneClient& GetScene();
 	FRenderResourceService& GetResources();
-	std::size_t Build(FRenderGraph& InGraph, FRenderView InView);
+	FRenderPassTargets FrameTargets(std::optional<FVec4> InClear = {}) const;
+	std::size_t Build(FRenderGraph& InGraph, FRenderView InView, FRenderPassTargets InTargets);
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
+	                       std::span<const FRenderPassTargets> InTargets,
+	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
+	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false);
+	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
+	                       const FRenderPassTargets& InTargets,
 	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
 	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false);
 	// Render publishes deferred statistics after graph execution joins the RHI coordinator.
@@ -64,9 +70,11 @@ private:
 	FMaterialProviderInputs PrepareViewInputs(const FRenderSceneSnapshot& InSnapshot);
 	void InvalidatePreparedViews();
 	std::shared_ptr<const FRenderSceneSnapshot> PrepareView(const FRenderView& InView,
+	                                                        const FRenderPassTargets& InTargets,
 	                                                        std::shared_ptr<const FMaterialFrameContext> InFrame,
 	                                                        std::uint64_t InFamily,
 	                                                        std::optional<std::uint64_t> InSceneRevision,
-	                                                        std::uint64_t InResourceRevision);
+	                                                        std::uint64_t InResourceRevision,
+	                                                        std::vector<FRenderTargetSource>& OutReads);
 };
 } // namespace Hyperion

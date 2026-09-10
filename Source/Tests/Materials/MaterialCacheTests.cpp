@@ -96,14 +96,13 @@ void CheckEvictedPixels(IRHIDevice& InDevice, IRHISwapchain& InSwapchain, const 
 	Draw.Scissor = {0, 0, 64, 64};
 	InSwapchain.BeginFrame({64, 64});
 	FPassCommands Pass;
+	Pass.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Pass.Name = "Evicted constant snapshot";
-	Pass.TransitionFrom = EResourceState::Present;
-	Pass.TransitionTo = EResourceState::RenderTarget;
-	Pass.bClear = true;
+	Pass.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
+	Pass.Color->Actions.Load = EAttachmentLoad::Clear;
 	Pass.Draws = {Draw};
 	FPassCommands Present;
-	Present.TransitionFrom = EResourceState::RenderTarget;
-	Present.TransitionTo = EResourceState::Present;
+	Present.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 	const std::array Lists{InSwapchain.Record(0, Pass), InSwapchain.Record(1, Present)};
 	const auto Image = InSwapchain.EndFrame(Lists, false, true);
 	HYP_CHECK(std::abs(Image.Rgba[(32 * 64 + 32) * 4] - .2f) < .01f);

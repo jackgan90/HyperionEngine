@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <cmath>
 #include <fstream>
@@ -103,24 +104,32 @@ float4 PSMain(float4 InPosition : SV_Position) : SV_Target0
 		    }); // Color output in a depth-only pipeline.
 	}
 
-	FGraphicsPass Producer() const
+	FGraphTexture Import(FRenderGraph& InGraph, bool bInInitialized = false, FTexture InTexture = {}) const
+	{
+		const auto Texture = InGraph.Import({"Shadow texture",
+		                                     FRenderTarget::FromTexture(InTexture ? InTexture : Depth),
+		                                     {32, 32},
+		                                     ERHIDepthFormat::D32,
+		                                     EResourceState::ShaderRead,
+		                                     bInInitialized});
+		InGraph.Export(Texture, EResourceState::ShaderRead);
+		return Texture;
+	}
+
+	FGraphicsPass Producer(FRenderGraph& InGraph) const
 	{
 		FGraphicsPass Pass;
-		Pass.Commands.Name = "Shadow write";
-		Pass.Commands.bUseColor = false;
-		Pass.Commands.DepthTarget = Depth;
-		Pass.Commands.DepthFormat = ERHIDepthFormat::D32;
-		Pass.Commands.bUseDepth = Pass.Commands.bClearDepth = true;
+		Pass.Name = "Shadow write";
+		Pass.DepthStencil = FGraphDepthStencilAttachment{Import(InGraph), FAttachmentActions{EAttachmentLoad::Clear}};
+		Pass.Batches.push_back({});
 		return Pass;
 	}
 
-	FGraphicsPass Consumer(bool bInReverse = false) const
+	FGraphicsPass Consumer(FRenderGraph& InGraph, bool bInReverse = false, bool bInInitialized = false) const
 	{
-		FGraphicsPass Pass;
-		Pass.Commands.Name = "Shadow compare";
-		Pass.Load = EColorLoad::Clear;
-		Pass.Commands.SampledDepth = {Depth};
-		Pass.Commands.Draws = {bInReverse ? Reversed : Receiver};
+		auto Pass = MakeColorPass(InGraph, "Shadow compare", EAttachmentLoad::Clear);
+		Pass.Reads = {Import(InGraph, bInInitialized)};
+		Pass.Batches[0].Commands.Draws = {bInReverse ? Reversed : Receiver};
 		return Pass;
 	}
 
@@ -155,47 +164,46 @@ void Pixel(const FImage& InImage, unsigned InX, float InRed, float InGreen)
 void CheckPixels(FDepthFixture& InFixture)
 {
 	FRenderGraph Graph;
-	Graph.ImportDepth(InFixture.Depth);
-	Graph.Add(InFixture.Consumer());
+	Graph.Add(InFixture.Consumer(Graph, false, true));
 	Pixel(InFixture.Render(Graph), 32, 1, 1); // Queued initial clear is visible without a CPU idle.
 	Graph = {};
-	auto Write = InFixture.Producer();
-	Write.Commands.Draws = {InFixture.Caster};
+	auto Write = InFixture.Producer(Graph);
+	Write.Batches[0].Commands.Draws = {InFixture.Caster};
 	Graph.Add(Write);
-	Graph.Add(InFixture.Consumer());
+	Graph.Add(InFixture.Consumer(Graph));
 	const auto Plan = Graph.Compile();
-	HYP_CHECK(!Plan[0].bUseColor && Plan[0].TextureTransitions[0].After == EResourceState::DepthWrite);
-	HYP_CHECK(Plan[1].TextureTransitions[0].After == EResourceState::ShaderRead);
+	HYP_CHECK(!Plan[0].HasColor() && Plan[0].Transitions[0].After == EResourceState::DepthWrite);
+	HYP_CHECK(Plan[1].Transitions.back().After == EResourceState::ShaderRead);
 	Pixel(InFixture.Render(Graph), 32, 0, 1);
 	Graph = {};
-	Graph.ImportDepth(InFixture.Depth);
-	Graph.Add(InFixture.Consumer(true));
+	Graph.Add(InFixture.Consumer(Graph, true, true));
 	Pixel(InFixture.Render(Graph), 32, 1, 0);
 	Graph = {};
-	Write.Commands.Draws = {InFixture.Masked};
+	Write = InFixture.Producer(Graph);
+	Write.Batches[0].Commands.Draws = {InFixture.Masked};
 	Graph.Add(Write);
-	Graph.Add(InFixture.Consumer());
+	Graph.Add(InFixture.Consumer(Graph));
 	const auto Masked = InFixture.Render(Graph);
 	Pixel(Masked, 16, 0, 1);
 	Pixel(Masked, 48, 1, 1);
 	Graph = {};
-	Graph.Add(InFixture.Producer()); // Removal/empty cascade must erase the previous occluder.
-	Graph.Add(InFixture.Consumer());
+	Graph.Add(InFixture.Producer(Graph)); // Removal/empty cascade must erase the previous occluder.
+	Graph.Add(InFixture.Consumer(Graph));
 	Pixel(InFixture.Render(Graph), 16, 1, 1);
 }
 
 void CheckGraphHazards(FDepthFixture& InFixture)
 {
 	FRenderGraph Graph;
-	Graph.Add(InFixture.Consumer());
+	Graph.Add(InFixture.Consumer(Graph));
 	Rejects(
 	    [&]
 	    {
 		    Graph.Compile();
 	    });
 	Graph = {};
-	auto Write = InFixture.Producer();
-	Write.Commands.SampledDepth = {InFixture.Depth};
+	auto Write = InFixture.Producer(Graph);
+	Write.Reads = {Write.DepthStencil->Texture};
 	Graph.Add(Write);
 	Rejects(
 	    [&]
@@ -203,8 +211,8 @@ void CheckGraphHazards(FDepthFixture& InFixture)
 		    Graph.Compile();
 	    });
 	Graph = {};
-	Write = InFixture.Producer();
-	Write.Commands.bClearDepth = false;
+	Write = InFixture.Producer(Graph);
+	Write.DepthStencil->Depth->Load = EAttachmentLoad::Load;
 	Graph.Add(Write);
 	Rejects(
 	    [&]
@@ -212,10 +220,10 @@ void CheckGraphHazards(FDepthFixture& InFixture)
 		    Graph.Compile();
 	    });
 	Graph = {};
-	Write = InFixture.Producer();
-	Write.Commands.Viewport = FViewport{0, 0, 16, 16};
+	Write = InFixture.Producer(Graph);
+	Write.Viewport = FViewport{0, 0, 16, 16};
 	Graph.Add(Write);
-	Graph.Add(InFixture.Consumer());
+	Graph.Add(InFixture.Consumer(Graph));
 	Rejects(
 	    [&]
 	    {
@@ -223,10 +231,44 @@ void CheckGraphHazards(FDepthFixture& InFixture)
 	    });
 }
 
+void CheckPhysicalDimensions(FDepthFixture& InFixture)
+{
+	const auto Info = InFixture.Depth.Payload->GetInfo();
+	HYP_CHECK(Info.Width == 32 && Info.Height == 32 && Info.DepthFormat == ERHIDepthFormat::D32);
+	for (const bool bDeferred : {false, true})
+	{
+		FRenderGraph Graph;
+		FGraphTextureImport Import{"wrong physical size",
+		                           FRenderTarget::FromTexture(InFixture.Depth),
+		                           {16, 32},
+		                           ERHIDepthFormat::D32,
+		                           EResourceState::ShaderRead};
+		if (bDeferred)
+		{
+			Import.Target.Texture = {};
+			Import.Identity = InFixture.Depth.Payload;
+			Import.Resolve = [&InFixture]
+			{
+				return InFixture.Depth;
+			};
+		}
+		FGraphicsPass Clear;
+		Clear.Name = "clear wrong extent";
+		Clear.DepthStencil =
+		    FGraphDepthStencilAttachment{Graph.Import(Import), FAttachmentActions{EAttachmentLoad::Clear}};
+		Graph.Add(Clear);
+		Rejects(
+		    [&]
+		    {
+			    Graph.Compile();
+		    });
+	}
+}
+
 void CheckCancelledRetention(FDepthFixture& InFixture)
 {
 	FRenderGraph Graph;
-	Graph.Add(InFixture.Producer());
+	Graph.Add(InFixture.Producer(Graph));
 	auto Plan = Graph.Compile();
 	InFixture.Swapchain.BeginFrame({64, 64});
 	const auto Recorded = InFixture.Swapchain.Record(0, Plan.front());
@@ -234,12 +276,16 @@ void CheckCancelledRetention(FDepthFixture& InFixture)
 	InFixture.Swapchain.CancelFrame();
 	HYP_CHECK(Recorded.Payload);
 	// Unsubmitted transitions must not poison the next graph's ShaderRead entry state.
-	Graph.Add(InFixture.Consumer());
+	Graph.Add(InFixture.Consumer(Graph));
 	Pixel(InFixture.Render(Graph), 32, 1, 1);
-	auto Clear = InFixture.Producer();
-	Clear.Commands.DepthTarget = InFixture.Device.CreateDepthTexture({32, 32, 1});
-	std::weak_ptr<IRHITexture> Weak = Clear.Commands.DepthTarget.Payload;
 	Graph = {};
+	auto Texture = InFixture.Device.CreateDepthTexture({32, 32, 1});
+	std::weak_ptr<IRHITexture> Weak = Texture.Payload;
+	FGraphicsPass Clear;
+	Clear.Name = "Retained clear";
+	Clear.DepthStencil = FGraphDepthStencilAttachment{InFixture.Import(Graph, false, Texture),
+	                                                  FAttachmentActions{EAttachmentLoad::Clear}};
+	Texture = {};
 	Graph.Add(Clear);
 	Plan = Graph.Compile();
 	InFixture.Swapchain.BeginFrame({64, 64});
@@ -260,6 +306,7 @@ void RunShadowDepthTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 	FDepthFixture Fixture(InDevice, InSwapchain);
 	CheckPixels(Fixture);
 	CheckGraphHazards(Fixture);
+	CheckPhysicalDimensions(Fixture);
 	CheckCancelledRetention(Fixture);
 	Rejects(
 	    [&]

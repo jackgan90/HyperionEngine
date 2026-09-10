@@ -1,6 +1,7 @@
 #include "ViewerApplication.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
+#include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Triangle/TrianglePlugin.h"
 #include <algorithm>
 

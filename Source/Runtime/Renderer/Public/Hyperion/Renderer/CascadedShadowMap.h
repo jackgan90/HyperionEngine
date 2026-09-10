@@ -40,8 +40,9 @@ public:
 	FCascadedShadowMap();
 	bool Prepare(const FRenderView& InMain, FVec3 InSurfaceToLight, const FCascadedShadowSettings& InSettings,
 	             const FBoundsQuery& InQuery, std::optional<std::array<std::uint64_t, 2>> InSceneState = {});
-	std::vector<FRenderView> Views(const FRenderView& InMain, std::shared_ptr<const void> InLifetime) const;
-	void Bind(FRenderView& InMain, std::shared_ptr<const void> InLifetime) const;
+	std::vector<FRenderView> Views(const FRenderView& InMain) const;
+	std::vector<FRenderPassTargets> Targets(std::shared_ptr<const void> InLifetime) const;
+	void Bind(FRenderView& InMain, FRenderPassTargets& InTargets, std::shared_ptr<const void> InLifetime) const;
 	const std::array<FShadowCascade, 4>& Cascades() const;
 	std::uint64_t TextureBytes() const;
 	bool IsEnabled() const;

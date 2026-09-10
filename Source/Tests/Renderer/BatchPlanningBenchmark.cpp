@@ -25,7 +25,7 @@ FRenderSceneSnapshot Frame(const FRenderSceneSnapshot& InSource, const FWorkload
 {
 	FRenderSceneSnapshot Result;
 	Result.View = InSource.View;
-	Result.DepthFormat = InSource.DepthFormat;
+	Result.Targets = InSource.Targets;
 	const auto Schema = InSource.Items[0].State.Surface->GetCompiled()->Interface.Schema;
 	std::shared_ptr<FMaterialSharedParameters> Shared;
 	if (InWork.bShared)

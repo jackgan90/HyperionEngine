@@ -2,6 +2,7 @@
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <fstream>
 #include <iostream>
@@ -145,10 +146,10 @@ int Runtime()
 		                          [&]
 		                          {
 			                          FRenderGraph Graph;
-			                          FColorPass Pass;
-			                          Pass.Commands.Name = "Capture service clear";
-			                          Pass.Commands.ClearColor = {.2f, .4f, .8f, 1};
-			                          Pass.Load = EColorLoad::Clear;
+			                          auto Pass = MakeColorPass(Graph, "pending");
+			                          Pass.Name = "Capture service clear";
+			                          Pass.Color->Clear = {.2f, .4f, .8f, 1};
+			                          Pass.Color->Actions.Load = EAttachmentLoad::Clear;
 			                          Graph.Add(std::move(Pass));
 			                          ExecuteGraph(Graph, Tasks, *Swapchain, {128, 128}, false, false);
 		                          }));

@@ -254,8 +254,7 @@ void FCascadedShadowMap::PrepareCascade(std::size_t InIndex, const FRenderView& 
 	Cascade.CandidateCasters = Casters.size();
 }
 
-std::vector<FRenderView> FCascadedShadowMap::Views(const FRenderView& InMain,
-                                                   std::shared_ptr<const void> InLifetime) const
+std::vector<FRenderView> FCascadedShadowMap::Views(const FRenderView& InMain) const
 {
 	std::vector<FRenderView> Result;
 	if (bEnabled)
@@ -270,11 +269,26 @@ std::vector<FRenderView> FCascadedShadowMap::Views(const FRenderView& InMain,
 			View.Height = Settings.Resolution;
 			View.Usage = "ShadowDepth";
 			View.bSkipMissingPass = true;
-			View.DepthTarget = Textures[Index];
-			View.TargetLifetime = InLifetime;
-			View.Name = "Shadow cascade " + std::to_string(Index);
 			View.bInstanceBatching = InMain.bInstanceBatching;
 			Result.push_back(std::move(View));
+		}
+	}
+	return Result;
+}
+
+std::vector<FRenderPassTargets> FCascadedShadowMap::Targets(std::shared_ptr<const void> InLifetime) const
+{
+	std::vector<FRenderPassTargets> Result;
+	if (bEnabled)
+	{
+		for (std::size_t Index = 0; Index < Textures.size(); ++Index)
+		{
+			FRenderPassTargets Pass;
+			Pass.Name = "Shadow cascade " + std::to_string(Index);
+			Pass.DepthStencil = FRenderDepthTarget{{ERenderTargetKind::Texture, Textures[Index], InLifetime, false},
+			                                       ERHIDepthFormat::D32,
+			                                       FAttachmentActions{EAttachmentLoad::Clear}};
+			Result.push_back(std::move(Pass));
 		}
 	}
 	return Result;

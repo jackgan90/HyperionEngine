@@ -3,6 +3,7 @@
 #include "Hyperion/RHI/RHIGraphicsState.h"
 #include "Hyperion/Renderer/MaterialFrame.h"
 #include "Hyperion/Renderer/RenderItemList.h"
+#include "Hyperion/Renderer/RenderPass.h"
 #include "Hyperion/Renderer/SceneSpatialIndex.h"
 #include "Hyperion/Scene/Scene.h"
 #include "Hyperion/Tasks/TaskSystem.h"
@@ -72,12 +73,7 @@ struct FRenderView
 	FMaterialParameterValues PassParameters;
 	bool bInstanceBatching = true;
 	std::optional<FRenderCamera> Camera;
-	std::shared_ptr<const FMaterialTextureSource> DepthTarget;
-	std::vector<std::shared_ptr<const FMaterialTextureSource>> SampledDepth;
-	std::shared_ptr<const void> TargetLifetime;
-	std::string Name;
 	bool bSkipMissingPass{};
-	std::optional<FVec4> ClearColor;
 };
 
 struct FRenderItem
@@ -119,13 +115,13 @@ struct FRenderSceneSnapshot
 {
 	static constexpr std::size_t RetainedItemLimit = 2048;
 	FRenderView View;
+	FRenderPassTargets Targets;
 	FRenderItemList Items;
 	FRenderItemList RetainedItems; // Bounded static preparation outside the current visible set; never submitted.
 	bool bRetainCulledItems{};
 	FSceneVisibilityStats Statistics;
 	std::shared_ptr<const FMaterialFrameContext> Frame;
 	std::uint64_t Family = 1;
-	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
 	std::shared_ptr<const FRenderBatchPlan> Batches;
 	std::shared_ptr<const FMaterialBindingGroups> SharedBindingGroups; // Immutable indices for this ordered membership.
 	// Renderer-owned identities: immutable prepared contents and the current preparation receipt frame.

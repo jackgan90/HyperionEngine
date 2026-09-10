@@ -179,11 +179,11 @@ FImage Render(FFixture& InFixture, const FDrawPacket& InDraw)
 {
 	InFixture.Swapchain->BeginFrame({64, 64});
 	FPassCommands Draw;
+	Draw.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Draw.Name = "Material bindings";
-	Draw.TransitionFrom = EResourceState::Present;
-	Draw.TransitionTo = EResourceState::RenderTarget;
-	Draw.bClear = true;
-	Draw.ClearColor = {0, 0, 0, 1};
+	Draw.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
+	Draw.Color->Actions.Load = EAttachmentLoad::Clear;
+	Draw.Color->Clear = {0, 0, 0, 1};
 	Draw.Draws = {InDraw, InDraw};
 	FPassCommands Invalid = Draw;
 	++Invalid.Draws.front().ConstantBindings.front().Slice.Offset;
@@ -201,8 +201,7 @@ FImage Render(FFixture& InFixture, const FDrawPacket& InDraw)
 	    });
 	FPassCommands Present;
 	Present.Name = "Present";
-	Present.TransitionFrom = EResourceState::RenderTarget;
-	Present.TransitionTo = EResourceState::Present;
+	Present.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 	const auto Before = InFixture.Device->Statistics();
 	const std::array<FRecordedList, 2> Lists{InFixture.Swapchain->Record(0, Draw),
 	                                         InFixture.Swapchain->Record(1, Present)};
@@ -228,14 +227,13 @@ void CheckRootSwitch(FFixture& InFixture, const FDrawSetup& InSetup, FPipelineDe
 	Other.Bindings = InFixture.Device->CreateBindingSet(OtherSet);
 	InFixture.Swapchain->BeginFrame({64, 64});
 	FPassCommands Pass;
+	Pass.Color = FColorAttachment{FRenderTarget::Backbuffer()};
 	Pass.Name = "Root switch and repeated arguments";
-	Pass.TransitionFrom = EResourceState::Present;
-	Pass.TransitionTo = EResourceState::RenderTarget;
-	Pass.bClear = true;
+	Pass.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
+	Pass.Color->Actions.Load = EAttachmentLoad::Clear;
 	Pass.Draws = {InSetup.Draw, Other, InSetup.Draw, InSetup.Draw};
 	FPassCommands Present;
-	Present.TransitionFrom = EResourceState::RenderTarget;
-	Present.TransitionTo = EResourceState::Present;
+	Present.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::RenderTarget, EResourceState::Present}};
 	const std::array Lists{InFixture.Swapchain->Record(0, Pass), InFixture.Swapchain->Record(1, Present)};
 	const auto Image = InFixture.Swapchain->EndFrame(Lists, false, true);
 	const auto After = InFixture.Device->Statistics();

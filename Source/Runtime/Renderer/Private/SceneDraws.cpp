@@ -42,20 +42,9 @@ FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRen
 {
 	HYP_PERF_SCOPE_C(Detail, PrepareSceneDrawPackets);
 	FPreparedSceneDraws Result;
-	Result.bDepth = bool(InSnapshot.View.DepthTarget);
 	Result.Packets.resize(InSnapshot.Items.Size());
 	Result.Srgb.resize(InSnapshot.Items.Size());
-	for (const auto& Item : InSnapshot.Items)
-	{
-		if (Item.PreparationError.empty() && Item.State.Surface &&
-		    Item.State.Surface->GetSnapshot()->Definition->HasPass(InSnapshot.View.Usage))
-		{
-			const auto& State = Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).State;
-			Result.bDepth |= State.bDepthTest;
-			Result.bStencil |= State.bStencil;
-		}
-	}
-	Result.Depth = Result.bDepth || Result.bStencil ? InSnapshot.DepthFormat : ERHIDepthFormat::None;
+	Result.Depth = InSnapshot.Targets.GetDepthFormat();
 	if (InSnapshot.Batches)
 	{
 		PrepareBatchedDraws(InOwner, InSnapshot, Result);
@@ -76,7 +65,8 @@ FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRen
 			}
 			Result.Srgb[Index] =
 			    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
-			Result.Packets[Index] = InOwner.DrawMaterial(Item, InSnapshot.View, {Result.Srgb[Index], Result.Depth});
+			Result.Packets[Index] = InOwner.DrawMaterial(
+			    Item, InSnapshot.View, {Result.Srgb[Index], Result.Depth, InSnapshot.Targets.ColorCount()});
 		}
 		catch (const std::exception& Error)
 		{
@@ -86,39 +76,10 @@ FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRen
 	return Result;
 }
 
-FColorPass NewPass(const FRenderSceneSnapshot& InSnapshot, const FPreparedSceneDraws& InPrepared, std::size_t InIndex,
-                   bool bInSrgb)
-{
-	FColorPass Pass;
-	const auto Frame = InSnapshot.Frame;
-	Pass.Commands.Name = "Scene " + std::to_string(Frame ? Frame->Session : 0) + "/" +
-	                     std::to_string(Frame ? Frame->Frame : 0) + "/" + std::to_string(InSnapshot.Family) + "/" +
-	                     std::to_string(InSnapshot.View.Identity) + "/" + InSnapshot.View.Usage + "/" +
-	                     std::to_string(InIndex);
-	Pass.Commands.bUseDepth = InPrepared.bDepth;
-	Pass.Commands.bUseStencil = InPrepared.bStencil;
-	Pass.Commands.DepthFormat = InPrepared.Depth;
-	Pass.Commands.bClearDepth = InPrepared.bDepth && InIndex == 0;
-	Pass.Commands.bClearStencil = InPrepared.bStencil && InIndex == 0;
-	Pass.Commands.DepthDomain = InSnapshot.View.Identity;
-	Pass.Commands.Viewport = InSnapshot.View.Viewport;
-	Pass.Commands.bSrgbTarget = bInSrgb;
-	if (InIndex == 0 && InSnapshot.View.ClearColor)
-	{
-		Pass.Load = EColorLoad::Clear;
-		Pass.Commands.ClearColor = *InSnapshot.View.ClearColor;
-	}
-	if (!InSnapshot.View.Name.empty())
-	{
-		Pass.Commands.Name = InSnapshot.View.Name + "/" + std::to_string(InIndex);
-	}
-	return Pass;
-}
-
-std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPreparedSceneDraws InPrepared)
+std::vector<FGraphicsDrawBatch> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPreparedSceneDraws InPrepared)
 {
 	HYP_PERF_SCOPE_C(Detail, PublishSceneDrawReceipts);
-	std::vector<FColorPass> Passes;
+	std::vector<FGraphicsDrawBatch> Passes;
 	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
 	{
 		const auto& Item = InSnapshot.Items[Index];
@@ -134,15 +95,11 @@ std::vector<FColorPass> PublishDraws(const FRenderSceneSnapshot& InSnapshot, FPr
 		{
 			continue;
 		}
-		if (Passes.empty() || Passes.back().Commands.bSrgbTarget != InPrepared.Srgb[Index])
+		if (Passes.empty() || Passes.back().bSrgb != InPrepared.Srgb[Index])
 		{
-			Passes.push_back(NewPass(InSnapshot, InPrepared, Passes.size(), InPrepared.Srgb[Index]));
+			Passes.push_back({{}, InPrepared.Srgb[Index]});
 		}
 		Passes.back().Commands.Draws.push_back(std::move(*InPrepared.Packets[Index]));
-	}
-	if (Passes.empty() && (InSnapshot.View.DepthTarget || InSnapshot.View.ClearColor))
-	{
-		Passes.push_back(NewPass(InSnapshot, InPrepared, 0, false));
 	}
 	return Passes;
 }
@@ -167,37 +124,15 @@ void CountPreparedDraws(const FRenderSceneSnapshot& InSnapshot, FPreparedSceneDr
 	}
 }
 
-void BindViewDepth(FRenderResourceCoordinator& InOwner, const FRenderView& InView, std::vector<FColorPass>& InPasses)
-{
-	if (!InView.DepthTarget && InView.SampledDepth.empty())
-	{
-		return;
-	}
-	InOwner.EnsureMaterialCaches();
-	InOwner.TrackScope(InView.TargetLifetime);
-	const FMaterialResourceOwners Owners{InView.TargetLifetime};
-	for (auto& Pass : InPasses)
-	{
-		if (InView.DepthTarget)
-		{
-			Pass.Commands.bUseColor = false;
-			Pass.Commands.DepthTarget = InOwner.MaterialGpu->GetTexture(InView.DepthTarget, Owners);
-		}
-		for (const auto& Source : InView.SampledDepth)
-		{
-			Pass.Commands.SampledDepth.push_back(InOwner.MaterialGpu->GetTexture(Source, Owners));
-		}
-	}
-}
 } // namespace
 
-std::vector<FColorPass> FRenderResourceService::BuildPasses(const FRenderSceneSnapshot& InSnapshot)
+std::vector<FGraphicsDrawBatch> FRenderResourceService::BuildDraws(const FRenderSceneSnapshot& InSnapshot)
 {
-	return GetPreparation().BuildPasses(InSnapshot);
+	return GetPreparation().BuildDraws(InSnapshot);
 }
 
-std::vector<FColorPass> FRenderResourcePreparation::BuildPasses(const FRenderSceneSnapshot& InSnapshot,
-                                                                FRenderBatchStats* OutStatistics) const
+std::vector<FGraphicsDrawBatch> FRenderResourcePreparation::BuildDraws(const FRenderSceneSnapshot& InSnapshot,
+                                                                       FRenderBatchStats* OutStatistics) const
 {
 	HYP_PERF_SCOPE_C(Rhi, PrepareDraws);
 	auto& Owner = *Coordinator;
@@ -208,7 +143,7 @@ std::vector<FColorPass> FRenderResourcePreparation::BuildPasses(const FRenderSce
 		InSnapshot.DrawFrame->store(std::max(Frame, InSnapshot.DrawFrame->load(std::memory_order_relaxed)),
 		                            std::memory_order_release);
 	}
-	std::vector<FColorPass> Passes;
+	std::vector<FGraphicsDrawBatch> Passes;
 	{
 		std::lock_guard Lock(Owner.Mutex);
 		if (Owner.bClosed)
@@ -255,7 +190,6 @@ std::vector<FColorPass> FRenderResourcePreparation::BuildPasses(const FRenderSce
 		}
 		auto Sources = PrepareDrawSources(InSnapshot, Prepared);
 		Passes = PublishDraws(InSnapshot, std::move(Prepared));
-		BindViewDepth(Owner, InSnapshot.View, Passes);
 		Owner.CacheViewPasses(InSnapshot, Passes, std::move(Sources));
 		if (Owner.MaterialGpu)
 		{

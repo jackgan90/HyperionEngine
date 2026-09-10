@@ -1,6 +1,7 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 
@@ -92,10 +93,10 @@ void CheckAssetRetry(FTaskSystem& InTasks)
 FRenderGraph ClearGraph()
 {
 	FRenderGraph Graph;
-	FColorPass Clear;
-	Clear.Commands.Name = "Clear";
-	Clear.Load = EColorLoad::Clear;
-	Clear.Commands.ClearColor = {.25f, .5f, .75f, 1};
+	auto Clear = MakeColorPass(Graph, "pending");
+	Clear.Name = "Clear";
+	Clear.Color->Actions.Load = EAttachmentLoad::Clear;
+	Clear.Color->Clear = {.25f, .5f, .75f, 1};
 	Graph.Add(Clear);
 	return Graph;
 }
@@ -116,9 +117,9 @@ void CheckFrameRecovery(FTaskSystem& InTasks)
 	                              }));
 	const auto Good = ClearGraph();
 	auto Bad = ClearGraph();
-	FColorPass Invalid;
-	Invalid.Commands.Name = "Invalid draw";
-	Invalid.Commands.Draws.emplace_back();
+	auto Invalid = MakeColorPass(Bad, "pending");
+	Invalid.Name = "Invalid draw";
+	Invalid.Batches[0].Commands.Draws.emplace_back();
 	Bad.Add(Invalid);
 	for (int Attempt = 0; Attempt < 3; ++Attempt)
 	{

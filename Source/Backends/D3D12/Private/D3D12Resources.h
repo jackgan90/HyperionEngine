@@ -46,6 +46,13 @@ struct FD3D12Texture final : IRHITexture
 		return State.get();
 	}
 
+	FRHITextureInfo GetInfo() const noexcept override
+	{
+		const auto Description = Resource->GetDesc();
+		return {static_cast<std::uint32_t>(Description.Width), Description.Height,
+		        DepthViews ? ERHIDepthFormat::D32 : ERHIDepthFormat::None};
+	}
+
 	std::shared_ptr<FD3D12DeviceState> State;
 	ComPtr<D3D12MA::Allocation> Allocation;
 	ComPtr<ID3D12Resource> Resource;
