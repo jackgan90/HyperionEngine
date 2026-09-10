@@ -10,21 +10,19 @@ void FViewerApplication::SaveSettingsAsync(const std::filesystem::path& InPath)
 	Services->FileWrites.push_back(Services->IO.WriteAsync(InPath, {Bytes.begin(), Bytes.end()}).Task());
 }
 
-void FViewerApplication::SaveScreenshot(FImage InImage)
+void FViewerApplication::SaveScreenshot(FImage InImage, const FAppSettings& InSettings, const std::string& InSceneError)
 {
-	if (Options.bVerifyModel && !(ModelPlugin ? ModelPlugin->Ready() : ScenePlugin && ScenePlugin->Ready()))
+	if (Options.bVerifyModel && !InSceneError.empty())
 	{
-		throw std::runtime_error(ModelPlugin   ? ModelPlugin->Status()
-		                         : ScenePlugin ? ScenePlugin->Status()
-		                                       : "No model plugin active");
+		throw std::runtime_error(InSceneError);
 	}
 	const auto Path = Options.Capture.empty() ? std::filesystem::path(HYP_SOURCE_DIR) / "out/captures" /
 	                                                ("capture-" + std::to_string(ClockNanoseconds()) + ".png")
 	                                          : Options.Capture;
-	VerifyImage(InImage, Settings, Options);
+	VerifyImage(InImage, InSettings, Options);
 	Services->FileWrites.push_back(
 	    DispatchAsync<bool>(Services->Tasks, {EDomain::Worker},
-	                        [this, Path, Snapshot = std::move(InImage)]
+	                        [Services = Services.get(), Path, Snapshot = std::move(InImage)]
 	                        {
 		                        return *Services->IO.WriteAsync(Path, EncodePng(Snapshot)).Get(Services->Tasks);
 	                        })
@@ -35,6 +33,12 @@ void FViewerApplication::SaveScreenshot(FImage InImage)
 
 void FViewerApplication::VerifyOutputs()
 {
+	const auto Progress = FramePipeline->Progress();
+	Log(ELogLevel::Info, "CPU frames: submitted=" + std::to_string(Progress.Submitted) +
+	                         "; render=" + std::to_string(Progress.RenderCompleted) +
+	                         "; rhi=" + std::to_string(Progress.RhiCompleted) +
+	                         "; leads=" + std::to_string(Metrics.FrameLimits.MainLead) + "," +
+	                         std::to_string(Metrics.FrameLimits.RenderLead));
 	if (ScenePlugin)
 	{
 		Log(ELogLevel::Info, "Scene: " + ScenePlugin->Status() + " | groups=" + std::to_string(SceneStatistics.Groups) +

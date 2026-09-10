@@ -80,6 +80,30 @@ void FForwardRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 	}
 }
 
+FForwardPipelineStatistics FForwardFrame::Statistics() const
+{
+	auto Result = Base;
+	if (bDeferred)
+	{
+		const auto Family = Preparation.Statistics();
+		Result.PreparationMilliseconds += Family.Milliseconds;
+		Result.Views = Family.Views;
+	}
+	return Result;
+}
+
+FForwardFrame FForwardRenderPipeline::GetFrame() const
+{
+	FForwardFrame Result;
+	Result.Base = LastStatistics;
+	Result.bDeferred = bPending;
+	if (bPending)
+	{
+		Result.Preparation = Session.GetViewPreparation();
+	}
+	return Result;
+}
+
 void FForwardRenderPipeline::Complete()
 {
 	if (bPending)

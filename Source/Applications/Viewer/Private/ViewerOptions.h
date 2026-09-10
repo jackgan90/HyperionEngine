@@ -30,6 +30,8 @@ struct FOptions
 	std::string SceneCulling = "bvh";
 	bool bVerifyModel{};
 	std::optional<std::string> Backend;
+	std::optional<int> MainRenderLead;
+	std::optional<int> RenderRhiLead;
 	int Frames{};
 	bool bHidden{};
 	bool bExercise{};

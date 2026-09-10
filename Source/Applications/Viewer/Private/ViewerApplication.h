@@ -3,9 +3,11 @@
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
+#include "Hyperion/Renderer/FramePipeline.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "ViewerOptions.h"
+#include <deque>
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
 #endif
@@ -23,7 +25,7 @@ struct FViewerServices
 	std::vector<FTaskHandle> FileWrites;
 };
 
-// Owns one Viewer session. Main waits for each Render frame before mutating input/settings.
+// Main owns UI/input and consumes frame results. Graphics services outlive the drained CPU pipeline.
 class FViewerApplication
 {
 public:
@@ -51,14 +53,16 @@ private:
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
 	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
 	FRenderFrame UpdateScene(FSize InSize);
-	FImage RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture);
+	void RenderFrame(int InFrame, FSize InSize, FGuiDrawData InGuiData, bool bInTakeCapture, bool bInCaptureRdc);
+	void CollectFrames();
+	void DrainFrames();
 	FRenderGraph BuildRenderGraph(const FRenderFrame& InFrame, const FGuiDrawData& InGuiData,
-	                              std::shared_ptr<const FMaterialFrameContext> InMaterialFrame);
-	void UpdateRenderStatistics();
+	                              std::shared_ptr<const FMaterialFrameContext> InMaterialFrame,
+	                              const FCascadedShadowSettings& InShadows);
 	void UpdateCaptureStatus();
-	void HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled);
+	bool HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled);
 	void SaveSettingsAsync(const std::filesystem::path& InPath);
-	void SaveScreenshot(FImage InImage);
+	void SaveScreenshot(FImage InImage, const FAppSettings& InSettings, const std::string& InSceneError);
 	void VerifyOutputs();
 	FDeviceStats ReleaseGraphics();
 	void Shutdown();
@@ -90,6 +94,48 @@ private:
 	FSceneViewerPlugin* ScenePlugin{};
 	FSceneVisibilityStats SceneStatistics;
 
+	struct FViewerFrameResult
+	{
+		FForwardPipelineStatistics Pipeline;
+		FDeviceStats Device;
+		FImage Screenshot;
+		std::uint64_t CompletedAt{};
+	};
+
+	struct FViewerFrameInput
+	{
+		FRenderFrame Frame;
+		std::uint64_t FrameId{};
+		FGuiDrawData Gui;
+		std::shared_ptr<const FMaterialFrameContext> Material;
+		FCascadedShadowSettings Shadows;
+		FNativeSurface Surface;
+		bool bTakeCapture{};
+		bool bCaptureRdc{};
+	};
+
+	std::function<void()> PrepareFrame(FViewerFrameInput InInput, std::shared_ptr<FViewerFrameResult> InResult);
+
+	struct FPendingViewerFrame
+	{
+		FFrameTicket Ticket;
+		std::shared_ptr<FViewerFrameResult> Result;
+		FAppSettings Settings;
+		std::string SceneError;
+		int Frame{};
+		std::uint64_t StartedAt{};
+		double MainMilliseconds{};
+		bool bTakeCapture{};
+		bool bCaptureRdc{};
+		bool bBenchmark{};
+	};
+
+	// Declared after every referenced graphics service; drain also runs explicitly before teardown.
+	std::unique_ptr<FFramePipeline> FramePipeline;
+	std::deque<FPendingViewerFrame> PendingFrames;
+	std::uint64_t FrameStartedAt{};
+	std::size_t PendingCaptures{};
+
 	struct FBenchmarkFrame
 	{
 		int Frame{};
@@ -99,6 +145,7 @@ private:
 		FRenderBatchStats Batches;
 		FForwardPipelineStatistics Pipeline;
 		FDeviceStats Device;
+		double CpuLatencyMilliseconds{};
 	};
 
 	std::vector<FBenchmarkFrame> BenchmarkFrames;

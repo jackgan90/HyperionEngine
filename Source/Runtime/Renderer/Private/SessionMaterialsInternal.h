@@ -37,6 +37,7 @@ struct FRenderSession::FMaterialState
 	FMaterialProviderRegistry Providers;
 	std::vector<std::weak_ptr<const FMaterialSharedBinding>> SharedBindings;
 	std::mutex Publication;
+	bool bProvidersFrozen{}; // Guarded by Publication; freeze once before any frame reaches Render.
 	FMaterialProviderInputs Inputs;
 	std::map<std::uint64_t, FViewEntry> Views;
 	std::map<std::uint64_t, FPreparedView> PreparedViews;

@@ -37,9 +37,12 @@ void CheckSettingsPersistence()
 	Hyperion::FAppSettings Settings;
 	Settings.Width = 960;
 	Settings.TriangleScale = 0.6;
+	Settings.MainRenderLead = 2;
+	Settings.RenderRhiLead = 3;
 	Settings.Plugins = {"triangle"};
 	Hyperion::SaveSettings("test-settings.json", Settings);
 	const auto Loaded = Hyperion::LoadSettings("test-settings.json");
+	HYP_CHECK(Loaded.MainRenderLead == 2 && Loaded.RenderRhiLead == 3);
 	HYP_CHECK(Loaded.Width == 960 && Loaded.TriangleScale == 0.6 && Loaded.Plugins == Settings.Plugins);
 	{
 		std::ofstream File("test-invalid.json");
@@ -78,6 +81,32 @@ void CheckSettingsPersistence()
 	HYP_CHECK(Hyperion::LoadSettings("test-defaults.json").Height == Hyperion::FAppSettings{}.Height);
 }
 
+void CheckFrameLeadValidation()
+{
+	for (const std::string Key : {"main_render_lead", "render_rhi_lead"})
+	{
+		for (const std::string Value : {"-1", "17", "1.5", "999999999999999999999", "\"2\""})
+		{
+			const auto Text =
+			    std::string(R"({"type":"hyperion.application-settings","schema_version":1,"properties":{")") + Key +
+			    "\":" + Value + "}}";
+			std::ofstream("test-frame-limit.json") << Text;
+			bool bRejected{};
+			try
+			{
+				Hyperion::LoadSettings("test-frame-limit.json");
+			}
+			catch (const std::exception&)
+			{
+				bRejected = true;
+			}
+			HYP_CHECK(bRejected);
+		}
+	}
+	const auto Defaults = Hyperion::LoadSettings("test-defaults.json");
+	HYP_CHECK(Defaults.MainRenderLead == 1 && Defaults.RenderRhiLead == 1);
+}
+
 } // namespace
 
 int main()
@@ -85,6 +114,7 @@ int main()
 	try
 	{
 		CheckSettingsPersistence();
+		CheckFrameLeadValidation();
 		bool bRejected = false;
 		std::vector<int> Events;
 		Hyperion::FPluginRegistry Registry;

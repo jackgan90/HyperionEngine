@@ -111,7 +111,7 @@ void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineSta
 	InOutput << ',' << MembershipReuses << ',' << MembershipAdded << ',' << MembershipRemoved << ',' << ContainedItems;
 	InOutput << ',' << Packing.IncrementalPlanUpdates << ',' << Packing.IncrementalItemReuses << ','
 	         << Packing.AffectedBatches << ',' << Packing.RetainedBatches << ',' << Packing.BatchAdmissionReuses << ','
-	         << Packing.CachedPlanItems << ',' << Packing.CachedPlanBlocks << '\n';
+	         << Packing.CachedPlanItems << ',' << Packing.CachedPlanBlocks;
 }
 } // namespace
 
@@ -157,13 +157,13 @@ void FViewerApplication::MatchBenchmarkTimings()
 	}
 	for (auto& Frame : BenchmarkFrames)
 	{
-		const auto Expected = static_cast<std::uint64_t>(Frame.Frame) + 1;
+		const auto Expected = Frame.Device.SubmittedFrames;
 		const auto Found = std::lower_bound(Timings.begin(), Timings.end(), Expected,
 		                                    [](const auto& InTiming, std::uint64_t InFrame)
 		                                    {
 			                                    return InTiming.Frame < InFrame;
 		                                    });
-		if (Frame.Device.SubmittedFrames != Expected || Found == Timings.end() || Found->Frame != Expected)
+		if (!Expected || Found == Timings.end() || Found->Frame != Expected)
 		{
 			throw std::runtime_error("Benchmark interval contains an untimed or unsubmitted frame");
 		}
@@ -211,7 +211,7 @@ void FViewerApplication::SaveBenchmark()
 	       "items,retained_item_restores"
 	    << ",membership_reuses,membership_added,membership_removed,contained_item_tests"
 	    << ",incremental_plan_updates,incremental_item_reuses,affected_batches,retained_batches,batch_admission_reuses,"
-	       "cached_plan_items,cached_plan_blocks\n"
+	       "cached_plan_items,cached_plan_blocks,cpu_latency_ms,main_render_lead,render_rhi_lead\n"
 	    << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
@@ -239,6 +239,8 @@ void FViewerApplication::SaveBenchmark()
 		       << Frame.Device.GraphicsPipelineBinds << ',' << Frame.Device.GraphicsGeometryBinds << ','
 		       << Frame.Device.GraphicsDynamicBinds;
 		WritePreparationBenchmark(Output, Frame.Pipeline);
+		Output << ',' << Frame.CpuLatencyMilliseconds << ',' << Metrics.FrameLimits.MainLead << ','
+		       << Metrics.FrameLimits.RenderLead << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}
 	Output.close();

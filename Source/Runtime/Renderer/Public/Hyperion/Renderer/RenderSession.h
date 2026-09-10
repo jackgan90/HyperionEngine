@@ -13,6 +13,26 @@ struct FRenderViewStatistics
 	FSceneVisibilityStats Visibility;
 };
 
+struct FRenderViewFamilyStatistics
+{
+	std::vector<FRenderViewStatistics> Views;
+	FSceneVisibilityStats Spatial;
+	double Milliseconds{};
+};
+
+struct FPreparedViewFamily;
+
+// Owns one family independently of subsequent Session builds. Statistics throws until prepared.
+class FRenderViewPreparation
+{
+public:
+	FRenderViewFamilyStatistics Statistics() const;
+
+private:
+	std::shared_ptr<FPreparedViewFamily> State;
+	friend class FRenderSession;
+};
+
 // Main constructs/closes the session; Render builds its scene passes.
 class FRenderSession
 {
@@ -37,6 +57,7 @@ public:
 	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false);
 	// Render publishes deferred statistics after graph execution joins the RHI coordinator.
 	double CompleteViews();
+	FRenderViewPreparation GetViewPreparation() const; // Render, immediately after BuildViews.
 	std::shared_ptr<const FMaterialFrameContext> FreezeFrame(float InTime = 0,
 	                                                         FMaterialParameterValues InFrameValues = {});
 	void SetGlobalParameters(FMaterialParameterValues InValues);
@@ -60,7 +81,6 @@ private:
 	bool bClosed{};
 	FSceneVisibilityStats LastStatistics;
 	std::vector<FRenderViewStatistics> LastViews;
-	struct FPreparedViewFamily;
 	std::shared_ptr<FPreparedViewFamily> PendingFamily;
 	struct FMaterialState;
 	std::unique_ptr<FMaterialState> MaterialState;

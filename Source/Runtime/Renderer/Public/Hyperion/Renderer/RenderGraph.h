@@ -103,6 +103,10 @@ struct FRenderGraphCallbacks
 	std::function<void()> OnFailure;
 };
 
+// Called on RHI 0 by an owned frame job; completes all recording peers before returning.
+FImage ExecuteGraphOnRhi(FRenderGraph InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
+                         bool bInVsync, bool bInCapture, const FRenderGraphCallbacks& InCallbacks = {});
+
 // Called from Render; jobs are routed to engine-owned RHI executors.
 FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
                     bool bInVsync, bool bInCapture);

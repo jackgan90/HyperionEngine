@@ -122,6 +122,7 @@ void FViewerApplication::UpdateProfiling(int InFrame)
 {
 	if (Options.ProfilingMask && InFrame == Options.ProfileStart)
 	{
+		DrainFrames();
 		SetProfilingMask(Options.ProfilingMask);
 		if (Options.bProfileSampling)
 		{
@@ -134,6 +135,7 @@ void FViewerApplication::UpdateProfiling(int InFrame)
 	if (Options.ProfileFrames && InFrame >= Options.ProfileStart &&
 	    InFrame - Options.ProfileStart == Options.ProfileFrames)
 	{
+		DrainFrames();
 		SetProfilingMask(0);
 	}
 	Metrics.Profiling = GetProfilingStatus();
@@ -143,6 +145,7 @@ void FViewerApplication::HandleProfilingActions(const FDebugActions& InActions)
 {
 	if (InActions.ProfilingMask)
 	{
+		DrainFrames();
 		SetProfilingMask(*InActions.ProfilingMask);
 	}
 	if (InActions.Sampling)

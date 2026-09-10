@@ -71,6 +71,8 @@ const FTypeDescriptor& SettingsType()
 	     Field("height", "Window height", &FAppSettings::Height, 64, 8192),
 	     Field("workers", "CPU workers", &FAppSettings::Workers, 1, 64),
 	     Field("rhi_threads", "RHI threads", &FAppSettings::RhiThreads, 1, 8),
+	     Field("main_render_lead", "Main to Render lead (restart)", &FAppSettings::MainRenderLead, 0, 16),
+	     Field("render_rhi_lead", "Render to RHI lead (restart)", &FAppSettings::RenderRhiLead, 0, 16),
 	     Field("rhi_backend", "RHI backend (restart)", &FAppSettings::RHIBackend),
 	     Field("model_source", "Model source (restart)", &FAppSettings::ModelSource),
 	     Field("scene_source", "Scene source (restart)", &FAppSettings::SceneSource),

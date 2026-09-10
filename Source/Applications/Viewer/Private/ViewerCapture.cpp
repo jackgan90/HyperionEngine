@@ -44,8 +44,8 @@ void FViewerApplication::UpdateCaptureStatus()
 	{
 		const auto Status = FrameCapture->Status();
 		Metrics.FrameCapture.bAvailable = Status.bAvailable;
-		Metrics.FrameCapture.bBusy =
-		    Status.State == EFrameCaptureState::Pending || Status.State == EFrameCaptureState::Capturing;
+		Metrics.FrameCapture.bBusy = PendingCaptures != 0 || Status.State == EFrameCaptureState::Pending ||
+		                             Status.State == EFrameCaptureState::Capturing;
 		Metrics.FrameCapture.Status = Status.Message;
 		const auto Path = Status.LastCapture.u8string();
 		Metrics.FrameCapture.LastCapture.assign(reinterpret_cast<const char*>(Path.data()), Path.size());
@@ -54,20 +54,19 @@ void FViewerApplication::UpdateCaptureStatus()
 #endif
 }
 
-void FViewerApplication::HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled)
+bool FViewerApplication::HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled)
 {
 #if HYP_ENABLE_RENDERDOC
-	if (FrameCapture && (InActions.bCaptureRdc || (bInScheduled && !Options.bExerciseRdcUi)))
-	{
-		FrameCapture->RequestCapture();
-	}
 	if (FrameCapture && InActions.bOpenRdc)
 	{
 		FrameCapture->OpenLastCapture();
 	}
+	// The request travels with the target frame. Earlier queued frames cannot consume it.
+	return FrameCapture && (InActions.bCaptureRdc || (bInScheduled && !Options.bExerciseRdcUi));
 #else
 	(void)InActions;
 	(void)bInScheduled;
+	return false;
 #endif
 }
 

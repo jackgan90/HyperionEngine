@@ -67,6 +67,7 @@ SceneViewer 默认启用四级方向光阴影；`experiments/Shadows.json` 展�
 可选 RenderDoc 插件支持两个 Viewer 通过 `Capture RDC` 抓帧、打开最近文件及选择抓取后自动打开。运行 `.\tools\GenerateSolution.ps1 -RenderDoc -Build` 编入支持，再以 `--renderdoc` 启动 Viewer；安装位置、配置、引擎 API 和验收流程见 [RenderDoc 抓帧](docs/RenderDoc.md)。默认实验不加载 RenderDoc。
 
 - Main 管理窗口、输入和 GUI；Render 组织帧；多个专用 RHI 线程录制命令，RHI 0 提交；单独 IO 线程处理新资产的文件读写。oneTBB 执行解析、解码等 CPU jobs，支持依赖、异常传播和挂起等待。
+- CPU 帧管线支持独立的 Main→Render、Render→RHI 领先限额，默认均为 1；RHI 0 仍汇合同帧录制并按序提交。配置、所有权与诊断见 [CPU 异步帧管线](docs/CpuFramePipeline.md)。
 - 逻辑插件通过 ID、依赖和启动/关闭生命周期组织，当前为静态链接。已有 `triangle`、`debug-ui`、`model-viewer` 和可选 `renderdoc`；RenderDoc 服务在图形设备创建前启动，不涉及插件 DLL 热更新。
 - 反射使用类型/属性和记录描述符，驱动配置、GUI 编辑、嵌套模型数据与数值 bulk 的原生读写。没有 GC、AST 生成器或任意指针对象图序列化。
 - Render Graph 管理交换链颜色和可采样的独立深度目标，支持 depth-only pass，校验 pass 依赖、内容初始化及逐资源状态转换。容量由后端能力限定；当前 D3D12 支持最多 15 个 graphics pass（另占一个 Present context）、单 graphics queue、2 个 GPU frame context。

@@ -78,8 +78,12 @@ def reconnect(profile, executable, output):
 
 def check_viewer(profile, viewer, output, mode):
     folder = output / mode
+    config = json.loads((profile.ROOT / "experiments/Scene.json").read_text(encoding="utf-8"))
+    config["properties"].update(main_render_lead=2, render_rhi_lead=3)
+    config_path = output / (mode + "-Settings.json")
+    config_path.write_text(json.dumps(config), encoding="utf-8")
     profile.run([sys.executable, profile.ROOT / "tools/Profile.py", "--viewer", viewer, "--mode", mode,
-                 "--out", folder, "--no-build", "--warmup", "120", "--frames", "120"],
+                 "--config", config_path, "--out", folder, "--no-build", "--warmup", "120", "--frames", "120"],
                 output / (mode + ".log"), timeout=60)
     summary = json.loads((folder / "Metadata.json").read_text())["summary"]
     assert 1 <= summary["draw_min"] <= summary["draw_max"] <= 10, summary
@@ -87,10 +91,14 @@ def check_viewer(profile, viewer, output, mode):
     frames = [event for event in events if event["name"] == "ApplicationFrame"]
     assert len(frames) == 120 and sorted(int(event["value"].split()[0]) for event in frames) == list(range(120, 240))
     names = {event["name"] for event in events}
-    assert {"PrepareMaterials", "PrepareDraws", "PrepareSceneSnapshot", "ValidateDraws", "RecordCommands",
+    for stage in ("PipelineRenderFrame", "PipelineRhiFrame"):
+        ids = sorted(int(event["value"].split()[0]) for event in events if event["name"] == stage)
+        assert ids == list(range(121, 241)), (stage, ids)
+    assert {"PrepareMaterials", "PrepareDraws", "PrepareRetainedView", "ValidateDraws", "RecordCommands",
             "RecordNativeDraws", "ResetNativeCommandList", "SubmitCommandLists", "PresentWait"} <= names
     # Material counters are per view: the forward view plus four CSM cascades when enabled.
-    view_count = sum(5 if int(row["shadows"]) else 1 for row in rows(folder / "Frames.csv"))
+    samples = rows(folder / "Frames.csv")
+    view_count = sum(5 if int(row["shadows"]) else 1 for row in samples)
     material_count = sum(event["name"] == "PrepareMaterials" for event in events)
     assert sum(event["name"] == "PrepareDraws" for event in events) == view_count
     if mode == "basic":
@@ -108,7 +116,8 @@ def check_viewer(profile, viewer, output, mode):
     for name in ("SceneCollectionReuses", "ViewPreparationReuses", "ViewPacketReuses"):
         assert len(plots[name]) == view_count and set(plots[name]) <= {0, 1}, name
     assert material_count + sum(plots["ViewPreparationReuses"]) == view_count
-    packet_count = view_count - sum(plots["ViewPacketReuses"])
+    # A retained pass can refresh dynamic bindings and still report a packet reuse.
+    packet_count = view_count - sum(plots["ViewPacketReuses"]) + sum(int(row["local_packet_reuses"]) for row in samples)
     for name in ("MaterialEvaluationFull", "MaterialEvaluationReuses", "MaterialEvaluationRefreshes", "MaterialSharedUpdates",
                  "ProviderEvaluations", "ProviderReuses", "BatchPlanReuses"):
         assert len(plots[name]) == material_count and min(plots[name]) >= 0, (name, len(plots[name]))

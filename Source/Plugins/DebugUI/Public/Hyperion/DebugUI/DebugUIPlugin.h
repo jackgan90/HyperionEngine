@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Gui/Gui.h"
+#include "Hyperion/Renderer/FramePipeline.h"
 #include "Hyperion/Renderer/RenderPlugin.h"
 #include <array>
 #include <optional>
@@ -20,6 +21,9 @@ struct FFrameCaptureMetrics
 struct FDebugMetrics
 {
 	FDeviceStats Device;
+	FFramePipelineProgress FramePipeline;
+	FFramePipelineLimits FrameLimits;
+	std::uint64_t ResultFrame{};
 	std::vector<FExecutionStats> Threads;
 	std::vector<float> FrameMilliseconds;
 	std::string AssetStatus;

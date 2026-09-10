@@ -26,41 +26,51 @@ void JoinRecordings(FTaskSystem& InTasks, std::span<const FTaskHandle> InRecordi
 	}
 }
 
+struct FFrameRecording
+{
+	IRHISwapchain* Swapchain{};
+	std::vector<FRecordedList> Lists;
+	std::vector<std::shared_ptr<const FPassCommands>> Commands;
+	std::uint32_t Threads{};
+
+	void RecordPartition(std::uint32_t InThread)
+	{
+		for (std::size_t Index = InThread; Index < Commands.size(); Index += Threads)
+		{
+			Lists[Index] = Swapchain->RecordOwned(static_cast<std::uint32_t>(Index), Commands[Index]);
+		}
+	}
+};
+
 std::vector<FRecordedList> RecordFrame(FTaskSystem& InTasks, IRHISwapchain& InSwapchain,
                                        std::vector<FPassCommands> InCommands)
 {
 	HYP_PERF_SCOPE_C(Rhi, RecordFrame);
-	std::vector<FRecordedList> Lists(InCommands.size());
-	std::vector<std::shared_ptr<const FPassCommands>> Commands;
-	Commands.reserve(InCommands.size());
+	auto Recording = std::make_shared<FFrameRecording>();
+	Recording->Swapchain = &InSwapchain;
+	Recording->Lists.resize(InCommands.size());
+	Recording->Commands.reserve(InCommands.size());
 	for (auto& Pass : InCommands)
 	{
-		Commands.push_back(std::make_shared<const FPassCommands>(std::move(Pass)));
+		Recording->Commands.push_back(std::make_shared<const FPassCommands>(std::move(Pass)));
 	}
-	const auto Threads = InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).bEnabled
-	                         ? std::min(InTasks.RhiThreadCount(), static_cast<std::uint32_t>(Commands.size()))
+	Recording->Threads = InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).bEnabled
+	                         ? std::min(InTasks.RhiThreadCount(), static_cast<std::uint32_t>(InCommands.size()))
 	                         : 1U;
 	std::vector<FTaskHandle> Peers;
-	Peers.reserve(Threads - 1);
-	const auto RecordPartition = [&](std::uint32_t InThread)
-	{
-		for (std::size_t Index = InThread; Index < Commands.size(); Index += Threads)
-		{
-			Lists[Index] = InSwapchain.RecordOwned(static_cast<std::uint32_t>(Index), Commands[Index]);
-		}
-	};
+	Peers.reserve(Recording->Threads - 1);
 	std::exception_ptr Error;
 	try
 	{
-		for (std::uint32_t Thread = 1; Thread < Threads; ++Thread)
+		for (std::uint32_t Thread = 1; Thread < Recording->Threads; ++Thread)
 		{
 			Peers.push_back(InTasks.Dispatch({EDomain::Rhi, Thread},
-			                                 [&, Thread]
+			                                 [Recording, Thread]
 			                                 {
-				                                 RecordPartition(Thread);
+				                                 Recording->RecordPartition(Thread);
 			                                 }));
 		}
-		RecordPartition(0);
+		Recording->RecordPartition(0);
 	}
 	catch (...)
 	{
@@ -73,7 +83,7 @@ std::vector<FRecordedList> RecordFrame(FTaskSystem& InTasks, IRHISwapchain& InSw
 		std::rethrow_exception(Error);
 	}
 	HYP_PERF_PLOT(Rhi, FrameRecordingTasks, double(Peers.size()));
-	return Lists;
+	return std::move(Recording->Lists);
 }
 
 FImage ExecuteFrame(FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
@@ -137,6 +147,12 @@ FImage ExecuteFrame(FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& 
 }
 } // namespace
 
+FImage ExecuteGraphOnRhi(FRenderGraph InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
+                         bool bInVsync, bool bInCapture, const FRenderGraphCallbacks& InCallbacks)
+{
+	return ExecuteFrame(InGraph, InTasks, InSwapchain, InSize, bInVsync, bInCapture, InCallbacks);
+}
+
 FImage ExecuteGraph(const FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& InSwapchain, FSize InSize,
                     bool bInVsync, bool bInCapture)
 {
@@ -155,13 +171,14 @@ FImage ExecuteGraph(FRenderGraph&& InGraph, FTaskSystem& InTasks, IRHISwapchain&
                     bool bInVsync, bool bInCapture, const FRenderGraphCallbacks& InCallbacks)
 {
 	HYP_PERF_SCOPE_C(Render, ExecuteRenderGraph);
-	FImage Image;
+	auto Image = std::make_shared<FImage>();
 	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
-	                              [&, Graph = std::move(InGraph)]() mutable
+	                              [Image, Tasks = &InTasks, Swapchain = &InSwapchain, Size = InSize, bVsync = bInVsync,
+	                               bCapture = bInCapture, Callbacks = InCallbacks, Graph = std::move(InGraph)]() mutable
 	                              {
-		                              Image = ExecuteFrame(Graph, InTasks, InSwapchain, InSize, bInVsync, bInCapture,
-		                                                   InCallbacks);
+		                              *Image = ExecuteGraphOnRhi(std::move(Graph), *Tasks, *Swapchain, Size, bVsync,
+		                                                         bCapture, Callbacks);
 	                              }));
-	return Image;
+	return std::move(*Image);
 }
 } // namespace Hyperion

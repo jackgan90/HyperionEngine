@@ -47,6 +47,14 @@ FViewerApplication::~FViewerApplication()
 	SetProfilingMask(0);
 	if (Services && !bStopped)
 	{
+		try
+		{
+			DrainFrames();
+		}
+		catch (const std::exception& Error)
+		{
+			Log(ELogLevel::Error, Error.what());
+		}
 		Services->DrainWrites();
 		Services->Assets.Drain();
 		try
@@ -145,6 +153,20 @@ FDeviceStats FViewerApplication::ReleaseGraphics()
 {
 	FDeviceStats Stats;
 	auto& Tasks = Services->Tasks;
+	// Drain on normal exits and partial initialization before releasing any frame consumer.
+	if (FramePipeline)
+	{
+		try
+		{
+			FramePipeline->Drain();
+		}
+		catch (const std::exception& Error)
+		{
+			Log(ELogLevel::Error, Error.what());
+		}
+		FramePipeline.reset();
+		PendingFrames.clear();
+	}
 	Plugins.reset();
 	GuiPlugin = nullptr;
 	ModelPlugin = nullptr;
@@ -210,6 +232,9 @@ void FViewerApplication::Run()
 	InitializeCapture();
 	InitializeGraphics();
 	InitializePlugins();
+	Metrics.FrameLimits = {static_cast<std::uint32_t>(Settings.MainRenderLead),
+	                       static_cast<std::uint32_t>(Settings.RenderRhiLead)};
+	FramePipeline = std::make_unique<FFramePipeline>(Services->Tasks, Metrics.FrameLimits);
 	Log(ELogLevel::Info, "Windows rendering application started");
 	RunFrames();
 	VerifyOutputs();

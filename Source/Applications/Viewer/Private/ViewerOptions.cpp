@@ -1,5 +1,7 @@
 #include "ViewerOptions.h"
+#include "Hyperion/Renderer/FramePipeline.h"
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <stdexcept>
 
@@ -7,6 +9,24 @@ namespace Hyperion
 {
 namespace
 {
+bool ParseFramePipelineOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex)
+{
+	if ((InArg != "--main-render-lead" && InArg != "--render-rhi-lead") || InIndex + 1 >= InArgc)
+	{
+		return false;
+	}
+	const std::string_view Text = InArgv[++InIndex];
+	int Value{};
+	const auto Parsed = std::from_chars(Text.data(), Text.data() + Text.size(), Value);
+	if (Parsed.ec != std::errc{} || Parsed.ptr != Text.data() + Text.size() || Value < 0 ||
+	    Value > static_cast<int>(FFramePipelineLimits::MaximumLead))
+	{
+		throw std::invalid_argument(InArg + " requires an integer from 0 to 16");
+	}
+	(InArg == "--main-render-lead" ? InOptions.MainRenderLead : InOptions.RenderRhiLead) = Value;
+	return true;
+}
+
 bool ParseBenchmarkOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex)
 {
 	if (InArg == "--benchmark" && InIndex + 1 < InArgc)
@@ -213,7 +233,8 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 	for (int Index = 1; Index < InArgc; ++Index)
 	{
 		const std::string Arg = InArgv[Index];
-		if (!ParseApplicationOption(Options, Arg, InArgc, InArgv, Index) &&
+		if (!ParseFramePipelineOption(Options, Arg, InArgc, InArgv, Index) &&
+		    !ParseApplicationOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseCaptureOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseBenchmarkOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseShadowOption(Options, Arg, InArgc, InArgv, Index) &&
@@ -228,6 +249,14 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 
 void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings)
 {
+	InSettings.MainRenderLead = InOptions.MainRenderLead.value_or(InSettings.MainRenderLead);
+	InSettings.RenderRhiLead = InOptions.RenderRhiLead.value_or(InSettings.RenderRhiLead);
+	if (InSettings.MainRenderLead < 0 || InSettings.RenderRhiLead < 0 ||
+	    InSettings.MainRenderLead > static_cast<int>(FFramePipelineLimits::MaximumLead) ||
+	    InSettings.RenderRhiLead > static_cast<int>(FFramePipelineLimits::MaximumLead))
+	{
+		throw std::invalid_argument("CPU frame lead settings require integers from 0 to 16");
+	}
 	if (InOptions.bNoVsync)
 	{
 		InSettings.bVsync = false;

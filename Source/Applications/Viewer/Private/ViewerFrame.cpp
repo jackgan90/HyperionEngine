@@ -1,7 +1,6 @@
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
 #include "ViewerApplication.h"
-#include "ViewerCaptureScope.h"
 #include <algorithm>
 #include <chrono>
 #include <thread>
@@ -27,19 +26,16 @@ void FViewerApplication::RunFrames()
 		const auto Now = ClockNanoseconds();
 		const float Delta = Frame ? float(Now - LastFrame) / 1e9f : 1.f / 60.f;
 		LastFrame = Now;
+		FrameStartedAt = Now;
 		ExerciseBenchmarkCamera(Frame);
 		Tick(Frame, Delta);
-		if (!Options.Benchmark.empty() && Frame >= Options.BenchmarkWarmup)
+		if (!PendingFrames.empty() && PendingFrames.back().Frame == Frame)
 		{
-			if (ScenePlugin && !ScenePlugin->Ready())
-			{
-				throw std::runtime_error("Benchmark scene is not ready; increase --benchmark-warmup and --frames");
-			}
-			BenchmarkFrames.push_back({Frame, double(ClockNanoseconds() - Now) / 1e6, SceneStatistics.Draws,
-			                           SceneStatistics.VisibleItems, SceneStatistics.Batches, PipelineStatistics,
-			                           Metrics.Device});
+			PendingFrames.back().MainMilliseconds = double(ClockNanoseconds() - Now) / 1e6;
 		}
+		CollectFrames();
 	}
+	DrainFrames();
 	if (Options.ProfileFrames)
 	{
 		SetProfilingMask(0);
@@ -51,6 +47,8 @@ void FViewerApplication::PollInput()
 	HYP_PERF_SCOPE_C(Frame, PollInput);
 	Window->Poll();
 	Services->Tasks.PumpMain();
+	CollectFrames();
+	Metrics.FramePipeline = FramePipeline->Progress();
 	if (ModelPlugin || ScenePlugin)
 	{
 		Metrics.AssetStatus = ModelPlugin ? ModelPlugin->Status() : ScenePlugin->Status();
@@ -129,6 +127,11 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	if (Window->Minimized() || !Size.Width || !Size.Height)
 	{
 		UpdateScene(Size);
+		FramePipeline->Skip();
+		if (!Options.Benchmark.empty() && InFrame >= Options.BenchmarkWarmup)
+		{
+			throw std::runtime_error("Benchmark tick did not render a frame");
+		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		return;
 	}
@@ -142,7 +145,8 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	const auto Actions = BuildGui(InFrame, InDelta, Logical, Size, GuiData);
 	UpdateShadowLight(InFrame);
 	HandleProfilingActions(Actions);
-	HandleCaptureActions(Actions, std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1));
+	const bool bCaptureRdc = HandleCaptureActions(
+	    Actions, std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1));
 	if (Actions.bSave)
 	{
 		SaveSettingsAsync(Options.Config);
@@ -160,11 +164,7 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 		                   Gui && Settings.bShowGui && Gui->WantsMouse(),
 		                   Gui && Settings.bShowGui && Gui->WantsKeyboard());
 	}
-	auto Screenshot = RenderFrame(Size, GuiData, bTakeCapture);
-	if (bTakeCapture)
-	{
-		SaveScreenshot(std::move(Screenshot));
-	}
+	RenderFrame(InFrame, Size, std::move(GuiData), bTakeCapture, bCaptureRdc);
 	ProfileFrame();
 }
 
@@ -186,11 +186,12 @@ FRenderFrame FViewerApplication::UpdateScene(FSize InSize)
 }
 
 FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, const FGuiDrawData& InGuiData,
-                                                  std::shared_ptr<const FMaterialFrameContext> InMaterialFrame)
+                                                  std::shared_ptr<const FMaterialFrameContext> InMaterialFrame,
+                                                  const FCascadedShadowSettings& InShadows)
 {
 	FRenderGraph Graph;
 	ForwardPipeline->Build(
-	    Graph, InFrame.View, std::move(InMaterialFrame), ShadowSettings,
+	    Graph, InFrame.View, std::move(InMaterialFrame), InShadows,
 	    {float(InFrame.Settings.ClearRed), float(InFrame.Settings.ClearGreen), float(InFrame.Settings.ClearBlue), 1},
 	    [&](FRenderGraph& InGraph)
 	    {
@@ -210,70 +211,4 @@ FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, c
 	return Graph;
 }
 
-void FViewerApplication::UpdateRenderStatistics()
-{
-	ForwardPipeline->Complete();
-	PipelineStatistics = ForwardPipeline->Statistics();
-	SceneStatistics = PipelineStatistics.Views.back().Visibility;
-	SceneStatistics.UpdateMilliseconds = PipelineStatistics.Spatial.UpdateMilliseconds;
-	SceneStatistics.IndexRebuilds = PipelineStatistics.Spatial.IndexRebuilds;
-	SceneStatistics.IndexRefits = PipelineStatistics.Spatial.IndexRefits;
-	HYP_PERF_PLOT(Frame, SceneDraws, double(SceneStatistics.Draws));
-}
-
-FImage FViewerApplication::RenderFrame(FSize InSize, const FGuiDrawData& InGuiData, bool bInTakeCapture)
-{
-	auto& Tasks = Services->Tasks;
-	const auto Frame = UpdateScene(InSize);
-	const auto MaterialFrame = RenderSession->FreezeFrame(float(ClockNanoseconds() / 1000000000.0));
-	FImage Screenshot;
-	FRenderGraphCallbacks Callbacks;
-#if HYP_ENABLE_RENDERDOC
-	const auto Surface = Window->Surface();
-	bool bRdcSucceeded = false;
-	std::unique_ptr<FFrameCaptureScope> CaptureScope;
-	Callbacks.BeforePrepare = [&]
-	{
-		if (FrameCapture)
-		{
-			CaptureScope = std::make_unique<FFrameCaptureScope>(Tasks, FrameCapture, Surface);
-		}
-	};
-	Callbacks.OnFailure = [&]
-	{
-		CaptureScope.reset();
-	};
-#endif
-	Callbacks.AfterSubmit = [&]
-	{
-		Metrics.Device = Device->Statistics();
-#if HYP_ENABLE_RENDERDOC
-		if (CaptureScope)
-		{
-			bRdcSucceeded = CaptureScope->Finish();
-			CaptureScope.reset();
-		}
-#endif
-	};
-	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-	                          [&, Frame, MaterialFrame, GuiData = InGuiData]
-	                          {
-		                          HYP_PERF_SCOPE_C(Render, RenderFrame);
-		                          auto Graph = BuildRenderGraph(Frame, GuiData, MaterialFrame);
-		                          Screenshot = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, InSize,
-		                                                    Frame.Settings.bVsync, bInTakeCapture, Callbacks);
-		                          UpdateRenderStatistics();
-	                          }));
-#if HYP_ENABLE_RENDERDOC
-	if (bRdcSucceeded && Settings.bRenderDocAutoOpen)
-	{
-		FrameCapture->OpenLastCapture();
-	}
-#endif
-	if (Metrics.Device.ValidationErrors)
-	{
-		throw std::runtime_error("RHI validation errors");
-	}
-	return Screenshot;
-}
 } // namespace Hyperion

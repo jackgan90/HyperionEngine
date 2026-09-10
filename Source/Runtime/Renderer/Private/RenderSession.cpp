@@ -1,6 +1,7 @@
 #include "Hyperion/Core/Profiling.h"
 #include "SessionMaterialsInternal.h"
 #include <chrono>
+#include <mutex>
 #include <numeric>
 #include <stdexcept>
 
@@ -27,20 +28,22 @@ template<typename TEntry> void RetireViewHistory(std::map<std::uint64_t, TEntry>
 }
 } // namespace
 
-struct FRenderSession::FPreparedViewFamily
+struct FPreparedViewFamily
 {
 	std::vector<FRenderViewStatistics> Views;
 	std::vector<double> Times;
 	std::vector<bool> Prepared;
 	FSceneVisibilityStats Spatial;
 	double Milliseconds{};
+	mutable std::mutex Publication;
 	bool bReady{};
 	std::vector<FGraphicsDrawBatch> Prepare(const FRenderResourcePreparation& InResources,
 	                                        const FRenderSceneSnapshot& InSnapshot, std::size_t InIndex);
 };
 
-std::vector<FGraphicsDrawBatch> FRenderSession::FPreparedViewFamily::Prepare(
-    const FRenderResourcePreparation& InResources, const FRenderSceneSnapshot& InSnapshot, std::size_t InIndex)
+std::vector<FGraphicsDrawBatch> FPreparedViewFamily::Prepare(const FRenderResourcePreparation& InResources,
+                                                             const FRenderSceneSnapshot& InSnapshot,
+                                                             std::size_t InIndex)
 {
 	const auto Start = std::chrono::steady_clock::now();
 	auto Stats = InSnapshot.Statistics;
@@ -50,6 +53,7 @@ std::vector<FGraphicsDrawBatch> FRenderSession::FPreparedViewFamily::Prepare(
 	{
 		Stats.Draws += Batch.Commands.GetDraws().size();
 	}
+	std::lock_guard Lock(Publication);
 	Views[InIndex] = {InSnapshot.View.Identity, InSnapshot.View.Usage, Stats};
 	Times[InIndex] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
 	Prepared[InIndex] = true;
@@ -215,16 +219,35 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 	return Count;
 }
 
-double FRenderSession::CompleteViews()
+FRenderViewFamilyStatistics FRenderViewPreparation::Statistics() const
 {
-	Tasks.Require({EDomain::Render});
-	if (!PendingFamily || !PendingFamily->bReady)
+	if (!State)
+	{
+		throw std::logic_error("View preparation is empty");
+	}
+	std::lock_guard Lock(State->Publication);
+	if (!State->bReady)
 	{
 		throw std::logic_error("Deferred view preparation has not completed");
 	}
-	LastViews = PendingFamily->Views;
+	return {State->Views, State->Spatial, State->Milliseconds};
+}
+
+FRenderViewPreparation FRenderSession::GetViewPreparation() const
+{
+	Tasks.Require({EDomain::Render});
+	FRenderViewPreparation Result;
+	Result.State = PendingFamily;
+	return Result;
+}
+
+double FRenderSession::CompleteViews()
+{
+	Tasks.Require({EDomain::Render});
+	const auto Family = GetViewPreparation().Statistics();
+	LastViews = Family.Views;
 	LastStatistics = LastViews.back().Visibility;
-	// Compatibility: Statistics reports the last view's visibility with family-wide draw/batch totals.
+	// Compatibility: Statistics reports the last view with family-wide draw/batch totals.
 	LastStatistics.Draws = 0;
 	LastStatistics.Batches = {};
 	for (const auto& View : LastViews)
@@ -232,10 +255,10 @@ double FRenderSession::CompleteViews()
 		LastStatistics.Draws += View.Visibility.Draws;
 		LastStatistics.Batches += View.Visibility.Batches;
 	}
-	LastStatistics.UpdateMilliseconds = PendingFamily->Spatial.UpdateMilliseconds;
-	LastStatistics.IndexRebuilds = PendingFamily->Spatial.IndexRebuilds;
-	LastStatistics.IndexRefits = PendingFamily->Spatial.IndexRefits;
-	return PendingFamily->Milliseconds;
+	LastStatistics.UpdateMilliseconds = Family.Spatial.UpdateMilliseconds;
+	LastStatistics.IndexRebuilds = Family.Spatial.IndexRebuilds;
+	LastStatistics.IndexRefits = Family.Spatial.IndexRefits;
+	return Family.Milliseconds;
 }
 
 std::set<std::uint64_t> FRenderSession::AdmitFamily(std::span<const FRenderView> InViews,

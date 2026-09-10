@@ -10,6 +10,8 @@ struct FAppSettings
 	int Height = 720;
 	int Workers = 4;
 	int RhiThreads = 2;
+	int MainRenderLead = 1;
+	int RenderRhiLead = 1;
 	std::string RHIBackend = "d3d12";
 	std::string ModelSource;
 	std::string SceneSource;

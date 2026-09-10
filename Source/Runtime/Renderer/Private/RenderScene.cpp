@@ -77,15 +77,15 @@ void FRenderScene::Create(FRenderPrimitiveHandle InHandle, FRenderPrimitiveState
 			throw std::invalid_argument("Primitive factory returned no object");
 		}
 		const auto Admitted = std::make_shared<const FRenderPrimitiveState>(InState);
-		const auto Revision = InState.Revision;
+		const auto PrimitiveRevision = InState.Revision;
 		const bool bPending = bool(InState.Resource);
 		Primitive->Apply(std::move(InState));
 		Entries.emplace(InHandle.Slot, FEntry{InHandle, std::move(Primitive), InResult, InGroup, {}, ScopeFactory()});
 		Groups[InGroup].insert(InHandle.Slot);
 		DirtyGroups.insert(InGroup);
 		const auto& State = Entries.at(InHandle.Slot).Primitive->GetState();
-		InResult->Publish(bPending ? ERenderPrimitiveStatus::PendingResources : ERenderPrimitiveStatus::Ready, Revision,
-		                  {}, State.Resource, State.Section, Admitted);
+		InResult->Publish(bPending ? ERenderPrimitiveStatus::PendingResources : ERenderPrimitiveStatus::Ready,
+		                  PrimitiveRevision, {}, State.Resource, State.Section, Admitted);
 	}
 	catch (const std::exception& Error)
 	{
@@ -135,7 +135,7 @@ void FRenderScene::Update(std::vector<FRenderPrimitiveUpdate> InUpdates)
 	for (auto& Update : InUpdates)
 	{
 		auto& Entry = Entries.at(Update.Handle.Slot);
-		const auto Revision = Update.State.Revision;
+		const auto PrimitiveRevision = Update.State.Revision;
 		const bool bPending = bool(Update.State.Resource);
 		Entry.Lifetime = std::move(Lifetimes.at(Update.Handle.Slot));
 		Entry.EvaluationCache = std::move(Caches.at(Update.Handle.Slot));
@@ -143,7 +143,7 @@ void FRenderScene::Update(std::vector<FRenderPrimitiveUpdate> InUpdates)
 		Entry.Primitive->Apply(std::move(Update.State));
 		const auto& State = Entry.Primitive->GetState();
 		Entry.Result->Publish(bPending ? ERenderPrimitiveStatus::PendingResources : ERenderPrimitiveStatus::Ready,
-		                      Revision, {}, State.Resource, State.Section, Admitted.at(Update.Handle.Slot));
+		                      PrimitiveRevision, {}, State.Resource, State.Section, Admitted.at(Update.Handle.Slot));
 	}
 }
 

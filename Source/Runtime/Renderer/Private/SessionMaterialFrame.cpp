@@ -37,7 +37,12 @@ std::shared_ptr<const FMaterialFrameContext> FRenderSession::FMaterialState::Fra
 		throw std::invalid_argument("Nonfinite material frame time");
 	}
 	std::lock_guard Lock(Publication);
-	Providers.Freeze();
+	if (!bProvidersFrozen)
+	{
+		// Registry caches belong to Render. Do not rewrite its frozen flag from subsequent Main ticks.
+		Providers.Freeze();
+		bProvidersFrozen = true;
+	}
 	auto& SceneScope = Inputs.Scopes[ScopeIndex(EMaterialScope::Scene)];
 	if (SceneScope.Key.GetQualifiers() != std::vector<std::uint64_t>{InSceneIdentity})
 	{

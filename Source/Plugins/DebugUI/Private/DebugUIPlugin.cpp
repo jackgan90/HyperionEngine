@@ -65,6 +65,12 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 	{
 		InGui.Text("H Y P E R I O N");
 		InGui.Text("Rendering lab  /  " + InSettings.RHIBackend);
+		const auto Progress = InMetrics.FramePipeline;
+		InGui.Text("CPU sent " + std::to_string(Progress.Submitted) + " | R done " +
+		           std::to_string(Progress.RenderCompleted) + " | RHI " + std::to_string(Progress.RhiCompleted));
+		InGui.Text("Result frame " + std::to_string(InMetrics.ResultFrame) + " | lead limits " +
+		           std::to_string(InMetrics.FrameLimits.MainLead) + " / " +
+		           std::to_string(InMetrics.FrameLimits.RenderLead));
 		if (!InMetrics.AssetStatus.empty())
 		{
 			InGui.Separator();
@@ -128,7 +134,7 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		}
 		InGui.Text("CPU hooked: " + Fixed(Tracked / 1048576.0) + " MiB");
 		InGui.Text("GPU allocated: " + Fixed(InMetrics.Device.GpuAllocationBytes / 1048576.0) + " MiB");
-		InGui.Text("Frame interval includes present waits.");
+		InGui.Text("Main tick interval includes pipeline waits.");
 	}
 	InGui.EndPanel();
 	return Actions;
