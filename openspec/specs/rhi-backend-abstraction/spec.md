@@ -74,3 +74,14 @@ Renderer resource services SHALL drain accepted operations and retirement record
 #### Scenario: Direct RHI frame progress
 - **WHEN** a standalone RHI client continues submitting frames and earlier submissions have completed
 - **THEN** normal frame progress reclaims completed retention records instead of accumulating them until explicit collection or shutdown
+
+### Requirement: Explicit color formats and multiple targets
+RHI SHALL expose vendor-independent color formats, sampled render-color creation, immutable texture format information and enabled format/MRT capabilities. Graphics pipeline target signatures SHALL describe each ordered color slot. D3D12 SHALL bind and validate all declared RTVs, reflect pixel-output compatibility, and retain existing ownership and failure checks. Complete target signatures SHALL participate in pipeline and draw-cache equality.
+
+#### Scenario: Mixed GBuffer formats
+- **WHEN** one pass writes RGBA8 and RGBA16F attachments
+- **THEN** the backend creates matching views/PSO formats and accepts compatible shader outputs without converting data to sRGB
+
+#### Scenario: Mismatched pipeline or foreign target
+- **WHEN** a draw declares the wrong target format/count or an attachment belongs to another device
+- **THEN** validation rejects it before GPU submission

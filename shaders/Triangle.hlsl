@@ -1,4 +1,5 @@
 #include "Common.hlsli"
+#include "Common/ColorSpace.hlsli"
 
 struct FVertexInput
 {
@@ -33,5 +34,10 @@ FVertexOutput VSMain(FVertexInput InInput
 
 float4 PSMain(FVertexOutput InInput) : SV_Target0
 {
+#if HYP_HDR_DISPLAY
+	float3 Linear = SrgbToLinear(InInput.Color.rgb);
+	return float4(min(Linear / max(1 - Linear, .0001), 65000), InInput.Color.a);
+#else
 	return InInput.Color;
+#endif
 }

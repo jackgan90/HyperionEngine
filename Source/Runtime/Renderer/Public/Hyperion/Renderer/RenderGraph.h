@@ -23,6 +23,7 @@ struct FGraphTextureImport
 	// A deferred import declares a stable engine source identity before RHI resolution.
 	std::shared_ptr<const void> Identity;
 	std::function<FTexture()> Resolve;
+	ERHIColorFormat ColorFormat = ERHIColorFormat::Rgba8Unorm;
 };
 
 enum class EGraphColorView
@@ -66,6 +67,17 @@ struct FGraphicsPass
 	std::vector<FGraphicsDrawBatch> Batches;
 	// Only draw batches are deferred. Attachments and resource accesses are already declared.
 	std::function<std::vector<FGraphicsDrawBatch>()> Prepare;
+	std::vector<FGraphColorAttachment> Colors;
+
+	std::span<const FGraphColorAttachment> GetColors() const
+	{
+		if (Color && !Colors.empty())
+		{
+			throw std::invalid_argument("Graph pass cannot mix single and multiple color attachment storage");
+		}
+		return Color ? std::span<const FGraphColorAttachment>(&*Color, 1)
+		             : std::span<const FGraphColorAttachment>(Colors);
+	}
 };
 
 class FRenderGraph

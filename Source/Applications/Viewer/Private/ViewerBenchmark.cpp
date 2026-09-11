@@ -66,6 +66,31 @@ void WriteShadowBenchmark(std::ostream& InOutput, const FForwardPipelineStatisti
 	         << ShadowPlan << ',' << ShadowPrepare;
 }
 
+void WriteScenePipelineBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline,
+                                 const FDeviceStats& InDevice)
+{
+	std::array<double, 6> Times{};
+	constexpr std::array<std::string_view, 5> Prefixes{
+	    "Deferred/BasePass/", "Deferred/Lighting/", "Deferred/Compatibility/", "Scene/Transparent/", "Output/Tonemap/"};
+	for (const auto& Pass : InDevice.GpuTiming.Passes)
+	{
+		Times.back() += Pass.Milliseconds;
+		for (std::size_t Index = 0; Index < Prefixes.size(); ++Index)
+		{
+			if (Pass.Name.starts_with(Prefixes[Index]))
+			{
+				Times[Index] += Pass.Milliseconds;
+			}
+		}
+	}
+	for (const auto Time : Times)
+	{
+		InOutput << ',' << Time;
+	}
+	InOutput << ',' << InPipeline.SceneTargetBytes << ',' << InPipeline.FullscreenDraws << ','
+	         << InPipeline.FullscreenPreparationMilliseconds;
+}
+
 void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline)
 {
 	std::size_t SharedUpdates{};
@@ -132,7 +157,14 @@ void FViewerApplication::ExerciseBenchmarkCamera(int InFrame)
 	Events[2].Type = EEventType::MouseButton;
 	Events[2].Button = 1;
 	Events[2].bDown = false;
-	ScenePlugin->Input(Events, false, false);
+	if (ScenePlugin)
+	{
+		ScenePlugin->Input(Events, false, false);
+	}
+	else
+	{
+		ModelPlugin->Input(Events, false, false);
+	}
 }
 
 void FViewerApplication::MatchBenchmarkTimings()
@@ -211,7 +243,9 @@ void FViewerApplication::SaveBenchmark()
 	       "items,retained_item_restores"
 	    << ",membership_reuses,membership_added,membership_removed,contained_item_tests"
 	    << ",incremental_plan_updates,incremental_item_reuses,affected_batches,retained_batches,batch_admission_reuses,"
-	       "cached_plan_items,cached_plan_blocks,cpu_latency_ms,main_render_lead,render_rhi_lead\n"
+	       "cached_plan_items,cached_plan_blocks,cpu_latency_ms,main_render_lead,render_rhi_lead"
+	       ",base_gpu_ms,lighting_gpu_ms,compatibility_gpu_ms,transparent_gpu_ms,tonemap_gpu_ms,total_gpu_pass_ms"
+	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms\n"
 	    << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
@@ -240,7 +274,9 @@ void FViewerApplication::SaveBenchmark()
 		       << Frame.Device.GraphicsDynamicBinds;
 		WritePreparationBenchmark(Output, Frame.Pipeline);
 		Output << ',' << Frame.CpuLatencyMilliseconds << ',' << Metrics.FrameLimits.MainLead << ','
-		       << Metrics.FrameLimits.RenderLead << '\n';
+		       << Metrics.FrameLimits.RenderLead;
+		WriteScenePipelineBenchmark(Output, Frame.Pipeline, Frame.Device);
+		Output << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}
 	Output.close();

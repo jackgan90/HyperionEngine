@@ -117,7 +117,7 @@ void FViewerApplication::InitializePlugins()
 	}
 	auto& Tasks = Services->Tasks;
 	RenderSession = std::make_unique<FRenderSession>(Tasks, *Device, *Compiler);
-	ForwardPipeline = std::make_unique<FForwardRenderPipeline>(*RenderSession);
+	ScenePipeline = std::make_unique<FSceneRenderPipeline>(*RenderSession, Device->GetCapabilities(), Options.Pipeline);
 	FPluginRegistry Registry;
 	RegisterTrianglePlugin(Registry, *RenderSession, *Device, *Compiler, Tasks);
 	RegisterModelViewerPlugin(Registry, *RenderSession, Tasks, Services->Assets, Settings.ModelSource);
@@ -173,7 +173,7 @@ FDeviceStats FViewerApplication::ReleaseGraphics()
 	ScenePlugin = nullptr;
 	if (RenderSession)
 	{
-		ForwardPipeline.reset();
+		ScenePipeline.reset();
 		RenderSession->Close();
 		RenderSession.reset();
 	}

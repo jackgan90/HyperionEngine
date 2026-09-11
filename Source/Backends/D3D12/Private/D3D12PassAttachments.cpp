@@ -4,6 +4,7 @@
 #include "Hyperion/RHI/RHIPipeline.h"
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace Hyperion
 {
@@ -84,25 +85,70 @@ void ValidateTransitions(const FD3D12DeviceState& InState, const FPassCommands& 
 	for (const auto& Barrier : InCommands.Transitions)
 	{
 		ResolveTarget(Barrier.Target, InState, InFrame);
+		const auto* Texture = Barrier.Target.Kind == ERenderTargetKind::Texture
+		                          ? &NativeResource<FD3D12Texture>(Barrier.Target.Texture.Payload, &InState)
+		                          : nullptr;
+		if (Texture && !Texture->DepthViews && !Texture->ColorViews)
+		{
+			throw std::invalid_argument("Only sampled render target transitions are supported");
+		}
 		const auto Valid = [&](EResourceState InValue)
 		{
 			if (Barrier.Target.Kind == ERenderTargetKind::Backbuffer)
 			{
 				return InValue == EResourceState::Present || InValue == EResourceState::RenderTarget;
 			}
-			return InValue == EResourceState::DepthWrite ||
-			       (Barrier.Target.Kind == ERenderTargetKind::Texture && InValue == EResourceState::ShaderRead);
+			return (Texture && Texture->ColorViews ? InValue == EResourceState::RenderTarget
+			                                       : InValue == EResourceState::DepthWrite) ||
+			       (Texture && InValue == EResourceState::ShaderRead);
 		};
 		if (!Valid(Barrier.Before) || !Valid(Barrier.After))
 		{
 			throw std::invalid_argument("Invalid attachment resource transition");
 		}
-		if (Barrier.Target.Kind == ERenderTargetKind::Texture &&
-		    !NativeResource<FD3D12Texture>(Barrier.Target.Texture.Payload, &InState).DepthViews)
-		{
-			throw std::invalid_argument("Only sampled depth texture transitions are supported");
-		}
 	}
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE ColorView(const FD3D12DeviceState& InState, const FColorAttachment& InAttachment,
+                                      const FD3D12FrameTargets& InFrame)
+{
+	return InAttachment.Target.Kind == ERenderTargetKind::Backbuffer
+	           ? (InAttachment.GetFormat() == ERHIColorFormat::Rgba8Srgb ? InFrame.SrgbView : InFrame.ColorView)
+	           : NativeResource<FD3D12Texture>(InAttachment.Target.Texture.Payload, &InState)
+	                 .ColorViews->GetCPUDescriptorHandleForHeapStart();
+}
+
+FSize ValidateColor(const FD3D12DeviceState& InState, const FColorAttachment& InAttachment,
+                    const FD3D12FrameTargets& InFrame)
+{
+	if (!IsFinite(FVec3{InAttachment.Clear.X, InAttachment.Clear.Y, InAttachment.Clear.Z}) ||
+	    !std::isfinite(InAttachment.Clear.W) || InAttachment.Format >= ERHIColorFormat::Count ||
+	    (InAttachment.bSrgb && InAttachment.Format != ERHIColorFormat::Rgba8Unorm))
+	{
+		throw std::invalid_argument("Invalid color clear or view format");
+	}
+	ValidateActions(InAttachment.Actions);
+	ResolveTarget(InAttachment.Target, InState, InFrame);
+	if (InAttachment.Target.Kind == ERenderTargetKind::Backbuffer)
+	{
+		if (InAttachment.GetFormat() != ERHIColorFormat::Rgba8Unorm &&
+		    InAttachment.GetFormat() != ERHIColorFormat::Rgba8Srgb)
+		{
+			throw std::invalid_argument("Backbuffer requires RGBA8 color format");
+		}
+		return InFrame.Size;
+	}
+	if (InAttachment.Target.Kind != ERenderTargetKind::Texture)
+	{
+		throw std::invalid_argument("Invalid color attachment kind");
+	}
+	const auto& Texture = NativeResource<FD3D12Texture>(InAttachment.Target.Texture.Payload, &InState);
+	if (!Texture.ColorViews || Texture.ColorFormat != InAttachment.GetFormat())
+	{
+		throw std::invalid_argument("Color texture format or render view mismatch");
+	}
+	const auto Info = Texture.GetInfo();
+	return {Info.Width, Info.Height};
 }
 
 D3D12_RECT RenderRect(const FPassCommands& InCommands, FSize InSize)
@@ -135,9 +181,12 @@ void DiscardAttachments(ID3D12GraphicsCommandList& InList, const FD3D12DeviceSta
 		return bInStore ? InActions.Store == EAttachmentStore::Discard : InActions.Load == EAttachmentLoad::Discard;
 	};
 	const auto Rect = RenderRect(InCommands, InSize);
-	if (InCommands.Color && IsDiscard(InCommands.Color->Actions))
+	for (const auto& Color : InCommands.GetColors())
 	{
-		Discard(InList, ResolveTarget(InCommands.Color->Target, InState, InFrame), Rect, 0);
+		if (IsDiscard(Color.Actions))
+		{
+			Discard(InList, ResolveTarget(Color.Target, InState, InFrame), Rect, 0);
+		}
 	}
 	if (InCommands.DepthStencil)
 	{
@@ -159,35 +208,48 @@ FSize ValidatePassAttachments(const FD3D12DeviceState& InState, const FPassComma
                               const FD3D12FrameTargets& InFrame)
 {
 	auto Size = InFrame.Size;
-	if (InCommands.Color)
+	const auto Colors = InCommands.GetColors();
+	if (Colors.size() > InState.Capabilities.MaxColorTargets)
 	{
-		if (InCommands.Color->Target.Kind != ERenderTargetKind::Backbuffer ||
-		    (!IsFinite(FVec3{InCommands.Color->Clear.X, InCommands.Color->Clear.Y, InCommands.Color->Clear.Z}) ||
-		     !std::isfinite(InCommands.Color->Clear.W)))
+		throw std::invalid_argument("Pass exceeds backend MRT capacity");
+	}
+	std::set<ID3D12Resource*> Written;
+	bool bHaveSize = false;
+	const auto CheckSize = [&](FSize InSize)
+	{
+		if (bHaveSize && (Size.Width != InSize.Width || Size.Height != InSize.Height))
 		{
-			throw std::invalid_argument("Unsupported color target or clear value");
+			throw std::invalid_argument("Pass attachment dimensions differ");
 		}
-		ResolveTarget(InCommands.Color->Target, InState, InFrame);
-		ValidateActions(InCommands.Color->Actions);
+		Size = InSize;
+		bHaveSize = true;
+	};
+	for (const auto& Color : Colors)
+	{
+		CheckSize(ValidateColor(InState, Color, InFrame));
+		if (!Written.insert(ResolveTarget(Color.Target, InState, InFrame)).second)
+		{
+			throw std::invalid_argument("Duplicate color attachment resource");
+		}
 	}
 	if (InCommands.DepthStencil)
 	{
-		Size = ValidateDepth(InState, *InCommands.DepthStencil, InFrame);
-		if (InCommands.Color && (Size.Width != InFrame.Size.Width || Size.Height != InFrame.Size.Height))
+		CheckSize(ValidateDepth(InState, *InCommands.DepthStencil, InFrame));
+		if (!Written.insert(ResolveTarget(InCommands.DepthStencil->Target, InState, InFrame)).second)
 		{
-			throw std::invalid_argument("Color/depth attachment dimensions differ");
+			throw std::invalid_argument("Aliased color/depth attachment");
 		}
 	}
-	if (!InCommands.Color && !InCommands.DepthStencil && !InCommands.GetDraws().empty())
+	if (Colors.empty() && !InCommands.DepthStencil && !InCommands.GetDraws().empty())
 	{
 		throw std::invalid_argument("Draws require an explicit graphics attachment");
 	}
 	for (const auto& Texture : InCommands.SampledTextures)
 	{
-		if (!NativeResource<FD3D12Texture>(Texture.Payload, &InState).DepthViews ||
-		    Texture == InCommands.GetDepthTexture())
+		const auto& NativeTexture = NativeResource<FD3D12Texture>(Texture.Payload, &InState);
+		if ((!NativeTexture.DepthViews && !NativeTexture.ColorViews) || Written.contains(NativeTexture.Resource.Get()))
 		{
-			throw std::invalid_argument("Invalid sampled depth resource");
+			throw std::invalid_argument("Invalid or simultaneously writable sampled target");
 		}
 	}
 	ValidateTransitions(InState, InCommands, InFrame);
@@ -207,17 +269,25 @@ void RecordPassBegin(ID3D12GraphicsCommandList& InList, const FD3D12DeviceState&
 		           Native(Barrier.After));
 	}
 	DiscardAttachments(InList, InState, InCommands, InFrame, InSize, false);
-	const auto Rtv = InCommands.IsSrgb() ? InFrame.SrgbView : InFrame.ColorView;
+	const auto Colors = InCommands.GetColors();
+	std::array<D3D12_CPU_DESCRIPTOR_HANDLE, MaximumColorTargets> Rtvs{};
+	for (std::size_t Index = 0; Index < Colors.size(); ++Index)
+	{
+		Rtvs[Index] = ColorView(InState, Colors[Index], InFrame);
+	}
 	const auto Dsv =
 	    InCommands.DepthStencil ? DepthView(InState, *InCommands.DepthStencil, InFrame) : D3D12_CPU_DESCRIPTOR_HANDLE{};
-	InList.OMSetRenderTargets(InCommands.Color ? 1 : 0, InCommands.Color ? &Rtv : nullptr, FALSE,
+	InList.OMSetRenderTargets(static_cast<UINT>(Colors.size()), Colors.empty() ? nullptr : Rtvs.data(), FALSE,
 	                          InCommands.DepthStencil ? &Dsv : nullptr);
 	const auto Rect = RenderRect(InCommands, InSize);
-	if (InCommands.Color && InCommands.Color->Actions.Load == EAttachmentLoad::Clear)
+	for (std::size_t Index = 0; Index < Colors.size(); ++Index)
 	{
-		const auto& Value = InCommands.Color->Clear;
-		const float Color[]{Value.X, Value.Y, Value.Z, Value.W};
-		InList.ClearRenderTargetView(Rtv, Color, 1, &Rect);
+		if (Colors[Index].Actions.Load == EAttachmentLoad::Clear)
+		{
+			const auto& Value = Colors[Index].Clear;
+			const float Color[]{Value.X, Value.Y, Value.Z, Value.W};
+			InList.ClearRenderTargetView(Rtvs[Index], Color, 1, &Rect);
+		}
 	}
 	if (InCommands.DepthStencil)
 	{

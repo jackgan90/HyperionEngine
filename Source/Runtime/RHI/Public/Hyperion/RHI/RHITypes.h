@@ -45,6 +45,14 @@ struct FDepthTextureDesc
 	float ClearDepth = 1;
 };
 
+struct FColorTextureDesc
+{
+	std::uint32_t Width = 1;
+	std::uint32_t Height = 1;
+	ERHIColorFormat Format = ERHIColorFormat::Rgba16Float;
+	FVec4 Clear;
+};
+
 struct FTextureMip
 {
 	std::uint32_t Width{};
@@ -183,6 +191,12 @@ struct FColorAttachment
 	FAttachmentActions Actions;
 	FVec4 Clear;
 	bool bSrgb{};
+	ERHIColorFormat Format = ERHIColorFormat::Rgba8Unorm;
+
+	ERHIColorFormat GetFormat() const
+	{
+		return bSrgb ? ERHIColorFormat::Rgba8Srgb : Format;
+	}
 };
 
 struct FDepthStencilAttachment
@@ -245,10 +259,36 @@ struct FPassCommands : FDrawCommands
 	std::optional<FViewport> Viewport;
 	std::vector<FTexture> SampledTextures;
 	std::vector<FResourceTransition> Transitions;
+	// Color is the legacy single-target spelling; it cannot be combined with Colors.
+	std::vector<FColorAttachment> Colors;
+
+	std::span<const FColorAttachment> GetColors() const
+	{
+		if (Color && !Colors.empty())
+		{
+			throw std::invalid_argument("Pass cannot mix single and multiple color attachment storage");
+		}
+		return Color ? std::span<const FColorAttachment>(&*Color, 1) : std::span<const FColorAttachment>(Colors);
+	}
+
+	FGraphicsTarget GetGraphicsTarget() const
+	{
+		const auto Attachments = GetColors();
+		if (Attachments.size() > MaximumColorTargets)
+		{
+			throw std::invalid_argument("Too many color attachments");
+		}
+		FGraphicsTarget Result{IsSrgb(), GetDepthFormat(), static_cast<std::uint32_t>(Attachments.size())};
+		for (std::size_t Index = 0; Index < Attachments.size(); ++Index)
+		{
+			Result.ColorFormats[Index] = Index == 0 ? Attachments[Index].Format : Attachments[Index].GetFormat();
+		}
+		return Result;
+	}
 
 	bool HasColor() const
 	{
-		return Color.has_value();
+		return !GetColors().empty();
 	}
 
 	bool HasDepth() const
@@ -263,7 +303,8 @@ struct FPassCommands : FDrawCommands
 
 	bool IsSrgb() const
 	{
-		return Color && Color->bSrgb;
+		const auto Attachments = GetColors();
+		return !Attachments.empty() && Attachments.front().bSrgb;
 	}
 
 	ERHIDepthFormat GetDepthFormat() const

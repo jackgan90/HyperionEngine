@@ -65,6 +65,45 @@ bool ParseBenchmarkOption(FOptions& InOptions, const std::string& InArg, int InA
 	return true;
 }
 
+bool ParseScenePipelineOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex)
+{
+	if (InArg == "--pipeline" && InIndex + 1 < InArgc)
+	{
+		const std::string Value = InArgv[++InIndex];
+		if (Value != "deferred" && Value != "forward")
+		{
+			throw std::invalid_argument("--pipeline requires deferred or forward");
+		}
+		InOptions.bPipelineOption = true;
+		InOptions.Pipeline.Pipeline =
+		    Value == "deferred" ? ESceneRenderPipeline::Deferred : ESceneRenderPipeline::Forward;
+	}
+	else if (InArg == "--gbuffer" && InIndex + 1 < InArgc)
+	{
+		const std::string Value = InArgv[++InIndex];
+		if (Value != "compact" && Value != "high")
+		{
+			throw std::invalid_argument("--gbuffer requires compact or high");
+		}
+		InOptions.bGBufferOption = true;
+		InOptions.Pipeline.GBuffer = Value == "high" ? FGBufferLayout::HighPrecision() : FGBufferLayout{};
+	}
+	else if (InArg == "--exposure" && InIndex + 1 < InArgc)
+	{
+		InOptions.bExposureOption = true;
+		InOptions.Pipeline.Exposure = std::stof(InArgv[++InIndex]);
+	}
+	else if (InArg == "--gbuffer-debug" && InIndex + 1 < InArgc)
+	{
+		InOptions.GBufferDebug = std::stoi(InArgv[++InIndex]);
+	}
+	else
+	{
+		return false;
+	}
+	return true;
+}
+
 bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex)
 {
 	if (InArg == "--frames" && InIndex + 1 < InArgc)
@@ -235,6 +274,7 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 		const std::string Arg = InArgv[Index];
 		if (!ParseFramePipelineOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseApplicationOption(Options, Arg, InArgc, InArgv, Index) &&
+		    !ParseScenePipelineOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseCaptureOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseBenchmarkOption(Options, Arg, InArgc, InArgv, Index) &&
 		    !ParseShadowOption(Options, Arg, InArgc, InArgv, Index) &&
@@ -249,6 +289,27 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 
 void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings)
 {
+	if (InOptions.bPipelineOption)
+	{
+		InSettings.RenderPipeline =
+		    InOptions.Pipeline.Pipeline == ESceneRenderPipeline::Deferred ? "deferred" : "forward";
+	}
+	if (InOptions.bGBufferOption)
+	{
+		InSettings.GBufferLayout = InOptions.Pipeline.GBuffer == FGBufferLayout::HighPrecision() ? "high" : "compact";
+	}
+	if (InOptions.bExposureOption)
+	{
+		InSettings.Exposure = InOptions.Pipeline.Exposure;
+	}
+	InSettings.GBufferDebug = InOptions.GBufferDebug.value_or(InSettings.GBufferDebug);
+	if ((InSettings.RenderPipeline != "deferred" && InSettings.RenderPipeline != "forward") ||
+	    (InSettings.GBufferLayout != "compact" && InSettings.GBufferLayout != "high") ||
+	    !std::isfinite(InSettings.Exposure) || InSettings.Exposure <= 0 || InSettings.GBufferDebug < 0 ||
+	    InSettings.GBufferDebug > 6)
+	{
+		throw std::invalid_argument("Invalid scene pipeline, GBuffer layout, exposure or debug mode");
+	}
 	InSettings.MainRenderLead = InOptions.MainRenderLead.value_or(InSettings.MainRenderLead);
 	InSettings.RenderRhiLead = InOptions.RenderRhiLead.value_or(InSettings.RenderRhiLead);
 	if (InSettings.MainRenderLead < 0 || InSettings.RenderRhiLead < 0 ||

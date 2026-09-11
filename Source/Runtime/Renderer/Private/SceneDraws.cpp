@@ -65,8 +65,8 @@ FPreparedSceneDraws PrepareDraws(FRenderResourceCoordinator& InOwner, const FRen
 			}
 			Result.Srgb[Index] =
 			    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
-			Result.Packets[Index] = InOwner.DrawMaterial(
-			    Item, InSnapshot.View, {Result.Srgb[Index], Result.Depth, InSnapshot.Targets.ColorCount()});
+			Result.Packets[Index] =
+			    InOwner.DrawMaterial(Item, InSnapshot.View, InSnapshot.Targets.GraphicsTarget(Result.Srgb[Index]));
 		}
 		catch (const std::exception& Error)
 		{

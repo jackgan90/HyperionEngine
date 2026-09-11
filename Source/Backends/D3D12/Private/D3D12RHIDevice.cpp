@@ -20,6 +20,16 @@ void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& In
 	Caps.Adapter = InState.AdapterName;
 	Caps.MaxRecordingContexts = ContextCount;
 	Caps.MaxSampledTextures = 128;
+	Caps.MaxColorTargets = MaximumColorTargets;
+	for (std::size_t Index = 0; Index < Caps.SampledColorTargets.size(); ++Index)
+	{
+		D3D12_FEATURE_DATA_FORMAT_SUPPORT Support{NativeColorFormat(static_cast<ERHIColorFormat>(Index))};
+		const auto Required = D3D12_FORMAT_SUPPORT1_RENDER_TARGET | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE |
+		                      D3D12_FORMAT_SUPPORT1_SHADER_LOAD | D3D12_FORMAT_SUPPORT1_BLENDABLE;
+		Caps.SampledColorTargets[Index] =
+		    SUCCEEDED(InState.Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &Support, sizeof(Support))) &&
+		    (Support.Support1 & Required) == Required;
+	}
 	Caps.MaxRegisterSpaces = ShaderRegisterSpaceCount;
 	Caps.MaxConstantBuffers = 14;
 	Caps.MaxSamplers = 16;
@@ -285,6 +295,17 @@ FPipeline FD3D12RHIDevice::CreatePipeline(const FPipelineDesc& InDesc)
 	R->State = State;
 	R->Layout = InDesc.Layout;
 	ValidateGraphicsPipeline(InDesc);
+	if (InDesc.Target.ColorCount > State->Capabilities.MaxColorTargets)
+	{
+		throw std::invalid_argument("Pipeline exceeds backend MRT capacity");
+	}
+	for (std::uint32_t Index = 0; Index < InDesc.Target.ColorCount; ++Index)
+	{
+		if (!State->Capabilities.SampledColorTargets[static_cast<std::size_t>(InDesc.Target.GetColorFormat(Index))])
+		{
+			throw std::invalid_argument("Pipeline uses an unsupported color target format");
+		}
+	}
 	const auto& Layout = NativeResource<FD3D12BindingLayout>(R->Layout.Payload, State.get());
 	ValidatePipelineBindings(InDesc, Layout.Description);
 	R->Root = Layout.Root;

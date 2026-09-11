@@ -27,15 +27,20 @@ FGraphTexture ImportTarget(FRenderGraph& InGraph, const FRenderResourcePreparati
 	{
 		return InGraph.ImportFrameDepth(InFormat);
 	}
-	if (InSource.Kind != ERenderTargetKind::Texture || !InSource.Texture || !InSource.Texture->GetDepthTarget() ||
+	if (InSource.Kind != ERenderTargetKind::Texture || !InSource.Texture || !InSource.Texture->IsRenderTarget() ||
 	    !InSource.Lifetime)
 	{
 		throw std::invalid_argument("Render pass requires a live explicit target source");
 	}
-	const auto& Depth = *InSource.Texture->GetDepthTarget();
-	const auto Texture = InGraph.Import({"Depth " + std::to_string(InSource.Texture->GetIdentity()),
+	const auto* Depth = InSource.Texture->GetDepthTarget();
+	const auto* Color = InSource.Texture->GetColorTarget();
+	if ((Depth && InFormat != ERHIDepthFormat::D32) || (Color && InFormat != ERHIDepthFormat::None))
+	{
+		throw std::invalid_argument("Render target source aspect differs from declaration");
+	}
+	const auto Texture = InGraph.Import({"Target " + std::to_string(InSource.Texture->GetIdentity()),
 	                                     {ERenderTargetKind::Texture},
-	                                     {Depth.Width, Depth.Height},
+	                                     {Depth ? Depth->Width : Color->Width, Depth ? Depth->Height : Color->Height},
 	                                     InFormat,
 	                                     EResourceState::ShaderRead,
 	                                     InSource.bInitialized,
@@ -43,7 +48,8 @@ FGraphTexture ImportTarget(FRenderGraph& InGraph, const FRenderResourcePreparati
 	                                     [InPreparation, InSource]
 	                                     {
 		                                     return InPreparation.ResolveTexture(InSource.Texture, InSource.Lifetime);
-	                                     }});
+	                                     },
+	                                     Color ? GetRenderColorFormat(Color->Format) : ERHIColorFormat::Rgba8Unorm});
 	InGraph.Export(Texture, EResourceState::ShaderRead);
 	return Texture;
 }
@@ -51,7 +57,7 @@ FGraphTexture ImportTarget(FRenderGraph& InGraph, const FRenderResourcePreparati
 void AddSampledValue(const FMaterialValue& InValue, const std::shared_ptr<const void>& InOwner,
                      std::set<const FMaterialTextureSource*>& InSeen, std::vector<FRenderTargetSource>& OutReads)
 {
-	if (InValue.Texture && InValue.Texture->GetDepthTarget() && InSeen.insert(InValue.Texture.get()).second)
+	if (InValue.Texture && InValue.Texture->IsRenderTarget() && InSeen.insert(InValue.Texture.get()).second)
 	{
 		OutReads.push_back({ERenderTargetKind::Texture, InValue.Texture, InOwner});
 	}
@@ -92,7 +98,7 @@ std::vector<FRenderTargetSource> CollectMaterialReads(const FRenderSceneSnapshot
 				continue;
 			}
 			const auto& Value = Item.GetMaterialValue(*Binding.ResourceParameter);
-			if (Value && ((Value->Texture && Value->Texture->GetDepthTarget()) ||
+			if (Value && ((Value->Texture && Value->Texture->IsRenderTarget()) ||
 			              (!Value->Elements.empty() && SeenArrays.insert(Value.get()).second)))
 			{
 				AddSampledValue(*Value, Item.State.Surface, Seen, Reads);
@@ -136,11 +142,21 @@ FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph, con
 	                                       std::to_string(InSnapshot.View.Identity) + "/" + InSnapshot.View.Usage
 	                                 : Targets.Name;
 	Pass.Viewport = InSnapshot.View.Viewport;
-	if (Targets.Color)
+	for (const auto& Color : Targets.GetColors())
 	{
-		const auto& Color = *Targets.Color;
-		Pass.Color = FGraphColorAttachment{ImportTarget(InGraph, *this, Color.Source, ERHIDepthFormat::None),
-		                                   Color.Actions, Color.Clear, Color.View};
+		FGraphColorAttachment Attachment{
+		    ImportTarget(InGraph, *this, Color.Source, ERHIDepthFormat::None), Color.Actions, Color.Clear,
+		    Color.Source.Kind == ERenderTargetKind::Texture && Color.View == EGraphColorView::DrawBatch
+		        ? EGraphColorView::Linear
+		        : Color.View};
+		if (Targets.Color)
+		{
+			Pass.Color = Attachment;
+		}
+		else
+		{
+			Pass.Colors.push_back(Attachment);
+		}
 	}
 	if (Targets.DepthStencil)
 	{
@@ -151,7 +167,9 @@ FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph, con
 	}
 	for (const auto& Read : InReads)
 	{
-		const auto Texture = ImportTarget(InGraph, *this, Read, ERHIDepthFormat::D32);
+		const auto Texture =
+		    ImportTarget(InGraph, *this, Read,
+		                 Read.Texture && Read.Texture->GetDepthTarget() ? ERHIDepthFormat::D32 : ERHIDepthFormat::None);
 		if (std::find(Pass.Reads.begin(), Pass.Reads.end(), Texture) == Pass.Reads.end())
 		{
 			Pass.Reads.push_back(Texture);

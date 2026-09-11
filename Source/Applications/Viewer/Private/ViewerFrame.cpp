@@ -9,9 +9,9 @@ namespace Hyperion
 {
 void FViewerApplication::RunFrames()
 {
-	if (Options.bBenchmarkCamera && !ScenePlugin)
+	if (Options.bBenchmarkCamera && !ScenePlugin && !ModelPlugin)
 	{
-		throw std::invalid_argument("--benchmark-camera requires scene-viewer");
+		throw std::invalid_argument("--benchmark-camera requires scene-viewer or model-viewer");
 	}
 	auto LastFrame = ClockNanoseconds();
 	if (Options.bExerciseRdcUi && (!Gui || !Settings.bShowGui))
@@ -101,6 +101,9 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 		if (ScenePlugin)
 		{
 			ScenePlugin->DrawGui(*Gui, SceneStatistics, Options.bNoInstanceBatching);
+		}
+		if (ScenePlugin || ModelPlugin)
+		{
 			DrawShadowGui();
 			if (ShadowSettings.PreviewViewport)
 			{
@@ -190,7 +193,14 @@ FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, c
                                                   const FCascadedShadowSettings& InShadows)
 {
 	FRenderGraph Graph;
-	ForwardPipeline->Build(
+	FScenePipelineSettings Pipeline;
+	Pipeline.Pipeline =
+	    InFrame.Settings.RenderPipeline == "deferred" ? ESceneRenderPipeline::Deferred : ESceneRenderPipeline::Forward;
+	Pipeline.GBuffer = InFrame.Settings.GBufferLayout == "high" ? FGBufferLayout::HighPrecision() : FGBufferLayout{};
+	Pipeline.Exposure = float(InFrame.Settings.Exposure);
+	Pipeline.DebugMode = static_cast<std::uint32_t>(InFrame.Settings.GBufferDebug);
+	ScenePipeline->Configure(Pipeline);
+	ScenePipeline->Build(
 	    Graph, InFrame.View, std::move(InMaterialFrame), InShadows,
 	    {float(InFrame.Settings.ClearRed), float(InFrame.Settings.ClearGreen), float(InFrame.Settings.ClearBlue), 1},
 	    [&](FRenderGraph& InGraph)

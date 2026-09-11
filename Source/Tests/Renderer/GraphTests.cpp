@@ -347,6 +347,92 @@ void CheckPhysicalImports()
 	}
 }
 
+void CheckColorTargets()
+{
+	class FColorTexture final : public IRHITexture
+	{
+	public:
+		FRHITextureInfo GetInfo() const noexcept override
+		{
+			return {64, 64, ERHIDepthFormat::None, ERHIColorFormat::Rgba16Float, true};
+		}
+
+		const void* GetDeviceIdentity() const noexcept override
+		{
+			return this;
+		}
+	};
+
+	FRenderGraph Graph;
+	const auto ImportColor = [&]()
+	{
+		FGraphTextureImport Import{"HDR", FRenderTarget::FromTexture({std::make_shared<FColorTexture>()}), {64, 64}};
+		Import.ColorFormat = ERHIColorFormat::Rgba16Float;
+		return Graph.Import(Import);
+	};
+	const auto First = ImportColor();
+	const auto Second = ImportColor();
+	FGraphicsPass Base;
+	Base.Name = "MRT";
+	Base.Colors = {{First, {EAttachmentLoad::Clear}}, {Second, {EAttachmentLoad::Clear}}};
+	Base.Batches.resize(2);
+	Graph.Add(Base);
+	auto Lighting = MakeColorPass(Graph, "lighting", EAttachmentLoad::Clear);
+	Lighting.Reads = {First, Second};
+	Graph.Add(Lighting);
+	const auto Compiled = Graph.Compile();
+	HYP_CHECK(Compiled[0].Colors.size() == 2 && Compiled[1].Colors.size() == 2);
+	HYP_CHECK(Compiled[0].Colors[1].Actions.Load == EAttachmentLoad::Clear);
+	HYP_CHECK(Compiled[1].Colors[1].Actions.Load == EAttachmentLoad::Load);
+	HYP_CHECK(Compiled[2].SampledTextures.size() == 2 && Compiled[2].Transitions.size() == 3);
+	HYP_CHECK(Compiled[0].GetGraphicsTarget().GetColorFormat(1) == ERHIColorFormat::Rgba16Float);
+	auto Conflicting = Graph;
+	Base.Name = "duplicate target";
+	Base.Colors[1].Texture = First;
+	Conflicting.Add(Base);
+	Rejects(
+	    [&]
+	    {
+		    Conflicting.Compile();
+	    });
+	Conflicting = Graph;
+	Base.Colors[1].Texture = Second;
+	Base.Reads = {First};
+	Conflicting.Add(Base);
+	Rejects(
+	    [&]
+	    {
+		    Conflicting.Compile();
+	    });
+	Conflicting = Graph;
+	Base.Reads.clear();
+	Base.Color = Base.Colors.front();
+	Conflicting.Add(Base);
+	Rejects(
+	    [&]
+	    {
+		    Conflicting.Compile();
+	    });
+	Conflicting = {};
+	const auto Undefined = Conflicting.Import({"undefined",
+	                                           FRenderTarget::FromTexture({std::make_shared<FColorTexture>()}),
+	                                           {64, 64},
+	                                           ERHIDepthFormat::None,
+	                                           EResourceState::ShaderRead,
+	                                           false,
+	                                           {},
+	                                           {},
+	                                           ERHIColorFormat::Rgba16Float});
+	auto Read = MakeColorPass(Conflicting, "undefined read", EAttachmentLoad::Clear);
+	Read.Reads = {Undefined};
+	Conflicting.Add(Read);
+	Rejects(
+	    [&]
+	    {
+		    Conflicting.Compile();
+	    });
+}
+
 void CheckGraphMoves()
 {
 	FRenderGraph Original;
@@ -448,6 +534,7 @@ int main()
 		CheckCompilationMutation();
 		CheckPhysicalImports();
 		CheckGraphMoves();
+		CheckColorTargets();
 		CheckFractionalRegions();
 		std::cout << "Explicit graph attachments, hazards, content lifetime and packet ownership passed\n";
 	}

@@ -51,6 +51,7 @@ struct FIncrementalBatchHistory
 	std::uint64_t Access{};
 	ERHIDepthFormat Depth{};
 	std::uint32_t ColorCount{};
+	FGraphicsTarget Target;
 	std::weak_ptr<const void> LocalContents;
 	std::shared_ptr<const void> Structure;
 	bool bStructureChanged{};

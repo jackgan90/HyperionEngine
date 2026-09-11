@@ -1,3 +1,4 @@
+#include "Hyperion/Renderer/RenderPass.h"
 #include "MaterialGpuCacheInternal.h"
 
 namespace Hyperion
@@ -59,6 +60,15 @@ FTexture FMaterialGpuCache::FImpl::Texture(std::shared_ptr<const FMaterialTextur
 		if (const auto* Depth = InSource->GetDepthTarget())
 		{
 			Entry.Resource = Device.CreateDepthTexture({Depth->Width, Depth->Height, Depth->ClearDepth});
+			return Entry.Resource;
+		}
+		if (const auto* Color = InSource->GetColorTarget())
+		{
+			Entry.Resource =
+			    Device.CreateColorTexture({Color->Width,
+			                               Color->Height,
+			                               GetRenderColorFormat(Color->Format),
+			                               {Color->Clear[0], Color->Clear[1], Color->Clear[2], Color->Clear[3]}});
 			return Entry.Resource;
 		}
 		FTextureDesc Description;

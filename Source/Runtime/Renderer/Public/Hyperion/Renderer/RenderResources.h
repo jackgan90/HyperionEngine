@@ -85,10 +85,13 @@ struct FRenderResourceStats
 };
 
 // Owned RHI preparation endpoint. Deferred work can outlive the service facade and rejects a closed coordinator.
+struct FFullscreenPassDesc;
+
 class FRenderResourcePreparation
 {
 public:
 	FGraphicsPass DeclarePass(FRenderGraph& InGraph, const FRenderSceneSnapshot& InSnapshot) const;
+	FGraphicsDrawBatch BuildFullscreen(const FFullscreenPassDesc& InPass) const;
 	FTexture ResolveTexture(std::shared_ptr<const FMaterialTextureSource> InSource,
 	                        std::shared_ptr<const void> InLifetime) const;
 	std::vector<FGraphicsDrawBatch> BuildDraws(const FRenderSceneSnapshot& InSnapshot,

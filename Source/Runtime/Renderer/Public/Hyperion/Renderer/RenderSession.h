@@ -50,11 +50,13 @@ public:
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
 	                       std::span<const FRenderPassTargets> InTargets,
 	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
-	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false);
+	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false,
+	                       const std::function<void(std::size_t)>& InAfterView = {});
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
 	                       const FRenderPassTargets& InTargets,
 	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
-	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false);
+	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false,
+	                       const std::function<void(std::size_t)>& InAfterView = {});
 	// Render publishes deferred statistics after graph execution joins the RHI coordinator.
 	double CompleteViews();
 	FRenderViewPreparation GetViewPreparation() const; // Render, immediately after BuildViews.
@@ -71,6 +73,8 @@ public:
 	FMaterialProviderStats ProviderStatistics() const; // Render only.
 	void AppendDepthPreview(FRenderGraph& InGraph, std::shared_ptr<const FMaterialTextureSource> InSource,
 	                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred = false);
+	void AppendFullscreen(FRenderGraph& InGraph, FFullscreenPassDesc InPass, bool bInDeferPreparation = true);
+	void ResetViewHistory(); // Render: discard cached view preparation after structural pipeline changes.
 	void Close();
 
 private:

@@ -6,9 +6,6 @@
 #ifndef HYP_SHADOW_CASTER
 #define HYP_SHADOW_CASTER 0
 #endif
-#if !HYP_SHADOW_CASTER
-#include "CascadedShadows.hlsli"
-#endif
 
 Texture2D BaseColorTexture : register(t0);
 Texture2D MetallicRoughnessTexture : register(t1);
@@ -106,59 +103,36 @@ void PSMain(FVertexOutput InInput)
 	ClipModelAlpha(InInput, ModelBaseColor(InInput).a);
 }
 #else
+#include "Material/ModelMaterial.hlsli"
+#include "Material/Parameters.hlsli"
+#if HYP_DEFERRED_BASE
+#include "Deferred/GBuffer.hlsli"
+
+FGBufferOutput PSMain(FVertexOutput InInput, bool bInFront : SV_IsFrontFace)
+{
+	FMaterialParameters Material = InitMaterialParameters(InInput, bInFront);
+	clip(Material.bUnlit ? -1 : 1);
+	return EncodeGBuffer(Material);
+}
+#else
+#include "Lighting/SurfaceLighting.hlsli"
+
 float4 PSMain(FVertexOutput InInput, bool bInFront : SV_IsFrontFace) : SV_Target0
 {
-	float4 Base = ModelBaseColor(InInput);
-	ClipModelAlpha(InInput, Base.a);
-	float Alpha = HYP_SURFACE(AlphaMode) == 2 ? Base.a : 1;
-	if (HYP_SURFACE(bUnlit))
+	FMaterialParameters Material = InitMaterialParameters(InInput, bInFront);
+#if HYP_UNLIT_COMPATIBILITY
+	clip(Material.bUnlit ? 1 : -1);
+#endif
+	float3 Color =
+	    EvaluateLighting(Material, InInput.WorldPosition, CameraPosition.xyz, MainLightDirection, MainLightColor,
+	                     AmbientColor, ddx(InInput.WorldPosition), ddy(InInput.WorldPosition));
+#if !HYP_FORWARD_HDR
+	if (!Material.bUnlit)
 	{
-		return float4(Base.rgb, Alpha);
+		Color = Color / (1 + Color);
 	}
-	float3 N = normalize(InInput.Normal);
-	if (HYP_SURFACE(bDoubleSided) && !bInFront)
-	{
-		N = -N;
-	}
-	float3 GeometricNormal = N;
-	if (HYP_SURFACE(bHasNormal))
-	{
-		float3 T = normalize(InInput.Tangent.xyz - N * dot(N, InInput.Tangent.xyz));
-		float3 B = cross(N, T) * InInput.Tangent.w;
-		float3 Mapped = NormalTexture.Sample(NormalSampler, SelectUv(InInput, HYP_SURFACE(NormalUv))).xyz * 2 - 1;
-		Mapped.xy *= HYP_SURFACE(NormalScale);
-		N = normalize(T * Mapped.x + B * Mapped.y + N * Mapped.z);
-	}
-	float4 Mr =
-	    MetallicRoughnessTexture.Sample(MetallicRoughnessSampler, SelectUv(InInput, HYP_SURFACE(MetallicRoughnessUv)));
-	float SurfaceMetallic = saturate(HYP_SURFACE(Metallic) * Mr.b);
-	float SurfaceRoughness = clamp(HYP_SURFACE(Roughness) * Mr.g, .045, 1);
-	float3 V = normalize(CameraPosition.xyz - InInput.WorldPosition);
-	float3 L = MainLightDirection;
-	float3 H = normalize(V + L);
-	float Nl = saturate(dot(N, L));
-	float Nv = max(saturate(dot(N, V)), .0001);
-	float Nh = saturate(dot(N, H));
-	float Vh = saturate(dot(V, H));
-	float A = SurfaceRoughness * SurfaceRoughness;
-	float A2 = A * A;
-	float Denominator = Nh * Nh * (A2 - 1) + 1;
-	float Distribution = A2 / max(3.14159265 * Denominator * Denominator, .000001);
-	float VisibilityV = 2 * Nv / max(Nv + sqrt(A2 + (1 - A2) * Nv * Nv), .0001);
-	float VisibilityL = 2 * Nl / max(Nl + sqrt(A2 + (1 - A2) * Nl * Nl), .0001);
-	float3 F0 = lerp(float3(.04, .04, .04), Base.rgb, SurfaceMetallic);
-	float3 Fresnel = F0 + (1 - F0) * pow(1 - Vh, 5);
-	float3 Specular = Distribution * VisibilityV * VisibilityL * Fresnel / max(4 * Nv * Nl, .0001);
-	float3 Diffuse = (1 - Fresnel) * (1 - SurfaceMetallic) * Base.rgb / 3.14159265;
-	float Occlusion = lerp(1, OcclusionTexture.Sample(OcclusionSampler, SelectUv(InInput, HYP_SURFACE(OcclusionUv))).r,
-	                       HYP_SURFACE(OcclusionStrength));
-	float3 Ambient = (Base.rgb * (1 - SurfaceMetallic) + F0 * (.7 - .4 * SurfaceRoughness)) * AmbientColor * Occlusion;
-	float3 SurfaceEmissive =
-	    HYP_SURFACE(Emissive) * EmissiveTexture.Sample(EmissiveSampler, SelectUv(InInput, HYP_SURFACE(EmissiveUv))).rgb;
-	float Shadow = DirectionalShadow(InInput.WorldPosition, GeometricNormal, L);
-	float3 Color = (Diffuse + Specular) * MainLightColor * Nl * Shadow + Ambient + SurfaceEmissive;
-	Color = Color / (1 + Color);
-	Color = ShadowDebugColor(Color, InInput.WorldPosition);
-	return float4(Color, Alpha);
+#endif
+	return float4(Color, Material.Alpha);
 }
+#endif
 #endif

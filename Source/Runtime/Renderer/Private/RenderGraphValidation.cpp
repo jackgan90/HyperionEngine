@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <stdexcept>
 
 namespace Hyperion
@@ -32,10 +33,12 @@ void Region(const FGraphicsPass& InPass, const FGraphTextureImport& InResource)
 void ValidateGraphState(const FGraphTextureImport& InResource, EResourceState InState)
 {
 	const auto Kind = InResource.Target.Kind;
-	const bool bValid = Kind == ERenderTargetKind::Backbuffer
-	                        ? InState == EResourceState::Present || InState == EResourceState::RenderTarget
-	                        : InState == EResourceState::DepthWrite ||
-	                              (Kind == ERenderTargetKind::Texture && InState == EResourceState::ShaderRead);
+	const bool bColor = InResource.DepthFormat == ERHIDepthFormat::None;
+	const bool bValid =
+	    Kind == ERenderTargetKind::Backbuffer
+	        ? InState == EResourceState::Present || InState == EResourceState::RenderTarget
+	        : (bColor ? InState == EResourceState::RenderTarget : InState == EResourceState::DepthWrite) ||
+	              (Kind == ERenderTargetKind::Texture && InState == EResourceState::ShaderRead);
 	if (!bValid)
 	{
 		throw std::invalid_argument("Resource state is incompatible with graph texture");
@@ -65,11 +68,13 @@ void ValidateGraphImport(const FGraphTextureImport& InResource)
 	}
 	else if (Kind == ERenderTargetKind::Texture)
 	{
-		if (InResource.DepthFormat != ERHIDepthFormat::D32 || !InResource.Size.Width ||
+		if ((InResource.DepthFormat != ERHIDepthFormat::D32 && InResource.DepthFormat != ERHIDepthFormat::None) ||
+		    InResource.ColorFormat >= ERHIColorFormat::Count || !InResource.Size.Width ||
 		    (!InResource.Target.Texture && (!InResource.Identity || !InResource.Resolve)) ||
 		    (InResource.Target.Texture && InResource.Resolve))
 		{
-			throw std::invalid_argument("Sampled D32 import requires explicit dimensions and one resource source");
+			throw std::invalid_argument(
+			    "Sampled target import requires explicit dimensions, supported format and one resource source");
 		}
 	}
 	else
@@ -99,18 +104,36 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 		}
 		return InResources[InTexture.Index];
 	};
-	if (InPass.Color)
+	const auto Colors = InPass.GetColors();
+	if (Colors.size() > MaximumColorTargets)
 	{
-		const auto& Color = Resource(InPass.Color->Texture);
-		if (Color.Target.Kind != ERenderTargetKind::Backbuffer ||
-		    (!IsFinite(FVec3{InPass.Color->Clear.X, InPass.Color->Clear.Y, InPass.Color->Clear.Z}) ||
-		     !std::isfinite(InPass.Color->Clear.W)) ||
-		    (InPass.Color->View != EGraphColorView::Linear && InPass.Color->View != EGraphColorView::Srgb &&
-		     InPass.Color->View != EGraphColorView::DrawBatch))
+		throw std::invalid_argument("Graph exceeds color attachment capacity");
+	}
+	std::set<std::size_t> ColorIndices;
+	FSize ColorSize{};
+	for (const auto& Attachment : Colors)
+	{
+		const auto& Color = Resource(Attachment.Texture);
+		if ((Color.Target.Kind != ERenderTargetKind::Backbuffer && Color.Target.Kind != ERenderTargetKind::Texture) ||
+		    Color.DepthFormat != ERHIDepthFormat::None || !ColorIndices.insert(Attachment.Texture.Index).second ||
+		    !IsFinite(FVec3{Attachment.Clear.X, Attachment.Clear.Y, Attachment.Clear.Z}) ||
+		    !std::isfinite(Attachment.Clear.W) ||
+		    (Attachment.View != EGraphColorView::Linear && Attachment.View != EGraphColorView::Srgb &&
+		     Attachment.View != EGraphColorView::DrawBatch) ||
+		    (Color.Target.Kind == ERenderTargetKind::Texture && Attachment.View != EGraphColorView::Linear))
 		{
-			throw std::invalid_argument("Invalid graph color attachment");
+			throw std::invalid_argument("Invalid graph color attachment, view or duplicate target");
 		}
-		Actions(InPass.Color->Actions);
+		if (ColorSize.Width && Color.Size.Width &&
+		    (ColorSize.Width != Color.Size.Width || ColorSize.Height != Color.Size.Height))
+		{
+			throw std::invalid_argument("Graph color attachment dimensions differ");
+		}
+		if (Color.Size.Width)
+		{
+			ColorSize = Color.Size;
+		}
+		Actions(Attachment.Actions);
 		Region(InPass, Color);
 	}
 	if (InPass.DepthStencil)
@@ -131,9 +154,9 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 			}
 		}
 		Region(InPass, Depth);
-		if (InPass.Color)
+		if (!Colors.empty())
 		{
-			const auto Size = Resource(InPass.Color->Texture).Size;
+			const auto Size = ColorSize;
 			if (Size.Width && Depth.Size.Width && (Size.Width != Depth.Size.Width || Size.Height != Depth.Size.Height))
 			{
 				throw std::invalid_argument("Graph color/depth dimensions differ");
@@ -142,8 +165,7 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 	}
 	for (const auto Read : InPass.Reads)
 	{
-		if (Resource(Read).Target.Kind != ERenderTargetKind::Texture ||
-		    (InPass.Color && InPass.Color->Texture == Read) ||
+		if (Resource(Read).Target.Kind != ERenderTargetKind::Texture || ColorIndices.contains(Read.Index) ||
 		    (InPass.DepthStencil && InPass.DepthStencil->Texture == Read))
 		{
 			throw std::invalid_argument("Invalid or simultaneously writable graph sampled texture");

@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RHI/RHIGraphicsState.h"
 #include "Hyperion/Shaders/ShaderCompiler.h"
 #include <array>
 #include <cstdint>
@@ -54,6 +55,8 @@ struct FRHICapabilities
 	bool bVertexTextures{};
 	bool bComparisonSamplers{};
 	bool bSampledDepthTargets{};
+	std::uint32_t MaxColorTargets = 1;
+	std::array<bool, static_cast<std::size_t>(ERHIColorFormat::Count)> SampledColorTargets{};
 	std::array<FRHIFeatureSupport, static_cast<std::size_t>(ERHIFeature::Count)> Features{};
 
 	FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const;

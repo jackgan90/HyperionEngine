@@ -74,6 +74,17 @@ enum class ERHIDepthFormat : std::uint8_t
 	D32S8
 };
 
+enum class ERHIColorFormat : std::uint8_t
+{
+	Rgba8Unorm,
+	Rgba8Srgb,
+	Rgba16Float,
+	Rgba32Float,
+	Count
+};
+
+inline constexpr std::uint32_t MaximumColorTargets = 8;
+
 struct FStencilFaceDesc
 {
 	ERHICompare Compare = ERHICompare::Always;
@@ -119,6 +130,13 @@ struct FGraphicsTarget
 	ERHIDepthFormat Depth = ERHIDepthFormat::None;
 	std::uint32_t ColorCount = 1;
 	std::uint32_t SampleCount = 1;
+	std::array<ERHIColorFormat, MaximumColorTargets> ColorFormats{};
+
+	ERHIColorFormat GetColorFormat(std::uint32_t InSlot) const
+	{
+		return InSlot == 0 && bSrgb ? ERHIColorFormat::Rgba8Srgb : ColorFormats.at(InSlot);
+	}
+
 	bool operator==(const FGraphicsTarget&) const = default;
 };
 

@@ -151,16 +151,19 @@ std::size_t FRenderSession::Build(FRenderGraph& InGraph, FRenderView InView, FRe
 std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
                                        const FRenderPassTargets& InTargets,
                                        std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
-                                       bool bInSpatialPrepared, bool bInDeferPreparation)
+                                       bool bInSpatialPrepared, bool bInDeferPreparation,
+                                       const std::function<void(std::size_t)>& InAfterView)
 {
 	const std::vector<FRenderPassTargets> Targets(InViews.size(), InTargets);
-	return BuildViews(InGraph, InViews, Targets, std::move(InFrame), InFamily, bInSpatialPrepared, bInDeferPreparation);
+	return BuildViews(InGraph, InViews, Targets, std::move(InFrame), InFamily, bInSpatialPrepared, bInDeferPreparation,
+	                  InAfterView);
 }
 
 std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
                                        std::span<const FRenderPassTargets> InTargets,
                                        std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
-                                       bool bInSpatialPrepared, bool bInDeferPreparation)
+                                       bool bInSpatialPrepared, bool bInDeferPreparation,
+                                       const std::function<void(std::size_t)>& InAfterView)
 {
 	HYP_PERF_SCOPE_C(Render, BuildViews);
 	Tasks.Require({EDomain::Render});
@@ -206,9 +209,13 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 		PrepareImmediate(Tasks, Passes);
 		CompleteViews();
 	}
-	for (auto& Pass : Passes)
+	for (std::size_t Index = 0; Index < Passes.size(); ++Index)
 	{
-		InGraph.Add(std::move(Pass));
+		InGraph.Add(std::move(Passes[Index]));
+		if (InAfterView)
+		{
+			InAfterView(Index);
+		}
 	}
 	RetireViewHistory(MaterialState->Views, InFrame->Frame);
 	if (bRefreshed)
@@ -304,6 +311,13 @@ FMaterialProviderStats FRenderSession::ProviderStatistics() const
 {
 	Tasks.Require({EDomain::Render});
 	return MaterialState->Providers.Statistics();
+}
+
+void FRenderSession::ResetViewHistory()
+{
+	Tasks.Require({EDomain::Render});
+	InvalidatePreparedViews();
+	MaterialState->Views.clear();
 }
 
 void FRenderSession::Close()

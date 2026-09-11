@@ -55,7 +55,7 @@ bool FRenderScene::SelectPrepared(const FRenderView& InView, std::uint64_t InRes
 			}
 			const auto& Definition = *Item.State.Surface->GetSnapshot()->Definition;
 			const bool bHasPass = Definition.HasPass(InView.Usage);
-			if (InView.bSkipMissingPass && !bHasPass)
+			if (IsExcludedFromView(Definition, InView) || (InView.bSkipMissingPass && !bHasPass))
 			{
 				continue;
 			}

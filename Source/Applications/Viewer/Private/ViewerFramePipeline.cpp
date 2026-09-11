@@ -10,7 +10,7 @@ std::function<void()> FViewerApplication::PrepareFrame(FViewerFrameInput InInput
 	// Only stable service pointers and Render-owned pipeline/plugin APIs are accessed here.
 	// ReleaseGraphics drains every frame before replacing or destroying these services.
 	auto Graph = BuildRenderGraph(InInput.Frame, InInput.Gui, std::move(InInput.Material), InInput.Shadows);
-	auto Prepared = ForwardPipeline->GetFrame();
+	auto Prepared = ScenePipeline->GetFrame();
 	return [Graph = std::move(Graph), Prepared = std::move(Prepared), Result = std::move(InResult),
 	        Tasks = &Services->Tasks, Swapchain = Swapchain.get(), Device = Device.get(), Size = InInput.Frame.Size,
 	        bVsync = InInput.Frame.Settings.bVsync, bTakeCapture = InInput.bTakeCapture
@@ -72,7 +72,7 @@ void FViewerApplication::RenderFrame(int InFrame, FSize InSize, FGuiDrawData InG
 		                     : ScenePlugin ? ScenePlugin->Status()
 		                                   : "No model plugin active";
 	}
-	if (Pending.bBenchmark && ScenePlugin && !Pending.SceneError.empty())
+	if (Pending.bBenchmark && (ScenePlugin || ModelPlugin) && !Pending.SceneError.empty())
 	{
 		throw std::runtime_error("Benchmark scene is not ready; increase --benchmark-warmup and --frames");
 	}
@@ -106,7 +106,16 @@ void FViewerApplication::CollectFrames()
 		Metrics.Device = Result.Device;
 		Metrics.ResultFrame = Pending.Ticket.Frame();
 		PipelineStatistics = std::move(Result.Pipeline);
-		SceneStatistics = PipelineStatistics.Views.back().Visibility;
+		SceneStatistics = PipelineStatistics.MainView();
+		Metrics.LegacyDisplayItems = 0;
+		Metrics.SceneTargetBytes = PipelineStatistics.SceneTargetBytes;
+		for (const auto& View : PipelineStatistics.Views)
+		{
+			if (View.Usage == "Forward")
+			{
+				Metrics.LegacyDisplayItems += View.Visibility.VisibleItems;
+			}
+		}
 		SceneStatistics.UpdateMilliseconds = PipelineStatistics.Spatial.UpdateMilliseconds;
 		SceneStatistics.IndexRebuilds = PipelineStatistics.Spatial.IndexRebuilds;
 		SceneStatistics.IndexRefits = PipelineStatistics.Spatial.IndexRefits;

@@ -13,6 +13,8 @@ struct FD3D12DrawCache
 	std::weak_ptr<IRHITexture> DepthTarget;
 	std::vector<std::weak_ptr<IRHITexture>> Reads;
 	std::array<unsigned, 7> Target{};
+	FGraphicsTarget GraphicsTarget;
+	std::vector<std::weak_ptr<IRHITexture>> ColorTargets;
 	std::shared_ptr<const FD3D12DrawPlan> Plan;
 };
 

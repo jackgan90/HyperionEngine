@@ -1,5 +1,5 @@
 #pragma once
-#include "DepthPreview.h"
+#include "FullscreenPass.h"
 #include "Hyperion/Renderer/RenderResources.h"
 #include <atomic>
 #include <map>
@@ -161,7 +161,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	std::unique_ptr<FMaterialConstantCache> MaterialConstants;
 	FShaderCompiler& Compiler;
 	FRenderResourceStats Stats;
-	FDepthPreview DepthPreview;
+	FFullscreenResources Fullscreen;
 
 	FRenderResourceCoordinator(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler)
 	    : Tasks(InTasks), Device(InDevice), Compiler(InCompiler)

@@ -64,7 +64,7 @@ auto Surface = Session.GetResources().RequestMaterial(Instance->Freeze());
 
 DXIL 原生反射会将直接多维数组展平为总元素数，自动 schema 如实使用该布局；SPIR-V/MSL 保留各层数组维度。需要跨目标一致的逻辑形状时，显式声明嵌套数组 schema。准备阶段检查完整叶类型和总元素数，以 DXIL 原生 leaf stride 重建嵌套地址，保留实际 offset、extent 及矩阵/struct 内部布局。原生信息无法区分 `[2][3]` 与 `[3][2]`，维度顺序由作者负责，不能把兼容性检查当作原 HLSL 维度恢复。当前 DXC 对直接多维矩阵数组生成 SPIR-V 会报告缺少 MatrixStride decoration；因此这类数组的实际 GPU 验收限于 DXIL，SPIR-V/MSL 的多维测试覆盖 float/bool/struct。编译器错误正常向上报告，不绕过其验证或修改依赖代码。
 
-纹理 sampled component type 与 structured-buffer element stride 同样进入接口约束。当前 RGBA8 路径拒绝 integer texture；structured view 的 stride 必须与 shader 反射值一致。RHI layout 的 `StructureByteStride=0` 表示尚未约束，但这种布局不能用于需要确定 stride 的真实 structured-buffer shader。当前 shader cache key 为 v7、reflection 为 v4；磁盘缓存沿用编译内容寻址，没有自动容量/TTL 淘汰，旧文件由缓存目录所有者管理。
+纹理 sampled component type 与 structured-buffer element stride 同样进入接口约束。当前 RGBA8 路径拒绝 integer texture；structured view 的 stride 必须与 shader 反射值一致。RHI layout 的 `StructureByteStride=0` 表示尚未约束，但这种布局不能用于需要确定 stride 的真实 structured-buffer shader。当前 shader cache key 为 v7、reflection 为 v5；磁盘缓存沿用编译内容寻址，没有自动容量/TTL 淘汰，旧文件由缓存目录所有者管理。
 
 ## Semantic 与更新频率
 

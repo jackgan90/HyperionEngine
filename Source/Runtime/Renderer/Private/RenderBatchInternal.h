@@ -159,6 +159,7 @@ struct FRenderBatchSystem::FImpl
 		FRenderBatchStats Statistics;
 		ERHIDepthFormat Depth{};
 		std::uint32_t ColorCount{};
+		FGraphicsTarget Target;
 		std::uint64_t Access{};
 		std::weak_ptr<const void> LocalContents;
 		std::shared_ptr<const void> StructureIdentity;

@@ -24,6 +24,8 @@ struct FDebugMetrics
 	FFramePipelineProgress FramePipeline;
 	FFramePipelineLimits FrameLimits;
 	std::uint64_t ResultFrame{};
+	std::size_t LegacyDisplayItems{};
+	std::uint64_t SceneTargetBytes{};
 	std::vector<FExecutionStats> Threads;
 	std::vector<float> FrameMilliseconds;
 	std::string AssetStatus;

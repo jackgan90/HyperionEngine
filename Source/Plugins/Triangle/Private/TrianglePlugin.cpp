@@ -20,6 +20,11 @@ FRenderResourceDesc PrepareTriangle(FShaderCompiler& InCompiler, EShaderFormat I
 	Pass.Vertex.Defines.push_back({"HYP_INSTANCE_CAPACITY", "128"});
 	Pass.InstanceArrays = {{"DrawConstants", "DrawInstances"}};
 	Description.Passes.push_back(Pass);
+	Pass.Pixel.Defines = {{"HYP_HDR_DISPLAY", "1"}};
+	Pass.Usage = "HdrForwardOpaque";
+	Description.Passes.push_back(Pass);
+	Pass.Usage = "HdrCompatibility";
+	Description.Passes.push_back(Pass);
 	auto Transform =
 	    DeclareMaterialSemantic("Transform", "Engine.Object.WorldViewProjection", *GetStandardMaterialSemantics());
 	Transform.Targets = {"DrawConstants.TransformMatrix"};

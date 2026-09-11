@@ -48,9 +48,9 @@ std::vector<std::size_t> FRenderGraph::Order() const
 			Hazard.Readers.insert(Index);
 		}
 		std::vector<FGraphTexture> Writes;
-		if (Pass.Color)
+		for (const auto& Color : Pass.GetColors())
 		{
-			Writes.push_back(Pass.Color->Texture);
+			Writes.push_back(Color.Texture);
 		}
 		if (Pass.DepthStencil)
 		{

@@ -81,7 +81,7 @@ private:
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FShaderCompiler> Compiler;
 	std::unique_ptr<FRenderSession> RenderSession;
-	std::unique_ptr<FForwardRenderPipeline> ForwardPipeline;
+	std::unique_ptr<FSceneRenderPipeline> ScenePipeline;
 	FCascadedShadowSettings ShadowSettings;
 	FForwardPipelineStatistics PipelineStatistics;
 	FVec3 ShadowLight;

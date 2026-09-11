@@ -3,6 +3,7 @@
 
 namespace Hyperion
 {
+DXGI_FORMAT NativeColorFormat(ERHIColorFormat InFormat);
 DXGI_FORMAT NativeDepthFormat(ERHIDepthFormat InFormat);
 DXGI_FORMAT NativeVertexFormat(EVertexFormat InFormat);
 D3D_PRIMITIVE_TOPOLOGY NativeTopology(ERHIPrimitiveTopology InTopology);

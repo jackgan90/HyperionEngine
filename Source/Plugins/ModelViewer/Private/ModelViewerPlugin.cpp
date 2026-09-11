@@ -104,9 +104,10 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 		const FVec3 Direction{std::sin(P.Yaw) * std::cos(P.Pitch), std::sin(P.Pitch),
 		                      std::cos(P.Yaw) * std::cos(P.Pitch)};
 		const FVec3 Eye = Add(P.Center, ScaleVector(Direction, P.Distance));
-		InFrame.View.ViewProjection =
-		    Multiply(Perspective(1, Aspect, std::max(.0001f, P.Radius * .001f), P.Distance + P.Radius * 10),
-		             LookAt(Eye, P.Center));
+		const float Near = std::max(.0001f, P.Radius * .001f);
+		const float Far = P.Distance + P.Radius * 10;
+		InFrame.View.Camera = FRenderCamera{ScaleVector(Direction, -1), {0, 1, 0}, 1, Near, Far};
+		InFrame.View.ViewProjection = Multiply(Perspective(1, Aspect, Near, Far), LookAt(Eye, P.Center));
 		InFrame.View.Eye = Eye;
 		P.bIsReady = P.Bridge->IsReady(P.Model);
 		if (P.bIsReady)

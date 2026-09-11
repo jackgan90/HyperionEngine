@@ -1,4 +1,5 @@
 #include "Common.hlsli"
+#include "Common/ColorSpace.hlsli"
 Texture2D FontTexture : register(t0);
 SamplerState FontSampler : register(s0);
 
@@ -37,5 +38,9 @@ FVertexOutput VSMain(FVertexInput InInput
 
 float4 PSMain(FVertexOutput InInput) : SV_Target0
 {
-	return InInput.Color * FontTexture.Sample(FontSampler, InInput.Uv);
+	float4 Color = InInput.Color * FontTexture.Sample(FontSampler, InInput.Uv);
+#if HYP_GUI_SRGB
+	Color.rgb = SrgbToLinear(Color.rgb);
+#endif
+	return Color;
 }

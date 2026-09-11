@@ -14,7 +14,7 @@ void FRenderResourceCoordinator::CloseNativeResources()
 		PreparedDraws.clear();
 		PreparedViews.clear();
 		BatchAdmissions.clear();
-		DepthPreview = {};
+		Fullscreen = {};
 		for (const auto& [Key, Entry] : Entries)
 		{
 			if (!Entry.Record->CanRelease())

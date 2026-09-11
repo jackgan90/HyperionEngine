@@ -91,6 +91,25 @@ float Determinant(const FMat4& InMatrix)
 	return glm::determinant(Native(InMatrix));
 }
 
+FMat4 Inverse(const FMat4& InMatrix)
+{
+	const float Det = Determinant(InMatrix);
+	if (!std::isfinite(Det) || std::abs(Det) < 1e-20f)
+	{
+		throw std::invalid_argument("Cannot invert a singular or nonfinite matrix");
+	}
+	auto Result = Owned(glm::inverse(Native(InMatrix)));
+	if (!std::all_of(Result.Values.begin(), Result.Values.end(),
+	                 [](float InValue)
+	                 {
+		                 return std::isfinite(InValue);
+	                 }))
+	{
+		throw std::invalid_argument("Matrix inverse is nonfinite");
+	}
+	return Result;
+}
+
 FMat4 NormalMatrix(const FMat4& InMatrix)
 {
 	if (std::abs(Determinant(InMatrix)) < 1e-20f)

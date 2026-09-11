@@ -19,9 +19,9 @@ std::uint64_t NextGraphIdentity()
 bool SameImport(const FGraphTextureImport& InA, const FGraphTextureImport& InB)
 {
 	return InA.Target == InB.Target && InA.Size.Width == InB.Size.Width && InA.Size.Height == InB.Size.Height &&
-	       InA.DepthFormat == InB.DepthFormat && InA.InitialState == InB.InitialState &&
-	       InA.bInitialized == InB.bInitialized && InA.Identity == InB.Identity &&
-	       bool(InA.Resolve) == bool(InB.Resolve);
+	       InA.DepthFormat == InB.DepthFormat && InA.ColorFormat == InB.ColorFormat &&
+	       InA.InitialState == InB.InitialState && InA.bInitialized == InB.bInitialized &&
+	       InA.Identity == InB.Identity && bool(InA.Resolve) == bool(InB.Resolve);
 }
 
 std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCommands)
@@ -30,9 +30,10 @@ std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCo
 	if (Batches.empty())
 	{
 		Batches.push_back({}); // Clear/store and resource dependencies survive an empty draw list.
-		if (InPass.Color)
+		const auto Colors = InPass.GetColors();
+		if (!Colors.empty())
 		{
-			Batches.back().bSrgb = InPass.Color->View == EGraphColorView::Srgb;
+			Batches.back().bSrgb = Colors.front().View == EGraphColorView::Srgb;
 		}
 	}
 	std::vector<FPassCommands> Result;
@@ -42,17 +43,21 @@ std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCo
 		auto Commands = InCommands;
 		Commands.Name = InPass.Name + "/" + std::to_string(Index);
 		static_cast<FDrawCommands&>(Commands) = std::move(Batches[Index].Commands);
-		if (Commands.Color)
+		const auto Attachments = InPass.GetColors();
+		auto Colors = Commands.Color ? std::span<FColorAttachment>(&*Commands.Color, 1)
+		                             : std::span<FColorAttachment>(Commands.Colors);
+		for (std::size_t Slot = 0; Slot < Colors.size(); ++Slot)
 		{
-			if (InPass.Color->View != EGraphColorView::DrawBatch &&
-			    Batches[Index].bSrgb != (InPass.Color->View == EGraphColorView::Srgb))
+			auto& Color = Colors[Slot];
+			const auto View = Attachments[Slot].View;
+			if (Slot == 0 && View != EGraphColorView::DrawBatch &&
+			    Batches[Index].bSrgb != (View == EGraphColorView::Srgb))
 			{
 				throw std::invalid_argument("Draw batch uses an undeclared color view");
 			}
-			Commands.Color->bSrgb = Batches[Index].bSrgb;
-			Commands.Color->Actions.Load = Index == 0 ? Commands.Color->Actions.Load : EAttachmentLoad::Load;
-			Commands.Color->Actions.Store =
-			    Index + 1 == Batches.size() ? Commands.Color->Actions.Store : EAttachmentStore::Store;
+			Color.bSrgb = View == EGraphColorView::DrawBatch ? Batches[Index].bSrgb : View == EGraphColorView::Srgb;
+			Color.Actions.Load = Index == 0 ? Color.Actions.Load : EAttachmentLoad::Load;
+			Color.Actions.Store = Index + 1 == Batches.size() ? Color.Actions.Store : EAttachmentStore::Store;
 		}
 		if (Commands.DepthStencil)
 		{
@@ -70,7 +75,7 @@ std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCo
 			Commands.Transitions.clear();
 		}
 		(void)Commands.GetDraws();
-		if (!Commands.Color && !Commands.DepthStencil && !Commands.GetDraws().empty())
+		if (!Commands.HasColor() && !Commands.DepthStencil && !Commands.GetDraws().empty())
 		{
 			throw std::invalid_argument("Draw batch requires declared attachments");
 		}

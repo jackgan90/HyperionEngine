@@ -74,6 +74,7 @@ struct FRenderView
 	bool bInstanceBatching = true;
 	std::optional<FRenderCamera> Camera;
 	bool bSkipMissingPass{};
+	std::vector<std::string> ExcludedPasses; // Materials with any listed usage belong to another route.
 };
 
 struct FRenderItem

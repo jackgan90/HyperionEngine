@@ -226,7 +226,7 @@ void CheckStateRejections(FStateFixture& InFixture)
 	Reject(
 	    [](FPipelineDesc& InDesc)
 	    {
-		    InDesc.Target.ColorCount = 2;
+		    InDesc.Target.ColorCount = MaximumColorTargets + 1;
 	    });
 	Reject(
 	    [](FPipelineDesc& InDesc)

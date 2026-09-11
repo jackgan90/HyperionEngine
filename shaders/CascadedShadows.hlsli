@@ -98,11 +98,8 @@ uint SelectCascade(float InDepth)
 	return (InDepth > ShadowSplits.x) + (InDepth > ShadowSplits.y) + (InDepth > ShadowSplits.z);
 }
 
-float DirectionalShadow(float3 InWorld, float3 InNormal, float3 InLight)
+float DirectionalShadow(float3 InWorld, float3 InNormal, float3 InLight, float3 Dx, float3 Dy)
 {
-	// Derivatives are evaluated before any per-pixel cascade/fade divergence.
-	float3 Dx = ddx(InWorld);
-	float3 Dy = ddy(InWorld);
 	float Depth = dot(ShadowCamera, float4(InWorld, 1));
 	if (ShadowControl.x < .5 || Depth <= 0 || Depth >= ShadowControl.w)
 	{
@@ -119,6 +116,11 @@ float DirectionalShadow(float3 InWorld, float3 InNormal, float3 InLight)
 	}
 	float Fade = saturate((ShadowControl.w - Depth) / max(ShadowControl.w * ShadowFilter.w, .001));
 	return lerp(1, Visibility, Fade);
+}
+
+float DirectionalShadow(float3 InWorld, float3 InNormal, float3 InLight)
+{
+	return DirectionalShadow(InWorld, InNormal, InLight, ddx(InWorld), ddy(InWorld));
 }
 
 float3 ShadowDebugColor(float3 InColor, float3 InWorld)

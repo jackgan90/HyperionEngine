@@ -17,6 +17,32 @@ FMaterialTextureSource::FMaterialTextureSource(FMaterialDepthTexture InDepth, st
 	}
 }
 
+FMaterialTextureSource::FMaterialTextureSource(FMaterialColorTexture InColor, std::uint64_t InVersion)
+    : Identity(MaterialsPrivate::NextIdentity()), Version(InVersion), Encoding(EMaterialTextureEncoding::Linear),
+      Color(InColor), bColorTarget(true)
+{
+	if (!Version || !Color.Width || !Color.Height || Color.Width > 16384 || Color.Height > 16384 ||
+	    Color.Format > EMaterialColorFormat::Rgba32Float ||
+	    !std::all_of(Color.Clear.begin(), Color.Clear.end(),
+	                 [](float InValue)
+	                 {
+		                 return std::isfinite(InValue);
+	                 }))
+	{
+		throw std::invalid_argument("Invalid material color target description");
+	}
+}
+
+const FMaterialColorTexture* FMaterialTextureSource::GetColorTarget() const
+{
+	return bColorTarget ? &Color : nullptr;
+}
+
+bool FMaterialTextureSource::IsRenderTarget() const
+{
+	return bDepthTarget || bColorTarget;
+}
+
 const FMaterialDepthTexture* FMaterialTextureSource::GetDepthTarget() const
 {
 	return bDepthTarget ? &Depth : nullptr;

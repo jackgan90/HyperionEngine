@@ -23,6 +23,23 @@ struct FMaterialDepthTexture
 	bool operator==(const FMaterialDepthTexture&) const = default;
 };
 
+enum class EMaterialColorFormat : std::uint8_t
+{
+	Rgba8Unorm,
+	Rgba16Float,
+	Rgba32Float
+};
+
+// CPU-only description; Renderer maps formats to its chosen RHI backend.
+struct FMaterialColorTexture
+{
+	std::uint32_t Width = 1;
+	std::uint32_t Height = 1;
+	EMaterialColorFormat Format = EMaterialColorFormat::Rgba16Float;
+	std::array<float, 4> Clear{};
+	bool operator==(const FMaterialColorTexture&) const = default;
+};
+
 struct FMaterialTextureMip
 {
 	std::uint32_t Width{};
@@ -37,6 +54,7 @@ public:
 	FMaterialTextureSource(EMaterialTextureEncoding InEncoding, std::vector<FMaterialTextureMip> InMips,
 	                       std::uint64_t InVersion = 1);
 	explicit FMaterialTextureSource(FMaterialDepthTexture InDepth, std::uint64_t InVersion = 1);
+	explicit FMaterialTextureSource(FMaterialColorTexture InColor, std::uint64_t InVersion = 1);
 	FMaterialTextureSource(const FMaterialTextureSource&) = delete;
 	FMaterialTextureSource& operator=(const FMaterialTextureSource&) = delete;
 	std::uint64_t GetIdentity() const;
@@ -44,6 +62,8 @@ public:
 	EMaterialTextureEncoding GetEncoding() const;
 	const std::vector<FMaterialTextureMip>& GetMips() const;
 	const FMaterialDepthTexture* GetDepthTarget() const;
+	const FMaterialColorTexture* GetColorTarget() const;
+	bool IsRenderTarget() const;
 
 private:
 	std::uint64_t Identity;
@@ -52,6 +72,8 @@ private:
 	std::vector<FMaterialTextureMip> Mips;
 	FMaterialDepthTexture Depth;
 	bool bDepthTarget{};
+	FMaterialColorTexture Color;
+	bool bColorTarget{};
 };
 
 class FMaterialReadBufferSource

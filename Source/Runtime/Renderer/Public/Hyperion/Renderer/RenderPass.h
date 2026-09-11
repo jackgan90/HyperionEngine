@@ -4,6 +4,8 @@
 
 namespace Hyperion
 {
+ERHIColorFormat GetRenderColorFormat(EMaterialColorFormat InFormat);
+
 struct FRenderTargetSource
 {
 	ERenderTargetKind Kind = ERenderTargetKind::None;
@@ -40,6 +42,9 @@ struct FRenderPassTargets
 	std::optional<FRenderColorTarget> Color;
 	std::optional<FRenderDepthTarget> DepthStencil;
 	std::vector<FRenderTargetSource> Reads;
+	std::vector<FRenderColorTarget> Colors;
+	std::span<const FRenderColorTarget> GetColors() const;
+	FGraphicsTarget GraphicsTarget(bool bInSrgb = false) const;
 	static FRenderPassTargets Frame(ERHIDepthFormat InDepth, std::optional<FVec4> InClear = {});
 	static FRenderPassTargets ColorOnly(std::optional<FVec4> InClear = {});
 	ERHIDepthFormat GetDepthFormat() const;

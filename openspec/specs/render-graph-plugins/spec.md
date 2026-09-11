@@ -80,7 +80,7 @@ The Renderer SHALL aggregate scene items by view, target and required rendering 
 - **THEN** it uses one Render control-message boundary, unique graph pass names and explicit per-view viewport/depth initialization, without mixing material revisions
 
 ### Requirement: Limited depth and stencil attachment validation
-The graphics graph SHALL validate depth and stencil initialization separately for configured D32 or D32S8 targets and explicit sampled D32 offscreen attachments. Zero or one color attachment SHALL be supported. Stencil operations SHALL require a stencil-capable attachment with initialized contents before load. This change SHALL NOT imply multiple color targets or resolve operations.
+The graphics graph SHALL validate depth and stencil initialization separately for configured D32 or D32S8 targets and explicit sampled D32 offscreen attachments. Zero through the supported maximum ordered color attachments SHALL be supported, including sampled offscreen color targets with explicit formats. Stencil operations SHALL require a stencil-capable attachment with initialized contents before load. Every color attachment SHALL have independently validated dimensions, format and content operations. This change SHALL NOT imply resolve operations or simultaneous sampled and writable depth use.
 
 #### Scenario: Stencil unavailable
 - **WHEN** a pass requires stencil while the configured depth target has no stencil component
@@ -93,6 +93,10 @@ The graphics graph SHALL validate depth and stencil initialization separately fo
 #### Scenario: Offscreen depth-only pass
 - **WHEN** a pass clears and writes an explicit depth texture with no color attachment
 - **THEN** the actual texture dimensions, depth format and zero-color pipeline contract are validated without binding or clearing swapchain color
+
+#### Scenario: GBuffer producer and consumer
+- **WHEN** a BasePass writes multiple color targets that Lighting samples
+- **THEN** all targets participate in RAW/WAR/WAW dependencies and transitions, and undefined, aliased or dimension-incompatible attachments are rejected
 
 ### Requirement: Explicit sampled depth dependencies
 
@@ -136,3 +140,10 @@ Graph passes SHALL declare resources, attachments and accesses before deferred p
 #### Scenario: Segmented scene draws
 - **WHEN** a logical pass contains multiple target-view-compatible draw segments
 - **THEN** their order is preserved, the load operation occurs once and the store operation occurs after the last segment
+
+### Requirement: Sampled color target lifetime
+Graph color imports SHALL identify immutable physical format, dimensions, initial state and content validity. Exports SHALL establish the requested reusable final state. Recorded lists SHALL retain every color attachment and transition resource through submitted completion including clear-only and failed frames.
+
+#### Scenario: Replaced target generation
+- **WHEN** resize or layout replacement occurs while an old color target is retained by submitted work
+- **THEN** the old resource is not released until that work completes and the new graph uses only its declared target generation

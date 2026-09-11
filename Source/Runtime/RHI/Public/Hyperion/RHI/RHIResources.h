@@ -23,6 +23,8 @@ struct FRHITextureInfo
 	std::uint32_t Width{};
 	std::uint32_t Height{};
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::None;
+	ERHIColorFormat ColorFormat = ERHIColorFormat::Rgba8Unorm;
+	bool bColorTarget{};
 };
 
 class IRHITexture : public IRHIResource

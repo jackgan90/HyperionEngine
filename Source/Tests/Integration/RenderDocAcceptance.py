@@ -59,7 +59,7 @@ def verify_capture(document, experiment):
                 submitted.update(recorded.get(submitted_list.text, {}))
     # Ordinary sessions retain their structured identity. The forward pipeline owns stage names.
     scene_draws = sum(count for marker, count in submitted.items()
-                      if re.fullmatch(r'(Scene [1-9]\d*/[1-9]\d*/[1-9]\d*/[1-9]\d*/Forward|Forward)/\d+', marker))
+                      if re.fullmatch(r'(Scene [1-9]\d*/[1-9]\d*/[1-9]\d*/[1-9]\d*/Forward|Forward|Forward/HDR|Deferred/BasePass|Deferred/Compatibility|Scene/Transparent|Display/LegacyMaterials)/\d+', marker))
     assert scene_draws > 0, f'{experiment}: missing submitted session scene draws'
     if experiment == 'Shadows':
         for cascade in range(4):

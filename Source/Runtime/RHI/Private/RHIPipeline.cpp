@@ -159,13 +159,13 @@ void ValidateStencil(const FStencilFaceDesc& InFace)
 void ValidateGraphicsPipeline(const FPipelineDesc& InDesc)
 {
 	const auto& State = InDesc.State;
-	if (InDesc.Target.SampleCount != 1 || InDesc.Target.ColorCount > 1 || State.bAlphaToCoverage ||
+	if (InDesc.Target.SampleCount != 1 || InDesc.Target.ColorCount > MaximumColorTargets || State.bAlphaToCoverage ||
 	    (InDesc.Target.ColorCount == 0 && (State.ColorWriteMask != 0 || State.bBlend || InDesc.Target.bSrgb ||
 	                                       InDesc.Target.Depth == ERHIDepthFormat::None)) ||
 	    InDesc.Target.Depth > ERHIDepthFormat::D32S8 || InDesc.Topology > ERHIPrimitiveTopology::PointList)
 	{
 		throw std::invalid_argument(
-		    "Invalid graphics attachment count/state; single-sample zero/one color targets are supported");
+		    "Invalid graphics attachment count/state; single-sample zero through eight color targets are supported");
 	}
 	if ((State.bDepthTest && InDesc.Target.Depth == ERHIDepthFormat::None) ||
 	    (State.bStencil && InDesc.Target.Depth != ERHIDepthFormat::D32S8) || (State.bDepthWrite && !State.bDepthTest))
@@ -181,6 +181,14 @@ void ValidateGraphicsPipeline(const FPipelineDesc& InDesc)
 	    (State.bBlend && (!IsAlphaFactor(State.SourceAlpha) || !IsAlphaFactor(State.DestinationAlpha))))
 	{
 		throw std::invalid_argument("Invalid graphics pipeline state or alpha blend factor");
+	}
+	for (std::uint32_t Index = 0; Index < InDesc.Target.ColorCount; ++Index)
+	{
+		if (InDesc.Target.ColorFormats[Index] >= ERHIColorFormat::Count ||
+		    (Index == 0 && InDesc.Target.bSrgb && InDesc.Target.ColorFormats[Index] != ERHIColorFormat::Rgba8Unorm))
+		{
+			throw std::invalid_argument("Invalid color format or incompatible sRGB view");
+		}
 	}
 	ValidateStencil(State.FrontStencil);
 	ValidateStencil(State.BackStencil);

@@ -18,8 +18,8 @@ bool SameMatrix(const FMat4& InA, const FMat4& InB)
 
 bool SameCollectionView(const FRenderView& InA, const FRenderView& InB, bool bInDepthSorted)
 {
-	return InA.Usage == InB.Usage && InA.bSkipMissingPass == InB.bSkipMissingPass &&
-	       InA.CullingMode == InB.CullingMode &&
+	return InA.Usage == InB.Usage && InA.ExcludedPasses == InB.ExcludedPasses &&
+	       InA.bSkipMissingPass == InB.bSkipMissingPass && InA.CullingMode == InB.CullingMode &&
 	       (InA.CullingMode == ESceneCullingMode::None ||
 	        SameMatrix(InA.CullingViewProjection.value_or(InA.ViewProjection),
 	                   InB.CullingViewProjection.value_or(InB.ViewProjection))) &&
@@ -33,8 +33,8 @@ bool SamePassEnvironment(const FRenderView& InA, const FRenderView& InB)
 		const auto Value = InView.Viewport.value_or(FViewport{0, 0, float(InView.Width), float(InView.Height)});
 		return std::array{Value.X, Value.Y, Value.Width, Value.Height, Value.MinDepth, Value.MaxDepth};
 	};
-	return InA.Identity == InB.Identity && InA.Usage == InB.Usage && InA.Width == InB.Width &&
-	       InA.Height == InB.Height && InA.Viewport.has_value() == InB.Viewport.has_value() &&
+	return InA.Identity == InB.Identity && InA.Usage == InB.Usage && InA.ExcludedPasses == InB.ExcludedPasses &&
+	       InA.Width == InB.Width && InA.Height == InB.Height && InA.Viewport.has_value() == InB.Viewport.has_value() &&
 	       Viewport(InA) == Viewport(InB) && InA.bInstanceBatching == InB.bInstanceBatching;
 }
 

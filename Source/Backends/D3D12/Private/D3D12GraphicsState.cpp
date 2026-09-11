@@ -183,9 +183,10 @@ void ApplyGraphicsState(D3D12_GRAPHICS_PIPELINE_STATE_DESC& OutPso, const FPipel
 			break;
 	}
 	OutPso.NumRenderTargets = InDesc.Target.ColorCount;
-	OutPso.RTVFormats[0] = InDesc.Target.ColorCount == 0 ? DXGI_FORMAT_UNKNOWN
-	                       : InDesc.Target.bSrgb         ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
-	                                                     : DXGI_FORMAT_R8G8B8A8_UNORM;
+	for (std::uint32_t Index = 0; Index < InDesc.Target.ColorCount; ++Index)
+	{
+		OutPso.RTVFormats[Index] = NativeColorFormat(InDesc.Target.GetColorFormat(Index));
+	}
 	OutPso.DSVFormat = NativeDepthFormat(InDesc.Target.Depth);
 	OutPso.SampleDesc.Count = 1;
 	auto& Raster = OutPso.RasterizerState;
@@ -214,6 +215,23 @@ void ApplyGraphicsState(D3D12_GRAPHICS_PIPELINE_STATE_DESC& OutPso, const FPipel
 	Blend.SrcBlendAlpha = Native(State.SourceAlpha);
 	Blend.DestBlendAlpha = Native(State.DestinationAlpha);
 	Blend.BlendOpAlpha = Native(State.AlphaOperation);
+}
+
+DXGI_FORMAT NativeColorFormat(ERHIColorFormat InFormat)
+{
+	switch (InFormat)
+	{
+		case ERHIColorFormat::Rgba8Unorm:
+			return DXGI_FORMAT_R8G8B8A8_UNORM;
+		case ERHIColorFormat::Rgba8Srgb:
+			return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+		case ERHIColorFormat::Rgba16Float:
+			return DXGI_FORMAT_R16G16B16A16_FLOAT;
+		case ERHIColorFormat::Rgba32Float:
+			return DXGI_FORMAT_R32G32B32A32_FLOAT;
+		default:
+			throw std::invalid_argument("Unsupported color format");
+	}
 }
 
 DXGI_FORMAT NativeVertexFormat(EVertexFormat InFormat)

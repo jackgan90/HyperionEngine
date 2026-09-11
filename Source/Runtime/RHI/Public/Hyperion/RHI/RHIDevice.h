@@ -53,6 +53,12 @@ public:
 		throw std::runtime_error("Backend does not support sampled depth targets");
 	}
 
+	// Initialized on the graphics queue; graph boundaries use ShaderRead.
+	virtual FTexture CreateColorTexture(const FColorTextureDesc&)
+	{
+		throw std::runtime_error("Backend does not support sampled color targets");
+	}
+
 	virtual std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc>)
 	{
 		throw std::runtime_error("Backend does not support asynchronous texture uploads");

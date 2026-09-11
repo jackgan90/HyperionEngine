@@ -19,8 +19,7 @@ void FRenderBatchSystem::FImpl::AdmitIncremental(const FRenderSceneSnapshot& InS
 		const auto& Item = InSnapshot.Items[Index];
 		CurrentInputs[Index] = PrepareInput(InSnapshot, Item, OutStats);
 		const bool bSrgb = Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
-		const auto Candidate = Describe(
-		    InSnapshot, Item, {bSrgb, InSnapshot.Targets.GetDepthFormat(), InHistory.ColorCount}, OutStats, Shared);
+		const auto Candidate = Describe(InSnapshot, Item, InSnapshot.Targets.GraphicsTarget(bSrgb), OutStats, Shared);
 		const auto Decision = Strategies.front()->Evaluate(*Candidate, Capabilities);
 		if (!Candidate->bReorderable || Decision.Capacity < 2 ||
 		    !InHistory.Insert(InSnapshot, Index, Candidate->Signature, Decision.Capacity, Limits.MaxChunks,
@@ -159,6 +158,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildIncremental(co
 	{
 		auto& History = IncrementalPlans[Key];
 		if (History.Scene != InSnapshot.CollectionKey[0] || History.ResourceRevision != InSnapshot.CollectionKey[2] ||
+		    History.Target != InSnapshot.Targets.GraphicsTarget() ||
 		    History.Depth != InSnapshot.Targets.GetDepthFormat() ||
 		    History.ColorCount != InSnapshot.Targets.ColorCount())
 		{
@@ -167,6 +167,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildIncremental(co
 			History.ResourceRevision = InSnapshot.CollectionKey[2];
 			History.Depth = InSnapshot.Targets.GetDepthFormat();
 			History.ColorCount = InSnapshot.Targets.ColorCount();
+			History.Target = InSnapshot.Targets.GraphicsTarget();
 		}
 		FRenderBatchStats Statistics;
 		std::vector<std::size_t> Added;

@@ -50,7 +50,7 @@ struct FD3D12Texture final : IRHITexture
 	{
 		const auto Description = Resource->GetDesc();
 		return {static_cast<std::uint32_t>(Description.Width), Description.Height,
-		        DepthViews ? ERHIDepthFormat::D32 : ERHIDepthFormat::None};
+		        DepthViews ? ERHIDepthFormat::D32 : ERHIDepthFormat::None, ColorFormat, bool(ColorViews)};
 	}
 
 	std::shared_ptr<FD3D12DeviceState> State;
@@ -59,6 +59,8 @@ struct FD3D12Texture final : IRHITexture
 	std::uint64_t UploadFence{};
 	FD3D12DescriptorRange SourceDescriptor;
 	ComPtr<ID3D12DescriptorHeap> DepthViews;
+	ComPtr<ID3D12DescriptorHeap> ColorViews;
+	ERHIColorFormat ColorFormat = ERHIColorFormat::Rgba8Unorm;
 	FSize DepthSize;
 
 	~FD3D12Texture() override

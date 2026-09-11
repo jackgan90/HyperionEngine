@@ -57,9 +57,9 @@ FMaterialPass ShadowPass(const FModelMaterial& InMaterial)
 std::shared_ptr<const FMaterialDefinition> ModelDefinition(const FModelMaterial& InMaterial)
 {
 	static std::mutex Mutex;
-	static std::map<std::pair<EAlphaMode, bool>, std::weak_ptr<const FMaterialDefinition>> Definitions;
+	static std::map<std::tuple<EAlphaMode, bool, bool>, std::weak_ptr<const FMaterialDefinition>> Definitions;
 	std::lock_guard Lock(Mutex);
-	auto& Cached = Definitions[{InMaterial.AlphaMode, InMaterial.bDoubleSided}];
+	auto& Cached = Definitions[{InMaterial.AlphaMode, InMaterial.bDoubleSided, InMaterial.bUnlit}];
 	if (auto Existing = Cached.lock())
 	{
 		return Existing;
@@ -67,6 +67,27 @@ std::shared_ptr<const FMaterialDefinition> ModelDefinition(const FModelMaterial&
 	FMaterialDescription Description;
 	Description.Name = "Builtin glTF PBR";
 	Description.Passes.push_back(ModelPass(InMaterial));
+	auto Hdr = ModelPass(InMaterial);
+	Hdr.bSrgbTarget = false;
+	Hdr.Pixel.Defines = {{"HYP_FORWARD_HDR", "1"}};
+	Hdr.Usage = InMaterial.AlphaMode == EAlphaMode::Blend ? "HdrTransparent" : "HdrForwardOpaque";
+	Description.Passes.push_back(Hdr);
+	if (InMaterial.AlphaMode != EAlphaMode::Blend)
+	{
+		if (InMaterial.bUnlit)
+		{
+			Hdr.Usage = "HdrCompatibility";
+			Description.Passes.push_back(Hdr);
+		}
+		else
+		{
+			auto Base = ModelPass(InMaterial);
+			Base.Usage = "DeferredBase";
+			Base.bSrgbTarget = false;
+			Base.Pixel.Defines = {{"HYP_DEFERRED_BASE", "1"}};
+			Description.Passes.push_back(std::move(Base));
+		}
+	}
 	if (InMaterial.AlphaMode != EAlphaMode::Blend)
 	{
 		Description.Passes.push_back(ShadowPass(InMaterial));

@@ -295,8 +295,16 @@ std::shared_ptr<const FD3D12DrawPlan> PrepareNativeDraws(const FD3D12DeviceState
 	    unsigned(InCommands.GetDepthFormat()),
 	    unsigned(InCommands.Color ? InCommands.Color->Target.Kind : ERenderTargetKind::None),
 	    unsigned(InCommands.DepthStencil ? InCommands.DepthStencil->Target.Kind : ERenderTargetKind::None)};
+	const auto Colors = InCommands.GetColors();
+	const auto GraphicsTarget = InCommands.GetGraphicsTarget();
 	std::lock_guard Lock(InCache.Mutex);
 	if (InCommands.SharedDraws && InCache.Owner.lock() == InCommands.SharedDraws && InCache.Target == Target &&
+	    InCache.GraphicsTarget == GraphicsTarget && InCache.ColorTargets.size() == Colors.size() &&
+	    std::equal(InCache.ColorTargets.begin(), InCache.ColorTargets.end(), Colors.begin(),
+	               [](const auto& InWeak, const auto& InColor)
+	               {
+		               return InWeak.lock() == InColor.Target.Texture.Payload;
+	               }) &&
 	    InCache.DepthTarget.lock() == InCommands.GetDepthTexture().Payload &&
 	    InCache.Reads.size() == InCommands.SampledTextures.size() &&
 	    std::equal(InCache.Reads.begin(), InCache.Reads.end(), InCommands.SampledTextures.begin(),
@@ -321,6 +329,12 @@ std::shared_ptr<const FD3D12DrawPlan> PrepareNativeDraws(const FD3D12DeviceState
 	InCache.Plan.reset();
 	InCache.Owner = InCommands.SharedDraws;
 	InCache.Target = Target;
+	InCache.GraphicsTarget = GraphicsTarget;
+	InCache.ColorTargets.clear();
+	for (const auto& Color : Colors)
+	{
+		InCache.ColorTargets.push_back(Color.Target.Texture.Payload);
+	}
 	InCache.DepthTarget = InCommands.GetDepthTexture().Payload;
 	InCache.Reads.clear();
 	for (const auto& Texture : InCommands.SampledTextures)

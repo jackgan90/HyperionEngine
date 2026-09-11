@@ -2,6 +2,7 @@
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Config/AppSettings.h"
 #include "Hyperion/Renderer/CascadedShadowMap.h"
+#include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include <optional>
 
 namespace Hyperion
@@ -19,6 +20,11 @@ struct FOptions
 	float BenchmarkCameraStep = .1f;
 	bool bNoVsync{};
 	bool bNoInstanceBatching{};
+	FScenePipelineSettings Pipeline;
+	bool bPipelineOption{};
+	bool bGBufferOption{};
+	bool bExposureOption{};
+	std::optional<int> GBufferDebug;
 	FCascadedShadowSettings Shadows;
 	std::optional<FVec3> ShadowLight;
 	bool bBenchmarkLight{};

@@ -37,6 +37,15 @@ float SortDepth(const FRenderItem& InItem, const FRenderView& InView, const FBou
 }
 } // namespace
 
+bool IsExcludedFromView(const FMaterialDefinition& InDefinition, const FRenderView& InView)
+{
+	return std::any_of(InView.ExcludedPasses.begin(), InView.ExcludedPasses.end(),
+	                   [&](const std::string& InUsage)
+	                   {
+		                   return InDefinition.HasPass(InUsage);
+	                   });
+}
+
 bool PrepareSceneItem(FRenderItem& InItem)
 {
 	if (!InItem.State.Resource)
@@ -133,7 +142,8 @@ FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot)
 		}
 		const auto& Preparation = *Item.Preparation;
 		const auto Surface = Item.State.Surface ? Item.State.Surface->GetSnapshot() : nullptr;
-		if (InSnapshot.View.bSkipMissingPass && (!Surface || !Surface->Definition->HasPass(InSnapshot.View.Usage)))
+		if ((Surface && IsExcludedFromView(*Surface->Definition, InSnapshot.View)) ||
+		    (InSnapshot.View.bSkipMissingPass && (!Surface || !Surface->Definition->HasPass(InSnapshot.View.Usage))))
 		{
 			continue;
 		}

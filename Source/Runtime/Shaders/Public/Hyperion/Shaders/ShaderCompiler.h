@@ -100,7 +100,7 @@ struct FShaderBinding
 
 struct FShaderReflection
 {
-	std::uint32_t Version = 4;
+	std::uint32_t Version = 5;
 	EShaderFormat LayoutFormat = EShaderFormat::Dxil;
 	std::vector<FShaderSignatureParameter> Inputs;
 	std::vector<FShaderSignatureParameter> Outputs;

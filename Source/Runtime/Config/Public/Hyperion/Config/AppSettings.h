@@ -13,6 +13,10 @@ struct FAppSettings
 	int MainRenderLead = 1;
 	int RenderRhiLead = 1;
 	std::string RHIBackend = "d3d12";
+	std::string RenderPipeline = "deferred";
+	std::string GBufferLayout = "compact";
+	double Exposure = 1;
+	int GBufferDebug = 0;
 	std::string ModelSource;
 	std::string SceneSource;
 	bool bVsync = true;

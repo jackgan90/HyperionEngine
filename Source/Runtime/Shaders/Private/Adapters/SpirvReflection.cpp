@@ -1,5 +1,6 @@
 #include "ShaderReflection.h"
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <limits>
 #include <spirv_cross.hpp>
@@ -306,7 +307,12 @@ void ReflectSpirv(FShaderArtifact& InArtifact, std::string& InPayload, const FSh
 		    !std::any_of(InArtifact.Reflection.Outputs.begin(), InArtifact.Reflection.Outputs.end(),
 		                 [&Parameter](const FShaderSignatureParameter& InOther)
 		                 {
-			                 return InOther.Semantic == Parameter.Semantic &&
+			                 return std::equal(InOther.Semantic.begin(), InOther.Semantic.end(),
+			                                   Parameter.Semantic.begin(), Parameter.Semantic.end(),
+			                                   [](unsigned char InLeft, unsigned char InRight)
+			                                   {
+				                                   return std::toupper(InLeft) == std::toupper(InRight);
+			                                   }) &&
 			                        InOther.SemanticIndex == Parameter.SemanticIndex;
 		                 }))
 		{

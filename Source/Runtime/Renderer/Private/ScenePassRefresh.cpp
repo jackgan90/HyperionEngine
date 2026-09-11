@@ -20,10 +20,8 @@ void RefreshDrawPackets(FRenderResourceCoordinator& InOwner, const FRenderSceneS
 		for (auto& Draw : Pass.Commands.Draws)
 		{
 			const auto& Source = InCached.Sources.at(Index++);
-			Draw =
-			    InOwner.DrawMaterial(InSnapshot.Items.At(Source.Item), InSnapshot.View,
-			                         {Pass.bSrgb, InSnapshot.Targets.GetDepthFormat(), InSnapshot.Targets.ColorCount()},
-			                         Source.Batch.has_value());
+			Draw = InOwner.DrawMaterial(InSnapshot.Items.At(Source.Item), InSnapshot.View,
+			                            InSnapshot.Targets.GraphicsTarget(Pass.bSrgb), Source.Batch.has_value());
 			if (Source.Batch)
 			{
 				const auto& Data = InSnapshot.Batches->Batches.at(*Source.Batch).Instances;

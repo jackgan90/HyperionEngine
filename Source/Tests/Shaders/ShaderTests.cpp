@@ -3,6 +3,7 @@
 #include <iostream>
 #include <stdexcept>
 
+void CheckDeferredShaders();
 void CheckMaterialShaderReflection(const std::filesystem::path& InRoot);
 
 namespace
@@ -30,6 +31,9 @@ int main()
 			std::filesystem::copy_file(std::filesystem::path(HYP_SOURCE_DIR) / "shaders" / Name, Root / Name,
 			                           std::filesystem::copy_options::overwrite_existing);
 		}
+		std::filesystem::create_directories(Root / "Common");
+		std::filesystem::copy_file(std::filesystem::path(HYP_SOURCE_DIR) / "shaders/Common/ColorSpace.hlsli",
+		                           Root / "Common/ColorSpace.hlsli", std::filesystem::copy_options::overwrite_existing);
 		FShaderCompiler Compiler(Root, "shader-test/cache");
 		for (auto Stage : {EShaderStage::Vertex, EShaderStage::Pixel})
 		{
@@ -107,6 +111,7 @@ int main()
 		}
 		Check(bFailed, "Compiler diagnostics");
 		CheckMaterialShaderReflection(Root);
+		CheckDeferredShaders();
 		std::cout << "Shader target, reflection and cache checks passed\n";
 		return 0;
 	}

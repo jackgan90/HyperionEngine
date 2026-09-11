@@ -122,10 +122,10 @@ FMaterialPassResult ResolveMaterialPass(const FMaterialPass& InPass, const FMate
 		Result.Availability = EMaterialAvailability::Unsupported;
 		Result.Reason = "Renderer does not schedule usage " + InPass.Usage;
 	}
-	else if (InContext.SampleCount != 1 || InContext.ColorTargetCount > 1)
+	else if (InContext.SampleCount != 1 || InContext.ColorTargetCount > 8)
 	{
 		Result.Availability = EMaterialAvailability::Unsupported;
-		Result.Reason = "Material renderer supports one single-sample color target";
+		Result.Reason = "Material renderer supports up to eight single-sample color targets";
 	}
 	else if (InPass.State.bAlphaToCoverage || (InPass.State.bDepthTest && !InContext.bHasDepth) ||
 	         (InPass.State.bStencil && !InContext.bHasStencil) ||

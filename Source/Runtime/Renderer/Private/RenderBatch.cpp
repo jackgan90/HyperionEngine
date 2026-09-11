@@ -105,7 +105,6 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildFresh(const FR
 	{
 		PrepareInputs(InSnapshot, Result->Statistics);
 	}
-	const auto Depth = BatchDepth(InSnapshot);
 	std::multimap<std::size_t, FBatchGroup> Groups;
 	FSharedBatchValueCache Shared;
 	for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
@@ -122,8 +121,8 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildFresh(const FR
 			{
 				const bool bSrgb =
 				    Item.State.Surface->GetSnapshot()->Definition->GetPass(InSnapshot.View.Usage).bSrgbTarget;
-				Candidate = P.Describe(InSnapshot, Item, {bSrgb, Depth, InSnapshot.Targets.ColorCount()},
-				                       Result->Statistics, Shared);
+				Candidate =
+				    P.Describe(InSnapshot, Item, InSnapshot.Targets.GraphicsTarget(bSrgb), Result->Statistics, Shared);
 				for (const auto& Strategy : P.Strategies)
 				{
 					const auto Decision = Strategy->Evaluate(*Candidate, P.Capabilities);

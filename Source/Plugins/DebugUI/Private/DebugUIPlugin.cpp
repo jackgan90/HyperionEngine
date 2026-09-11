@@ -17,6 +17,25 @@ std::string Fixed(double InValue, int InDecimals = 2)
 	Out << std::fixed << std::setprecision(InDecimals) << InValue;
 	return Out.str();
 }
+
+void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings)
+{
+	InGui.Text("RENDER PIPELINE");
+	bool bDeferred = InSettings.RenderPipeline == "deferred";
+	if (InGui.Checkbox("Deferred shading", bDeferred))
+	{
+		InSettings.RenderPipeline = bDeferred ? "deferred" : "forward";
+	}
+	bool bHighPrecision = InSettings.GBufferLayout == "high";
+	if (InGui.Checkbox("High precision GBuffer", bHighPrecision))
+	{
+		InSettings.GBufferLayout = bHighPrecision ? "high" : "compact";
+	}
+	constexpr std::array<std::string_view, 2> PipelineIds{"exposure", "gbuffer_debug"};
+	InGui.EditProperties(SettingsType(), &InSettings, PipelineIds);
+	InGui.TextWrapped("GBuffer: 0 lit, 1 base, 2 normal, 3 rough/metal/AO, 4 emissive, 5 depth, 6 surface normal");
+	InGui.Separator();
+}
 } // namespace
 
 FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, const FFrameCaptureMetrics& InMetrics)
@@ -121,6 +140,14 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		Actions.Sampling = ProfilingActions.Sampling;
 		Actions.ProfilingBounds = ProfilingActions.ProfilingBounds;
 		InGui.Separator();
+		DrawPipelineControls(InGui, InSettings);
+		InGui.Text("Scene targets: " + Fixed(InMetrics.SceneTargetBytes / 1048576.0) + " MiB");
+		if (InMetrics.LegacyDisplayItems)
+		{
+			InGui.TextWrapped(
+			    std::to_string(InMetrics.LegacyDisplayItems) +
+			    " legacy material items render as display overlays. Add an HDR usage for scene lighting.");
+		}
 		InGui.Text("EXECUTION / MEMORY");
 		for (const auto& Thread : InMetrics.Threads)
 		{
@@ -166,6 +193,7 @@ void FDebugUiPlugin::Start()
 	P.Tasks.Require({EDomain::Main});
 	FPipelineDesc Desc;
 	Desc.State.bBlend = true;
+	Desc.Target.bSrgb = true;
 	Desc.State.SourceRgb = ERHIBlendFactor::SourceAlpha;
 	Desc.State.DestinationRgb = ERHIBlendFactor::InverseSourceAlpha;
 	Desc.State.DestinationAlpha = ERHIBlendFactor::InverseSourceAlpha;
@@ -176,7 +204,8 @@ void FDebugUiPlugin::Start()
 		                              Desc.Vertex = P.Compiler.Compile("Gui.hlsl", "VSMain", EShaderStage::Vertex,
 		                                                               P.Device.GetCapabilities().ShaderFormat);
 		                              Desc.Pixel = P.Compiler.Compile("Gui.hlsl", "PSMain", EShaderStage::Pixel,
-		                                                              P.Device.GetCapabilities().ShaderFormat);
+		                                                              P.Device.GetCapabilities().ShaderFormat,
+		                                                              {{{"HYP_GUI_SRGB", "1"}}});
 	                              }));
 	Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Position)},
 	                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Uv)},
@@ -285,8 +314,8 @@ void FDebugUiPlugin::Build(FRenderGraph& InGraph, const FRenderFrame&)
 	}
 	FGraphicsPass Pass;
 	Pass.Name = "Debug UI";
-	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer()};
-	Pass.Batches.push_back({{Impl->Draws}});
+	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer(), {}, {}, EGraphColorView::Srgb};
+	Pass.Batches.push_back({{Impl->Draws}, true});
 	InGraph.Add(std::move(Pass));
 }
 
@@ -299,7 +328,7 @@ void FDebugUiPlugin::BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData)
 	}
 	FGraphicsPass Pass;
 	Pass.Name = "Debug UI";
-	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer()};
+	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer(), {}, {}, EGraphColorView::Srgb};
 	Pass.Prepare = [Owner = std::weak_ptr<FImpl>(Impl), Data = std::move(InData)]
 	{
 		const auto State = Owner.lock();
@@ -309,7 +338,7 @@ void FDebugUiPlugin::BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData)
 		}
 		State->Prepare(Data);
 		std::vector<FGraphicsDrawBatch> Batches;
-		Batches.push_back({{std::move(State->Draws)}});
+		Batches.push_back({{std::move(State->Draws)}, true});
 		return Batches;
 	};
 	InGraph.Add(std::move(Pass));

@@ -4,14 +4,20 @@
 
 namespace Hyperion
 {
+struct FFullscreenPreparationStatistics;
+
 struct FForwardPipelineStatistics
 {
 	double PreparationMilliseconds{};
 	double ShadowSetupMilliseconds{};
+	double FullscreenPreparationMilliseconds{};
+	std::uint64_t SceneTargetBytes{};
+	std::size_t FullscreenDraws{};
 	FSceneVisibilityStats Spatial;
 	std::vector<FRenderViewStatistics> Views;
 	std::uint64_t ShadowTextureBytes{};
 	bool bShadows{};
+	FSceneVisibilityStats MainView() const;
 };
 
 // Captured on Render; read after this frame's RHI graph execution completes.
@@ -23,8 +29,10 @@ public:
 private:
 	FForwardPipelineStatistics Base;
 	FRenderViewPreparation Preparation;
+	std::shared_ptr<FFullscreenPreparationStatistics> Fullscreen;
 	bool bDeferred{};
 	friend class FForwardRenderPipeline;
+	friend class FSceneRenderPipeline;
 };
 
 // Render-owned orchestration: all shadow depth views -> forward -> extension passes.
