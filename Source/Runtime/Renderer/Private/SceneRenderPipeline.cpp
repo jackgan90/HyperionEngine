@@ -50,7 +50,7 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 			throw std::invalid_argument("Deferred reconstruction requires a positive invertible viewport depth range");
 		}
 	}
-	Resize(InMain.Width, InMain.Height);
+	Resize(InMain.Width, InMain.Height, InMain.DepthConvention);
 	LastStatistics = {};
 	FullscreenStatistics = std::make_shared<FFullscreenPreparationStatistics>();
 	LastStatistics.Spatial = Session.GetScene().BeginViews();
@@ -66,10 +66,11 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 	    State);
 	LastStatistics.ShadowSetupMilliseconds =
 	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
-	if (!ShadowLifetime || ShadowBytes != ShadowMaps.TextureBytes())
+	if (!ShadowLifetime || ShadowBytes != ShadowMaps.TextureBytes() || ShadowDepthConvention != InMain.DepthConvention)
 	{
 		ShadowLifetime = Session.GetResources().CreateScopeLifetime();
 		ShadowBytes = ShadowMaps.TextureBytes();
+		ShadowDepthConvention = InMain.DepthConvention;
 	}
 	const FVec4 Clear{ClearHdr(InClear.X, Settings.Exposure), ClearHdr(InClear.Y, Settings.Exposure),
 	                  ClearHdr(InClear.Z, Settings.Exposure), InClear.W};

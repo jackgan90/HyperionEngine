@@ -12,6 +12,7 @@ struct FRHISwapchainDesc
 	FNativeSurface Surface;
 	FSize Size;
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
+	float DepthClearValue = 1;
 };
 
 // Current presentation contract records passes against one swapchain color target.

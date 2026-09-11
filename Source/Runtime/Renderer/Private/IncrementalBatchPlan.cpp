@@ -65,7 +65,8 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::PublishIncremental(
 			{
 				const auto& [Scene, Slot, Generation, LocalId] = *Block.Chunk;
 				const FBatchItemKey Key{
-				    InSnapshot.View.Identity, InSnapshot.View.Usage, Scene, Slot, Generation, LocalId};
+				    InSnapshot.View.Identity,       InSnapshot.View.Usage, Scene, Slot, Generation, LocalId,
+				    InSnapshot.View.DepthConvention};
 				if (const auto Found = Chunks.find(Key); Found != Chunks.end() && Found->second.Data->IsLive())
 				{
 					Batch.Instances = Found->second.Data;
@@ -140,7 +141,7 @@ void FRenderBatchSystem::FImpl::LimitIncrementalHistory()
 std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::BuildIncremental(const FRenderSceneSnapshot& InSnapshot)
 {
 	HYP_PERF_SCOPE_C(Detail, BuildIncrementalBatchPlan);
-	const auto Key = std::pair{InSnapshot.View.Identity, InSnapshot.View.Usage};
+	const auto Key = std::tuple{InSnapshot.View.Identity, InSnapshot.View.Usage, InSnapshot.View.DepthConvention};
 	if (Strategies.size() != 1 || !InSnapshot.LocalContentIdentity || !InSnapshot.CollectionKey[0] ||
 	    !InSnapshot.CollectionKey[1] || !InSnapshot.CollectionKey[2] || InSnapshot.Items.IsEmpty() ||
 	    InSnapshot.Items.Size() > Limits.MaxItems || !Limits.MaxChunks)

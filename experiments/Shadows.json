@@ -2,6 +2,7 @@
   "type": "hyperion.application-settings",
   "schema_version": 1,
   "properties": {
+    "reversed_z": true,
     "title": "Hyperion | Cascaded Shadow Study",
     "width": 1440,
     "height": 900,

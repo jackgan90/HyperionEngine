@@ -12,6 +12,9 @@ struct FSceneItemPreparation
 	bool bRequiresConservativeBounds{};
 };
 
+FMat4 PrimitiveClipTransform(const FRenderPrimitiveState& InState, const FMat4& InViewProjection,
+                             EDepthConvention InConvention);
+
 bool IsExcludedFromView(const FMaterialDefinition& InDefinition, const FRenderView& InView);
 bool PrepareSceneItem(FRenderItem& InItem);
 bool IsPreparedSceneItemVisible(const FRenderItem& InItem, const FRenderView& InView, const FFrustum& InFrustum,

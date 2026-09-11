@@ -19,6 +19,9 @@ FRenderResourceDesc PrepareTriangle(FShaderCompiler& InCompiler, EShaderFormat I
 	Pass.Pixel = {"Triangle.hlsl", "PSMain"};
 	Pass.Vertex.Defines.push_back({"HYP_INSTANCE_CAPACITY", "128"});
 	Pass.InstanceArrays = {{"DrawConstants", "DrawInstances"}};
+	Pass.State.bDepthTest = true;
+	Pass.State.bDepthWrite = true;
+	Pass.State.bViewRelativeDepth = true;
 	Description.Passes.push_back(Pass);
 	Pass.Pixel.Defines = {{"HYP_HDR_DISPLAY", "1"}};
 	Pass.Usage = "HdrForwardOpaque";

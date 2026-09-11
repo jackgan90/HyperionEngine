@@ -18,6 +18,11 @@ std::filesystem::path WriteShader()
 cbuffer ValuesV1 : register(b0) { float A; float B; };
 float4 PSMain() : SV_Target0 { return float4(A, B, 0, 1); }
 )";
+	std::ofstream(Root / "Depth.hlsl") << R"(
+cbuffer ValuesV1 : register(b0) { float A; float B; };
+struct FOutput { float4 Color : SV_Target0; float Depth : SV_Depth; };
+FOutput PSMain() { FOutput Output; Output.Color = float4(A, B, 0, 1); Output.Depth = .5; return Output; }
+)";
 	return Root;
 }
 
@@ -131,6 +136,33 @@ void CheckDynamicState(FFullscreenFixture& InFixture)
 		    HYP_CHECK(Batch.Commands.Draws.at(0).DynamicState.StencilReference == 37);
 	    }));
 }
+
+void CheckDepthConventions(FFullscreenFixture& InFixture)
+{
+	auto Material = Description();
+	Material.Passes[0].Pixel.Path = "Depth.hlsl";
+	Material.Passes[0].State.bDepthTest = true;
+	Material.Passes[0].State.bDepthWrite = true;
+	Material.Passes[0].State.bViewRelativeDepth = true;
+	InFixture.Pass.Material = std::make_shared<const FMaterialDefinition>(std::move(Material));
+	for (const auto Convention : {EDepthConvention::Standard, EDepthConvention::Reversed})
+	{
+		InFixture.Pass.DepthConvention = Convention;
+		const float Clear = GetDepthClearValue(Convention);
+		const auto Depth = std::make_shared<const FMaterialTextureSource>(FMaterialDepthTexture{384, 288, Clear});
+		InFixture.Pass.Targets.DepthStencil =
+		    FRenderDepthTarget{{ERenderTargetKind::Texture, Depth, InFixture.Pass.Lifetime, false},
+		                       ERHIDepthFormat::D32,
+		                       FAttachmentActions{EAttachmentLoad::Clear},
+		                       {},
+		                       Clear};
+		for (const bool bDeferred : {false, true})
+		{
+			const auto Image = InFixture.Render({{"A", FMaterialValue::Float(.35f)}}, bDeferred);
+			HYP_CHECK(std::abs(Pixel(Image, 0) - .35f) < .008f);
+		}
+	}
+}
 } // namespace
 
 void RunFullscreenTests(FTaskSystem& InTasks, IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
@@ -138,6 +170,7 @@ void RunFullscreenTests(FTaskSystem& InTasks, IRHIDevice& InDevice, IRHISwapchai
 	FFullscreenFixture Fixture(InTasks, InDevice, InSwapchain);
 	CheckRecovery(Fixture);
 	CheckDynamicState(Fixture);
+	CheckDepthConventions(Fixture);
 	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
 	                              [&]
 	                              {

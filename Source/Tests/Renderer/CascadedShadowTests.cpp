@@ -214,6 +214,57 @@ void CheckRetainedSetup()
 	HYP_CHECK(Shadows.Prepare(View, Light, Settings, Query));
 	HYP_CHECK(Queries == 40); // Custom/dynamic query clients without a stable scene token always execute.
 }
+
+void CheckDepthConventions()
+{
+	FCascadedShadowMap Shadows;
+	auto View = Camera();
+	unsigned Queries{};
+	const auto Query = [&](const ISceneVisibility&)
+	{
+		++Queries;
+		return std::vector<FBounds>{};
+	};
+	const std::array<std::uint64_t, 2> SceneState{1, 1};
+	HYP_CHECK(Shadows.Prepare(View, {.4f, .8f, .3f}, {}, Query, SceneState));
+	const auto Standard = Shadows.Cascades();
+	const auto StandardTargets = Shadows.Targets({});
+	HYP_CHECK(Queries == 4);
+	View.DepthConvention = EDepthConvention::Reversed;
+	View.ViewProjection =
+	    Multiply(Perspective(1, 1280.f / 720, .05f, 500, View.DepthConvention), LookAt(View.Eye, {0, 2, 0}));
+	HYP_CHECK(Shadows.Prepare(View, {.4f, .8f, .3f}, {}, Query, SceneState));
+	HYP_CHECK(Queries == 8);
+	CheckReceiverCoverage(Shadows, View);
+	const auto ReversedTargets = Shadows.Targets({});
+	const auto Views = Shadows.Views(View);
+	for (unsigned Index = 0; Index < 4; ++Index)
+	{
+		HYP_CHECK(Views[Index].DepthConvention == EDepthConvention::Reversed);
+		HYP_CHECK(Standard[Index].Near == Shadows.Cascades()[Index].Near);
+		HYP_CHECK(Standard[Index].Far == Shadows.Cascades()[Index].Far);
+		const auto& Target = *ReversedTargets[Index].DepthStencil;
+		HYP_CHECK(Target.ClearDepth == 0 && Target.Source.Texture->GetDepthTarget()->ClearDepth == 0);
+		HYP_CHECK(Target.Source.Texture != StandardTargets[Index].DepthStencil->Source.Texture);
+		const auto Point = Shadows.Cascades()[Index].Center;
+		const auto A = Transform(Standard[Index].ViewProjection, {Point.X, Point.Y, Point.Z, 1});
+		const auto B = Transform(Views[Index].ViewProjection, {Point.X, Point.Y, Point.Z, 1});
+		HYP_CHECK(std::abs(A.Z + B.Z - 1) < .00001f && A.X == B.X && A.Y == B.Y);
+	}
+	HYP_CHECK(Shadows.Prepare(View, {.4f, .8f, .3f}, {}, Query, SceneState));
+	HYP_CHECK(Queries == 8);
+	for (const auto& Parameter : DefaultShadowParameters(EDepthConvention::Reversed))
+	{
+		if (Parameter.Name == "Engine.View.ShadowSampler")
+		{
+			HYP_CHECK(Parameter.Value.Sampler.Compare == EMaterialSamplerCompare::GreaterEqual);
+		}
+		if (Parameter.Value.Texture)
+		{
+			HYP_CHECK(Parameter.Value.Texture->GetDepthTarget()->ClearDepth == 0);
+		}
+	}
+}
 } // namespace
 
 int main()
@@ -224,6 +275,7 @@ int main()
 		CheckOffscreenCasters();
 		CheckDisableAndInvalid();
 		CheckRetainedSetup();
+		CheckDepthConventions();
 		std::cout << "Cascaded shadow projection and caster queries passed\n";
 		return 0;
 	}

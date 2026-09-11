@@ -69,6 +69,7 @@ private:
 
 	FOptions Options;
 	FAppSettings Settings;
+	const bool bActiveReversedZ;
 	FDebugMetrics Metrics;
 #if HYP_ENABLE_RENDERDOC
 	std::unique_ptr<FPluginSet> StartupPlugins;

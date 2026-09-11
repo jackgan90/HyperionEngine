@@ -213,7 +213,7 @@ void FillMaterialObjectInputs(FMaterialProviderInputs& InInputs, const FRenderIt
                               const FRenderSceneSnapshot& InSnapshot, const FRenderResourceService& InResources)
 {
 	const auto WorldViewProjection =
-	    InItem.State.bClipSpace ? InItem.State.World : Multiply(InSnapshot.View.ViewProjection, InItem.State.World);
+	    PrimitiveClipTransform(InItem.State, InSnapshot.View.ViewProjection, InSnapshot.View.DepthConvention);
 	FMaterialParameterValues ObjectValues = {
 	    {"Engine.Object.World", FMaterialValue::Matrix(InItem.State.World)},
 	    {"Engine.Object.Normal", FMaterialValue::Matrix(NormalMatrix(InItem.State.World))},
@@ -248,13 +248,14 @@ FMaterialProviderInputs FRenderSession::PrepareViewInputs(const FRenderSceneSnap
 	    {"Engine.View.CameraPosition", FMaterialValue::Float(InSnapshot.View.Eye)}};
 	ViewValues.insert(ViewValues.end(), InSnapshot.View.Parameters.begin(), InSnapshot.View.Parameters.end());
 	FMaterialInputValues PublishedView(std::move(ViewValues));
-	if (!View.Scope.Lifetime || View.Values != PublishedView)
+	if (!View.Scope.Lifetime || View.Values != PublishedView || View.DepthConvention != InSnapshot.View.DepthConvention)
 	{
 		View.Scope.Lifetime = Resources.CreateScopeLifetime();
 		View.Scope.Key.Identity = MaterialState->Identity;
 		++View.Scope.Key.Revision;
 		View.Scope.Key.SetQualifiers({InSnapshot.View.Identity});
 		View.Values = std::move(PublishedView);
+		View.DepthConvention = InSnapshot.View.DepthConvention;
 	}
 	Inputs.Scopes[ScopeIndex(EMaterialScope::View)] = View.Scope;
 	Inputs.Values[ScopeIndex(EMaterialScope::View)] = View.Values;

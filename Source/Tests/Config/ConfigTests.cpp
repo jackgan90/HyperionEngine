@@ -35,6 +35,8 @@ struct FProbe final : Hyperion::FPlugin
 void CheckSettingsPersistence()
 {
 	Hyperion::FAppSettings Settings;
+	HYP_CHECK(Settings.bReversedZ);
+	Settings.bReversedZ = false;
 	Settings.Width = 960;
 	Settings.TriangleScale = 0.6;
 	Settings.MainRenderLead = 2;
@@ -42,6 +44,7 @@ void CheckSettingsPersistence()
 	Settings.Plugins = {"triangle"};
 	Hyperion::SaveSettings("test-settings.json", Settings);
 	const auto Loaded = Hyperion::LoadSettings("test-settings.json");
+	HYP_CHECK(!Loaded.bReversedZ);
 	HYP_CHECK(Loaded.MainRenderLead == 2 && Loaded.RenderRhiLead == 3);
 	HYP_CHECK(Loaded.Width == 960 && Loaded.TriangleScale == 0.6 && Loaded.Plugins == Settings.Plugins);
 	{
@@ -78,6 +81,7 @@ void CheckSettingsPersistence()
 		std::ofstream File("test-defaults.json");
 		File << R"({"type":"hyperion.application-settings","schema_version":1,"properties":{"width":800}})";
 	}
+	HYP_CHECK(Hyperion::LoadSettings("test-defaults.json").bReversedZ);
 	HYP_CHECK(Hyperion::LoadSettings("test-defaults.json").Height == Hyperion::FAppSettings{}.Height);
 }
 

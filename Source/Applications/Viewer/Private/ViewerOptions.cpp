@@ -146,6 +146,10 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	{
 		InOptions.bHidden = true;
 	}
+	else if (InArg == "--exercise-depth-config")
+	{
+		InOptions.bExerciseDepthConfig = true;
+	}
 	else if (InArg == "--exercise-window")
 	{
 		InOptions.bExercise = true;
@@ -232,6 +236,10 @@ void ValidateOptions(FOptions& InOptions)
 	    (InOptions.SceneCulling != "none" && InOptions.SceneCulling != "linear" && InOptions.SceneCulling != "bvh"))
 	{
 		throw std::invalid_argument("Choose --model or --scene; --scene-culling accepts none, linear or bvh");
+	}
+	if (InOptions.bExerciseDepthConfig && InOptions.Frames < 4)
+	{
+		throw std::invalid_argument("--exercise-depth-config requires at least four frames");
 	}
 	if (InOptions.Frames < 0)
 	{

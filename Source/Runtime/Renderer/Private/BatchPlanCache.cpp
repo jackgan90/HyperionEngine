@@ -47,7 +47,8 @@ bool FRenderBatchSystem::FImpl::FPlanItem::Matches(const FRenderItem& InItem, bo
 std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRenderSceneSnapshot& InSnapshot)
 {
 	HYP_PERF_SCOPE_C(Detail, ReuseBatchPlan);
-	const auto Existing = Plans.find({InSnapshot.View.Identity, InSnapshot.View.Usage});
+	const auto Existing =
+	    Plans.find({InSnapshot.View.Identity, InSnapshot.View.Usage, InSnapshot.View.DepthConvention});
 	if (Existing == Plans.end())
 	{
 		return {};
@@ -117,7 +118,7 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::ReusePlan(const FRe
 void FRenderBatchSystem::FImpl::CachePlan(const FRenderSceneSnapshot& InSnapshot, const FRenderBatchPlan& InPlan)
 {
 	HYP_PERF_SCOPE_C(Detail, CacheBatchPlan);
-	const auto Key = std::pair{InSnapshot.View.Identity, InSnapshot.View.Usage};
+	const auto Key = std::tuple{InSnapshot.View.Identity, InSnapshot.View.Usage, InSnapshot.View.DepthConvention};
 	const auto Existing = Plans.find(Key);
 	if (Existing != Plans.end())
 	{

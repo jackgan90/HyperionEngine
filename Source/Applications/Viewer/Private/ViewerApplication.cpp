@@ -36,9 +36,10 @@ void FViewerServices::DrainWrites() noexcept
 }
 
 FViewerApplication::FViewerApplication(FOptions InOptions)
-    : Options(std::move(InOptions)), Settings(LoadSettings(Options.Config))
+    : Options(std::move(InOptions)), Settings(LoadSettings(Options.Config)), bActiveReversedZ(Settings.bReversedZ)
 {
 	ApplyOptions(Options, Settings);
+	Metrics.bActiveReversedZ = bActiveReversedZ;
 	InitializeShadowSettings();
 }
 
@@ -90,7 +91,9 @@ void FViewerApplication::InitializeGraphics()
 		                          FRHIDeviceDesc Desc;
 		                          Desc.RequiredFeatures = {ERHIFeature::Graphics, ERHIFeature::TextureSampling};
 		                          Device = Backends.CreateDevice(SelectedBackend, Desc);
-		                          Swapchain = Device->CreateSwapchain({Surface, InitialSize});
+		                          Swapchain = Device->CreateSwapchain(
+		                              {Surface, InitialSize, ERHIDepthFormat::D32,
+		                               GetDepthClearValue(GetDepthConvention(bActiveReversedZ))});
 		                          Swapchain->SetGpuTimingEnabled(true);
 		                          if (!Options.Benchmark.empty())
 		                          {

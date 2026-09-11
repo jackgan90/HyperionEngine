@@ -10,6 +10,7 @@
 
 using namespace Hyperion;
 void RunColorTargetTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
+void RunClipSpaceTests(FTaskSystem& InTasks, IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunFullscreenTests(FTaskSystem& InTasks, IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 
 namespace
@@ -91,26 +92,29 @@ struct FFixture
 	FScenePipelineSettings Settings;
 	FVec4 Clear{.025f, .035f, .065f, 1};
 
-	FFixture()
+	explicit FFixture(EDepthConvention InConvention = EDepthConvention::Standard)
 	{
+		View.DepthConvention = InConvention;
 		const auto Surface = Window.Surface();
-		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-		                          [&]
-		                          {
-			                          FRHIBackendRegistry Registry;
-			                          RegisterD3D12RHIBackend(Registry);
-			                          Device = Registry.CreateDevice(ERHIBackend::D3D12);
-			                          Swapchain = Device->CreateSwapchain({Surface, {384, 288}, ERHIDepthFormat::D32});
-			                          Swapchain->SetGpuTimingEnabled(true);
-			                          RunColorTargetTests(*Device, *Swapchain);
-		                          }));
+		Tasks.Wait(
+		    Tasks.Dispatch({EDomain::Rhi, 0},
+		                   [&]
+		                   {
+			                   FRHIBackendRegistry Registry;
+			                   RegisterD3D12RHIBackend(Registry);
+			                   Device = Registry.CreateDevice(ERHIBackend::D3D12);
+			                   Swapchain = Device->CreateSwapchain(
+			                       {Surface, {384, 288}, ERHIDepthFormat::D32, GetDepthClearValue(InConvention)});
+			                   Swapchain->SetGpuTimingEnabled(true);
+			                   RunColorTargetTests(*Device, *Swapchain);
+		                   }));
 		Session = std::make_unique<FRenderSession>(Tasks, *Device, Compiler);
 		Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities());
 		View.Eye = {0, 0, 5};
 		View.Width = 384;
 		View.Height = 288;
 		View.Camera = FRenderCamera{{0, 0, -1}, {0, 1, 0}, 1, .1f, 40};
-		View.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 40), LookAt(View.Eye, {}));
+		View.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 40, View.DepthConvention), LookAt(View.Eye, {}));
 		Shadows.Resolution = 1024;
 		Shadows.Distance = 18;
 		Shadows.bEnabled = false;
@@ -252,6 +256,90 @@ void CheckHdrAndRoutes(FFixture& InFixture)
 	Unlit.Remove();
 }
 
+void CheckDepthOrdering(FFixture& InFixture)
+{
+	FModelMaterial Material;
+	Material.bUnlit = true;
+	Material.BaseColor = {.8f, 0, 0, 1};
+	// Create the nearer surface first so wrong depth state lets the later far draw overwrite it.
+	FModel Near(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	Near.SetTransform(Translation({0, 0, 1}));
+	Material.BaseColor = {0, 0, .8f, 1};
+	FModel Far(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	Await(Near);
+	Await(Far);
+	const auto Opaque = InFixture.Frame();
+	const auto Center = (144 * 384 + 192) * 4;
+	HYP_CHECK(Opaque.Rgba[Center] > .6f && Opaque.Rgba[Center + 2] < .01f);
+	Similar(Opaque, InFixture.Frame(ESceneRenderPipeline::Forward), .008f);
+	Near.Remove();
+	Far.Remove();
+	Material.AlphaMode = EAlphaMode::Blend;
+	Material.BaseColor = {.8f, 0, 0, .5f};
+	FModel NearBlend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	NearBlend.SetTransform(Translation({0, 0, 1}));
+	Material.BaseColor = {0, 0, .8f, .5f};
+	FModel FarBlend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	Await(NearBlend);
+	Await(FarBlend);
+	const auto SavedClear = InFixture.Clear;
+	InFixture.Clear = {0, 0, 0, 1};
+	const auto Blended = InFixture.Frame();
+	// Far blue then near red: HDR (.4, 0, .2), followed by Reinhard and sRGB.
+	HYP_CHECK(std::abs(Blended.Rgba[Center] - .571f) < .008f);
+	HYP_CHECK(std::abs(Blended.Rgba[Center + 2] - .445f) < .008f);
+	Similar(Blended, InFixture.Frame(ESceneRenderPipeline::Forward), .008f);
+	InFixture.Clear = SavedClear;
+	NearBlend.Remove();
+	FarBlend.Remove();
+}
+
+void CheckViewDepthCacheIsolation(FFixture& InFixture)
+{
+	FModelMaterial Material;
+	Material.bUnlit = true;
+	Material.BaseColor = {.8f, .2f, .1f, 1};
+	const auto Asset = Quad(Material);
+	FModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	A.SetTransform(Translation({-.5f, 0, 1}));
+	B.SetTransform(Translation({.5f, 0, 0}));
+	Await(A);
+	Await(B);
+	const auto Reference = InFixture.Frame();
+	HYP_CHECK(InFixture.Statistics.MainView().Batches.InstancedItems == 2);
+	const auto Initial = InFixture.View.DepthConvention;
+	const auto Other = Initial == EDepthConvention::Reversed ? EDepthConvention::Standard : EDepthConvention::Reversed;
+	const auto Surface = InFixture.Window.Surface();
+
+	// Reuse the session/material/batch caches across explicitly different views. A new
+	// swapchain keeps optimized clear metadata consistent; Viewer does not expose this switch.
+	for (const auto Convention : {Other, Initial, Other, Initial})
+	{
+		InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+		    {EDomain::Rhi, 0},
+		    [&]
+		    {
+			    InFixture.Device->WaitIdle();
+			    InFixture.Swapchain.reset();
+			    InFixture.Swapchain = InFixture.Device->CreateSwapchain(
+			        {Surface, {384, 288}, ERHIDepthFormat::D32, GetDepthClearValue(Convention)});
+			    InFixture.Swapchain->SetGpuTimingEnabled(true);
+		    }));
+		InFixture.View.DepthConvention = Convention;
+		InFixture.View.ViewProjection =
+		    Multiply(Perspective(1, 4.f / 3, .1f, 40, Convention), LookAt(InFixture.View.Eye, {}));
+		Similar(Reference, InFixture.Frame(), .008f);
+		HYP_CHECK(InFixture.Statistics.MainView().Batches.InstancedItems == 2);
+		// Replacing scene targets can retire fullscreen PSOs; stationary frames must reuse them.
+		const auto Pipelines = InFixture.DeviceStats.PipelinesCreated;
+		Similar(Reference, InFixture.Frame(), .008f);
+		HYP_CHECK(InFixture.DeviceStats.PipelinesCreated == Pipelines);
+	}
+	A.Remove();
+	B.Remove();
+}
+
 void CheckCoverageAndInstances(FFixture& InFixture)
 {
 	FModelMaterial Material;
@@ -316,8 +404,8 @@ void CheckShadowContinuity(FFixture& InFixture)
 	HYP_CHECK(MaximumShadow > .1f);
 	Similar(Shadowed, InFixture.Frame(ESceneRenderPipeline::Forward), .065f);
 	InFixture.View.Eye.X = .015f;
-	InFixture.View.ViewProjection =
-	    Multiply(Perspective(1, 4.f / 3, .1f, 40), LookAt(InFixture.View.Eye, {.015f, 0, 0}));
+	InFixture.View.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 40, InFixture.View.DepthConvention),
+	                                         LookAt(InFixture.View.Eye, {.015f, 0, 0}));
 	Similar(InFixture.Frame(), InFixture.Frame(ESceneRenderPipeline::Forward), .065f);
 	Receiver.Remove();
 	Caster.Remove();
@@ -454,23 +542,29 @@ int main()
 {
 	try
 	{
-		FFixture Fixture;
-		CheckConfiguration(Fixture);
-		CheckHdrAndRoutes(Fixture);
-		CheckCoverageAndInstances(Fixture);
-		CheckShadowContinuity(Fixture);
-		Fixture.View.Viewport = FViewport{32, 24, 320, 240, .2f, .8f};
-		CheckShadowContinuity(Fixture);
-		Fixture.View.Viewport->MaxDepth = Fixture.View.Viewport->MinDepth;
-		Rejects(
-		    [&]
-		    {
-			    Fixture.Frame();
-		    });
-		Fixture.View.Viewport.reset();
-		RunFullscreenTests(Fixture.Tasks, *Fixture.Device, *Fixture.Swapchain);
-		CheckQueuedGenerations(Fixture);
-		CheckReplacementAndRecovery(Fixture);
+		for (const auto Convention : {EDepthConvention::Standard, EDepthConvention::Reversed})
+		{
+			FFixture Fixture(Convention);
+			CheckConfiguration(Fixture);
+			CheckHdrAndRoutes(Fixture);
+			CheckDepthOrdering(Fixture);
+			CheckViewDepthCacheIsolation(Fixture);
+			CheckCoverageAndInstances(Fixture);
+			CheckShadowContinuity(Fixture);
+			Fixture.View.Viewport = FViewport{32, 24, 320, 240, .2f, .8f};
+			CheckShadowContinuity(Fixture);
+			Fixture.View.Viewport->MaxDepth = Fixture.View.Viewport->MinDepth;
+			Rejects(
+			    [&]
+			    {
+				    Fixture.Frame();
+			    });
+			Fixture.View.Viewport.reset();
+			RunClipSpaceTests(Fixture.Tasks, *Fixture.Device, *Fixture.Swapchain);
+			RunFullscreenTests(Fixture.Tasks, *Fixture.Device, *Fixture.Swapchain);
+			CheckQueuedGenerations(Fixture);
+			CheckReplacementAndRecovery(Fixture);
+		}
 		std::cout << "Deferred rendering tests passed\n";
 		return 0;
 	}

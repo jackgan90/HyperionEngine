@@ -9,8 +9,8 @@
 
 namespace Hyperion
 {
-using FBatchItemKey =
-    std::tuple<std::uint64_t, std::string, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t>;
+using FBatchItemKey = std::tuple<std::uint64_t, std::string, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t,
+                                 EDepthConvention>;
 
 FBatchItemKey BatchItemKey(const FRenderSceneSnapshot& InSnapshot, const FRenderItem& InItem);
 
@@ -20,7 +20,7 @@ struct FBatchItemKeyHash
 	{
 		std::size_t Hash = std::hash<std::string>{}(std::get<1>(InKey));
 		for (const auto Word : {std::get<0>(InKey), std::get<2>(InKey), std::uint64_t(std::get<3>(InKey)),
-		                        std::get<4>(InKey), std::get<5>(InKey)})
+		                        std::get<4>(InKey), std::get<5>(InKey), std::uint64_t(std::get<6>(InKey))})
 		{
 			Hash = Hash * 16777619U ^ std::hash<std::uint64_t>{}(Word);
 		}
@@ -186,9 +186,9 @@ struct FRenderBatchSystem::FImpl
 	std::size_t ChunkBytes{};
 	std::uint64_t Access{};
 	bool bStarted{};
-	std::map<std::pair<std::uint64_t, std::string>, FPlanEntry> Plans;
+	std::map<std::tuple<std::uint64_t, std::string, EDepthConvention>, FPlanEntry> Plans;
 	std::size_t PlanItems{};
-	std::map<std::pair<std::uint64_t, std::string>, FIncrementalBatchHistory> IncrementalPlans;
+	std::map<std::tuple<std::uint64_t, std::string, EDepthConvention>, FIncrementalBatchHistory> IncrementalPlans;
 	std::array<std::uint64_t, 3> RetiredFamily{};
 	std::array<std::uint64_t, 3> RetiredCollection{};
 	std::uint32_t RetainedFamilies{};

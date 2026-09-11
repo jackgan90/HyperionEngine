@@ -45,7 +45,8 @@ public:
 	FRenderSession& operator=(const FRenderSession&) = delete;
 	FRenderSceneClient& GetScene();
 	FRenderResourceService& GetResources();
-	FRenderPassTargets FrameTargets(std::optional<FVec4> InClear = {}) const;
+	FRenderPassTargets FrameTargets(std::optional<FVec4> InClear = {},
+	                                EDepthConvention InConvention = EDepthConvention::Standard) const;
 	std::size_t Build(FRenderGraph& InGraph, FRenderView InView, FRenderPassTargets InTargets);
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
 	                       std::span<const FRenderPassTargets> InTargets,

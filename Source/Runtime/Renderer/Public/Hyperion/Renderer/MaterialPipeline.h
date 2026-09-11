@@ -4,12 +4,14 @@
 
 namespace Hyperion
 {
-FGraphicsState ConvertMaterialState(const FMaterialState& InState, bool bInMirrored = false);
+FGraphicsState ConvertMaterialState(const FMaterialState& InState, bool bInMirrored = false,
+                                    EDepthConvention InConvention = EDepthConvention::Standard);
 FGraphicsDynamicState ConvertMaterialDynamicState(const FMaterialDynamicState& InState);
 FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& InPass);
 FPipelineDesc DescribeMaterialPipeline(const FCompiledMaterialPass& InProgram, const FMaterialPass& InPass,
                                        const FResourceBindingLayout& InLayout,
                                        std::vector<FVertexAttribute> InAttributes, std::uint32_t InStride,
                                        ERHIPrimitiveTopology InTopology, FGraphicsTarget InTarget,
-                                       bool bInMirrored = false);
+                                       bool bInMirrored = false,
+                                       EDepthConvention InConvention = EDepthConvention::Standard);
 } // namespace Hyperion

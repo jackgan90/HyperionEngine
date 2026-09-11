@@ -134,13 +134,13 @@ FRenderBatchSystem& FRenderSession::GetBatchSystem()
 	return Batches;
 }
 
-FRenderPassTargets FRenderSession::FrameTargets(std::optional<FVec4> InClear) const
+FRenderPassTargets FRenderSession::FrameTargets(std::optional<FVec4> InClear, EDepthConvention InConvention) const
 {
 	if (bClosed)
 	{
 		throw std::logic_error("Closed render session");
 	}
-	return FRenderPassTargets::Frame(MaterialState->Depth, InClear);
+	return FRenderPassTargets::Frame(MaterialState->Depth, InClear, InConvention);
 }
 
 std::size_t FRenderSession::Build(FRenderGraph& InGraph, FRenderView InView, FRenderPassTargets InTargets)

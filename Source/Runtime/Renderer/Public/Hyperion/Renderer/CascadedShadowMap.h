@@ -30,8 +30,8 @@ struct FShadowCascade
 	std::size_t CandidateCasters{};
 };
 
-// Defaults are initialized depth=1 and zero shadow strength; ordinary material clients need no pipeline.
-FMaterialParameterValues DefaultShadowParameters();
+// Defaults use the convention far value and zero shadow strength.
+FMaterialParameterValues DefaultShadowParameters(EDepthConvention InConvention = EDepthConvention::Standard);
 
 class FCascadedShadowMap
 {
@@ -56,7 +56,8 @@ private:
 	FVec3 LightUp{0, 1, 0};
 	FVec3 Light{0, 0, 1};
 	bool bEnabled{};
-	std::optional<std::array<std::uint64_t, 26>> PreparedKey;
+	EDepthConvention DepthConvention = EDepthConvention::Standard;
+	std::optional<std::array<std::uint64_t, 27>> PreparedKey;
 	void PrepareCascade(std::size_t InIndex, const FRenderView& InMain, const FBoundsQuery& InQuery);
 };
 } // namespace Hyperion

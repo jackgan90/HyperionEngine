@@ -45,7 +45,8 @@ struct FRenderPassTargets
 	std::vector<FRenderColorTarget> Colors;
 	std::span<const FRenderColorTarget> GetColors() const;
 	FGraphicsTarget GraphicsTarget(bool bInSrgb = false) const;
-	static FRenderPassTargets Frame(ERHIDepthFormat InDepth, std::optional<FVec4> InClear = {});
+	static FRenderPassTargets Frame(ERHIDepthFormat InDepth, std::optional<FVec4> InClear = {},
+	                                EDepthConvention InConvention = EDepthConvention::Standard);
 	static FRenderPassTargets ColorOnly(std::optional<FVec4> InClear = {});
 	ERHIDepthFormat GetDepthFormat() const;
 	std::uint32_t ColorCount() const;

@@ -15,6 +15,7 @@ struct FRenderSession::FMaterialState
 	{
 		FMaterialScopeInput Scope;
 		FMaterialInputValues Values;
+		EDepthConvention DepthConvention = EDepthConvention::Standard;
 		std::uint64_t AccessFrame{};
 	};
 

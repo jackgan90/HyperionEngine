@@ -65,13 +65,17 @@ FRenderPassTargets FRenderPassTargets::ColorOnly(std::optional<FVec4> InClear)
 	return Result;
 }
 
-FRenderPassTargets FRenderPassTargets::Frame(ERHIDepthFormat InDepth, std::optional<FVec4> InClear)
+FRenderPassTargets FRenderPassTargets::Frame(ERHIDepthFormat InDepth, std::optional<FVec4> InClear,
+                                             EDepthConvention InConvention)
 {
 	auto Result = ColorOnly(InClear);
 	if (InDepth != ERHIDepthFormat::None)
 	{
-		Result.DepthStencil =
-		    FRenderDepthTarget{{ERenderTargetKind::FrameDepth}, InDepth, FAttachmentActions{EAttachmentLoad::Clear}};
+		Result.DepthStencil = FRenderDepthTarget{{ERenderTargetKind::FrameDepth},
+		                                         InDepth,
+		                                         FAttachmentActions{EAttachmentLoad::Clear},
+		                                         {},
+		                                         GetDepthClearValue(InConvention)};
 		if (InDepth == ERHIDepthFormat::D32S8)
 		{
 			Result.DepthStencil->Stencil = FAttachmentActions{EAttachmentLoad::Clear};

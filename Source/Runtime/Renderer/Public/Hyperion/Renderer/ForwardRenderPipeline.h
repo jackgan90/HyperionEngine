@@ -53,6 +53,7 @@ private:
 	FCascadedShadowMap ShadowMaps;
 	std::shared_ptr<const void> Lifetime;
 	std::uint64_t AllocatedShadowBytes{};
+	EDepthConvention ShadowDepthConvention = EDepthConvention::Standard;
 	FForwardPipelineStatistics LastStatistics;
 	bool bPending{};
 };

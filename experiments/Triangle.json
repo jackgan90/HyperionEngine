@@ -2,6 +2,7 @@
   "type": "hyperion.application-settings",
   "schema_version": 1,
   "properties": {
+    "reversed_z": true,
     "title": "Hyperion | Rendering Lab",
     "width": 1280,
     "height": 720,

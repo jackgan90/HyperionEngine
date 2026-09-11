@@ -77,8 +77,10 @@ struct FShadowFixture
 	FForwardPipelineStatistics Statistics;
 	FDeviceStats DeviceStats;
 
-	explicit FShadowFixture(ERHIDepthFormat InDepth = ERHIDepthFormat::D32)
+	explicit FShadowFixture(ERHIDepthFormat InDepth = ERHIDepthFormat::D32,
+	                        EDepthConvention InConvention = EDepthConvention::Standard)
 	{
+		View.DepthConvention = InConvention;
 		const auto Surface = Window.Surface();
 		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 		                          [&]
@@ -86,7 +88,8 @@ struct FShadowFixture
 			                          FRHIBackendRegistry Registry;
 			                          RegisterD3D12RHIBackend(Registry);
 			                          Device = Registry.CreateDevice(ERHIBackend::D3D12);
-			                          Swapchain = Device->CreateSwapchain({Surface, {384, 288}, InDepth});
+			                          Swapchain = Device->CreateSwapchain(
+			                              {Surface, {384, 288}, InDepth, GetDepthClearValue(InConvention)});
 			                          Swapchain->SetGpuTimingEnabled(true);
 		                          }));
 		Session = std::make_unique<FRenderSession>(Tasks, *Device, Compiler, InDepth, GetStandardMaterialSemantics());
@@ -95,7 +98,8 @@ struct FShadowFixture
 		View.Width = 384;
 		View.Height = 288;
 		View.Camera = FRenderCamera{{0, 0, -1}, {0, 1, 0}, 1, .1f, 40};
-		View.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 40), LookAt(View.Eye, {0, 0, 0}));
+		View.ViewProjection =
+		    Multiply(Perspective(1, 4.f / 3, .1f, 40, View.DepthConvention), LookAt(View.Eye, {0, 0, 0}));
 		Settings.Resolution = 1024;
 		Settings.Distance = 18;
 	}
@@ -129,44 +133,51 @@ struct FShadowFixture
 		Session->SetSceneParameters(std::move(Values));
 		const auto Frame = Session->FreezeFrame();
 		FImage Image;
-		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-		                          [&]
-		                          {
-			                          FRenderGraph Graph;
-			                          Pipeline->Build(Graph, View, Frame, Settings, {0, 0, 0, 1});
-			                          std::vector<FPassCommands> Plan;
-			                          Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-			                                                    [&]
-			                                                    {
-				                                                    Plan = Graph.Compile();
-			                                                    }));
-			                          HYP_CHECK(Plan.size() <= 8);
-			                          if (Pipeline->Statistics().bShadows)
-			                          {
-				                          for (unsigned Index = 0; Index < 4; ++Index)
-				                          {
-					                          HYP_CHECK(!Plan[Index].HasColor() &&
-					                                    Plan[Index].DepthStencil->Depth->Load ==
-					                                        EAttachmentLoad::Clear &&
-					                                    Plan[Index].GetDepthTexture());
-					                          HYP_CHECK(Plan[Index].Draws.empty() || Plan[Index].Draws[0].Pipeline);
-				                          }
-				                          HYP_CHECK(Plan[4].HasColor() && Plan[4].SampledTextures.size() == 4);
-			                          }
-			                          Statistics = Pipeline->Statistics();
-			                          for (const auto& Stats : Statistics.Views)
-			                          {
-				                          HYP_CHECK(Stats.Visibility.Batches.FailedItems == 0);
-			                          }
-			                          Image = ExecuteGraph(Graph, Tasks, *Swapchain, {384, 288}, false, true);
-			                          Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-			                                                    [&]
-			                                                    {
-				                                                    Device->CollectCompletedResources();
-				                                                    DeviceStats = Device->Statistics();
-				                                                    HYP_CHECK(DeviceStats.ValidationErrors == 0);
-			                                                    }));
-		                          }));
+		Tasks.Wait(Tasks.Dispatch(
+		    {EDomain::Render},
+		    [&]
+		    {
+			    FRenderGraph Graph;
+			    Pipeline->Build(Graph, View, Frame, Settings, {0, 0, 0, 1});
+			    std::vector<FPassCommands> Plan;
+			    Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+			                              [&]
+			                              {
+				                              Plan = Graph.Compile();
+			                              }));
+			    HYP_CHECK(Plan.size() <= 8);
+			    for (const auto& Pass : Plan)
+			    {
+				    if (Pass.HasDepth())
+				    {
+					    HYP_CHECK(Pass.DepthStencil->ClearDepth == GetDepthClearValue(View.DepthConvention));
+				    }
+			    }
+			    if (Pipeline->Statistics().bShadows)
+			    {
+				    for (unsigned Index = 0; Index < 4; ++Index)
+				    {
+					    HYP_CHECK(!Plan[Index].HasColor() &&
+					              Plan[Index].DepthStencil->Depth->Load == EAttachmentLoad::Clear &&
+					              Plan[Index].GetDepthTexture());
+					    HYP_CHECK(Plan[Index].Draws.empty() || Plan[Index].Draws[0].Pipeline);
+				    }
+				    HYP_CHECK(Plan[4].HasColor() && Plan[4].SampledTextures.size() == 4);
+			    }
+			    Statistics = Pipeline->Statistics();
+			    for (const auto& Stats : Statistics.Views)
+			    {
+				    HYP_CHECK(Stats.Visibility.Batches.FailedItems == 0);
+			    }
+			    Image = ExecuteGraph(Graph, Tasks, *Swapchain, {384, 288}, false, true);
+			    Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+			                              [&]
+			                              {
+				                              Device->CollectCompletedResources();
+				                              DeviceStats = Device->Statistics();
+				                              HYP_CHECK(DeviceStats.ValidationErrors == 0);
+			                              }));
+		    }));
 		return Image;
 	}
 
@@ -261,8 +272,8 @@ void CheckBlendAndBatching(FShadowFixture& InFixture)
 	for (unsigned Index = 0; Index < 20; ++Index)
 	{
 		InFixture.View.Eye.X = float(Index) * .002f;
-		InFixture.View.ViewProjection =
-		    Multiply(Perspective(1, 4.f / 3, .1f, 40), LookAt(InFixture.View.Eye, {InFixture.View.Eye.X, 0, 0}));
+		InFixture.View.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 40, InFixture.View.DepthConvention),
+		                                         LookAt(InFixture.View.Eye, {InFixture.View.Eye.X, 0, 0}));
 		InFixture.Frame(true, {1, .1f * std::sin(float(Index) * .1f), 1});
 	}
 	HYP_CHECK(InFixture.DeviceStats.PipelinesCreated == Before.PipelinesCreated);
@@ -293,8 +304,9 @@ void CheckResolutionAndPreview(FShadowFixture& InFixture)
 	}
 	InFixture.Settings.DebugMode = 2;
 	const auto Preview = InFixture.Frame(true);
-	HYP_CHECK(Preview.Rgba.at((280 * Preview.Width + 380) * 4) >
-	          .99f); // Empty depth texel is white in the actual map pane.
+	// The pane displays raw depth, including the convention's far clear value.
+	HYP_CHECK(std::abs(Preview.Rgba.at((280 * Preview.Width + 380) * 4) -
+	                   GetDepthClearValue(InFixture.View.DepthConvention)) < .01f);
 	const auto Before = InFixture.DeviceStats.DescriptorAllocations;
 	InFixture.Frame(true);
 	HYP_CHECK(InFixture.DeviceStats.DescriptorAllocations == Before);
@@ -304,8 +316,8 @@ void CheckResolutionAndPreview(FShadowFixture& InFixture)
 void CheckIdleAfterMotion(FShadowFixture& InFixture)
 {
 	InFixture.View.Eye.X += .01f;
-	InFixture.View.ViewProjection =
-	    Multiply(Perspective(1, 4.f / 3, .1f, 40), LookAt(InFixture.View.Eye, {InFixture.View.Eye.X, 0, 0}));
+	InFixture.View.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 40, InFixture.View.DepthConvention),
+	                                         LookAt(InFixture.View.Eye, {InFixture.View.Eye.X, 0, 0}));
 	InFixture.Frame(true, {1, .1f, 1});
 	// All captured GPU work is complete. Stable live resources must not keep scheduling retirement polls.
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -417,8 +429,8 @@ void CheckStableShadowPlans()
 	{
 		Counts.ShadowEvaluations = 0;
 		Fixture.View.Eye.X += .00001f;
-		Fixture.View.ViewProjection =
-		    Multiply(Perspective(1, 4.f / 3, .1f, 40), LookAt(Fixture.View.Eye, {Fixture.View.Eye.X, 0, 0}));
+		Fixture.View.ViewProjection = Multiply(Perspective(1, 4.f / 3, .1f, 40, Fixture.View.DepthConvention),
+		                                       LookAt(Fixture.View.Eye, {Fixture.View.Eye.X, 0, 0}));
 		Fixture.Frame(true, {0, 0, 1});
 		HYP_CHECK(Counts.ShadowEvaluations == 0);
 		for (unsigned Index = 0; Index < 4; ++Index)
@@ -479,26 +491,29 @@ int main()
 		CheckProviderAndDepthFormat();
 		CheckLocalLightProvider();
 		CheckStableShadowPlans();
-		FShadowFixture Fixture;
-		FModel Receiver(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
-		Receiver.SetTransform(Scale({4, 3, 1}));
-		Await(Receiver);
-		CheckOffscreenAndRemoval(Fixture);
-		CheckMaskAndMirroring(Fixture);
-		CheckBlendAndBatching(Fixture);
-		CheckResolutionAndPreview(Fixture);
-		CheckIdleAfterMotion(Fixture);
-		CheckHiddenPreviewRetirement(Fixture);
-		CheckTimingCapture(Fixture);
-		for (const auto Direction : {FVec3{0, 1, 0}, FVec3{0, -1, 0}, FVec3{1, 0, 0}, FVec3{0, 0, -1}})
+		for (const auto Convention : {EDepthConvention::Standard, EDepthConvention::Reversed})
 		{
-			Fixture.Frame(true, Direction);
-		}
-		Receiver.Remove();
-		Fixture.Frame(true);
-		for (const auto& View : Fixture.Statistics.Views)
-		{
-			HYP_CHECK(View.Visibility.Draws == 0);
+			FShadowFixture Fixture(ERHIDepthFormat::D32, Convention);
+			FModel Receiver(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
+			Receiver.SetTransform(Scale({4, 3, 1}));
+			Await(Receiver);
+			CheckOffscreenAndRemoval(Fixture);
+			CheckMaskAndMirroring(Fixture);
+			CheckBlendAndBatching(Fixture);
+			CheckResolutionAndPreview(Fixture);
+			CheckIdleAfterMotion(Fixture);
+			CheckHiddenPreviewRetirement(Fixture);
+			CheckTimingCapture(Fixture);
+			for (const auto Direction : {FVec3{0, 1, 0}, FVec3{0, -1, 0}, FVec3{1, 0, 0}, FVec3{0, 0, -1}})
+			{
+				Fixture.Frame(true, Direction);
+			}
+			Receiver.Remove();
+			Fixture.Frame(true);
+			for (const auto& View : Fixture.Statistics.Views)
+			{
+				HYP_CHECK(View.Visibility.Draws == 0);
+			}
 		}
 		std::cout << "Shadow pixels: offscreen caster, UV1 mask, alpha factors, mirror, blend, removal, instancing, "
 		             "motion and empty cascades passed\n";

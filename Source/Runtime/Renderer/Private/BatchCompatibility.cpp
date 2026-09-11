@@ -126,7 +126,7 @@ FRenderBatchCandidate DescribeBatchCandidate(const FRenderItem& InItem, const FR
 	Signature.Attributes = Geometry.Attributes;
 	Signature.VertexProgram = Result.Pass->Vertex.CacheKey;
 	Signature.PixelProgram = Result.Pass->Pixel.CacheKey;
-	Signature.State = ConvertMaterialState(Pass.State, Determinant(InItem.State.World) < 0);
+	Signature.State = ConvertMaterialState(Pass.State, Determinant(InItem.State.World) < 0, InView.DepthConvention);
 	Signature.DynamicState = ConvertMaterialDynamicState(InItem.DynamicState.value_or(Pass.DynamicState));
 	Signature.Target = InTarget;
 	Signature.Layout = DescribeMaterialLayout(*Result.Pass);

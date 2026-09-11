@@ -124,6 +124,10 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 void FViewerApplication::Tick(int InFrame, float InDelta)
 {
 	PollInput();
+	if (Options.bExerciseDepthConfig && InFrame == 2)
+	{
+		Settings.bReversedZ = !bActiveReversedZ;
+	}
 	ExerciseWindow(InFrame);
 	const auto Size = Window->PixelSize();
 	const auto Logical = Window->LogicalSize();
@@ -175,6 +179,9 @@ FRenderFrame FViewerApplication::UpdateScene(FSize InSize)
 {
 	HYP_PERF_SCOPE_C(Frame, UpdateScene);
 	FRenderFrame Frame{InSize, Settings};
+	// Editable settings describe the next launch; every submitted frame uses the startup mode.
+	Frame.Settings.bReversedZ = bActiveReversedZ;
+	Frame.View.DepthConvention = GetDepthConvention(bActiveReversedZ);
 	Frame.View.Width = std::max(1u, InSize.Width);
 	Frame.View.Height = std::max(1u, InSize.Height);
 	for (const auto& Plugin : Plugins->GetInstances())

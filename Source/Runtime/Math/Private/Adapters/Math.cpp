@@ -77,13 +77,30 @@ FMat4 LookAt(FVec3 InEye, FVec3 InTarget, FVec3 InUp)
 	                           glm::vec3(InUp.X, InUp.Y, InUp.Z)));
 }
 
-FMat4 Perspective(float InVerticalRadians, float InAspect, float InNear, float InFar)
+FMat4 Perspective(float InVerticalRadians, float InAspect, float InNear, float InFar, EDepthConvention InConvention)
 {
-	if (!(InAspect > 0 && InNear > 0 && InFar > InNear && InVerticalRadians > 0 && InVerticalRadians < 3.14f))
+	if (!(InAspect > 0 && InNear > 0 && InFar > InNear && InVerticalRadians > 0 && InVerticalRadians < 3.14f) ||
+	    !std::isfinite(InAspect) || !std::isfinite(InNear) || !std::isfinite(InFar) ||
+	    InConvention > EDepthConvention::Reversed)
 	{
 		throw std::invalid_argument("Invalid camera projection");
 	}
-	return Owned(glm::perspectiveRH_ZO(InVerticalRadians, InAspect, InNear, InFar));
+	// Construct reversed coefficients directly rather than subtracting nearly equal clip Z/W values.
+	return InConvention == EDepthConvention::Reversed
+	           ? Owned(glm::perspectiveRH_ZO(InVerticalRadians, InAspect, InFar, InNear))
+	           : Owned(glm::perspectiveRH_ZO(InVerticalRadians, InAspect, InNear, InFar));
+}
+
+FMat4 ClipDepthTransform(EDepthConvention InConvention)
+{
+	if (InConvention > EDepthConvention::Reversed)
+	{
+		throw std::invalid_argument("Invalid depth convention");
+	}
+	auto Result = Identity();
+	Result.Values[10] = GetDepthDirection(InConvention);
+	Result.Values[14] = 1.f - GetDepthClearValue(InConvention);
+	return Result;
 }
 
 float Determinant(const FMat4& InMatrix)

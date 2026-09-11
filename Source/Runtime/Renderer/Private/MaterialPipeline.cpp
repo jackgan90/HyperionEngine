@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "Hyperion/RHI/RHIPipeline.h"
+#include <limits>
 #include <stdexcept>
 
 namespace Hyperion
@@ -136,11 +137,48 @@ FStencilFaceDesc Convert(const FMaterialStencilFace& InFace)
 {
 	return {Convert(InFace.Compare), Convert(InFace.Fail), Convert(InFace.DepthFail), Convert(InFace.Pass)};
 }
+
+void AdaptDepthState(FMaterialState& InState, EDepthConvention InConvention)
+{
+	if (InConvention > EDepthConvention::Reversed)
+	{
+		throw std::invalid_argument("Invalid material depth convention");
+	}
+	if (!InState.bViewRelativeDepth || InConvention == EDepthConvention::Standard)
+	{
+		return;
+	}
+	switch (InState.DepthCompare)
+	{
+		case EMaterialCompare::Less:
+			InState.DepthCompare = EMaterialCompare::Greater;
+			break;
+		case EMaterialCompare::LessEqual:
+			InState.DepthCompare = EMaterialCompare::GreaterEqual;
+			break;
+		case EMaterialCompare::Greater:
+			InState.DepthCompare = EMaterialCompare::Less;
+			break;
+		case EMaterialCompare::GreaterEqual:
+			InState.DepthCompare = EMaterialCompare::LessEqual;
+			break;
+		default:
+			break;
+	}
+	if (InState.DepthBias == std::numeric_limits<std::int32_t>::min())
+	{
+		throw std::invalid_argument("View-relative depth bias cannot be negated");
+	}
+	InState.DepthBias = -InState.DepthBias;
+	InState.DepthBiasClamp = -InState.DepthBiasClamp;
+	InState.SlopeScaledDepthBias = -InState.SlopeScaledDepthBias;
+}
 } // namespace
 
-FGraphicsState ConvertMaterialState(const FMaterialState& InState, bool bInMirrored)
+FGraphicsState ConvertMaterialState(const FMaterialState& InState, bool bInMirrored, EDepthConvention InConvention)
 {
-	const auto State = NormalizeMaterialState(InState);
+	auto State = NormalizeMaterialState(InState);
+	AdaptDepthState(State, InConvention);
 	FGraphicsState Result;
 	Result.Fill = Convert(State.Fill);
 	Result.Cull = Convert(State.Cull);
@@ -233,7 +271,8 @@ FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& I
 FPipelineDesc DescribeMaterialPipeline(const FCompiledMaterialPass& InProgram, const FMaterialPass& InPass,
                                        const FResourceBindingLayout& InLayout,
                                        std::vector<FVertexAttribute> InAttributes, std::uint32_t InStride,
-                                       ERHIPrimitiveTopology InTopology, FGraphicsTarget InTarget, bool bInMirrored)
+                                       ERHIPrimitiveTopology InTopology, FGraphicsTarget InTarget, bool bInMirrored,
+                                       EDepthConvention InConvention)
 {
 	FMaterialPassContext Context;
 	Context.ColorTargetCount = InTarget.ColorCount;
@@ -252,7 +291,7 @@ FPipelineDesc DescribeMaterialPipeline(const FCompiledMaterialPass& InProgram, c
 	Result.VertexStride = InStride;
 	Result.Topology = InTopology;
 	Result.Layout = InLayout;
-	Result.State = ConvertMaterialState(Availability.State, bInMirrored);
+	Result.State = ConvertMaterialState(Availability.State, bInMirrored, InConvention);
 	Result.Target = InTarget;
 	ValidateGraphicsPipeline(Result);
 	return Result;

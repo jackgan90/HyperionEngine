@@ -33,6 +33,8 @@ void FViewerApplication::SaveScreenshot(FImage InImage, const FAppSettings& InSe
 
 void FViewerApplication::VerifyOutputs()
 {
+	Log(ELogLevel::Info, std::string("Depth convention: active=") + (bActiveReversedZ ? "reversed" : "standard") +
+	                         "; configured=" + (Settings.bReversedZ ? "reversed" : "standard"));
 	const auto Progress = FramePipeline->Progress();
 	Log(ELogLevel::Info, "CPU frames: submitted=" + std::to_string(Progress.Submitted) +
 	                         "; render=" + std::to_string(Progress.RenderCompleted) +

@@ -45,15 +45,16 @@ void FForwardRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 	    SceneState);
 	LastStatistics.ShadowSetupMilliseconds =
 	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
-	if (AllocatedShadowBytes != ShadowMaps.TextureBytes())
+	if (AllocatedShadowBytes != ShadowMaps.TextureBytes() || ShadowDepthConvention != InMain.DepthConvention)
 	{
 		// Replacing resolution retires the previous attachment set after its submitted users complete.
 		Lifetime = Session.GetResources().CreateScopeLifetime();
 		AllocatedShadowBytes = ShadowMaps.TextureBytes();
+		ShadowDepthConvention = InMain.DepthConvention;
 	}
 	auto Views = ShadowMaps.Views(InMain);
 	auto Targets = ShadowMaps.Targets(Lifetime);
-	auto MainTargets = Session.FrameTargets();
+	auto MainTargets = Session.FrameTargets({}, InMain.DepthConvention);
 	MainTargets.Color->Actions.Load = EAttachmentLoad::Clear;
 	MainTargets.Color->Clear = InClear;
 	MainTargets.Name = "Forward";

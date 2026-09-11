@@ -86,6 +86,7 @@ float CascadeVisibility(uint InCascade, float3 InWorld, float3 InNormal, float3 
 		[unroll] for (int X = -1; X <= 1; ++X)
 		{
 			float2 Offset = float2(X, Y) * ShadowControl.z;
+			// ShadowFilter.x is signed for the shadow depth convention; DepthTexel is a positive distance.
 			float Depth = Projected.z + dot(Gradient, Offset) - DepthTexel * ShadowFilter.x;
 			Visibility += CompareShadow(InCascade, Uv + Offset, saturate(Depth));
 		}

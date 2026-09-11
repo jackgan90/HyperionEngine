@@ -52,7 +52,8 @@ public:
 	                              const FResourceBindingLayout& InLayout,
 	                              const std::vector<FVertexAttribute>& InAttributes, std::uint32_t InStride,
 	                              ERHIPrimitiveTopology InTopology, FGraphicsTarget InTarget, bool bInMirrored,
-	                              const FMaterialResourceOwners& InOwners);
+	                              const FMaterialResourceOwners& InOwners,
+	                              EDepthConvention InConvention = EDepthConvention::Standard);
 	// Returns whether submitted resources still require collection after all relevant CPU users have left.
 	bool Collect();
 	void ClearOwners();

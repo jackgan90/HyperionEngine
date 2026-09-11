@@ -59,6 +59,7 @@ struct FD3D12RHISwapchain::FImpl
 	std::uint64_t Serial{};
 	FSize Size;
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::D32;
+	float DepthClearValue = 1;
 	bool bActive{};
 	bool bSubmissionStarted{};
 	bool bGpuTiming{};
@@ -127,7 +128,7 @@ struct FD3D12RHISwapchain::FImpl
 		Allocation.HeapType = D3D12_HEAP_TYPE_DEFAULT;
 		D3D12_CLEAR_VALUE Clear{};
 		Clear.Format = Desc.Format;
-		Clear.DepthStencil.Depth = 1;
+		Clear.DepthStencil.Depth = DepthClearValue;
 		Check(State->Allocator->CreateResource(&Allocation, &Desc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &Clear,
 		                                       &DepthAllocation, IID_PPV_ARGS(&Depth)),
 		      "Create scene depth");
@@ -158,7 +159,8 @@ struct FD3D12RHISwapchain::FImpl
 FD3D12RHISwapchain::FD3D12RHISwapchain(std::shared_ptr<FD3D12DeviceState> InState, const FRHISwapchainDesc& InDesc)
     : Impl(std::make_unique<FImpl>())
 {
-	if (!InDesc.Surface.Handle || !InDesc.Size.Width || !InDesc.Size.Height ||
+	if (!InDesc.Surface.Handle || !InDesc.Size.Width || !InDesc.Size.Height || !std::isfinite(InDesc.DepthClearValue) ||
+	    InDesc.DepthClearValue < 0 || InDesc.DepthClearValue > 1 ||
 	    (InDesc.DepthFormat != ERHIDepthFormat::D32 && InDesc.DepthFormat != ERHIDepthFormat::D32S8))
 	{
 		throw std::invalid_argument("Invalid RHI surface");
@@ -167,6 +169,7 @@ FD3D12RHISwapchain::FD3D12RHISwapchain(std::shared_ptr<FD3D12DeviceState> InStat
 	P.State = std::move(InState);
 	P.Size = InDesc.Size;
 	P.DepthFormat = InDesc.DepthFormat;
+	P.DepthClearValue = InDesc.DepthClearValue;
 	D3D12_DESCRIPTOR_HEAP_DESC Heap{};
 	Heap.NumDescriptors = FrameCount * 2;
 	Heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;

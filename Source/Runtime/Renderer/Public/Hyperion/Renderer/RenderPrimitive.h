@@ -43,6 +43,7 @@ struct FRenderPrimitiveState
 	std::shared_ptr<const FRenderMaterial> Surface;
 	FMaterialParameterValues ObjectParameters;
 	FMaterialParameterValues SectionParameters;
+	// World maps vertices to canonical standard-Z clip space; Renderer adapts depth in WVP only.
 	bool bClipSpace{};
 	bool bConservativeBounds{};
 	FMaterialParameterValues ObjectInputs; // Semantic provider inputs, independently owned.
@@ -75,6 +76,7 @@ struct FRenderView
 	std::optional<FRenderCamera> Camera;
 	bool bSkipMissingPass{};
 	std::vector<std::string> ExcludedPasses; // Materials with any listed usage belong to another route.
+	EDepthConvention DepthConvention = EDepthConvention::Standard;
 };
 
 struct FRenderItem

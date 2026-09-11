@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Math/DepthConvention.h"
 #include <array>
 
 namespace Hyperion
@@ -44,7 +45,10 @@ float Length(FVec3 InValue);
 FVec3 Normalize(FVec3 InValue);
 FMat4 ComposeTRS(FVec3 InTranslation, FVec4 InRotation, FVec3 InScale);
 FMat4 LookAt(FVec3 InEye, FVec3 InTarget, FVec3 InUp = {0, 1, 0});
-FMat4 Perspective(float InVerticalRadians, float InAspect, float InNear, float InFar);
+FMat4 Perspective(float InVerticalRadians, float InAspect, float InNear, float InFar,
+                  EDepthConvention InConvention = EDepthConvention::Standard);
+// Maps canonical standard-Z clip coordinates to a view's depth convention.
+FMat4 ClipDepthTransform(EDepthConvention InConvention);
 FMat4 Inverse(const FMat4& InMatrix);
 FMat4 NormalMatrix(const FMat4& InMatrix);
 float Determinant(const FMat4& InMatrix);

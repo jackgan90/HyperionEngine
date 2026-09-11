@@ -11,7 +11,8 @@ void FSceneViewerPlugin::FImpl::UpdateCamera(FRenderFrame& InFrame)
 	InFrame.View.Camera = FRenderCamera{ScaleVector(Direction, -1), {0, 1, 0}, 1, Manifest->Near, Manifest->Far};
 	const float Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
 	InFrame.View.ViewProjection =
-	    Multiply(Perspective(1, Aspect, Manifest->Near, Manifest->Far), LookAt(InFrame.View.Eye, Target));
+	    Multiply(Perspective(1, Aspect, Manifest->Near, Manifest->Far, InFrame.View.DepthConvention),
+	             LookAt(InFrame.View.Eye, Target));
 	InFrame.View.CullingMode = Mode;
 	InFrame.View.bInstanceBatching = bInstanceBatching;
 	if (bFrozen)

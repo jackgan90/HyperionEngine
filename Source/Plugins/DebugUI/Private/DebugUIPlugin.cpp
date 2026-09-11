@@ -18,7 +18,7 @@ std::string Fixed(double InValue, int InDecimals = 2)
 	return Out.str();
 }
 
-void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings)
+void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings, const FDebugMetrics& InMetrics)
 {
 	InGui.Text("RENDER PIPELINE");
 	bool bDeferred = InSettings.RenderPipeline == "deferred";
@@ -31,8 +31,13 @@ void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings)
 	{
 		InSettings.GBufferLayout = bHighPrecision ? "high" : "compact";
 	}
-	constexpr std::array<std::string_view, 2> PipelineIds{"exposure", "gbuffer_debug"};
+	constexpr std::array<std::string_view, 3> PipelineIds{"reversed_z", "exposure", "gbuffer_debug"};
 	InGui.EditProperties(SettingsType(), &InSettings, PipelineIds);
+	InGui.Text(InMetrics.bActiveReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z");
+	if (InSettings.bReversedZ != InMetrics.bActiveReversedZ)
+	{
+		InGui.TextWrapped("Depth change pending: save experiment and restart to apply.");
+	}
 	InGui.TextWrapped("GBuffer: 0 lit, 1 base, 2 normal, 3 rough/metal/AO, 4 emissive, 5 depth, 6 surface normal");
 	InGui.Separator();
 }
@@ -140,7 +145,7 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		Actions.Sampling = ProfilingActions.Sampling;
 		Actions.ProfilingBounds = ProfilingActions.ProfilingBounds;
 		InGui.Separator();
-		DrawPipelineControls(InGui, InSettings);
+		DrawPipelineControls(InGui, InSettings, InMetrics);
 		InGui.Text("Scene targets: " + Fixed(InMetrics.SceneTargetBytes / 1048576.0) + " MiB");
 		if (InMetrics.LegacyDisplayItems)
 		{

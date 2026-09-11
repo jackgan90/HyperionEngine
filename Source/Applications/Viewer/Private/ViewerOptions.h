@@ -41,6 +41,7 @@ struct FOptions
 	int Frames{};
 	bool bHidden{};
 	bool bExercise{};
+	bool bExerciseDepthConfig{};
 	bool bVerifyClear{};
 	bool bVerifyTriangle{};
 	bool bVerifyUi{};

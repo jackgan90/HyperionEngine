@@ -127,9 +127,9 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 	auto Draw = Fullscreen.Triangle;
 	Draw.DynamicState = ConvertMaterialDynamicState(MaterialPass.DynamicState);
 	ValidateGraphicsDynamicState(Draw.DynamicState);
-	Draw.Pipeline =
-	    Owner.MaterialGpu->GetMaterialPipeline(Program, MaterialPass, Bindings.Layout, Attributes, sizeof(FVec2),
-	                                           ERHIPrimitiveTopology::TriangleList, Target, false, {InPass.Lifetime});
+	Draw.Pipeline = Owner.MaterialGpu->GetMaterialPipeline(Program, MaterialPass, Bindings.Layout, Attributes,
+	                                                       sizeof(FVec2), ERHIPrimitiveTopology::TriangleList, Target,
+	                                                       false, {InPass.Lifetime}, InPass.DepthConvention);
 	Draw.Bindings = Bindings.Set;
 	Draw.ConstantBindings = Owner.MaterialConstants->Bind(Program, *Snapshot->Schema, Values);
 	const auto& View = InPass.Viewport;

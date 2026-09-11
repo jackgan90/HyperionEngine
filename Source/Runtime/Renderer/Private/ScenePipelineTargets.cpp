@@ -83,9 +83,9 @@ void FSceneRenderPipeline::Configure(FScenePipelineSettings InSettings)
 	Settings = std::move(InSettings);
 }
 
-void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight)
+void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight, EDepthConvention InConvention)
 {
-	if (InWidth == Width && InHeight == Height)
+	if (InWidth == Width && InHeight == Height && InConvention == DepthConvention)
 	{
 		return;
 	}
@@ -98,7 +98,8 @@ void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight)
 	auto NewLifetime = Session.GetResources().CreateScopeLifetime();
 	auto NewColor = std::make_shared<const FMaterialTextureSource>(
 	    FMaterialColorTexture{InWidth, InHeight, EMaterialColorFormat::Rgba16Float});
-	auto NewDepth = std::make_shared<const FMaterialTextureSource>(FMaterialDepthTexture{InWidth, InHeight, 1});
+	auto NewDepth = std::make_shared<const FMaterialTextureSource>(
+	    FMaterialDepthTexture{InWidth, InHeight, GetDepthClearValue(InConvention)});
 	decltype(GBuffer) NewGBuffer;
 	if (Settings.Pipeline == ESceneRenderPipeline::Deferred)
 	{
@@ -114,6 +115,7 @@ void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight)
 	GBuffer = std::move(NewGBuffer);
 	Width = InWidth;
 	Height = InHeight;
+	DepthConvention = InConvention;
 }
 
 void FSceneRenderPipeline::ClearTargets(FRenderGraph& InGraph, FVec4 InClear) const
@@ -148,8 +150,11 @@ FRenderPassTargets FSceneRenderPipeline::ColorTargets(std::string InName, EAttac
 
 FRenderDepthTarget FSceneRenderPipeline::DepthTarget(EAttachmentLoad InLoad) const
 {
-	return {
-	    {ERenderTargetKind::Texture, SceneDepth, Lifetime, false}, ERHIDepthFormat::D32, FAttachmentActions{InLoad}};
+	return {{ERenderTargetKind::Texture, SceneDepth, Lifetime, false},
+	        ERHIDepthFormat::D32,
+	        FAttachmentActions{InLoad},
+	        {},
+	        GetDepthClearValue(DepthConvention)};
 }
 
 std::uint64_t FSceneRenderPipeline::TargetBytes() const

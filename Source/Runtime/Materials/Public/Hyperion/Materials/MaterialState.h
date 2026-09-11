@@ -107,6 +107,8 @@ struct FMaterialState
 	std::uint8_t ColorWriteMask = 15;
 	bool bAlphaToCoverage{};
 	std::uint32_t SampleMask = 0xffffffffU;
+	// Adapt standard-Z depth comparisons and biases to the view; stencil is unaffected.
+	bool bViewRelativeDepth{};
 	bool operator==(const FMaterialState&) const = default;
 };
 

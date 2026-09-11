@@ -89,7 +89,8 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 		    Cached.Parameters.lock() == Resolved && Cached.Shared.lock() == InItem.SharedParameters;
 		if (Cached.Resources.lock() == ResourceIdentity && Cached.Geometry.lock() == InItem.State.Resource &&
 		    Cached.Surface.lock() == InItem.State.Surface && Cached.Target == InTarget &&
-		    Cached.bMirrored == bMirrored && (bSameParameters || SameResources(Cached.ResourceValues, Program, Values)))
+		    Cached.bMirrored == bMirrored && Cached.DepthConvention == InView.DepthConvention &&
+		    (bSameParameters || SameResources(Cached.ResourceValues, Program, Values)))
 		{
 			if (!bSameParameters)
 			{
@@ -122,7 +123,7 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	FDrawPacket Result;
 	Result.Pipeline = MaterialGpu->GetMaterialPipeline(
 	    Program, Pass, Bindings.Layout, Geometry.Attributes, Geometry.VertexStride, Geometry.Topology, InTarget,
-	    Determinant(InItem.State.World) < 0, {MaterialRecord.GpuLifetime, InItem.State.Resource});
+	    bMirrored, {MaterialRecord.GpuLifetime, InItem.State.Resource}, InView.DepthConvention);
 	Result.Vertices = GeometryRecord.Vertices[Section.Geometry];
 	Result.Indices = GeometryRecord.Indices[Section.Geometry];
 	Result.VertexStride = Geometry.VertexStride;
@@ -143,7 +144,8 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	}
 	PreparedDraws.insert_or_assign(Key, FPreparedDraw{Resolved, ResourceIdentity, std::move(ResourceValues),
 	                                                  InItem.State.Resource, InItem.State.Surface, InTarget, bMirrored,
-	                                                  Result, std::move(Constants), InItem.SharedParameters});
+	                                                  Result, std::move(Constants), InItem.SharedParameters,
+	                                                  InView.DepthConvention});
 	return Result;
 }
 } // namespace Hyperion

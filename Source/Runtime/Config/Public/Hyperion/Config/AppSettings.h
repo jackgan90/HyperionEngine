@@ -20,6 +20,7 @@ struct FAppSettings
 	std::string ModelSource;
 	std::string SceneSource;
 	bool bVsync = true;
+	bool bReversedZ = true;
 	bool bShowGui = true;
 	std::string RenderDocLibrary;
 	std::string RenderDocOutput = "out/captures/renderdoc";

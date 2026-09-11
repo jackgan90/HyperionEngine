@@ -37,10 +37,11 @@ public:
 	}
 };
 
-FMat4 Projection(FVec3 InRight, FVec3 InUp, FVec3 InLight, FVec3 InCenter, float InRadius, float InNear, float InFar)
+FMat4 Projection(FVec3 InRight, FVec3 InUp, FVec3 InLight, FVec3 InCenter, float InRadius, float InNear, float InFar,
+                 EDepthConvention InConvention)
 {
 	FMat4 Result = Identity();
-	const FVec3 Depth = ScaleVector(InLight, -1.f / (InFar - InNear));
+	const FVec3 Depth = ScaleVector(InLight, -GetDepthDirection(InConvention) / (InFar - InNear));
 	const FVec3 X = ScaleVector(InRight, 1.f / InRadius);
 	const FVec3 Y = ScaleVector(InUp, 1.f / InRadius);
 	Result.Values = {X.X,
@@ -57,15 +58,16 @@ FMat4 Projection(FVec3 InRight, FVec3 InUp, FVec3 InLight, FVec3 InCenter, float
 	                 0,
 	                 -Dot(X, InCenter),
 	                 -Dot(Y, InCenter),
-	                 -InNear / (InFar - InNear),
+	                 (InConvention == EDepthConvention::Reversed ? InFar : -InNear) / (InFar - InNear),
 	                 1};
 	return Result;
 }
 
 bool Valid(const FRenderView& InMain, FVec3 InLight, const FCascadedShadowSettings& InSettings)
 {
-	if (!InMain.Camera || !IsFinite(InMain.Eye) || !IsFinite(InLight) || !std::isfinite(Length(InLight)) ||
-	    Length(InLight) < .0001f || (InSettings.Resolution != 1024 && InSettings.Resolution != 2048))
+	if (InMain.DepthConvention > EDepthConvention::Reversed || !InMain.Camera || !IsFinite(InMain.Eye) ||
+	    !IsFinite(InLight) || !std::isfinite(Length(InLight)) || Length(InLight) < .0001f ||
+	    (InSettings.Resolution != 1024 && InSettings.Resolution != 2048))
 	{
 		return false;
 	}
@@ -81,7 +83,7 @@ bool Valid(const FRenderView& InMain, FVec3 InLight, const FCascadedShadowSettin
 	       std::isfinite(InSettings.FadeFraction) && InMain.Width > 0 && InMain.Height > 0;
 }
 
-std::array<std::uint64_t, 26> PreparationKey(const FRenderView& InView, FVec3 InLight,
+std::array<std::uint64_t, 27> PreparationKey(const FRenderView& InView, FVec3 InLight,
                                              const FCascadedShadowSettings& InSettings,
                                              const std::array<std::uint64_t, 2>& InSceneState)
 {
@@ -107,11 +109,12 @@ std::array<std::uint64_t, 26> PreparationKey(const FRenderView& InView, FVec3 In
 	                        InSettings.ReceiverBias,
 	                        InSettings.BlendFraction,
 	                        InSettings.FadeFraction};
-	std::array<std::uint64_t, 26> Result{InSceneState[0], InSceneState[1], InView.Width, InView.Height,
-	                                     InSettings.Resolution};
+	std::array<std::uint64_t, 27> Result{InSceneState[0],       InSceneState[1],
+	                                     InView.Width,          InView.Height,
+	                                     InSettings.Resolution, static_cast<std::uint64_t>(InView.DepthConvention)};
 	for (std::size_t Index = 0; Index < Values.size(); ++Index)
 	{
-		Result[Index + 5] = std::bit_cast<std::uint32_t>(Values[Index]);
+		Result[Index + 6] = std::bit_cast<std::uint32_t>(Values[Index]);
 	}
 	return Result;
 }
@@ -137,6 +140,7 @@ bool FCascadedShadowMap::Prepare(const FRenderView& InMain, FVec3 InSurfaceToLig
 		PreparedKey.reset();
 		return false;
 	}
+	DepthConvention = InMain.DepthConvention;
 	Settings = InSettings;
 	Settings.Distance = std::min(Settings.Distance, InMain.Camera->Far);
 	Settings.SplitLambda = std::clamp(Settings.SplitLambda, 0.f, 1.f);
@@ -187,10 +191,11 @@ bool FCascadedShadowMap::Prepare(const FRenderView& InMain, FVec3 InSurfaceToLig
 			bEnabled = false;
 			return false;
 		}
-		if (!Textures[Index] || Textures[Index]->GetDepthTarget()->Width != Settings.Resolution)
+		if (!Textures[Index] || Textures[Index]->GetDepthTarget()->Width != Settings.Resolution ||
+		    Textures[Index]->GetDepthTarget()->ClearDepth != GetDepthClearValue(DepthConvention))
 		{
 			Textures[Index] = std::make_shared<const FMaterialTextureSource>(
-			    FMaterialDepthTexture{Settings.Resolution, Settings.Resolution, 1});
+			    FMaterialDepthTexture{Settings.Resolution, Settings.Resolution, GetDepthClearValue(DepthConvention)});
 		}
 	}
 	PreparedKey = Key;
@@ -242,7 +247,7 @@ void FCascadedShadowMap::PrepareCascade(std::size_t InIndex, const FRenderView& 
 	const float DepthStep = std::max(1.f, Radius / 8);
 	Minimum = std::floor((Minimum - Texel * 4) / DepthStep) * DepthStep;
 	Maximum = std::ceil((Maximum + Texel * 4) / DepthStep) * DepthStep;
-	Cascade.ViewProjection = Projection(LightRight, LightUp, Light, Center, Radius, Minimum, Maximum);
+	Cascade.ViewProjection = Projection(LightRight, LightUp, Light, Center, Radius, Minimum, Maximum, DepthConvention);
 	Cascade.Center = Center;
 	// The light camera's snapped near-plane origin must not inherit the main camera's unsnapped eye.
 	Cascade.Eye = Add(Add(ScaleVector(LightRight, std::round(X / Texel) * Texel),
@@ -264,6 +269,7 @@ std::vector<FRenderView> FCascadedShadowMap::Views(const FRenderView& InMain) co
 			FRenderView View;
 			View.Identity = ViewIds[Index];
 			View.ViewProjection = Data[Index].ViewProjection;
+			View.DepthConvention = DepthConvention;
 			View.Eye = Data[Index].Eye;
 			View.Width = Settings.Resolution;
 			View.Height = Settings.Resolution;
@@ -287,7 +293,9 @@ std::vector<FRenderPassTargets> FCascadedShadowMap::Targets(std::shared_ptr<cons
 			Pass.Name = "Shadow cascade " + std::to_string(Index);
 			Pass.DepthStencil = FRenderDepthTarget{{ERenderTargetKind::Texture, Textures[Index], InLifetime, false},
 			                                       ERHIDepthFormat::D32,
-			                                       FAttachmentActions{EAttachmentLoad::Clear}};
+			                                       FAttachmentActions{EAttachmentLoad::Clear},
+			                                       {},
+			                                       GetDepthClearValue(DepthConvention)};
 			Result.push_back(std::move(Pass));
 		}
 	}

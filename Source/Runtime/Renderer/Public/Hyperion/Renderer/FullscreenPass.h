@@ -23,6 +23,7 @@ struct FFullscreenPassDesc
 	bool bFullTargetViewport{}; // Omit graph viewport when initializing the whole attachment.
 	std::shared_ptr<FFullscreenPreparationStatistics> Statistics;
 	std::shared_ptr<const void> Lifetime;
+	EDepthConvention DepthConvention = EDepthConvention::Standard;
 };
 
 std::shared_ptr<const FMaterialDefinition> MakeFullscreenMaterial(std::string InName, std::string InPixelShader,

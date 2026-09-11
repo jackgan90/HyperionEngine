@@ -23,6 +23,7 @@ FMaterialPass ModelPass(const FModelMaterial& InMaterial)
 	             : InMaterial.AlphaMode == EAlphaMode::Mask ? EMaterialQueue::Masked
 	                                                        : EMaterialQueue::Opaque;
 	Pass.State.bDepthTest = true;
+	Pass.State.bViewRelativeDepth = true;
 	Pass.State.bDepthWrite = InMaterial.AlphaMode != EAlphaMode::Blend;
 	Pass.State.bBlend = InMaterial.AlphaMode == EAlphaMode::Blend;
 	Pass.State.SourceRgb = EMaterialBlendFactor::SourceAlpha;

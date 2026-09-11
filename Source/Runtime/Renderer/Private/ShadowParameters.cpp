@@ -3,22 +3,28 @@
 
 namespace Hyperion
 {
-FMaterialParameterValues DefaultShadowParameters()
+FMaterialParameterValues DefaultShadowParameters(EDepthConvention InConvention)
 {
-	static const auto Neutral = std::make_shared<const FMaterialTextureSource>(FMaterialDepthTexture{1, 1, 1});
+	static const std::array NeutralTextures{
+	    std::make_shared<const FMaterialTextureSource>(FMaterialDepthTexture{1, 1, 1}),
+	    std::make_shared<const FMaterialTextureSource>(FMaterialDepthTexture{1, 1, 0})};
+	const auto& Neutral = NeutralTextures.at(static_cast<std::size_t>(InConvention));
 	FMaterialSampler Sampler;
 	Sampler.U = EMaterialAddressMode::Clamp;
 	Sampler.V = EMaterialAddressMode::Clamp;
 	Sampler.W = EMaterialAddressMode::Clamp;
 	Sampler.bComparison = true;
-	Sampler.Compare = EMaterialSamplerCompare::LessEqual;
-	FMaterialParameterValues Result{{"Engine.View.ShadowSplits", FMaterialValue::Float(FVec4{})},
-	                                {"Engine.View.ShadowTexels", FMaterialValue::Float(FVec4{})},
-	                                {"Engine.View.ShadowRanges", FMaterialValue::Float(FVec4{1, 1, 1, 1})},
-	                                {"Engine.View.ShadowCamera", FMaterialValue::Float(FVec4{0, 0, -1, 0})},
-	                                {"Engine.View.ShadowFilter", FMaterialValue::Float(FVec4{.15f, .6f, .1f, .1f})},
-	                                {"Engine.View.ShadowControl", FMaterialValue::Float(FVec4{})},
-	                                {"Engine.View.ShadowSampler", FMaterialValue::FromSampler(Sampler)}};
+	Sampler.Compare = InConvention == EDepthConvention::Reversed ? EMaterialSamplerCompare::GreaterEqual
+	                                                             : EMaterialSamplerCompare::LessEqual;
+	FMaterialParameterValues Result{
+	    {"Engine.View.ShadowSplits", FMaterialValue::Float(FVec4{})},
+	    {"Engine.View.ShadowTexels", FMaterialValue::Float(FVec4{})},
+	    {"Engine.View.ShadowRanges", FMaterialValue::Float(FVec4{1, 1, 1, 1})},
+	    {"Engine.View.ShadowCamera", FMaterialValue::Float(FVec4{0, 0, -1, 0})},
+	    {"Engine.View.ShadowFilter",
+	     FMaterialValue::Float(FVec4{.15f * GetDepthDirection(InConvention), .6f, .1f, .1f})},
+	    {"Engine.View.ShadowControl", FMaterialValue::Float(FVec4{})},
+	    {"Engine.View.ShadowSampler", FMaterialValue::FromSampler(Sampler)}};
 	for (unsigned Index = 0; Index < 4; ++Index)
 	{
 		Result.push_back({"Engine.View.ShadowMatrix" + std::to_string(Index), FMaterialValue::Matrix(Identity())});
@@ -30,7 +36,7 @@ FMaterialParameterValues DefaultShadowParameters()
 void FCascadedShadowMap::Bind(FRenderView& InMain, FRenderPassTargets& InTargets,
                               std::shared_ptr<const void> InLifetime) const
 {
-	auto Parameters = DefaultShadowParameters();
+	auto Parameters = DefaultShadowParameters(InMain.DepthConvention);
 	const auto Set = [&Parameters](std::string InName, FMaterialValue InValue)
 	{
 		const auto Found = std::find_if(Parameters.begin(), Parameters.end(),
@@ -50,8 +56,9 @@ void FCascadedShadowMap::Bind(FRenderView& InMain, FRenderPassTargets& InTargets
 		const auto Direction = Normalize(InMain.Camera->Forward);
 		Set("ShadowCamera",
 		    FMaterialValue::Float(FVec4{Direction.X, Direction.Y, Direction.Z, -Dot(InMain.Eye, Direction)}));
-		Set("ShadowFilter", FMaterialValue::Float(FVec4{Settings.ReceiverBias, Settings.NormalOffset,
-		                                                Settings.BlendFraction, Settings.FadeFraction}));
+		Set("ShadowFilter",
+		    FMaterialValue::Float(FVec4{Settings.ReceiverBias * GetDepthDirection(DepthConvention),
+		                                Settings.NormalOffset, Settings.BlendFraction, Settings.FadeFraction}));
 		Set("ShadowControl", FMaterialValue::Float(FVec4{1, Settings.DebugMode == 1 ? 1.f : 0.f,
 		                                                 1.f / Settings.Resolution, Settings.Distance}));
 		for (std::size_t Index = 0; Index < Data.size(); ++Index)

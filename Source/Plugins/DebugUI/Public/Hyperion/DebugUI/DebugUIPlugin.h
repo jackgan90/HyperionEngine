@@ -30,6 +30,7 @@ struct FDebugMetrics
 	std::vector<float> FrameMilliseconds;
 	std::string AssetStatus;
 	bool bSceneViewer{};
+	bool bActiveReversedZ{};
 	FFrameCaptureMetrics FrameCapture;
 	FProfileStatus Profiling;
 };

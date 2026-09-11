@@ -215,11 +215,11 @@ FPipeline FMaterialGpuCache::GetMaterialPipeline(const FCompiledMaterialPass& In
                                                  const std::vector<FVertexAttribute>& InAttributes,
                                                  std::uint32_t InStride, ERHIPrimitiveTopology InTopology,
                                                  FGraphicsTarget InTarget, bool bInMirrored,
-                                                 const FMaterialResourceOwners& InOwners)
+                                                 const FMaterialResourceOwners& InOwners, EDepthConvention InConvention)
 {
 	HYP_PERF_SCOPE_C(Detail, GetMaterialPipeline);
 	Impl->CheckOwner();
-	const auto State = ConvertMaterialState(InPass.State, bInMirrored);
+	const auto State = ConvertMaterialState(InPass.State, bInMirrored, InConvention);
 	const auto Hash = std::hash<std::string>{}(InProgram.Vertex.CacheKey + "/" + InProgram.Pixel.CacheKey);
 	const auto [Begin, End] = Impl->Pipelines.equal_range(Hash);
 	for (auto It = Begin; It != End; ++It)
@@ -238,7 +238,7 @@ FPipeline FMaterialGpuCache::GetMaterialPipeline(const FCompiledMaterialPass& In
 		}
 	}
 	return GetPipeline(DescribeMaterialPipeline(InProgram, InPass, InLayout, InAttributes, InStride, InTopology,
-	                                            InTarget, bInMirrored),
+	                                            InTarget, bInMirrored, InConvention),
 	                   InOwners);
 }
 

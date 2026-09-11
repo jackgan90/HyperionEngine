@@ -16,9 +16,8 @@ bool IsItemVisible(const FRenderItem& InItem, const FRenderView& InView, const F
 	{
 		return true;
 	}
-	const auto Clip = InItem.State.bClipSpace
-	                      ? InItem.State.World
-	                      : Multiply(InView.CullingViewProjection.value_or(InView.ViewProjection), InItem.State.World);
+	const auto Clip = PrimitiveClipTransform(InItem.State, InView.CullingViewProjection.value_or(InView.ViewProjection),
+	                                         InView.DepthConvention);
 	return FFrustum(Clip).Intersects(IsUsable(InItem.State.LocalBounds) ? InItem.State.LocalBounds : InBounds);
 }
 
@@ -28,14 +27,26 @@ float SortDepth(const FRenderItem& InItem, const FRenderView& InView, const FBou
 	{
 		return 0;
 	}
-	const auto Clip =
-	    InItem.State.bClipSpace ? InItem.State.World : Multiply(InView.ViewProjection, InItem.State.World);
+	const auto Clip = PrimitiveClipTransform(InItem.State, InView.ViewProjection, InView.DepthConvention);
 	const auto Center = ScaleVector(Add(InBounds.Minimum, InBounds.Maximum), .5f);
 	const auto Projected = Transform(Clip, {Center.X, Center.Y, Center.Z, 1});
 	const float Depth = Projected.W > 0 ? Projected.Z / Projected.W : std::numeric_limits<float>::lowest();
-	return std::isfinite(Depth) ? Depth : std::numeric_limits<float>::lowest();
+	return std::isfinite(Depth) && Projected.W > 0 ? Depth * GetDepthDirection(InView.DepthConvention)
+	                                               : std::numeric_limits<float>::lowest();
 }
 } // namespace
+
+FMat4 PrimitiveClipTransform(const FRenderPrimitiveState& InState, const FMat4& InViewProjection,
+                             EDepthConvention InConvention)
+{
+	// Depth remapping is a projection, not a geometric reflection used by face/normal state.
+	if (InState.bClipSpace)
+	{
+		return InConvention == EDepthConvention::Standard ? InState.World
+		                                                  : Multiply(ClipDepthTransform(InConvention), InState.World);
+	}
+	return Multiply(InViewProjection, InState.World);
+}
 
 bool IsExcludedFromView(const FMaterialDefinition& InDefinition, const FRenderView& InView)
 {

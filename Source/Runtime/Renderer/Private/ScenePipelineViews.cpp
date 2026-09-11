@@ -57,7 +57,7 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 	Result.TransparentIndex = Views.size() - 1;
 	auto DisplayView = InMain;
 	DisplayView.ExcludedPasses = {"HdrForwardOpaque", "DeferredBase", "HdrCompatibility", "HdrTransparent"};
-	auto DisplayTargets = Session.FrameTargets();
+	auto DisplayTargets = Session.FrameTargets({}, InMain.DepthConvention);
 	DisplayTargets.Name = "Display/LegacyMaterials";
 	AddView(Views, Targets, DisplayView, "Forward", std::move(DisplayTargets), 4);
 	return Result;

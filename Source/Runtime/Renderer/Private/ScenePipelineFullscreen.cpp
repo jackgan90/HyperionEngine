@@ -16,6 +16,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	static const auto Material = MakeFullscreenMaterial("Deferred lighting", "Deferred/Lighting.hlsl");
 	FFullscreenPassDesc Result;
 	Result.Material = Material;
+	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
 	Result.Statistics = FullscreenStatistics;
 	Result.Viewport = Viewport(InMain);
@@ -73,6 +74,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 	static const auto Material = MakeFullscreenMaterial("GBuffer debug", "Deferred/Debug.hlsl", true);
 	FFullscreenPassDesc Result;
 	Result.Material = Material;
+	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
 	Result.Statistics = FullscreenStatistics;
 	Result.Viewport = Viewport(InMain);
@@ -95,6 +97,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Tonemap(const FRenderView& InMain) con
 	static const auto Material = MakeFullscreenMaterial("HDR tonemap", "Common/Tonemap.hlsl", true);
 	FFullscreenPassDesc Result;
 	Result.Material = Material;
+	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
 	Result.Statistics = FullscreenStatistics;
 	Result.bFullTargetViewport = true;
