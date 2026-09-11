@@ -11,6 +11,7 @@ FSceneViewerPlugin::FSceneViewerPlugin(FRenderSession& InSession, FTaskSystem& I
     : Impl(std::make_unique<FImpl>(InSession, InTasks, InAssets, std::move(InPath)))
 {
 	InTasks.Require({EDomain::Main});
+	Impl->Owner = this;
 }
 
 FSceneViewerPlugin::~FSceneViewerPlugin() = default;
@@ -36,6 +37,7 @@ void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
+	P.PollSave();
 	if (P.bStopped || !P.Error.empty())
 	{
 		return;
@@ -85,6 +87,17 @@ void FSceneViewerPlugin::Stop() noexcept
 	if (P.bStopped)
 	{
 		return;
+	}
+	if (P.Save)
+	{
+		try
+		{
+			P.Save->Get(P.Tasks);
+		}
+		catch (...)
+		{
+		}
+		P.PollSave();
 	}
 	P.bStopped = true;
 	P.Scene.Close();

@@ -1,36 +1,35 @@
 #pragma once
+#include "Hyperion/Assets/NativeAsset.h"
 #include "Hyperion/IO/IOService.h"
-#include "Hyperion/Serialization/Archive.h"
 
 namespace Hyperion
 {
-struct FAssetLoadContext
+struct FLoadedAsset
 {
-	FIOService& IO;
+	FAssetHeader Header;
+	std::shared_ptr<const FRecordDescriptor> Type;
+	std::shared_ptr<const void> Object;
 	std::filesystem::path Path;
-	std::shared_ptr<const FBytes> Bytes;
-	FCancellationToken Cancellation;
+	std::vector<std::string> Diagnostics;
+	std::size_t RetainedBytes{};
 
-	std::shared_ptr<const FBytes> Read(const std::filesystem::path& InPath) const
+	template<class T> std::shared_ptr<const T> As() const
 	{
-		Cancellation.Check();
-		return IO.ReadAsync(InPath, Cancellation).Get(IO.TaskSystem());
+		if (!Type || Type->CppType != typeid(T))
+		{
+			throw std::runtime_error("Asset C++ type mismatch: " + Header.TypeId);
+		}
+		return std::static_pointer_cast<const T>(Object);
 	}
 };
 
-struct FAssetCodec
-{
-	std::string TypeId;
-	std::vector<std::string> Extensions;
-	std::function<std::shared_ptr<void>(FAssetLoadContext&)> Load;
-};
-
-template<class T> class TAssetRequest
+class FAssetRequest
 {
 public:
-	TAssetRequest() = default;
+	FAssetRequest() = default;
 
-	explicit TAssetRequest(TAsyncResult<std::shared_ptr<const void>> InResult) : Result(std::move(InResult))
+	explicit FAssetRequest(TAsyncResult<FLoadedAsset> InResult, std::optional<FAssetRef> InExpected = {})
+	    : Result(std::move(InResult)), Expected(std::move(InExpected))
 	{
 	}
 
@@ -44,62 +43,142 @@ public:
 		return Cancellation.IsCancelled() || Result.Ready();
 	}
 
+	std::shared_ptr<const FLoadedAsset> GetReady() const;
+	std::shared_ptr<const FLoadedAsset> Get(FTaskSystem& InTasks) const;
+
+	const FTaskHandle& Task() const
+	{
+		return Result.Task();
+	}
+
+private:
+	friend class FAssetService;
+	void Validate(const FLoadedAsset& InAsset) const;
+	TAsyncResult<FLoadedAsset> Result;
+	FCancellationToken Cancellation;
+	std::optional<FAssetRef> Expected;
+};
+
+template<class T> class TAssetRequest
+{
+public:
+	TAssetRequest() = default;
+
+	explicit TAssetRequest(FAssetRequest InRequest) : Request(std::move(InRequest))
+	{
+	}
+
+	void Cancel() const
+	{
+		Request.Cancel();
+	}
+
+	bool Ready() const
+	{
+		return Request.Ready();
+	}
+
 	std::shared_ptr<const T> GetReady() const
 	{
-		Cancellation.Check();
-		return std::static_pointer_cast<const T>(*Result.GetReady());
+		return Request.GetReady()->template As<T>();
 	}
 
 	std::shared_ptr<const T> Get(FTaskSystem& InTasks) const
 	{
-		Cancellation.Check();
-		auto Value = Result.Get(InTasks);
-		Cancellation.Check();
-		return std::static_pointer_cast<const T>(*Value);
+		return Request.Get(InTasks)->template As<T>();
+	}
+
+	std::shared_ptr<const FLoadedAsset> GetAsset(FTaskSystem& InTasks) const
+	{
+		return Request.Get(InTasks);
 	}
 
 private:
-	TAsyncResult<std::shared_ptr<const void>> Result;
-	FCancellationToken Cancellation;
+	FAssetRequest Request;
 };
 
-// Own before requests and destroy/drain before IO and Tasks. Register codecs
-// before loading. Results are immutable CPU assets; GPU readiness is separate.
+struct FAssetCacheOptions
+{
+	std::size_t MaxEntries = 64;
+	std::size_t MaxBytes = 256u * 1024u * 1024u;
+	std::size_t MaxInFlight = 256;
+	std::size_t MaxGraphAssets = 4096;
+};
+
+struct FAssetCacheStats
+{
+	std::size_t Entries{};
+	std::size_t InFlight{};
+	std::size_t RetainedBytes{};
+};
+
+struct FAssetDependencyFailure
+{
+	std::filesystem::path Parent;
+	std::string Field;
+	FAssetRef Reference;
+	std::string Error;
+};
+
+struct FAssetGraph
+{
+	std::shared_ptr<const FLoadedAsset> Root;
+	std::map<std::filesystem::path, std::shared_ptr<const FLoadedAsset>> Assets;
+	std::vector<FAssetDependencyFailure> Failures;
+};
+
+// Own before requests; destroy/drain before IO and Tasks. CPU readiness is separate from GPU readiness.
 class FAssetService
 {
 public:
-	explicit FAssetService(FIOService& InIO) : IO(InIO)
-	{
-	}
-
+	explicit FAssetService(FIOService& InIO, FAssetCacheOptions InOptions = {});
 	~FAssetService();
-	void Register(FAssetCodec InCodec);
+	FRecordRegistry& Types();
+	FAssetRequest LoadAsync(const std::filesystem::path& InPath);
+	FAssetRequest LoadReferenceAsync(const FAssetRef& InReference, const std::filesystem::path& InContainingAsset);
+	FAssetRequest LoadByIdAsync(std::string_view InId);
+	TAsyncResult<FAssetGraph> LoadGraphAsync(const std::filesystem::path& InPath);
+	void SetCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory);
+	std::filesystem::path Resolve(const FAssetRef& InReference, const std::filesystem::path& InContainingAsset) const;
 
 	template<class T> TAssetRequest<T> LoadAsync(const std::filesystem::path& InPath)
 	{
-		return TAssetRequest<T>(Load(InPath, RecordType<T>()));
+		Types().Register<T>();
+		return TAssetRequest<T>(LoadAsync(InPath));
+	}
+
+	template<class T>
+	TAssetRequest<T> LoadReferenceAsync(const FAssetRef& InReference, const std::filesystem::path& InContainingAsset)
+	{
+		Types().Register<T>();
+		if (InReference.TypeId != RecordType<T>().Id)
+		{
+			throw std::runtime_error("Asset reference expected type mismatch: " + InReference.TypeId);
+		}
+		return TAssetRequest<T>(LoadReferenceAsync(InReference, InContainingAsset));
 	}
 
 	template<class T> TAsyncResult<bool> SaveAsync(std::filesystem::path InPath, std::shared_ptr<const T> InSnapshot)
 	{
-		return Save(std::move(InPath), RecordType<T>(), std::move(InSnapshot));
+		if (!InSnapshot)
+		{
+			throw std::invalid_argument("Null asset snapshot");
+		}
+		Types().Register<T>();
+		// Capture value ownership at admission; later caller edits cannot race the serializer.
+		return Save(std::move(InPath), RecordType<T>(), std::make_shared<const T>(*InSnapshot));
 	}
 
-	void Drain();
+	void Invalidate(const std::filesystem::path& InPath);
 	void ClearCache();
+	FAssetCacheStats Statistics();
+	void Drain();
 
 private:
-	TAsyncResult<std::shared_ptr<const void>> Load(const std::filesystem::path& InPath,
-	                                               const FRecordDescriptor& InType);
+	FAssetRequest Load(const std::filesystem::path& InPath, bool bInGraphDependency);
 	TAsyncResult<bool> Save(std::filesystem::path InPath, const FRecordDescriptor& InType,
 	                        std::shared_ptr<const void> InSnapshot);
-	FIOService& IO;
-	std::mutex Mutex;
-	bool bLoading{};
-	bool bClosing{};
-	FCancellationToken Cancellation;
-	std::vector<FAssetCodec> Codecs;
-	std::map<std::pair<std::filesystem::path, std::string>, TAsyncResult<std::shared_ptr<const void>>> Cache;
-	std::vector<FTaskHandle> Pending;
+	struct FImpl;
+	std::unique_ptr<FImpl> Impl;
 };
 } // namespace Hyperion

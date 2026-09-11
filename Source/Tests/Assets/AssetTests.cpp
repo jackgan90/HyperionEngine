@@ -1,3 +1,4 @@
+#include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Core/Core.h"
 #include <cmath>

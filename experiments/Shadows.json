@@ -6,7 +6,7 @@
     "title": "Hyperion | Cascaded Shadow Study",
     "width": 1440,
     "height": 900,
-    "scene_source": "assets/Scenes/Shadows.json",
+    "scene_source": "out/content/Scenes/Shadows.hasset",
     "plugins": ["scene-viewer", "debug-ui"],
     "vsync": true,
     "show_gui": true

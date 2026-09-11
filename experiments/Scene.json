@@ -6,7 +6,7 @@
     "title": "Hyperion | Scene Viewer + Cascaded Shadows",
     "width": 1440,
     "height": 900,
-    "scene_source": "assets/Scenes/Showcase.json",
+    "scene_source": "out/content/Scenes/Showcase.hasset",
     "plugins": ["scene-viewer", "debug-ui"],
     "vsync": true,
     "show_gui": true

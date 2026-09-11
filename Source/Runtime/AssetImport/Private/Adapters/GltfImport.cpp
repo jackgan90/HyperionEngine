@@ -1,3 +1,4 @@
+#define CGLTF_IMPLEMENTATION
 #include "GltfImportInternal.h"
 #include "Hyperion/Core/Core.h"
 
@@ -8,7 +9,7 @@ namespace
 using namespace Private;
 using FGltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
-FGltfData ParseSource(FAssetLoadContext& InContext)
+FGltfData ParseSource(FAssetImportContext& InContext)
 {
 	HYP_PERF_SCOPE_C(Assets, ParseGltf);
 	cgltf_options Options{};
@@ -47,7 +48,7 @@ FGltfData ParseSource(FAssetLoadContext& InContext)
 class FGltfImport
 {
 public:
-	explicit FGltfImport(FAssetLoadContext& InContext)
+	explicit FGltfImport(FAssetImportContext& InContext)
 	    : Context(InContext), Data(ParseSource(InContext)),
 	      Model(std::static_pointer_cast<FModelAsset>(RecordType<FModelAsset>().Create())),
 	      Total(InContext.Bytes->size()), MeshPrimitives(Data->meshes_count)
@@ -56,6 +57,12 @@ public:
 
 	std::shared_ptr<FModelAsset> Run();
 
+	FModelPrimitive Primitive(std::size_t InMesh, std::size_t InPrimitive)
+	{
+		Run();
+		return Model->Primitives.at(MeshPrimitives.at(InMesh).at(InPrimitive));
+	}
+
 private:
 	void CheckExtensions();
 	void LoadBuffers();
@@ -63,7 +70,7 @@ private:
 	void LoadImages();
 	void LoadMeshes();
 	void SelectRoots();
-	FAssetLoadContext& Context;
+	FAssetImportContext& Context;
 	FGltfData Data;
 	std::shared_ptr<FModelAsset> Model;
 	std::vector<std::shared_ptr<const FBytes>> OwnedBuffers;
@@ -234,7 +241,7 @@ std::shared_ptr<FModelAsset> FGltfImport::Run()
 	return Model;
 }
 
-std::shared_ptr<void> Import(FAssetLoadContext& InContext)
+std::shared_ptr<void> Import(FAssetImportContext& InContext)
 {
 	HYP_PERF_SCOPE_C(Assets, ImportGltf);
 	return FGltfImport(InContext).Run();
@@ -242,8 +249,22 @@ std::shared_ptr<void> Import(FAssetLoadContext& InContext)
 
 } // namespace
 
-void RegisterGltfImporter(FAssetService& InAssets)
+FModelPrimitive Private::ConvertGltfPrimitive(FAssetImportContext& InContext, std::size_t InMesh,
+                                              std::size_t InPrimitive)
 {
-	InAssets.Register({RecordType<FModelAsset>().Id, {".gltf", ".glb"}, Import});
+	return FGltfImport(InContext).Primitive(InMesh, InPrimitive);
+}
+
+void RegisterGltfImporter(FAssetImportService& InImports)
+{
+	InImports.Register({"hyperion.gltf", 1, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
+	InImports.Register({"hyperion.native-model-upgrade",
+	                    1,
+	                    &RecordType<FModelAsset>(),
+	                    {".hasset"},
+	                    [](FAssetImportContext& InContext)
+	                    {
+		                    return ReadRecord(RecordType<FModelAsset>(), DecodeAsset(InContext.Bytes).Object);
+	                    }});
 }
 } // namespace Hyperion

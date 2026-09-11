@@ -1,0 +1,3 @@
+add_library(hyperion_asset_types STATIC Private/AssetTypes.cpp)
+hyp_module(hyperion_asset_types)
+target_link_libraries(hyperion_asset_types PUBLIC hyperion_reflection)

@@ -21,8 +21,6 @@ struct FMesh
 	std::vector<std::uint32_t> Indices;
 };
 
-// Loads local-space data from one static triangle primitive, not a glTF scene.
-FMesh LoadGltfPrimitive(const std::filesystem::path& InPath, std::size_t InMesh = 0, std::size_t InPrimitive = 0);
 enum class EColorSpace
 {
 	Linear,

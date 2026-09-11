@@ -7,7 +7,7 @@ From the repository root:
 ```powershell
 ./tools/Build.ps1
 ./out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
-./out/build/debug/bin/hyperion_viewer.exe --scene assets/Scenes/Showcase.json --scene-culling bvh
+./out/build/debug/bin/hyperion_viewer.exe --scene out/content/Scenes/Showcase.hasset --scene-culling bvh
 ```
 
 The example contains 78 model instances plus one shared ground slab (79 instances total). `assets/Models/Ground.gltf` reuses the repository-generated Showcase cube geometry with a matte gray material and embeds its buffer, so no external download or texture is required. The slab spans X=[-35,35], Z=[-40,5], with its top at Y=0 and thickness 0.4. Showcase instances are raised to Y=0.192 to place their scaled pedestal bottoms on the slab; Interleaved instances already start at Y=0. All 78 model instances sit on the top surface and fit within its edges. `--scene-culling` accepts `none`, `linear` and `bvh`. Existing ModelViewer configuration, `--model`, capture and executable names remain supported. A configuration cannot select both model_source and scene_source.
@@ -22,9 +22,9 @@ The example contains 78 model instances plus one shared ground slab (79 instance
 | Freeze culling camera | Retain rejection view while display camera moves |
 | Show model bounds | Overlay bounds; diagnostic projection does not determine visibility |
 
-Add reuses a loaded asset and works after deleting every instance. Runtime edits do not overwrite the manifest. Near/far limits come from the manifest; very large scenes need a suitable far limit even after Fit.
+Add reuses a loaded asset and works after deleting every instance. The Save edited scene button writes the edited snapshot asynchronously to <name>.edited.hasset; --save-scene PATH selects a CLI output. Stable IDs, matrices, visibility, simple overrides and camera persist. Near/far limits come from the manifest; very large scenes need a suitable far limit even after Fit.
 
-## Manifest
+## Source manifest (offline import)
 
 ```json
 {
@@ -42,19 +42,19 @@ Add reuses a loaded asset and works after deleting every instance. Runtime edits
 
 Paths resolve relative to the manifest. Asset and instance IDs are nonempty and unique within their respective arrays. References must resolve. Transforms use finite translation/scale and normalized quaternion `[x,y,z,w]`. Camera direction must be valid and not parallel to world up. A malformed manifest reports a terminal error. Individual model failures leave other instances active and appear in the panel. Manifest IDs are separate from runtime generation-checked handles.
 
-Scene owns the validated record schema and private JSON adapter. `RegisterSceneManifestLoader` registers the codec with AssetService before requests start; model files use the existing glTF importer. Reflected `.hasset` manifests also work through AssetService. The adapter privately uses the existing JSON dependency.
+Scene owns the validated record schema. AssetImport owns the private JSON adapter and converts this source document into a native scene with typed, revision-qualified model references. Run AssetTool import before loading it in Viewer. See [NativeAssets.md](NativeAssets.md) for native schema v2, explicit v1 migrations and publication rules.
 
 ## Runtime scene entity
 
-`FSceneInstance` is the Main-owned Renderer entity alongside `FModel`. Construct it with a render session, task system and asset service; call `Load(path)`, `Tick()` on every Main tick (including minimized frames), then `Close()` before closing the session. It owns the logical `FScene`, its `FSceneRenderBridge`, asynchronous manifest/model requests and instance-to-asset bookkeeping. Register `RegisterSceneManifestLoader` from the Renderer runtime before loading.
+`FSceneInstance` is the Main-owned Renderer entity alongside `FModel`. Construct it with a render session, task system and asset service; call `Load(path)`, `Tick()` on every Main tick (including minimized frames), then `Close()` before closing the session. It owns the logical `FScene`, its `FSceneRenderBridge`, asynchronous manifest/model requests and instance-to-asset bookkeeping. Register native descriptors with `RegisterSceneAssetTypes(Assets.Types())` before loading.
 
-`Add`, `Update`, `Remove`, `Find` and `GetHandles` use generation-checked handles. Add can use ready model data or an asset ID from the loaded manifest. Transform/visibility edits and removal during loading survive completion; explicit data replacement detaches the pending asset association. `GetModels`, `GetAssets`, `GetManifest`, `GetStatus`, `GetError` and `GetDrawResults` expose structured data without GUI strings. Per-handle errors include associated asset loading failures and reject stale generations. Close cancels requests and joins all admitted preparation before detaching; it is idempotent, and a later Load creates a fresh attachment. After Close, repeated Close and destruction do not access the external dependencies.
+`Add`, `Update`, `Remove`, `Find` and `GetHandles` use generation-checked handles. Add can use ready model data or an asset ID from the loaded manifest. Transform/visibility edits and removal during loading survive completion; explicit data replacement detaches the pending asset association. `Snapshot(destination)`, `GetModels`, `GetAssets`, `GetManifest`, `GetStatus`, `GetError` and `GetDrawResults` expose structured data without GUI strings. Per-handle errors include associated asset loading failures and reject stale generations. Close cancels requests and joins all admitted preparation before detaching; it is idempotent, and a later Load creates a fresh attachment. After Close, repeated Close and destruction do not access the external dependencies.
 
 SceneViewer now owns this entity and keeps camera, input, selection, visualization and the original fixed-step demo animation. ModelViewer continues using `FModel`. CPU Scene remains independent of Renderer/RHI; no gameplay object hierarchy is introduced.
 
 ## Ownership and synchronization
 
-Construct/use `FScene` on Main. It owns flat `FSceneModel` values with name, transform, visibility, material overrides and optional immutable `FSceneModelData`. Null data represents a placeholder. `PrepareSceneModel` validates assets and computes node occurrences/bounds on a loading Worker; instances share that metadata. Scene depends on Math/Reflection, not Renderer/RHI.
+Construct/use `FScene` on Main. It owns flat `FSceneModel` values with name, transform, visibility, material overrides and optional immutable `FSceneModelData`. Null data represents a placeholder. `PrepareSceneModel` validates assets and computes node occurrences/bounds on a loading Worker; instances share that metadata. Scene depends on Math/Reflection/AssetTypes/Materials, not Renderer/RHI.
 
 `FSceneRenderBridge` attaches one logical Scene to one render client. Both ends reject duplicate simultaneous logical attachment. Destroy the bridge before its scene, session and task system. It consumes coalesced owned changes in revision order, acknowledges successful admission and observes update task errors associated with the submitted revision. Reattachment republishes existing models.
 

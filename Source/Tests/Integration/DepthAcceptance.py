@@ -4,6 +4,7 @@ import os
 import pathlib
 import subprocess
 import sys
+from NativeContent import import_asset
 
 
 viewer = pathlib.Path(sys.argv[1]).resolve()
@@ -19,6 +20,7 @@ scene = {
 }
 manifest = work / "Scene.json"
 manifest.write_text(json.dumps(scene), encoding="utf-8")
+manifest = import_asset(viewer, manifest)
 
 
 def run(name, config, application, pipeline, *extra):
@@ -27,7 +29,7 @@ def run(name, config, application, pipeline, *extra):
             "--frames", "180",
             "--hidden", "--no-ui", "--no-vsync", "--capture", str(capture)]
     if application == "Model":
-        args += ["--model", str(root / "assets/Models/Showcase.gltf"), "--verify-model"]
+        args += ["--model", str(root / "out/content/Models/Showcase.hasset"), "--verify-model"]
     elif application == "Scene":
         args += ["--scene", str(manifest), "--verify-model"]
     else:

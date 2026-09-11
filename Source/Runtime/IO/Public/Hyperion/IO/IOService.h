@@ -3,16 +3,32 @@
 #include <filesystem>
 #include <map>
 #include <mutex>
+#include <optional>
 
 namespace Hyperion
 {
+class FFileNotFound : public std::runtime_error
+{
+public:
+	using std::runtime_error::runtime_error;
+};
+
 using FBytes = std::vector<std::byte>;
+
+class IFileWriteLease
+{
+public:
+	virtual ~IFileWriteLease() = 0;
+};
+
+inline IFileWriteLease::~IFileWriteLease() = default;
 
 // Synchronous storage primitive. Runtime callers schedule it through FIOService.
 class IFileSystem
 {
 public:
 	virtual ~IFileSystem() = default;
+	virtual std::shared_ptr<IFileWriteLease> AcquireWriteLease(const std::filesystem::path& InPath);
 	virtual FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) = 0;
 	virtual void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) = 0;
 };
@@ -20,6 +36,7 @@ public:
 class FLocalFileSystem final : public IFileSystem
 {
 public:
+	std::shared_ptr<IFileWriteLease> AcquireWriteLease(const std::filesystem::path& InPath) override;
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override;
 	void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) override;
 };
@@ -50,7 +67,13 @@ public:
 	                    std::shared_ptr<IFileSystem> InFiles = std::make_shared<FLocalFileSystem>());
 	TAsyncResult<FBytes> ReadAsync(std::filesystem::path InPath, FCancellationToken InCancellation = {},
 	                               std::size_t InLimit = 512u * 1024u * 1024u);
+	TAsyncResult<std::optional<FBytes>> TryReadAsync(std::filesystem::path InPath,
+	                                                 FCancellationToken InCancellation = {},
+	                                                 std::size_t InLimit = 512u * 1024u * 1024u);
 	TAsyncResult<bool> WriteAsync(std::filesystem::path InPath, FBytes InBytes, FCancellationToken InCancellation = {});
+
+	TAsyncResult<std::shared_ptr<IFileWriteLease>> AcquireWriteLeaseAsync(std::filesystem::path InPath,
+	                                                                      FCancellationToken InCancellation = {});
 
 	const FIOStats& Statistics() const
 	{

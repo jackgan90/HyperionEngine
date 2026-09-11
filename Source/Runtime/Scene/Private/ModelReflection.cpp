@@ -2,6 +2,36 @@
 
 namespace Hyperion
 {
+template<> std::span<const EAlphaMode> RecordEnumValues<EAlphaMode>()
+{
+	static constexpr std::array Values{EAlphaMode::Opaque, EAlphaMode::Mask, EAlphaMode::Blend};
+	return Values;
+}
+
+template<> std::span<const EWrapMode> RecordEnumValues<EWrapMode>()
+{
+	static constexpr std::array Values{EWrapMode::Repeat, EWrapMode::Clamp, EWrapMode::Mirror};
+	return Values;
+}
+
+template<> std::span<const ESamplerFilter> RecordEnumValues<ESamplerFilter>()
+{
+	static constexpr std::array Values{ESamplerFilter::Nearest,           ESamplerFilter::Linear,
+	                                   ESamplerFilter::NearestMipNearest, ESamplerFilter::LinearMipNearest,
+	                                   ESamplerFilter::NearestMipLinear,  ESamplerFilter::LinearMipLinear};
+	return Values;
+}
+
+template<> const FRecordDescriptor& RecordType<FMaterialOverride>()
+{
+	static const auto Type = MakeRecord<FMaterialOverride>("hyperion.materialoverride",
+	                                                       {Member("baseColor", &FMaterialOverride::BaseColor),
+	                                                        Member("metallic", &FMaterialOverride::Metallic),
+	                                                        Member("roughness", &FMaterialOverride::Roughness)},
+	                                                       1, ValidateMaterialOverride);
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FVec2>()
 {
 	static const auto Type = MakeRecord<FVec2>("hyperion.vec2", {Member("x", &FVec2::X), Member("y", &FVec2::Y)});

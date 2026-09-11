@@ -126,6 +126,10 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	{
 		InOptions.Scene = InArgv[++InIndex];
 	}
+	else if (InArg == "--save-scene" && InIndex + 1 < InArgc)
+	{
+		InOptions.SaveScene = InArgv[++InIndex];
+	}
 	else if (InArg == "--scene-culling" && InIndex + 1 < InArgc)
 	{
 		InOptions.SceneCulling = InArgv[++InIndex];

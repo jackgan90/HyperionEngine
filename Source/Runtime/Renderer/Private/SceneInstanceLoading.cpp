@@ -3,38 +3,35 @@
 
 namespace Hyperion
 {
-void RegisterSceneManifestLoader(FAssetService& InAssets)
-{
-	InAssets.Register({RecordType<FSceneManifest>().Id,
-	                   {".json"},
-	                   [](FAssetLoadContext& InContext)
-	                   {
-		                   const auto& Bytes = *InContext.Bytes;
-		                   return std::make_shared<FSceneManifest>(
-		                       DecodeSceneManifest({reinterpret_cast<const char*>(Bytes.data()), Bytes.size()}));
-	                   }});
-}
-
 void FSceneInstance::FImpl::BeginManifest()
 {
 	Manifest = ManifestRequest.GetReady();
 	for (const auto& Entry : Manifest->Instances)
 	{
 		FSceneModel Model;
-		Model.Name = Entry.Id;
-		Model.World = ComposeTRS(Entry.Translation, Entry.Rotation, Entry.Scale);
+		Model.Name = Entry.Name.empty() ? Entry.Id : Entry.Name;
+		Model.World = Entry.Transform;
+		Model.Material = Entry.Material;
 		Model.bVisible = Entry.bVisible;
-		Models.push_back({Scene.Add(std::move(Model)), Entry.Asset});
+		Models.push_back({Scene.Add(std::move(Model)), Entry.Asset, Entry.Id});
 	}
 	for (const auto& Entry : Manifest->Assets)
 	{
 		auto& Load = Loads[Entry.Id];
-		Load.Request = Assets.LoadAsync<FModelAsset>(Path.parent_path() / Entry.Path);
-		Load.Preparation = DispatchAsync<FSceneModelData>(Tasks, {EDomain::Worker},
-		                                                  [Request = Load.Request, Tasks = &Tasks]
-		                                                  {
-			                                                  return *PrepareSceneModel(Request.Get(*Tasks));
-		                                                  });
+		try
+		{
+			Load.Request = Assets.LoadReferenceAsync<FModelAsset>(Entry.Reference, Path);
+			Load.Preparation = DispatchAsync<FSceneModelData>(Tasks, {EDomain::Worker},
+			                                                  [Request = Load.Request, Tasks = &Tasks]
+			                                                  {
+				                                                  return *PrepareSceneModel(Request.Get(*Tasks));
+			                                                  });
+		}
+		catch (const std::exception& Failure)
+		{
+			Load.Error = Failure.what();
+			Load.bComplete = true;
+		}
 	}
 	Status.bLoaded = true;
 	bStatusDirty = true;

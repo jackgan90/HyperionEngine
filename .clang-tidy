@@ -6,7 +6,7 @@ CheckOptions:
   readability-identifier-naming.ClassCase: CamelCase
   readability-identifier-naming.ClassPrefix: F
   # clang-tidy has no separate class-template prefix option; these use the required T prefix.
-  readability-identifier-naming.ClassIgnoredRegexp: '^(TAsyncResult|TAssetRequest|TTrackedResource|TMaterialParameterTable)$'
+  readability-identifier-naming.ClassIgnoredRegexp: '^(TAsyncResult|TAssetRequest|TImportRequest|TRecordCallback|TTrackedResource|TMaterialParameterTable)$'
   readability-identifier-naming.AbstractClassCase: CamelCase
   readability-identifier-naming.AbstractClassPrefix: I
   readability-identifier-naming.StructCase: CamelCase

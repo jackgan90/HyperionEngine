@@ -35,7 +35,7 @@ namespace
 {
 using namespace Hyperion;
 
-void CheckInvalidImports(FAssetService& InAssets, FTaskSystem& InTasks, const std::filesystem::path& InRoot)
+void CheckInvalidImports(FAssetImportService& InAssets, FTaskSystem& InTasks, const std::filesystem::path& InRoot)
 {
 	bool bFailed = false;
 	for (const auto* File :
@@ -68,7 +68,8 @@ int main()
 		FTaskSystem Tasks(1, 1);
 		auto Storage = std::make_shared<FObservedFileSystem>();
 		FIOService IO(Tasks, Storage);
-		FAssetService Assets(IO);
+		FAssetImportService Assets(IO);
+		FAssetService Native(IO);
 		RegisterGltfImporter(Assets);
 		const auto Root = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
 		auto Cancelled = Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf");
@@ -112,17 +113,17 @@ int main()
 			}
 		}
 		CheckInvalidImports(Assets, Tasks, Root);
-		Assets.SaveAsync("model-roundtrip.hasset", Model).Get(Tasks);
-		auto Restored = Assets.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks);
+		Native.SaveAsync("model-roundtrip.hasset", Model).Get(Tasks);
+		auto Restored = Native.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks);
 		HYP_CHECK(Serialize(*Restored) == Serialize(*Model));
 		auto Changed = std::make_shared<FModelAsset>(*Model);
 		Changed->Name = "Changed snapshot";
-		Assets.SaveAsync<FModelAsset>("model-roundtrip.hasset", Changed).Get(Tasks);
-		HYP_CHECK(Assets.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks)->Name == "Changed snapshot");
+		Native.SaveAsync<FModelAsset>("model-roundtrip.hasset", Changed).Get(Tasks);
+		HYP_CHECK(Native.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks)->Name == "Changed snapshot");
 		bFailed = false;
 		try
 		{
-			Assets.SaveAsync("unsupported.gltf", Model).Get(Tasks);
+			Native.SaveAsync("unsupported.gltf", Model).Get(Tasks);
 		}
 		catch (...)
 		{
@@ -130,13 +131,14 @@ int main()
 		}
 		HYP_CHECK(bFailed);
 		{
-			FAssetService Temporary(IO);
+			FAssetImportService Temporary(IO);
 			RegisterGltfImporter(Temporary);
 			auto Abandoned = Temporary.LoadAsync<FModelAsset>(Root / "Showcase.glb");
 			Abandoned.Cancel();
 			// Destruction cancels/drains the producer before IO or the task system dies.
 		}
 		Assets.Drain();
+		Native.Drain();
 		Tasks.Shutdown();
 		std::cout << "Asynchronous glTF import and native persistence passed\n";
 	}

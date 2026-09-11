@@ -7,25 +7,39 @@ namespace Hyperion
 {
 enum class EAlphaMode
 {
-	Opaque,
-	Mask,
-	Blend
+	Opaque = 0,
+	Mask = 1,
+	Blend = 2
 };
 enum class EWrapMode
 {
-	Repeat,
-	Clamp,
-	Mirror
+	Repeat = 0,
+	Clamp = 1,
+	Mirror = 2
 };
 enum class ESamplerFilter
 {
-	Nearest,
-	Linear,
-	NearestMipNearest,
-	LinearMipNearest,
-	NearestMipLinear,
-	LinearMipLinear
+	Nearest = 0,
+	Linear = 1,
+	NearestMipNearest = 2,
+	LinearMipNearest = 3,
+	NearestMipLinear = 4,
+	LinearMipLinear = 5
 };
+
+template<> std::span<const EAlphaMode> RecordEnumValues<EAlphaMode>();
+template<> std::span<const EWrapMode> RecordEnumValues<EWrapMode>();
+template<> std::span<const ESamplerFilter> RecordEnumValues<ESamplerFilter>();
+
+struct FMaterialOverride
+{
+	std::optional<FVec4> BaseColor;
+	std::optional<float> Metallic;
+	std::optional<float> Roughness;
+};
+
+void ValidateMaterialOverride(const FMaterialOverride& InMaterial);
+template<> const FRecordDescriptor& RecordType<FMaterialOverride>();
 
 struct FModelSampler
 {

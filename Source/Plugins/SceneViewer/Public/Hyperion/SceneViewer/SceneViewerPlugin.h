@@ -30,6 +30,8 @@ public:
 	void RemoveSelected();
 	void ToggleSelected();
 	void MoveSelected(float InOffset);
+	TAsyncResult<bool> SaveAsync(const std::filesystem::path& InPath);
+	const std::string& SaveStatus() const;
 
 private:
 	struct FImpl;

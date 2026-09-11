@@ -7,6 +7,7 @@ import pathlib
 import re
 import subprocess
 import sys
+from NativeContent import import_asset
 
 viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
@@ -87,6 +88,7 @@ def scene_fixture():
             instance["translation"][1] -= .01
     path = work / "Scene.json"
     path.write_text(json.dumps(scene), encoding="utf-8")
+    path = import_asset(viewer, path)
     config = json.loads((root / "experiments/Scene.json").read_text(encoding="utf-8"))
     config["properties"]["scene_source"] = str(path)
     config_path = work / "SceneSettings.json"

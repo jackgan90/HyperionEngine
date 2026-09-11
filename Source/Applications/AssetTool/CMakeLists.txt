@@ -1,0 +1,3 @@
+add_executable(hyperion_asset_tool Private/AssetTool.manifest Private/Adapters/ProcessStatistics.cpp Private/Main.cpp Private/AssetCommands.cpp Private/AssetCommands.h)
+hyp_executable(hyperion_asset_tool)
+target_link_libraries(hyperion_asset_tool PRIVATE hyperion_asset_import hyperion_assets hyperion_scene hyperion_io hyperion_tasks PRIVATE Psapi)

@@ -19,10 +19,12 @@
 
 1. 打开 `Hyperion.sln`，选择 `Debug | x64` 或 `Release | x64`。
 2. 默认启动项目为 `hyperion_viewer`，按 F5 编译并调试渲染器；Ctrl+F5 不附加调试器运行。已有 `.suo` 的启动偏好可能优先，此时手动设一次启动项目。
-3. `Hyperion/Applications` 放 Viewer，`Hyperion/Runtime` 放运行时模块，`Hyperion/Backends` 放图形后端，`Hyperion/Plugins` 放实验插件，`Hyperion/Tests` 放测试，`ThirdParty` 放依赖。模块源码显示在各自的 `Public` / `Private` 筛选器中；Viewer 项目也列出 shader、实验配置和文档。
+3. `Hyperion/Applications` 放 Viewer 和独立 AssetTool，`Hyperion/Runtime` 放运行时模块，`Hyperion/Backends` 放图形后端，`Hyperion/Plugins` 放实验插件，`Hyperion/Tests` 放测试，`ThirdParty` 放依赖。模块源码显示在各自的 `Public` / `Private` 筛选器中；Viewer 项目也列出 shader、实验配置和文档。
 4. HLSL 在工程里用于查看/编辑，实际由引擎 DXC wrapper 编译，不走 Visual Studio 的默认 FXC 规则。
 
 Viewer 的调试工作目录为仓库根目录，可以在项目属性的“调试 → 命令参数”中填写 `--config experiments/Triangle.json` 等选项。生成的可执行文件在 `out/build/vs2022/bin/Debug` 或 `bin/Release`，所需 DLL 会自动复制到旁边。
+
+Viewer 构建会先运行 native_sample_content，用 C++ AssetTool 将源样例转换到 out/content；Assets 和 Viewer 仅消费生成的 .hasset。新增 native_asset_tests、publication_tests 也纳入 hyperion_check。导入、自定义类型、场景保存和迁移命令见 [NativeAssets.md](NativeAssets.md)。
 
 ## 在 VS 中跑测试
 

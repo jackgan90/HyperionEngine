@@ -34,11 +34,14 @@ template<> const FRecordDescriptor& RecordType<FArchiveFixture>()
 }
 } // namespace Hyperion
 
+void CheckRecordEvolution();
+
 int main()
 {
 	using namespace Hyperion;
 	try
 	{
+		CheckRecordEvolution();
 		FArchiveFixture Original{{{"mesh", {1, 2, 3}}}, 42};
 		Original.Slots[1].Name = "fixed element";
 		auto Bytes = Serialize(Original);

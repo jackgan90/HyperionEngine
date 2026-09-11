@@ -114,6 +114,7 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 	if (InGui.BeginPanel("Scene Viewer", {std::max(12.f, Size.X - 410), 16}, {394, std::min(720.f, Size.Y - 32)}))
 	{
 		InGui.TextWrapped(P.Status);
+		P.DrawSave(InGui);
 		DrawStatistics(InGui, InStats);
 		InGui.Separator();
 		const std::array Names{"None", "Linear frustum", "BVH frustum"};

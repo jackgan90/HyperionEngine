@@ -12,6 +12,7 @@ struct FOptions
 	std::filesystem::path Config = std::filesystem::path(HYP_SOURCE_DIR) / "experiments/Triangle.json";
 	std::filesystem::path Capture;
 	std::filesystem::path SaveConfig;
+	std::filesystem::path SaveScene;
 	std::filesystem::path Model;
 	std::filesystem::path Scene;
 	std::filesystem::path Benchmark;

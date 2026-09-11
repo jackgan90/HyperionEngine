@@ -1,3 +1,4 @@
+#include "Hyperion/Core/ContentHash.h"
 #include "SceneInstanceInternal.h"
 #include <algorithm>
 #include <stdexcept>
@@ -43,7 +44,7 @@ void FSceneInstance::Load(const std::filesystem::path& InPath)
 	P.Bridge = std::make_unique<FSceneRenderBridge>(P.Scene, P.Session, P.Tasks);
 	P.Status = {};
 	P.bStatusDirty = true;
-	P.Path = InPath;
+	P.Path = std::filesystem::absolute(InPath).lexically_normal();
 	P.ManifestRequest = P.Assets.LoadAsync<FSceneManifest>(P.Path);
 }
 
@@ -124,7 +125,7 @@ FSceneHandle FSceneInstance::Add(FSceneModel InModel, std::string InAsset)
 	const auto Handle = P.Scene.Add(std::move(InModel));
 	try
 	{
-		P.Models.push_back({Handle, std::move(InAsset)});
+		P.Models.push_back({Handle, std::move(InAsset), CreateIdentifier()});
 	}
 	catch (...)
 	{

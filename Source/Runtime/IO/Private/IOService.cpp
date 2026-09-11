@@ -28,6 +28,28 @@ TAsyncResult<FBytes> FIOService::ReadAsync(std::filesystem::path InPath, FCancel
 	    InCancellation);
 }
 
+TAsyncResult<std::optional<FBytes>> FIOService::TryReadAsync(std::filesystem::path InPath,
+                                                             FCancellationToken InCancellation, std::size_t InLimit)
+{
+	return DispatchAsync<std::optional<FBytes>>(
+	    Tasks, {EDomain::Io},
+	    [Path = std::move(InPath), InLimit, Storage = Files, Counters = Stats]() -> std::optional<FBytes>
+	    {
+		    try
+		    {
+			    auto Bytes = Storage->Read(Path, InLimit);
+			    Counters->Reads.fetch_add(1);
+			    Counters->ReadBytes.fetch_add(Bytes.size());
+			    return Bytes;
+		    }
+		    catch (const FFileNotFound&)
+		    {
+			    return {};
+		    }
+	    },
+	    InCancellation);
+}
+
 TAsyncResult<bool> FIOService::WriteAsync(std::filesystem::path InPath, FBytes InBytes,
                                           FCancellationToken InCancellation)
 {
@@ -49,7 +71,7 @@ FBytes FMemoryFileSystem::Read(const std::filesystem::path& InPath, std::size_t 
 	auto It = Files.find(InPath.lexically_normal());
 	if (It == Files.end())
 	{
-		throw std::runtime_error("File not found: " + InPath.generic_string());
+		throw FFileNotFound("File not found: " + InPath.generic_string());
 	}
 	if (It->second.size() > InLimit)
 	{

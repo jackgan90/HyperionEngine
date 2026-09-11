@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/AssetImport/GltfImport.h"
+#include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"

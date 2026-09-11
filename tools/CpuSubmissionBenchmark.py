@@ -59,7 +59,7 @@ def validate(rows, log, warmup, samples, count, shadows):
     return {key: distribution([float(row[key]) for row in rows]) for key in rows[0]}
 
 
-def generate(output, counts):
+def generate(output, counts, viewer):
     config = json.loads((ROOT / "experiments/Scene.json").read_text(encoding="utf-8"))
     config["properties"]["plugins"] = []
     config["properties"].pop("scene_source", None)
@@ -73,7 +73,11 @@ def generate(output, counts):
                  "instances": [{"id": f"triangle-{i}", "asset": "triangle",
                                 "scale": [.05, .05, .05]} for i in range(count)],
                  "camera": {"eye": [0, 0, 10], "target": [0, 0, 0], "near": .05, "far": 100}}
-        (output / f"Triangles-{count}.json").write_text(json.dumps(scene), encoding="utf-8")
+        source = output / f"Triangles-{count}.json"
+        source.write_text(json.dumps(scene), encoding="utf-8")
+        tool = viewer.resolve().with_name("hyperion_asset_tool" + viewer.suffix)
+        subprocess.run([str(tool), "import", str(source), str(source.with_suffix(".hasset"))],
+                       check=True, timeout=60)
 
 
 def run(args, label, viewer, trial, count, moving, shadows):
@@ -89,7 +93,7 @@ def run(args, label, viewer, trial, count, moving, shadows):
     if not args.ui:
         command.append("--no-ui")
     if count:
-        command += ["--scene", str(args.output / f"Triangles-{count}.json"),
+        command += ["--scene", str(args.output / f"Triangles-{count}.hasset"),
                     "--scene-culling", "none", "--no-instance-batching"]
     if moving:
         command += ["--benchmark-camera", "--benchmark-camera-step", str(getattr(args, "camera_step", .1))]
@@ -147,7 +151,7 @@ def main():
         parser.error("camera-step must be finite and positive")
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
-    generate(args.output, args.counts)
+    generate(args.output, args.counts, args.viewer)
     binaries = [("candidate", args.viewer.resolve())]
     if args.baseline:
         binaries.insert(0, ("baseline", args.baseline.resolve()))

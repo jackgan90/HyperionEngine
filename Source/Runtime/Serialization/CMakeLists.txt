@@ -1,3 +1,3 @@
-add_library(hyperion_serialization STATIC Private/Archive.cpp)
+add_library(hyperion_serialization STATIC Private/Archive.cpp Private/ArchiveEncoding.cpp Private/ArchiveReader.cpp Private/ArchiveInternal.h)
 hyp_module(hyperion_serialization)
-target_link_libraries(hyperion_serialization PUBLIC hyperion_reflection)
+target_link_libraries(hyperion_serialization PUBLIC hyperion_reflection PRIVATE hyperion_core)

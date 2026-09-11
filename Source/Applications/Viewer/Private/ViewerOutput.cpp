@@ -62,6 +62,15 @@ void FViewerApplication::VerifyOutputs()
 		                         (FrameCapture ? FrameCapture->Status().Message : std::string("plugin unavailable")));
 	}
 #endif
+	if (!Options.SaveScene.empty())
+	{
+		if (!ScenePlugin || !ScenePlugin->Ready())
+		{
+			throw std::runtime_error("--save-scene requires a ready scene");
+		}
+		ScenePlugin->SaveAsync(Options.SaveScene).Get(Services->Tasks);
+		Log(ELogLevel::Info, "Scene saved: " + Options.SaveScene.string());
+	}
 	if (!Options.SaveConfig.empty())
 	{
 		const auto Size = Window->LogicalSize();

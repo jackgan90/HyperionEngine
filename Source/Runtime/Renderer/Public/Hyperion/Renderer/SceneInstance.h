@@ -10,6 +10,7 @@ struct FSceneInstanceModel
 {
 	FSceneHandle Handle;
 	std::string Asset;
+	std::string Id;
 };
 
 struct FSceneInstanceAsset
@@ -49,6 +50,7 @@ public:
 	std::span<const FSceneInstanceModel> GetModels() const;
 	std::vector<FSceneInstanceAsset> GetAssets() const;
 	std::shared_ptr<const FSceneManifest> GetManifest() const;
+	FSceneManifest Snapshot(const std::filesystem::path& InDestination) const;
 	const FSceneInstanceStatus& GetStatus() const;
 	std::string GetError(FSceneHandle InHandle) const;
 	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
@@ -58,5 +60,4 @@ private:
 	std::unique_ptr<FImpl> Impl;
 };
 
-void RegisterSceneManifestLoader(FAssetService& InAssets);
 } // namespace Hyperion

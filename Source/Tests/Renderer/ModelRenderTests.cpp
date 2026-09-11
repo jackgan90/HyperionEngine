@@ -1,10 +1,11 @@
-#include "Hyperion/AssetImport/GltfImport.h"
+#include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/ModelPreparation.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Support/GraphTestSupport.h"
+#include "Support/NativeAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <atomic>
@@ -95,7 +96,7 @@ private:
 	std::mutex Mutex;
 	std::condition_variable Signal;
 	bool bReleased{};
-	FLocalFileSystem Local;
+	FNativeOnlyFileSystem Local;
 };
 
 struct FModelReadbackContext
@@ -345,9 +346,9 @@ int main()
 		auto Storage = std::make_shared<FGatedFileSystem>();
 		FIOService IO(Tasks, Storage);
 		FAssetService Assets(IO);
-		RegisterGltfImporter(Assets);
+
 		FAppSettings Settings;
-		FModelViewerPlugin Plugin(Session, Tasks, Assets, Root / "out/fixtures/Showcase.gltf");
+		FModelViewerPlugin Plugin(Session, Tasks, Assets, Root / "out/fixtures/native/Showcase-gltf.hasset");
 		Plugin.Start();
 		const auto Frame = [&](FModelViewerPlugin& InPlugin, FSize InSize = {320, 240})
 		{
@@ -363,7 +364,7 @@ int main()
 		HYP_CHECK(Plugin.Ready() && Storage->bStarted);
 		CheckCameraInput(Plugin, Frame, ReadyImage, Root);
 		Plugin.Stop();
-		FModelViewerPlugin Broken(Session, Tasks, Assets, Root / "out/fixtures/Missing.gltf");
+		FModelViewerPlugin Broken(Session, Tasks, Assets, Root / "out/fixtures/native/Missing.hasset");
 		Broken.Start();
 		while (Broken.Error().empty() && std::chrono::steady_clock::now() < Deadline)
 		{

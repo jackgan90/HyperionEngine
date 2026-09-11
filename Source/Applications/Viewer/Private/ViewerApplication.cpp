@@ -11,8 +11,7 @@ FViewerServices::FViewerServices(const FAppSettings& InSettings)
     : Tasks(static_cast<unsigned>(InSettings.Workers), static_cast<unsigned>(InSettings.RhiThreads)), IO(Tasks),
       Assets(IO)
 {
-	RegisterGltfImporter(Assets);
-	RegisterSceneManifestLoader(Assets);
+	RegisterSceneAssetTypes(Assets.Types());
 }
 
 FViewerServices::~FViewerServices()

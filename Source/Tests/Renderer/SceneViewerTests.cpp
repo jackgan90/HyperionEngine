@@ -1,9 +1,9 @@
-#include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "Support/GraphTestSupport.h"
+#include "Support/NativeAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <iostream>
@@ -16,7 +16,7 @@ using namespace Hyperion;
 struct FViewerFixture
 {
 	FTaskSystem Tasks{1, 1};
-	FIOService IO{Tasks};
+	FIOService IO{Tasks, std::make_shared<FNativeOnlyFileSystem>()};
 	FAssetService Assets{IO};
 	FWindow Window{"Scene controls", {640, 480}, true};
 	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
@@ -31,8 +31,7 @@ struct FViewerFixture
 
 	FViewerFixture()
 	{
-		RegisterGltfImporter(Assets);
-		RegisterSceneManifestLoader(Assets);
+		RegisterSceneAssetTypes(Assets.Types());
 		const auto Surface = Window.Surface();
 		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 		                          [&]
@@ -43,13 +42,15 @@ struct FViewerFixture
 			                          Swapchain = Device->CreateSwapchain({Surface, {640, 480}});
 		                          }));
 		Session = std::make_unique<FRenderSession>(Tasks, *Device, Compiler);
-		const std::string Text =
-		    R"({"type":"hyperion.scene","schema_version":1,"assets":[{"id":"a","path":")" +
-		    (std::filesystem::path(HYP_SOURCE_DIR) / "assets/Models/Showcase.gltf").generic_string() +
-		    R"("}],"instances":[{"id":"one","asset":"a"}],"camera":{"eye":[0,1,7],"target":[0,0,0]}})";
-		const auto Bytes = std::as_bytes(std::span(Text));
-		IO.WriteAsync("SceneControls.json", {Bytes.begin(), Bytes.end()}).Get(Tasks);
-		Plugin = std::make_unique<FSceneViewerPlugin>(*Session, Tasks, Assets, "SceneControls.json");
+		FSceneManifest Manifest;
+		Manifest.Assets = {
+		    {"a",
+		     {"", (std::filesystem::path(HYP_SOURCE_DIR) / "out/content/Models/Showcase.hasset").generic_string(),
+		      RecordType<FModelAsset>().Id, ""}}};
+		Manifest.Instances = {{"one", "a"}};
+		Manifest.Eye = {0, 1, 7};
+		Assets.SaveAsync("SceneControls.hasset", std::make_shared<const FSceneManifest>(Manifest)).Get(Tasks);
+		Plugin = std::make_unique<FSceneViewerPlugin>(*Session, Tasks, Assets, "SceneControls.hasset");
 		Frame.View.Width = 640;
 		Frame.View.Height = 480;
 		Plugin->Start();
@@ -143,6 +144,55 @@ void CheckControls(FViewerFixture& InFixture)
 	InFixture.Tick();
 	HYP_CHECK(Plugin.ModelCount() == 1);
 }
+
+void CheckSaveReload(FViewerFixture& InFixture)
+{
+	auto& Plugin = *InFixture.Plugin;
+	Plugin.MoveSelected(1.25f);
+	Plugin.DuplicateSelected();
+	Plugin.ToggleSelected();
+	const auto ReadyDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	do
+	{
+		InFixture.Tick();
+	} while (!Plugin.Ready() && std::chrono::steady_clock::now() < ReadyDeadline);
+	HYP_CHECK(Plugin.Ready());
+	InFixture.Tick();
+	HYP_CHECK(InFixture.Statistics.VisibleItems > 0);
+	const auto Before = InFixture.Image.Rgba;
+	const auto Output = std::filesystem::absolute("scene-save/subdirectory/edited.hasset");
+	Plugin.SaveAsync(Output).Get(InFixture.Tasks);
+	InFixture.Tick();
+	HYP_CHECK(Plugin.SaveStatus().find("Saved scene:") == 0);
+	const auto Saved = InFixture.Assets.LoadAsync<FSceneManifest>(Output).Get(InFixture.Tasks);
+	HYP_CHECK(Saved->Instances.size() == 2 && Saved->Instances[0].Id != Saved->Instances[1].Id);
+	HYP_CHECK(!Saved->Instances[1].bVisible);
+	HYP_CHECK(Saved->Eye.X == InFixture.Frame.View.Eye.X && Saved->Eye.Y == InFixture.Frame.View.Eye.Y);
+	Plugin.Stop();
+	InFixture.Plugin =
+	    std::make_unique<FSceneViewerPlugin>(*InFixture.Session, InFixture.Tasks, InFixture.Assets, Output);
+	InFixture.Plugin->Start();
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	while (!InFixture.Plugin->Ready() && std::chrono::steady_clock::now() < Deadline)
+	{
+		InFixture.Tick();
+	}
+	HYP_CHECK(InFixture.Plugin->Ready() && InFixture.Plugin->ModelCount() == 2);
+	InFixture.Tick();
+	float MaximumDifference{};
+	double TotalDifference{};
+	std::size_t Different{};
+	for (std::size_t Index = 0; Index < Before.size(); ++Index)
+	{
+		const auto Difference = std::abs(InFixture.Image.Rgba[Index] - Before[Index]);
+		MaximumDifference = std::max(MaximumDifference, Difference);
+		TotalDifference += Difference;
+		Different += Difference > 1.f / 255.f;
+	}
+	std::cout << "Save reload pixel max=" << MaximumDifference << " mean=" << TotalDifference / Before.size()
+	          << " over_one_step=" << Different << " of " << Before.size() << '\n';
+	HYP_CHECK(MaximumDifference <= 1.f / 255.f);
+}
 } // namespace
 
 int main()
@@ -151,6 +201,7 @@ int main()
 	{
 		FViewerFixture Fixture;
 		CheckControls(Fixture);
+		CheckSaveReload(Fixture);
 		std::cout
 		    << "Scene Viewer visible hide/move/duplicate/remove, frozen view, fit and empty-scene recovery passed\n";
 	}

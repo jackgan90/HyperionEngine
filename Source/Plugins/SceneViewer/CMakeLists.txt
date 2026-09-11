@@ -1,3 +1,3 @@
-add_library(hyperion_scene_viewer STATIC Private/SceneViewerPlugin.cpp Private/SceneViewerControls.cpp Private/SceneViewerGui.cpp)
+add_library(hyperion_scene_viewer STATIC Private/SceneViewerPersistence.cpp Private/SceneViewerPlugin.cpp Private/SceneViewerControls.cpp Private/SceneViewerGui.cpp)
 hyp_module(hyperion_scene_viewer)
 target_link_libraries(hyperion_scene_viewer PUBLIC hyperion_render hyperion_assets hyperion_gui PRIVATE hyperion_core hyperion_scene hyperion_math hyperion_tasks hyperion_platform)

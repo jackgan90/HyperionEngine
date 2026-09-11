@@ -104,10 +104,42 @@ void CheckLogicalScene()
 	HYP_CHECK(Scene.GetHandles().empty());
 }
 
+void CheckManifestMigration()
+{
+	FSceneManifest Original;
+	Original.Assets = {{"model", {"", "Model.hasset", RecordType<FModelAsset>().Id, ""}}};
+	Original.Instances = {{"stable-id", "model"}};
+	auto Node = WriteValue(Original);
+	auto& Root = std::get<FArchiveNode::FObject>(Node.Value);
+	Root["version"] = WriteValue(1u);
+	auto& Fields = std::get<FArchiveNode::FObject>(Root.at("fields").Value);
+	auto& Asset = std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FArray>(Fields.at("assets").Value)[0].Value);
+	Asset["version"] = WriteValue(1u);
+	auto& AssetFields = std::get<FArchiveNode::FObject>(Asset.at("fields").Value);
+	AssetFields.erase("reference");
+	AssetFields["path"] = WriteValue(std::string("Model.hasset"));
+	auto& Instance =
+	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FArray>(Fields.at("instances").Value)[0].Value);
+	Instance["version"] = WriteValue(1u);
+	auto& InstanceFields = std::get<FArchiveNode::FObject>(Instance.at("fields").Value);
+	InstanceFields.erase("transform");
+	InstanceFields.erase("material");
+	InstanceFields.erase("name");
+	InstanceFields["translation"] = WriteValue(FVec3{1, 2, 3});
+	InstanceFields["rotation"] = WriteValue(FVec4{0, 0, 0, 1});
+	InstanceFields["scale"] = WriteValue(FVec3{2, 3, 4});
+	std::vector<std::string> Diagnostics;
+	const auto Restored = ReadValue<FSceneManifest>(Node, {"legacy-scene", &Diagnostics});
+	HYP_CHECK(Restored.Assets[0].Reference.TypeId == RecordType<FModelAsset>().Id);
+	HYP_CHECK(Restored.Instances[0].Id == "stable-id" && Restored.Instances[0].Transform.Values[12] == 1);
+	HYP_CHECK(Restored.Instances[0].Transform.Values[5] == 3 && Diagnostics.size() == 3);
+}
+
 void CheckManifest()
 {
-	const auto Manifest = DecodeSceneManifest(
-	    R"({"type":"hyperion.scene","schema_version":1,"assets":[{"id":"a","path":"../Models/A.gltf"}],"instances":[{"id":"one","asset":"a"},{"id":"two","asset":"a","visible":false}]})");
+	FSceneManifest Manifest;
+	Manifest.Assets.push_back({"a", {"", "../Models/A.hasset", RecordType<FModelAsset>().Id, ""}});
+	Manifest.Instances = {{"one", "a"}, {"two", "a", Identity(), false}};
 	HYP_CHECK(Manifest.Instances.size() == 2 && !Manifest.Instances[1].bVisible);
 	const auto Copy = ReadValue<FSceneManifest>(WriteValue(Manifest));
 	HYP_CHECK(Copy.Instances[0].Asset == "a");
@@ -128,7 +160,7 @@ void CheckManifest()
 		}
 		if (Case == 3)
 		{
-			Bad.Instances[0].Rotation = {};
+			Bad.Instances[0].Transform.Values[15] = 0;
 		}
 		if (Case == 4)
 		{
@@ -155,6 +187,7 @@ int main()
 		CheckBounds();
 		CheckLogicalScene();
 		CheckManifest();
+		CheckManifestMigration();
 		std::cout << "Bounds oracle, logical scene ownership, generations and manifest validation passed\n";
 	}
 	catch (const std::exception& Error)

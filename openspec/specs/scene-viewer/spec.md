@@ -4,16 +4,15 @@
 Define manifest-based multi-model viewing, runtime scene inspection and diagnostics while preserving existing ModelViewer behavior.
 ## Requirements
 ### Requirement: Manifest-based multi-model viewer
-
-SceneViewer SHALL delegate scene loading, instance bookkeeping, Tick synchronization and shutdown to the Renderer scene runtime entity. It SHALL load the existing validated versioned manifest with relative asset paths, unique asset/instance IDs, TRS, visibility and initial camera settings. Instances SHALL share assets and GPU resources. Loading SHALL remain asynchronous with independent instance failures and generation-safe cancellation. Existing camera, controls, GUI, fixed-step demo animation, plugin IDs and CLI behavior SHALL remain unchanged.
+SceneViewer SHALL delegate native scene loading, instance bookkeeping, Tick synchronization and shutdown to the Renderer scene runtime entity. It SHALL load reflected versioned .hasset scenes with native asset references, unique asset/instance IDs, transforms, visibility and initial camera settings. Instances SHALL share assets and GPU resources. Loading SHALL remain asynchronous with independent instance failures and generation-safe cancellation. Existing camera, controls, GUI, fixed-step demo animation and plugin IDs SHALL remain unchanged. CLI/configuration keys SHALL remain stable with native asset paths replacing source-format paths.
 
 #### Scenario: Repeated and failed assets
 - **WHEN** multiple instances share a valid asset and another asset fails
 - **THEN** valid models render with independent transforms and the failed entry reports an error without stopping them
 
 #### Scenario: Existing viewer behavior
-- **WHEN** SceneViewer and ModelViewer run their prior acceptance cases after the refactor
-- **THEN** loading, rendering, material appearance, input, manipulation, UI and capture behavior have no regressions
+- **WHEN** SceneViewer and ModelViewer run their acceptance cases with imported native content
+- **THEN** rendering, material appearance, input, manipulation, UI and capture behavior have no regressions
 
 ### Requirement: Scene inspection controls
 SceneViewer SHALL provide navigable camera and fit, culling mode selection, freeze-culling view, optional bounds visualization, runtime instance manipulation and separate model/primitive/item/draw and timing diagnostics through engine GUI interfaces.
@@ -64,3 +63,10 @@ Delivery SHALL include deterministic contact, sloped, masked, thin/double-sided,
 #### Scenario: Shadow correctness suite
 - **WHEN** CPU, GPU and viewer shadow acceptance tests run
 - **THEN** depth sampling, main/shadow view separation, shadow reception, empty-map clearing and enabled/disabled/batching comparisons are verified with documented image and performance evidence
+
+### Requirement: Save current scene
+SceneViewer SHALL expose asynchronous saving of current editable scene state and camera to .hasset, with visible success/failure status and no frame-loop wait. Saving SHALL preserve valid references when the output location changes.
+
+#### Scenario: Viewer save and reload
+- **WHEN** the user edits a scene, saves it and loads the result
+- **THEN** current instance state and camera are restored and the Viewer remains responsive during saving

@@ -45,7 +45,7 @@ python tools/Bootstrap.py
 
 SceneViewer 默认启用四级方向光阴影；`experiments/Shadows.json` 展示接触、斜面、薄片和镂空投影。独立 ForwardRenderPipeline 编排 shadow depth → forward → 扩展 passes，面板提供 shadow 设置、cascade/depth 预览和 CPU/GPU 耗时。运行参数、精度边界、性能实测和验证见 [级联阴影](docs/CascadedShadows.md)。
 
-静态模型入口：`hyperion_viewer.exe --config experiments/Model.json`，或 `--model "模型路径.glb"`。右键旋转、滚轮缩放、Home 取景、Tab 显隐面板。运行命令、格式支持边界、资产 API 和 OpenSpec 实施顺序见 [资产流水线](docs/AssetPipeline.md)。
+静态模型入口：`hyperion_viewer.exe --config experiments/Model.json`，或先用 `hyperion_asset_tool import 源模型.glb 输出.hasset` 导入，再用 `--model 输出.hasset`。右键旋转、滚轮缩放、Home 取景、Tab 显隐面板。运行命令、格式支持边界、资产 API 和 OpenSpec 实施顺序见 [资产流水线](docs/AssetPipeline.md)。
 
 默认配置为 `experiments/Triangle.json`。面板可实时修改三角形缩放、背景色和 VSync；“Save experiment”保存到当前配置文件，“Capture screenshot”写入 `out/captures`。插件列表修改后重启生效。窗口右上角关闭按钮退出应用。
 

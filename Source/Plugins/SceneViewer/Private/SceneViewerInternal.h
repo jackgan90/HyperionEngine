@@ -8,11 +8,18 @@ namespace Hyperion
 struct FSceneViewerPlugin::FImpl
 {
 	FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets, std::filesystem::path InPath)
-	    : Tasks(InTasks), Path(std::move(InPath)), Scene(InSession, InTasks, InAssets)
+	    : Tasks(InTasks), Assets(InAssets), Path(std::move(InPath)), Scene(InSession, InTasks, InAssets)
 	{
 	}
 
 	FTaskSystem& Tasks;
+	FAssetService& Assets;
+	FSceneViewerPlugin* Owner{};
+	std::optional<TAsyncResult<bool>> Save;
+	std::filesystem::path SavePath;
+	std::string SaveStatus;
+	void PollSave();
+	void DrawSave(FGui& InGui);
 	std::filesystem::path Path;
 	FSceneInstance Scene;
 	std::shared_ptr<const FSceneManifest> Manifest;

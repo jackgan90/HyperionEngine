@@ -14,10 +14,11 @@ Source/
     Config/        # 应用/实验配置，依赖 Reflection
     Plugins/       # 逻辑插件注册、依赖和生命周期
     Platform/      # 窗口、输入与 SDL wrapper
-    Assets/        # 资产引用、图片、网格及导入 wrapper
+    AssetTypes/    # 轻量引用、头部、来源记录和 catalog
+    Assets/        # 原生异步加载/保存、依赖解析、缓存和图片 wrapper
     Materials/     # CPU 材质定义、实例、semantic 和资源源数据（仅 Core/Math）
     Scene/         # 独立 CPU 模型、Main 逻辑场景、清单与反射注册
-    AssetImport/   # glTF 场景适配，通过 Assets / IO 加载
+    AssetImport/   # 离线 glTF/JSON 转换、增量导入和完整依赖发布
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
     RHI/           # 公共图形契约、能力查询、后端注册表
     Renderer/      # render session / primitive / resources / SceneInstance / Model 桥接 / RenderGraph
@@ -32,7 +33,8 @@ Source/
     SceneViewer/   # 场景实体的交互、相机及空间剔除诊断
     RenderDoc/     # 可选抓帧服务的设备创建前生命周期
   Applications/
-    Viewer/        # 应用入口与模块组装
+    Viewer/        # 原生资产应用入口与模块组装
+    AssetTool/     # 独立 import / inspect / validate / catalog / upgrade CLI
   Tests/           # 对应模块的单元测试及 Integration 验收
 ```
 
@@ -43,13 +45,13 @@ Source/Runtime/Assets/
   CMakeLists.txt
   Public/Hyperion/Assets/Assets.h
   Private/AssetReference.cpp
-  Private/Adapters/GltfMesh.cpp
+  Private/NativeAsset.cpp
   Private/Adapters/Images.cpp
 ```
 
 调用方写 `#include "Hyperion/Assets/Assets.h"`，并在自己的 CMake target 声明依赖。只有公共接口确实依赖的模块使用 `PUBLIC`；实现细节使用 `PRIVATE`。第三方库私有链接，第三方类型不能出现在引擎公共接口中。`tools/CheckBoundaries.py` 检查模块依赖声明、私有头越界、第三方 include 和依赖方向。
 
-`Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection、Materials，保存静态模型和节点层级，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 的 Model 桥接将 CPU 数据注册为 Render primitives，共享资源服务管理 GPU 资源，由 session 统一收集和提交场景 pass。完整线程/所有权契约见 [RenderPrimitives.md](RenderPrimitives.md)。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
+`Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection、AssetTypes、Materials，保存静态模型和节点层级，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 的 Model 桥接将 CPU 数据注册为 Render primitives，共享资源服务管理 GPU 资源，由 session 统一收集和提交场景 pass。完整线程/所有权契约见 [RenderPrimitives.md](RenderPrimitives.md)。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
 
 Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Containers/`；仅供某个模块使用的工具留在该模块 `Private`，避免把所有辅助代码集中进一个无边界的 Utils 模块。当前 Core 接口数量少，后续增长时再按这些概念拆分。
 

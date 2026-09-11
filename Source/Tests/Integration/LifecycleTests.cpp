@@ -1,6 +1,7 @@
-#include "Hyperion/AssetImport/GltfImport.h"
+#include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
+#include "Hyperion/Scene/Model.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
@@ -47,19 +48,19 @@ void CheckAssetRetry(FTaskSystem& InTasks)
 	auto Files = std::make_shared<FMemoryFileSystem>();
 	FIOService IO(InTasks, Files);
 	FAssetService Assets(IO);
-	RegisterGltfImporter(Assets);
+
 	const auto Root = std::filesystem::absolute("lifecycle-assets").lexically_normal();
 	FLocalFileSystem Local;
-	const auto FixtureRoot = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
-	const auto Gltf = Local.Read(FixtureRoot / "Showcase.gltf", 1024 * 1024);
-	Files->WriteAtomic(Root / "Showcase.gltf", Gltf);
-	auto Failed = Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf");
+	const auto FixtureRoot = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/native";
+	const auto Gltf = Local.Read(FixtureRoot / "Showcase-gltf.hasset", 1024 * 1024);
+	Files->WriteAtomic(Root / "Showcase-gltf.hasset", std::span(Gltf).first(16));
+	auto Failed = Assets.LoadAsync<FModelAsset>(Root / "Showcase-gltf.hasset");
 	Rejects(
 	    [&]
 	    {
 		    Failed.Get(InTasks);
 	    });
-	// Supply all fixture dependencies after the shared producer has failed.
+	// Replace the truncated native asset after the shared producer has failed.
 	for (const auto& File : std::filesystem::directory_iterator(FixtureRoot))
 	{
 		if (File.is_regular_file())
@@ -67,16 +68,16 @@ void CheckAssetRetry(FTaskSystem& InTasks)
 			Files->WriteAtomic(Root / File.path().filename(), Local.Read(File.path(), 1024 * 1024));
 		}
 	}
-	auto Unrelated = Assets.LoadAsync<FModelAsset>(Root / "Showcase.glb").Get(InTasks);
+	auto Unrelated = Assets.LoadAsync<FModelAsset>(Root / "Showcase-glb.hasset").Get(InTasks);
 	const auto Reads = IO.Statistics().Reads.load();
-	auto Retry = Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf");
-	auto Shared = Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf");
-	auto Cancelled = Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf");
+	auto Retry = Assets.LoadAsync<FModelAsset>(Root / "Showcase-gltf.hasset");
+	auto Shared = Assets.LoadAsync<FModelAsset>(Root / "Showcase-gltf.hasset");
+	auto Cancelled = Assets.LoadAsync<FModelAsset>(Root / "Showcase-gltf.hasset");
 	Cancelled.Cancel();
 	const auto Model = Retry.Get(InTasks);
 	HYP_CHECK(Model == Shared.Get(InTasks));
-	HYP_CHECK(IO.Statistics().Reads == Reads + 3);
-	HYP_CHECK(Assets.LoadAsync<FModelAsset>(Root / "Showcase.glb").Get(InTasks) == Unrelated);
+	HYP_CHECK(IO.Statistics().Reads == Reads + 1);
+	HYP_CHECK(Assets.LoadAsync<FModelAsset>(Root / "Showcase-glb.hasset").Get(InTasks) == Unrelated);
 	Rejects(
 	    [&]
 	    {

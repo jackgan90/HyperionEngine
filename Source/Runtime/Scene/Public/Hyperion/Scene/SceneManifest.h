@@ -1,23 +1,23 @@
 #pragma once
+#include "Hyperion/AssetTypes/AssetTypes.h"
 #include "Hyperion/Scene/Model.h"
-#include <string_view>
 
 namespace Hyperion
 {
 struct FSceneAssetEntry
 {
 	std::string Id;
-	std::string Path;
+	FAssetRef Reference;
 };
 
 struct FSceneInstanceEntry
 {
 	std::string Id;
 	std::string Asset;
-	FVec3 Translation;
-	FVec4 Rotation{0, 0, 0, 1};
-	FVec3 Scale{1, 1, 1};
+	FMat4 Transform = Identity();
 	bool bVisible = true;
+	std::string Name;
+	FMaterialOverride Material;
 };
 
 struct FSceneManifest
@@ -31,7 +31,7 @@ struct FSceneManifest
 };
 
 void ValidateSceneManifest(const FSceneManifest& InManifest);
-FSceneManifest DecodeSceneManifest(std::string_view InText);
+void RegisterSceneAssetTypes(FRecordRegistry& InRegistry);
 template<> const FRecordDescriptor& RecordType<FSceneAssetEntry>();
 template<> const FRecordDescriptor& RecordType<FSceneInstanceEntry>();
 template<> const FRecordDescriptor& RecordType<FSceneManifest>();

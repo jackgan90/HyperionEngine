@@ -7,13 +7,6 @@
 
 namespace Hyperion
 {
-struct FMaterialOverride
-{
-	std::optional<FVec4> BaseColor;
-	std::optional<float> Metallic;
-	std::optional<float> Roughness;
-};
-
 // Prepared once on a loader/Worker, shared by independently transformed instances.
 struct FSceneModelData
 {

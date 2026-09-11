@@ -9,6 +9,11 @@ FBytes FLocalFileSystem::Read(const std::filesystem::path& InPath, std::size_t I
 	std::ifstream File(InPath, std::ios::binary | std::ios::ate);
 	if (!File)
 	{
+		std::error_code Error;
+		if (!std::filesystem::exists(InPath, Error) && !Error)
+		{
+			throw FFileNotFound("File not found: " + InPath.generic_string());
+		}
 		throw std::runtime_error("Cannot read file: " + InPath.generic_string());
 	}
 	const auto Size = File.tellg();

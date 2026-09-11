@@ -29,31 +29,46 @@ std::shared_ptr<FModelAsset> MakeModel()
 	return Model;
 }
 
+class FGateFileSystem final : public IFileSystem
+{
+public:
+	std::atomic<bool> bRelease{false};
+	std::atomic<bool> bEntered{false};
+	bool bEnabled{};
+	FLocalFileSystem Local;
+
+	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
+	{
+		if (bEnabled && InPath.filename() == "SceneRuntime.model.hasset")
+		{
+			bEntered = true;
+			while (!bRelease)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+		}
+		return Local.Read(InPath, InLimit);
+	}
+
+	void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) override
+	{
+		Local.WriteAtomic(InPath, InBytes);
+	}
+};
+
 struct FSceneFixture
 {
 	FTaskSystem Tasks{2, 1};
-	FIOService IO{Tasks};
+	std::shared_ptr<FGateFileSystem> Files = std::make_shared<FGateFileSystem>();
+	FIOService IO{Tasks, Files};
 	FAssetService Assets{IO};
 	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "scene-instance-shaders"};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<FRenderSession> Session;
-	std::atomic<bool> bRelease{false};
-	std::atomic<bool> bEntered{false};
 
 	FSceneFixture()
 	{
-		RegisterSceneManifestLoader(Assets);
-		Assets.Register({RecordType<FModelAsset>().Id,
-		                 {".model"},
-		                 [this](FAssetLoadContext&)
-		                 {
-			                 bEntered = true;
-			                 while (!bRelease)
-			                 {
-				                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
-			                 }
-			                 return MakeModel();
-		                 }});
+		RegisterSceneAssetTypes(Assets.Types());
 		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 		                          [&]
 		                          {
@@ -62,18 +77,21 @@ struct FSceneFixture
 			                          Device = Registry.CreateDevice(ERHIBackend::D3D12);
 		                          }));
 		Session = std::make_unique<FRenderSession>(Tasks, *Device, Compiler);
-		IO.WriteAsync("SceneRuntime.model", {std::byte{0}}).Get(Tasks);
-		const std::string Manifest = R"({"type":"hyperion.scene","schema_version":1,
-"assets":[{"id":"good","path":"SceneRuntime.model"},{"id":"bad","path":"MissingRuntime.model"}],
-"instances":[{"id":"one","asset":"good"},{"id":"two","asset":"good"},{"id":"failed","asset":"bad"}],
-"camera":{"eye":[0,1,7],"target":[0,0,0]}})";
-		const auto Bytes = std::as_bytes(std::span(Manifest));
-		IO.WriteAsync("SceneRuntime.json", {Bytes.begin(), Bytes.end()}).Get(Tasks);
+		const auto Model = MakeModel();
+		IO.WriteAsync("SceneRuntime.model.hasset", EncodeAsset(RecordType<FModelAsset>(), Model.get()).Bytes)
+		    .Get(Tasks);
+		FSceneManifest Manifest;
+		Manifest.Assets = {{"good", {"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""}},
+		                   {"bad", {"", "MissingRuntime.hasset", RecordType<FModelAsset>().Id, ""}}};
+		Manifest.Instances = {{"one", "good"}, {"two", "good"}, {"failed", "bad"}};
+		Manifest.Eye = {0, 1, 7};
+		IO.WriteAsync("SceneRuntime.hasset", EncodeAsset(RecordType<FSceneManifest>(), &Manifest).Bytes).Get(Tasks);
+		Files->bEnabled = true;
 	}
 
 	~FSceneFixture()
 	{
-		bRelease = true;
+		Files->bRelease = true;
 		Assets.Drain();
 		Session.reset();
 		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
@@ -100,7 +118,7 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 {
 	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
 
-	// Release the codec before Scene unwinds even when an assertion fails.
+	// Release the IO gate before Scene unwinds even when an assertion fails.
 	struct FRelease
 	{
 		std::atomic<bool>& bFlag;
@@ -109,13 +127,13 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 		{
 			bFlag = true;
 		}
-	} Release{InFixture.bRelease};
+	} Release{InFixture.Files->bRelease};
 
-	Scene.Load("SceneRuntime.json");
+	Scene.Load("SceneRuntime.hasset");
 	Await(Scene,
 	      [&]
 	      {
-		      return Scene.GetModels().size() == 3 && InFixture.bEntered;
+		      return Scene.GetModels().size() == 3 && InFixture.Files->bEntered;
 	      });
 	const auto Removed = Scene.GetModels()[0].Handle;
 	const auto Kept = Scene.GetModels()[1].Handle;
@@ -125,13 +143,15 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	HYP_CHECK(Added.Slot == Removed.Slot && Added.Generation != Removed.Generation);
 	auto Model = *Scene.Find(Kept);
 	Model.World = Translation({4, 0, 0});
+	Model.World.Values[4] = .35f;
+	Model.Material.Roughness = .27f;
 	Model.bVisible = false;
 	HYP_CHECK(Scene.Update(Kept, Model));
 	const auto Overridden = Scene.Add({"explicit data"}, "good");
 	auto Explicit = *Scene.Find(Overridden);
 	Explicit.Data = PrepareSceneModel(MakeModel());
 	HYP_CHECK(Scene.Update(Overridden, Explicit));
-	InFixture.bRelease = true;
+	InFixture.Files->bRelease = true;
 	Await(Scene,
 	      [&]
 	      {
@@ -141,6 +161,16 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	HYP_CHECK(Scene.Find(Kept)->World.Values[12] == 4 && !Scene.Find(Kept)->bVisible);
 	HYP_CHECK(Scene.Find(Kept)->Data == Scene.Find(Added)->Data);
 	HYP_CHECK(Scene.Find(Overridden)->Data == Explicit.Data);
+	bool bSnapshotRejected{};
+	try
+	{
+		Scene.Snapshot("edited.hasset");
+	}
+	catch (const std::runtime_error&)
+	{
+		bSnapshotRejected = true;
+	}
+	HYP_CHECK(bSnapshotRejected);
 	HYP_CHECK(Scene.Remove(Overridden));
 	const auto Failure = Scene.GetError(Failed);
 	HYP_CHECK(!Failure.empty());
@@ -158,10 +188,28 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	HYP_CHECK(Scene.Remove(Reused));
 	Scene.Tick();
 	HYP_CHECK(Scene.GetStatus().bReady && Scene.GetStatus().Models == 2);
+	const auto Snapshot = Scene.Snapshot("subdirectory/edited.hasset");
+	HYP_CHECK(Snapshot.Instances[0].Id == "two" && Snapshot.Instances[0].Transform.Values[4] == .35f);
+	HYP_CHECK(Snapshot.Instances[0].Material.Roughness == .27f && !Snapshot.Instances[0].bVisible);
+	HYP_CHECK(Snapshot.Assets.size() == 1 && Snapshot.Assets[0].Reference.Path == "../SceneRuntime.model.hasset");
+	auto Generic = *Scene.Find(Kept);
+	// Snapshot validates representation even when a generic selection cannot be rendered.
+	Generic.SectionSurfaces.emplace(0, FSceneMaterialSelection{});
+	Scene.Update(Kept, Generic);
+	bSnapshotRejected = false;
+	try
+	{
+		Scene.Snapshot("edited.hasset");
+	}
+	catch (const std::runtime_error&)
+	{
+		bSnapshotRejected = true;
+	}
+	HYP_CHECK(bSnapshotRejected);
 	Scene.Close();
 	Scene.Close();
 	HYP_CHECK(Scene.GetStatus().bClosed && Scene.GetModels().empty());
-	Scene.Load("SceneRuntime.json");
+	Scene.Load("SceneRuntime.hasset");
 	Await(Scene,
 	      [&]
 	      {
@@ -173,17 +221,17 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 void CheckClosePending(FSceneFixture& InFixture)
 {
 	InFixture.Assets.ClearCache();
-	InFixture.bRelease = false;
-	InFixture.bEntered = false;
+	InFixture.Files->bRelease = false;
+	InFixture.Files->bEntered = false;
 	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
 	std::jthread Release(
 	    [&]
 	    {
-		    // An admitted external codec need not observe request cancellation itself.
+		    // An admitted file read completes before scene shutdown drains preparation.
 		    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		    InFixture.bRelease = true;
+		    InFixture.Files->bRelease = true;
 	    });
-	Scene.Load("SceneRuntime.json");
+	Scene.Load("SceneRuntime.hasset");
 	Await(Scene,
 	      [&]
 	      {

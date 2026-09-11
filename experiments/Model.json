@@ -9,7 +9,7 @@
     "workers": 4,
     "rhi_threads": 2,
     "rhi_backend": "d3d12",
-    "model_source": "assets/Models/Showcase.gltf",
+    "model_source": "out/content/Models/Showcase.hasset",
     "plugins": ["model-viewer", "debug-ui"],
     "show_gui": true,
     "vsync": true,

@@ -58,7 +58,7 @@ static FBytes Base64(std::string_view InText)
 	return Bytes;
 }
 
-std::shared_ptr<const FBytes> ReadUri(FAssetLoadContext& InContext, const char* InUri)
+std::shared_ptr<const FBytes> ReadUri(FAssetImportContext& InContext, const char* InUri)
 {
 	Require(InUri != nullptr, "missing dependency URI");
 	const std::string Uri(InUri);
