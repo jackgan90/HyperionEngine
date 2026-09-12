@@ -2,7 +2,8 @@
 
 namespace Hyperion
 {
-std::shared_ptr<const FSceneModelData> PrepareSceneModel(std::shared_ptr<const FModelAsset> InAsset)
+std::shared_ptr<const FSceneModelData> PrepareSceneModel(
+    std::shared_ptr<const FModelAsset> InAsset, std::vector<std::shared_ptr<const FMaterialAssetData>> InMaterials)
 {
 	if (!InAsset)
 	{
@@ -10,6 +11,7 @@ std::shared_ptr<const FSceneModelData> PrepareSceneModel(std::shared_ptr<const F
 	}
 	auto Data = std::make_shared<FSceneModelData>();
 	Data->Asset = std::move(InAsset);
+	Data->Materials = std::move(InMaterials);
 	Data->Instances = ModelInstances(*Data->Asset);
 	for (const auto& Primitive : Data->Asset->Primitives)
 	{

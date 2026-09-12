@@ -67,6 +67,8 @@ void FSceneInstance::Tick()
 			P.BeginManifest();
 		}
 		P.PollModels();
+		P.PollMaterials();
+		P.PublishModels();
 		P.Bridge->Flush();
 		P.UpdateStatus();
 	}
@@ -87,9 +89,21 @@ void FSceneInstance::Close()
 	P.Tasks.Require({EDomain::Main});
 	P.Status.bClosed = true;
 	P.ManifestRequest.Cancel();
+	P.MaterialCancellation.Cancel();
+	try
+	{
+		P.Tasks.Wait(P.MaterialPreparation.Task());
+	}
+	catch (...)
+	{
+	}
+	P.MaterialPreparation = {};
+	P.SelectedMaterials.clear();
+	P.PendingMaterials.clear();
+	P.bMaterialsComplete = true;
 	for (auto& [Id, Load] : P.Loads)
 	{
-		Load.Request.Cancel();
+		Load.Cancellation.Cancel();
 		try
 		{
 			P.Tasks.Wait(Load.Preparation.Task());
@@ -145,21 +159,28 @@ bool FSceneInstance::Update(FSceneHandle InHandle, FSceneModel InModel)
 	{
 		return false;
 	}
+	const auto Instance = std::find_if(P.Models.begin(), P.Models.end(),
+	                                   [InHandle](const auto& InInstance)
+	                                   {
+		                                   return InInstance.Handle == InHandle;
+	                                   });
+	const auto Pending = Instance == P.Models.end() ? P.PendingMaterials.end() : P.PendingMaterials.find(Instance->Id);
+	auto Edits = Pending == P.PendingMaterials.end() ? std::optional<FImpl::FPendingMaterial>{}
+	                                                 : P.PrepareMaterialEdits(Pending->second, *Existing, InModel);
 	const bool bDataChanged = Existing->Data != InModel.Data;
 	if (!P.Scene.Update(InHandle, std::move(InModel)))
 	{
 		return false;
 	}
-	if (bDataChanged)
+	if (bDataChanged && Instance != P.Models.end())
 	{
-		for (auto& Model : P.Models)
-		{
-			if (Model.Handle == InHandle)
-			{
-				Model.Asset.clear(); // Explicit replacement is no longer a pending manifest instance.
-				break;
-			}
-		}
+		Instance->Asset.clear(); // Explicit replacement is no longer a pending manifest instance.
+		P.PendingMaterials.erase(Instance->Id);
+		P.SelectedMaterials.erase(Instance->Id);
+	}
+	else if (Edits)
+	{
+		Pending->second = std::move(*Edits);
 	}
 	P.bStatusDirty = true;
 	return true;
@@ -174,9 +195,15 @@ bool FSceneInstance::Remove(FSceneHandle InHandle)
 		return false;
 	}
 	std::erase_if(P.Models,
-	              [InHandle](const auto& InModel)
+	              [&P, InHandle](const auto& InModel)
 	              {
-		              return InModel.Handle == InHandle;
+		              if (InModel.Handle != InHandle)
+		              {
+			              return false;
+		              }
+		              P.PendingMaterials.erase(InModel.Id);
+		              P.SelectedMaterials.erase(InModel.Id);
+		              return true;
 	              });
 	P.bStatusDirty = true;
 	return true;
@@ -234,6 +261,11 @@ std::string FSceneInstance::GetError(FSceneHandle InHandle) const
 	{
 		if (Model.Handle == InHandle)
 		{
+			const auto Selection = Impl->SelectedMaterials.find(Model.Id);
+			if (Selection != Impl->SelectedMaterials.end() && !Selection->second.Error.empty())
+			{
+				return Selection->second.Error;
+			}
 			const auto Load = Impl->Loads.find(Model.Asset);
 			if (Load != Impl->Loads.end() && !Load->second.Error.empty())
 			{

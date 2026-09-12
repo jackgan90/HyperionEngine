@@ -2,6 +2,7 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneInstance.h"
+#include "Support/ModelAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <atomic>
@@ -13,9 +14,9 @@ using namespace Hyperion;
 
 namespace
 {
-std::shared_ptr<FModelAsset> MakeModel()
+std::shared_ptr<FModelSource> MakeModel()
 {
-	auto Model = std::make_shared<FModelAsset>();
+	auto Model = std::make_shared<FModelSource>();
 	FModelPrimitive Primitive;
 	Primitive.Positions = {-1, -1, 0, 1, -1, 0, 0, 1, 0};
 	Primitive.Indices = {0, 1, 2};
@@ -77,8 +78,25 @@ struct FSceneFixture
 			                          Device = Registry.CreateDevice(ERHIBackend::D3D12);
 		                          }));
 		Session = std::make_unique<FRenderSession>(Tasks, *Device, Compiler);
-		const auto Model = MakeModel();
-		IO.WriteAsync("SceneRuntime.model.hasset", EncodeAsset(RecordType<FModelAsset>(), Model.get()).Bytes)
+		auto Split = SplitModelSource(*MakeModel());
+		for (const auto& Product : Split.Products)
+		{
+			auto Object = ReadRecord(*Product.Type, WriteRecord(*Product.Type, Product.Object.get()));
+			VisitRecord(*Product.Type, Object.get(),
+			            [](const FRecordDescriptor& InType, const void* InValue, std::string_view)
+			            {
+				            if (InType.CppType == typeid(FAssetRef))
+				            {
+					            const_cast<FAssetRef*>(static_cast<const FAssetRef*>(InValue))->Path += ".hasset";
+				            }
+			            });
+			IO.WriteAsync("@" + Product.Key + ".hasset", EncodeAsset(*Product.Type, Object.get()).Bytes).Get(Tasks);
+		}
+		for (auto& Reference : Split.Model.MaterialSlots)
+		{
+			Reference.Path += ".hasset";
+		}
+		IO.WriteAsync("SceneRuntime.model.hasset", EncodeAsset(RecordType<FModelAsset>(), &Split.Model).Bytes)
 		    .Get(Tasks);
 		FSceneManifest Manifest;
 		Manifest.Assets = {{"good", {"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""}},
@@ -149,7 +167,7 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	HYP_CHECK(Scene.Update(Kept, Model));
 	const auto Overridden = Scene.Add({"explicit data"}, "good");
 	auto Explicit = *Scene.Find(Overridden);
-	Explicit.Data = PrepareSceneModel(MakeModel());
+	Explicit.Data = PrepareSourceModel(MakeModel());
 	HYP_CHECK(Scene.Update(Overridden, Explicit));
 	InFixture.Files->bRelease = true;
 	Await(Scene,
@@ -194,7 +212,10 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	HYP_CHECK(Snapshot.Assets.size() == 1 && Snapshot.Assets[0].Reference.Path == "../SceneRuntime.model.hasset");
 	auto Generic = *Scene.Find(Kept);
 	// Snapshot validates representation even when a generic selection cannot be rendered.
-	Generic.SectionSurfaces.emplace(0, FSceneMaterialSelection{});
+	FSceneMaterialSelection Unbacked;
+	Unbacked.Snapshot =
+	    InFixture.Session->GetResources().PrepareMaterialAsset(Scene.Find(Kept)->Data->Materials.front());
+	Generic.SectionSurfaces.emplace(0, std::move(Unbacked));
 	Scene.Update(Kept, Generic);
 	bSnapshotRejected = false;
 	try
@@ -242,6 +263,96 @@ void CheckClosePending(FSceneFixture& InFixture)
 	HYP_CHECK(Scene.GetStatus().bClosed && Scene.GetModels().empty());
 }
 
+void RejectPendingSnapshot(FSceneInstance& InScene)
+{
+	bool bRejected{};
+	try
+	{
+		InScene.Snapshot("SavedPending.hasset");
+	}
+	catch (const std::runtime_error& Error)
+	{
+		bRejected = std::string(Error.what()).find("pending or failed material selection") != std::string::npos;
+	}
+	HYP_CHECK(bRejected);
+}
+
+void CheckPendingMaterialEdits(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	F.Assets.ClearCache();
+	F.Files->bRelease = false;
+	F.Files->bEntered = false;
+	FSceneManifest Manifest;
+	Manifest.Assets = {{"good", {"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""}}};
+	Manifest.Instances = {{"one", "good"}, {"cleared", "good"}};
+	for (auto& Entry : Manifest.Instances)
+	{
+		Entry.Surface.Reference = FAssetRef{"", "@material-0.hasset", RecordType<FMaterialAsset>().Id, ""};
+		Entry.Surface.Overrides = {{"Pbr.RoughnessFactor", PersistMaterialValue(FMaterialValue::Float(.15f))}};
+		Entry.SectionSurfaces = {{0, Entry.Surface}};
+	}
+	F.IO.WriteAsync("PendingMaterial.hasset", EncodeAsset(RecordType<FSceneManifest>(), &Manifest).Bytes).Get(F.Tasks);
+	FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
+
+	struct FRelease
+	{
+		std::atomic<bool>& bFlag;
+
+		~FRelease()
+		{
+			bFlag = true;
+		}
+	} Release{F.Files->bRelease};
+
+	Scene.Load("PendingMaterial.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetModels().size() == 2 && F.Files->bEntered;
+	      });
+	RejectPendingSnapshot(Scene);
+	const auto Handle = Scene.GetModels()[0].Handle;
+	auto Edited = *Scene.Find(Handle);
+	Edited.World = Translation({2, 0, 0});
+	Edited.Surface.Overrides = {{"Pbr.RoughnessFactor", FMaterialValue::Float(.62f)}};
+	Edited.SectionSurfaces[0].Overrides = {{"Pbr.MetallicFactor", FMaterialValue::Float(.4f)}};
+	HYP_CHECK(Scene.Update(Handle, Edited));
+	const auto Cleared = Scene.GetModels()[1].Handle;
+	HYP_CHECK(Scene.Update(Cleared, Edited));
+	Edited.Surface = {};
+	Edited.SectionSurfaces.clear();
+	HYP_CHECK(Scene.Update(Cleared, Edited));
+	F.Files->bRelease = true;
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().ReadyModels == 2;
+	      });
+	HYP_CHECK(Scene.Find(Handle)->Surface.Overrides[0].Value == FMaterialValue::Float(.62f));
+	HYP_CHECK(Scene.Find(Handle)->SectionSurfaces.at(0).Overrides[0].Value == FMaterialValue::Float(.4f));
+	HYP_CHECK(Scene.Find(Handle)->World.Values[12] == 2);
+	HYP_CHECK(!Scene.Find(Cleared)->Surface.Reference && Scene.Find(Cleared)->Surface.Overrides.empty());
+	HYP_CHECK(Scene.Find(Cleared)->SectionSurfaces.empty());
+	const auto Snapshot = Scene.Snapshot("SavedMaterialEdits.hasset");
+	HYP_CHECK(Snapshot.Instances[0].Surface.Overrides[0].Value.Words == FMaterialValue::Float(.62f).Words);
+	HYP_CHECK(Snapshot.Instances[0].SectionSurfaces.size() == 1 && Snapshot.Instances[1].SectionSurfaces.empty());
+	Scene.Close();
+	Manifest.Instances.resize(1);
+	Manifest.Instances[0].Surface.Reference->Path = "MissingMaterial.hasset";
+	F.IO.WriteAsync("FailedMaterial.hasset", EncodeAsset(RecordType<FSceneManifest>(), &Manifest).Bytes).Get(F.Tasks);
+	Scene.Load("FailedMaterial.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().FailedModels == 1;
+	      });
+	RejectPendingSnapshot(Scene);
+	HYP_CHECK(Scene.Remove(Scene.GetModels()[0].Handle));
+	HYP_CHECK(Scene.Snapshot("RemovedFailedMaterial.hasset").Instances.empty());
+	std::cout << "Pending/failed material saves reject; pending whole/section edits and clears survive publication\n";
+}
+
 void CheckClosedDependencies()
 {
 	auto Fixture = std::make_unique<FSceneFixture>();
@@ -260,6 +371,7 @@ int main()
 		FSceneFixture Fixture;
 		CheckLoadingEdits(Fixture);
 		CheckClosePending(Fixture);
+		CheckPendingMaterialEdits(Fixture);
 		CheckClosedDependencies();
 		std::cout << "Independent scene loading, shared models, generation-safe edits and close passed\n";
 	}

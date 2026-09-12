@@ -2,12 +2,6 @@
 
 namespace Hyperion
 {
-FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources,
-               std::shared_ptr<const FModelAsset> InAsset)
-    : FModel(InScene, InResources, FSceneModel{"", PrepareSceneModel(std::move(InAsset))})
-{
-}
-
 FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources, const FSceneModel& InModel)
     : FModel(InScene, InResources, InModel, false)
 {
@@ -25,7 +19,19 @@ FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources,
 	Data = InModel.Data;
 	Asset = Data->Asset;
 	Instances = Data->Instances;
-	Resource = Resources.RequestModel(Asset);
+	DefaultMaterials = Data->MaterialSnapshots;
+	if (DefaultMaterials.empty())
+	{
+		for (const auto& Material : Data->Materials)
+		{
+			DefaultMaterials.push_back(Resources.ResolveMaterialAsset(Material));
+		}
+	}
+	if (DefaultMaterials.size() != Asset->MaterialSlots.size())
+	{
+		throw std::invalid_argument("Model requires every resolved default material");
+	}
+	Resource = Resources.RequestModel(Data);
 	if (!bInDeferred)
 	{
 		FFrozenMaterials Frozen;
@@ -83,6 +89,10 @@ FModel::FPreparedUpdate FModel::PrepareState(const FSceneModel& InModel, FFrozen
 		State.LocalBounds = Data->PrimitiveBounds[State.Section];
 		State.ObjectParameters = InModel.Surface.Overrides;
 		auto Snapshot = ModelSnapshot;
+		if (!Snapshot)
+		{
+			Snapshot = DefaultMaterials.at(Asset->Primitives[State.Section].Material);
+		}
 		const auto Selection = InModel.SectionSurfaces.find(State.Section);
 		if (Selection != InModel.SectionSurfaces.end())
 		{
@@ -155,7 +165,8 @@ bool FModel::IsReady() const
 	}
 	for (const auto& Binding : Bindings)
 	{
-		if (Binding.GetStatus().State != ERenderPrimitiveStatus::Ready)
+		const auto Status = Binding.GetStatus();
+		if (Status.Revision != Revision || Status.State != ERenderPrimitiveStatus::Ready)
 		{
 			return false;
 		}

@@ -93,8 +93,8 @@ def capture(experiment, frame_count, capture_frames):
 
 
 capture('Triangle', 24, [8, 16])
-capture('Model', 100, [80])
-capture('Shadows', 100, [80])
+capture('Model', 900, [800])
+capture('Shadows', 900, [800])
 
 missing = work / 'missing' / 'renderdoc.dll'
 text = run('missing-runtime', [viewer, '--frames', '8', '--hidden', '--renderdoc-library', missing])

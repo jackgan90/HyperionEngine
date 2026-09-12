@@ -138,6 +138,8 @@ public:
 	FAssetRequest LoadReferenceAsync(const FAssetRef& InReference, const std::filesystem::path& InContainingAsset);
 	FAssetRequest LoadByIdAsync(std::string_view InId);
 	TAsyncResult<FAssetGraph> LoadGraphAsync(const std::filesystem::path& InPath);
+	TAsyncResult<FAssetGraph> LoadGraphAsync(const FAssetRef& InReference,
+	                                         const std::filesystem::path& InContainingAsset);
 	void SetCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory);
 	std::filesystem::path Resolve(const FAssetRef& InReference, const std::filesystem::path& InContainingAsset) const;
 
@@ -176,6 +178,7 @@ public:
 
 private:
 	FAssetRequest Load(const std::filesystem::path& InPath, bool bInGraphDependency);
+	TAsyncResult<FAssetGraph> LoadGraph(FAssetRequest InRoot);
 	TAsyncResult<bool> Save(std::filesystem::path InPath, const FRecordDescriptor& InType,
 	                        std::shared_ptr<const void> InSnapshot);
 	struct FImpl;

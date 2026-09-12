@@ -1,6 +1,7 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
+#include "Support/ModelAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <chrono>
@@ -28,9 +29,9 @@ void Rejects(const std::function<void()>& InAction)
 	throw std::runtime_error("Invalid deferred configuration accepted");
 }
 
-std::shared_ptr<const FModelAsset> Quad(FModelMaterial InMaterial, bool bInNormalMap = false)
+std::shared_ptr<const FModelSource> Quad(FModelMaterial InMaterial, bool bInNormalMap = false)
 {
-	FModelAsset Asset;
+	FModelSource Asset;
 	FModelPrimitive Primitive;
 	Primitive.Positions = {-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0};
 	Primitive.Normals = {0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1};
@@ -59,10 +60,10 @@ std::shared_ptr<const FModelAsset> Quad(FModelMaterial InMaterial, bool bInNorma
 	Node.Primitives = {0};
 	Asset.Nodes.push_back(Node);
 	Asset.Roots = {0};
-	return std::make_shared<const FModelAsset>(std::move(Asset));
+	return std::make_shared<const FModelSource>(std::move(Asset));
 }
 
-void Await(const FModel& InModel)
+void Await(const FSourceModel& InModel)
 {
 	const auto End = std::chrono::steady_clock::now() + std::chrono::seconds(20);
 	while (!InModel.IsReady() && InModel.GetError().empty() && std::chrono::steady_clock::now() < End)
@@ -227,7 +228,7 @@ void CheckHdrAndRoutes(FFixture& InFixture)
 	Material.BaseColor = {0, 0, 0, 1};
 	Material.Metallic = 0;
 	Material.Emissive = {4, 2, 1};
-	FModel Surface(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Surface(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Await(Surface);
 	const auto Deferred = InFixture.Frame();
 	const auto Forward = InFixture.Frame(ESceneRenderPipeline::Forward);
@@ -238,7 +239,7 @@ void CheckHdrAndRoutes(FFixture& InFixture)
 	Material.bUnlit = true;
 	Material.BaseColor = {.2f, .4f, .8f, .5f};
 	Material.AlphaMode = EAlphaMode::Blend;
-	FModel Transparent(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Transparent(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Transparent.SetTransform(Translation({0, 0, 1}));
 	Await(Transparent);
 	const auto Blended = InFixture.Frame();
@@ -249,7 +250,7 @@ void CheckHdrAndRoutes(FFixture& InFixture)
 	Transparent.Remove();
 	Surface.Remove();
 	Material.AlphaMode = EAlphaMode::Opaque;
-	FModel Unlit(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Unlit(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Await(Unlit);
 	Similar(InFixture.Frame(), InFixture.Frame(ESceneRenderPipeline::Forward), .008f);
 	HYP_CHECK(InFixture.Statistics.MainView().VisibleItems == 1);
@@ -262,10 +263,10 @@ void CheckDepthOrdering(FFixture& InFixture)
 	Material.bUnlit = true;
 	Material.BaseColor = {.8f, 0, 0, 1};
 	// Create the nearer surface first so wrong depth state lets the later far draw overwrite it.
-	FModel Near(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Near(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Near.SetTransform(Translation({0, 0, 1}));
 	Material.BaseColor = {0, 0, .8f, 1};
-	FModel Far(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Far(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Await(Near);
 	Await(Far);
 	const auto Opaque = InFixture.Frame();
@@ -276,10 +277,10 @@ void CheckDepthOrdering(FFixture& InFixture)
 	Far.Remove();
 	Material.AlphaMode = EAlphaMode::Blend;
 	Material.BaseColor = {.8f, 0, 0, .5f};
-	FModel NearBlend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel NearBlend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	NearBlend.SetTransform(Translation({0, 0, 1}));
 	Material.BaseColor = {0, 0, .8f, .5f};
-	FModel FarBlend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel FarBlend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Await(NearBlend);
 	Await(FarBlend);
 	const auto SavedClear = InFixture.Clear;
@@ -300,8 +301,8 @@ void CheckViewDepthCacheIsolation(FFixture& InFixture)
 	Material.bUnlit = true;
 	Material.BaseColor = {.8f, .2f, .1f, 1};
 	const auto Asset = Quad(Material);
-	FModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
-	FModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
 	A.SetTransform(Translation({-.5f, 0, 1}));
 	B.SetTransform(Translation({.5f, 0, 0}));
 	Await(A);
@@ -349,8 +350,8 @@ void CheckCoverageAndInstances(FFixture& InFixture)
 	Material.bDoubleSided = true;
 	Material.AlphaMode = EAlphaMode::Mask;
 	const auto Asset = Quad(Material, true);
-	FModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
-	FModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
 	A.SetTransform(Multiply(Translation({-.9f, 0, 0}), Scale({.7f, .7f, 1})));
 	B.SetTransform(Multiply(Translation({.9f, 0, 0}), Scale({.7f, .7f, 1})));
 	Await(A);
@@ -382,10 +383,10 @@ void CheckShadowContinuity(FFixture& InFixture)
 	Material.BaseColor = {.6f, .6f, .6f, 1};
 	Material.Metallic = 0;
 	Material.Roughness = 1;
-	FModel Receiver(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material, true));
+	FSourceModel Receiver(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material, true));
 	Receiver.SetTransform(Scale({4, 4, 1}));
 	Material.AlphaMode = EAlphaMode::Mask;
-	FModel Caster(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Caster(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Caster.SetTransform(Multiply(Translation({0, 0, 1}), Scale({.5f, .5f, 1})));
 	Await(Receiver);
 	Await(Caster);
@@ -417,7 +418,7 @@ void CheckQueuedGenerations(FFixture& InFixture)
 	FModelMaterial Material;
 	Material.BaseColor = {0, 0, 0, 1};
 	Material.Emissive = {.5f, .25f, .1f};
-	FModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Await(Model);
 	const auto Reference = InFixture.Frame();
 	const auto FirstFrame = InFixture.Session->FreezeFrame();
@@ -498,7 +499,7 @@ void CheckReplacementAndRecovery(FFixture& InFixture)
 {
 	FModelMaterial Material;
 	Material.BaseColor = {.5f, .5f, .5f, 1};
-	FModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	FSourceModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
 	Await(Model);
 	InFixture.Shadows.bEnabled = true;
 	InFixture.Frame();

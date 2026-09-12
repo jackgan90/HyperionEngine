@@ -1,5 +1,7 @@
 #define CGLTF_IMPLEMENTATION
 #include "GltfImportInternal.h"
+#include "Hyperion/AssetImport/MaterialImport.h"
+#include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/Core/Core.h"
 
 namespace Hyperion
@@ -50,12 +52,12 @@ class FGltfImport
 public:
 	explicit FGltfImport(FAssetImportContext& InContext)
 	    : Context(InContext), Data(ParseSource(InContext)),
-	      Model(std::static_pointer_cast<FModelAsset>(RecordType<FModelAsset>().Create())),
+	      Model(std::static_pointer_cast<FModelSource>(RecordType<FModelSource>().Create())),
 	      Total(InContext.Bytes->size()), MeshPrimitives(Data->meshes_count)
 	{
 	}
 
-	std::shared_ptr<FModelAsset> Run();
+	std::shared_ptr<FModelSource> Run();
 
 	FModelPrimitive Primitive(std::size_t InMesh, std::size_t InPrimitive)
 	{
@@ -72,7 +74,7 @@ private:
 	void SelectRoots();
 	FAssetImportContext& Context;
 	FGltfData Data;
-	std::shared_ptr<FModelAsset> Model;
+	std::shared_ptr<FModelSource> Model;
 	std::vector<std::shared_ptr<const FBytes>> OwnedBuffers;
 	std::size_t Total;
 	std::vector<std::vector<std::uint32_t>> MeshPrimitives;
@@ -149,10 +151,11 @@ void FGltfImport::LoadImages()
 		Context.Cancellation.Check();
 		const auto& Image = Raw->images[Index];
 		std::shared_ptr<const FBytes> External;
+		std::string SourcePath;
 		std::span<const std::byte> Bytes;
 		if (Image.uri)
 		{
-			External = ReadUri(Context, Image.uri);
+			External = ReadUri(Context, Image.uri, &SourcePath);
 			Bytes = *External;
 		}
 		else
@@ -164,7 +167,8 @@ void FGltfImport::LoadImages()
 		auto Pixels = DecodeImage(Bytes);
 		Require(Pixels.Rgba.size() <= MaxImportBytes - Total, "decoded image budget exceeded");
 		Total += Pixels.Rgba.size();
-		Model->Images.push_back({Name(Image.name), Pixels.Width, Pixels.Height, std::move(Pixels.Rgba)});
+		Model->Images.push_back(
+		    {Name(Image.name), Pixels.Width, Pixels.Height, std::move(Pixels.Rgba), std::move(SourcePath)});
 	}
 }
 
@@ -225,7 +229,7 @@ void FGltfImport::SelectRoots()
 	}
 }
 
-std::shared_ptr<FModelAsset> FGltfImport::Run()
+std::shared_ptr<FModelSource> FGltfImport::Run()
 {
 	const auto PathName = Context.Path.filename().u8string();
 	Model->Name.assign(reinterpret_cast<const char*>(PathName.data()), PathName.size());
@@ -237,14 +241,14 @@ std::shared_ptr<FModelAsset> FGltfImport::Run()
 	LoadMaterials(*Data, *Model);
 	LoadMeshes();
 	SelectRoots();
-	ValidateModel(*Model);
+	ValidateModelSource(*Model);
 	return Model;
 }
 
 std::shared_ptr<void> Import(FAssetImportContext& InContext)
 {
 	HYP_PERF_SCOPE_C(Assets, ImportGltf);
-	return FGltfImport(InContext).Run();
+	return EmitModelSource(InContext, *FGltfImport(InContext).Run());
 }
 
 } // namespace
@@ -257,14 +261,39 @@ FModelPrimitive Private::ConvertGltfPrimitive(FAssetImportContext& InContext, st
 
 void RegisterGltfImporter(FAssetImportService& InImports)
 {
-	InImports.Register({"hyperion.gltf", 1, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
-	InImports.Register({"hyperion.native-model-upgrade",
+	RegisterMaterialImporters(InImports);
+	InImports.Register({"hyperion.json-model",
 	                    1,
 	                    &RecordType<FModelAsset>(),
-	                    {".hasset"},
+	                    {".json"},
 	                    [](FAssetImportContext& InContext)
 	                    {
-		                    return ReadRecord(RecordType<FModelAsset>(), DecodeAsset(InContext.Bytes).Object);
+		                    return ReadRecord(
+		                        RecordType<FModelAsset>(),
+		                        DecodeAssetSourceJson(
+		                            {reinterpret_cast<const char*>(InContext.Bytes->data()), InContext.Bytes->size()}));
+	                    }});
+	InImports.Register({"hyperion.gltf", 2, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
+	InImports.Register({"hyperion.gltf-source",
+	                    1,
+	                    &RecordType<FModelSource>(),
+	                    {".gltf", ".glb"},
+	                    [](FAssetImportContext& InContext) -> std::shared_ptr<void>
+	                    {
+		                    return FGltfImport(InContext).Run();
+	                    }});
+	InImports.Register({"hyperion.native-model-upgrade",
+	                    2,
+	                    &RecordType<FModelAsset>(),
+	                    {".hasset"},
+	                    [](FAssetImportContext& InContext) -> std::shared_ptr<void>
+	                    {
+		                    const auto Document = DecodeAsset(InContext.Bytes);
+		                    if (Document.Header.SchemaVersion == 1)
+		                    {
+			                    return EmitModelSource(InContext, ReadEmbeddedModelSource(Document));
+		                    }
+		                    return ReadRecord(RecordType<FModelAsset>(), Document.Object);
 	                    }});
 }
 } // namespace Hyperion

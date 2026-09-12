@@ -55,7 +55,7 @@ void SplitFlatCorners(FModelPrimitive& InPrimitive)
 	std::iota(InPrimitive.Indices.begin(), InPrimitive.Indices.end(), 0u);
 }
 
-std::uint32_t TangentUvSet(const FModelPrimitive& InPrimitive, const FModelAsset& InModel)
+std::uint32_t TangentUvSet(const FModelPrimitive& InPrimitive, const FModelSource& InModel)
 {
 	std::uint32_t TangentUv{};
 	if (InPrimitive.Material >= 0)
@@ -74,7 +74,7 @@ std::uint32_t TangentUvSet(const FModelPrimitive& InPrimitive, const FModelAsset
 
 } // namespace
 
-FModelPrimitive ConvertPrimitive(const cgltf_primitive& InSource, const cgltf_data& InData, const FModelAsset& InModel,
+FModelPrimitive ConvertPrimitive(const cgltf_primitive& InSource, const cgltf_data& InData, const FModelSource& InModel,
                                  const char* InName, std::size_t& InTotal)
 {
 	Require(!InSource.targets_count, "morph targets are outside the static importer");

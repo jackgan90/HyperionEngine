@@ -19,7 +19,7 @@ The engine SHALL render loaded static glTF geometry with node transforms, a usab
 - **THEN** the generic renderer honors the compatible selected material without reintroducing PBR layout or mandatory depth behavior
 
 ### Requirement: Material interpretation
-The engine SHALL render supported metallic-roughness material maps and alpha/double-sided modes using role-appropriate color spaces. A Renderer-owned adapter SHALL convert existing FModelMaterial CPU data into builtin generic PBR definitions/instances, preserving serialized fields and supported UV/mip/sampler behavior. Camera, object and PBR values SHALL use the generic parameter system; builtin lighting constants SHALL come from the documented Scene provider with current default values.
+The engine SHALL render supported metallic-roughness material maps and alpha/double-sided modes using role-appropriate color spaces. Offline import SHALL convert embedded glTF material data into general reflected material assets, preserving supported UV/mip/sampler behavior. Native model rendering SHALL resolve material and texture references and honor their authored pass descriptions. Camera, object and PBR values SHALL use the generic parameter system; builtin lighting constants SHALL come from the documented Scene provider with current default values.
 
 #### Scenario: Material interpretation acceptance
 - **WHEN** a fixture combines textured opaque, masked and blended primitives
@@ -27,7 +27,7 @@ The engine SHALL render supported metallic-roughness material maps and alpha/dou
 
 #### Scenario: PBR migration parity
 - **WHEN** existing fixtures exercise unlit, normal maps, UV1, role color spaces, mip generation, mirrored transforms and double-sided surfaces
-- **THEN** the migrated generic material path preserves the established pixel results and validation behavior
+- **THEN** the independent asset path preserves the established pixel results and validation behavior
 
 ### Requirement: Nonblocking upload publication
 The engine SHALL retain staging and destination resources through necessary GPU completion and publish only ready model resource groups without per-texture idle waits. Readiness SHALL be published to Render without borrowing the Main model. Removing a loading model SHALL prevent its late preparation or upload result from registering visible primitives.
@@ -71,3 +71,14 @@ Triangle, ModelViewer and SceneViewer SHALL render through the new material syst
 #### Scenario: Existing plugin acceptance
 - **WHEN** existing triangle, model-viewer, scene-viewer and GUI acceptance workflows run
 - **THEN** configuration, loading, camera/scene controls, clipping, capture and expected pixels remain valid through the new binding path
+
+### Requirement: Shared native model resources
+Renderer SHALL reuse CPU texture sources, GPU textures and material definitions across different model assets that reference the same immutable dependencies. Old versions SHALL remain alive through existing submission fences. Readiness and failures SHALL include material and texture dependencies.
+
+#### Scenario: Two model assets share dependencies
+- **WHEN** independently loaded models reference one material and texture revision
+- **THEN** diagnostics prove one shared dependency preparation/upload and both models render correctly
+
+#### Scenario: Missing material dependency
+- **WHEN** a model's pinned material or texture dependency is missing or mismatched
+- **THEN** loading reports the dependency failure without publishing an incomplete model

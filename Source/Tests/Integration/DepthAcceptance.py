@@ -26,7 +26,7 @@ manifest = import_asset(viewer, manifest)
 def run(name, config, application, pipeline, *extra):
     capture = work / f"{name}.png"
     args = [str(viewer), "--config", str(config), "--pipeline", pipeline,
-            "--frames", "180",
+            "--frames", "900",
             "--hidden", "--no-ui", "--no-vsync", "--capture", str(capture)]
     if application == "Model":
         args += ["--model", str(root / "out/content/Models/Showcase.hasset"), "--verify-model"]

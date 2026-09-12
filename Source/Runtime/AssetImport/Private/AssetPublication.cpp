@@ -15,6 +15,7 @@ TAsyncResult<FAssetImportResult> FAssetImportService::ImportAsync(std::filesyste
 	{
 		throw std::invalid_argument("Import output must be a separate .hasset file");
 	}
+	InOptions.Library = ImportPath(InOptions.Library.empty() ? Output.parent_path() : InOptions.Library);
 	std::lock_guard Lock(Impl->Mutex);
 	if (Impl->bClosing)
 	{
@@ -27,11 +28,12 @@ TAsyncResult<FAssetImportResult> FAssetImportService::ImportAsync(std::filesyste
 		throw std::runtime_error("Import publication in-flight limit exceeded");
 	}
 	std::vector<FTaskHandle> Prerequisites;
-	if (const auto It = Impl->Publications.find(Output); It != Impl->Publications.end())
+	if (const auto It = Impl->Publications.find(InOptions.Library); It != Impl->Publications.end())
 	{
 		Prerequisites.push_back(It->second);
 	}
 	Impl->Pending.reserve(Impl->Pending.size() + 2);
+	const auto PublicationKey = InOptions.Library;
 	auto Result = DispatchAsync<FAssetImportResult>(
 	    Impl->IO.TaskSystem(), {EDomain::Worker},
 	    [State = Impl.get(), Source, Output, Options = std::move(InOptions), Prerequisites]
@@ -50,7 +52,7 @@ TAsyncResult<FAssetImportResult> FAssetImportService::ImportAsync(std::filesyste
 	    },
 	    Impl->Cancellation);
 	Impl->Pending.push_back(Result.Task());
-	Impl->Publications[Output] = Result.Task();
+	Impl->Publications[PublicationKey] = Result.Task();
 	Impl->ScheduleTrim(Result.Task());
 	return Result;
 }
@@ -69,6 +71,10 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	                         },
 	                         InSource,
 	                         InOutput};
+	Publication.Library = InOptions.Library;
+	const auto LibraryLease =
+	    IO.AcquireWriteLeaseAsync(Publication.Library / ".asset-library.hasset", Cancellation).Get(IO.TaskSystem());
+	Publication.LoadLibrary();
 	Publication.Prepare(InOptions);
 	if (!InOptions.bForce && Publication.IsCurrent())
 	{
@@ -81,6 +87,7 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 		FSceneManifest Scene;
 		Scene.Assets.push_back({"model", {"", ImportPathString(InSource.filename()), Converted.Type->Id, ""}});
 		Scene.Instances.push_back({"instance", "model", Identity(), true, InOptions.Name});
+		Converted.Products.clear();
 		Converted.Type = std::make_shared<const FRecordDescriptor>(RecordType<FSceneManifest>());
 		Converted.Object = std::make_shared<const FSceneManifest>(std::move(Scene));
 		Converted.NativeHeader.reset();

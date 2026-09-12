@@ -54,7 +54,7 @@ FTextureBinding Binding(const cgltf_texture_view& InView, const cgltf_data& InDa
 
 } // namespace
 
-void LoadMaterials(const cgltf_data& InData, FModelAsset& OutModel)
+void LoadMaterials(const cgltf_data& InData, FModelSource& OutModel)
 {
 	for (std::size_t Index = 0; Index < InData.samplers_count; ++Index)
 	{

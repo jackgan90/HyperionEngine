@@ -117,7 +117,15 @@ FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path&
 		{
 			throw std::runtime_error("Source importer returned a null object");
 		}
-		const auto Weight = EncodeArchive(WriteRecord(*Importer->Type, Object.get())).size() * 2;
+		auto Weight = EncodeArchive(WriteRecord(*Importer->Type, Object.get())).size() * 2;
+		for (const auto& Product : Context.Products)
+		{
+			Weight += EncodeArchive(WriteRecord(*Product.Type, Product.Object.get())).size() * 2;
+			if (Weight > 1024ULL * 1024 * 1024)
+			{
+				throw std::runtime_error("Import products exceed retained data budget");
+			}
+		}
 		std::sort(Context.Sources.begin(), Context.Sources.end());
 		return {std::make_shared<const FRecordDescriptor>(*Importer->Type),
 		        std::move(Object),
@@ -125,7 +133,8 @@ FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path&
 		        Importer->Id,
 		        Importer->Version,
 		        Weight,
-		        Extension == ".hasset" ? std::optional<FAssetHeader>(DecodeAsset(Context.Bytes).Header) : std::nullopt};
+		        Extension == ".hasset" ? std::optional<FAssetHeader>(DecodeAsset(Context.Bytes).Header) : std::nullopt,
+		        std::move(Context.Products)};
 	}
 	catch (const std::exception& Error)
 	{

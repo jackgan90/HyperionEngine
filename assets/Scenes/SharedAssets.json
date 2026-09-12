@@ -1,0 +1,259 @@
+{
+  "fields": {
+    "assets": [
+      {
+        "fields": {
+          "id": "a",
+          "reference": {
+            "fields": {
+              "id": "",
+              "path": "../Models/SharedQuad.json",
+              "revision": "",
+              "type": "hyperion.modelasset"
+            },
+            "type": "hyperion.assetref",
+            "version": 1
+          }
+        },
+        "type": "hyperion.sceneasset",
+        "version": 2
+      },
+      {
+        "fields": {
+          "id": "b",
+          "reference": {
+            "fields": {
+              "id": "",
+              "path": "../Models/SharedPanel.json",
+              "revision": "",
+              "type": "hyperion.modelasset"
+            },
+            "type": "hyperion.assetref",
+            "version": 1
+          }
+        },
+        "type": "hyperion.sceneasset",
+        "version": 2
+      }
+    ],
+    "eye": {
+      "fields": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 3.0
+      },
+      "type": "hyperion.vec3",
+      "version": 1
+    },
+    "far": 1000.0,
+    "instances": [
+      {
+        "fields": {
+          "asset": "a",
+          "id": "left",
+          "material": {
+            "fields": {
+              "baseColor": null,
+              "metallic": null,
+              "roughness": null
+            },
+            "type": "hyperion.materialoverride",
+            "version": 1
+          },
+          "name": "",
+          "sectionSurfaces": [],
+          "surface": {
+            "fields": {
+              "overrides": [],
+              "reference": {
+                "fields": {
+                  "id": "",
+                  "path": "../Materials/SharedColor.json",
+                  "revision": "",
+                  "type": "hyperion.materialasset"
+                },
+                "type": "hyperion.assetref",
+                "version": 1
+              },
+              "values": [
+                {
+                  "type": "hyperion.materialassetentry",
+                  "version": 1,
+                  "fields": {
+                    "name": "Tint",
+                    "value": {
+                      "fields": {
+                        "elements": [],
+                        "sampler": {
+                          "fields": {
+                            "borderColor": {
+                              "$bulk": "f32",
+                              "data": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                              ]
+                            },
+                            "compare": 3,
+                            "comparison": false,
+                            "magLinear": true,
+                            "maxAnisotropy": 1,
+                            "maxLod": 3.4028234663852886e+38,
+                            "minLinear": true,
+                            "minLod": 0.0,
+                            "mipLinear": true,
+                            "mipLodBias": 0.0,
+                            "u": 0,
+                            "v": 0,
+                            "w": 0
+                          },
+                          "type": "hyperion.materialsampler",
+                          "version": 1
+                        },
+                        "texture": null,
+                        "type": {
+                          "fields": {
+                            "arrayCount": 0,
+                            "columns": 4,
+                            "kind": 0,
+                            "memberNames": [],
+                            "members": [],
+                            "rows": 1,
+                            "scalar": 3
+                          },
+                          "type": "hyperion.materialparametertype",
+                          "version": 1
+                        },
+                        "words": {
+                          "$bulk": "u32",
+                          "data": [
+                            0,
+                            1065353216,
+                            0,
+                            1065353216
+                          ]
+                        }
+                      },
+                      "type": "hyperion.materialassetvalue",
+                      "version": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "type": "hyperion.scenematerialasset",
+            "version": 1
+          },
+          "transform": {
+            "fields": {
+              "values": {
+                "$bulk": "f32",
+                "data": [
+                  0.4000000059604645,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.4000000059604645,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0,
+                  0.0,
+                  -0.699999988079071,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              }
+            },
+            "type": "hyperion.mat4",
+            "version": 1
+          },
+          "visible": true
+        },
+        "type": "hyperion.sceneinstance",
+        "version": 3
+      },
+      {
+        "fields": {
+          "asset": "b",
+          "id": "right",
+          "material": {
+            "fields": {
+              "baseColor": null,
+              "metallic": null,
+              "roughness": null
+            },
+            "type": "hyperion.materialoverride",
+            "version": 1
+          },
+          "name": "",
+          "sectionSurfaces": [],
+          "surface": {
+            "fields": {
+              "overrides": [],
+              "reference": {
+                "fields": {
+                  "id": "",
+                  "path": "../Materials/SharedColor.json",
+                  "revision": "",
+                  "type": "hyperion.materialasset"
+                },
+                "type": "hyperion.assetref",
+                "version": 1
+              },
+              "values": []
+            },
+            "type": "hyperion.scenematerialasset",
+            "version": 1
+          },
+          "transform": {
+            "fields": {
+              "values": {
+                "$bulk": "f32",
+                "data": [
+                  0.4000000059604645,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.4000000059604645,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0,
+                  0.0,
+                  0.699999988079071,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              }
+            },
+            "type": "hyperion.mat4",
+            "version": 1
+          },
+          "visible": true
+        },
+        "type": "hyperion.sceneinstance",
+        "version": 3
+      }
+    ],
+    "near": 0.009999999776482582,
+    "target": {
+      "fields": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "type": "hyperion.vec3",
+      "version": 1
+    }
+  },
+  "type": "hyperion.scene",
+  "version": 3
+}

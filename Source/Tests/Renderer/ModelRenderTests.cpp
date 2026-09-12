@@ -5,6 +5,7 @@
 #include "Hyperion/Renderer/ModelPreparation.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Support/GraphTestSupport.h"
+#include "Support/ModelAssetSupport.h"
 #include "Support/NativeAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
@@ -19,9 +20,9 @@ namespace
 {
 using namespace Hyperion;
 
-FModelAsset Quads()
+FModelSource Quads()
 {
-	FModelAsset Model;
+	FModelSource Model;
 	for (int Index = 0; Index < 2; ++Index)
 	{
 		FModelPrimitive Primitive;
@@ -107,10 +108,10 @@ struct FModelReadbackContext
 	FRenderSession& Session;
 };
 
-FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelAsset InModel, bool bInCheckConstantRanges)
+FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelSource InModel, bool bInCheckConstantRanges)
 {
-	FModel Model(InContext.Session.GetScene(), InContext.Session.GetResources(),
-	             std::make_shared<const FModelAsset>(std::move(InModel)));
+	FSourceModel Model(InContext.Session.GetScene(), InContext.Session.GetResources(),
+	                   std::make_shared<const FModelSource>(std::move(InModel)));
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 	while (!Model.IsReady() && Model.GetError().empty() && std::chrono::steady_clock::now() < Deadline)
 	{
@@ -217,8 +218,14 @@ void CheckMaterialPixels(const RenderOperation& InRender, const std::filesystem:
 	Mask.Primitives[0].TexCoords1 = {.25f, .5f, .25f, .5f, .25f, .5f, .25f, .5f};
 	Pixel(InRender(Mask), 200, 120, {.502f, .502f, .502f});
 	Mask.Images[0].Rgba = {0, 0, 0, 255, 255, 255, 255, 255};
-	auto Prepared = PrepareModel(std::make_shared<const FModelAsset>(Mask));
-	HYP_CHECK(Prepared.Textures[1].Mips.back().Rgba[0] == 188);
+	const auto Prepared = SplitModelSource(Mask);
+	const auto Texture = std::find_if(Prepared.Products.begin(), Prepared.Products.end(),
+	                                  [](const auto& InProduct)
+	                                  {
+		                                  return InProduct.Key == "image-0-srgb";
+	                                  });
+	HYP_CHECK(Texture != Prepared.Products.end());
+	HYP_CHECK(std::static_pointer_cast<const FTextureAsset>(Texture->Object)->Mips.back().Bytes[0] == 188);
 	auto Mirrored = Quads();
 	Mirrored.Nodes[0].Local = ComposeTRS({0, 0, .25f}, {0, 0, 0, 1}, {-1, 1, 1});
 	Pixel(InRender(Mirrored), 160, 120, {.5371f, 0, 0});
@@ -337,7 +344,7 @@ int main()
 		FShaderCompiler Compiler(Root / "shaders", Root / "out/shader-cache");
 		FRenderSession Session(Tasks, *Device, Compiler);
 		const FModelReadbackContext RenderContext{Tasks, *Device, *Swapchain, Session};
-		const auto RenderModel = [&](FModelAsset InModel, bool bInCheckConstantRanges = false)
+		const auto RenderModel = [&](FModelSource InModel, bool bInCheckConstantRanges = false)
 		{
 			return RenderModelReadback(RenderContext, std::move(InModel), bInCheckConstantRanges);
 		};

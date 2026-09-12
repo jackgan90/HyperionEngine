@@ -21,11 +21,11 @@ Visual Studio 对应程序位于 out/build/vs2022/bin/<Configuration>。右键�
 | Accessor | offset、stride、interleaved、normalized、sparse；8/16/32 位无符号索引 |
 | 属性 | POSITION、NORMAL、TANGENT、COLOR_0、TEXCOORD_0/1；缺失法线/切线按既有算法生成 |
 | 节点 | TRS/matrix、层级和共享网格；default scene、首 scene 或顶层节点 |
-| 图片 | PNG/JPEG 内存解码；渲染准备阶段生成完整 mip 链 |
+| 图片 | PNG/JPEG 内存解码；离线生成独立纹理资产和完整 mip 链 |
 | 材质 | metallic-roughness 的五类纹理、因子、UV 选择、sampler；KHR_materials_unlit |
 | 颜色 | base color/emissive 按 sRGB，数据纹理线性；sRGB mip 在线性空间平均 |
 | Alpha/面向 | Opaque/Mask/Blend，透明排序、双面和镜像绕序 |
-| 持久化 | CPU 模型原生 .hasset，运行时不再解析源格式 |
+| 持久化 | 模型引用独立材质，材质引用独立纹理；运行时只读取原生资产 |
 
 动画、蒙皮、morph target、points/lines、UV2 及更高 UV 集会拒绝导入。唯一支持的 glTF 扩展是 KHR_materials_unlit；其他 required 扩展报错，其他 optional 扩展记录诊断并使用基础 fallback。没有 Draco、meshopt、BasisU/KTX2、KHR_texture_transform、扩展材质、IBL 或 glTF camera 导入。引擎场景阴影由独立 CSM 管线提供。
 
@@ -37,10 +37,10 @@ AssetImport/Private/Adapters/GltfImport.cpp 封装锁定的 cgltf v1.15。根文
 
 FAssetImportService 注册 FAssetImporter{Id, Version, Type, Extensions, Convert}，将语义转换集中在格式适配器。LoadAsync<T> 用于源格式工具/测试；ImportAsync 负责增量判断、稳定身份和原生依赖发布。新增外部格式仍需适配器；新增原生数据类型只需反射描述符和注册，不需要修改通用 Assets 读写分派。同步 LoadGltfPrimitive 兼容入口也属于 AssetImport。
 
-GPU 上传、纹理 mip、材质适配与共享资源继续走 [RenderPrimitives.md](RenderPrimitives.md) 的 session/primitive 路径。RHI 0 创建和上传资源，上传 fence 完成后允许绘制；draw packet 保留资源到帧 fence 完成。没有持久化 GPU 句柄、独立材质/纹理资产或新增 importer 支持范围。通用材质边界见 [Materials.md](Materials.md)。
+GPU 上传、材质准备与共享资源继续走 [RenderPrimitives.md](RenderPrimitives.md) 的 session/primitive 路径。RHI 0 创建和上传资源，上传 fence 完成后允许绘制；draw packet 保留资源到帧 fence 完成。GPU 句柄不持久化。独立材质/纹理资产、共享库、作者 shader 和场景局部覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。通用材质边界见 [Materials.md](Materials.md)。
 
 ## 验证
 
 async_gltf_import 保留源格式语义和取消/共享回归；native_asset_management、native_asset_publication 覆盖通用原生读写及发布。model_rendering 在拒绝源文件读取的后端上验证像素、上传和门控 IO；scene_viewer_controls 覆盖编辑/保存/重载。model_viewer_acceptance 使用 C++ 工具生成的原生 glTF/GLB fixtures，检查 UI、缺失资产和保存失败退出。
 
-原始 2026-09-06 交付和独立审计的历史证据保留在 [ModelViewerReview.md](ModelViewerReview.md) 和 OpenSpec archive 中，不代表当前套件数量。当前变更证据见 [原生资产验证](../openspec/changes/complete-native-asset-pipeline/verification.md)。
+原始 2026-09-06 交付和独立审计的历史证据保留在 [ModelViewerReview.md](ModelViewerReview.md) 和 OpenSpec archive 中，不代表当前套件数量。当前变更证据见 [原生资产验证](../openspec/changes/archive/2026-09-12-add-shared-material-texture-assets/verification.md)。

@@ -1,4 +1,5 @@
 #include "Hyperion/AssetImport/GltfImport.h"
+#include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
@@ -104,7 +105,7 @@ void CheckPublication()
 	IO.WriteAsync(Directory / "child.source", Serialize(Child)).Get(Tasks);
 	IO.WriteAsync(Directory / "data.bin", {std::byte{1}}).Get(Tasks);
 	const auto First = Imports.ImportAsync(Source, Output).Get(Tasks);
-	HYP_CHECK(!First->bUpToDate && First->WrittenAssets == 2 && First->Header.Dependencies.size() == 2);
+	HYP_CHECK(!First->bUpToDate && First->WrittenAssets == 3 && First->Header.Dependencies.size() == 2);
 	HYP_CHECK(First->Header.Dependencies[0].Reference == First->Header.Dependencies[1].Reference);
 	const auto Old = IO.ReadAsync(Output).Get(Tasks);
 	const auto Writes = IO.Statistics().Writes.load();
@@ -300,7 +301,7 @@ void CheckModelToScene()
 	HYP_CHECK(Graph->Failures.empty() && Graph->Root->As<FSceneManifest>()->Instances.size() == 1);
 	const auto Model =
 	    Assets.LoadReferenceAsync<FModelAsset>(Result->Header.Dependencies[0].Reference, Output).Get(Tasks);
-	HYP_CHECK(ModelInstances(*Model).size() == 4 && Model->Images[0].Width == 64);
+	HYP_CHECK(ModelInstances(*Model).size() == 4 && Model->MaterialSlots.size() == 4);
 }
 
 void CheckExternalImageReimport()
@@ -327,13 +328,14 @@ void CheckExternalImageReimport()
 	HYP_CHECK(First->Header.Id == Second->Header.Id && First->Header.Revision != Second->Header.Revision);
 	Assets.Invalidate(Output);
 	const auto After = Assets.LoadAsync<FModelAsset>(Output).Get(Tasks);
-	HYP_CHECK(After->Images[0].Rgba != Before->Images[0].Rgba);
+	HYP_CHECK(After->MaterialSlots != Before->MaterialSlots);
 	HYP_CHECK(After->Primitives[0].Positions == Before->Primitives[0].Positions);
-	IO.WriteAsync(Directory / "legacy.hasset", Serialize(*Before)).Get(Tasks);
-	const auto Upgraded = Imports.ImportAsync(Directory / "legacy.hasset", Directory / "upgraded.hasset").Get(Tasks);
+	IO.WriteAsync(Output.parent_path() / "copy.hasset", Serialize(*Before)).Get(Tasks);
+	const auto Upgraded =
+	    Imports.ImportAsync(Output.parent_path() / "copy.hasset", Directory / "upgraded.hasset").Get(Tasks);
 	const auto Native = Assets.LoadAsync<FModelAsset>(Directory / "upgraded.hasset").GetAsset(Tasks);
 	HYP_CHECK(Native->Diagnostics.empty() && Native->Header.Id == Upgraded->Header.Id);
-	HYP_CHECK(Serialize(*Native->As<FModelAsset>()) == Serialize(*Before));
+	HYP_CHECK(Native->As<FModelAsset>()->Primitives[0].Positions == Before->Primitives[0].Positions);
 }
 
 void CheckLocalLease()

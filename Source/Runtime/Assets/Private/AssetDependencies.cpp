@@ -125,7 +125,17 @@ struct FGraphLoader
 
 TAsyncResult<FAssetGraph> FAssetService::LoadGraphAsync(const std::filesystem::path& InPath)
 {
-	auto Root = LoadAsync(InPath);
+	return LoadGraph(LoadAsync(InPath));
+}
+
+TAsyncResult<FAssetGraph> FAssetService::LoadGraphAsync(const FAssetRef& InReference,
+                                                        const std::filesystem::path& InContainingAsset)
+{
+	return LoadGraph(LoadReferenceAsync(InReference, InContainingAsset));
+}
+
+TAsyncResult<FAssetGraph> FAssetService::LoadGraph(FAssetRequest InRoot)
+{
 	std::lock_guard Lock(Impl->Mutex);
 	Impl->RequireOpen();
 	if (Impl->Trim().InFlight >= Impl->Options.MaxInFlight)
@@ -135,7 +145,7 @@ TAsyncResult<FAssetGraph> FAssetService::LoadGraphAsync(const std::filesystem::p
 	Impl->Pending.reserve(Impl->Pending.size() + 2);
 	auto Result = DispatchAsync<FAssetGraph>(
 	    Impl->IO.TaskSystem(), {EDomain::Worker},
-	    [this, Root]
+	    [this, Root = std::move(InRoot)]
 	    {
 		    FGraphLoader Loader{*this, Impl->IO.TaskSystem(), Impl->Cancellation, Impl->Options.MaxGraphAssets,
 		                        [this](const FAssetRef& InReference, const std::filesystem::path& InContaining)

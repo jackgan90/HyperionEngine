@@ -1,3 +1,4 @@
+#include "ModelMaterials.h"
 #include "RenderResourcesInternal.h"
 #include <atomic>
 #include <stdexcept>
@@ -5,7 +6,8 @@
 namespace Hyperion
 {
 FRenderResourceService::FRenderResourceService(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler)
-    : Coordinator(std::make_shared<FRenderResourceCoordinator>(InTasks, InDevice, InCompiler)), Compiler(InCompiler)
+    : Coordinator(std::make_shared<FRenderResourceCoordinator>(InTasks, InDevice, InCompiler)), Compiler(InCompiler),
+      AssetCache(std::make_shared<FMaterialAssetCache>())
 {
 	InTasks.Require({EDomain::Main});
 }
@@ -25,15 +27,31 @@ std::uint64_t FRenderResourceService::GetPublicationRevision() const
 	return Coordinator->PublicationRevision.load(std::memory_order_acquire);
 }
 
-std::shared_ptr<const FRenderResource> FRenderResourceService::RequestModel(std::shared_ptr<const FModelAsset> InAsset,
-                                                                            std::uint64_t InVersion)
+std::shared_ptr<const FRenderResource> FRenderResourceService::RequestModel(
+    std::shared_ptr<const FSceneModelData> InData, std::uint64_t InVersion)
 {
+	if (!InData || !InData->Asset)
+	{
+		throw std::invalid_argument("Model request requires prepared CPU data");
+	}
 	const auto Format = Coordinator->Device.GetCapabilities().ShaderFormat;
-	return Request(InAsset, InVersion, "ModelVertex-v1",
-	               [Asset = InAsset, Compiler = &Compiler, Format]
+	return Request(InData->Asset, InVersion, "ModelVertex-v2",
+	               [Data = InData, Compiler = &Compiler, Format, Cache = AssetCache]
 	               {
-		               return PrepareModelResources(Asset, *Compiler, Format);
+		               return PrepareModelResources(*Data, *Compiler, Format, Cache.get());
 	               });
+}
+
+std::shared_ptr<const FMaterialSnapshot> FRenderResourceService::ResolveMaterialAsset(
+    const std::shared_ptr<const FMaterialAssetData>& InData)
+{
+	return AssetCache->Prepare(InData, Compiler, Coordinator->Device.GetCapabilities().ShaderFormat, false).Surface;
+}
+
+std::shared_ptr<const FMaterialSnapshot> FRenderResourceService::PrepareMaterialAsset(
+    const std::shared_ptr<const FMaterialAssetData>& InData)
+{
+	return AssetCache->Prepare(InData, Compiler, Coordinator->Device.GetCapabilities().ShaderFormat).Surface;
 }
 
 std::shared_ptr<const FRenderResource> FRenderResourceService::Request(std::shared_ptr<const void> InIdentity,
@@ -128,8 +146,13 @@ void FRenderResourceCoordinator::Upload(FRenderResourceRecord& InRecord)
 
 FRenderResourceStats FRenderResourceService::Statistics() const
 {
-	std::lock_guard Lock(Coordinator->Mutex);
-	return Coordinator->Stats;
+	FRenderResourceStats Result;
+	{
+		std::lock_guard Lock(Coordinator->Mutex);
+		Result = Coordinator->Stats;
+	}
+	Result.AssetMaterials = AssetCache->Statistics();
+	return Result;
 }
 
 void FRenderResourceService::Close()

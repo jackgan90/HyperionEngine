@@ -6,6 +6,18 @@
 
 namespace Hyperion
 {
+FMaterialTextureSource::FMaterialTextureSource(std::shared_ptr<const FTextureAsset> InAsset, std::uint64_t InVersion)
+    : Identity(MaterialsPrivate::NextIdentity()), Version(InVersion), Encoding(EMaterialTextureEncoding::Linear),
+      Asset(std::move(InAsset))
+{
+	if (!Asset || !Version)
+	{
+		throw std::invalid_argument("Texture source requires an asset and a nonzero version");
+	}
+	ValidateTextureAsset(*Asset);
+	Encoding = Asset->Encoding;
+}
+
 FMaterialTextureSource::FMaterialTextureSource(FMaterialDepthTexture InDepth, std::uint64_t InVersion)
     : Identity(MaterialsPrivate::NextIdentity()), Version(InVersion), Encoding(EMaterialTextureEncoding::Linear),
       Depth(InDepth), bDepthTarget(true)
@@ -94,7 +106,12 @@ EMaterialTextureEncoding FMaterialTextureSource::GetEncoding() const
 
 const std::vector<FMaterialTextureMip>& FMaterialTextureSource::GetMips() const
 {
-	return Mips;
+	return Asset ? Asset->Mips : Mips;
+}
+
+const std::shared_ptr<const FTextureAsset>& FMaterialTextureSource::GetAsset() const
+{
+	return Asset;
 }
 
 FMaterialReadBufferSource::FMaterialReadBufferSource(std::span<const std::byte> InBytes, std::uint64_t InVersion)

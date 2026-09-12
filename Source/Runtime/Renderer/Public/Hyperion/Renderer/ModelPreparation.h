@@ -21,19 +21,10 @@ struct FPreparedPrimitive
 	FVec3 Center;
 };
 
-struct FPreparedMaterial
-{
-	FModelMaterial Material;
-	std::array<std::uint32_t, 5> Textures{};
-	std::array<FSamplerDesc, 5> Samplers;
-};
-
 struct FPreparedModel
 {
 	std::shared_ptr<const FModelAsset> Source;
 	std::vector<FPreparedPrimitive> Primitives;
-	std::vector<FPreparedMaterial> Materials;
-	std::vector<FTextureDesc> Textures;
 	FBounds Bounds;
 };
 

@@ -58,7 +58,7 @@ static FBytes Base64(std::string_view InText)
 	return Bytes;
 }
 
-std::shared_ptr<const FBytes> ReadUri(FAssetImportContext& InContext, const char* InUri)
+std::shared_ptr<const FBytes> ReadUri(FAssetImportContext& InContext, const char* InUri, std::string* OutSource)
 {
 	Require(InUri != nullptr, "missing dependency URI");
 	const std::string Uri(InUri);
@@ -95,7 +95,13 @@ std::shared_ptr<const FBytes> ReadUri(FAssetImportContext& InContext, const char
 		Index += 2;
 	}
 	const std::u8string Utf8(reinterpret_cast<const char8_t*>(Decoded.data()), Decoded.size());
-	return InContext.Read((InContext.Path.parent_path() / std::filesystem::path(Utf8)).lexically_normal());
+	const auto Path = (InContext.Path.parent_path() / std::filesystem::path(Utf8)).lexically_normal();
+	if (OutSource)
+	{
+		const auto Canonical = Path.generic_u8string();
+		OutSource->assign(reinterpret_cast<const char*>(Canonical.data()), Canonical.size());
+	}
+	return InContext.Read(Path);
 }
 
 static std::uint32_t Unsigned(const std::uint8_t* InData, cgltf_component_type InType);

@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
 #include "Support/GraphTestSupport.h"
+#include "Support/ModelAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <cmath>
@@ -15,9 +16,9 @@ namespace
 {
 using namespace Hyperion;
 
-FModelAsset Quad(FVec4 InColor = {1, 1, 1, 1}, float InDepth = 0, bool bInBlend = false)
+FModelSource Quad(FVec4 InColor = {1, 1, 1, 1}, float InDepth = 0, bool bInBlend = false)
 {
-	FModelAsset Asset;
+	FModelSource Asset;
 	FModelPrimitive Primitive;
 	Primitive.Positions = {-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0};
 	Primitive.Indices = {0, 1, 2, 0, 2, 3};
@@ -36,7 +37,7 @@ FModelAsset Quad(FVec4 InColor = {1, 1, 1, 1}, float InDepth = 0, bool bInBlend 
 	return Asset;
 }
 
-void AwaitModel(const FModel& InModel)
+void AwaitModel(const FSourceModel& InModel)
 {
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 	while (!InModel.IsReady() && InModel.GetError().empty() && std::chrono::steady_clock::now() < Deadline)
@@ -155,9 +156,9 @@ void CheckSharedModels(FSceneFixture& InFixture)
 	auto& Scene = InFixture.Session->GetScene();
 	auto& Resources = InFixture.Session->GetResources();
 	const auto Before = Resources.Statistics();
-	auto Asset = std::make_shared<const FModelAsset>(Quad());
-	FModel Left(Scene, Resources, Asset);
-	FModel Right(Scene, Resources, Asset);
+	auto Asset = std::make_shared<const FModelSource>(Quad());
+	FSourceModel Left(Scene, Resources, Asset);
+	FSourceModel Right(Scene, Resources, Asset);
 	HYP_CHECK(Left.GetResource() == Right.GetResource());
 	Left.SetTransform(Multiply(Translation({-.7f, 0, 0}), Scale({.4f, .4f, 1})));
 	Right.SetTransform(Multiply(Translation({.7f, 0, 0}), Scale({.4f, .4f, 1})));
@@ -220,8 +221,8 @@ void CheckSceneDepth(FSceneFixture& InFixture)
 {
 	auto& Scene = InFixture.Session->GetScene();
 	auto& Resources = InFixture.Session->GetResources();
-	FModel Near(Scene, Resources, std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1}, .5f)));
-	FModel Far(Scene, Resources, std::make_shared<const FModelAsset>(Quad({0, 0, 1, 1}, 0)));
+	FSourceModel Near(Scene, Resources, std::make_shared<const FModelSource>(Quad({1, 0, 0, 1}, .5f)));
+	FSourceModel Far(Scene, Resources, std::make_shared<const FModelSource>(Quad({0, 0, 1, 1}, 0)));
 	AwaitModel(Near);
 	AwaitModel(Far);
 	Pixel(InFixture.Frame(2), 160, {1, 0, 0}); // The second model must preserve the first model's depth.
@@ -230,7 +231,7 @@ void CheckSceneDepth(FSceneFixture& InFixture)
 	InFixture.AwaitRetirement();
 }
 
-FModelAsset Pair(FVec4 InNear, float InNearDepth, FVec4 InFar, float InFarDepth)
+FModelSource Pair(FVec4 InNear, float InNearDepth, FVec4 InFar, float InFarDepth)
 {
 	auto Asset = Quad(InNear, InNearDepth, true);
 	auto Far = Quad(InFar, InFarDepth, true);
@@ -247,8 +248,10 @@ void CheckGlobalBlend(FSceneFixture& InFixture)
 {
 	auto& Scene = InFixture.Session->GetScene();
 	auto& Resources = InFixture.Session->GetResources();
-	FModel A(Scene, Resources, std::make_shared<const FModelAsset>(Pair({1, 0, 0, .5f}, 1, {0, 1, 0, .5f}, -.5f)));
-	FModel B(Scene, Resources, std::make_shared<const FModelAsset>(Pair({0, 0, 1, .5f}, .5f, {1, 1, 0, .5f}, -1)));
+	FSourceModel A(Scene, Resources,
+	               std::make_shared<const FModelSource>(Pair({1, 0, 0, .5f}, 1, {0, 1, 0, .5f}, -.5f)));
+	FSourceModel B(Scene, Resources,
+	               std::make_shared<const FModelSource>(Pair({0, 0, 1, .5f}, .5f, {1, 1, 0, .5f}, -1)));
 	AwaitModel(A);
 	AwaitModel(B);
 	const auto Srgb = [](float InValue)
@@ -270,12 +273,12 @@ void CheckGlobalBlend(FSceneFixture& InFixture)
 
 void CheckManyPrimitives(FSceneFixture& InFixture)
 {
-	auto Asset = std::make_shared<const FModelAsset>(Quad());
-	std::vector<std::unique_ptr<FModel>> Models;
+	auto Asset = std::make_shared<const FModelSource>(Quad());
+	std::vector<std::unique_ptr<FSourceModel>> Models;
 	for (unsigned Index = 0; Index < 40; ++Index)
 	{
 		Models.push_back(
-		    std::make_unique<FModel>(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset));
+		    std::make_unique<FSourceModel>(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset));
 	}
 	for (const auto& Model : Models)
 	{
@@ -313,9 +316,9 @@ std::vector<FRenderItem> CollectItems(FSceneFixture& InFixture)
 	return Result;
 }
 
-std::shared_ptr<FMaterialInstance> SharedSurface(FSceneFixture& InFixture, std::shared_ptr<const FModelAsset> InAsset)
+std::shared_ptr<FMaterialInstance> SharedSurface(FSceneFixture& InFixture, std::shared_ptr<const FModelSource> InAsset)
 {
-	FModel Warm(InFixture.Session->GetScene(), InFixture.Session->GetResources(), InAsset);
+	FSourceModel Warm(InFixture.Session->GetScene(), InFixture.Session->GetResources(), InAsset);
 	AwaitModel(Warm);
 	const auto Surface = Warm.GetResource()->GetMaterial(0);
 	auto Instance = std::make_shared<FMaterialInstance>(Surface->GetCompiled()->Interface);
@@ -366,15 +369,15 @@ void CheckMaterialAtomicity(FSceneFixture& InFixture, FScene& InScene, FSceneRen
 
 void CheckSharedMaterialPublication(FSceneFixture& InFixture)
 {
-	auto Asset = std::make_shared<const FModelAsset>(Quad());
+	auto Asset = std::make_shared<const FModelSource>(Quad());
 	auto Shared = SharedSurface(InFixture, Asset);
 	FScene Scene;
 	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
-	FSceneModel Left{"left", PrepareSceneModel(Asset)};
+	FSceneModel Left{"left", PrepareSourceModel(Asset)};
 	Left.World = Multiply(Translation({-.7f, 0, 0}), Scale({.4f, .4f, 1}));
 	Left.Surface.Instance = Shared;
 	FSceneModel Right = Left;
-	Right.Data = PrepareSceneModel(std::make_shared<const FModelAsset>(Quad()));
+	Right.Data = PrepareSourceModel(std::make_shared<const FModelSource>(Quad()));
 	Right.World = Multiply(Translation({.7f, 0, 0}), Scale({.4f, .4f, 1}));
 	const auto A = Scene.Add(Left);
 	const auto B = Scene.Add(Right);
@@ -415,6 +418,7 @@ void CheckSharedMaterialPublication(FSceneFixture& InFixture)
 	Bridge.Flush();
 	Shared->SetSemantic("Pbr.BaseColorFactor", FMaterialValue::Float(FVec4{1, 1, 0, 1}));
 	Bridge.Flush();
+	AwaitBridge(Bridge, B);                    // The newly selected default can still be preparing asynchronously.
 	Pixel(InFixture.Frame(1), 210, {0, 0, 1}); // Removed subscriptions cannot affect the inherited material.
 	Scene.Clear();
 	Bridge.Flush();
@@ -439,7 +443,7 @@ void CheckLogicalAttachment(FSceneFixture& InFixture)
 		bRejected = true;
 	}
 	HYP_CHECK(bRejected);
-	const auto Data = PrepareSceneModel(std::make_shared<const FModelAsset>(Quad()));
+	const auto Data = PrepareSourceModel(std::make_shared<const FModelSource>(Quad()));
 	const auto Before = InFixture.Session->GetResources().Statistics();
 	const auto Stale = Scene.Add({"loading"});
 	Scene.Remove(Stale);
@@ -475,7 +479,7 @@ void CheckLogicalAttachment(FSceneFixture& InFixture)
 	Reattached.Close();
 	InFixture.AwaitRetirement();
 	FSceneRenderBridge Pending(Scene, *InFixture.Session, InFixture.Tasks);
-	const auto Loading = Scene.Add({"pending", PrepareSceneModel(std::make_shared<const FModelAsset>(Quad()))});
+	const auto Loading = Scene.Add({"pending", PrepareSourceModel(std::make_shared<const FModelSource>(Quad()))});
 	Pending.Flush();
 	Scene.Remove(Loading);
 	Pending.Flush();
@@ -573,9 +577,9 @@ void CheckVisibilityReturn(FSceneFixture& InFixture)
 
 void CheckLocalPackets(FSceneFixture& InFixture)
 {
-	const auto Asset = std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1}));
-	FModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
-	FModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	const auto Asset = std::make_shared<const FModelSource>(Quad({1, 0, 0, 1}));
+	FSourceModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
 	A.SetTransform(Multiply(Translation({-.7f, 0, 0}), Scale({.4f, .4f, 1})));
 	B.SetTransform(Multiply(Translation({.7f, 0, 0}), Scale({.4f, .4f, 1})));
 	AwaitModel(A);
@@ -615,12 +619,12 @@ void CheckLocalPackets(FSceneFixture& InFixture)
 
 void CheckLocalVisibilityInputs(FSceneFixture& InFixture)
 {
-	const auto Asset = std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1}));
-	std::array<std::unique_ptr<FModel>, 3> Models;
+	const auto Asset = std::make_shared<const FModelSource>(Quad({1, 0, 0, 1}));
+	std::array<std::unique_ptr<FSourceModel>, 3> Models;
 	for (std::size_t Index = 0; Index < Models.size(); ++Index)
 	{
 		Models[Index] =
-		    std::make_unique<FModel>(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+		    std::make_unique<FSourceModel>(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
 		Models[Index]->SetTransform(Multiply(Translation({(float(Index) - 1) * .8f, 0, 0}), Scale({.2f, .2f, 1})));
 		AwaitModel(*Models[Index]);
 	}
@@ -731,7 +735,8 @@ void CheckIncrementalRetirement(FSceneFixture& InFixture)
 {
 	auto& Scene = InFixture.Session->GetScene();
 	auto& Batches = InFixture.Session->GetBatchSystem();
-	FModel Template(Scene, InFixture.Session->GetResources(), std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	FSourceModel Template(Scene, InFixture.Session->GetResources(),
+	                      std::make_shared<const FModelSource>(Quad({1, 0, 0, 1})));
 	AwaitModel(Template);
 	auto Resource = Template.GetResource();
 	Template.Remove();
@@ -832,7 +837,8 @@ void CheckIncrementalHistoryCapacity(FSceneFixture& InFixture, std::size_t InCou
 void CheckIncrementalBlocks(FSceneFixture& InFixture)
 {
 	auto& Scene = InFixture.Session->GetScene();
-	FModel Template(Scene, InFixture.Session->GetResources(), std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	FSourceModel Template(Scene, InFixture.Session->GetResources(),
+	                      std::make_shared<const FModelSource>(Quad({1, 0, 0, 1})));
 	AwaitModel(Template);
 	auto Resource = Template.GetResource();
 	const auto* Pass = Resource->GetMaterial(0)->GetCompiled()->FindInstancePass("Forward");
@@ -963,7 +969,8 @@ std::shared_ptr<const FRenderMaterial> SharedOverrideMaterial(FSceneFixture& InF
 void CheckIncrementalSharedSplit(FSceneFixture& InFixture)
 {
 	auto& Scene = InFixture.Session->GetScene();
-	FModel Template(Scene, InFixture.Session->GetResources(), std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	FSourceModel Template(Scene, InFixture.Session->GetResources(),
+	                      std::make_shared<const FModelSource>(Quad({1, 0, 0, 1})));
 	AwaitModel(Template);
 	auto Resource = Template.GetResource();
 	Template.Remove();
@@ -1025,7 +1032,7 @@ void CheckRetainedFrames(FSceneFixture& InFixture)
 {
 	FScene Scene;
 	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
-	FSceneModel Model{"retained", PrepareSceneModel(std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})))};
+	FSceneModel Model{"retained", PrepareSourceModel(std::make_shared<const FModelSource>(Quad({1, 0, 0, 1})))};
 	const auto Handle = Scene.Add(Model);
 	Bridge.Flush();
 	AwaitBridge(Bridge, Handle);
@@ -1066,8 +1073,8 @@ void CheckRetainedFrames(FSceneFixture& InFixture)
 
 void CheckReceiptViewChanges(FSceneFixture& InFixture)
 {
-	FModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(),
-	             std::make_shared<const FModelAsset>(Quad({1, 0, 0, 1})));
+	FSourceModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(),
+	                   std::make_shared<const FModelSource>(Quad({1, 0, 0, 1})));
 	AwaitModel(Model);
 	const auto Run = [&](std::vector<std::uint64_t> InIds, bool bInExpectReuse)
 	{

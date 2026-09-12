@@ -28,13 +28,31 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 		{
 			throw std::runtime_error("Cannot persist source-less model: " + Model->Name);
 		}
-		if (Model->Surface.Instance || Model->Surface.Snapshot || !Model->Surface.Overrides.empty() ||
-		    !Model->SectionSurfaces.empty())
+		const auto Pending = P.PendingMaterials.find(Instance.Id);
+		if (Pending != P.PendingMaterials.end() && Pending->second.bHasStoredSelection)
 		{
-			throw std::runtime_error("Cannot persist generic runtime material selections: " + Model->Name);
+			throw std::runtime_error("Cannot save pending or failed material selection: " + Instance.Id);
 		}
-		Result.Instances.push_back(
-		    {Instance.Id, Instance.Asset, Model->World, Model->bVisible, Model->Name, Model->Material});
+		FSceneInstanceEntry Entry{Instance.Id,     Instance.Asset, Model->World,
+		                          Model->bVisible, Model->Name,    Model->Material};
+		Entry.Surface = PersistSceneMaterialSelection(Model->Surface);
+		for (const auto& [Section, Selection] : Model->SectionSurfaces)
+		{
+			Entry.SectionSurfaces.push_back({Section, PersistSceneMaterialSelection(Selection)});
+		}
+		VisitRecord(RecordType<FSceneInstanceEntry>(), &Entry,
+		            [&](const FRecordDescriptor& InType, const void* InValue, std::string_view)
+		            {
+			            if (InType.CppType == typeid(FAssetRef))
+			            {
+				            auto& Reference = *const_cast<FAssetRef*>(static_cast<const FAssetRef*>(InValue));
+				            const auto Target = P.Assets.Resolve(Reference, P.Path);
+				            const auto Relative = Target.lexically_relative(Destination.parent_path());
+				            const auto Text = (Relative.empty() ? Target : Relative).generic_u8string();
+				            Reference.Path.assign(reinterpret_cast<const char*>(Text.data()), Text.size());
+			            }
+		            });
+		Result.Instances.push_back(std::move(Entry));
 		Used.insert(Instance.Asset);
 	}
 	for (const auto& Id : Used)

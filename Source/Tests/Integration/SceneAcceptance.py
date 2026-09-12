@@ -26,8 +26,9 @@ manifest = source.with_suffix(".hasset")
 
 def run(name, mode="bvh", show_ui=False, verify=True):
     capture = work / f"{name}.png"
+    # Budget for native dependency preparation before the final-frame assertions.
     args = [str(viewer), "--scene", str(manifest), "--scene-culling", mode,
-            "--frames", "180", "--hidden", "--capture", str(capture)]
+            "--frames", "900", "--hidden", "--capture", str(capture)]
     if verify:
         args.append("--verify-model")
     if not show_ui:

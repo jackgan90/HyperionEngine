@@ -6,7 +6,7 @@
 
 | 层 | 职责 |
 | --- | --- |
-| `Materials` | 仅依赖 Core/Math；CPU definition、instance、snapshot、参数 schema、semantic、状态和不可变资源源数据 |
+| `Materials` | 依赖 Core/Math/Reflection/AssetTypes/Textures；CPU definition、instance、snapshot、参数 schema、semantic、状态及独立反射资产 |
 | `Shaders` | 引擎自有 DXIL/SPIR-V/MSL 反射与编译缓存；DXC/SPIRV-Cross 留在私有 adapter |
 | `Renderer` | 编译接口准备、provider、目标布局打包、资源协调、PSO/descriptor/constant slice 缓存和 Scene 桥接 |
 | `RHI` | 通用 buffer/view/slice、sampler、binding layout/set、pipeline、draw packet 和能力查询 |
@@ -14,7 +14,9 @@
 
 `FMaterialDefinition` 是不可变配置；改变 shader、defines、pass 或固定状态需要新 definition。`FMaterialInstance` 由一个 Main owner 编辑，内容变化的 `Set`、`Clear`、`ReplaceDefinition` 产生新 revision，失败保留旧快照；设置相同值或清除不存在的覆盖不复制快照。Worker 私有 PBR 适配器可以在其唯一 owner 内临时构建实例，只发布 `Freeze()` 的不可变结果。跨线程和跨模型共享的是 `shared_ptr<const FMaterialSnapshot>`，Render 不读取可变实例。
 
-texture/read-buffer source 拥有字节副本和不可复用的 identity/version；更改内容要创建新 source。GPU 资源在各 session/device 内共享，按源身份、编码、view 范围、数组次序和 sampler 值区分，不做跨导入副本的内容哈希去重。CPU Scene 直接依赖 Materials，仍无 Renderer/RHI 的直接或传递依赖。
+程序化 texture/read-buffer source 拥有字节副本和不可复用的 identity/version；原生 texture source 直接持有共享 FTextureAsset 的 mip。更改内容要创建新 source。GPU 资源在各 session/device 内共享，按源身份、编码、view 范围、数组次序和 sampler 值区分，不做跨导入副本的内容哈希去重。CPU Scene 直接依赖 Materials，仍无 Renderer/RHI 的直接或传递依赖。
+
+独立资产的 shader/pass/类型化参数、共享加载与场景保存流程见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
 
 ## 声明、反射与按名称编辑
 

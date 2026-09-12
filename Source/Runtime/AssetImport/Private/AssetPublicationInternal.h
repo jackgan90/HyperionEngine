@@ -4,6 +4,14 @@
 
 namespace Hyperion
 {
+struct FAssetLibraryIndex
+{
+	std::map<std::string, FAssetRef> Entries;
+};
+
+template<> const FRecordDescriptor& RecordType<FAssetLibraryIndex>();
+std::filesystem::path ImportProductPath(const std::filesystem::path& InSource, std::string_view InKey);
+
 struct FPublishedAsset
 {
 	FAssetRef Reference;
@@ -30,6 +38,14 @@ struct FPublication
 	std::map<std::string, std::string> PreviousIds;
 	std::size_t Written{};
 	std::size_t Bytes{};
+	std::filesystem::path Library;
+	FAssetLibraryIndex LibraryIndex;
+	FAssetHeader LibraryHeader;
+	std::map<std::string, FPublishedAsset> SharedProducts;
+
+	void LoadLibrary();
+	void SaveLibrary();
+	void AddProducts(const std::filesystem::path& InSource, const FConvertedAsset& InAsset);
 
 	void Prepare(const FAssetImportOptions& InOptions);
 	bool IsCurrent();

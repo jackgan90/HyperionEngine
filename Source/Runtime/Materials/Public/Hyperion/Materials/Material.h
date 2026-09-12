@@ -59,6 +59,8 @@ struct FMaterialSnapshot
 	std::shared_ptr<const FMaterialDefinition> Definition;
 	std::shared_ptr<const FMaterialParameterSchema> Schema;
 	FMaterialParameterValues Overrides;
+	// Optional immutable CPU preparation owner retained by copies and in-flight draws.
+	std::shared_ptr<const void> Lifetime;
 };
 
 enum class EMaterialWriteResult : std::uint8_t
@@ -73,6 +75,7 @@ class FMaterialInstance
 public:
 	explicit FMaterialInstance(std::shared_ptr<const FMaterialDefinition> InDefinition);
 	explicit FMaterialInstance(const FPreparedMaterialInterface& InInterface);
+	explicit FMaterialInstance(std::shared_ptr<const FMaterialSnapshot> InSnapshot);
 	FMaterialInstance(const FMaterialInstance&) = delete;
 	FMaterialInstance& operator=(const FMaterialInstance&) = delete;
 	std::uint64_t GetIdentity() const;

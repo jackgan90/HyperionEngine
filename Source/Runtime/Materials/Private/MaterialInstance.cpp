@@ -75,6 +75,24 @@ FMaterialInstance::FMaterialInstance(const FPreparedMaterialInterface& InInterfa
 	Snapshot = std::make_shared<const FMaterialSnapshot>(std::move(Initial));
 }
 
+FMaterialInstance::FMaterialInstance(std::shared_ptr<const FMaterialSnapshot> InSnapshot)
+    : Owner(std::this_thread::get_id())
+{
+	if (!InSnapshot || !InSnapshot->Definition || !InSnapshot->Schema || !InSnapshot->Identity || !InSnapshot->Revision)
+	{
+		throw std::invalid_argument("Cannot clone an incomplete material snapshot");
+	}
+	for (const auto& Entry : InSnapshot->Overrides)
+	{
+		ValidateMaterialOverride(InSnapshot->Schema->Get(InSnapshot->Schema->Find(Entry.Name)), Entry.Value,
+		                         EMaterialScope::Material);
+	}
+	auto Initial = *InSnapshot;
+	Initial.Identity = MaterialsPrivate::NextIdentity();
+	Initial.Revision = 1;
+	Snapshot = std::make_shared<const FMaterialSnapshot>(std::move(Initial));
+}
+
 void FMaterialInstance::CheckOwner() const
 {
 	if (Owner != std::this_thread::get_id())

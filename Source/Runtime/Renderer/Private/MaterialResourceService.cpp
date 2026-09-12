@@ -1,3 +1,4 @@
+#include "ModelMaterials.h"
 #include "RenderResourcesInternal.h"
 #include <algorithm>
 
@@ -182,12 +183,19 @@ std::shared_ptr<const FRenderMaterial> FRenderResourceService::RequestMaterial(
 {
 	auto& Owner = *Coordinator;
 	Owner.Tasks.Require({EDomain::Main});
+	const auto Compiled = InSnapshot ? AssetCache->FindCompiled(InSnapshot->Definition.get()) : nullptr;
 	std::shared_ptr<const FRenderMaterial> Result;
 	{
 		std::lock_guard Lock(Owner.Mutex);
-		Result = Owner.AcquireMaterial(std::move(InSnapshot));
+		Result = Owner.AcquireMaterial(std::move(InSnapshot), Compiled);
 	}
 	Owner.Schedule();
 	return Result;
+}
+
+FMaterialParameterValues FRenderResourceService::PrepareAssetValues(
+    const FMaterialAssetValues& InValues, const std::map<FAssetRef, std::shared_ptr<const FTextureAsset>>& InTextures)
+{
+	return AssetCache->ResolveValues(InValues, InTextures);
 }
 } // namespace Hyperion

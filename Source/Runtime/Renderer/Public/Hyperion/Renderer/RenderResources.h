@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderMaterial.h"
 #include "Hyperion/Renderer/RenderPrimitive.h"
+#include "Hyperion/Scene/Scene.h"
 #include "Hyperion/Tasks/AsyncResult.h"
 
 namespace Hyperion
@@ -70,6 +71,19 @@ private:
 	friend class FRenderResourceService;
 };
 
+struct FMaterialAssetStats
+{
+	std::uint64_t Requests{};
+	std::uint64_t MaterialPreparations{};
+	std::uint64_t TextureSources{};
+	std::uint64_t MaterialCacheHits{};
+	std::uint64_t TextureCacheHits{};
+	std::size_t MaterialEntries{};
+	std::size_t TextureEntries{};
+};
+
+class FMaterialAssetCache;
+
 struct FRenderResourceStats
 {
 	std::uint64_t Requests{};
@@ -79,6 +93,7 @@ struct FRenderResourceStats
 	std::uint64_t MaintenanceTasks{};
 	std::uint64_t MaintenanceTicks{};
 	std::size_t LiveResources{};
+	FMaterialAssetStats AssetMaterials;
 	FMaterialConstantStats Constants;
 	FMaterialGpuStats Materials;
 	FRenderBatchStats Batches;
@@ -121,8 +136,14 @@ public:
 	~FRenderResourceService();
 	FRenderResourceService(const FRenderResourceService&) = delete;
 	FRenderResourceService& operator=(const FRenderResourceService&) = delete;
-	std::shared_ptr<const FRenderResource> RequestModel(std::shared_ptr<const FModelAsset> InAsset,
+	std::shared_ptr<const FRenderResource> RequestModel(std::shared_ptr<const FSceneModelData> InData,
 	                                                    std::uint64_t InVersion = 1);
+	// Worker preparation; caller must drain admitted work before destroying this service.
+	std::shared_ptr<const FMaterialSnapshot> PrepareMaterialAsset(
+	    const std::shared_ptr<const FMaterialAssetData>& InData);
+	FMaterialParameterValues PrepareAssetValues(
+	    const FMaterialAssetValues& InValues,
+	    const std::map<FAssetRef, std::shared_ptr<const FTextureAsset>>& InTextures);
 	std::shared_ptr<const FRenderMaterial> RequestMaterial(std::shared_ptr<const FMaterialSnapshot> InSnapshot);
 	std::shared_ptr<const void> CreateScopeLifetime() const;
 	// Changes only when resource readiness/error publication changes; safe to observe from Main or Render.
@@ -138,12 +159,17 @@ public:
 	void Close();
 
 private:
+	// Resolve declared CPU values only; shader compilation remains in the existing Worker program preparation.
+	std::shared_ptr<const FMaterialSnapshot> ResolveMaterialAsset(
+	    const std::shared_ptr<const FMaterialAssetData>& InData);
+	friend class FModel;
 	std::shared_ptr<FRenderResourceCoordinator> Coordinator;
 	FShaderCompiler& Compiler;
+	std::shared_ptr<FMaterialAssetCache> AssetCache;
 };
 
 // Render only: freeze resource readiness, conservatively cull and globally order items.
 FRenderSceneSnapshot PrepareSceneSnapshot(FRenderSceneSnapshot InSnapshot);
-FRenderResourceDesc PrepareModelResources(std::shared_ptr<const FModelAsset> InAsset, FShaderCompiler& InCompiler,
-                                          EShaderFormat InFormat);
+FRenderResourceDesc PrepareModelResources(const FSceneModelData& InData, FShaderCompiler& InCompiler,
+                                          EShaderFormat InFormat, FMaterialAssetCache* InCache = nullptr);
 } // namespace Hyperion

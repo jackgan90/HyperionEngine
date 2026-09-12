@@ -1,3 +1,4 @@
+#include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
 #include <nlohmann/json.hpp>
 
@@ -37,6 +38,10 @@ FVec4 Quaternion(const FJson& InValue)
 FSceneManifest DecodeSceneManifest(std::string_view InText)
 {
 	const auto Json = FJson::parse(InText);
+	if (Json.contains("fields"))
+	{
+		return ReadValue<FSceneManifest>(DecodeAssetSourceJson(InText));
+	}
 	if (Json.at("type") != "hyperion.scene" || Json.at("schema_version") != 1 || !Json.at("assets").is_array() ||
 	    !Json.at("instances").is_array())
 	{

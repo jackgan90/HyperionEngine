@@ -1,4 +1,5 @@
 #include "Hyperion/AssetImport/GltfImport.h"
+#include "Hyperion/AssetImport/ModelImport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 #include <thread>
@@ -45,7 +46,7 @@ void CheckInvalidImports(FAssetImportService& InAssets, FTaskSystem& InTasks, co
 		bFailed = false;
 		try
 		{
-			InAssets.LoadAsync<FModelAsset>(InRoot / File).Get(InTasks);
+			InAssets.LoadAsync<FModelSource>(InRoot / File).Get(InTasks);
 		}
 		catch (...)
 		{
@@ -72,14 +73,15 @@ int main()
 		FAssetService Native(IO);
 		RegisterGltfImporter(Assets);
 		const auto Root = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
-		auto Cancelled = Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf");
-		auto Shared = Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf");
+		auto Cancelled = Assets.LoadAsync<FModelSource>(Root / "Showcase.gltf");
+		auto Shared = Assets.LoadAsync<FModelSource>(Root / "Showcase.gltf");
 		Cancelled.Cancel();
 		auto Model = Shared.Get(Tasks);
-		HYP_CHECK(Model->Primitives.size() == 4 && ModelInstances(*Model).size() == 4 && Model->Images[0].Width == 64);
+		HYP_CHECK(Model->Primitives.size() == 4 && ModelInstances(SplitModelSource(*Model).Model).size() == 4 &&
+		          Model->Images[0].Width == 64);
 		HYP_CHECK(Storage->Thread != std::this_thread::get_id());
 		HYP_CHECK(IO.Statistics().Reads == 3);
-		HYP_CHECK(Assets.LoadAsync<FModelAsset>(Root / "Showcase.gltf").Get(Tasks) == Model);
+		HYP_CHECK(Assets.LoadAsync<FModelSource>(Root / "Showcase.gltf").Get(Tasks) == Model);
 		bool bFailed = false;
 		try
 		{
@@ -92,20 +94,21 @@ int main()
 		HYP_CHECK(bFailed);
 		for (const auto* File : {"Showcase.glb", "DataUri.gltf", "Jpeg.gltf"})
 		{
-			auto Loaded = Assets.LoadAsync<FModelAsset>(Root / File).Get(Tasks);
+			auto Loaded = Assets.LoadAsync<FModelSource>(Root / File).Get(Tasks);
 			HYP_CHECK(Loaded->Primitives[0].Positions == Model->Primitives[0].Positions);
-			HYP_CHECK(ModelBounds(*Loaded).Maximum.X == ModelBounds(*Model).Maximum.X);
+			HYP_CHECK(ModelBounds(SplitModelSource(*Loaded).Model).Maximum.X ==
+			          ModelBounds(SplitModelSource(*Model).Model).Maximum.X);
 		}
 		for (const auto* File : {"Sparse.gltf", "Interleaved.gltf", "SparseInterleaved.gltf"})
 		{
-			auto Loaded = Assets.LoadAsync<FModelAsset>(Root / File).Get(Tasks);
+			auto Loaded = Assets.LoadAsync<FModelSource>(Root / File).Get(Tasks);
 			HYP_CHECK(Loaded->Primitives[0].Positions == std::vector<float>({0, 0, 0, 2, 0, 0, 0, 3, 0}));
 		}
-		auto Normalized = Assets.LoadAsync<FModelAsset>(Root / "Normalized.gltf").Get(Tasks);
+		auto Normalized = Assets.LoadAsync<FModelSource>(Root / "Normalized.gltf").Get(Tasks);
 		HYP_CHECK(std::abs(Normalized->Primitives[0].Colors[5] - 128.f / 255) < .00001f);
 		for (const auto* File : {"Strip.gltf", "Fan.gltf"})
 		{
-			auto Topology = Assets.LoadAsync<FModelAsset>(Root / File).Get(Tasks);
+			auto Topology = Assets.LoadAsync<FModelSource>(Root / File).Get(Tasks);
 			HYP_CHECK(Topology->Primitives[0].Indices.size() == 6);
 			for (std::size_t Index = 2; Index < Topology->Primitives[0].Normals.size(); Index += 3)
 			{
@@ -113,17 +116,18 @@ int main()
 			}
 		}
 		CheckInvalidImports(Assets, Tasks, Root);
-		Native.SaveAsync("model-roundtrip.hasset", Model).Get(Tasks);
+		const auto NativeModel = std::make_shared<const FModelAsset>(SplitModelSource(*Model).Model);
+		Native.SaveAsync("model-roundtrip.hasset", NativeModel).Get(Tasks);
 		auto Restored = Native.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks);
-		HYP_CHECK(Serialize(*Restored) == Serialize(*Model));
-		auto Changed = std::make_shared<FModelAsset>(*Model);
+		HYP_CHECK(Serialize(*Restored) == Serialize(*NativeModel));
+		auto Changed = std::make_shared<FModelAsset>(*NativeModel);
 		Changed->Name = "Changed snapshot";
 		Native.SaveAsync<FModelAsset>("model-roundtrip.hasset", Changed).Get(Tasks);
 		HYP_CHECK(Native.LoadAsync<FModelAsset>("model-roundtrip.hasset").Get(Tasks)->Name == "Changed snapshot");
 		bFailed = false;
 		try
 		{
-			Native.SaveAsync("unsupported.gltf", Model).Get(Tasks);
+			Native.SaveAsync("unsupported.gltf", NativeModel).Get(Tasks);
 		}
 		catch (...)
 		{
@@ -133,7 +137,7 @@ int main()
 		{
 			FAssetImportService Temporary(IO);
 			RegisterGltfImporter(Temporary);
-			auto Abandoned = Temporary.LoadAsync<FModelAsset>(Root / "Showcase.glb");
+			auto Abandoned = Temporary.LoadAsync<FModelSource>(Root / "Showcase.glb");
 			Abandoned.Cancel();
 			// Destruction cancels/drains the producer before IO or the task system dies.
 		}

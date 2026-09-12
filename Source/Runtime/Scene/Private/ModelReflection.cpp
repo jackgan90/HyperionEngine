@@ -2,26 +2,6 @@
 
 namespace Hyperion
 {
-template<> std::span<const EAlphaMode> RecordEnumValues<EAlphaMode>()
-{
-	static constexpr std::array Values{EAlphaMode::Opaque, EAlphaMode::Mask, EAlphaMode::Blend};
-	return Values;
-}
-
-template<> std::span<const EWrapMode> RecordEnumValues<EWrapMode>()
-{
-	static constexpr std::array Values{EWrapMode::Repeat, EWrapMode::Clamp, EWrapMode::Mirror};
-	return Values;
-}
-
-template<> std::span<const ESamplerFilter> RecordEnumValues<ESamplerFilter>()
-{
-	static constexpr std::array Values{ESamplerFilter::Nearest,           ESamplerFilter::Linear,
-	                                   ESamplerFilter::NearestMipNearest, ESamplerFilter::LinearMipNearest,
-	                                   ESamplerFilter::NearestMipLinear,  ESamplerFilter::LinearMipLinear};
-	return Values;
-}
-
 template<> const FRecordDescriptor& RecordType<FMaterialOverride>()
 {
 	static const auto Type = MakeRecord<FMaterialOverride>("hyperion.materialoverride",
@@ -58,49 +38,6 @@ template<> const FRecordDescriptor& RecordType<FMat4>()
 	return Type;
 }
 
-template<> const FRecordDescriptor& RecordType<FModelSampler>()
-{
-	static const auto Type = MakeRecord<FModelSampler>(
-	    "hyperion.modelsampler", {Member("wrapU", &FModelSampler::WrapU), Member("wrapV", &FModelSampler::WrapV),
-	                              Member("min", &FModelSampler::Min), Member("mag", &FModelSampler::Mag)});
-	return Type;
-}
-
-template<> const FRecordDescriptor& RecordType<FTextureBinding>()
-{
-	static const auto Type =
-	    MakeRecord<FTextureBinding>("hyperion.texturebinding", {Member("image", &FTextureBinding::Image),
-	                                                            Member("sampler", &FTextureBinding::Sampler),
-	                                                            Member("texCoord", &FTextureBinding::TexCoord)});
-	return Type;
-}
-
-template<> const FRecordDescriptor& RecordType<FModelImage>()
-{
-	static const auto Type = MakeRecord<FModelImage>(
-	    "hyperion.modelimage", {Member("name", &FModelImage::Name), Member("width", &FModelImage::Width),
-	                            Member("height", &FModelImage::Height), Member("rgba", &FModelImage::Rgba)});
-	return Type;
-}
-
-template<> const FRecordDescriptor& RecordType<FModelMaterial>()
-{
-	static const auto Type = MakeRecord<FModelMaterial>(
-	    "hyperion.modelmaterial",
-	    {Member("name", &FModelMaterial::Name), Member("baseColor", &FModelMaterial::BaseColor),
-	     Member("emissive", &FModelMaterial::Emissive), Member("metallic", &FModelMaterial::Metallic),
-	     Member("roughness", &FModelMaterial::Roughness), Member("normalScale", &FModelMaterial::NormalScale),
-	     Member("occlusionStrength", &FModelMaterial::OcclusionStrength),
-	     Member("alphaCutoff", &FModelMaterial::AlphaCutoff), Member("alphaMode", &FModelMaterial::AlphaMode),
-	     Member("doubleSided", &FModelMaterial::bDoubleSided), Member("unlit", &FModelMaterial::bUnlit),
-	     Member("baseColorTexture", &FModelMaterial::BaseColorTexture),
-	     Member("metallicRoughnessTexture", &FModelMaterial::MetallicRoughnessTexture),
-	     Member("normalTexture", &FModelMaterial::NormalTexture),
-	     Member("occlusionTexture", &FModelMaterial::OcclusionTexture),
-	     Member("emissiveTexture", &FModelMaterial::EmissiveTexture)});
-	return Type;
-}
-
 template<> const FRecordDescriptor& RecordType<FModelPrimitive>()
 {
 	static const auto Type = MakeRecord<FModelPrimitive>(
@@ -124,13 +61,23 @@ template<> const FRecordDescriptor& RecordType<FModelNode>()
 
 template<> const FRecordDescriptor& RecordType<FModelAsset>()
 {
-	static const auto Type = MakeRecord<FModelAsset>(
-	    "hyperion.modelasset",
-	    {Member("name", &FModelAsset::Name), Member("primitives", &FModelAsset::Primitives),
-	     Member("materials", &FModelAsset::Materials), Member("images", &FModelAsset::Images),
-	     Member("samplers", &FModelAsset::Samplers), Member("nodes", &FModelAsset::Nodes),
-	     Member("roots", &FModelAsset::Roots), Member("diagnostics", &FModelAsset::Diagnostics)},
-	    1, ValidateModel);
+	static const auto Type = []
+	{
+		auto Result = MakeRecord<FModelAsset>(
+		    "hyperion.modelasset",
+		    {Member("name", &FModelAsset::Name), Member("primitives", &FModelAsset::Primitives),
+		     Member("materialSlots", &FModelAsset::MaterialSlots), Member("nodes", &FModelAsset::Nodes),
+		     Member("roots", &FModelAsset::Roots), Member("diagnostics", &FModelAsset::Diagnostics)},
+		    2, ValidateModel);
+		Result.Migrations.emplace(
+		    1,
+		    [](FArchiveNode::FObject&)
+		    {
+			    throw std::runtime_error(
+			        "Embedded model schema 1 requires AssetTool upgrade to independent material/texture assets");
+		    });
+		return Result;
+	}();
 	return Type;
 }
 } // namespace Hyperion

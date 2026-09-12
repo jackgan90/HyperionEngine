@@ -1,5 +1,6 @@
 #include "AssetCommands.h"
 #include "Hyperion/AssetImport/GltfImport.h"
+#include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
 #include <set>
 
@@ -23,7 +24,7 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 	if (InArguments.size() < 3)
 	{
 		throw std::invalid_argument(
-		    "import/upgrade SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID]");
+		    "import/upgrade SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] [--library DIRECTORY]");
 	}
 	FAssetImportOptions Options;
 	for (std::size_t Index = 3; Index < InArguments.size(); ++Index)
@@ -36,6 +37,10 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 		else if (Argument == "--force")
 		{
 			Options.bForce = true;
+		}
+		else if (Argument == "--library" && Index + 1 < InArguments.size())
+		{
+			Options.Library = Path(InArguments[++Index]);
 		}
 		else if ((Argument == "--name" || Argument == "--type") && Index + 1 < InArguments.size())
 		{
@@ -98,6 +103,34 @@ std::shared_ptr<const FAssetGraph> Validate(FAssetService& InAssets, FTaskSystem
 	return Graph;
 }
 
+void ExportJson(std::span<const std::string_view> InArguments, FAssetService& InAssets, FIOService& InIO)
+{
+	if (InArguments.size() != 3)
+	{
+		throw std::invalid_argument("export-json INPUT.hasset OUTPUT.json");
+	}
+	const auto Asset = InAssets.LoadAsync(Path(InArguments[1])).Get(InIO.TaskSystem());
+	const auto Output = std::filesystem::absolute(Path(InArguments[2])).lexically_normal();
+	auto Object = ReadRecord(*Asset->Type, WriteRecord(*Asset->Type, Asset->Object.get()));
+	VisitRecord(*Asset->Type, Object.get(),
+	            [&](const FRecordDescriptor& InType, const void* InValue, std::string_view)
+	            {
+		            if (InType.CppType == typeid(FAssetRef))
+		            {
+			            auto& Reference = *const_cast<FAssetRef*>(static_cast<const FAssetRef*>(InValue));
+			            if (!Reference.Path.empty())
+			            {
+				            const auto Absolute = (Asset->Path.parent_path() / Path(Reference.Path)).lexically_normal();
+				            const auto Relative = Absolute.lexically_relative(Output.parent_path());
+				            Reference.Path = PathText(Relative.empty() ? Absolute : Relative);
+			            }
+		            }
+	            });
+	const auto Text = EncodeAssetSourceJson(WriteRecord(*Asset->Type, Object.get()));
+	const auto Bytes = std::as_bytes(std::span(Text));
+	InIO.WriteAsync(Output, FBytes(Bytes.begin(), Bytes.end())).Get(InIO.TaskSystem());
+}
+
 void Catalog(std::span<const std::string_view> InArguments, FAssetService& InAssets, FTaskSystem& InTasks,
              std::ostream& InOutput)
 {
@@ -135,9 +168,11 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 {
 	if (InArguments.empty() || InArguments[0] == "--help")
 	{
-		InOutput << "hyperion_asset_tool import SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID]\n"
+		InOutput << "hyperion_asset_tool import SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] "
+		            "[--library DIRECTORY]\n"
 		         << "hyperion_asset_tool upgrade LEGACY.hasset OUTPUT.hasset\n"
 		         << "hyperion_asset_tool inspect|validate ROOT.hasset\n"
+		         << "hyperion_asset_tool export-json INPUT.hasset OUTPUT.json\n"
 		         << "hyperion_asset_tool measure-source SOURCE.gltf|SOURCE.glb\n"
 		         << "hyperion_asset_tool catalog OUTPUT.hasset ROOT.hasset [ROOT.hasset ...]\n";
 		return;
@@ -164,7 +199,11 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	FAssetService Assets(InIO);
 	RegisterSceneAssetTypes(Assets.Types());
 	Assets.Types().Register<FAssetCatalog>();
-	if (Command == "catalog")
+	if (Command == "export-json")
+	{
+		ExportJson(InArguments, Assets, InIO);
+	}
+	else if (Command == "catalog")
 	{
 		Catalog(InArguments, Assets, InIO.TaskSystem(), InOutput);
 	}

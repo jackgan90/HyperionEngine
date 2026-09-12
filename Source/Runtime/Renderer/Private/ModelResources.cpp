@@ -4,12 +4,22 @@
 
 namespace Hyperion
 {
-FRenderResourceDesc PrepareModelResources(std::shared_ptr<const FModelAsset> InAsset, FShaderCompiler& InCompiler,
-                                          EShaderFormat InFormat)
+FRenderResourceDesc PrepareModelResources(const FSceneModelData& InData, FShaderCompiler& InCompiler,
+                                          EShaderFormat InFormat, FMaterialAssetCache* InCache)
 {
+	const auto& InAsset = InData.Asset;
+	if (!InAsset || InData.Materials.size() != InAsset->MaterialSlots.size() || InData.Materials.empty())
+	{
+		throw std::invalid_argument("Model rendering requires a complete resolved material asset graph");
+	}
 	const auto Prepared = PrepareModel(InAsset);
 	FRenderResourceDesc Result;
-	Result.Materials = PrepareModelMaterials(Prepared, InCompiler, InFormat);
+	FMaterialAssetCache LocalCache;
+	auto& Cache = InCache ? *InCache : LocalCache;
+	for (const auto& Material : InData.Materials)
+	{
+		Result.Materials.push_back(Cache.Prepare(Material, InCompiler, InFormat, !InData.MaterialSnapshots.empty()));
+	}
 	for (const auto& Primitive : Prepared.Primitives)
 	{
 		FRenderGeometryDesc Geometry;
@@ -33,10 +43,8 @@ FRenderResourceDesc PrepareModelResources(std::shared_ptr<const FModelAsset> InA
 		}
 		const auto Index = static_cast<std::uint32_t>(Result.Geometries.size());
 		const auto Material = InAsset->Primitives[Index].Material;
-		Result.Sections.push_back({Index,
-		                           Material < 0 ? static_cast<std::uint32_t>(Prepared.Materials.size() - 1)
-		                                        : static_cast<std::uint32_t>(Material),
-		                           0, static_cast<std::uint32_t>(Primitive.Indices.size())});
+		Result.Sections.push_back(
+		    {Index, static_cast<std::uint32_t>(Material), 0, static_cast<std::uint32_t>(Primitive.Indices.size())});
 		Result.Geometries.push_back(std::move(Geometry));
 	}
 	return Result;

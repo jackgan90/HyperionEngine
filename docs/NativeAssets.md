@@ -2,6 +2,8 @@
 
 运行时只读取原生 .hasset。源 glTF/GLB 和场景 JSON 由独立 AssetImport 模块转换；Viewer 不链接 AssetImport，也不注册源格式 codec。现有实验配置仍是 JSON，model_source、scene_source、--model、--scene 保持原名，值改为原生资产路径。
 
+模型 schema 2 引用独立材质，材质引用独立纹理。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 必须先经 AssetTool 拆分升级。
+
 ## 构建和工具
 
 从仓库根目录执行：
@@ -21,9 +23,9 @@
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
-源文件与输出文件必须不同。--scene 将完整模型及其原有节点层级包装为一个场景实例；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
+源文件与输出文件必须不同。--scene 将完整模型及其原有节点层级包装为一个场景实例；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
-cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 和 Shadows.hasset，以及 Catalog.hasset。两种场景分别保留 79 和 10 个实例。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
+cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 、Shadows.hasset 和 SharedAssets.hasset，以及 Catalog.hasset。两种场景分别保留 79 和 10 个实例。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
 
 ## 模块与线程
 
@@ -34,11 +36,12 @@ cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models
 | AssetTypes | FAssetRef、头部、来源记录、catalog 等轻量反射数据，仅依赖 Reflection |
 | Assets | 原生 envelope、CPU 对象缓存、引用解析、依赖图、异步保存 |
 | AssetImport | importer 注册、源读取跟踪、glTF/场景 JSON 转换、增量发布 |
+| Textures / Materials | 独立 CPU 纹理/材质反射记录与类型化参数 |
 | Scene | FModelAsset、FSceneManifest 和逻辑场景数据；不依赖 RHI/Renderer |
 | Renderer | FSceneInstance/FModel、CPU 到 GPU 的准备、资源和绘制 |
 | AssetTool | 组合工具所需类型和 importer；独立可执行程序 |
 
-Main 仅发起请求、轮询、编辑及捕获快照；Worker 执行反射、转换、依赖遍历及编码；EDomain::Io 执行文件读取、原子替换和发布 lease 的获取。Worker 使用现有可恢复等待请求 IO，因此单 Worker 也可完成依赖加载。CPU ready、依赖图完整和 GPU ready 是不同状态。已有 mip 生成、GPU 上传/fence 与材质准备仍属于渲染准备过程，没有保存原生 GPU 对象或句柄。
+Main 仅发起请求、轮询、编辑及捕获快照；Worker 执行反射、转换、依赖遍历及编码；EDomain::Io 执行文件读取、原子替换和发布 lease 的获取。Worker 使用现有可恢复等待请求 IO，因此单 Worker 也可完成依赖加载。CPU ready、依赖图完整和 GPU ready 是不同状态。mip 生成属于离线导入；运行时直接共享已存 mip，GPU 上传/fence 与材质准备属于 Renderer，没有保存原生 GPU 对象或句柄。
 
 ## 调用
 
@@ -89,7 +92,7 @@ Tasks.Shutdown();
 
 同一批次按规范化来源路径和类型去重。依赖先写为 .assets/<AssetId>-<Revision>.hasset；依赖引用相对于各自目录。原生来源的每条引用都会先核对源文件的 ID、类型和固定 Revision，包括转换或发布结果复用；之后才允许重写为迁移后的输出引用。跨盘来源不能形成相对路径时，来源指纹路径与输出身份键均保留绝对路径。来源在发布根文件前再次核对，最后才原子替换根文件。转换失败或依赖写入失败不会改变旧根；旧根仍引用旧的不可变依赖。根身份和对应来源的依赖身份在重导入间保持稳定，revision 是内容指纹。
 
-同一导入服务内，同一路径按顺序发布；本地文件系统在 IO 域取得独占 Windows 文件 lease，其他活跃发布者会失败并返回明确错误。lease 文件关闭或进程退出时由系统删除。替代文件系统可覆盖 AcquireWriteLease；其默认实现仅提供当前进程、同一存储实例内的互斥。
+同一导入服务内，同一共享库按顺序发布；本地文件系统在 IO 域取得独占 Windows 文件 lease，其他活跃发布者会失败并返回明确错误。lease 文件关闭或进程退出时由系统删除。替代文件系统可覆盖 AcquireWriteLease；其默认实现仅提供当前进程、同一存储实例内的互斥。
 
 旧依赖代际不会自动删除。当前不提供代际回收命令；应由内容管理者在确认没有旧根/运行中消费者依赖它们后显式清理。这里只承诺单文件原子替换加不可变依赖，不承诺多个文件同时事务提交。
 
@@ -129,7 +132,7 @@ HYPA v2 以 little endian 写入 24 字节前缀：magic、u32 版本、u64 meta
 
 读取检查 magic、版本、完整性、范围、计数、重复 key、块索引、元素对齐、有限数值和多余数据。默认单文件 512 MiB（含 80 字节 HAST 头）、复杂度 100 万节点/64 层、保守累计分配预算 1 GiB。底层 EncodeAsset/DecodeAsset 可传入 FArchiveLimits；编码会先为 HAST 头保留字节，拒绝写出超过完整文件限额的内容。拥有原始字节的解码保留 bulk 视图直到类型构造，规范内容哈希也按块计算，不为哈希复制完整 bulk。公开 span 解码拥有必要副本，输入在调用后释放仍安全。预算不包含整个进程、图形驱动或任意自定义验证器的分配。
 
-历史 HYPA v1 和裸 HYPA v2 记录可以只读加载，产生升级诊断和确定的临时身份；只有工具或显式保存才写入 HAST。Scene v1 的 path/TRS 会显式迁移成类型引用与矩阵，升级含源格式依赖的旧场景应使用 AssetTool，让依赖一并导入。
+历史 HYPA v1 和裸 HYPA v2 容器可以只读解析，产生升级诊断和确定的临时身份；具体类型还须支持其模式版本，内嵌 model schema 1 要求工具升级；只有工具或显式保存才写入 HAST。Scene v1 的 path/TRS 会显式迁移成类型引用与矩阵，升级含源格式依赖的旧场景应使用 AssetTool，让依赖一并导入。
 
 ## 场景保存
 
@@ -139,7 +142,7 @@ Scene 面板的 Save edited scene 异步写出当前目录下 <原名>.edited.ha
 ./out/build/debug/bin/hyperion_viewer.exe --scene out/content/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
 ~~~
 
-FSceneInstance::Snapshot(destination) 保留每个实例的稳定 ID、名称、完整仿射矩阵、可见性和基础材质覆盖；新增实例获得独立 ID。它只保存仍在使用的模型引用，并按另存目标重新定位路径。SceneViewer 另补当前相机 eye/target/near/far。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。没有原生来源关联的模型和任意 FMaterialInstance/FMaterialSnapshot/section selection 会明确拒绝保存，避免静默丢失状态。
+FSceneInstance::Snapshot(destination) 保留每个实例的稳定 ID、名称、完整仿射矩阵、可见性和基础材质覆盖；新增实例获得独立 ID。它只保存仍在使用的模型引用，并按另存目标重新定位路径。SceneViewer 另补当前相机 eye/target/near/far。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
 
 ## 验证与测量
 

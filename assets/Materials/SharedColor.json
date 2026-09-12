@@ -1,0 +1,384 @@
+{
+  "fields": {
+    "name": "Independent authored shader",
+    "parameters": [
+      {
+        "fields": {
+          "active": true,
+          "default": {
+            "fields": {
+              "elements": [],
+              "sampler": {
+                "fields": {
+                  "borderColor": {
+                    "$bulk": "f32",
+                    "data": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  "compare": 3,
+                  "comparison": false,
+                  "magLinear": true,
+                  "maxAnisotropy": 1,
+                  "maxLod": 3.4028234663852886e+38,
+                  "minLinear": true,
+                  "minLod": 0.0,
+                  "mipLinear": true,
+                  "mipLodBias": 0.0,
+                  "u": 0,
+                  "v": 0,
+                  "w": 0
+                },
+                "type": "hyperion.materialsampler",
+                "version": 1
+              },
+              "texture": null,
+              "type": {
+                "fields": {
+                  "arrayCount": 0,
+                  "columns": 4,
+                  "kind": 0,
+                  "memberNames": [],
+                  "members": [],
+                  "rows": 1,
+                  "scalar": 3
+                },
+                "type": "hyperion.materialparametertype",
+                "version": 1
+              },
+              "words": {
+                "$bulk": "u32",
+                "data": [
+                  1065353216,
+                  0,
+                  0,
+                  1065353216
+                ]
+              }
+            },
+            "type": "hyperion.materialassetvalue",
+            "version": 1
+          },
+          "name": "Tint",
+          "overridePolicy": 1,
+          "overrideScopes": 224,
+          "required": true,
+          "semantic": "",
+          "source": 0,
+          "targets": [
+            "Surface.Tint"
+          ],
+          "type": {
+            "fields": {
+              "arrayCount": 0,
+              "columns": 4,
+              "kind": 0,
+              "memberNames": [],
+              "members": [],
+              "rows": 1,
+              "scalar": 3
+            },
+            "type": "hyperion.materialparametertype",
+            "version": 1
+          }
+        },
+        "type": "hyperion.materialassetparameter",
+        "version": 1
+      },
+      {
+        "fields": {
+          "active": true,
+          "default": {
+            "fields": {
+              "elements": [],
+              "sampler": {
+                "fields": {
+                  "borderColor": {
+                    "$bulk": "f32",
+                    "data": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  "compare": 3,
+                  "comparison": false,
+                  "magLinear": true,
+                  "maxAnisotropy": 1,
+                  "maxLod": 3.4028234663852886e+38,
+                  "minLinear": true,
+                  "minLod": 0.0,
+                  "mipLinear": true,
+                  "mipLodBias": 0.0,
+                  "u": 0,
+                  "v": 0,
+                  "w": 0
+                },
+                "type": "hyperion.materialsampler",
+                "version": 1
+              },
+              "texture": null,
+              "type": {
+                "fields": {
+                  "arrayCount": 0,
+                  "columns": 1,
+                  "kind": 5,
+                  "memberNames": [],
+                  "members": [],
+                  "rows": 1,
+                  "scalar": 3
+                },
+                "type": "hyperion.materialparametertype",
+                "version": 1
+              },
+              "words": {
+                "$bulk": "u32",
+                "data": []
+              }
+            },
+            "type": "hyperion.materialassetvalue",
+            "version": 1
+          },
+          "name": "ImageSampler",
+          "overridePolicy": 1,
+          "overrideScopes": 224,
+          "required": true,
+          "semantic": "",
+          "source": 0,
+          "targets": [
+            "ImageSampler"
+          ],
+          "type": {
+            "fields": {
+              "arrayCount": 0,
+              "columns": 1,
+              "kind": 5,
+              "memberNames": [],
+              "members": [],
+              "rows": 1,
+              "scalar": 3
+            },
+            "type": "hyperion.materialparametertype",
+            "version": 1
+          }
+        },
+        "type": "hyperion.materialassetparameter",
+        "version": 1
+      },
+      {
+        "fields": {
+          "active": true,
+          "default": null,
+          "name": "ImageTexture",
+          "overridePolicy": 1,
+          "overrideScopes": 224,
+          "required": true,
+          "semantic": "",
+          "source": 0,
+          "targets": [],
+          "type": {
+            "fields": {
+              "arrayCount": 0,
+              "columns": 1,
+              "kind": 3,
+              "memberNames": [],
+              "members": [],
+              "rows": 1,
+              "scalar": 3
+            },
+            "type": "hyperion.materialparametertype",
+            "version": 1
+          }
+        },
+        "type": "hyperion.materialassetparameter",
+        "version": 1
+      }
+    ],
+    "passes": [
+      {
+        "fields": {
+          "allowBatchReordering": false,
+          "allowDynamicOverrides": false,
+          "alphaClip": false,
+          "dynamicState": {
+            "fields": {
+              "blendConstants": {
+                "$bulk": "f32",
+                "data": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              "stencilReference": 0
+            },
+            "type": "hyperion.materialdynamicstate",
+            "version": 1
+          },
+          "instanceArrays": [],
+          "pixel": {
+            "fields": {
+              "defines": [
+                {
+                  "fields": {
+                    "name": "ASSET_GAIN",
+                    "value": "1"
+                  },
+                  "type": "hyperion.materialshaderdefine",
+                  "version": 1
+                }
+              ],
+              "entry": "AssetPixel",
+              "path": "SharedAsset.hlsl"
+            },
+            "type": "hyperion.materialshader",
+            "version": 1
+          },
+          "queue": 0,
+          "requiresConservativeBounds": false,
+          "srgbTarget": true,
+          "state": {
+            "fields": {
+              "alphaOperation": 0,
+              "alphaToCoverage": false,
+              "backStencil": {
+                "fields": {
+                  "compare": 7,
+                  "depthFail": 0,
+                  "fail": 0,
+                  "pass": 0
+                },
+                "type": "hyperion.materialstencilface",
+                "version": 1
+              },
+              "blend": false,
+              "colorWriteMask": 15,
+              "cull": 0,
+              "depthBias": 0,
+              "depthBiasClamp": 0.0,
+              "depthClip": true,
+              "depthCompare": 3,
+              "depthTest": false,
+              "depthWrite": false,
+              "destinationAlpha": 0,
+              "destinationRgb": 0,
+              "fill": 0,
+              "frontCounterClockwise": true,
+              "frontStencil": {
+                "fields": {
+                  "compare": 7,
+                  "depthFail": 0,
+                  "fail": 0,
+                  "pass": 0
+                },
+                "type": "hyperion.materialstencilface",
+                "version": 1
+              },
+              "rgbOperation": 0,
+              "sampleMask": 4294967295,
+              "slopeScaledDepthBias": 0.0,
+              "sourceAlpha": 1,
+              "sourceRgb": 1,
+              "stencil": false,
+              "stencilReadMask": 255,
+              "stencilWriteMask": 255,
+              "viewRelativeDepth": false
+            },
+            "type": "hyperion.materialstate",
+            "version": 1
+          },
+          "usage": "Forward",
+          "vertex": {
+            "fields": {
+              "defines": [],
+              "entry": "AssetVertex",
+              "path": "SharedAsset.hlsl"
+            },
+            "type": "hyperion.materialshader",
+            "version": 1
+          }
+        },
+        "type": "hyperion.materialpass",
+        "version": 1
+      }
+    ],
+    "values": [
+      {
+        "fields": {
+          "name": "ImageTexture",
+          "value": {
+            "fields": {
+              "elements": [],
+              "sampler": {
+                "fields": {
+                  "borderColor": {
+                    "$bulk": "f32",
+                    "data": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  "compare": 3,
+                  "comparison": false,
+                  "magLinear": true,
+                  "maxAnisotropy": 1,
+                  "maxLod": 3.4028234663852886e+38,
+                  "minLinear": true,
+                  "minLod": 0.0,
+                  "mipLinear": true,
+                  "mipLodBias": 0.0,
+                  "u": 0,
+                  "v": 0,
+                  "w": 0
+                },
+                "type": "hyperion.materialsampler",
+                "version": 1
+              },
+              "texture": {
+                "fields": {
+                  "id": "",
+                  "path": "../Textures/White.json",
+                  "revision": "",
+                  "type": "hyperion.textureasset"
+                },
+                "type": "hyperion.assetref",
+                "version": 1
+              },
+              "type": {
+                "fields": {
+                  "arrayCount": 0,
+                  "columns": 1,
+                  "kind": 3,
+                  "memberNames": [],
+                  "members": [],
+                  "rows": 1,
+                  "scalar": 3
+                },
+                "type": "hyperion.materialparametertype",
+                "version": 1
+              },
+              "words": {
+                "$bulk": "u32",
+                "data": []
+              }
+            },
+            "type": "hyperion.materialassetvalue",
+            "version": 1
+          }
+        },
+        "type": "hyperion.materialassetentry",
+        "version": 1
+      }
+    ],
+    "version": 1
+  },
+  "type": "hyperion.materialasset",
+  "version": 1
+}

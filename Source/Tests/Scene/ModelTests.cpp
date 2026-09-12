@@ -34,7 +34,9 @@ int main()
 	try
 	{
 		FModelAsset Model;
+		Model.MaterialSlots.push_back({"", "Material.hasset", "hyperion.materialasset", ""});
 		FModelPrimitive Primitive;
+		Primitive.Material = 0;
 		Primitive.Positions = {0, 0, 0, 1, 0, 0, 0, 1, 0};
 		Primitive.Indices = {0, 1, 2};
 		GenerateMeshDirections(Primitive);

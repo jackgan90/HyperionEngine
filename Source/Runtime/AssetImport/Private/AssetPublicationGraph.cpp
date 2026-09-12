@@ -46,7 +46,9 @@ void FPublication::Rewrite(void* InObject, const FRecordDescriptor& InType, cons
 		            {
 			            throw std::runtime_error(std::string(InField) + ": import requires a source path");
 		            }
-		            const auto Path = ImportPath(InSource.parent_path() / PathFromUtf8(Reference.Path));
+		            const auto Path = Reference.Path.starts_with("@")
+		                                  ? ImportProductPath(InSource, Reference.Path.substr(1))
+		                                  : ImportPath(InSource.parent_path() / PathFromUtf8(Reference.Path));
 		            const auto Key = std::make_pair(Path, Reference.TypeId);
 		            auto Existing = Published.find(Key);
 		            if (Existing == Published.end())
@@ -62,8 +64,7 @@ void FPublication::Rewrite(void* InObject, const FRecordDescriptor& InType, cons
 			            ValidateSourceReference(Reference, Existing->second.SourceIdentity, InField, InSource);
 		            }
 		            Reference = Existing->second.Reference;
-		            Reference.Path =
-		                ImportPathString(Existing->second.Path.lexically_relative(InDestination.parent_path()));
+		            Reference.Path = ImportRelativePath(Existing->second.Path, InDestination.parent_path());
 	            });
 }
 
@@ -74,6 +75,7 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 	{
 		throw std::runtime_error("Import dependency cycle or graph limit at " + ImportPathString(InSource));
 	}
+	AddProducts(InSource, InAsset);
 	Track(InAsset);
 	Bytes += InAsset.RetainedBytes;
 	if (Bytes > 1024ull * 1024ull * 1024ull)
@@ -81,28 +83,34 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 		throw std::runtime_error("Import graph exceeds 1 GiB retained data budget");
 	}
 	auto Object = ReadRecord(*InAsset.Type, WriteRecord(*InAsset.Type, InAsset.Object.get()));
-	const auto IdentityKey =
-	    bInRoot ? "$root" : ImportRelativePath(InSource, Source.parent_path()) + "|" + InAsset.Type->Id;
+	const auto IdentityKey = bInRoot                      ? "$root"
+	                         : !InAsset.StableKey.empty() ? InAsset.StableKey
+	                         : InAsset.NativeHeader ? "native/" + InAsset.NativeHeader->Id + "|" + InAsset.Type->Id
+	                                                : "source/" + ImportPathString(InSource) + "|" + InAsset.Type->Id;
 	std::string Id;
-	if (const auto It = PreviousIds.find(IdentityKey); It != PreviousIds.end())
-	{
-		Id = It->second;
-	}
-	else if (bInRoot && Previous)
+	if (bInRoot && Previous)
 	{
 		Id = Previous->Header.Id;
+	}
+	else if (const auto It = LibraryIndex.Entries.find(IdentityKey); !bInRoot && It != LibraryIndex.Entries.end())
+	{
+		Id = It->second.Id;
 	}
 	else if (InAsset.NativeHeader)
 	{
 		Id = InAsset.NativeHeader->Id;
+	}
+	else if (const auto It = PreviousIds.find(IdentityKey); It != PreviousIds.end())
+	{
+		Id = It->second;
 	}
 	else
 	{
 		Id = CreateIdentifier();
 	}
 	Provenance.OutputIds[IdentityKey] = Id;
-	const auto Destination = bInRoot ? Output : Output.parent_path() / ".assets" / (Id + ".hasset");
-	Rewrite(Object.get(), *InAsset.Type, InSource, Destination);
+	const auto Destination = bInRoot ? Output : Library / ".assets" / (Id + ".hasset");
+	Rewrite(Object.get(), *InAsset.Type, InAsset.ProductRoot.empty() ? InSource : InAsset.ProductRoot, Destination);
 	FAssetHeader Header;
 	Header.Id = Id;
 	if (bInRoot)
@@ -116,11 +124,29 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 	}
 	auto Encoded = EncodeAsset(*InAsset.Type, Object.get(), std::move(Header));
 	const auto Path = bInRoot ? Output : Destination.parent_path() / (Id + "-" + Encoded.Header.Revision + ".hasset");
+	if (bInRoot)
+	{
+		SaveLibrary();
+	}
+	else
+	{
+		if (const auto It = SharedProducts.find(IdentityKey); !InAsset.NativeHeader && It != SharedProducts.end() &&
+		                                                      It->second.Reference.Revision != Encoded.Header.Revision)
+		{
+			throw std::runtime_error("Conflicting products claim one shared import identity: " + IdentityKey);
+		}
+		LibraryIndex.Entries[IdentityKey] = {Id, ImportRelativePath(Path, Library), Encoded.Header.TypeId,
+		                                     Encoded.Header.Revision};
+	}
 	Write(Path, Encoded);
 	FPublishedAsset Result{{Id, ImportPathString(Path.filename()), Encoded.Header.TypeId, Encoded.Header.Revision},
 	                       Path,
 	                       SourceIdentity(InAsset)};
 	Published.emplace(Key, Result);
+	if (!bInRoot)
+	{
+		SharedProducts[IdentityKey] = Result;
+	}
 	Active.erase(Key);
 	if (bInRoot)
 	{

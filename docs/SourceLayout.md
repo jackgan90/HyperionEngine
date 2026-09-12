@@ -16,7 +16,8 @@ Source/
     Platform/      # 窗口、输入与 SDL wrapper
     AssetTypes/    # 轻量引用、头部、来源记录和 catalog
     Assets/        # 原生异步加载/保存、依赖解析、缓存和图片 wrapper
-    Materials/     # CPU 材质定义、实例、semantic 和资源源数据（仅 Core/Math）
+    Textures/      # CPU 纹理反射记录、颜色编码和离线 mip
+    Materials/     # CPU 材质定义、实例、semantic、反射资产和纹理引用
     Scene/         # 独立 CPU 模型、Main 逻辑场景、清单与反射注册
     AssetImport/   # 离线 glTF/JSON 转换、增量导入和完整依赖发布
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存

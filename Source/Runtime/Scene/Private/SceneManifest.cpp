@@ -1,4 +1,5 @@
 #include "Hyperion/Scene/SceneManifest.h"
+#include "Hyperion/Materials/MaterialAsset.h"
 #include <set>
 
 namespace Hyperion
@@ -30,6 +31,16 @@ void ValidateSceneManifest(const FSceneManifest& InManifest)
 			throw std::invalid_argument("Invalid scene instance ID, asset reference or affine transform");
 		}
 		ValidateMaterialOverride(Instance.Material);
+		ValidateSceneMaterialAsset(Instance.Surface);
+		std::set<std::uint32_t> Sections;
+		for (const auto& Section : Instance.SectionSurfaces)
+		{
+			if (!Sections.insert(Section.Section).second)
+			{
+				throw std::invalid_argument("Duplicate persistent scene material section");
+			}
+			ValidateSceneMaterialAsset(Section.Material);
+		}
 	}
 	const auto Direction = Subtract(InManifest.Target, InManifest.Eye);
 	if (!IsFinite(InManifest.Eye) || !IsFinite(InManifest.Target) || !IsFinite(Direction) ||
@@ -97,9 +108,15 @@ template<> const FRecordDescriptor& RecordType<FSceneInstanceEntry>()
 		    "hyperion.sceneinstance",
 		    {Member("id", &FSceneInstanceEntry::Id, {true}), Member("asset", &FSceneInstanceEntry::Asset, {true}),
 		     Member("transform", &FSceneInstanceEntry::Transform), Member("visible", &FSceneInstanceEntry::bVisible),
-		     Member("name", &FSceneInstanceEntry::Name), Member("material", &FSceneInstanceEntry::Material)},
-		    2);
+		     Member("name", &FSceneInstanceEntry::Name), Member("material", &FSceneInstanceEntry::Material),
+		     Member("surface", &FSceneInstanceEntry::Surface),
+		     Member("sectionSurfaces", &FSceneInstanceEntry::SectionSurfaces)},
+		    3);
 		Result.Migrations.emplace(1, MigrateInstance);
+		Result.Migrations.emplace(2,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
 		return Result;
 	}();
 	return Type;
@@ -114,8 +131,12 @@ template<> const FRecordDescriptor& RecordType<FSceneManifest>()
 		    {Member("assets", &FSceneManifest::Assets, {true}), Member("instances", &FSceneManifest::Instances, {true}),
 		     Member("eye", &FSceneManifest::Eye), Member("target", &FSceneManifest::Target),
 		     Member("near", &FSceneManifest::Near), Member("far", &FSceneManifest::Far)},
-		    2, ValidateSceneManifest);
+		    3, ValidateSceneManifest);
 		Result.Migrations.emplace(1,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
+		Result.Migrations.emplace(2,
 		                          [](FArchiveNode::FObject&)
 		                          {
 		                          });
@@ -127,6 +148,8 @@ template<> const FRecordDescriptor& RecordType<FSceneManifest>()
 void RegisterSceneAssetTypes(FRecordRegistry& InRegistry)
 {
 	InRegistry.Register<FModelAsset>();
+	InRegistry.Register<FMaterialAsset>();
+	InRegistry.Register<FTextureAsset>();
 	InRegistry.Register<FSceneManifest>();
 }
 } // namespace Hyperion

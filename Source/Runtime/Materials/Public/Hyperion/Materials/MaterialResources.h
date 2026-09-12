@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Textures/TextureAsset.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -8,12 +9,6 @@
 
 namespace Hyperion
 {
-enum class EMaterialTextureEncoding : std::uint8_t
-{
-	Linear,
-	Srgb
-};
-
 // CPU description of a renderer-produced, single-sample depth texture.
 struct FMaterialDepthTexture
 {
@@ -40,17 +35,10 @@ struct FMaterialColorTexture
 	bool operator==(const FMaterialColorTexture&) const = default;
 };
 
-struct FMaterialTextureMip
-{
-	std::uint32_t Width{};
-	std::uint32_t Height{};
-	std::vector<std::uint8_t> Bytes;
-	bool operator==(const FMaterialTextureMip&) const = default;
-};
-
 class FMaterialTextureSource
 {
 public:
+	explicit FMaterialTextureSource(std::shared_ptr<const FTextureAsset> InAsset, std::uint64_t InVersion = 1);
 	FMaterialTextureSource(EMaterialTextureEncoding InEncoding, std::vector<FMaterialTextureMip> InMips,
 	                       std::uint64_t InVersion = 1);
 	explicit FMaterialTextureSource(FMaterialDepthTexture InDepth, std::uint64_t InVersion = 1);
@@ -61,6 +49,7 @@ public:
 	std::uint64_t GetVersion() const;
 	EMaterialTextureEncoding GetEncoding() const;
 	const std::vector<FMaterialTextureMip>& GetMips() const;
+	const std::shared_ptr<const FTextureAsset>& GetAsset() const;
 	const FMaterialDepthTexture* GetDepthTarget() const;
 	const FMaterialColorTexture* GetColorTarget() const;
 	bool IsRenderTarget() const;
@@ -70,6 +59,7 @@ private:
 	std::uint64_t Version;
 	EMaterialTextureEncoding Encoding;
 	std::vector<FMaterialTextureMip> Mips;
+	std::shared_ptr<const FTextureAsset> Asset;
 	FMaterialDepthTexture Depth;
 	bool bDepthTarget{};
 	FMaterialColorTexture Color;

@@ -1,6 +1,7 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/Model.h"
+#include "Support/ModelAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <cmath>
@@ -11,9 +12,9 @@ using namespace Hyperion;
 
 namespace
 {
-std::shared_ptr<const FModelAsset> Plane(EAlphaMode InAlpha = EAlphaMode::Opaque)
+std::shared_ptr<const FModelSource> Plane(EAlphaMode InAlpha = EAlphaMode::Opaque)
 {
-	FModelAsset Asset;
+	FModelSource Asset;
 	FModelPrimitive Primitive;
 	Primitive.Positions = {-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0};
 	Primitive.Normals = {0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1};
@@ -46,10 +47,10 @@ std::shared_ptr<const FModelAsset> Plane(EAlphaMode InAlpha = EAlphaMode::Opaque
 	Node.Primitives = {0};
 	Asset.Nodes.push_back(Node);
 	Asset.Roots = {0};
-	return std::make_shared<const FModelAsset>(std::move(Asset));
+	return std::make_shared<const FModelSource>(std::move(Asset));
 }
 
-void Await(const FModel& InModel)
+void Await(const FSourceModel& InModel)
 {
 	const auto End = std::chrono::steady_clock::now() + std::chrono::seconds(20);
 	while (!InModel.IsReady() && InModel.GetError().empty() && std::chrono::steady_clock::now() < End)
@@ -192,7 +193,7 @@ struct FShadowFixture
 
 void CheckOffscreenAndRemoval(FShadowFixture& InFixture)
 {
-	FModel Caster(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Plane());
+	FSourceModel Caster(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Plane());
 	Caster.SetTransform(Multiply(Translation({8, 0, 3}), Scale({.75f, .75f, 1})));
 	Await(Caster);
 	const auto Lit = InFixture.Frame(false, {8, 0, 3});
@@ -213,7 +214,7 @@ void CheckOffscreenAndRemoval(FShadowFixture& InFixture)
 void CheckMaskAndMirroring(FShadowFixture& InFixture)
 {
 	const auto Asset = Plane(EAlphaMode::Mask);
-	FModel Caster(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel Caster(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
 	Caster.SetTransform(Translation({0, 0, 2}));
 	Await(Caster);
 	const auto Program = Caster.GetResource()->GetMaterial(0)->GetCompiled();
@@ -238,7 +239,7 @@ void CheckMaskAndMirroring(FShadowFixture& InFixture)
 
 void CheckBlendAndBatching(FShadowFixture& InFixture)
 {
-	FModel Blend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Plane(EAlphaMode::Blend));
+	FSourceModel Blend(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Plane(EAlphaMode::Blend));
 	Blend.SetTransform(Translation({0, 0, 2}));
 	Await(Blend);
 	const auto Lit = InFixture.Frame(false);
@@ -246,8 +247,8 @@ void CheckBlendAndBatching(FShadowFixture& InFixture)
 	HYP_CHECK(std::abs(InFixture.Pixel(Lit, {-2, 0, 0}) - InFixture.Pixel(Enabled, {-2, 0, 0})) < .025f);
 	Blend.Remove();
 	const auto Asset = Plane();
-	FModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
-	FModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel A(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
+	FSourceModel B(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Asset);
 	A.SetTransform(Translation({0, -1, 2}));
 	B.SetTransform(Translation({0, 1, 2}));
 	Await(A);
@@ -352,10 +353,10 @@ void CheckProviderAndDepthFormat()
 	                                          {
 		                                          return FMaterialValue::Float(Normalize(FVec3{8, 0, 3}));
 	                                          }});
-	FModel Receiver(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
+	FSourceModel Receiver(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
 	Receiver.SetTransform(Scale({4, 3, 1}));
 	Await(Receiver);
-	FModel Caster(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
+	FSourceModel Caster(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
 	Caster.SetTransform(Multiply(Translation({8, 0, 3}), Scale({.75f, .75f, 1})));
 	Await(Caster);
 	const auto Lit = Fixture.Frame(false);
@@ -386,7 +387,7 @@ void CheckLocalLightProvider()
 		                                          {
 			                                          return FMaterialValue::Float(FVec3{0, 0, 1});
 		                                          }});
-		FModel Model(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
+		FSourceModel Model(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
 		Await(Model);
 		Fixture.Frame(true);
 		HYP_CHECK(!Fixture.Statistics.bShadows && Fixture.Statistics.Views.size() == 1);
@@ -418,8 +419,8 @@ void CheckStableShadowPlans()
 	auto& Counts = *Strategy;
 	Fixture.Session->GetBatchSystem().Register(std::move(Strategy));
 	const auto Asset = Plane();
-	FModel A(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Asset);
-	FModel B(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Asset);
+	FSourceModel A(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Asset);
+	FSourceModel B(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Asset);
 	Await(A);
 	Await(B);
 	Fixture.Frame(true, {0, 0, 1});
@@ -494,7 +495,7 @@ int main()
 		for (const auto Convention : {EDepthConvention::Standard, EDepthConvention::Reversed})
 		{
 			FShadowFixture Fixture(ERHIDepthFormat::D32, Convention);
-			FModel Receiver(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
+			FSourceModel Receiver(Fixture.Session->GetScene(), Fixture.Session->GetResources(), Plane());
 			Receiver.SetTransform(Scale({4, 3, 1}));
 			Await(Receiver);
 			CheckOffscreenAndRemoval(Fixture);

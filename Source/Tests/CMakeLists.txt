@@ -192,3 +192,23 @@ set_tests_properties(native_asset_publication PROPERTIES FIXTURES_REQUIRED model
 
 add_dependencies(hyperion_check native_asset_tests publication_tests hyperion_asset_tool)
 set_tests_properties(native_model_fixtures native_asset_publication PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+
+hyp_test(material_asset_tests material_asset_contracts hyperion_materials Materials/MaterialAssetTests.cpp)
+target_link_libraries(material_asset_tests PRIVATE hyperion_assets)
+set_tests_properties(material_asset_contracts PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+add_dependencies(hyperion_check material_asset_tests)
+
+foreach(shared_asset_test IN ITEMS model_render_tests scene_render_tests deferred_render_tests shadow_render_tests scene_instance_tests)
+  target_link_libraries(${shared_asset_test} PRIVATE hyperion_asset_import)
+endforeach()
+
+hyp_test(shared_asset_publication_tests shared_asset_publication hyperion_asset_import Assets/SharedAssetPublicationTests.cpp)
+target_compile_definitions(shared_asset_publication_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+set_tests_properties(shared_asset_publication PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+add_dependencies(hyperion_check shared_asset_publication_tests)
+
+hyp_test(shared_asset_gpu_tests shared_asset_rendering hyperion_render Renderer/SharedAssetGpuTests.cpp)
+target_link_libraries(shared_asset_gpu_tests PRIVATE hyperion_rhi_d3d12)
+target_compile_definitions(shared_asset_gpu_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+set_tests_properties(shared_asset_rendering PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+add_dependencies(hyperion_check shared_asset_gpu_tests)

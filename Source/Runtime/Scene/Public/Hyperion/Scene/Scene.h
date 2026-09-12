@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/Materials/Material.h"
+#include "Hyperion/Materials/MaterialAsset.h"
 #include "Hyperion/Scene/Model.h"
 #include <compare>
 #include <optional>
@@ -14,9 +14,14 @@ struct FSceneModelData
 	std::vector<FModelInstance> Instances;
 	std::vector<FBounds> PrimitiveBounds;
 	FBounds Bounds;
+	std::vector<std::shared_ptr<const FMaterialAssetData>> Materials;
+	// Optional renderer-prepared defaults belong to this resolved dependency revision, independently of geometry.
+	std::vector<std::shared_ptr<const FMaterialSnapshot>> MaterialSnapshots;
 };
 
-std::shared_ptr<const FSceneModelData> PrepareSceneModel(std::shared_ptr<const FModelAsset> InAsset);
+std::shared_ptr<const FSceneModelData> PrepareSceneModel(
+    std::shared_ptr<const FModelAsset> InAsset,
+    std::vector<std::shared_ptr<const FMaterialAssetData>> InMaterials = {});
 void ValidateMaterialOverride(const FMaterialOverride& InMaterial);
 
 struct FSceneHandle
@@ -33,6 +38,10 @@ struct FSceneMaterialSelection
 	std::shared_ptr<FMaterialInstance> Instance;
 	std::shared_ptr<const FMaterialSnapshot> Snapshot;
 	FMaterialParameterValues Overrides;
+	std::optional<FAssetRef> Reference;
+	std::shared_ptr<const FMaterialSnapshot> AssetSnapshot;
+	std::map<FAssetRef, std::shared_ptr<const FTextureAsset>> TextureAssets;
+	bool operator==(const FSceneMaterialSelection&) const = default;
 };
 
 struct FSceneModel

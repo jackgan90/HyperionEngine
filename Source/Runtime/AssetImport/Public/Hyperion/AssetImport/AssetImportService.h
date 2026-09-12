@@ -3,6 +3,15 @@
 
 namespace Hyperion
 {
+struct FAssetImportProduct
+{
+	std::string Key;
+	std::shared_ptr<const FRecordDescriptor> Type;
+	std::shared_ptr<const void> Object;
+	// An explicit source/interpretation identity shared across import roots; empty means owner source plus Key.
+	std::string SharedKey;
+};
+
 struct FAssetImportContext
 {
 	FIOService& IO;
@@ -10,8 +19,16 @@ struct FAssetImportContext
 	std::shared_ptr<const FBytes> Bytes;
 	FCancellationToken Cancellation;
 	std::vector<FAssetSource> Sources;
+	std::vector<FAssetImportProduct> Products;
 
 	std::shared_ptr<const FBytes> Read(const std::filesystem::path& InPath);
+	FAssetRef Emit(FAssetImportProduct InProduct);
+
+	template<class T> FAssetRef Emit(std::string InKey, T InObject, std::string InSharedKey = {})
+	{
+		return Emit({std::move(InKey), std::make_shared<const FRecordDescriptor>(RecordType<T>()),
+		             std::make_shared<const T>(std::move(InObject)), std::move(InSharedKey)});
+	}
 };
 
 struct FAssetImporter
@@ -32,6 +49,9 @@ struct FConvertedAsset
 	std::uint32_t ImporterVersion{};
 	std::size_t RetainedBytes{};
 	std::optional<FAssetHeader> NativeHeader;
+	std::vector<FAssetImportProduct> Products;
+	std::filesystem::path ProductRoot;
+	std::string StableKey;
 };
 
 template<class T> class TImportRequest
@@ -82,6 +102,7 @@ struct FAssetImportOptions
 	bool bForce{};
 	std::string Name;
 	std::string TypeId;
+	std::filesystem::path Library;
 };
 
 struct FAssetImportResult

@@ -1,4 +1,5 @@
 #include "AssetPublicationInternal.h"
+#include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -12,6 +13,17 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	if (SourceType.empty() && Extension == ".hasset")
 	{
 		SourceType = DecodeAsset(IO.ReadAsync(Source, Cancellation).Get(IO.TaskSystem())).Header.TypeId;
+	}
+	if (SourceType.empty() && Extension == ".json")
+	{
+		const auto SourceBytes = IO.ReadAsync(Source, Cancellation).Get(IO.TaskSystem());
+		const auto Node =
+		    DecodeAssetSourceJson({reinterpret_cast<const char*>(SourceBytes->data()), SourceBytes->size()});
+		const auto& Object = std::get<FArchiveNode::FObject>(Node.Value);
+		if (const auto It = Object.find("type"); It != Object.end())
+		{
+			SourceType = ReadValue<std::string>(It->second);
+		}
 	}
 	for (const auto& Importer : Importers)
 	{
@@ -47,6 +59,7 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	Provenance.Settings["source"] = ImportPathString(Source.filename());
 	Provenance.Settings["scene"] = InOptions.bScene ? "true" : "false";
 	Provenance.Settings["name"] = InOptions.Name;
+	Provenance.Settings["library"] = ImportRelativePath(Library, Output.parent_path());
 	const auto Existing = IO.TryReadAsync(Output, Cancellation).Get(IO.TaskSystem());
 	if (*Existing)
 	{

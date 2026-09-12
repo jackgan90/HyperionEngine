@@ -1,4 +1,5 @@
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Renderer/RenderSession.h"
 #include "SceneInstanceInternal.h"
 
 namespace Hyperion
@@ -20,12 +21,8 @@ void FSceneInstance::FImpl::BeginManifest()
 		auto& Load = Loads[Entry.Id];
 		try
 		{
-			Load.Request = Assets.LoadReferenceAsync<FModelAsset>(Entry.Reference, Path);
-			Load.Preparation = DispatchAsync<FSceneModelData>(Tasks, {EDomain::Worker},
-			                                                  [Request = Load.Request, Tasks = &Tasks]
-			                                                  {
-				                                                  return *PrepareSceneModel(Request.Get(*Tasks));
-			                                                  });
+			Load.Preparation =
+			    LoadNativeModel(Assets, Tasks, Entry.Reference, Path, Load.Cancellation, &Session.GetResources());
 		}
 		catch (const std::exception& Failure)
 		{
@@ -33,6 +30,7 @@ void FSceneInstance::FImpl::BeginManifest()
 			Load.bComplete = true;
 		}
 	}
+	BeginMaterials();
 	Status.bLoaded = true;
 	bStatusDirty = true;
 }
@@ -48,16 +46,6 @@ void FSceneInstance::FImpl::PollModels()
 		try
 		{
 			Load.Data = Load.Preparation.GetReady();
-			for (const auto& Instance : Models)
-			{
-				const auto Model = Scene.Find(Instance.Handle);
-				if (Model && Instance.Asset == Id)
-				{
-					auto Updated = *Model;
-					Updated.Data = Load.Data;
-					Scene.Update(Instance.Handle, std::move(Updated));
-				}
-			}
 		}
 		catch (const std::exception& Failure)
 		{
@@ -84,9 +72,11 @@ void FSceneInstance::FImpl::UpdateStatus()
 		Status.ReadyModels += Bridge->IsReady(Model.Handle) ? 1 : 0;
 		const auto Load = Loads.find(Model.Asset);
 		const bool bLoadFailed = Load != Loads.end() && !Load->second.Error.empty();
-		Status.FailedModels += bLoadFailed || !Bridge->GetError(Model.Handle).empty() ? 1 : 0;
+		const auto Selection = SelectedMaterials.find(Model.Id);
+		const bool bMaterialFailed = Selection != SelectedMaterials.end() && !Selection->second.Error.empty();
+		Status.FailedModels += bLoadFailed || bMaterialFailed || !Bridge->GetError(Model.Handle).empty() ? 1 : 0;
 	}
-	Status.bReady = Status.bLoaded && Status.ReadyModels == Status.Models;
+	Status.bReady = Status.bLoaded && bMaterialsComplete && Status.ReadyModels == Status.Models;
 	StatusRevision = Revision;
 	bStatusDirty = false;
 }

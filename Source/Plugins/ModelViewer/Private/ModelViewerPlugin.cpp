@@ -1,4 +1,5 @@
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
+#include "Hyperion/Renderer/NativeModel.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
 #include <algorithm>
@@ -13,18 +14,12 @@ struct FModelViewerPlugin::FImpl
 	{
 	}
 
-	struct FLoadedModel
-	{
-		std::shared_ptr<const FSceneModelData> Data;
-		FBounds Bounds;
-	};
-
 	FRenderSession& Session;
 	FTaskSystem& Tasks;
 	FAssetService& Assets;
 	std::filesystem::path Path;
-	TAssetRequest<FModelAsset> Request;
-	TAsyncResult<FLoadedModel> Preparation;
+	FCancellationToken Cancellation;
+	TAsyncResult<FSceneModelData> Preparation;
 	FScene Scene;
 	FSceneHandle Model;
 	std::unique_ptr<FSceneRenderBridge> Bridge;
@@ -55,14 +50,8 @@ void FModelViewerPlugin::Start()
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
 	P.Bridge = std::make_unique<FSceneRenderBridge>(P.Scene, P.Session, P.Tasks);
-	P.Request = P.Assets.LoadAsync<FModelAsset>(P.Path);
-	P.Preparation = DispatchAsync<FImpl::FLoadedModel>(P.Tasks, {EDomain::Worker},
-	                                                   [Request = P.Request, Tasks = &P.Tasks]
-	                                                   {
-		                                                   auto Asset = Request.Get(*Tasks);
-		                                                   const auto Data = PrepareSceneModel(Asset);
-		                                                   return FImpl::FLoadedModel{Data, Data->Bounds};
-	                                                   });
+	P.Cancellation = {};
+	P.Preparation = LoadNativeModel(P.Assets, P.Tasks, P.Path, P.Cancellation, &P.Session.GetResources());
 }
 
 void FModelViewerPlugin::Update(FRenderFrame& InFrame)
@@ -85,7 +74,7 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 			const auto& Bounds = Loaded->Bounds;
 			P.Center = ScaleVector(Add(Bounds.Minimum, Bounds.Maximum), .5f);
 			P.Radius = std::max(.01f, Length(Subtract(Bounds.Maximum, P.Center)));
-			P.Model = P.Scene.Add(FSceneModel{Loaded->Data->Asset->Name, Loaded->Data});
+			P.Model = P.Scene.Add(FSceneModel{Loaded->Asset->Name, Loaded});
 			P.Preparation = {};
 			P.Status = "Uploading model to GPU...";
 		}
@@ -189,7 +178,7 @@ void FModelViewerPlugin::Stop() noexcept
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	P.Request.Cancel();
+	P.Cancellation.Cancel();
 	try
 	{
 		P.Tasks.Wait(P.Preparation.Task());

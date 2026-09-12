@@ -1,0 +1,139 @@
+{
+  "fields": {
+    "diagnostics": [],
+    "materialSlots": [
+      {
+        "fields": {
+          "id": "",
+          "path": "../Materials/SharedColor.json",
+          "revision": "",
+          "type": "hyperion.materialasset"
+        },
+        "type": "hyperion.assetref",
+        "version": 1
+      }
+    ],
+    "name": "Shared panel",
+    "nodes": [
+      {
+        "fields": {
+          "children": {
+            "$bulk": "u32",
+            "data": []
+          },
+          "local": {
+            "fields": {
+              "values": {
+                "$bulk": "f32",
+                "data": [
+                  1.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              }
+            },
+            "type": "hyperion.mat4",
+            "version": 1
+          },
+          "name": "",
+          "primitives": {
+            "$bulk": "u32",
+            "data": [
+              0
+            ]
+          }
+        },
+        "type": "hyperion.modelnode",
+        "version": 1
+      }
+    ],
+    "primitives": [
+      {
+        "fields": {
+          "colors": {
+            "$bulk": "f32",
+            "data": []
+          },
+          "indices": {
+            "$bulk": "u32",
+            "data": [
+              0,
+              1,
+              2,
+              0,
+              2,
+              3
+            ]
+          },
+          "material": 0,
+          "name": "",
+          "normals": {
+            "$bulk": "f32",
+            "data": []
+          },
+          "positions": {
+            "$bulk": "f32",
+            "data": [
+              -1.0,
+              -0.65,
+              0.0,
+              1.0,
+              -0.65,
+              0.0,
+              1.0,
+              0.65,
+              0.0,
+              -1.0,
+              0.65,
+              0.0
+            ]
+          },
+          "tangents": {
+            "$bulk": "f32",
+            "data": []
+          },
+          "texCoords0": {
+            "$bulk": "f32",
+            "data": [
+              0.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "texCoords1": {
+            "$bulk": "f32",
+            "data": []
+          }
+        },
+        "type": "hyperion.modelprimitive",
+        "version": 1
+      }
+    ],
+    "roots": {
+      "$bulk": "u32",
+      "data": [
+        0
+      ]
+    }
+  },
+  "type": "hyperion.modelasset",
+  "version": 2
+}
