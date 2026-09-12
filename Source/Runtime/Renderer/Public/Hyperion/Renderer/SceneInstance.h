@@ -30,6 +30,7 @@ struct FSceneInstanceStatus
 	std::size_t Models{};
 	std::size_t ReadyModels{};
 	std::size_t FailedModels{};
+	std::uint64_t ModelStatusRefreshes{};
 	bool bLoaded{};
 	bool bReady{};
 	bool bClosed{};
@@ -52,6 +53,8 @@ public:
 	FTaskHandle GetReceipt() const;
 	void Close();
 	FSceneHandle AddNode(FSceneNode InNode);
+	// Copy one node, including pending material selections; descendants remain with the source.
+	FSceneHandle DuplicateNode(FSceneHandle InHandle);
 	bool RemoveSubtree(FSceneHandle InHandle);
 	bool RemoveNodeKeepChildren(FSceneHandle InHandle);
 	const FSceneNode* FindNode(FSceneHandle InHandle) const;

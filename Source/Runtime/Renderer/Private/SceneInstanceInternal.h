@@ -35,6 +35,7 @@ struct FSceneInstance::FImpl
 		bool bHasStoredSelection{};
 		bool bSurfaceEdited{};
 		std::set<std::uint32_t> EditedSections;
+		FSceneHandle SelectionSource;
 	};
 
 	std::map<FSceneHandle, FPendingMaterial> PendingMaterials;
@@ -52,6 +53,7 @@ struct FSceneInstance::FImpl
 	FAssetService& Assets;
 	FScene Scene;
 	std::uint64_t LoadEpoch{1};
+	FSceneHandle AddNode(FSceneNode InNode, bool bInResolveData);
 	void RefreshModels();
 	void ForgetRemovedModels();
 	std::unique_ptr<FSceneRenderBridge> Bridge;
@@ -61,14 +63,15 @@ struct FSceneInstance::FImpl
 	std::map<std::string, FLoad> Loads;
 	std::vector<FSceneInstanceModel> Models;
 	FSceneInstanceStatus Status;
-	std::pair<std::uint64_t, std::uint64_t> StatusRevision;
-	bool bStatusDirty = true;
+	std::pair<std::uint64_t, std::uint64_t> ModelStatusRevision;
+	bool bModelStatusDirty = true;
 	void BeginManifest();
 	void PollModels();
 	void BeginMaterials();
 	void PollMaterials();
 	void PublishModels();
 	void UpdateStatus();
+	void RefreshModelStatus();
 	void RequireOpen() const;
 };
 } // namespace Hyperion

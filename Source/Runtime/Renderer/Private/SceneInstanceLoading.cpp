@@ -28,7 +28,7 @@ void FSceneInstance::FImpl::BeginManifest()
 	}
 	BeginMaterials();
 	Status.bLoaded = true;
-	bStatusDirty = true;
+	bModelStatusDirty = true;
 }
 
 void FSceneInstance::FImpl::PollModels()
@@ -48,26 +48,36 @@ void FSceneInstance::FImpl::PollModels()
 			Load.Error = Failure.what();
 		}
 		Load.bComplete = true;
-		bStatusDirty = true;
+		bModelStatusDirty = true;
 	}
 }
 
 void FSceneInstance::FImpl::UpdateStatus()
 {
 	HYP_PERF_SCOPE_C(Frame, UpdateSceneStatus);
-	const auto Revision = Bridge->GetStatusRevision();
-	if (!bStatusDirty && Status.bReady && StatusRevision == Revision)
-	{
-		return;
-	}
 	Status.PublicationError = Bridge->GetSceneError();
 	const auto Camera = Scene.GetSettings().DefaultCamera;
 	Status.bHasActiveCamera = Camera && Scene.FindCamera(*Camera) && Scene.IsEffectivelyEnabled(*Camera);
-	Status.Nodes = Scene.GetNodes().size();
 	Status.Groups = Scene.CountNodes(ESceneNodeKind::Group);
 	Status.Cameras = Scene.CountNodes(ESceneNodeKind::Camera);
 	Status.DirectionalLights = Scene.CountNodes(ESceneNodeKind::DirectionalLight);
 	Status.EnvironmentLights = Scene.CountNodes(ESceneNodeKind::EnvironmentLight);
+	Status.Nodes = Status.Groups + Status.Cameras + Status.DirectionalLights + Status.EnvironmentLights + Models.size();
+	const auto Revision = Bridge->GetModelStatusRevision();
+	if (bModelStatusDirty || Status.ReadyModels != Models.size() || ModelStatusRevision != Revision)
+	{
+		RefreshModelStatus();
+		ModelStatusRevision = Revision;
+		bModelStatusDirty = false;
+	}
+	Status.bReady =
+	    Status.PublicationError.empty() && Status.bLoaded && bMaterialsComplete && Status.ReadyModels == Status.Models;
+}
+
+void FSceneInstance::FImpl::RefreshModelStatus()
+{
+	HYP_PERF_SCOPE_C(Frame, RefreshSceneModelStatus);
+	++Status.ModelStatusRefreshes;
 	Status.Models = Models.size();
 	Status.ReadyModels = 0;
 	Status.FailedModels = 0;
@@ -80,9 +90,5 @@ void FSceneInstance::FImpl::UpdateStatus()
 		const bool bMaterialFailed = Selection != SelectedMaterials.end() && !Selection->second.Error.empty();
 		Status.FailedModels += bLoadFailed || bMaterialFailed || !Bridge->GetError(Model.Handle).empty() ? 1 : 0;
 	}
-	Status.bReady =
-	    Status.PublicationError.empty() && Status.bLoaded && bMaterialsComplete && Status.ReadyModels == Status.Models;
-	StatusRevision = Revision;
-	bStatusDirty = false;
 }
 } // namespace Hyperion

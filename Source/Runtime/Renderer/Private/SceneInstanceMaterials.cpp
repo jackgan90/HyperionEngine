@@ -20,7 +20,9 @@ void FSceneInstance::FImpl::BeginMaterials()
 		{
 			const auto Handle = Scene.FindHandle(Entry.Id);
 			const bool bStored = HasSelection(Entry.Model->Surface) || !Entry.Model->SectionSurfaces.empty();
-			PendingMaterials.emplace(Handle, FPendingMaterial{bStored});
+			FPendingMaterial Pending{bStored};
+			Pending.SelectionSource = Handle;
+			PendingMaterials.emplace(Handle, std::move(Pending));
 			if (bStored)
 			{
 				Selections.emplace_back(Handle, *Entry.Model);
@@ -77,23 +79,41 @@ void FSceneInstance::FImpl::PollMaterials()
 {
 	if (!bMaterialsComplete && MaterialPreparation.Ready())
 	{
+		std::map<FSceneHandle, std::vector<FSceneHandle>> Targets;
+		for (const auto& [Handle, Pending] : PendingMaterials)
+		{
+			Targets[Pending.SelectionSource].push_back(Handle);
+		}
 		for (const auto& Selection : *MaterialPreparation.GetReady())
 		{
-			if (Selection.Epoch == LoadEpoch && Scene.FindModelComponent(Selection.Handle) &&
-			    PendingMaterials.contains(Selection.Handle))
+			if (Selection.Epoch != LoadEpoch)
 			{
-				SelectedMaterials.emplace(Selection.Handle, Selection);
+				continue;
+			}
+			const auto Found = Targets.find(Selection.Handle);
+			if (Found == Targets.end())
+			{
+				continue;
+			}
+			for (const auto Handle : Found->second)
+			{
+				if (Scene.FindModelComponent(Handle))
+				{
+					auto Copy = Selection;
+					Copy.Handle = Handle;
+					SelectedMaterials.emplace(Handle, std::move(Copy));
+				}
 			}
 		}
 		MaterialPreparation = {};
 		bMaterialsComplete = true;
-		bStatusDirty = true;
+		bModelStatusDirty = true;
 	}
 }
 
 void FSceneInstance::FImpl::PublishModels()
 {
-	if (!bMaterialsComplete)
+	if (!bMaterialsComplete || (!bModelStatusDirty && Status.ReadyModels == Models.size()))
 	{
 		return;
 	}
@@ -125,7 +145,7 @@ void FSceneInstance::FImpl::PublishModels()
 		{
 			SelectedMaterials[Instance.Handle].Error = Error.what();
 		}
-		bStatusDirty = true;
+		bModelStatusDirty = true;
 	}
 }
 

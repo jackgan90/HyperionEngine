@@ -53,15 +53,10 @@ void FSceneViewerPlugin::DuplicateSelected()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	const auto Source = P.Scene.FindNode(P.Selected);
-	if (!Source)
+	if (const auto Copy = P.Scene.DuplicateNode(P.Selected); Copy.Scene)
 	{
-		return;
+		P.Selected = Copy;
 	}
-	auto Node = *Source;
-	Node.Id.clear();
-	Node.Name += " copy";
-	P.Selected = P.Scene.AddNode(std::move(Node));
 }
 
 void FSceneViewerPlugin::AddModel()

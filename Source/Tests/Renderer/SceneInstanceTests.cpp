@@ -37,11 +37,12 @@ public:
 	std::atomic<bool> bRelease{false};
 	std::atomic<bool> bEntered{false};
 	bool bEnabled{};
+	std::string GateName = "SceneRuntime.model.hasset";
 	FLocalFileSystem Local;
 
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
 	{
-		if (bEnabled && InPath.filename() == "SceneRuntime.model.hasset")
+		if (bEnabled && InPath.filename() == GateName)
 		{
 			bEntered = true;
 			while (!bRelease)
@@ -352,9 +353,139 @@ void CheckPendingMaterialEdits(FSceneFixture& InFixture)
 		      return Scene.GetStatus().FailedModels == 1;
 	      });
 	RejectPendingSnapshot(Scene);
-	HYP_CHECK(Scene.Remove(Scene.GetModels()[0].Handle));
+	const auto FailedSource = Scene.GetModels()[0].Handle;
+	const auto FailedCopy = Scene.DuplicateNode(FailedSource);
+	Scene.Tick();
+	HYP_CHECK(Scene.GetStatus().FailedModels == 2);
+	RejectPendingSnapshot(Scene);
+	HYP_CHECK(Scene.Remove(FailedSource));
+	Scene.Tick();
+	HYP_CHECK(Scene.GetStatus().FailedModels == 1 && Scene.Find(FailedCopy));
+	RejectPendingSnapshot(Scene);
+	HYP_CHECK(Scene.Remove(FailedCopy));
 	HYP_CHECK(SceneModelCount(Scene.Snapshot("RemovedFailedMaterial.hasset")) == 0);
 	std::cout << "Pending/failed material saves reject; pending whole/section edits and clears survive publication\n";
+}
+
+std::array<FSceneHandle, 3> CopyPendingModels(FSceneInstance& InScene)
+{
+	const auto Source = InScene.GetModels()[0].Handle;
+	const auto Plain = InScene.DuplicateNode(Source);
+	auto Model = *InScene.FindNode(Source)->Model;
+	Model.Surface.Overrides = {{"Pbr.RoughnessFactor", FMaterialValue::Float(.62f)}};
+	Model.SectionSurfaces[0].Overrides = {{"Pbr.MetallicFactor", FMaterialValue::Float(.4f)}};
+	InScene.SetModelComponent(Source, Model);
+	const auto Edited = InScene.DuplicateNode(Source);
+	const auto Cleared = InScene.DuplicateNode(Plain);
+	InScene.SetModelComponent(Cleared, Model);
+	Model.Surface = {};
+	Model.SectionSurfaces.clear();
+	InScene.SetModelComponent(Cleared, Model);
+	const auto Removed = InScene.DuplicateNode(Plain);
+	InScene.RemoveSubtree(Removed);
+	FSceneNode Group;
+	Group.Id = "replacement";
+	const auto Replacement = InScene.AddNode(Group);
+	HYP_CHECK(Replacement.Slot == Removed.Slot && Replacement.Generation != Removed.Generation);
+	InScene.RemoveSubtree(Source);
+	HYP_CHECK(!InScene.DuplicateNode(Source).Scene);
+	RejectPendingSnapshot(InScene);
+	return {Plain, Edited, Cleared};
+}
+
+void CheckCopiedMaterialValues(FSceneInstance& InScene, const std::array<FSceneHandle, 3>& InHandles)
+{
+	const auto* Plain = InScene.Find(InHandles[0]);
+	const auto* Edited = InScene.Find(InHandles[1]);
+	const auto* Cleared = InScene.Find(InHandles[2]);
+	HYP_CHECK(Plain && Edited && Cleared);
+	HYP_CHECK(Plain->Surface.Reference && Plain->Surface.Overrides[0].Value == FMaterialValue::Float(.15f));
+	HYP_CHECK(Plain->SectionSurfaces.at(0).Reference &&
+	          Plain->SectionSurfaces.at(0).Overrides[0].Value == FMaterialValue::Float(.15f));
+	HYP_CHECK(Edited->Surface.Overrides[0].Value == FMaterialValue::Float(.62f));
+	HYP_CHECK(Edited->SectionSurfaces.at(0).Overrides[0].Value == FMaterialValue::Float(.4f));
+	HYP_CHECK(!Cleared->Surface.Reference && Cleared->Surface.Overrides.empty() && Cleared->SectionSurfaces.empty());
+}
+
+void CheckPendingMaterialCopies(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	for (unsigned Case = 0; Case < 2; ++Case)
+	{
+		if (Case == 0)
+		{
+			F.Assets.ClearCache();
+		}
+		F.Files->bRelease = false;
+		F.Files->bEntered = false;
+		const auto MaterialPath = "DuplicateMaterial" + std::to_string(Case) + ".hasset";
+		const auto ManifestPath = "DuplicatePending" + std::to_string(Case) + ".hasset";
+		F.Files->GateName = Case == 0 ? "SceneRuntime.model.hasset" : MaterialPath;
+		F.IO.WriteAsync(MaterialPath, *F.IO.ReadAsync("@material-0.hasset").Get(F.Tasks)).Get(F.Tasks);
+		FLegacySceneManifest Manifest;
+		Manifest.Assets = {{"good", {"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""}}};
+		Manifest.Instances = {{"original", "good"}};
+		auto& Entry = Manifest.Instances[0];
+		Entry.Surface.Reference = FAssetRef{"", MaterialPath, RecordType<FMaterialAsset>().Id, ""};
+		Entry.Surface.Overrides = {{"Pbr.RoughnessFactor", PersistMaterialValue(FMaterialValue::Float(.15f))}};
+		Entry.SectionSurfaces = {{0, Entry.Surface}};
+		F.IO.WriteAsync(ManifestPath, EncodeAsset(RecordType<FLegacySceneManifest>(), &Manifest).Bytes).Get(F.Tasks);
+		FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
+
+		struct FRelease
+		{
+			std::atomic<bool>& bFlag;
+
+			~FRelease()
+			{
+				bFlag = true;
+			}
+		} Release{F.Files->bRelease};
+
+		std::cout << "Pending copy case=" << Case << " stage=wait-gate\n";
+		Scene.Load(ManifestPath);
+		Await(Scene,
+		      [&]
+		      {
+			      return Scene.GetModels().size() == 1 && F.Files->bEntered;
+		      });
+		if (Case == 1)
+		{
+			std::cout << "Pending copy stage=wait-model-ready\n";
+			Await(Scene,
+			      [&]
+			      {
+				      return bool(Scene.GetAssets()[0].Data);
+			      });
+		}
+		std::cout << "Pending copy stage=duplicate\n";
+		const auto Copies = CopyPendingModels(Scene);
+		F.Files->bRelease = true;
+		Await(Scene,
+		      [&]
+		      {
+			      return Scene.GetStatus().ReadyModels == 3;
+		      });
+		CheckCopiedMaterialValues(Scene, Copies);
+		const auto Snapshot = Scene.Snapshot("DuplicateSaved.hasset");
+		F.Assets.SaveAsync("DuplicateSaved.hasset", std::make_shared<const FSceneManifest>(Snapshot)).Get(F.Tasks);
+		std::array<std::string, 3> Ids;
+		for (std::size_t Index = 0; Index < Ids.size(); ++Index)
+		{
+			Ids[Index] = Scene.FindNode(Copies[Index])->Id;
+		}
+		std::cout << "Pending copy stage=reload\n";
+		Scene.Load("DuplicateSaved.hasset");
+		Await(Scene,
+		      [&]
+		      {
+			      return Scene.GetStatus().bReady;
+		      });
+		CheckCopiedMaterialValues(Scene,
+		                          {Scene.FindHandle(Ids[0]), Scene.FindHandle(Ids[1]), Scene.FindHandle(Ids[2])});
+		Scene.Close();
+	}
+	F.Files->GateName = "SceneRuntime.model.hasset";
 }
 
 void CheckNodeOnlySnapshot(FSceneFixture& InFixture)
@@ -654,6 +785,81 @@ void CheckSceneMaterialGuards(FSceneFixture& InFixture)
 	std::cout << "All five protected providers and Global/Frame/View/pass inputs reject; batches remain atomic\n";
 }
 
+void CheckModelStatusCache()
+{
+	FSceneFixture F;
+	FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
+	const auto Data = PrepareSourceModel(MakeModel());
+	std::array<FSceneHandle, 8> Models;
+	for (auto& Handle : Models)
+	{
+		Handle = Scene.Add({"cached", Data});
+	}
+	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 3}, {}));
+	const auto Light = Scene.AddNode(MakeSceneDirectionalLightNode("sun"));
+	Scene.SetSettings({Camera, Light, {}});
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	F.Tasks.Wait(Scene.GetReceipt());
+	Scene.Tick();
+	const auto Refreshes = Scene.GetStatus().ModelStatusRefreshes;
+	for (unsigned Index = 0; Index < 64; ++Index)
+	{
+		Scene.SetWorldTransform(Camera, Translation({float(Index) * .01f, 0, 3}));
+		Scene.SetCamera(Camera, {1, .01f, 100, 3 + float(Index) * .01f});
+		Scene.SetDirectionalLight(Light, {{1, 1, 1}, 1 + float(Index), true});
+		Scene.SetEnabled(Camera, Index % 2 == 0);
+		Scene.Tick();
+		F.Tasks.Wait(Scene.GetReceipt());
+		Scene.Tick();
+		const auto& Status = Scene.GetStatus();
+		HYP_CHECK(Status.bReady && Status.ReadyModels == Models.size() && Status.FailedModels == 0);
+		HYP_CHECK(Status.bHasActiveCamera == (Index % 2 == 0));
+		HYP_CHECK(Status.ModelStatusRefreshes == Refreshes && Status.Nodes == Models.size() + 2);
+	}
+	Scene.Reparent(Models[0], Camera, ESceneReparentMode::KeepWorld);
+	Scene.Tick();
+	F.Tasks.Wait(Scene.GetReceipt());
+	Scene.Tick();
+	const auto Parented = Scene.GetStatus().ModelStatusRefreshes;
+	Scene.SetWorldTransform(Camera, Translation({1, 0, 3}));
+	Scene.Tick();
+	F.Tasks.Wait(Scene.GetReceipt());
+	Scene.Tick();
+	HYP_CHECK(Scene.GetStatus().ModelStatusRefreshes > Parented);
+	Scene.Remove(Models[0]);
+	Scene.Tick();
+	HYP_CHECK(Scene.GetStatus().Models == Models.size() - 1);
+	std::cout << "64 camera/light updates reused model status; inherited model transforms and deletion invalidate\n";
+}
+
+void CheckLargeCoordinateView(FSceneFixture& InFixture)
+{
+	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
+	const auto Camera = Scene.AddNode(MakeSceneCameraNode("large-coordinate", {0, 0, 3}, {}));
+	Scene.SetWorldTransform(Camera, Translation({33554432.f, 33554432.f, 33554432.f}));
+	Scene.SetSettings({Camera, {}, {}});
+	Scene.Tick();
+	const auto Seed = InFixture.Session->FreezeSceneFrame(Scene.GetToken());
+	InFixture.Tasks.Wait(
+	    InFixture.Tasks.Dispatch({EDomain::Render},
+	                             [&]
+	                             {
+		                             FSceneViewRequest Request;
+		                             Request.Width = 320;
+		                             Request.Height = 240;
+		                             const auto Frame = InFixture.Session->ResolveSceneFrame(*Seed, Request);
+		                             for (const auto Value : Frame.View.ViewProjection.Values)
+		                             {
+			                             HYP_CHECK(std::isfinite(Value));
+		                             }
+		                             HYP_CHECK(Frame.HasCamera() && Frame.View.Camera->Forward.Z == -1);
+	                             }));
+}
+
 void CheckNavigationPrecision(FSceneFixture& InFixture)
 {
 	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
@@ -817,12 +1023,15 @@ int main()
 		CheckLoadingEdits(Fixture);
 		CheckClosePending(Fixture);
 		CheckPendingMaterialEdits(Fixture);
+		CheckPendingMaterialCopies(Fixture);
 		CheckNodeOnlySnapshot(Fixture);
 		CheckSceneFrameTokens(Fixture);
 		CheckSceneViewSelection(Fixture);
 		CheckSceneMaterialGuards(Fixture);
 		CheckSceneNavigation(Fixture);
 		CheckNavigationPrecision(Fixture);
+		CheckLargeCoordinateView(Fixture);
+		CheckModelStatusCache();
 		CheckClosedDependencies();
 		CheckPendingHierarchy();
 		std::cout << "Independent scene loading, shared models, generation-safe edits and close passed\n";

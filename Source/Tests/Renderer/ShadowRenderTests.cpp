@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/Model.h"
 #include "Support/ModelAssetSupport.h"
 #include "Support/TestSupport.h"
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -286,6 +287,68 @@ void CheckBlendAndBatching(FShadowFixture& InFixture)
 	B.Remove();
 }
 
+struct FWorkerGate
+{
+	FTaskSystem& Tasks;
+	std::atomic<bool> bOpen{};
+	std::atomic<unsigned> Entered{};
+	std::array<FTaskHandle, 2> Handles;
+
+	~FWorkerGate()
+	{
+		Open();
+	}
+
+	void Open()
+	{
+		bOpen = true;
+		Tasks.WaitAll(Handles);
+	}
+
+	void Start()
+	{
+		for (auto& Handle : Handles)
+		{
+			Handle = Tasks.Dispatch({EDomain::Worker},
+			                        [&]
+			                        {
+				                        ++Entered;
+				                        while (!bOpen)
+				                        {
+					                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				                        }
+			                        });
+		}
+		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+		while (Entered != Handles.size() && std::chrono::steady_clock::now() < Deadline)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		HYP_CHECK(Entered == Handles.size());
+	}
+};
+
+void AwaitShadowRetirement(FShadowFixture& InFixture, std::uint64_t InMaximumBytes)
+{
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+	do
+	{
+		InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Rhi, 0},
+		                                              [&]
+		                                              {
+			                                              InFixture.Device->CollectCompletedResources();
+			                                              InFixture.DeviceStats = InFixture.Device->Statistics();
+		                                              }));
+		if (InFixture.DeviceStats.GpuAllocationBytes <= InMaximumBytes)
+		{
+			break;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	} while (std::chrono::steady_clock::now() < Deadline);
+	HYP_CHECK(InFixture.DeviceStats.ValidationErrors == 0);
+	HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes <= InMaximumBytes);
+}
+
 void CheckResolutionAndPreview(FShadowFixture& InFixture)
 {
 	InFixture.Frame(true);
@@ -295,12 +358,24 @@ void CheckResolutionAndPreview(FShadowFixture& InFixture)
 		InFixture.Settings.Resolution = 2048;
 		InFixture.Frame(true);
 		HYP_CHECK(InFixture.Statistics.ShadowTextureBytes == 64 * 1024 * 1024);
+		FWorkerGate Gate{InFixture.Tasks};
+		Gate.Start();
+		// Drain maintenance already queued on RHI before the Worker gate was entered.
+		InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Rhi, 0},
+		                                              []
+		                                              {
+		                                              }));
 		InFixture.Settings.Resolution = 1024;
 		for (unsigned Frame = 0; Frame < 4; ++Frame)
 		{
 			InFixture.Frame(true);
 		}
 		HYP_CHECK(InFixture.Statistics.ShadowTextureBytes == 16 * 1024 * 1024);
+		// Captured frames have completed on the GPU, but cache retirement also needs its Worker/RHI task.
+		HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes > Small + 8 * 1024 * 1024);
+		std::cout << "Worker-gated old shadow allocation bytes=" << InFixture.DeviceStats.GpuAllocationBytes << "\n";
+		Gate.Open();
+		AwaitShadowRetirement(InFixture, Small + 8 * 1024 * 1024);
 		std::cout << "Shadow resolution retirement iteration=" << Iteration << " baseline bytes=" << Small
 		          << " current bytes=" << InFixture.DeviceStats.GpuAllocationBytes << "\n";
 		HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes <= Small + 8 * 1024 * 1024);

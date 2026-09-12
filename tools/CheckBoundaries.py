@@ -33,6 +33,7 @@ for path in SOURCE.rglob('*'):
         continue
     adapter = owner and (path.is_relative_to(owner / 'Private/Adapters') or
                          (owner.is_relative_to(SOURCE / 'Backends') and path.is_relative_to(owner / 'Private')))
+    adapter = adapter or (test and path.is_relative_to(SOURCE / 'Tests/Private/Adapters'))
     for line, text in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
         include = re.match(r'\s*#\s*include\s*[<"]([^>"]+)[>"]', text)
         if not include:

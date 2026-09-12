@@ -12,7 +12,7 @@ void FSceneInstance::FImpl::RefreshModels()
 		Updated.push_back({Handle, Node.Model->Asset, Node.Id});
 	}
 	Models = std::move(Updated);
-	bStatusDirty = true;
+	bModelStatusDirty = true;
 }
 
 void FSceneInstance::FImpl::ForgetRemovedModels()
@@ -32,31 +32,78 @@ void FSceneInstance::FImpl::ForgetRemovedModels()
 	              {
 		              return !Scene.FindNode(InModel.Handle);
 	              });
-	bStatusDirty = true;
+	bModelStatusDirty = true;
+}
+
+FSceneHandle FSceneInstance::FImpl::AddNode(FSceneNode InNode, bool bInResolveData)
+{
+	if (InNode.Model && !InNode.Model->Asset.empty())
+	{
+		const auto Load = Loads.find(InNode.Model->Asset);
+		if (Load == Loads.end())
+		{
+			throw std::invalid_argument("Unknown scene asset");
+		}
+		if (bInResolveData)
+		{
+			InNode.Model->Data = Load->second.Data;
+		}
+	}
+	Models.reserve(Models.size() + (InNode.Model ? 1 : 0));
+	const auto Handle = Scene.AddNode(std::move(InNode));
+	const auto& Node = *Scene.FindNode(Handle);
+	if (Node.Model)
+	{
+		Models.push_back({Handle, Node.Model->Asset, Node.Id});
+	}
+	bModelStatusDirty = true;
+	return Handle;
 }
 
 FSceneHandle FSceneInstance::AddNode(FSceneNode InNode)
 {
+	Impl->RequireOpen();
+	return Impl->AddNode(std::move(InNode), true);
+}
+
+FSceneHandle FSceneInstance::DuplicateNode(FSceneHandle InHandle)
+{
 	auto& P = *Impl;
 	P.RequireOpen();
-	if (InNode.Model && !InNode.Model->Asset.empty())
+	const auto* Source = P.Scene.FindNode(InHandle);
+	if (!Source)
 	{
-		const auto Load = P.Loads.find(InNode.Model->Asset);
-		if (Load == P.Loads.end())
-		{
-			throw std::invalid_argument("Unknown scene asset");
-		}
-		InNode.Model->Data = Load->second.Data;
+		return {};
 	}
-	// Reserve the compatibility projection before committing a node insertion.
-	P.Models.reserve(P.Models.size() + (InNode.Model ? 1 : 0));
-	const auto Handle = P.Scene.AddNode(std::move(InNode));
-	const auto& Node = *P.Scene.FindNode(Handle);
-	if (Node.Model)
+	auto Node = *Source;
+	Node.Id.clear();
+	Node.Name += " copy";
+	// Allocate material bookkeeping before inserting the logical node. Copies keep their own edit masks.
+	decltype(P.PendingMaterials) Pending;
+	decltype(P.SelectedMaterials) Selected;
+	if (const auto It = P.PendingMaterials.find(InHandle); It != P.PendingMaterials.end())
 	{
-		P.Models.push_back({Handle, Node.Model->Asset, Node.Id});
+		Pending.emplace(InHandle, It->second);
 	}
-	P.bStatusDirty = true;
+	if (const auto It = P.SelectedMaterials.find(InHandle); It != P.SelectedMaterials.end())
+	{
+		Selected.emplace(InHandle, It->second);
+	}
+	// Do not install ready geometry ahead of an original node that is still awaiting material preparation.
+	const auto Handle = P.AddNode(std::move(Node), false);
+	if (!Pending.empty())
+	{
+		auto Entry = Pending.extract(Pending.begin());
+		Entry.key() = Handle;
+		P.PendingMaterials.insert(std::move(Entry));
+	}
+	if (!Selected.empty())
+	{
+		auto Entry = Selected.extract(Selected.begin());
+		Entry.key() = Handle;
+		Entry.mapped().Handle = Handle;
+		P.SelectedMaterials.insert(std::move(Entry));
+	}
 	return Handle;
 }
 
@@ -98,7 +145,7 @@ bool FSceneInstance::SetModelComponent(FSceneHandle InHandle, FSceneModelCompone
 	{
 		Pending->second = std::move(*Edits);
 	}
-	P.bStatusDirty |= bResult;
+	P.bModelStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -182,7 +229,6 @@ bool FSceneInstance::SetName(FSceneHandle InHandle, std::string InName)
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetName(InHandle, std::move(InName));
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -190,7 +236,6 @@ bool FSceneInstance::SetEnabled(FSceneHandle InHandle, bool bInEnabled)
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetEnabled(InHandle, bInEnabled);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -198,7 +243,6 @@ bool FSceneInstance::SetModelVisible(FSceneHandle InHandle, bool bInVisible)
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetModelVisible(InHandle, bInVisible);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -206,7 +250,6 @@ bool FSceneInstance::SetCameraView(FSceneHandle InHandle, FMat4 InWorld, FSceneC
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetCameraView(InHandle, InWorld, InCamera);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -214,7 +257,6 @@ bool FSceneInstance::SetCamera(FSceneHandle InHandle, FSceneCamera InCamera)
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetCamera(InHandle, InCamera);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -222,7 +264,6 @@ bool FSceneInstance::SetDirectionalLight(FSceneHandle InHandle, FSceneDirectiona
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetDirectionalLight(InHandle, InLight);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -230,7 +271,6 @@ bool FSceneInstance::SetEnvironmentLight(FSceneHandle InHandle, FSceneEnvironmen
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetEnvironmentLight(InHandle, InLight);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -238,7 +278,6 @@ bool FSceneInstance::SetLocalTransform(FSceneHandle InHandle, FMat4 InLocal)
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetLocalTransform(InHandle, InLocal);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -246,7 +285,6 @@ bool FSceneInstance::SetWorldTransform(FSceneHandle InHandle, FMat4 InWorld)
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetWorldTransform(InHandle, InWorld);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -254,7 +292,6 @@ bool FSceneInstance::Reparent(FSceneHandle InHandle, std::optional<FSceneHandle>
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.Reparent(InHandle, InParent, InMode);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 
@@ -262,7 +299,6 @@ bool FSceneInstance::SetSettings(FSceneSettings InSettings)
 {
 	Impl->RequireOpen();
 	const bool bResult = Impl->Scene.SetSettings(InSettings);
-	Impl->bStatusDirty |= bResult;
 	return bResult;
 }
 

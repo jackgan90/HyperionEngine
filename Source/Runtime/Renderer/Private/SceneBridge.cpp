@@ -50,6 +50,7 @@ void FSceneRenderBridge::Observe(bool bInWait)
 		}
 		It = Receipts.erase(It);
 		++StatusRevision;
+		++ModelStatusRevision;
 	}
 }
 
@@ -73,6 +74,10 @@ void FSceneRenderBridge::Flush()
 	{
 		PublishChanges(Pending, Affected, PrepareMetadata(Changes));
 		++StatusRevision;
+		if (!Pending.empty() || !Affected.empty())
+		{
+			++ModelStatusRevision;
+		}
 	}
 	for (const auto& Change : Changes)
 	{
@@ -309,6 +314,12 @@ std::pair<std::uint64_t, std::uint64_t> FSceneRenderBridge::GetStatusRevision() 
 {
 	Tasks.Require({EDomain::Main});
 	return {StatusRevision, Session.GetResources().GetPublicationRevision()};
+}
+
+std::pair<std::uint64_t, std::uint64_t> FSceneRenderBridge::GetModelStatusRevision() const
+{
+	Tasks.Require({EDomain::Main});
+	return {ModelStatusRevision, Session.GetResources().GetPublicationRevision()};
 }
 
 std::uint64_t FSceneRenderBridge::GetModelPreparationCount() const

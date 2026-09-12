@@ -25,6 +25,7 @@ public:
 	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
 	std::size_t PrimitiveCount(FSceneHandle InHandle) const;
 	std::pair<std::uint64_t, std::uint64_t> GetStatusRevision() const;
+	std::pair<std::uint64_t, std::uint64_t> GetModelStatusRevision() const;
 
 private:
 	struct FAttachment
@@ -75,6 +76,7 @@ private:
 	std::vector<FReceipt> Receipts;
 	std::set<FSceneHandle> EditableModels;
 	std::uint64_t StatusRevision = 1;
+	std::uint64_t ModelStatusRevision = 1;
 	std::uint64_t ModelPreparationCount{};
 	bool bClosed{};
 	std::uint64_t NextPublication{};

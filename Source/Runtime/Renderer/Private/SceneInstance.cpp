@@ -43,7 +43,7 @@ void FSceneInstance::Load(const std::filesystem::path& InPath)
 	Close();
 	P.Bridge = std::make_unique<FSceneRenderBridge>(P.Scene, P.Session, P.Tasks);
 	P.Status = {};
-	P.bStatusDirty = true;
+	P.bModelStatusDirty = true;
 	P.Path = std::filesystem::absolute(InPath).lexically_normal();
 	P.ManifestRequest = P.Assets.LoadAsync<FSceneManifest>(P.Path);
 }
@@ -171,7 +171,7 @@ bool FSceneInstance::Update(FSceneHandle InHandle, FSceneModel InModel)
 	{
 		Pending->second = std::move(*Edits);
 	}
-	P.bStatusDirty = true;
+	P.bModelStatusDirty = true;
 	return true;
 }
 
