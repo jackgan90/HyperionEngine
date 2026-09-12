@@ -4,6 +4,23 @@
 
 namespace Hyperion
 {
+namespace
+{
+void RebaseReference(FAssetRef& InReference, FAssetService& InAssets, const std::filesystem::path& InSource,
+                     const std::filesystem::path& InDestination)
+{
+	const auto Target = InAssets.Resolve(InReference, InSource);
+	const auto Relative = Target.lexically_relative(InDestination.parent_path());
+	const auto Text = (Relative.empty() ? Target : Relative).generic_u8string();
+	InReference.Path.assign(reinterpret_cast<const char*>(Text.data()), Text.size());
+}
+
+std::string SelectionId(const FScene& InScene, std::optional<FSceneHandle> InSelection)
+{
+	return InSelection ? InScene.FindNode(*InSelection)->Id : std::string{};
+}
+} // namespace
+
 FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestination) const
 {
 	const auto& P = *Impl;
@@ -12,48 +29,36 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 	{
 		throw std::runtime_error("Cannot save an unloaded or invalid scene");
 	}
-	FSceneManifest Result = P.Manifest ? *P.Manifest : FSceneManifest{};
-	Result.Assets.clear();
-	Result.Instances.clear();
+	FSceneManifest Result;
+	const auto& Settings = P.Scene.GetSettings();
+	Result.DefaultCamera = SelectionId(P.Scene, Settings.DefaultCamera);
+	Result.MainDirectionalLight = SelectionId(P.Scene, Settings.MainDirectionalLight);
+	Result.EnvironmentLight = SelectionId(P.Scene, Settings.EnvironmentLight);
 	std::set<std::string> Used;
 	const auto Destination = std::filesystem::absolute(InDestination).lexically_normal();
-	for (const auto& Instance : P.Models)
+	for (const auto Handle : P.Scene.GetNodes())
 	{
-		const auto* Model = P.Scene.Find(Instance.Handle);
-		if (!Model)
+		const auto& Node = *P.Scene.FindNode(Handle);
+		auto Entry = SceneEntryFromNode(Node);
+		if (Node.Model)
 		{
-			throw std::logic_error("Scene instance handle is stale");
+			if (Node.Model->Asset.empty())
+			{
+				throw std::runtime_error("Cannot persist source-less model: " + Node.Name);
+			}
+			const auto Pending = P.PendingMaterials.find(Handle);
+			if (Pending != P.PendingMaterials.end() && Pending->second.bHasStoredSelection)
+			{
+				throw std::runtime_error("Cannot save pending or failed material selection: " + Node.Id);
+			}
+			Entry.Model->Surface = PersistSceneMaterialSelection(Node.Model->Surface);
+			for (const auto& [Section, Selection] : Node.Model->SectionSurfaces)
+			{
+				Entry.Model->SectionSurfaces.push_back({Section, PersistSceneMaterialSelection(Selection)});
+			}
+			Used.insert(Node.Model->Asset);
 		}
-		if (Instance.Asset.empty())
-		{
-			throw std::runtime_error("Cannot persist source-less model: " + Model->Name);
-		}
-		const auto Pending = P.PendingMaterials.find(Instance.Id);
-		if (Pending != P.PendingMaterials.end() && Pending->second.bHasStoredSelection)
-		{
-			throw std::runtime_error("Cannot save pending or failed material selection: " + Instance.Id);
-		}
-		FSceneInstanceEntry Entry{Instance.Id,     Instance.Asset, Model->World,
-		                          Model->bVisible, Model->Name,    Model->Material};
-		Entry.Surface = PersistSceneMaterialSelection(Model->Surface);
-		for (const auto& [Section, Selection] : Model->SectionSurfaces)
-		{
-			Entry.SectionSurfaces.push_back({Section, PersistSceneMaterialSelection(Selection)});
-		}
-		VisitRecord(RecordType<FSceneInstanceEntry>(), &Entry,
-		            [&](const FRecordDescriptor& InType, const void* InValue, std::string_view)
-		            {
-			            if (InType.CppType == typeid(FAssetRef))
-			            {
-				            auto& Reference = *const_cast<FAssetRef*>(static_cast<const FAssetRef*>(InValue));
-				            const auto Target = P.Assets.Resolve(Reference, P.Path);
-				            const auto Relative = Target.lexically_relative(Destination.parent_path());
-				            const auto Text = (Relative.empty() ? Target : Relative).generic_u8string();
-				            Reference.Path.assign(reinterpret_cast<const char*>(Text.data()), Text.size());
-			            }
-		            });
-		Result.Instances.push_back(std::move(Entry));
-		Used.insert(Instance.Asset);
+		Result.Nodes.push_back(std::move(Entry));
 	}
 	for (const auto& Id : Used)
 	{
@@ -70,13 +75,18 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 		{
 			throw std::logic_error("Missing scene asset reference");
 		}
-		auto Reference = Entry->Reference;
-		const auto Target = P.Assets.Resolve(Reference, P.Path);
-		const auto Relative = Target.lexically_relative(Destination.parent_path());
-		const auto Text = (Relative.empty() ? Target : Relative).generic_u8string();
-		Reference.Path.assign(reinterpret_cast<const char*>(Text.data()), Text.size());
-		Result.Assets.push_back({Id, std::move(Reference)});
+		Result.Assets.push_back(*Entry);
 	}
+	// Visit the complete v4 snapshot, including optional model payload material/texture dependencies.
+	VisitRecord(RecordType<FSceneManifest>(), &Result,
+	            [&](const FRecordDescriptor& InType, const void* InValue, std::string_view)
+	            {
+		            if (InType.CppType == typeid(FAssetRef))
+		            {
+			            auto& Reference = *const_cast<FAssetRef*>(static_cast<const FAssetRef*>(InValue));
+			            RebaseReference(Reference, P.Assets, P.Path, Destination);
+		            }
+	            });
 	ValidateSceneManifest(Result);
 	return Result;
 }

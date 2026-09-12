@@ -74,6 +74,7 @@ struct FRenderView
 	FMaterialParameterValues PassParameters;
 	bool bInstanceBatching = true;
 	std::optional<FRenderCamera> Camera;
+	std::optional<FSceneHandle> SceneCamera;
 	bool bSkipMissingPass{};
 	std::vector<std::string> ExcludedPasses; // Materials with any listed usage belong to another route.
 	EDepthConvention DepthConvention = EDepthConvention::Standard;

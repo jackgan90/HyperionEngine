@@ -94,7 +94,7 @@ struct FFixture
 		Material = Store(IO, Directory / "Material.hasset", MakeMaterial(Texture));
 		const auto A = Store(IO, Directory / "A.hasset", MakeModel(Material, "Geometry A"));
 		const auto B = Store(IO, Directory / "B.hasset", MakeModel(Material, "Geometry B"));
-		FSceneManifest Manifest;
+		FLegacySceneManifest Manifest;
 		Manifest.Assets = {{"a", A}, {"b", B}};
 		Manifest.Instances = {{"left", "a"}, {"right", "b"}};
 		for (std::size_t Index = 0; Index < Manifest.Instances.size(); ++Index)
@@ -103,7 +103,11 @@ struct FFixture
 			Entry.Transform = Multiply(Translation({Index == 0 ? -.7f : .7f, 0, 0}), Scale({.4f, .4f, 1}));
 			Entry.Surface.Reference = Material;
 		}
-		Store(IO, Directory / "Scene.hasset", Manifest);
+		auto Current = UpgradeLegacyScene(Manifest);
+		auto& Camera = Current.Nodes[2];
+		Camera.Transform = SceneCameraTransform({0, 0, 3}, {});
+		Camera.Camera = FSceneCamera{1, .1f, 10, 3};
+		Store(IO, Directory / "Scene.hasset", Current);
 		const auto Surface = Window.Surface();
 		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 		                          [&]
@@ -160,22 +164,26 @@ struct FFixture
 		Await(InScene);
 		Window.Poll();
 		FImage Image;
-		const auto MaterialFrame = Session->FreezeFrame(0);
-		Tasks.Wait(Tasks.Dispatch(
-		    {EDomain::Render},
-		    [&]
-		    {
-			    FRenderGraph Graph;
-			    auto Clear = MakeColorPass(Graph, "Clear");
-			    Clear.Color->Actions.Load = EAttachmentLoad::Clear;
-			    Graph.Add(Clear);
-			    FRenderView View{
-			        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
-			    HYP_CHECK(Session->BuildViews(Graph, std::span(&View, 1), Session->FrameTargets(), MaterialFrame, 1,
-			                                  false, true) == 2);
-			    Image = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, {320, 240}, false, true);
-			    Session->CompleteViews();
-		    }));
+		const auto Seed = Session->FreezeSceneFrame(InScene.GetToken());
+		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+		                          [&]
+		                          {
+			                          FRenderGraph Graph;
+			                          auto Clear = MakeColorPass(Graph, "Clear");
+			                          Clear.Color->Actions.Load = EAttachmentLoad::Clear;
+			                          Graph.Add(Clear);
+			                          FSceneViewRequest Request;
+			                          Request.Width = 320;
+			                          Request.Height = 240;
+			                          const auto Resolved = Session->ResolveSceneFrame(*Seed, Request);
+			                          const auto& View = Resolved.View;
+			                          const auto MaterialFrame = Resolved.Frame;
+			                          HYP_CHECK(Session->BuildViews(Graph, std::span(&View, 1), Session->FrameTargets(),
+			                                                        MaterialFrame, 1, false, true) == 2);
+			                          Image =
+			                              ExecuteGraph(std::move(Graph), Tasks, *Swapchain, {320, 240}, false, true);
+			                          Session->CompleteViews();
+		                          }));
 		return Image;
 	}
 };
@@ -221,8 +229,8 @@ void CheckSharingAndSave(FFixture& InFixture)
 	HYP_CHECK(After.AssetMaterials.MaterialPreparations == Before.AssetMaterials.MaterialPreparations);
 	const auto Destination = F.Directory / "saved/Scene.hasset";
 	const auto Snapshot = Scene.Snapshot(Destination);
-	HYP_CHECK(Snapshot.Instances[0].Surface.Values.size() == 1);
-	HYP_CHECK(Snapshot.Instances[0].Surface.Reference->Path == "../Material.hasset");
+	HYP_CHECK(Snapshot.Nodes[0].Model->Surface.Values.size() == 1);
+	HYP_CHECK(Snapshot.Nodes[0].Model->Surface.Reference->Path == "../Material.hasset");
 	Store(F.IO, Destination, Snapshot);
 	Scene.Close();
 	F.Assets.ClearCache();
@@ -295,7 +303,7 @@ void CheckSectionVariants(FFixture& InFixture)
 	HYP_CHECK(F.Session->GetResources().Statistics().Materials.TextureUploads == Shared.Materials.TextureUploads + 1);
 	const auto Destination = F.Directory / "variants/Scene.hasset";
 	const auto Saved = Scene.Snapshot(Destination);
-	HYP_CHECK(Saved.Instances[1].SectionSurfaces[0].Material.Overrides.size() == 1);
+	HYP_CHECK(Saved.Nodes[1].Model->SectionSurfaces[0].Material.Overrides.size() == 1);
 	Store(F.IO, Destination, Saved);
 	Scene.Close();
 	Scene.Load(Destination);

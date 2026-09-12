@@ -13,16 +13,21 @@ bool HasSelection(const FSceneMaterialAsset& InMaterial)
 
 void FSceneInstance::FImpl::BeginMaterials()
 {
-	for (const auto& Entry : Manifest->Instances)
+	std::vector<std::pair<FSceneHandle, FSceneNodeModel>> Selections;
+	for (const auto& Entry : Manifest->Nodes)
 	{
-		PendingMaterials.emplace(Entry.Id,
-		                         FPendingMaterial{HasSelection(Entry.Surface) || !Entry.SectionSurfaces.empty()});
+		if (Entry.Model)
+		{
+			const auto Handle = Scene.FindHandle(Entry.Id);
+			const bool bStored = HasSelection(Entry.Model->Surface) || !Entry.Model->SectionSurfaces.empty();
+			PendingMaterials.emplace(Handle, FPendingMaterial{bStored});
+			if (bStored)
+			{
+				Selections.emplace_back(Handle, *Entry.Model);
+			}
+		}
 	}
-	bMaterialsComplete = std::none_of(Manifest->Instances.begin(), Manifest->Instances.end(),
-	                                  [](const auto& InEntry)
-	                                  {
-		                                  return HasSelection(InEntry.Surface) || !InEntry.SectionSurfaces.empty();
-	                                  });
+	bMaterialsComplete = Selections.empty();
 	if (bMaterialsComplete)
 	{
 		return;
@@ -30,14 +35,16 @@ void FSceneInstance::FImpl::BeginMaterials()
 	MaterialCancellation = {};
 	MaterialPreparation = DispatchAsync<std::vector<FSelectedMaterials>>(
 	    Tasks, {EDomain::Worker},
-	    [this, Source = Manifest, Containing = Path, Cancellation = MaterialCancellation]
+	    [this, Source = std::move(Selections), Epoch = LoadEpoch, Containing = Path,
+	     Cancellation = MaterialCancellation]
 	    {
 		    std::vector<FSelectedMaterials> Result;
-		    for (const auto& Entry : Source->Instances)
+		    for (const auto& [Handle, Entry] : Source)
 		    {
 			    Cancellation.Check();
 			    FSelectedMaterials Selection;
-			    Selection.Id = Entry.Id;
+			    Selection.Handle = Handle;
+			    Selection.Epoch = Epoch;
 			    try
 			    {
 				    if (HasSelection(Entry.Surface))
@@ -72,9 +79,10 @@ void FSceneInstance::FImpl::PollMaterials()
 	{
 		for (const auto& Selection : *MaterialPreparation.GetReady())
 		{
-			if (PendingMaterials.contains(Selection.Id))
+			if (Selection.Epoch == LoadEpoch && Scene.FindModelComponent(Selection.Handle) &&
+			    PendingMaterials.contains(Selection.Handle))
 			{
-				SelectedMaterials.emplace(Selection.Id, Selection);
+				SelectedMaterials.emplace(Selection.Handle, Selection);
 			}
 		}
 		MaterialPreparation = {};
@@ -91,13 +99,13 @@ void FSceneInstance::FImpl::PublishModels()
 	}
 	for (const auto& Instance : Models)
 	{
-		const auto* Model = Scene.Find(Instance.Handle);
+		const auto* Model = Scene.FindModelComponent(Instance.Handle);
 		const auto Load = Loads.find(Instance.Asset);
-		if (!Model || Model->Data || Load == Loads.end() || !Load->second.Data)
+		if (!Model || Model->Data || Load == Loads.end() || !Load->second.Data || Load->second.Epoch != LoadEpoch)
 		{
 			continue;
 		}
-		const auto Selection = SelectedMaterials.find(Instance.Id);
+		const auto Selection = SelectedMaterials.find(Instance.Handle);
 		if (Selection != SelectedMaterials.end() && !Selection->second.Error.empty())
 		{
 			continue;
@@ -108,22 +116,21 @@ void FSceneInstance::FImpl::PublishModels()
 			Updated.Data = Load->second.Data;
 			if (Selection != SelectedMaterials.end())
 			{
-				ApplyLoadedMaterials(Updated, Selection->second, PendingMaterials.at(Instance.Id));
+				ApplyLoadedMaterials(Updated, Selection->second, PendingMaterials.at(Instance.Handle));
 			}
-			Scene.Update(Instance.Handle, std::move(Updated));
-			PendingMaterials.erase(Instance.Id);
+			Scene.SetModelComponent(Instance.Handle, std::move(Updated));
+			PendingMaterials.erase(Instance.Handle);
 		}
 		catch (const std::exception& Error)
 		{
-			SelectedMaterials[Instance.Id].Error = Error.what();
+			SelectedMaterials[Instance.Handle].Error = Error.what();
 		}
 		bStatusDirty = true;
 	}
 }
 
-FSceneInstance::FImpl::FPendingMaterial FSceneInstance::FImpl::PrepareMaterialEdits(const FPendingMaterial& InPending,
-                                                                                    const FSceneModel& InBefore,
-                                                                                    const FSceneModel& InAfter) const
+FSceneInstance::FImpl::FPendingMaterial FSceneInstance::FImpl::PrepareMaterialEdits(
+    const FPendingMaterial& InPending, const FSceneModelComponent& InBefore, const FSceneModelComponent& InAfter) const
 {
 	auto Result = InPending;
 	Result.bSurfaceEdited |= InBefore.Surface != InAfter.Surface;
@@ -143,7 +150,7 @@ FSceneInstance::FImpl::FPendingMaterial FSceneInstance::FImpl::PrepareMaterialEd
 	return Result;
 }
 
-void FSceneInstance::FImpl::ApplyLoadedMaterials(FSceneModel& InModel, const FSelectedMaterials& InSelection,
+void FSceneInstance::FImpl::ApplyLoadedMaterials(FSceneModelComponent& InModel, const FSelectedMaterials& InSelection,
                                                  const FPendingMaterial& InPending) const
 {
 	if (!InPending.bSurfaceEdited)

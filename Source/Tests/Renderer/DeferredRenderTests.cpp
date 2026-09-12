@@ -1,5 +1,6 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/Model.h"
+#include "Hyperion/Renderer/SceneBridge.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Support/ModelAssetSupport.h"
 #include "Support/TestSupport.h"
@@ -91,6 +92,7 @@ struct FFixture
 	FForwardPipelineStatistics Statistics;
 	FDeviceStats DeviceStats;
 	FScenePipelineSettings Settings;
+	FSceneRenderBridge* LogicalBridge{};
 	FVec4 Clear{.025f, .035f, .065f, 1};
 
 	explicit FFixture(EDepthConvention InConvention = EDepthConvention::Standard)
@@ -140,14 +142,29 @@ struct FFixture
 		Window.Poll();
 		Tasks.Wait(Session->GetScene().Flush());
 		Settings.Pipeline = InPipeline;
-		const auto Frame = Session->FreezeFrame();
+		const auto Frame = LogicalBridge ? std::shared_ptr<const FMaterialFrameContext>{} : Session->FreezeFrame();
+		const auto Seed = LogicalBridge ? Session->FreezeSceneFrame(LogicalBridge->GetToken()) : nullptr;
 		FImage Result;
 		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 		                          [&]
 		                          {
 			                          Pipeline->Configure(Settings);
 			                          FRenderGraph Graph;
-			                          Pipeline->Build(Graph, View, Frame, Shadows, Clear, {}, true);
+			                          if (Seed)
+			                          {
+				                          FSceneViewRequest Request;
+				                          Request.Width = View.Width;
+				                          Request.Height = View.Height;
+				                          Request.Viewport = View.Viewport;
+				                          Request.DepthConvention = View.DepthConvention;
+				                          Request.bInstanceBatching = View.bInstanceBatching;
+				                          Request.CullingMode = View.CullingMode;
+				                          Pipeline->Build(Graph, Request, Seed, Shadows, Clear, {}, true);
+			                          }
+			                          else
+			                          {
+				                          Pipeline->Build(Graph, View, Frame, Shadows, Clear, {}, true);
+			                          }
 			                          const auto Prepared = Pipeline->GetFrame();
 			                          Result = ExecuteGraph(std::move(Graph), Tasks, *Swapchain,
 			                                                {View.Width, View.Height}, false, bInCapture);
@@ -413,6 +430,201 @@ void CheckShadowContinuity(FFixture& InFixture)
 	InFixture.Shadows.bEnabled = false;
 }
 
+void AwaitScene(FSceneRenderBridge& InBridge, std::span<const FSceneHandle> InHandles)
+{
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+	while (true)
+	{
+		InBridge.Flush();
+		bool bReady = true;
+		for (const auto Handle : InHandles)
+		{
+			HYP_CHECK(InBridge.GetError(Handle).empty());
+			bReady &= InBridge.IsReady(Handle);
+		}
+		if (bReady)
+		{
+			return;
+		}
+		HYP_CHECK(std::chrono::steady_clock::now() < Deadline);
+		std::this_thread::yield();
+	}
+}
+
+void CheckOwnedOffscreenShadow(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 5}, {}, {1, .1f, 40, 5});
+	const auto Camera = *Scene.GetSettings().DefaultCamera;
+	const auto Sun = *Scene.GetSettings().MainDirectionalLight;
+	Scene.SetWorldTransform(Sun, SceneCameraTransform({}, {-3, 0, -1}));
+	Scene.SetDirectionalLight(Sun, {{1, 1, 1}, 3, true});
+	FSceneNode Parent;
+	Parent.Id = "caster-parent";
+	Parent.Local = Translation({3.5f, 0, 1});
+	const auto Rig = Scene.AddNode(Parent);
+	FModelMaterial Material;
+	Material.BaseColor = {.6f, .6f, .6f, 1};
+	Material.Metallic = 0;
+	Material.Roughness = 1;
+	const auto Data = PrepareSourceModel(Quad(Material));
+	FSceneModel Receiver{"receiver", Data, Scale({4, 4, 1})};
+	const auto Ground = Scene.Add(Receiver);
+	FSceneNode Caster;
+	Caster.Id = "offscreen-caster";
+	Caster.Parent = "caster-parent";
+	Caster.Local = Scale({.4f, .4f, 1});
+	Caster.Model = FSceneModelComponent{};
+	Caster.Model->Data = Data;
+	const auto Occluder = Scene.AddNode(Caster);
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	F.LogicalBridge = &Bridge;
+	const std::array Handles{Ground, Occluder};
+	AwaitScene(Bridge, Handles);
+	F.Shadows.bEnabled = false;
+	const auto Unshadowed = F.Frame();
+	HYP_CHECK(F.Statistics.MainView().VisibleItems == 1);
+	F.Shadows.bEnabled = true;
+	const auto Shadowed = F.Frame();
+	HYP_CHECK(F.Statistics.MainView().VisibleItems == 1 && F.Statistics.bShadows);
+	std::size_t ShadowItems{};
+	for (const auto& View : F.Statistics.Views)
+	{
+		if (View.Usage == "ShadowDepth")
+		{
+			ShadowItems += View.Visibility.VisibleItems;
+		}
+	}
+	HYP_CHECK(ShadowItems >= 2);
+	float MaximumShadow{};
+	for (std::size_t Index = 0; Index < Shadowed.Rgba.size(); Index += 4)
+	{
+		MaximumShadow = std::max(MaximumShadow, Unshadowed.Rgba[Index] - Shadowed.Rgba[Index]);
+	}
+	std::cout << "Owned offscreen shadow contrast=" << MaximumShadow << " shadow items=" << ShadowItems << "\n";
+	HYP_CHECK(MaximumShadow > .05f);
+	Similar(Shadowed, F.Frame(ESceneRenderPipeline::Forward), .065f);
+	Scene.SetLocalTransform(Rig, Translation({3.5f, .6f, 1}));
+	Bridge.Flush();
+	HYP_CHECK(F.Frame().Rgba != Shadowed.Rgba);
+	auto Lens = *Scene.FindCamera(Camera);
+	Lens.VerticalRadians = .9f;
+	Scene.SetCamera(Camera, Lens);
+	Scene.SetWorldTransform(Sun, SceneCameraTransform({}, {0, -1, -.001f}, {0, 0, 1}));
+	Bridge.Flush();
+	Similar(F.Frame(), F.Frame(ESceneRenderPipeline::Forward), .065f);
+	Scene.SetDirectionalLight(Sun, {{1, 1, 1}, 3, false});
+	Bridge.Flush();
+	F.Frame();
+	HYP_CHECK(!F.Statistics.bShadows && !F.Pipeline->Shadows().IsEnabled());
+	Scene.RemoveSubtree(Sun);
+	Bridge.Flush();
+	F.Frame();
+	HYP_CHECK(!F.Statistics.bShadows && !F.Pipeline->Shadows().IsEnabled());
+	Bridge.Close();
+	F.LogicalBridge = nullptr;
+	F.Shadows.bEnabled = false;
+}
+
+void CheckOwnedCameraLightRoutes(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	FSceneNode Rig;
+	Rig.Id = "rig";
+	Rig.Local = Translation({.2f, 0, 0});
+	const auto Parent = Scene.AddNode(Rig);
+	auto CameraNode = MakeSceneCameraNode("camera", {-.2f, 0, 5}, {-.2f, 0, 0}, {1, .1f, 40, 5});
+	CameraNode.Parent = "rig";
+	const auto Camera = Scene.AddNode(CameraNode);
+	auto SunNode = MakeSceneDirectionalLightNode("sun");
+	SunNode.Parent = "rig";
+	SunNode.Local = SceneCameraTransform({}, {-1, 0, -1});
+	SunNode.DirectionalLight = FSceneDirectionalLight{{1, 1, 1}, 3, true};
+	const auto Sun = Scene.AddNode(SunNode);
+	auto Environment = MakeSceneEnvironmentLightNode("environment");
+	Environment.EnvironmentLight = FSceneEnvironmentLight{{1, 1, 1}, .2f};
+	const auto Ambient = Scene.AddNode(Environment);
+	Scene.SetSettings({Camera, Sun, Ambient});
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	F.LogicalBridge = &Bridge;
+	FModelMaterial Material;
+	Material.BaseColor = {.4f, .2f, .1f, 1};
+	Material.Metallic = .6f;
+	Material.Roughness = .25f;
+	Material.bDoubleSided = true;
+	Material.AlphaMode = EAlphaMode::Mask;
+	const auto Data = PrepareSourceModel(Quad(Material, true));
+	FSceneModel Left{"left", Data};
+	Left.World = Multiply(Translation({-.9f, 0, 0}), Scale({.7f, .7f, 1}));
+	const auto A = Scene.Add(Left);
+	Scene.Reparent(A, Parent, ESceneReparentMode::KeepWorld);
+	Left.World = Multiply(Translation({.9f, 0, 0}), Scale({.7f, .7f, 1}));
+	const auto B = Scene.Add(Left);
+	Material.bUnlit = true;
+	Material.AlphaMode = EAlphaMode::Blend;
+	Material.BaseColor = {.1f, .2f, .8f, .4f};
+	FSceneModel Transparent{"transparent", PrepareSourceModel(Quad(Material))};
+	Transparent.World = Multiply(Translation({0, -.5f, 1}), Scale({.4f, .4f, 1}));
+	const auto C = Scene.Add(Transparent);
+	const std::array Handles{A, B, C};
+	AwaitScene(Bridge, Handles);
+	for (const bool bShadows : {false, true})
+	{
+		F.Shadows.bEnabled = bShadows;
+		F.View.bInstanceBatching = true;
+		const auto Reference = F.Frame();
+		HYP_CHECK(F.Statistics.SceneToken == Bridge.GetToken());
+		HYP_CHECK(F.Statistics.MainView().VisibleItems == 3);
+		HYP_CHECK(F.Statistics.MainView().Batches.InstancedItems == 2);
+		HYP_CHECK(F.Statistics.bShadows == bShadows);
+		Similar(Reference, F.Frame(ESceneRenderPipeline::Forward), .065f);
+		F.View.bInstanceBatching = false;
+		Similar(Reference, F.Frame(), .008f);
+		HYP_CHECK(F.Statistics.MainView().Batches.InstancedItems == 0);
+		F.View.bInstanceBatching = true;
+	}
+	Scene.SetWorldTransform(B, Multiply(Translation({.9f, 0, 0}), Scale({-.7f, .7f, 1})));
+	Bridge.Flush();
+	Similar(F.Frame(), F.Frame(ESceneRenderPipeline::Forward), .065f);
+	F.View.Viewport = FViewport{32, 24, 300, 180};
+	auto Lens = *Scene.FindCamera(Camera);
+	Lens.VerticalRadians = .8f;
+	Scene.SetCamera(Camera, Lens);
+	Scene.SetLocalTransform(Parent, Translation({.4f, 0, 0}));
+	Bridge.Flush();
+	Similar(F.Frame(), F.Frame(ESceneRenderPipeline::Forward), .065f);
+	const auto HierarchyReference = F.Frame();
+	HYP_CHECK(F.Statistics.MainView().Groups == 3 && F.Statistics.MainView().UnboundedGroups == 0);
+	for (const auto Mode : {ESceneCullingMode::None, ESceneCullingMode::Linear, ESceneCullingMode::Bvh})
+	{
+		F.View.CullingMode = Mode;
+		HYP_CHECK(HierarchyReference.Rgba == F.Frame().Rgba);
+		HYP_CHECK(F.Statistics.MainView().VisibleItems == 3);
+	}
+	F.View.Viewport.reset();
+	Scene.SetEnabled(Sun, false);
+	Bridge.Flush();
+	const auto WithoutSun = F.Frame();
+	HYP_CHECK(!F.Statistics.bShadows && !F.Pipeline->Shadows().IsEnabled());
+	Similar(WithoutSun, F.Frame(ESceneRenderPipeline::Forward), .025f);
+	Scene.SetEnabled(Camera, false);
+	Bridge.Flush();
+	const auto Clear = F.Frame();
+	HYP_CHECK(F.Statistics.CameraStatus == ESceneCameraStatus::NoActiveCamera);
+	HYP_CHECK(std::abs(Pixel(Clear, 192, 144) - F.Clear.X) < .004f);
+	Scene.SetEnabled(Camera, true);
+	Bridge.Flush();
+	HYP_CHECK(F.Frame().Rgba != Clear.Rgba);
+	Bridge.Close();
+	F.LogicalBridge = nullptr;
+	F.Shadows.bEnabled = false;
+	F.View.bInstanceBatching = true;
+	std::cout << "Scene-owned inherited camera/light: Forward/Deferred, shadow, instance, mask, blend, mirror and "
+	             "clear parity passed\n";
+}
+
 void CheckQueuedGenerations(FFixture& InFixture)
 {
 	FModelMaterial Material;
@@ -565,6 +777,8 @@ int main()
 			RunFullscreenTests(Fixture.Tasks, *Fixture.Device, *Fixture.Swapchain);
 			CheckQueuedGenerations(Fixture);
 			CheckReplacementAndRecovery(Fixture);
+			CheckOwnedCameraLightRoutes(Fixture);
+			CheckOwnedOffscreenShadow(Fixture);
 		}
 		std::cout << "Deferred rendering tests passed\n";
 		return 0;

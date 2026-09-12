@@ -6,6 +6,7 @@
 namespace Hyperion
 {
 class FRenderSession;
+class FSceneInstance;
 
 class FSceneViewerPlugin final : public IScenePlugin
 {
@@ -14,6 +15,7 @@ public:
 	                   std::filesystem::path InPath);
 	~FSceneViewerPlugin() override;
 	void Start() override;
+	FSceneInstance& GetSceneInstance();
 	void Update(FRenderFrame& InFrame) override;
 	void Stop() noexcept override;
 	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);
@@ -25,6 +27,7 @@ public:
 	void SetCullingMode(ESceneCullingMode InMode);
 	void SetFrozen(bool bInFrozen);
 	void Fit();
+	void SetRenderedView(const std::optional<FRenderView>& InView);
 	void DuplicateSelected();
 	void AddModel();
 	void RemoveSelected();

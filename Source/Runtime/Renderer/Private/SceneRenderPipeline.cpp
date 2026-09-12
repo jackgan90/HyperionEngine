@@ -35,12 +35,60 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
                                  const FCascadedShadowSettings& InShadows, FVec4 InClear,
                                  const std::function<void(FRenderGraph&)>& InExtensions, bool bInDeferPreparation)
 {
+	if (Session.GetScene().GetLogicalSceneIdentity())
+	{
+		throw std::logic_error("Bound scene pipeline requires a scene view request and frame seed");
+	}
+	BuildResolved(InGraph, std::move(InMain), std::move(InFrame), InShadows, InClear, InExtensions,
+	              bInDeferPreparation);
+}
+
+void FSceneRenderPipeline::Build(FRenderGraph& InGraph, const FSceneViewRequest& InRequest,
+                                 std::shared_ptr<const FSceneFrameSeed> InSeed,
+                                 const FCascadedShadowSettings& InShadows, FVec4 InClear,
+                                 const std::function<void(FRenderGraph&)>& InExtensions, bool bInDeferPreparation)
+{
+	if (!InSeed)
+	{
+		throw std::invalid_argument("Scene pipeline requires an owned frame seed");
+	}
+	const auto Resolved = Session.ResolveSceneFrame(*InSeed, InRequest);
+	if (Resolved.HasCamera())
+	{
+		BuildResolved(InGraph, Resolved.View, Resolved.Frame, InShadows, InClear, InExtensions, bInDeferPreparation);
+	}
+	else
+	{
+		LastStatistics = {};
+		bPending = false;
+		FullscreenStatistics.reset();
+		auto Disabled = InShadows;
+		Disabled.bEnabled = false;
+		ShadowMaps.Prepare(Resolved.View, {0, 0, 1}, Disabled, {});
+		Session.BuildSceneClear(InGraph, Resolved, InClear);
+		if (InExtensions)
+		{
+			InExtensions(InGraph);
+		}
+	}
+	LastStatistics.SceneToken = InSeed->GetToken();
+	LastStatistics.CameraStatus = Resolved.CameraStatus;
+	LastStatistics.MainCameraView = Resolved.HasCamera() ? std::optional(Resolved.View) : std::nullopt;
+}
+
+void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMain,
+                                         std::shared_ptr<const FMaterialFrameContext> InFrame,
+                                         const FCascadedShadowSettings& InShadows, FVec4 InClear,
+                                         const std::function<void(FRenderGraph&)>& InExtensions,
+                                         bool bInDeferPreparation)
+{
 	HYP_PERF_SCOPE_C(Render, ScenePipeline);
 	const auto Start = std::chrono::steady_clock::now();
 	if (!InFrame)
 	{
 		throw std::invalid_argument("Scene pipeline requires a frozen material frame");
 	}
+	Session.ValidateSceneFrame(*InFrame);
 	if (Settings.Pipeline == ESceneRenderPipeline::Deferred && InMain.Viewport)
 	{
 		const auto& View = *InMain.Viewport;
@@ -57,8 +105,10 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, FRenderView InMain,
 	const auto Revision = Session.GetScene().GetCollectionRevision();
 	const auto State =
 	    Revision ? std::optional(std::array{*Revision, Session.GetResources().GetPublicationRevision()}) : std::nullopt;
+	auto EffectiveShadows = InShadows;
+	EffectiveShadows.bEnabled &= !InFrame->GetSceneToken() || InFrame->CastsSceneShadows();
 	LastStatistics.bShadows = ShadowMaps.Prepare(
-	    InMain, Direction(Session, *InFrame), InShadows,
+	    InMain, Direction(Session, *InFrame), EffectiveShadows,
 	    [this](const ISceneVisibility& InVolume)
 	    {
 		    return Session.GetScene().QueryBounds(InVolume);

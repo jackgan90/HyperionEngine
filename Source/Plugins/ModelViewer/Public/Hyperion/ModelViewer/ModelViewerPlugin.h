@@ -5,6 +5,7 @@
 namespace Hyperion
 {
 class FRenderSession;
+class FSceneInstance;
 
 class FModelViewerPlugin final : public IScenePlugin
 {
@@ -13,6 +14,7 @@ public:
 	                   std::filesystem::path InPath);
 	~FModelViewerPlugin() override;
 	void Start() override;
+	FSceneInstance& GetSceneInstance();
 	void Update(FRenderFrame& InFrame) override;
 	void Stop() noexcept override;
 	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);

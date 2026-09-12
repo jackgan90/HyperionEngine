@@ -23,7 +23,7 @@
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
-源文件与输出文件必须不同。--scene 将完整模型及其原有节点层级包装为一个场景实例；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
+源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建真实 camera/directionalLight/environmentLight 节点及选择；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
 cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 、Shadows.hasset 和 SharedAssets.hasset，以及 Catalog.hasset。其中 Showcase 和 Shadows 分别保留 79 和 10 个实例。Scene Viewer 默认另行导入 `assets/Scenes/Sponza.json` 到 `out/content/Scenes/Sponza.hasset` 并加入 catalog；这是一个完整 Sponza 模型实例，源模型与全部纹理已随仓库保存。迁移和能力边界见 [SponzaMigration.md](SponzaMigration.md)。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
 
@@ -158,3 +158,7 @@ AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、writt
 可运行 tools/MeasureAssets.py --tool <工具路径> --source <源模型路径> --output <结果目录> 自动进行每模式 2 次预热、7 次独立进程测量，保存原始日志和 Summary.json。
 
 这两个测量不包括 GPU 上传；peak_resident_bytes 是整个短进程的峰值驻留集，不能当作缓存字节。首次运行与系统文件缓存也会影响耗时。实际 Debug/Release 结果和完整套件证据记录在当前 OpenSpec change 的 verification.md 中。
+
+## 场景节点记录
+
+当前 `hyperion.scene` 为 native schema v4，plain JSON source 为 v2。Nodes 与三个 stable-ID 选择替代旧 Instances/Eye/Target；native v1/v2/v3 和 plain source v1 通过显式迁移保留模型、材质、矩阵与旧镜头/默认灯。新空场景不自动补节点。scene-json importer revision 2 使旧缓存重新转换。Snapshot 从当前节点生成独立快照，包含 Local、parent、enabled、camera/light payload 和选择；异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneManagement.md](SceneManagement.md)。

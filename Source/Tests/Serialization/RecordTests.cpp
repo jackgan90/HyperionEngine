@@ -292,6 +292,111 @@ void CheckBindingIdentity()
 	HYP_CHECK(Restored->First == 10 && Restored->Second == 0);
 }
 
+void CheckContextMigrationContract()
+{
+	struct FContextFixture
+	{
+		int Value{};
+	};
+
+	auto Type = MakeRecord<FContextFixture>("test.context.migration", {Member("value", &FContextFixture::Value)}, 2);
+	Type.ContextMigrations.emplace(1,
+	                               [](FArchiveNode::FObject& InFields, const FRecordReadContext&)
+	                               {
+		                               InFields["value"] = WriteValue(42);
+		                               InFields.erase("retired");
+	                               });
+	Type.RejectedFields = {"retired"};
+	FRecordRegistry Registry;
+	Registry.Register(Type);
+	Registry.Register(Type);
+	auto Conflict = Type;
+	Conflict.RejectedFields = {"another"};
+	Reject(
+	    [&]
+	    {
+		    Registry.Register(Conflict);
+	    },
+	    "Conflicting");
+	Conflict = Type;
+	Conflict.ContextMigrations.clear();
+	Reject(
+	    [&]
+	    {
+		    Registry.Register(Conflict);
+	    },
+	    "Conflicting");
+	auto Invalid = Type;
+	Invalid.Migrations.emplace(1,
+	                           [](FArchiveNode::FObject&)
+	                           {
+	                           });
+	Reject(
+	    [&]
+	    {
+		    ValidateRecordDescriptor(Invalid);
+	    },
+	    "context migration");
+	Invalid = Type;
+	Invalid.RejectedFields = {"value"};
+	Reject(
+	    [&]
+	    {
+		    ValidateRecordDescriptor(Invalid);
+	    },
+	    "retired");
+	const FContextFixture Original{7};
+	auto Archive = WriteRecord(Type, &Original);
+	auto& Root = std::get<FArchiveNode::FObject>(Archive.Value);
+	auto& Fields = std::get<FArchiveNode::FObject>(Root.at("fields").Value);
+	Fields["retired"] = WriteValue(1);
+	Reject(
+	    [&]
+	    {
+		    ReadRecord(Type, Archive);
+	    },
+	    "retired");
+	Root["version"] = WriteValue(1u);
+	const auto Restored = std::static_pointer_cast<FContextFixture>(ReadRecord(Type, Archive));
+	HYP_CHECK(Restored->Value == 42);
+}
+
+void CheckStrictUnknownFields()
+{
+	struct FStrictFixture
+	{
+		int Value{};
+	};
+
+	auto Type = MakeRecord<FStrictFixture>("test.strict", {Member("value", &FStrictFixture::Value)});
+	FRecordRegistry Registry;
+	Registry.Register(Type);
+	const FStrictFixture Original{7};
+	auto Archive = WriteRecord(Type, &Original);
+	auto& Root = std::get<FArchiveNode::FObject>(Archive.Value);
+	auto& Fields = std::get<FArchiveNode::FObject>(Root.at("fields").Value);
+	Fields["future"] = WriteValue(42);
+	std::vector<std::string> Diagnostics;
+	const auto Restored = std::static_pointer_cast<FStrictFixture>(ReadRecord(Type, Archive, {"record", &Diagnostics}));
+	HYP_CHECK(Restored->Value == 7 && Diagnostics.size() == 1 &&
+	          Diagnostics[0].find("record.future") != std::string::npos);
+	Type.bRejectUnknownFields = true;
+	Reject(
+	    [&]
+	    {
+		    Registry.Register(Type);
+	    },
+	    "Conflicting");
+	FStrictFixture Destination{13};
+	Reject(
+	    [&]
+	    {
+		    ReadRecordFields(Type, &Destination, Archive, {"record"});
+	    },
+	    "record.future");
+	HYP_CHECK(Destination.Value == 13);
+}
+
 void CheckWire()
 {
 	const auto Bytes = Serialize(std::uint64_t{0x0807060504030201});
@@ -373,5 +478,7 @@ void CheckRecordEvolution()
 	CheckMismatch();
 	CheckRegistry();
 	CheckBindingIdentity();
+	CheckContextMigrationContract();
+	CheckStrictUnknownFields();
 	CheckWire();
 }

@@ -47,6 +47,9 @@ public:
 	FMaterialProviderRegistry& operator=(const FMaterialProviderRegistry&) = delete;
 	void Register(FMaterialProviderDescription InDescription);
 	void Freeze();
+	void ValidateSceneBinding() const;
+	void ValidateSceneInputs(const FMaterialParameterValues& InValues, bool bInAllowDefaultLights = false) const;
+	FMaterialParameterValues WithoutSceneInputs(FMaterialParameterValues InValues) const;
 	std::uint64_t GetVersion() const;
 	std::vector<FMaterialProvidedValue> Evaluate(const FMaterialProviderInputs& InInputs,
 	                                             std::span<const std::string> InSemantics);

@@ -5,6 +5,7 @@
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/FramePipeline.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "ViewerOptions.h"
 #include <deque>
@@ -50,6 +51,8 @@ private:
 	void InitializeShadowSettings();
 	void UpdateShadowLight(int InFrame);
 	void DrawShadowGui();
+	FSceneInstance* GetSceneInstance();
+	void SetSceneLightDirection(FVec3 InDirection);
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
 	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
 	FRenderFrame UpdateScene(FSize InSize);
@@ -58,6 +61,7 @@ private:
 	void DrainFrames();
 	FRenderGraph BuildRenderGraph(const FRenderFrame& InFrame, const FGuiDrawData& InGuiData,
 	                              std::shared_ptr<const FMaterialFrameContext> InMaterialFrame,
+	                              std::shared_ptr<const FSceneFrameSeed> InSceneSeed,
 	                              const FCascadedShadowSettings& InShadows);
 	void UpdateCaptureStatus();
 	bool HandleCaptureActions(const FDebugActions& InActions, bool bInScheduled);
@@ -85,9 +89,7 @@ private:
 	std::unique_ptr<FSceneRenderPipeline> ScenePipeline;
 	FCascadedShadowSettings ShadowSettings;
 	FForwardPipelineStatistics PipelineStatistics;
-	FVec3 ShadowLight;
-	float LightAzimuth{};
-	float LightElevation{};
+	bool bShadowLightApplied{};
 	std::unique_ptr<FGui> Gui;
 	std::unique_ptr<FPluginSet> Plugins;
 	FDebugUiPlugin* GuiPlugin{};
@@ -109,6 +111,7 @@ private:
 		std::uint64_t FrameId{};
 		FGuiDrawData Gui;
 		std::shared_ptr<const FMaterialFrameContext> Material;
+		std::shared_ptr<const FSceneFrameSeed> SceneSeed;
 		FCascadedShadowSettings Shadows;
 		FNativeSurface Surface;
 		bool bTakeCapture{};

@@ -1,5 +1,6 @@
 #include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
+#include <algorithm>
 #include <nlohmann/json.hpp>
 
 namespace Hyperion
@@ -33,46 +34,197 @@ FVec4 Quaternion(const FJson& InValue)
 	}
 	return Result;
 }
-} // namespace
 
-FSceneManifest DecodeSceneManifest(std::string_view InText)
+void Fields(const FJson& InObject, std::initializer_list<std::string_view> InAllowed)
 {
-	const auto Json = FJson::parse(InText);
-	if (Json.contains("fields"))
+	if (!InObject.is_object())
 	{
-		return ReadValue<FSceneManifest>(DecodeAssetSourceJson(InText));
+		throw std::invalid_argument("Expected a scene object");
 	}
-	if (Json.at("type") != "hyperion.scene" || Json.at("schema_version") != 1 || !Json.at("assets").is_array() ||
-	    !Json.at("instances").is_array())
+	for (const auto& [Key, Value] : InObject.items())
 	{
-		throw std::invalid_argument("Unsupported scene manifest type, version or arrays");
+		if (std::find(InAllowed.begin(), InAllowed.end(), Key) == InAllowed.end())
+		{
+			throw std::invalid_argument("Unsupported scene field: " + Key);
+		}
 	}
-	FSceneManifest Manifest;
-	for (const auto& Asset : Json.at("assets"))
+}
+
+FMat4 NodeTransform(const FJson& InNode)
+{
+	if (InNode.contains("transform"))
 	{
-		Manifest.Assets.push_back({Asset.at("id").get<std::string>(),
-		                           {{}, Asset.at("path").get<std::string>(), RecordType<FModelAsset>().Id, {}}});
+		if (InNode.contains("translation") || InNode.contains("rotation") || InNode.contains("scale"))
+		{
+			throw std::invalid_argument("Scene transform and TRS are mutually exclusive");
+		}
+		const auto& Array = InNode.at("transform");
+		if (!Array.is_array() || Array.size() != 16)
+		{
+			throw std::invalid_argument("Expected sixteen column-major scene matrix numbers");
+		}
+		FMat4 Result;
+		for (std::size_t Index = 0; Index < 16; ++Index)
+		{
+			Result.Values[Index] = Array.at(Index).get<float>();
+		}
+		return Result;
 	}
-	for (const auto& Instance : Json.at("instances"))
+	return ComposeTRS(Vector3(InNode.value("translation", FJson{0, 0, 0})),
+	                  Quaternion(InNode.value("rotation", FJson{0, 0, 0, 1})),
+	                  Vector3(InNode.value("scale", FJson{1, 1, 1})));
+}
+
+FSceneNodeModel ModelPayload(const FJson& InJson)
+{
+	Fields(InJson, {"asset", "visible", "material", "surface", "sectionSurfaces"});
+	FSceneNodeModel Result;
+	Result.Asset = InJson.at("asset").get<std::string>();
+	Result.bVisible = InJson.value("visible", true);
+	if (InJson.contains("material"))
 	{
+		Result.Material = ReadValue<FMaterialOverride>(DecodeAssetSourceJson(InJson.at("material").dump()));
+	}
+	if (InJson.contains("surface"))
+	{
+		Result.Surface = ReadValue<FSceneMaterialAsset>(DecodeAssetSourceJson(InJson.at("surface").dump()));
+	}
+	if (InJson.contains("sectionSurfaces"))
+	{
+		Result.SectionSurfaces =
+		    ReadValue<std::vector<FSceneSectionMaterial>>(DecodeAssetSourceJson(InJson.at("sectionSurfaces").dump()));
+	}
+	return Result;
+}
+
+FSceneCamera CameraPayload(const FJson& InJson)
+{
+	Fields(InJson, {"verticalRadians", "near", "far", "focusDistance"});
+	FSceneCamera Result;
+	Result.VerticalRadians = InJson.value("verticalRadians", Result.VerticalRadians);
+	Result.Near = InJson.value("near", Result.Near);
+	Result.Far = InJson.value("far", Result.Far);
+	Result.FocusDistance = InJson.value("focusDistance", Result.FocusDistance);
+	return Result;
+}
+
+FSceneNodeEntry NodeEntry(const FJson& InJson)
+{
+	Fields(InJson, {"id", "name", "parent", "enabled", "transform", "translation", "rotation", "scale", "model",
+	                "camera", "directionalLight", "environmentLight"});
+	FSceneNodeEntry Result;
+	Result.Id = InJson.at("id").get<std::string>();
+	Result.Name = InJson.value("name", Result.Id);
+	Result.Parent = InJson.value("parent", std::string{});
+	Result.bEnabled = InJson.value("enabled", true);
+	Result.Transform = NodeTransform(InJson);
+	if (InJson.contains("model"))
+	{
+		Result.Model = ModelPayload(InJson.at("model"));
+	}
+	if (InJson.contains("camera"))
+	{
+		Result.Camera = CameraPayload(InJson.at("camera"));
+	}
+	if (InJson.contains("directionalLight"))
+	{
+		const auto& Light = InJson.at("directionalLight");
+		Fields(Light, {"color", "intensity", "castShadows"});
+		Result.DirectionalLight =
+		    FSceneDirectionalLight{Vector3(Light.value("color", FJson{1, 1, 1})), Light.value("intensity", 1.f),
+		                           Light.value("castShadows", true)};
+	}
+	if (InJson.contains("environmentLight"))
+	{
+		const auto& Light = InJson.at("environmentLight");
+		Fields(Light, {"color", "intensity"});
+		Result.EnvironmentLight =
+		    FSceneEnvironmentLight{Vector3(Light.value("color", FJson{1, 1, 1})), Light.value("intensity", 1.f)};
+	}
+	return Result;
+}
+
+std::vector<FSceneAssetEntry> SceneAssets(const FJson& InArray)
+{
+	if (!InArray.is_array())
+	{
+		throw std::invalid_argument("Expected scene assets array");
+	}
+	std::vector<FSceneAssetEntry> Result;
+	for (const auto& Asset : InArray)
+	{
+		Fields(Asset, {"id", "path"});
+		Result.push_back({Asset.at("id").get<std::string>(),
+		                  {{}, Asset.at("path").get<std::string>(), RecordType<FModelAsset>().Id, {}}});
+	}
+	return Result;
+}
+
+FSceneManifest DecodeLegacy(const FJson& InJson)
+{
+	Fields(InJson, {"type", "schema_version", "assets", "instances", "camera"});
+	if (!InJson.at("instances").is_array())
+	{
+		throw std::invalid_argument("Expected legacy scene instances array");
+	}
+	FLegacySceneManifest Manifest;
+	Manifest.Assets = SceneAssets(InJson.at("assets"));
+	for (const auto& Instance : InJson.at("instances"))
+	{
+		Fields(Instance, {"id", "name", "asset", "visible", "translation", "rotation", "scale"});
 		FSceneInstanceEntry Entry;
 		Entry.Id = Instance.at("id").get<std::string>();
 		Entry.Name = Instance.value("name", Entry.Id);
 		Entry.Asset = Instance.at("asset").get<std::string>();
-		Entry.Transform = ComposeTRS(Vector3(Instance.value("translation", FJson{0, 0, 0})),
-		                             Quaternion(Instance.value("rotation", FJson{0, 0, 0, 1})),
-		                             Vector3(Instance.value("scale", FJson{1, 1, 1})));
+		Entry.Transform = NodeTransform(Instance);
 		Entry.bVisible = Instance.value("visible", true);
 		Manifest.Instances.push_back(std::move(Entry));
 	}
-	if (Json.contains("camera"))
+	if (InJson.contains("camera"))
 	{
-		const auto& Camera = Json.at("camera");
+		const auto& Camera = InJson.at("camera");
+		Fields(Camera, {"eye", "target", "near", "far"});
 		Manifest.Eye = Vector3(Camera.at("eye"));
 		Manifest.Target = Vector3(Camera.at("target"));
 		Manifest.Near = Camera.value("near", .01f);
 		Manifest.Far = Camera.value("far", 1000.f);
 	}
+	return UpgradeLegacyScene(Manifest);
+}
+} // namespace
+
+FSceneManifest DecodeSceneManifest(std::string_view InText)
+{
+	// The shared archive adapter rejects duplicate keys before nlohmann can overwrite them.
+	const auto Archive = DecodeAssetSourceJson(InText);
+	const auto Json = FJson::parse(InText);
+	if (Json.contains("fields"))
+	{
+		return ReadValue<FSceneManifest>(Archive);
+	}
+	if (Json.at("type") != "hyperion.scene")
+	{
+		throw std::invalid_argument("Unsupported scene manifest type");
+	}
+	if (Json.at("schema_version") == 1)
+	{
+		return DecodeLegacy(Json);
+	}
+	Fields(Json,
+	       {"type", "schema_version", "assets", "nodes", "defaultCamera", "mainDirectionalLight", "environmentLight"});
+	if (Json.at("schema_version") != 2 || !Json.at("nodes").is_array())
+	{
+		throw std::invalid_argument("Unsupported scene manifest version or nodes");
+	}
+	FSceneManifest Manifest;
+	Manifest.Assets = SceneAssets(Json.at("assets"));
+	for (const auto& Node : Json.at("nodes"))
+	{
+		Manifest.Nodes.push_back(NodeEntry(Node));
+	}
+	Manifest.DefaultCamera = Json.value("defaultCamera", std::string{});
+	Manifest.MainDirectionalLight = Json.value("mainDirectionalLight", std::string{});
+	Manifest.EnvironmentLight = Json.value("environmentLight", std::string{});
 	ValidateSceneManifest(Manifest);
 	return Manifest;
 }
@@ -80,7 +232,7 @@ FSceneManifest DecodeSceneManifest(std::string_view InText)
 void RegisterSceneImporter(FAssetImportService& InImports)
 {
 	InImports.Register({"hyperion.scene-json",
-	                    1,
+	                    2,
 	                    &RecordType<FSceneManifest>(),
 	                    {".json"},
 	                    [](FAssetImportContext& InContext)
@@ -90,7 +242,7 @@ void RegisterSceneImporter(FAssetImportService& InImports)
 		                        DecodeSceneManifest({reinterpret_cast<const char*>(Bytes.data()), Bytes.size()}));
 	                    }});
 	InImports.Register({"hyperion.native-scene-upgrade",
-	                    1,
+	                    2,
 	                    &RecordType<FSceneManifest>(),
 	                    {".hasset"},
 	                    [](FAssetImportContext& InContext)

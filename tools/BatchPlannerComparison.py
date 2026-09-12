@@ -47,7 +47,7 @@ def viewer(args, executable, name, motion):
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
     log = result.stdout + result.stderr
     (args.output / f"{name}.log").write_text(log, encoding="utf-8")
-    count = len(json.loads((ROOT / "assets/Scenes/Showcase.json").read_text(encoding="utf-8"))["instances"])
+    count = sum("model" in node for node in json.loads((ROOT / "assets/Scenes/Showcase.json").read_text(encoding="utf-8"))["nodes"])
     if result.returncode or "validation errors: 0" not in log or f"{count}/{count} models ready | 0 failed" not in log:
         raise RuntimeError(f"Viewer readiness or validation failed: {name}")
     assert "vsync=off" in log

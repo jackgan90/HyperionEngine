@@ -67,6 +67,10 @@ void DrawStatistics(FGui& InGui, const FSceneVisibilityStats& InStats)
 
 void FSceneViewerPlugin::FImpl::DrawBounds(FGui& InGui) const
 {
+	if (!LastView.Camera)
+	{
+		return;
+	}
 	for (const auto Handle : Scene.GetHandles())
 	{
 		const auto Model = Scene.Find(Handle);
@@ -136,41 +140,7 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		}
 		InGui.TextWrapped("Drag: orbit | Wheel: dolly | Arrows: move | Page Up/Down: elevate | Tab: panels");
 		InGui.Separator();
-		if (!P.Scene.GetModels().empty())
-		{
-			P.Selected %= P.Scene.GetModels().size();
-			const auto Handle = P.Scene.GetModels()[P.Selected].Handle;
-			InGui.Text("Selected: " + P.Scene.Find(Handle)->Name);
-			if (InGui.Button("Next model"))
-			{
-				P.Selected = (P.Selected + 1) % P.Scene.GetModels().size();
-			}
-			if (InGui.Button("Duplicate [Insert]"))
-			{
-				DuplicateSelected();
-			}
-			if (InGui.Button("Remove [Delete]"))
-			{
-				RemoveSelected();
-			}
-			if (InGui.Button("Show / hide [Space]"))
-			{
-				ToggleSelected();
-			}
-			if (InGui.Button("Move X -2"))
-			{
-				MoveSelected(-2);
-			}
-			if (InGui.Button("Move X +2"))
-			{
-				MoveSelected(2);
-			}
-			InGui.Checkbox("Animate selected across view", P.bAnimate);
-		}
-		if (InGui.Button("Add loaded model"))
-		{
-			AddModel();
-		}
+		P.DrawNodes(InGui);
 		for (const auto& Asset : P.Scene.GetAssets())
 		{
 			if (!Asset.Error.empty())

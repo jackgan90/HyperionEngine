@@ -351,6 +351,7 @@ FRenderSceneSnapshot FRenderSceneClient::Collect(FRenderView InView, bool bInRef
 	{
 		throw std::logic_error("Render scene is closed");
 	}
+	Mailbox->Scene->RequireHealthy();
 	return Mailbox->Scene->Collect(std::move(InView), bInRefresh, InResourceRevision, InPrevious);
 }
 
@@ -362,12 +363,14 @@ FRenderSceneSnapshot FRenderSceneClient::CollectPrepared(FRenderView InView, std
 	{
 		throw std::logic_error("Render scene is closed");
 	}
+	Mailbox->Scene->RequireHealthy();
 	return Mailbox->Scene->CollectPrepared(std::move(InView), InResourceRevision, InPrevious);
 }
 
 FSceneVisibilityStats FRenderSceneClient::BeginViews() const
 {
 	Mailbox->Tasks.Require({EDomain::Render});
+	Mailbox->Scene->RequireHealthy();
 	return Mailbox->Scene->BeginViews();
 }
 

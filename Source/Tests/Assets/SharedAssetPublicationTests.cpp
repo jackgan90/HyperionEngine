@@ -126,7 +126,10 @@ void CheckPinnedGenerations(FFixture& InFixture)
 		    {Entry.first,
 		     {Header.Id, std::string("one/") + (Entry.first == std::string_view("old") ? "Old.hasset" : "Model.hasset"),
 		      Header.TypeId, Header.Revision}});
-		Scene.Instances.push_back({Entry.first, Entry.first});
+		FSceneNodeEntry Node;
+		Node.Id = Entry.first;
+		Node.Model = FSceneNodeModel{Entry.first};
+		Scene.Nodes.push_back(std::move(Node));
 	}
 	const auto Source = F.Directory / "MixedGenerations.source.hasset";
 	F.IO.WriteAsync(Source, EncodeAsset(RecordType<FSceneManifest>(), &Scene).Bytes).Get(F.Tasks);

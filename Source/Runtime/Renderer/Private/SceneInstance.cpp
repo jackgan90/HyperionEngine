@@ -60,15 +60,15 @@ void FSceneInstance::Tick()
 	{
 		if (!P.Status.bLoaded)
 		{
-			if (!P.ManifestRequest.Ready())
+			if (P.ManifestRequest.Ready())
 			{
-				return;
+				P.BeginManifest();
 			}
-			P.BeginManifest();
 		}
 		P.PollModels();
 		P.PollMaterials();
 		P.PublishModels();
+		P.Scene.Update();
 		P.Bridge->Flush();
 		P.UpdateStatus();
 	}
@@ -88,6 +88,7 @@ void FSceneInstance::Close()
 	}
 	P.Tasks.Require({EDomain::Main});
 	P.Status.bClosed = true;
+	++P.LoadEpoch;
 	P.ManifestRequest.Cancel();
 	P.MaterialCancellation.Cancel();
 	try
@@ -125,58 +126,46 @@ void FSceneInstance::Close()
 
 FSceneHandle FSceneInstance::Add(FSceneModel InModel, std::string InAsset)
 {
-	auto& P = *Impl;
-	P.RequireOpen();
-	if (!InAsset.empty())
-	{
-		const auto Load = P.Loads.find(InAsset);
-		if (Load == P.Loads.end())
-		{
-			throw std::invalid_argument("Unknown scene asset");
-		}
-		InModel.Data = Load->second.Data;
-	}
-	const auto Handle = P.Scene.Add(std::move(InModel));
-	try
-	{
-		P.Models.push_back({Handle, std::move(InAsset), CreateIdentifier()});
-	}
-	catch (...)
-	{
-		P.Scene.Remove(Handle);
-		throw;
-	}
-	P.bStatusDirty = true;
-	return Handle;
+	FSceneNode Node;
+	Node.Name = std::move(InModel.Name);
+	Node.Local = InModel.World;
+	Node.Model =
+	    FSceneModelComponent{std::move(InAsset), std::move(InModel.Data),    InModel.bVisible,
+	                         InModel.Material,   std::move(InModel.Surface), std::move(InModel.SectionSurfaces)};
+	return AddNode(std::move(Node));
 }
 
 bool FSceneInstance::Update(FSceneHandle InHandle, FSceneModel InModel)
 {
 	auto& P = *Impl;
 	P.RequireOpen();
-	const auto Existing = P.Scene.Find(InHandle);
+	const auto Existing = P.Scene.FindModelComponent(InHandle);
 	if (!Existing)
 	{
 		return false;
 	}
-	const auto Instance = std::find_if(P.Models.begin(), P.Models.end(),
-	                                   [InHandle](const auto& InInstance)
-	                                   {
-		                                   return InInstance.Handle == InHandle;
-	                                   });
-	const auto Pending = Instance == P.Models.end() ? P.PendingMaterials.end() : P.PendingMaterials.find(Instance->Id);
+	FSceneModelComponent Component{Existing->Asset,  InModel.Data,    InModel.bVisible,
+	                               InModel.Material, InModel.Surface, InModel.SectionSurfaces};
+	const auto Pending = P.PendingMaterials.find(InHandle);
 	auto Edits = Pending == P.PendingMaterials.end() ? std::optional<FImpl::FPendingMaterial>{}
-	                                                 : P.PrepareMaterialEdits(Pending->second, *Existing, InModel);
+	                                                 : P.PrepareMaterialEdits(Pending->second, *Existing, Component);
 	const bool bDataChanged = Existing->Data != InModel.Data;
+	// Legacy world/name/content updates retain the Scene transaction's all-or-nothing validation.
 	if (!P.Scene.Update(InHandle, std::move(InModel)))
 	{
 		return false;
 	}
-	if (bDataChanged && Instance != P.Models.end())
+	if (bDataChanged)
 	{
-		Instance->Asset.clear(); // Explicit replacement is no longer a pending manifest instance.
-		P.PendingMaterials.erase(Instance->Id);
-		P.SelectedMaterials.erase(Instance->Id);
+		P.PendingMaterials.erase(InHandle);
+		P.SelectedMaterials.erase(InHandle);
+		for (auto& Model : P.Models)
+		{
+			if (Model.Handle == InHandle)
+			{
+				Model.Asset.clear();
+			}
+		}
 	}
 	else if (Edits)
 	{
@@ -188,25 +177,7 @@ bool FSceneInstance::Update(FSceneHandle InHandle, FSceneModel InModel)
 
 bool FSceneInstance::Remove(FSceneHandle InHandle)
 {
-	auto& P = *Impl;
-	P.RequireOpen();
-	if (!P.Scene.Remove(InHandle))
-	{
-		return false;
-	}
-	std::erase_if(P.Models,
-	              [&P, InHandle](const auto& InModel)
-	              {
-		              if (InModel.Handle != InHandle)
-		              {
-			              return false;
-		              }
-		              P.PendingMaterials.erase(InModel.Id);
-		              P.SelectedMaterials.erase(InModel.Id);
-		              return true;
-	              });
-	P.bStatusDirty = true;
-	return true;
+	return RemoveSubtree(InHandle);
 }
 
 const FSceneModel* FSceneInstance::Find(FSceneHandle InHandle) const
@@ -261,7 +232,7 @@ std::string FSceneInstance::GetError(FSceneHandle InHandle) const
 	{
 		if (Model.Handle == InHandle)
 		{
-			const auto Selection = Impl->SelectedMaterials.find(Model.Id);
+			const auto Selection = Impl->SelectedMaterials.find(Model.Handle);
 			if (Selection != Impl->SelectedMaterials.end() && !Selection->second.Error.empty())
 			{
 				return Selection->second.Error;

@@ -242,6 +242,18 @@ void FGui::EndPanel()
 	ImGui::End();
 }
 
+void FGui::BeginScrollRegion(const char* InId, float InHeight)
+{
+	Impl->Select();
+	ImGui::BeginChild(InId, {0, InHeight}, ImGuiChildFlags_Borders);
+}
+
+void FGui::EndScrollRegion()
+{
+	Impl->Select();
+	ImGui::EndChild();
+}
+
 void FGui::Text(const std::string& InValue)
 {
 	Impl->Select();
@@ -293,6 +305,91 @@ bool FGui::Slider(const char* InLabel, float& InValue, float InMinimum, float In
 {
 	Impl->Select();
 	return ImGui::SliderFloat(InLabel, &InValue, InMinimum, InMaximum, "%.2f");
+}
+
+bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth)
+{
+	Impl->Select();
+	const float Indent = float(std::min(InDepth, 16u)) * 12;
+	if (Indent)
+	{
+		ImGui::Indent(Indent);
+	}
+	const bool bSelected = ImGui::Selectable(InLabel, bInSelected);
+	if (Indent)
+	{
+		ImGui::Unindent(Indent);
+	}
+	return bSelected;
+}
+
+bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex)
+{
+	Impl->Select();
+	bool bChanged = false;
+	const char* Preview = InIndex < InChoices.size() ? InChoices[InIndex].c_str() : "None";
+	if (ImGui::BeginCombo(InLabel, Preview))
+	{
+		for (std::size_t Index = 0; Index < InChoices.size(); ++Index)
+		{
+			ImGui::PushID(static_cast<int>(Index));
+			if (ImGui::Selectable(InChoices[Index].c_str(), Index == InIndex))
+			{
+				InIndex = Index;
+				bChanged = true;
+			}
+			ImGui::PopID();
+		}
+		ImGui::EndCombo();
+	}
+	return bChanged;
+}
+
+bool FGui::InputText(const char* InLabel, std::string& InValue)
+{
+	Impl->Select();
+	std::vector<char> Buffer(InValue.size() + 1024, 0);
+	std::copy(InValue.begin(), InValue.end(), Buffer.begin());
+	if (!ImGui::InputText(InLabel, Buffer.data(), Buffer.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		return false;
+	}
+	InValue = Buffer.data();
+	return true;
+}
+
+bool FGui::InputFloat(const char* InLabel, float& InValue)
+{
+	Impl->Select();
+	return ImGui::InputFloat(InLabel, &InValue, 0, 0, "%.6g", ImGuiInputTextFlags_EnterReturnsTrue);
+}
+
+bool FGui::InputVector(const char* InLabel, FVec3& InValue)
+{
+	Impl->Select();
+	float Values[]{InValue.X, InValue.Y, InValue.Z};
+	if (!ImGui::InputFloat3(InLabel, Values, "%.6g", ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		return false;
+	}
+	InValue = {Values[0], Values[1], Values[2]};
+	return true;
+}
+
+bool FGui::InputMatrix(const char* InLabel, FMat4& InValue)
+{
+	Impl->Select();
+	ImGui::PushID(InLabel);
+	ImGui::TextUnformatted(InLabel);
+	bool bChanged = false;
+	for (unsigned Column = 0; Column < 4; ++Column)
+	{
+		const auto Label = "Column " + std::to_string(Column);
+		bChanged |= ImGui::InputFloat4(Label.c_str(), InValue.Values.data() + Column * 4, "%.6g",
+		                               ImGuiInputTextFlags_EnterReturnsTrue);
+	}
+	ImGui::PopID();
+	return bChanged;
 }
 
 FVec4 FGui::LastItemBounds()

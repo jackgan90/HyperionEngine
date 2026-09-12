@@ -150,7 +150,6 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	}
 	FGuiDrawData GuiData;
 	const auto Actions = BuildGui(InFrame, InDelta, Logical, Size, GuiData);
-	UpdateShadowLight(InFrame);
 	HandleProfilingActions(Actions);
 	const bool bCaptureRdc = HandleCaptureActions(
 	    Actions, std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1));
@@ -192,11 +191,16 @@ FRenderFrame FViewerApplication::UpdateScene(FSize InSize)
 		}
 	}
 	Frame.View.bInstanceBatching &= !Options.bNoInstanceBatching;
+	if (Frame.SceneView)
+	{
+		Frame.SceneView->bInstanceBatching &= !Options.bNoInstanceBatching;
+	}
 	return Frame;
 }
 
 FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, const FGuiDrawData& InGuiData,
                                                   std::shared_ptr<const FMaterialFrameContext> InMaterialFrame,
+                                                  std::shared_ptr<const FSceneFrameSeed> InSceneSeed,
                                                   const FCascadedShadowSettings& InShadows)
 {
 	FRenderGraph Graph;
@@ -207,24 +211,31 @@ FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, c
 	Pipeline.Exposure = float(InFrame.Settings.Exposure);
 	Pipeline.DebugMode = static_cast<std::uint32_t>(InFrame.Settings.GBufferDebug);
 	ScenePipeline->Configure(Pipeline);
-	ScenePipeline->Build(
-	    Graph, InFrame.View, std::move(InMaterialFrame), InShadows,
-	    {float(InFrame.Settings.ClearRed), float(InFrame.Settings.ClearGreen), float(InFrame.Settings.ClearBlue), 1},
-	    [&](FRenderGraph& InGraph)
-	    {
-		    for (const auto& Plugin : Plugins->GetInstances())
-		    {
-			    if (Plugin.get() == GuiPlugin)
-			    {
-				    GuiPlugin->BuildDeferred(InGraph, InGuiData);
-			    }
-			    else if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
-			    {
-				    Render->Build(InGraph, InFrame);
-			    }
-		    }
-	    },
-	    true);
+	const auto Extensions = [&](FRenderGraph& InGraph)
+	{
+		for (const auto& Plugin : Plugins->GetInstances())
+		{
+			if (Plugin.get() == GuiPlugin)
+			{
+				GuiPlugin->BuildDeferred(InGraph, InGuiData);
+			}
+			else if (auto Render = dynamic_cast<IRenderPlugin*>(Plugin.get()))
+			{
+				Render->Build(InGraph, InFrame);
+			}
+		}
+	};
+	const FVec4 Clear{float(InFrame.Settings.ClearRed), float(InFrame.Settings.ClearGreen),
+	                  float(InFrame.Settings.ClearBlue), 1};
+	if (InFrame.SceneView)
+	{
+		ScenePipeline->Build(Graph, *InFrame.SceneView, std::move(InSceneSeed), InShadows, Clear, Extensions, true);
+	}
+	else
+	{
+		ScenePipeline->Build(Graph, InFrame.View, std::move(InMaterialFrame), InShadows, Clear, Extensions, true);
+	}
+
 	return Graph;
 }
 

@@ -87,7 +87,7 @@ void Inspect(const FLoadedAsset& InAsset, std::ostream& InOutput)
 	}
 	if (InAsset.Type->CppType == typeid(FSceneManifest))
 	{
-		InOutput << "instances=" << InAsset.As<FSceneManifest>()->Instances.size() << '\n';
+		InOutput << "instances=" << SceneModelCount(*InAsset.As<FSceneManifest>()) << '\n';
 	}
 }
 

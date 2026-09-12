@@ -17,6 +17,9 @@ struct FForwardPipelineStatistics
 	std::vector<FRenderViewStatistics> Views;
 	std::uint64_t ShadowTextureBytes{};
 	bool bShadows{};
+	std::optional<FScenePublicationToken> SceneToken;
+	ESceneCameraStatus CameraStatus = ESceneCameraStatus::Active;
+	std::optional<FRenderView> MainCameraView;
 	FSceneVisibilityStats MainView() const;
 };
 
@@ -43,12 +46,18 @@ public:
 	void Build(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
 	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
+	void Build(FRenderGraph& InGraph, const FSceneViewRequest& InRequest, std::shared_ptr<const FSceneFrameSeed> InSeed,
+	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
+	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
 	FForwardFrame GetFrame() const; // Render, before building the next frame.
 	void Complete();                // Render, after executing a deferred graph.
 	const FForwardPipelineStatistics& Statistics() const;
 	const FCascadedShadowMap& Shadows() const;
 
 private:
+	void BuildResolved(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
+	                   const FCascadedShadowSettings& InShadows, FVec4 InClear,
+	                   const std::function<void(FRenderGraph&)>& InExtensions, bool bInDeferPreparation);
 	FRenderSession& Session;
 	FCascadedShadowMap ShadowMaps;
 	std::shared_ptr<const void> Lifetime;

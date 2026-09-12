@@ -1,7 +1,7 @@
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Renderer/NativeModel.h"
 #include "Hyperion/Renderer/RenderSession.h"
-#include "Hyperion/Renderer/SceneBridge.h"
+#include "Hyperion/Renderer/SceneNavigation.h"
 #include <algorithm>
 #include <cmath>
 
@@ -10,7 +10,8 @@ namespace Hyperion
 struct FModelViewerPlugin::FImpl
 {
 	FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets, std::filesystem::path InPath)
-	    : Session(InSession), Tasks(InTasks), Assets(InAssets), Path(std::move(InPath))
+	    : Session(InSession), Tasks(InTasks), Assets(InAssets), Path(std::move(InPath)),
+	      Scene(InSession, InTasks, InAssets)
 	{
 	}
 
@@ -20,9 +21,8 @@ struct FModelViewerPlugin::FImpl
 	std::filesystem::path Path;
 	FCancellationToken Cancellation;
 	TAsyncResult<FSceneModelData> Preparation;
-	FScene Scene;
+	FSceneInstance Scene;
 	FSceneHandle Model;
-	std::unique_ptr<FSceneRenderBridge> Bridge;
 	std::string Status = "Loading model...";
 	std::string Error;
 	bool bIsReady{};
@@ -31,9 +31,6 @@ struct FModelViewerPlugin::FImpl
 	FVec2 LastMouse;
 	FVec3 Center;
 	float Radius = 1;
-	float Distance = 5;
-	float Yaw = .35f;
-	float Pitch = .3f;
 };
 
 FModelViewerPlugin::FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
@@ -45,11 +42,23 @@ FModelViewerPlugin::FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& I
 
 FModelViewerPlugin::~FModelViewerPlugin() = default;
 
+FSceneInstance& FModelViewerPlugin::GetSceneInstance()
+{
+	Impl->Tasks.Require({EDomain::Main});
+	return Impl->Scene;
+}
+
 void FModelViewerPlugin::Start()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	P.Bridge = std::make_unique<FSceneRenderBridge>(P.Scene, P.Session, P.Tasks);
+	const FVec3 Direction{std::sin(.35f) * std::cos(.3f), std::sin(.3f), std::cos(.35f) * std::cos(.3f)};
+	FSceneCamera Camera;
+	Camera.VerticalRadians = 1;
+	const auto CameraHandle = P.Scene.AddNode(MakeSceneCameraNode({}, ScaleVector(Direction, 5), {}, Camera));
+	const auto Light = P.Scene.AddNode(MakeSceneDirectionalLightNode({}));
+	const auto Environment = P.Scene.AddNode(MakeSceneEnvironmentLightNode({}));
+	P.Scene.SetSettings({CameraHandle, Light, Environment});
 	P.Cancellation = {};
 	P.Preparation = LoadNativeModel(P.Assets, P.Tasks, P.Path, P.Cancellation, &P.Session.GetResources());
 }
@@ -58,6 +67,11 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
+	FSceneViewRequest Request;
+	Request.Width = InFrame.Size.Width;
+	Request.Height = InFrame.Size.Height;
+	Request.DepthConvention = InFrame.View.DepthConvention;
+	InFrame.SceneView = Request;
 	if (!P.Error.empty())
 	{
 		return;
@@ -68,6 +82,7 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 		{
 			if (!P.Preparation.Ready())
 			{
+				P.Scene.Tick();
 				return;
 			}
 			const auto Loaded = P.Preparation.GetReady();
@@ -78,32 +93,26 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 			P.Preparation = {};
 			P.Status = "Uploading model to GPU...";
 		}
-		P.Bridge->Flush();
-		if (auto Error = P.Bridge->GetError(P.Model); !Error.empty())
-		{
-			throw std::runtime_error(Error);
-		}
 		const float Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
 		if (P.bFitRequested)
 		{
-			const float Limit = std::min(.5f, std::atan(std::tan(.5f) * Aspect));
-			P.Distance = P.Radius / std::sin(Limit) * 1.12f;
+			FitSceneCamera(P.Scene, Aspect, true);
 			P.bFitRequested = false;
 		}
-		const FVec3 Direction{std::sin(P.Yaw) * std::cos(P.Pitch), std::sin(P.Pitch),
-		                      std::cos(P.Yaw) * std::cos(P.Pitch)};
-		const FVec3 Eye = Add(P.Center, ScaleVector(Direction, P.Distance));
-		const float Near = std::max(.0001f, P.Radius * .001f);
-		const float Far = P.Distance + P.Radius * 10;
-		InFrame.View.Camera = FRenderCamera{ScaleVector(Direction, -1), {0, 1, 0}, 1, Near, Far};
-		InFrame.View.ViewProjection =
-		    Multiply(Perspective(1, Aspect, Near, Far, InFrame.View.DepthConvention), LookAt(Eye, P.Center));
-		InFrame.View.Eye = Eye;
-		P.bIsReady = P.Bridge->IsReady(P.Model);
+		P.Scene.Tick();
+		if (auto Error = P.Scene.GetError(P.Model); !Error.empty())
+		{
+			throw std::runtime_error(Error);
+		}
+		if (!P.Scene.GetStatus().Error.empty())
+		{
+			throw std::runtime_error(P.Scene.GetStatus().Error);
+		}
+		P.bIsReady = P.Scene.GetStatus().bReady;
 		if (P.bIsReady)
 		{
-			P.Status = "Ready | " + std::to_string(P.Bridge->PrimitiveCount(P.Model)) + " primitives";
-			for (const auto& Draw : P.Bridge->GetDrawResults(P.Model))
+			P.Status = "Ready | " + std::to_string(P.Scene.Find(P.Model)->Data->Instances.size()) + " primitives";
+			for (const auto& Draw : P.Scene.GetDrawResults(P.Model))
 			{
 				if (!Draw.Error.empty())
 				{
@@ -139,14 +148,13 @@ void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMo
 		{
 			if (P.bDragging)
 			{
-				P.Yaw -= (Event.X - P.LastMouse.X) * .006f;
-				P.Pitch = std::clamp(P.Pitch + (Event.Y - P.LastMouse.Y) * .006f, -1.5f, 1.5f);
+				OrbitSceneCamera(P.Scene, -(Event.X - P.LastMouse.X) * .006f, (Event.Y - P.LastMouse.Y) * .006f);
 			}
 			P.LastMouse = {Event.X, Event.Y};
 		}
 		if (Event.Type == EEventType::MouseWheel && !bInMouseCaptured)
 		{
-			P.Distance = std::clamp(P.Distance * std::pow(.85f, Event.Y), P.Radius * .15f, P.Radius * 100);
+			DollySceneCamera(P.Scene, std::pow(.85f, Event.Y), P.Radius * .15f, P.Radius * 100, P.Radius * 10);
 		}
 		if (Event.Type == EEventType::Key && Event.bDown && !bInKeyboardCaptured)
 		{
@@ -156,19 +164,19 @@ void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMo
 			}
 			if (Event.Key == EKey::Left)
 			{
-				P.Yaw -= .1f;
+				OrbitSceneCamera(P.Scene, -.1f, 0);
 			}
 			if (Event.Key == EKey::Right)
 			{
-				P.Yaw += .1f;
+				OrbitSceneCamera(P.Scene, .1f, 0);
 			}
 			if (Event.Key == EKey::Up)
 			{
-				P.Pitch = std::min(1.5f, P.Pitch + .1f);
+				OrbitSceneCamera(P.Scene, 0, .1f);
 			}
 			if (Event.Key == EKey::Down)
 			{
-				P.Pitch = std::max(-1.5f, P.Pitch - .1f);
+				OrbitSceneCamera(P.Scene, 0, -.1f);
 			}
 		}
 	}
@@ -188,8 +196,7 @@ void FModelViewerPlugin::Stop() noexcept
 		// Cancellation or import failure still joins the producer before the plugin is released.
 	}
 	P.Preparation = {};
-	P.Scene.Clear();
-	P.Bridge.reset();
+	P.Scene.Close();
 	P.Model = {};
 	P.bIsReady = false;
 }

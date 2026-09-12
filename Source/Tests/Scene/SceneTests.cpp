@@ -6,6 +6,8 @@
 #include <limits>
 #include <random>
 
+void CheckSceneNodes();
+
 namespace
 {
 using namespace Hyperion;
@@ -106,7 +108,7 @@ void CheckLogicalScene()
 
 void CheckManifestMigration()
 {
-	FSceneManifest Original;
+	FLegacySceneManifest Original;
 	Original.Assets = {{"model", {"", "Model.hasset", RecordType<FModelAsset>().Id, ""}}};
 	Original.Instances = {{"stable-id", "model"}};
 	auto Node = WriteValue(Original);
@@ -131,18 +133,60 @@ void CheckManifestMigration()
 	std::vector<std::string> Diagnostics;
 	const auto Restored = ReadValue<FSceneManifest>(Node, {"legacy-scene", &Diagnostics});
 	HYP_CHECK(Restored.Assets[0].Reference.TypeId == RecordType<FModelAsset>().Id);
-	HYP_CHECK(Restored.Instances[0].Id == "stable-id" && Restored.Instances[0].Transform.Values[12] == 1);
-	HYP_CHECK(Restored.Instances[0].Transform.Values[5] == 3 && Diagnostics.size() == 3);
+	HYP_CHECK(Restored.Nodes[0].Id == "stable-id" && Restored.Nodes[0].Transform.Values[12] == 1);
+	HYP_CHECK(Restored.Nodes[0].Transform.Values[5] == 3 && Diagnostics.size() == 3);
+}
+
+void CheckNativeNodeKinds()
+{
+	FSceneManifest Manifest;
+	FSceneNodeEntry Entry;
+	Entry.Id = "node";
+	Manifest.Nodes.push_back(Entry);
+	for (const auto Name : {"pointLight", "camrea", "projection"})
+	{
+		auto Archive = WriteValue(Manifest);
+		auto& Root = std::get<FArchiveNode::FObject>(Archive.Value);
+		auto& Fields = std::get<FArchiveNode::FObject>(Root.at("fields").Value);
+		auto& Nodes = std::get<FArchiveNode::FArray>(Fields.at("nodes").Value);
+		auto& Node = std::get<FArchiveNode::FObject>(Nodes[0].Value);
+		auto& NodeFields = std::get<FArchiveNode::FObject>(Node.at("fields").Value);
+		if (std::string_view(Name) == "projection")
+		{
+			auto Camera = WriteValue(FSceneCamera{});
+			auto& CameraRecord = std::get<FArchiveNode::FObject>(Camera.Value);
+			auto& CameraFields = std::get<FArchiveNode::FObject>(CameraRecord.at("fields").Value);
+			CameraFields[Name] = WriteValue(std::string("orthographic"));
+			NodeFields["camera"] = std::move(Camera);
+		}
+		else
+		{
+			NodeFields[Name] = FArchiveNode(FArchiveNode::FObject{});
+		}
+		bool bRejected{};
+		try
+		{
+			ReadValue<FSceneManifest>(Archive, {"native-scene"});
+		}
+		catch (const std::runtime_error& Error)
+		{
+			const std::string Message = Error.what();
+			bRejected = Message.find("nodes[0]") != std::string::npos && Message.find(Name) != std::string::npos;
+		}
+		HYP_CHECK(bRejected);
+	}
+	const auto Restored = ReadValue<FSceneManifest>(WriteValue(Manifest));
+	HYP_CHECK(Restored.Nodes.size() == 1 && NodeFromSceneEntry(Restored.Nodes[0]).GetKind() == ESceneNodeKind::Group);
 }
 
 void CheckManifest()
 {
-	FSceneManifest Manifest;
+	FLegacySceneManifest Manifest;
 	Manifest.Assets.push_back({"a", {"", "../Models/A.hasset", RecordType<FModelAsset>().Id, ""}});
 	Manifest.Instances = {{"one", "a"}, {"two", "a", Identity(), false}};
 	HYP_CHECK(Manifest.Instances.size() == 2 && !Manifest.Instances[1].bVisible);
-	const auto Copy = ReadValue<FSceneManifest>(WriteValue(Manifest));
-	HYP_CHECK(Copy.Instances[0].Asset == "a");
+	const auto Copy = ReadValue<FSceneManifest>(WriteValue(UpgradeLegacyScene(Manifest)));
+	HYP_CHECK(Copy.Nodes[0].Model->Asset == "a");
 	for (unsigned Case = 0; Case < 5; ++Case)
 	{
 		auto Bad = Manifest;
@@ -169,7 +213,7 @@ void CheckManifest()
 		bool bRejected = false;
 		try
 		{
-			ValidateSceneManifest(Bad);
+			ValidateLegacySceneManifest(Bad);
 		}
 		catch (const std::invalid_argument&)
 		{
@@ -186,8 +230,10 @@ int main()
 	{
 		CheckBounds();
 		CheckLogicalScene();
+		CheckSceneNodes();
 		CheckManifest();
 		CheckManifestMigration();
+		CheckNativeNodeKinds();
 		std::cout << "Bounds oracle, logical scene ownership, generations and manifest validation passed\n";
 	}
 	catch (const std::exception& Error)

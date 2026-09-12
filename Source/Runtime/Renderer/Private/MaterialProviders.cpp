@@ -330,6 +330,65 @@ void FMaterialProviderRegistry::Register(FMaterialProviderDescription InDescript
 	++Impl->Version;
 }
 
+namespace
+{
+bool IsSceneOwnedSemantic(std::string_view InName)
+{
+	return InName == "Engine.Scene.MainDirectionalLightDirection" ||
+	       InName == "Engine.Scene.MainDirectionalLightColor" || InName == "Engine.Scene.AmbientColor" ||
+	       InName == "Engine.View.ViewProjection" || InName == "Engine.View.CameraPosition";
+}
+
+bool IsSceneInput(const FMaterialSemanticRegistry& InSemantics, std::string_view InName)
+{
+	try
+	{
+		return IsSceneOwnedSemantic(InSemantics.Normalize(InName));
+	}
+	catch (const std::invalid_argument&)
+	{
+		return false; // Ordinary named custom parameters need not be registered semantics.
+	}
+}
+} // namespace
+
+void FMaterialProviderRegistry::ValidateSceneBinding() const
+{
+	for (const auto& [Name, Provider] : Impl->Providers)
+	{
+		if (IsSceneOwnedSemantic(Name))
+		{
+			throw std::invalid_argument("Custom provider conflicts with scene-owned semantic: " + Name);
+		}
+	}
+}
+
+void FMaterialProviderRegistry::ValidateSceneInputs(const FMaterialParameterValues& InValues,
+                                                    bool bInAllowDefaultLights) const
+{
+	for (const auto& Value : InValues)
+	{
+		if (IsSceneInput(*Impl->Semantics, Value.Name))
+		{
+			if (bInAllowDefaultLights && Impl->Semantics->Normalize(Value.Name).starts_with("Engine.Scene."))
+			{
+				continue;
+			}
+			throw std::invalid_argument("External input conflicts with scene-owned semantic: " + Value.Name);
+		}
+	}
+}
+
+FMaterialParameterValues FMaterialProviderRegistry::WithoutSceneInputs(FMaterialParameterValues InValues) const
+{
+	std::erase_if(InValues,
+	              [&](const auto& InValue)
+	              {
+		              return IsSceneInput(*Impl->Semantics, InValue.Name);
+	              });
+	return InValues;
+}
+
 void FMaterialProviderRegistry::Freeze()
 {
 	Impl->bFrozen = true;

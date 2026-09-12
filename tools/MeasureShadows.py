@@ -21,7 +21,7 @@ def measure(viewer, root, work, name, motion, enabled, samples, warmup, resoluti
     log = result.stdout + result.stderr
     (work / f"{name}.log").write_text(log, encoding="utf-8")
     assert result.returncode == 0 and "validation errors: 0" in log, log
-    model_count = len(json.loads((root / "assets/Scenes/Showcase.json").read_text())["instances"])
+    model_count = sum("model" in node for node in json.loads((root / "assets/Scenes/Showcase.json").read_text(encoding="utf-8"))["nodes"])
     assert f"{model_count}/{model_count} models ready | 0 failed" in log, log
     with output.open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))

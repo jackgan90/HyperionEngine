@@ -248,12 +248,29 @@ FMaterialProviderInputs FRenderSession::PrepareViewInputs(const FRenderSceneSnap
 	    {"Engine.View.CameraPosition", FMaterialValue::Float(InSnapshot.View.Eye)}};
 	ViewValues.insert(ViewValues.end(), InSnapshot.View.Parameters.begin(), InSnapshot.View.Parameters.end());
 	FMaterialInputValues PublishedView(std::move(ViewValues));
-	if (!View.Scope.Lifetime || View.Values != PublishedView || View.DepthConvention != InSnapshot.View.DepthConvention)
+	std::vector<std::uint64_t> Qualifiers{InSnapshot.View.Identity};
+	if (InSnapshot.View.SceneCamera)
+	{
+		const auto Handle = *InSnapshot.View.SceneCamera;
+		Qualifiers.insert(Qualifiers.end(), {Handle.Scene, Handle.Slot, Handle.Generation, InSnapshot.View.Width,
+		                                     InSnapshot.View.Height});
+		const auto Viewport = InSnapshot.View.Viewport.value_or(
+		    FViewport{0, 0, float(InSnapshot.View.Width), float(InSnapshot.View.Height)});
+		for (const auto Value :
+		     {Viewport.X, Viewport.Y, Viewport.Width, Viewport.Height, Viewport.MinDepth, Viewport.MaxDepth})
+		{
+			Qualifiers.push_back(std::bit_cast<std::uint32_t>(Value));
+		}
+	}
+	if (!View.Scope.Lifetime || View.Values != PublishedView ||
+	    View.DepthConvention != InSnapshot.View.DepthConvention || View.Qualifiers != Qualifiers)
 	{
 		View.Scope.Lifetime = Resources.CreateScopeLifetime();
 		View.Scope.Key.Identity = MaterialState->Identity;
 		++View.Scope.Key.Revision;
+		// Compare full camera/viewport identity once here; revision carries the change into draw cache keys.
 		View.Scope.Key.SetQualifiers({InSnapshot.View.Identity});
+		View.Qualifiers = std::move(Qualifiers);
 		View.Values = std::move(PublishedView);
 		View.DepthConvention = InSnapshot.View.DepthConvention;
 	}

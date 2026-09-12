@@ -28,6 +28,7 @@ hyp_test(material_gpu_tests material_rendering hyperion_render Materials/Materia
 target_link_libraries(material_gpu_tests PRIVATE hyperion_rhi_d3d12)
 set_tests_properties(material_rendering PROPERTIES TIMEOUT 120 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_test(scene_tests scene_management hyperion_scene Scene/SceneTests.cpp)
+target_sources(scene_tests PRIVATE Scene/SceneNodeTests.cpp)
 hyp_test(spatial_tests scene_spatial_visibility hyperion_render Renderer/SpatialTests.cpp)
 hyp_test(scene_instance_tests scene_runtime_instance hyperion_render Renderer/SceneInstanceTests.cpp)
 target_link_libraries(scene_instance_tests PRIVATE hyperion_assets hyperion_rhi_d3d12)
@@ -187,6 +188,7 @@ set_tests_properties(native_model_fixtures PROPERTIES FIXTURES_REQUIRED model_da
 add_dependencies(scene_viewer_tests native_sample_content)
 
 hyp_test(publication_tests native_asset_publication hyperion_asset_import Assets/PublicationTests.cpp)
+target_sources(publication_tests PRIVATE Assets/SceneSourceTests.cpp)
 target_compile_definitions(publication_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(native_asset_publication PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120)
 

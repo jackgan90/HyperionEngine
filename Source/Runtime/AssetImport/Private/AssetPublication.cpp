@@ -84,12 +84,12 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	if (InOptions.bScene && Converted.Type->CppType == typeid(FModelAsset))
 	{
 		Publication.Converted.emplace(std::make_pair(InSource, Converted.Type->Id), Converted);
-		FSceneManifest Scene;
+		FLegacySceneManifest Scene;
 		Scene.Assets.push_back({"model", {"", ImportPathString(InSource.filename()), Converted.Type->Id, ""}});
 		Scene.Instances.push_back({"instance", "model", Identity(), true, InOptions.Name});
 		Converted.Products.clear();
 		Converted.Type = std::make_shared<const FRecordDescriptor>(RecordType<FSceneManifest>());
-		Converted.Object = std::make_shared<const FSceneManifest>(std::move(Scene));
+		Converted.Object = std::make_shared<const FSceneManifest>(UpgradeLegacyScene(Scene));
 		Converted.NativeHeader.reset();
 	}
 	if (!InOptions.Name.empty() && Converted.Type->CppType == typeid(FModelAsset))

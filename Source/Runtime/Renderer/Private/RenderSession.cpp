@@ -175,6 +175,7 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 	{
 		InFrame = MaterialState->Frame(Resources, 0, {}, Scene.GetLogicalSceneIdentity());
 	}
+	ValidateSceneFrame(*InFrame);
 	AdmitFamily(InViews, *InFrame, InFamily);
 	const auto SpatialStats = bInSpatialPrepared ? FSceneVisibilityStats{} : Scene.BeginViews();
 	const auto SceneRevision = Scene.GetCollectionRevision();
@@ -224,6 +225,30 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 	}
 	RetireViewHistory(MaterialState->PreparedViews, InFrame->Frame);
 	return Count;
+}
+
+void FRenderSession::BuildSceneClear(FRenderGraph& InGraph, const FResolvedSceneFrame& InFrame, FVec4 InClear)
+{
+	Tasks.Require({EDomain::Render});
+	if (!InFrame.Frame || InFrame.HasCamera())
+	{
+		throw std::invalid_argument("Scene clear requires a resolved inactive-camera frame");
+	}
+	ValidateSceneFrame(*InFrame.Frame);
+	AdmitFamily({}, *InFrame.Frame, 1);
+	LastStatistics = {};
+	LastViews.clear();
+	PendingFamily.reset();
+	if (InFrame.View.Width && InFrame.View.Height)
+	{
+		FRenderSceneSnapshot Snapshot;
+		Snapshot.Frame = InFrame.Frame;
+		Snapshot.View = InFrame.View;
+		Snapshot.View.Viewport.reset();
+		Snapshot.Targets = FrameTargets(InClear, InFrame.View.DepthConvention);
+		Snapshot.Targets.Name = "Scene/NoActiveCameraClear";
+		InGraph.Add(Resources.GetPreparation().DeclarePass(InGraph, Snapshot));
+	}
 }
 
 FRenderViewFamilyStatistics FRenderViewPreparation::Statistics() const

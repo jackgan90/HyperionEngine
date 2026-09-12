@@ -2,6 +2,7 @@
 #include "Hyperion/Renderer/RenderBatch.h"
 #include "Hyperion/Renderer/RenderResources.h"
 #include "Hyperion/Renderer/RenderScene.h"
+#include "Hyperion/Renderer/SceneFrame.h"
 #include <set>
 
 namespace Hyperion
@@ -63,6 +64,11 @@ public:
 	FRenderViewPreparation GetViewPreparation() const; // Render, immediately after BuildViews.
 	std::shared_ptr<const FMaterialFrameContext> FreezeFrame(float InTime = 0,
 	                                                         FMaterialParameterValues InFrameValues = {});
+	std::shared_ptr<const FSceneFrameSeed> FreezeSceneFrame(FScenePublicationToken InToken, float InTime = 0,
+	                                                        FMaterialParameterValues InFrameValues = {});
+	FResolvedSceneFrame ResolveSceneFrame(const FSceneFrameSeed& InSeed, const FSceneViewRequest& InRequest);
+	void BuildSceneClear(FRenderGraph& InGraph, const FResolvedSceneFrame& InFrame, FVec4 InClear);
+	void ValidateSceneFrame(const FMaterialFrameContext& InFrame) const;
 	void SetGlobalParameters(FMaterialParameterValues InValues);
 	void SetSceneParameters(FMaterialParameterValues InValues);
 	FMaterialProviderRegistry& GetProviders();

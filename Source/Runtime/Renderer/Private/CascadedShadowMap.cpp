@@ -71,6 +71,11 @@ bool Valid(const FRenderView& InMain, FVec3 InLight, const FCascadedShadowSettin
 	{
 		return false;
 	}
+	if (InMain.Viewport && (!std::isfinite(InMain.Viewport->Width) || !std::isfinite(InMain.Viewport->Height) ||
+	                        InMain.Viewport->Width <= 0 || InMain.Viewport->Height <= 0))
+	{
+		return false;
+	}
 	const auto& Camera = *InMain.Camera;
 	return IsFinite(Camera.Forward) && IsFinite(Camera.Up) && Length(Camera.Forward) > .0001f &&
 	       std::isfinite(Length(Camera.Forward)) && std::isfinite(Length(Camera.Up)) &&
@@ -83,7 +88,7 @@ bool Valid(const FRenderView& InMain, FVec3 InLight, const FCascadedShadowSettin
 	       std::isfinite(InSettings.FadeFraction) && InMain.Width > 0 && InMain.Height > 0;
 }
 
-std::array<std::uint64_t, 27> PreparationKey(const FRenderView& InView, FVec3 InLight,
+std::array<std::uint64_t, 29> PreparationKey(const FRenderView& InView, FVec3 InLight,
                                              const FCascadedShadowSettings& InSettings,
                                              const std::array<std::uint64_t, 2>& InSceneState)
 {
@@ -108,8 +113,10 @@ std::array<std::uint64_t, 27> PreparationKey(const FRenderView& InView, FVec3 In
 	                        InSettings.NormalOffset,
 	                        InSettings.ReceiverBias,
 	                        InSettings.BlendFraction,
-	                        InSettings.FadeFraction};
-	std::array<std::uint64_t, 27> Result{InSceneState[0],       InSceneState[1],
+	                        InSettings.FadeFraction,
+	                        InView.Viewport ? InView.Viewport->Width : float(InView.Width),
+	                        InView.Viewport ? InView.Viewport->Height : float(InView.Height)};
+	std::array<std::uint64_t, 29> Result{InSceneState[0],       InSceneState[1],
 	                                     InView.Width,          InView.Height,
 	                                     InSettings.Resolution, static_cast<std::uint64_t>(InView.DepthConvention)};
 	for (std::size_t Index = 0; Index < Values.size(); ++Index)
@@ -138,6 +145,7 @@ bool FCascadedShadowMap::Prepare(const FRenderView& InMain, FVec3 InSurfaceToLig
 	if (!bEnabled)
 	{
 		PreparedKey.reset();
+		Data = {};
 		return false;
 	}
 	DepthConvention = InMain.DepthConvention;
@@ -209,7 +217,9 @@ void FCascadedShadowMap::PrepareCascade(std::size_t InIndex, const FRenderView& 
 	    InIndex ? Cascade.Near - (Cascade.Near - Data[InIndex - 1].Near) * Settings.BlendFraction : Cascade.Near;
 	const float Middle = (Near + Cascade.Far) * .5f;
 	const float HalfHeight = Cascade.Far * std::tan(InMain.Camera->VerticalRadians * .5f);
-	const float HalfWidth = HalfHeight * float(InMain.Width) / InMain.Height;
+	const float Aspect =
+	    InMain.Viewport ? InMain.Viewport->Width / InMain.Viewport->Height : float(InMain.Width) / InMain.Height;
+	const float HalfWidth = HalfHeight * Aspect;
 	const float HalfDepth = (Cascade.Far - Near) * .5f;
 	// Rotation-independent receiver sphere with a fixed filter/snapping guard band.
 	float Radius =

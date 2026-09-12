@@ -19,7 +19,7 @@ The engine SHALL render loaded static glTF geometry with node transforms, a usab
 - **THEN** the generic renderer honors the compatible selected material without reintroducing PBR layout or mandatory depth behavior
 
 ### Requirement: Material interpretation
-The engine SHALL render supported metallic-roughness material maps and alpha/double-sided modes using role-appropriate color spaces. Offline import SHALL convert embedded glTF material data into general reflected material assets, preserving supported UV/mip/sampler behavior. Native model rendering SHALL resolve material and texture references and honor their authored pass descriptions. Camera, object and PBR values SHALL use the generic parameter system; builtin lighting constants SHALL come from the documented Scene provider with current default values.
+The engine SHALL render supported metallic-roughness material maps and alpha/double-sided modes using role-appropriate color spaces. Offline import SHALL convert embedded glTF material data into general reflected material assets, preserving supported UV/mip/sampler behavior. Native model rendering SHALL resolve material and texture references and honor their authored pass descriptions. Camera, object and PBR values SHALL use the generic parameter system. In logical-scene rendering, builtin lighting constants SHALL derive from the selected scene light nodes; ModelViewer initialization SHALL create actual default nodes matching the established initial values rather than depending on persistent session-owned lighting.
 
 #### Scenario: Material interpretation acceptance
 - **WHEN** a fixture combines textured opaque, masked and blended primitives
@@ -28,6 +28,10 @@ The engine SHALL render supported metallic-roughness material maps and alpha/dou
 #### Scenario: PBR migration parity
 - **WHEN** existing fixtures exercise unlit, normal maps, UV1, role color spaces, mip generation, mirrored transforms and double-sided surfaces
 - **THEN** the independent asset path preserves the established pixel results and validation behavior
+
+#### Scenario: Default ModelViewer lighting
+- **WHEN** ModelViewer initializes its temporary logical scene
+- **THEN** actual scene camera/light nodes reproduce its established initial camera and lighting behavior and subsequent controls edit those nodes
 
 ### Requirement: Nonblocking upload publication
 The engine SHALL retain staging and destination resources through necessary GPU completion and publish only ready model resource groups without per-texture idle waits. Readiness SHALL be published to Render without borrowing the Main model. Removing a loading model SHALL prevent its late preparation or upload result from registering visible primitives.

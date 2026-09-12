@@ -16,6 +16,12 @@ FSceneViewerPlugin::FSceneViewerPlugin(FRenderSession& InSession, FTaskSystem& I
 
 FSceneViewerPlugin::~FSceneViewerPlugin() = default;
 
+FSceneInstance& FSceneViewerPlugin::GetSceneInstance()
+{
+	Impl->Tasks.Require({EDomain::Main});
+	return Impl->Scene;
+}
+
 void FSceneViewerPlugin::Start()
 {
 	auto& P = *Impl;
@@ -26,11 +32,8 @@ void FSceneViewerPlugin::Start()
 void FSceneViewerPlugin::FImpl::BeginManifest()
 {
 	Manifest = Scene.GetManifest();
-	Target = Manifest->Target;
-	const auto Direction = Subtract(Manifest->Eye, Target);
-	Distance = Length(Direction);
-	Yaw = std::atan2(Direction.X, Direction.Z);
-	Pitch = std::asin(std::clamp(Direction.Y / Distance, -.99f, .99f));
+	const auto Models = Scene.GetNodes(ESceneNodeKind::Model);
+	Selected = Models.empty() ? FSceneHandle{} : Models.front();
 }
 
 void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
@@ -38,6 +41,7 @@ void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
 	P.PollSave();
+	P.UpdateCamera(InFrame);
 	if (P.bStopped || !P.Error.empty())
 	{
 		return;

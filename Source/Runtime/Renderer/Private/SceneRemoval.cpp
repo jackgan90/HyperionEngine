@@ -3,7 +3,7 @@
 
 namespace Hyperion
 {
-void FRenderSceneClient::AttachLogicalScene(std::uint64_t InIdentity)
+std::uint64_t FRenderSceneClient::AttachLogicalScene(std::uint64_t InIdentity)
 {
 	RequireMain();
 	std::lock_guard Lock(Mailbox->Admission);
@@ -11,7 +11,11 @@ void FRenderSceneClient::AttachLogicalScene(std::uint64_t InIdentity)
 	{
 		throw std::logic_error("Render client already attached or closed");
 	}
+	static std::atomic_uint64_t NextEpoch{1};
 	Mailbox->LogicalScene = InIdentity;
+	Mailbox->AttachmentEpoch = NextEpoch.fetch_add(1);
+	Mailbox->AdmittedToken = {};
+	return Mailbox->AttachmentEpoch;
 }
 
 void FRenderSceneClient::DetachLogicalScene(std::uint64_t InIdentity)
@@ -21,6 +25,8 @@ void FRenderSceneClient::DetachLogicalScene(std::uint64_t InIdentity)
 	if (Mailbox->LogicalScene == InIdentity)
 	{
 		Mailbox->LogicalScene = 0;
+		Mailbox->AttachmentEpoch = 0;
+		Mailbox->AdmittedToken = {};
 	}
 }
 

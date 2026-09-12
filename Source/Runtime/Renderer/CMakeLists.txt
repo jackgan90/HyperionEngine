@@ -1,4 +1,4 @@
-add_library(hyperion_render STATIC Private/SceneInstanceSnapshot.cpp
+add_library(hyperion_render STATIC Private/SceneNavigation.cpp Private/SceneFrame.cpp Private/SceneMetadata.cpp Private/SceneBridgeMetadata.cpp Private/SceneInstanceSnapshot.cpp Private/SceneInstanceNodes.cpp
   Private/SceneMaterialAssets.cpp
   Private/SceneInstanceMaterials.cpp Private/SceneInstance.cpp Private/SceneInstanceLoading.cpp Private/RenderPass.cpp Private/RenderPassDeclaration.cpp Private/RenderGraph.cpp Private/RenderGraphResources.cpp Private/RenderGraphValidation.cpp Private/RenderGraphContent.cpp
   Private/RenderGraphPreparation.cpp Private/RenderGraphExecution.cpp Private/FramePipeline.cpp

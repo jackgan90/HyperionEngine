@@ -83,8 +83,8 @@ def scene_fixture():
         asset["path"] = str((source.parent / asset["path"]).resolve())
     # The stock ground meets model bottoms at the same depth. Publication/draw order
     # can change their shared edge pixels even with synchronous frames.
-    for instance in scene["instances"]:
-        if instance["asset"] == "ground":
+    for instance in scene["nodes"]:
+        if instance.get("model", {}).get("asset") == "ground":
             instance["translation"][1] -= .01
     path = work / "Scene.json"
     path.write_text(json.dumps(scene), encoding="utf-8")

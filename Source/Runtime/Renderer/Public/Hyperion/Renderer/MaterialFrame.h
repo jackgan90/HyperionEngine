@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/MaterialProviders.h"
+#include "Hyperion/Renderer/ScenePublication.h"
 
 namespace Hyperion
 {
@@ -9,6 +10,23 @@ struct FMaterialFrameContext
 	std::uint64_t Session{};
 	std::uint64_t Frame{};
 	FMaterialProviderInputs Inputs;
+
+	std::optional<FScenePublicationToken> GetSceneToken() const
+	{
+		return SceneToken;
+	}
+
+	bool CastsSceneShadows() const
+	{
+		return bSceneShadows;
+	}
+
+private:
+	std::optional<FScenePublicationToken> SceneToken;
+	// Resolution belongs to this immutable instance, not to editable copies of its public inputs.
+	std::weak_ptr<const FMaterialFrameContext> SceneResolutionOwner;
+	bool bSceneShadows{};
+	friend class FRenderSession;
 };
 
 struct FRenderDrawResult

@@ -301,6 +301,8 @@ void CheckResolutionAndPreview(FShadowFixture& InFixture)
 			InFixture.Frame(true);
 		}
 		HYP_CHECK(InFixture.Statistics.ShadowTextureBytes == 16 * 1024 * 1024);
+		std::cout << "Shadow resolution retirement iteration=" << Iteration << " baseline bytes=" << Small
+		          << " current bytes=" << InFixture.DeviceStats.GpuAllocationBytes << "\n";
 		HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes <= Small + 8 * 1024 * 1024);
 	}
 	InFixture.Settings.DebugMode = 2;

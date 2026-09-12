@@ -3,6 +3,7 @@
 #include "Hyperion/Plugins/PluginRuntime.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderPrimitive.h"
+#include "Hyperion/Renderer/SceneFrame.h"
 
 namespace Hyperion
 {
@@ -11,6 +12,7 @@ struct FRenderFrame
 	FSize Size;
 	FAppSettings Settings;
 	FRenderView View;
+	std::optional<FSceneViewRequest> SceneView;
 };
 
 // Scene producers run Start, Update and Stop on Main. The session renders their primitives.

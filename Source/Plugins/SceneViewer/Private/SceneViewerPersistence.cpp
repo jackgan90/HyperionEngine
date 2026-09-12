@@ -16,11 +16,6 @@ TAsyncResult<bool> FSceneViewerPlugin::SaveAsync(const std::filesystem::path& In
 		throw std::runtime_error("Scene has not loaded");
 	}
 	auto Snapshot = P.Scene.Snapshot(InPath);
-	const FVec3 Direction{std::sin(P.Yaw) * std::cos(P.Pitch), std::sin(P.Pitch), std::cos(P.Yaw) * std::cos(P.Pitch)};
-	Snapshot.Eye = Add(P.Target, ScaleVector(Direction, P.Distance));
-	Snapshot.Target = P.Target;
-	Snapshot.Near = P.Manifest->Near;
-	Snapshot.Far = P.Manifest->Far;
 	P.Save = P.Assets.SaveAsync(InPath, std::make_shared<const FSceneManifest>(std::move(Snapshot)));
 	P.SavePath = InPath;
 	P.SaveStatus = "Saving scene...";

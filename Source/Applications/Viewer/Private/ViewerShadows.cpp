@@ -63,22 +63,52 @@ bool ParseShadowOption(FOptions& InOptions, const std::string& InArg, int InArgc
 void FViewerApplication::InitializeShadowSettings()
 {
 	ShadowSettings = Options.Shadows;
-	ShadowLight = Options.ShadowLight.value_or(Normalize(FVec3{-.45f, .8f, .65f}));
-	LightAzimuth = std::atan2(ShadowLight.X, ShadowLight.Z) * 180 / 3.14159265f;
-	LightElevation = std::asin(ShadowLight.Y) * 180 / 3.14159265f;
+}
+
+FSceneInstance* FViewerApplication::GetSceneInstance()
+{
+	return ScenePlugin ? &ScenePlugin->GetSceneInstance() : ModelPlugin ? &ModelPlugin->GetSceneInstance() : nullptr;
+}
+
+void FViewerApplication::SetSceneLightDirection(FVec3 InDirection)
+{
+	auto* Scene = GetSceneInstance();
+	if (!Scene || !Scene->GetStatus().bLoaded)
+	{
+		return;
+	}
+	auto Selections = Scene->GetSettings();
+	if (!Selections.MainDirectionalLight)
+	{
+		Selections.MainDirectionalLight = Scene->AddNode(MakeSceneDirectionalLightNode({}));
+		Scene->SetSettings(Selections);
+	}
+	FSceneNodeView View;
+	Scene->GetNodeView(*Selections.MainDirectionalLight, View);
+	const auto Pose = ExtractScenePose(View.World);
+	const auto Forward = ScaleVector(Normalize(InDirection), -1);
+	const FVec3 Up = std::abs(Forward.Y) > .999f ? FVec3{0, 0, 1} : FVec3{0, 1, 0};
+	Scene->SetWorldTransform(*Selections.MainDirectionalLight,
+	                         SceneCameraTransform(Pose.Eye, Add(Pose.Eye, Forward), Up));
 }
 
 void FViewerApplication::UpdateShadowLight(int InFrame)
 {
+	const auto* Scene = GetSceneInstance();
+	if (!Scene || !Scene->GetStatus().bLoaded)
+	{
+		return;
+	}
+	if (Options.ShadowLight && !bShadowLightApplied)
+	{
+		SetSceneLightDirection(*Options.ShadowLight);
+		bShadowLightApplied = true;
+	}
 	if (Options.bBenchmarkLight && InFrame >= Options.BenchmarkWarmup)
 	{
 		const float Phase = float(InFrame - Options.BenchmarkWarmup) * .004f;
-		ShadowLight = Normalize(FVec3{std::sin(Phase), .8f + .15f * std::sin(Phase * .7f), std::cos(Phase)});
+		SetSceneLightDirection(Normalize(FVec3{std::sin(Phase), .8f + .15f * std::sin(Phase * .7f), std::cos(Phase)}));
 	}
-	RenderSession->SetSceneParameters(
-	    {{"Engine.Scene.MainDirectionalLightDirection", FMaterialValue::Float(ShadowLight)},
-	     {"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(FVec3{3.f, 2.85f, 2.7f})},
-	     {"Engine.Scene.AmbientColor", FMaterialValue::Float(FVec3{.22f, .25f, .3f})}});
 }
 
 void FViewerApplication::DrawShadowGui()
@@ -106,14 +136,49 @@ void FViewerApplication::DrawShadowGui()
 		Gui->Slider("Depth (texels)", ShadowSettings.ReceiverBias, 0, 2);
 		Gui->Slider("Cascade blend", ShadowSettings.BlendFraction, .01f, .25f);
 		Gui->Slider("Distance fade", ShadowSettings.FadeFraction, .01f, .5f);
-		bool bLightChanged = Gui->Slider("Light azimuth", LightAzimuth, -180, 180);
-		bLightChanged |= Gui->Slider("Light elevation", LightElevation, -90, 90);
-		if (bLightChanged)
+		auto* Scene = GetSceneInstance();
+		const auto Handle = Scene ? Scene->GetSettings().MainDirectionalLight : std::optional<FSceneHandle>{};
+		FSceneNodeView LightView;
+		if (Handle && Scene->GetNodeView(*Handle, LightView))
 		{
-			const float Azimuth = LightAzimuth * 3.14159265f / 180;
-			const float Elevation = LightElevation * 3.14159265f / 180;
-			ShadowLight = {std::sin(Azimuth) * std::cos(Elevation), std::sin(Elevation),
-			               std::cos(Azimuth) * std::cos(Elevation)};
+			auto Light = *LightView.Node->DirectionalLight;
+			bool bLightChanged = Gui->InputVector("Main light color", Light.Color);
+			bLightChanged |= Gui->InputFloat("Main light intensity", Light.Intensity);
+			bLightChanged |= Gui->Checkbox("Main light casts shadows", Light.bCastShadows);
+			if (bLightChanged)
+			{
+				try
+				{
+					Scene->SetDirectionalLight(*Handle, Light);
+				}
+				catch (const std::exception& Failure)
+				{
+					Gui->TextWrapped(Failure.what());
+				}
+			}
+			const auto Direction = ScaleVector(ExtractScenePose(LightView.World).Forward, -1);
+			float AzimuthDegrees = std::atan2(Direction.X, Direction.Z) * 180 / 3.14159265f;
+			float ElevationDegrees = std::asin(std::clamp(Direction.Y, -1.f, 1.f)) * 180 / 3.14159265f;
+			bool bChanged = Gui->Slider("Light azimuth", AzimuthDegrees, -180, 180);
+			bChanged |= Gui->Slider("Light elevation", ElevationDegrees, -90, 90);
+			if (bChanged)
+			{
+				const float Azimuth = AzimuthDegrees * 3.14159265f / 180;
+				const float Elevation = ElevationDegrees * 3.14159265f / 180;
+				try
+				{
+					SetSceneLightDirection({std::sin(Azimuth) * std::cos(Elevation), std::sin(Elevation),
+					                        std::cos(Azimuth) * std::cos(Elevation)});
+				}
+				catch (const std::exception& Failure)
+				{
+					Gui->TextWrapped(Failure.what());
+				}
+			}
+		}
+		else
+		{
+			Gui->Text("No main directional light selected");
 		}
 		const std::array Names{"Shaded", "Cascade tint", "Depth 0", "Depth 1", "Depth 2", "Depth 3"};
 		Gui->Text(std::string("Display: ") + Names[ShadowSettings.DebugMode]);

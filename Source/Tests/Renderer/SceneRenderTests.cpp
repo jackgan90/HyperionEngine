@@ -1,5 +1,6 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/CascadedShadowMap.h"
+#include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
@@ -8,6 +9,7 @@
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <cmath>
+#include <future>
 #include <iostream>
 #include <source_location>
 #include <thread>
@@ -79,6 +81,34 @@ struct FSceneFixture
 	std::unique_ptr<FRenderSession> Session;
 	FSceneVisibilityStats LastStatistics;
 	std::uint64_t FrameNumber{};
+	FSceneRenderBridge* LogicalBridge{};
+
+	struct FFrameInput
+	{
+		std::shared_ptr<const FSceneFrameSeed> Seed;
+		std::shared_ptr<const FMaterialFrameContext> Material;
+	};
+
+	FFrameInput Freeze()
+	{
+		if (LogicalBridge)
+		{
+			return {Session->FreezeSceneFrame(LogicalBridge->GetToken()), {}};
+		}
+		return {{}, Session->FreezeFrame()};
+	}
+
+	std::shared_ptr<const FMaterialFrameContext> Resolve(const FFrameInput& InInput)
+	{
+		if (!InInput.Seed)
+		{
+			return InInput.Material;
+		}
+		FSceneViewRequest Request;
+		Request.Width = 320;
+		Request.Height = 240;
+		return Session->ResolveSceneFrame(*InInput.Seed, Request).Frame;
+	}
 
 	FSceneFixture()
 	{
@@ -112,12 +142,13 @@ struct FSceneFixture
 	{
 		Window.Poll();
 		FImage Image;
-		const auto MaterialFrame = Session->FreezeFrame(0);
-		FrameNumber = MaterialFrame->Frame;
+		const auto Input = Freeze();
 		Tasks.Wait(Tasks.Dispatch(
 		    {EDomain::Render},
 		    [&]
 		    {
+			    const auto MaterialFrame = Resolve(Input);
+			    FrameNumber = MaterialFrame->Frame;
 			    FRenderGraph Graph;
 			    auto Clear = MakeColorPass(Graph, "pending");
 			    Clear.Color->Actions.Load = EAttachmentLoad::Clear;
@@ -333,6 +364,11 @@ void CheckMaterialAtomicity(FSceneFixture& InFixture, FScene& InScene, FSceneRen
                             FSceneHandle InFirst, FSceneHandle InSecond)
 {
 	const auto Before = CollectItems(InFixture);
+	const auto Token = InBridge.GetToken();
+	const auto Camera = *InScene.GetSettings().DefaultCamera;
+	FMat4 OldCamera;
+	InScene.GetWorld(Camera, OldCamera);
+	InScene.SetWorldTransform(Camera, Translation({.15f, 0, 3}));
 	auto First = *InScene.Find(InFirst);
 	First.World = Translation({-.5f, 0, 0});
 	InScene.Update(InFirst, First);
@@ -348,7 +384,7 @@ void CheckMaterialAtomicity(FSceneFixture& InFixture, FScene& InScene, FSceneRen
 	{
 		bRejected = true;
 	}
-	HYP_CHECK(bRejected && InScene.GetChanges().size() == 2);
+	HYP_CHECK(bRejected && InScene.GetChanges().size() == 3 && InBridge.GetToken() == Token);
 	const auto After = CollectItems(InFixture);
 	HYP_CHECK(Before.size() == After.size());
 	for (std::size_t Index = 0; Index < Before.size(); ++Index)
@@ -359,7 +395,9 @@ void CheckMaterialAtomicity(FSceneFixture& InFixture, FScene& InScene, FSceneRen
 	Second.Surface.Overrides.clear();
 	InScene.Update(InSecond, Second);
 	InBridge.Flush();
-	HYP_CHECK(InScene.GetChanges().empty());
+	HYP_CHECK(InScene.GetChanges().empty() && InBridge.GetToken().PublicationSerial == Token.PublicationSerial + 1);
+	InScene.SetWorldTransform(Camera, OldCamera);
+	InBridge.Flush();
 	const auto Recovered = CollectItems(InFixture);
 	HYP_CHECK(Recovered[0].State.Revision > Before[0].State.Revision);
 	// A delayed result for the old publication must not overwrite the new revision.
@@ -372,7 +410,9 @@ void CheckSharedMaterialPublication(FSceneFixture& InFixture)
 	auto Asset = std::make_shared<const FModelSource>(Quad());
 	auto Shared = SharedSurface(InFixture, Asset);
 	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 3}, {}, {1, .1f, 10, 3});
 	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
+	InFixture.LogicalBridge = &Bridge;
 	FSceneModel Left{"left", PrepareSourceModel(Asset)};
 	Left.World = Multiply(Translation({-.7f, 0, 0}), Scale({.4f, .4f, 1}));
 	Left.Surface.Instance = Shared;
@@ -423,6 +463,7 @@ void CheckSharedMaterialPublication(FSceneFixture& InFixture)
 	Scene.Clear();
 	Bridge.Flush();
 	Bridge.Close();
+	InFixture.LogicalBridge = nullptr;
 	Shared.reset();
 	Left = {};
 	Right = {};
@@ -432,7 +473,9 @@ void CheckSharedMaterialPublication(FSceneFixture& InFixture)
 void CheckLogicalAttachment(FSceneFixture& InFixture)
 {
 	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 3}, {}, {1, .1f, 10, 3});
 	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
+	InFixture.LogicalBridge = &Bridge;
 	bool bRejected = false;
 	try
 	{
@@ -469,6 +512,7 @@ void CheckLogicalAttachment(FSceneFixture& InFixture)
 	Bridge.Flush();
 	Pixel(InFixture.Frame(0), 160, {0, 0, 0});
 	Bridge.Close();
+	InFixture.LogicalBridge = nullptr;
 	InFixture.AwaitRetirement();
 	FSceneRenderBridge Reattached(Scene, *InFixture.Session, InFixture.Tasks);
 	Reattached.Flush();
@@ -489,13 +533,15 @@ void CheckLogicalAttachment(FSceneFixture& InFixture)
 
 void CheckQueuedViews(FSceneFixture& InFixture)
 {
-	const auto First = InFixture.Session->FreezeFrame(0);
-	const auto Second = InFixture.Session->FreezeFrame(0);
+	const auto FirstInput = InFixture.Freeze();
+	const auto SecondInput = InFixture.Freeze();
 	std::array<FImage, 2> Images;
 	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
 	    {EDomain::Render},
 	    [&]
 	    {
+		    const auto First = InFixture.Resolve(FirstInput);
+		    const auto Second = InFixture.Resolve(SecondInput);
 		    FRenderView View{
 		        Multiply(Perspective(1, 4.f / 3, .1f, 10), LookAt({0, 0, 3}, {0, 0, 0})), {0, 0, 3}, 320, 240};
 		    View.CullingMode = ESceneCullingMode::None;
@@ -1031,7 +1077,9 @@ void CheckIncrementalSharedSplit(FSceneFixture& InFixture)
 void CheckRetainedFrames(FSceneFixture& InFixture)
 {
 	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 3}, {}, {1, .1f, 10, 3});
 	FSceneRenderBridge Bridge(Scene, *InFixture.Session, InFixture.Tasks);
+	InFixture.LogicalBridge = &Bridge;
 	FSceneModel Model{"retained", PrepareSourceModel(std::make_shared<const FModelSource>(Quad({1, 0, 0, 1})))};
 	const auto Handle = Scene.Add(Model);
 	Bridge.Flush();
@@ -1052,7 +1100,7 @@ void CheckRetainedFrames(FSceneFixture& InFixture)
 		HYP_CHECK(InFixture.LastStatistics.VisitedNodes == 0 && InFixture.LastStatistics.GroupTests == 0);
 		const auto Results = Bridge.GetDrawResults(Handle);
 		HYP_CHECK(Results.size() == 1 && Results[0].bReady && Results[0].Frame == InFixture.FrameNumber);
-		const auto Unused = InFixture.Session->FreezeFrame(0); // Unconsumed scope destruction must remain idle.
+		const auto Unused = InFixture.Freeze(); // Unconsumed scope destruction must remain idle.
 	}
 	const auto Idle = InFixture.Session->GetResources().Statistics();
 	HYP_CHECK(Idle.MaintenanceTasks == Warm.MaintenanceTasks && Idle.MaintenanceTicks == Warm.MaintenanceTicks);
@@ -1068,7 +1116,418 @@ void CheckRetainedFrames(FSceneFixture& InFixture)
 	Scene.Clear();
 	Bridge.Flush();
 	Bridge.Close();
+	InFixture.LogicalBridge = nullptr;
 	InFixture.AwaitRetirement();
+}
+
+struct FPublicationGate
+{
+	std::promise<void> Release;
+	std::shared_future<void> Ready = Release.get_future().share();
+	std::promise<void> Entered;
+
+	void Wait()
+	{
+		Entered.set_value();
+		if (Ready.wait_for(std::chrono::seconds(10)) != std::future_status::ready)
+		{
+			throw std::runtime_error("Scene publication gate timed out");
+		}
+	}
+
+	void Open()
+	{
+		try
+		{
+			Release.set_value();
+		}
+		catch (const std::future_error&)
+		{
+		}
+	}
+
+	~FPublicationGate()
+	{
+		Open();
+	}
+};
+
+struct FOwnedFrameResult
+{
+	FImage Image;
+	FResolvedSceneFrame Resolved;
+	FForwardPipelineStatistics Statistics;
+};
+
+FOwnedFrameResult RenderOwnedFrame(FSceneFixture& InFixture, FForwardRenderPipeline& InPipeline,
+                                   const std::shared_ptr<const FSceneFrameSeed>& InSeed)
+{
+	FSceneViewRequest Request;
+	Request.Width = 320;
+	Request.Height = 240;
+	FOwnedFrameResult Result;
+	Result.Resolved = InFixture.Session->ResolveSceneFrame(*InSeed, Request);
+	FRenderGraph Graph;
+	FCascadedShadowSettings Shadows;
+	Shadows.bEnabled = false;
+	InPipeline.Build(Graph, Request, InSeed, Shadows, {});
+	const auto Frame = InPipeline.GetFrame();
+	Result.Image = ExecuteGraph(std::move(Graph), InFixture.Tasks, *InFixture.Swapchain, {320, 240}, false, true);
+	Result.Statistics = Frame.Statistics();
+	return Result;
+}
+
+void CheckSceneMetadataReuse(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 3}, {}, {1, .1f, 10, 3});
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	FForwardRenderPipeline Pipeline(*F.Session);
+	const auto Data = PrepareSourceModel(std::make_shared<const FModelSource>(Quad()));
+	const auto First = Scene.Add({"first", Data, Translation({-.4f, 0, 0})});
+	const auto Second = Scene.Add({"second", Data, Translation({.4f, 0, 0})});
+	Bridge.Flush();
+	AwaitBridge(Bridge, First);
+	AwaitBridge(Bridge, Second);
+	const auto Candidate = Scene.AddNode(MakeSceneDirectionalLightNode("unselected"));
+	const auto Preparations = Bridge.GetModelPreparationCount();
+	const auto Camera = *Scene.GetSettings().DefaultCamera;
+	const auto Sun = *Scene.GetSettings().MainDirectionalLight;
+	FOwnedFrameResult Previous;
+	for (unsigned Index = 0; Index < 48; ++Index)
+	{
+		Scene.SetWorldTransform(Camera, Translation({Index * .001f, 0, 3}));
+		if (Index >= 16 && Index < 32)
+		{
+			Scene.SetDirectionalLight(Sun, {{1, 1, 1}, 1 + Index * .01f, false});
+		}
+		if (Index >= 32)
+		{
+			auto Lens = *Scene.FindCamera(Camera);
+			Lens.FocusDistance = 3 + Index * .01f;
+			Scene.SetCamera(Camera, Lens);
+			Scene.SetName(Camera, "camera-" + std::to_string(Index));
+			Scene.SetDirectionalLight(Candidate, {{1, 0, 0}, float(Index), true});
+		}
+		Bridge.Flush();
+		HYP_CHECK(Bridge.GetModelPreparationCount() == Preparations);
+		const auto Seed = F.Session->FreezeSceneFrame(Bridge.GetToken());
+		FOwnedFrameResult Current;
+		F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+		                              [&]
+		                              {
+			                              Current = RenderOwnedFrame(F, Pipeline, Seed);
+		                              }));
+		HYP_CHECK(Current.Statistics.SceneToken == Seed->GetToken());
+		if (Index > 1)
+		{
+			HYP_CHECK(Current.Statistics.Spatial.IndexRebuilds == 0 && Current.Statistics.Spatial.IndexRefits == 0);
+			constexpr auto Scope = static_cast<std::size_t>(EMaterialScope::Scene);
+			const auto& Old = Previous.Resolved.Frame->Inputs.Scopes[Scope].Key;
+			const auto& New = Current.Resolved.Frame->Inputs.Scopes[Scope].Key;
+			HYP_CHECK((Old == New) == (Index < 16 || Index >= 32));
+			const auto& Batches = Current.Statistics.Views.front().Visibility.Batches;
+			HYP_CHECK(Batches.PreparedInputBuilds == 0 && Batches.LocalPacketReuses == 1);
+		}
+		Previous = std::move(Current);
+	}
+	Bridge.Close();
+	std::cout << "Camera/light-only updates retain model preparation, BVH and local material records; Scene key "
+	             "changes only with light values\n";
+}
+
+void CheckGatedScenePublications(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 3}, {}, {1, .1f, 10, 3});
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	FForwardRenderPipeline Pipeline(*F.Session);
+	FSceneModel Model{"gated", PrepareSourceModel(std::make_shared<const FModelSource>(Quad()))};
+	const auto Handle = Scene.Add(Model);
+	Bridge.Flush();
+	AwaitBridge(Bridge, Handle);
+	const auto Camera = *Scene.GetSettings().DefaultCamera;
+	const auto Sun = *Scene.GetSettings().MainDirectionalLight;
+	FOwnedFrameResult First;
+	FOwnedFrameResult Second;
+	FPublicationGate Gate;
+	const auto Blocker = F.Tasks.Dispatch({EDomain::Render},
+	                                      [&]
+	                                      {
+		                                      Gate.Wait();
+	                                      });
+	HYP_CHECK(Gate.Entered.get_future().wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+	Model.World = Translation({-.3f, 0, 0});
+	Model.Material.BaseColor = FVec4{1, 0, 0, 1};
+	Scene.Update(Handle, Model);
+	Scene.SetDirectionalLight(Sun, {{1, 0, 0}, 2, false});
+	Bridge.Flush();
+	const auto Seed1 = F.Session->FreezeSceneFrame(Bridge.GetToken());
+	const auto Frame1 = F.Tasks.Dispatch({EDomain::Render},
+	                                     [&]
+	                                     {
+		                                     First = RenderOwnedFrame(F, Pipeline, Seed1);
+	                                     });
+	Model.World = Translation({.3f, 0, 0});
+	Model.Material.BaseColor = FVec4{0, 0, 1, 1};
+	Scene.Update(Handle, Model);
+	Scene.SetWorldTransform(Camera, Translation({.2f, 0, 3}));
+	Scene.SetDirectionalLight(Sun, {{0, 0, 1}, 3, false});
+	Bridge.Flush();
+	const auto Seed2 = F.Session->FreezeSceneFrame(Bridge.GetToken());
+	const auto Frame2 = F.Tasks.Dispatch({EDomain::Render},
+	                                     [&]
+	                                     {
+		                                     Second = RenderOwnedFrame(F, Pipeline, Seed2);
+	                                     });
+	Gate.Open();
+	F.Tasks.Wait(Blocker);
+	F.Tasks.Wait(Frame1);
+	F.Tasks.Wait(Frame2);
+	HYP_CHECK(First.Statistics.SceneToken == Seed1->GetToken() && Second.Statistics.SceneToken == Seed2->GetToken());
+	HYP_CHECK(First.Resolved.View.Eye.X == 0 && Second.Resolved.View.Eye.X == .2f);
+	const auto Light = "Engine.Scene.MainDirectionalLightColor";
+	HYP_CHECK(*First.Resolved.Frame->Inputs.Find(EMaterialScope::Scene, Light) ==
+	          FMaterialValue::Float(FVec3{2, 0, 0}));
+	HYP_CHECK(*Second.Resolved.Frame->Inputs.Find(EMaterialScope::Scene, Light) ==
+	          FMaterialValue::Float(FVec3{0, 0, 3}));
+	Pixel(First.Image, 160, {1, 0, 0});
+	Pixel(Second.Image, 160, {0, 0, 1});
+	// Geometry positions are independently visible at opposite outer edges.
+	Pixel(First.Image, 75, {1, 0, 0});
+	Pixel(Second.Image, 75, {0, 0, 0});
+	bool bMismatch{};
+	F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              try
+		                              {
+			                              RenderOwnedFrame(F, Pipeline, Seed1);
+		                              }
+		                              catch (const std::invalid_argument&)
+		                              {
+			                              bMismatch = true;
+		                              }
+	                              }));
+	HYP_CHECK(bMismatch);
+	Bridge.Close();
+	std::cout << "Gated P1/F1/P2/F2 preserved geometry, camera, lighting, pixels and exact publication tokens\n";
+}
+
+void CheckGatedOldSceneGraph(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 3}, {}, {1, .1f, 10, 3});
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	FForwardRenderPipeline Pipeline(*F.Session);
+	FSceneModel Model{"old graph", PrepareSourceModel(std::make_shared<const FModelSource>(Quad({1, 0, 0, 1})))};
+	const auto Handle = Scene.Add(Model);
+	Bridge.Flush();
+	AwaitBridge(Bridge, Handle);
+	const auto Seed = F.Session->FreezeSceneFrame(Bridge.GetToken());
+	FRenderGraph Graph;
+	FForwardFrame Frame;
+	FPublicationGate Gate;
+	const auto Blocker = F.Tasks.Dispatch({EDomain::Rhi, 0},
+	                                      [&]
+	                                      {
+		                                      Gate.Wait();
+	                                      });
+	HYP_CHECK(Gate.Entered.get_future().wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+	F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              FSceneViewRequest Request;
+		                              Request.Width = 320;
+		                              Request.Height = 240;
+		                              FCascadedShadowSettings Shadows;
+		                              Shadows.bEnabled = false;
+		                              Pipeline.Build(Graph, Request, Seed, Shadows, {}, {}, true);
+		                              Frame = Pipeline.GetFrame();
+	                              }));
+	Scene.Clear();
+	Bridge.Flush();
+	F.Tasks.Wait(Bridge.GetReceipt());
+	const auto Empty = F.Session->FreezeSceneFrame(Bridge.GetToken());
+	Gate.Open();
+	F.Tasks.Wait(Blocker);
+	F.Tasks.Wait(F.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    Pixel(ExecuteGraph(std::move(Graph), F.Tasks, *F.Swapchain, {320, 240}, false, true), 160, {1, 0, 0});
+		    HYP_CHECK(Frame.Statistics().SceneToken == Seed->GetToken());
+		    const auto Cleared = RenderOwnedFrame(F, Pipeline, Empty);
+		    Pixel(Cleared.Image, 160, {});
+		    HYP_CHECK(!Cleared.Resolved.HasCamera() && !Cleared.Statistics.bShadows);
+	    }));
+	Bridge.Close();
+	FSceneRenderBridge Reattached(Scene, *F.Session, F.Tasks);
+	Reattached.Flush();
+	HYP_CHECK(Reattached.GetToken().AttachmentEpoch != Seed->GetToken().AttachmentEpoch);
+	bool bRejected{};
+	try
+	{
+		F.Session->FreezeSceneFrame(Seed->GetToken());
+	}
+	catch (const std::invalid_argument&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+	Reattached.Close();
+	std::cout << "RHI-gated old graph survived scene deletion; clear output and reattach epoch rejection passed\n";
+}
+
+void CheckFailedMetadataPublication(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	// An outstanding explicit primitive violates the first logical publication's empty-scene contract.
+	FSourceModel External(F.Session->GetScene(), F.Session->GetResources(),
+	                      std::make_shared<const FModelSource>(Quad()));
+	AwaitModel(External);
+	FScene Scene;
+	const auto Camera = Scene.AddNode(MakeSceneCameraNode("failed-camera", {0, 0, 3}, {}));
+	Scene.SetSettings({Camera, {}, {}});
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	Bridge.Flush();
+	const auto Seed = F.Session->FreezeSceneFrame(Bridge.GetToken());
+	bool bReceiptFailed{};
+	try
+	{
+		F.Tasks.Wait(Bridge.GetReceipt());
+	}
+	catch (const std::logic_error&)
+	{
+		bReceiptFailed = true;
+	}
+	HYP_CHECK(bReceiptFailed);
+	Bridge.Flush();
+	HYP_CHECK(!Bridge.GetSceneError().empty());
+	bool bFrameFailed{};
+	F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              FSceneViewRequest Request;
+		                              Request.Width = 320;
+		                              Request.Height = 240;
+		                              try
+		                              {
+			                              F.Session->ResolveSceneFrame(*Seed, Request);
+		                              }
+		                              catch (const std::runtime_error&)
+		                              {
+			                              bFrameFailed = true;
+		                              }
+	                              }));
+	HYP_CHECK(bFrameFailed);
+	// Cleanup is serial 2 although the failed serial 1 never installed Render metadata.
+	Bridge.Close();
+	F.Tasks.Wait(Bridge.GetReceipt());
+	HYP_CHECK(F.Session->GetScene().GetLogicalSceneIdentity() == 0);
+	External.Remove();
+	F.Tasks.Wait(F.Session->GetScene().Flush());
+	FSceneRenderBridge Recovery(Scene, *F.Session, F.Tasks);
+	Recovery.Flush();
+	F.Tasks.Wait(Recovery.GetReceipt());
+	const auto Recovered = F.Session->FreezeSceneFrame(Recovery.GetToken());
+	F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              FSceneViewRequest Request;
+		                              Request.Width = 320;
+		                              Request.Height = 240;
+		                              HYP_CHECK(F.Session->ResolveSceneFrame(*Recovered, Request).HasCamera());
+	                              }));
+	Recovery.Close();
+	std::cout << "First camera-only publication failure has receipt, blocks frames, closes and recovers on reattach\n";
+}
+
+void CheckResolvedFrameOwnership(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 8}, {}));
+	Scene.SetSettings({Camera, {}, {}});
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	Bridge.Flush();
+	F.Tasks.Wait(Bridge.GetReceipt());
+	const auto Seed = F.Session->FreezeSceneFrame(Bridge.GetToken());
+	F.Tasks.Wait(F.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    FSceneViewRequest Request;
+		    Request.Width = 320;
+		    Request.Height = 240;
+		    const auto Resolved = F.Session->ResolveSceneFrame(*Seed, Request);
+		    const auto Reject = [](const std::function<void()>& InOperation)
+		    {
+			    bool bRejected{};
+			    try
+			    {
+				    InOperation();
+			    }
+			    catch (const std::invalid_argument&)
+			    {
+				    bRejected = true;
+			    }
+			    HYP_CHECK(bRejected);
+		    };
+		    for (const auto Scope : {EMaterialScope::Global, EMaterialScope::Frame, EMaterialScope::Scene})
+		    {
+			    auto Constructed = std::make_shared<FMaterialFrameContext>(*Resolved.Frame);
+			    auto Assigned = std::make_shared<FMaterialFrameContext>();
+			    *Assigned = *Resolved.Frame;
+			    for (const auto& Copy : {Constructed, Assigned})
+			    {
+				    Copy->Inputs.Values[static_cast<std::size_t>(Scope)] = FMaterialParameterValues{
+				        {"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(FVec3{99, 98, 97})}};
+				    Reject(
+				        [&]
+				        {
+					        F.Session->ValidateSceneFrame(*Copy);
+				        });
+				    Reject(
+				        [&]
+				        {
+					        F.Session->ResolveFrameSemantic(*Copy, "Engine.Scene.MainDirectionalLightColor");
+				        });
+				    FRenderGraph Graph;
+				    Reject(
+				        [&]
+				        {
+					        F.Session->BuildViews(Graph, std::span(&Resolved.View, 1), F.Session->FrameTargets(FVec4{}),
+					                              Copy, 1, false, true);
+				        });
+			    }
+		    }
+		    F.Session->ValidateSceneFrame(*Resolved.Frame);
+		    const auto Color =
+		        F.Session->ResolveFrameSemantic(*Resolved.Frame, "Engine.Scene.MainDirectionalLightColor");
+		    HYP_CHECK(Color && *Color == FMaterialValue::Float(FVec3{}));
+		    FRenderGraph Graph;
+		    F.Session->BuildViews(Graph, std::span(&Resolved.View, 1), F.Session->FrameTargets(FVec4{}), Resolved.Frame,
+		                          1, false, true);
+		    ExecuteGraph(std::move(Graph), F.Tasks, *F.Swapchain, {320, 240}, false, false);
+	    }));
+	Bridge.Close();
+	const auto Unbound = F.Session->FreezeFrame();
+	F.Tasks.Wait(F.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    auto Copy = *Unbound;
+		    Copy.Inputs.Values[static_cast<std::size_t>(EMaterialScope::Scene)] = FMaterialParameterValues{
+		        {"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(FVec3{9, 8, 7})}};
+		    ++Copy.Inputs.Scopes[static_cast<std::size_t>(EMaterialScope::Scene)].Key.Revision;
+		    F.Session->ValidateSceneFrame(Copy);
+		    const auto Color = F.Session->ResolveFrameSemantic(Copy, "Engine.Scene.MainDirectionalLightColor");
+		    HYP_CHECK(Color && *Color == FMaterialValue::Float(FVec3{9, 8, 7}));
+	    }));
 }
 
 void CheckReceiptViewChanges(FSceneFixture& InFixture)
@@ -1128,6 +1587,11 @@ int main()
 		CheckLogicalAttachment(Fixture);
 		CheckSharedMaterialPublication(Fixture);
 		CheckRetainedFrames(Fixture);
+		CheckSceneMetadataReuse(Fixture);
+		CheckGatedScenePublications(Fixture);
+		CheckGatedOldSceneGraph(Fixture);
+		CheckFailedMetadataPublication(Fixture);
+		CheckResolvedFrameOwnership(Fixture);
 		CheckReceiptViewChanges(Fixture);
 		CheckLocalPackets(Fixture);
 		CheckLocalVisibilityInputs(Fixture);

@@ -11,14 +11,30 @@ viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
 work = pathlib.Path.cwd() / "scene-performance"
 work.mkdir(exist_ok=True)
-model_count = len(json.loads((root / "assets/Scenes/Showcase.json").read_text(encoding="utf-8"))["instances"])
+source = json.loads((root / "assets/Scenes/Showcase.json").read_text(encoding="utf-8"))
+model_count = sum("model" in node for node in source["nodes"])
+# Keep this regression's original 190-210 item workload independent of shipped camera calibration.
+for asset in source["assets"]:
+    asset["path"] = str((root / "assets/Scenes" / asset["path"]).resolve())
+for node in source["nodes"]:
+    if node["id"] == source["defaultCamera"]:
+        node["camera"]["verticalRadians"] = 0.8
+source_path = work / "MovingScene.json"
+scene_path = work / "MovingScene.hasset"
+source_path.write_text(json.dumps(source), encoding="utf-8")
+asset_tool = viewer.with_name("hyperion_asset_tool" + viewer.suffix)
+imported = subprocess.run([str(asset_tool), "import", str(source_path), str(scene_path)],
+                          cwd=root, capture_output=True, text=True, timeout=60)
+(work / "Import.log").write_text(imported.stdout + imported.stderr, encoding="utf-8")
+assert imported.returncode == 0, imported.stdout + imported.stderr
 
 
 def run(name, batched):
     output = work / f"{name}.csv"
     capture = work / f"{name}.png"
     args = [str(viewer), "--config", str(root / "experiments/Scene.json"),
-            "--frames", "180", "--benchmark-warmup", "80", "--benchmark", str(output),
+            "--scene", str(scene_path), "--pipeline", "forward",
+            "--frames", "340", "--benchmark-warmup", "240", "--benchmark", str(output),
             "--capture", str(capture), "--benchmark-camera", "--no-vsync", "--hidden", "--no-ui"]
     if not batched:
         args.append("--no-instance-batching")
@@ -30,7 +46,7 @@ def run(name, batched):
     assert "vsync=off" in log and "Benchmark: 100 frames" in log, log
     with output.open(newline="", encoding="utf-8") as stream:
         samples = list(csv.DictReader(stream))
-    assert [int(row["frame"]) for row in samples] == list(range(80, 180))
+    assert [int(row["frame"]) for row in samples] == list(range(240, 340))
     assert all(math.isfinite(float(row["frame_ms"])) and float(row["frame_ms"]) > 0 for row in samples)
     assert all(190 <= int(row["visible_items"]) <= 210 for row in samples), samples
     assert all(int(row["failed_items"]) == 0 for row in samples), samples

@@ -245,7 +245,7 @@ void FViewerApplication::SaveBenchmark()
 	    << ",incremental_plan_updates,incremental_item_reuses,affected_batches,retained_batches,batch_admission_reuses,"
 	       "cached_plan_items,cached_plan_blocks,cpu_latency_ms,main_render_lead,render_rhi_lead"
 	       ",base_gpu_ms,lighting_gpu_ms,compatibility_gpu_ms,transparent_gpu_ms,tonemap_gpu_ms,total_gpu_pass_ms"
-	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms\n"
+	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms,index_rebuilds,index_refits\n"
 	    << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
@@ -276,7 +276,7 @@ void FViewerApplication::SaveBenchmark()
 		Output << ',' << Frame.CpuLatencyMilliseconds << ',' << Metrics.FrameLimits.MainLead << ','
 		       << Metrics.FrameLimits.RenderLead;
 		WriteScenePipelineBenchmark(Output, Frame.Pipeline, Frame.Device);
-		Output << '\n';
+		Output << ',' << Frame.Pipeline.Spatial.IndexRebuilds << ',' << Frame.Pipeline.Spatial.IndexRefits << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}
 	Output.close();

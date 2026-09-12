@@ -53,7 +53,9 @@ std::size_t ValidatePublication(const std::vector<std::vector<FRenderPrimitiveSt
 
 FRenderScenePublication FRenderSceneClient::PublishGroups(std::vector<std::vector<FRenderPrimitiveState>> InGroups,
                                                           std::vector<FRenderPrimitiveUpdate> InUpdates,
-                                                          std::vector<FRenderPrimitiveHandle> InRemovals)
+                                                          std::vector<FRenderPrimitiveHandle> InRemovals,
+                                                          std::shared_ptr<const FSceneMetadata> InMetadata,
+                                                          bool bInCleanup)
 {
 	auto& Queue = *Mailbox;
 	Queue.Tasks.Require({EDomain::Main});
@@ -72,6 +74,12 @@ FRenderScenePublication FRenderSceneClient::PublishGroups(std::vector<std::vecto
 		if (Queue.bClosed)
 		{
 			throw std::logic_error("Render scene is closed");
+		}
+		if (InMetadata && (InMetadata->Token.LogicalSceneIdentity != Queue.LogicalScene ||
+		                   InMetadata->Token.AttachmentEpoch != Queue.AttachmentEpoch ||
+		                   InMetadata->Token.PublicationSerial != Queue.AdmittedToken.PublicationSerial + 1))
+		{
+			throw std::invalid_argument("Scene publication token does not match its attachment or next serial");
 		}
 		for (const auto& Update : InUpdates)
 		{
@@ -103,22 +111,46 @@ FRenderScenePublication FRenderSceneClient::PublishGroups(std::vector<std::vecto
 					Queue.Active[Slot] = true;
 				}
 			}
-			Result.Task = Queue.Tasks.Dispatch(
-			    {EDomain::Render},
-			    [Mailbox = Mailbox, Creations, Updates = std::move(InUpdates), Removals = InRemovals]() mutable
-			    {
-				    Mailbox->Scene->Update(std::move(Updates));
-				    for (const auto Handle : Removals)
-				    {
-					    Mailbox->Scene->Remove(Handle);
-				    }
-				    for (auto& Creation : Creations)
-				    {
-					    Mailbox->Scene->Create(Creation.Handle, std::move(Creation.State), Creation.Group, {},
-					                           Creation.Result);
-				    }
-			    });
+			Result.Task =
+			    Queue.Tasks.Dispatch({EDomain::Render},
+			                         [Mailbox = Mailbox, Creations, Updates = std::move(InUpdates),
+			                          Removals = InRemovals, Metadata = InMetadata, bCleanup = bInCleanup]() mutable
+			                         {
+				                         try
+				                         {
+					                         if (Metadata)
+					                         {
+						                         Mailbox->Scene->BeginPublication(*Metadata, bCleanup);
+					                         }
+					                         Mailbox->Scene->Update(std::move(Updates));
+					                         for (const auto Handle : Removals)
+					                         {
+						                         Mailbox->Scene->Remove(Handle);
+					                         }
+					                         for (auto& Creation : Creations)
+					                         {
+						                         Mailbox->Scene->Create(Creation.Handle, std::move(Creation.State),
+						                                                Creation.Group, {}, Creation.Result);
+					                         }
+					                         if (Metadata)
+					                         {
+						                         Mailbox->Scene->CompletePublication(std::move(Metadata));
+					                         }
+				                         }
+				                         catch (...)
+				                         {
+					                         if (Metadata)
+					                         {
+						                         Mailbox->Scene->FailPublication();
+					                         }
+					                         throw;
+				                         }
+			                         });
 			Queue.Last = Result.Task;
+			if (InMetadata)
+			{
+				Queue.AdmittedToken = InMetadata->Token;
+			}
 			for (const auto Handle : InRemovals)
 			{
 				if (Handle.Scene == Queue.Identity && Handle.Slot < Queue.Active.size() &&

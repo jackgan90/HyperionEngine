@@ -57,7 +57,7 @@ private:
 	FVec3 Light{0, 0, 1};
 	bool bEnabled{};
 	EDepthConvention DepthConvention = EDepthConvention::Standard;
-	std::optional<std::array<std::uint64_t, 27>> PreparedKey;
+	std::optional<std::array<std::uint64_t, 29>> PreparedKey;
 	void PrepareCascade(std::size_t InIndex, const FRenderView& InMain, const FBoundsQuery& InQuery);
 };
 } // namespace Hyperion

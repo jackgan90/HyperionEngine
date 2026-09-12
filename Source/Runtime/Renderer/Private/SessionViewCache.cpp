@@ -42,7 +42,7 @@ bool SamePassEnvironment(const FRenderView& InA, const FRenderView& InB)
 
 bool SamePreparedView(const FRenderView& InA, const FRenderView& InB)
 {
-	return SamePassEnvironment(InA, InB) && InA.Revision == InB.Revision &&
+	return SamePassEnvironment(InA, InB) && InA.SceneCamera == InB.SceneCamera && InA.Revision == InB.Revision &&
 	       SameMatrix(InA.ViewProjection, InB.ViewProjection) &&
 	       std::array{InA.Eye.X, InA.Eye.Y, InA.Eye.Z} == std::array{InB.Eye.X, InB.Eye.Y, InB.Eye.Z} &&
 	       InA.Parameters == InB.Parameters && InA.PassParameters == InB.PassParameters;

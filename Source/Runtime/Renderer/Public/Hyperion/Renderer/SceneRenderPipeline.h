@@ -38,11 +38,18 @@ public:
 	void Build(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
 	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
+	void Build(FRenderGraph& InGraph, const FSceneViewRequest& InRequest, std::shared_ptr<const FSceneFrameSeed> InSeed,
+	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
+	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
 	FForwardFrame GetFrame() const;
 	const FCascadedShadowMap& Shadows() const;
 	std::uint64_t TargetBytes() const;
 
 private:
+	void BuildResolved(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
+	                   const FCascadedShadowSettings& InShadows, FVec4 InClear,
+	                   const std::function<void(FRenderGraph&)>& InExtensions, bool bInDeferPreparation);
+
 	struct FViewFamily
 	{
 		std::vector<FRenderView> Views;

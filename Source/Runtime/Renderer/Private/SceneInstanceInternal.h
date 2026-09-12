@@ -13,6 +13,7 @@ struct FSceneInstance::FImpl
 
 	struct FLoad
 	{
+		std::uint64_t Epoch{};
 		FCancellationToken Cancellation;
 		TAsyncResult<FSceneModelData> Preparation;
 		std::shared_ptr<const FSceneModelData> Data;
@@ -22,7 +23,8 @@ struct FSceneInstance::FImpl
 
 	struct FSelectedMaterials
 	{
-		std::string Id;
+		FSceneHandle Handle;
+		std::uint64_t Epoch{};
 		FSceneMaterialSelection Surface;
 		std::map<std::uint32_t, FSceneMaterialSelection> Sections;
 		std::string Error;
@@ -35,13 +37,13 @@ struct FSceneInstance::FImpl
 		std::set<std::uint32_t> EditedSections;
 	};
 
-	std::map<std::string, FPendingMaterial> PendingMaterials;
-	FPendingMaterial PrepareMaterialEdits(const FPendingMaterial& InPending, const FSceneModel& InBefore,
-	                                      const FSceneModel& InAfter) const;
-	void ApplyLoadedMaterials(FSceneModel& InModel, const FSelectedMaterials& InSelection,
+	std::map<FSceneHandle, FPendingMaterial> PendingMaterials;
+	FPendingMaterial PrepareMaterialEdits(const FPendingMaterial& InPending, const FSceneModelComponent& InBefore,
+	                                      const FSceneModelComponent& InAfter) const;
+	void ApplyLoadedMaterials(FSceneModelComponent& InModel, const FSelectedMaterials& InSelection,
 	                          const FPendingMaterial& InPending) const;
 	TAsyncResult<std::vector<FSelectedMaterials>> MaterialPreparation;
-	std::map<std::string, FSelectedMaterials> SelectedMaterials;
+	std::map<FSceneHandle, FSelectedMaterials> SelectedMaterials;
 	FCancellationToken MaterialCancellation;
 	bool bMaterialsComplete = true;
 
@@ -49,6 +51,9 @@ struct FSceneInstance::FImpl
 	FTaskSystem& Tasks;
 	FAssetService& Assets;
 	FScene Scene;
+	std::uint64_t LoadEpoch{1};
+	void RefreshModels();
+	void ForgetRemovedModels();
 	std::unique_ptr<FSceneRenderBridge> Bridge;
 	std::filesystem::path Path;
 	TAssetRequest<FSceneManifest> ManifestRequest;

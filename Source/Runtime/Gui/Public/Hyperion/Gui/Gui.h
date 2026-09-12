@@ -40,6 +40,8 @@ public:
 	void BeginFrame(FSize InLogical, FSize InPixels, float InDeltaSeconds, std::span<const FInputEvent> InEvents);
 	bool BeginPanel(const char* InTitle, FVec2 InPosition, FVec2 InSize);
 	void EndPanel();
+	void BeginScrollRegion(const char* InId, float InHeight);
+	void EndScrollRegion();
 	void Text(const std::string& InValue);
 	void TextWrapped(const std::string& InValue);
 	FVec2 DisplaySize() const;
@@ -50,6 +52,12 @@ public:
 	bool Button(const char* InLabel, bool bInEnabled = true);
 	bool Checkbox(const char* InLabel, bool& bInValue);
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
+	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0);
+	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex);
+	bool InputText(const char* InLabel, std::string& InValue);
+	bool InputFloat(const char* InLabel, float& InValue);
+	bool InputVector(const char* InLabel, FVec3& InValue);
+	bool InputMatrix(const char* InLabel, FMat4& InValue);
 	FVec4 LastItemBounds();
 	bool EditProperties(const FTypeDescriptor& InType, void* InObject, std::span<const std::string_view> InIds);
 	void Plot(const char* InLabel, std::span<const float> InValues, float InMaximum);

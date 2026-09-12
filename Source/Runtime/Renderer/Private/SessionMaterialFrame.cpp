@@ -65,12 +65,55 @@ std::shared_ptr<const FMaterialFrameContext> FRenderSession::FreezeFrame(float I
                                                                          FMaterialParameterValues InFrameValues)
 {
 	Tasks.Require({EDomain::Main});
-	return MaterialState->Frame(Resources, InTime, std::move(InFrameValues), Scene.GetLogicalSceneIdentity());
+	if (Scene.GetLogicalSceneIdentity())
+	{
+		throw std::logic_error("A bound scene requires FreezeSceneFrame and a publication token");
+	}
+	return MaterialState->Frame(Resources, InTime, std::move(InFrameValues), 0);
+}
+
+std::shared_ptr<const FSceneFrameSeed> FRenderSession::FreezeSceneFrame(FScenePublicationToken InToken, float InTime,
+                                                                        FMaterialParameterValues InFrameValues)
+{
+	Tasks.Require({EDomain::Main});
+	Scene.ValidateAdmittedToken(InToken);
+	MaterialState->Providers.ValidateSceneBinding();
+	MaterialState->Providers.ValidateSceneInputs(InFrameValues);
+	MaterialState->Providers.ValidateSceneInputs(
+	    MaterialState->Inputs.Values[ScopeIndex(EMaterialScope::Global)].Get());
+	MaterialState->Providers.ValidateSceneInputs(MaterialState->Inputs.Values[ScopeIndex(EMaterialScope::Scene)].Get(),
+	                                             true);
+	// Only pre-attachment default lights are replaced; View injection remains invalid.
+	auto Seed = std::make_shared<FSceneFrameSeed>();
+	Seed->Token = InToken;
+	Seed->Frame = MaterialState->Frame(Resources, InTime, std::move(InFrameValues), InToken.LogicalSceneIdentity);
+	return Seed;
+}
+
+void FRenderSession::ValidateSceneFrame(const FMaterialFrameContext& InFrame) const
+{
+	Tasks.Require({EDomain::Render});
+	if (InFrame.Session != MaterialState->Identity || (Scene.GetLogicalSceneIdentity() && !InFrame.SceneToken))
+	{
+		throw std::invalid_argument("Bound scene build requires a session-owned resolved scene frame");
+	}
+	if (InFrame.SceneToken)
+	{
+		if (InFrame.SceneResolutionOwner.lock().get() != &InFrame)
+		{
+			throw std::invalid_argument("A copied scene frame cannot authorize modified material inputs");
+		}
+		Scene.ResolveMetadata(*InFrame.SceneToken);
+	}
 }
 
 void FRenderSession::SetGlobalParameters(FMaterialParameterValues InValues)
 {
 	Tasks.Require({EDomain::Main});
+	if (Scene.GetLogicalSceneIdentity())
+	{
+		MaterialState->Providers.ValidateSceneInputs(InValues);
+	}
 	std::lock_guard Lock(MaterialState->Publication);
 	ReplaceValues(MaterialState->Inputs, EMaterialScope::Global, std::move(InValues), Resources);
 }
@@ -78,6 +121,10 @@ void FRenderSession::SetGlobalParameters(FMaterialParameterValues InValues)
 void FRenderSession::SetSceneParameters(FMaterialParameterValues InValues)
 {
 	Tasks.Require({EDomain::Main});
+	if (Scene.GetLogicalSceneIdentity())
+	{
+		MaterialState->Providers.ValidateSceneInputs(InValues);
+	}
 	std::lock_guard Lock(MaterialState->Publication);
 	ReplaceValues(MaterialState->Inputs, EMaterialScope::Scene, std::move(InValues), Resources);
 }
@@ -96,6 +143,7 @@ FMaterialSharedValue FRenderSession::ResolveFrameSemantic(const FMaterialFrameCo
 	{
 		throw std::invalid_argument("Foreign or stale material frame");
 	}
+	ValidateSceneFrame(InFrame);
 	FMaterialProviderInputs Inputs;
 	for (const auto Scope : {EMaterialScope::Global, EMaterialScope::Frame, EMaterialScope::Scene})
 	{

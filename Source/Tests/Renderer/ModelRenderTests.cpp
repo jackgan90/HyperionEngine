@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/ModelPreparation.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneInstance.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/ModelAssetSupport.h"
 #include "Support/NativeAssetSupport.h"
@@ -244,6 +245,7 @@ FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain&
 	Frame.View.Width = InSize.Width;
 	Frame.View.Height = InSize.Height;
 	InPlugin.Update(Frame);
+	const auto Seed = InSession.FreezeSceneFrame(InPlugin.GetSceneInstance().GetToken());
 	FImage Image;
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
@@ -253,7 +255,16 @@ FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain&
 		                              Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 		                              Clear.Name = "Background";
 		                              Graph.Add(std::move(Clear));
-		                              InSession.Build(Graph, Frame.View, InSession.FrameTargets());
+		                              const auto Resolved = InSession.ResolveSceneFrame(*Seed, *Frame.SceneView);
+		                              if (Resolved.HasCamera())
+		                              {
+			                              InSession.BuildViews(Graph, std::span(&Resolved.View, 1),
+			                                                   InSession.FrameTargets(), Resolved.Frame);
+		                              }
+		                              else
+		                              {
+			                              InSession.BuildSceneClear(Graph, Resolved, {});
+		                              }
 		                              Image = ExecuteGraph(Graph, InTasks, InSwapchain, InSize, false, true);
 	                              }));
 	return Image;
@@ -292,6 +303,16 @@ void CheckCameraInput(FModelViewerPlugin& InPlugin, const FrameOperation& InFram
 	HYP_CHECK(Difference(InReadyImage, Orbited) > .003f);
 	SaveImage(InRoot / "out/captures/model-orbit.png", Orbited);
 	HYP_CHECK(InFrame(InPlugin, {480, 200}).Width == 480);
+	auto& Scene = InPlugin.GetSceneInstance();
+	const auto Camera = *Scene.GetSettings().DefaultCamera;
+	auto Lens = *Scene.FindNode(Camera)->Camera;
+	Lens.Far += 100;
+	Scene.SetCamera(Camera, Lens);
+	InPlugin.Input({}, false, false);
+	InFrame(InPlugin);
+	HYP_CHECK(Scene.FindNode(Camera)->Camera->Far == Lens.Far);
+	InPlugin.Input(std::span(&Wheel, 1), true, false);
+	HYP_CHECK(Scene.FindNode(Camera)->Camera->Far == Lens.Far);
 }
 
 template<class FrameOperation>

@@ -45,6 +45,21 @@ void ValidateRecordDescriptor(const FRecordDescriptor& InType)
 			throw std::logic_error("Invalid reflected migration: " + InType.Id);
 		}
 	}
+	for (const auto& [Version, Migration] : InType.ContextMigrations)
+	{
+		if (Version < InType.MinimumVersion || Version >= InType.Version || !Migration ||
+		    InType.Migrations.contains(Version))
+		{
+			throw std::logic_error("Invalid reflected context migration: " + InType.Id);
+		}
+	}
+	for (const auto& Name : InType.RejectedFields)
+	{
+		if (Name.empty() || !Names.insert(Name).second)
+		{
+			throw std::logic_error("Invalid or conflicting retired record field: " + InType.Id);
+		}
+	}
 }
 
 FArchiveNode WriteRecord(const FRecordDescriptor& InType, const void* InObject)
@@ -72,6 +87,13 @@ namespace
 void BindFields(const FRecordDescriptor& InType, void* InObject, const FArchiveNode::FObject& InFields,
                 const FRecordReadContext& InContext)
 {
+	for (const auto& Name : InType.RejectedFields)
+	{
+		if (InFields.contains(Name))
+		{
+			throw std::runtime_error(InContext.Child(Name).Path + ": retired field is not permitted");
+		}
+	}
 	std::set<std::string> Known;
 	for (const auto& Field : InType.Members)
 	{
@@ -107,6 +129,10 @@ void BindFields(const FRecordDescriptor& InType, void* InObject, const FArchiveN
 	{
 		if (!Known.contains(Name))
 		{
+			if (InType.bRejectUnknownFields)
+			{
+				throw std::runtime_error(InContext.Child(Name).Path + ": unknown field is not permitted");
+			}
 			InContext.Child(Name).Warn("unknown field ignored");
 		}
 	}
@@ -140,12 +166,20 @@ std::shared_ptr<void> ReadRecord(const FRecordDescriptor& InType, const FArchive
 			auto Migrated = Fields;
 			while (Version < InType.Version)
 			{
+				const auto ContextStep = InType.ContextMigrations.find(Version);
 				const auto Step = InType.Migrations.find(Version);
-				if (Step == InType.Migrations.end())
+				if (ContextStep != InType.ContextMigrations.end())
+				{
+					ContextStep->second(Migrated, Context);
+				}
+				else if (Step != InType.Migrations.end())
+				{
+					Step->second(Migrated);
+				}
+				else
 				{
 					throw std::runtime_error("missing schema migration from version " + std::to_string(Version));
 				}
-				Step->second(Migrated);
 				++Version;
 			}
 			BindFields(InType, Result.get(), Migrated, Context);
@@ -210,7 +244,9 @@ void FRecordRegistry::Register(const FRecordDescriptor& InType)
 		    Existing.Definition != InType.Definition || Existing.Create != InType.Create ||
 		    Existing.Validate != InType.Validate || Existing.Commit != InType.Commit ||
 		    Existing.MinimumVersion != InType.MinimumVersion || Existing.Migrations != InType.Migrations ||
-		    !bMembersMatch)
+		    Existing.ContextMigrations != InType.ContextMigrations ||
+		    Existing.RejectedFields != InType.RejectedFields ||
+		    Existing.bRejectUnknownFields != InType.bRejectUnknownFields || !bMembersMatch)
 		{
 			throw std::logic_error("Conflicting reflected type registration: " + InType.Id);
 		}

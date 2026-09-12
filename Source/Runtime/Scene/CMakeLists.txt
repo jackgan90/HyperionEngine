@@ -1,3 +1,3 @@
-add_library(hyperion_scene STATIC Private/Model.cpp Private/ModelReflection.cpp Private/ModelSource.cpp Private/ModelSourceReflection.cpp Private/Scene.cpp Private/SceneMaterials.cpp Private/SceneMaterialAssets.cpp Private/SceneModel.cpp Private/SceneManifest.cpp)
+add_library(hyperion_scene STATIC Private/Model.cpp Private/ModelReflection.cpp Private/ModelSource.cpp Private/ModelSourceReflection.cpp Private/Scene.cpp Private/SceneNode.cpp Private/SceneCamera.cpp Private/SceneLight.cpp Private/SceneDefaults.cpp Private/SceneMutation.cpp Private/SceneHierarchy.cpp Private/SceneMaterials.cpp Private/SceneMaterialAssets.cpp Private/SceneModel.cpp Private/SceneManifest.cpp Private/SceneLegacy.cpp Private/SceneMigration.cpp)
 hyp_module(hyperion_scene)
 target_link_libraries(hyperion_scene PUBLIC hyperion_asset_types hyperion_math hyperion_reflection hyperion_materials)

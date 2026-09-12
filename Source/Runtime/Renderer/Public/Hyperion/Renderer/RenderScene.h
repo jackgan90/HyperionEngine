@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/RenderPrimitive.h"
+#include "Hyperion/Renderer/ScenePublication.h"
 
 namespace Hyperion
 {
@@ -74,7 +75,9 @@ public:
 	FRenderSceneClient& operator=(const FRenderSceneClient&) = delete;
 	void RequireMain() const;
 	std::uint64_t GetLogicalSceneIdentity() const;
-	void AttachLogicalScene(std::uint64_t InIdentity);
+	std::uint64_t AttachLogicalScene(std::uint64_t InIdentity);
+	void ValidateAdmittedToken(FScenePublicationToken InToken) const;
+	std::shared_ptr<const FSceneMetadata> ResolveMetadata(FScenePublicationToken InToken) const;
 	void DetachLogicalScene(std::uint64_t InIdentity);
 	FRenderBinding Create(FRenderPrimitiveState InState, FRenderPrimitiveFactory InFactory = {});
 	std::vector<FRenderBinding> CreateBatch(std::vector<FRenderPrimitiveState> InStates,
@@ -83,7 +86,9 @@ public:
 	// One admission for a material bridge's new groups and already validated existing-object updates.
 	FRenderScenePublication PublishGroups(std::vector<std::vector<FRenderPrimitiveState>> InGroups,
 	                                      std::vector<FRenderPrimitiveUpdate> InUpdates,
-	                                      std::vector<FRenderPrimitiveHandle> InRemovals = {});
+	                                      std::vector<FRenderPrimitiveHandle> InRemovals = {},
+	                                      std::shared_ptr<const FSceneMetadata> InMetadata = {},
+	                                      bool bInCleanup = false);
 	FTaskHandle RemoveBatch(std::span<FRenderBinding> InBindings);
 	FTaskHandle Flush();
 	void Close();

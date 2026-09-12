@@ -22,6 +22,11 @@ struct FSceneInstanceAsset
 
 struct FSceneInstanceStatus
 {
+	std::size_t Nodes{};
+	std::size_t Groups{};
+	std::size_t Cameras{};
+	std::size_t DirectionalLights{};
+	std::size_t EnvironmentLights{};
 	std::size_t Models{};
 	std::size_t ReadyModels{};
 	std::size_t FailedModels{};
@@ -29,6 +34,8 @@ struct FSceneInstanceStatus
 	bool bReady{};
 	bool bClosed{};
 	std::string Error;
+	std::string PublicationError;
+	bool bHasActiveCamera{};
 };
 
 // Main-owned scene lifecycle. Close before destroying its session, tasks or asset service.
@@ -41,7 +48,33 @@ public:
 	FSceneInstance& operator=(const FSceneInstance&) = delete;
 	void Load(const std::filesystem::path& InPath);
 	void Tick();
+	FScenePublicationToken GetToken() const;
+	FTaskHandle GetReceipt() const;
 	void Close();
+	FSceneHandle AddNode(FSceneNode InNode);
+	bool RemoveSubtree(FSceneHandle InHandle);
+	bool RemoveNodeKeepChildren(FSceneHandle InHandle);
+	const FSceneNode* FindNode(FSceneHandle InHandle) const;
+	FSceneHandle FindHandle(std::string_view InId) const;
+	bool GetNodeView(FSceneHandle InHandle, FSceneNodeView& OutView) const;
+	std::vector<FSceneHandle> GetNodes() const;
+	std::vector<FSceneHandle> GetNodes(ESceneNodeKind InKind) const;
+	std::vector<FSceneHandle> GetRoots() const;
+	std::vector<FSceneHandle> GetChildren(FSceneHandle InHandle) const;
+	bool GetCameraPose(FSceneHandle InHandle, FSceneCameraPose& OutPose) const;
+	bool SetName(FSceneHandle InHandle, std::string InName);
+	bool SetEnabled(FSceneHandle InHandle, bool bInEnabled);
+	bool SetModelVisible(FSceneHandle InHandle, bool bInVisible);
+	bool SetModelComponent(FSceneHandle InHandle, FSceneModelComponent InModel);
+	bool SetCameraView(FSceneHandle InHandle, FMat4 InWorld, FSceneCamera InCamera);
+	bool SetCamera(FSceneHandle InHandle, FSceneCamera InCamera);
+	bool SetDirectionalLight(FSceneHandle InHandle, FSceneDirectionalLight InLight);
+	bool SetEnvironmentLight(FSceneHandle InHandle, FSceneEnvironmentLight InLight);
+	bool SetLocalTransform(FSceneHandle InHandle, FMat4 InLocal);
+	bool SetWorldTransform(FSceneHandle InHandle, FMat4 InWorld);
+	bool Reparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);
+	bool SetSettings(FSceneSettings InSettings);
+	const FSceneSettings& GetSettings() const;
 	FSceneHandle Add(FSceneModel InModel, std::string InAsset = {});
 	bool Update(FSceneHandle InHandle, FSceneModel InModel);
 	bool Remove(FSceneHandle InHandle);

@@ -35,6 +35,11 @@ public:
 	}
 
 	~FRenderScene();
+	void BeginPublication(const FSceneMetadata& InMetadata, bool bInCleanup);
+	void CompletePublication(std::shared_ptr<const FSceneMetadata> InMetadata);
+	void FailPublication() noexcept;
+	std::shared_ptr<const FSceneMetadata> ResolveMetadata(FScenePublicationToken InToken) const;
+	void RequireHealthy() const;
 	void Create(FRenderPrimitiveHandle InHandle, FRenderPrimitiveState InState, std::uint64_t InGroup,
 	            const FRenderPrimitiveFactory& InFactory, std::shared_ptr<FRenderBindingResult> InResult);
 	void Update(std::vector<FRenderPrimitiveUpdate> InUpdates);
@@ -75,6 +80,8 @@ private:
 	void MaterializePrepared(FRenderSceneSnapshot& OutSnapshot, const std::vector<FVisibleItem>& InItems,
 	                         FRenderSceneSnapshot* InPrevious);
 
+	std::shared_ptr<const FSceneMetadata> Metadata;
+	bool bPublicationFailed{};
 	FTaskSystem& Tasks;
 	std::uint64_t Identity{};
 	std::function<std::shared_ptr<const void>()> ScopeFactory;
@@ -98,6 +105,8 @@ struct FRenderSceneMailbox
 	std::uint64_t Identity{};
 	std::uint64_t NextGroup{};
 	std::uint64_t LogicalScene{};
+	std::uint64_t AttachmentEpoch{};
+	FScenePublicationToken AdmittedToken;
 	bool bClosed{};
 	std::vector<std::uint64_t> Generations;
 	std::vector<bool> Active;

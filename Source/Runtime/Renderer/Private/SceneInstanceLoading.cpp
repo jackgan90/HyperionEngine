@@ -7,18 +7,14 @@ namespace Hyperion
 void FSceneInstance::FImpl::BeginManifest()
 {
 	Manifest = ManifestRequest.GetReady();
-	for (const auto& Entry : Manifest->Instances)
-	{
-		FSceneModel Model;
-		Model.Name = Entry.Name.empty() ? Entry.Id : Entry.Name;
-		Model.World = Entry.Transform;
-		Model.Material = Entry.Material;
-		Model.bVisible = Entry.bVisible;
-		Models.push_back({Scene.Add(std::move(Model)), Entry.Asset, Entry.Id});
-	}
+	ValidateSceneManifest(*Manifest);
+	Scene.LoadNodes(NodesFromSceneManifest(*Manifest));
+	Scene.SetSettings(ResolveSceneSettings(*Manifest, Scene));
+	RefreshModels();
 	for (const auto& Entry : Manifest->Assets)
 	{
 		auto& Load = Loads[Entry.Id];
+		Load.Epoch = LoadEpoch;
 		try
 		{
 			Load.Preparation =
@@ -39,7 +35,7 @@ void FSceneInstance::FImpl::PollModels()
 {
 	for (auto& [Id, Load] : Loads)
 	{
-		if (Load.bComplete || !Load.Preparation.Ready())
+		if (Load.Epoch != LoadEpoch || Load.bComplete || !Load.Preparation.Ready())
 		{
 			continue;
 		}
@@ -64,6 +60,14 @@ void FSceneInstance::FImpl::UpdateStatus()
 	{
 		return;
 	}
+	Status.PublicationError = Bridge->GetSceneError();
+	const auto Camera = Scene.GetSettings().DefaultCamera;
+	Status.bHasActiveCamera = Camera && Scene.FindCamera(*Camera) && Scene.IsEffectivelyEnabled(*Camera);
+	Status.Nodes = Scene.GetNodes().size();
+	Status.Groups = Scene.CountNodes(ESceneNodeKind::Group);
+	Status.Cameras = Scene.CountNodes(ESceneNodeKind::Camera);
+	Status.DirectionalLights = Scene.CountNodes(ESceneNodeKind::DirectionalLight);
+	Status.EnvironmentLights = Scene.CountNodes(ESceneNodeKind::EnvironmentLight);
 	Status.Models = Models.size();
 	Status.ReadyModels = 0;
 	Status.FailedModels = 0;
@@ -72,11 +76,12 @@ void FSceneInstance::FImpl::UpdateStatus()
 		Status.ReadyModels += Bridge->IsReady(Model.Handle) ? 1 : 0;
 		const auto Load = Loads.find(Model.Asset);
 		const bool bLoadFailed = Load != Loads.end() && !Load->second.Error.empty();
-		const auto Selection = SelectedMaterials.find(Model.Id);
+		const auto Selection = SelectedMaterials.find(Model.Handle);
 		const bool bMaterialFailed = Selection != SelectedMaterials.end() && !Selection->second.Error.empty();
 		Status.FailedModels += bLoadFailed || bMaterialFailed || !Bridge->GetError(Model.Handle).empty() ? 1 : 0;
 	}
-	Status.bReady = Status.bLoaded && bMaterialsComplete && Status.ReadyModels == Status.Models;
+	Status.bReady =
+	    Status.PublicationError.empty() && Status.bLoaded && bMaterialsComplete && Status.ReadyModels == Status.Models;
 	StatusRevision = Revision;
 	bStatusDirty = false;
 }

@@ -9,7 +9,8 @@ std::function<void()> FViewerApplication::PrepareFrame(FViewerFrameInput InInput
 {
 	// Only stable service pointers and Render-owned pipeline/plugin APIs are accessed here.
 	// ReleaseGraphics drains every frame before replacing or destroying these services.
-	auto Graph = BuildRenderGraph(InInput.Frame, InInput.Gui, std::move(InInput.Material), InInput.Shadows);
+	auto Graph = BuildRenderGraph(InInput.Frame, InInput.Gui, std::move(InInput.Material), std::move(InInput.SceneSeed),
+	                              InInput.Shadows);
 	auto Prepared = ScenePipeline->GetFrame();
 	return [Graph = std::move(Graph), Prepared = std::move(Prepared), Result = std::move(InResult),
 	        Tasks = &Services->Tasks, Swapchain = Swapchain.get(), Device = Device.get(), Size = InInput.Frame.Size,
@@ -53,7 +54,16 @@ void FViewerApplication::RenderFrame(int InFrame, FSize InSize, FGuiDrawData InG
 	Input.Frame = UpdateScene(InSize);
 	Input.FrameId = static_cast<std::uint64_t>(InFrame) + 1;
 	Input.Gui = std::move(InGuiData);
-	Input.Material = RenderSession->FreezeFrame(float(ClockNanoseconds() / 1000000000.0));
+	if (auto Scene = GetSceneInstance())
+	{
+		UpdateShadowLight(InFrame);
+		Scene->Tick();
+		Input.SceneSeed = RenderSession->FreezeSceneFrame(Scene->GetToken(), float(ClockNanoseconds() / 1000000000.0));
+	}
+	else
+	{
+		Input.Material = RenderSession->FreezeFrame(float(ClockNanoseconds() / 1000000000.0));
+	}
 	Input.Shadows = ShadowSettings;
 	Input.Surface = Window->Surface();
 	Input.bTakeCapture = bInTakeCapture;
@@ -107,6 +117,10 @@ void FViewerApplication::CollectFrames()
 		Metrics.ResultFrame = Pending.Ticket.Frame();
 		PipelineStatistics = std::move(Result.Pipeline);
 		SceneStatistics = PipelineStatistics.MainView();
+		if (ScenePlugin)
+		{
+			ScenePlugin->SetRenderedView(PipelineStatistics.MainCameraView);
+		}
 		Metrics.LegacyDisplayItems = 0;
 		Metrics.SceneTargetBytes = PipelineStatistics.SceneTargetBytes;
 		for (const auto& View : PipelineStatistics.Views)

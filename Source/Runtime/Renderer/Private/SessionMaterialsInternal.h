@@ -15,6 +15,7 @@ struct FRenderSession::FMaterialState
 	{
 		FMaterialScopeInput Scope;
 		FMaterialInputValues Values;
+		std::vector<std::uint64_t> Qualifiers;
 		EDepthConvention DepthConvention = EDepthConvention::Standard;
 		std::uint64_t AccessFrame{};
 	};
@@ -40,6 +41,8 @@ struct FRenderSession::FMaterialState
 	std::mutex Publication;
 	bool bProvidersFrozen{}; // Guarded by Publication; freeze once before any frame reaches Render.
 	FMaterialProviderInputs Inputs;
+	FMaterialProviderInputs EffectiveSceneInputs;
+	std::shared_ptr<const FMaterialFrameContext> ResolvedSceneFrame;
 	std::map<std::uint64_t, FViewEntry> Views;
 	std::map<std::uint64_t, FPreparedView> PreparedViews;
 	std::uint64_t LastFrame{};

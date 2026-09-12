@@ -1,32 +1,29 @@
+#include "Hyperion/Renderer/SceneNavigation.h"
 #include "SceneViewerInternal.h"
 #include <algorithm>
 #include <cmath>
 
 namespace Hyperion
 {
-namespace
-{
-// Fixed SceneViewer lens, calibrated with the Sponza reference composition.
-constexpr float VerticalFieldOfView = .729224966f;
-} // namespace
-
 void FSceneViewerPlugin::FImpl::UpdateCamera(FRenderFrame& InFrame)
 {
-	const FVec3 Direction{std::sin(Yaw) * std::cos(Pitch), std::sin(Pitch), std::cos(Yaw) * std::cos(Pitch)};
-	InFrame.View.Eye = Add(Target, ScaleVector(Direction, Distance));
-	InFrame.View.Camera =
-	    FRenderCamera{ScaleVector(Direction, -1), {0, 1, 0}, VerticalFieldOfView, Manifest->Near, Manifest->Far};
-	const float Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
-	InFrame.View.ViewProjection =
-	    Multiply(Perspective(VerticalFieldOfView, Aspect, Manifest->Near, Manifest->Far, InFrame.View.DepthConvention),
-	             LookAt(InFrame.View.Eye, Target));
-	InFrame.View.CullingMode = Mode;
-	InFrame.View.bInstanceBatching = bInstanceBatching;
+	FSceneViewRequest Request;
+	Request.Width = InFrame.Size.Width;
+	Request.Height = InFrame.Size.Height;
+	Request.DepthConvention = InFrame.View.DepthConvention;
+	Request.CullingMode = Mode;
+	Request.bInstanceBatching = bInstanceBatching;
 	if (bFrozen)
 	{
-		InFrame.View.CullingViewProjection = FrozenView;
+		Request.CullingViewProjection = FrozenView;
 	}
-	LastView = InFrame.View;
+	InFrame.SceneView = std::move(Request);
+}
+
+void FSceneViewerPlugin::SetRenderedView(const std::optional<FRenderView>& InView)
+{
+	Impl->Tasks.Require({EDomain::Main});
+	Impl->LastView = InView.value_or(FRenderView{});
 }
 
 void FSceneViewerPlugin::SetCullingMode(ESceneCullingMode InMode)
@@ -49,44 +46,22 @@ void FSceneViewerPlugin::Fit()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	FBounds Bounds;
-	for (const auto Handle : P.Scene.GetHandles())
-	{
-		const auto Model = P.Scene.Find(Handle);
-		if (Model->Data && Model->bVisible)
-		{
-			const auto WorldBounds = TransformBounds(Model->Data->Bounds, Model->World);
-			if (IsUsable(WorldBounds))
-			{
-				Bounds = IsUsable(Bounds) ? UnionBounds(Bounds, WorldBounds) : WorldBounds;
-			}
-		}
-	}
-	if (IsUsable(Bounds))
-	{
-		P.Target = ScaleVector(Add(Bounds.Minimum, Bounds.Maximum), .5f);
-		P.Radius = std::max(.01f, Length(Subtract(Bounds.Maximum, P.Target)));
-		const float Aspect = float(P.LastView.Width) / std::max(1u, P.LastView.Height);
-		const float HalfFieldOfView = VerticalFieldOfView * .5f;
-		P.Distance =
-		    P.Radius / std::sin(std::min(HalfFieldOfView, std::atan(std::tan(HalfFieldOfView) * Aspect))) * 1.12f;
-	}
+	FitSceneCamera(P.Scene, float(P.LastView.Width) / std::max(1u, P.LastView.Height));
 }
 
 void FSceneViewerPlugin::DuplicateSelected()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.Scene.GetModels().empty())
+	const auto Source = P.Scene.FindNode(P.Selected);
+	if (!Source)
 	{
 		return;
 	}
-	const auto Source = P.Scene.GetModels()[P.Selected % P.Scene.GetModels().size()];
-	auto Model = *P.Scene.Find(Source.Handle);
-	Model.Name += " copy";
-	Model.World = Multiply(Translation({2, 0, 0}), Model.World);
-	P.Scene.Add(std::move(Model), Source.Asset);
-	P.Selected = P.Scene.GetModels().size() - 1;
+	auto Node = *Source;
+	Node.Id.clear();
+	Node.Name += " copy";
+	P.Selected = P.Scene.AddNode(std::move(Node));
 }
 
 void FSceneViewerPlugin::AddModel()
@@ -98,9 +73,8 @@ void FSceneViewerPlugin::AddModel()
 		if (Asset.Data && Asset.Error.empty())
 		{
 			FSceneModel Model{"Added model", Asset.Data};
-			Model.World = Translation(P.Target);
-			P.Scene.Add(std::move(Model), Asset.Id);
-			P.Selected = P.Scene.GetModels().size() - 1;
+			Model.World = Translation(GetSceneNavigationPivot(P.Scene));
+			P.Selected = P.Scene.Add(std::move(Model), Asset.Id);
 			return;
 		}
 	}
@@ -108,43 +82,35 @@ void FSceneViewerPlugin::AddModel()
 
 void FSceneViewerPlugin::RemoveSelected()
 {
-	auto& P = *Impl;
-	P.Tasks.Require({EDomain::Main});
-	if (P.Scene.GetModels().empty())
-	{
-		return;
-	}
-	P.Selected %= P.Scene.GetModels().size();
-	P.Scene.Remove(P.Scene.GetModels()[P.Selected].Handle);
-	P.Selected = 0;
+	Impl->Scene.RemoveSubtree(Impl->Selected);
+	const auto Models = Impl->Scene.GetNodes(ESceneNodeKind::Model);
+	Impl->Selected = Models.empty() ? FSceneHandle{} : Models.front();
 }
 
 void FSceneViewerPlugin::ToggleSelected()
 {
-	auto& P = *Impl;
-	P.Tasks.Require({EDomain::Main});
-	if (P.Scene.GetModels().empty())
+	const auto Node = Impl->Scene.FindNode(Impl->Selected);
+	if (!Node)
 	{
 		return;
 	}
-	const auto Handle = P.Scene.GetModels()[P.Selected % P.Scene.GetModels().size()].Handle;
-	auto Model = *P.Scene.Find(Handle);
-	Model.bVisible = !Model.bVisible;
-	P.Scene.Update(Handle, std::move(Model));
+	if (Node->Model)
+	{
+		Impl->Scene.SetModelVisible(Impl->Selected, !Node->Model->bVisible);
+	}
+	else
+	{
+		Impl->Scene.SetEnabled(Impl->Selected, !Node->bEnabled);
+	}
 }
 
 void FSceneViewerPlugin::MoveSelected(float InOffset)
 {
-	auto& P = *Impl;
-	P.Tasks.Require({EDomain::Main});
-	if (P.Scene.GetModels().empty())
+	FSceneNodeView View;
+	if (Impl->Scene.GetNodeView(Impl->Selected, View))
 	{
-		return;
+		Impl->Scene.SetWorldTransform(Impl->Selected, Multiply(Translation({InOffset, 0, 0}), View.World));
 	}
-	const auto Handle = P.Scene.GetModels()[P.Selected % P.Scene.GetModels().size()].Handle;
-	auto Model = *P.Scene.Find(Handle);
-	Model.World = Multiply(Translation({InOffset, 0, 0}), Model.World);
-	P.Scene.Update(Handle, std::move(Model));
 }
 
 void FSceneViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured)
@@ -153,71 +119,74 @@ void FSceneViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMo
 	P.Tasks.Require({EDomain::Main});
 	for (const auto& Event : InEvents)
 	{
-		if (Event.Type == EEventType::Focus && !Event.bDown)
+		try
 		{
-			P.bDragging = false;
-		}
-		if (Event.Type == EEventType::MouseButton && Event.Button == 1)
-		{
-			P.bDragging = Event.bDown && !bInMouseCaptured;
-		}
-		if (Event.Type == EEventType::MouseMove)
-		{
-			if (P.bDragging)
+			if (Event.Type == EEventType::Focus && !Event.bDown)
 			{
-				P.Yaw -= (Event.X - P.LastMouse.X) * .006f;
-				P.Pitch = std::clamp(P.Pitch + (Event.Y - P.LastMouse.Y) * .006f, -1.5f, 1.5f);
+				P.bDragging = false;
 			}
-			P.LastMouse = {Event.X, Event.Y};
+			if (Event.Type == EEventType::MouseButton && Event.Button == 1)
+			{
+				P.bDragging = Event.bDown && !bInMouseCaptured;
+			}
+			if (Event.Type == EEventType::MouseMove)
+			{
+				if (P.bDragging)
+				{
+					OrbitSceneCamera(P.Scene, -(Event.X - P.LastMouse.X) * .006f, (Event.Y - P.LastMouse.Y) * .006f);
+				}
+				P.LastMouse = {Event.X, Event.Y};
+			}
+			if (Event.Type == EEventType::MouseWheel && !bInMouseCaptured)
+			{
+				DollySceneCamera(P.Scene, std::pow(.85f, Event.Y));
+			}
+			if (Event.Type != EEventType::Key || !Event.bDown || bInKeyboardCaptured)
+			{
+				continue;
+			}
+			switch (Event.Key)
+			{
+				case EKey::Left:
+					PanSceneCamera(P.Scene, {-1, 0, 0});
+					break;
+				case EKey::Right:
+					PanSceneCamera(P.Scene, {1, 0, 0});
+					break;
+				case EKey::Up:
+					PanSceneCamera(P.Scene, {0, 0, 1});
+					break;
+				case EKey::Down:
+					PanSceneCamera(P.Scene, {0, 0, -1});
+					break;
+				case EKey::PageUp:
+					PanSceneCamera(P.Scene, {0, 1, 0});
+					break;
+				case EKey::PageDown:
+					PanSceneCamera(P.Scene, {0, -1, 0});
+					break;
+				case EKey::Home:
+					Fit();
+					break;
+				case EKey::Insert:
+					DuplicateSelected();
+					break;
+				case EKey::Delete:
+					RemoveSelected();
+					break;
+				case EKey::Space:
+					ToggleSelected();
+					break;
+				case EKey::C:
+					SetCullingMode(static_cast<ESceneCullingMode>((static_cast<int>(P.Mode) + 1) % 3));
+					break;
+				default:
+					break;
+			}
 		}
-		if (Event.Type == EEventType::MouseWheel && !bInMouseCaptured)
+		catch (const std::exception& Failure)
 		{
-			P.Distance = std::clamp(P.Distance * std::pow(.85f, Event.Y), .02f, 100000.f);
-		}
-		if (Event.Type != EEventType::Key || !Event.bDown || bInKeyboardCaptured)
-		{
-			continue;
-		}
-		const FVec3 Right{std::cos(P.Yaw), 0, -std::sin(P.Yaw)};
-		const FVec3 Forward{-std::sin(P.Yaw), 0, -std::cos(P.Yaw)};
-		const float Step = std::max(.1f, P.Distance * .08f);
-		switch (Event.Key)
-		{
-			case EKey::Left:
-				P.Target = Add(P.Target, ScaleVector(Right, -Step));
-				break;
-			case EKey::Right:
-				P.Target = Add(P.Target, ScaleVector(Right, Step));
-				break;
-			case EKey::Up:
-				P.Target = Add(P.Target, ScaleVector(Forward, Step));
-				break;
-			case EKey::Down:
-				P.Target = Add(P.Target, ScaleVector(Forward, -Step));
-				break;
-			case EKey::PageUp:
-				P.Target.Y += Step;
-				break;
-			case EKey::PageDown:
-				P.Target.Y -= Step;
-				break;
-			case EKey::Home:
-				Fit();
-				break;
-			case EKey::Insert:
-				DuplicateSelected();
-				break;
-			case EKey::Delete:
-				RemoveSelected();
-				break;
-			case EKey::Space:
-				ToggleSelected();
-				break;
-			case EKey::C:
-				SetCullingMode(static_cast<ESceneCullingMode>((static_cast<int>(P.Mode) + 1) % 3));
-				break;
-			default:
-				break;
+			P.EditError = Failure.what();
 		}
 	}
 }

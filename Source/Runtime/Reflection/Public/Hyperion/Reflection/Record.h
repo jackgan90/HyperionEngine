@@ -47,6 +47,12 @@ struct FRecordDescriptor
 	TRecordCallback<void(void*, void*)> Commit;
 	std::uint32_t MinimumVersion = 1;
 	std::map<std::uint32_t, TRecordCallback<void(FArchiveNode::FObject&)>> Migrations;
+	// A migration that decodes nested records can preserve their paths and diagnostics.
+	std::map<std::uint32_t, TRecordCallback<void(FArchiveNode::FObject&, const FRecordReadContext&)>> ContextMigrations;
+	// Explicitly retired fields fail after migration; other unknown fields keep the normal warning policy.
+	std::vector<std::string> RejectedFields;
+	// Opt in where dropping a field could change the represented kind or projection.
+	bool bRejectUnknownFields{};
 	// Copies retain their definition identity; independently built descriptors cannot replace a registered contract.
 	std::shared_ptr<const void> Definition = std::make_shared<const int>(0);
 };
