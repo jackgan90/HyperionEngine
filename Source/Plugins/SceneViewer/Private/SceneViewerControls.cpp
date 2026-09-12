@@ -4,14 +4,21 @@
 
 namespace Hyperion
 {
+namespace
+{
+// Fixed SceneViewer lens, calibrated with the Sponza reference composition.
+constexpr float VerticalFieldOfView = .729224966f;
+} // namespace
+
 void FSceneViewerPlugin::FImpl::UpdateCamera(FRenderFrame& InFrame)
 {
 	const FVec3 Direction{std::sin(Yaw) * std::cos(Pitch), std::sin(Pitch), std::cos(Yaw) * std::cos(Pitch)};
 	InFrame.View.Eye = Add(Target, ScaleVector(Direction, Distance));
-	InFrame.View.Camera = FRenderCamera{ScaleVector(Direction, -1), {0, 1, 0}, 1, Manifest->Near, Manifest->Far};
+	InFrame.View.Camera =
+	    FRenderCamera{ScaleVector(Direction, -1), {0, 1, 0}, VerticalFieldOfView, Manifest->Near, Manifest->Far};
 	const float Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
 	InFrame.View.ViewProjection =
-	    Multiply(Perspective(1, Aspect, Manifest->Near, Manifest->Far, InFrame.View.DepthConvention),
+	    Multiply(Perspective(VerticalFieldOfView, Aspect, Manifest->Near, Manifest->Far, InFrame.View.DepthConvention),
 	             LookAt(InFrame.View.Eye, Target));
 	InFrame.View.CullingMode = Mode;
 	InFrame.View.bInstanceBatching = bInstanceBatching;
@@ -60,7 +67,9 @@ void FSceneViewerPlugin::Fit()
 		P.Target = ScaleVector(Add(Bounds.Minimum, Bounds.Maximum), .5f);
 		P.Radius = std::max(.01f, Length(Subtract(Bounds.Maximum, P.Target)));
 		const float Aspect = float(P.LastView.Width) / std::max(1u, P.LastView.Height);
-		P.Distance = P.Radius / std::sin(std::min(.5f, std::atan(std::tan(.5f) * Aspect))) * 1.12f;
+		const float HalfFieldOfView = VerticalFieldOfView * .5f;
+		P.Distance =
+		    P.Radius / std::sin(std::min(HalfFieldOfView, std::atan(std::tan(HalfFieldOfView) * Aspect))) * 1.12f;
 	}
 }
 

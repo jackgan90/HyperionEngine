@@ -3,12 +3,19 @@
   "schema_version": 1,
   "properties": {
     "reversed_z": true,
-    "title": "Hyperion | Scene Viewer + Cascaded Shadows",
+    "title": "Hyperion | Sponza",
     "width": 1440,
-    "height": 900,
-    "scene_source": "out/content/Scenes/Showcase.hasset",
-    "plugins": ["scene-viewer", "debug-ui"],
+    "height": 728,
+    "scene_source": "out/content/Scenes/Sponza.hasset",
+    "plugins": [
+      "scene-viewer",
+      "debug-ui"
+    ],
     "vsync": true,
-    "show_gui": true
+    "show_gui": false,
+    "exposure": 2.5,
+    "clear_red": 0.6,
+    "clear_green": 0.6,
+    "clear_blue": 0.6
   }
 }

@@ -1,0 +1,31 @@
+{
+  "type": "hyperion.scene",
+  "schema_version": 1,
+  "assets": [
+    {
+      "id": "sponza",
+      "path": "../Models/Sponza/Sponza.gltf"
+    }
+  ],
+  "instances": [
+    {
+      "id": "sponza-atrium",
+      "name": "Sponza Atrium",
+      "asset": "sponza"
+    }
+  ],
+  "camera": {
+    "eye": [
+      -10.521811,
+      1.233887,
+      0.461733
+    ],
+    "target": [
+      2.304462,
+      3.170765,
+      -0.395713
+    ],
+    "near": 0.05,
+    "far": 100
+  }
+}

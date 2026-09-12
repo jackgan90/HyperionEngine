@@ -25,7 +25,7 @@
 
 源文件与输出文件必须不同。--scene 将完整模型及其原有节点层级包装为一个场景实例；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
-cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 、Shadows.hasset 和 SharedAssets.hasset，以及 Catalog.hasset。两种场景分别保留 79 和 10 个实例。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
+cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 、Shadows.hasset 和 SharedAssets.hasset，以及 Catalog.hasset。其中 Showcase 和 Shadows 分别保留 79 和 10 个实例。Scene Viewer 默认另行导入 `assets/Scenes/Sponza.json` 到 `out/content/Scenes/Sponza.hasset` 并加入 catalog；这是一个完整 Sponza 模型实例，源模型与全部纹理已随仓库保存。迁移和能力边界见 [SponzaMigration.md](SponzaMigration.md)。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
 
 ## 模块与线程
 

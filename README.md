@@ -41,7 +41,7 @@ python tools/Bootstrap.py
 
 ## 实验操作
 
-多模型场景入口：`hyperion_viewer.exe --config experiments/Scene.json`，或 `--scene "场景清单.json"`。支持平级模型实例增删、移动、显隐，Render 线程 BVH 视锥剔除，以及关闭／线性／BVH 三种模式对照、冻结剔除相机和包围盒显示。清单格式、控制与架构见 [场景管理](docs/SceneManagement.md)。
+场景入口：`hyperion_viewer.exe --config experiments/Scene.json`，默认展示 Khronos Sponza 的参考镜头构图；也可用 `--scene "原生场景.hasset"` 选择其他场景。默认隐藏调试面板，Tab 可打开。资产来源、默认镜头与缺失能力/光照差异见 [Sponza 迁移](docs/SponzaMigration.md)。支持平级模型实例增删、移动、显隐，Render 线程 BVH 视锥剔除，以及关闭／线性／BVH 三种模式对照、冻结剔除相机和包围盒显示。清单格式、控制与架构见 [场景管理](docs/SceneManagement.md)。
 
 SceneViewer 默认启用四级方向光阴影；`experiments/Shadows.json` 展示接触、斜面、薄片和镂空投影。独立 ForwardRenderPipeline 编排 shadow depth → forward → 扩展 passes，面板提供 shadow 设置、cascade/depth 预览和 CPU/GPU 耗时。运行参数、精度边界、性能实测和验证见 [级联阴影](docs/CascadedShadows.md)。
 
