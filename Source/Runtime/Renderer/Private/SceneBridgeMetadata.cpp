@@ -1,5 +1,7 @@
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
+#include <algorithm>
+#include <limits>
 
 namespace Hyperion
 {
@@ -10,6 +12,22 @@ std::shared_ptr<const FSceneMetadata> FSceneRenderBridge::PrepareMetadata(
 	Result->Token = {Scene.GetIdentity(), AttachmentEpoch, Metadata ? Metadata->Token.PublicationSerial + 1 : 1,
 	                 Scene.GetRevision()};
 	Result->Settings = Scene.GetSettings();
+	const bool bLocalChanged = std::any_of(
+	    InChanges.begin(), InChanges.end(),
+	    [](const FSceneChange& InChange)
+	    {
+		    return (InChange.Kind == ESceneNodeKind::PointLight || InChange.Kind == ESceneNodeKind::SpotLight) &&
+		           HasChange(InChange.Mask, ESceneChangeMask::Structure | ESceneChangeMask::Transform |
+		                                        ESceneChangeMask::Enabled | ESceneChangeMask::Light);
+	    });
+	if (bLocalChanged)
+	{
+		if (Result->LocalLightRevision == std::numeric_limits<std::uint64_t>::max())
+		{
+			throw std::overflow_error("Local light publication revision exhausted");
+		}
+		++Result->LocalLightRevision;
+	}
 	for (const auto& Change : InChanges)
 	{
 		if (Change.Kind == ESceneNodeKind::Camera)
@@ -35,6 +53,31 @@ std::shared_ptr<const FSceneMetadata> FSceneRenderBridge::PrepareMetadata(
 				Result->DirectionalLights[Change.Handle] = {*Change.Node->DirectionalLight,
 				                                            ScaleVector(ExtractScenePose(Change.World).Forward, -1),
 				                                            Change.bEffectiveEnabled};
+			}
+		}
+		else if (Change.Kind == ESceneNodeKind::PointLight)
+		{
+			if (Change.bRemoved)
+			{
+				Result->PointLights.erase(Change.Handle);
+			}
+			else if (Change.Node)
+			{
+				const auto Position = Transform(Change.World, {0, 0, 0, 1});
+				Result->PointLights[Change.Handle] = {
+				    *Change.Node->PointLight, {Position.X, Position.Y, Position.Z}, Change.bEffectiveEnabled};
+			}
+		}
+		else if (Change.Kind == ESceneNodeKind::SpotLight)
+		{
+			if (Change.bRemoved)
+			{
+				Result->SpotLights.erase(Change.Handle);
+			}
+			else if (Change.Node)
+			{
+				Result->SpotLights[Change.Handle] = {*Change.Node->SpotLight, ExtractScenePose(Change.World),
+				                                     Change.bEffectiveEnabled};
 			}
 		}
 		else if (Change.Kind == ESceneNodeKind::EnvironmentLight)

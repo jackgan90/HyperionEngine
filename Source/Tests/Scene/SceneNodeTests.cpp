@@ -474,6 +474,59 @@ void CheckDefaultLightValues()
 	Defaults.SetLocalTransform(Handles[2], Scale({0, 0, 0}));
 	HYP_CHECK(Defaults.FindNode(Handles[2])->EnvironmentLight == BeforeAmbient);
 }
+
+void CheckLocalLightNodes()
+{
+	FScene Scene;
+	const auto Parent = Scene.AddNode(Group("local-rig", {}, Translation({3, 2, 1})));
+	auto Point = MakeScenePointLightNode("point");
+	Point.Parent = "local-rig";
+	Point.PointLight = FScenePointLight{{1, .5f, .2f}, 8, 4};
+	const auto A = Scene.AddNode(Point);
+	auto Spot = MakeSceneSpotLightNode("spot");
+	Spot.Parent = "local-rig";
+	Spot.SpotLight = FSceneSpotLight{{.2f, .5f, 1}, 12, 6, .2f, .7f};
+	const auto B = Scene.AddNode(Spot);
+	HYP_CHECK(Scene.CountNodes(ESceneNodeKind::PointLight) == 1 && Scene.CountNodes(ESceneNodeKind::SpotLight) == 1);
+	HYP_CHECK(World(Scene, A).Values[12] == 3 && Scene.FindSpotLight(B)->Range == 6);
+	Scene.SetLocalTransform(Parent, Multiply(Translation({4, 3, 2}), Scale({2, 3, 4})));
+	HYP_CHECK(Scene.FindPointLight(A)->Range == 4 && Scene.FindSpotLight(B)->Range == 6);
+	Scene.SetEnabled(Parent, false);
+	HYP_CHECK(!Scene.IsEffectivelyEnabled(A) && !Scene.IsEffectivelyEnabled(B));
+	Scene.SetEnabled(Parent, true);
+	Scene.Acknowledge(Scene.GetRevision());
+	auto Light = *Scene.FindPointLight(A);
+	Light.Intensity = 9;
+	Scene.SetPointLight(A, Light);
+	HYP_CHECK(HasChange(Scene.GetChanges().front().Mask, ESceneChangeMask::Light));
+	for (const float Range : {0.f, -1.f, std::numeric_limits<float>::infinity()})
+	{
+		Light.Range = Range;
+		RejectUnchanged(Scene,
+		                [&]
+		                {
+			                Scene.SetPointLight(A, Light);
+		                });
+	}
+	auto Cone = *Scene.FindSpotLight(B);
+	Cone.InnerRadians = Cone.OuterRadians;
+	RejectUnchanged(Scene,
+	                [&]
+	                {
+		                Scene.SetSpotLight(B, Cone);
+	                });
+	Cone = *Scene.FindSpotLight(B);
+	Cone.Color.X = -1;
+	RejectUnchanged(Scene,
+	                [&]
+	                {
+		                Scene.SetSpotLight(B, Cone);
+	                });
+	Scene.Reparent(B, {}, ESceneReparentMode::KeepWorld);
+	HYP_CHECK(World(Scene, B).Values[12] == 4);
+	Scene.RemoveSubtree(Parent);
+	HYP_CHECK(!Scene.FindPointLight(A) && Scene.FindSpotLight(B));
+}
 } // namespace
 
 void CheckSceneNodes()
@@ -485,4 +538,5 @@ void CheckSceneNodes()
 	CheckDocumentInstallation();
 	CheckCameraAndLightValues();
 	CheckDefaultLightValues();
+	CheckLocalLightNodes();
 }

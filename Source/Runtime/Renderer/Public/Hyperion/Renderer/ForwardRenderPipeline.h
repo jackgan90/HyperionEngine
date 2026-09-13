@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/CascadedShadowMap.h"
+#include "Hyperion/Renderer/LocalLights.h"
 #include "Hyperion/Renderer/RenderSession.h"
 
 namespace Hyperion
@@ -14,6 +15,7 @@ struct FForwardPipelineStatistics
 	std::uint64_t SceneTargetBytes{};
 	std::size_t FullscreenDraws{};
 	FSceneVisibilityStats Spatial;
+	FLocalLightStatistics LocalLights;
 	std::vector<FRenderViewStatistics> Views;
 	std::uint64_t ShadowTextureBytes{};
 	bool bShadows{};

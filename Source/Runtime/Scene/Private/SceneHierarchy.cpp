@@ -189,7 +189,8 @@ bool FSceneStorage::EditNode(FSceneHandle InHandle, FSceneNode InNode)
 	{
 		Mask |= ESceneChangeMask::Camera;
 	}
-	if (Before.DirectionalLight != InNode.DirectionalLight || Before.EnvironmentLight != InNode.EnvironmentLight)
+	if (Before.DirectionalLight != InNode.DirectionalLight || Before.EnvironmentLight != InNode.EnvironmentLight ||
+	    Before.PointLight != InNode.PointLight || Before.SpotLight != InNode.SpotLight)
 	{
 		Mask |= ESceneChangeMask::Light;
 	}

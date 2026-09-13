@@ -274,6 +274,18 @@ bool FSceneInstance::SetEnvironmentLight(FSceneHandle InHandle, FSceneEnvironmen
 	return bResult;
 }
 
+bool FSceneInstance::SetPointLight(FSceneHandle InHandle, FScenePointLight InLight)
+{
+	Impl->RequireOpen();
+	return Impl->Scene.SetPointLight(InHandle, InLight);
+}
+
+bool FSceneInstance::SetSpotLight(FSceneHandle InHandle, FSceneSpotLight InLight)
+{
+	Impl->RequireOpen();
+	return Impl->Scene.SetSpotLight(InHandle, InLight);
+}
+
 bool FSceneInstance::SetLocalTransform(FSceneHandle InHandle, FMat4 InLocal)
 {
 	Impl->RequireOpen();

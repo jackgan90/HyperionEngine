@@ -161,4 +161,4 @@ AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、writt
 
 ## 场景节点记录
 
-当前 `hyperion.scene` 为 native schema v4，plain JSON source 为 v2。Nodes 与三个 stable-ID 选择替代旧 Instances/Eye/Target；native v1/v2/v3 和 plain source v1 通过显式迁移保留模型、材质、矩阵与旧镜头/默认灯。新空场景不自动补节点。scene-json importer revision 2 使旧缓存重新转换。Snapshot 从当前节点生成独立快照，包含 Local、parent、enabled、camera/light payload 和选择；异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneManagement.md](SceneManagement.md)。
+当前 `hyperion.scene` 为 native schema v5，节点记录为 v2，plain JSON source 为 v3；新增独立点光与聚光 payload。Nodes 与三个 stable-ID 选择替代旧 Instances/Eye/Target；native v1/v2/v3 和 plain source v1 通过显式迁移保留模型、材质、矩阵与旧镜头/默认灯。native v4 与 source v2 继续兼容，迁移不添加局部光，新空场景不自动补节点。scene-json 和 native-scene-upgrade importer revision 3 使旧缓存重新转换。Snapshot 从当前节点生成独立快照，包含 Local、parent、enabled、camera/light payload 和选择；异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。

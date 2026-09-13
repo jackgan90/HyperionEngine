@@ -106,7 +106,8 @@ void FSceneViewerPlugin::FImpl::DrawBounds(FGui& InGui) const
 	}
 }
 
-void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats, bool bInForceOrdinary)
+void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats, bool bInForceOrdinary,
+                                 const FLocalLightStatistics& InLights)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
@@ -114,12 +115,22 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 	{
 		P.DrawBounds(InGui);
 	}
+	if (P.bLightBounds)
+	{
+		P.DrawLightBounds(InGui);
+	}
 	const auto Size = InGui.DisplaySize();
 	if (InGui.BeginPanel("Scene Viewer", {std::max(12.f, Size.X - 410), 16}, {394, std::min(720.f, Size.Y - 32)}))
 	{
 		InGui.TextWrapped(P.Status);
 		P.DrawSave(InGui);
 		DrawStatistics(InGui, InStats);
+		InGui.TextWrapped(InLights.bActive ? "Local lights: Deferred volumes active (opaque/masked only)"
+		                                   : "Local lights: inactive in Forward / shadow visualization");
+		InGui.Text("Point lights " + std::to_string(InLights.VisiblePoints) + "/" + std::to_string(InLights.Points) +
+		           " | Spot lights " + std::to_string(InLights.VisibleSpots) + "/" + std::to_string(InLights.Spots));
+		InGui.Text("Light candidates " + std::to_string(InLights.Spatial.CandidateGroups) + " | draws " +
+		           std::to_string(InLights.Draws));
 		InGui.Separator();
 		const std::array Names{"None", "Linear frustum", "BVH frustum"};
 		InGui.Text(std::string("Culling: ") + Names[static_cast<unsigned>(P.Mode)]);
@@ -134,6 +145,7 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		}
 		DrawBatchControl(InGui, P.bInstanceBatching, bInForceOrdinary);
 		InGui.Checkbox("Show model bounds", P.bBounds);
+		InGui.Checkbox("Show light influence", P.bLightBounds);
 		if (InGui.Button("Fit all [Home]"))
 		{
 			Fit();

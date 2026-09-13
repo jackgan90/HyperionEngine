@@ -1,5 +1,7 @@
 # Sponza 场景迁移
 
+后续更新：场景现已加入三盏可编辑、可持久化的点光，接近下文参考图中的地面亮斑和邻近布幔照明。当前局部光能力与验收见 [LocalLights.md](LocalLights.md)。下文保留迁移当时的能力和验证记录。
+
 2026-09-12。Scene Viewer 的 `experiments/Scene.json` 现在直接打开 Khronos glTF Sample Assets 的 Sponza。源模型、纹理、材质和节点变换原样保留；本次没有实现新的 glTF 特性，也没有修改光照 shader。
 
 ## 启动与交付内容

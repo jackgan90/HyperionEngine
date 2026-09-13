@@ -100,7 +100,7 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 		RdcButtonBounds = Actions.CaptureRdcBounds;
 		if (ScenePlugin)
 		{
-			ScenePlugin->DrawGui(*Gui, SceneStatistics, Options.bNoInstanceBatching);
+			ScenePlugin->DrawGui(*Gui, SceneStatistics, Options.bNoInstanceBatching, PipelineStatistics.LocalLights);
 		}
 		if (ScenePlugin || ModelPlugin)
 		{

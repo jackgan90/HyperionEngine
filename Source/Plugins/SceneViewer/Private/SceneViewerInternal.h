@@ -36,6 +36,9 @@ struct FSceneViewerPlugin::FImpl
 	FSceneCameraController CameraController;
 	bool bFrozen{};
 	bool bBounds{};
+	bool bLightBounds{};
+	void DrawLightProperties(FGui& InGui, const FSceneNode& InNode);
+	void DrawLightBounds(FGui& InGui) const;
 	bool bAnimate{};
 	bool bInstanceBatching = true;
 	float AnimationTime{};

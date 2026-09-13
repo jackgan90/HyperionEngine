@@ -62,7 +62,9 @@ enum class ESceneNodeKind : std::uint8_t
 	Model,
 	Camera,
 	DirectionalLight,
-	EnvironmentLight
+	EnvironmentLight,
+	PointLight,
+	SpotLight
 };
 
 struct FSceneModelComponent
@@ -87,6 +89,8 @@ struct FSceneNode
 	std::optional<FSceneCamera> Camera;
 	std::optional<FSceneDirectionalLight> DirectionalLight;
 	std::optional<FSceneEnvironmentLight> EnvironmentLight;
+	std::optional<FScenePointLight> PointLight;
+	std::optional<FSceneSpotLight> SpotLight;
 	ESceneNodeKind GetKind() const;
 	bool operator==(const FSceneNode& InOther) const;
 };
@@ -151,4 +155,6 @@ FSceneNode MakeSceneCameraNode(std::string InId, FVec3 InEye = {0, 3, 12}, FVec3
                                FSceneCamera InCamera = {});
 FSceneNode MakeSceneDirectionalLightNode(std::string InId);
 FSceneNode MakeSceneEnvironmentLightNode(std::string InId);
+FSceneNode MakeScenePointLightNode(std::string InId);
+FSceneNode MakeSceneSpotLightNode(std::string InId);
 } // namespace Hyperion

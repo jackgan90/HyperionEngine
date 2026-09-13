@@ -128,6 +128,40 @@ void CheckLegacyVersions()
 		    ReadValue<FSceneManifest>(Conflict);
 	    });
 }
+
+void CheckLocalLightSources()
+{
+	const auto Source = DecodeSceneManifest(R"({"type":"hyperion.scene","schema_version":3,"assets":[],"nodes":[
+	{"id":"rig","translation":[1,2,3]},
+	{"id":"point","parent":"rig","pointLight":{"color":[1,0.5,0.2],"intensity":8,"range":4}},
+	{"id":"spot","enabled":false,"spotLight":{"range":6,"innerRadians":0.2,"outerRadians":0.7}}]})");
+	HYP_CHECK(Source.Nodes.size() == 3 && Source.Nodes[1].PointLight->Range == 4 && !Source.Nodes[2].bEnabled);
+	const auto Native = ReadValue<FSceneManifest>(WriteValue(Source));
+	HYP_CHECK(Serialize(Native) == Serialize(Source));
+	const auto Text = DecodeSceneManifest(EncodeAssetSourceJson(WriteValue(Native)));
+	HYP_CHECK(Text.Nodes[2].SpotLight == Source.Nodes[2].SpotLight);
+	FScene Scene;
+	Scene.LoadNodes(NodesFromSceneManifest(Text));
+	for (const auto Handle : Scene.GetNodes())
+	{
+		const auto Entry = SceneEntryFromNode(*Scene.FindNode(Handle));
+		HYP_CHECK(NodeFromSceneEntry(Entry) == *Scene.FindNode(Handle));
+	}
+	for (const auto* Payload : {R"("pointLight":{"range":0})", R"("spotLight":{"innerRadians":0.8,"outerRadians":0.7})",
+	                            R"("pointLight":{},"spotLight":{})", R"("pointLight":{"rang":4})"})
+	{
+		Rejects(
+		    [&]
+		    {
+			    DecodeSceneManifest(
+			        std::string(R"({"type":"hyperion.scene","schema_version":3,"assets":[],"nodes":[{"id":"bad",)") +
+			        Payload + "}]}");
+		    });
+	}
+	auto Old = WriteValue(FSceneManifest{});
+	std::get<FArchiveNode::FObject>(Old.Value)["version"] = WriteValue(4u);
+	HYP_CHECK(ReadValue<FSceneManifest>(Old).Nodes.empty());
+}
 } // namespace
 
 void CheckSceneSources()
@@ -135,4 +169,5 @@ void CheckSceneSources()
 	CheckSourceNodes();
 	CheckInvalidSourceNodes();
 	CheckLegacyVersions();
+	CheckLocalLightSources();
 }

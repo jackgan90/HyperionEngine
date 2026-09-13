@@ -39,6 +39,8 @@ FSceneNode NodeFromSceneEntry(const FSceneNodeEntry& InEntry)
 	Node.Camera = InEntry.Camera;
 	Node.DirectionalLight = InEntry.DirectionalLight;
 	Node.EnvironmentLight = InEntry.EnvironmentLight;
+	Node.SpotLight = InEntry.SpotLight;
+	Node.PointLight = InEntry.PointLight;
 	if (InEntry.Model)
 	{
 		Node.Model = FSceneModelComponent{};
@@ -60,6 +62,8 @@ FSceneNodeEntry SceneEntryFromNode(const FSceneNode& InNode)
 	Entry.Camera = InNode.Camera;
 	Entry.DirectionalLight = InNode.DirectionalLight;
 	Entry.EnvironmentLight = InNode.EnvironmentLight;
+	Entry.SpotLight = InNode.SpotLight;
+	Entry.PointLight = InNode.PointLight;
 	if (InNode.Model)
 	{
 		Entry.Model = FSceneNodeModel{};
@@ -155,8 +159,13 @@ template<> const FRecordDescriptor& RecordType<FSceneNodeEntry>()
 		     Member("parent", &FSceneNodeEntry::Parent), Member("transform", &FSceneNodeEntry::Transform),
 		     Member("enabled", &FSceneNodeEntry::bEnabled), Member("model", &FSceneNodeEntry::Model),
 		     Member("camera", &FSceneNodeEntry::Camera), Member("directionalLight", &FSceneNodeEntry::DirectionalLight),
-		     Member("environmentLight", &FSceneNodeEntry::EnvironmentLight)},
-		    1, ValidateNodeEntry);
+		     Member("environmentLight", &FSceneNodeEntry::EnvironmentLight),
+		     Member("pointLight", &FSceneNodeEntry::PointLight), Member("spotLight", &FSceneNodeEntry::SpotLight)},
+		    2, ValidateNodeEntry);
+		Result.Migrations.emplace(1,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
 		Result.bRejectUnknownFields = true;
 		return Result;
 	}();
@@ -175,7 +184,11 @@ template<> const FRecordDescriptor& RecordType<FSceneManifest>()
 		                                          Member("defaultCamera", &FSceneManifest::DefaultCamera),
 		                                          Member("mainDirectionalLight", &FSceneManifest::MainDirectionalLight),
 		                                          Member("environmentLight", &FSceneManifest::EnvironmentLight)},
-		                                         4, ValidateSceneManifest);
+		                                         5, ValidateSceneManifest);
+		Result.Migrations.emplace(4,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
 		Result.Migrations.emplace(1,
 		                          [](FArchiveNode::FObject&)
 		                          {

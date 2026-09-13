@@ -251,7 +251,9 @@ void FViewerApplication::SaveBenchmark()
 	    << ",incremental_plan_updates,incremental_item_reuses,affected_batches,retained_batches,batch_admission_reuses,"
 	       "cached_plan_items,cached_plan_blocks,cpu_latency_ms,main_render_lead,render_rhi_lead"
 	       ",base_gpu_ms,lighting_gpu_ms,compatibility_gpu_ms,transparent_gpu_ms,tonemap_gpu_ms,total_gpu_pass_ms"
-	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms,index_rebuilds,index_refits\n"
+	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms,index_rebuilds,index_refits"
+	       ",local_lights_active,point_lights,spot_lights,local_visible,local_draws,local_query_ms,local_rebuilds,"
+	       "local_refits,local_gpu_ms\n"
 	    << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
@@ -282,7 +284,20 @@ void FViewerApplication::SaveBenchmark()
 		Output << ',' << Frame.CpuLatencyMilliseconds << ',' << Metrics.FrameLimits.MainLead << ','
 		       << Metrics.FrameLimits.RenderLead;
 		WriteScenePipelineBenchmark(Output, Frame.Pipeline, Frame.Device);
-		Output << ',' << Frame.Pipeline.Spatial.IndexRebuilds << ',' << Frame.Pipeline.Spatial.IndexRefits << '\n';
+		Output << ',' << Frame.Pipeline.Spatial.IndexRebuilds << ',' << Frame.Pipeline.Spatial.IndexRefits;
+		const auto& Lights = Frame.Pipeline.LocalLights;
+		double LocalGpu{};
+		for (const auto& Pass : Frame.Device.GpuTiming.Passes)
+		{
+			if (Pass.Name.starts_with("Deferred/LocalLights/"))
+			{
+				LocalGpu += Pass.Milliseconds;
+			}
+		}
+		Output << ',' << Lights.bActive << ',' << Lights.Points << ',' << Lights.Spots << ','
+		       << Lights.VisiblePoints + Lights.VisibleSpots << ',' << Lights.Draws << ','
+		       << Lights.Spatial.QueryMilliseconds << ',' << Lights.Spatial.IndexRebuilds << ','
+		       << Lights.Spatial.IndexRefits << ',' << LocalGpu << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}
 	Output.close();

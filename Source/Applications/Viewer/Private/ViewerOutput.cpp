@@ -50,6 +50,11 @@ void FViewerApplication::VerifyOutputs()
 		                         " items=" + std::to_string(SceneStatistics.VisibleItems) +
 		                         " draws=" + std::to_string(SceneStatistics.Draws));
 	}
+	const auto& Lights = PipelineStatistics.LocalLights;
+	Log(ELogLevel::Info, "Local lights: active=" + std::to_string(Lights.bActive) +
+	                         " points=" + std::to_string(Lights.Points) + " spots=" + std::to_string(Lights.Spots) +
+	                         " visible=" + std::to_string(Lights.VisiblePoints + Lights.VisibleSpots) +
+	                         " draws=" + std::to_string(Lights.Draws));
 	if (!Options.Capture.empty() && !bCaptured)
 	{
 		throw std::runtime_error("Requested capture was not produced");

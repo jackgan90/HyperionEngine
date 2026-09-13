@@ -111,7 +111,7 @@ FSceneCamera CameraPayload(const FJson& InJson)
 FSceneNodeEntry NodeEntry(const FJson& InJson)
 {
 	Fields(InJson, {"id", "name", "parent", "enabled", "transform", "translation", "rotation", "scale", "model",
-	                "camera", "directionalLight", "environmentLight"});
+	                "camera", "directionalLight", "environmentLight", "pointLight", "spotLight"});
 	FSceneNodeEntry Result;
 	Result.Id = InJson.at("id").get<std::string>();
 	Result.Name = InJson.value("name", Result.Id);
@@ -140,6 +140,21 @@ FSceneNodeEntry NodeEntry(const FJson& InJson)
 		Fields(Light, {"color", "intensity"});
 		Result.EnvironmentLight =
 		    FSceneEnvironmentLight{Vector3(Light.value("color", FJson{1, 1, 1})), Light.value("intensity", 1.f)};
+	}
+	if (InJson.contains("pointLight"))
+	{
+		const auto& Light = InJson.at("pointLight");
+		Fields(Light, {"color", "intensity", "range"});
+		Result.PointLight = FScenePointLight{Vector3(Light.value("color", FJson{1, 1, 1})),
+		                                     Light.value("intensity", 10.f), Light.value("range", 5.f)};
+	}
+	if (InJson.contains("spotLight"))
+	{
+		const auto& Light = InJson.at("spotLight");
+		Fields(Light, {"color", "intensity", "range", "innerRadians", "outerRadians"});
+		Result.SpotLight = FSceneSpotLight{Vector3(Light.value("color", FJson{1, 1, 1})),
+		                                   Light.value("intensity", 10.f), Light.value("range", 5.f),
+		                                   Light.value("innerRadians", .35f), Light.value("outerRadians", .6f)};
 	}
 	return Result;
 }
@@ -212,7 +227,7 @@ FSceneManifest DecodeSceneManifest(std::string_view InText)
 	}
 	Fields(Json,
 	       {"type", "schema_version", "assets", "nodes", "defaultCamera", "mainDirectionalLight", "environmentLight"});
-	if (Json.at("schema_version") != 2 || !Json.at("nodes").is_array())
+	if ((Json.at("schema_version") != 2 && Json.at("schema_version") != 3) || !Json.at("nodes").is_array())
 	{
 		throw std::invalid_argument("Unsupported scene manifest version or nodes");
 	}
@@ -220,6 +235,10 @@ FSceneManifest DecodeSceneManifest(std::string_view InText)
 	Manifest.Assets = SceneAssets(Json.at("assets"));
 	for (const auto& Node : Json.at("nodes"))
 	{
+		if (Json.at("schema_version") == 2 && (Node.contains("pointLight") || Node.contains("spotLight")))
+		{
+			throw std::invalid_argument("Local light payloads require scene source version 3");
+		}
 		Manifest.Nodes.push_back(NodeEntry(Node));
 	}
 	Manifest.DefaultCamera = Json.value("defaultCamera", std::string{});
@@ -232,7 +251,7 @@ FSceneManifest DecodeSceneManifest(std::string_view InText)
 void RegisterSceneImporter(FAssetImportService& InImports)
 {
 	InImports.Register({"hyperion.scene-json",
-	                    2,
+	                    3,
 	                    &RecordType<FSceneManifest>(),
 	                    {".json"},
 	                    [](FAssetImportContext& InContext)
@@ -242,7 +261,7 @@ void RegisterSceneImporter(FAssetImportService& InImports)
 		                        DecodeSceneManifest({reinterpret_cast<const char*>(Bytes.data()), Bytes.size()}));
 	                    }});
 	InImports.Register({"hyperion.native-scene-upgrade",
-	                    2,
+	                    3,
 	                    &RecordType<FSceneManifest>(),
 	                    {".hasset"},
 	                    [](FAssetImportContext& InContext)

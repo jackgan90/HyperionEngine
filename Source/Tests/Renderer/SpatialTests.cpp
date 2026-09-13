@@ -1,3 +1,4 @@
+#include "Hyperion/Renderer/LocalLights.h"
 #include "Hyperion/Renderer/RenderScene.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
@@ -173,6 +174,62 @@ void CheckCollection()
 	                          }));
 	Client.Close();
 }
+
+class FPositiveHalfSpace final : public ISceneVisibility
+{
+public:
+	bool Intersects(const FBounds& InBounds) const override
+	{
+		return !IsUsable(InBounds) || InBounds.Maximum.X >= 0;
+	}
+};
+
+void CheckLocalLightIndex()
+{
+	FSceneMetadata Metadata;
+	Metadata.Token = {31, 1, 1, 1};
+	for (unsigned Index = 0; Index < 128; ++Index)
+	{
+		const FSceneHandle Handle{31, Index, 1};
+		const FVec3 Position{float(Index % 16) - 8, float(Index / 16) - 4, 2};
+		Metadata.PointLights.emplace(Handle, FPublishedPointLight{{{1, 1, 1}, 5, 1}, Position, true});
+	}
+	Metadata.SpotLights.emplace(
+	    FSceneHandle{31, 128, 1},
+	    FPublishedSpotLight{{{1, 1, 1}, 8, 3, .2f, .6f}, ExtractScenePose(Translation({1, 0, 3})), true});
+	FLocalLightIndex Index;
+	const FPositiveHalfSpace Visibility;
+	FLocalLightStatistics First;
+	const auto A = Index.Query(Metadata, &Visibility, true, First);
+	HYP_CHECK(First.Spatial.IndexRebuilds == 1 && First.Points == 128 && First.Spots == 1);
+	FLocalLightStatistics Linear;
+	const auto B = Index.Query(Metadata, &Visibility, false, Linear);
+	HYP_CHECK(A.size() == B.size() && Linear.Spatial.IndexRebuilds == 0);
+	for (std::size_t Item = 0; Item < A.size(); ++Item)
+	{
+		HYP_CHECK(A[Item].Handle == B[Item].Handle);
+	}
+	const auto Retained = A;
+	++Metadata.LocalLightRevision;
+	++Metadata.Token.PublicationSerial;
+	Metadata.PointLights.begin()->second.Light.Intensity = 12;
+	FLocalLightStatistics Parameters;
+	Index.Query(Metadata, nullptr, true, Parameters);
+	HYP_CHECK(Parameters.Spatial.IndexRebuilds == 0 && Parameters.Spatial.IndexRefits == 0);
+	++Metadata.LocalLightRevision;
+	++Metadata.Token.PublicationSerial;
+	Metadata.PointLights.begin()->second.Position.X += .1f;
+	FLocalLightStatistics Moved;
+	Index.Query(Metadata, &Visibility, true, Moved);
+	HYP_CHECK(Moved.Spatial.IndexRebuilds == 0 && Moved.Spatial.IndexRefits == 1);
+	++Metadata.LocalLightRevision;
+	++Metadata.Token.PublicationSerial;
+	Metadata.PointLights.clear();
+	Metadata.SpotLights.clear();
+	FLocalLightStatistics Empty;
+	HYP_CHECK(Index.Query(Metadata, &Visibility, true, Empty).empty());
+	HYP_CHECK(Retained.size() == A.size() && !Retained.empty());
+}
 } // namespace
 
 int main()
@@ -182,6 +239,7 @@ int main()
 		CheckContainment();
 		CheckSpatial();
 		CheckCollection();
+		CheckLocalLightIndex();
 		std::cout << "BVH differential, incremental updates, conservative early collection and view isolation passed\n";
 	}
 	catch (const std::exception& Error)

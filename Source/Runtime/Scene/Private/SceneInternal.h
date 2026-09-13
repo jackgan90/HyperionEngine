@@ -58,7 +58,7 @@ public:
 	std::map<std::string, std::uint32_t, std::less<>> Ids;
 	std::map<FSceneHandle, FSceneChange> Changes;
 	FSceneSettings Settings;
-	std::array<std::size_t, 5> Counts{};
+	std::array<std::size_t, 7> Counts{};
 	bool bSynchronizing{};
 
 	std::uint32_t Live(FSceneHandle InHandle) const;

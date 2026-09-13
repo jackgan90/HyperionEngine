@@ -15,6 +15,7 @@ void FRenderResourceCoordinator::CloseNativeResources()
 		PreparedViews.clear();
 		BatchAdmissions.clear();
 		Fullscreen = {};
+		LightVolumes = {};
 		for (const auto& [Key, Entry] : Entries)
 		{
 			if (!Entry.Record->CanRelease())

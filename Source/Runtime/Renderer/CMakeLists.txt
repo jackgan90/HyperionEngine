@@ -1,4 +1,4 @@
-add_library(hyperion_render STATIC Private/SceneCameraController.cpp Private/SceneNavigation.cpp Private/SceneFrame.cpp Private/SceneMetadata.cpp Private/SceneBridgeMetadata.cpp Private/SceneInstanceSnapshot.cpp Private/SceneInstanceNodes.cpp
+add_library(hyperion_render STATIC Private/SceneCameraController.cpp Private/SceneNavigation.cpp Private/SceneFrame.cpp Private/LocalLights.cpp Private/LightVolumePass.cpp Private/LightVolumeResources.cpp Private/ScenePipelineLocalLights.cpp Private/SceneMetadata.cpp Private/SceneBridgeMetadata.cpp Private/SceneInstanceSnapshot.cpp Private/SceneInstanceNodes.cpp
   Private/SceneMaterialAssets.cpp
   Private/SceneInstanceMaterials.cpp Private/SceneInstance.cpp Private/SceneInstanceLoading.cpp Private/RenderPass.cpp Private/RenderPassDeclaration.cpp Private/RenderGraph.cpp Private/RenderGraphResources.cpp Private/RenderGraphValidation.cpp Private/RenderGraphContent.cpp
   Private/RenderGraphPreparation.cpp Private/RenderGraphExecution.cpp Private/FramePipeline.cpp

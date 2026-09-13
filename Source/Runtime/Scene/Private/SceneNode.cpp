@@ -32,7 +32,8 @@ bool FSceneNode::operator==(const FSceneNode& InOther) const
 	return Id == InOther.Id && Name == InOther.Name && Parent == InOther.Parent &&
 	       Local.Values == InOther.Local.Values && bEnabled == InOther.bEnabled && Model == InOther.Model &&
 	       Camera == InOther.Camera && DirectionalLight == InOther.DirectionalLight &&
-	       EnvironmentLight == InOther.EnvironmentLight;
+	       EnvironmentLight == InOther.EnvironmentLight && PointLight == InOther.PointLight &&
+	       SpotLight == InOther.SpotLight;
 }
 
 ESceneNodeKind FSceneNode::GetKind() const
@@ -53,6 +54,14 @@ ESceneNodeKind FSceneNode::GetKind() const
 	{
 		return ESceneNodeKind::EnvironmentLight;
 	}
+	if (PointLight)
+	{
+		return ESceneNodeKind::PointLight;
+	}
+	if (SpotLight)
+	{
+		return ESceneNodeKind::SpotLight;
+	}
 	return ESceneNodeKind::Group;
 }
 
@@ -68,6 +77,10 @@ const char* ToString(ESceneNodeKind InKind)
 			return "Camera";
 		case ESceneNodeKind::DirectionalLight:
 			return "DirectionalLight";
+		case ESceneNodeKind::PointLight:
+			return "PointLight";
+		case ESceneNodeKind::SpotLight:
+			return "SpotLight";
 		case ESceneNodeKind::EnvironmentLight:
 			return "EnvironmentLight";
 	}
@@ -114,7 +127,9 @@ FSceneModelComponent SceneModelComponent(const FSceneModel& InModel)
 void ValidateSceneNode(const FSceneNode& InNode)
 {
 	const auto Payloads = unsigned(InNode.Model.has_value()) + unsigned(InNode.Camera.has_value()) +
-	                      unsigned(InNode.DirectionalLight.has_value()) + unsigned(InNode.EnvironmentLight.has_value());
+	                      unsigned(InNode.DirectionalLight.has_value()) +
+	                      unsigned(InNode.EnvironmentLight.has_value()) + unsigned(InNode.PointLight.has_value()) +
+	                      unsigned(InNode.SpotLight.has_value());
 	if (InNode.Id.empty() || Payloads > 1 || !IsAffine(InNode.Local))
 	{
 		throw std::invalid_argument("Invalid scene node ID, transform or mutually exclusive payload");
@@ -131,6 +146,14 @@ void ValidateSceneNode(const FSceneNode& InNode)
 	{
 		ValidateSceneEnvironmentLight(*InNode.EnvironmentLight);
 	}
+	if (InNode.PointLight)
+	{
+		ValidateScenePointLight(*InNode.PointLight);
+	}
+	if (InNode.SpotLight)
+	{
+		ValidateSceneSpotLight(*InNode.SpotLight);
+	}
 	if (InNode.Model)
 	{
 		ValidateMaterialOverride(InNode.Model->Material);
@@ -144,7 +167,7 @@ void ValidateSceneWorld(const FSceneNode& InNode, const FMat4& InWorld)
 	{
 		throw std::invalid_argument("Scene hierarchy produces a nonfinite or nonaffine world transform");
 	}
-	if (InNode.Camera || InNode.DirectionalLight)
+	if (InNode.Camera || InNode.DirectionalLight || InNode.SpotLight)
 	{
 		ExtractScenePose(InWorld);
 	}

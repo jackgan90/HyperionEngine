@@ -161,6 +161,7 @@ FResolvedSceneFrame FRenderSession::ResolveSceneFrame(const FSceneFrameSeed& InS
 		Effective.Values[SceneIndex] = std::move(Published);
 	}
 	auto Frame = std::make_shared<FMaterialFrameContext>(*InSeed.Frame);
+	Frame->SceneMetadata = Metadata;
 	Frame->SceneToken = InSeed.Token;
 	Frame->SceneResolutionOwner = Frame;
 	Frame->bSceneShadows = Light.bShadows;

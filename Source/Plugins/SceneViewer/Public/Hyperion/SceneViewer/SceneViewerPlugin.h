@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Gui/Gui.h"
+#include "Hyperion/Renderer/LocalLights.h"
 #include "Hyperion/Renderer/RenderPlugin.h"
 
 namespace Hyperion
@@ -21,7 +22,8 @@ public:
 	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);
 	// Call once per Main frame after Input and before scene publication.
 	void AdvanceCamera(float InDeltaSeconds);
-	void DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats, bool bInForceOrdinary = false);
+	void DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats, bool bInForceOrdinary = false,
+	             const FLocalLightStatistics& InLights = {});
 	bool Ready() const;
 	const std::string& Status() const;
 	const std::string& Error() const;

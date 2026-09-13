@@ -16,12 +16,18 @@ struct FMaterialFrameContext
 		return SceneToken;
 	}
 
+	const std::shared_ptr<const FSceneMetadata>& GetSceneMetadata() const
+	{
+		return SceneMetadata;
+	}
+
 	bool CastsSceneShadows() const
 	{
 		return bSceneShadows;
 	}
 
 private:
+	std::shared_ptr<const FSceneMetadata> SceneMetadata;
 	std::optional<FScenePublicationToken> SceneToken;
 	// Resolution belongs to this immutable instance, not to editable copies of its public inputs.
 	std::weak_ptr<const FMaterialFrameContext> SceneResolutionOwner;

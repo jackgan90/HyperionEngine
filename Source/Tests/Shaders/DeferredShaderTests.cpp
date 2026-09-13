@@ -25,8 +25,17 @@ void CheckDeferredShaders()
 			Options.Defines.front() = {"HYP_FORWARD_HDR", "1"};
 			const auto Forward = Compiler.Compile("Model.hlsl", "PSMain", EShaderStage::Pixel, Format, Options);
 			HYP_CHECK(Forward.Reflection.Outputs.size() == 1 && Forward.CacheKey != Base.CacheKey);
+			HYP_CHECK(std::none_of(Forward.Bindings.begin(), Forward.Bindings.end(),
+			                       [](const FShaderBinding& InBinding)
+			                       {
+				                       return InBinding.Name.starts_with("LocalLight") ||
+				                              InBinding.Name == "LocalLights";
+			                       }));
 		}
-		for (const auto* Shader : {"Deferred/Lighting.hlsl", "Deferred/Debug.hlsl", "Common/Tonemap.hlsl"})
+		const auto Volume = Compiler.Compile("Deferred/LocalLight.hlsl", "VSMain", EShaderStage::Vertex, Format);
+		HYP_CHECK(!Volume.Bytes.empty());
+		for (const auto* Shader :
+		     {"Deferred/Lighting.hlsl", "Deferred/LocalLight.hlsl", "Deferred/Debug.hlsl", "Common/Tonemap.hlsl"})
 		{
 			const auto Pixel = Compiler.Compile(Shader, "PSMain", EShaderStage::Pixel, Format);
 			HYP_CHECK(!Pixel.Bytes.empty() && Pixel.Reflection.Outputs.size() == 1);

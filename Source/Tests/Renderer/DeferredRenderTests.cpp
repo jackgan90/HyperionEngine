@@ -451,6 +451,264 @@ void AwaitScene(FSceneRenderBridge& InBridge, std::span<const FSceneHandle> InHa
 	}
 }
 
+float HdrPixel(const FImage& InImage, unsigned InX = 192, unsigned InY = 144)
+{
+	const float Srgb = Pixel(InImage, InX, InY);
+	const float Linear = Srgb <= .04045f ? Srgb / 12.92f : std::pow((Srgb + .055f) / 1.055f, 2.4f);
+	return Linear / std::max(1.f - Linear, 1e-6f);
+}
+
+void CheckLocalVolumeCoverage(FFixture& InFixture, FScene& InScene, FSceneHandle InCamera, FSceneRenderBridge& InBridge,
+                              float InReference)
+{
+	for (const float Eye : {10.f, 6.01f, 6.f, 5.99f, 5.f, 2.f, 1.f, .25f})
+	{
+		InScene.SetCameraView(InCamera, SceneCameraTransform({0, 0, Eye}, {}), {1, .01f, Eye + .1f, Eye});
+		InBridge.Flush();
+		const auto Image = InFixture.Frame();
+		const float Actual = HdrPixel(Image);
+		std::cout << "local volume eye=" << Eye << " hdr=" << Actual << " expected=" << InReference << '\n';
+		HYP_CHECK(std::abs(Actual - InReference) < .012f);
+		HYP_CHECK(InFixture.Statistics.LocalLights.Draws == 1);
+	}
+	InScene.SetCameraView(InCamera, SceneCameraTransform({0, 0, 5}, {}), {1, .1f, 40, 5});
+	InBridge.Flush();
+	InFixture.View.Viewport = FViewport{32, 24, 300, 180, .2f, .85f};
+	HYP_CHECK(std::abs(HdrPixel(InFixture.Frame(), 182, 114) - InReference) < .012f);
+	InFixture.View.Viewport.reset();
+}
+
+void CheckLocalLightCulling(FFixture& InFixture, FScene& InScene, FSceneHandle InPoint, FSceneRenderBridge& InBridge)
+{
+	InScene.SetWorldTransform(InPoint, Translation({4, 0, 2}));
+	InScene.SetPointLight(InPoint, {{1, 1, 1}, 20, 8});
+	InBridge.Flush();
+	InFixture.View.CullingMode = ESceneCullingMode::None;
+	const auto Reference = InFixture.Frame();
+	HYP_CHECK(HdrPixel(Reference) > .01f);
+	for (const auto Mode : {ESceneCullingMode::Linear, ESceneCullingMode::Bvh})
+	{
+		InFixture.View.CullingMode = Mode;
+		HYP_CHECK(InFixture.Frame().Rgba == Reference.Rgba);
+	}
+	InScene.SetWorldTransform(InPoint, Translation({100, 0, 2}));
+	InBridge.Flush();
+	InFixture.Frame();
+	HYP_CHECK(InFixture.Statistics.LocalLights.Draws == 0);
+	InScene.SetWorldTransform(InPoint, Translation({0, 0, 2}));
+	InScene.SetPointLight(InPoint, {{1, 1, 1}, 5, 4});
+	InBridge.Flush();
+}
+
+void CheckLocalLightLifetime(FFixture& InFixture, FScene& InScene, FSceneHandle InPoint, FSceneRenderBridge& InBridge,
+                             const FImage& InReference)
+{
+	auto& F = InFixture;
+	const auto Seed = F.Session->FreezeSceneFrame(InBridge.GetToken());
+	FRenderGraph Pending;
+	F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              FSceneViewRequest Request;
+		                              Request.Width = F.View.Width;
+		                              Request.Height = F.View.Height;
+		                              Request.DepthConvention = F.View.DepthConvention;
+		                              F.Pipeline->Build(Pending, Request, Seed, F.Shadows, F.Clear, {}, true);
+	                              }));
+	InScene.SetEnabled(InPoint, false);
+	InBridge.Flush();
+	F.Settings.GBuffer = FGBufferLayout::HighPrecision();
+	const auto NewFrame = F.Frame(ESceneRenderPipeline::Forward);
+	HYP_CHECK(HdrPixel(NewFrame) < .03f);
+	FImage OldFrame;
+	F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              OldFrame = ExecuteGraph(std::move(Pending), F.Tasks, *F.Swapchain, {384, 288},
+		                                                      false, true);
+	                              }));
+	Similar(InReference, OldFrame, .008f);
+	InScene.SetEnabled(InPoint, true);
+	InBridge.Flush();
+	F.Settings.GBuffer = {};
+	for (unsigned Index = 0; Index < 6; ++Index)
+	{
+		F.View.Width = Index % 2 ? 384 : 320;
+		F.View.Height = Index % 2 ? 288 : 240;
+		const auto Resized = F.Frame();
+		HYP_CHECK(std::abs(HdrPixel(Resized, F.View.Width / 2, F.View.Height / 2) - HdrPixel(InReference)) < .012f);
+		HYP_CHECK(F.Statistics.LocalLights.Draws == 1);
+	}
+	for (unsigned Index = 0; Index < 10; ++Index)
+	{
+		F.Frame();
+	}
+	const auto Before = F.DeviceStats;
+	for (unsigned Index = 0; Index < 24; ++Index)
+	{
+		InScene.SetWorldTransform(InPoint, Translation({.1f * float(Index % 3), 0, 2}));
+		InBridge.Flush();
+		F.Frame();
+	}
+	HYP_CHECK(F.DeviceStats.PipelinesCreated == Before.PipelinesCreated);
+	HYP_CHECK(F.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+	HYP_CHECK(F.DeviceStats.GpuAllocationBytes <= Before.GpuAllocationBytes + 1024 * 1024);
+	InScene.SetWorldTransform(InPoint, Translation({0, 0, 2}));
+	InBridge.Flush();
+}
+
+void CheckLocalLightCenter(FFixture& InFixture, FScene& InScene, FSceneHandle InPoint, FSceneRenderBridge& InBridge)
+{
+	InScene.SetWorldTransform(InPoint, Translation({0, 0, 0}));
+	InBridge.Flush();
+	const auto AtCenter = InFixture.Frame();
+	HYP_CHECK(std::isfinite(HdrPixel(AtCenter)) && HdrPixel(AtCenter) >= .018f);
+	InScene.SetWorldTransform(InPoint, Translation({0, 0, 2}));
+	InBridge.Flush();
+}
+
+void CheckStationaryLocalRetirement(FFixture& InFixture, FScene& InScene, FSceneRenderBridge& InBridge)
+{
+	std::vector<FSceneHandle> Added;
+	for (unsigned Index = 0; Index < 12; ++Index)
+	{
+		auto Node = MakeScenePointLightNode("retirement-" + std::to_string(Index));
+		Node.Local = Translation({0, 0, 2});
+		Node.PointLight = FScenePointLight{{1, 1, 1}, float(Index + 1), 4};
+		Added.push_back(InScene.AddNode(Node));
+	}
+	InBridge.Flush();
+	for (unsigned Index = 0; Index < 16; ++Index)
+	{
+		InFixture.Frame(ESceneRenderPipeline::Deferred, false);
+	}
+	const auto Before = InFixture.DeviceStats;
+	for (unsigned Index = 0; Index < 96; ++Index)
+	{
+		InFixture.Frame(ESceneRenderPipeline::Deferred, false);
+		HYP_CHECK(InFixture.Statistics.LocalLights.Draws == 13);
+		HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes <= Before.GpuAllocationBytes + 4 * 65536);
+	}
+	HYP_CHECK(InFixture.DeviceStats.PipelinesCreated == Before.PipelinesCreated);
+	HYP_CHECK(InFixture.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+	for (const auto Handle : Added)
+	{
+		InScene.RemoveSubtree(Handle);
+	}
+	InBridge.Flush();
+}
+
+void CheckSpotAttenuation(FFixture& InFixture, FScene& InScene, FSceneHandle InPoint, FSceneHandle InSpot,
+                          FSceneRenderBridge& InBridge)
+{
+	InScene.SetEnabled(InPoint, true);
+	InScene.SetEnabled(InSpot, false);
+	InBridge.Flush();
+	const auto Point = InFixture.Frame();
+	InScene.SetEnabled(InPoint, false);
+	InScene.SetEnabled(InSpot, true);
+	InBridge.Flush();
+	const auto Spot = InFixture.Frame();
+	// Center is fully inside the inner cone; a lateral receiver is in the penumbra; far lateral is outside.
+	HYP_CHECK(std::abs(HdrPixel(Point) - HdrPixel(Spot)) < .01f);
+	HYP_CHECK(HdrPixel(Spot, 225, 144) < HdrPixel(Point, 225, 144) - .005f);
+	HYP_CHECK(HdrPixel(Spot, 225, 144) > .021f);
+	HYP_CHECK(std::abs(HdrPixel(Spot, 300, 144) - .02f) < .002f);
+}
+
+void CheckLocalTransparentRoute(FFixture& InFixture, FScene& InScene, FSceneHandle InSurface, FSceneHandle InPoint,
+                                FSceneRenderBridge& InBridge)
+{
+	FModelMaterial Material;
+	Material.BaseColor = {.4f, .3f, .2f, .5f};
+	Material.Metallic = 0;
+	Material.Roughness = .5f;
+	Material.Emissive = {.05f, .05f, .05f};
+	Material.AlphaMode = EAlphaMode::Blend;
+	InScene.SetModelVisible(InSurface, false);
+	const auto Transparent =
+	    InScene.Add({"transparent receiver", PrepareSourceModel(Quad(Material)), Scale({20, 20, 1})});
+	InScene.SetEnabled(InPoint, true);
+	AwaitScene(InBridge, std::array{Transparent});
+	const auto WithLight = InFixture.Frame();
+	InScene.SetEnabled(InPoint, false);
+	InBridge.Flush();
+	HYP_CHECK(InFixture.Frame().Rgba == WithLight.Rgba);
+	InScene.RemoveSubtree(Transparent);
+	InScene.SetModelVisible(InSurface, true);
+	InBridge.Flush();
+}
+
+void CheckOwnedLocalLights(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 5}, {}, {1, .1f, 40, 5}));
+	Scene.SetSettings({Camera, {}, {}});
+	FModelMaterial Material;
+	Material.BaseColor = {.5f, .5f, .5f, 1};
+	Material.Metallic = 0;
+	Material.Roughness = 1;
+	Material.Emissive = {.02f, .02f, .02f};
+	const auto Surface = Scene.Add({"receiver", PrepareSourceModel(Quad(Material)), Scale({20, 20, 1})});
+	auto Node = MakeScenePointLightNode("point");
+	Node.Local = Translation({0, 0, 2});
+	Node.PointLight = FScenePointLight{{1, 1, 1}, 5, 4};
+	const auto Point = Scene.AddNode(Node);
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	F.LogicalBridge = &Bridge;
+	AwaitScene(Bridge, std::array{Surface});
+	const auto Lit = F.Frame();
+	const float One = HdrPixel(Lit);
+	HYP_CHECK(One > .1f && F.Statistics.LocalLights.Draws == 1);
+	// Normal incidence, roughness=1: diffuse .48/pi plus specular .01/pi, attenuated at d=2/R=4.
+	const float Expected = .02f + (.49f / 3.14159265f) * (5.f / 4) * std::pow(1.f - 1.f / 16, 2.f);
+	HYP_CHECK(std::abs(One - Expected) < .01f);
+	CheckLocalVolumeCoverage(F, Scene, Camera, Bridge, One);
+	CheckLocalLightLifetime(F, Scene, Point, Bridge, Lit);
+	CheckLocalLightCenter(F, Scene, Point, Bridge);
+	CheckStationaryLocalRetirement(F, Scene, Bridge);
+	Scene.SetEnabled(Point, false);
+	Bridge.Flush();
+	const auto Dark = F.Frame();
+	const float Base = HdrPixel(Dark);
+	HYP_CHECK(std::abs(Base - .02f) < .002f && F.Statistics.LocalLights.Draws == 0);
+	Scene.SetEnabled(Point, true);
+	Node.Id = "second";
+	const auto Second = Scene.AddNode(Node);
+	Bridge.Flush();
+	HYP_CHECK(std::abs(HdrPixel(F.Frame()) - (2 * One - Base)) < .012f);
+	HYP_CHECK(F.Statistics.LocalLights.Draws == 2);
+	Similar(Dark, F.Frame(ESceneRenderPipeline::Forward), .008f);
+	HYP_CHECK(!F.Statistics.LocalLights.bActive && F.Statistics.LocalLights.Draws == 0);
+	Scene.RemoveSubtree(Second);
+	CheckLocalLightCulling(F, Scene, Point, Bridge);
+	Scene.SetEnabled(Point, false);
+	auto Cone = MakeSceneSpotLightNode("spot");
+	Cone.Local = Translation({0, 0, 2});
+	Cone.SpotLight = FSceneSpotLight{{1, 1, 1}, 5, 4, .2f, .65f};
+	const auto Spot = Scene.AddNode(Cone);
+	Bridge.Flush();
+	HYP_CHECK(std::abs(HdrPixel(F.Frame()) - One) < .01f);
+	CheckSpotAttenuation(F, Scene, Point, Spot, Bridge);
+	// Cross the cone apex from outside to inside while its exit lies beyond the camera far plane.
+	Scene.SetCameraView(Camera, SceneCameraTransform({0, 0, 1}, {}), {1, .01f, 1.1f, 1});
+	Bridge.Flush();
+	HYP_CHECK(std::abs(HdrPixel(F.Frame()) - One) < .012f);
+	Scene.SetWorldTransform(Spot, SceneCameraTransform({0, 0, 2}, {0, 0, 3}));
+	Bridge.Flush();
+	HYP_CHECK(std::abs(HdrPixel(F.Frame()) - Base) < .002f);
+	Scene.SetWorldTransform(Spot, Translation({0, 0, 2}));
+	Scene.SetSpotLight(Spot, {{1, 1, 1}, 5, 1, .2f, .65f});
+	Bridge.Flush();
+	HYP_CHECK(std::abs(HdrPixel(F.Frame()) - Base) < .002f);
+	CheckLocalTransparentRoute(F, Scene, Surface, Point, Bridge);
+	Bridge.Close();
+	F.LogicalBridge = nullptr;
+	std::cout << "Local light GPU: analytic BRDF, additivity, camera/clip crossing, cone, culling and Forward "
+	             "exclusion passed\n";
+}
+
 void CheckOwnedOffscreenShadow(FFixture& InFixture)
 {
 	auto& F = InFixture;
@@ -778,6 +1036,7 @@ int main()
 			CheckQueuedGenerations(Fixture);
 			CheckReplacementAndRecovery(Fixture);
 			CheckOwnedCameraLightRoutes(Fixture);
+			CheckOwnedLocalLights(Fixture);
 			CheckOwnedOffscreenShadow(Fixture);
 		}
 		std::cout << "Deferred rendering tests passed\n";

@@ -10,6 +10,7 @@ Viewer defaults to `FSceneRenderPipeline` with `ESceneRenderPipeline::Deferred`.
 CSM shadow views
  -> BasePass (opaque/masked DefaultLit; four MRTs and D32)
  -> raster fullscreen Lighting (GBuffer + D32 + CSM -> SceneColor)
+ -> indexed sphere/cone LocalLights (additive direct lighting -> SceneColor)
  -> HDR opaque compatibility (Unlit)
  -> globally sorted HDR transparent geometry
  -> fullscreen Reinhard tonemap -> sRGB backbuffer
@@ -19,6 +20,8 @@ CSM shadow views
 ```
 
 HDR Forward replaces BasePass and Lighting with `Forward/HDR`. Both paths share the transparent and output stages. Scene depth returns to DepthWrite before compatibility/transparent draws; simultaneous SRV/DSV binding is unsupported.
+
+Scene-owned point and spot lights use the Deferred-only volume pass. Forward and the shared forward transparent stage do not receive local lights. See [LocalLights.md](LocalLights.md) for attenuation, camera-inside coverage, culling, persistence and Sponza acceptance.
 
 ModelViewer supplies the same perspective-camera metadata used by its projection, so CSM works there as well as in SceneViewer. Both viewers expose the shadow controls.
 

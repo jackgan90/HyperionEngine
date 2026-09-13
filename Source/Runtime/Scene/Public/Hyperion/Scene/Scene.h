@@ -47,6 +47,10 @@ public:
 	bool SetCamera(FSceneHandle InHandle, FSceneCamera InCamera);
 	bool SetDirectionalLight(FSceneHandle InHandle, FSceneDirectionalLight InLight);
 	bool SetEnvironmentLight(FSceneHandle InHandle, FSceneEnvironmentLight InLight);
+	const FScenePointLight* FindPointLight(FSceneHandle InHandle) const;
+	bool SetPointLight(FSceneHandle InHandle, FScenePointLight InLight);
+	const FSceneSpotLight* FindSpotLight(FSceneHandle InHandle) const;
+	bool SetSpotLight(FSceneHandle InHandle, FSceneSpotLight InLight);
 	bool SetLocalTransform(FSceneHandle InHandle, FMat4 InLocal);
 	bool SetWorldTransform(FSceneHandle InHandle, FMat4 InWorld);
 	bool Reparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);

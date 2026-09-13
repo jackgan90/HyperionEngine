@@ -129,6 +129,12 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		ClearTargets(InGraph, Clear);
 	}
 	const bool bDeferred = Settings.Pipeline == ESceneRenderPipeline::Deferred;
+	LastStatistics.LocalLights.bActive = bDeferred && !InShadows.DebugMode;
+	if (const auto& Metadata = InFrame->GetSceneMetadata())
+	{
+		LastStatistics.LocalLights.Points = Metadata->PointLights.size();
+		LastStatistics.LocalLights.Spots = Metadata->SpotLights.size();
+	}
 	auto Family = MakeViews(InMain, Clear);
 	Session.BuildViews(InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
 	                   [&](std::size_t InIndex)
@@ -137,6 +143,10 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		                   {
 			                   AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear),
 			                                     bInDeferPreparation);
+			                   if (!InShadows.DebugMode)
+			                   {
+				                   AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
+			                   }
 		                   }
 		                   if (InIndex == Family.TransparentIndex)
 		                   {

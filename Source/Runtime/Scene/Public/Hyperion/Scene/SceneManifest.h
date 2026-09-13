@@ -67,6 +67,8 @@ struct FSceneNodeEntry
 	std::optional<FSceneCamera> Camera;
 	std::optional<FSceneDirectionalLight> DirectionalLight;
 	std::optional<FSceneEnvironmentLight> EnvironmentLight;
+	std::optional<FScenePointLight> PointLight;
+	std::optional<FSceneSpotLight> SpotLight;
 };
 
 struct FSceneManifest

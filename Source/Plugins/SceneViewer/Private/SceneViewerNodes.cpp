@@ -41,7 +41,8 @@ void FSceneViewerPlugin::FImpl::DrawSceneSettings(FGui& InGui)
 	{
 		Scene.SetSettings(Settings);
 	}
-	InGui.TextWrapped("Only the selected main and environment lights contribute. No default camera means clear + GUI.");
+	InGui.TextWrapped("Select the main directional and environment lights here. Enabled local lights contribute in "
+	                  "Deferred. No default camera means clear + GUI.");
 }
 
 void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
@@ -115,6 +116,7 @@ void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
 			Scene.SetEnvironmentLight(Selected, Light);
 		}
 	}
+	DrawLightProperties(InGui, Node);
 	if (InGui.Button("Duplicate node [Insert]"))
 	{
 		Owner->DuplicateSelected();
@@ -200,6 +202,20 @@ void FSceneViewerPlugin::FImpl::DrawNodes(FGui& InGui)
 		{
 			auto Node = MakeSceneEnvironmentLightNode({});
 			Node.Name = "Environment light";
+			Selected = Scene.AddNode(std::move(Node));
+		}
+		if (InGui.Button("Add point light"))
+		{
+			auto Node = MakeScenePointLightNode({});
+			Node.Name = "Point light";
+			Node.Local = Translation({0, 2, 0});
+			Selected = Scene.AddNode(std::move(Node));
+		}
+		if (InGui.Button("Add spot light"))
+		{
+			auto Node = MakeSceneSpotLightNode({});
+			Node.Name = "Spot light";
+			Node.Local = Translation({0, 2, 0});
 			Selected = Scene.AddNode(std::move(Node));
 		}
 		if (InGui.Button("Add loaded model"))

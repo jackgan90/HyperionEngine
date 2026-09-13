@@ -1,6 +1,7 @@
 #pragma once
 #include "FullscreenPass.h"
 #include "Hyperion/Renderer/RenderResources.h"
+#include "LightVolumeResources.h"
 #include <atomic>
 #include <map>
 #include <mutex>
@@ -163,6 +164,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	FShaderCompiler& Compiler;
 	FRenderResourceStats Stats;
 	FFullscreenResources Fullscreen;
+	FLightVolumeResources LightVolumes;
 
 	FRenderResourceCoordinator(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler)
 	    : Tasks(InTasks), Device(InDevice), Compiler(InCompiler)
