@@ -152,11 +152,17 @@ void FViewerApplication::ExerciseBenchmarkCamera(int InFrame)
 	Events[0].Type = EEventType::MouseButton;
 	Events[0].Button = 1;
 	Events[0].bDown = true;
+	// Synthetic button events carry the cursor position, just like Platform events.
+	const int PreviousPhase = (InFrame - 1) % 40;
+	Events[0].X = InFrame == Options.BenchmarkWarmup
+	                  ? 0.f
+	                  : float(PreviousPhase < 20 ? PreviousPhase : 40 - PreviousPhase) * Options.BenchmarkCameraStep;
 	Events[1].Type = EEventType::MouseMove;
 	Events[1].X = float(Phase < 20 ? Phase : 40 - Phase) * Options.BenchmarkCameraStep;
 	Events[2].Type = EEventType::MouseButton;
 	Events[2].Button = 1;
 	Events[2].bDown = false;
+	Events[2].X = Events[1].X;
 	if (ScenePlugin)
 	{
 		ScenePlugin->Input(Events, false, false);

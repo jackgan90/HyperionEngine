@@ -133,6 +133,10 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 	const auto Logical = Window->LogicalSize();
 	if (Window->Minimized() || !Size.Width || !Size.Height)
 	{
+		if (ScenePlugin)
+		{
+			ScenePlugin->Input(Window->Events(), true, true);
+		}
 		UpdateScene(Size);
 		FramePipeline->Skip();
 		if (!Options.Benchmark.empty() && InFrame >= Options.BenchmarkWarmup)
@@ -169,6 +173,7 @@ void FViewerApplication::Tick(int InFrame, float InDelta)
 		ScenePlugin->Input(Options.bBenchmarkCamera ? std::span<const FInputEvent>{} : Window->Events(),
 		                   Gui && Settings.bShowGui && Gui->WantsMouse(),
 		                   Gui && Settings.bShowGui && Gui->WantsKeyboard());
+		ScenePlugin->AdvanceCamera(InDelta);
 	}
 	RenderFrame(InFrame, Size, std::move(GuiData), bTakeCapture, bCaptureRdc);
 	ProfileFrame();

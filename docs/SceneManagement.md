@@ -17,7 +17,9 @@ The separately selectable Showcase example contains 78 model instances plus one 
 | Control | Action |
 | --- | --- |
 | Mouse drag / wheel | Orbit around target / dolly |
-| Arrows / Page Up, Page Down | Translate camera and target / elevate |
+| W/S, A/D | Hold to move forward/back along the view direction or strafe left/right |
+| Q/E | Hold to move down/up along world Y |
+| Arrows / Page Up, Page Down | Continuous aliases for WASD / E,Q |
 | Home / C / Tab | Fit all loaded visible models / cycle culling / toggle panels |
 | Insert / Delete / Space | Duplicate one selected node / remove its subtree / toggle selected model visibility |
 | Scene panel | Hierarchical node selection, typed properties, creation, reparenting, two removal modes and model animation |
@@ -129,3 +131,9 @@ Build-local screenshots/logs live in `out/build/<preset>/scene-acceptance`. Meas
 A resolved scene frame is immutable and authorized only as its original shared instance. Copying its public material inputs does not transfer that authorization; validation, semantic resolution and view-family construction reject such copies for bound scenes. Unbound explicit material frames remain supported.
 
 `FRenderSession::BuildViews` is low-level plumbing for trusted derived view families, including CSM projections. Scene-bound application code enters through `FSceneViewRequest` and a scene frame seed on the render pipelines. The high-level explicit-view overload rejects a bound scene; low-level family construction intentionally accepts internally derived views with the resolved frame.
+
+### Reusable camera navigation
+
+`FSceneCameraController` in `Hyperion/Renderer/SceneCameraController.h` provides WASDQE, right-button orbit and wheel dolly without a SceneViewer or GUI dependency. Create one per viewport. On Main, call `Input(Scene, Events, bMouseCaptured, bKeyboardCaptured)` then `Advance(Scene, DeltaSeconds)` before publishing the scene. Call `Reset()` when deactivating a viewport, changing its scene or shutting down. Input also clears movement on focus loss or keyboard capture. A fresh press resumes after interruption.
+
+Movement needs no mouse button. Speed is `max(1, FocusDistance)` world units/second; combined directions are normalized. Frame time is capped at 0.1 seconds to limit jumps after stalls. Release stops immediately without inertia. RMB continues to orbit the focus pivot; wheel changes focus distance.

@@ -1,12 +1,15 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
+#include "Hyperion/Renderer/SceneNavigation.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/NativeAssetSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <iostream>
+#include <limits>
 #include <thread>
 
 namespace
@@ -172,7 +175,10 @@ void CheckControls(FViewerFixture& InFixture)
 	for (unsigned Index = 0; Index < 30; ++Index)
 	{
 		Plugin.Input({&Right, 1}, false, false);
+		Plugin.AdvanceCamera(.1f);
 	}
+	Right.bDown = false;
+	Plugin.Input({&Right, 1}, false, false);
 	InFixture.Tick();
 	HYP_CHECK(InFixture.Statistics.VisibleItems == Count && InFixture.Image.Rgba != Original);
 	Plugin.SetFrozen(false);
@@ -187,6 +193,177 @@ void CheckControls(FViewerFixture& InFixture)
 	Plugin.AddModel();
 	InFixture.Tick();
 	HYP_CHECK(Plugin.ModelCount() == 1);
+}
+
+FInputEvent CameraKey(EKey InKey, bool bInDown = true, bool bInRepeat = false)
+{
+	FInputEvent Event;
+	Event.Type = EEventType::Key;
+	Event.Key = InKey;
+	Event.bDown = bInDown;
+	Event.bRepeat = bInRepeat;
+	return Event;
+}
+
+void CheckContinuousCamera(FViewerFixture& InFixture)
+{
+	auto& Scene = InFixture.Plugin->GetSceneInstance();
+	const auto Handle = *GetSceneNavigationCamera(Scene);
+	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	FSceneNodeView View;
+	Scene.GetNodeView(Handle, View);
+	const auto Original = View.World;
+	const auto Start = SceneCameraTransform({2, 3, 9}, {0, 1, 0});
+	FSceneCameraController Controller;
+	const auto Pose = [&]
+	{
+		FSceneCameraPose Result;
+		HYP_CHECK(Scene.GetCameraPose(Handle, Result));
+		return Result;
+	};
+	const auto Simulate = [&](std::initializer_list<EKey> InKeys, unsigned InRate)
+	{
+		Controller.Reset();
+		Scene.SetCameraView(Handle, Start, Camera);
+		const auto Before = Pose();
+		for (const auto Key : InKeys)
+		{
+			const auto Event = CameraKey(Key);
+			Controller.Input(Scene, {&Event, 1}, false, false);
+		}
+		HYP_CHECK(Length(Subtract(Pose().Eye, Before.Eye)) == 0);
+		for (unsigned Index = 0; Index < InRate; ++Index)
+		{
+			Controller.Input(Scene, {}, false, false);
+			Controller.Advance(Scene, 1.f / InRate);
+		}
+		HYP_CHECK(Length(Subtract(Pose().Forward, Before.Forward)) < .0001f);
+		HYP_CHECK(Scene.FindNode(Handle)->Camera->FocusDistance == Camera.FocusDistance);
+		return Subtract(Pose().Eye, Before.Eye);
+	};
+	const auto Forward = Simulate({EKey::W}, 60);
+	HYP_CHECK(Forward.Y < 0);
+	HYP_CHECK(Length(Subtract(Forward, Simulate({EKey::W}, 30))) < .0001f);
+	HYP_CHECK(Length(Subtract(Forward, Simulate({EKey::W}, 120))) < .0001f);
+	HYP_CHECK(Length(Add(Forward, Simulate({EKey::S}, 60))) < .0001f);
+	HYP_CHECK(Length(Subtract(Forward, Simulate({EKey::W, EKey::Up}, 60))) < .0001f);
+	HYP_CHECK(Length(Simulate({EKey::W, EKey::S}, 60)) < .0001f);
+	HYP_CHECK(std::abs(Length(Simulate({EKey::W, EKey::D, EKey::E}, 60)) - Length(Forward)) < .0001f);
+	HYP_CHECK(Length(Add(Simulate({EKey::A}, 60), Simulate({EKey::D}, 60))) < .0001f);
+	const auto Up = Simulate({EKey::E}, 60);
+	HYP_CHECK(Up.Y > 0 && std::abs(Up.X) < .0001f && std::abs(Up.Z) < .0001f);
+	HYP_CHECK(Length(Add(Up, Simulate({EKey::Q}, 60))) < .0001f);
+	Controller.Reset();
+	Scene.SetCameraView(Handle, Original, Camera);
+	std::cout << "Reusable controller: continuous 30/60/120 Hz, pitched WASDQE, aliases and diagonal speed passed\n";
+}
+
+void CheckCameraInterruptions(FViewerFixture& InFixture)
+{
+	auto& Scene = InFixture.Plugin->GetSceneInstance();
+	const auto Handle = *GetSceneNavigationCamera(Scene);
+	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	FSceneNodeView View;
+	Scene.GetNodeView(Handle, View);
+	const auto Original = View.World;
+	FSceneCameraController Controller;
+	const auto Eye = [&]
+	{
+		FSceneCameraPose Pose;
+		Scene.GetCameraPose(Handle, Pose);
+		return Pose.Eye;
+	};
+	const auto Press = CameraKey(EKey::W);
+	const auto Repeat = CameraKey(EKey::W, true, true);
+	const auto Release = CameraKey(EKey::W, false);
+	for (unsigned Mode = 0; Mode < 3; ++Mode)
+	{
+		Controller.Input(Scene, {&Press, 1}, false, false);
+		Controller.Advance(Scene, .01f);
+		const auto Before = Eye();
+		if (Mode == 0)
+		{
+			Controller.Input(Scene, {&Release, 1}, false, false);
+		}
+		else if (Mode == 1)
+		{
+			Controller.Input(Scene, {}, true, true);
+		}
+		else
+		{
+			FInputEvent Focus;
+			Focus.Type = EEventType::Focus;
+			Controller.Input(Scene, {&Focus, 1}, false, false);
+			Focus.bDown = true;
+			Controller.Input(Scene, {&Focus, 1}, false, false);
+		}
+		Controller.Input(Scene, {&Repeat, 1}, false, false);
+		Controller.Advance(Scene, .1f);
+		HYP_CHECK(Length(Subtract(Eye(), Before)) == 0);
+	}
+	Controller.Input(Scene, {&Press, 1}, false, false);
+	const auto Before = Eye();
+	for (const float Delta :
+	     {0.f, -1.f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()})
+	{
+		Controller.Advance(Scene, Delta);
+	}
+	HYP_CHECK(Length(Subtract(Eye(), Before)) == 0);
+	Controller.Advance(Scene, 10);
+	HYP_CHECK(std::abs(Length(Subtract(Eye(), Before)) - std::max(1.f, Camera.FocusDistance) * .1f) < .0001f);
+	Controller.Reset();
+	const auto Stopped = Eye();
+	Controller.Advance(Scene, .1f);
+	HYP_CHECK(Length(Subtract(Eye(), Stopped)) == 0);
+	Scene.SetEnabled(Handle, false);
+	Controller.Input(Scene, {&Press, 1}, false, false);
+	Controller.Advance(Scene, .1f);
+	HYP_CHECK(Length(Subtract(Eye(), Stopped)) == 0);
+	Scene.SetEnabled(Handle, true);
+	Scene.SetCameraView(Handle, Original, Camera);
+	std::cout << "Camera release, capture, focus, repeat, reset, invalid delta and stall clamp passed\n";
+}
+
+void CheckReusableMouse(FViewerFixture& InFixture)
+{
+	auto& Scene = InFixture.Plugin->GetSceneInstance();
+	const auto Handle = *GetSceneNavigationCamera(Scene);
+	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	FSceneNodeView View;
+	Scene.GetNodeView(Handle, View);
+	const auto Original = View.World;
+	FSceneCameraController Controller;
+	const auto Pivot = GetSceneNavigationPivot(Scene);
+	FInputEvent Button;
+	Button.Type = EEventType::MouseButton;
+	Button.Button = 1;
+	Button.bDown = true;
+	Button.X = 200;
+	Button.Y = 100;
+	Controller.Input(Scene, {&Button, 1}, false, false);
+	FInputEvent Move;
+	Move.Type = EEventType::MouseMove;
+	Move.X = 220;
+	Move.Y = 110;
+	Controller.Input(Scene, {&Move, 1}, false, false);
+	HYP_CHECK(Length(Subtract(GetSceneNavigationPivot(Scene), Pivot)) < .0001f);
+	Scene.GetNodeView(Handle, View);
+	HYP_CHECK(View.World.Values != Original.Values);
+	const auto Orbited = View.World;
+	Controller.Input(Scene, {}, true, false);
+	Move.X = 240;
+	Controller.Input(Scene, {&Move, 1}, false, false);
+	Scene.GetNodeView(Handle, View);
+	HYP_CHECK(View.World.Values == Orbited.Values);
+	FInputEvent Wheel;
+	Wheel.Type = EEventType::MouseWheel;
+	Wheel.Y = 1;
+	Controller.Input(Scene, {&Wheel, 1}, true, false);
+	HYP_CHECK(Scene.FindNode(Handle)->Camera->FocusDistance == Camera.FocusDistance);
+	Controller.Input(Scene, {&Wheel, 1}, false, false);
+	HYP_CHECK(std::abs(Scene.FindNode(Handle)->Camera->FocusDistance - Camera.FocusDistance * .85f) < .0001f);
+	HYP_CHECK(Length(Subtract(GetSceneNavigationPivot(Scene), Pivot)) < .0001f);
+	Scene.SetCameraView(Handle, Original, Camera);
 }
 
 void CheckSaveReload(FViewerFixture& InFixture)
@@ -354,6 +531,9 @@ int main()
 	{
 		FViewerFixture Fixture;
 		CheckControls(Fixture);
+		CheckContinuousCamera(Fixture);
+		CheckCameraInterruptions(Fixture);
+		CheckReusableMouse(Fixture);
 		CheckSaveReload(Fixture);
 		CheckSnapshotIsolationAndFailure(Fixture);
 		CheckEmptyAndNodeOnlySave(Fixture);

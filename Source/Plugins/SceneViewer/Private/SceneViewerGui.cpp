@@ -138,7 +138,7 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		{
 			Fit();
 		}
-		InGui.TextWrapped("Drag: orbit | Wheel: dolly | Arrows: move | Page Up/Down: elevate | Tab: panels");
+		InGui.TextWrapped("RMB drag: orbit | Wheel: dolly | WASD: move | Q/E: down/up | Tab: panels");
 		InGui.Separator();
 		P.DrawNodes(InGui);
 		for (const auto& Asset : P.Scene.GetAssets())

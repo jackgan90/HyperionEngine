@@ -44,6 +44,16 @@ EKey Translate(SDL_Keycode InKey)
 			return EKey::Escape;
 		case SDLK_A:
 			return EKey::A;
+		case SDLK_W:
+			return EKey::W;
+		case SDLK_S:
+			return EKey::S;
+		case SDLK_D:
+			return EKey::D;
+		case SDLK_Q:
+			return EKey::Q;
+		case SDLK_E:
+			return EKey::E;
 		case SDLK_C:
 			return EKey::C;
 		case SDLK_V:
@@ -155,6 +165,8 @@ void FWindow::Poll()
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
 			case SDL_EVENT_MOUSE_BUTTON_UP:
 				Event.Type = EEventType::MouseButton;
+				Event.X = Native.button.x;
+				Event.Y = Native.button.y;
 				Event.bDown = Native.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
 				Event.Button = Native.button.button == SDL_BUTTON_LEFT     ? 0
 				               : Native.button.button == SDL_BUTTON_RIGHT  ? 1
@@ -177,6 +189,7 @@ void FWindow::Poll()
 				Event.Type = EEventType::Key;
 				Event.bDown = Native.type == SDL_EVENT_KEY_DOWN;
 				Event.Key = Translate(Native.key.key);
+				Event.bRepeat = Native.key.repeat;
 				Event.Modifiers =
 				    ((Native.key.mod & SDL_KMOD_CTRL) ? 1u : 0u) | ((Native.key.mod & SDL_KMOD_SHIFT) ? 2u : 0u) |
 				    ((Native.key.mod & SDL_KMOD_ALT) ? 4u : 0u) | ((Native.key.mod & SDL_KMOD_GUI) ? 8u : 0u);

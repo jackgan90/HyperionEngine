@@ -108,58 +108,50 @@ void FSceneViewerPlugin::MoveSelected(float InOffset)
 	}
 }
 
+void FSceneViewerPlugin::AdvanceCamera(float InDeltaSeconds)
+{
+	auto& P = *Impl;
+	P.Tasks.Require({EDomain::Main});
+	if (P.bStopped)
+	{
+		return;
+	}
+	try
+	{
+		P.CameraController.Advance(P.Scene, InDeltaSeconds);
+	}
+	catch (const std::exception& Failure)
+	{
+		P.EditError = Failure.what();
+	}
+}
+
 void FSceneViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
+	if (P.bStopped)
+	{
+		return;
+	}
+	try
+	{
+		P.CameraController.Input(P.Scene, InEvents, bInMouseCaptured, bInKeyboardCaptured);
+	}
+	catch (const std::exception& Failure)
+	{
+		P.EditError = Failure.what();
+	}
 	for (const auto& Event : InEvents)
 	{
 		try
 		{
-			if (Event.Type == EEventType::Focus && !Event.bDown)
-			{
-				P.bDragging = false;
-			}
-			if (Event.Type == EEventType::MouseButton && Event.Button == 1)
-			{
-				P.bDragging = Event.bDown && !bInMouseCaptured;
-			}
-			if (Event.Type == EEventType::MouseMove)
-			{
-				if (P.bDragging)
-				{
-					OrbitSceneCamera(P.Scene, -(Event.X - P.LastMouse.X) * .006f, (Event.Y - P.LastMouse.Y) * .006f);
-				}
-				P.LastMouse = {Event.X, Event.Y};
-			}
-			if (Event.Type == EEventType::MouseWheel && !bInMouseCaptured)
-			{
-				DollySceneCamera(P.Scene, std::pow(.85f, Event.Y));
-			}
 			if (Event.Type != EEventType::Key || !Event.bDown || bInKeyboardCaptured)
 			{
 				continue;
 			}
 			switch (Event.Key)
 			{
-				case EKey::Left:
-					PanSceneCamera(P.Scene, {-1, 0, 0});
-					break;
-				case EKey::Right:
-					PanSceneCamera(P.Scene, {1, 0, 0});
-					break;
-				case EKey::Up:
-					PanSceneCamera(P.Scene, {0, 0, 1});
-					break;
-				case EKey::Down:
-					PanSceneCamera(P.Scene, {0, 0, -1});
-					break;
-				case EKey::PageUp:
-					PanSceneCamera(P.Scene, {0, 1, 0});
-					break;
-				case EKey::PageDown:
-					PanSceneCamera(P.Scene, {0, -1, 0});
-					break;
 				case EKey::Home:
 					Fit();
 					break;

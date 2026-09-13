@@ -104,6 +104,7 @@ void FSceneViewerPlugin::Stop() noexcept
 		P.PollSave();
 	}
 	P.bStopped = true;
+	P.CameraController.Reset();
 	P.Scene.Close();
 }
 

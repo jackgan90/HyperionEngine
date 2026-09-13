@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
@@ -32,12 +33,11 @@ struct FSceneViewerPlugin::FImpl
 	bool bKeepWorld = true;
 	void DrawSceneSettings(FGui& InGui);
 	bool bStopped{};
-	bool bDragging{};
+	FSceneCameraController CameraController;
 	bool bFrozen{};
 	bool bBounds{};
 	bool bAnimate{};
 	bool bInstanceBatching = true;
-	FVec2 LastMouse;
 	float AnimationTime{};
 	FRenderView LastView;
 	FMat4 FrozenView = Identity();

@@ -39,7 +39,12 @@ enum class EKey
 	V,
 	X,
 	Y,
-	Z
+	Z,
+	W,
+	S,
+	D,
+	Q,
+	E
 };
 enum class EEventType
 {
@@ -63,6 +68,7 @@ struct FInputEvent
 	EKey Key{};
 	bool bDown{};
 	std::string Text;
+	bool bRepeat{};
 };
 
 class FWindow

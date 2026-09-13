@@ -47,6 +47,16 @@ ImGuiKey Key(EKey InK)
 			return ImGuiKey_Escape;
 		case EKey::A:
 			return ImGuiKey_A;
+		case EKey::W:
+			return ImGuiKey_W;
+		case EKey::S:
+			return ImGuiKey_S;
+		case EKey::D:
+			return ImGuiKey_D;
+		case EKey::Q:
+			return ImGuiKey_Q;
+		case EKey::E:
+			return ImGuiKey_E;
 		case EKey::C:
 			return ImGuiKey_C;
 		case EKey::V:

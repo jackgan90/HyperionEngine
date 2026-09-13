@@ -19,6 +19,8 @@ public:
 	void Update(FRenderFrame& InFrame) override;
 	void Stop() noexcept override;
 	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);
+	// Call once per Main frame after Input and before scene publication.
+	void AdvanceCamera(float InDeltaSeconds);
 	void DrawGui(FGui& InGui, const FSceneVisibilityStats& InStats, bool bInForceOrdinary = false);
 	bool Ready() const;
 	const std::string& Status() const;
