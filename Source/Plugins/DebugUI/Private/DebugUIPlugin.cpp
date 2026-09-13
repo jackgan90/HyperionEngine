@@ -31,7 +31,8 @@ void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings, const FDebugMet
 	{
 		InSettings.GBufferLayout = bHighPrecision ? "high" : "compact";
 	}
-	constexpr std::array<std::string_view, 3> PipelineIds{"reversed_z", "exposure", "gbuffer_debug"};
+	constexpr std::array<std::string_view, 4> PipelineIds{"clustered_lighting", "reversed_z", "exposure",
+	                                                      "gbuffer_debug"};
 	InGui.EditProperties(SettingsType(), &InSettings, PipelineIds);
 	InGui.Text(InMetrics.bActiveReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z");
 	if (InSettings.bReversedZ != InMetrics.bActiveReversedZ)

@@ -39,9 +39,11 @@ public:
 	                                 const FMaterialResourceOwners& InOwners);
 	FTexture GetTexture(std::shared_ptr<const FMaterialTextureSource> InSource,
 	                    const FMaterialResourceOwners& InOwners);
+	// Set bInCreateSet=false during static preparation to upload sources without pinning unused descriptor tables.
 	FMaterialResourceBindings BindResources(const FCompiledMaterialPass& InPass,
 	                                        std::span<const std::optional<FMaterialValue>> InValues,
-	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
+	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false,
+	                                        bool bInCreateSet = true);
 	FMaterialResourceBindings BindResources(const FCompiledMaterialPass& InPass,
 	                                        std::span<const std::shared_ptr<const FMaterialValue>> InValues,
 	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
@@ -63,7 +65,8 @@ public:
 private:
 	FMaterialResourceBindings BindResourceValues(const FCompiledMaterialPass& InPass,
 	                                             std::span<const FMaterialValue* const> InValues,
-	                                             const FMaterialResourceOwners& InOwners, bool bInAllowMissing);
+	                                             const FMaterialResourceOwners& InOwners, bool bInAllowMissing,
+	                                             bool bInCreateSet = true);
 
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;

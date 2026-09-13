@@ -1,6 +1,6 @@
 # Scene local lights
 
-Point and spot lights are scene-owned nodes with independent types. They support normal hierarchy, enablement, stable IDs, generation handles, runtime editing and source/native save and load. The traditional local-light renderer is active only for Deferred opaque/masked receivers. Forward, transparent, Unlit and legacy display materials receive no local contribution. Local shadows, area lights, clustered lighting and glTF `KHR_lights_punctual` import are outside this implementation.
+Point and spot lights are scene-owned nodes with independent types. They support normal hierarchy, enablement, stable IDs, generation handles, runtime editing and source/native save and load. [Clustered lighting](ClusteredLighting.md) is enabled by default for Deferred, HDR Forward and lit transparency. Disabling it restores traditional Deferred opaque/masked volumes and excludes Forward/transparent local lighting. Unlit and legacy display materials receive no local contribution. Local shadows, area lights and glTF `KHR_lights_punctual` import are outside this implementation.
 
 ## Authoring
 
@@ -26,9 +26,9 @@ SceneBridge publishes point/spot values with camera and geometry under the exist
 
 The light index reuses `ISceneSpatialIndex` / `CreateBvhSpatialIndex()` and accepts `ISceneVisibility`. The scene pipeline supplies its current or frozen culling frustum; None, Linear and BVH modes remain supported. Range spheres and finite spot support have conservative AABBs. Light-center visibility alone is insufficient. Candidate IDs are sorted before accumulation so BVH topology does not change light summation order. Light membership and diagnostics are independent of model geometry and CSM casters.
 
-## Deferred rendering
+## Legacy Deferred volume rendering
 
-The graph executes BasePass, directional/environment/emissive fullscreen lighting, local light volumes, compatibility/transparent geometry and tonemapping. DirectLighting.hlsli contains the common BRDF; ambient, emissive, CSM and shadow visualization stay outside local-light evaluation. Local accumulation is suppressed during shadow visualization.
+With clustering disabled, the graph executes BasePass, directional/environment/emissive fullscreen lighting, local light volumes, compatibility/transparent geometry and tonemapping. DirectLighting.hlsli contains the common BRDF and LocalLighting.hlsli shares single-light attenuation with the clustered path; ambient, emissive, CSM and shadow visualization stay outside local-light evaluation. Local accumulation is suppressed during shadow visualization.
 
 Each visible light submits one indexed draw into the existing linear HDR scene color. The session caches a closed sphere (512 triangles, conservatively expanded from a subdivided octahedron) and closed cone (48 sides with a bottom cap, 96 triangles). Circumscribed proxies cover analytic influence rather than cutting off tessellation edges.
 

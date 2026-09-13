@@ -1,3 +1,5 @@
+#ifndef HYP_DIRECT_LIGHTING
+#define HYP_DIRECT_LIGHTING
 #include "../Material/Parameters.hlsli"
 
 float3 EvaluateDirectLighting(FMaterialParameters InMaterial, float3 InWorld, float3 InCamera, float3 InLight,
@@ -23,3 +25,4 @@ float3 EvaluateDirectLighting(FMaterialParameters InMaterial, float3 InWorld, fl
 	float3 Diffuse = (1 - Fresnel) * (1 - InMaterial.Metallic) * InMaterial.BaseColor / 3.14159265;
 	return (Diffuse + Specular) * InLightColor * Nl;
 }
+#endif

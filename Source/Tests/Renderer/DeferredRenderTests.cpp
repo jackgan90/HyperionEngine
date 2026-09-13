@@ -469,7 +469,7 @@ void CheckLocalVolumeCoverage(FFixture& InFixture, FScene& InScene, FSceneHandle
 		const float Actual = HdrPixel(Image);
 		std::cout << "local volume eye=" << Eye << " hdr=" << Actual << " expected=" << InReference << '\n';
 		HYP_CHECK(std::abs(Actual - InReference) < .012f);
-		HYP_CHECK(InFixture.Statistics.LocalLights.Draws == 1);
+		HYP_CHECK(InFixture.Statistics.LocalLights.Draws == (InFixture.Settings.bClusteredLighting ? 0 : 1));
 	}
 	InScene.SetCameraView(InCamera, SceneCameraTransform({0, 0, 5}, {}), {1, .1f, 40, 5});
 	InBridge.Flush();
@@ -537,13 +537,14 @@ void CheckLocalLightLifetime(FFixture& InFixture, FScene& InScene, FSceneHandle 
 		F.View.Height = Index % 2 ? 288 : 240;
 		const auto Resized = F.Frame();
 		HYP_CHECK(std::abs(HdrPixel(Resized, F.View.Width / 2, F.View.Height / 2) - HdrPixel(InReference)) < .012f);
-		HYP_CHECK(F.Statistics.LocalLights.Draws == 1);
+		HYP_CHECK(F.Statistics.LocalLights.Draws == (F.Settings.bClusteredLighting ? 0 : 1));
 	}
 	for (unsigned Index = 0; Index < 10; ++Index)
 	{
 		F.Frame();
 	}
 	const auto Before = F.DeviceStats;
+	const auto LiveBefore = F.Session->GetResources().Statistics().Materials.LiveObjects;
 	for (unsigned Index = 0; Index < 24; ++Index)
 	{
 		InScene.SetWorldTransform(InPoint, Translation({.1f * float(Index % 3), 0, 2}));
@@ -551,7 +552,12 @@ void CheckLocalLightLifetime(FFixture& InFixture, FScene& InScene, FSceneHandle 
 		F.Frame();
 	}
 	HYP_CHECK(F.DeviceStats.PipelinesCreated == Before.PipelinesCreated);
-	HYP_CHECK(F.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+	// DescriptorAllocations is cumulative; changing immutable read buffers legitimately creates new sets.
+	if (!F.Settings.bClusteredLighting)
+	{
+		HYP_CHECK(F.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+	}
+	HYP_CHECK(F.Session->GetResources().Statistics().Materials.LiveObjects <= LiveBefore + 32);
 	HYP_CHECK(F.DeviceStats.GpuAllocationBytes <= Before.GpuAllocationBytes + 1024 * 1024);
 	InScene.SetWorldTransform(InPoint, Translation({0, 0, 2}));
 	InBridge.Flush();
@@ -586,11 +592,24 @@ void CheckStationaryLocalRetirement(FFixture& InFixture, FScene& InScene, FScene
 	for (unsigned Index = 0; Index < 96; ++Index)
 	{
 		InFixture.Frame(ESceneRenderPipeline::Deferred, false);
-		HYP_CHECK(InFixture.Statistics.LocalLights.Draws == 13);
+		HYP_CHECK(InFixture.Statistics.LocalLights.Draws == (InFixture.Settings.bClusteredLighting ? 0 : 13));
 		HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes <= Before.GpuAllocationBytes + 4 * 65536);
 	}
 	HYP_CHECK(InFixture.DeviceStats.PipelinesCreated == Before.PipelinesCreated);
 	HYP_CHECK(InFixture.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+	if (InFixture.Settings.bClusteredLighting)
+	{
+		const auto Camera = *InScene.GetSettings().DefaultCamera;
+		for (unsigned Index = 1; Index <= 12; ++Index)
+		{
+			const float X = float(Index) * .00001f;
+			InScene.SetWorldTransform(Camera, SceneCameraTransform({X, 0, 5}, {X, 0, 0}));
+			InBridge.Flush();
+			InFixture.Frame(ESceneRenderPipeline::Deferred, false);
+		}
+		HYP_CHECK(InFixture.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+		InScene.SetWorldTransform(Camera, SceneCameraTransform({0, 0, 5}, {}));
+	}
 	for (const auto Handle : Added)
 	{
 		InScene.RemoveSubtree(Handle);
@@ -631,11 +650,68 @@ void CheckLocalTransparentRoute(FFixture& InFixture, FScene& InScene, FSceneHand
 	InScene.SetEnabled(InPoint, true);
 	AwaitScene(InBridge, std::array{Transparent});
 	const auto WithLight = InFixture.Frame();
+	if (InFixture.Settings.bClusteredLighting)
+	{
+		Similar(WithLight, InFixture.Frame(ESceneRenderPipeline::Forward), .008f);
+	}
 	InScene.SetEnabled(InPoint, false);
 	InBridge.Flush();
-	HYP_CHECK(InFixture.Frame().Rgba == WithLight.Rgba);
+	const auto WithoutLight = InFixture.Frame();
+	if (InFixture.Settings.bClusteredLighting)
+	{
+		HYP_CHECK(HdrPixel(WithLight) > HdrPixel(WithoutLight) + .01f);
+	}
+	else
+	{
+		HYP_CHECK(WithoutLight.Rgba == WithLight.Rgba);
+	}
 	InScene.RemoveSubtree(Transparent);
 	InScene.SetModelVisible(InSurface, true);
+	InBridge.Flush();
+}
+
+void CheckClusteredDirectionalAndDense(FFixture& InFixture, FScene& InScene, FSceneRenderBridge& InBridge)
+{
+	if (!InFixture.Settings.bClusteredLighting)
+	{
+		return;
+	}
+	const auto Original = InScene.GetSettings();
+	auto SunNode = MakeSceneDirectionalLightNode("cluster sun");
+	SunNode.DirectionalLight = FSceneDirectionalLight{{1, 1, 1}, .5f, false};
+	const auto Sun = InScene.AddNode(SunNode);
+	auto Settings = Original;
+	Settings.MainDirectionalLight = Sun;
+	InScene.SetSettings(Settings);
+	InBridge.Flush();
+	const auto Fused = InFixture.Frame();
+	HYP_CHECK(InFixture.Statistics.LocalLights.Draws == 0);
+	Similar(Fused, InFixture.Frame(ESceneRenderPipeline::Forward), .008f);
+	InFixture.Settings.bClusteredLighting = false;
+	Similar(Fused, InFixture.Frame(), .008f);
+	InFixture.Settings.bClusteredLighting = true;
+	InScene.SetSettings(Original);
+	InScene.RemoveSubtree(Sun);
+	std::vector<FSceneHandle> Added;
+	for (unsigned Index = 0; Index < 80; ++Index)
+	{
+		auto Node = MakeScenePointLightNode("dense-" + std::to_string(Index));
+		Node.Local = Translation({0, 0, 2});
+		Node.PointLight = FScenePointLight{{1, 1, 1}, .02f, 4};
+		Added.push_back(InScene.AddNode(Node));
+	}
+	InBridge.Flush();
+	const auto Dense = InFixture.Frame();
+	HYP_CHECK(InFixture.Statistics.LocalLights.ClusterMaximum == 81);
+	Similar(Dense, InFixture.Frame(ESceneRenderPipeline::Forward), .008f);
+	InFixture.Settings.bClusteredLighting = false;
+	// Eighty half-float additive roundings can differ from one float accumulation and final half conversion.
+	Similar(Dense, InFixture.Frame(), .016f);
+	InFixture.Settings.bClusteredLighting = true;
+	for (const auto Handle : Added)
+	{
+		InScene.RemoveSubtree(Handle);
+	}
 	InBridge.Flush();
 }
 
@@ -660,7 +736,16 @@ void CheckOwnedLocalLights(FFixture& InFixture)
 	AwaitScene(Bridge, std::array{Surface});
 	const auto Lit = F.Frame();
 	const float One = HdrPixel(Lit);
-	HYP_CHECK(One > .1f && F.Statistics.LocalLights.Draws == 1);
+	HYP_CHECK(One > .1f && F.Statistics.LocalLights.Draws == (F.Settings.bClusteredLighting ? 0 : 1));
+	if (F.Settings.bClusteredLighting)
+	{
+		HYP_CHECK(F.Statistics.LocalLights.ClusterReferences > 0);
+		Similar(Lit, F.Frame(ESceneRenderPipeline::Forward), .008f);
+		F.Settings.bClusteredLighting = false;
+		Similar(Lit, F.Frame(), .008f);
+		F.Settings.bClusteredLighting = true;
+		Similar(Lit, F.Frame(), .008f);
+	}
 	// Normal incidence, roughness=1: diffuse .48/pi plus specular .01/pi, attenuated at d=2/R=4.
 	const float Expected = .02f + (.49f / 3.14159265f) * (5.f / 4) * std::pow(1.f - 1.f / 16, 2.f);
 	HYP_CHECK(std::abs(One - Expected) < .01f);
@@ -668,6 +753,7 @@ void CheckOwnedLocalLights(FFixture& InFixture)
 	CheckLocalLightLifetime(F, Scene, Point, Bridge, Lit);
 	CheckLocalLightCenter(F, Scene, Point, Bridge);
 	CheckStationaryLocalRetirement(F, Scene, Bridge);
+	CheckClusteredDirectionalAndDense(F, Scene, Bridge);
 	Scene.SetEnabled(Point, false);
 	Bridge.Flush();
 	const auto Dark = F.Frame();
@@ -677,10 +763,11 @@ void CheckOwnedLocalLights(FFixture& InFixture)
 	Node.Id = "second";
 	const auto Second = Scene.AddNode(Node);
 	Bridge.Flush();
-	HYP_CHECK(std::abs(HdrPixel(F.Frame()) - (2 * One - Base)) < .012f);
-	HYP_CHECK(F.Statistics.LocalLights.Draws == 2);
-	Similar(Dark, F.Frame(ESceneRenderPipeline::Forward), .008f);
-	HYP_CHECK(!F.Statistics.LocalLights.bActive && F.Statistics.LocalLights.Draws == 0);
+	const auto Two = F.Frame();
+	HYP_CHECK(std::abs(HdrPixel(Two) - (2 * One - Base)) < .012f);
+	HYP_CHECK(F.Statistics.LocalLights.Draws == (F.Settings.bClusteredLighting ? 0 : 2));
+	Similar(F.Settings.bClusteredLighting ? Two : Dark, F.Frame(ESceneRenderPipeline::Forward), .008f);
+	HYP_CHECK(F.Statistics.LocalLights.bActive == F.Settings.bClusteredLighting && F.Statistics.LocalLights.Draws == 0);
 	Scene.RemoveSubtree(Second);
 	CheckLocalLightCulling(F, Scene, Point, Bridge);
 	Scene.SetEnabled(Point, false);
@@ -707,6 +794,40 @@ void CheckOwnedLocalLights(FFixture& InFixture)
 	F.LogicalBridge = nullptr;
 	std::cout << "Local light GPU: analytic BRDF, additivity, camera/clip crossing, cone, culling and Forward "
 	             "exclusion passed\n";
+}
+
+void CheckClusteredMaterialCapacity(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 5}, {}, {1, .1f, 40, 5});
+	auto Point = MakeScenePointLightNode("capacity point");
+	Point.Local = Translation({0, 0, 2});
+	Point.PointLight = FScenePointLight{{1, 1, 1}, 5, 4};
+	Scene.AddNode(Point);
+	std::vector<FSceneHandle> Models;
+	for (unsigned Index = 0; Index < 32; ++Index)
+	{
+		FModelMaterial Material;
+		Material.BaseColor = {.5f, .5f, .5f, 1};
+		// Independent texture assets require distinct resource sets even when their texels match.
+		Models.push_back(Scene.Add({"material " + std::to_string(Index), PrepareSourceModel(Quad(Material, true))}));
+	}
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	F.LogicalBridge = &Bridge;
+	AwaitScene(Bridge, Models);
+	F.Shadows.bEnabled = true;
+	for (unsigned Index = 0; Index < 8; ++Index)
+	{
+		F.Settings.bClusteredLighting = Index % 2 == 0;
+		F.Frame(ESceneRenderPipeline::Forward, false);
+		HYP_CHECK(F.Statistics.MainView().VisibleItems == Models.size());
+		HYP_CHECK(F.Statistics.MainView().Draws == Models.size());
+	}
+	F.Settings.bClusteredLighting = true;
+	F.Shadows.bEnabled = false;
+	Bridge.Close();
+	F.LogicalBridge = nullptr;
 }
 
 void CheckOwnedOffscreenShadow(FFixture& InFixture)
@@ -1037,7 +1158,11 @@ int main()
 			CheckReplacementAndRecovery(Fixture);
 			CheckOwnedCameraLightRoutes(Fixture);
 			CheckOwnedLocalLights(Fixture);
+			Fixture.Settings.bClusteredLighting = false;
+			CheckOwnedLocalLights(Fixture);
+			Fixture.Settings.bClusteredLighting = true;
 			CheckOwnedOffscreenShadow(Fixture);
+			CheckClusteredMaterialCapacity(Fixture);
 		}
 		std::cout << "Deferred rendering tests passed\n";
 		return 0;

@@ -125,8 +125,16 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		InGui.TextWrapped(P.Status);
 		P.DrawSave(InGui);
 		DrawStatistics(InGui, InStats);
-		InGui.TextWrapped(InLights.bActive ? "Local lights: Deferred volumes active (opaque/masked only)"
-		                                   : "Local lights: inactive in Forward / shadow visualization");
+		InGui.TextWrapped(!InLights.bActive     ? "Local lights: inactive in Forward / shadow visualization"
+		                  : InLights.bClustered ? "Local lights: clustered (opaque, masked and lit transparent)"
+		                                        : "Local lights: Deferred volumes (opaque/masked only)");
+		if (InLights.bClustered)
+		{
+			InGui.Text("Clusters " + std::to_string(InLights.ClusterOccupied) + "/" +
+			           std::to_string(InLights.ClusterCells) + " | references " +
+			           std::to_string(InLights.ClusterReferences) + " | max lights " +
+			           std::to_string(InLights.ClusterMaximum));
+		}
 		InGui.Text("Point lights " + std::to_string(InLights.VisiblePoints) + "/" + std::to_string(InLights.Points) +
 		           " | Spot lights " + std::to_string(InLights.VisibleSpots) + "/" + std::to_string(InLights.Spots));
 		InGui.Text("Light candidates " + std::to_string(InLights.Spatial.CandidateGroups) + " | draws " +

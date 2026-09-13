@@ -129,12 +129,14 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		ClearTargets(InGraph, Clear);
 	}
 	const bool bDeferred = Settings.Pipeline == ESceneRenderPipeline::Deferred;
-	LastStatistics.LocalLights.bActive = bDeferred && !InShadows.DebugMode;
+	LastStatistics.LocalLights.bActive = (bDeferred || Settings.bClusteredLighting) && !InShadows.DebugMode;
+	LastStatistics.LocalLights.bClustered = Settings.bClusteredLighting;
 	if (const auto& Metadata = InFrame->GetSceneMetadata())
 	{
 		LastStatistics.LocalLights.Points = Metadata->PointLights.size();
 		LastStatistics.LocalLights.Spots = Metadata->SpotLights.size();
 	}
+	PrepareClusters(InMain, *InFrame, Settings.bClusteredLighting && !InShadows.DebugMode);
 	auto Family = MakeViews(InMain, Clear);
 	Session.BuildViews(InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
 	                   [&](std::size_t InIndex)
@@ -143,7 +145,7 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		                   {
 			                   AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear),
 			                                     bInDeferPreparation);
-			                   if (!InShadows.DebugMode)
+			                   if (!InShadows.DebugMode && !Settings.bClusteredLighting)
 			                   {
 				                   AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
 			                   }

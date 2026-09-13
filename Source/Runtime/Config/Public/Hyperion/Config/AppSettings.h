@@ -14,6 +14,7 @@ struct FAppSettings
 	int RenderRhiLead = 1;
 	std::string RHIBackend = "d3d12";
 	std::string RenderPipeline = "deferred";
+	bool bClusteredLighting = true;
 	std::string GBufferLayout = "compact";
 	double Exposure = 1;
 	int GBufferDebug = 0;

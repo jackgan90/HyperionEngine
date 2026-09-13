@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Renderer/ClusteredLights.h"
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/FullscreenPass.h"
 
@@ -26,6 +27,7 @@ struct FScenePipelineSettings
 	FGBufferLayout GBuffer;
 	float Exposure = 1;
 	std::uint32_t DebugMode{};
+	bool bClusteredLighting = true;
 };
 
 // Main constructs; Render builds immutable frame descriptions. RHI retains submitted generations.
@@ -64,6 +66,10 @@ private:
 	FScenePipelineSettings Settings;
 	FCascadedShadowMap ShadowMaps;
 	FLocalLightIndex LocalLightIndex;
+	FClusteredLights Clusters;
+	FMaterialParameterValues ClusterParameters;
+	std::shared_ptr<const void> ClusterLifetime;
+	void PrepareClusters(const FRenderView& InView, const FMaterialFrameContext& InFrame, bool bInEnabled);
 	void AddLocalLights(FRenderGraph& InGraph, const FRenderView& InView, const FMaterialFrameContext& InFrame,
 	                    bool bInDeferPreparation);
 	std::shared_ptr<const void> Lifetime;

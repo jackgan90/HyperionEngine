@@ -75,6 +75,10 @@ void WriteScenePipelineBenchmark(std::ostream& InOutput, const FForwardPipelineS
 	for (const auto& Pass : InDevice.GpuTiming.Passes)
 	{
 		Times.back() += Pass.Milliseconds;
+		if (Pass.Name.starts_with("Deferred/LightingClustered/") || Pass.Name.starts_with("Deferred/ClusterLighting/"))
+		{
+			Times[1] += Pass.Milliseconds;
+		}
 		for (std::size_t Index = 0; Index < Prefixes.size(); ++Index)
 		{
 			if (Pass.Name.starts_with(Prefixes[Index]))
@@ -253,7 +257,8 @@ void FViewerApplication::SaveBenchmark()
 	       ",base_gpu_ms,lighting_gpu_ms,compatibility_gpu_ms,transparent_gpu_ms,tonemap_gpu_ms,total_gpu_pass_ms"
 	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms,index_rebuilds,index_refits"
 	       ",local_lights_active,point_lights,spot_lights,local_visible,local_draws,local_query_ms,local_rebuilds,"
-	       "local_refits,local_gpu_ms\n"
+	       "local_refits,local_gpu_ms,clustered_lighting,cluster_cells,cluster_occupied,cluster_references,cluster_max_"
+	       "lights,cluster_bytes,cluster_build_ms,cluster_rebuilt\n"
 	    << std::fixed << std::setprecision(6);
 	std::vector<double> Times;
 	Times.reserve(BenchmarkFrames.size());
@@ -297,7 +302,10 @@ void FViewerApplication::SaveBenchmark()
 		Output << ',' << Lights.bActive << ',' << Lights.Points << ',' << Lights.Spots << ','
 		       << Lights.VisiblePoints + Lights.VisibleSpots << ',' << Lights.Draws << ','
 		       << Lights.Spatial.QueryMilliseconds << ',' << Lights.Spatial.IndexRebuilds << ','
-		       << Lights.Spatial.IndexRefits << ',' << LocalGpu << '\n';
+		       << Lights.Spatial.IndexRefits << ',' << LocalGpu << ',' << Lights.bClustered << ','
+		       << Lights.ClusterCells << ',' << Lights.ClusterOccupied << ',' << Lights.ClusterReferences << ','
+		       << Lights.ClusterMaximum << ',' << Lights.ClusterBytes << ',' << Lights.ClusterBuildMilliseconds << ','
+		       << Lights.bClusterRebuilt << '\n';
 		Times.push_back(Frame.Milliseconds);
 	}
 	Output.close();

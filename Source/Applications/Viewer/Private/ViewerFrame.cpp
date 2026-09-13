@@ -215,6 +215,7 @@ FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, c
 	Pipeline.GBuffer = InFrame.Settings.GBufferLayout == "high" ? FGBufferLayout::HighPrecision() : FGBufferLayout{};
 	Pipeline.Exposure = float(InFrame.Settings.Exposure);
 	Pipeline.DebugMode = static_cast<std::uint32_t>(InFrame.Settings.GBufferDebug);
+	Pipeline.bClusteredLighting = InFrame.Settings.bClusteredLighting;
 	ScenePipeline->Configure(Pipeline);
 	const auto Extensions = [&](FRenderGraph& InGraph)
 	{

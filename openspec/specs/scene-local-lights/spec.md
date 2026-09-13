@@ -1,7 +1,7 @@
 # scene-local-lights Specification
 
 ## Purpose
-Define scene-owned point and spot lights with persistent typed data, extensible visibility queries, shared attenuated direct lighting, and stable Deferred light-volume accumulation. Specify SceneViewer authoring and Sponza visual acceptance while keeping this local-light algorithm inactive in Forward.
+Define scene-owned point and spot lights with persistent typed data, extensible visibility queries and shared attenuated direct lighting. Specify default clustered shading across Deferred and HDR Forward, the optional Deferred light-volume fallback, SceneViewer authoring and Sponza visual acceptance.
 ## Requirements
 ### Requirement: Distinct persistent local light nodes
 Scene SHALL own distinct point and spot light payloads with stable node identity, hierarchy, effective enablement, linear color, intensity and positive world-unit range. Spot lights SHALL additionally own validated inner/outer half angles and derive emission from world minus-Z. Node scale SHALL NOT rescale authored range. Source/native serialization and runtime save SHALL preserve both types and migrate old scenes without adding lights.
@@ -33,23 +33,23 @@ Point, spot and directional lights SHALL use the same direct BRDF. Local lights 
 - **THEN** its linear HDR direct contribution equals the sum of the independent contributions within numerical tolerance
 
 ### Requirement: Deferred light volumes with stable coverage
-Deferred SHALL draw closed conservative sphere/cone volumes into HDR with additive RGB, preserved alpha, CullFront inside and outside, disabled Z clipping and no depth test/write/attachment. Shaders SHALL reconstruct the actual receiver and reject invalid or out-of-influence pixels. Each light SHALL contribute at most once per receiver sample. Forward and forward transparency SHALL receive no local-light list or local contribution.
+Local lighting SHALL default to clustered evaluation in Deferred and HDR Forward, including lit transparency. When clustering is disabled, Deferred SHALL draw closed conservative sphere/cone volumes into HDR with additive RGB, preserved alpha, CullFront inside and outside, disabled Z clipping and no depth test/write/attachment. Volume shaders SHALL reconstruct the actual receiver and reject invalid or out-of-influence pixels. Each light SHALL contribute at most once per receiver sample. With clustering disabled, Forward and forward transparency SHALL receive no local contribution.
 
 #### Scenario: Camera crosses the volume
-- **WHEN** a camera moves outside, inside or across a sphere/cone and its near/far planes intersect the proxy
+- **WHEN** clustering is disabled and a camera moves outside, inside or across a sphere/cone and its near/far planes intersect the proxy
 - **THEN** valid receivers remain illuminated once without brightness doubling or clipping holes in either depth convention
 
 #### Scenario: Forward selection
 - **WHEN** the user selects Forward with local lights present
-- **THEN** the scene retains editable lights, the algorithm reports inactive, and no local draws or shader list bindings occur
+- **THEN** clustered lighting illuminates lit models by default, while disabling clustering retains editable lights and disables local contribution
 
 ### Requirement: Editable diagnostic and Sponza acceptance
-SceneViewer SHALL expose creation/editing of both local light types, influence visualization, per-type visibility/draw statistics and algorithm availability. The default Sponza scene SHALL contain authored point lights approximating the floor pools and nearby architectural lighting of the Khronos README Screenshot while preserving its calibrated camera and model/material assets. Delivery SHALL include real D3D12 on/off captures, a reference comparison, documented visual limitations and validation/resource evidence.
+SceneViewer SHALL expose creation/editing of both local light types, influence visualization, per-type visibility/draw statistics and algorithm availability. The default Sponza scene SHALL retain its authored point lights approximating the floor pools and nearby architectural lighting of the Khronos README Screenshot while preserving its calibrated camera and model/material assets. Default clustered rendering SHALL preserve the existing point-light appearance within documented numerical tolerance. Delivery SHALL include real D3D12 clustered/volume comparisons, documented visual limitations and validation/resource evidence.
 
 #### Scenario: Default Sponza run
 - **WHEN** the default SceneViewer Sponza scene is rendered with Deferred
-- **THEN** distinct soft local floor illumination and nearby surface lighting approach the reference, lights survive save/reload, and GPU validation reports no errors
+- **THEN** clustering is enabled, existing local illumination is preserved, lights survive save/reload, and GPU validation reports no errors
 
 #### Scenario: Stable and moving workloads
 - **WHEN** ready scenes render with static/moving cameras, light edits, resize and pipeline switching
-- **THEN** resource use remains bounded and the recorded statistics distinguish model work from local light work
+- **THEN** resource use remains bounded and recorded statistics distinguish model work, cluster preparation and legacy light-volume work

@@ -14,19 +14,43 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
                                                    FVec4 InClear) const
 {
 	static const auto Material = MakeFullscreenMaterial("Deferred lighting", "Deferred/Lighting.hlsl");
+	static const auto Clustered = MakeFullscreenMaterial("Deferred clustered lighting", "Deferred/Clustered.hlsl");
+	static const auto ClusterOnly = MakeFullscreenMaterial("Deferred cluster only", "Deferred/ClusteredOnly.hlsl");
+	const bool bClustered = Settings.bClusteredLighting && LastStatistics.LocalLights.bActive;
+	const auto Direct = Session.ResolveFrameSemantic(InFrame, "Engine.Scene.MainDirectionalLightColor");
+	if (!Direct || Direct->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
+	{
+		throw std::invalid_argument("Deferred lighting requires scene directional radiance");
+	}
+	const bool bNoDirectional = bClustered && Direct->Words == FMaterialValue::Float(FVec3{}).Words;
 	FFullscreenPassDesc Result;
-	Result.Material = Material;
+	Result.Material = bClustered ? (bNoDirectional ? ClusterOnly : Clustered) : Material;
 	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
 	Result.Statistics = FullscreenStatistics;
 	Result.Viewport = Viewport(InMain);
 	Result.Targets =
 	    ColorTargets("Deferred/Lighting", InMain.Viewport ? EAttachmentLoad::Load : EAttachmentLoad::Clear, InClear);
+	if (bClustered)
+	{
+		Result.Targets.Name = bNoDirectional ? "Deferred/ClusterLighting" : "Deferred/LightingClustered";
+		Result.ParameterLifetime = ClusterLifetime;
+		for (const auto& Parameter : ClusterParameters)
+		{
+			const auto Name = Parameter.Name.substr(std::string("Engine.View.").size());
+			Result.Parameters.push_back(
+			    {"Pixel:" + (Parameter.Value.Type.Kind == EMaterialValueKind::Numeric ? "ClusterViewV1." + Name : Name),
+			     Parameter.Value});
+		}
+	}
 	auto ShadowView = InMain;
-	ShadowMaps.Bind(ShadowView, Result.Targets, ShadowLifetime);
+	if (!bNoDirectional)
+	{
+		ShadowMaps.Bind(ShadowView, Result.Targets, ShadowLifetime);
+	}
 	for (const auto& Parameter : ShadowView.Parameters)
 	{
-		if (Parameter.Name.starts_with("Engine.View.Shadow"))
+		if (!bNoDirectional && Parameter.Name.starts_with("Engine.View.Shadow"))
 		{
 			const auto Name = Parameter.Name.substr(std::string("Engine.View.").size());
 			Result.Parameters.push_back(
@@ -59,6 +83,10 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	                            std::pair{"LightColor", "Engine.Scene.MainDirectionalLightColor"},
 	                            std::pair{"Ambient", "Engine.Scene.AmbientColor"}})
 	{
+		if (bNoDirectional && std::string_view(Mapping.first) != "Ambient")
+		{
+			continue;
+		}
 		const auto Value = Session.ResolveFrameSemantic(InFrame, Mapping.second);
 		if (!Value || Value->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
 		{

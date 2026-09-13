@@ -38,6 +38,7 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 	}
 	else
 	{
+		InMain.Parameters.insert(InMain.Parameters.end(), ClusterParameters.begin(), ClusterParameters.end());
 		auto Forward = ColorTargets("Forward/HDR", MainLoad, InClear);
 		Forward.DepthStencil = DepthTarget(MainLoad);
 		ShadowMaps.Bind(InMain, Forward, ShadowLifetime);
@@ -51,6 +52,10 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 		AddView(Views, Targets, InMain, "HdrCompatibility", std::move(Compatibility), 2);
 	}
 	auto Transparent = ColorTargets("Scene/Transparent", EAttachmentLoad::Load);
+	if (bDeferred)
+	{
+		InMain.Parameters.insert(InMain.Parameters.end(), ClusterParameters.begin(), ClusterParameters.end());
+	}
 	Transparent.DepthStencil = DepthTarget(EAttachmentLoad::Load);
 	ShadowMaps.Bind(InMain, Transparent, ShadowLifetime);
 	AddView(Views, Targets, InMain, "HdrTransparent", std::move(Transparent), 3);

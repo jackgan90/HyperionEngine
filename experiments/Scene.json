@@ -3,6 +3,7 @@
   "schema_version": 1,
   "properties": {
     "reversed_z": true,
+    "clustered_lighting": true,
     "title": "Hyperion | Sponza",
     "width": 1440,
     "height": 728,

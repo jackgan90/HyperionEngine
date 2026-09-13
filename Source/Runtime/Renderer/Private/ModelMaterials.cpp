@@ -1,5 +1,6 @@
 #include "ModelMaterials.h"
 #include "Hyperion/Renderer/CascadedShadowMap.h"
+#include "Hyperion/Renderer/ClusteredLights.h"
 
 namespace Hyperion
 {
@@ -13,7 +14,9 @@ struct FMaterialAssetLifetime
 
 void SemanticDefaults(FMaterialDescription& InDescription)
 {
-	const auto Defaults = DefaultShadowParameters();
+	auto Defaults = DefaultShadowParameters();
+	const auto ClusterDefaults = DefaultClusterParameters();
+	Defaults.insert(Defaults.end(), ClusterDefaults.begin(), ClusterDefaults.end());
 	for (auto& Parameter : InDescription.Parameters)
 	{
 		if (Parameter.Source != EMaterialParameterSource::Semantic || Parameter.Default)

@@ -6,6 +6,8 @@
 #include <limits>
 #include <random>
 
+void CheckClusteredLights();
+
 namespace
 {
 using namespace Hyperion;
@@ -240,6 +242,7 @@ int main()
 		CheckSpatial();
 		CheckCollection();
 		CheckLocalLightIndex();
+		CheckClusteredLights();
 		std::cout << "BVH differential, incremental updates, conservative early collection and view isolation passed\n";
 	}
 	catch (const std::exception& Error)

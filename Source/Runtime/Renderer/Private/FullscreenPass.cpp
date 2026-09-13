@@ -105,8 +105,15 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 	}
 	const auto Snapshot = Entry.Instance->Freeze();
 	const auto& Program = Entry.Program->GetPass();
-	const auto Values = ResolveMaterialBindingContext(Snapshot, *Entry.Program, Program, {});
+	auto Values = ResolveMaterialBindingContext(Snapshot, *Entry.Program, Program, {});
 	FMaterialResourceOwners BindingOwners{InPass.Lifetime};
+	if (InPass.ParameterLifetime)
+	{
+		Owner.TrackScope(InPass.ParameterLifetime);
+		BindingOwners.push_back(InPass.ParameterLifetime);
+		Values.Scopes.Set(static_cast<std::size_t>(EMaterialScope::Material),
+		                  {{Snapshot->Identity, Snapshot->Revision}, InPass.ConstantLifetime});
+	}
 	for (const auto& Read : InPass.Targets.Reads)
 	{
 		if (Read.Lifetime &&
@@ -150,6 +157,10 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 void FRenderSession::AppendFullscreen(FRenderGraph& InGraph, FFullscreenPassDesc InPass, bool bInDeferPreparation)
 {
 	Tasks.Require({EDomain::Render});
+	if (InPass.ParameterLifetime)
+	{
+		InPass.ConstantLifetime = Resources.CreateScopeLifetime();
+	}
 	FRenderSceneSnapshot Snapshot;
 	if (!InPass.bFullTargetViewport)
 	{

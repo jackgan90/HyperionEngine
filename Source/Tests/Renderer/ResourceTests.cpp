@@ -145,16 +145,16 @@ public:
 	FResourceBindingLayout CreateBindingLayout(const FResourceBindingLayoutDesc&) override
 	{
 		Tasks.Require({EDomain::Rhi, 0});
+		if (bFailLayout.exchange(false))
+		{
+			throw std::runtime_error("Expected layout failure");
+		}
 		return {std::make_shared<TTrackedResource<IRHIResourceBindingLayout>>(Tasks, Alive)};
 	}
 
 	FResourceBindingSet CreateBindingSet(const FResourceBindingSetDesc& InDesc) override
 	{
 		Tasks.Require({EDomain::Rhi, 0});
-		if (bFailBinding.exchange(false))
-		{
-			throw std::runtime_error("Expected binding failure");
-		}
 		std::vector<std::shared_ptr<IRHIResource>> Dependencies{InDesc.Layout.Payload};
 		for (const auto& Entry : InDesc.Entries)
 		{
@@ -214,7 +214,7 @@ public:
 	std::atomic_int Alive{};
 	std::atomic<bool> bUploadComplete{};
 	std::atomic<bool> bFrameComplete{};
-	std::atomic<bool> bFailBinding{};
+	std::atomic<bool> bFailLayout{};
 	std::atomic<bool> bFailCollection{};
 	std::atomic_int IdleCalls{};
 	std::vector<FGraphicsDrawBatch> Retained;
@@ -303,7 +303,7 @@ void CheckSharedUpload(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompi
 	InTasks.Wait(A.Remove());
 	First.reset();
 	HYP_CHECK(B.GetStatus().State == ERenderPrimitiveStatus::PendingResources);
-	HYP_CHECK(InDevice.Alive == 5);
+	HYP_CHECK(InDevice.Alive == 4); // Two geometry buffers, texture and layout; no unused static descriptor set.
 	InDevice.bUploadComplete = true;
 	Await(
 	    [&]
@@ -502,7 +502,7 @@ void CheckNoFrameCleanup(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 {
 	FRenderSession Session(InTasks, InDevice, InCompiler);
 	const auto IdleBefore = InDevice.IdleCalls.load();
-	InDevice.bFailBinding = true;
+	InDevice.bFailLayout = true;
 	auto Failed = Session.GetResources().Request(std::make_shared<const int>(7), 1, "pipeline-failure",
 	                                             []
 	                                             {
@@ -516,7 +516,7 @@ void CheckNoFrameCleanup(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	    {
 		    return Binding.GetStatus().State == ERenderPrimitiveStatus::Failed;
 	    });
-	HYP_CHECK(Binding.GetStatus().Error == "Expected binding failure");
+	HYP_CHECK(Binding.GetStatus().Error == "Expected layout failure");
 	InTasks.Wait(Binding.Remove());
 	Failed.reset();
 	Await(

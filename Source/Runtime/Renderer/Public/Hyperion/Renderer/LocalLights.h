@@ -27,6 +27,14 @@ struct FLocalLightStatistics
 	std::size_t VisibleSpots{};
 	std::size_t Draws{};
 	bool bActive{};
+	bool bClustered{};
+	std::size_t ClusterCells{};
+	std::size_t ClusterOccupied{};
+	std::size_t ClusterReferences{};
+	std::size_t ClusterMaximum{};
+	std::size_t ClusterBytes{};
+	double ClusterBuildMilliseconds{};
+	bool bClusterRebuilt{};
 	FSceneVisibilityStats Spatial;
 };
 

@@ -1,6 +1,14 @@
 #include "../CascadedShadows.hlsli"
 #include "DirectLighting.hlsli"
 
+float3 EvaluateIndirectLighting(FMaterialParameters InMaterial, float3 InAmbient)
+{
+	float3 F0 = lerp(float3(.04, .04, .04), InMaterial.BaseColor, InMaterial.Metallic);
+	return (InMaterial.BaseColor * (1 - InMaterial.Metallic) + F0 * (.7 - .4 * InMaterial.Roughness)) * InAmbient *
+	           InMaterial.Occlusion +
+	       InMaterial.Emissive;
+}
+
 float3 EvaluateLighting(FMaterialParameters InMaterial, float3 InWorld, float3 InCamera, float3 InLight,
                         float3 InLightColor, float3 InAmbient, float3 InDx, float3 InDy)
 {

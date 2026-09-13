@@ -1,4 +1,4 @@
-#include "../Lighting/DirectLighting.hlsli"
+#include "../Lighting/LocalLighting.hlsli"
 #include "GBuffer.hlsli"
 
 cbuffer LocalVolumeV1 : register(b0)
@@ -37,22 +37,7 @@ float4 PSMain(float4 InPosition : SV_Position) : SV_Target0
 	float4 Surface = GBuffer2.Load(int3(Pixel, 0));
 	clip(Surface.z - .5);
 	float3 Receiver = ReconstructWorld(InPosition.xy, SceneDepth.Load(int3(Pixel, 0)));
-	float3 ToLight = Position - Receiver;
-	float DistanceSquared = dot(ToLight, ToLight);
-	float Distance = sqrt(DistanceSquared);
-	float NormalizedDistance = Distance * ConeRange.x;
-	clip(1 - NormalizedDistance);
-	float3 L = DistanceSquared > 1e-12 ? ToLight * rsqrt(DistanceSquared) : float3(0, 0, 1);
-	float Attenuation = saturate(1 - pow(NormalizedDistance, 4));
-	Attenuation = Attenuation * Attenuation / max(DistanceSquared, .0001);
-	if (ConeRange.w > .5)
-	{
-		float Angle = dot(Direction, -L);
-		clip(Angle - ConeRange.z);
-		Attenuation *= smoothstep(ConeRange.z, ConeRange.y, Angle);
-	}
 	FMaterialParameters Material =
 	    DecodeGBuffer(GBuffer0.Load(int3(Pixel, 0)), GBuffer1.Load(int3(Pixel, 0)), Surface, 0);
-	float3 Color = EvaluateDirectLighting(Material, Receiver, Eye, L, min(Radiance, 1e20) * Attenuation);
-	return float4(min(Color, 65000), 0);
+	return float4(EvaluateLocalLight(Material, Receiver, Eye, Position, Radiance, Direction, ConeRange), 0);
 }

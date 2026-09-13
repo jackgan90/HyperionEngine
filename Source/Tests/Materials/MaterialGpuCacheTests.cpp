@@ -164,6 +164,23 @@ void CheckSharedOwners(IRHIDevice& InDevice)
 	HYP_CHECK(Cache.IsEmpty());
 }
 
+void CheckUploadWithoutSet(FMaterialGpuCache& InCache, const FCompiledMaterialDefinition& InProgram,
+                           const FMaterialInstance& InInstance, const FMaterialResourceOwners& InOwners)
+{
+	const auto Resolved = ResolveMaterialBindingContext(InInstance.Freeze(), InProgram, InProgram.GetPass(), {});
+	std::vector<std::optional<FMaterialValue>> Values(Resolved.Values.GetSize());
+	for (std::size_t Index = 0; Index < Values.size(); ++Index)
+	{
+		if (const auto Value = Resolved.Values.Get(Index))
+		{
+			Values[Index] = *Value;
+		}
+	}
+	const auto Uploaded = InCache.BindResources(InProgram.GetPass(), Values, InOwners, true, false);
+	HYP_CHECK(Uploaded.Layout && !Uploaded.Set && InCache.Statistics().SetsCreated == 0 &&
+	          InCache.Statistics().TextureUploads == 1);
+}
+
 void CheckSampling(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 {
 	FMaterialGpuCache Cache(InDevice);
@@ -183,6 +200,7 @@ void CheckSampling(IRHIDevice& InDevice, IRHISwapchain& InSwapchain)
 		const auto Parameters = ResolveMaterialBindingContext(Instance.Freeze(), Program, Program.GetPass(), {});
 		return Cache.BindResources(Program.GetPass(), Parameters.Values, Owners);
 	};
+	CheckUploadWithoutSet(Cache, Program, Instance, Owners);
 	auto Bindings = Bind();
 	InDevice.WaitIdle();
 	Bindings = Bind();

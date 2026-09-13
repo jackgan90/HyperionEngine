@@ -85,7 +85,9 @@ void FRenderResourceCoordinator::PrepareMaterialResources(FRenderMaterialRecord&
 			// Optional native layouts are prepared by the batch path, which can fall back to ordinary draws.
 			continue;
 		}
-		auto Binding = MaterialGpu->BindResources(Pass, Values, {InRecord.GpuLifetime}, true);
+		// Upload sources eagerly, but publish descriptor sets only for actual draws. View defaults are
+		// replaced by shadow/cluster resources and must not pin redundant sets for every unused pass.
+		auto Binding = MaterialGpu->BindResources(Pass, Values, {InRecord.GpuLifetime}, true, false);
 		bReady &= Binding.bReady;
 		Bindings.push_back(std::move(Binding));
 	}

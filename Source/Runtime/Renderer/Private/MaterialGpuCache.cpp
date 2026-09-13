@@ -119,7 +119,7 @@ FResourceBindingSet FMaterialGpuCache::FImpl::Set(FResourceBindingSetDesc InDesc
 FMaterialResourceBindings FMaterialGpuCache::BindResourceValues(const FCompiledMaterialPass& InPass,
                                                                 std::span<const FMaterialValue* const> InValues,
                                                                 const FMaterialResourceOwners& InOwners,
-                                                                bool bInAllowMissing)
+                                                                bool bInAllowMissing, bool bInCreateSet)
 {
 	Impl->CheckOwner();
 	FResourceBindingSetDesc Description;
@@ -173,7 +173,7 @@ FMaterialResourceBindings FMaterialGpuCache::BindResourceValues(const FCompiledM
 	}
 	FMaterialResourceBindings Result;
 	Result.Layout = Description.Layout;
-	if (bComplete)
+	if (bComplete && bInCreateSet)
 	{
 		Result.Set = Impl->Set(std::move(Description), InOwners);
 	}
@@ -184,7 +184,7 @@ FMaterialResourceBindings FMaterialGpuCache::BindResourceValues(const FCompiledM
 FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMaterialPass& InPass,
                                                            std::span<const std::optional<FMaterialValue>> InValues,
                                                            const FMaterialResourceOwners& InOwners,
-                                                           bool bInAllowMissing)
+                                                           bool bInAllowMissing, bool bInCreateSet)
 {
 	HYP_PERF_SCOPE_C(Detail, BindMaterialResources);
 	std::vector<const FMaterialValue*> Values;
@@ -193,7 +193,7 @@ FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMateri
 	{
 		Values.push_back(Value ? &*Value : nullptr);
 	}
-	return BindResourceValues(InPass, Values, InOwners, bInAllowMissing);
+	return BindResourceValues(InPass, Values, InOwners, bInAllowMissing, bInCreateSet);
 }
 
 FMaterialResourceBindings FMaterialGpuCache::BindResources(

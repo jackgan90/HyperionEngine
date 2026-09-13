@@ -34,6 +34,16 @@ FMaterialSemanticRegistry::FMaterialSemanticRegistry()
 	}
 	Add({"Engine.View.ShadowSampler", FMaterialParameterType::Resource(EMaterialValueKind::Sampler),
 	     EMaterialScope::View, "Less-equal depth comparison sampler"});
+	for (const auto* Name : {"ClusterViewport", "ClusterGrid", "ClusterCamera", "ClusterForward", "ClusterDepth"})
+	{
+		Numeric(std::string("Engine.View.") + Name, EMaterialScalar::Float, 4, EMaterialScope::View,
+		        "Clustered local lighting view contract V1");
+	}
+	for (const auto* Name : {"ClusterLights", "ClusterHeaders", "ClusterIndices"})
+	{
+		Add({std::string("Engine.View.") + Name, FMaterialParameterType::Resource(EMaterialValueKind::ReadBuffer),
+		     EMaterialScope::View, "Clustered local lighting structured buffer V1"});
+	}
 	Numeric("Engine.Object.World", EMaterialScalar::Float, 4, EMaterialScope::Object, "Column-vector local to world",
 	        4);
 	Numeric("Engine.Object.Normal", EMaterialScalar::Float, 4, EMaterialScope::Object,

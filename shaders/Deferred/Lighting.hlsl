@@ -1,5 +1,8 @@
 #include "../Lighting/SurfaceLighting.hlsli"
 #include "GBuffer.hlsli"
+#if HYP_CLUSTERED
+#include "../Lighting/ClusteredLighting.hlsli"
+#endif
 Texture2D<float4> GBuffer0 : register(t0);
 Texture2D<float4> GBuffer1 : register(t1);
 Texture2D<float4> GBuffer2 : register(t2);
@@ -12,8 +15,10 @@ cbuffer DeferredLightV1 : register(b0)
 	float4 Viewport;
 	float2 DepthRange;
 	float3 Eye;
+#if !HYP_NO_DIRECTIONAL
 	float3 LightDirection;
 	float3 LightColor;
+#endif
 	float3 Ambient;
 };
 
@@ -56,7 +61,15 @@ float4 PSMain(float4 InPosition : SV_Position) : SV_Target0
 	FMaterialParameters Material = DecodeGBuffer(GBuffer0.Load(int3(Pixel, 0)), GBuffer1.Load(int3(Pixel, 0)), Surface,
 	                                             GBuffer3.Load(int3(Pixel, 0)));
 	float3 World = ReconstructWorld(InPosition.xy, SceneDepth.Load(int3(Pixel, 0)));
+#if HYP_NO_DIRECTIONAL
+	float3 Color = EvaluateIndirectLighting(Material, Ambient);
+#else
 	float3 Dx = ReceiverDerivative(Pixel, int2(1, 0), World, Material.GeometricNormal);
 	float3 Dy = ReceiverDerivative(Pixel, int2(0, 1), World, Material.GeometricNormal);
-	return float4(EvaluateLighting(Material, World, Eye, LightDirection, LightColor, Ambient, Dx, Dy), 1);
+	float3 Color = EvaluateLighting(Material, World, Eye, LightDirection, LightColor, Ambient, Dx, Dy);
+#endif
+#if HYP_CLUSTERED
+	Color += EvaluateClusteredLighting(Material, World, Eye, InPosition.xy);
+#endif
+	return float4(Color, 1);
 }

@@ -58,6 +58,15 @@ void AddParameters(FMaterialDescription& InDescription)
 		Parameter.Targets = {Parameter.Type.Kind == EMaterialValueKind::Numeric ? "ShadowViewV1." + InName : InName};
 		InDescription.Parameters.push_back(std::move(Parameter));
 	};
+	for (const auto* Name : {"ClusterViewport", "ClusterGrid", "ClusterCamera", "ClusterForward", "ClusterDepth",
+	                         "ClusterLights", "ClusterHeaders", "ClusterIndices"})
+	{
+		auto Parameter =
+		    DeclareMaterialSemantic(std::string("Engine.View.") + Name, std::string("Engine.View.") + Name, *Semantics);
+		Parameter.Targets = {Parameter.Type.Kind == EMaterialValueKind::Numeric ? std::string("ClusterViewV1.") + Name
+		                                                                        : Name};
+		InDescription.Parameters.push_back(std::move(Parameter));
+	}
 	for (const auto* Name : {"ShadowSplits", "ShadowTexels", "ShadowRanges", "ShadowCamera", "ShadowFilter",
 	                         "ShadowControl", "ShadowSampler"})
 	{

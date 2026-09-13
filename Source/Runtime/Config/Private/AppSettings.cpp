@@ -75,6 +75,7 @@ const FTypeDescriptor& SettingsType()
 	     Field("render_rhi_lead", "Render to RHI lead (restart)", &FAppSettings::RenderRhiLead, 0, 16),
 	     Field("rhi_backend", "RHI backend (restart)", &FAppSettings::RHIBackend),
 	     Field("render_pipeline", "Render pipeline", &FAppSettings::RenderPipeline),
+	     Field("clustered_lighting", "Clustered local lighting", &FAppSettings::bClusteredLighting),
 	     Field("reversed_z", "Reversed Z (restart)", &FAppSettings::bReversedZ),
 	     Field("gbuffer_layout", "GBuffer layout", &FAppSettings::GBufferLayout),
 	     Field("exposure", "Exposure", &FAppSettings::Exposure, .01, 16),

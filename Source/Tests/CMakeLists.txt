@@ -30,6 +30,7 @@ set_tests_properties(material_rendering PROPERTIES TIMEOUT 120 LABELS "gpu;deskt
 hyp_test(scene_tests scene_management hyperion_scene Scene/SceneTests.cpp)
 target_sources(scene_tests PRIVATE Scene/SceneNodeTests.cpp)
 hyp_test(spatial_tests scene_spatial_visibility hyperion_render Renderer/SpatialTests.cpp)
+target_sources(spatial_tests PRIVATE Renderer/ClusteredLightTests.cpp)
 hyp_test(scene_instance_tests scene_runtime_instance hyperion_render Renderer/SceneInstanceTests.cpp)
 target_link_libraries(scene_instance_tests PRIVATE hyperion_assets hyperion_rhi_d3d12)
 target_compile_definitions(scene_instance_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

@@ -219,17 +219,21 @@ float4 PSMain() : SV_Target0 { return Maps[0].Sample(Filter, .5) + Maps[1].Sampl
 	FShaderCompiler Compiler(Root, "material-resource-failure/cache");
 	FRenderResourceService Service(Tasks, *Device, Compiler);
 	FMaterialDescription Description;
-	Description.Name = "Upload then exhausted visible descriptors";
+	Description.Name = "Upload then exhausted source descriptors";
 	FMaterialPass Pass;
 	Pass.Vertex = {"Failure.hlsl", "VSMain"};
 	Pass.Pixel = {"Failure.hlsl", "PSMain"};
 	Description.Passes.push_back(Pass);
 	const auto Source = std::make_shared<const FMaterialTextureSource>(
 	    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {255, 255, 255, 255}}});
+	const auto SecondSource = std::make_shared<const FMaterialTextureSource>(
+	    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {127, 127, 127, 255}}});
 	FMaterialParameterDeclaration Maps;
 	Maps.Name = "Maps";
 	Maps.Type = FMaterialParameterType::Array(FMaterialParameterType::Resource(EMaterialValueKind::Texture2D), 2);
-	Maps.Default = FMaterialValue::Array({FMaterialValue::FromTexture(Source), FMaterialValue::FromTexture(Source)});
+	// Static preparation uploads sources; visible tables are now deferred until an actual draw.
+	Maps.Default =
+	    FMaterialValue::Array({FMaterialValue::FromTexture(Source), FMaterialValue::FromTexture(SecondSource)});
 	Description.Parameters.push_back(Maps);
 	FMaterialParameterDeclaration Filter;
 	Filter.Name = "Filter";

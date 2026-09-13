@@ -41,7 +41,10 @@ FD3D12DescriptorRange FD3D12DescriptorArena::Reserve(UINT InCount)
 			return {Begin, InCount};
 		}
 	}
-	throw std::runtime_error("Material descriptor capacity exceeded (contiguous range unavailable)");
+	const auto Description = Heap->GetDesc();
+	throw std::runtime_error("Material descriptor capacity exceeded (contiguous range unavailable): heap=" +
+	                         std::to_string(Description.Type) + " requested=" + std::to_string(InCount) +
+	                         " capacity=" + std::to_string(Occupied.size()));
 }
 
 void FD3D12DescriptorArena::Release(FD3D12DescriptorRange InRange) noexcept

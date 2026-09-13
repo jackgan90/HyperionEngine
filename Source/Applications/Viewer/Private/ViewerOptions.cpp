@@ -67,7 +67,11 @@ bool ParseBenchmarkOption(FOptions& InOptions, const std::string& InArg, int InA
 
 bool ParseScenePipelineOption(FOptions& InOptions, const std::string& InArg, int InArgc, char** InArgv, int& InIndex)
 {
-	if (InArg == "--pipeline" && InIndex + 1 < InArgc)
+	if (InArg == "--clustered-lighting" || InArg == "--no-clustered-lighting")
+	{
+		InOptions.ClusteredLighting = InArg == "--clustered-lighting";
+	}
+	else if (InArg == "--pipeline" && InIndex + 1 < InArgc)
 	{
 		const std::string Value = InArgv[++InIndex];
 		if (Value != "deferred" && Value != "forward")
@@ -301,6 +305,7 @@ FOptions ParseOptions(int InArgc, char** InArgv)
 
 void ApplyOptions(const FOptions& InOptions, FAppSettings& InSettings)
 {
+	InSettings.bClusteredLighting = InOptions.ClusteredLighting.value_or(InSettings.bClusteredLighting);
 	if (InOptions.bPipelineOption)
 	{
 		InSettings.RenderPipeline =

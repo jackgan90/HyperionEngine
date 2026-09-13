@@ -23,6 +23,7 @@ struct FOptions
 	bool bNoInstanceBatching{};
 	FScenePipelineSettings Pipeline;
 	bool bPipelineOption{};
+	std::optional<bool> ClusteredLighting;
 	bool bGBufferOption{};
 	bool bExposureOption{};
 	std::optional<int> GBufferDebug;

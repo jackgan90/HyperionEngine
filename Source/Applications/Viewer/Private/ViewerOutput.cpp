@@ -1,8 +1,31 @@
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/Renderer/SceneInstance.h"
 #include "ViewerApplication.h"
 
 namespace Hyperion
 {
+namespace
+{
+void VerifySceneDraws(FSceneViewerPlugin& InPlugin, std::size_t InDraws)
+{
+	auto& Scene = InPlugin.GetSceneInstance();
+	for (const auto& Model : Scene.GetModels())
+	{
+		for (const auto& Draw : Scene.GetDrawResults(Model.Handle))
+		{
+			if (!Draw.Error.empty())
+			{
+				throw std::runtime_error("Scene draw failed (" + Draw.Usage + "): " + Draw.Error);
+			}
+		}
+	}
+	if (!InPlugin.Ready() || InDraws == 0)
+	{
+		throw std::runtime_error("Scene model verification requires ready models and submitted draws");
+	}
+}
+} // namespace
+
 void FViewerApplication::SaveSettingsAsync(const std::filesystem::path& InPath)
 {
 	const auto Text = EncodeReflected(SettingsType(), &Settings);
@@ -43,6 +66,10 @@ void FViewerApplication::VerifyOutputs()
 	                         std::to_string(Metrics.FrameLimits.RenderLead));
 	if (ScenePlugin)
 	{
+		if (Options.bVerifyModel)
+		{
+			VerifySceneDraws(*ScenePlugin, SceneStatistics.Draws);
+		}
 		Log(ELogLevel::Info, "Scene: " + ScenePlugin->Status() + " | groups=" + std::to_string(SceneStatistics.Groups) +
 		                         " visits=" + std::to_string(SceneStatistics.VisitedNodes) +
 		                         " group_tests=" + std::to_string(SceneStatistics.GroupTests) +
@@ -51,10 +78,12 @@ void FViewerApplication::VerifyOutputs()
 		                         " draws=" + std::to_string(SceneStatistics.Draws));
 	}
 	const auto& Lights = PipelineStatistics.LocalLights;
-	Log(ELogLevel::Info, "Local lights: active=" + std::to_string(Lights.bActive) +
-	                         " points=" + std::to_string(Lights.Points) + " spots=" + std::to_string(Lights.Spots) +
-	                         " visible=" + std::to_string(Lights.VisiblePoints + Lights.VisibleSpots) +
-	                         " draws=" + std::to_string(Lights.Draws));
+	Log(ELogLevel::Info,
+	    "Local lights: active=" + std::to_string(Lights.bActive) + " points=" + std::to_string(Lights.Points) +
+	        " spots=" + std::to_string(Lights.Spots) + " visible=" +
+	        std::to_string(Lights.VisiblePoints + Lights.VisibleSpots) + " draws=" + std::to_string(Lights.Draws) +
+	        " clustered=" + std::to_string(Lights.bClustered) + " clusters=" + std::to_string(Lights.ClusterOccupied) +
+	        "/" + std::to_string(Lights.ClusterCells) + " references=" + std::to_string(Lights.ClusterReferences));
 	if (!Options.Capture.empty() && !bCaptured)
 	{
 		throw std::runtime_error("Requested capture was not produced");

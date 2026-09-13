@@ -116,6 +116,9 @@ FGBufferOutput PSMain(FVertexOutput InInput, bool bInFront : SV_IsFrontFace)
 }
 #else
 #include "Lighting/SurfaceLighting.hlsli"
+#if HYP_FORWARD_HDR
+#include "Lighting/ClusteredLighting.hlsli"
+#endif
 
 float4 PSMain(FVertexOutput InInput, bool bInFront : SV_IsFrontFace) : SV_Target0
 {
@@ -126,6 +129,9 @@ float4 PSMain(FVertexOutput InInput, bool bInFront : SV_IsFrontFace) : SV_Target
 	float3 Color =
 	    EvaluateLighting(Material, InInput.WorldPosition, CameraPosition.xyz, MainLightDirection, MainLightColor,
 	                     AmbientColor, ddx(InInput.WorldPosition), ddy(InInput.WorldPosition));
+#if HYP_FORWARD_HDR
+	Color += EvaluateClusteredLighting(Material, InInput.WorldPosition, CameraPosition.xyz, InInput.Position.xy);
+#endif
 #if !HYP_FORWARD_HDR
 	if (!Material.bUnlit)
 	{
