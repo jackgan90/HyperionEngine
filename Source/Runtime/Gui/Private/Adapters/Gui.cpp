@@ -355,12 +355,13 @@ bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, st
 	return bChanged;
 }
 
-bool FGui::InputText(const char* InLabel, std::string& InValue)
+bool FGui::InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter)
 {
 	Impl->Select();
 	std::vector<char> Buffer(InValue.size() + 1024, 0);
 	std::copy(InValue.begin(), InValue.end(), Buffer.begin());
-	if (!ImGui::InputText(InLabel, Buffer.data(), Buffer.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+	if (!ImGui::InputText(InLabel, Buffer.data(), Buffer.size(),
+	                      bInCommitOnEnter ? ImGuiInputTextFlags_EnterReturnsTrue : 0))
 	{
 		return false;
 	}

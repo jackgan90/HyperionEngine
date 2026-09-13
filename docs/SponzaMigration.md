@@ -2,6 +2,8 @@
 
 后续更新：场景现已加入三盏可编辑、可持久化的点光，接近下文参考图中的地面亮斑和邻近布幔照明。当前局部光能力与验收见 [LocalLights.md](LocalLights.md)。下文保留迁移当时的能力和验证记录。
 
+2026-09-13 更新：默认环境已改用 Cloudy 天空资产，加入 SH/GGX IBL 与可选择原生天空资产的 GUI；面板默认显示。当前天光与背景能力、验收及限制见 [SkyLighting.md](SkyLighting.md)。下文的常量环境和灰色背景描述属于最初迁移记录。
+
 2026-09-12。Scene Viewer 的 `experiments/Scene.json` 现在直接打开 Khronos glTF Sample Assets 的 Sponza。源模型、纹理、材质和节点变换原样保留；本次没有实现新的 glTF 特性，也没有修改光照 shader。
 
 ## 启动与交付内容

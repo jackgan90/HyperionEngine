@@ -48,6 +48,25 @@ struct FSceneInstance::FImpl
 	FCancellationToken MaterialCancellation;
 	bool bMaterialsComplete = true;
 
+	struct FSkyLoad
+	{
+		FSceneHandle Handle;
+		FAssetRef Reference;
+		FCancellationToken Cancellation;
+		TAsyncResult<FSceneSkyData> Preparation;
+		TAsyncResult<bool> Upload;
+		std::shared_ptr<const FSceneSkyData> Data;
+		std::string Error;
+		bool bGpuSubmitted{};
+		bool bComplete{};
+	};
+
+	std::map<FSceneHandle, std::shared_ptr<FSkyLoad>> SkyLoads;
+	std::vector<std::shared_ptr<FSkyLoad>> RetiredSkyLoads;
+	void PollSkies();
+	void PollSky(FSkyLoad& InLoad);
+	void CloseSkies();
+
 	FRenderSession& Session;
 	FTaskSystem& Tasks;
 	FAssetService& Assets;

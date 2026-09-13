@@ -32,6 +32,10 @@ struct FSceneViewerPlugin::FImpl
 	std::optional<FSceneHandle> ProposedParent;
 	bool bKeepWorld = true;
 	void DrawSceneSettings(FGui& InGui);
+	void DrawSkyControls(FGui& InGui);
+	std::string SkyPath;
+	std::vector<std::string> SkyChoices;
+	bool bSkyChoicesInitialized{};
 	bool bStopped{};
 	FSceneCameraController CameraController;
 	bool bFrozen{};

@@ -1,3 +1,4 @@
+#include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
@@ -101,6 +102,7 @@ public:
 		for (std::size_t Index = 0; Index < InTextures.size(); ++Index)
 		{
 			Result.push_back(CreateTexture({}));
+			++TextureUploads;
 		}
 		return Result;
 	}
@@ -217,6 +219,7 @@ public:
 	std::atomic<bool> bFailLayout{};
 	std::atomic<bool> bFailCollection{};
 	std::atomic_int IdleCalls{};
+	std::atomic_int TextureUploads{};
 	std::vector<FGraphicsDrawBatch> Retained;
 	std::uint64_t Publication{};
 };
@@ -823,6 +826,36 @@ void CheckBoundsReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCo
 		                              HYP_CHECK(Frame.Statistics.UnboundedGroups == 1);
 	                              }));
 }
+
+void CheckFullscreenPendingUpload(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompiler& InCompiler)
+{
+	FRenderSession Session(InTasks, InDevice, InCompiler);
+	FFullscreenPassDesc Pass;
+	Pass.Material = MakeFullscreenMaterial("Pending fullscreen", "Common/Tonemap.hlsl", true);
+	Pass.Lifetime = Session.GetResources().CreateScopeLifetime();
+	Pass.Targets = FRenderPassTargets::ColorOnly();
+	Pass.Viewport = {0, 0, 1, 1};
+	const auto Texture = std::make_shared<const FMaterialTextureSource>(
+	    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {255, 255, 255, 255}}});
+	Pass.Parameters = {{"Pixel:SceneColor", FMaterialValue::FromTexture(Texture)},
+	                   {"Pixel:OutputV1.Exposure", FMaterialValue::Float(1.f)}};
+	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
+	                              [&]
+	                              {
+		                              InDevice.bUploadComplete = false;
+		                              const auto IdleCalls = InDevice.IdleCalls.load();
+		                              const auto PreviousUploads = InDevice.TextureUploads.load();
+		                              const auto Preparation = Session.GetResources().GetPreparation();
+		                              HYP_CHECK(Preparation.BuildFullscreen(Pass).Commands.Draws.empty());
+		                              const auto Uploads = InDevice.TextureUploads.load();
+		                              HYP_CHECK(Uploads == PreviousUploads + 1);
+		                              HYP_CHECK(Preparation.BuildFullscreen(Pass).Commands.Draws.empty());
+		                              InDevice.bUploadComplete = true;
+		                              HYP_CHECK(Preparation.BuildFullscreen(Pass).Commands.Draws.size() == 1);
+		                              HYP_CHECK(InDevice.TextureUploads == Uploads);
+		                              HYP_CHECK(InDevice.IdleCalls == IdleCalls);
+	                              }));
+}
 } // namespace
 
 int main()
@@ -843,6 +876,7 @@ int main()
 		CheckPendingSection(Tasks, Device, Compiler);
 		CheckVisibilityAndAggregation(Tasks, Device, Compiler);
 		CheckBoundsReadiness(Tasks, Device, Compiler);
+		CheckFullscreenPendingUpload(Tasks, Device, Compiler);
 		HYP_CHECK(Device.Alive == 0);
 		std::cout << "Resource sharing, retry, supersession, GPU retention, RHI destruction and culling passed\n";
 	}

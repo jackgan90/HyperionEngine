@@ -52,6 +52,17 @@ void AddParameters(FMaterialDescription& InDescription)
 {
 	const auto Semantics = GetStandardMaterialSemantics();
 	InDescription.Parameters = GetStandardMaterialBlockParameters("HyperionMaterialV1", *Semantics);
+	for (const auto* Name :
+	     {"EnvironmentControl", "EnvironmentRotation", "EnvironmentSh0", "EnvironmentSh1", "EnvironmentSh2",
+	      "EnvironmentSh3", "EnvironmentSh4", "EnvironmentSh5", "EnvironmentSh6", "EnvironmentSh7", "EnvironmentSh8",
+	      "EnvironmentSpecular", "EnvironmentBrdf", "EnvironmentSampler"})
+	{
+		auto Parameter = DeclareMaterialSemantic(std::string("Engine.Scene.") + Name,
+		                                         std::string("Engine.Scene.") + Name, *Semantics);
+		Parameter.Targets = {Parameter.Type.Kind == EMaterialValueKind::Numeric ? std::string("EnvironmentV1.") + Name
+		                                                                        : Name};
+		InDescription.Parameters.push_back(std::move(Parameter));
+	}
 	const auto AddShadow = [&](std::string InName)
 	{
 		auto Parameter = DeclareMaterialSemantic("Engine.View." + InName, "Engine.View." + InName, *Semantics);

@@ -21,6 +21,7 @@ void ResourceKey(const FMaterialValue& InValue, std::vector<std::uint64_t>& OutW
 				ResourceKey(Element, OutWords);
 			}
 			break;
+		case EMaterialValueKind::TextureCube:
 		case EMaterialValueKind::Texture2D:
 			OutWords.push_back(InValue.Texture->GetIdentity());
 			OutWords.push_back(InValue.Texture->GetVersion());

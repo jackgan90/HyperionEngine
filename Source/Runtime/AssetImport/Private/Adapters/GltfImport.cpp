@@ -273,7 +273,7 @@ void RegisterGltfImporter(FAssetImportService& InImports)
 		                        DecodeAssetSourceJson(
 		                            {reinterpret_cast<const char*>(InContext.Bytes->data()), InContext.Bytes->size()}));
 	                    }});
-	InImports.Register({"hyperion.gltf", 3, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
+	InImports.Register({"hyperion.gltf", 4, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
 	InImports.Register({"hyperion.gltf-source",
 	                    1,
 	                    &RecordType<FModelSource>(),

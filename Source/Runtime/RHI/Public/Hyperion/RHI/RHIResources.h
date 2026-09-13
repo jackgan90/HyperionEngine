@@ -17,6 +17,12 @@ class IRHIBuffer : public IRHIResource
 {
 };
 
+enum class ERHITextureDimension : std::uint8_t
+{
+	Texture2D,
+	Cube
+};
+
 // Immutable physical description of the base level; no native handles are exposed.
 struct FRHITextureInfo
 {
@@ -25,6 +31,8 @@ struct FRHITextureInfo
 	ERHIDepthFormat DepthFormat = ERHIDepthFormat::None;
 	ERHIColorFormat ColorFormat = ERHIColorFormat::Rgba8Unorm;
 	bool bColorTarget{};
+	ERHITextureDimension Dimension = ERHITextureDimension::Texture2D;
+	std::uint32_t MipCount = 1;
 };
 
 class IRHITexture : public IRHIResource

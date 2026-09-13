@@ -58,6 +58,20 @@ FMaterialSemanticRegistry::FMaterialSemanticRegistry()
 	        "Linear RGB radiance");
 	Numeric("Engine.Scene.AmbientColor", EMaterialScalar::Float, 3, EMaterialScope::Scene,
 	        "Linear ambient RGB radiance");
+	for (const auto* Name :
+	     {"EnvironmentControl", "EnvironmentRotation", "EnvironmentSh0", "EnvironmentSh1", "EnvironmentSh2",
+	      "EnvironmentSh3", "EnvironmentSh4", "EnvironmentSh5", "EnvironmentSh6", "EnvironmentSh7", "EnvironmentSh8"})
+	{
+		Numeric(std::string("Engine.Scene.") + Name, EMaterialScalar::Float, 4, EMaterialScope::Scene,
+		        "Environment V1: ready/intensity/max mip, inverse Y rotation, cosine-convolved SH9 RGB");
+	}
+	for (const auto& [Name, Kind] : {std::pair{"EnvironmentSpecular", EMaterialValueKind::TextureCube},
+	                                 std::pair{"EnvironmentBrdf", EMaterialValueKind::Texture2D},
+	                                 std::pair{"EnvironmentSampler", EMaterialValueKind::Sampler}})
+	{
+		Add({std::string("Engine.Scene.") + Name, FMaterialParameterType::Resource(Kind), EMaterialScope::Scene,
+		     "Linear GGX environment split-sum resources"});
+	}
 	Numeric("Pbr.AlphaMode", EMaterialScalar::Uint, 1, EMaterialScope::Material, "0 opaque, 1 masked, 2 blended");
 	Numeric("Pbr.DoubleSided", EMaterialScalar::Bool, 1, EMaterialScope::Material, "Flip the back-face shading normal");
 	Numeric("Pbr.Unlit", EMaterialScalar::Bool, 1, EMaterialScope::Material, "Use unlit base color and emissive");

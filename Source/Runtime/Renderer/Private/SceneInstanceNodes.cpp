@@ -270,7 +270,25 @@ bool FSceneInstance::SetDirectionalLight(FSceneHandle InHandle, FSceneDirectiona
 bool FSceneInstance::SetEnvironmentLight(FSceneHandle InHandle, FSceneEnvironmentLight InLight)
 {
 	Impl->RequireOpen();
+	const auto Load = Impl->SkyLoads.find(InHandle);
+	bool bRetireLoad = Load != Impl->SkyLoads.end() && !Load->second->Error.empty();
+	if (const auto* Existing = Impl->Scene.FindEnvironmentLight(InHandle))
+	{
+		bRetireLoad |= Load != Impl->SkyLoads.end() && Existing->Source != InLight.Source;
+		InLight.Data = InLight.Source == ESceneEnvironmentSource::SkyAsset ? Existing->Data : nullptr;
+	}
+	if (bRetireLoad)
+	{
+		Impl->RetiredSkyLoads.reserve(Impl->RetiredSkyLoads.size() + 1);
+	}
 	const bool bResult = Impl->Scene.SetEnvironmentLight(InHandle, InLight);
+	if (bRetireLoad)
+	{
+		// Explicit edits retry failures. Retire source transitions immediately, even between ticks.
+		Impl->RetiredSkyLoads.push_back(Load->second);
+		Load->second->Cancellation.Cancel();
+		Impl->SkyLoads.erase(Load);
+	}
 	return bResult;
 }
 

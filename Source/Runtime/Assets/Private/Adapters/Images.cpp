@@ -4,6 +4,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
+#define STBI_ONLY_HDR
 #include <stb_image.h>
 #include <stb_image_write.h>
 #define TINYEXR_IMPLEMENTATION
@@ -68,6 +69,109 @@ FImagePixels DecodeImage(std::span<const std::byte> InBytes)
 	}
 	return {static_cast<std::uint32_t>(Width),
 	        static_cast<std::uint32_t>(Height),
+	        {Raw, Raw + std::size_t(Width) * Height * 4}};
+}
+
+namespace
+{
+void ValidateHdrSize(int InWidth, int InHeight)
+{
+	if (InWidth <= 0 || InHeight <= 0 || InWidth > 16384 || InHeight > 16384 ||
+	    std::uint64_t(InWidth) * InHeight * 16 > 512ULL * 1024 * 1024)
+	{
+		throw std::invalid_argument("HDR dimensions exceed the 512 MiB decoded image budget");
+	}
+}
+
+FImage DecodeExr(std::span<const std::byte> InBytes)
+{
+	const auto* Bytes = reinterpret_cast<const unsigned char*>(InBytes.data());
+	EXRVersion Version{};
+	if (ParseEXRVersionFromMemory(&Version, Bytes, InBytes.size()) != TINYEXR_SUCCESS || Version.multipart ||
+	    Version.non_image)
+	{
+		throw std::invalid_argument("Only ordinary single-part RGB/RGBA EXR images are supported");
+	}
+	EXRHeader Header;
+	InitEXRHeader(&Header);
+	const auto FreeHeader = [](EXRHeader* InHeader)
+	{
+		FreeEXRHeader(InHeader);
+	};
+	std::unique_ptr<EXRHeader, decltype(FreeHeader)> HeaderOwner(&Header, FreeHeader);
+	const char* Error{};
+	const auto HeaderStatus = ParseEXRHeaderFromMemory(&Header, &Version, Bytes, InBytes.size(), &Error);
+	ExrError(HeaderStatus, Error);
+	const auto Width = std::int64_t(Header.data_window.max_x) - Header.data_window.min_x + 1;
+	const auto Height = std::int64_t(Header.data_window.max_y) - Header.data_window.min_y + 1;
+	if (Width <= 0 || Height <= 0 || Width > 16384 || Height > 16384 || Header.num_channels < 3 ||
+	    Header.num_channels > 4)
+	{
+		throw std::invalid_argument("Unsupported EXR channel layout or dimensions");
+	}
+	ValidateHdrSize(int(Width), int(Height));
+	bool bRed{};
+	bool bGreen{};
+	bool bBlue{};
+	for (int Index = 0; Index < Header.num_channels; ++Index)
+	{
+		const std::string_view Name(Header.channels[Index].name);
+		bRed |= Name == "R";
+		bGreen |= Name == "G";
+		bBlue |= Name == "B";
+		if (Name != "R" && Name != "G" && Name != "B" && Name != "A")
+		{
+			throw std::invalid_argument("EXR sky requires RGB and optional alpha channels");
+		}
+	}
+	if (!bRed || !bGreen || !bBlue)
+	{
+		throw std::invalid_argument("EXR sky is missing an RGB channel");
+	}
+	float* Raw{};
+	int DecodedWidth{};
+	int DecodedHeight{};
+	Error = nullptr;
+	const auto Status = LoadEXRFromMemory(&Raw, &DecodedWidth, &DecodedHeight, Bytes, InBytes.size(), &Error);
+	std::unique_ptr<float, decltype(&std::free)> Holder(Raw, std::free);
+	ExrError(Status, Error);
+	ValidateHdrSize(DecodedWidth, DecodedHeight);
+	return {static_cast<unsigned>(DecodedWidth),
+	        static_cast<unsigned>(DecodedHeight),
+	        EColorSpace::Linear,
+	        {Raw, Raw + std::size_t(DecodedWidth) * DecodedHeight * 4}};
+}
+} // namespace
+
+FImage DecodeHdrImage(std::span<const std::byte> InBytes)
+{
+	if (InBytes.empty() || InBytes.size() > 256ULL * 1024 * 1024)
+	{
+		throw std::invalid_argument("HDR encoded input exceeds the image budget");
+	}
+	const auto* Bytes = reinterpret_cast<const unsigned char*>(InBytes.data());
+	const int Size = static_cast<int>(InBytes.size());
+	if (!stbi_is_hdr_from_memory(Bytes, Size))
+	{
+		return DecodeExr(InBytes);
+	}
+	int Width{};
+	int Height{};
+	int Channels{};
+	if (!stbi_info_from_memory(Bytes, Size, &Width, &Height, &Channels))
+	{
+		throw std::invalid_argument("Invalid Radiance HDR header");
+	}
+	ValidateHdrSize(Width, Height);
+	float* Raw = stbi_loadf_from_memory(Bytes, Size, &Width, &Height, &Channels, 4);
+	std::unique_ptr<float, decltype(&stbi_image_free)> Holder(Raw, stbi_image_free);
+	if (!Raw)
+	{
+		throw std::runtime_error("Radiance HDR decode failed");
+	}
+	return {static_cast<unsigned>(Width),
+	        static_cast<unsigned>(Height),
+	        EColorSpace::Linear,
 	        {Raw, Raw + std::size_t(Width) * Height * 4}};
 }
 

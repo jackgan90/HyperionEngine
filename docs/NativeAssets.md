@@ -4,6 +4,8 @@
 
 模型 schema 2 引用独立材质，材质引用独立纹理。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 必须先经 AssetTool 拆分升级。
 
+天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为带固定版本依赖的 `.hasset`；Viewer 不读取源 HDR/EXR。
+
 ## 构建和工具
 
 从仓库根目录执行：

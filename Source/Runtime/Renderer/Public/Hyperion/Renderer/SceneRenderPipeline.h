@@ -72,6 +72,8 @@ private:
 	void PrepareClusters(const FRenderView& InView, const FMaterialFrameContext& InFrame, bool bInEnabled);
 	void AddLocalLights(FRenderGraph& InGraph, const FRenderView& InView, const FMaterialFrameContext& InFrame,
 	                    bool bInDeferPreparation);
+	void AddSky(FRenderGraph& InGraph, const FRenderView& InView, const FMaterialFrameContext& InFrame,
+	            bool bInDeferPreparation) const;
 	std::shared_ptr<const void> Lifetime;
 	std::shared_ptr<const void> ShadowLifetime;
 	std::uint64_t ShadowBytes{};

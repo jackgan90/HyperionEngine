@@ -15,8 +15,14 @@ enum class EMaterialValueKind : std::uint8_t
 	Array,
 	Texture2D,
 	ReadBuffer,
-	Sampler
+	Sampler,
+	TextureCube
 };
+
+constexpr bool IsMaterialTexture(EMaterialValueKind InKind)
+{
+	return InKind == EMaterialValueKind::Texture2D || InKind == EMaterialValueKind::TextureCube;
+}
 
 enum class EMaterialScalar : std::uint8_t
 {

@@ -58,7 +58,7 @@ bool IsResource(const FMaterialParameterType& InType)
 	{
 		return IsResource(InType.Members.front());
 	}
-	return InType.Kind == EMaterialValueKind::Texture2D || InType.Kind == EMaterialValueKind::ReadBuffer ||
+	return IsMaterialTexture(InType.Kind) || InType.Kind == EMaterialValueKind::ReadBuffer ||
 	       InType.Kind == EMaterialValueKind::Sampler;
 }
 

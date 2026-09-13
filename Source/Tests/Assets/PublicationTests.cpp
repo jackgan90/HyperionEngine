@@ -324,7 +324,7 @@ void CheckSceneImporterCache()
 	FAssetImportOptions Force;
 	Force.bForce = true;
 	const auto First = Imports.ImportAsync(Source, Output, Force).Get(Tasks);
-	HYP_CHECK(First->Header.SchemaVersion == 5 && First->Header.Import->ImporterVersion == 3);
+	HYP_CHECK(First->Header.SchemaVersion == 5 && First->Header.Import->ImporterVersion == 4);
 	HYP_CHECK(First->Header.Import->Importer == "hyperion.scene-json");
 	const auto Same = Imports.ImportAsync(Source, Output).Get(Tasks);
 	HYP_CHECK(Same->bUpToDate && Same->WrittenAssets == 0);
@@ -343,13 +343,13 @@ void CheckSceneImporterCache()
 	const auto LegacyPath = Directory / "legacy.hasset";
 	IO.WriteAsync(LegacyPath, EncodeAsset(RecordType<FLegacySceneManifest>(), &Legacy).Bytes).Get(Tasks);
 	const auto Upgraded = Imports.ImportAsync(LegacyPath, Directory / "upgraded.hasset", Force).Get(Tasks);
-	HYP_CHECK(Upgraded->Header.SchemaVersion == 5 && Upgraded->Header.Import->ImporterVersion == 3);
+	HYP_CHECK(Upgraded->Header.SchemaVersion == 5 && Upgraded->Header.Import->ImporterVersion == 4);
 	HYP_CHECK(Upgraded->Header.Import->Importer == "hyperion.native-scene-upgrade");
 	FAssetService Assets(IO);
 	RegisterSceneAssetTypes(Assets.Types());
 	const auto Loaded = Assets.LoadAsync<FSceneManifest>(Directory / "upgraded.hasset").Get(Tasks);
 	HYP_CHECK(Loaded->Nodes.size() == 3 && Loaded->Nodes[0].Camera->FocusDistance == 8);
-	std::cout << "Scene source and native importer version 3: v5, unchanged cache, changed camera fingerprint passed\n";
+	std::cout << "Scene source and native importer version 4: v5, unchanged cache, changed camera fingerprint passed\n";
 }
 
 void CheckExternalImageReimport()

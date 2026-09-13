@@ -1,3 +1,4 @@
+#include "D3D12GraphicsState.h"
 #include "D3D12RHIDevice.h"
 #include "D3D12Resources.h"
 
@@ -5,22 +6,45 @@ namespace Hyperion
 {
 namespace
 {
+std::uint32_t PixelBytes(ERHIColorFormat InFormat)
+{
+	switch (InFormat)
+	{
+		case ERHIColorFormat::Rgba8Unorm:
+			return 4;
+		case ERHIColorFormat::Rgba16Float:
+			return 8;
+		case ERHIColorFormat::Rgba32Float:
+			return 16;
+		default:
+			throw std::invalid_argument("Unsupported uploaded texture format");
+	}
+}
+
 void ValidateTextureMips(const FTextureDesc& InSource)
 {
-	if (InSource.Mips.empty() || InSource.Mips.size() > 15)
+	if (InSource.Mips.empty() || InSource.Mips.size() > 15 || InSource.Dimension > ERHITextureDimension::Cube ||
+	    (InSource.bSrgb && InSource.Format != ERHIColorFormat::Rgba8Unorm))
 	{
 		throw std::invalid_argument("Invalid texture mip count");
 	}
 	const auto& Base = InSource.Mips.front();
-	if (!Base.Width || !Base.Height || Base.Width > 16384 || Base.Height > 16384)
+	const std::uint32_t Faces = InSource.Dimension == ERHITextureDimension::Cube ? 6 : 1;
+	if (!Base.Width || !Base.Height || Base.Width > 16384 || Base.Height > 16384 ||
+	    (Faces == 6 && Base.Width != Base.Height))
 	{
 		throw std::invalid_argument("Invalid texture dimensions");
 	}
 	std::uint32_t Width = Base.Width;
 	std::uint32_t Height = Base.Height;
-	for (const auto& Mip : InSource.Mips)
+	std::uint64_t Bytes{};
+	for (std::size_t Index = 0; Index < InSource.Mips.size(); ++Index)
 	{
-		if (Mip.Width != Width || Mip.Height != Height || Mip.Rgba.size() != std::size_t(Width) * Height * 4)
+		const auto& Mip = InSource.Mips[Index];
+		Bytes += Mip.Rgba.size();
+		if (Mip.Width != Width || Mip.Height != Height ||
+		    Mip.Rgba.size() != std::uint64_t(Width) * Height * Faces * PixelBytes(InSource.Format) ||
+		    Bytes > 512ULL * 1024 * 1024 || (Width == 1 && Height == 1 && Index + 1 != InSource.Mips.size()))
 		{
 			throw std::invalid_argument("Invalid mip dimensions or bytes");
 		}
@@ -52,35 +76,40 @@ std::vector<FTexture> FD3D12RHIDevice::CreateTexturesAsync(std::span<const FText
 		const auto& Base = Source.Mips.front();
 		auto Texture = std::make_shared<FD3D12Texture>();
 		Texture->State = State;
+		Texture->Dimension = Source.Dimension;
+		Texture->ColorFormat = Source.Format;
 		D3D12_RESOURCE_DESC Desc{};
 		Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 		Desc.Width = Base.Width;
 		Desc.Height = Base.Height;
-		Desc.DepthOrArraySize = 1;
+		Desc.DepthOrArraySize = Source.Dimension == ERHITextureDimension::Cube ? 6 : 1;
 		Desc.MipLevels = static_cast<UINT16>(Source.Mips.size());
-		Desc.Format = Source.bSrgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+		Desc.Format = Source.bSrgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : NativeColorFormat(Source.Format);
 		Desc.SampleDesc.Count = 1;
 		D3D12MA::ALLOCATION_DESC Allocation{};
 		Allocation.HeapType = D3D12_HEAP_TYPE_DEFAULT;
 		Check(P.Allocator->CreateResource(&Allocation, &Desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
 		                                  &Texture->Allocation, IID_PPV_ARGS(&Texture->Resource)),
 		      "Allocate model texture");
-		std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> Footprints(Source.Mips.size());
+		const UINT Subresources = Desc.MipLevels * Desc.DepthOrArraySize;
+		std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> Footprints(Subresources);
 		UINT64 Total{};
-		P.Device->GetCopyableFootprints(&Desc, 0, Desc.MipLevels, 0, Footprints.data(), nullptr, nullptr, &Total);
+		P.Device->GetCopyableFootprints(&Desc, 0, Subresources, 0, Footprints.data(), nullptr, nullptr, &Total);
 		auto Upload = P.AllocateBuffer(Total, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 		void* Mapped{};
 		D3D12_RANGE Read{0, 0};
 		Check(Upload->Resource->Map(0, &Read, &Mapped), "Map model upload");
-		for (UINT Index = 0; Index < Source.Mips.size(); ++Index)
+		for (UINT Index = 0; Index < Subresources; ++Index)
 		{
-			const auto& Mip = Source.Mips[Index];
+			const auto& Mip = Source.Mips[Index % Desc.MipLevels];
+			const auto Face = Index / Desc.MipLevels;
+			const auto RowBytes = std::size_t(Mip.Width) * PixelBytes(Source.Format);
 			const auto& Footprint = Footprints[Index];
 			for (UINT Row = 0; Row < Mip.Height; ++Row)
 			{
 				std::memcpy(static_cast<std::byte*>(Mapped) + Footprint.Offset +
 				                std::size_t(Row) * Footprint.Footprint.RowPitch,
-				            Mip.Rgba.data() + std::size_t(Row) * Mip.Width * 4, std::size_t(Mip.Width) * 4);
+				            Mip.Rgba.data() + (std::size_t(Face) * Mip.Height + Row) * RowBytes, RowBytes);
 			}
 			D3D12_TEXTURE_COPY_LOCATION Destination{};
 			Destination.pResource = Texture->Resource.Get();
@@ -100,6 +129,11 @@ std::vector<FTexture> FD3D12RHIDevice::CreateTexturesAsync(std::span<const FText
 		View.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 		View.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		View.Texture2D.MipLevels = Desc.MipLevels;
+		if (Source.Dimension == ERHITextureDimension::Cube)
+		{
+			View.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+			View.TextureCube.MipLevels = Desc.MipLevels;
+		}
 		Texture->SourceDescriptor = P.ResourceSources.Reserve(1);
 		P.Device->CreateShaderResourceView(Texture->Resource.Get(), &View,
 		                                   P.ResourceSources.Cpu(Texture->SourceDescriptor.Offset));

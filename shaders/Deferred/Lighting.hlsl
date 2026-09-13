@@ -62,7 +62,7 @@ float4 PSMain(float4 InPosition : SV_Position) : SV_Target0
 	                                             GBuffer3.Load(int3(Pixel, 0)));
 	float3 World = ReconstructWorld(InPosition.xy, SceneDepth.Load(int3(Pixel, 0)));
 #if HYP_NO_DIRECTIONAL
-	float3 Color = EvaluateIndirectLighting(Material, Ambient);
+	float3 Color = EvaluateIndirectLighting(Material, Ambient, normalize(Eye - World));
 #else
 	float3 Dx = ReceiverDerivative(Pixel, int2(1, 0), World, Material.GeometricNormal);
 	float3 Dy = ReceiverDerivative(Pixel, int2(0, 1), World, Material.GeometricNormal);

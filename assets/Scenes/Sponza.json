@@ -76,8 +76,11 @@
     },
     {
       "id": "light-environment",
-      "name": "Environment light",
+      "name": "Sky environment",
       "environmentLight": {
+		"source": "SkyAsset",
+		"sky": "../Skies/Cloudy.json",
+		"visible": true,
         "color": [
           0.22,
           0.25,

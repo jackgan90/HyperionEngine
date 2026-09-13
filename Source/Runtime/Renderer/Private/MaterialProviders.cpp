@@ -336,7 +336,8 @@ bool IsSceneOwnedSemantic(std::string_view InName)
 {
 	return InName == "Engine.Scene.MainDirectionalLightDirection" ||
 	       InName == "Engine.Scene.MainDirectionalLightColor" || InName == "Engine.Scene.AmbientColor" ||
-	       InName == "Engine.View.ViewProjection" || InName == "Engine.View.CameraPosition";
+	       InName.starts_with("Engine.Scene.Environment") || InName == "Engine.View.ViewProjection" ||
+	       InName == "Engine.View.CameraPosition";
 }
 
 bool IsSceneInput(const FMaterialSemanticRegistry& InSemantics, std::string_view InName)

@@ -124,6 +124,7 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 	{
 		InGui.TextWrapped(P.Status);
 		P.DrawSave(InGui);
+		P.DrawSkyControls(InGui);
 		DrawStatistics(InGui, InStats);
 		InGui.TextWrapped(!InLights.bActive     ? "Local lights: inactive in Forward / shadow visualization"
 		                  : InLights.bClustered ? "Local lights: clustered (opaque, masked and lit transparent)"

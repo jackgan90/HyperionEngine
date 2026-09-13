@@ -1,4 +1,5 @@
 #include "ModelMaterials.h"
+#include "EnvironmentParameters.h"
 #include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Hyperion/Renderer/ClusteredLights.h"
 
@@ -17,6 +18,8 @@ void SemanticDefaults(FMaterialDescription& InDescription)
 	auto Defaults = DefaultShadowParameters();
 	const auto ClusterDefaults = DefaultClusterParameters();
 	Defaults.insert(Defaults.end(), ClusterDefaults.begin(), ClusterDefaults.end());
+	const auto EnvironmentDefaults = EnvironmentParameters();
+	Defaults.insert(Defaults.end(), EnvironmentDefaults.begin(), EnvironmentDefaults.end());
 	for (auto& Parameter : InDescription.Parameters)
 	{
 		if (Parameter.Source != EMaterialParameterSource::Semantic || Parameter.Default)

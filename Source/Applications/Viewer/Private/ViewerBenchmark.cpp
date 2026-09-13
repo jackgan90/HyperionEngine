@@ -69,9 +69,10 @@ void WriteShadowBenchmark(std::ostream& InOutput, const FForwardPipelineStatisti
 void WriteScenePipelineBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline,
                                  const FDeviceStats& InDevice)
 {
-	std::array<double, 6> Times{};
-	constexpr std::array<std::string_view, 5> Prefixes{
-	    "Deferred/BasePass/", "Deferred/Lighting/", "Deferred/Compatibility/", "Scene/Transparent/", "Output/Tonemap/"};
+	std::array<double, 7> Times{};
+	constexpr std::array<std::string_view, 6> Prefixes{"Deferred/BasePass/",      "Deferred/Lighting/",
+	                                                   "Deferred/Compatibility/", "Scene/Transparent/",
+	                                                   "Output/Tonemap/",         "Scene/Sky/"};
 	for (const auto& Pass : InDevice.GpuTiming.Passes)
 	{
 		Times.back() += Pass.Milliseconds;
@@ -254,7 +255,8 @@ void FViewerApplication::SaveBenchmark()
 	    << ",membership_reuses,membership_added,membership_removed,contained_item_tests"
 	    << ",incremental_plan_updates,incremental_item_reuses,affected_batches,retained_batches,batch_admission_reuses,"
 	       "cached_plan_items,cached_plan_blocks,cpu_latency_ms,main_render_lead,render_rhi_lead"
-	       ",base_gpu_ms,lighting_gpu_ms,compatibility_gpu_ms,transparent_gpu_ms,tonemap_gpu_ms,total_gpu_pass_ms"
+	       ",base_gpu_ms,lighting_gpu_ms,compatibility_gpu_ms,transparent_gpu_ms,tonemap_gpu_ms,sky_gpu_ms,total_gpu_"
+	       "pass_ms"
 	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms,index_rebuilds,index_refits"
 	       ",local_lights_active,point_lights,spot_lights,local_visible,local_draws,local_query_ms,local_rebuilds,"
 	       "local_refits,local_gpu_ms,clustered_lighting,cluster_cells,cluster_occupied,cluster_references,cluster_max_"

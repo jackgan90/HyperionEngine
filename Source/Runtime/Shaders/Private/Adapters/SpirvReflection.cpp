@@ -221,6 +221,8 @@ FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Re
 		Result.ResourceScalar = Scalar(InCross.get_type(Type.image.type));
 		Result.Dimension = Type.image.dim == spv::Dim2D && !Type.image.arrayed && !Type.image.ms
 		                       ? EShaderResourceDimension::Texture2D
+		                   : Type.image.dim == spv::DimCube && !Type.image.arrayed && !Type.image.ms
+		                       ? EShaderResourceDimension::TextureCube
 		                       : EShaderResourceDimension::Unsupported;
 	}
 	else if (InKind == EBindingKind::StructuredBuffer)

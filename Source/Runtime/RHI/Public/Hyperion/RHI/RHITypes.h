@@ -64,6 +64,8 @@ struct FTextureDesc
 {
 	bool bSrgb{};
 	std::vector<FTextureMip> Mips;
+	ERHITextureDimension Dimension = ERHITextureDimension::Texture2D;
+	ERHIColorFormat Format = ERHIColorFormat::Rgba8Unorm;
 };
 enum class EVertexFormat
 {

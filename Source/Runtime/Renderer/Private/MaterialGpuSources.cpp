@@ -73,6 +73,11 @@ FTexture FMaterialGpuCache::FImpl::Texture(std::shared_ptr<const FMaterialTextur
 		}
 		FTextureDesc Description;
 		Description.bSrgb = InSource->GetEncoding() == EMaterialTextureEncoding::Srgb;
+		Description.Dimension = InSource->GetDimension() == ETextureDimension::Cube ? ERHITextureDimension::Cube
+		                                                                            : ERHITextureDimension::Texture2D;
+		Description.Format = InSource->GetFormat() == ETextureFormat::Rgba16Float   ? ERHIColorFormat::Rgba16Float
+		                     : InSource->GetFormat() == ETextureFormat::Rgba32Float ? ERHIColorFormat::Rgba32Float
+		                                                                            : ERHIColorFormat::Rgba8Unorm;
 		for (const auto& Mip : InSource->GetMips())
 		{
 			Description.Mips.push_back({Mip.Width, Mip.Height, Mip.Bytes});
@@ -143,6 +148,7 @@ FResourceBindingValue FMaterialGpuCache::FImpl::Resource(const FMaterialValue& I
 	InValue.Validate();
 	switch (InValue.Type.Kind)
 	{
+		case EMaterialValueKind::TextureCube:
 		case EMaterialValueKind::Texture2D:
 			return Texture(InValue.Texture, InOwners);
 		case EMaterialValueKind::Sampler:

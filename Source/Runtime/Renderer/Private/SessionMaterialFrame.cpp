@@ -1,3 +1,4 @@
+#include "EnvironmentParameters.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
 #include <cmath>
@@ -54,6 +55,15 @@ std::shared_ptr<const FMaterialFrameContext> FRenderSession::FMaterialState::Fra
 	Result->Session = Identity;
 	Result->Frame = NextFrame.fetch_add(1);
 	Result->Inputs = Inputs;
+	auto SceneValues = Result->Inputs.Values[ScopeIndex(EMaterialScope::Scene)].Get();
+	for (const auto& Value : EnvironmentParameters())
+	{
+		if (!Result->Inputs.Find(EMaterialScope::Scene, Value.Name))
+		{
+			SceneValues.push_back(Value);
+		}
+	}
+	Result->Inputs.Values[ScopeIndex(EMaterialScope::Scene)] = FMaterialInputValues(std::move(SceneValues));
 	InValues.push_back({"Engine.Frame.Time", FMaterialValue::Float(InTime)});
 	InValues.push_back({"Engine.Frame.Index", FMaterialValue::Uint(static_cast<std::uint32_t>(Result->Frame))});
 	ReplaceValues(Result->Inputs, EMaterialScope::Frame, std::move(InValues), InResources);

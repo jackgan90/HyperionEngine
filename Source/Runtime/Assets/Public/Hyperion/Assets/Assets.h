@@ -55,5 +55,7 @@ struct FImagePixels
 };
 
 FImagePixels DecodeImage(std::span<const std::byte> InBytes);
+// Bounded linear RGB/RGBA Radiance HDR or single-part EXR decoded from tracked IO bytes.
+FImage DecodeHdrImage(std::span<const std::byte> InBytes);
 std::vector<std::byte> EncodePng(const FImage& InImage);
 } // namespace Hyperion

@@ -123,6 +123,20 @@ FTexture FRenderResourcePreparation::ResolveTexture(std::shared_ptr<const FMater
 	return Owner.MaterialGpu->GetTexture(std::move(InSource), {std::move(InLifetime)});
 }
 
+bool FRenderResourcePreparation::PrepareTextures(
+    std::span<const std::shared_ptr<const FMaterialTextureSource>> InSources,
+    std::shared_ptr<const void> InLifetime) const
+{
+	auto& Owner = *Coordinator;
+	Owner.Tasks.Require({EDomain::Rhi, 0});
+	std::vector<FTexture> Textures;
+	for (const auto& Source : InSources)
+	{
+		Textures.push_back(ResolveTexture(Source, InLifetime));
+	}
+	return Owner.Device.TexturesReady(Textures);
+}
+
 FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph,
                                                       const FRenderSceneSnapshot& InSnapshot) const
 {

@@ -48,6 +48,8 @@ public:
 	std::uint64_t GetIdentity() const;
 	std::uint64_t GetVersion() const;
 	EMaterialTextureEncoding GetEncoding() const;
+	ETextureDimension GetDimension() const;
+	ETextureFormat GetFormat() const;
 	const std::vector<FMaterialTextureMip>& GetMips() const;
 	const std::shared_ptr<const FTextureAsset>& GetAsset() const;
 	const FMaterialDepthTexture* GetDepthTarget() const;

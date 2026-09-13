@@ -1,0 +1,3 @@
+add_library(hyperion_environment STATIC Private/SkyAsset.cpp Private/Cubemap.cpp Private/EnvironmentBake.cpp Private/EnvironmentBrdf.cpp)
+hyp_module(hyperion_environment)
+target_link_libraries(hyperion_environment PUBLIC hyperion_asset_types hyperion_textures hyperion_math)

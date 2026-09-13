@@ -54,7 +54,7 @@ public:
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
 	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0);
 	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex);
-	bool InputText(const char* InLabel, std::string& InValue);
+	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true);
 	bool InputFloat(const char* InLabel, float& InValue);
 	bool InputVector(const char* InLabel, FVec3& InValue);
 	bool InputMatrix(const char* InLabel, FMat4& InValue);

@@ -180,13 +180,15 @@ FMaterialParameterType ResourceType(const FShaderBinding& InBinding)
 	switch (InBinding.Kind)
 	{
 		case EBindingKind::Texture:
-			if (InBinding.Dimension != EShaderResourceDimension::Texture2D ||
+			if ((InBinding.Dimension != EShaderResourceDimension::Texture2D &&
+			     InBinding.Dimension != EShaderResourceDimension::TextureCube) ||
 			    InBinding.ResourceScalar != EShaderScalar::Float)
 			{
 				throw std::invalid_argument("Unsupported material texture dimension or component type: " +
 				                            InBinding.Name);
 			}
-			Kind = EMaterialValueKind::Texture2D;
+			Kind = InBinding.Dimension == EShaderResourceDimension::TextureCube ? EMaterialValueKind::TextureCube
+			                                                                    : EMaterialValueKind::Texture2D;
 			break;
 		case EBindingKind::StructuredBuffer:
 		case EBindingKind::RawBuffer:

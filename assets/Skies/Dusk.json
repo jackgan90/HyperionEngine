@@ -1,0 +1,9 @@
+{
+  "type": "hyperion.skyasset",
+  "schema_version": 1,
+  "name": "Dusk",
+  "source": "Dusk.exr",
+  "radiance_size": 256,
+  "specular_size": 64,
+  "samples": 256
+}

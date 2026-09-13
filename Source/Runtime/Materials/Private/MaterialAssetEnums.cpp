@@ -6,7 +6,8 @@ template<> std::span<const EMaterialValueKind> RecordEnumValues<EMaterialValueKi
 {
 	static constexpr std::array Values{EMaterialValueKind::Numeric,    EMaterialValueKind::Structure,
 	                                   EMaterialValueKind::Array,      EMaterialValueKind::Texture2D,
-	                                   EMaterialValueKind::ReadBuffer, EMaterialValueKind::Sampler};
+	                                   EMaterialValueKind::ReadBuffer, EMaterialValueKind::Sampler,
+	                                   EMaterialValueKind::TextureCube};
 	return Values;
 }
 

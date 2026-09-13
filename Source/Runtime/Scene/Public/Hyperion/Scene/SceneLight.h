@@ -1,4 +1,6 @@
 #pragma once
+#include "Hyperion/Environment/SkyAsset.h"
+#include "Hyperion/Materials/MaterialResources.h"
 #include "Hyperion/Scene/Model.h"
 
 namespace Hyperion
@@ -11,10 +13,30 @@ struct FSceneDirectionalLight
 	bool operator==(const FSceneDirectionalLight& InOther) const;
 };
 
+enum class ESceneEnvironmentSource
+{
+	ConstantColor,
+	SkyAsset
+};
+
+// Immutable CPU sources shared by scene publication; native resources remain renderer-owned.
+struct FSceneSkyData
+{
+	std::string Name;
+	FAssetRef Reference;
+	FEnvironmentSh Irradiance{};
+	std::array<std::shared_ptr<const FMaterialTextureSource>, 3> Textures;
+};
+
 struct FSceneEnvironmentLight
 {
 	FVec3 Color{1, 1, 1};
 	float Intensity = 1;
+	ESceneEnvironmentSource Source = ESceneEnvironmentSource::ConstantColor;
+	std::optional<FAssetRef> Sky;
+	float YawRadians{};
+	bool bVisible = true;
+	std::shared_ptr<const FSceneSkyData> Data;
 	bool operator==(const FSceneEnvironmentLight& InOther) const;
 };
 
@@ -46,4 +68,5 @@ void ValidateSceneDirectionalLight(const FSceneDirectionalLight& InLight);
 void ValidateSceneEnvironmentLight(const FSceneEnvironmentLight& InLight);
 template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>();
 template<> const FRecordDescriptor& RecordType<FSceneEnvironmentLight>();
+template<> std::span<const ESceneEnvironmentSource> RecordEnumValues<ESceneEnvironmentSource>();
 } // namespace Hyperion

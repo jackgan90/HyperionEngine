@@ -12,10 +12,12 @@ ERHIBindingKind BindingKind(const FShaderBinding& InBinding)
 		case EBindingKind::UniformBuffer:
 			return ERHIBindingKind::ConstantBuffer;
 		case EBindingKind::Texture:
-			if (InBinding.Dimension == EShaderResourceDimension::Texture2D &&
+			if ((InBinding.Dimension == EShaderResourceDimension::Texture2D ||
+			     InBinding.Dimension == EShaderResourceDimension::TextureCube) &&
 			    InBinding.ResourceScalar == EShaderScalar::Float)
 			{
-				return ERHIBindingKind::Texture2D;
+				return InBinding.Dimension == EShaderResourceDimension::TextureCube ? ERHIBindingKind::TextureCube
+				                                                                    : ERHIBindingKind::Texture2D;
 			}
 			break;
 		case EBindingKind::Sampler:

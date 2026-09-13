@@ -45,9 +45,14 @@ void ValidateBufferView(const FReadBufferView& InView, ERHIBindingKind InKind, c
 
 void ValidateValue(const FResourceBindingValue& InValue, ERHIBindingKind InKind, const FD3D12DeviceState& InState)
 {
-	if (InKind == ERHIBindingKind::Texture2D && std::holds_alternative<FTexture>(InValue))
+	if ((InKind == ERHIBindingKind::Texture2D || InKind == ERHIBindingKind::TextureCube) &&
+	    std::holds_alternative<FTexture>(InValue))
 	{
-		NativeResource<FD3D12Texture>(std::get<FTexture>(InValue).Payload, &InState);
+		const auto& Texture = NativeResource<FD3D12Texture>(std::get<FTexture>(InValue).Payload, &InState);
+		if ((Texture.Dimension == ERHITextureDimension::Cube) != (InKind == ERHIBindingKind::TextureCube))
+		{
+			throw std::invalid_argument("Texture resource dimension does not match binding");
+		}
 	}
 	else if (InKind == ERHIBindingKind::Sampler && std::holds_alternative<FSampler>(InValue))
 	{

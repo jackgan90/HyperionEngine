@@ -425,6 +425,10 @@ void CheckSharedMaterialPublication(FSceneFixture& InFixture)
 	AwaitBridge(Bridge, A);
 	AwaitBridge(Bridge, B);
 	InFixture.Frame(2);
+	// Measure descriptor reuse with live prior owners. Publication can retire unreferenced caches
+	// before the next draw, so exact allocation counts must not depend on maintenance timing.
+	auto Previous = CollectItems(InFixture);
+	HYP_CHECK(Previous.size() == 2);
 	const auto Warm = InFixture.Session->GetResources().Statistics();
 	Shared->SetSemantic("Pbr.BaseColorFactor", FMaterialValue::Float(FVec4{1, 0, 0, 1}));
 	HYP_CHECK(Scene.GetChanges().empty()); // Material-only edits have no logical Scene revision.
@@ -444,6 +448,7 @@ void CheckSharedMaterialPublication(FSceneFixture& InFixture)
 	HYP_CHECK(Changed.GeometryUploads == Warm.GeometryUploads);
 	HYP_CHECK(Changed.Materials.PipelinesCreated == Warm.Materials.PipelinesCreated);
 	HYP_CHECK(Changed.Materials.SetsCreated == Warm.Materials.SetsCreated);
+	Previous.clear();
 	CheckMaterialAtomicity(InFixture, Scene, Bridge, A, B);
 	Right.Material.BaseColor = FVec4{0, 0, 1, 1};
 	Right.Surface.Overrides = {{"Pbr.BaseColorFactor", FMaterialValue::Float(FVec4{1, 0, 0, 1})}};

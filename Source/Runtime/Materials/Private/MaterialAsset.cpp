@@ -6,10 +6,10 @@ namespace Hyperion
 namespace
 {
 FMaterialValue ResolveValue(const FMaterialAssetValue& InValue, const FMaterialTextureResolver& InResolve,
-                            std::uint32_t InDepth)
+                            std::uint32_t InDepth, bool bInValidationOnly = false)
 {
 	if (InDepth > 32 || InValue.Type.Kind == EMaterialValueKind::ReadBuffer ||
-	    (InValue.Type.Kind == EMaterialValueKind::Texture2D) != InValue.Texture.has_value())
+	    IsMaterialTexture(InValue.Type.Kind) != InValue.Texture.has_value())
 	{
 		throw std::invalid_argument("Invalid persistent material resource or nesting depth");
 	}
@@ -25,6 +25,17 @@ FMaterialValue ResolveValue(const FMaterialAssetValue& InValue, const FMaterialT
 			throw std::invalid_argument("Persistent material texture requires a typed asset resolver");
 		}
 		Result.Texture = InResolve(*InValue.Texture);
+		if (bInValidationOnly && InValue.Type.Kind == EMaterialValueKind::TextureCube)
+		{
+			static const auto Cube = []
+			{
+				auto Asset = std::make_shared<FTextureAsset>();
+				Asset->Dimension = ETextureDimension::Cube;
+				Asset->Mips = {{1, 1, std::vector<std::uint8_t>(24, 255)}};
+				return std::make_shared<const FMaterialTextureSource>(std::move(Asset));
+			}();
+			Result.Texture = Cube;
+		}
 		if (!Result.Texture || Result.Texture->IsRenderTarget())
 		{
 			throw std::invalid_argument("Persistent material cannot resolve to a runtime render target");
@@ -32,7 +43,7 @@ FMaterialValue ResolveValue(const FMaterialAssetValue& InValue, const FMaterialT
 	}
 	for (const auto& Element : InValue.Elements)
 	{
-		Result.Elements.push_back(ResolveValue(Element, InResolve, InDepth + 1));
+		Result.Elements.push_back(ResolveValue(Element, InResolve, InDepth + 1, bInValidationOnly));
 	}
 	Result.Validate();
 	return Result;
@@ -48,7 +59,7 @@ std::shared_ptr<const FMaterialTextureSource> ValidationTexture(const FAssetRef&
 
 void ValidateMaterialAssetValue(const FMaterialAssetValue& InValue)
 {
-	(void)ResolveValue(InValue, ValidationTexture, 0);
+	(void)ResolveValue(InValue, ValidationTexture, 0, true);
 }
 
 FMaterialValue ResolveMaterialAssetValue(const FMaterialAssetValue& InValue, const FMaterialTextureResolver& InResolve)

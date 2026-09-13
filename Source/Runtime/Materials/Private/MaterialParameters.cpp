@@ -38,8 +38,8 @@ FMaterialParameterType FMaterialParameterType::Array(FMaterialParameterType InEl
 
 void FMaterialParameterType::Validate(std::uint32_t InDepth) const
 {
-	if (InDepth > 32 || Kind > EMaterialValueKind::Sampler || Scalar > EMaterialScalar::Float || Rows < 1 || Rows > 4 ||
-	    Columns < 1 || Columns > 4)
+	if (InDepth > 32 || Kind > EMaterialValueKind::TextureCube || Scalar > EMaterialScalar::Float || Rows < 1 ||
+	    Rows > 4 || Columns < 1 || Columns > 4)
 	{
 		throw std::invalid_argument("Unsupported material parameter type or nesting depth");
 	}
@@ -163,7 +163,9 @@ FMaterialValue FMaterialValue::Bool(bool bInValue)
 FMaterialValue FMaterialValue::FromTexture(std::shared_ptr<const FMaterialTextureSource> InTexture)
 {
 	FMaterialValue Result;
-	Result.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
+	Result.Type = FMaterialParameterType::Resource(InTexture && InTexture->GetDimension() == ETextureDimension::Cube
+	                                                   ? EMaterialValueKind::TextureCube
+	                                                   : EMaterialValueKind::Texture2D);
 	Result.Texture = std::move(InTexture);
 	Result.Validate();
 	return Result;
@@ -205,8 +207,7 @@ void FMaterialValue::Validate() const
 	Type.Validate();
 	if ((Type.Kind != EMaterialValueKind::Numeric && !Words.empty()) ||
 	    (Type.Kind != EMaterialValueKind::Array && Type.Kind != EMaterialValueKind::Structure && !Elements.empty()) ||
-	    (Type.Kind != EMaterialValueKind::Texture2D && Texture) ||
-	    (Type.Kind != EMaterialValueKind::ReadBuffer && Buffer.Source))
+	    (!IsMaterialTexture(Type.Kind) && Texture) || (Type.Kind != EMaterialValueKind::ReadBuffer && Buffer.Source))
 	{
 		throw std::invalid_argument("Material value contains data of another type");
 	}
@@ -242,9 +243,13 @@ void FMaterialValue::Validate() const
 			Elements[Index].Validate();
 		}
 	}
-	else if (Type.Kind == EMaterialValueKind::Texture2D && !Texture)
+	else if (IsMaterialTexture(Type.Kind))
 	{
-		throw std::invalid_argument("Null material texture");
+		if (!Texture ||
+		    (Texture->GetDimension() == ETextureDimension::Cube) != (Type.Kind == EMaterialValueKind::TextureCube))
+		{
+			throw std::invalid_argument("Null material texture or resource dimension mismatch");
+		}
 	}
 	else if (Type.Kind == EMaterialValueKind::ReadBuffer)
 	{

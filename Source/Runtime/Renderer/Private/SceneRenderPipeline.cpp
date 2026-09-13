@@ -150,6 +150,10 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 				                   AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
 			                   }
 		                   }
+		                   if (InIndex + 1 == Family.TransparentIndex)
+		                   {
+			                   AddSky(InGraph, InMain, *InFrame, bInDeferPreparation);
+		                   }
 		                   if (InIndex == Family.TransparentIndex)
 		                   {
 			                   AddFullscreenPass(Session, InGraph, Tonemap(InMain), bInDeferPreparation);

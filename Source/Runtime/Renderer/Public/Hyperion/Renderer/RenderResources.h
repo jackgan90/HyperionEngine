@@ -111,6 +111,8 @@ public:
 	FGraphicsDrawBatch BuildFullscreen(const FFullscreenPassDesc& InPass) const;
 	FTexture ResolveTexture(std::shared_ptr<const FMaterialTextureSource> InSource,
 	                        std::shared_ptr<const void> InLifetime) const;
+	bool PrepareTextures(std::span<const std::shared_ptr<const FMaterialTextureSource>> InSources,
+	                     std::shared_ptr<const void> InLifetime) const;
 	std::vector<FGraphicsDrawBatch> BuildDraws(const FRenderSceneSnapshot& InSnapshot,
 	                                           FRenderBatchStats* OutStatistics = nullptr) const;
 	FGraphicsDrawBatch BuildDepthPreview(std::shared_ptr<const FMaterialTextureSource> InSource,

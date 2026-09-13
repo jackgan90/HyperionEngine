@@ -70,8 +70,8 @@ void FSceneInstance::FImpl::UpdateStatus()
 		ModelStatusRevision = Revision;
 		bModelStatusDirty = false;
 	}
-	Status.bReady =
-	    Status.PublicationError.empty() && Status.bLoaded && bMaterialsComplete && Status.ReadyModels == Status.Models;
+	Status.bReady = Status.PublicationError.empty() && Status.bLoaded && bMaterialsComplete &&
+	                Status.ReadyModels == Status.Models && Status.PendingSkies == 0 && Status.FailedSkies == 0;
 }
 
 void FSceneInstance::FImpl::RefreshModelStatus()

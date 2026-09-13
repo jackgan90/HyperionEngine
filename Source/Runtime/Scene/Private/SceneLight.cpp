@@ -13,7 +13,8 @@ bool FSceneDirectionalLight::operator==(const FSceneDirectionalLight& InOther) c
 bool FSceneEnvironmentLight::operator==(const FSceneEnvironmentLight& InOther) const
 {
 	return Color.X == InOther.Color.X && Color.Y == InOther.Color.Y && Color.Z == InOther.Color.Z &&
-	       Intensity == InOther.Intensity;
+	       Intensity == InOther.Intensity && Source == InOther.Source && Sky == InOther.Sky &&
+	       YawRadians == InOther.YawRadians && bVisible == InOther.bVisible && Data == InOther.Data;
 }
 
 FVec3 SceneLightRadiance(FVec3 InColor, float InIntensity)
@@ -35,6 +36,23 @@ void ValidateSceneDirectionalLight(const FSceneDirectionalLight& InLight)
 void ValidateSceneEnvironmentLight(const FSceneEnvironmentLight& InLight)
 {
 	SceneLightRadiance(InLight.Color, InLight.Intensity);
+	if (!std::isfinite(InLight.YawRadians) || (InLight.Source != ESceneEnvironmentSource::ConstantColor &&
+	                                           InLight.Source != ESceneEnvironmentSource::SkyAsset))
+	{
+		throw std::invalid_argument("Invalid environment source or yaw");
+	}
+	if (InLight.Sky)
+	{
+		ValidateAssetRef(*InLight.Sky);
+		if (InLight.Sky->TypeId != RecordType<FSkyAsset>().Id)
+		{
+			throw std::invalid_argument("Environment reference must target a sky asset");
+		}
+	}
+	if (InLight.Source == ESceneEnvironmentSource::SkyAsset && !InLight.Sky)
+	{
+		throw std::invalid_argument("Sky environment requires an asset reference");
+	}
 }
 
 template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
@@ -47,12 +65,29 @@ template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
 	return Type;
 }
 
+template<> std::span<const ESceneEnvironmentSource> RecordEnumValues<ESceneEnvironmentSource>()
+{
+	static constexpr std::array Values{ESceneEnvironmentSource::ConstantColor, ESceneEnvironmentSource::SkyAsset};
+	return Values;
+}
+
 template<> const FRecordDescriptor& RecordType<FSceneEnvironmentLight>()
 {
-	static const auto Type = MakeRecord<FSceneEnvironmentLight>(
-	    "hyperion.sceneenvironmentlight",
-	    {Member("color", &FSceneEnvironmentLight::Color), Member("intensity", &FSceneEnvironmentLight::Intensity)}, 1,
-	    ValidateSceneEnvironmentLight);
+	static const auto Type = []
+	{
+		auto Result = MakeRecord<FSceneEnvironmentLight>(
+		    "hyperion.sceneenvironmentlight",
+		    {Member("color", &FSceneEnvironmentLight::Color), Member("intensity", &FSceneEnvironmentLight::Intensity),
+		     Member("source", &FSceneEnvironmentLight::Source), Member("sky", &FSceneEnvironmentLight::Sky),
+		     Member("yawRadians", &FSceneEnvironmentLight::YawRadians),
+		     Member("visible", &FSceneEnvironmentLight::bVisible)},
+		    2, ValidateSceneEnvironmentLight);
+		Result.Migrations.emplace(1,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
+		return Result;
+	}();
 	return Type;
 }
 } // namespace Hyperion

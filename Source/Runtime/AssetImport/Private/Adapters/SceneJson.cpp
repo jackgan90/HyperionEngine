@@ -1,5 +1,6 @@
 #include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/AssetImport/SkyImport.h"
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
@@ -137,9 +138,23 @@ FSceneNodeEntry NodeEntry(const FJson& InJson)
 	if (InJson.contains("environmentLight"))
 	{
 		const auto& Light = InJson.at("environmentLight");
-		Fields(Light, {"color", "intensity"});
+		Fields(Light, {"color", "intensity", "source", "sky", "yawRadians", "visible"});
 		Result.EnvironmentLight =
 		    FSceneEnvironmentLight{Vector3(Light.value("color", FJson{1, 1, 1})), Light.value("intensity", 1.f)};
+		auto& Environment = *Result.EnvironmentLight;
+		const auto Source = Light.value("source", std::string("ConstantColor"));
+		if (Source != "ConstantColor" && Source != "SkyAsset")
+		{
+			throw std::invalid_argument("Unsupported environment source");
+		}
+		Environment.Source =
+		    Source == "SkyAsset" ? ESceneEnvironmentSource::SkyAsset : ESceneEnvironmentSource::ConstantColor;
+		if (Light.contains("sky"))
+		{
+			Environment.Sky = FAssetRef{"", Light.at("sky").get<std::string>(), RecordType<FSkyAsset>().Id, ""};
+		}
+		Environment.YawRadians = Light.value("yawRadians", 0.f);
+		Environment.bVisible = Light.value("visible", true);
 	}
 	if (InJson.contains("pointLight"))
 	{
@@ -250,8 +265,9 @@ FSceneManifest DecodeSceneManifest(std::string_view InText)
 
 void RegisterSceneImporter(FAssetImportService& InImports)
 {
+	RegisterSkyImporter(InImports);
 	InImports.Register({"hyperion.scene-json",
-	                    3,
+	                    4,
 	                    &RecordType<FSceneManifest>(),
 	                    {".json"},
 	                    [](FAssetImportContext& InContext)
@@ -261,7 +277,7 @@ void RegisterSceneImporter(FAssetImportService& InImports)
 		                        DecodeSceneManifest({reinterpret_cast<const char*>(Bytes.data()), Bytes.size()}));
 	                    }});
 	InImports.Register({"hyperion.native-scene-upgrade",
-	                    3,
+	                    4,
 	                    &RecordType<FSceneManifest>(),
 	                    {".hasset"},
 	                    [](FAssetImportContext& InContext)

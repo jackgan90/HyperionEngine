@@ -31,6 +31,8 @@ struct FSceneInstanceStatus
 	std::size_t ReadyModels{};
 	std::size_t FailedModels{};
 	std::uint64_t ModelStatusRefreshes{};
+	std::size_t PendingSkies{};
+	std::size_t FailedSkies{};
 	bool bLoaded{};
 	bool bReady{};
 	bool bClosed{};
@@ -91,6 +93,7 @@ public:
 	FSceneManifest Snapshot(const std::filesystem::path& InDestination) const;
 	const FSceneInstanceStatus& GetStatus() const;
 	std::string GetError(FSceneHandle InHandle) const;
+	std::string GetSkyStatus(FSceneHandle InHandle) const;
 	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
 
 private:

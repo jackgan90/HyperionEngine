@@ -52,8 +52,8 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 		{
 			throw std::invalid_argument("Invalid instance constant layout");
 		}
-		if (Slot.Kind < ERHIBindingKind::ConstantBuffer || Slot.Kind > ERHIBindingKind::Sampler || Slot.Count == 0 ||
-		    Slot.Space >= InCaps.MaxRegisterSpaces || Slot.Register >= ShaderRegistersPerKind ||
+		if (Slot.Kind < ERHIBindingKind::ConstantBuffer || Slot.Kind > ERHIBindingKind::TextureCube ||
+		    Slot.Count == 0 || Slot.Space >= InCaps.MaxRegisterSpaces || Slot.Register >= ShaderRegistersPerKind ||
 		    Slot.Count > ShaderRegistersPerKind - Slot.Register || Slot.MinimumBufferSize > InCaps.MaxConstantRange ||
 		    (Slot.Kind == ERHIBindingKind::ConstantBuffer && Slot.Count != 1) ||
 		    (Slot.StructureByteStride != 0 && (Slot.Kind != ERHIBindingKind::StructuredBuffer ||

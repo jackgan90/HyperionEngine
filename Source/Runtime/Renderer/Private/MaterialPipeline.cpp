@@ -227,7 +227,9 @@ FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& I
 				Slot.Kind = ERHIBindingKind::ConstantBuffer;
 				break;
 			case EBindingKind::Texture:
-				Slot.Kind = ERHIBindingKind::Texture2D;
+				Slot.Kind = Binding.Resource.Dimension == EShaderResourceDimension::TextureCube
+				                ? ERHIBindingKind::TextureCube
+				                : ERHIBindingKind::Texture2D;
 				break;
 			case EBindingKind::Sampler:
 				Slot.Kind = ERHIBindingKind::Sampler;

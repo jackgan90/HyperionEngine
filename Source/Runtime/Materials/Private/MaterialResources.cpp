@@ -99,6 +99,16 @@ std::uint64_t FMaterialTextureSource::GetVersion() const
 	return Version;
 }
 
+ETextureDimension FMaterialTextureSource::GetDimension() const
+{
+	return Asset ? Asset->Dimension : ETextureDimension::Texture2D;
+}
+
+ETextureFormat FMaterialTextureSource::GetFormat() const
+{
+	return Asset ? Asset->Format : ETextureFormat::Rgba8Unorm;
+}
+
 EMaterialTextureEncoding FMaterialTextureSource::GetEncoding() const
 {
 	return Encoding;

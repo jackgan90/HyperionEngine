@@ -1,3 +1,4 @@
+#include "EnvironmentParameters.h"
 #include "SessionMaterialsInternal.h"
 #include <cmath>
 
@@ -13,6 +14,7 @@ struct FSceneLighting
 	FVec3 Direct;
 	FVec3 Ambient;
 	bool bShadows{};
+	const FSceneEnvironmentLight* Environment{};
 };
 
 FSceneLighting Lighting(const FSceneMetadata& InMetadata)
@@ -35,7 +37,11 @@ FSceneLighting Lighting(const FSceneMetadata& InMetadata)
 		const auto Entry = InMetadata.EnvironmentLights.find(*InMetadata.Settings.EnvironmentLight);
 		if (Entry != InMetadata.EnvironmentLights.end() && Entry->second.bEnabled)
 		{
-			Result.Ambient = ScaleVector(Entry->second.Light.Color, Entry->second.Light.Intensity);
+			Result.Environment = &Entry->second.Light;
+			if (Result.Environment->Source == ESceneEnvironmentSource::ConstantColor)
+			{
+				Result.Ambient = ScaleVector(Entry->second.Light.Color, Entry->second.Light.Intensity);
+			}
 		}
 	}
 	return Result;
@@ -147,6 +153,8 @@ FResolvedSceneFrame FRenderSession::ResolveSceneFrame(const FSceneFrameSeed& InS
 	Values.push_back({"Engine.Scene.MainDirectionalLightDirection", FMaterialValue::Float(Light.Direction)});
 	Values.push_back({"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(Light.Direct)});
 	Values.push_back({"Engine.Scene.AmbientColor", FMaterialValue::Float(Light.Ambient)});
+	const auto Environment = EnvironmentParameters(Light.Environment);
+	Values.insert(Values.end(), Environment.begin(), Environment.end());
 	FMaterialInputValues Published(std::move(Values));
 	auto& Effective = MaterialState->EffectiveSceneInputs;
 	auto& Scope = Effective.Scopes[SceneIndex];

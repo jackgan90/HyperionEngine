@@ -25,6 +25,7 @@ struct FFullscreenPassDesc
 	std::shared_ptr<const void> Lifetime;
 	std::shared_ptr<const void> ParameterLifetime;
 	std::shared_ptr<const void> ConstantLifetime;
+	std::shared_ptr<const void> ResourceLifetime;
 	EDepthConvention DepthConvention = EDepthConvention::Standard;
 };
 

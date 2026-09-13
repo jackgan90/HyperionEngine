@@ -47,7 +47,8 @@ enum class EShaderResourceDimension
 	None,
 	Buffer,
 	Texture2D,
-	Unsupported
+	Unsupported,
+	TextureCube
 };
 
 struct FShaderMember

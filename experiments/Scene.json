@@ -13,7 +13,7 @@
       "debug-ui"
     ],
     "vsync": true,
-    "show_gui": false,
+    "show_gui": true,
     "exposure": 2.5,
     "clear_red": 0.6,
     "clear_green": 0.6,

@@ -209,6 +209,7 @@ void RegisterSceneAssetTypes(FRecordRegistry& InRegistry)
 	InRegistry.Register<FModelAsset>();
 	InRegistry.Register<FMaterialAsset>();
 	InRegistry.Register<FTextureAsset>();
+	InRegistry.Register<FSkyAsset>();
 	InRegistry.Register<FSceneManifest>();
 }
 } // namespace Hyperion

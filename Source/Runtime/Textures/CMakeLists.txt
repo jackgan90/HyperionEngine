@@ -1,3 +1,3 @@
-add_library(hyperion_textures STATIC Private/TextureAsset.cpp Private/TextureMips.cpp)
+add_library(hyperion_textures STATIC Private/TextureAsset.cpp Private/TextureMips.cpp Private/TexturePixels.cpp)
 hyp_module(hyperion_textures)
 target_link_libraries(hyperion_textures PUBLIC hyperion_reflection)

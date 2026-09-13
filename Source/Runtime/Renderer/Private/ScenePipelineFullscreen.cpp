@@ -1,3 +1,4 @@
+#include "EnvironmentParameters.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 
 namespace Hyperion
@@ -27,6 +28,14 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	Result.Material = bClustered ? (bNoDirectional ? ClusterOnly : Clustered) : Material;
 	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
+	if (const auto Metadata = InFrame.GetSceneMetadata(); Metadata && Metadata->Settings.EnvironmentLight)
+	{
+		const auto Found = Metadata->EnvironmentLights.find(*Metadata->Settings.EnvironmentLight);
+		if (Found != Metadata->EnvironmentLights.end())
+		{
+			Result.ResourceLifetime = Found->second.Light.Data;
+		}
+	}
 	Result.Statistics = FullscreenStatistics;
 	Result.Viewport = Viewport(InMain);
 	Result.Targets =
@@ -79,6 +88,14 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	Set("Viewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height}));
 	Set("DepthRange", FMaterialValue::Float(FVec2{View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)}));
 	Set("Eye", FMaterialValue::Float(InMain.Eye));
+	for (const auto& Default : EnvironmentParameters())
+	{
+		const auto Value = Session.ResolveFrameSemantic(InFrame, Default.Name);
+		const auto Name = Default.Name.substr(std::string("Engine.Scene.").size());
+		Result.Parameters.push_back(
+		    {"Pixel:" + (Default.Value.Type.Kind == EMaterialValueKind::Numeric ? "EnvironmentV1." + Name : Name),
+		     Value ? *Value : Default.Value});
+	}
 	for (const auto& Mapping : {std::pair{"LightDirection", "Engine.Scene.MainDirectionalLightDirection"},
 	                            std::pair{"LightColor", "Engine.Scene.MainDirectionalLightColor"},
 	                            std::pair{"Ambient", "Engine.Scene.AmbientColor"}})

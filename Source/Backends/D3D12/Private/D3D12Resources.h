@@ -49,8 +49,13 @@ struct FD3D12Texture final : IRHITexture
 	FRHITextureInfo GetInfo() const noexcept override
 	{
 		const auto Description = Resource->GetDesc();
-		return {static_cast<std::uint32_t>(Description.Width), Description.Height,
-		        DepthViews ? ERHIDepthFormat::D32 : ERHIDepthFormat::None, ColorFormat, bool(ColorViews)};
+		return {static_cast<std::uint32_t>(Description.Width),
+		        Description.Height,
+		        DepthViews ? ERHIDepthFormat::D32 : ERHIDepthFormat::None,
+		        ColorFormat,
+		        bool(ColorViews),
+		        Dimension,
+		        Description.MipLevels};
 	}
 
 	std::shared_ptr<FD3D12DeviceState> State;
@@ -62,6 +67,7 @@ struct FD3D12Texture final : IRHITexture
 	ComPtr<ID3D12DescriptorHeap> ColorViews;
 	ERHIColorFormat ColorFormat = ERHIColorFormat::Rgba8Unorm;
 	FSize DepthSize;
+	ERHITextureDimension Dimension = ERHITextureDimension::Texture2D;
 
 	~FD3D12Texture() override
 	{

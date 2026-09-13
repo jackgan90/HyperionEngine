@@ -68,6 +68,7 @@ void FSceneInstance::Tick()
 		P.PollModels();
 		P.PollMaterials();
 		P.PublishModels();
+		P.PollSkies();
 		P.Scene.Update();
 		P.Bridge->Flush();
 		P.UpdateStatus();
@@ -91,6 +92,7 @@ void FSceneInstance::Close()
 	++P.LoadEpoch;
 	P.ManifestRequest.Cancel();
 	P.MaterialCancellation.Cancel();
+	P.CloseSkies();
 	try
 	{
 		P.Tasks.Wait(P.MaterialPreparation.Task());

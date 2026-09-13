@@ -107,6 +107,11 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 	const auto& Program = Entry.Program->GetPass();
 	auto Values = ResolveMaterialBindingContext(Snapshot, *Entry.Program, Program, {});
 	FMaterialResourceOwners BindingOwners{InPass.Lifetime};
+	if (InPass.ResourceLifetime)
+	{
+		Owner.TrackScope(InPass.ResourceLifetime);
+		BindingOwners.push_back(InPass.ResourceLifetime);
+	}
 	if (InPass.ParameterLifetime)
 	{
 		Owner.TrackScope(InPass.ParameterLifetime);
@@ -126,7 +131,11 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 	const auto Bindings = Owner.MaterialGpu->BindResources(Program, Values.Values, BindingOwners);
 	if (!Bindings.bReady)
 	{
-		throw std::runtime_error("Fullscreen sampled resource upload is not ready");
+		// Upload completion is asynchronous, including first-use neutral environment inputs.
+		// Preserve the pass attachments and retry preparation next frame without a GPU wait.
+		FGraphicsDrawBatch Pending;
+		Pending.bSrgb = InPass.Material->GetPass().bSrgbTarget;
+		return Pending;
 	}
 	const auto& MaterialPass = InPass.Material->GetPass();
 	const auto Target = InPass.Targets.GraphicsTarget(MaterialPass.bSrgbTarget);

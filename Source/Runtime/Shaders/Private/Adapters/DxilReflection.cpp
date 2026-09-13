@@ -178,8 +178,9 @@ FShaderBinding ReadBinding(ID3D12ShaderReflection* InReflection, const D3D12_SHA
 				Result.ResourceScalar = EShaderScalar::Unsupported;
 				break;
 		}
-		Result.Dimension = InDesc.Dimension == D3D_SRV_DIMENSION_TEXTURE2D ? EShaderResourceDimension::Texture2D
-		                                                                   : EShaderResourceDimension::Unsupported;
+		Result.Dimension = InDesc.Dimension == D3D_SRV_DIMENSION_TEXTURE2D     ? EShaderResourceDimension::Texture2D
+		                   : InDesc.Dimension == D3D_SRV_DIMENSION_TEXTURECUBE ? EShaderResourceDimension::TextureCube
+		                                                                       : EShaderResourceDimension::Unsupported;
 	}
 	else if (Result.Kind == EBindingKind::StructuredBuffer || Result.Kind == EBindingKind::RawBuffer)
 	{

@@ -60,7 +60,8 @@ enum class ERHIBindingKind
 	Texture2D,
 	StructuredBuffer,
 	RawBuffer,
-	Sampler
+	Sampler,
+	TextureCube
 };
 enum class ERHIShaderVisibility : std::uint8_t
 {

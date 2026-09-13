@@ -35,6 +35,20 @@ void CheckDeferredShaders()
 			                      }));
 		}
 		const auto Volume = Compiler.Compile("Deferred/LocalLight.hlsl", "VSMain", EShaderStage::Vertex, Format);
+		const auto Sky = Compiler.Compile("Common/Sky.hlsl", "PSMain", EShaderStage::Pixel, Format);
+		HYP_CHECK(std::any_of(Sky.Bindings.begin(), Sky.Bindings.end(),
+		                      [](const auto& InBinding)
+		                      {
+			                      return InBinding.Name == "SkyRadiance" &&
+			                             InBinding.Dimension == EShaderResourceDimension::TextureCube;
+		                      }));
+		for (const auto* Reversed : {"0", "1"})
+		{
+			FShaderCompileOptions Options;
+			Options.Defines = {{"HYP_REVERSED_SKY", Reversed}};
+			HYP_CHECK(
+			    !Compiler.Compile("Common/Sky.hlsl", "VSMain", EShaderStage::Vertex, Format, Options).Bytes.empty());
+		}
 		HYP_CHECK(!Volume.Bytes.empty());
 		for (const auto* Shader : {"Deferred/Lighting.hlsl", "Deferred/Clustered.hlsl", "Deferred/ClusteredOnly.hlsl",
 		                           "Deferred/LocalLight.hlsl", "Deferred/Debug.hlsl", "Common/Tonemap.hlsl"})
