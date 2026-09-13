@@ -1,5 +1,7 @@
 # CPU 渲染优化的独立审计修复
 
+> 历史记录：以下设计取舍、配置、测试数量和测量结果对应文中基线，不代表当前默认行为或本次工作区的验证结果。当前功能与操作入口见 [文档索引](README.md)。
+
 审查范围是 `optimize-renderer-cpu-submission` 与 `optimize-retained-render-frames` 的全部工作区改动。基线 commit 为 `144c1e5e4c60816f15f9ecc9e520e9c9d2002d21`。本轮开始时逐一核对了审计快照的 117 个文件，当前内容均匹配；原快照摘要为 `28a1e54c294a30ead6fbcc6c802ce1cd507a3f69bf4aa46bc88c4f7fd27b7a3b`。
 
 原始报告、probe、日志和源码快照保留在 `out/audit-cpu-proposals-20260909`。材料组 `Review.md` 与原生组 `InitialReview.md` 已核对；原来没有最终报告的 scene-graph 组补做独立核查并生成 `Review.md`。修复后的结果不会覆盖原始失败证据。

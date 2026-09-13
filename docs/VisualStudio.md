@@ -9,7 +9,7 @@
 .\tools\GenerateSolution.ps1 -Open
 ```
 
-脚本可以从任意工作目录调用，通过自身位置找到仓库。它检测安装了 C++ 工具的 Visual Studio，优先使用带 IDE 的版本；当前本机会选择 VS 2022 Community。只有 Build Tools 时也能生成和编译。CMake 优先从已安装的 VS 工具中选择兼容版本，避免 PATH 中的旧 CMake。Python 3.10+ 需要通过 `python` 命令可用。
+脚本可以从任意工作目录调用，通过自身位置找到仓库。它检测安装了 C++ 工具的 Visual Studio，优先使用带 IDE 的版本。只有 Build Tools 时也能生成和编译。CMake 优先从已安装的 VS 工具中选择兼容版本，避免 PATH 中的旧 CMake。Python 3.10+ 需要通过 `python` 命令可用。
 
 缺少的依赖自动按 `dependencies.lock.json` 下载/校验。已有依赖时不需要网络。脚本只规范化子进程环境，处理 MSBuild 遇到的 `PATH`/`Path` 重复问题，不修改系统环境变量。CMD 入口的执行策略参数也仅对该 PowerShell 进程生效。
 
@@ -86,32 +86,4 @@ Tracy 的 `TRACY_ON_DEMAND` 只延迟采集，仍会监听连接，因此启用 
 
 性能测量推荐独立的 `profile` preset：`.\tools\Build.ps1 -Preset profile` 使用 Release 优化并给自有模块生成 `/Zi`、可执行文件链接 `/DEBUG:FULL /INCREMENTAL:NO`。编入支持后仍需 `--profile` 或 GUI 开关启用 scope；细节、GPU 和系统采样分别选择。新配置的 Tracy 默认仅监听 loopback，并关闭发现广播；已有显式缓存选择保持不变。完整采集、导出命令与开销证据见 [性能分析](Profiling.md)。
 
-## 本机验证记录
-
-2026-09-08：通用材质参数更新优化完成，独立 Ninja Debug/Release（Tracy ON、RenderDoc OFF）各 **40/40** CTest，独立 Debug（Tracy OFF、RenderDoc ON）**45/45**，包含无监听和 RenderDoc replay；最终补充字节预算的材质回归两种 profiling 配置各 **2/2**。246 源码格式、151 编译单元命名、241 模块源码/25 模块边界及 OpenSpec strict 通过。相同旧新 exe 三轮交错复测，运动 mean 中位数 Debug 24.356→14.249 ms、Release 3.859→2.663 ms；方法、全部样本和剩余边界见 [材质性能优化](MaterialPerformance.md)。常规构建目录配置未改变，验证产物在 `out/build/material-perf-debug`、`out/build/profile` 和 `out/build/material-optimization-checks`。
-
-2026-09-08：Scene 性能修复完成，VS 2022 Debug/Release 均通过 **43/43** CTest，新增真实运动镜头验收；Ninja Debug Viewer、227 源码格式、139 编译单元命名和模块边界检查通过。同一 194–195 draw 场景、GUI/RenderDoc 开启且 VSync 关闭时，Release 静止约 389 FPS、连续相机运动约 266 FPS；详见 [性能定位与数据](ScenePerformance.md)。
-
-2026-09-07：通用材质系统及 Triangle/ModelViewer/SceneViewer/DebugUI 迁移完成。最终 VS 2022 Debug **42/42**（104.95 秒）、Release **42/42**（70.33 秒）CTest 通过，包含材质像素/共享常量、连续 Object 更新回收、Scene 原子发布、失败 Present、原场景规模验收及实际 RenderDoc replay。514 模型/2053 draws 的 Debug 180 帧无剔除测试约 22 秒，保持原 45 秒限制并得到零 D3D12 validation errors。Ninja Debug 构建、225 自有源码的格式、137 编译单元命名、220 模块源码/25 模块边界及 OpenSpec strict 检查通过。日志为 `out/MaterialFinalVsDebug.log`、`out/MaterialFinalVsRelease.log`、`out/MaterialFinalNaming.log`、`out/MaterialFinalBoundaries.log` 和 `out/MaterialFinalDebugSceneNone.log`；接口和首版能力见 [Materials.md](Materials.md)，完整证据见 [implementation.md](../openspec/changes/archive/2026-09-07-add-extensible-material-system/implementation.md)。未执行 Git commit。
-
-2026-09-07 审计收尾：10 项确认缺陷完成修复并由原独立 reviewer 复审关闭。最终 Debug **42/42**（119.87 秒）、Release **42/42**（74.97 秒）CTest 通过；命名、格式、模块边界和 OpenSpec strict 检查通过。原 514 模型无剔除 fixture 的 Debug 应用运行约 18.36 秒，保持原超时门槛。详情见 [材质审计报告](MaterialAudit.md)，最终日志为 `out/MaterialAudit/ProgramFinalVsDebug.log`、`ProgramFinalVsRelease.log` 和 `ProgramFinalNaming.log`。
-
-2026-09-07：Tracy 改为显式启用后，VS 2022 Debug/Release 均通过 **32/32** CTest，包含新增 `offline_startup`。该检查在修改前的 Viewer 上检测到 TCP 8086 监听和 UDP 端点，修改后两种配置均未发现 TCP/UDP 端点。Ninja Debug/Release 构建、61 个编译单元命名、格式和模块边界检查通过；显式开启 Tracy 的 Release Core 测试通过。VS 2022 和 Ninja 的 Debug/Release 产物均已重编译并恢复 Tracy 关闭。日志见 `out/NetworkVsDebug.log`、`out/NetworkVsRelease.log`、`out/NetworkNinjaDebugBuild.log`、`out/NetworkNinjaReleaseBuild.log`、`out/NetworkTracyEnabledBuild.log` 和 `out/NetworkStyle.log`。
-
-2026-09-06 上述限定 change 的独立审计后，补齐 Present 失败时的 GPU 等待并新增 `d3d12_frame_failure_recovery`：Debug/Release 分别通过 **31/31**，RenderDoc OFF Debug 通过 **26/26**。61 个编译单元命名、格式、模块边界和 OpenSpec strict 均通过；原 P2 已由独立 reviewer 复审关闭。日志位于 `out/IndependentReview/FinalVsDebug.log`、`FinalVsRelease.log`、`FinalDisabledTest.log`，详见 [独立审计记录](../openspec/changes/archive/2026-09-06-fix-lifecycle-and-split-entrypoints/independent-review.md)。
-
-2026-09-06 架构审查的限定修复与 Viewer/importer 拆分后，VS Debug/Release 分别通过 **30/30**，独立 RenderDoc OFF Debug 构建通过 **25/25**；新增 `lifecycle_recovery` 覆盖窗口、资产重试和帧失败恢复。格式、60 个编译单元命名、模块边界与 OpenSpec strict 均通过。日志位于 `out/ArchitectureReview/FixesVsDebug.log`、`FixesVsRelease.log`、`FixesDisabledTest.log`，详见 [本轮验证记录](../openspec/changes/archive/2026-09-06-fix-lifecycle-and-split-entrypoints/verification.md)。
-
-可选 RenderDoc 抓帧支持可通过 `-RenderDoc` 编入，通过 `-NoRenderDoc` 关闭；不指定时保留 CMake 缓存。完整说明见 [RenderDoc 抓帧](RenderDoc.md)。2026-09-06 验证：启用时 Debug/Release 分别通过 **28/28**；关闭时 Debug 通过 **24/24**，并验证了未编译插件的明确错误。日志为 `out/RenderDocDebugTest.log`、`out/RenderDocReleaseTest.log`、`out/RenderDocDisabledTest.log`；验收后已恢复启用支持的 Debug 构建。
-
-同日 RenderDoc 独立审计后，修复内容验收误报与清理失败后的所有权丢失，并增加 `capture_failure_recovery` 回归。最终启用时 Debug/Release 分别通过 **29/29**，关闭时 Debug 通过 **24/24**；格式、模块边界、51 个编译单元的命名检查及 OpenSpec strict 全部通过。日志为 `out/RenderDocReviewDebug.log`、`out/RenderDocReviewRelease.log`、`out/RenderDocReviewDisabled.log`，复核过程见 [RenderDoc 独立审计](RenderDocReview.md)。当前 VS 工程已恢复启用支持并重新构建 Debug。
-
-2026-09-06：VS 2022 Community / MSBuild 17 / MSVC 19.38，Debug 与 Release 均通过 `hyperion_check` 完成 **13/13** CTest 验收，包含 DX12 硬件测试。CMD 入口也已从仓库外的工作目录执行，并成功重复生成。日志为 `out/vs-workflow-debug.log`、`out/vs-workflow-release.log` 和 `out/vs-workflow-cmd.log`。
-
-同日完成 UE 风格迁移后，再次生成并验证 Debug/Release，均为 **14/14**（新增 `code_style_paths`），记录为 `out/style-vs-debug.log`、`out/style-vs-release.log`。CMD 入口也已复验，记录为 `out/style-cmd.log`。代码文件和辅助脚本已采用 PascalCase，解决方案名称、启动项目和 `hyperion_check` 使用方式保持一致；Viewer 项目中可以直接浏览规范和格式配置。
-
-同日完成 RHI 抽象与源码模块化后，Debug/Release 均为 **16/16**，新增 `rhi_backend_contracts` 与 `d3d12_device_ownership`。记录为 `out/ModularDebugTest.log`、`out/ModularReleaseTest.log`。解决方案仍由同一入口生成，项目按 `Hyperion/Runtime`、`Backends`、`Plugins`、`Applications`、`Tests` 分组，模块内的 Public/Private 与源码目录一致。
-
-同日完成异步 glTF 资产流水线后，Debug/Release 均为 **23/23**，记录为 `out/GltfVsDebugVerified.log`（41.62 秒）与 `out/GltfVsReleaseVerified.log`（37.39 秒）。新增 IO、Archive、Scene、importer、材质像素与模型 Viewer 验收；涵盖单 Worker、延迟读取、取消、保存失败收尾和真实 D3D12 截图。并行构建曾暴露每个程序重复复制同一 DLL 的竞态，现由共享 `hyperion_runtime_files` 目标统一准备 DLL。两种配置均已通过此修复后的完整流程。示例运行见 [AssetPipeline.md](AssetPipeline.md)。
-
-同日 Model Viewer 独立审计修复后，Debug/Release 再次通过 **23/23**，记录为 `out/ModelReviewDebug.log`（35.62 秒）与 `out/ModelReviewRelease.log`（28.13 秒）。原测试中新增 sparse/interleaved 组合、畸形范围、倒序深层级、偏轴透明像素与常量偏移回归；审计及修复范围见 [ModelViewerReview.md](ModelViewerReview.md)。
+可选 RenderDoc 支持通过 `-RenderDoc` 编入、`-NoRenderDoc` 关闭；不指定时保留 CMake 缓存。运行时仍需 `--renderdoc` 加载插件，详见 [RenderDoc 抓帧](RenderDoc.md)。测试入口与结果记录约定见 [验证指南](Verification.md)。

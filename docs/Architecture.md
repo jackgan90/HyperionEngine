@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-  Main[Main: models + input + owned view] --> Render[Render: primitives + scene items + graph]
+  Main[Main: scene nodes + input + immutable frame seed] --> Render[Render: primitives + scene items + graph]
   Render --> R0[RHI 0: frame begin + recording]
   Render --> R1[RHI 1..N: recording]
   R0 --> Submit[RHI 0: ordered submission]
@@ -14,7 +14,7 @@ flowchart LR
   Render --> Worker
 ```
 
-Main waits for CPU frame completion before editing the next settings snapshot. GUI data is deep-copied before it reaches Render/RHI. This first version does not overlap Main and Render frames. GPU resource lifetime uses a separate two-frame fence ring; CPU frame completion does not imply GPU completion.
+Main publishes owned settings and scene-frame snapshots; GUI data is deep-copied before it reaches Render/RHI. FFramePipeline independently bounds Main→Render and Render→RHI lead, both defaulting to 1. Main and Render may overlap different CPU frames; zero lead provides serialized operation. Resize and shutdown drain admitted work. See [CpuFramePipeline.md](CpuFramePipeline.md). GPU resource lifetime uses a separate two-frame fence ring; CPU frame completion does not imply GPU completion.
 
 RHI frame control/resource creation belongs to RHI 0. Recording can happen concurrently in distinct contexts; each context can be used once per frame. Submitted draw packets keep their buffers, textures and pipelines alive until the associated fence completes. Resize and shutdown drain the graphics queue. Geometry uses immutable upload buffers, and the font uses a default-heap texture with staging upload.
 
@@ -30,6 +30,8 @@ Task handles carry completion and exceptions. Dependencies are continuation driv
 
 [RenderPrimitives.md](RenderPrimitives.md) defines the standard runtime flow, message and lifetime contracts. Main logical objects hold opaque bindings; Render owns persistent primitives and collects independent frame items. A device/session resource service shares immutable geometry/materials and retires native handles on RHI 0 after uploads, frame references and GPU fences permit it. Control and retirement progress continue without new presented frames.
 
+Scene-backed viewers own FSceneInstance on Main. Cameras and lights are scene nodes; the bridge publishes geometry and metadata under one exact publication token. Render resolves an immutable scene-frame seed through FSceneViewRequest. Application code must not reconstruct a bound frame by copying its public material inputs or bypass scene camera selection with a separate view. Reusable navigation is provided by FSceneCameraController; see [SceneManagement.md](SceneManagement.md).
+
 ## Adding an experiment
 
 1. Scene producers implement `IScenePlugin` in `Source/Plugins/<Name>` and register a stable ID/factory in the application registry. `Start`, `Update` and `Stop` run on Main.
@@ -38,7 +40,7 @@ Task handles carry completion and exceptions. Dependencies are continuation driv
 4. Release bindings in `Stop`; close the render session before destroying graphics and task services. Ordinary object removal uses asynchronous retirement without a device idle wait.
 5. Non-scene operations such as GUI implement `IRenderPlugin::Build` on Render. Their Main lifecycle dispatches any RHI 0 resource work explicitly; graph Load passes still require initialized color contents.
 
-The current graph manages swapchain color and an optional matching depth target. Static models use depth and an sRGB color view, followed by the existing GUI pass. An offscreen GI algorithm still needs a future change introducing graph resource handles, textures/formats/usages and read/write tracking across multiple resources. Do not bypass RHI to add native graphics calls in a plugin.
+The graph imports explicit color/depth resources, tracks read/write dependencies and supports sampled offscreen targets and multiple color attachments. Viewer uses the shared HDR scene pipeline: Deferred GBuffer lighting or HDR Forward, CSM, clustered local lights, sky/IBL, transparency, tonemapping and GUI. Compute, transient aliasing and multi-queue scheduling remain unimplemented. See [RenderGraph.md](RenderGraph.md) and [DeferredRendering.md](DeferredRendering.md). Do not bypass RHI to add native graphics calls in a plugin.
 
 ## Reflection, allocation and dependency boundaries
 
@@ -52,7 +54,7 @@ Vendor includes and calls live in each runtime module's `Private/Adapters`, or a
 
 ## Shader contract
 
-Sources use HLSL with column-major matrices and column-vector multiplication. DXC emits shader model 6.0 DXIL or Vulkan 1.1 SPIR-V; SPIRV-Cross supplies resource metadata and MSL source. Space 0 currently maps b-registers directly, t-registers to binding 1000+, s-registers to 2000+, and u-registers to 3000+ to keep Vulkan bindings distinct. Current engine reflection exposes uniform buffers, separate textures and samplers; storage buffers/images and other spaces require extending this contract.
+Sources use HLSL with column-major matrices and column-vector multiplication. DXC emits shader model 6.0 DXIL or Vulkan 1.1 SPIR-V; SPIRV-Cross supplies resource metadata and MSL source. Space 0 currently maps b-registers directly, t-registers to binding 1000+, s-registers to 2000+, and u-registers to 3000+ to keep Vulkan bindings distinct. The mapping applies independently to register spaces 0–3. Engine reflection supports uniform buffers, Texture2D/TextureCube resources, samplers and read-only structured/raw buffers. Runtime UAV writes and compute stages are not implemented.
 
 SHA-256 cache keys include a wrapper revision, pinned DXC/SPIRV-Cross identity, entry/stage/format and every file under the configured shader root. Includes must stay inside this root. Source-tree invalidation is deliberately conservative. Cache files carry an integrity digest; corrupt or incomplete files are recompiled. Shader compilation is serialized per compiler instance. MSL output is source generation evidence, not Metal runtime validation.
 
@@ -64,7 +66,7 @@ Native windowing, graphics and shader runtime loading currently target Windows/M
 
 ## Runtime modules and backend selection
 
-See [SourceLayout.md](SourceLayout.md) for module ownership and future Scene/Animation boundaries. Reflection, Math and logical plugin management are independent foundation modules. Application settings do not belong to reflection or asset importing. Runtime modules never include concrete backend or experiment-plugin headers.
+See [SourceLayout.md](SourceLayout.md) for module ownership, the existing Scene/Environment boundaries and future Animation placement. Reflection, Math and logical plugin management are independent foundation modules. Application settings do not belong to reflection or asset importing. Runtime modules never include concrete backend or experiment-plugin headers.
 
 ```mermaid
 classDiagram
@@ -78,7 +80,7 @@ classDiagram
   FD3D12RHISwapchain --> FD3D12DeviceState : retains
 ```
 
-The Viewer composition root explicitly registers `RegisterD3D12RHIBackend`, then asks `FRHIBackendRegistry` for a device. `IRHIBackend::CreateDevice` returns a fully initialized `IRHIDevice`; construction failure throws instead of exposing a half-initialized device. Device creation has no window argument. Each `IRHISwapchain` owns its surface, backbuffers, recording contexts and frame progression. The current command API targets one swapchain color buffer; a future offscreen/resource-graph change should introduce command contexts and richer resource descriptions rather than reinterpret the swapchain as a general renderer.
+The Viewer composition root explicitly registers `RegisterD3D12RHIBackend`, then asks `FRHIBackendRegistry` for a device. `IRHIBackend::CreateDevice` returns a fully initialized `IRHIDevice`; construction failure throws instead of exposing a half-initialized device. Device creation has no window argument. Each `IRHISwapchain` owns its surface, backbuffers, recording contexts and frame progression. Pass commands explicitly name frame or offscreen attachments and sampled reads, including MRT color lists. Swapchain frame ownership coordinates recording and submission; it does not restrict every pass to its backbuffer.
 
 `rhi_backend` is persisted in application settings, defaults to `d3d12` for old configurations, and can be overridden by `--backend`. Recognized but unregistered backends fail before creating a window. There is no implicit fallback or native API selection inside Renderer.
 

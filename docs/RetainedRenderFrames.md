@@ -1,5 +1,7 @@
 # 保留渲染准备结果与帧调度优化
 
+> 历史记录：以下设计取舍、配置、测试数量和测量结果对应文中基线，不代表当前默认行为或本次工作区的验证结果。当前功能与操作入口见 [文档索引](README.md)。
+
 本轮基于 `optimize-renderer-cpu-submission` 开发完成后的源码和二进制继续优化。第一轮结果见 [RendererCpuPerformance.md](RendererCpuPerformance.md)。二进制 SHA-256、源码快照及新证据保存在 `out/retained-render-20260909`；正式数字使用 Tracy 编译关闭的 Debug/Release，定位使用 Profile。
 
 下文的完整扫描和历史 trace 数字来自独立审计前的实现。后续正确性修复、复审结果及其性能复测单独记录于 [RendererCpuAudit.md](RendererCpuAudit.md)。

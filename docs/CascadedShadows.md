@@ -2,7 +2,7 @@
 
 ## 使用
 
-SceneViewer 默认使用单方向光、四级 2048×2048 D32 shadow map，四级每帧更新。`experiments/Scene.json` 的原有多模型场景和地面已经接入阴影；`experiments/Shadows.json` 是接触、斜面、薄片、镂空及镜像投影的专用场景。
+SceneViewer 默认使用单方向光、四级 2048×2048 D32 shadow map，四级每帧更新。`experiments/Scene.json` 展示 Sponza，方向光由选中的场景节点提供；`experiments/Shadows.json` 是接触、斜面、薄片、镂空及镜像投影的专用场景。
 
 ```powershell
 .\tools\Build.ps1 -Preset release
@@ -10,13 +10,13 @@ SceneViewer 默认使用单方向光、四级 2048×2048 D32 shadow map，四级
 .\out\build\release\bin\hyperion_viewer.exe --config experiments/Shadows.json
 ```
 
-`Directional shadows` 面板提供启用、1024/2048 分辨率、距离、split lambda、receiver bias、normal offset、cascade overlap、距离淡出及光源方向控制。`Cycle shadow display` 在正常着色、cascade 着色、四张真实深度纹理预览之间切换；深度预览在阴影面板下方，隐藏 UI 时在右下角；白色为 depth=1。面板同时显示各 view 的可见物体、draw 数、CPU 准备和最近已完成 GPU 帧的各 pass 耗时。参数是当前会话设置，不写回实验配置。
+`Directional shadows` 面板提供启用、1024/2048 分辨率、距离、split lambda、receiver bias、normal offset、cascade overlap、距离淡出及光源方向控制。`Cycle shadow display` 在正常着色、cascade 着色、四张真实深度纹理预览之间切换；深度预览在阴影面板下方，隐藏 UI 时在右下角；白色为 depth=1。面板同时显示各 view 的可见物体、draw 数、CPU 准备和最近已完成 GPU 帧的各 pass 耗时。分辨率、距离和偏移等阴影管线设置仅作用于当前会话，不写回实验配置；面板中的光源颜色、强度、方向和 castShadows 编辑的是场景节点，会随场景保存。
 
-CLI 对应参数：`--no-shadows`、`--shadow-resolution 1024|2048`、`--shadow-distance 100`、`--shadow-debug 0..5`、`--shadow-light x y z`。光方向表示表面指向光源的单位方向，输入会验证并归一化。默认方向为 `normalize(-0.45, 0.8, 0.65)`，默认 lambda=0.6、normal offset=0.6 texel、receiver bias=0.15 texel、overlap/fade=0.1。按实际场景比例调节距离和偏移；增大偏移会增加接触分离，降低距离可提高单位世界空间的纹理密度。
+CLI 对应参数：`--no-shadows`、`--shadow-resolution 1024|2048`、`--shadow-distance 100`、`--shadow-debug 0..5`、`--shadow-light x y z`。光方向表示表面指向光源的单位方向，输入会验证并归一化。场景的实际方向来自主方向光节点；Sponza 的初始方向为 `normalize(-0.45, 0.8, 0.65)`。默认 lambda=0.6、normal offset=0.6 texel、receiver bias=0.15 texel、overlap/fade=0.1。按实际场景比例调节距离和偏移；增大偏移会增加接触分离，降低距离可提高单位世界空间的纹理密度。
 
 ## 管线与资源
 
-`FForwardRenderPipeline` 在 Renderer 内集中组织一帧：共享场景空间索引维护 → 四个 `ShadowDepth` view → `Forward` 主 view → 可选深度预览 → 扩展/plugin passes。所有 view 使用同一个冻结材质 frame，一次 Render 准备完成后再交给 RHI 0；空间索引每个 family 更新一次。`FRenderSession::ViewStatistics()` 分别报告各 view；原 `Statistics()` 保留“最后 view 的可见性、family 总 draw/batch 数”的兼容语义。
+Viewer 使用 `FSceneRenderPipeline`，在共享 CSM 后运行 HDR Forward 或 Deferred，详见 [DeferredRendering.md](DeferredRendering.md)。保留的 legacy `FForwardRenderPipeline` 在 Renderer 内组织：共享场景空间索引维护 → 四个 `ShadowDepth` view → `Forward` 主 view → 可选深度预览 → 扩展/plugin passes。所有 view 使用同一个冻结材质 frame，一次 Render 准备完成后再交给 RHI 0；空间索引每个 family 更新一次。`FRenderSession::ViewStatistics()` 分别报告各 view；原 `Statistics()` 保留“最后 view 的可见性、family 总 draw/batch 数”的兼容语义。
 
 `FCascadedShadowMap` 持有稳定 view identity 和纹理 source。`Views()` 提供相机/剔除输入，`Targets(lifetime)` 单独提供各级深度附件，`Bind(main, targets, lifetime)` 声明 Forward 的 sampled reads 和材质参数。主相机的 forward、up、FOV、near/far 显式放入 `FRenderView::Camera`。当前 pipeline 接受单个透视主相机和单个方向光；普通 `BuildViews` 仍可单独使用。
 
@@ -24,11 +24,11 @@ CLI 对应参数：`--no-shadows`、`--shadow-resolution 1024|2048`、`--shadow-
 
 `FMaterialDepthTexture` 是没有原生依赖的 CPU 描述。Renderer 的材质 GPU cache 将 source identity 解析为同一张 RHI texture，既供 attachment 写入，也供材质反射绑定采样。D3D12 使用 R32_TYPELESS resource、D32_FLOAT DSV 和 R32_FLOAT SRV，支持独立 comparison sampler 及比较函数。四张 2048 贴图的像素 payload 为 64 MiB，1024 为 16 MiB；实际设备统计还包括对齐、常量页及其他场景资源。关闭阴影会保留当前贴图供重新启用；切换分辨率会在引用和 fence 释放后回收旧集合。
 
-`FGraphicsPass` 显式声明颜色使用、深度 attachment 和 sampled depth。Graph 检查初始化、读写冲突与依赖，并生成 `ShaderRead → DepthWrite → ShaderRead` 转换；空 cascade 仍整张清到 1。外部已初始化深度通过 `Import(FGraphTextureImport)` 的状态及内容有效性声明，结束状态通过 `Export` 声明。未提交帧取消不会改变 GPU 资源状态，已提交帧及 clear-only pass 都保留纹理直到原有 fence 完成。初始 clear 排入同一 graphics queue，不增加 CPU idle。没有每帧 shadow texture 创建、深度读回或 profiling 专用同步；深度预览直接在 GPU 采样。
+`FGraphicsPass` 显式声明颜色使用、深度 attachment 和 sampled depth。Graph 检查初始化、读写冲突与依赖，并生成 `ShaderRead → DepthWrite → ShaderRead` 转换；空 cascade 仍整张清到有效深度约定的远值（标准 Z 为 1，reversed-Z 为 0）。外部已初始化深度通过 `Import(FGraphTextureImport)` 的状态及内容有效性声明，结束状态通过 `Export` 声明。未提交帧取消不会改变 GPU 资源状态，已提交帧及 clear-only pass 都保留纹理直到原有 fence 完成。初始 clear 排入同一 graphics queue，不增加 CPU idle。没有每帧 shadow texture 创建、深度读回或 profiling 专用同步；深度预览直接在 GPU 采样。
 
 显式 sampled-depth attachment 按自身的 D32 格式准备 PSO 和 pass；主视图可独立使用 D32S8。深度预览的纹理与 binding set 跟随 attachment lifetime，隐藏预览后切换分辨率也会在 RHI 回收旧引用；预览的 PSO 和几何继续复用。
 
-普通材质客户端使用已初始化的 1×1 depth=1 及 shadow strength=0 作为缺省输入。自定义 caster 通过声明 `ShadowDepth` usage 接入；未声明该 pass 的材质会跳过投影。透明材质接受阴影但不投影有色/透明阴影。
+普通材质客户端使用已初始化的 1×1 中性深度纹理及 shadow strength=0 作为缺省输入；标准 Z 与 reversed-Z 分别使用匹配的深度清除值和比较函数。自定义 caster 通过声明 `ShadowDepth` usage 接入；未声明该 pass 的材质会跳过投影。透明材质接受阴影但不投影有色/透明阴影。
 
 ## 着色与稳定性
 
@@ -36,7 +36,7 @@ CLI 对应参数：`--no-shadows`、`--shadow-resolution 1024|2048`、`--shadow-
 
 CSM 使用 uniform/log 混合 splits、旋转不变的 receiver 包围球、filter guard band 与光空间 texel snapping。光源 basis 避免与 up 共线，并在缓慢改变方向时保持连续。Caster 查询将每个 receiver 沿光方向挤出，独立查询共享 BVH，包含主相机外的遮挡物；caster 决定保守 Z 范围，向外量化避免近裁剪遗漏。未知 bounds 保守通过，非有限/退化输入和投影溢出关闭阴影并发布有限缺省值。
 
-Forward 只对方向光直接光照施加 shadow visibility，ambient/emissive 不受影响。固定 3×3 comparison PCF 配合有上限的 raster slope/depth bias、按世界 texel 缩放的 receiver bias 和几何 normal offset、受限 receiver-plane correction。相邻 cascade 在重叠区混合，最远距离淡出；采样越界返回 lit。
+Forward 与 Deferred 只对方向光直接光照施加 shadow visibility，ambient/emissive 不受影响。固定 3×3 comparison PCF 配合有上限的 raster slope/depth bias、按世界 texel 缩放的 receiver bias 和几何 normal offset、受限 receiver-plane correction。相邻 cascade 在重叠区混合，最远距离淡出；采样越界返回 lit。
 
 固定分辨率无法表示任意细小几何，bias 也存在 acne 与 peter panning 的精度权衡。当前默认值在专用接触、斜面、薄片、mask 和镜像场景中没有观察到明显条纹或分离；不声称消除任意场景比例下的全部 artifacts。初版没有分帧更新、PCSS、VSM、多个 shadowed lights、GPU culling 或 transient aliasing。
 

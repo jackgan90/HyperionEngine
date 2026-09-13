@@ -18,7 +18,7 @@ Color is linear RGB. Intensity is the inverse-square numerator in the scene's wo
 
 Distance attenuation is `saturate(1 - (distance/range)^4)^2 / max(distance^2, 0.0001)`. The denominator uses a 0.01-world-unit near-source distance. Spot attenuation multiplies by smoothstep from outer cosine to inner cosine. A finite neutral direction handles the exact light center. Pathological per-light shader values are bounded before HDR output; RGBA16F additive accumulation still has finite dynamic range, as does existing scene lighting.
 
-Native scene schema is v5 and node records are v2. Old source v1/v2 and native v1-v4 continue to migrate; old empty scenes remain empty and no local lights are synthesized. New local payloads require source v3. Both scene importers now use revision 3, invalidating stale conversion results. Runtime snapshot/save uses the same Scene reflection records.
+Native scene schema is v5 and node records are v2. Old source v1/v2 and native v1-v4 continue to migrate; old empty scenes remain empty and no local lights are synthesized. New local payloads require source v3. Both scene importers use revision 4, including subsequent sky support, invalidating stale conversion results. Runtime snapshot/save uses the same Scene reflection records.
 
 ## Publication and visibility
 
@@ -46,6 +46,6 @@ Viewer benchmark CSV appends `local_lights_active`, `point_lights`, `spot_lights
 
 The default `assets/Scenes/Sponza.json` contains three warm point lights arranged along the courtyard. The camera, source model, textures, material values, directional light and exposure are preserved. Light positions were chosen from the calibrated camera's ground-plane projection of the reference floor pools, then tuned using real D3D12 captures for nearby column/banner illumination.
 
-Reference: [Khronos Sponza README Screenshot](https://github.com/KhronosGroup/glTF-Sample-Assets/blob/main/Models/Sponza/README.md), image `screenshot/large.jpg`. Upstream explicitly states that its lights are not part of the model. This is an authored visual approximation: reference light parameters are unpublished, and local shadows, GI/IBL, sky and tonemapping differences are not reconstructed.
+Reference: [Khronos Sponza README Screenshot](https://github.com/KhronosGroup/glTF-Sample-Assets/blob/main/Models/Sponza/README.md), image `screenshot/large.jpg`. Upstream explicitly states that its lights are not part of the model. This is an authored visual approximation: reference light parameters are unpublished, and local shadows and bounced GI remain unavailable. The current scene also has sky/IBL; see [SkyLighting.md](SkyLighting.md). The authored sky, lights and tonemapping do not establish a pixel-identical reconstruction of the reference.
 
 Validation evidence, screenshots and measurements are recorded in the change's `verification.md` and `out/LocalLights`.

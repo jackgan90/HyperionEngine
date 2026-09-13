@@ -1,5 +1,7 @@
 # Model Viewer 独立审计与修复
 
+> 历史记录：以下设计取舍、配置、测试数量和测量结果对应文中基线，不代表当前默认行为或本次工作区的验证结果。当前功能与操作入口见 [文档索引](README.md)。
+
 日期：2026-09-06。范围为本轮静态 glTF/GLB Model Viewer，包括其 IO、资产服务、导入适配器、Scene 数据、渲染及 D3D12 资源生命周期。
 
 独立 reviewer 以 `fork_turns: none` 启动，只收到仓库位置、审计范围与检查要求，没有继承主会话上下文。reviewer 只读代码，不修改文件或运行构建。主 agent 对每项发现独立核实并实施修复；修复后 reviewer 再次静态审阅，没有发现此次局部修改引入的新问题。
@@ -47,6 +49,6 @@ reviewer 和主 agent 检查了单 Worker 下的 IO 等待、请求取消/Drain�
 
 - [GltfImport.cpp](../Source/Runtime/AssetImport/Private/Adapters/GltfImport.cpp)
 - [Model.cpp](../Source/Runtime/Scene/Private/Model.cpp)
-- [ModelRenderer.cpp](../Source/Runtime/Renderer/Private/ModelRenderer.cpp)
+- `ModelRenderer.cpp` 是该次审计中的历史文件，现已拆分；当前渲染入口见 [RenderPrimitives.md](RenderPrimitives.md)。
 - [D3D12RHISwapchain.cpp](../Source/Backends/D3D12/Private/D3D12RHISwapchain.cpp)
 - [GenerateModelFixtures.py](../tools/GenerateModelFixtures.py)、[ImportTests.cpp](../Source/Tests/Assets/ImportTests.cpp)、[ModelTests.cpp](../Source/Tests/Scene/ModelTests.cpp)、[ModelRenderTests.cpp](../Source/Tests/Renderer/ModelRenderTests.cpp)

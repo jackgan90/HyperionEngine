@@ -1,6 +1,6 @@
 # 资产管线与静态 glTF 支持
 
-原生资产工作流、工具、API、模式迁移、缓存和场景保存见 [NativeAssets.md](NativeAssets.md)。运行时 Assets 和 Viewer 只读取 .hasset；glTF/GLB 与场景 JSON 通过离线 FAssetImportService 转换。源模型示例由仓库脚本原创生成，沿用项目 MIT 许可证。
+原生资产工作流、工具、API、模式迁移、缓存和场景保存见 [NativeAssets.md](NativeAssets.md)。运行时 Assets 和 Viewer 只读取 .hasset；glTF/GLB 与场景 JSON 通过离线 FAssetImportService 转换。Showcase 等生成示例沿用项目 MIT 许可证；Sponza 来自 Khronos 示例资产，许可见 assets/Models/Sponza/License.txt。天空资产来源与许可见 [SkyLighting.md](SkyLighting.md)。
 
 ~~~powershell
 ./tools/Build.ps1
@@ -27,9 +27,9 @@ Visual Studio 对应程序位于 out/build/vs2022/bin/<Configuration>。右键�
 | Alpha/面向 | Opaque/Mask/Blend，透明排序、双面和镜像绕序 |
 | 持久化 | 模型引用独立材质，材质引用独立纹理；运行时只读取原生资产 |
 
-动画、蒙皮、morph target、points/lines、UV2 及更高 UV 集会拒绝导入。唯一支持的 glTF 扩展是 KHR_materials_unlit；其他 required 扩展报错，其他 optional 扩展记录诊断并使用基础 fallback。没有 Draco、meshopt、BasisU/KTX2、KHR_texture_transform、扩展材质、IBL 或 glTF camera 导入。引擎场景阴影由独立 CSM 管线提供。
+动画、蒙皮、morph target、points/lines、UV2 及更高 UV 集会拒绝导入。唯一支持的 glTF 扩展是 KHR_materials_unlit；其他 required 扩展报错，其他 optional 扩展记录诊断并使用基础 fallback。没有 Draco、meshopt、BasisU/KTX2、KHR_texture_transform、扩展材质或 glTF camera 导入。天空 IBL 通过独立 HDR/EXR 离线导入提供，不属于 glTF importer；见 [SkyLighting.md](SkyLighting.md)。引擎场景阴影由独立 CSM 管线提供。
 
-缺失切线的生成不是 MikkTSpace；透明排序以 primitive 中心为粒度，不能解决相交透明面。FBX/OBJ/COLLADA 尚未接入。PNG/JPEG 单张解码上限为 256 MiB、单边最多 16384；这不是整个进程的峰值内存配额。当前 D3D12 纹理描述符容量为 256，由同一设备上的模型和 GUI 共享。
+缺失切线的生成不是 MikkTSpace；透明排序以 primitive 中心为粒度，不能解决相交透明面。FBX/OBJ/COLLADA 尚未接入。PNG/JPEG 单张解码上限为 256 MiB、单边最多 16384；这不是整个进程的峰值内存配额。D3D12 通用材质描述符堆由设备配置决定，默认资源描述符 4096、sampler 描述符 512；实际容量和单次绑定限制通过 FRHICapabilities 查询，不能把描述符数等同于模型或纹理总数。
 
 ## 适配器与渲染准备
 

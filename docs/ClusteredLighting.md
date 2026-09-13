@@ -42,7 +42,7 @@ The initial D3D12 buffer path uses upload heap memory and allocates new native b
 
 ## Assets and diagnostics
 
-Built-in persisted PBR descriptions now declare cluster View semantics. glTF importer revision 3 invalidates old generated materials; normal builds regenerate native sample content. No Scene/native scene schema bump is needed. The renderer supplies valid disabled defaults to standalone built-in material consumers.
+Built-in persisted PBR descriptions declare cluster View semantics. The native glTF importer is revision 4, including cluster and sky material semantics; normal builds regenerate stale native sample content. Clustering itself does not require a Scene/native scene schema bump. The renderer supplies valid disabled defaults to standalone built-in material consumers.
 
 Viewer reports algorithm, visible point/spot counts, volume draws, occupied/total cells and reference counts. CSV appends `clustered_lighting`, `cluster_cells`, `cluster_occupied`, `cluster_references`, `cluster_max_lights`, `cluster_bytes`, `cluster_build_ms`, `cluster_rebuilt`. `local_gpu_ms` continues to measure only legacy volume draws; `lighting_gpu_ms` includes the fused or dedicated Deferred lighting pass and is not an isolated local-light timing.
 

@@ -1,5 +1,7 @@
 # Renderer CPU 提交优化
 
+> 历史记录：以下设计取舍、配置、测试数量和测量结果对应文中基线，不代表当前默认行为或本次工作区的验证结果。当前功能与操作入口见 [文档索引](README.md)。
+
 本轮对应 OpenSpec `optimize-renderer-cpu-submission`，基线为 `144c1e5`。实现顺序为测量基准、材质与批次刷新、D3D12 录制、数据所有权与任务调度。原始分析见本机 [Analysis.md](../out/cpu-analysis-20260909/Analysis.md)。
 
 后续以 `5895bd7` 为基线的共享参数、稳定 item 存储和独立实例块优化，见 [IncrementalRenderUpdates.md](IncrementalRenderUpdates.md)。本页保留上一轮的历史实现与测量条件，不能与后续轮次混作同一组 A/B。
@@ -166,6 +168,6 @@ Debug 的 48 项、Release 的 43 项 CTest 均通过；Profile 的 42 项常规
 
 新增状态缓存测试在同一 PSO 下交替 VB/IB/scissor、重复相同绘制，并跨 frame slot 检查颜色与实际绑定次数。持有旧录制的测试验证其元数据和原生列表不被后续帧修改。完整命名/格式、模块边界及 `git diff --check` 通过。
 
-测量和图像/持续运行详情见上述结果及本机 evidence；OpenSpec change 保持开发完成状态，归档和提交单独执行。
+测量和图像/持续运行详情见上述结果及本机 evidence；对应设计与验收记录保存在 OpenSpec archive 中。
 
 两个 CPU proposal 的后续独立审计修复与验证见 [RendererCpuAudit.md](RendererCpuAudit.md)。上述历史性能数据不替代修复版本的复测。

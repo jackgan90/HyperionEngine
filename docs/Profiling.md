@@ -61,7 +61,7 @@ void UpdateMaterial()
 - Tasks：静态线程名、TaskDispatch/TaskExecute/TaskWait 的数值 task ID，以及仅在启用时计时的 TaskQueueMilliseconds。队列延迟从依赖已满足、进入执行器队列时开始。
 - Assets：IO 任务内的 ReadAssetBytes、ImportGltf、ParseGltf、ConvertGltfMeshes、DecodeImage，以及 ShaderCompilation。标记覆盖完整操作，不进入顶点或像素循环；导入等待外部 IO 时同样按 Worker 执行段拆分。查看加载热点应从启动时开启 Assets，预热结束后的采集通常已经错过初次加载。
 
-材质 reuse/refresh/full 的计数在一次 view 准备中使用局部变量累计；provider 与常量/绑定/PSO 缓存使用已有累计计数的差值。`SceneDraws` 表示该 Viewer 帧实际场景 draw。当前 Viewer 一帧一个 view，因此这些 plot 每帧一组；多 view 调用者会每 view 发布一组，应按时间和 view 准备 scope 解读。Full 计数包含进入完整求值后失败的尝试，Refresh scope 包含未能使用快速刷新路径的尝试。
+材质 reuse/refresh/full 的计数在一次 view 准备中使用局部变量累计；provider 与常量/绑定/PSO 缓存使用已有累计计数的差值。`SceneDraws` 表示该 Viewer 帧实际场景 draw。Viewer 可在一帧构建 CSM、主视图、兼容与透明等多个 view；这些 plot 应按 view 准备 scope 解读，不能把一个样本直接当作整帧汇总。Full 计数包含进入完整求值后失败的尝试，Refresh scope 包含未能使用快速刷新路径的尝试。
 
 材质优化新增 `ConstantFullLookups/ConstantPreparedReuses/ConstantEvictions` 和 `ProviderEvictions` 增量计数，以及 `ConstantCachedBlocks/ConstantCachedBytes/ConstantPreparedBlocks/ConstantPageBytes`、`ProviderCachedEntries/ProviderCachedValueBytes` 存量。候选常量字节为对齐后的 slice extent；provider 字节为 owned value-tree 估算，均不能代替进程 Private Bytes。`ConstantPageBytes` 包括外部旧帧与活跃 draw 保留的完整页面。原生 `GraphicsRootBinds/GraphicsHeapBinds/GraphicsConstantBinds/GraphicsTableBinds` 每次 list 录制发布实际命令数；同一帧有多个 pass/list 时需要汇总，不能拿单个 plot 样本当作每帧数量。详细对照见 [材质性能优化](MaterialPerformance.md)。
 

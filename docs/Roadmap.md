@@ -1,19 +1,25 @@
-# Windows rendering foundation
+# 功能范围与扩展边界
 
-Status: all nine changes implemented and verified on 2026-09-06. See [acceptance evidence](Verification.md) and the archived changes under `openspec/changes/archive`.
+本页描述当前代码的能力边界，不是待执行的任务清单。具体设计和已完成变更保存在 [OpenSpec 归档](../openspec/changes/archive)。
 
-The user authorized continuous implementation, validation, spec synchronization and archival of these changes in order. Each change must have proposal, design, delta specifications, checked implementation tasks and concrete verification evidence before archival.
+## 已实现
 
-1. bootstrap-build-and-core-services — build, dependency isolation, logging, memory, profiling
-2. add-task-system-and-execution-domains — oneTBB workers and dedicated Main/Render/RHI executors
-3. add-reflection-config-and-plugin-runtime — reflection, persisted settings and static plugins
-4. add-windows-application-platform — SDL3 window and application lifecycle
-5. add-asset-and-math-foundation — GLM, glTF, PNG and EXR through engine types
-6. add-shader-compilation-pipeline — DXC, SPIR-V reflection and MSL conversion
-7. add-d3d12-rhi-and-presentation — DX12 device, resources, presentation and GPU lifetime
-8. add-render-graph-and-triangle-plugin — validated graph and triangle through RHI
-9. add-debug-ui-and-end-to-end-validation — ImGui/ImPlot, screenshots and full validation
+| 领域 | 能力与说明 |
+| --- | --- |
+| 平台与构建 | Windows x64 / MSVC、Visual Studio 与 Ninja、锁定依赖；见 [VisualStudio.md](VisualStudio.md) |
+| 运行时 | 独立 Main/Render/RHI/IO 执行域、oneTBB Worker、反射配置和静态逻辑插件 |
+| 资产 | 离线 glTF/GLB、原生模型/材质/纹理/场景/天空资产、增量导入和异步加载；见 [NativeAssets.md](NativeAssets.md) |
+| 场景 | 层级、相机、方向/环境/点/聚光节点、编辑保存、BVH 视锥剔除和可复用导航 |
+| 渲染 | HDR Forward/Deferred、MRT GBuffer、CSM、reversed-Z、实例批处理和增量准备 |
+| 光照 | CPU 聚簇局部光、天空背景、SH 漫反射和 GGX 预过滤 IBL |
+| 调试与验证 | GUI、截图验收、可选 RenderDoc 和 Tracy；见 [Verification.md](Verification.md) |
 
-The initial renderer uses Windows x64 and D3D12. Plugins are statically linked logical units selected at startup. General CPU jobs use oneTBB. Main, Render and RHI execution domains are owned by Hyperion. Native graphics calls and third-party types remain inside private adapters. Shader sources use HLSL, with DXC producing DXIL/SPIR-V and SPIRV-Cross producing MSL; Metal runtime verification belongs to a future platform change.
+## 尚未实现
 
-Deferred: dynamic plugin reload, AST reflection, full asset cooking, Vulkan/Metal backends (including VMA), multi-GPU-queue graph scheduling, resource aliasing and advanced rendering algorithms.
+- Vulkan/Metal 运行时后端与移动平台；现有 SPIR-V/MSL 编译反射不能代替原生后端验证。
+- 动画、蒙皮、morph target，以及 glTF 压缩和扩展材质导入；完整格式范围见 [AssetPipeline.md](AssetPipeline.md)。
+- Compute/UAV 写入、多 GPU 队列调度、瞬态资源别名、MSAA/resolve、原生 ray tracing 和 mesh shader 操作。
+- 局部光阴影、场景遮蔽的天光、多次反弹 GI、局部反射探针捕获与混合。
+- 动态插件 DLL 热重载、AST 反射生成、GC 和任意指针对象图序列化。
+
+新增能力遵循 [Architecture.md](Architecture.md) 与 [SourceLayout.md](SourceLayout.md) 的模块、线程和资源所有权边界。

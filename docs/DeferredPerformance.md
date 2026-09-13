@@ -1,5 +1,7 @@
 # Deferred 性能与验收报告
 
+> 历史记录：以下设计取舍、配置、测试数量和测量结果对应文中基线，不代表当前默认行为或本次工作区的验证结果。当前功能与操作入口见 [文档索引](README.md)。
+
 测量日期：2026-09-11。本次实现默认启用传统 raster Deferred，并保留相同线性 HDR / Reinhard / sRGB 输出的 Forward 作为有效 A/B 参照。
 
 在本机的单方向光工作负载中，Deferred 紧凑布局增加了 GPU 通道总时间：16 个匹配场景组合的两轮合并均值增量为 **0.0105–0.0354 ms**。这些场景没有获得 GPU 加速；额外 GBuffer 带宽、全屏光照和 CPU pass 准备构成了实际成本。结果不代表未来多光源场景。
@@ -137,7 +139,7 @@ SceneColor RGBA16F + SceneDepth D32 为 12 bytes/pixel；Compact 总计 36、Hig
 - 着色器测试覆盖 DXIL/SPIR-V/MSL 的 BasePass/Forward、实例变体及全屏 lighting/debug/tonemap；BasePass 恰有四个颜色输出，不含阴影/光照资源依赖。Reflection v5 修复系统输出大小写导致的跨格式重复计数。
 - 格式、355 个 owned 源文件路径、219 个 C++ 翻译单元语义命名及最后两处修改复查通过；依赖边界检查通过，OpenSpec strict validation 与 git diff --check 通过。
 
-API、颜色、GBuffer、兼容材质和未来 stencil 扩展边界详见 [DeferredRendering.md](DeferredRendering.md)。当前只实现单一 DefaultLit deferred lighting；透明与 Unlit 分流到共享 HDR Forward。未实现多 shading-model/material-ID 分发、compute lighting、tile/cluster 光源剔除或多光源性能优化。
+API、颜色、GBuffer、兼容材质和未来 stencil 扩展边界详见 [DeferredRendering.md](DeferredRendering.md)。该测量使用单方向光负载，不代表后续多光源性能。当前支持 CPU 聚簇光照，见 [ClusteredLighting.md](ClusteredLighting.md)；仍未实现多 shading-model/material-ID 分发和 compute lighting。透明与 Unlit 分流到共享 HDR 路径。
 
 ## 审计修复后补测（2026-09-11）
 

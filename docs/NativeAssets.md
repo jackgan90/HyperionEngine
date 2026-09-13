@@ -25,9 +25,9 @@
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
-源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建真实 camera/directionalLight/environmentLight 节点及选择；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
+源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建真实 camera/directionalLight/environmentLight 节点及选择；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
-cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 、Shadows.hasset 和 SharedAssets.hasset，以及 Catalog.hasset。其中 Showcase 和 Shadows 分别保留 79 和 10 个实例。Scene Viewer 默认另行导入 `assets/Scenes/Sponza.json` 到 `out/content/Scenes/Sponza.hasset` 并加入 catalog；这是一个完整 Sponza 模型实例，源模型与全部纹理已随仓库保存。迁移和能力边界见 [SponzaMigration.md](SponzaMigration.md)。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
+cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 、Shadows.hasset 和 SharedAssets.hasset，以及三个 Skies/Cloudy.hasset、Dusk.hasset、Clear.hasset 和 Catalog.hasset。其中 Showcase 和 Shadows 分别保留 79 和 10 个实例。Scene Viewer 默认另行导入 `assets/Scenes/Sponza.json` 到 `out/content/Scenes/Sponza.hasset` 并加入 catalog；这是一个完整 Sponza 模型实例，源模型与全部纹理已随仓库保存。迁移和能力边界见 [SponzaMigration.md](SponzaMigration.md)。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
 
 ## 模块与线程
 
@@ -39,6 +39,7 @@ cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models
 | Assets | 原生 envelope、CPU 对象缓存、引用解析、依赖图、异步保存 |
 | AssetImport | importer 注册、源读取跟踪、glTF/场景 JSON 转换、增量发布 |
 | Textures / Materials | 独立 CPU 纹理/材质反射记录与类型化参数 |
+| Environment | 天空资产记录、全景转换、SH 投影和 GGX 预过滤；不依赖 RHI/Renderer |
 | Scene | FModelAsset、FSceneManifest 和逻辑场景数据；不依赖 RHI/Renderer |
 | Renderer | FSceneInstance/FModel、CPU 到 GPU 的准备、资源和绘制 |
 | AssetTool | 组合工具所需类型和 importer；独立可执行程序 |
@@ -144,7 +145,7 @@ Scene 面板的 Save edited scene 异步写出当前目录下 <原名>.edited.ha
 ./out/build/debug/bin/hyperion_viewer.exe --scene out/content/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
 ~~~
 
-FSceneInstance::Snapshot(destination) 保留每个实例的稳定 ID、名称、完整仿射矩阵、可见性和基础材质覆盖；新增实例获得独立 ID。它只保存仍在使用的模型引用，并按另存目标重新定位路径。SceneViewer 另补当前相机 eye/target/near/far。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
+FSceneInstance::Snapshot(destination) 保留每个实例的稳定 ID、名称、完整仿射矩阵、可见性和基础材质覆盖；新增实例获得独立 ID。它只保存仍在使用的模型引用，并按另存目标重新定位路径。相机、方向光、环境光、点光和聚光的节点 payload、层级及选择一起由 Scene 快照保存；相机镜头包含 FOV、near/far 和 focus distance，插件不再补写独立 eye/target。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
 
 ## 验证与测量
 
@@ -163,4 +164,4 @@ AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、writt
 
 ## 场景节点记录
 
-当前 `hyperion.scene` 为 native schema v5，节点记录为 v2，plain JSON source 为 v3；新增独立点光与聚光 payload。Nodes 与三个 stable-ID 选择替代旧 Instances/Eye/Target；native v1/v2/v3 和 plain source v1 通过显式迁移保留模型、材质、矩阵与旧镜头/默认灯。native v4 与 source v2 继续兼容，迁移不添加局部光，新空场景不自动补节点。scene-json 和 native-scene-upgrade importer revision 3 使旧缓存重新转换。Snapshot 从当前节点生成独立快照，包含 Local、parent、enabled、camera/light payload 和选择；异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。
+当前 `hyperion.scene` 为 native schema v5，节点记录为 v2，plain JSON source 为 v3；新增独立点光与聚光 payload。Nodes 与三个 stable-ID 选择替代旧 Instances/Eye/Target；native v1/v2/v3 和 plain source v1 通过显式迁移保留模型、材质、矩阵与旧镜头/默认灯。native v4 与 source v2 继续兼容，迁移不添加局部光，新空场景不自动补节点。scene-json 和 native-scene-upgrade importer revision 4（包含天空依赖支持） 使旧缓存重新转换。Snapshot 从当前节点生成独立快照，包含 Local、parent、enabled、camera/light payload 和选择；异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。

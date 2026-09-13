@@ -16,7 +16,7 @@ The separately selectable Showcase example contains 78 model instances plus one 
 
 | Control | Action |
 | --- | --- |
-| Mouse drag / wheel | Orbit around target / dolly |
+| Right-button drag / wheel | Orbit around target / dolly |
 | W/S, A/D | Hold to move forward/back along the view direction or strafe left/right |
 | Q/E | Hold to move down/up along world Y |
 | Arrows / Page Up, Page Down | Continuous aliases for WASD / E,Q |
@@ -33,7 +33,7 @@ Add reuses a loaded asset and works after deleting every instance. The Save edit
 ```json
 {
   "type": "hyperion.scene",
-  "schema_version": 2,
+  "schema_version": 3,
   "assets": [{"id": "model", "path": "../Models/Showcase.gltf"}],
   "nodes": [
     {"id": "rig", "translation": [0, 0, 0]},
@@ -53,9 +53,9 @@ Add reuses a loaded asset and works after deleting every instance. The Save edit
 }
 ```
 
-Paths resolve relative to the manifest. Each node has a unique stable ID and at most one model, camera, directional-light or environment-light payload; no payload means Group. Parents may appear after their children. A node accepts either an affine column-major `matrix` or TRS (`translation`, normalized `[x,y,z,w]` `rotation`, `scale`), never both. Missing parents, cycles, duplicate IDs, invalid poses/lenses and selections of the wrong kind reject the whole manifest before installation.
+Paths resolve relative to the manifest. Each node has a unique stable ID and at most one model, camera, directional-light, environment-light, point-light or spot-light payload; no payload means Group. Parents may appear after their children. A node accepts either an affine column-major `transform` or TRS (`translation`, normalized `[x,y,z,w]` `rotation`, `scale`), never both. Missing parents, cycles, duplicate IDs, invalid poses/lenses and selections of the wrong kind reject the whole manifest before installation.
 
-Native `hyperion.scene` records use schema v5; reflected nodes use v2. Native v1/v2/v3 and plain source v1 migrate explicitly, converting the old eye/target and defaults into real nodes with deterministic collision-free IDs. Native v4 migrates without adding lights. Source v2 remains readable; source v3 adds point/spot payloads. Empty scenes stay empty. Scene owns the records and migrations; AssetImport owns the private source JSON adapter. The scene-json and native-scene-upgrade importer revisions are 3. AssetTool `--scene` creates one model node plus explicit default camera/lights, and `inspect` keeps `instances=` model-only. See [NativeAssets.md](NativeAssets.md) and [LocalLights.md](LocalLights.md).
+Native `hyperion.scene` records use schema v5; reflected nodes use v2. Native v1/v2/v3 and plain source v1 migrate explicitly, converting the old eye/target and defaults into real nodes with deterministic collision-free IDs. Native v4 migrates without adding lights. Source v2 remains readable; source v3 adds point/spot payloads. Empty scenes stay empty. Scene owns the records and migrations; AssetImport owns the private source JSON adapter. The scene-json and native-scene-upgrade importer revisions are 4, including sky dependencies. AssetTool `--scene` creates one model node plus explicit default camera/lights, and `inspect` keeps `instances=` model-only. See [NativeAssets.md](NativeAssets.md) and [LocalLights.md](LocalLights.md).
 
 Native node records reject unknown fields that could hide an unsupported payload or misspelled kind. Native camera records also reject unsupported projection fields. Other reflection records retain their usual unknown-field diagnostics.
 
@@ -134,6 +134,6 @@ A resolved scene frame is immutable and authorized only as its original shared i
 
 ### Reusable camera navigation
 
-`FSceneCameraController` in `Hyperion/Renderer/SceneCameraController.h` provides WASDQE, right-button orbit and wheel dolly without a SceneViewer or GUI dependency. Create one per viewport. On Main, call `Input(Scene, Events, bMouseCaptured, bKeyboardCaptured)` then `Advance(Scene, DeltaSeconds)` before publishing the scene. Call `Reset()` when deactivating a viewport, changing its scene or shutting down. Input also clears movement on focus loss or keyboard capture. A fresh press resumes after interruption.
+`FSceneCameraController` in `Hyperion/Renderer/SceneCameraController.h` provides WASDQE, right-button orbit and wheel dolly without a SceneViewer or GUI dependency. Create one per viewport. On Main, call `Input(Scene, Events, bMouseCaptured, bKeyboardCaptured)` then `Advance(Scene, DeltaSeconds)` before publishing the scene. Call `Reset()` when deactivating or minimizing a viewport, changing its scene or shutting down. Input also clears movement on focus loss or keyboard capture. A fresh press resumes after interruption.
 
 Movement needs no mouse button. Speed is `max(1, FocusDistance)` world units/second; combined directions are normalized. Frame time is capped at 0.1 seconds to limit jumps after stalls. Release stops immediately without inertia. RMB continues to orbit the focus pivot; wheel changes focus distance.

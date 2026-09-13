@@ -1,5 +1,7 @@
 # 材质参数更新性能
 
+> 历史记录：以下设计取舍、配置、测试数量和测量结果对应文中基线，不代表当前默认行为或本次工作区的验证结果。当前功能与操作入口见 [文档索引](README.md)。
+
 2026-09-08，`optimize-material-parameter-updates`。优化落在 Materials、Renderer、RHI 和 D3D12 的通用路径；未修改 Applications、Plugins、shader、场景数据、CLI 或现有 target。完整决策与验证记录见 [OpenSpec 实施记录](../openspec/changes/archive/2026-09-08-optimize-material-parameter-updates/implementation.md)，接口见 [Materials.md](Materials.md)。
 
 ## 同程序条件下的前后结果

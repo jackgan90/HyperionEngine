@@ -1,5 +1,7 @@
 # Scene Viewer 性能定位与验证
 
+> 历史记录：以下设计取舍、配置、测试数量和测量结果对应文中基线，不代表当前默认行为或本次工作区的验证结果。当前功能与操作入口见 [文档索引](README.md)。
+
 2026-09-08，基于 `6a4b147` 定位并修复。本机 NVIDIA GeForce RTX 5080，VS 2022 x64，`experiments/Scene.json`，1440×900，78 个模型，194–195 个场景 draw，另有 GUI draw。保留 D3D12 debug layer、索引校验和 GPU fence 生命周期保护；Tracy 关闭。
 
 ## 原因与修复

@@ -29,7 +29,7 @@ Main 和 Render 类型树不要求对应，也不共享可变对象。新的 pro
 
 每次更新是完整 `FRenderPrimitiveState`，带严格递增 revision；资源请求使用不可变 identity/version/configuration。旧 revision、旧 generation、其他 scene 的句柄不会覆盖当前对象。一个更新 batch 先校验所有成员再应用，非法字段会在返回的 task 上报告异常；调用者应观察返回 task，移除任务仍会执行。 已就绪资源的 section 索引在发布前校验；资源仍在准备/上传时无法确定的索引，在描述就绪后通过 binding 状态报告 Failed，无效 item 不进入绘制，也不阻断其他对象。延迟失败不会回滚已经接收的 revision，后续合法更新或 Remove 仍可处理。
 
-`FRenderSession::BuildViews`（单 view 的 `Build` 委托它）的 Render 任务是帧边界：之前入队的控制任务已经完成，后续控制任务在该任务结束后才执行。收集结果按值持有矩阵、可见性、材质覆盖和资源租约。多次或多视图收集不得推进动画/逻辑状态，也不得直接创建 native GPU 资源。Main 等待当前 CPU 帧只是 Viewer 的调度选择；数据隔离依靠自有快照。
+`FRenderSession::BuildViews`（单 view 的 `Build` 委托它）的 Render 任务是帧边界：之前入队的控制任务已经完成，后续控制任务在该任务结束后才执行。收集结果按值持有矩阵、可见性、材质覆盖和资源租约。多次或多视图收集不得推进动画/逻辑状态，也不得直接创建 native GPU 资源。Viewer 通过有界 CPU 帧管线限制领先量，默认允许 Main/Render/RHI 重叠处理不同帧；数据隔离依靠自有快照，见 [CpuFramePipeline.md](CpuFramePipeline.md)。
 
 创建、更新和移除无需出帧即可推进。最小化、没有 Present 时仍由专用 Render 队列处理。`Remove()` 立即使 binding 停止接受更新，返回的回执表示 Render 已移除/析构对象；它不表示 GPU 完成。重复 Remove 返回同一回执。关闭后存活的 binding 只释放已经失效的 mailbox/result，不访问 executor。
 
@@ -39,9 +39,9 @@ Main 和 Render 类型树不要求对应，也不共享可变对象。新的 pro
 
 每个设备/session 创建一个 `FRenderResourceService` 并供所有生产者复用。服务以仍被强引用保活的不可变源 identity、version、configuration 定位资源，记录另外分配唯一 identity。section 的 geometry/material 索引及范围描述子资源。地址只在源对象仍受保活时参与键，不会把复用地址当成旧资产。不同服务/device 不共享 native payload。
 
-模型 preparation 固定顶点布局，按图片索引与 sRGB/线性角色分别生成纹理，并保留材质 sampler、shader、depth/blend/cull 及镜像绕序变体。通用 `Request` 的调用者必须把所有影响布局、shader 或颜色解释的配置纳入 configuration，或提高 version。不能以相同键请求不同内容。geometry 与 material 分别共享和退休；材质资源以不可变 source/view 身份复用。不做独立导入副本的内容去重、LRU 或热重载。
+模型 preparation 使用固定顶点布局，并从已解析的独立材质/纹理资产取得纹理源，保留 sampler、shader、depth/blend/cull 及镜像绕序变体。按纹理用途区分 sRGB/线性资产和生成 mip 属于离线导入。通用 `Request` 的调用者必须把所有影响布局、shader 或颜色解释的配置纳入 configuration，或提高 version。不能以相同键请求不同内容。geometry 与 material 分别共享和退休；材质资源以不可变 source/view 身份复用，不提供自动文件监视或跨独立来源的内容去重。各参数与批次缓存的预算见 [Materials.md](Materials.md) 和 [InstanceBatching.md](InstanceBatching.md)。
 
-Worker 准备不可变 CPU 顶点、mip、shader 数据；RHI 0 创建 GPU 资源并发起上传；Render 读取已发布的就绪描述。组内所有上传完成前不会输出该组 draw。资源替换提交完整状态和显式新版本；pending 版本不会被物化，旧结果也无法覆盖新请求。首版替换期间可暂时不绘制该组，不提供旧版本持续显示或热重载事务 UI。
+Worker 准备不可变 CPU 顶点、已导入 mip 与 shader 数据；RHI 0 创建 GPU 资源并发起上传；Render 读取已发布的就绪描述。组内所有上传完成前不会输出该组 draw。资源替换提交完整状态和显式新版本；pending 版本不会被物化，旧结果也无法覆盖新请求。底层 primitive 资源替换不保证旧组持续显示；天空替换由独立的完整代际发布协议保留旧天空，见 [SkyLighting.md](SkyLighting.md)。
 
 兼容请求共享一次 preparation/upload；释放一个消费者不取消其他消费者。失败记录为原消费者保留错误，新请求可重试，重试中的请求继续合并。变换、可见性及当前支持的 base color、metallic、roughness 覆盖只进入实例状态和常量数据，不能修改共享定义。改变 alpha mode/shader 需要新的不可变 material definition，改变纹理/sampler 发布新 material snapshot；两者均不要求重新上传 geometry。
 

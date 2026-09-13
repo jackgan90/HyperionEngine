@@ -1,6 +1,6 @@
 # RenderDoc 抓帧
 
-当前支持 Windows x64 / D3D12、单设备和单窗口。Triangle 与 Model Viewer 共用 RDC 控件。原有 `Capture screenshot` / `--capture` 仍保存 PNG；RDC 保存可由 RenderDoc 回放的 GPU 命令、流水线和资源。
+当前支持 Windows x64 / D3D12、单设备和单窗口。Triangle、ModelViewer 与 SceneViewer 共用 RDC 控件。`Capture screenshot` / `--capture` 保存 PNG；RDC 保存可由 RenderDoc 回放的 GPU 命令、流水线和资源。
 
 ## 启用构建
 
@@ -125,7 +125,6 @@ python tools/CheckStyle.py --naming --build-dir out/build/debug
 
 自动打开另行验证：含中文/空格路径正确传给安装目录的 qrenderdoc；正常用户环境中再次执行后，进程 44600 的窗口标题为 `Triangle-78272-178910399411000-1_capture.rdc - RenderDoc v1.37`，与本次新捕获匹配。证据为 `out/RenderDocAutoOpen.log`、`out/RenderDocAutoOpenProcess.json`、`out/RenderDocUserOpen.log`、`out/RenderDocUserOpenProcess.json`、`out/RenderDocUserOpenWindow.json`。
 
-验收后已将日常 VS 工程恢复为 RenderDoc ON 并重新构建 Debug，原始实验配置保持未启用状态，用户通过 `--renderdoc` 或面板保存配置选择启用。
 
 后续独立审计确认并局部修复了内容验收误报和清理失败后的所有权问题，增加持久化失败注入测试。核实过程、未采纳的推断和新一轮验证见 [RenderDoc 独立审计记录](RenderDocReview.md)。
 
