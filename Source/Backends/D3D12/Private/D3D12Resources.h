@@ -124,11 +124,24 @@ struct FD3D12BindingLayout final : IRHIResourceBindingLayout
 	}
 };
 
+struct FD3D12SamplerTable
+{
+	std::shared_ptr<FD3D12DeviceState> State;
+	std::vector<FSamplerDesc> Descriptions;
+	FD3D12DescriptorRange Range;
+
+	~FD3D12SamplerTable()
+	{
+		State->SamplerTables.Release(Range);
+	}
+};
+
 struct FD3D12BindingSet final : IRHIResourceBindingSet
 {
 	std::shared_ptr<FD3D12DeviceState> State;
 	FResourceBindingSetDesc Description;
 	std::vector<FD3D12DescriptorRange> Tables;
+	std::vector<std::shared_ptr<const FD3D12SamplerTable>> SamplerTables;
 	std::uint64_t UploadFence{};
 
 	const void* GetDeviceIdentity() const noexcept override

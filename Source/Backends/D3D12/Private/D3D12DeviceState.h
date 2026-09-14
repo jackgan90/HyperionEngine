@@ -10,6 +10,7 @@
 namespace Hyperion
 {
 struct FD3D12Buffer;
+struct FD3D12SamplerTable;
 
 struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 {
@@ -19,6 +20,8 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	FD3D12DescriptorArena ResourceTables;
 	FD3D12DescriptorArena SamplerSources;
 	FD3D12DescriptorArena SamplerTables;
+	std::mutex SamplerTableMutex;
+	std::vector<std::weak_ptr<const FD3D12SamplerTable>> SharedSamplerTables;
 	std::uint64_t DescriptorAllocations{};
 	std::uint64_t DescriptorCopies{};
 	std::uint64_t BindingSetsCreated{};

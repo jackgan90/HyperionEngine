@@ -146,6 +146,58 @@ void WriteDescriptor(FD3D12DeviceState& InState, D3D12_CPU_DESCRIPTOR_HANDLE InD
 	++InState.DescriptorCopies;
 }
 
+std::shared_ptr<const FD3D12SamplerTable> ShareSamplerTable(const std::shared_ptr<FD3D12DeviceState>& InState,
+                                                            const FResourceBindingSetDesc& InDescription,
+                                                            const FD3D12BindingLayout& InLayout, std::size_t InTable)
+{
+	const auto Count = InLayout.Tables[InTable].Count;
+	std::vector<FSamplerDesc> Descriptions(Count);
+	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> Sources(Count);
+	for (const auto& Entry : InDescription.Entries)
+	{
+		const auto& Slot = InLayout.Slots[Entry.Slot];
+		if (Slot.Table != InTable)
+		{
+			continue;
+		}
+		for (std::size_t Index = 0; Index < Entry.Values.size(); ++Index)
+		{
+			const auto& Sampler =
+			    NativeResource<FD3D12Sampler>(std::get<FSampler>(Entry.Values[Index]).Payload, InState.get());
+			Descriptions[Slot.Offset + Index] = Sampler.Description;
+			Sources[Slot.Offset + Index] = InState->SamplerSources.Cpu(Sampler.SourceDescriptor.Offset);
+		}
+	}
+	std::lock_guard Lock(InState->SamplerTableMutex);
+	std::erase_if(InState->SharedSamplerTables,
+	              [](const auto& InEntry)
+	              {
+		              return InEntry.expired();
+	              });
+	for (const auto& Entry : InState->SharedSamplerTables)
+	{
+		if (auto Existing = Entry.lock(); Existing && Existing->Descriptions == Descriptions)
+		{
+			return Existing;
+		}
+	}
+	// Descriptor bytes depend on ordered sampler values, not textures, root registers or shader visibility.
+	// The device keeps weak entries; binding sets and their retained GPU commands own the immutable range.
+	auto Table = std::make_shared<FD3D12SamplerTable>();
+	Table->State = InState;
+	Table->Descriptions = std::move(Descriptions);
+	Table->Range = InState->SamplerTables.Reserve(Count);
+	InState->DescriptorAllocations += Count;
+	for (UINT Index = 0; Index < Count; ++Index)
+	{
+		InState->Device->CopyDescriptorsSimple(1, InState->SamplerTables.Cpu(Table->Range.Offset + Index),
+		                                       Sources[Index], D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+		++InState->DescriptorCopies;
+	}
+	InState->SharedSamplerTables.push_back(Table);
+	return Table;
+}
+
 void ValidateConstant(const FConstantBinding& InBinding, const FResourceBindingSlot& InSlot,
                       const FD3D12DeviceState& InState, std::uint32_t InInstanceCount)
 {
@@ -233,8 +285,10 @@ FD3D12BindingSet::~FD3D12BindingSet()
 	}
 	for (std::size_t Index = 0; Index < Tables.size(); ++Index)
 	{
-		auto& Arena = Layout->Tables[Index].bSampler ? State->SamplerTables : State->ResourceTables;
-		Arena.Release(Tables[Index]);
+		if (!Layout->Tables[Index].bSampler)
+		{
+			State->ResourceTables.Release(Tables[Index]);
+		}
 	}
 }
 
@@ -246,18 +300,30 @@ FResourceBindingSet FD3D12RHIDevice::CreateBindingSet(const FResourceBindingSetD
 	Set->State = State;
 	Set->Description = InDesc;
 	Set->Tables.resize(Layout.Tables.size());
+	Set->SamplerTables.resize(Layout.Tables.size());
 	for (std::size_t Index = 0; Index < Layout.Tables.size(); ++Index)
 	{
 		const FD3D12BindingLayout::FTable& Table = Layout.Tables[Index];
-		auto& Arena = Table.bSampler ? State->SamplerTables : State->ResourceTables;
-		Set->Tables[Index] = Arena.Reserve(Table.Count);
-		State->DescriptorAllocations += Table.Count;
+		if (Table.bSampler)
+		{
+			Set->SamplerTables[Index] = ShareSamplerTable(State, InDesc, Layout, Index);
+			Set->Tables[Index] = Set->SamplerTables[Index]->Range;
+		}
+		else
+		{
+			Set->Tables[Index] = State->ResourceTables.Reserve(Table.Count);
+			State->DescriptorAllocations += Table.Count;
+		}
 	}
 	for (const FResourceBindingEntry& Entry : InDesc.Entries)
 	{
 		const FD3D12BindingLayout::FSlot& Slot = Layout.Slots[Entry.Slot];
 		const FD3D12BindingLayout::FTable& Table = Layout.Tables[Slot.Table];
-		auto& Arena = Table.bSampler ? State->SamplerTables : State->ResourceTables;
+		if (Table.bSampler)
+		{
+			continue;
+		}
+		auto& Arena = State->ResourceTables;
 		for (UINT Index = 0; Index < Entry.Values.size(); ++Index)
 		{
 			if (const auto* Texture = std::get_if<FTexture>(&Entry.Values[Index]))

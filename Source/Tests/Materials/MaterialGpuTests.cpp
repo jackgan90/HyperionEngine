@@ -14,6 +14,7 @@ void RunMaterialGpuCacheTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialResourceTests(IRHIDevice& InDevice);
 void RunMaterialSessionTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
 void RunMaterialFrequencyTests(IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
+void RunDescriptorTableTests();
 
 namespace
 {
@@ -334,19 +335,21 @@ float4 PSMain() : SV_Target0 { return float4(Image.Load(int3(0,0,0))); }
 void CheckAllocationRollback(FFixture& InFixture)
 {
 	FRHIDeviceDesc Desc;
-	Desc.SamplerDescriptorCapacity = 1;
+	Desc.SamplerDescriptorCapacity = 2;
 	Desc.ResourceDescriptorCapacity = 4;
 	auto Device = InFixture.Registry.CreateDevice(ERHIBackend::D3D12, Desc);
 	const FSampler Sampler = Device->CreateSampler({});
-	FResourceBindingLayoutDesc LayoutDesc{{{ERHIBindingKind::Sampler, ERHIShaderVisibility::Vertex},
+	// Different table lengths cannot share: fail after the first reservation and verify its rollback.
+	FResourceBindingLayoutDesc LayoutDesc{{{ERHIBindingKind::Sampler, ERHIShaderVisibility::Vertex, 0, 0, 2},
 	                                       {ERHIBindingKind::Sampler, ERHIShaderVisibility::Pixel}}};
 	const FResourceBindingLayout Layout = Device->CreateBindingLayout(LayoutDesc);
 	Rejects(
 	    [&]
 	    {
-		    Device->CreateBindingSet({Layout, {{0, {Sampler}}, {1, {Sampler}}}});
+		    Device->CreateBindingSet({Layout, {{0, {Sampler, Sampler}}, {1, {Sampler}}}});
 	    });
 	LayoutDesc.Slots.resize(1);
+	LayoutDesc.Slots.front().Count = 1;
 	const FResourceBindingLayout Single = Device->CreateBindingLayout(LayoutDesc);
 	const FResourceBindingSet Recovered = Device->CreateBindingSet({Single, {{0, {Sampler}}}});
 	HYP_CHECK(Recovered);
@@ -367,6 +370,7 @@ int main()
 {
 	try
 	{
+		RunDescriptorTableTests();
 		FFixture Fixture;
 		for (std::uint32_t Count : {0U, 1U, 8U})
 		{

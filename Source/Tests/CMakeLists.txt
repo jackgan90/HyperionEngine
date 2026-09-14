@@ -207,6 +207,7 @@ target_sources(material_gpu_tests PRIVATE Materials/MaterialResourceTests.cpp)
 target_sources(material_gpu_tests PRIVATE Materials/MaterialSessionTests.cpp)
 target_sources(material_gpu_tests PRIVATE Renderer/SceneRetentionTests.cpp)
 target_sources(material_gpu_tests PRIVATE Materials/MaterialFrequencyTests.cpp)
+target_sources(material_gpu_tests PRIVATE Materials/DescriptorTableTests.cpp)
 
 add_test(NAME native_model_fixtures COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/BuildNativeFixtures.py" --tool $<TARGET_FILE:hyperion_asset_tool> --source "${PROJECT_SOURCE_DIR}/out/fixtures")
 set_tests_properties(native_model_fixtures PROPERTIES FIXTURES_REQUIRED model_data FIXTURES_SETUP native_model_data TIMEOUT 120)

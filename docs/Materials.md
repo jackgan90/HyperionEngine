@@ -115,6 +115,8 @@ definition 可声明多个 `Usage`，`HasPass("Shadow")` 仅表示存在该 pass
 
 当前 native 执行是 D3D12 VS/PS、单采样，支持窗口和可采样离屏颜色目标、MRT（D3D12 最多 8 个颜色附件），深度可选择 D32 或 D32S8，可采样深度使用 D32。支持 Texture2D/TextureCube、固定资源数组、常规及 comparison sampler、只读 structured/raw buffer、多 cbuffer、VS texture 和 register space 0–3。实际 limits 和格式支持通过 `FRHICapabilities` 查询，descriptor heaps 为显式固定容量，容量耗尽给出错误并回滚分配。CSM、Deferred 和天空 IBL 使用同一材质/RHI 契约。UAV 写入、其他 shader stage、bindless、MSAA/resolve 以及 Vulkan/Metal native 后端尚未实现。SPIR-V/MSL 的编译与反射支持不代表已有对应 native 后端。
 
+D3D12 的 shader-visible sampler 表按实际 descriptor 顺序和完整 `FSamplerDesc` 值在同一 device 内共享。纹理或 buffer 更新产生新的 binding set 时，相同 sampler 表不重复占用槽位；不同表长度、顺序或 sampler 值保持独立。设备仅保存弱缓存，binding set 及其 recorded list/fence 引用共同持有不可变表，最后一个使用者释放后才回收范围。资源表仍由各 binding set 独立持有。
+
 Main 冻结一份 frame，Render 在一个 task 中调用 `BuildViews(Graph, Views, Frame, Family)`，完成所有 view 的 collection/provider 解析后才提交 RHI 准备。View identity 和 Family 非零且在对应范围唯一，同一 frame/family 不允许重复接收。旧 frame 不得覆盖新 frame。单 view `Build` 委托同一路径。多 viewport 在同一图中具有独立的深度初始化域，graph 容量超限在 BeginFrame 前报告。
 
 同一 primitive 可输出零到多个 owned item。可重复识别的 item 应填写 `LocalItemId`；缺省 ordinal 只在当前 collection 内有效，不跨 collection 复用 Object/Draw slice。即使 primitive revision 未变化，不同 World/Draw 内容也不会错误共享。`bClipSpace` 是 primitive 坐标契约，裁剪时不再套相机；自定义 shader 应采用对应的 WVP 语义。会在 shader 中改变几何边界的 pass 声明 `bRequiresConservativeBounds`；只有调用方明确提供覆盖位移的 bounds 并设置 `bConservativeBounds` 才启用 bounds 剔除。
