@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 void CheckDeferredShaders();
+void CheckComputeShaders(const std::filesystem::path& InRoot);
 void TestMountedShaders();
 void CheckMaterialShaderReflection(const std::filesystem::path& InRoot);
 
@@ -114,6 +115,7 @@ int main()
 		}
 		Check(bFailed, "Compiler diagnostics");
 		CheckMaterialShaderReflection(Root);
+		CheckComputeShaders(Root);
 		CheckDeferredShaders();
 		std::cout << "Shader target, reflection and cache checks passed\n";
 		return 0;

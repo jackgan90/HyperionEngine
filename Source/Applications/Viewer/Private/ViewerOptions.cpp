@@ -162,6 +162,10 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	{
 		InOptions.bExerciseDepthConfig = true;
 	}
+	else if (InArg == "--exercise-contact-shadows")
+	{
+		InOptions.bExerciseContactShadows = true;
+	}
 	else if (InArg == "--exercise-window")
 	{
 		InOptions.bExercise = true;

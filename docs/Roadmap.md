@@ -18,7 +18,7 @@
 
 - Vulkan/Metal 运行时后端与移动平台；现有 SPIR-V/MSL 编译反射不能代替原生后端验证。
 - 动画、蒙皮、morph target，以及 glTF 压缩和扩展材质导入；完整格式范围见 [AssetPipeline.md](AssetPipeline.md)。
-- Compute/UAV 写入、多 GPU 队列调度、瞬态资源别名、MSAA/resolve、原生 ray tracing 和 mesh shader 操作。
+- 多 GPU 队列调度、瞬态资源别名、MSAA/resolve、原生 ray tracing 和 mesh shader 操作。Compute/UAV 已支持，详见 [Compute pipelines](ComputePipelines.md)。
 - 局部光阴影、场景遮蔽的天光、多次反弹 GI、局部反射探针捕获与混合。
 - 动态插件 DLL 热重载、AST 反射生成、GC 和任意指针对象图序列化。
 

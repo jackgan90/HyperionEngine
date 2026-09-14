@@ -13,8 +13,19 @@ public:
 	virtual const void* GetDeviceIdentity() const noexcept = 0;
 };
 
+struct FRHIBufferInfo
+{
+	std::uint64_t Size{};
+	std::uint32_t Usage{};
+};
+
 class IRHIBuffer : public IRHIResource
 {
+public:
+	virtual FRHIBufferInfo GetInfo() const noexcept
+	{
+		return {};
+	}
 };
 
 enum class ERHITextureDimension : std::uint8_t
@@ -33,6 +44,7 @@ struct FRHITextureInfo
 	bool bColorTarget{};
 	ERHITextureDimension Dimension = ERHITextureDimension::Texture2D;
 	std::uint32_t MipCount = 1;
+	bool bStorage{};
 };
 
 class IRHITexture : public IRHIResource

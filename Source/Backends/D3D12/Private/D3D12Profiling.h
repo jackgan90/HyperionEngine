@@ -12,6 +12,7 @@ struct FD3D12ProfileQueries
 {
 	ComPtr<ID3D12QueryHeap> Heap;
 	ComPtr<ID3D12Resource> Readback;
+	UINT PassCapacity{};
 };
 
 struct FD3D12ProfileState
@@ -23,7 +24,7 @@ struct FD3D12ProfileState
 };
 
 void PrepareD3D12Profiling(FD3D12DeviceState& InDevice, FD3D12ProfileState& InState,
-                           std::shared_ptr<FD3D12ProfileQueries>& InQueries);
+                           std::shared_ptr<FD3D12ProfileQueries>& InQueries, UINT InPassCount = ContextCount);
 void BeginD3D12Profile(FD3D12RecordedList& InList, const FD3D12ProfileState& InState,
                        const std::shared_ptr<FD3D12ProfileQueries>& InQueries);
 void EndD3D12Profile(FD3D12RecordedList& InList);

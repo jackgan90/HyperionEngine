@@ -217,8 +217,13 @@ FGraphicsDynamicState ConvertMaterialDynamicState(const FMaterialDynamicState& I
 
 FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& InPass)
 {
+	return DescribeShaderLayout(InPass.Bindings);
+}
+
+FResourceBindingLayoutDesc DescribeShaderLayout(std::span<const FMaterialProgramBinding> InBindings)
+{
 	FResourceBindingLayoutDesc Result;
-	for (const auto& Binding : InPass.Bindings)
+	for (const auto& Binding : InBindings)
 	{
 		FResourceBindingSlot Slot;
 		switch (Binding.Resource.Kind)
@@ -242,6 +247,15 @@ FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& I
 				break;
 			case EBindingKind::Unsupported:
 				throw std::invalid_argument("Unsupported material binding");
+			case EBindingKind::StorageTexture:
+				Slot.Kind = ERHIBindingKind::StorageTexture2D;
+				break;
+			case EBindingKind::StorageStructuredBuffer:
+				Slot.Kind = ERHIBindingKind::StorageStructuredBuffer;
+				break;
+			case EBindingKind::StorageRawBuffer:
+				Slot.Kind = ERHIBindingKind::StorageRawBuffer;
+				break;
 		}
 		switch (Binding.Stages)
 		{
@@ -253,6 +267,9 @@ FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& I
 				break;
 			case 3:
 				Slot.Visibility = ERHIShaderVisibility::Graphics;
+				break;
+			case 4:
+				Slot.Visibility = ERHIShaderVisibility::Compute;
 				break;
 			default:
 				throw std::invalid_argument("Unsupported material shader stage");

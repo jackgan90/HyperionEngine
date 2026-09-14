@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/CascadedShadowMap.h"
+#include "Hyperion/Renderer/HierarchicalDepth.h"
 #include "Hyperion/Renderer/LocalLights.h"
 #include "Hyperion/Renderer/RenderSession.h"
 
@@ -19,6 +20,8 @@ struct FForwardPipelineStatistics
 	std::vector<FRenderViewStatistics> Views;
 	std::uint64_t ShadowTextureBytes{};
 	bool bShadows{};
+	bool bContactShadows{};
+	FHierarchicalDepthStats HierarchicalDepth;
 	std::optional<FScenePublicationToken> SceneToken;
 	ESceneCameraStatus CameraStatus = ESceneCameraStatus::Active;
 	std::optional<FRenderView> MainCameraView;

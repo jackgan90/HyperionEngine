@@ -340,7 +340,9 @@ std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const 
 	                                    L"-E",
 	                                    std::wstring(InEntry.begin(), InEntry.end()),
 	                                    L"-T",
-	                                    InStage == EShaderStage::Vertex ? L"vs_6_0" : L"ps_6_0",
+	                                    InStage == EShaderStage::Vertex  ? L"vs_6_0"
+	                                    : InStage == EShaderStage::Pixel ? L"ps_6_0"
+	                                                                     : L"cs_6_0",
 	                                    L"-HV",
 	                                    L"2021",
 	                                    L"-Ges",
@@ -412,7 +414,8 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
                                          EShaderStage InStage, EShaderFormat InFormat, FShaderCompileOptions InOptions)
 {
 	NormalizeOptions(InOptions);
-	if (InEntry.empty() || (InStage != EShaderStage::Vertex && InStage != EShaderStage::Pixel) ||
+	if (InEntry.empty() ||
+	    (InStage != EShaderStage::Vertex && InStage != EShaderStage::Pixel && InStage != EShaderStage::Compute) ||
 	    (InFormat != EShaderFormat::Dxil && InFormat != EShaderFormat::Spirv && InFormat != EShaderFormat::Msl))
 	{
 		throw std::invalid_argument("Unsupported shader entry, stage or target");

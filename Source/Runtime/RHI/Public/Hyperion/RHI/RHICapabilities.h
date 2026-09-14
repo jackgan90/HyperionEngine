@@ -24,6 +24,7 @@ enum class ERHIFeature
 	RayTracing,
 	MeshShaders,
 	InstancedDrawing,
+	Compute,
 	Count
 };
 
@@ -58,6 +59,11 @@ struct FRHICapabilities
 	std::uint32_t MaxColorTargets = 1;
 	std::array<bool, static_cast<std::size_t>(ERHIColorFormat::Count)> SampledColorTargets{};
 	std::array<FRHIFeatureSupport, static_cast<std::size_t>(ERHIFeature::Count)> Features{};
+	std::array<bool, static_cast<std::size_t>(ERHIColorFormat::Count)> StorageTextures{};
+	std::uint32_t MaxStorageResources{};
+	std::uint32_t MaxComputeThreads{};
+	std::array<std::uint32_t, 3> MaxComputeGroupSize{};
+	std::array<std::uint32_t, 3> MaxDispatchGroups{};
 
 	FRHIFeatureSupport QueryFeature(ERHIFeature InFeature) const;
 };

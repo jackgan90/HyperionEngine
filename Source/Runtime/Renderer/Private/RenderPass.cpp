@@ -13,6 +13,10 @@ ERHIColorFormat GetRenderColorFormat(EMaterialColorFormat InFormat)
 			return ERHIColorFormat::Rgba16Float;
 		case EMaterialColorFormat::Rgba32Float:
 			return ERHIColorFormat::Rgba32Float;
+		case EMaterialColorFormat::R32Float:
+			return ERHIColorFormat::R32Float;
+		case EMaterialColorFormat::R8Unorm:
+			return ERHIColorFormat::R8Unorm;
 	}
 	throw std::invalid_argument("Unsupported material color format");
 }

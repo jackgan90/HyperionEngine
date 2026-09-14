@@ -80,6 +80,8 @@ enum class ERHIColorFormat : std::uint8_t
 	Rgba8Srgb,
 	Rgba16Float,
 	Rgba32Float,
+	R32Float,
+	R8Unorm,
 	Count
 };
 

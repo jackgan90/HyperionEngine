@@ -36,7 +36,7 @@ FMaterialValue ResolveValue(const FMaterialAssetValue& InValue, const FMaterialT
 			}();
 			Result.Texture = Cube;
 		}
-		if (!Result.Texture || Result.Texture->IsRenderTarget())
+		if (!Result.Texture || Result.Texture->IsGpuGenerated())
 		{
 			throw std::invalid_argument("Persistent material cannot resolve to a runtime render target");
 		}
@@ -71,7 +71,7 @@ FMaterialAssetValue PersistMaterialValue(const FMaterialValue& InValue, const FM
 {
 	InValue.Validate();
 	if (InValue.Type.Kind == EMaterialValueKind::ReadBuffer ||
-	    (InValue.Texture && (InValue.Texture->IsRenderTarget() || !InReference)))
+	    (InValue.Texture && (InValue.Texture->IsGpuGenerated() || !InReference)))
 	{
 		throw std::invalid_argument("Material resource has no persistent asset representation");
 	}

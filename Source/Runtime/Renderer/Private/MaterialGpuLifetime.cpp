@@ -79,6 +79,7 @@ bool FMaterialGpuCache::Collect()
 	// Consumers retire first. Their native payloads and cached descriptions retain layouts and source descriptors.
 	CollectEntries(Impl->Sets, bPending);
 	CollectEntries(Impl->Pipelines, bPending);
+	CollectEntries(Impl->ComputePipelines, bPending);
 	CollectEntries(Impl->Layouts, bPending);
 	for (auto Iterator = Impl->Textures.begin(); Iterator != Impl->Textures.end();)
 	{
@@ -111,6 +112,7 @@ void FMaterialGpuCache::ClearOwners()
 	Impl->CheckOwner();
 	ClearEntryOwners(Impl->Sets);
 	ClearEntryOwners(Impl->Pipelines);
+	ClearEntryOwners(Impl->ComputePipelines);
 	ClearEntryOwners(Impl->Layouts);
 	ClearEntryOwners(Impl->Textures);
 	ClearEntryOwners(Impl->Buffers);
@@ -124,8 +126,8 @@ void FMaterialGpuCache::ClearOwners()
 bool FMaterialGpuCache::IsEmpty() const
 {
 	Impl->CheckOwner();
-	return Impl->Sets.empty() && Impl->Pipelines.empty() && Impl->Layouts.empty() && Impl->Textures.empty() &&
-	       Impl->Buffers.empty() && Impl->Samplers.empty();
+	return Impl->Sets.empty() && Impl->Pipelines.empty() && Impl->ComputePipelines.empty() && Impl->Layouts.empty() &&
+	       Impl->Textures.empty() && Impl->Buffers.empty() && Impl->Samplers.empty();
 }
 
 FMaterialGpuStats FMaterialGpuCache::Statistics() const
@@ -133,7 +135,7 @@ FMaterialGpuStats FMaterialGpuCache::Statistics() const
 	Impl->CheckOwner();
 	auto Result = Impl->Stats;
 	Result.LiveObjects = Impl->Sets.size() + Impl->Pipelines.size() + Impl->Layouts.size() + Impl->Textures.size() +
-	                     Impl->Buffers.size() + Impl->Samplers.size();
+	                     Impl->Buffers.size() + Impl->Samplers.size() + Impl->ComputePipelines.size();
 	return Result;
 }
 } // namespace Hyperion

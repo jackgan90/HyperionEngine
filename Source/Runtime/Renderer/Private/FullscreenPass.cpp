@@ -67,6 +67,29 @@ void UpdateMaterial(FFullscreenResources::FMaterialEntry& InEntry, const FMateri
 	}
 	InEntry.Values = InValues;
 }
+
+void TrackReadOwners(FRenderResourceCoordinator& InOwner, const FFullscreenPassDesc& InPass,
+                     FMaterialResourceOwners& InBindingOwners)
+{
+	for (const auto& Read : InPass.Targets.Reads)
+	{
+		if (Read.Lifetime &&
+		    std::find(InBindingOwners.begin(), InBindingOwners.end(), Read.Lifetime) == InBindingOwners.end())
+		{
+			InOwner.TrackScope(Read.Lifetime);
+			InBindingOwners.push_back(Read.Lifetime);
+		}
+	}
+	for (const auto& Read : InPass.Targets.BufferReads)
+	{
+		if (Read.Lifetime &&
+		    std::find(InBindingOwners.begin(), InBindingOwners.end(), Read.Lifetime) == InBindingOwners.end())
+		{
+			InOwner.TrackScope(Read.Lifetime);
+			InBindingOwners.push_back(Read.Lifetime);
+		}
+	}
+}
 } // namespace
 
 FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreenPassDesc& InPass) const
@@ -119,15 +142,7 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 		Values.Scopes.Set(static_cast<std::size_t>(EMaterialScope::Material),
 		                  {{Snapshot->Identity, Snapshot->Revision}, InPass.ConstantLifetime});
 	}
-	for (const auto& Read : InPass.Targets.Reads)
-	{
-		if (Read.Lifetime &&
-		    std::find(BindingOwners.begin(), BindingOwners.end(), Read.Lifetime) == BindingOwners.end())
-		{
-			Owner.TrackScope(Read.Lifetime);
-			BindingOwners.push_back(Read.Lifetime);
-		}
-	}
+	TrackReadOwners(Owner, InPass, BindingOwners);
 	const auto Bindings = Owner.MaterialGpu->BindResources(Program, Values.Values, BindingOwners);
 	if (!Bindings.bReady)
 	{

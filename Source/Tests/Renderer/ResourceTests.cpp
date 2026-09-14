@@ -170,6 +170,10 @@ public:
 					    {
 						    Dependencies.push_back(InValue.Buffer.Payload);
 					    }
+					    else if constexpr (std::is_same_v<std::decay_t<decltype(InValue)>, FTextureView>)
+					    {
+						    Dependencies.push_back(InValue.Texture.Payload);
+					    }
 					    else
 					    {
 						    Dependencies.push_back(InValue.Payload);

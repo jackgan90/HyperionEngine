@@ -26,6 +26,10 @@ struct FDebugMetrics
 	std::uint64_t ResultFrame{};
 	std::size_t LegacyDisplayItems{};
 	std::uint64_t SceneTargetBytes{};
+	std::uint32_t HierarchicalDepthConsumers{};
+	std::uint32_t HierarchicalDepthDispatches{};
+	std::uint64_t HierarchicalDepthBytes{};
+	bool bContactShadows{};
 	std::vector<FExecutionStats> Threads;
 	std::vector<float> FrameMilliseconds;
 	std::string AssetStatus;
@@ -47,6 +51,7 @@ struct FDebugActions
 	FVec4 CaptureRdcBounds;
 	FVec4 OpenRdcBounds;
 	FVec4 AutoOpenRdcBounds;
+	FVec4 ContactShadowBounds;
 	std::array<FVec4, 4> ProfilingBounds;
 };
 

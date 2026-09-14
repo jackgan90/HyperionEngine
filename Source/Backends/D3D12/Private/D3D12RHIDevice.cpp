@@ -29,7 +29,14 @@ void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& In
 		Caps.SampledColorTargets[Index] =
 		    SUCCEEDED(InState.Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &Support, sizeof(Support))) &&
 		    (Support.Support1 & Required) == Required;
+		Caps.StorageTextures[Index] = (Support.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_LOAD) != 0 &&
+		                              (Support.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE) != 0 &&
+		                              (Support.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0;
 	}
+	Caps.MaxStorageResources = 64;
+	Caps.MaxComputeThreads = D3D12_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP;
+	Caps.MaxComputeGroupSize = {1024, 1024, 64};
+	Caps.MaxDispatchGroups = {65535, 65535, 65535};
 	Caps.MaxRegisterSpaces = ShaderRegisterSpaceCount;
 	Caps.MaxConstantBuffers = 14;
 	Caps.MaxSamplers = 16;
@@ -58,7 +65,7 @@ void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& In
 	Caps.SamplerDescriptorCapacity = InDesc.SamplerDescriptorCapacity;
 	Caps.MaxTextureDimension = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
 	for (const auto Feature : {ERHIFeature::Graphics, ERHIFeature::TextureSampling, ERHIFeature::ConcurrentRecording,
-	                           ERHIFeature::Readback, ERHIFeature::InstancedDrawing})
+	                           ERHIFeature::Readback, ERHIFeature::InstancedDrawing, ERHIFeature::Compute})
 	{
 		Caps.Features[static_cast<std::size_t>(Feature)] = {true, true};
 	}

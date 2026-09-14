@@ -55,6 +55,14 @@ private:
 	void SetSceneLightDirection(FVec3 InDirection);
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
 	void ExerciseCaptureInput(bool bInScheduled, std::vector<FInputEvent>& InEvents);
+	void ExerciseContactInput(std::vector<FInputEvent>& InEvents);
+	FVec4 ContactShadowBounds;
+	std::uint32_t ContactToggleCount{};
+	std::uint32_t ContactStableFrames{};
+	bool bContactMouseDown{};
+	bool bContactExerciseCompleted{};
+	std::uint32_t ContactWindowFrame{};
+	bool bContactWindowCompleted{};
 	FRenderFrame UpdateScene(FSize InSize);
 	void RenderFrame(int InFrame, FSize InSize, FGuiDrawData InGuiData, bool bInTakeCapture, bool bInCaptureRdc);
 	void CollectFrames();

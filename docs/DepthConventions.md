@@ -26,6 +26,8 @@ Triangle 仍以标准深度的裁剪空间描述屏幕形状，已开启深度�
 
 ## 接口约定
 
+[HZB 与 contact shadows](ContactShadows.md) 继承视图的深度约定。HZB nearest 在 Standard Z 取 min、Reversed Z 取 max，farthest 相反；复制层先归一化 viewport depth range。Contact 使用匹配的逆投影重建世界坐标，阴影 visibility 始终为 1 亮、0 遮挡，两种约定都与 CSM 做 min 合成。
+
 - Math 拥有 `EDepthConvention`、`GetDepthClearValue`、`GetDepthDirection` 和 `ClipDepthTransform`，不依赖 RHI。
 - `Perspective(..., Convention)` 直接生成对应投影系数。省略第五个参数时保留标准 Z，兼容显式构造投影的现有低层调用方。
 - 自定义 fullscreen pass 通过 `FFullscreenPassDesc::DepthConvention` 指定其深度约定；使用原始 SV_Depth 输出时由 shader 保证一致。

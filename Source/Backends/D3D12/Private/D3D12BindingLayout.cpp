@@ -15,6 +15,7 @@ D3D12_SHADER_VISIBILITY NativeVisibility(ERHIShaderVisibility InVisibility)
 		case ERHIShaderVisibility::Pixel:
 			return D3D12_SHADER_VISIBILITY_PIXEL;
 		case ERHIShaderVisibility::Graphics:
+		case ERHIShaderVisibility::Compute:
 			return D3D12_SHADER_VISIBILITY_ALL;
 		default:
 			throw std::invalid_argument("Invalid graphics binding visibility");
@@ -31,12 +32,16 @@ std::uint32_t RegisterClass(ERHIBindingKind InKind)
 	{
 		return 2;
 	}
+	if (IsStorageBinding(InKind))
+	{
+		return 3;
+	}
 	return 1;
 }
 
 void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabilities& InCaps)
 {
-	std::array<std::array<std::uint32_t, 3>, 2> Counts{};
+	std::array<std::array<std::uint32_t, 4>, 3> Counts{};
 	for (std::size_t Index = 0; Index < InDesc.Slots.size(); ++Index)
 	{
 		const FResourceBindingSlot& Slot = InDesc.Slots[Index];
@@ -52,16 +57,21 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 		{
 			throw std::invalid_argument("Invalid instance constant layout");
 		}
-		if (Slot.Kind < ERHIBindingKind::ConstantBuffer || Slot.Kind > ERHIBindingKind::TextureCube ||
+		if (Slot.Kind < ERHIBindingKind::ConstantBuffer || Slot.Kind > ERHIBindingKind::StorageRawBuffer ||
 		    Slot.Count == 0 || Slot.Space >= InCaps.MaxRegisterSpaces || Slot.Register >= ShaderRegistersPerKind ||
 		    Slot.Count > ShaderRegistersPerKind - Slot.Register || Slot.MinimumBufferSize > InCaps.MaxConstantRange ||
 		    (Slot.Kind == ERHIBindingKind::ConstantBuffer && Slot.Count != 1) ||
-		    (Slot.StructureByteStride != 0 && (Slot.Kind != ERHIBindingKind::StructuredBuffer ||
+		    (Slot.StructureByteStride != 0 && ((Slot.Kind != ERHIBindingKind::StructuredBuffer &&
+		                                        Slot.Kind != ERHIBindingKind::StorageStructuredBuffer) ||
 		                                       Slot.StructureByteStride > 2048 || Slot.StructureByteStride % 4 != 0)))
 		{
 			throw std::invalid_argument("Invalid binding kind, count, space, register or constant range");
 		}
 		const std::uint32_t Class = RegisterClass(Slot.Kind);
+		if (IsStorageBinding(Slot.Kind) && Slot.Visibility != ERHIShaderVisibility::Compute)
+		{
+			throw std::invalid_argument("Storage bindings require compute visibility");
+		}
 		for (std::size_t Stage = 0; Stage < Counts.size(); ++Stage)
 		{
 			if ((static_cast<unsigned>(Slot.Visibility) & (1U << Stage)) != 0)
@@ -72,6 +82,11 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 		for (std::size_t Previous = 0; Previous < Index; ++Previous)
 		{
 			const FResourceBindingSlot& Other = InDesc.Slots[Previous];
+			if ((Slot.Visibility == ERHIShaderVisibility::Compute) !=
+			    (Other.Visibility == ERHIShaderVisibility::Compute))
+			{
+				throw std::invalid_argument("Compute and graphics require separate binding layouts");
+			}
 			if (Slot.Space == Other.Space && Class == RegisterClass(Other.Kind) &&
 			    (static_cast<unsigned>(Slot.Visibility) & static_cast<unsigned>(Other.Visibility)) != 0 &&
 			    Slot.Register < Other.Register + Other.Count && Other.Register < Slot.Register + Slot.Count)
@@ -83,7 +98,7 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 	for (const auto& Stage : Counts)
 	{
 		if (Stage[0] > InCaps.MaxConstantBuffers || Stage[1] > InCaps.MaxSampledTextures ||
-		    Stage[2] > InCaps.MaxSamplers)
+		    Stage[2] > InCaps.MaxSamplers || Stage[3] > InCaps.MaxStorageResources)
 		{
 			throw std::invalid_argument("Graphics binding layout exceeds per-stage resource limits");
 		}
@@ -122,7 +137,9 @@ UINT PlanLayout(FD3D12BindingLayout& InLayout)
 			Plan.RootParameter = Group.RootParameter;
 			Plan.Table = Table;
 			Plan.Offset = Group.Count;
-			Group.Ranges.push_back({bSampler ? D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER : D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+			Group.Ranges.push_back({bSampler ? D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER
+			                                 : (IsStorageBinding(Slot.Kind) ? D3D12_DESCRIPTOR_RANGE_TYPE_UAV
+			                                                                : D3D12_DESCRIPTOR_RANGE_TYPE_SRV),
 			                        Slot.Count, Slot.Register, Slot.Space, Group.Count});
 			Group.Count += Slot.Count;
 		}

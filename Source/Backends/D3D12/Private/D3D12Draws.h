@@ -12,6 +12,26 @@ struct FD3D12DrawCache
 	std::weak_ptr<const std::vector<FDrawPacket>> Owner;
 	std::weak_ptr<IRHITexture> DepthTarget;
 	std::vector<std::weak_ptr<IRHITexture>> Reads;
+
+	struct FTextureAccessKey
+	{
+		std::weak_ptr<IRHITexture> Texture;
+		std::uint32_t FirstMip{};
+		std::uint32_t MipCount{};
+		EResourceState State{};
+	};
+
+	std::vector<FTextureAccessKey> TextureAccesses;
+
+	struct FBufferAccessKey
+	{
+		std::weak_ptr<IRHIBuffer> Buffer;
+		std::uint64_t Offset{};
+		std::uint64_t Size{};
+		EResourceState State{};
+	};
+
+	std::vector<FBufferAccessKey> BufferAccesses;
 	std::array<unsigned, 7> Target{};
 	FGraphicsTarget GraphicsTarget;
 	std::vector<std::weak_ptr<IRHITexture>> ColorTargets;

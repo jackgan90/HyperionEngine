@@ -3,6 +3,7 @@
 #include <iostream>
 
 using namespace Hyperion;
+void CheckComputeGraph();
 
 namespace
 {
@@ -527,6 +528,7 @@ int main()
 	try
 	{
 		CheckPacketOwnership();
+		CheckComputeGraph();
 		CheckDeferredPreparation();
 		CheckResourceHazards();
 		CheckContents();

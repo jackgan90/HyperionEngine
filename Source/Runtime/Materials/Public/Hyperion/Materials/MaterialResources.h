@@ -22,7 +22,9 @@ enum class EMaterialColorFormat : std::uint8_t
 {
 	Rgba8Unorm,
 	Rgba16Float,
-	Rgba32Float
+	Rgba32Float,
+	R32Float,
+	R8Unorm
 };
 
 // CPU-only description; Renderer maps formats to its chosen RHI backend.
@@ -35,6 +37,15 @@ struct FMaterialColorTexture
 	bool operator==(const FMaterialColorTexture&) const = default;
 };
 
+struct FMaterialStorageTexture
+{
+	std::uint32_t Width = 1;
+	std::uint32_t Height = 1;
+	std::uint32_t MipCount = 1;
+	EMaterialColorFormat Format = EMaterialColorFormat::R32Float;
+	bool operator==(const FMaterialStorageTexture&) const = default;
+};
+
 class FMaterialTextureSource
 {
 public:
@@ -43,6 +54,7 @@ public:
 	                       std::uint64_t InVersion = 1);
 	explicit FMaterialTextureSource(FMaterialDepthTexture InDepth, std::uint64_t InVersion = 1);
 	explicit FMaterialTextureSource(FMaterialColorTexture InColor, std::uint64_t InVersion = 1);
+	explicit FMaterialTextureSource(FMaterialStorageTexture InStorage, std::uint64_t InVersion = 1);
 	FMaterialTextureSource(const FMaterialTextureSource&) = delete;
 	FMaterialTextureSource& operator=(const FMaterialTextureSource&) = delete;
 	std::uint64_t GetIdentity() const;
@@ -55,6 +67,8 @@ public:
 	const FMaterialDepthTexture* GetDepthTarget() const;
 	const FMaterialColorTexture* GetColorTarget() const;
 	bool IsRenderTarget() const;
+	const FMaterialStorageTexture* GetStorage() const;
+	bool IsGpuGenerated() const;
 
 private:
 	std::uint64_t Identity;
@@ -66,22 +80,29 @@ private:
 	bool bDepthTarget{};
 	FMaterialColorTexture Color;
 	bool bColorTarget{};
+	FMaterialStorageTexture Storage;
+	bool bStorage{};
 };
 
 class FMaterialReadBufferSource
 {
 public:
 	explicit FMaterialReadBufferSource(std::span<const std::byte> InBytes, std::uint64_t InVersion = 1);
+	// GPU storage buffers expose both raw and structured shader views. Their initial contents are undefined.
+	explicit FMaterialReadBufferSource(std::uint64_t InStorageSize, std::uint64_t InVersion = 1);
 	FMaterialReadBufferSource(const FMaterialReadBufferSource&) = delete;
 	FMaterialReadBufferSource& operator=(const FMaterialReadBufferSource&) = delete;
 	std::uint64_t GetIdentity() const;
 	std::uint64_t GetVersion() const;
 	std::span<const std::byte> GetBytes() const;
+	std::uint64_t GetSize() const;
+	bool IsStorage() const;
 
 private:
 	std::uint64_t Identity;
 	std::uint64_t Version;
 	std::vector<std::byte> Bytes;
+	std::uint64_t StorageSize{};
 };
 
 enum class EMaterialBufferViewKind : std::uint8_t

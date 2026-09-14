@@ -48,6 +48,11 @@ public:
 	                                        std::span<const std::shared_ptr<const FMaterialValue>> InValues,
 	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
 	FPipeline GetPipeline(const FPipelineDesc& InDescription, const FMaterialResourceOwners& InOwners);
+	FPipeline GetComputePipeline(const FComputePipelineDesc& InDescription, const FMaterialResourceOwners& InOwners);
+	FBuffer GetBuffer(std::shared_ptr<const FMaterialReadBufferSource> InSource,
+	                  const FMaterialResourceOwners& InOwners);
+	FResourceBindingValue GetResource(const FMaterialValue& InValue, const FMaterialResourceOwners& InOwners);
+	FResourceBindingSet GetSet(FResourceBindingSetDesc InDescription, const FMaterialResourceOwners& InOwners);
 	FMaterialResourceBindings BindResources(const FCompiledMaterialPass& InPass, const FMaterialValueTable& InValues,
 	                                        const FMaterialResourceOwners& InOwners, bool bInAllowMissing = false);
 	FPipeline GetMaterialPipeline(const FCompiledMaterialPass& InProgram, const FMaterialPass& InPass,

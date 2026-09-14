@@ -15,6 +15,13 @@ struct FAppSettings
 	std::string RHIBackend = "d3d12";
 	std::string RenderPipeline = "deferred";
 	bool bClusteredLighting = true;
+	bool bContactShadows = false;
+	double ContactShadowLength = .35;
+	double ContactShadowThickness = .05;
+	double ContactShadowBias = .003;
+	int ContactShadowSteps = 96;
+	int ContactShadowDebug = 0;
+	int HierarchicalDepthMip = 4;
 	std::string GBufferLayout = "compact";
 	double Exposure = 1;
 	int GBufferDebug = 0;

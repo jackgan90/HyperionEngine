@@ -48,24 +48,7 @@ void RetainConstantPages(const FD3D12DeviceState& InState, const std::shared_ptr
 	                                              : std::static_pointer_cast<const void>(InCommands);
 	for (const auto& Draw : InCommands->GetDraws())
 	{
-		for (const auto& Constant : Draw.ConstantBindings)
-		{
-			const auto& Buffer = NativeResource<FD3D12Buffer>(Constant.Slice.Buffer.Payload, &InState);
-			std::lock_guard Lock(Buffer.ConstantMutex);
-			std::erase_if(Buffer.ConstantOwners,
-			              [](const auto& InOwner)
-			              {
-				              return InOwner.expired();
-			              });
-			if (std::none_of(Buffer.ConstantOwners.begin(), Buffer.ConstantOwners.end(),
-			                 [&](const auto& InOwner)
-			                 {
-				                 return !InOwner.owner_before(Owner) && !Owner.owner_before(InOwner);
-			                 }))
-			{
-				Buffer.ConstantOwners.push_back(Owner);
-			}
-		}
+		RetainShaderConstantPages(InState, Draw.ConstantBindings, Owner);
 	}
 }
 
@@ -298,7 +281,23 @@ std::shared_ptr<const FD3D12DrawPlan> PrepareNativeDraws(const FD3D12DeviceState
 	const auto Colors = InCommands.GetColors();
 	const auto GraphicsTarget = InCommands.GetGraphicsTarget();
 	std::lock_guard Lock(InCache.Mutex);
-	if (InCommands.SharedDraws && InCache.Owner.lock() == InCommands.SharedDraws && InCache.Target == Target &&
+	if (InCache.BufferAccesses.size() == InCommands.BufferAccesses.size() &&
+	    std::equal(InCache.BufferAccesses.begin(), InCache.BufferAccesses.end(), InCommands.BufferAccesses.begin(),
+	               [](const auto& InKey, const auto& InAccess)
+	               {
+		               return InKey.Buffer.lock() == InAccess.View.Buffer.Payload &&
+		                      InKey.Offset == InAccess.View.Offset && InKey.Size == InAccess.View.Size &&
+		                      InKey.State == InAccess.State;
+	               }) &&
+	    InCache.TextureAccesses.size() == InCommands.TextureAccesses.size() &&
+	    std::equal(InCache.TextureAccesses.begin(), InCache.TextureAccesses.end(), InCommands.TextureAccesses.begin(),
+	               [](const auto& InKey, const auto& InAccess)
+	               {
+		               return InKey.Texture.lock() == InAccess.View.Texture.Payload &&
+		                      InKey.FirstMip == InAccess.View.FirstMip && InKey.MipCount == InAccess.View.MipCount &&
+		                      InKey.State == InAccess.State;
+	               }) &&
+	    InCommands.SharedDraws && InCache.Owner.lock() == InCommands.SharedDraws && InCache.Target == Target &&
 	    InCache.GraphicsTarget == GraphicsTarget && InCache.ColorTargets.size() == Colors.size() &&
 	    std::equal(InCache.ColorTargets.begin(), InCache.ColorTargets.end(), Colors.begin(),
 	               [](const auto& InWeak, const auto& InColor)
@@ -337,6 +336,18 @@ std::shared_ptr<const FD3D12DrawPlan> PrepareNativeDraws(const FD3D12DeviceState
 	}
 	InCache.DepthTarget = InCommands.GetDepthTexture().Payload;
 	InCache.Reads.clear();
+	InCache.BufferAccesses.clear();
+	for (const auto& Access : InCommands.BufferAccesses)
+	{
+		InCache.BufferAccesses.push_back(
+		    {Access.View.Buffer.Payload, Access.View.Offset, Access.View.Size, Access.State});
+	}
+	InCache.TextureAccesses.clear();
+	for (const auto& Access : InCommands.TextureAccesses)
+	{
+		InCache.TextureAccesses.push_back(
+		    {Access.View.Texture.Payload, Access.View.FirstMip, Access.View.MipCount, Access.State});
+	}
 	for (const auto& Texture : InCommands.SampledTextures)
 	{
 		InCache.Reads.push_back(Texture.Payload);

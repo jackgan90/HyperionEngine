@@ -1129,6 +1129,65 @@ void CheckReplacementAndRecovery(FFixture& InFixture)
 	Model.Remove();
 	InFixture.Shadows.bEnabled = false;
 }
+
+void CheckContactRoutes(FFixture& InFixture)
+{
+	FModelMaterial Material;
+	Material.BaseColor = {.5f, .5f, .5f, 1};
+	FSourceModel Model(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material));
+	Await(Model);
+	InFixture.Shadows.bEnabled = false;
+	for (unsigned Index = 0; Index < 4; ++Index)
+	{
+		InFixture.Frame();
+	}
+	for (const bool bClustered : {false, true})
+	{
+		InFixture.Settings.bClusteredLighting = bClustered;
+		for (const bool bShadows : {false, true})
+		{
+			InFixture.Shadows.bEnabled = bShadows;
+			InFixture.Settings.ContactShadows.bEnabled = false;
+			const auto Baseline = InFixture.Frame();
+			HYP_CHECK(InFixture.Statistics.HierarchicalDepth.Dispatches == 0);
+			InFixture.Settings.ContactShadows.bEnabled = true;
+			InFixture.Frame();
+			const auto Contact = InFixture.Frame();
+			HYP_CHECK(InFixture.Statistics.bContactShadows && InFixture.Statistics.HierarchicalDepth.Consumers == 1);
+			HYP_CHECK(InFixture.Statistics.HierarchicalDepth.Dispatches == 9);
+			HYP_CHECK(Baseline.Rgba == Contact.Rgba);
+			const auto Before = InFixture.DeviceStats;
+			InFixture.Frame();
+			HYP_CHECK(InFixture.DeviceStats.PipelinesCreated == Before.PipelinesCreated);
+			HYP_CHECK(InFixture.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+		}
+	}
+	InFixture.Frame(ESceneRenderPipeline::Forward);
+	HYP_CHECK(!InFixture.Statistics.bContactShadows && InFixture.Statistics.HierarchicalDepth.Dispatches == 0);
+	InFixture.Settings.ContactShadows.bEnabled = false;
+	InFixture.Settings.ContactShadows.DebugMode = 2;
+	InFixture.Frame();
+	HYP_CHECK(!InFixture.Statistics.bContactShadows && InFixture.Statistics.HierarchicalDepth.Consumers == 1);
+	InFixture.Settings.ContactShadows.bEnabled = true;
+	InFixture.Frame();
+	HYP_CHECK(InFixture.Statistics.HierarchicalDepth.Consumers == 2 &&
+	          InFixture.Statistics.HierarchicalDepth.Products == 1);
+	InFixture.Settings.ContactShadows.DebugMode = 0;
+	InFixture.View.Viewport = FViewport{32, 24, 320, 240, .2f, .8f};
+	InFixture.Frame();
+	InFixture.View.Viewport.reset();
+	InFixture.View.Width = 320;
+	InFixture.View.Height = 240;
+	InFixture.Frame();
+	HYP_CHECK(InFixture.Statistics.HierarchicalDepth.Bytes > 320U * 240U * 4U);
+	InFixture.View.Width = 384;
+	InFixture.View.Height = 288;
+	InFixture.Settings.ContactShadows = {};
+	InFixture.Shadows.bEnabled = false;
+	InFixture.Frame();
+	HYP_CHECK(InFixture.Statistics.HierarchicalDepth.Bytes == 0 && !InFixture.Statistics.bContactShadows);
+	Model.Remove();
+}
 } // namespace
 
 int main()
@@ -1139,6 +1198,7 @@ int main()
 		{
 			FFixture Fixture(Convention);
 			CheckConfiguration(Fixture);
+			CheckContactRoutes(Fixture);
 			CheckHdrAndRoutes(Fixture);
 			CheckDepthOrdering(Fixture);
 			CheckViewDepthCacheIsolation(Fixture);

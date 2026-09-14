@@ -9,6 +9,7 @@ Viewer defaults to `FSceneRenderPipeline` with `ESceneRenderPipeline::Deferred`.
 ```text
 CSM shadow views
  -> BasePass (opaque/masked DefaultLit; four MRTs and D32)
+ -> requested compute HZB and fullscreen contact mask (when a consumer is active)
  -> fullscreen LightingClustered (directional + local + environment/emissive -> SceneColor)
     or ClusterLighting (no directional light; local + environment/emissive)
  -> HDR opaque compatibility (Unlit)
@@ -20,6 +21,8 @@ CSM shadow views
 ```
 
 HDR Forward replaces BasePass and Lighting with `Forward/HDR`. Both paths share the transparent and output stages. Scene depth returns to DepthWrite before compatibility/transparent draws; simultaneous SRV/DSV binding is unsupported.
+
+[Contact shadows](ContactShadows.md) combine directional visibility with CSM before later geometry. They require Deferred GBuffer depth; Forward and later compatibility/transparent receivers remain outside this effect. HZB is an independent requested producer, also available to future effects.
 
 Scene-owned point and spot lights default to [clustered lighting](ClusteredLighting.md). HDR Forward and shared lit transparency query the same per-view lists. `--no-clustered-lighting` restores separate Deferred Lighting followed by sphere/cone volumes, and excludes local lights from Forward/transparency. See [LocalLights.md](LocalLights.md) for attenuation, volume coverage, culling and persistence.
 

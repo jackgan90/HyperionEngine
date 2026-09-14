@@ -14,6 +14,16 @@ void FViewerApplication::RunFrames()
 		throw std::invalid_argument("--benchmark-camera requires scene-viewer or model-viewer");
 	}
 	auto LastFrame = ClockNanoseconds();
+	if (Options.bExerciseContactShadows)
+	{
+		if (!Gui || !Settings.bShowGui || !ScenePlugin || Settings.RenderPipeline != "deferred")
+		{
+			throw std::invalid_argument(
+			    "Contact UI exercise requires scene-viewer, Deferred and a visible debug panel");
+		}
+		Settings.bContactShadows = false;
+		Settings.ContactShadowDebug = 0;
+	}
 	if (Options.bExerciseRdcUi && (!Gui || !Settings.bShowGui))
 	{
 		throw std::runtime_error("RDC UI exercise requires a visible diagnostics panel");
@@ -69,6 +79,30 @@ void FViewerApplication::ExerciseWindow(int InFrame)
 	{
 		return;
 	}
+	if (Options.bExerciseContactShadows)
+	{
+		if (!bContactExerciseCompleted)
+		{
+			return;
+		}
+		InFrame = static_cast<int>(ContactWindowFrame++);
+		if (InFrame >= 36 && !bContactWindowCompleted)
+		{
+			std::uint64_t ExpectedBytes{};
+			for (std::uint32_t Mip = 0; (960U >> Mip) || (540U >> Mip); ++Mip)
+			{
+				ExpectedBytes += std::uint64_t(std::max(1U, 960U >> Mip)) * std::max(1U, 540U >> Mip) * 4;
+			}
+			const auto Pixels = Window->PixelSize();
+			bContactWindowCompleted = Pixels.Width == 960 && Pixels.Height == 540 &&
+			                          PipelineStatistics.bContactShadows &&
+			                          PipelineStatistics.HierarchicalDepth.Bytes == ExpectedBytes;
+			if (bContactWindowCompleted)
+			{
+				Log(ELogLevel::Info, "Contact GUI verified: active resize/minimize/restore at 960x540");
+			}
+		}
+	}
 	if (InFrame == 2)
 	{
 		Window->Resize({960, 540});
@@ -95,9 +129,11 @@ FDebugActions FViewerApplication::BuildGui(int InFrame, float InDelta, FSize InL
 		std::vector<FInputEvent> UiEvents(Window->Events().begin(), Window->Events().end());
 		ExerciseCaptureInput(std::binary_search(Options.RdcFrames.begin(), Options.RdcFrames.end(), InFrame + 1),
 		                     UiEvents);
+		ExerciseContactInput(UiEvents);
 		Gui->BeginFrame(InLogical, InPixels, InDelta, UiEvents);
 		Actions = DrawDebugPanel(*Gui, Settings, Metrics, InLogical);
 		RdcButtonBounds = Actions.CaptureRdcBounds;
+		ContactShadowBounds = Actions.ContactShadowBounds;
 		if (ScenePlugin)
 		{
 			ScenePlugin->DrawGui(*Gui, SceneStatistics, Options.bNoInstanceBatching, PipelineStatistics.LocalLights);
@@ -216,6 +252,13 @@ FRenderGraph FViewerApplication::BuildRenderGraph(const FRenderFrame& InFrame, c
 	Pipeline.Exposure = float(InFrame.Settings.Exposure);
 	Pipeline.DebugMode = static_cast<std::uint32_t>(InFrame.Settings.GBufferDebug);
 	Pipeline.bClusteredLighting = InFrame.Settings.bClusteredLighting;
+	Pipeline.ContactShadows = {InFrame.Settings.bContactShadows,
+	                           float(InFrame.Settings.ContactShadowLength),
+	                           float(InFrame.Settings.ContactShadowThickness),
+	                           float(InFrame.Settings.ContactShadowBias),
+	                           static_cast<std::uint32_t>(InFrame.Settings.ContactShadowSteps),
+	                           static_cast<std::uint32_t>(InFrame.Settings.ContactShadowDebug),
+	                           static_cast<std::uint32_t>(InFrame.Settings.HierarchicalDepthMip)};
 	ScenePipeline->Configure(Pipeline);
 	const auto Extensions = [&](FRenderGraph& InGraph)
 	{

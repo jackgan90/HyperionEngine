@@ -70,6 +70,29 @@ public:
 	}
 
 	virtual FPipeline CreatePipeline(const FPipelineDesc& InDesc) = 0;
+
+	virtual FPipeline CreateComputePipeline(const FComputePipelineDesc&)
+	{
+		throw std::runtime_error("Backend does not support compute pipelines");
+	}
+
+	virtual FTexture CreateStorageTexture(const FStorageTextureDesc&)
+	{
+		throw std::runtime_error("Backend does not support storage textures");
+	}
+
+	// Diagnostic blocking reads, called on the coordinator outside frame recording.
+	// Texture rows are tightly packed, preserving the native format's bytes.
+	virtual std::vector<std::byte> ReadTexture(const FTextureView&, EResourceState)
+	{
+		throw std::runtime_error("Backend does not support texture readback");
+	}
+
+	virtual std::vector<std::byte> ReadBuffer(const FReadBufferView&, EResourceState)
+	{
+		throw std::runtime_error("Backend does not support buffer readback");
+	}
+
 	virtual std::unique_ptr<IRHISwapchain> CreateSwapchain(const FRHISwapchainDesc& InDesc) = 0;
 	virtual void WaitIdle() = 0;
 

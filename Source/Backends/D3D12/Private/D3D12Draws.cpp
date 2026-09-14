@@ -1,5 +1,6 @@
 #include "D3D12Draws.h"
 #include "D3D12Bindings.h"
+#include "D3D12Dispatch.h"
 #include "D3D12GraphicsState.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/RHI/RHIPipeline.h"
@@ -84,6 +85,23 @@ void ValidateTargetBindings(const FD3D12DeviceState& InState, const FPassCommand
 		{
 			for (const auto& Value : Entry.Values)
 			{
+				if (const auto* View = std::get_if<FTextureView>(&Value))
+				{
+					ValidateTextureAccess(*View, EResourceState::ShaderRead, InCommands);
+				}
+				else if (const auto* BufferView = std::get_if<FReadBufferView>(&Value);
+				         BufferView &&
+				         (NativeResource<FD3D12Buffer>(BufferView->Buffer.Payload, &InState).Usage &
+				          (BufferUsage(ERHIBufferUsage::StructuredWrite) | BufferUsage(ERHIBufferUsage::RawWrite))))
+				{
+					ValidateBufferAccess(*BufferView, EResourceState::ShaderRead, InCommands);
+				}
+				else if (const auto* Sampled = std::get_if<FTexture>(&Value);
+				         Sampled && Sampled->Payload->GetInfo().bStorage)
+				{
+					ValidateTextureAccess({*Sampled, 0, Sampled->Payload->GetInfo().MipCount},
+					                      EResourceState::ShaderRead, InCommands);
+				}
 				if (const auto* Texture = std::get_if<FTexture>(&Value);
 				    Texture && (NativeResource<FD3D12Texture>(Texture->Payload, &InState).DepthViews ||
 				                NativeResource<FD3D12Texture>(Texture->Payload, &InState).ColorViews))

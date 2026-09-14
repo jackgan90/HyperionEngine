@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/ClusteredLights.h"
+#include "Hyperion/Renderer/ContactShadows.h"
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/FullscreenPass.h"
 
@@ -28,6 +29,7 @@ struct FScenePipelineSettings
 	float Exposure = 1;
 	std::uint32_t DebugMode{};
 	bool bClusteredLighting = true;
+	FContactShadowSettings ContactShadows;
 };
 
 // Main constructs; Render builds immutable frame descriptions. RHI retains submitted generations.
@@ -51,6 +53,8 @@ private:
 	void BuildResolved(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	                   const FCascadedShadowSettings& InShadows, FVec4 InClear,
 	                   const std::function<void(FRenderGraph&)>& InExtensions, bool bInDeferPreparation);
+	void PrepareShadows(const FRenderView& InMain, const FMaterialFrameContext& InFrame,
+	                    const FCascadedShadowSettings& InShadows);
 
 	struct FViewFamily
 	{
@@ -68,6 +72,13 @@ private:
 	FLocalLightIndex LocalLightIndex;
 	FClusteredLights Clusters;
 	FMaterialParameterValues ClusterParameters;
+	FHierarchicalDepthProducer HierarchicalDepth;
+	FHierarchicalDepthProduct ContactDepth;
+	std::shared_ptr<const FMaterialTextureSource> ContactMask;
+	std::shared_ptr<const void> ContactLifetime;
+	void AddContactShadows(FRenderGraph& InGraph, const FRenderView& InView, const FMaterialFrameContext& InFrame,
+	                       FVec3 InDirection, bool bInDeferPreparation);
+	void AddContactDebug(FRenderGraph& InGraph, const FRenderView& InView, bool bInDeferPreparation) const;
 	std::shared_ptr<const void> ClusterLifetime;
 	void PrepareClusters(const FRenderView& InView, const FMaterialFrameContext& InFrame, bool bInEnabled);
 	void AddLocalLights(FRenderGraph& InGraph, const FRenderView& InView, const FMaterialFrameContext& InFrame,

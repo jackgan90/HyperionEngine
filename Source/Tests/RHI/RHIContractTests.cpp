@@ -47,6 +47,7 @@ public:
 		HYP_CHECK(!bActive);
 		bActive = true;
 		Recorded = 0;
+		LogicalPasses = 0;
 		++Begun;
 	}
 
@@ -58,6 +59,15 @@ public:
 		}
 		++Recorded;
 		return {};
+	}
+
+	FRecordedList RecordBatchOwned(std::uint32_t InContext,
+	                               std::span<const std::shared_ptr<const FPassCommands>> InCommands,
+	                               std::uint32_t) override
+	{
+		HYP_CHECK(!InCommands.empty());
+		LogicalPasses += static_cast<std::uint32_t>(InCommands.size());
+		return Record(InContext, *InCommands.front());
 	}
 
 	FImage EndFrame(std::span<const FRecordedList> InLists, bool, bool) override
@@ -93,6 +103,7 @@ public:
 	bool bFailEnd{};
 	std::uint32_t Begun{};
 	std::atomic<std::uint32_t> Recorded{};
+	std::atomic<std::uint32_t> LogicalPasses{};
 	std::uint32_t Submitted{};
 	std::uint32_t Cancelled{};
 };
@@ -456,12 +467,15 @@ int main()
 		auto Image = ExecuteGraph(Graph, Tasks, *Swapchain, {32, 32}, false, true);
 		HYP_CHECK(Image.Width == 1 && Test.Submitted == 1 && Test.Recorded == 2);
 		Test.Capabilities.MaxRecordingContexts = 1;
+		ExecuteGraph(Graph, Tasks, *Swapchain, {32, 32}, false, false);
+		HYP_CHECK(Test.Begun == 2 && Test.Submitted == 2 && Test.Recorded == 1 && Test.LogicalPasses == 2);
+		Test.Capabilities.MaxRecordingContexts = 0;
 		Rejects(
 		    [&]
 		    {
 			    ExecuteGraph(Graph, Tasks, *Swapchain, {32, 32}, false, false);
 		    });
-		HYP_CHECK(Test.Begun == 1); // Capacity failure must not acquire a frame.
+		HYP_CHECK(Test.Begun == 2); // Invalid capacity must not acquire a frame.
 		Test.Capabilities.MaxRecordingContexts = 2;
 		Test.Capabilities.Features[static_cast<std::size_t>(ERHIFeature::Readback)].bEnabled = false;
 		Rejects(
@@ -469,7 +483,7 @@ int main()
 		    {
 			    ExecuteGraph(Graph, Tasks, *Swapchain, {32, 32}, false, true);
 		    });
-		HYP_CHECK(Test.Begun == 1);
+		HYP_CHECK(Test.Begun == 2);
 		Tasks.Shutdown();
 		CheckFrameErrors(Device->GetCapabilities());
 		CheckFrameCoordinator(Device->GetCapabilities());

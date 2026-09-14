@@ -7,6 +7,11 @@ namespace Hyperion
 {
 struct FD3D12Buffer final : IRHIBuffer
 {
+	FRHIBufferInfo GetInfo() const noexcept override
+	{
+		return {Size, Usage};
+	}
+
 	const void* GetDeviceIdentity() const noexcept override
 	{
 		return State.get();
@@ -16,6 +21,7 @@ struct FD3D12Buffer final : IRHIBuffer
 	ComPtr<D3D12MA::Allocation> Allocation;
 	ComPtr<ID3D12Resource> Resource;
 	std::uint64_t Size{};
+	std::uint64_t UploadFence{};
 	std::uint32_t Usage = BufferUsage(ERHIBufferUsage::Vertex) | BufferUsage(ERHIBufferUsage::Index);
 	std::uint64_t PublishedEnd{};
 	std::uint64_t NextPublication = 1;
@@ -55,7 +61,8 @@ struct FD3D12Texture final : IRHITexture
 		        ColorFormat,
 		        bool(ColorViews),
 		        Dimension,
-		        Description.MipLevels};
+		        Description.MipLevels,
+		        (Description.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0};
 	}
 
 	std::shared_ptr<FD3D12DeviceState> State;
@@ -168,6 +175,7 @@ struct FD3D12Pipeline final : IRHIPipeline
 	FGraphicsState GraphicsState;
 	ERHIPrimitiveTopology Topology = ERHIPrimitiveTopology::TriangleList;
 	std::uint32_t VertexStride{};
+	bool bCompute{};
 };
 
 struct FD3D12SwapchainIdentity
@@ -178,6 +186,7 @@ struct FD3D12PassQueries;
 
 struct FD3D12RecordedList final : IRHIRecordedList
 {
+	std::vector<std::shared_ptr<FD3D12RecordedList>> Passes;
 	std::shared_ptr<FD3D12PassQueries> TimingQueries;
 	std::string Name;
 #if HYP_ENABLE_PROFILING

@@ -1,4 +1,5 @@
 #include "D3D12RHISwapchain.h"
+#include "D3D12Dispatch.h"
 #include "D3D12Draws.h"
 #include "D3D12GraphicsState.h"
 #include "D3D12PassAttachments.h"
@@ -63,6 +64,7 @@ struct FD3D12RHISwapchain::FImpl
 	bool bActive{};
 	bool bSubmissionStarted{};
 	bool bGpuTiming{};
+	std::uint32_t RecordingPassCount = ContextCount;
 
 	std::shared_ptr<FD3D12RecordedList> PrepareRecording(std::uint32_t InContext,
 	                                                     std::shared_ptr<const FPassCommands> InCommands)
@@ -264,6 +266,7 @@ void FD3D12RHISwapchain::BeginFrame(FSize InSize)
 		bRecorded = false;
 	}
 	P.bActive = true;
+	P.RecordingPassCount = ContextCount;
 	P.bSubmissionStarted = false;
 	++P.Serial;
 }
@@ -278,13 +281,46 @@ FRecordedList FD3D12RHISwapchain::Record(std::uint32_t InContext, const FPassCom
 FRecordedList FD3D12RHISwapchain::RecordOwned(std::uint32_t InContext,
                                               std::shared_ptr<const FPassCommands> InOwnedCommands)
 {
+	return RecordBatchOwned(InContext, std::span(&InOwnedCommands, 1), InContext);
+}
+
+void FD3D12RHISwapchain::PrepareFrameRecording(std::uint32_t InPassCount)
+{
+	auto& P = *Impl;
+	if (!P.bActive || !InPassCount || InPassCount > UINT32_MAX / 2)
+	{
+		throw std::invalid_argument("Invalid logical recording capacity");
+	}
+	auto& Frame = P.Frames[P.FrameIndex];
+	for (const auto& bRecorded : Frame.Recorded)
+	{
+		if (bRecorded)
+		{
+			throw std::logic_error("Recording capacity must be prepared before recording");
+		}
+	}
+	P.RecordingPassCount = InPassCount;
+	if (P.bGpuTiming && (!Frame.TimingQueries || Frame.TimingQueries->PassCapacity < InPassCount))
+	{
+		Frame.TimingQueries = CreatePassQueries(*P.State, InPassCount);
+	}
+	Frame.bTimeFrame = P.bGpuTiming && Frame.TimingQueries && Frame.TimingQueries.use_count() == 1;
+#if HYP_ENABLE_PROFILING
+	PrepareD3D12Profiling(*P.State, P.Profiling, Frame.ProfileQueries, InPassCount);
+#endif
+}
+
+FRecordedList FD3D12RHISwapchain::RecordBatchOwned(
+    std::uint32_t InContext, std::span<const std::shared_ptr<const FPassCommands>> InOwnedCommands,
+    std::uint32_t InFirstPass)
+{
 	HYP_PERF_SCOPE_C(Rhi, RecordPass);
 	auto& P = *Impl;
-	if (!P.bActive || InContext >= ContextCount || !InOwnedCommands)
+	if (!P.bActive || InContext >= ContextCount || InOwnedCommands.empty() || InFirstPass >= P.RecordingPassCount ||
+	    InOwnedCommands.size() > P.RecordingPassCount - InFirstPass)
 	{
 		throw std::invalid_argument("Invalid recording context");
 	}
-	const auto& InCommands = *InOwnedCommands;
 	auto ColorView = P.Rtvs->GetCPUDescriptorHandleForHeapStart();
 	ColorView.ptr += std::size_t(P.FrameIndex) * P.RtvStep;
 	auto SrgbView = ColorView;
@@ -296,39 +332,69 @@ FRecordedList FD3D12RHISwapchain::RecordOwned(std::uint32_t InContext,
 	                                 P.Dsvs->GetCPUDescriptorHandleForHeapStart(),
 	                                 P.Size,
 	                                 P.DepthFormat};
-	const auto TargetSize = ValidatePassAttachments(*P.State, InCommands, Targets);
-	const auto DrawPlan = PrepareNativeDraws(*P.State, InOwnedCommands, P.DrawCaches[InContext]);
+	std::vector<FSize> TargetSizes;
+	std::vector<std::shared_ptr<const FD3D12DrawPlan>> DrawPlans;
+	for (const auto& Commands : InOwnedCommands)
+	{
+		if (!Commands)
+		{
+			throw std::invalid_argument("Empty pass in recording batch");
+		}
+		TargetSizes.push_back(ValidatePassAttachments(*P.State, *Commands, Targets));
+		ValidateResourceAccesses(*P.State, *Commands);
+		ValidateDispatches(*P.State, Commands);
+		DrawPlans.push_back(PrepareNativeDraws(*P.State, Commands, P.DrawCaches[InContext]));
+	}
 	auto& Frame = P.Frames[P.FrameIndex];
 	if (Frame.Recorded[InContext].exchange(true))
 	{
 		throw std::logic_error("Command context already recorded this frame");
 	}
 	HYP_PERF_SCOPE_C(Rhi, RecordCommands);
-	auto R = P.PrepareRecording(InContext, std::move(InOwnedCommands));
+	auto R = P.PrepareRecording(InContext, InOwnedCommands.front());
 	auto List = R->List.Get();
-	if (Frame.bTimeFrame)
+	for (std::size_t Index = 0; Index < InOwnedCommands.size(); ++Index)
 	{
-		BeginPassTiming(*R, Frame.TimingQueries);
-	}
+		auto Pass = std::make_shared<FD3D12RecordedList>();
+		Pass->State = P.State;
+		Pass->List = R->List;
+		Pass->Frame = R->Frame;
+		Pass->Owner = R->Owner;
+		Pass->Context = InFirstPass + static_cast<UINT>(Index);
+		Pass->Commands = InOwnedCommands[Index];
+		Pass->Name = Pass->Commands->Name;
+		const auto& InCommands = *Pass->Commands;
+		const auto TargetSize = TargetSizes[Index];
+		const auto& DrawPlan = DrawPlans[Index];
+		if (Frame.bTimeFrame)
+		{
+			BeginPassTiming(*Pass, Frame.TimingQueries);
+		}
 #if HYP_ENABLE_PROFILING
-	BeginD3D12Profile(*R, P.Profiling, Frame.ProfileQueries);
+		BeginD3D12Profile(*Pass, P.Profiling, Frame.ProfileQueries);
 #endif
-	List->BeginEvent(1, InCommands.Name.c_str(), static_cast<UINT>(InCommands.Name.size() + 1));
-	RecordPassBegin(*List, *P.State, InCommands, Targets, TargetSize);
-	if (DrawPlan)
-	{
-		RecordNativeDrawPlan(*List, *DrawPlan, *P.State);
-	}
-	else
-	{
-		RecordDraws(*List, InCommands, *P.State);
-	}
-	RecordPassEnd(*List, *P.State, InCommands, Targets, TargetSize);
-	List->EndEvent();
+		List->BeginEvent(1, InCommands.Name.c_str(), static_cast<UINT>(InCommands.Name.size() + 1));
+		RecordPassBegin(*List, *P.State, InCommands, Targets, TargetSize);
+		if (InCommands.bCompute)
+		{
+			RecordDispatches(*List, *P.State, InCommands);
+		}
+		else if (DrawPlan)
+		{
+			RecordNativeDrawPlan(*List, *DrawPlan, *P.State);
+		}
+		else
+		{
+			RecordDraws(*List, InCommands, *P.State);
+		}
+		RecordPassEnd(*List, *P.State, InCommands, Targets, TargetSize);
+		List->EndEvent();
 #if HYP_ENABLE_PROFILING
-	EndD3D12Profile(*R);
+		EndD3D12Profile(*Pass);
 #endif
-	EndPassTiming(*R);
+		EndPassTiming(*Pass);
+		R->Passes.push_back(std::move(Pass));
+	}
 	Check(List->Close(), "Close recording list");
 	Frame.Recordings[InContext] = {R->List, R};
 	return {std::move(R)};
@@ -345,6 +411,7 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 	auto& Frame = P.Frames[P.FrameIndex];
 	std::vector<ID3D12CommandList*> NativeLists;
 	std::array<bool, ContextCount> Seen{};
+	std::vector<bool> LogicalPasses(P.RecordingPassCount);
 	for (const auto& List : InLists)
 	{
 		const auto& NativeList = NativeResource<FD3D12RecordedList>(List.Payload, P.State.get());
@@ -354,6 +421,14 @@ FImage FD3D12RHISwapchain::EndFrame(std::span<const FRecordedList> InLists, bool
 			throw std::invalid_argument("Stale, foreign or duplicate command list");
 		}
 		Seen[NativeList.Context] = true;
+		for (const auto& Pass : NativeList.Passes)
+		{
+			if (Pass->Context >= LogicalPasses.size() || LogicalPasses[Pass->Context])
+			{
+				throw std::invalid_argument("Overlapping logical pass query ranges");
+			}
+			LogicalPasses[Pass->Context] = true;
+		}
 		NativeLists.push_back(NativeList.List.Get());
 	}
 	Frame.Retained.assign(InLists.begin(), InLists.end());

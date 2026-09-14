@@ -20,6 +20,7 @@ struct FGraphResourceState
 	FGraphContent Color;
 	FGraphContent Depth;
 	FGraphContent Stencil;
+	std::uint32_t MipLevel{};
 };
 
 void ValidateGraphImport(const FGraphTextureImport& InResource);

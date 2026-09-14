@@ -26,6 +26,17 @@ ERHIBindingKind BindingKind(const FShaderBinding& InBinding)
 			return ERHIBindingKind::StructuredBuffer;
 		case EBindingKind::RawBuffer:
 			return ERHIBindingKind::RawBuffer;
+		case EBindingKind::StorageStructuredBuffer:
+			return ERHIBindingKind::StorageStructuredBuffer;
+		case EBindingKind::StorageRawBuffer:
+			return ERHIBindingKind::StorageRawBuffer;
+		case EBindingKind::StorageTexture:
+			if (InBinding.Dimension == EShaderResourceDimension::Texture2D &&
+			    InBinding.ResourceScalar == EShaderScalar::Float)
+			{
+				return ERHIBindingKind::StorageTexture2D;
+			}
+			break;
 		case EBindingKind::Unsupported:
 			break;
 	}
@@ -34,7 +45,8 @@ ERHIBindingKind BindingKind(const FShaderBinding& InBinding)
 
 void ValidateStage(const FShaderArtifact& InShader, const FResourceBindingLayoutDesc& InLayout)
 {
-	const unsigned Stage = InShader.Stage == EShaderStage::Vertex ? 1U : 2U;
+	const unsigned Stage =
+	    InShader.Stage == EShaderStage::Vertex ? 1U : (InShader.Stage == EShaderStage::Pixel ? 2U : 4U);
 	for (const auto& Binding : InShader.Bindings)
 	{
 		const auto Kind = BindingKind(Binding);
@@ -50,7 +62,7 @@ void ValidateStage(const FShaderArtifact& InShader, const FResourceBindingLayout
 		if (Slot == InLayout.Slots.end() ||
 		    (Slot->Kind == ERHIBindingKind::Sampler && Slot->bComparison != Binding.bComparison) ||
 		    (Kind == ERHIBindingKind::ConstantBuffer && Slot->MinimumBufferSize < Binding.ByteSize) ||
-		    (Kind == ERHIBindingKind::StructuredBuffer &&
+		    ((Kind == ERHIBindingKind::StructuredBuffer || Kind == ERHIBindingKind::StorageStructuredBuffer) &&
 		     (Binding.StructureByteStride == 0 || Slot->StructureByteStride != Binding.StructureByteStride)))
 		{
 			throw std::invalid_argument("Graphics binding layout does not cover shader resource: " + Binding.Name);
@@ -75,5 +87,17 @@ void ValidatePipelineBindings(const FPipelineDesc& InDesc, const FResourceBindin
 {
 	ValidateStage(InDesc.Vertex, InLayout);
 	ValidateStage(InDesc.Pixel, InLayout);
+}
+
+void ValidatePipelineBindings(const FComputePipelineDesc& InDesc, const FResourceBindingLayoutDesc& InLayout)
+{
+	for (const auto& Slot : InLayout.Slots)
+	{
+		if (Slot.Visibility != ERHIShaderVisibility::Compute)
+		{
+			throw std::invalid_argument("Compute pipeline requires compute binding layout");
+		}
+	}
+	ValidateStage(InDesc.Compute, InLayout);
 }
 } // namespace Hyperion

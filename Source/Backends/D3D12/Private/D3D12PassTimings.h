@@ -11,9 +11,10 @@ struct FD3D12PassQueries
 	ComPtr<ID3D12QueryHeap> Heap;
 	ComPtr<ID3D12Resource> Readback;
 	double MillisecondsPerTick{};
+	UINT PassCapacity{};
 };
 
-std::shared_ptr<FD3D12PassQueries> CreatePassQueries(FD3D12DeviceState& InDevice);
+std::shared_ptr<FD3D12PassQueries> CreatePassQueries(FD3D12DeviceState& InDevice, UINT InPassCount = ContextCount);
 void BeginPassTiming(FD3D12RecordedList& InList, const std::shared_ptr<FD3D12PassQueries>& InQueries);
 void EndPassTiming(FD3D12RecordedList& InList);
 void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedList> InLists,

@@ -32,12 +32,17 @@ struct FFrameRecording
 	std::vector<FRecordedList> Lists;
 	std::vector<std::shared_ptr<const FPassCommands>> Commands;
 	std::uint32_t Threads{};
+	std::uint32_t BatchCount{};
 
 	void RecordPartition(std::uint32_t InThread)
 	{
-		for (std::size_t Index = InThread; Index < Commands.size(); Index += Threads)
+		for (std::size_t Index = InThread; Index < BatchCount; Index += Threads)
 		{
-			Lists[Index] = Swapchain->RecordOwned(static_cast<std::uint32_t>(Index), Commands[Index]);
+			const auto First = Commands.size() * Index / BatchCount;
+			const auto End = Commands.size() * (Index + 1) / BatchCount;
+			Lists[Index] = Swapchain->RecordBatchOwned(static_cast<std::uint32_t>(Index),
+			                                           std::span(Commands).subspan(First, End - First),
+			                                           static_cast<std::uint32_t>(First));
 		}
 	}
 };
@@ -48,14 +53,17 @@ std::vector<FRecordedList> RecordFrame(FTaskSystem& InTasks, IRHISwapchain& InSw
 	HYP_PERF_SCOPE_C(Rhi, RecordFrame);
 	auto Recording = std::make_shared<FFrameRecording>();
 	Recording->Swapchain = &InSwapchain;
-	Recording->Lists.resize(InCommands.size());
+	Recording->BatchCount =
+	    std::min(static_cast<std::uint32_t>(InCommands.size()), InSwapchain.GetCapabilities().MaxRecordingContexts);
+	Recording->Lists.resize(Recording->BatchCount);
+	InSwapchain.PrepareFrameRecording(static_cast<std::uint32_t>(InCommands.size()));
 	Recording->Commands.reserve(InCommands.size());
 	for (auto& Pass : InCommands)
 	{
 		Recording->Commands.push_back(std::make_shared<const FPassCommands>(std::move(Pass)));
 	}
 	Recording->Threads = InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::ConcurrentRecording).bEnabled
-	                         ? std::min(InTasks.RhiThreadCount(), static_cast<std::uint32_t>(InCommands.size()))
+	                         ? std::min(InTasks.RhiThreadCount(), Recording->BatchCount)
 	                         : 1U;
 	std::vector<FTaskHandle> Peers;
 	Peers.reserve(Recording->Threads - 1);
@@ -99,9 +107,9 @@ FImage ExecuteFrame(FRenderGraph& InGraph, FTaskSystem& InTasks, IRHISwapchain& 
 			InCallbacks.BeforePrepare();
 		}
 		auto Commands = InGraph.CompileAndConsume();
-		if (Commands.size() > InSwapchain.GetCapabilities().MaxRecordingContexts)
+		if (Commands.empty() || !InSwapchain.GetCapabilities().MaxRecordingContexts || Commands.size() > UINT32_MAX / 2)
 		{
-			throw std::runtime_error("Graph exceeds backend recording context capacity");
+			throw std::invalid_argument("Invalid command count or recording capacity");
 		}
 		if (bInCapture && !InSwapchain.GetCapabilities().QueryFeature(ERHIFeature::Readback).bEnabled)
 		{

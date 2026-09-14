@@ -57,6 +57,12 @@ FTexture FMaterialGpuCache::FImpl::Texture(std::shared_ptr<const FMaterialTextur
 	if (!Entry.Resource)
 	{
 		Entry.Description = InSource;
+		if (const auto* Storage = InSource->GetStorage())
+		{
+			Entry.Resource = Device.CreateStorageTexture(
+			    {Storage->Width, Storage->Height, Storage->MipCount, GetRenderColorFormat(Storage->Format)});
+			return Entry.Resource;
+		}
 		if (const auto* Depth = InSource->GetDepthTarget())
 		{
 			Entry.Resource = Device.CreateDepthTexture({Depth->Width, Depth->Height, Depth->ClearDepth});
@@ -114,10 +120,12 @@ FBuffer FMaterialGpuCache::FImpl::Buffer(std::shared_ptr<const FMaterialReadBuff
 	if (!Entry.Resource)
 	{
 		Entry.Description = InSource;
-		Entry.Resource =
-		    Device.CreateBuffer({InSource->GetBytes().size(),
-		                         BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead)},
-		                        InSource->GetBytes());
+		Entry.Resource = Device.CreateBuffer(
+		    {InSource->GetSize(), BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead) |
+		                              (InSource->IsStorage() ? BufferUsage(ERHIBufferUsage::StructuredWrite) |
+		                                                           BufferUsage(ERHIBufferUsage::RawWrite)
+		                                                     : 0U)},
+		    InSource->GetBytes());
 		++Stats.ReadBufferUploads;
 	}
 	return Entry.Resource;

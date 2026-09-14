@@ -60,6 +60,11 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, const FSceneViewRequest&
 	else
 	{
 		LastStatistics = {};
+		HierarchicalDepth.BeginFrame(InGraph);
+		HierarchicalDepth.EndFrame();
+		ContactDepth = {};
+		ContactMask.reset();
+		ContactLifetime.reset();
 		bPending = false;
 		FullscreenStatistics.reset();
 		auto Disabled = InShadows;
@@ -74,6 +79,32 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, const FSceneViewRequest&
 	LastStatistics.SceneToken = InSeed->GetToken();
 	LastStatistics.CameraStatus = Resolved.CameraStatus;
 	LastStatistics.MainCameraView = Resolved.HasCamera() ? std::optional(Resolved.View) : std::nullopt;
+}
+
+void FSceneRenderPipeline::PrepareShadows(const FRenderView& InMain, const FMaterialFrameContext& InFrame,
+                                          const FCascadedShadowSettings& InShadows)
+{
+	const auto Start = std::chrono::steady_clock::now();
+	const auto Revision = Session.GetScene().GetCollectionRevision();
+	const auto State =
+	    Revision ? std::optional(std::array{*Revision, Session.GetResources().GetPublicationRevision()}) : std::nullopt;
+	auto Effective = InShadows;
+	Effective.bEnabled &= !InFrame.GetSceneToken() || InFrame.CastsSceneShadows();
+	LastStatistics.bShadows = ShadowMaps.Prepare(
+	    InMain, Direction(Session, InFrame), Effective,
+	    [this](const ISceneVisibility& InVolume)
+	    {
+		    return Session.GetScene().QueryBounds(InVolume);
+	    },
+	    State);
+	LastStatistics.ShadowSetupMilliseconds =
+	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
+	if (!ShadowLifetime || ShadowBytes != ShadowMaps.TextureBytes() || ShadowDepthConvention != InMain.DepthConvention)
+	{
+		ShadowLifetime = Session.GetResources().CreateScopeLifetime();
+		ShadowBytes = ShadowMaps.TextureBytes();
+		ShadowDepthConvention = InMain.DepthConvention;
+	}
 }
 
 void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMain,
@@ -100,28 +131,11 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	}
 	Resize(InMain.Width, InMain.Height, InMain.DepthConvention);
 	LastStatistics = {};
+	HierarchicalDepth.BeginFrame(InGraph);
+	ContactDepth = {};
 	FullscreenStatistics = std::make_shared<FFullscreenPreparationStatistics>();
 	LastStatistics.Spatial = Session.GetScene().BeginViews();
-	const auto Revision = Session.GetScene().GetCollectionRevision();
-	const auto State =
-	    Revision ? std::optional(std::array{*Revision, Session.GetResources().GetPublicationRevision()}) : std::nullopt;
-	auto EffectiveShadows = InShadows;
-	EffectiveShadows.bEnabled &= !InFrame->GetSceneToken() || InFrame->CastsSceneShadows();
-	LastStatistics.bShadows = ShadowMaps.Prepare(
-	    InMain, Direction(Session, *InFrame), EffectiveShadows,
-	    [this](const ISceneVisibility& InVolume)
-	    {
-		    return Session.GetScene().QueryBounds(InVolume);
-	    },
-	    State);
-	LastStatistics.ShadowSetupMilliseconds =
-	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
-	if (!ShadowLifetime || ShadowBytes != ShadowMaps.TextureBytes() || ShadowDepthConvention != InMain.DepthConvention)
-	{
-		ShadowLifetime = Session.GetResources().CreateScopeLifetime();
-		ShadowBytes = ShadowMaps.TextureBytes();
-		ShadowDepthConvention = InMain.DepthConvention;
-	}
+	PrepareShadows(InMain, *InFrame, InShadows);
 	const FVec4 Clear{ClearHdr(InClear.X, Settings.Exposure), ClearHdr(InClear.Y, Settings.Exposure),
 	                  ClearHdr(InClear.Z, Settings.Exposure), InClear.W};
 	if (InMain.Viewport)
@@ -138,28 +152,36 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	}
 	PrepareClusters(InMain, *InFrame, Settings.bClusteredLighting && !InShadows.DebugMode);
 	auto Family = MakeViews(InMain, Clear);
-	Session.BuildViews(InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
-	                   [&](std::size_t InIndex)
-	                   {
-		                   if (bDeferred && InIndex == Family.BaseIndex)
-		                   {
-			                   AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear),
-			                                     bInDeferPreparation);
-			                   if (!InShadows.DebugMode && !Settings.bClusteredLighting)
-			                   {
-				                   AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
-			                   }
-		                   }
-		                   if (InIndex + 1 == Family.TransparentIndex)
-		                   {
-			                   AddSky(InGraph, InMain, *InFrame, bInDeferPreparation);
-		                   }
-		                   if (InIndex == Family.TransparentIndex)
-		                   {
-			                   AddFullscreenPass(Session, InGraph, Tonemap(InMain), bInDeferPreparation);
-		                   }
-	                   });
+	Session.BuildViews(
+	    InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
+	    [&](std::size_t InIndex)
+	    {
+		    if (bDeferred && InIndex == Family.BaseIndex)
+		    {
+			    AddContactShadows(InGraph, InMain, *InFrame, Direction(Session, *InFrame), bInDeferPreparation);
+			    AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear), bInDeferPreparation);
+			    if (!InShadows.DebugMode && !Settings.bClusteredLighting)
+			    {
+				    AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
+			    }
+		    }
+		    if (InIndex + 1 == Family.TransparentIndex)
+		    {
+			    AddSky(InGraph, InMain, *InFrame, bInDeferPreparation);
+		    }
+		    if (InIndex == Family.TransparentIndex)
+		    {
+			    AddFullscreenPass(Session, InGraph, Tonemap(InMain), bInDeferPreparation);
+		    }
+	    });
 	bPending = bInDeferPreparation;
+	HierarchicalDepth.EndFrame();
+	LastStatistics.HierarchicalDepth = HierarchicalDepth.Statistics();
+	if (!LastStatistics.bContactShadows)
+	{
+		ContactMask.reset();
+		ContactLifetime.reset();
+	}
 	if (bDeferred && Settings.DebugMode)
 	{
 		AddFullscreenPass(Session, InGraph, Debug(InMain), bInDeferPreparation);
@@ -172,6 +194,10 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		    InShadows.PreviewViewport.value_or(
 		        FViewport{float(InMain.Width) - Size, float(InMain.Height) - Size, Size, Size}),
 		    bInDeferPreparation);
+	}
+	if (bDeferred)
+	{
+		AddContactDebug(InGraph, InMain, bInDeferPreparation);
 	}
 	LastStatistics.Views = Session.ViewStatistics();
 	LastStatistics.ShadowTextureBytes = ShadowMaps.TextureBytes();

@@ -30,8 +30,11 @@ D3D12_TEXTURE_ADDRESS_MODE Address(ERHIAddressMode InMode)
 void ValidateBufferView(const FReadBufferView& InView, ERHIBindingKind InKind, const FD3D12DeviceState& InState)
 {
 	const FD3D12Buffer& Buffer = NativeResource<FD3D12Buffer>(InView.Buffer.Payload, &InState);
-	const bool bStructured = InKind == ERHIBindingKind::StructuredBuffer;
-	const ERHIBufferUsage RequiredUsage = bStructured ? ERHIBufferUsage::StructuredRead : ERHIBufferUsage::RawRead;
+	const bool bStructured =
+	    InKind == ERHIBindingKind::StructuredBuffer || InKind == ERHIBindingKind::StorageStructuredBuffer;
+	const ERHIBufferUsage RequiredUsage =
+	    IsStorageBinding(InKind) ? (bStructured ? ERHIBufferUsage::StructuredWrite : ERHIBufferUsage::RawWrite)
+	                             : (bStructured ? ERHIBufferUsage::StructuredRead : ERHIBufferUsage::RawRead);
 	const std::uint32_t ElementSize = bStructured ? InView.Stride : 4;
 	if ((Buffer.Usage & BufferUsage(RequiredUsage)) == 0 || InView.Size == 0 || InView.Offset > Buffer.Size ||
 	    InView.Size > Buffer.Size - InView.Offset ||
@@ -45,8 +48,20 @@ void ValidateBufferView(const FReadBufferView& InView, ERHIBindingKind InKind, c
 
 void ValidateValue(const FResourceBindingValue& InValue, ERHIBindingKind InKind, const FD3D12DeviceState& InState)
 {
-	if ((InKind == ERHIBindingKind::Texture2D || InKind == ERHIBindingKind::TextureCube) &&
-	    std::holds_alternative<FTexture>(InValue))
+	if ((InKind == ERHIBindingKind::Texture2D || InKind == ERHIBindingKind::StorageTexture2D) &&
+	    std::holds_alternative<FTextureView>(InValue))
+	{
+		const auto& View = std::get<FTextureView>(InValue);
+		const auto Info = NativeResource<FD3D12Texture>(View.Texture.Payload, &InState).GetInfo();
+		if (Info.Dimension != ERHITextureDimension::Texture2D || View.MipCount == 0 || View.FirstMip >= Info.MipCount ||
+		    View.MipCount > Info.MipCount - View.FirstMip ||
+		    (IsStorageBinding(InKind) && (!Info.bStorage || View.MipCount != 1)))
+		{
+			throw std::invalid_argument("Invalid texture view dimension, mip range or storage usage");
+		}
+	}
+	else if ((InKind == ERHIBindingKind::Texture2D || InKind == ERHIBindingKind::TextureCube) &&
+	         std::holds_alternative<FTexture>(InValue))
 	{
 		const auto& Texture = NativeResource<FD3D12Texture>(std::get<FTexture>(InValue).Payload, &InState);
 		if ((Texture.Dimension == ERHITextureDimension::Cube) != (InKind == ERHIBindingKind::TextureCube))
@@ -58,7 +73,8 @@ void ValidateValue(const FResourceBindingValue& InValue, ERHIBindingKind InKind,
 	{
 		NativeResource<FD3D12Sampler>(std::get<FSampler>(InValue).Payload, &InState);
 	}
-	else if ((InKind == ERHIBindingKind::StructuredBuffer || InKind == ERHIBindingKind::RawBuffer) &&
+	else if ((InKind == ERHIBindingKind::StructuredBuffer || InKind == ERHIBindingKind::RawBuffer ||
+	          InKind == ERHIBindingKind::StorageStructuredBuffer || InKind == ERHIBindingKind::StorageRawBuffer) &&
 	         std::holds_alternative<FReadBufferView>(InValue))
 	{
 		ValidateBufferView(std::get<FReadBufferView>(InValue), InKind, InState);
@@ -94,8 +110,9 @@ void ValidateSet(const FResourceBindingSetDesc& InDesc, const FD3D12BindingLayou
 			{
 				throw std::invalid_argument("Sampler comparison mode does not match reflected layout");
 			}
-			if (Slot.Kind == ERHIBindingKind::StructuredBuffer && Slot.StructureByteStride != 0 &&
-			    std::get<FReadBufferView>(Value).Stride != Slot.StructureByteStride)
+			if ((Slot.Kind == ERHIBindingKind::StructuredBuffer ||
+			     Slot.Kind == ERHIBindingKind::StorageStructuredBuffer) &&
+			    Slot.StructureByteStride != 0 && std::get<FReadBufferView>(Value).Stride != Slot.StructureByteStride)
 			{
 				throw std::invalid_argument("Structured buffer view stride does not match its binding layout");
 			}
@@ -113,7 +130,29 @@ void ValidateSet(const FResourceBindingSetDesc& InDesc, const FD3D12BindingLayou
 void WriteDescriptor(FD3D12DeviceState& InState, D3D12_CPU_DESCRIPTOR_HANDLE InDestination,
                      const FResourceBindingValue& InValue, ERHIBindingKind InKind)
 {
-	if (const auto* Texture = std::get_if<FTexture>(&InValue))
+	if (const auto* View = std::get_if<FTextureView>(&InValue))
+	{
+		const auto& Texture = NativeResource<FD3D12Texture>(View->Texture.Payload, &InState);
+		if (IsStorageBinding(InKind))
+		{
+			D3D12_UNORDERED_ACCESS_VIEW_DESC Desc{};
+			Desc.Format = Texture.Resource->GetDesc().Format;
+			Desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+			Desc.Texture2D.MipSlice = View->FirstMip;
+			InState.Device->CreateUnorderedAccessView(Texture.Resource.Get(), nullptr, &Desc, InDestination);
+		}
+		else
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC Desc{};
+			Desc.Format = Texture.DepthViews ? DXGI_FORMAT_R32_FLOAT : Texture.Resource->GetDesc().Format;
+			Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			Desc.Texture2D.MostDetailedMip = View->FirstMip;
+			Desc.Texture2D.MipLevels = View->MipCount;
+			InState.Device->CreateShaderResourceView(Texture.Resource.Get(), &Desc, InDestination);
+		}
+	}
+	else if (const auto* Texture = std::get_if<FTexture>(&InValue))
 	{
 		const FD3D12Texture& Native = NativeResource<FD3D12Texture>(Texture->Payload, &InState);
 		InState.Device->CopyDescriptorsSimple(1, InDestination,
@@ -129,17 +168,30 @@ void WriteDescriptor(FD3D12DeviceState& InState, D3D12_CPU_DESCRIPTOR_HANDLE InD
 	}
 	else
 	{
-		const FReadBufferView& View = std::get<FReadBufferView>(InValue);
-		const FD3D12Buffer& Buffer = NativeResource<FD3D12Buffer>(View.Buffer.Payload, &InState);
-		const bool bRaw = InKind == ERHIBindingKind::RawBuffer;
-		const UINT ElementSize = bRaw ? 4 : View.Stride;
+		const FReadBufferView& BufferView = std::get<FReadBufferView>(InValue);
+		const FD3D12Buffer& Buffer = NativeResource<FD3D12Buffer>(BufferView.Buffer.Payload, &InState);
+		const bool bRaw = InKind == ERHIBindingKind::RawBuffer || InKind == ERHIBindingKind::StorageRawBuffer;
+		const UINT ElementSize = bRaw ? 4 : BufferView.Stride;
+		if (IsStorageBinding(InKind))
+		{
+			D3D12_UNORDERED_ACCESS_VIEW_DESC Desc{};
+			Desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+			Desc.Format = bRaw ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN;
+			Desc.Buffer.FirstElement = BufferView.Offset / ElementSize;
+			Desc.Buffer.NumElements = static_cast<UINT>(BufferView.Size / ElementSize);
+			Desc.Buffer.StructureByteStride = bRaw ? 0 : BufferView.Stride;
+			Desc.Buffer.Flags = bRaw ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE;
+			InState.Device->CreateUnorderedAccessView(Buffer.Resource.Get(), nullptr, &Desc, InDestination);
+			++InState.DescriptorCopies;
+			return;
+		}
 		D3D12_SHADER_RESOURCE_VIEW_DESC Desc{};
 		Desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		Desc.Format = bRaw ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN;
-		Desc.Buffer.FirstElement = View.Offset / ElementSize;
-		Desc.Buffer.NumElements = static_cast<UINT>(View.Size / ElementSize);
-		Desc.Buffer.StructureByteStride = bRaw ? 0 : View.Stride;
+		Desc.Buffer.FirstElement = BufferView.Offset / ElementSize;
+		Desc.Buffer.NumElements = static_cast<UINT>(BufferView.Size / ElementSize);
+		Desc.Buffer.StructureByteStride = bRaw ? 0 : BufferView.Stride;
 		Desc.Buffer.Flags = bRaw ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE;
 		InState.Device->CreateShaderResourceView(Buffer.Resource.Get(), &Desc, InDestination);
 	}
@@ -331,6 +383,16 @@ FResourceBindingSet FD3D12RHIDevice::CreateBindingSet(const FResourceBindingSetD
 				Set->UploadFence = std::max(Set->UploadFence,
 				                            NativeResource<FD3D12Texture>(Texture->Payload, State.get()).UploadFence);
 			}
+			if (const auto* View = std::get_if<FTextureView>(&Entry.Values[Index]))
+			{
+				Set->UploadFence = std::max(
+				    Set->UploadFence, NativeResource<FD3D12Texture>(View->Texture.Payload, State.get()).UploadFence);
+			}
+			if (const auto* View = std::get_if<FReadBufferView>(&Entry.Values[Index]))
+			{
+				Set->UploadFence = std::max(
+				    Set->UploadFence, NativeResource<FD3D12Buffer>(View->Buffer.Payload, State.get()).UploadFence);
+			}
 			WriteDescriptor(*State, Arena.Cpu(Set->Tables[Slot.Table].Offset + Slot.Offset + Index),
 			                Entry.Values[Index], Layout.Description.Slots[Entry.Slot].Kind);
 		}
@@ -339,13 +401,37 @@ FResourceBindingSet FD3D12RHIDevice::CreateBindingSet(const FResourceBindingSetD
 	return {std::move(Set)};
 }
 
-void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& InPipeline,
-                              const FD3D12DeviceState& InState, std::uint64_t InCompletedFence)
+void RetainShaderConstantPages(const FD3D12DeviceState& InState, std::span<const FConstantBinding> InConstants,
+                               const std::shared_ptr<const void>& InOwner)
+{
+	for (const auto& Constant : InConstants)
+	{
+		const auto& Buffer = NativeResource<FD3D12Buffer>(Constant.Slice.Buffer.Payload, &InState);
+		std::lock_guard Lock(Buffer.ConstantMutex);
+		std::erase_if(Buffer.ConstantOwners,
+		              [](const auto& InExisting)
+		              {
+			              return InExisting.expired();
+		              });
+		if (std::none_of(Buffer.ConstantOwners.begin(), Buffer.ConstantOwners.end(),
+		                 [&](const auto& InExisting)
+		                 {
+			                 return !InExisting.owner_before(InOwner) && !InOwner.owner_before(InExisting);
+		                 }))
+		{
+			Buffer.ConstantOwners.push_back(InOwner);
+		}
+	}
+}
+
+void ValidateShaderBindings(const FResourceBindingSet& InBindings, std::span<const FConstantBinding> InConstants,
+                            std::uint32_t InInstanceCount, const FD3D12Pipeline& InPipeline,
+                            const FD3D12DeviceState& InState, std::uint64_t InCompletedFence)
 {
 	const FD3D12BindingLayout& Layout = NativeResource<FD3D12BindingLayout>(InPipeline.Layout.Payload, &InState);
-	if (InDraw.Bindings)
+	if (InBindings)
 	{
-		const FD3D12BindingSet& Set = NativeResource<FD3D12BindingSet>(InDraw.Bindings.Payload, &InState);
+		const FD3D12BindingSet& Set = NativeResource<FD3D12BindingSet>(InBindings.Payload, &InState);
 		if (Set.Description.Layout.Payload != InPipeline.Layout.Payload)
 		{
 			throw std::invalid_argument("Incompatible pipeline/resource binding layout");
@@ -361,7 +447,7 @@ void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& I
 		throw std::invalid_argument("Missing graphics resource binding set");
 	}
 	std::uint64_t Seen{};
-	for (const FConstantBinding& Constant : InDraw.ConstantBindings)
+	for (const FConstantBinding& Constant : InConstants)
 	{
 		if (Constant.Slot >= Layout.Slots.size() ||
 		    Layout.Description.Slots[Constant.Slot].Kind != ERHIBindingKind::ConstantBuffer)
@@ -374,12 +460,23 @@ void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& I
 			throw std::invalid_argument("Invalid or duplicate dynamic constant binding");
 		}
 		Seen |= Bit;
-		ValidateConstant(Constant, Layout.Description.Slots[Constant.Slot], InState, InDraw.InstanceCount);
+		ValidateConstant(Constant, Layout.Description.Slots[Constant.Slot], InState, InInstanceCount);
 	}
 	if (Seen != Layout.ConstantMask)
 	{
 		throw std::invalid_argument("Missing dynamic constant binding");
 	}
+}
+
+void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& InPipeline,
+                              const FD3D12DeviceState& InState, std::uint64_t InCompletedFence)
+{
+	if (InPipeline.bCompute)
+	{
+		throw std::invalid_argument("Draw requires graphics pipeline");
+	}
+	ValidateShaderBindings(InDraw.Bindings, InDraw.ConstantBindings, InDraw.InstanceCount, InPipeline, InState,
+	                       InCompletedFence);
 }
 
 void RecordGraphicsBindings(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw,

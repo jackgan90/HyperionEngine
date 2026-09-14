@@ -70,12 +70,22 @@ void WriteScenePipelineBenchmark(std::ostream& InOutput, const FForwardPipelineS
                                  const FDeviceStats& InDevice)
 {
 	std::array<double, 7> Times{};
+	double HierarchicalDepthGpu{};
+	double ContactShadowGpu{};
 	constexpr std::array<std::string_view, 6> Prefixes{"Deferred/BasePass/",      "Deferred/Lighting/",
 	                                                   "Deferred/Compatibility/", "Scene/Transparent/",
 	                                                   "Output/Tonemap/",         "Scene/Sky/"};
 	for (const auto& Pass : InDevice.GpuTiming.Passes)
 	{
 		Times.back() += Pass.Milliseconds;
+		if (Pass.Name.starts_with("HZB/"))
+		{
+			HierarchicalDepthGpu += Pass.Milliseconds;
+		}
+		if (Pass.Name.starts_with("Deferred/ContactShadowMask/"))
+		{
+			ContactShadowGpu += Pass.Milliseconds;
+		}
 		if (Pass.Name.starts_with("Deferred/LightingClustered/") || Pass.Name.starts_with("Deferred/ClusterLighting/"))
 		{
 			Times[1] += Pass.Milliseconds;
@@ -94,6 +104,9 @@ void WriteScenePipelineBenchmark(std::ostream& InOutput, const FForwardPipelineS
 	}
 	InOutput << ',' << InPipeline.SceneTargetBytes << ',' << InPipeline.FullscreenDraws << ','
 	         << InPipeline.FullscreenPreparationMilliseconds;
+	InOutput << ',' << InPipeline.bContactShadows << ',' << InPipeline.HierarchicalDepth.Consumers << ','
+	         << InPipeline.HierarchicalDepth.Dispatches << ',' << InPipeline.HierarchicalDepth.Bytes << ','
+	         << HierarchicalDepthGpu << ',' << ContactShadowGpu;
 }
 
 void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline)
@@ -257,7 +270,8 @@ void FViewerApplication::SaveBenchmark()
 	       "cached_plan_items,cached_plan_blocks,cpu_latency_ms,main_render_lead,render_rhi_lead"
 	       ",base_gpu_ms,lighting_gpu_ms,compatibility_gpu_ms,transparent_gpu_ms,tonemap_gpu_ms,sky_gpu_ms,total_gpu_"
 	       "pass_ms"
-	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms,index_rebuilds,index_refits"
+	       ",scene_target_bytes,fullscreen_draws,fullscreen_prepare_ms,contact_active,hzb_consumers,hzb_dispatches,hzb_"
+	       "bytes,hzb_gpu_ms,contact_gpu_ms,index_rebuilds,index_refits"
 	       ",local_lights_active,point_lights,spot_lights,local_visible,local_draws,local_query_ms,local_rebuilds,"
 	       "local_refits,local_gpu_ms,clustered_lighting,cluster_cells,cluster_occupied,cluster_references,cluster_max_"
 	       "lights,cluster_bytes,cluster_build_ms,cluster_rebuilt\n"

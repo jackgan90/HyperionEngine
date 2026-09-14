@@ -44,6 +44,23 @@ public:
 	}
 
 	virtual FImage EndFrame(std::span<const FRecordedList> InLists, bool bInVsync, bool bInCapture = false) = 0;
+
+	// Coordinator prepares telemetry capacity before concurrent recording; no queue wait is introduced.
+	virtual void PrepareFrameRecording(std::uint32_t)
+	{
+	}
+
+	virtual FRecordedList RecordBatchOwned(std::uint32_t InContext,
+	                                       std::span<const std::shared_ptr<const FPassCommands>> InCommands,
+	                                       std::uint32_t)
+	{
+		if (InCommands.size() != 1)
+		{
+			throw std::runtime_error("Backend does not support recording pass batches");
+		}
+		return RecordOwned(InContext, InCommands.front());
+	}
+
 	// Coordinator only, after all recorders finish. Idempotent; submitted work must
 	// finish before releasing resources. Throws if the device cannot recover safely.
 	virtual void CancelFrame() = 0;

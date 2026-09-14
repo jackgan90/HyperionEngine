@@ -15,6 +15,7 @@ void FRenderResourceCoordinator::CloseNativeResources()
 		PreparedViews.clear();
 		BatchAdmissions.clear();
 		Fullscreen = {};
+		Compute = {};
 		LightVolumes = {};
 		for (const auto& [Key, Entry] : Entries)
 		{

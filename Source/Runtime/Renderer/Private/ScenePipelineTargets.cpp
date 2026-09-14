@@ -62,6 +62,7 @@ FSceneRenderPipeline::FSceneRenderPipeline(FRenderSession& InSession, FRHICapabi
 
 void FSceneRenderPipeline::Configure(FScenePipelineSettings InSettings)
 {
+	InSettings.ContactShadows.Validate();
 	if (InSettings.DebugMode > 6 ||
 	    (InSettings.Pipeline != ESceneRenderPipeline::Deferred &&
 	     InSettings.Pipeline != ESceneRenderPipeline::Forward) ||
@@ -113,6 +114,8 @@ void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight,
 	SceneColor = std::move(NewColor);
 	SceneDepth = std::move(NewDepth);
 	GBuffer = std::move(NewGBuffer);
+	ContactMask.reset();
+	ContactLifetime.reset();
 	Width = InWidth;
 	Height = InHeight;
 	DepthConvention = InConvention;
@@ -160,7 +163,8 @@ FRenderDepthTarget FSceneRenderPipeline::DepthTarget(EAttachmentLoad InLoad) con
 std::uint64_t FSceneRenderPipeline::TargetBytes() const
 {
 	return std::uint64_t(Width) * Height *
-	       (12 + (Settings.Pipeline == ESceneRenderPipeline::Deferred ? Settings.GBuffer.BytesPerPixel() : 0));
+	           (12 + (Settings.Pipeline == ESceneRenderPipeline::Deferred ? Settings.GBuffer.BytesPerPixel() : 0)) +
+	       HierarchicalDepth.Statistics().Bytes + (ContactMask ? std::uint64_t(Width) * Height : 0);
 }
 
 const FCascadedShadowMap& FSceneRenderPipeline::Shadows() const

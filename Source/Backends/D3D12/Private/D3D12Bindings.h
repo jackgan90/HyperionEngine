@@ -18,6 +18,12 @@ struct FD3D12GraphicsBindingState
 
 void ValidateGraphicsBindings(const FDrawPacket& InDraw, const FD3D12Pipeline& InPipeline,
                               const FD3D12DeviceState& InState, std::uint64_t InCompletedFence);
+void ValidateShaderBindings(const FResourceBindingSet& InBindings, std::span<const FConstantBinding> InConstants,
+                            std::uint32_t InInstanceCount, const FD3D12Pipeline& InPipeline,
+                            const FD3D12DeviceState& InState, std::uint64_t InCompletedFence);
+// Register before slice validation so reset either precedes validation or observes a live command owner.
+void RetainShaderConstantPages(const FD3D12DeviceState& InState, std::span<const FConstantBinding> InConstants,
+                               const std::shared_ptr<const void>& InOwner);
 void RecordGraphicsBindings(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw,
                             const FD3D12Pipeline& InPipeline, const FD3D12DeviceState& InState,
                             FD3D12GraphicsBindingState& InBindings);

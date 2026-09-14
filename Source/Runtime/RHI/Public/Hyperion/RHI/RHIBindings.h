@@ -14,7 +14,9 @@ enum class ERHIBufferUsage : std::uint32_t
 	Index = 2,
 	Constant = 4,
 	StructuredRead = 8,
-	RawRead = 16
+	RawRead = 16,
+	StructuredWrite = 32,
+	RawWrite = 64
 };
 
 constexpr std::uint32_t BufferUsage(ERHIBufferUsage InUsage)
@@ -54,6 +56,14 @@ struct FReadBufferView
 	bool operator==(const FReadBufferView&) const = default;
 };
 
+struct FTextureView
+{
+	FTexture Texture;
+	std::uint32_t FirstMip{};
+	std::uint32_t MipCount = 1;
+	bool operator==(const FTextureView&) const = default;
+};
+
 enum class ERHIBindingKind
 {
 	ConstantBuffer,
@@ -61,13 +71,23 @@ enum class ERHIBindingKind
 	StructuredBuffer,
 	RawBuffer,
 	Sampler,
-	TextureCube
+	TextureCube,
+	StorageTexture2D,
+	StorageStructuredBuffer,
+	StorageRawBuffer
 };
+
+constexpr bool IsStorageBinding(ERHIBindingKind InKind)
+{
+	return InKind == ERHIBindingKind::StorageTexture2D || InKind == ERHIBindingKind::StorageStructuredBuffer ||
+	       InKind == ERHIBindingKind::StorageRawBuffer;
+}
 enum class ERHIShaderVisibility : std::uint8_t
 {
 	Vertex = 1,
 	Pixel = 2,
-	Graphics = 3
+	Graphics = 3,
+	Compute = 4
 };
 
 struct FResourceBindingSlot
@@ -91,7 +111,7 @@ struct FResourceBindingLayoutDesc
 	bool operator==(const FResourceBindingLayoutDesc&) const = default;
 };
 
-using FResourceBindingValue = std::variant<FTexture, FReadBufferView, FSampler>;
+using FResourceBindingValue = std::variant<FTexture, FReadBufferView, FSampler, FTextureView>;
 
 struct FResourceBindingEntry
 {

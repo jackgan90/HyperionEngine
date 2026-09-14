@@ -26,6 +26,10 @@ public:
 	std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc> InTextures) override;
 	bool TexturesReady(std::span<const FTexture> InTextures) override;
 	FPipeline CreatePipeline(const FPipelineDesc& InDesc) override;
+	FPipeline CreateComputePipeline(const FComputePipelineDesc& InDesc) override;
+	FTexture CreateStorageTexture(const FStorageTextureDesc& InDesc) override;
+	std::vector<std::byte> ReadTexture(const FTextureView& InView, EResourceState InState) override;
+	std::vector<std::byte> ReadBuffer(const FReadBufferView& InView, EResourceState InState) override;
 	std::unique_ptr<IRHISwapchain> CreateSwapchain(const FRHISwapchainDesc& InDesc) override;
 	void WaitIdle() override;
 	void CollectCompletedResources() override;

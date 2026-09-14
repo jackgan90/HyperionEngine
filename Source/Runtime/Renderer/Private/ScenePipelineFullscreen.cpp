@@ -9,6 +9,43 @@ FViewport Viewport(const FRenderView& InView)
 {
 	return InView.Viewport.value_or(FViewport{0, 0, float(InView.Width), float(InView.Height)});
 }
+
+void SetLightingParameters(FFullscreenPassDesc& InPass, FRenderSession& InSession, const FMaterialFrameContext& InFrame,
+                           const FRenderView& InMain, bool bInNoDirectional)
+{
+	const auto Set = [&](std::string InName, FMaterialValue InValue)
+	{
+		InPass.Parameters.push_back({"Pixel:DeferredLightV1." + InName, std::move(InValue)});
+	};
+	Set("InverseViewProjection", FMaterialValue::Matrix(Inverse(InMain.ViewProjection)));
+	const auto View = InPass.Viewport;
+	Set("Viewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height}));
+	Set("DepthRange", FMaterialValue::Float(FVec2{View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)}));
+	Set("Eye", FMaterialValue::Float(InMain.Eye));
+	for (const auto& Default : EnvironmentParameters())
+	{
+		const auto Value = InSession.ResolveFrameSemantic(InFrame, Default.Name);
+		const auto Name = Default.Name.substr(std::string("Engine.Scene.").size());
+		InPass.Parameters.push_back(
+		    {"Pixel:" + (Default.Value.Type.Kind == EMaterialValueKind::Numeric ? "EnvironmentV1." + Name : Name),
+		     Value ? *Value : Default.Value});
+	}
+	for (const auto& Mapping : {std::pair{"LightDirection", "Engine.Scene.MainDirectionalLightDirection"},
+	                            std::pair{"LightColor", "Engine.Scene.MainDirectionalLightColor"},
+	                            std::pair{"Ambient", "Engine.Scene.AmbientColor"}})
+	{
+		if (bInNoDirectional && std::string_view(Mapping.first) != "Ambient")
+		{
+			continue;
+		}
+		const auto Value = InSession.ResolveFrameSemantic(InFrame, Mapping.second);
+		if (!Value || Value->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
+		{
+			throw std::invalid_argument("Deferred lighting requires frame-resolved scene light semantics");
+		}
+		Set(Mapping.first, *Value);
+	}
+}
 } // namespace
 
 FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, const FMaterialFrameContext& InFrame,
@@ -17,6 +54,9 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	static const auto Material = MakeFullscreenMaterial("Deferred lighting", "Deferred/Lighting.hlsl");
 	static const auto Clustered = MakeFullscreenMaterial("Deferred clustered lighting", "Deferred/Clustered.hlsl");
 	static const auto ClusterOnly = MakeFullscreenMaterial("Deferred cluster only", "Deferred/ClusteredOnly.hlsl");
+	static const auto Contact = MakeFullscreenMaterial("Deferred contact lighting", "Deferred/LightingContact.hlsl");
+	static const auto ClusterContact =
+	    MakeFullscreenMaterial("Deferred clustered contact lighting", "Deferred/ClusteredContact.hlsl");
 	const bool bClustered = Settings.bClusteredLighting && LastStatistics.LocalLights.bActive;
 	const auto Direct = Session.ResolveFrameSemantic(InFrame, "Engine.Scene.MainDirectionalLightColor");
 	if (!Direct || Direct->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
@@ -26,6 +66,17 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	const bool bNoDirectional = bClustered && Direct->Words == FMaterialValue::Float(FVec3{}).Words;
 	FFullscreenPassDesc Result;
 	Result.Material = bClustered ? (bNoDirectional ? ClusterOnly : Clustered) : Material;
+	if (LastStatistics.bContactShadows && !bNoDirectional)
+	{
+		Result.Material = bClustered ? ClusterContact : Contact;
+		Result.Parameters.push_back({"Pixel:ContactVisibility", FMaterialValue::FromTexture(ContactMask)});
+		FMaterialSampler Sampler;
+		Sampler.U = Sampler.V = Sampler.W = EMaterialAddressMode::Clamp;
+		Sampler.bMinLinear = false;
+		Sampler.bMagLinear = false;
+		Sampler.bMipLinear = false;
+		Result.Parameters.push_back({"Pixel:ContactSampler", FMaterialValue::FromSampler(Sampler)});
+	}
 	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
 	if (const auto Metadata = InFrame.GetSceneMetadata(); Metadata && Metadata->Settings.EnvironmentLight)
@@ -40,6 +91,10 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	Result.Viewport = Viewport(InMain);
 	Result.Targets =
 	    ColorTargets("Deferred/Lighting", InMain.Viewport ? EAttachmentLoad::Load : EAttachmentLoad::Clear, InClear);
+	if (LastStatistics.bContactShadows && !bNoDirectional)
+	{
+		Result.Targets.Reads.push_back({ERenderTargetKind::Texture, ContactMask, ContactLifetime, false});
+	}
 	if (bClustered)
 	{
 		Result.Targets.Name = bNoDirectional ? "Deferred/ClusterLighting" : "Deferred/LightingClustered";
@@ -79,38 +134,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	}
 	Result.Targets.Reads.push_back({ERenderTargetKind::Texture, SceneDepth, Lifetime, false});
 	Result.Parameters.push_back({"Pixel:SceneDepth", FMaterialValue::FromTexture(SceneDepth)});
-	const auto Set = [&](std::string InName, FMaterialValue InValue)
-	{
-		Result.Parameters.push_back({"Pixel:DeferredLightV1." + InName, std::move(InValue)});
-	};
-	Set("InverseViewProjection", FMaterialValue::Matrix(Inverse(InMain.ViewProjection)));
-	const auto View = Result.Viewport;
-	Set("Viewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height}));
-	Set("DepthRange", FMaterialValue::Float(FVec2{View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)}));
-	Set("Eye", FMaterialValue::Float(InMain.Eye));
-	for (const auto& Default : EnvironmentParameters())
-	{
-		const auto Value = Session.ResolveFrameSemantic(InFrame, Default.Name);
-		const auto Name = Default.Name.substr(std::string("Engine.Scene.").size());
-		Result.Parameters.push_back(
-		    {"Pixel:" + (Default.Value.Type.Kind == EMaterialValueKind::Numeric ? "EnvironmentV1." + Name : Name),
-		     Value ? *Value : Default.Value});
-	}
-	for (const auto& Mapping : {std::pair{"LightDirection", "Engine.Scene.MainDirectionalLightDirection"},
-	                            std::pair{"LightColor", "Engine.Scene.MainDirectionalLightColor"},
-	                            std::pair{"Ambient", "Engine.Scene.AmbientColor"}})
-	{
-		if (bNoDirectional && std::string_view(Mapping.first) != "Ambient")
-		{
-			continue;
-		}
-		const auto Value = Session.ResolveFrameSemantic(InFrame, Mapping.second);
-		if (!Value || Value->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
-		{
-			throw std::invalid_argument("Deferred lighting requires frame-resolved scene light semantics");
-		}
-		Set(Mapping.first, *Value);
-	}
+	SetLightingParameters(Result, Session, InFrame, InMain, bNoDirectional);
 	return Result;
 }
 

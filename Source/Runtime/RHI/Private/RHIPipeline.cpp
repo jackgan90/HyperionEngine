@@ -7,6 +7,43 @@
 
 namespace Hyperion
 {
+std::array<std::uint32_t, 3> ComputeDispatchGroups(std::array<std::uint32_t, 3> InExtent,
+                                                   std::array<std::uint32_t, 3> InGroupSize)
+{
+	for (std::size_t Axis = 0; Axis < 3; ++Axis)
+	{
+		if (!InGroupSize[Axis])
+		{
+			throw std::invalid_argument("Compute group dimension must be positive");
+		}
+		InExtent[Axis] = InExtent[Axis] / InGroupSize[Axis] + (InExtent[Axis] % InGroupSize[Axis] != 0);
+	}
+	return InExtent;
+}
+
+void ValidateComputePipeline(const FComputePipelineDesc& InDesc, const FRHICapabilities& InCapabilities)
+{
+	if (!InCapabilities.QueryFeature(ERHIFeature::Compute).bEnabled || !InDesc.Layout || InDesc.Compute.Bytes.empty() ||
+	    InDesc.Compute.Stage != EShaderStage::Compute || InDesc.Compute.Format != InCapabilities.ShaderFormat)
+	{
+		throw std::invalid_argument("Invalid or unsupported compute shader, layout or target");
+	}
+	std::uint64_t Threads = 1;
+	for (std::size_t Axis = 0; Axis < 3; ++Axis)
+	{
+		const auto Size = InDesc.Compute.Reflection.ThreadGroupSize[Axis];
+		if (!Size || Size > InCapabilities.MaxComputeGroupSize[Axis])
+		{
+			throw std::invalid_argument("Compute thread group dimension exceeds device limits");
+		}
+		Threads *= Size;
+	}
+	if (Threads > InCapabilities.MaxComputeThreads)
+	{
+		throw std::invalid_argument("Compute thread group exceeds device thread limit");
+	}
+}
+
 FVertexFormatInfo GetVertexFormatInfo(EVertexFormat InFormat)
 {
 	switch (InFormat)

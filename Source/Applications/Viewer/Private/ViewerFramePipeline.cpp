@@ -123,6 +123,10 @@ void FViewerApplication::CollectFrames()
 		}
 		Metrics.LegacyDisplayItems = 0;
 		Metrics.SceneTargetBytes = PipelineStatistics.SceneTargetBytes;
+		Metrics.HierarchicalDepthConsumers = PipelineStatistics.HierarchicalDepth.Consumers;
+		Metrics.HierarchicalDepthDispatches = PipelineStatistics.HierarchicalDepth.Dispatches;
+		Metrics.HierarchicalDepthBytes = PipelineStatistics.HierarchicalDepth.Bytes;
+		Metrics.bContactShadows = PipelineStatistics.bContactShadows;
 		for (const auto& View : PipelineStatistics.Views)
 		{
 			if (View.Usage == "Forward")

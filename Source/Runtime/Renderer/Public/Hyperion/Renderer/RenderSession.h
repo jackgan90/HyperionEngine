@@ -82,6 +82,7 @@ public:
 	                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred = false);
 	void AppendLightVolumes(FRenderGraph& InGraph, FLightVolumePassDesc InPass, bool bInDeferPreparation = true);
 	void AppendFullscreen(FRenderGraph& InGraph, FFullscreenPassDesc InPass, bool bInDeferPreparation = true);
+	void AppendCompute(FRenderGraph& InGraph, FComputePassDesc InPass, bool bInDeferPreparation = true);
 	void ResetViewHistory(); // Render: discard cached view preparation after structural pipeline changes.
 	void Close();
 

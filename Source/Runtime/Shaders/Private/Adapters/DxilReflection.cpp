@@ -155,11 +155,21 @@ FShaderBinding ReadBinding(ID3D12ShaderReflection* InReflection, const D3D12_SHA
 		case D3D_SIT_BYTEADDRESS:
 			Result.Kind = EBindingKind::RawBuffer;
 			break;
+		case D3D_SIT_UAV_RWTYPED:
+			Result.Kind = EBindingKind::StorageTexture;
+			break;
+		case D3D_SIT_UAV_RWSTRUCTURED:
+			Result.Kind = EBindingKind::StorageStructuredBuffer;
+			Result.StructureByteStride = InDesc.NumSamples;
+			break;
+		case D3D_SIT_UAV_RWBYTEADDRESS:
+			Result.Kind = EBindingKind::StorageRawBuffer;
+			break;
 		default:
 			Result.Kind = EBindingKind::Unsupported;
 			break;
 	}
-	if (Result.Kind == EBindingKind::Texture)
+	if (Result.Kind == EBindingKind::Texture || Result.Kind == EBindingKind::StorageTexture)
 	{
 		switch (InDesc.ReturnType)
 		{
@@ -182,7 +192,8 @@ FShaderBinding ReadBinding(ID3D12ShaderReflection* InReflection, const D3D12_SHA
 		                   : InDesc.Dimension == D3D_SRV_DIMENSION_TEXTURECUBE ? EShaderResourceDimension::TextureCube
 		                                                                       : EShaderResourceDimension::Unsupported;
 	}
-	else if (Result.Kind == EBindingKind::StructuredBuffer || Result.Kind == EBindingKind::RawBuffer)
+	else if (Result.Kind == EBindingKind::StructuredBuffer || Result.Kind == EBindingKind::RawBuffer ||
+	         Result.Kind == EBindingKind::StorageStructuredBuffer || Result.Kind == EBindingKind::StorageRawBuffer)
 	{
 		Result.Dimension = EShaderResourceDimension::Buffer;
 	}
@@ -231,6 +242,11 @@ void ReflectDxil(FShaderArtifact& InArtifact, const std::string& InPayload)
 	D3D12_SHADER_DESC Desc{};
 	Checked(Reflection->GetDesc(&Desc), "Read DXIL shader description");
 	InArtifact.Reflection.LayoutFormat = EShaderFormat::Dxil;
+	if (InArtifact.Stage == EShaderStage::Compute)
+	{
+		auto& Group = InArtifact.Reflection.ThreadGroupSize;
+		Reflection->GetThreadGroupSize(&Group[0], &Group[1], &Group[2]);
+	}
 	for (UINT Resource = 0; Resource < Desc.BoundResources; ++Resource)
 	{
 		D3D12_SHADER_INPUT_BIND_DESC Binding{};

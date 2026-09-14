@@ -62,6 +62,8 @@ public:
 	void Clear();
 	bool CanRelease() const;
 	FMaterialConstantStats Statistics() const;
+	// Uses the shared immutable page allocator; callers own slices and may cache identical packed bytes.
+	FBufferSlice PublishPacked(std::span<const std::byte> InBytes);
 
 private:
 	friend struct FRenderResourceCoordinator;

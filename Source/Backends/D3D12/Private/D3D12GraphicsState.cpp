@@ -229,6 +229,10 @@ DXGI_FORMAT NativeColorFormat(ERHIColorFormat InFormat)
 			return DXGI_FORMAT_R16G16B16A16_FLOAT;
 		case ERHIColorFormat::Rgba32Float:
 			return DXGI_FORMAT_R32G32B32A32_FLOAT;
+		case ERHIColorFormat::R32Float:
+			return DXGI_FORMAT_R32_FLOAT;
+		case ERHIColorFormat::R8Unorm:
+			return DXGI_FORMAT_R8_UNORM;
 		default:
 			throw std::invalid_argument("Unsupported color format");
 	}

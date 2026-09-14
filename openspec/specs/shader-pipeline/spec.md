@@ -4,7 +4,7 @@
 TBD - created by archiving change add-shader-compilation-pipeline. Update Purpose after archive.
 ## Requirements
 ### Requirement: Portable shader artifacts
-The engine SHALL compile HLSL vertex and pixel shaders to DXIL and SPIR-V and generate MSL source through an internal wrapper. Each artifact SHALL expose normalized resource and member reflection for its actual compilation target or preserved intermediate source, including cbuffer type trees, sizes, offsets, array/matrix strides and major order, binding spaces/counts/stages and shader input/output signatures. Native compiler and reflection types SHALL remain private. MSL reflection SHALL retain the generated resource mapping without implying a Metal execution backend.
+The engine SHALL compile HLSL vertex, pixel and compute shaders to DXIL and SPIR-V and generate MSL source through an internal wrapper. Each artifact SHALL expose normalized resource and member reflection for its actual compilation target or preserved intermediate source, including cbuffer type trees, sizes, offsets, array/matrix strides and major order, binding spaces/counts/stages and shader input/output signatures. Compute reflection SHALL include fixed thread-group dimensions and distinguish sampled resources from writable texture/structured/raw resources. Native compiler and reflection types SHALL remain private. MSL reflection SHALL retain the generated resource mapping without implying a Metal execution backend.
 
 #### Scenario: Valid shader
 - **WHEN** the triangle shader is compiled for each target
@@ -17,6 +17,10 @@ The engine SHALL compile HLSL vertex and pixel shaders to DXIL and SPIR-V and ge
 #### Scenario: Binding conflicts and visibility
 - **WHEN** vertex and pixel artifacts are combined into a material program
 - **THEN** compatible bindings are merged, disjoint stage-specific declarations remain distinguishable, and overlapping incompatible declarations produce diagnostics
+
+#### Scenario: Compute cache and reflection
+- **WHEN** a compute shader with storage resources is compiled cold and from cache for each supported artifact target
+- **THEN** stage, writable resource kinds, group dimensions, member layout and final bytes are preserved consistently
 
 ### Requirement: Correct cache invalidation
 The compiler SHALL key cached artifacts by the toolchain, compilation options and source-root contents and reject corrupted cache bytes. Explicit defines SHALL be normalized with duplicate names rejected. Artifact/reflection schema and register-space mapping versions SHALL be part of cache identity. Cache hits SHALL reconstruct the same normalized reflection and final bytes as cold compilation, preserving the unstripped DXIL or SPIR-V intermediate required for reflection and MSL conversion.

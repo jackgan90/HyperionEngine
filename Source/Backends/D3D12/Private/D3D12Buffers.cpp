@@ -7,13 +7,63 @@
 
 namespace Hyperion
 {
+namespace
+{
+FBuffer CreateStorageBuffer(const std::shared_ptr<FD3D12DeviceState>& InState, const FBufferDesc& InDesc,
+                            std::span<const std::byte> InBytes)
+{
+	if ((InDesc.Usage & 7U) != 0 || InDesc.Size % 4 != 0)
+	{
+		throw std::invalid_argument("Storage buffer requires exclusive shader usage and four-byte alignment");
+	}
+	auto Buffer =
+	    InState->AllocateBuffer(InDesc.Size, D3D12_HEAP_TYPE_DEFAULT,
+	                            InBytes.empty() ? Native(EResourceState::ShaderRead) : D3D12_RESOURCE_STATE_COPY_DEST,
+	                            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	Buffer->Usage = InDesc.Usage;
+	if (!InBytes.empty())
+	{
+		auto Upload = InState->AllocateBuffer(InDesc.Size, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		void* Mapped{};
+		const D3D12_RANGE Read{0, 0};
+		Check(Upload->Resource->Map(0, &Read, &Mapped), "Map storage buffer upload");
+		std::memset(Mapped, 0, static_cast<std::size_t>(InDesc.Size));
+		std::memcpy(Mapped, InBytes.data(), InBytes.size());
+		Upload->Resource->Unmap(0, nullptr);
+		FD3D12DeviceState::FUploadBatch Batch;
+		Batch.Resources = {Upload->Resource, Buffer->Resource};
+		Batch.Allocations = {Upload->Allocation, Buffer->Allocation};
+		Check(InState->Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&Batch.Allocator)),
+		      "Storage upload allocator");
+		Check(InState->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Batch.Allocator.Get(), nullptr,
+		                                         IID_PPV_ARGS(&Batch.List)),
+		      "Storage upload list");
+		Batch.List->CopyBufferRegion(Buffer->Resource.Get(), 0, Upload->Resource.Get(), 0, InDesc.Size);
+		Transition(Batch.List.Get(), Buffer->Resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
+		           Native(EResourceState::ShaderRead));
+		Check(Batch.List->Close(), "Close storage upload");
+		InState->Uploads.push_back(std::move(Batch));
+		auto& Submitted = InState->Uploads.back();
+		ID3D12CommandList* Lists[]{Submitted.List.Get()};
+		InState->Queue->ExecuteCommandLists(1, Lists);
+		Submitted.FenceValue = InState->Signal();
+		Buffer->UploadFence = Submitted.FenceValue;
+	}
+	return {std::move(Buffer)};
+}
+} // namespace
+
 FBuffer FD3D12RHIDevice::CreateBuffer(const FBufferDesc& InDesc, std::span<const std::byte> InBytes)
 {
 	HYP_PERF_SCOPE_C(Detail, CreateBuffer);
 	if (InDesc.Size == 0 || InDesc.Size > std::numeric_limits<std::size_t>::max() || InDesc.Usage == 0 ||
-	    (InDesc.Usage & ~31U) != 0 || InBytes.size() > InDesc.Size)
+	    (InDesc.Usage & ~127U) != 0 || InBytes.size() > InDesc.Size)
 	{
 		throw std::invalid_argument("Invalid typed buffer size, usage or initial data");
+	}
+	if ((InDesc.Usage & (BufferUsage(ERHIBufferUsage::StructuredWrite) | BufferUsage(ERHIBufferUsage::RawWrite))) != 0)
+	{
+		return CreateStorageBuffer(State, InDesc, InBytes);
 	}
 	const bool bConstant = (InDesc.Usage & BufferUsage(ERHIBufferUsage::Constant)) != 0;
 	if (bConstant && (InDesc.Usage != BufferUsage(ERHIBufferUsage::Constant) || InDesc.Size % 256 != 0))

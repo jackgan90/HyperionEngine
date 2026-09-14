@@ -14,6 +14,10 @@ public:
 	void BeginFrame(FSize InSize) override;
 	FRecordedList Record(std::uint32_t InContext, const FPassCommands& InCommands) override;
 	FRecordedList RecordOwned(std::uint32_t InContext, std::shared_ptr<const FPassCommands> InCommands) override;
+	void PrepareFrameRecording(std::uint32_t InPassCount) override;
+	FRecordedList RecordBatchOwned(std::uint32_t InContext,
+	                               std::span<const std::shared_ptr<const FPassCommands>> InCommands,
+	                               std::uint32_t InFirstPass) override;
 	FImage EndFrame(std::span<const FRecordedList> InLists, bool bInVsync, bool bInCapture) override;
 	void CancelFrame() override;
 	void WaitIdle() override;

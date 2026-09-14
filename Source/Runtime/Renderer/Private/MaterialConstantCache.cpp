@@ -452,6 +452,13 @@ FMaterialConstantCache::FMaterialConstantCache(IRHIDevice& InDevice, std::uint32
 
 FMaterialConstantCache::~FMaterialConstantCache() = default;
 
+FBufferSlice FMaterialConstantCache::PublishPacked(std::span<const std::byte> InBytes)
+{
+	Impl->CheckOwner();
+	++Impl->Stats.Packs;
+	return Impl->Publish(InBytes, true);
+}
+
 void FMaterialConstantCache::SetScopeTracker(std::function<void(const std::shared_ptr<const void>&)> InTracker)
 {
 	Impl->TrackScope = std::move(InTracker);

@@ -8,6 +8,7 @@ FGraphicsState ConvertMaterialState(const FMaterialState& InState, bool bInMirro
                                     EDepthConvention InConvention = EDepthConvention::Standard);
 FGraphicsDynamicState ConvertMaterialDynamicState(const FMaterialDynamicState& InState);
 FResourceBindingLayoutDesc DescribeMaterialLayout(const FCompiledMaterialPass& InPass);
+FResourceBindingLayoutDesc DescribeShaderLayout(std::span<const FMaterialProgramBinding> InBindings);
 FPipelineDesc DescribeMaterialPipeline(const FCompiledMaterialPass& InProgram, const FMaterialPass& InPass,
                                        const FResourceBindingLayout& InLayout,
                                        std::vector<FVertexAttribute> InAttributes, std::uint32_t InStride,

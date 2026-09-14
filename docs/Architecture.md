@@ -40,7 +40,7 @@ Scene-backed viewers own FSceneInstance on Main. Cameras and lights are scene no
 4. Release bindings in `Stop`; close the render session before destroying graphics and task services. Ordinary object removal uses asynchronous retirement without a device idle wait.
 5. Non-scene operations such as GUI implement `IRenderPlugin::Build` on Render. Their Main lifecycle dispatches any RHI 0 resource work explicitly; graph Load passes still require initialized color contents.
 
-The graph imports explicit color/depth resources, tracks read/write dependencies and supports sampled offscreen targets and multiple color attachments. Viewer uses the shared HDR scene pipeline: Deferred GBuffer lighting or HDR Forward, CSM, clustered local lights, sky/IBL, transparency, tonemapping and GUI. Compute, transient aliasing and multi-queue scheduling remain unimplemented. See [RenderGraph.md](RenderGraph.md) and [DeferredRendering.md](DeferredRendering.md). Do not bypass RHI to add native graphics calls in a plugin.
+The graph imports explicit texture mips/buffers, tracks read/write dependencies and supports sampled offscreen targets, multiple color attachments and compute dispatches. Viewer uses the shared HDR scene pipeline: Deferred GBuffer lighting or HDR Forward, CSM, requested HZB/contact shadows, clustered local lights, sky/IBL, transparency, tonemapping and GUI. Transient aliasing and multi-queue scheduling remain unimplemented. See [RenderGraph.md](RenderGraph.md), [ComputePipelines.md](ComputePipelines.md) and [DeferredRendering.md](DeferredRendering.md). Do not bypass RHI to add native graphics calls in a plugin.
 
 ## Reflection, allocation and dependency boundaries
 
@@ -54,7 +54,7 @@ Vendor includes and calls live in each runtime module's `Private/Adapters`, or a
 
 ## Shader contract
 
-Sources use HLSL with column-major matrices and column-vector multiplication. DXC emits shader model 6.0 DXIL or Vulkan 1.1 SPIR-V; SPIRV-Cross supplies resource metadata and MSL source. Space 0 currently maps b-registers directly, t-registers to binding 1000+, s-registers to 2000+, and u-registers to 3000+ to keep Vulkan bindings distinct. The mapping applies independently to register spaces 0–3. Engine reflection supports uniform buffers, Texture2D/TextureCube resources, samplers and read-only structured/raw buffers. Runtime UAV writes and compute stages are not implemented.
+Sources use HLSL with column-major matrices and column-vector multiplication. DXC emits shader model 6.0 DXIL or Vulkan 1.1 SPIR-V; SPIRV-Cross supplies resource metadata and MSL source. Space 0 maps b-registers directly, t-registers to binding 1000+, s-registers to 2000+, and u-registers to 3000+ to keep Vulkan bindings distinct. The mapping applies independently to register spaces 0–3. Engine reflection supports uniform buffers, Texture2D/TextureCube resources, samplers, structured/raw SRVs and UAVs, storage textures and compute thread-group sizes. The D3D12 backend executes both graphics and compute pipelines.
 
 SHA-256 cache keys include a wrapper revision, pinned DXC/SPIRV-Cross identity, entry/stage/format and every file under the configured shader root. Includes must stay inside this root. Source-tree invalidation is deliberately conservative. Cache files carry an integrity digest; corrupt or incomplete files are recompiled. Shader compilation is serialized per compiler instance. MSL output is source generation evidence, not Metal runtime validation.
 

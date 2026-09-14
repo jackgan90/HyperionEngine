@@ -41,6 +41,7 @@ struct FMaterialGpuCache::FImpl
 	using FLayoutEntry = TMaterialGpuEntry<FResourceBindingLayoutDesc, FResourceBindingLayout>;
 	using FSetEntry = TMaterialGpuEntry<FResourceBindingSetDesc, FResourceBindingSet>;
 	using FPipelineEntry = TMaterialGpuEntry<FPipelineDesc, FPipeline>;
+	using FComputeEntry = TMaterialGpuEntry<FComputePipelineDesc, FPipeline>;
 	IRHIDevice& Device;
 	std::thread::id Owner = std::this_thread::get_id();
 	std::map<std::uint64_t, FTextureEntry> Textures;
@@ -49,6 +50,7 @@ struct FMaterialGpuCache::FImpl
 	std::multimap<std::size_t, FLayoutEntry> Layouts;
 	std::multimap<std::size_t, FSetEntry> Sets;
 	std::multimap<std::size_t, FPipelineEntry> Pipelines;
+	std::multimap<std::size_t, FComputeEntry> ComputePipelines;
 	FMaterialGpuStats Stats;
 
 	explicit FImpl(IRHIDevice& InDevice) : Device(InDevice)

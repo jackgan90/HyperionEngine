@@ -37,7 +37,9 @@ void ValidateGraphState(const FGraphTextureImport& InResource, EResourceState In
 	const bool bValid =
 	    Kind == ERenderTargetKind::Backbuffer
 	        ? InState == EResourceState::Present || InState == EResourceState::RenderTarget
-	        : (bColor ? InState == EResourceState::RenderTarget : InState == EResourceState::DepthWrite) ||
+	        : (!InResource.bStorage && !InResource.bSampledOnly &&
+	           (bColor ? InState == EResourceState::RenderTarget : InState == EResourceState::DepthWrite)) ||
+	              (InResource.bStorage && InState == EResourceState::ShaderWrite) ||
 	              (Kind == ERenderTargetKind::Texture && InState == EResourceState::ShaderRead);
 	if (!bValid)
 	{
@@ -47,7 +49,11 @@ void ValidateGraphState(const FGraphTextureImport& InResource, EResourceState In
 
 void ValidateGraphImport(const FGraphTextureImport& InResource)
 {
-	if (InResource.Name.empty() || bool(InResource.Size.Width) != bool(InResource.Size.Height))
+	if (InResource.Name.empty() || bool(InResource.Size.Width) != bool(InResource.Size.Height) ||
+	    InResource.MipLevel >= 32 ||
+	    ((InResource.bStorage || InResource.bSampledOnly || InResource.MipLevel) &&
+	     InResource.Target.Kind != ERenderTargetKind::Texture) ||
+	    (InResource.bStorage && InResource.DepthFormat != ERHIDepthFormat::None))
 	{
 		throw std::invalid_argument("Invalid graph resource name or dimensions");
 	}
@@ -105,6 +111,12 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 		return InResources[InTexture.Index];
 	};
 	const auto Colors = InPass.GetColors();
+	if ((InPass.bCompute &&
+	     (!Colors.empty() || InPass.DepthStencil || InPass.Viewport || InPass.Prepare || !InPass.Batches.empty())) ||
+	    (!InPass.bCompute && (!InPass.ComputeWrites.empty() || InPass.PrepareCompute || !InPass.Dispatches.empty())))
+	{
+		throw std::invalid_argument("Invalid mixed graph compute and graphics declarations");
+	}
 	if (Colors.size() > MaximumColorTargets)
 	{
 		throw std::invalid_argument("Graph exceeds color attachment capacity");
@@ -115,7 +127,8 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 	{
 		const auto& Color = Resource(Attachment.Texture);
 		if ((Color.Target.Kind != ERenderTargetKind::Backbuffer && Color.Target.Kind != ERenderTargetKind::Texture) ||
-		    Color.DepthFormat != ERHIDepthFormat::None || !ColorIndices.insert(Attachment.Texture.Index).second ||
+		    Color.DepthFormat != ERHIDepthFormat::None || Color.bStorage || Color.bSampledOnly || Color.MipLevel ||
+		    !ColorIndices.insert(Attachment.Texture.Index).second ||
 		    !IsFinite(FVec3{Attachment.Clear.X, Attachment.Clear.Y, Attachment.Clear.Z}) ||
 		    !std::isfinite(Attachment.Clear.W) ||
 		    (Attachment.View != EGraphColorView::Linear && Attachment.View != EGraphColorView::Srgb &&
@@ -140,7 +153,8 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 	{
 		const auto& Attachment = *InPass.DepthStencil;
 		const auto& Depth = Resource(Attachment.Texture);
-		if (Depth.DepthFormat == ERHIDepthFormat::None || (!Attachment.Depth && !Attachment.Stencil) ||
+		if (Depth.DepthFormat == ERHIDepthFormat::None || Depth.MipLevel ||
+		    (!Attachment.Depth && !Attachment.Stencil) ||
 		    (Attachment.Stencil && Depth.DepthFormat != ERHIDepthFormat::D32S8) ||
 		    !std::isfinite(Attachment.ClearDepth) || Attachment.ClearDepth < 0 || Attachment.ClearDepth > 1)
 		{
@@ -161,6 +175,13 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 			{
 				throw std::invalid_argument("Graph color/depth dimensions differ");
 			}
+		}
+	}
+	for (const auto& Write : InPass.ComputeWrites)
+	{
+		if (!Resource(Write.Texture).bStorage || !ColorIndices.insert(Write.Texture.Index).second)
+		{
+			throw std::invalid_argument("Compute write requires unique storage mip");
 		}
 	}
 	for (const auto Read : InPass.Reads)

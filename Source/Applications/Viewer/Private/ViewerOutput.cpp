@@ -56,6 +56,14 @@ void FViewerApplication::SaveScreenshot(FImage InImage, const FAppSettings& InSe
 
 void FViewerApplication::VerifyOutputs()
 {
+	if (Options.bExerciseContactShadows && !bContactExerciseCompleted)
+	{
+		throw std::runtime_error("Contact GUI exercise did not verify off/on/off/on with a ready nonempty scene");
+	}
+	if (Options.bExerciseContactShadows && Options.bExercise && !bContactWindowCompleted)
+	{
+		throw std::runtime_error("Contact GUI exercise did not verify active resize/minimize/restore");
+	}
 	Log(ELogLevel::Info, std::string("Depth convention: active=") + (bActiveReversedZ ? "reversed" : "standard") +
 	                         "; configured=" + (Settings.bReversedZ ? "reversed" : "standard"));
 	const auto Progress = FramePipeline->Progress();
@@ -78,6 +86,11 @@ void FViewerApplication::VerifyOutputs()
 		                         " draws=" + std::to_string(SceneStatistics.Draws));
 	}
 	const auto& Lights = PipelineStatistics.LocalLights;
+	const auto& Depth = PipelineStatistics.HierarchicalDepth;
+	Log(ELogLevel::Info,
+	    "Contact shadows: active=" + std::to_string(PipelineStatistics.bContactShadows) +
+	        " HZB consumers=" + std::to_string(Depth.Consumers) + " products=" + std::to_string(Depth.Products) +
+	        " dispatches=" + std::to_string(Depth.Dispatches) + " bytes=" + std::to_string(Depth.Bytes));
 	Log(ELogLevel::Info,
 	    "Local lights: active=" + std::to_string(Lights.bActive) + " points=" + std::to_string(Lights.Points) +
 	        " spots=" + std::to_string(Lights.Spots) + " visible=" +

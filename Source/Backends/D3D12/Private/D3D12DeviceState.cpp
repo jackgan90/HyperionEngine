@@ -76,7 +76,8 @@ void FD3D12DeviceState::CollectUploads()
 }
 
 std::shared_ptr<FD3D12Buffer> FD3D12DeviceState::AllocateBuffer(std::uint64_t InBytes, D3D12_HEAP_TYPE InHeap,
-                                                                D3D12_RESOURCE_STATES InInitial)
+                                                                D3D12_RESOURCE_STATES InInitial,
+                                                                D3D12_RESOURCE_FLAGS InFlags)
 {
 	auto R = std::make_shared<FD3D12Buffer>();
 	R->State = shared_from_this();
@@ -84,6 +85,7 @@ std::shared_ptr<FD3D12Buffer> FD3D12DeviceState::AllocateBuffer(std::uint64_t In
 	D3D12MA::ALLOCATION_DESC A{};
 	A.HeapType = InHeap;
 	auto D = BufferDesc(InBytes);
+	D.Flags = InFlags;
 	Check(Allocator->CreateResource(&A, &D, InInitial, nullptr, &R->Allocation, IID_PPV_ARGS(&R->Resource)),
 	      "Allocate GPU buffer");
 	return R;

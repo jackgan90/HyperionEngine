@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Core/Profiling.h"
+#include "RenderGraphBuffers.h"
 #include "RenderGraphResources.h"
 #include <algorithm>
 #include <atomic>
@@ -21,11 +22,34 @@ bool SameImport(const FGraphTextureImport& InA, const FGraphTextureImport& InB)
 	return InA.Target == InB.Target && InA.Size.Width == InB.Size.Width && InA.Size.Height == InB.Size.Height &&
 	       InA.DepthFormat == InB.DepthFormat && InA.ColorFormat == InB.ColorFormat &&
 	       InA.InitialState == InB.InitialState && InA.bInitialized == InB.bInitialized &&
-	       InA.Identity == InB.Identity && bool(InA.Resolve) == bool(InB.Resolve);
+	       InA.Identity == InB.Identity && bool(InA.Resolve) == bool(InB.Resolve) && InA.MipLevel == InB.MipLevel &&
+	       InA.bStorage == InB.bStorage && InA.bSampledOnly == InB.bSampledOnly;
 }
 
 std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCommands)
 {
+	if (InPass.bCompute)
+	{
+		InCommands.Name = InPass.Name;
+		InCommands.Dispatches = InPass.PrepareCompute ? InPass.PrepareCompute() : std::move(InPass.Dispatches);
+		if (InCommands.Dispatches.empty() &&
+		    (!InPass.ComputeWrites.empty() || std::any_of(InPass.Buffers.begin(), InPass.Buffers.end(),
+		                                                  [](const auto& InAccess)
+		                                                  {
+			                                                  return InAccess.State == EResourceState::ShaderWrite;
+		                                                  })))
+		{
+			throw std::invalid_argument("Empty compute work cannot fulfill a declared write");
+		}
+		for (const auto& Dispatch : InCommands.Dispatches)
+		{
+			if (!Dispatch.Groups[0] || !Dispatch.Groups[1] || !Dispatch.Groups[2])
+			{
+				throw std::invalid_argument("Empty dispatch cannot fulfill a declared write");
+			}
+		}
+		return {std::move(InCommands)};
+	}
 	auto Batches = InPass.Prepare ? InPass.Prepare() : std::move(InPass.Batches);
 	if (Batches.empty())
 	{
@@ -96,6 +120,8 @@ FRenderGraph::FRenderGraph(const FRenderGraph& InOther) : FRenderGraph()
 	Resources = InOther.Resources;
 	Exports = InOther.Exports;
 	Passes = InOther.Passes;
+	Buffers = InOther.Buffers;
+	BufferExports = InOther.BufferExports;
 }
 
 FRenderGraph::FRenderGraph(FRenderGraph&& InOther) : FRenderGraph()
@@ -125,6 +151,8 @@ FRenderGraph& FRenderGraph::operator=(FRenderGraph&& InOther)
 		Resources = std::move(InOther.Resources);
 		Exports = std::move(InOther.Exports);
 		Passes = std::move(InOther.Passes);
+		Buffers = std::move(InOther.Buffers);
+		BufferExports = std::move(InOther.BufferExports);
 		InOther.Reset();
 	}
 	return *this;
@@ -147,6 +175,7 @@ FGraphTexture FRenderGraph::Import(FGraphTextureImport InResource)
 	{
 		const auto& Existing = Resources[Index];
 		const bool bSameIdentity = InResource.Target.Kind == Existing.Target.Kind &&
+		                           InResource.MipLevel == Existing.MipLevel &&
 		                           (InResource.Target.Kind != ERenderTargetKind::Texture ||
 		                            (InResource.Identity ? InResource.Identity == Existing.Identity
 		                                                 : InResource.Target.Texture == Existing.Target.Texture));
@@ -198,6 +227,20 @@ std::size_t FRenderGraph::Add(FGraphicsPass InPass)
 	return Passes.size() - 1;
 }
 
+std::size_t FRenderGraph::AddCompute(FComputePass InPass)
+{
+	FGraphicsPass Pass;
+	Pass.Name = std::move(InPass.Name);
+	Pass.bCompute = true;
+	Pass.Reads = std::move(InPass.Reads);
+	Pass.ComputeWrites = std::move(InPass.Writes);
+	Pass.Buffers = std::move(InPass.Buffers);
+	Pass.After = std::move(InPass.After);
+	Pass.Dispatches = std::move(InPass.Dispatches);
+	Pass.PrepareCompute = std::move(InPass.Prepare);
+	return Add(std::move(Pass));
+}
+
 std::vector<FPassCommands> FRenderGraph::Compile() const
 {
 	CheckMutable();
@@ -223,6 +266,8 @@ void FRenderGraph::Reset()
 	Passes.clear();
 	Resources.clear();
 	Exports.clear();
+	Buffers.clear();
+	BufferExports.clear();
 	Identity = NextGraphIdentity();
 }
 
@@ -251,20 +296,25 @@ std::vector<FPassCommands> FRenderGraph::CompileAndConsume()
 		                      Resource.InitialState,
 		                      {Resource.bInitialized},
 		                      {Resource.bInitialized},
-		                      {Resource.bInitialized}});
+		                      {Resource.bInitialized},
+		                      Resource.MipLevel});
 	}
+	auto BufferValidation = ResolveGraphBuffers(Buffers, false);
 	for (const auto Index : Sequence)
 	{
 		FPassCommands Unused;
 		ApplyGraphPass(Passes[Index], Resources, Validation, Unused);
+		ApplyGraphBuffers(Passes[Index], Buffers, BufferValidation, Unused);
 		FinishGraphAttachments(Passes[Index], Resources, Validation);
 	}
 	auto States = ResolveGraphResources(Resources);
+	auto BufferStates = ResolveGraphBuffers(Buffers, true);
 	std::vector<FPassCommands> Result;
 	for (const auto Index : Sequence)
 	{
 		FPassCommands Commands;
 		ApplyGraphPass(Passes[Index], Resources, States, Commands);
+		ApplyGraphBuffers(Passes[Index], Buffers, BufferStates, Commands);
 		auto Batches = PreparePass(Passes[Index], std::move(Commands));
 		Result.insert(Result.end(), std::make_move_iterator(Batches.begin()), std::make_move_iterator(Batches.end()));
 		FinishGraphAttachments(Passes[Index], Resources, States);
@@ -274,6 +324,10 @@ std::vector<FPassCommands> FRenderGraph::CompileAndConsume()
 	for (const auto& [Texture, State] : Exports)
 	{
 		TransitionGraphResource(States[ResourceIndex(Texture)], State, Final);
+	}
+	for (const auto& [Buffer, State] : BufferExports)
+	{
+		TransitionGraphBuffer(BufferStates[Buffer.Index], State, Final);
 	}
 	if (!Final.Transitions.empty())
 	{

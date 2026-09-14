@@ -53,6 +53,15 @@ struct FColorTextureDesc
 	FVec4 Clear;
 };
 
+// Uninitialized GPU-written storage; declared graph writes establish valid contents.
+struct FStorageTextureDesc
+{
+	std::uint32_t Width = 1;
+	std::uint32_t Height = 1;
+	std::uint32_t MipCount = 1;
+	ERHIColorFormat Format = ERHIColorFormat::R32Float;
+};
+
 struct FTextureMip
 {
 	std::uint32_t Width{};
@@ -105,6 +114,20 @@ struct FPipelineDesc
 	std::uint32_t VertexStride{};
 };
 
+struct FComputePipelineDesc
+{
+	FShaderArtifact Compute;
+	FResourceBindingLayout Layout;
+};
+
+struct FDispatchPacket
+{
+	FPipeline Pipeline;
+	FResourceBindingSet Bindings;
+	std::vector<FConstantBinding> ConstantBindings;
+	std::array<std::uint32_t, 3> Groups{1, 1, 1};
+};
+
 struct FRect
 {
 	std::int32_t Left{};
@@ -133,7 +156,10 @@ enum class EResourceState
 	Present,
 	RenderTarget,
 	DepthWrite,
-	ShaderRead
+	ShaderRead,
+	ShaderWrite,
+	CopySource,
+	CopyDestination
 };
 
 enum class ERenderTargetKind
@@ -216,6 +242,22 @@ struct FResourceTransition
 	FRenderTarget Target;
 	EResourceState Before = EResourceState::ShaderRead;
 	EResourceState After = EResourceState::DepthWrite;
+	std::uint32_t FirstMip{};
+	std::uint32_t MipCount{}; // Zero means all remaining mips.
+	FBuffer Buffer;           // Exclusive with Target; buffers have one subresource.
+	bool bUavBarrier{};
+};
+
+struct FTextureAccess
+{
+	FTextureView View;
+	EResourceState State = EResourceState::ShaderRead;
+};
+
+struct FBufferAccess
+{
+	FReadBufferView View;
+	EResourceState State = EResourceState::ShaderRead;
 };
 
 // Immutable publication: authors relinquish mutable aliases before sharing.
@@ -263,6 +305,10 @@ struct FPassCommands : FDrawCommands
 	std::vector<FResourceTransition> Transitions;
 	// Color is the legacy single-target spelling; it cannot be combined with Colors.
 	std::vector<FColorAttachment> Colors;
+	bool bCompute{};
+	std::vector<FDispatchPacket> Dispatches;
+	std::vector<FTextureAccess> TextureAccesses;
+	std::vector<FBufferAccess> BufferAccesses;
 
 	std::span<const FColorAttachment> GetColors() const
 	{

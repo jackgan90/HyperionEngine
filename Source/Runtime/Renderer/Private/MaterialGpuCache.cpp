@@ -33,6 +33,10 @@ std::size_t SetHash(const FResourceBindingSetDesc& InDescription)
 				    {
 					    return InValue.Buffer.Payload.get();
 				    }
+				    else if constexpr (std::is_same_v<std::decay_t<decltype(InValue)>, FTextureView>)
+				    {
+					    return InValue.Texture.Payload.get();
+				    }
 				    else
 				    {
 					    return InValue.Payload.get();
@@ -268,6 +272,56 @@ FPipeline FMaterialGpuCache::GetPipeline(const FPipelineDesc& InDescription, con
 	const auto Iterator = Impl->Pipelines.emplace(Hash, std::move(Entry));
 	++Impl->Stats.PipelinesCreated;
 	return Iterator->second.Resource;
+}
+
+FPipeline FMaterialGpuCache::GetComputePipeline(const FComputePipelineDesc& InDescription,
+                                                const FMaterialResourceOwners& InOwners)
+{
+	Impl->CheckOwner();
+	const auto Hash = std::hash<std::string>{}(InDescription.Compute.CacheKey);
+	const auto [Begin, End] = Impl->ComputePipelines.equal_range(Hash);
+	for (auto Iterator = Begin; Iterator != End; ++Iterator)
+	{
+		auto& Entry = Iterator->second;
+		if (Entry.Description.Layout == InDescription.Layout &&
+		    Entry.Description.Compute.Bytes == InDescription.Compute.Bytes &&
+		    Entry.Description.Compute.Format == InDescription.Compute.Format &&
+		    Entry.Description.Compute.Stage == InDescription.Compute.Stage &&
+		    Entry.Description.Compute.Reflection == InDescription.Compute.Reflection)
+		{
+			Entry.Ownership.Add(InOwners);
+			++Impl->Stats.PipelineReuses;
+			return Entry.Resource;
+		}
+	}
+	FImpl::FComputeEntry Entry;
+	Entry.Description = InDescription;
+	Entry.Ownership.Add(InOwners);
+	Entry.Resource = Impl->Device.CreateComputePipeline(InDescription);
+	const auto Iterator = Impl->ComputePipelines.emplace(Hash, std::move(Entry));
+	++Impl->Stats.PipelinesCreated;
+	return Iterator->second.Resource;
+}
+
+FResourceBindingSet FMaterialGpuCache::GetSet(FResourceBindingSetDesc InDescription,
+                                              const FMaterialResourceOwners& InOwners)
+{
+	Impl->CheckOwner();
+	return Impl->Set(std::move(InDescription), InOwners);
+}
+
+FResourceBindingValue FMaterialGpuCache::GetResource(const FMaterialValue& InValue,
+                                                     const FMaterialResourceOwners& InOwners)
+{
+	Impl->CheckOwner();
+	return Impl->Resource(InValue, InOwners);
+}
+
+FBuffer FMaterialGpuCache::GetBuffer(std::shared_ptr<const FMaterialReadBufferSource> InSource,
+                                     const FMaterialResourceOwners& InOwners)
+{
+	Impl->CheckOwner();
+	return Impl->Buffer(std::move(InSource), InOwners);
 }
 
 FMaterialResourceBindings FMaterialGpuCache::BindResources(const FCompiledMaterialPass& InPass,

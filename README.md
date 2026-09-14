@@ -6,6 +6,7 @@ Hyperion 是一个 C++20 渲染实验框架，当前运行平台为 Windows x64 
 
 - 共享线性 HDR Forward / Deferred 管线、可配置 GBuffer、Reinhard 色调映射和启动时选择的标准 Z / reversed-Z。
 - 四级方向光阴影、点光与聚光、默认启用的 CPU 聚簇光照，以及天空背景和 SH/GGX 图像光照。
+- 可配置参数与资源的 compute pipeline、按消费者请求生成的 HZB，以及可动态切换的 Deferred contact shadows。
 - 静态 glTF/GLB 离线导入，独立模型、材质、纹理、场景和天空 `.hasset` 资产，异步加载与共享资源管理。
 - 场景层级、相机和光源节点编辑、原生场景保存、BVH 视锥剔除、实例批处理和增量渲染准备。
 - Main / Render / RHI CPU 帧管线、独立 IO 线程和 oneTBB Worker 任务；反射配置、调试 GUI，以及可选 Tracy 和 RenderDoc 集成。

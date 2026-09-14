@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -10,7 +11,8 @@ namespace Hyperion
 enum class EShaderStage
 {
 	Vertex,
-	Pixel
+	Pixel,
+	Compute
 };
 enum class EShaderFormat
 {
@@ -25,7 +27,10 @@ enum class EBindingKind
 	Sampler,
 	StructuredBuffer,
 	RawBuffer,
-	Unsupported
+	Unsupported,
+	StorageTexture,
+	StorageStructuredBuffer,
+	StorageRawBuffer
 };
 
 enum class EShaderScalar
@@ -101,10 +106,11 @@ struct FShaderBinding
 
 struct FShaderReflection
 {
-	std::uint32_t Version = 5;
+	std::uint32_t Version = 6;
 	EShaderFormat LayoutFormat = EShaderFormat::Dxil;
 	std::vector<FShaderSignatureParameter> Inputs;
 	std::vector<FShaderSignatureParameter> Outputs;
+	std::array<std::uint32_t, 3> ThreadGroupSize{};
 	bool operator==(const FShaderReflection&) const = default;
 };
 

@@ -1,6 +1,7 @@
 #include "Hyperion/Materials/MaterialResources.h"
 #include "MaterialIdentity.h"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <limits>
 
@@ -34,7 +35,7 @@ FMaterialTextureSource::FMaterialTextureSource(FMaterialColorTexture InColor, st
       Color(InColor), bColorTarget(true)
 {
 	if (!Version || !Color.Width || !Color.Height || Color.Width > 16384 || Color.Height > 16384 ||
-	    Color.Format > EMaterialColorFormat::Rgba32Float ||
+	    Color.Format > EMaterialColorFormat::R8Unorm ||
 	    !std::all_of(Color.Clear.begin(), Color.Clear.end(),
 	                 [](float InValue)
 	                 {
@@ -48,6 +49,29 @@ FMaterialTextureSource::FMaterialTextureSource(FMaterialColorTexture InColor, st
 const FMaterialColorTexture* FMaterialTextureSource::GetColorTarget() const
 {
 	return bColorTarget ? &Color : nullptr;
+}
+
+FMaterialTextureSource::FMaterialTextureSource(FMaterialStorageTexture InStorage, std::uint64_t InVersion)
+    : Identity(MaterialsPrivate::NextIdentity()), Version(InVersion), Encoding(EMaterialTextureEncoding::Linear),
+      Storage(InStorage), bStorage(true)
+{
+	if (!Version || !Storage.Width || !Storage.Height || Storage.Width > 16384 || Storage.Height > 16384 ||
+	    !Storage.MipCount ||
+	    Storage.MipCount > static_cast<std::uint32_t>(std::bit_width(std::max(Storage.Width, Storage.Height))) ||
+	    Storage.Format > EMaterialColorFormat::R8Unorm)
+	{
+		throw std::invalid_argument("Invalid storage texture description");
+	}
+}
+
+const FMaterialStorageTexture* FMaterialTextureSource::GetStorage() const
+{
+	return bStorage ? &Storage : nullptr;
+}
+
+bool FMaterialTextureSource::IsGpuGenerated() const
+{
+	return IsRenderTarget() || bStorage;
 }
 
 bool FMaterialTextureSource::IsRenderTarget() const
@@ -138,6 +162,25 @@ std::uint64_t FMaterialReadBufferSource::GetIdentity() const
 	return Identity;
 }
 
+FMaterialReadBufferSource::FMaterialReadBufferSource(std::uint64_t InStorageSize, std::uint64_t InVersion)
+    : Identity(MaterialsPrivate::NextIdentity()), Version(InVersion), StorageSize(InStorageSize)
+{
+	if (!Version || !StorageSize || StorageSize % 4)
+	{
+		throw std::invalid_argument("Storage buffer requires aligned size and nonzero version");
+	}
+}
+
+std::uint64_t FMaterialReadBufferSource::GetSize() const
+{
+	return StorageSize ? StorageSize : Bytes.size();
+}
+
+bool FMaterialReadBufferSource::IsStorage() const
+{
+	return StorageSize != 0;
+}
+
 std::uint64_t FMaterialReadBufferSource::GetVersion() const
 {
 	return Version;
@@ -150,7 +193,7 @@ std::span<const std::byte> FMaterialReadBufferSource::GetBytes() const
 
 void FMaterialBufferView::Validate() const
 {
-	if (!Source || Size == 0 || Offset > Source->GetBytes().size() || Size > Source->GetBytes().size() - Offset)
+	if (!Source || Size == 0 || Offset > Source->GetSize() || Size > Source->GetSize() - Offset)
 	{
 		throw std::invalid_argument("Material read buffer view exceeds its owned source");
 	}

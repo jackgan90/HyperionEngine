@@ -3,7 +3,7 @@
 
 namespace Hyperion
 {
-std::shared_ptr<FD3D12PassQueries> CreatePassQueries(FD3D12DeviceState& InDevice)
+std::shared_ptr<FD3D12PassQueries> CreatePassQueries(FD3D12DeviceState& InDevice, UINT InPassCount)
 {
 	UINT64 Frequency{};
 	if (FAILED(InDevice.Queue->GetTimestampFrequency(&Frequency)) || !Frequency)
@@ -13,7 +13,8 @@ std::shared_ptr<FD3D12PassQueries> CreatePassQueries(FD3D12DeviceState& InDevice
 	auto Result = std::make_shared<FD3D12PassQueries>();
 	D3D12_QUERY_HEAP_DESC Desc{};
 	Desc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
-	Desc.Count = ContextCount * 2;
+	Desc.Count = InPassCount * 2;
+	Result->PassCapacity = InPassCount;
 	D3D12_HEAP_PROPERTIES Heap{};
 	Heap.Type = D3D12_HEAP_TYPE_READBACK;
 	const auto Buffer = BufferDesc(Desc.Count * sizeof(UINT64));
@@ -52,8 +53,24 @@ void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedLi
                         std::uint64_t InCaptureEpoch)
 {
 	FGpuFrameTiming Result;
-	std::size_t Expected{};
+	std::vector<FRecordedList> LogicalLists;
 	for (const auto& List : InLists)
+	{
+		const auto* Native = dynamic_cast<FD3D12RecordedList*>(List.Payload.get());
+		if (Native && !Native->Passes.empty())
+		{
+			for (const auto& Pass : Native->Passes)
+			{
+				LogicalLists.push_back({Pass});
+			}
+		}
+		else
+		{
+			LogicalLists.push_back(List);
+		}
+	}
+	std::size_t Expected{};
+	for (const auto& List : LogicalLists)
 	{
 		auto* Native = dynamic_cast<FD3D12RecordedList*>(List.Payload.get());
 		if (!Native || !Native->TimingQueries)

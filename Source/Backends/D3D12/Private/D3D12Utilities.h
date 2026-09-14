@@ -58,12 +58,18 @@ inline D3D12_RESOURCE_STATES Native(EResourceState InState)
 			return D3D12_RESOURCE_STATE_DEPTH_WRITE;
 		case EResourceState::ShaderRead:
 			return D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+		case EResourceState::ShaderWrite:
+			return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+		case EResourceState::CopySource:
+			return D3D12_RESOURCE_STATE_COPY_SOURCE;
+		case EResourceState::CopyDestination:
+			return D3D12_RESOURCE_STATE_COPY_DEST;
 	}
 	throw std::invalid_argument("Unknown resource state");
 }
 
 inline void Transition(ID3D12GraphicsCommandList* InList, ID3D12Resource* InResource, D3D12_RESOURCE_STATES InFrom,
-                       D3D12_RESOURCE_STATES InTo)
+                       D3D12_RESOURCE_STATES InTo, UINT InSubresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
 {
 	if (InFrom == InTo)
 	{
@@ -71,7 +77,7 @@ inline void Transition(ID3D12GraphicsCommandList* InList, ID3D12Resource* InReso
 	}
 	D3D12_RESOURCE_BARRIER B{};
 	B.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	B.Transition = {InResource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, InFrom, InTo};
+	B.Transition = {InResource, InSubresource, InFrom, InTo};
 	InList->ResourceBarrier(1, &B);
 }
 

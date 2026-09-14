@@ -6,12 +6,13 @@ namespace Hyperion
 #if HYP_ENABLE_PROFILING
 namespace
 {
-std::shared_ptr<FD3D12ProfileQueries> CreateQueries(ID3D12Device& InDevice)
+std::shared_ptr<FD3D12ProfileQueries> CreateQueries(ID3D12Device& InDevice, UINT InPassCount)
 {
 	auto Result = std::make_shared<FD3D12ProfileQueries>();
 	D3D12_QUERY_HEAP_DESC Heap{};
 	Heap.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
-	Heap.Count = ContextCount * 2;
+	Heap.Count = InPassCount * 2;
+	Result->PassCapacity = InPassCount;
 	D3D12_HEAP_PROPERTIES Properties{};
 	Properties.Type = D3D12_HEAP_TYPE_READBACK;
 	const auto Buffer = BufferDesc(sizeof(std::uint64_t) * Heap.Count);
@@ -27,7 +28,7 @@ std::shared_ptr<FD3D12ProfileQueries> CreateQueries(ID3D12Device& InDevice)
 } // namespace
 
 void PrepareD3D12Profiling(FD3D12DeviceState& InDevice, FD3D12ProfileState& InState,
-                           std::shared_ptr<FD3D12ProfileQueries>& InQueries)
+                           std::shared_ptr<FD3D12ProfileQueries>& InQueries, UINT InPassCount)
 {
 	InState.bFrameEnabled = false;
 	if (!IsProfilingEnabled(EProfileCategory::Gpu) || !GetProfilingConnection() ||
@@ -57,12 +58,12 @@ void PrepareD3D12Profiling(FD3D12DeviceState& InDevice, FD3D12ProfileState& InSt
 	}
 	InState.PreviousCpu = CpuTime;
 	InState.PreviousGpu = GpuTime;
-	if (!InQueries)
+	if (!InQueries || InQueries->PassCapacity < InPassCount)
 	{
 		// Telemetry allocation failure must not fail a render frame.
 		try
 		{
-			InQueries = CreateQueries(*InDevice.Device.Get());
+			InQueries = CreateQueries(*InDevice.Device.Get(), InPassCount);
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -99,10 +100,20 @@ void EndD3D12Profile(FD3D12RecordedList& InList)
 
 void CollectD3D12Profiles(std::span<const FRecordedList> InLists)
 {
-	static constinit FProfileSite Site{"GraphicsPass", __func__, __FILE__, __LINE__};
+	static constinit FProfileSite Site{"RenderPass", __func__, __FILE__, __LINE__};
 	for (const auto& List : InLists)
 	{
 		auto* Native = dynamic_cast<FD3D12RecordedList*>(List.Payload.get());
+		if (Native && !Native->Passes.empty())
+		{
+			std::vector<FRecordedList> Passes;
+			for (const auto& Pass : Native->Passes)
+			{
+				Passes.push_back({Pass});
+			}
+			CollectD3D12Profiles(Passes);
+			continue;
+		}
 		if (!Native || !Native->ProfileQueries)
 		{
 			continue;

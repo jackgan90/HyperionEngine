@@ -8,6 +8,10 @@ Texture2D<float4> GBuffer1 : register(t1);
 Texture2D<float4> GBuffer2 : register(t2);
 Texture2D<float4> GBuffer3 : register(t3);
 Texture2D<float> SceneDepth : register(t4);
+#if HYP_CONTACT_SHADOWS
+Texture2D<float> ContactVisibility : register(t9);
+SamplerState ContactSampler : register(s6);
+#endif
 
 cbuffer DeferredLightV1 : register(b0)
 {
@@ -66,7 +70,14 @@ float4 PSMain(float4 InPosition : SV_Position) : SV_Target0
 #else
 	float3 Dx = ReceiverDerivative(Pixel, int2(1, 0), World, Material.GeometricNormal);
 	float3 Dy = ReceiverDerivative(Pixel, int2(0, 1), World, Material.GeometricNormal);
-	float3 Color = EvaluateLighting(Material, World, Eye, LightDirection, LightColor, Ambient, Dx, Dy);
+	float Contact = 1;
+#if HYP_CONTACT_SHADOWS
+	uint Width;
+	uint Height;
+	ContactVisibility.GetDimensions(Width, Height);
+	Contact = ContactVisibility.SampleLevel(ContactSampler, InPosition.xy / float2(Width, Height), 0);
+#endif
+	float3 Color = EvaluateLighting(Material, World, Eye, LightDirection, LightColor, Ambient, Dx, Dy, Contact);
 #endif
 #if HYP_CLUSTERED
 	Color += EvaluateClusteredLighting(Material, World, Eye, InPosition.xy);

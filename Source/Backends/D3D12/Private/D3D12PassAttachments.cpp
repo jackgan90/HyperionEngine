@@ -84,13 +84,35 @@ void ValidateTransitions(const FD3D12DeviceState& InState, const FPassCommands& 
 {
 	for (const auto& Barrier : InCommands.Transitions)
 	{
+		if (Barrier.Buffer)
+		{
+			const auto& Buffer = NativeResource<FD3D12Buffer>(Barrier.Buffer.Payload, &InState);
+			const auto Valid = [](EResourceState InValue)
+			{
+				return InValue == EResourceState::ShaderRead || InValue == EResourceState::ShaderWrite ||
+				       InValue == EResourceState::CopySource || InValue == EResourceState::CopyDestination;
+			};
+			if (Barrier.Target.Kind != ERenderTargetKind::None || Barrier.Target.Texture || Barrier.FirstMip ||
+			    Barrier.MipCount > 1 || (Buffer.Usage & 96U) == 0 || !Valid(Barrier.Before) || !Valid(Barrier.After) ||
+			    (Barrier.bUavBarrier &&
+			     (Barrier.Before != EResourceState::ShaderWrite || Barrier.After != EResourceState::ShaderWrite)))
+			{
+				throw std::invalid_argument("Invalid storage buffer transition");
+			}
+			continue;
+		}
 		ResolveTarget(Barrier.Target, InState, InFrame);
 		const auto* Texture = Barrier.Target.Kind == ERenderTargetKind::Texture
 		                          ? &NativeResource<FD3D12Texture>(Barrier.Target.Texture.Payload, &InState)
 		                          : nullptr;
-		if (Texture && !Texture->DepthViews && !Texture->ColorViews)
+		if ((Texture && (Barrier.FirstMip >= Texture->GetInfo().MipCount ||
+		                 Barrier.MipCount > Texture->GetInfo().MipCount - Barrier.FirstMip)) ||
+		    (!Texture && (Barrier.FirstMip || Barrier.MipCount > 1)) ||
+		    (Barrier.bUavBarrier &&
+		     (!Texture || !Texture->GetInfo().bStorage || Barrier.Before != EResourceState::ShaderWrite ||
+		      Barrier.After != EResourceState::ShaderWrite)))
 		{
-			throw std::invalid_argument("Only sampled render target transitions are supported");
+			throw std::invalid_argument("Invalid transition mip range or UAV barrier");
 		}
 		const auto Valid = [&](EResourceState InValue)
 		{
@@ -98,9 +120,12 @@ void ValidateTransitions(const FD3D12DeviceState& InState, const FPassCommands& 
 			{
 				return InValue == EResourceState::Present || InValue == EResourceState::RenderTarget;
 			}
-			return (Texture && Texture->ColorViews ? InValue == EResourceState::RenderTarget
-			                                       : InValue == EResourceState::DepthWrite) ||
-			       (Texture && InValue == EResourceState::ShaderRead);
+			return (Texture && Texture->ColorViews && InValue == EResourceState::RenderTarget) ||
+			       ((Texture ? bool(Texture->DepthViews) : Barrier.Target.Kind == ERenderTargetKind::FrameDepth) &&
+			        InValue == EResourceState::DepthWrite) ||
+			       (Texture && (InValue == EResourceState::ShaderRead || InValue == EResourceState::CopySource ||
+			                    InValue == EResourceState::CopyDestination ||
+			                    (Texture->GetInfo().bStorage && InValue == EResourceState::ShaderWrite)));
 		};
 		if (!Valid(Barrier.Before) || !Valid(Barrier.After))
 		{
@@ -209,6 +234,12 @@ FSize ValidatePassAttachments(const FD3D12DeviceState& InState, const FPassComma
 {
 	auto Size = InFrame.Size;
 	const auto Colors = InCommands.GetColors();
+	if ((InCommands.bCompute &&
+	     (!Colors.empty() || InCommands.DepthStencil || !InCommands.GetDraws().empty() || InCommands.Viewport)) ||
+	    (!InCommands.bCompute && !InCommands.Dispatches.empty()))
+	{
+		throw std::invalid_argument("Cannot mix graphics and compute commands in a pass");
+	}
 	if (Colors.size() > InState.Capabilities.MaxColorTargets)
 	{
 		throw std::invalid_argument("Pass exceeds backend MRT capacity");
@@ -247,7 +278,7 @@ FSize ValidatePassAttachments(const FD3D12DeviceState& InState, const FPassComma
 	for (const auto& Texture : InCommands.SampledTextures)
 	{
 		const auto& NativeTexture = NativeResource<FD3D12Texture>(Texture.Payload, &InState);
-		if ((!NativeTexture.DepthViews && !NativeTexture.ColorViews) || Written.contains(NativeTexture.Resource.Get()))
+		if (Written.contains(NativeTexture.Resource.Get()))
 		{
 			throw std::invalid_argument("Invalid or simultaneously writable sampled target");
 		}
@@ -265,8 +296,31 @@ void RecordPassBegin(ID3D12GraphicsCommandList& InList, const FD3D12DeviceState&
 {
 	for (const auto& Barrier : InCommands.Transitions)
 	{
-		Transition(&InList, ResolveTarget(Barrier.Target, InState, InFrame), Native(Barrier.Before),
-		           Native(Barrier.After));
+		auto* Resource = Barrier.Buffer ? NativeResource<FD3D12Buffer>(Barrier.Buffer.Payload, &InState).Resource.Get()
+		                                : ResolveTarget(Barrier.Target, InState, InFrame);
+		if (Barrier.bUavBarrier)
+		{
+			D3D12_RESOURCE_BARRIER NativeBarrier{};
+			NativeBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			NativeBarrier.UAV.pResource = Resource;
+			InList.ResourceBarrier(1, &NativeBarrier);
+		}
+		else if (Barrier.FirstMip == 0 && Barrier.MipCount == 0)
+		{
+			Transition(&InList, Resource, Native(Barrier.Before), Native(Barrier.After));
+		}
+		else
+		{
+			const auto Count = Barrier.MipCount ? Barrier.MipCount : Resource->GetDesc().MipLevels - Barrier.FirstMip;
+			for (UINT Mip = Barrier.FirstMip; Mip < Barrier.FirstMip + Count; ++Mip)
+			{
+				Transition(&InList, Resource, Native(Barrier.Before), Native(Barrier.After), Mip);
+			}
+		}
+	}
+	if (InCommands.bCompute)
+	{
+		return;
 	}
 	DiscardAttachments(InList, InState, InCommands, InFrame, InSize, false);
 	const auto Colors = InCommands.GetColors();

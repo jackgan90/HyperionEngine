@@ -36,6 +36,14 @@ struct FRenderDepthTarget
 };
 
 // Rendering outputs are separate from camera/culling data and reusable across graph instances.
+struct FRenderBufferRead
+{
+	FMaterialBufferView View;
+	std::shared_ptr<const void> Lifetime;
+	bool bInitialized{};
+	bool operator==(const FRenderBufferRead&) const = default;
+};
+
 struct FRenderPassTargets
 {
 	std::string Name;
@@ -43,6 +51,7 @@ struct FRenderPassTargets
 	std::optional<FRenderDepthTarget> DepthStencil;
 	std::vector<FRenderTargetSource> Reads;
 	std::vector<FRenderColorTarget> Colors;
+	std::vector<FRenderBufferRead> BufferReads;
 	std::span<const FRenderColorTarget> GetColors() const;
 	FGraphicsTarget GraphicsTarget(bool bInSrgb = false) const;
 	static FRenderPassTargets Frame(ERHIDepthFormat InDepth, std::optional<FVec4> InClear = {},

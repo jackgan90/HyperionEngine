@@ -45,6 +45,7 @@ struct FOptions
 	bool bHidden{};
 	bool bExercise{};
 	bool bExerciseDepthConfig{};
+	bool bExerciseContactShadows{};
 	bool bVerifyClear{};
 	bool bVerifyTriangle{};
 	bool bVerifyUi{};

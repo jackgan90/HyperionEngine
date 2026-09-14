@@ -40,6 +40,19 @@ void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings, const FDebugMet
 		InGui.TextWrapped("Depth change pending: save experiment and restart to apply.");
 	}
 	InGui.TextWrapped("GBuffer: 0 lit, 1 base, 2 normal, 3 rough/metal/AO, 4 emissive, 5 depth, 6 surface normal");
+	constexpr std::array<std::string_view, 6> ContactIds{"contact_shadow_length", "contact_shadow_thickness",
+	                                                     "contact_shadow_bias",   "contact_shadow_steps",
+	                                                     "contact_shadow_debug",  "hierarchical_depth_mip"};
+	InGui.EditProperties(SettingsType(), &InSettings, ContactIds);
+	InGui.TextWrapped("Contact debug: 0 lit, 1 visibility mask, 2 HZB mip (requests depth even with contact off)");
+	InGui.Text(InMetrics.bContactShadows ? "Contact shadows: active" : "Contact shadows: inactive");
+	InGui.Text("HZB: consumers=" + std::to_string(InMetrics.HierarchicalDepthConsumers) +
+	           " dispatches=" + std::to_string(InMetrics.HierarchicalDepthDispatches) +
+	           " memory=" + Fixed(InMetrics.HierarchicalDepthBytes / 1048576.0) + " MiB");
+	if (!bDeferred)
+	{
+		InGui.TextWrapped("Contact shadows require Deferred GBuffer depth; Forward has no depth prepass.");
+	}
 	InGui.Separator();
 }
 } // namespace
@@ -90,6 +103,8 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 	{
 		InGui.Text("H Y P E R I O N");
 		InGui.Text("Rendering lab  /  " + InSettings.RHIBackend);
+		InGui.Checkbox("Contact shadows", InSettings.bContactShadows);
+		Actions.ContactShadowBounds = InGui.LastItemBounds();
 		const auto Progress = InMetrics.FramePipeline;
 		InGui.Text("CPU sent " + std::to_string(Progress.Submitted) + " | R done " +
 		           std::to_string(Progress.RenderCompleted) + " | RHI " + std::to_string(Progress.RhiCompleted));

@@ -11,7 +11,7 @@ namespace Hyperion
 namespace
 {
 FGraphTexture ImportTarget(FRenderGraph& InGraph, const FRenderResourcePreparation& InPreparation,
-                           const FRenderTargetSource& InSource, ERHIDepthFormat InFormat)
+                           const FRenderTargetSource& InSource, ERHIDepthFormat InFormat, std::uint32_t InMip = 0)
 {
 	if (InSource.Kind != ERenderTargetKind::Texture && (InSource.Texture || InSource.Lifetime))
 	{
@@ -27,13 +27,37 @@ FGraphTexture ImportTarget(FRenderGraph& InGraph, const FRenderResourcePreparati
 	{
 		return InGraph.ImportFrameDepth(InFormat);
 	}
-	if (InSource.Kind != ERenderTargetKind::Texture || !InSource.Texture || !InSource.Texture->IsRenderTarget() ||
+	if (InSource.Kind != ERenderTargetKind::Texture || !InSource.Texture || !InSource.Texture->IsGpuGenerated() ||
 	    !InSource.Lifetime)
 	{
 		throw std::invalid_argument("Render pass requires a live explicit target source");
 	}
 	const auto* Depth = InSource.Texture->GetDepthTarget();
 	const auto* Color = InSource.Texture->GetColorTarget();
+	if (const auto* Storage = InSource.Texture->GetStorage())
+	{
+		if (InFormat != ERHIDepthFormat::None || InMip >= Storage->MipCount)
+		{
+			throw std::invalid_argument("Invalid storage texture read");
+		}
+		const auto Texture =
+		    InGraph.Import({"Storage " + std::to_string(InSource.Texture->GetIdentity()),
+		                    {ERenderTargetKind::Texture},
+		                    {std::max(1U, Storage->Width >> InMip), std::max(1U, Storage->Height >> InMip)},
+		                    ERHIDepthFormat::None,
+		                    EResourceState::ShaderRead,
+		                    InSource.bInitialized,
+		                    InSource.Texture,
+		                    [InPreparation, InSource]
+		                    {
+			                    return InPreparation.ResolveTexture(InSource.Texture, InSource.Lifetime);
+		                    },
+		                    GetRenderColorFormat(Storage->Format),
+		                    InMip,
+		                    true});
+		InGraph.Export(Texture, EResourceState::ShaderRead);
+		return Texture;
+	}
 	if ((Depth && InFormat != ERHIDepthFormat::D32) || (Color && InFormat != ERHIDepthFormat::None))
 	{
 		throw std::invalid_argument("Render target source aspect differs from declaration");
@@ -57,9 +81,9 @@ FGraphTexture ImportTarget(FRenderGraph& InGraph, const FRenderResourcePreparati
 void AddSampledValue(const FMaterialValue& InValue, const std::shared_ptr<const void>& InOwner,
                      std::set<const FMaterialTextureSource*>& InSeen, std::vector<FRenderTargetSource>& OutReads)
 {
-	if (InValue.Texture && InValue.Texture->IsRenderTarget() && InSeen.insert(InValue.Texture.get()).second)
+	if (InValue.Texture && InValue.Texture->IsGpuGenerated() && InSeen.insert(InValue.Texture.get()).second)
 	{
-		OutReads.push_back({ERenderTargetKind::Texture, InValue.Texture, InOwner});
+		OutReads.push_back({ERenderTargetKind::Texture, InValue.Texture, InOwner, !InValue.Texture->GetStorage()});
 	}
 	for (const auto& Element : InValue.Elements)
 	{
@@ -98,7 +122,7 @@ std::vector<FRenderTargetSource> CollectMaterialReads(const FRenderSceneSnapshot
 				continue;
 			}
 			const auto& Value = Item.GetMaterialValue(*Binding.ResourceParameter);
-			if (Value && ((Value->Texture && Value->Texture->IsRenderTarget()) ||
+			if (Value && ((Value->Texture && Value->Texture->IsGpuGenerated()) ||
 			              (!Value->Elements.empty() && SeenArrays.insert(Value.get()).second)))
 			{
 				AddSampledValue(*Value, Item.State.Surface, Seen, Reads);
@@ -181,6 +205,18 @@ FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph, con
 	}
 	for (const auto& Read : InReads)
 	{
+		if (Read.Texture && Read.Texture->GetStorage())
+		{
+			for (std::uint32_t Mip = 0; Mip < Read.Texture->GetStorage()->MipCount; ++Mip)
+			{
+				const auto Texture = ImportTarget(InGraph, *this, Read, ERHIDepthFormat::None, Mip);
+				if (std::find(Pass.Reads.begin(), Pass.Reads.end(), Texture) == Pass.Reads.end())
+				{
+					Pass.Reads.push_back(Texture);
+				}
+			}
+			continue;
+		}
 		const auto Texture =
 		    ImportTarget(InGraph, *this, Read,
 		                 Read.Texture && Read.Texture->GetDepthTarget() ? ERHIDepthFormat::D32 : ERHIDepthFormat::None);
@@ -188,6 +224,39 @@ FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph, con
 		{
 			Pass.Reads.push_back(Texture);
 		}
+	}
+	for (const auto& Read : Targets.BufferReads)
+	{
+		Read.View.Validate();
+		if (!Read.Lifetime)
+		{
+			throw std::invalid_argument("Graphics buffer reads require a live resource scope");
+		}
+		const auto Source = Read.View.Source;
+		const auto Buffer = InGraph.Import(
+		    FGraphBufferImport{"Graphics buffer " + std::to_string(Source->GetIdentity()),
+		                       {},
+		                       Source->GetSize(),
+		                       BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead) |
+		                           (Source->IsStorage() ? BufferUsage(ERHIBufferUsage::StructuredWrite) |
+		                                                      BufferUsage(ERHIBufferUsage::RawWrite)
+		                                                : 0U),
+		                       Source->IsStorage() ? Read.bInitialized : true,
+		                       EResourceState::ShaderRead,
+		                       Source,
+		                       [Preparation = *this, Source, Lifetime = Read.Lifetime]
+		                       {
+			                       return Preparation.ResolveBuffer(Source, Lifetime);
+		                       }});
+		if (std::none_of(Pass.Buffers.begin(), Pass.Buffers.end(),
+		                 [&](const auto& InAccess)
+		                 {
+			                 return InAccess.Buffer == Buffer;
+		                 }))
+		{
+			Pass.Buffers.push_back({Buffer, EResourceState::ShaderRead});
+		}
+		InGraph.Export(Buffer, EResourceState::ShaderRead);
 	}
 	return Pass;
 }

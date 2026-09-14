@@ -168,12 +168,13 @@ FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Re
 	Result.Stage = InLogical.Stage;
 	if (InKind == EBindingKind::StructuredBuffer && Result.Binding >= 3000)
 	{
-		InKind = EBindingKind::Unsupported;
+		InKind = EBindingKind::StorageStructuredBuffer;
 		Result.Kind = InKind;
 	}
+	const bool bStorage = InKind == EBindingKind::StorageTexture || InKind == EBindingKind::StorageStructuredBuffer;
 	const std::uint32_t Shift = InKind == EBindingKind::UniformBuffer ? 0
 	                            : InKind == EBindingKind::Sampler     ? 2000
-	                            : InKind == EBindingKind::Unsupported ? 3000
+	                            : bStorage                            ? 3000
 	                                                                  : 1000;
 	if (Result.Binding < Shift || Result.Binding >= Shift + ShaderRegistersPerKind)
 	{
@@ -185,8 +186,11 @@ FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Re
 	const FShaderBinding* Logical = nullptr;
 	for (const FShaderBinding& Binding : InLogical.Bindings)
 	{
-		const bool bSameKind = Binding.Kind == InKind ||
-		                       (InKind == EBindingKind::StructuredBuffer && Binding.Kind == EBindingKind::RawBuffer);
+		const bool bSameKind =
+		    Binding.Kind == InKind ||
+		    (InKind == EBindingKind::StructuredBuffer && Binding.Kind == EBindingKind::RawBuffer) ||
+		    (InKind == EBindingKind::StorageStructuredBuffer &&
+		     (Binding.Kind == EBindingKind::StorageRawBuffer || Binding.Kind == EBindingKind::Unsupported));
 		if (Binding.Space == Result.Space && Binding.Register == Result.Register && bSameKind)
 		{
 			Logical = &Binding;
@@ -216,7 +220,7 @@ FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Re
 			                                            });
 		}
 	}
-	else if (InKind == EBindingKind::Texture)
+	else if (InKind == EBindingKind::Texture || InKind == EBindingKind::StorageTexture)
 	{
 		Result.ResourceScalar = Scalar(InCross.get_type(Type.image.type));
 		Result.Dimension = Type.image.dim == spv::Dim2D && !Type.image.arrayed && !Type.image.ms
@@ -225,10 +229,10 @@ FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Re
 		                       ? EShaderResourceDimension::TextureCube
 		                       : EShaderResourceDimension::Unsupported;
 	}
-	else if (InKind == EBindingKind::StructuredBuffer)
+	else if (InKind == EBindingKind::StructuredBuffer || InKind == EBindingKind::StorageStructuredBuffer)
 	{
 		Result.Dimension = EShaderResourceDimension::Buffer;
-		if (Result.Kind == EBindingKind::StructuredBuffer)
+		if (Result.Kind == EBindingKind::StructuredBuffer || Result.Kind == EBindingKind::StorageStructuredBuffer)
 		{
 			Result.StructureByteStride =
 			    InCross.type_struct_member_array_stride(InCross.get_type(InResource.base_type_id), 0);
@@ -292,8 +296,20 @@ void ReflectSpirv(FShaderArtifact& InArtifact, std::string& InPayload, const FSh
 	Reflect(Resources.separate_images, EBindingKind::Texture);
 	Reflect(Resources.separate_samplers, EBindingKind::Sampler);
 	Reflect(Resources.storage_buffers, EBindingKind::StructuredBuffer);
-	Reflect(Resources.storage_images, EBindingKind::Unsupported);
+	Reflect(Resources.storage_images, EBindingKind::StorageTexture);
 	InArtifact.Reflection.LayoutFormat = EShaderFormat::Spirv;
+	if (InArtifact.Stage == EShaderStage::Compute)
+	{
+		for (std::uint32_t Axis = 0; Axis < 3; ++Axis)
+		{
+			InArtifact.Reflection.ThreadGroupSize[Axis] =
+			    Cross.get_execution_mode_argument(spv::ExecutionModeLocalSize, Axis);
+		}
+		if (InArtifact.Reflection.ThreadGroupSize != InLogical.Reflection.ThreadGroupSize)
+		{
+			throw std::runtime_error("Compute thread group differs between shader targets");
+		}
+	}
 	InArtifact.Reflection.Inputs = ReadSignature(Cross, Resources.stage_inputs);
 	InArtifact.Reflection.Outputs = ReadSignature(Cross, Resources.stage_outputs);
 	for (const FShaderSignatureParameter& Parameter : InLogical.Reflection.Inputs)
