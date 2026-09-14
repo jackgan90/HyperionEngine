@@ -7,7 +7,7 @@
     "title": "Hyperion | Sponza",
     "width": 1440,
     "height": 728,
-    "scene_source": "out/content/Scenes/Sponza.hasset",
+    "scene_source": "/Game/Scenes/Sponza.hasset",
     "plugins": [
       "scene-viewer",
       "debug-ui"

@@ -17,7 +17,7 @@ namespace Hyperion
 {
 struct FViewerServices
 {
-	explicit FViewerServices(const FAppSettings& InSettings);
+	explicit FViewerServices(const FAppSettings& InSettings, std::shared_ptr<IFileSystem> InFiles);
 	~FViewerServices();
 	void DrainWrites() noexcept;
 	FTaskSystem Tasks;

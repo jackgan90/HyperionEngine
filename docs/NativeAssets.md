@@ -16,9 +16,9 @@
 ./out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
 ./out/build/debug/bin/hyperion_viewer.exe --config experiments/Shadows.json
 
-./out/build/debug/bin/hyperion_asset_tool.exe import assets/Models/Showcase.gltf out/my-content/model.hasset
-./out/build/debug/bin/hyperion_asset_tool.exe import assets/Models/Showcase.glb out/my-content/scene.hasset --scene
-./out/build/debug/bin/hyperion_asset_tool.exe import assets/Scenes/Showcase.json out/my-content/showcase.hasset
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.gltf out/my-content/model.hasset
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.glb out/my-content/scene.hasset --scene
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Scenes/Showcase.json out/my-content/showcase.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe inspect out/my-content/showcase.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe validate out/my-content/showcase.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe catalog out/my-content/catalog.hasset out/my-content/showcase.hasset
@@ -27,7 +27,7 @@
 
 源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建真实 camera/directionalLight/environmentLight 节点及选择；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
-cmake/NativeContent.cmake 在构建 Viewer 时检查并生成 out/content/Models/Showcase.hasset、out/content/Scenes/Showcase.hasset 、Shadows.hasset 和 SharedAssets.hasset，以及三个 Skies/Cloudy.hasset、Dusk.hasset、Clear.hasset 和 Catalog.hasset。其中 Showcase 和 Shadows 分别保留 79 和 10 个实例。Scene Viewer 默认另行导入 `assets/Scenes/Sponza.json` 到 `out/content/Scenes/Sponza.hasset` 并加入 catalog；这是一个完整 Sponza 模型实例，源模型与全部纹理已随仓库保存。迁移和能力边界见 [SponzaMigration.md](SponzaMigration.md)。源码 assets 不被改写。CTest 先运行 model_fixtures，再调用 tools/BuildNativeFixtures.py 中的 C++ importer 命令生成 out/fixtures/native；Python 不实现二进制资产协议。
+普通 Viewer 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 ## 模块与线程
 
@@ -50,13 +50,13 @@ Main 仅发起请求、轮询、编辑及捕获快照；Worker 执行反射、�
 
 ~~~cpp
 FTaskSystem Tasks(3, 2);
-FIOService IO(Tasks);
+FIOService IO(Tasks, LoadContentMounts("ContentMounts.json"));
 FAssetService Assets(IO);
 RegisterSceneAssetTypes(Assets.Types());
 
 // 无类型入口根据资产头查找注册描述符。
-auto Request = Assets.LoadAsync("out/content/Scenes/Showcase.hasset");
-auto GraphRequest = Assets.LoadGraphAsync("out/content/Scenes/Showcase.hasset");
+auto Request = Assets.LoadAsync("/Game/Scenes/Showcase.hasset");
+auto GraphRequest = Assets.LoadGraphAsync("/Game/Scenes/Showcase.hasset");
 
 // 显式等待用于工具或 Worker；帧循环使用 Ready()/GetReady()。
 auto Loaded = Request.Get(Tasks);
@@ -65,8 +65,8 @@ auto Graph = GraphRequest.Get(Tasks);      // Root、Assets、逐依赖 Failures
 auto Save = Assets.SaveAsync("out/saved-scene.hasset", Scene);
 Save.Get(Tasks);
 
-auto Catalog = Assets.LoadAsync<FAssetCatalog>("out/content/Catalog.hasset").Get(Tasks);
-Assets.SetCatalog(*Catalog, "out/content");
+auto Catalog = Assets.LoadAsync<FAssetCatalog>("/Game/Catalog.hasset").Get(Tasks);
+Assets.AddCatalog(*Catalog, "/Game");
 auto ById = Assets.LoadByIdAsync(Catalog->Assets.front().Id);
 
 Assets.Drain();
@@ -87,13 +87,13 @@ Tasks.Shutdown();
 
 一个消费者的 Cancel 不取消共享生产者；服务析构取消并 drain 自有工作。显式 Drain 关闭外部入口，允许已接受的依赖图继续派生内部读取，并等待所有生产者和清理任务结束；各请求的错误仍由 Get/GetReady 观察。调用方必须先关闭消费者，再关闭 Assets/AssetImport，最后销毁 IO/Tasks。已进入系统的写入可能成功，取消无法撤销已完成替换。
 
-路径使用绝对路径加 lexical normalization；当前不折叠符号链接或 Windows 大小写别名。引用字符串按 UTF-8 转换。跨磁盘另存时若无法形成相对路径会使用绝对路径；要移动内容目录，应把根资产、.assets 和 catalog 一起移动。
+挂载资产使用规范化 UTF-8 包路径，缓存、依赖图及写入顺序共享该身份。新发布内容和场景另存保留 `/Engine`、`/Game` 引用；旧相对引用仍可读取。原始导入文件和隔离工具输出可以显式使用本地路径。具体大小写、链接和只读契约见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 ## 增量导入与发布
 
 每个 importer 有稳定 ID 和版本。FAssetImportContext::Read 跟踪根文件、外部 buffer、图片等实际读取内容的 SHA-256。发布头保存 importer/version、选项、相对来源路径与指纹，以及来源到输出身份的映射。增量检查重新读取所有来源，验证原生依赖图完整性、当前记录版本和导入设置；内容、设置、importer 版本或模式变化都会重建。相同结果不重写该原生文件。
 
-同一批次按规范化来源路径和类型去重。依赖先写为 .assets/<AssetId>-<Revision>.hasset；依赖引用相对于各自目录。原生来源的每条引用都会先核对源文件的 ID、类型和固定 Revision，包括转换或发布结果复用；之后才允许重写为迁移后的输出引用。跨盘来源不能形成相对路径时，来源指纹路径与输出身份键均保留绝对路径。来源在发布根文件前再次核对，最后才原子替换根文件。转换失败或依赖写入失败不会改变旧根；旧根仍引用旧的不可变依赖。根身份和对应来源的依赖身份在重导入间保持稳定，revision 是内容指纹。
+同一批次按规范化来源路径和类型去重。依赖先写为 `.assets/<AssetId>-<Revision>.hasset`；挂载发布使用完整包路径，隔离本地输出仍可使用相对引用。已有原生包引用先核对完整依赖图和 ID、类型、固定 Revision，然后保留为外部引用。共享发布通过 `--source-root`、`--source-id` 将来源指纹及身份键改为逻辑来源路径；迁移源缓存不会改变身份。来源在发布根文件前再次核对，最后原子替换根文件；转换或依赖写入失败不会改变旧根。根身份和对应来源的依赖身份在重导入间保持稳定，revision 是内容指纹。未指定逻辑来源身份的独立本地导入仍遵循本地来源路径语义。
 
 同一导入服务内，同一共享库按顺序发布；本地文件系统在 IO 域取得独占 Windows 文件 lease，其他活跃发布者会失败并返回明确错误。lease 文件关闭或进程退出时由系统删除。替代文件系统可覆盖 AcquireWriteLease；其默认实现仅提供当前进程、同一存储实例内的互斥。
 
@@ -142,7 +142,7 @@ HYPA v2 以 little endian 写入 24 字节前缀：magic、u32 版本、u64 meta
 Scene 面板的 Save edited scene 异步写出当前目录下 <原名>.edited.hasset，并显示保存中、成功或失败状态。重复保存同一文件保留身份。CLI 可指定路径：
 
 ~~~powershell
-./out/build/debug/bin/hyperion_viewer.exe --scene out/content/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
+./out/build/debug/bin/hyperion_viewer.exe --scene /Game/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
 ~~~
 
 FSceneInstance::Snapshot(destination) 保留每个实例的稳定 ID、名称、完整仿射矩阵、可见性和基础材质覆盖；新增实例获得独立 ID。它只保存仍在使用的模型引用，并按另存目标重新定位路径。相机、方向光、环境光、点光和聚光的节点 payload、层级及选择一起由 Scene 快照保存；相机镜头包含 FOV、near/far 和 focus distance，插件不再补写独立 eye/target。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
@@ -154,8 +154,8 @@ FSceneInstance::Snapshot(destination) 保留每个实例的稳定 ID、名称、
 AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、written_bytes 和 peak_resident_bytes。以下命令分别测量源 glTF 转换和原生 CPU 图加载，均包含校验：
 
 ~~~powershell
-./out/build/release/bin/hyperion_asset_tool.exe measure-source assets/Models/Showcase.gltf
-./out/build/release/bin/hyperion_asset_tool.exe validate out/content/Models/Showcase.hasset
+./out/build/release/bin/hyperion_asset_tool.exe measure-source ../HyperionAssets/.cache/Sources/Models/Showcase.gltf
+./out/build/release/bin/hyperion_asset_tool.exe validate /Game/Models/Showcase.hasset
 ~~~
 
 可运行 tools/MeasureAssets.py --tool <工具路径> --source <源模型路径> --output <结果目录> 自动进行每模式 2 次预热、7 次独立进程测量，保存原始日志和 Summary.json。

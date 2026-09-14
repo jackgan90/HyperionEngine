@@ -1,6 +1,8 @@
 # Sponza 示例场景
 
-SceneViewer 的 `experiments/Scene.json` 打开仓库内的 Khronos Sponza 示例。场景包含一个模型节点、一台相机、主方向光、三盏点光和 Cloudy 天空环境；这些相机和光源由场景清单定义。
+当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+
+SceneViewer 的 `experiments/Scene.json` 打开 HyperionAssets 中的 Khronos Sponza 示例。场景包含一个模型节点、一台相机、主方向光、三盏点光和 Cloudy 天空环境；这些相机和光源由场景清单定义。
 
 ## 运行与操作
 
@@ -9,21 +11,21 @@ SceneViewer 的 `experiments/Scene.json` 打开仓库内的 Khronos Sponza 示�
 ./out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
 ```
 
-默认窗口为 1440×728，曝光为 2.5，调试面板显示；Tab 切换面板。WASDQE 连续移动、右键环绕、滚轮推拉、Home 取景。相机不会自动旋转；未保存的编辑在重启后恢复为源场景状态。其他场景可通过 `--scene out/content/Scenes/Showcase.hasset` 选择。Viewer 不带参数时仍打开 Triangle 实验。
+默认窗口为 1440×728，曝光为 2.5，调试面板显示；Tab 切换面板。WASDQE 连续移动、右键环绕、滚轮推拉、Home 取景。相机不会自动旋转；未保存的编辑在重启后恢复为源场景状态。其他场景可通过 `--scene /Game/Scenes/Showcase.hasset` 选择。Viewer 不带参数时仍打开 Triangle 实验。
 
 | 文件 | 作用 |
 | --- | --- |
 | [Scene.json](../experiments/Scene.json) | 窗口、曝光、面板与场景入口 |
-| [Sponza.json](../assets/Scenes/Sponza.json) | 模型、相机镜头、层级与光源节点 |
-| [Sponza.gltf](../assets/Models/Sponza/Sponza.gltf) | 上游模型，关联 bin 和全部源图片 |
-| [Source.json](../assets/Models/Sponza/Source.json) | 固定上游版本、文件大小和 SHA-256 |
-| [NativeContent.cmake](../cmake/NativeContent.cmake) | AssetTool 导入、天空样例生成和 catalog 构建 |
+| `Sponza.json`（见 HyperionAssets 的 Metadata 与本地源缓存） | 模型、相机镜头、层级与光源节点 |
+| `Sponza.gltf`（见 HyperionAssets 的 Metadata 与本地源缓存） | 上游模型，关联 bin 和全部源图片 |
+| `HyperionAssets/Metadata/Sources.json` | 固定上游版本、下载 SHA-256 和场景配方 |
+| [PrepareContent.py](../tools/PrepareContent.py) | 显式恢复来源、调用 AssetTool 导入和构建 catalog |
 
-构建生成 `out/content/Scenes/Sponza.hasset`，共享依赖位于 `out/content/.assets`。Viewer 只读取原生资产；源模型和纹理已随仓库保存，示例内容导入不需要重新下载它们。
+Sponza 原生资产位于 HyperionAssets，由 `/Game/Scenes/Sponza.hasset` 加载。原始模型和图片仅保存在忽略的源缓存；固定版本、哈希和自创场景配方记录在 `Metadata/Sources.json`。普通构建不下载或转换样例；重建流程见 [ContentFileSystem.md](ContentFileSystem.md)。
 
 ## 来源
 
-固定源版本与文件清单以 [Source.json](../assets/Models/Sponza/Source.json) 为准；[上游说明](../assets/Models/Sponza/UpstreamREADME.md) 和 [许可](../assets/Models/Sponza/License.txt) 保留在资产目录。源 glTF 有一个节点、一个 mesh 和 103 个图元，使用 25 个材质、69 张图片；没有相机或灯光节点。场景光源是项目另行创作的内容。
+固定源版本与文件清单以 HyperionAssets 的 `Metadata/Sources.json` 为准；上游说明和许可分别保存在 `Metadata/SponzaREADME.md`、`Metadata/SponzaLicense.txt`。源 glTF 有一个节点、一个 mesh 和 103 个图元，使用 25 个材质、69 张图片；没有相机或灯光节点。场景光源是项目另行创作的内容。
 
 ## 相机与光照
 

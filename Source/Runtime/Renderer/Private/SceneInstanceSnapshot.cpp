@@ -1,3 +1,4 @@
+#include "Hyperion/IO/Path.h"
 #include "SceneInstanceInternal.h"
 #include <algorithm>
 #include <set>
@@ -11,7 +12,7 @@ void RebaseReference(FAssetRef& InReference, FAssetService& InAssets, const std:
 {
 	const auto Target = InAssets.Resolve(InReference, InSource);
 	const auto Relative = Target.lexically_relative(InDestination.parent_path());
-	const auto Text = (Relative.empty() ? Target : Relative).generic_u8string();
+	const auto Text = (IsPackagePath(Target) || Relative.empty() ? Target : Relative).generic_u8string();
 	InReference.Path.assign(reinterpret_cast<const char*>(Text.data()), Text.size());
 }
 
@@ -35,7 +36,7 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 	Result.MainDirectionalLight = SelectionId(P.Scene, Settings.MainDirectionalLight);
 	Result.EnvironmentLight = SelectionId(P.Scene, Settings.EnvironmentLight);
 	std::set<std::string> Used;
-	const auto Destination = std::filesystem::absolute(InDestination).lexically_normal();
+	const auto Destination = P.Assets.NormalizePath(InDestination);
 	for (const auto Handle : P.Scene.GetNodes())
 	{
 		const auto& Node = *P.Scene.FindNode(Handle);

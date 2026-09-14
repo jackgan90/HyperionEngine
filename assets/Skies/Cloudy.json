@@ -1,9 +1,0 @@
-{
-  "type": "hyperion.skyasset",
-  "schema_version": 1,
-  "name": "Cloudy daylight",
-  "source": "Cloudy.hdr",
-  "radiance_size": 256,
-  "specular_size": 64,
-  "samples": 256
-}

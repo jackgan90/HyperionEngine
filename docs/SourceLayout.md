@@ -1,5 +1,7 @@
 # 源码模块与依赖方向
 
+当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+
 源码以概念模块聚合，每个模块有自己的 `CMakeLists.txt`。公共头文件只从该模块的 `Public` 导出，实现和第三方 wrapper 留在 `Private`，没有全仓库共享的头文件搜索路径。
 
 ```text

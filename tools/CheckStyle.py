@@ -9,7 +9,7 @@ import shutil
 import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SOURCE_DIRS = ('Source', 'shaders')
+SOURCE_DIRS = ('Source', 'Content/Shaders')
 SOURCE_SUFFIXES = ('.h', '.cpp', '.hlsl', '.hlsli')
 
 

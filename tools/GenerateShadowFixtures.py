@@ -1,4 +1,5 @@
 """Generate original, self-contained glTF fixtures for CSM contact/alpha/bias inspection."""
+import argparse
 import base64
 import copy
 import json
@@ -57,8 +58,11 @@ def card():
     return doc
 
 
-def generate():
-    models = ROOT / "assets/Models"
+def generate(output=None):
+    output = pathlib.Path(output) if output is not None else ROOT / "out/fixtures/Sources"
+    models = output / "Models"
+    models.mkdir(parents=True, exist_ok=True)
+    (output / "Scenes").mkdir(parents=True, exist_ok=True)
     mask = card()
     (models / "ShadowMask.gltf").write_text(json.dumps(mask, indent=2) + "\n", encoding="utf-8")
     thin = copy.deepcopy(mask)
@@ -87,8 +91,10 @@ def generate():
                         {"id": "thin", "path": "../Models/ShadowThin.gltf"}],
              "instances": instances,
              "camera": {"eye": [9, 8, 14], "target": [0, 1, -4], "near": .05, "far": 250}}
-    (ROOT / "assets/Scenes/Shadows.json").write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
+    (output / "Scenes/Shadows.json").write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
-    generate()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=pathlib.Path)
+    generate(parser.parse_args().output)

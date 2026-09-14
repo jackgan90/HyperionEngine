@@ -8,6 +8,7 @@
 #include "Support/GraphTestSupport.h"
 #include "Support/ModelAssetSupport.h"
 #include "Support/NativeAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <atomic>
@@ -362,7 +363,7 @@ int main()
 			                          Device = Registry.CreateDevice(ERHIBackend::D3D12, {});
 			                          Swapchain = Device->CreateSwapchain(SwapchainDesc);
 		                          }));
-		FShaderCompiler Compiler(Root / "shaders", Root / "out/shader-cache");
+		FShaderCompiler Compiler(TestShaderRoot(), Root / "out/shader-cache");
 		FRenderSession Session(Tasks, *Device, Compiler);
 		const FModelReadbackContext RenderContext{Tasks, *Device, *Swapchain, Session};
 		const auto RenderModel = [&](FModelSource InModel, bool bInCheckConstantRanges = false)

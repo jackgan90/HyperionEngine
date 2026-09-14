@@ -10,12 +10,13 @@ TAsyncResult<FAssetImportResult> FAssetImportService::ImportAsync(std::filesyste
                                                                   FAssetImportOptions InOptions)
 {
 	const auto Source = ImportPath(InSource);
-	const auto Output = ImportPath(InOutput);
-	if (Source == Output || ImportExtension(Output) != ".hasset")
+	const auto Output = Impl->IO.FileSystem()->Normalize(InOutput);
+	if (Impl->IO.FileSystem()->Normalize(Source) == Output || ImportExtension(Output) != ".hasset")
 	{
 		throw std::invalid_argument("Import output must be a separate .hasset file");
 	}
-	InOptions.Library = ImportPath(InOptions.Library.empty() ? Output.parent_path() : InOptions.Library);
+	InOptions.Library =
+	    Impl->IO.FileSystem()->Normalize(InOptions.Library.empty() ? Output.parent_path() : InOptions.Library);
 	std::lock_guard Lock(Impl->Mutex);
 	if (Impl->bClosing)
 	{
@@ -72,6 +73,12 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	                         InSource,
 	                         InOutput};
 	Publication.Library = InOptions.Library;
+	Publication.SourceRoot = InOptions.SourceRoot.empty() ? std::filesystem::path{} : ImportPath(InOptions.SourceRoot);
+	Publication.SourceId = InOptions.SourceId;
+	if (Publication.SourceRoot.empty() != Publication.SourceId.empty())
+	{
+		throw std::invalid_argument("Source root and source ID must be supplied together");
+	}
 	const auto LibraryLease =
 	    IO.AcquireWriteLeaseAsync(Publication.Library / ".asset-library.hasset", Cancellation).Get(IO.TaskSystem());
 	Publication.LoadLibrary();

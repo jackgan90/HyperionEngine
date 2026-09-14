@@ -21,15 +21,14 @@ void FSceneViewerPlugin::FImpl::DrawSkyControls(FGui& InGui)
 		if (!bSkyChoicesInitialized || bRefresh)
 		{
 			SkyChoices.clear();
-			const auto Folder = Path.parent_path().parent_path() / "Skies";
-			if (std::filesystem::is_directory(Folder))
+			const auto ContentRoot = IsPackagePath(Path) ? std::filesystem::path("/") / *Path.relative_path().begin()
+			                                             : Path.parent_path().parent_path();
+			const auto Folder = ContentRoot / "Skies";
+			for (const auto& Entry : Assets.FileSystem()->Enumerate(Folder, false))
 			{
-				for (const auto& Entry : std::filesystem::directory_iterator(Folder))
+				if (Entry.extension() == ".hasset")
 				{
-					if (Entry.is_regular_file() && Entry.path().extension() == ".hasset")
-					{
-						SkyChoices.push_back(PathToUtf8(std::filesystem::absolute(Entry.path()).lexically_normal()));
-					}
+					SkyChoices.push_back(PathToUtf8(Assets.NormalizePath(Entry)));
 				}
 			}
 			std::sort(SkyChoices.begin(), SkyChoices.end());

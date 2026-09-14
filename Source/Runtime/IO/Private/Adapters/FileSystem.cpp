@@ -1,11 +1,69 @@
 #include "Hyperion/IO/IOService.h"
+#include "Hyperion/IO/Path.h"
 #include <fstream>
 #include <windows.h>
 
 namespace Hyperion
 {
+namespace
+{
+void RequireLocalPath(const std::filesystem::path& InPath)
+{
+	if (IsPackagePath(InPath))
+	{
+		throw std::invalid_argument("Package path requires a configured mount: " + PathToUtf8(InPath));
+	}
+}
+} // namespace
+
+std::filesystem::path FLocalFileSystem::Normalize(const std::filesystem::path& InPath) const
+{
+	RequireLocalPath(InPath);
+	return NormalizeFilePath(InPath);
+}
+
+bool FLocalFileSystem::Exists(const std::filesystem::path& InPath)
+{
+	RequireLocalPath(InPath);
+	return std::filesystem::exists(InPath);
+}
+
+std::vector<std::filesystem::path> FLocalFileSystem::Enumerate(const std::filesystem::path& InDirectory,
+                                                               bool bInRecursive)
+{
+	RequireLocalPath(InDirectory);
+	std::vector<std::filesystem::path> Result;
+	if (!std::filesystem::exists(InDirectory))
+	{
+		return Result;
+	}
+	const auto Append = [&](const std::filesystem::directory_entry& InEntry)
+	{
+		if (InEntry.is_regular_file())
+		{
+			Result.push_back(InEntry.path());
+		}
+	};
+	if (bInRecursive)
+	{
+		for (const auto& Entry : std::filesystem::recursive_directory_iterator(InDirectory))
+		{
+			Append(Entry);
+		}
+	}
+	else
+	{
+		for (const auto& Entry : std::filesystem::directory_iterator(InDirectory))
+		{
+			Append(Entry);
+		}
+	}
+	return Result;
+}
+
 FBytes FLocalFileSystem::Read(const std::filesystem::path& InPath, std::size_t InLimit)
 {
+	RequireLocalPath(InPath);
 	std::ifstream File(InPath, std::ios::binary | std::ios::ate);
 	if (!File)
 	{
@@ -32,6 +90,7 @@ FBytes FLocalFileSystem::Read(const std::filesystem::path& InPath, std::size_t I
 
 void FLocalFileSystem::WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes)
 {
+	RequireLocalPath(InPath);
 	static std::atomic_uint64_t Next{};
 	if (!InPath.parent_path().empty())
 	{

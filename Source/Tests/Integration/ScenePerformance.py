@@ -11,11 +11,11 @@ viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
 work = pathlib.Path.cwd() / "scene-performance"
 work.mkdir(exist_ok=True)
-source = json.loads((root / "assets/Scenes/Showcase.json").read_text(encoding="utf-8"))
+source = json.loads((root / "out/fixtures/Sources/Scenes/Showcase.json").read_text(encoding="utf-8"))
 model_count = sum("model" in node for node in source["nodes"])
 # Keep this regression's original 190-210 item workload independent of shipped camera calibration.
 for asset in source["assets"]:
-    asset["path"] = str((root / "assets/Scenes" / asset["path"]).resolve())
+    asset["path"] = str((root / "out/fixtures/Sources/Scenes" / asset["path"]).resolve())
 for node in source["nodes"]:
     if node["id"] == source["defaultCamera"]:
         node["camera"]["verticalRadians"] = 0.8

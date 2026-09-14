@@ -1,6 +1,7 @@
 #include "AssetPublicationInternal.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
+#include "Hyperion/Materials/MaterialAsset.h"
 
 namespace Hyperion
 {
@@ -30,18 +31,68 @@ void ValidateSourceReference(const FAssetRef& InReference, const std::optional<F
 }
 } // namespace
 
+bool FPublication::PreserveExternal(FAssetRef& InReference)
+{
+	const auto Path = PathFromUtf8(InReference.Path);
+	if (!IsPackagePath(Path))
+	{
+		return false;
+	}
+	FAssetService Assets(IO);
+	for (const auto& Importer : Importers)
+	{
+		Assets.Types().Register(*Importer.Type);
+	}
+	const auto Graph = Assets.LoadGraphAsync(InReference, {}).Get(IO.TaskSystem());
+	if (!Graph->Failures.empty())
+	{
+		throw std::runtime_error("External asset dependency is invalid: " + Graph->Failures.front().Error);
+	}
+	for (const auto& [AssetPath, Asset] : Graph->Assets)
+	{
+		const auto Bytes = IO.ReadAsync(AssetPath, Cancellation).Get(IO.TaskSystem());
+		const auto Header = DecodeAsset(Bytes).Header;
+		if (Header.Id != Asset->Header.Id || Header.TypeId != Asset->Header.TypeId ||
+		    Header.Revision != Asset->Header.Revision)
+		{
+			throw std::runtime_error("External asset changed during dependency validation: " + PathToUtf8(AssetPath));
+		}
+		const auto Fingerprint = ContentHash(*Bytes);
+		const auto [It, bInserted] = Sources.emplace(AssetPath, Fingerprint);
+		if (!bInserted && It->second != Fingerprint)
+		{
+			throw std::runtime_error("External asset changed during publication: " + PathToUtf8(AssetPath));
+		}
+	}
+	const auto& Root = *Graph->Root;
+	InReference = {Root.Header.Id, PathToUtf8(Root.Path), Root.Header.TypeId, Root.Header.Revision};
+	return true;
+}
+
 void FPublication::Rewrite(void* InObject, const FRecordDescriptor& InType, const std::filesystem::path& InSource,
                            const std::filesystem::path& InDestination)
 {
 	VisitRecord(InType, InObject,
 	            [&](const FRecordDescriptor& InRecord, const void* InValue, std::string_view InField)
 	            {
+		            if (InRecord.CppType == typeid(FMaterialShader) && IsPackagePath(InDestination))
+		            {
+			            auto& Shader = *const_cast<FMaterialShader*>(static_cast<const FMaterialShader*>(InValue));
+			            if (!Shader.Path.empty() && !IsPackagePath(PathFromUtf8(Shader.Path)))
+			            {
+				            Shader.Path = "/Engine/Shaders/" + Shader.Path;
+			            }
+		            }
 		            if (InRecord.CppType != typeid(FAssetRef))
 		            {
 			            return;
 		            }
 		            // The visitor receives an exclusively owned mutable clone created below.
 		            auto& Reference = *const_cast<FAssetRef*>(static_cast<const FAssetRef*>(InValue));
+		            if (PreserveExternal(Reference))
+		            {
+			            return;
+		            }
 		            if (Reference.Path.empty())
 		            {
 			            throw std::runtime_error(std::string(InField) + ": import requires a source path");
@@ -86,7 +137,7 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 	const auto IdentityKey = bInRoot                      ? "$root"
 	                         : !InAsset.StableKey.empty() ? InAsset.StableKey
 	                         : InAsset.NativeHeader ? "native/" + InAsset.NativeHeader->Id + "|" + InAsset.Type->Id
-	                                                : "source/" + ImportPathString(InSource) + "|" + InAsset.Type->Id;
+	                                                : "source/" + StableSourceKey(InSource) + "|" + InAsset.Type->Id;
 	std::string Id;
 	if (bInRoot && Previous)
 	{

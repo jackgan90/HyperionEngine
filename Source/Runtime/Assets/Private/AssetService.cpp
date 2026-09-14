@@ -1,5 +1,6 @@
 #include "AssetServiceInternal.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/IO/Path.h"
 #include <algorithm>
 #include <cctype>
 
@@ -7,7 +8,17 @@ namespace Hyperion
 {
 std::filesystem::path NormalizeAssetPath(const std::filesystem::path& InPath)
 {
-	return std::filesystem::absolute(InPath).lexically_normal();
+	return NormalizeFilePath(InPath);
+}
+
+std::filesystem::path FAssetService::NormalizePath(const std::filesystem::path& InPath) const
+{
+	return Impl->IO.FileSystem()->Normalize(InPath);
+}
+
+const std::shared_ptr<IFileSystem>& FAssetService::FileSystem() const
+{
+	return Impl->IO.FileSystem();
 }
 
 void RequireNativeAssetPath(const std::filesystem::path& InPath)
@@ -58,6 +69,11 @@ FLoadedAsset FAssetService::FImpl::Read(const std::filesystem::path& InPath)
 	{
 		RequireNativeAssetPath(InPath);
 		auto Bytes = IO.ReadAsync(InPath, Cancellation).Get(IO.TaskSystem());
+		const std::string_view Prefix(reinterpret_cast<const char*>(Bytes->data()), Bytes->size());
+		if (Prefix.starts_with("version https://git-lfs.github.com/spec/v1"))
+		{
+			throw std::runtime_error("Git LFS object is missing; run git lfs pull in the content repository");
+		}
 		HYP_PERF_SCOPE_C(Assets, LoadNativeAsset);
 		Cancellation.Check();
 		auto Document = DecodeAsset(Bytes);
@@ -90,7 +106,7 @@ FAssetRequest FAssetService::LoadAsync(const std::filesystem::path& InPath)
 FAssetRequest FAssetService::Load(const std::filesystem::path& InPath, bool bInGraphDependency)
 {
 	auto& P = *Impl;
-	const auto Path = NormalizeAssetPath(InPath);
+	const auto Path = NormalizePath(InPath);
 	std::lock_guard Lock(P.Mutex);
 	if (!bInGraphDependency)
 	{
@@ -162,7 +178,7 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
                                        std::shared_ptr<const void> InSnapshot)
 {
 	auto& P = *Impl;
-	const auto Path = NormalizeAssetPath(InPath);
+	const auto Path = NormalizePath(InPath);
 	std::lock_guard Lock(P.Mutex);
 	P.RequireOpen();
 	P.Trim();

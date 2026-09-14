@@ -6,6 +6,7 @@
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/NativeAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <iostream>
@@ -52,8 +53,7 @@ struct FViewerFixture
 	FIOService IO{Tasks, Files};
 	FAssetService Assets{IO};
 	FWindow Window{"Scene controls", {640, 480}, true};
-	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                         std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache"};
+	FShaderCompiler Compiler{TestShaderRoot(), std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache"};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;
@@ -78,7 +78,7 @@ struct FViewerFixture
 		FLegacySceneManifest Manifest;
 		Manifest.Assets = {
 		    {"a",
-		     {"", (std::filesystem::path(HYP_SOURCE_DIR) / "out/content/Models/Showcase.hasset").generic_string(),
+		     {"", (std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/native/Showcase-gltf.hasset").generic_string(),
 		      RecordType<FModelAsset>().Id, ""}}};
 		Manifest.Instances = {{"one", "a"}};
 		Manifest.Eye = {0, 1, 7};

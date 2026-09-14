@@ -42,6 +42,11 @@ struct FPublication
 	FAssetLibraryIndex LibraryIndex;
 	FAssetHeader LibraryHeader;
 	std::map<std::string, FPublishedAsset> SharedProducts;
+	std::filesystem::path SourceRoot;
+	std::string SourceId;
+	std::string StableSourceKey(const std::filesystem::path& InPath) const;
+	std::string PortableKey(std::string InKey) const;
+	bool PreserveExternal(FAssetRef& InReference);
 
 	void LoadLibrary();
 	void SaveLibrary();

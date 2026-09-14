@@ -26,13 +26,15 @@ Vulkan/Metal 尚无运行时后端；SPIR-V/MSL 支持编译与反射。静态�
 
 使用 Ninja 构建并测试：
 
+完整测试还需检出同级 HyperionAssets、执行 `git lfs pull`，并用 `python tools/PrepareContent.py --restore-only` 准备源导入测试缓存。
+
 ```powershell
 python tools/Bootstrap.py
 ./tools/Build.ps1 -Preset debug -Test
 ./tools/Build.ps1 -Preset release -Test
 ```
 
-依赖版本、commit 和 SHA-256 固定在 `dependencies.lock.json`。首次准备依赖需要下载；依赖源码和缓存位于 `out/deps`、`out/downloads`。Viewer 构建会通过 AssetTool 将仓库示例导入 `out/content`。构建产物、日志与截图保存在被 Git 忽略的 `out` 中。
+依赖版本、commit 和 SHA-256 固定在 `dependencies.lock.json`。首次准备依赖需要下载；依赖源码和缓存位于 `out/deps`、`out/downloads`。Viewer 构建直接使用已发布资源；示例需检出同级 HyperionAssets 并执行 `git lfs pull`。挂载配置、离线重建及源导入测试准备见 [Content 与虚拟文件系统](docs/ContentFileSystem.md)。构建产物、日志与截图保存在被 Git 忽略的 `out` 中。
 
 ## 运行
 
@@ -54,8 +56,8 @@ SceneViewer 的 WASDQE 用于连续移动，右键拖动环绕，滚轮推拉，
 自定义模型先离线导入，再交给 Viewer：
 
 ```powershell
-./out/build/release/bin/hyperion_asset_tool.exe import path/to/model.glb out/content/custom.hasset
-./out/build/release/bin/hyperion_viewer.exe --model out/content/custom.hasset
+./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json import path/to/model.glb /Game/Models/Custom.hasset --library /Game
+./out/build/release/bin/hyperion_viewer.exe --model /Game/Models/Custom.hasset
 ```
 
 `--scene` 选择原生场景；`--pipeline forward` 切换到 HDR Forward。有限帧截图及自动验收用法见 [验证指南](docs/Verification.md)。
@@ -67,7 +69,8 @@ SceneViewer 的 WASDQE 用于连续移动，右键拖动环绕，滚轮推拉，
 - `Source/Runtime`：按概念划分的运行时模块，各自拥有 Public / Private 和 CMake target。
 - `Source/Backends`：原生图形后端；`Source/Plugins`：实验与 UI 插件。
 - `Source/Applications`：Viewer 与 AssetTool；`Source/Tests`：单元测试和集成验收。
-- `shaders`：HLSL；`assets`：源资产；`experiments`：实验配置；`tools`：构建和检查工具。
+- `Content`：引擎内置资源与 Shader；HyperionAssets：独立样例资源仓库。
+- `experiments`：实验配置；`tools`：构建、资产重建和检查工具。
 - `openspec`：功能规范与变更归档。
 
 开发遵循 [AGENTS.md](AGENTS.md)、[代码规范](docs/CodingStyle.md) 和 [源码组织](docs/SourceLayout.md)。

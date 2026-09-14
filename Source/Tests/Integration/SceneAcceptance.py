@@ -12,8 +12,8 @@ viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
 work = pathlib.Path.cwd() / "scene-acceptance"
 work.mkdir(exist_ok=True)
-assets = [{"id": "showcase", "path": os.path.relpath(root / "assets/Models/Showcase.gltf", work)},
-          {"id": "interleaved", "path": os.path.relpath(root / "assets/Models/Interleaved.gltf", work)}]
+assets = [{"id": "showcase", "path": os.path.relpath(root / "out/fixtures/Sources/Models/Showcase.gltf", work)},
+          {"id": "interleaved", "path": os.path.relpath(root / "out/fixtures/Sources/Models/Interleaved.gltf", work)}]
 instances = [{"id": "center", "asset": "showcase"},
              {"id": "side", "asset": "interleaved", "translation": [2, 0, -1]}]
 instances.extend({"id": f"outside-{i}", "asset": "showcase", "translation": [100 + i * 3, 0, 0]}
@@ -57,7 +57,7 @@ assert all(values[1] == values[2] == 0 for values in statistics.values()), stati
 assert statistics["bvh"][3] == statistics["linear"][3] < statistics["none"][3], statistics
 code, log, capture = run("gui", show_ui=True)
 assert code == 0 and capture.stat().st_size > 10000, log
-shutil.copyfile(root / "assets/Models/Interleaved.gltf", work / "Broken.gltf")
+shutil.copyfile(root / "out/fixtures/Sources/Models/Interleaved.gltf", work / "Broken.gltf")
 scene["assets"].append({"id": "broken", "path": "Broken.gltf"})
 scene["instances"].append({"id": "failed", "asset": "broken"})
 source.write_text(json.dumps(scene), encoding="utf-8")

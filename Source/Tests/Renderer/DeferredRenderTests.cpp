@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/SceneBridge.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <chrono>
@@ -82,7 +83,7 @@ struct FFixture
 {
 	FTaskSystem Tasks{2, 2};
 	FWindow Window{"Deferred regression", {384, 288}, true};
-	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "deferred-render-cache"};
+	FShaderCompiler Compiler{TestShaderRoot(), "deferred-render-cache"};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;

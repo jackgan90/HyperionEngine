@@ -1,11 +1,13 @@
 # 资产管线与静态 glTF 支持
 
-原生资产工作流、工具、API、模式迁移、缓存和场景保存见 [NativeAssets.md](NativeAssets.md)。运行时 Assets 和 Viewer 只读取 .hasset；glTF/GLB 与场景 JSON 通过离线 FAssetImportService 转换。Showcase 等生成示例沿用项目 MIT 许可证；Sponza 来自 Khronos 示例资产，许可见 assets/Models/Sponza/License.txt。天空资产来源与许可见 [SkyLighting.md](SkyLighting.md)。
+当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+
+原生资产工作流、工具、API、模式迁移、缓存和场景保存见 [NativeAssets.md](NativeAssets.md)。运行时 Assets 和 Viewer 只读取 .hasset；glTF/GLB 与场景 JSON 通过离线 FAssetImportService 转换。Showcase 等生成示例沿用项目 MIT 许可证；Sponza 来自 Khronos 示例资产，许可见 ../HyperionAssets/.cache/Sources/Models/Sponza/License.txt。天空资产来源与许可见 [SkyLighting.md](SkyLighting.md)。
 
 ~~~powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_asset_tool.exe import "D:/Models/Scene.glb" out/content/custom.hasset
-./out/build/debug/bin/hyperion_viewer.exe --model out/content/custom.hasset
+./out/build/debug/bin/hyperion_asset_tool.exe import "D:/Models/Scene.glb" /Game/custom.hasset
+./out/build/debug/bin/hyperion_viewer.exe --model /Game/custom.hasset
 ./out/build/debug/bin/hyperion_viewer.exe --config experiments/Model.json --frames 180 --hidden --no-ui --capture out/captures/model.png --verify-model
 ~~~
 

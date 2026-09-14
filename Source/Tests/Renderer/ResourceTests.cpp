@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <atomic>
@@ -864,7 +865,7 @@ int main()
 	{
 		FTaskSystem Tasks(1, 2);
 		FShaderCompiler Compiler(
-		    std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
+		    TestShaderRoot(),
 		    std::filesystem::path(HYP_SOURCE_DIR) /
 		        "out/shader-cache"); // Generic descriptions require no shader compilation in these tests.
 		FTestDevice Device(Tasks);

@@ -44,7 +44,7 @@ Viewer benchmark CSV appends `local_lights_active`, `point_lights`, `spot_lights
 
 ## Sponza reference
 
-The default `assets/Scenes/Sponza.json` contains three warm point lights arranged along the courtyard. The camera, source model, textures, material values, directional light and exposure are preserved. Light positions were chosen from the calibrated camera's ground-plane projection of the reference floor pools, then tuned using real D3D12 captures for nearby column/banner illumination.
+The default `../HyperionAssets/.cache/Sources/Scenes/Sponza.json` contains three warm point lights arranged along the courtyard. The camera, source model, textures, material values, directional light and exposure are preserved. Light positions were chosen from the calibrated camera's ground-plane projection of the reference floor pools, then tuned using real D3D12 captures for nearby column/banner illumination.
 
 Reference: [Khronos Sponza README Screenshot](https://github.com/KhronosGroup/glTF-Sample-Assets/blob/main/Models/Sponza/README.md), image `screenshot/large.jpg`. Upstream explicitly states that its lights are not part of the model. This is an authored visual approximation: reference light parameters are unpublished, and local shadows and bounced GI remain unavailable. The current scene also has sky/IBL; see [SkyLighting.md](SkyLighting.md). The authored sky, lights and tonemapping do not establish a pixel-identical reconstruction of the reference.
 

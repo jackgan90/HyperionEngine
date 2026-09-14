@@ -112,7 +112,7 @@ FAssetCacheStats FAssetService::FImpl::Trim()
 void FAssetService::Invalidate(const std::filesystem::path& InPath)
 {
 	auto& P = *Impl;
-	const auto Path = NormalizeAssetPath(InPath);
+	const auto Path = NormalizePath(InPath);
 	std::lock_guard Lock(P.Mutex);
 	P.RequireOpen();
 	P.Cache.erase(Path);

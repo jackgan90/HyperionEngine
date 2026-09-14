@@ -6,6 +6,7 @@
 #include "Hyperion/Renderer/SceneBridge.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <cmath>
@@ -74,8 +75,7 @@ struct FSceneFixture
 {
 	FTaskSystem Tasks{1, 2};
 	FWindow Window{"Shared render primitives", {320, 240}, true};
-	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                         std::filesystem::absolute("scene-render-shader-cache")};
+	FShaderCompiler Compiler{TestShaderRoot(), std::filesystem::absolute("scene-render-shader-cache")};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;

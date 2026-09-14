@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <chrono>
@@ -21,7 +22,7 @@ struct FSkyFixture
 	FIOService IO{Tasks};
 	FAssetService Assets{IO};
 	FWindow Window{"Sky rendering", {256, 192}, true};
-	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "sky-test-cache"};
+	FShaderCompiler Compiler{TestShaderRoot(), "sky-test-cache"};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;

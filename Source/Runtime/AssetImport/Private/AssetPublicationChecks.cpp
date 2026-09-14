@@ -60,6 +60,10 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	Provenance.Settings["scene"] = InOptions.bScene ? "true" : "false";
 	Provenance.Settings["name"] = InOptions.Name;
 	Provenance.Settings["library"] = ImportRelativePath(Library, Output.parent_path());
+	if (!SourceId.empty())
+	{
+		Provenance.Settings["source_id"] = StableSourceKey(Source);
+	}
 	const auto Existing = IO.TryReadAsync(Output, Cancellation).Get(IO.TaskSystem());
 	if (*Existing)
 	{
@@ -74,7 +78,10 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	}
 	if (Previous && Previous->Header.Import)
 	{
-		PreviousIds = Previous->Header.Import->OutputIds;
+		for (const auto& [Key, Id] : Previous->Header.Import->OutputIds)
+		{
+			PreviousIds.emplace(PortableKey(Key), Id);
+		}
 	}
 }
 
@@ -94,7 +101,8 @@ bool FPublication::IsCurrent()
 	{
 		for (const auto& Entry : Old.Sources)
 		{
-			const auto Path = Source.parent_path() / PathFromUtf8(Entry.Path);
+			const auto EntryPath = PathFromUtf8(Entry.Path);
+			const auto Path = IsPackagePath(EntryPath) ? EntryPath : Source.parent_path() / EntryPath;
 			if (ContentHash(*IO.ReadAsync(Path, Cancellation).Get(IO.TaskSystem())) != Entry.Fingerprint)
 			{
 				return false;

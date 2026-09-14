@@ -1,5 +1,6 @@
 #include "AssetImportInternal.h"
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/IO/Path.h"
 #include <algorithm>
 #include <cctype>
 
@@ -14,12 +15,12 @@ std::string ImportPathString(const std::filesystem::path& InPath)
 std::string ImportRelativePath(const std::filesystem::path& InPath, const std::filesystem::path& InBase)
 {
 	const auto Relative = InPath.lexically_relative(InBase);
-	return ImportPathString(Relative.empty() ? InPath : Relative);
+	return ImportPathString(IsPackagePath(InPath) || Relative.empty() ? InPath : Relative);
 }
 
 std::filesystem::path ImportPath(const std::filesystem::path& InPath)
 {
-	return std::filesystem::absolute(InPath).lexically_normal();
+	return NormalizeFilePath(InPath);
 }
 
 std::string ImportExtension(const std::filesystem::path& InPath)

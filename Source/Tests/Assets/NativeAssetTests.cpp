@@ -1,5 +1,6 @@
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/IO/MountedFileSystem.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 #include <thread>
@@ -403,10 +404,61 @@ void CheckCache(FTaskSystem& InTasks, FIOService& InIO, FMemoryFileSystem& InFil
 }
 } // namespace
 
+void CheckMountedNativeAssets()
+{
+	using namespace Hyperion;
+	FTaskSystem Tasks(1, 1);
+	const auto Root = std::filesystem::absolute("native-mounted") / CreateIdentifier();
+	std::filesystem::create_directories(Root / "Engine");
+	std::filesystem::create_directories(Root / "Game");
+	auto Files = std::make_shared<FMountedFileSystem>(
+	    std::vector<FContentMount>{{"/Engine", Root / "Engine", false}, {"/Game", Root / "Game", false}});
+	FIOService IO(Tasks, Files);
+	FAssetService Assets(IO);
+	Assets.SaveAsync("/Engine/Child.hasset", std::make_shared<const FNativeFixture>(FNativeFixture{"Child"}))
+	    .Get(Tasks);
+	const auto Child = Assets.LoadAsync("/Engine/Child.hasset").Get(Tasks);
+	const FAssetRef Reference{Child->Header.Id, "/Engine/Child.hasset", Child->Header.TypeId, Child->Header.Revision};
+	Assets.SaveAsync("/Game/Root.hasset", std::make_shared<const FNativeFixture>(FNativeFixture{"Root", {Reference}}))
+	    .Get(Tasks);
+	const auto First = Assets.LoadAsync("/Game/Root.hasset").Get(Tasks);
+	HYP_CHECK(Assets.LoadAsync(Root / "Game/Root.hasset").Get(Tasks) == First);
+	HYP_CHECK(Assets.LoadGraphAsync("/Game/Root.hasset").Get(Tasks)->Assets.size() == 2);
+	Assets.AddCatalog(FAssetCatalog{{Reference}}, "/Engine");
+	Assets.AddCatalog(FAssetCatalog{{Reference}}, "/Game");
+	HYP_CHECK(Assets.LoadByIdAsync(Reference.Id).Get(Tasks) == Child);
+	bool bRejected = false;
+	try
+	{
+		auto Conflict = Reference;
+		Conflict.Path = "/Game/Wrong.hasset";
+		Assets.AddCatalog(FAssetCatalog{{Conflict}}, "/Game");
+	}
+	catch (const std::exception&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+	Assets.Drain();
+	const auto Moved = Root.parent_path() / CreateIdentifier();
+	std::filesystem::copy(Root, Moved, std::filesystem::copy_options::recursive);
+	auto MovedFiles = std::make_shared<FMountedFileSystem>(
+	    std::vector<FContentMount>{{"/Engine", Moved / "Engine", true}, {"/Game", Moved / "Game", true}});
+	FIOService MovedIO(Tasks, MovedFiles);
+	FAssetService Reloaded(MovedIO);
+	Reloaded.Types().Register<FNativeFixture>();
+	const auto Graph = Reloaded.LoadGraphAsync("/Game/Root.hasset").Get(Tasks);
+	HYP_CHECK(Graph->Failures.empty() && Graph->Assets.size() == 2);
+	HYP_CHECK(Graph->Root->Header.Id == First->Header.Id);
+	Reloaded.Drain();
+	Tasks.Shutdown();
+}
+
 int main()
 {
 	try
 	{
+		CheckMountedNativeAssets();
 		CheckContainer();
 		CheckNativeSizeBudget();
 		CheckCustomArchiveLimits();

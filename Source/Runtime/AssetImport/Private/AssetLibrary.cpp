@@ -3,6 +3,33 @@
 
 namespace Hyperion
 {
+std::string FPublication::StableSourceKey(const std::filesystem::path& InPath) const
+{
+	if (SourceRoot.empty())
+	{
+		return ImportPathString(InPath);
+	}
+	const auto Relative = InPath.lexically_relative(SourceRoot);
+	if (Relative.empty() || Relative.is_absolute() || *Relative.begin() == "..")
+	{
+		throw std::runtime_error("Import source is outside configured source root: " + ImportPathString(InPath));
+	}
+	return SourceId + "/" + ImportPathString(Relative);
+}
+
+std::string FPublication::PortableKey(std::string InKey) const
+{
+	if (!SourceRoot.empty())
+	{
+		const auto Prefix = ImportPathString(SourceRoot) + "/";
+		for (auto Position = InKey.find(Prefix); Position != std::string::npos; Position = InKey.find(Prefix))
+		{
+			InKey.replace(Position, Prefix.size(), SourceId + "/");
+		}
+	}
+	return InKey;
+}
+
 template<> const FRecordDescriptor& RecordType<FAssetLibraryIndex>()
 {
 	static const auto Type =
@@ -25,6 +52,15 @@ void FPublication::LoadLibrary()
 		LibraryIndex = *std::static_pointer_cast<FAssetLibraryIndex>(
 		    ReadRecord(RecordType<FAssetLibraryIndex>(), Document.Object));
 		LibraryHeader = Document.Header;
+		if (!SourceRoot.empty())
+		{
+			std::map<std::string, FAssetRef> Entries;
+			for (const auto& [Key, Value] : LibraryIndex.Entries)
+			{
+				Entries.emplace(PortableKey(Key), Value);
+			}
+			LibraryIndex.Entries = std::move(Entries);
+		}
 	}
 }
 
@@ -47,9 +83,10 @@ void FPublication::AddProducts(const std::filesystem::path& InSource, const FCon
 		ConvertedProduct.ImporterVersion = InAsset.ImporterVersion;
 		// Root conversion already charges retained product bytes and tracks all source reads.
 		ConvertedProduct.ProductRoot = InSource;
-		ConvertedProduct.StableKey = Product.SharedKey.empty() ? "product/" + ImportPathString(InSource) + "/" +
-		                                                             Product.Key + "|" + Product.Type->Id
-		                                                       : "shared/" + Product.SharedKey + "|" + Product.Type->Id;
+		ConvertedProduct.StableKey =
+		    Product.SharedKey.empty()
+		        ? "product/" + StableSourceKey(InSource) + "/" + Product.Key + "|" + Product.Type->Id
+		        : "shared/" + PortableKey(Product.SharedKey) + "|" + Product.Type->Id;
 		if (!Converted.emplace(std::make_pair(Path, Product.Type->Id), std::move(ConvertedProduct)).second)
 		{
 			throw std::runtime_error("Duplicate named product path during publication: " + ImportPathString(Path));

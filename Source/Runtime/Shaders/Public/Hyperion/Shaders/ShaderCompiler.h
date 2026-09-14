@@ -141,6 +141,8 @@ class FShaderCompiler
 {
 public:
 	FShaderCompiler(std::filesystem::path InSourceRoot, std::filesystem::path InCacheRoot);
+	FShaderCompiler(std::filesystem::path InSourceRoot, std::filesystem::path InCacheRoot,
+	                std::shared_ptr<class IFileSystem> InFiles);
 	~FShaderCompiler();
 	FShaderArtifact Compile(const std::filesystem::path& InSource, std::string InEntry, EShaderStage InStage,
 	                        EShaderFormat InFormat);

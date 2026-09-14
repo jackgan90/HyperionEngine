@@ -1,5 +1,7 @@
 # Skybox and skylighting
 
+当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+
 The scene environment can use a native sky asset for an infinitely distant background and diffuse/specular image-based lighting. One linear HDR panorama produces the visual cube, nine irradiance SH coefficients and a separate GGX reflection cube. Rotation and intensity apply to all three together. `ConstantColor` and `SkyAsset` are exclusive environment sources; directional, point and spot lights remain independent.
 
 ## Try it
@@ -11,7 +13,7 @@ From the repository root:
 ./out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
 ```
 
-The Scene panel is visible initially; Tab toggles panels. Its sky controls offer `Cloudy.hasset`, `Dusk.hasset` and `Clear.hasset` from `out/content/Skies`. Selecting an entry applies it immediately. Alternatively type an arbitrary native sky path and press **Apply sky asset**. Relative input paths resolve from the process working directory. **Refresh sky assets** rescans the sibling `Skies` directory of the scene's containing directory. An empty custom path cannot be applied.
+The Scene panel is visible initially; Tab toggles panels. Its sky controls offer `Cloudy.hasset`, `Dusk.hasset` and `Clear.hasset` from `/Game/Skies`. Selecting an entry applies it immediately. Alternatively type an arbitrary native sky path and press **Apply sky asset**. Use virtual package paths for content selection; explicit local tool paths remain supported. **Refresh sky assets** uses the mounted filesystem to rescan the sibling `Skies` directory of the scene's containing directory. An empty custom path cannot be applied.
 
 The controls show source mode, shared intensity, yaw in radians, background visibility, loading/uploading/ready/error status and the active sky name. While a different generation is pending or failed, they also show its requested path. The dropdown displays the active name even when the saved scene refers to an immutable library object rather than a shipped alias. Turning off **Show sky background** retains skylighting. Choosing **Constant color** restores the stored color multiplied by intensity. Save edited scene and `--save-scene` persist the sky reference and controls; Save As rebases relative references.
 
@@ -20,7 +22,7 @@ Initial loading contributes zero environment light until all products are ready.
 ## Import a sky
 
 ```powershell
-./out/build/debug/bin/hyperion_asset_tool.exe import assets/Skies/Cloudy.json out/my-content/Skies/Cloudy.hasset --library out/my-content
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Skies/Cloudy.json out/my-content/Skies/Cloudy.hasset --library out/my-content
 ./out/build/debug/bin/hyperion_asset_tool.exe import path/to/environment.exr out/my-content/Skies/Custom.hasset --library out/my-content
 ./out/build/debug/bin/hyperion_asset_tool.exe validate out/my-content/Skies/Custom.hasset
 ```
@@ -45,7 +47,7 @@ Input is a 2:1 equirectangular Radiance `.hdr` or ordinary RGB OpenEXR image (op
 
 Radiance and specular face sizes must be powers of two, at most 1024 and 256 respectively; specular cannot exceed radiance. Samples must be 1–1024. Shipped defaults are 256/64 faces with 256 GGX samples, using 1K source images. Import processing is deterministic CPU work, bounded and offline. Increasing quality costs import time, storage and texture memory, with no per-frame convolution. Cancellation is checked around the bounded bake; it is not instantaneous within a bake loop.
 
-The three unmodified source images are CC0. Asset pages, original download URLs and SHA-256 checksums are recorded in [assets/Skies/License.md](../assets/Skies/License.md). Poly Haven website code is not incorporated.
+The three unmodified source images are CC0. Asset pages, original download URLs and SHA-256 checksums are recorded in `../HyperionAssets/.cache/Sources/Skies/License.md`（见 HyperionAssets 的 Metadata 与本地源缓存）. Poly Haven website code is not incorporated.
 
 ## Resource and shading contracts
 

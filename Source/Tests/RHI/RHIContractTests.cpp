@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Support/GraphTestSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <atomic>
 #include <chrono>
@@ -301,7 +302,7 @@ void CheckDeferredOwnerLifetime(bool bInDestroy, bool bInDepthPreview)
 	FTaskSystem Tasks(1, 2);
 	FTestDevice Device;
 	FTestSwapchain Swapchain(Device.GetCapabilities());
-	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "deferred-owner-shader-cache");
+	FShaderCompiler Compiler(TestShaderRoot(), "deferred-owner-shader-cache");
 	auto Session = std::make_unique<FRenderSession>(Tasks, Device, Compiler);
 	FRenderGraph Graph;
 	const auto Frame = Session->FreezeFrame(0);
@@ -348,7 +349,7 @@ void CheckSessionCloseRetry()
 {
 	FTaskSystem Tasks(1, 2);
 	FTestDevice Device;
-	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "close-retry-shader-cache");
+	FShaderCompiler Compiler(TestShaderRoot(), "close-retry-shader-cache");
 	auto Session = std::make_unique<FRenderSession>(Tasks, Device, Compiler);
 	Device.bFailNextIdle = true;
 	Rejects(
@@ -366,7 +367,7 @@ void CheckDeferredGuiOwner(bool bInDestroy)
 	FTaskSystem Tasks(1, 2);
 	FTestDevice Device;
 	FTestSwapchain Swapchain(Device.GetCapabilities());
-	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "deferred-gui-shader-cache");
+	FShaderCompiler Compiler(TestShaderRoot(), "deferred-gui-shader-cache");
 	auto Plugin = std::make_unique<FDebugUiPlugin>(Device, Compiler, Tasks, FImage{});
 	FRenderGraph Graph;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},

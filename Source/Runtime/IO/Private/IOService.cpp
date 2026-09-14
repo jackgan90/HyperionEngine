@@ -1,8 +1,70 @@
 #include "Hyperion/IO/IOService.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/IO/Path.h"
+#include <algorithm>
 
 namespace Hyperion
 {
+std::vector<FFileContents> IFileSystem::ReadTree(const std::filesystem::path& InDirectory,
+                                                 std::span<const std::string_view> InExtensions, std::size_t InLimit)
+{
+	std::vector<FFileContents> Result;
+	for (const auto& Path : Enumerate(InDirectory, true))
+	{
+		if (InExtensions.empty() ||
+		    std::find(InExtensions.begin(), InExtensions.end(), Path.extension().string()) != InExtensions.end())
+		{
+			Result.push_back({Path, Read(Path, InLimit)});
+		}
+	}
+	return Result;
+}
+
+std::filesystem::path IFileSystem::Normalize(const std::filesystem::path& InPath) const
+{
+	return NormalizeFilePath(InPath);
+}
+
+bool IFileSystem::Exists(const std::filesystem::path& InPath)
+{
+	try
+	{
+		(void)Read(InPath, 512u * 1024u * 1024u);
+		return true;
+	}
+	catch (const FFileNotFound&)
+	{
+		return false;
+	}
+}
+
+std::vector<std::filesystem::path> IFileSystem::Enumerate(const std::filesystem::path&, bool)
+{
+	throw std::logic_error("Storage backend does not support enumeration");
+}
+
+bool FMemoryFileSystem::Exists(const std::filesystem::path& InPath)
+{
+	std::lock_guard Lock(Mutex);
+	return Files.contains(InPath.lexically_normal());
+}
+
+std::vector<std::filesystem::path> FMemoryFileSystem::Enumerate(const std::filesystem::path& InDirectory,
+                                                                bool bInRecursive)
+{
+	std::lock_guard Lock(Mutex);
+	std::vector<std::filesystem::path> Result;
+	for (const auto& [Path, Bytes] : Files)
+	{
+		const auto Relative = Path.lexically_relative(InDirectory);
+		if (!Relative.empty() && *Relative.begin() != ".." && (bInRecursive || Path.parent_path() == InDirectory))
+		{
+			Result.push_back(Path);
+		}
+	}
+	return Result;
+}
+
 FIOService::FIOService(FTaskSystem& InTasks, std::shared_ptr<IFileSystem> InFiles)
     : Tasks(InTasks), Files(std::move(InFiles))
 {

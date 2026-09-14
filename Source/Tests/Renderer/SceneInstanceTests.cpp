@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <atomic>
@@ -65,7 +66,7 @@ struct FSceneFixture
 	std::shared_ptr<FGateFileSystem> Files = std::make_shared<FGateFileSystem>();
 	FIOService IO{Tasks, Files};
 	FAssetService Assets{IO};
-	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "scene-instance-shaders"};
+	FShaderCompiler Compiler{TestShaderRoot(), "scene-instance-shaders"};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<FRenderSession> Session;
 

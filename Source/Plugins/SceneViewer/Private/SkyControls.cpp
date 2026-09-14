@@ -31,8 +31,8 @@ FSkyControlResult DrawSkyAssetControls(FGui& InGui, FSceneEnvironmentLight& InLi
 	Result.ApplyBounds = InGui.LastItemBounds();
 	if (bSelected || bApply)
 	{
-		InLight.Sky = FAssetRef{"", PathToUtf8(std::filesystem::absolute(PathFromUtf8(InPath)).lexically_normal()),
-		                        RecordType<FSkyAsset>().Id, ""};
+		InLight.Sky =
+		    FAssetRef{"", PathToUtf8(NormalizeFilePath(PathFromUtf8(InPath))), RecordType<FSkyAsset>().Id, ""};
 		InLight.Source = ESceneEnvironmentSource::SkyAsset;
 		Result.bChanged = true;
 	}

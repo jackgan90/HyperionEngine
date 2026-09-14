@@ -4,7 +4,7 @@
 Define native HDR sky preprocessing, consistent infinite sky imagery and diffuse/specular environment lighting, reusable environment resources and reference-scene acceptance.
 ## Requirements
 ### Requirement: Native HDR sky preprocessing
-AssetTool SHALL import tracked equirectangular HDR and EXR sources into native sky assets with linear radiance cubemap, cosine-convolved nine-coefficient RGB SH and separate GGX roughness-prefiltered cubemap dependencies. Source/bake changes SHALL invalidate import products. Runtime SHALL consume native assets without source-image decoding or environment baking.
+AssetTool SHALL import equirectangular HDR and EXR sources recovered from provenance-tracked recipes into native sky assets with linear radiance cubemap, cosine-convolved nine-coefficient RGB SH and separate GGX roughness-prefiltered cubemap dependencies. Original source files SHALL remain untracked local cache data. Source/bake changes SHALL invalidate import products. Runtime SHALL consume native assets without source-image decoding or environment baking.
 
 #### Scenario: Reimport changed source
 - **WHEN** source pixels or bake quality change
@@ -40,7 +40,7 @@ Environment preprocessing and BRDF evaluation SHALL expose engine-owned reusable
 - **THEN** environment texture upload counts remain unchanged while reflection directions update
 
 ### Requirement: Reference environment acceptance
-Delivery SHALL include at least three differently lit redistributable HDR/EXR sources with provenance, native content generation, Sponza migration and documented CPU/GPU/persistence validation. Limitations concerning visibility, local reflections and solar energy SHALL be explicit.
+Delivery SHALL provide at least three differently lit native sky assets in HyperionAssets with recoverable HDR/EXR provenance and recipes, Sponza configuration and documented CPU/GPU/persistence validation. The shared BRDF LUT SHALL be published as an engine-owned Content asset referenced across mounts. Limitations concerning visibility, local reflections and solar energy SHALL be explicit.
 
 #### Scenario: Shipped environments
 - **WHEN** each shipped sky asset is selected in Sponza

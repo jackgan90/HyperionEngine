@@ -1,17 +1,28 @@
 #include "ViewerApplication.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
+#include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Triangle/TrianglePlugin.h"
 #include <algorithm>
 
 namespace Hyperion
 {
-FViewerServices::FViewerServices(const FAppSettings& InSettings)
-    : Tasks(static_cast<unsigned>(InSettings.Workers), static_cast<unsigned>(InSettings.RhiThreads)), IO(Tasks),
-      Assets(IO)
+FViewerServices::FViewerServices(const FAppSettings& InSettings, std::shared_ptr<IFileSystem> InFiles)
+    : Tasks(static_cast<unsigned>(InSettings.Workers), static_cast<unsigned>(InSettings.RhiThreads)),
+      IO(Tasks, std::move(InFiles)), Assets(IO)
 {
 	RegisterSceneAssetTypes(Assets.Types());
+	const auto Mounted = std::dynamic_pointer_cast<FMountedFileSystem>(IO.FileSystem());
+	for (const auto& Mount : Mounted ? Mounted->GetMounts() : std::vector<FContentMount>{})
+	{
+		const auto Path = Mount.Root / "Catalog.hasset";
+		if (IO.FileSystem()->Exists(Path))
+		{
+			const auto Catalog = Assets.LoadAsync<FAssetCatalog>(Path).Get(Tasks);
+			Assets.AddCatalog(*Catalog, Mount.Root);
+		}
+	}
 }
 
 FViewerServices::~FViewerServices()
@@ -38,6 +49,12 @@ FViewerApplication::FViewerApplication(FOptions InOptions)
     : Options(std::move(InOptions)), Settings(LoadSettings(Options.Config)), bActiveReversedZ(Settings.bReversedZ)
 {
 	ApplyOptions(Options, Settings);
+	const auto DefaultMounts = std::filesystem::path(HYP_SOURCE_DIR) / "ContentMounts.json";
+	const auto LocalMounts = std::filesystem::path(HYP_SOURCE_DIR) / "ContentMounts.local.json";
+	if (Options.Mounts.empty())
+	{
+		Options.Mounts = std::filesystem::exists(LocalMounts) ? LocalMounts : DefaultMounts;
+	}
 	Metrics.bActiveReversedZ = bActiveReversedZ;
 	InitializeShadowSettings();
 }
@@ -77,7 +94,7 @@ void FViewerApplication::InitializeGraphics()
 	{
 		throw std::runtime_error("RHI backend is not registered: " + Settings.RHIBackend);
 	}
-	Services = std::make_unique<FViewerServices>(Settings);
+	Services = std::make_unique<FViewerServices>(Settings, LoadContentMounts(Options.Mounts));
 	Window = std::make_unique<FWindow>(
 	    Settings.Title, FSize{static_cast<unsigned>(Settings.Width), static_cast<unsigned>(Settings.Height)},
 	    Options.bHidden);
@@ -99,8 +116,8 @@ void FViewerApplication::InitializeGraphics()
 			                          Device->BeginGpuTimingCapture(Options.Frames > 0 ? Options.Frames : 65536);
 		                          }
 	                          }));
-	Compiler = std::make_unique<FShaderCompiler>(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                                             std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
+	Compiler = std::make_unique<FShaderCompiler>(
+	    "/Engine/Shaders", std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache", Services->IO.FileSystem());
 }
 
 void FViewerApplication::InitializePlugins()

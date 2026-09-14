@@ -91,7 +91,7 @@ provider 返回空值仍保留全部声明依赖，保证原先采用 default �
 
 冻结输入采用 `FMaterialInputValues`：构造或整体替换时验证并排序，之后通过 `Get()` 只读访问；复制共享不可变值树。Global/Scene 写入相同内容时保留 scope revision/token。provider callback 仍返回 `optional<FMaterialValue>`，求值结果用 `FMaterialSharedValue` 共享；scope key 的 qualifiers 通过 `GetQualifiers/SetQualifiers` 访问。直接使用 Renderer 解析接口时，Values/Dependencies 表用 `Reset/Get/Set` 访问：每页 8 项的 copy-on-write 存储共享未变内容，前 4 页引用内联，更多参数使用扩展页，不限制材质参数数量。
 
-标准块 `HyperionViewV1`（80 字节）、`HyperionObjectV1`（144）、`HyperionMaterialV1`（96）、`HyperionSceneV1`（48）见 `shaders/MaterialBlocks.hlsli`。标准块按完整版本化 ABI 校验，包括被优化掉的成员；用户自定义块按各目标反射打包，不要求使用标准名称。CPU 数值矩阵采用逻辑行序，打包器处理目标 major/stride，padding 清零。
+标准块 `HyperionViewV1`（80 字节）、`HyperionObjectV1`（144）、`HyperionMaterialV1`（96）、`HyperionSceneV1`（48）见 `Content/Shaders/MaterialBlocks.hlsli`。标准块按完整版本化 ABI 校验，包括被优化掉的成员；用户自定义块按各目标反射打包，不要求使用标准名称。CPU 数值矩阵采用逻辑行序，打包器处理目标 major/stride，padding 清零。
 
 相同有效 layout、成员映射、值和完整 scope dependency 可复用实际的 GPU buffer/offset。引擎准备路径另外按不可变程序及值身份复用未变块；scope 改变但最终数值相同时，也可安全复用原 slice。公共 `FMaterialConstantCache::Bind` 保留完整内容检查，接受同 key 下不同值并返回新 slice。相机变化只求值依赖 View 的参数；Frame/Pass/Draw 同样增量更新。混合 Object×View provider 在派生矩阵更新后求值。纯数值变化保留资源身份，不重新查询纹理 descriptor set 或 PSO；资源值或其依赖 owner 变化则失效。混合 cbuffer 中任一成员的有效数值变化时整块重新打包，不依赖标准块名称。
 

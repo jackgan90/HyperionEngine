@@ -15,8 +15,8 @@ FRenderResourceDesc PrepareTriangle(FShaderCompiler& InCompiler, EShaderFormat I
 	FMaterialDescription Description;
 	Description.Name = "Triangle";
 	FMaterialPass Pass;
-	Pass.Vertex = {"Triangle.hlsl", "VSMain"};
-	Pass.Pixel = {"Triangle.hlsl", "PSMain"};
+	Pass.Vertex = {"/Game/Shaders/Triangle.hlsl", "VSMain"};
+	Pass.Pixel = {"/Game/Shaders/Triangle.hlsl", "PSMain"};
 	Pass.Vertex.Defines.push_back({"HYP_INSTANCE_CAPACITY", "128"});
 	Pass.InstanceArrays = {{"DrawConstants", "DrawInstances"}};
 	Pass.State.bDepthTest = true;

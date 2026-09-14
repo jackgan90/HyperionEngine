@@ -69,7 +69,7 @@ def generate(output, counts, viewer):
             continue
         scene = {"type": "hyperion.scene", "schema_version": 1,
                  "assets": [{"id": "triangle", "path": os.path.relpath(
-                     ROOT / "assets/Models/Interleaved.gltf", output)}],
+                     ROOT / "out/fixtures/Sources/Models/Interleaved.gltf", output)}],
                  "instances": [{"id": f"triangle-{i}", "asset": "triangle",
                                 "scale": [.05, .05, .05]} for i in range(count)],
                  "camera": {"eye": [0, 0, 10], "target": [0, 0, 0], "near": .05, "far": 100}}

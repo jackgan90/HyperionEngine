@@ -2,6 +2,7 @@
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
 #include "Support/DispatchAllocationFailure.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 #include <new>
@@ -87,7 +88,7 @@ int main()
 	try
 	{
 		FTaskSystem Tasks{2, 1};
-		FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "dispatch-failure-cache"};
+		FShaderCompiler Compiler{TestShaderRoot(), "dispatch-failure-cache"};
 		std::unique_ptr<IRHIDevice> Device;
 		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 		                          [&]

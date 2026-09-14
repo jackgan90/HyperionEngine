@@ -49,9 +49,17 @@ public:
 	FMemoryFileSystem Memory;
 	bool bFailDependencyWrites{};
 	bool bDenySources{};
+	std::filesystem::path ReplacementPath;
+	FBytes Replacement;
+	unsigned ReplaceOnRead{};
+	unsigned ReplacementReads{};
 
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
 	{
+		if (InPath == ReplacementPath && ++ReplacementReads == ReplaceOnRead)
+		{
+			Memory.WriteAtomic(InPath, Replacement);
+		}
 		if (bDenySources && InPath.extension() != ".hasset")
 		{
 			throw std::runtime_error("Runtime source access forbidden");
@@ -155,6 +163,47 @@ FAssetHeader StoreNative(FIOService& InIO, const std::filesystem::path& InPath, 
 	auto Encoded = EncodeAsset(RecordType<FImportFixture>(), &InObject, std::move(InHeader));
 	InIO.WriteAsync(InPath, std::move(Encoded.Bytes)).Get(InIO.TaskSystem());
 	return Encoded.Header;
+}
+
+void CheckExternalPublicationChanges()
+{
+	for (const unsigned ReplaceOnRead : {2u, 3u})
+	{
+		FTaskSystem Tasks(1, 1);
+		auto Files = std::make_shared<FImportStorage>();
+		FIOService IO(Tasks, Files);
+		FAssetImportService Imports(IO);
+		Imports.Register(FixtureImporter());
+		const auto Source = std::filesystem::absolute("external-publication/root.source");
+		const auto Output = std::filesystem::absolute("external-publication/root.hasset");
+		IO.WriteAsync(Source, Serialize(FImportFixture{"previous"})).Get(Tasks);
+		Imports.ImportAsync(Source, Output).Get(Tasks);
+		const auto Previous = IO.ReadAsync(Output).Get(Tasks);
+		FImportFixture Child{"old"};
+		const auto Original = EncodeAsset(RecordType<FImportFixture>(), &Child);
+		Child.Name = "new";
+		Files->Replacement = EncodeAsset(RecordType<FImportFixture>(), &Child, Original.Header).Bytes;
+		Files->ReplacementPath = "/Game/External.hasset";
+		Files->ReplaceOnRead = ReplaceOnRead;
+		Files->Memory.WriteAtomic(Files->ReplacementPath, Original.Bytes);
+		const FAssetRef Reference{"", "/Game/External.hasset", RecordType<FImportFixture>().Id, ""};
+		IO.WriteAsync(Source, Serialize(FImportFixture{"root", "", {Reference, Reference}})).Get(Tasks);
+		Rejects(
+		    [&]
+		    {
+			    Imports.ImportAsync(Source, Output).Get(Tasks);
+		    });
+		HYP_CHECK(*IO.ReadAsync(Output).Get(Tasks) == *Previous);
+		Files->ReplaceOnRead = 0;
+		Files->Memory.WriteAtomic(Files->ReplacementPath, Original.Bytes);
+		const auto Published = Imports.ImportAsync(Source, Output).Get(Tasks);
+		HYP_CHECK(Published->Header.Dependencies.size() == 2);
+		HYP_CHECK(Published->Header.Dependencies[0].Reference.Path == "/Game/External.hasset");
+		HYP_CHECK(Published->Header.Dependencies[0].Reference.Revision == Original.Header.Revision);
+		FAssetService Assets(IO);
+		Assets.Types().Register<FImportFixture>();
+		HYP_CHECK(Assets.LoadGraphAsync(Output).Get(Tasks)->Failures.empty());
+	}
 }
 
 void CheckPinnedNativeImport()
@@ -411,6 +460,7 @@ int main()
 	{
 		CheckSceneSources();
 		CheckPublication();
+		CheckExternalPublicationChanges();
 		CheckPinnedNativeImport();
 		CheckCrossVolumeImport();
 		CheckCyclesAndOrdering();

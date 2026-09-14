@@ -2,6 +2,7 @@
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/Model.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <atomic>
 #include <chrono>
@@ -69,7 +70,7 @@ struct FShadowFixture
 {
 	FTaskSystem Tasks{2, 2};
 	FWindow Window{"Cascaded shadow regression", {384, 288}, true};
-	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "shadow-render-cache"};
+	FShaderCompiler Compiler{TestShaderRoot(), "shadow-render-cache"};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;

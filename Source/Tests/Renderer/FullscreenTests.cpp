@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <cmath>
 #include <fstream>
@@ -12,8 +13,8 @@ std::filesystem::path WriteShader()
 {
 	const auto Root = std::filesystem::absolute("fullscreen-test/source");
 	std::filesystem::create_directories(Root / "Common");
-	std::filesystem::copy_file(std::filesystem::path(HYP_SOURCE_DIR) / "shaders/Common/Fullscreen.hlsl",
-	                           Root / "Common/Fullscreen.hlsl", std::filesystem::copy_options::overwrite_existing);
+	std::filesystem::copy_file(TestShaderRoot() / "Common/Fullscreen.hlsl", Root / "Common/Fullscreen.hlsl",
+	                           std::filesystem::copy_options::overwrite_existing);
 	std::ofstream(Root / "Values.hlsl") << R"(
 cbuffer ValuesV1 : register(b0) { float A; float B; };
 float4 PSMain() : SV_Target0 { return float4(A, B, 0, 1); }

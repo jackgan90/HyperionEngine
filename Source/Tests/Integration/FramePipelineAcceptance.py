@@ -77,7 +77,7 @@ def check_rendering():
 
 
 def scene_fixture():
-    source = root / "assets/Scenes/Showcase.json"
+    source = root / "out/fixtures/Sources/Scenes/Showcase.json"
     scene = json.loads(source.read_text(encoding="utf-8"))
     for asset in scene["assets"]:
         asset["path"] = str((source.parent / asset["path"]).resolve())

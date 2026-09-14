@@ -24,6 +24,7 @@ private:
 
 std::shared_ptr<IFileWriteLease> FLocalFileSystem::AcquireWriteLease(const std::filesystem::path& InPath)
 {
+	(void)Normalize(InPath);
 	auto Path = InPath;
 	Path += ".publish-lock";
 	if (!Path.parent_path().empty())

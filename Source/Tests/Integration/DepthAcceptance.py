@@ -13,7 +13,7 @@ work = pathlib.Path.cwd() / "depth-acceptance"
 work.mkdir(exist_ok=True)
 scene = {
     "type": "hyperion.scene", "schema_version": 1,
-    "assets": [{"id": "model", "path": os.path.relpath(root / "assets/Models/Showcase.gltf", work)}],
+    "assets": [{"id": "model", "path": os.path.relpath(root / "out/fixtures/Sources/Models/Showcase.gltf", work)}],
     "instances": [{"id": "front", "asset": "model"},
                   {"id": "back", "asset": "model", "translation": [0.5, 0, -2]}],
     "camera": {"eye": [0, 1, 7], "target": [0, 0, 0], "near": 0.05, "far": 200},
@@ -29,7 +29,7 @@ def run(name, config, application, pipeline, *extra):
             "--frames", "900",
             "--hidden", "--no-ui", "--no-vsync", "--capture", str(capture)]
     if application == "Model":
-        args += ["--model", str(root / "out/content/Models/Showcase.hasset"), "--verify-model"]
+        args += ["--model", str(root / "out/fixtures/native/Showcase-gltf.hasset"), "--verify-model"]
     elif application == "Scene":
         args += ["--scene", str(manifest), "--verify-model"]
     else:

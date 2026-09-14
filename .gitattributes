@@ -3,3 +3,4 @@
 *.cpp text eol=lf
 *.hlsl text eol=lf
 *.hlsli text eol=lf
+*.hasset -text

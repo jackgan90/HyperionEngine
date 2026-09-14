@@ -141,6 +141,9 @@ public:
 	TAsyncResult<FAssetGraph> LoadGraphAsync(const FAssetRef& InReference,
 	                                         const std::filesystem::path& InContainingAsset);
 	void SetCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory);
+	void AddCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory);
+	std::filesystem::path NormalizePath(const std::filesystem::path& InPath) const;
+	const std::shared_ptr<IFileSystem>& FileSystem() const;
 	std::filesystem::path Resolve(const FAssetRef& InReference, const std::filesystem::path& InContainingAsset) const;
 
 	template<class T> TAssetRequest<T> LoadAsync(const std::filesystem::path& InPath)

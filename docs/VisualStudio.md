@@ -24,7 +24,7 @@
 
 Viewer 的调试工作目录为仓库根目录，可以在项目属性的“调试 → 命令参数”中填写 `--config experiments/Triangle.json` 等选项。生成的可执行文件在 `out/build/vs2022/bin/Debug` 或 `bin/Release`，所需 DLL 会自动复制到旁边。
 
-Viewer 构建会先运行 native_sample_content，用 C++ AssetTool 将源样例转换到 out/content；Assets 和 Viewer 仅消费生成的 .hasset。新增 native_asset_tests、publication_tests 也纳入 hyperion_check。导入、自定义类型、场景保存和迁移命令见 [NativeAssets.md](NativeAssets.md)。
+Viewer 构建不再转换样例来源；示例从挂载的 HyperionAssets 加载。`native_sample_content` 保留为兼容目标，显式重建使用 `tools/PrepareContent.py`。源导入集成测试需要预先恢复来源缓存。参见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 ## 在 VS 中跑测试
 

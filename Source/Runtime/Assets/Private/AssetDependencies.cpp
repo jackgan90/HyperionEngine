@@ -10,10 +10,31 @@ void FAssetService::SetCatalog(const FAssetCatalog& InCatalog, const std::filesy
 	std::map<std::string, std::pair<FAssetRef, std::filesystem::path>> Catalog;
 	for (const auto& Asset : InCatalog.Assets)
 	{
-		Catalog.emplace(Asset.Id, std::make_pair(Asset, NormalizeAssetPath(InDirectory / PathFromUtf8(Asset.Path))));
+		const auto Path = PathFromUtf8(Asset.Path);
+		Catalog.emplace(Asset.Id,
+		                std::make_pair(Asset, NormalizePath(IsPackagePath(Path) ? Path : InDirectory / Path)));
 	}
 	std::lock_guard Lock(Impl->Mutex);
 	Impl->RequireOpen();
+	Impl->Catalog = std::move(Catalog);
+}
+
+void FAssetService::AddCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory)
+{
+	(void)WriteValue(InCatalog);
+	std::lock_guard Lock(Impl->Mutex);
+	Impl->RequireOpen();
+	auto Catalog = Impl->Catalog;
+	for (const auto& Asset : InCatalog.Assets)
+	{
+		const auto Path = PathFromUtf8(Asset.Path);
+		const auto Entry = std::make_pair(Asset, NormalizePath(IsPackagePath(Path) ? Path : InDirectory / Path));
+		const auto [It, bInserted] = Catalog.emplace(Asset.Id, Entry);
+		if (!bInserted && It->second != Entry)
+		{
+			throw std::runtime_error("Conflicting catalog asset: " + Asset.Id);
+		}
+	}
 	Impl->Catalog = std::move(Catalog);
 }
 
@@ -32,7 +53,8 @@ std::filesystem::path FAssetService::Resolve(const FAssetRef& InReference,
 	{
 		throw std::runtime_error("Asset ID is absent from catalog: " + InReference.Id);
 	}
-	return NormalizeAssetPath(InContainingAsset.parent_path() / PathFromUtf8(InReference.Path));
+	const auto Path = PathFromUtf8(InReference.Path);
+	return NormalizePath(IsPackagePath(Path) ? Path : InContainingAsset.parent_path() / Path);
 }
 
 FAssetRequest FAssetService::LoadReferenceAsync(const FAssetRef& InReference,

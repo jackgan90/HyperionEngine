@@ -26,7 +26,8 @@ for path in SOURCE.rglob('*'):
     if path.suffix not in ('.h', '.hpp', '.cpp'):
         continue
     count += 1
-    test = path.is_relative_to(SOURCE / 'Tests')
+    test = (path.is_relative_to(SOURCE / 'Tests') or
+            path == SOURCE / 'Backends/D3D12/Private/D3D12FrameFailureTests.cpp')
     owner = next((folder for folder in modules if path.is_relative_to(folder)), None)
     if not test and owner is None:
         bad.append(f'{path.relative_to(ROOT)}: source has no module CMakeLists.txt')

@@ -3,11 +3,14 @@
 #include <iostream>
 #include <thread>
 
+void TestMountedFileSystem();
+
 int main()
 {
 	using namespace Hyperion;
 	try
 	{
+		TestMountedFileSystem();
 		FTaskSystem Tasks(1, 1);
 		FIOService IO(Tasks);
 		const auto Path = std::filesystem::path(L"io-test/模型.bin");

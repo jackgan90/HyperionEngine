@@ -40,7 +40,7 @@ Stable main view IDs are 1 (primary), 2 (compatibility), 3 (transparent) and 4 (
 
 ## Configurable GBuffer
 
-`FGBufferLayout` validates backend capabilities and packing version 1. `shaders/Deferred/GBuffer.hlsli` owns matching encode/decode. Formats can change without changing semantic channel assignments.
+`FGBufferLayout` validates backend capabilities and packing version 1. `Content/Shaders/Deferred/GBuffer.hlsli` owns matching encode/decode. Formats can change without changing semantic channel assignments.
 
 | Attachment | Contents | Compact | High precision |
 |---|---|---|---|

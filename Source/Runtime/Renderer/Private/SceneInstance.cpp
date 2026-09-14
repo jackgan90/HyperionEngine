@@ -44,7 +44,7 @@ void FSceneInstance::Load(const std::filesystem::path& InPath)
 	P.Bridge = std::make_unique<FSceneRenderBridge>(P.Scene, P.Session, P.Tasks);
 	P.Status = {};
 	P.bModelStatusDirty = true;
-	P.Path = std::filesystem::absolute(InPath).lexically_normal();
+	P.Path = P.Assets.NormalizePath(InPath);
 	P.ManifestRequest = P.Assets.LoadAsync<FSceneManifest>(P.Path);
 }
 

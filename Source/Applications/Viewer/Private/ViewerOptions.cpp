@@ -114,6 +114,10 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	{
 		InOptions.Frames = std::stoi(InArgv[++InIndex]);
 	}
+	else if (InArg == "--mounts" && InIndex + 1 < InArgc)
+	{
+		InOptions.Mounts = InArgv[++InIndex];
+	}
 	else if (InArg == "--config" && InIndex + 1 < InArgc)
 	{
 		InOptions.Config = InArgv[++InIndex];

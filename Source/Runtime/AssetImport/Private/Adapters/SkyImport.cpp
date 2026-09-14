@@ -1,6 +1,7 @@
 #include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/Assets/Assets.h"
+#include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/IO/Path.h"
 #include <nlohmann/json.hpp>
 #include <set>
@@ -52,8 +53,15 @@ std::shared_ptr<void> ImportSky(FAssetImportContext& InContext)
 	Baked.Specular.Name = Result->Name + " specular";
 	Result->Radiance = InContext.Emit("radiance", std::move(Baked.Radiance));
 	Result->Specular = InContext.Emit("specular", std::move(Baked.Specular));
-	static const auto Brdf = BuildEnvironmentBrdf();
-	Result->Brdf = InContext.Emit("brdf", Brdf, "builtin/environment-brdf-ggx-smith-v1");
+	if (std::dynamic_pointer_cast<FMountedFileSystem>(InContext.IO.FileSystem()))
+	{
+		Result->Brdf = {"", "/Engine/Textures/EnvironmentBrdf.hasset", RecordType<FTextureAsset>().Id, ""};
+	}
+	else
+	{
+		static const auto Brdf = BuildEnvironmentBrdf();
+		Result->Brdf = InContext.Emit("brdf", Brdf, "builtin/environment-brdf-ggx-smith-v1");
+	}
 	Result->Irradiance = Baked.Irradiance;
 	ValidateSkyAsset(*Result);
 	return Result;

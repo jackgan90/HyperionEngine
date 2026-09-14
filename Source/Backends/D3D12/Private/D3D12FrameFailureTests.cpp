@@ -3,6 +3,7 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/ShaderSourceSupport.h"
 #include <atomic>
 #include <chrono>
 #include <iostream>
@@ -357,8 +358,7 @@ std::weak_ptr<IRHISampler> GetSampler(const FResourceBindingSet& InBindings)
 void CheckPrimitiveFenceRetirement(FFrameFixture& InFixture)
 {
 	auto& Tasks = InFixture.Tasks;
-	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                         std::filesystem::absolute("frame-failure-shader-cache"));
+	FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::absolute("frame-failure-shader-cache"));
 	FRenderSession Session(Tasks, *InFixture.Device, Compiler);
 	auto Resource = Session.GetResources().Request(std::make_shared<const int>(1), 1, "fence-test",
 	                                               [&Compiler]
@@ -515,8 +515,7 @@ void CheckTimingCaptureBoundary(FFrameFixture& InFixture, const FRenderGraph& In
 
 std::shared_ptr<const FPassCommands> OwnedConstantCommands(IRHIDevice& InDevice, bool bInSharedDraws)
 {
-	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                         std::filesystem::absolute("frame-failure-shader-cache"));
+	FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::absolute("frame-failure-shader-cache"));
 	FPipelineDesc Pipeline;
 	Pipeline.Vertex = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
 	Pipeline.Pixel = Compiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);

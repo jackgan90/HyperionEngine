@@ -1,18 +1,20 @@
 # 独立材质与纹理资产
 
+当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+
 原生模型 schema 2 保存几何、节点和 `MaterialSlots` 引用。材质 `hyperion.materialasset` 与纹理 `hyperion.textureasset` 是可单独加载、编辑、保存的反射记录，可由不同模型共享。运行时不读取 glTF、源图片或资产 JSON；HLSL 仍由现有 ShaderCompiler 编译，编译后的 shader 资产不在本轮范围。
 
 ## 运行样例
 
 ~~~powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --scene out/content/Scenes/SharedAssets.hasset
-./out/build/debug/bin/hyperion_asset_tool.exe validate out/content/Scenes/SharedAssets.hasset
+./out/build/debug/bin/hyperion_viewer.exe --scene /Game/Scenes/SharedAssets.hasset
+./out/build/debug/bin/hyperion_asset_tool.exe validate /Game/Scenes/SharedAssets.hasset
 ~~~
 
-[SharedAssets.json](../assets/Scenes/SharedAssets.json) 引用 [SharedQuad.json](../assets/Models/SharedQuad.json) 和 [SharedPanel.json](../assets/Models/SharedPanel.json)。两个模型引用同一个 [SharedColor.json](../assets/Materials/SharedColor.json)，后者引用 [White.json](../assets/Textures/White.json)。左侧实例保存局部绿色 Tint，右侧保持资产默认红色。
+`SharedAssets.json`（见 HyperionAssets 的 Metadata 与本地源缓存） 引用 `SharedQuad.json`（见 HyperionAssets 的 Metadata 与本地源缓存） 和 `SharedPanel.json`（见 HyperionAssets 的 Metadata 与本地源缓存）。两个模型引用同一个 `SharedColor.json`（见 HyperionAssets 的 Metadata 与本地源缓存），后者引用 `White.json`（见 HyperionAssets 的 Metadata 与本地源缓存）。左侧实例保存局部绿色 Tint，右侧保持资产默认红色。
 
-该材质的 shader 路径、入口 `AssetVertex/AssetPixel` 和 `ASSET_GAIN=1` 均来自资产。增加这类材质只需编写 HLSL 和资产数据；Renderer 不按该材质名称或固定 PBR 字段分派。[SharedAsset.hlsl](../shaders/SharedAsset.hlsl) 使用标准 View/Object block 与自定义 Surface.Tint。
+该材质的 shader 路径、入口 `AssetVertex/AssetPixel` 和 `ASSET_GAIN=1` 均来自资产。增加这类材质只需编写 HLSL 和资产数据；Renderer 不按该材质名称或固定 PBR 字段分派。`/Game/Shaders/SharedAsset.hlsl` 使用标准 View/Object block 与自定义 Surface.Tint。
 
 ## 数据与编辑接口
 
@@ -53,8 +55,8 @@ Assets.SaveAsync(Destination, Saved);
 ## 离线发布与共享库
 
 ~~~powershell
-./out/build/debug/bin/hyperion_asset_tool.exe import assets/Models/Showcase.gltf out/library/models/A.hasset --library out/library
-./out/build/debug/bin/hyperion_asset_tool.exe import assets/Scenes/SharedAssets.json out/library/scenes/Shared.hasset --library out/library
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.gltf out/library/models/A.hasset --library out/library
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Scenes/SharedAssets.json out/library/scenes/Shared.hasset --library out/library
 ./out/build/debug/bin/hyperion_asset_tool.exe export-json out/library/models/A.hasset out/edit/Model.json
 ./out/build/debug/bin/hyperion_asset_tool.exe import out/edit/Model.json out/library/models/Edited.hasset --library out/library
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy-model.hasset out/library/models/Upgraded.hasset --library out/library

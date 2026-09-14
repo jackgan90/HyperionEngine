@@ -1,5 +1,6 @@
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 
@@ -297,8 +298,7 @@ void CheckDeviceOwnership()
 	auto OwnIndices = Device->CreateBuffer(std::as_bytes(std::span(Indices)));
 	auto Foreign = OtherDevice->CreateBuffer(std::as_bytes(std::span(Vertices)));
 	HYP_CHECK(Own.Payload->GetDeviceIdentity() != Foreign.Payload->GetDeviceIdentity());
-	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "shaders",
-	                         std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
+	FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
 	FPipelineDesc PipelineDesc = TrianglePipeline(Compiler, *Device);
 	auto Pipeline = Device->CreatePipeline(PipelineDesc);
 	const auto ForeignDescription = TrianglePipeline(Compiler, *OtherDevice);

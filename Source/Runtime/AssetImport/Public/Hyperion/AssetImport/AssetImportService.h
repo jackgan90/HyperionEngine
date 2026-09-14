@@ -103,6 +103,8 @@ struct FAssetImportOptions
 	std::string Name;
 	std::string TypeId;
 	std::filesystem::path Library;
+	std::filesystem::path SourceRoot;
+	std::string SourceId;
 };
 
 struct FAssetImportResult

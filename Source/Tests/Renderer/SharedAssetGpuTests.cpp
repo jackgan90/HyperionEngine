@@ -5,6 +5,7 @@
 #include "Hyperion/Renderer/SceneMaterialAssets.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/NativeAssetSupport.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <iostream>
@@ -78,7 +79,7 @@ struct FFixture
 	std::shared_ptr<FNativeOnlyFileSystem> Files = std::make_shared<FNativeOnlyFileSystem>();
 	FIOService IO{Tasks, Files};
 	FAssetService Assets{IO};
-	FShaderCompiler Compiler{std::filesystem::path(HYP_SOURCE_DIR) / "shaders", "shared-asset-shaders"};
+	FShaderCompiler Compiler{TestShaderRoot(), "shared-asset-shaders"};
 	std::filesystem::path Directory = std::filesystem::absolute("shared-asset-gpu");
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;

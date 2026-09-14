@@ -1,15 +1,4 @@
-# Source inputs stay checked in; all runtime content is produced by the C++ importer.
+# Keep the target name stable. Published content is prepared explicitly with PrepareContent.py.
 add_custom_target(native_sample_content
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Skies/Cloudy.json" "${PROJECT_SOURCE_DIR}/out/content/Skies/Cloudy.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Skies/Dusk.json" "${PROJECT_SOURCE_DIR}/out/content/Skies/Dusk.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Skies/Clear.json" "${PROJECT_SOURCE_DIR}/out/content/Skies/Clear.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Models/Showcase.gltf" "${PROJECT_SOURCE_DIR}/out/content/Models/Showcase.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Scenes/Showcase.json" "${PROJECT_SOURCE_DIR}/out/content/Scenes/Showcase.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Scenes/Shadows.json" "${PROJECT_SOURCE_DIR}/out/content/Scenes/Shadows.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Scenes/SharedAssets.json" "${PROJECT_SOURCE_DIR}/out/content/Scenes/SharedAssets.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> import "${PROJECT_SOURCE_DIR}/assets/Scenes/Sponza.json" "${PROJECT_SOURCE_DIR}/out/content/Scenes/Sponza.hasset" --library "${PROJECT_SOURCE_DIR}/out/content"
-  COMMAND $<TARGET_FILE:hyperion_asset_tool> catalog "${PROJECT_SOURCE_DIR}/out/content/Catalog.hasset" "${PROJECT_SOURCE_DIR}/out/content/Models/Showcase.hasset" "${PROJECT_SOURCE_DIR}/out/content/Scenes/Showcase.hasset" "${PROJECT_SOURCE_DIR}/out/content/Scenes/Shadows.hasset" "${PROJECT_SOURCE_DIR}/out/content/Scenes/SharedAssets.hasset" "${PROJECT_SOURCE_DIR}/out/content/Scenes/Sponza.hasset" "${PROJECT_SOURCE_DIR}/out/content/Skies/Cloudy.hasset" "${PROJECT_SOURCE_DIR}/out/content/Skies/Dusk.hasset" "${PROJECT_SOURCE_DIR}/out/content/Skies/Clear.hasset"
-  DEPENDS hyperion_asset_tool
-  COMMENT "Verify and build native sample assets"
+  COMMAND ${CMAKE_COMMAND} -E echo "Sample content is supplied by the mounted HyperionAssets repository"
   VERBATIM)
-add_dependencies(hyperion_viewer native_sample_content)

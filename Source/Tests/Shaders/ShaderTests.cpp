@@ -1,9 +1,11 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
+#include "Support/ShaderSourceSupport.h"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 
 void CheckDeferredShaders();
+void TestMountedShaders();
 void CheckMaterialShaderReflection(const std::filesystem::path& InRoot);
 
 namespace
@@ -24,16 +26,17 @@ int main()
 	using namespace Hyperion;
 	try
 	{
+		TestMountedShaders();
 		auto Root = std::filesystem::absolute("shader-test/source");
 		std::filesystem::create_directories(Root);
 		for (auto Name : {"Triangle.hlsl", "Gui.hlsl", "Common.hlsli"})
 		{
-			std::filesystem::copy_file(std::filesystem::path(HYP_SOURCE_DIR) / "shaders" / Name, Root / Name,
+			std::filesystem::copy_file(TestShaderRoot() / Name, Root / Name,
 			                           std::filesystem::copy_options::overwrite_existing);
 		}
 		std::filesystem::create_directories(Root / "Common");
-		std::filesystem::copy_file(std::filesystem::path(HYP_SOURCE_DIR) / "shaders/Common/ColorSpace.hlsli",
-		                           Root / "Common/ColorSpace.hlsli", std::filesystem::copy_options::overwrite_existing);
+		std::filesystem::copy_file(TestShaderRoot() / "Common/ColorSpace.hlsli", Root / "Common/ColorSpace.hlsli",
+		                           std::filesystem::copy_options::overwrite_existing);
 		FShaderCompiler Compiler(Root, "shader-test/cache");
 		for (auto Stage : {EShaderStage::Vertex, EShaderStage::Pixel})
 		{

@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/MaterialBlocks.h"
+#include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <fstream>
 
@@ -8,8 +9,8 @@ void RunMaterialBlockTests()
 {
 	const auto Root = std::filesystem::absolute("material-block-test/source");
 	std::filesystem::create_directories(Root);
-	std::filesystem::copy_file(std::filesystem::path(HYP_SOURCE_DIR) / "shaders/MaterialBlocks.hlsli",
-	                           Root / "MaterialBlocks.hlsli", std::filesystem::copy_options::overwrite_existing);
+	std::filesystem::copy_file(TestShaderRoot() / "MaterialBlocks.hlsli", Root / "MaterialBlocks.hlsli",
+	                           std::filesystem::copy_options::overwrite_existing);
 	std::ofstream(Root / "Blocks.hlsl") << R"(
 #define HYP_MATERIAL_VIEW_V1
 #define HYP_MATERIAL_OBJECT_V1
