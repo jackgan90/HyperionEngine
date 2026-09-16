@@ -182,9 +182,11 @@ FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph, con
 	Pass.Viewport = InSnapshot.View.Viewport;
 	for (const auto& Color : Targets.GetColors())
 	{
+		const auto* Texture = Color.Source.Texture ? Color.Source.Texture->GetColorTarget() : nullptr;
 		FGraphColorAttachment Attachment{
 		    ImportTarget(InGraph, *this, Color.Source, ERHIDepthFormat::None), Color.Actions, Color.Clear,
-		    Color.Source.Kind == ERenderTargetKind::Texture && Color.View == EGraphColorView::DrawBatch
+		    Color.Source.Kind == ERenderTargetKind::Texture && Color.View == EGraphColorView::DrawBatch &&
+		            (!Texture || Texture->Format != EMaterialColorFormat::Rgba8Unorm)
 		        ? EGraphColorView::Linear
 		        : Color.View};
 		if (Targets.Color)

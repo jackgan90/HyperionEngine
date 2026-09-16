@@ -1,6 +1,7 @@
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -190,19 +191,16 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 
 struct FDebugUiPlugin::FImpl
 {
-	IRHIDevice& Device;
-	FShaderCompiler& Compiler;
-	FTaskSystem& Tasks;
-	FImage Font;
-	FPipeline Pipeline;
-	FTexture Texture;
-	std::vector<FDrawPacket> Draws;
-	FResourceBindingSet Bindings;
-	void Prepare(const FGuiDrawData& InData);
+	FGuiRenderer Renderer;
+
+	FImpl(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont)
+	    : Renderer(InDevice, InCompiler, InTasks, std::move(InFont))
+	{
+	}
 };
 
 FDebugUiPlugin::FDebugUiPlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont)
-    : Impl(std::make_shared<FImpl>(FImpl{InDevice, InCompiler, InTasks, std::move(InFont), {}, {}, {}}))
+    : Impl(std::make_shared<FImpl>(InDevice, InCompiler, InTasks, std::move(InFont)))
 {
 }
 
@@ -210,159 +208,27 @@ FDebugUiPlugin::~FDebugUiPlugin() = default;
 
 void FDebugUiPlugin::Start()
 {
-	auto& P = *Impl;
-	P.Tasks.Require({EDomain::Main});
-	FPipelineDesc Desc;
-	Desc.State.bBlend = true;
-	Desc.Target.bSrgb = true;
-	Desc.State.SourceRgb = ERHIBlendFactor::SourceAlpha;
-	Desc.State.DestinationRgb = ERHIBlendFactor::InverseSourceAlpha;
-	Desc.State.DestinationAlpha = ERHIBlendFactor::InverseSourceAlpha;
-	Desc.VertexStride = sizeof(FGuiVertex);
-	P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Worker},
-	                              [&]
-	                              {
-		                              Desc.Vertex = P.Compiler.Compile("Gui.hlsl", "VSMain", EShaderStage::Vertex,
-		                                                               P.Device.GetCapabilities().ShaderFormat);
-		                              Desc.Pixel = P.Compiler.Compile("Gui.hlsl", "PSMain", EShaderStage::Pixel,
-		                                                              P.Device.GetCapabilities().ShaderFormat,
-		                                                              {{{"HYP_GUI_SRGB", "1"}}});
-	                              }));
-	Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Position)},
-	                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Uv)},
-	                   {"COLOR", 0, EVertexFormat::Unorm8x4, offsetof(FGuiVertex, Color)}};
-	P.Tasks.Wait(P.Tasks.Dispatch(
-	    {EDomain::Rhi, 0},
-	    [&P, Desc = std::move(Desc)]() mutable
-	    {
-		    FResourceBindingLayoutDesc Layout;
-		    Layout.Slots = {{ERHIBindingKind::ConstantBuffer, ERHIShaderVisibility::Vertex, 0, 0, 1, 64},
-		                    {ERHIBindingKind::Texture2D, ERHIShaderVisibility::Pixel, 0},
-		                    {ERHIBindingKind::Sampler, ERHIShaderVisibility::Pixel, 0}};
-		    Desc.Layout = P.Device.CreateBindingLayout(Layout);
-		    P.Pipeline = P.Device.CreatePipeline(Desc);
-		    P.Texture = P.Device.CreateTexture(P.Font);
-		    FSamplerDesc Sampler;
-		    Sampler.U = Sampler.V = Sampler.W = ERHIAddressMode::Clamp;
-		    const auto FontSampler = P.Device.CreateSampler(Sampler);
-		    P.Bindings = P.Device.CreateBindingSet({Desc.Layout, {{1, {P.Texture}}, {2, {FontSampler}}}});
-		    P.Font = {};
-	    }));
+	Impl->Renderer.Start();
 }
 
 void FDebugUiPlugin::Stop() noexcept
 {
-	Impl->Tasks.Require({EDomain::Main});
-	Impl->Tasks.Wait(Impl->Tasks.Dispatch({EDomain::Rhi, 0},
-	                                      [this]
-	                                      {
-		                                      Impl->Draws.clear();
-		                                      Impl->Pipeline = {};
-		                                      Impl->Texture = {};
-		                                      Impl->Bindings = {};
-	                                      }));
+	Impl->Renderer.Stop();
 }
 
 void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
 {
-	Impl->Prepare(InData);
-}
-
-void FDebugUiPlugin::FImpl::Prepare(const FGuiDrawData& InData)
-{
-	HYP_PERF_SCOPE_C(Rhi, PrepareGuiResources);
-	auto& P = *this;
-	P.Tasks.Require({EDomain::Rhi, 0});
-	if (!P.Pipeline)
-	{
-		throw std::logic_error("Debug UI preparation requires a started plugin");
-	}
-	P.Draws.clear();
-	if (InData.Vertices.empty() || InData.Indices.empty())
-	{
-		return;
-	}
-	const auto VertexBytes = std::as_bytes(std::span(InData.Vertices));
-	const auto IndexBytes = std::as_bytes(std::span(InData.Indices));
-	auto Vertices = P.Device.CreateBuffer({VertexBytes.size(), BufferUsage(ERHIBufferUsage::Vertex)}, VertexBytes);
-	auto Indices = P.Device.CreateBuffer({IndexBytes.size(), BufferUsage(ERHIBufferUsage::Index)}, IndexBytes);
-	auto Matrix = Identity();
-	const float W = InData.DisplaySize.X;
-	const float H = InData.DisplaySize.Y;
-	Matrix.Values[0] = 2 / W;
-	Matrix.Values[5] = -2 / H;
-	Matrix.Values[12] = -1 - 2 * InData.DisplayPosition.X / W;
-	Matrix.Values[13] = 1 + 2 * InData.DisplayPosition.Y / H;
-	const auto Constants = P.Device.CreateBuffer({256, BufferUsage(ERHIBufferUsage::Constant)});
-	const auto Slice = P.Device.PublishConstantSlice(Constants, 0, std::as_bytes(std::span(&Matrix, 1)));
-	for (const auto& Command : InData.Commands)
-	{
-		FRect Scissor{static_cast<std::int32_t>(
-		                  std::max(0.f, (Command.Clip.X - InData.DisplayPosition.X) * InData.FramebufferScale.X)),
-		              static_cast<std::int32_t>(
-		                  std::max(0.f, (Command.Clip.Y - InData.DisplayPosition.Y) * InData.FramebufferScale.Y)),
-		              static_cast<std::int32_t>(
-		                  std::min(W * InData.FramebufferScale.X,
-		                           (Command.Clip.Z - InData.DisplayPosition.X) * InData.FramebufferScale.X)),
-		              static_cast<std::int32_t>(
-		                  std::min(H * InData.FramebufferScale.Y,
-		                           (Command.Clip.W - InData.DisplayPosition.Y) * InData.FramebufferScale.Y))};
-		if (Scissor.Right <= Scissor.Left || Scissor.Bottom <= Scissor.Top || !Command.IndexCount)
-		{
-			continue;
-		}
-		FDrawPacket Draw;
-		Draw.Pipeline = P.Pipeline;
-		Draw.Vertices = Vertices;
-		Draw.Indices = Indices;
-		Draw.Bindings = P.Bindings;
-		Draw.VertexStride = sizeof(FGuiVertex);
-		Draw.IndexCount = Command.IndexCount;
-		Draw.FirstIndex = Command.FirstIndex;
-		Draw.VertexOffset = Command.VertexOffset;
-		Draw.ConstantBindings = {{0, Slice}};
-		Draw.Scissor = Scissor;
-		P.Draws.push_back(std::move(Draw));
-	}
+	Impl->Renderer.Prepare(InData);
 }
 
 void FDebugUiPlugin::Build(FRenderGraph& InGraph, const FRenderFrame&)
 {
-	Impl->Tasks.Require({EDomain::Render});
-	if (Impl->Draws.empty())
-	{
-		return;
-	}
-	FGraphicsPass Pass;
-	Pass.Name = "Debug UI";
-	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer(), {}, {}, EGraphColorView::Srgb};
-	Pass.Batches.push_back({{Impl->Draws}, true});
-	InGraph.Add(std::move(Pass));
+	Impl->Renderer.Build(InGraph);
 }
 
 void FDebugUiPlugin::BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData)
 {
-	Impl->Tasks.Require({EDomain::Render});
-	if (InData.Commands.empty())
-	{
-		return;
-	}
-	FGraphicsPass Pass;
-	Pass.Name = "Debug UI";
-	Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer(), {}, {}, EGraphColorView::Srgb};
-	Pass.Prepare = [Owner = std::weak_ptr<FImpl>(Impl), Data = std::move(InData)]
-	{
-		const auto State = Owner.lock();
-		if (!State)
-		{
-			throw std::logic_error("Debug UI preparation owner has been destroyed");
-		}
-		State->Prepare(Data);
-		std::vector<FGraphicsDrawBatch> Batches;
-		Batches.push_back({{std::move(State->Draws)}, true});
-		return Batches;
-	};
-	InGraph.Add(std::move(Pass));
+	Impl->Renderer.BuildDeferred(InGraph, std::move(InData));
 }
 
 void RegisterDebugUiPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,

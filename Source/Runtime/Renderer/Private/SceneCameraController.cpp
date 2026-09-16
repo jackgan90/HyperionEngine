@@ -7,6 +7,9 @@ namespace Hyperion
 {
 namespace
 {
+constexpr float MinimumFlySpeed = .01f;
+constexpr float MaximumFlySpeed = 100000.f;
+
 bool IsMovementKey(EKey InKey)
 {
 	switch (InKey)
@@ -30,15 +33,40 @@ bool IsMovementKey(EKey InKey)
 }
 } // namespace
 
+FSceneCameraController::FSceneCameraController(ESceneCameraNavigationMode InMode) : Mode(InMode)
+{
+}
+
 void FSceneCameraController::Reset()
 {
 	HeldKeys.clear();
 	bDragging = false;
 }
 
+float FSceneCameraController::GetMovementSpeed(const FSceneInstance& InScene) const
+{
+	const auto Handle = GetSceneNavigationCamera(InScene);
+	if (!Handle)
+	{
+		return 0;
+	}
+	const float SceneSpeed = std::max(1.f, InScene.FindNode(*Handle)->Camera->FocusDistance);
+	return Mode == ESceneCameraNavigationMode::Fly
+	           ? FlyMovementSpeed.value_or(std::clamp(SceneSpeed, MinimumFlySpeed, MaximumFlySpeed))
+	           : SceneSpeed;
+}
+
 void FSceneCameraController::Input(FSceneInstance& InScene, std::span<const FInputEvent> InEvents,
                                    bool bInMouseCaptured, bool bInKeyboardCaptured)
 {
+	if (Mode == ESceneCameraNavigationMode::Fly && !FlyMovementSpeed)
+	{
+		const float Speed = GetMovementSpeed(InScene);
+		if (Speed > 0)
+		{
+			FlyMovementSpeed = Speed;
+		}
+	}
 	if (bInKeyboardCaptured)
 	{
 		HeldKeys.clear();
@@ -84,19 +112,47 @@ void FSceneCameraController::HandleEvent(FSceneInstance& InScene, const FInputEv
 	{
 		if (bDragging)
 		{
-			OrbitSceneCamera(InScene, -(InEvent.X - LastMouse.X) * .006f, (InEvent.Y - LastMouse.Y) * .006f);
+			const float Yaw = -(InEvent.X - LastMouse.X) * .006f;
+			const float Pitch = (InEvent.Y - LastMouse.Y) * .006f;
+			if (Mode == ESceneCameraNavigationMode::Fly)
+			{
+				RotateSceneCamera(InScene, Yaw, Pitch);
+			}
+			else
+			{
+				OrbitSceneCamera(InScene, Yaw, Pitch);
+			}
 		}
 		LastMouse = {InEvent.X, InEvent.Y};
 	}
 	if (InEvent.Type == EEventType::MouseWheel && bFocused && !bInMouseCaptured)
 	{
-		DollySceneCamera(InScene, std::pow(.85f, InEvent.Y));
+		HandleWheel(InScene, InEvent.Y);
 	}
+}
+
+void FSceneCameraController::HandleWheel(FSceneInstance& InScene, float InDelta)
+{
+	if (!std::isfinite(InDelta))
+	{
+		return;
+	}
+	if (Mode == ESceneCameraNavigationMode::Fly && bDragging)
+	{
+		if (FlyMovementSpeed)
+		{
+			const double Speed = *FlyMovementSpeed * std::pow(1.2, double(InDelta));
+			FlyMovementSpeed = float(std::clamp(Speed, double(MinimumFlySpeed), double(MaximumFlySpeed)));
+		}
+		return;
+	}
+	DollySceneCamera(InScene, std::pow(.85f, InDelta));
 }
 
 void FSceneCameraController::Advance(FSceneInstance& InScene, float InDeltaSeconds)
 {
-	if (HeldKeys.empty() || !bFocused || !std::isfinite(InDeltaSeconds) || InDeltaSeconds <= 0)
+	if (HeldKeys.empty() || !bFocused || (Mode == ESceneCameraNavigationMode::Fly && !bDragging) ||
+	    !std::isfinite(InDeltaSeconds) || InDeltaSeconds <= 0)
 	{
 		return;
 	}
@@ -121,7 +177,7 @@ void FSceneCameraController::Advance(FSceneInstance& InScene, float InDeltaSecon
 		return;
 	}
 	const auto Camera = *InScene.FindNode(*Handle)->Camera;
-	const float Distance = std::max(1.f, Camera.FocusDistance) * std::min(InDeltaSeconds, .1f);
+	const float Distance = GetMovementSpeed(InScene) * std::min(InDeltaSeconds, .1f);
 	const auto Eye = Add(Pose.Eye, ScaleVector(Direction, Distance / Magnitude));
 	InScene.SetCameraView(*Handle, SceneCameraTransform(Eye, Add(Eye, Pose.Forward), Pose.Up), Camera);
 }

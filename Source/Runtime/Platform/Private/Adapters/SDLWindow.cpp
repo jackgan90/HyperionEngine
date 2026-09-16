@@ -4,6 +4,11 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#include <Windows.h>
+#include <dwmapi.h>
+#endif
+
 namespace Hyperion
 {
 namespace
@@ -288,5 +293,22 @@ void FWindow::SetClipboard(const std::string& InText)
 {
 	Impl->RequireOwner();
 	Check(SDL_SetClipboardText(InText.c_str()));
+}
+
+bool FWindow::SetDarkTitleBar(bool bInEnabled)
+{
+	Impl->RequireOwner();
+#ifdef _WIN32
+	const auto Handle = static_cast<HWND>(Impl->Surface.Handle);
+	const BOOL DarkMode = bInEnabled ? TRUE : FALSE;
+	const COLORREF Caption = bInEnabled ? RGB(0, 0, 0) : DWMWA_COLOR_DEFAULT;
+	const COLORREF Text = bInEnabled ? RGB(230, 230, 230) : DWMWA_COLOR_DEFAULT;
+	const auto ModeResult = DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, &DarkMode, sizeof(DarkMode));
+	const auto CaptionResult = DwmSetWindowAttribute(Handle, DWMWA_CAPTION_COLOR, &Caption, sizeof(Caption));
+	const auto TextResult = DwmSetWindowAttribute(Handle, DWMWA_TEXT_COLOR, &Text, sizeof(Text));
+	return SUCCEEDED(ModeResult) && SUCCEEDED(CaptionResult) && SUCCEEDED(TextResult);
+#else
+	return false;
+#endif
 }
 } // namespace Hyperion

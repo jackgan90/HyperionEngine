@@ -1,4 +1,4 @@
-#include "Hyperion/Gui/Gui.h"
+#include "GuiInternal.h"
 #include "Hyperion/Core/Core.h"
 #include <algorithm>
 #include <imgui.h>
@@ -73,37 +73,6 @@ ImGuiKey Key(EKey InK)
 }
 } // namespace
 
-struct FGui::FImpl
-{
-	ImGuiContext* Context{};
-	ImPlotContext* Plot{};
-	std::thread::id Thread = std::this_thread::get_id();
-	FWindow* Window{};
-	std::string Clipboard;
-
-	void Select()
-	{
-		if (Thread != std::this_thread::get_id())
-		{
-			throw std::logic_error("GUI called from non-owning thread");
-		}
-		ImGui::SetCurrentContext(Context);
-		ImPlot::SetCurrentContext(Plot);
-	}
-
-	~FImpl()
-	{
-		if (Plot)
-		{
-			ImPlot::DestroyContext(Plot);
-		}
-		if (Context)
-		{
-			ImGui::DestroyContext(Context);
-		}
-	}
-};
-
 FGui::FGui(FWindow* InWindow) : Impl(std::make_unique<FImpl>())
 {
 	ImGui::SetAllocatorFunctions(
@@ -167,6 +136,25 @@ FGui::FGui(FWindow* InWindow) : Impl(std::make_unique<FImpl>())
 }
 
 FGui::~FGui() = default;
+
+void FGui::LoadFont(std::span<const std::byte> InBytes, float InPixels)
+{
+	Impl->Select();
+	if (InBytes.empty() || InBytes.size() > 16 * 1024 * 1024 || InPixels < 8 || InPixels > 64)
+	{
+		throw std::invalid_argument("Invalid GUI font data or size");
+	}
+	auto* Fonts = ImGui::GetIO().Fonts;
+	Fonts->Clear();
+	Impl->FontBytes.assign(InBytes.begin(), InBytes.end());
+	ImFontConfig Configuration;
+	Configuration.FontDataOwnedByAtlas = false;
+	if (!Fonts->AddFontFromMemoryTTF(Impl->FontBytes.data(), static_cast<int>(Impl->FontBytes.size()), InPixels,
+	                                 &Configuration))
+	{
+		throw std::runtime_error("Could not load GUI font");
+	}
+}
 
 FImage FGui::FontImage()
 {
@@ -523,14 +511,11 @@ FGuiDrawData FGui::Render()
 			{
 				throw std::runtime_error("Custom GUI callbacks are unsupported");
 			}
-			if (Cmd.GetTexID() != 1)
-			{
-				throw std::runtime_error("GUI currently supports its static font atlas only");
-			}
 			Out.Commands.push_back({{Cmd.ClipRect.x, Cmd.ClipRect.y, Cmd.ClipRect.z, Cmd.ClipRect.w},
 			                        Cmd.ElemCount,
 			                        IndexBase + Cmd.IdxOffset,
-			                        VertexBase + static_cast<std::int32_t>(Cmd.VtxOffset)});
+			                        VertexBase + static_cast<std::int32_t>(Cmd.VtxOffset),
+			                        static_cast<std::uint64_t>(Cmd.GetTexID())});
 		}
 	}
 	return Out;

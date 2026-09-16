@@ -70,7 +70,17 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, const FSceneViewRequest&
 		auto Disabled = InShadows;
 		Disabled.bEnabled = false;
 		ShadowMaps.Prepare(Resolved.View, {0, 0, 1}, Disabled, {});
-		Session.BuildSceneClear(InGraph, Resolved, InClear);
+		if (OutputTarget.Kind == ERenderTargetKind::Backbuffer)
+		{
+			Session.BuildSceneClear(InGraph, Resolved, InClear);
+		}
+		else
+		{
+			FRenderSceneSnapshot ClearSnapshot;
+			ClearSnapshot.Targets = OutputTargets(InClear);
+			ClearSnapshot.Targets.Name = "Scene without active camera";
+			InGraph.Add(Session.GetResources().GetPreparation().DeclarePass(InGraph, ClearSnapshot));
+		}
 		if (InExtensions)
 		{
 			InExtensions(InGraph);
@@ -120,6 +130,14 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		throw std::invalid_argument("Scene pipeline requires a frozen material frame");
 	}
 	Session.ValidateSceneFrame(*InFrame);
+	if (const auto* Output = OutputTarget.Texture ? OutputTarget.Texture->GetColorTarget() : nullptr)
+	{
+		if (Output->Width != InMain.Width || Output->Height != InMain.Height || InShadows.DebugMode ||
+		    Settings.ContactShadows.DebugMode)
+		{
+			throw std::invalid_argument("Offscreen scene output requires matching dimensions and no depth overlays");
+		}
+	}
 	if (Settings.Pipeline == ESceneRenderPipeline::Deferred && InMain.Viewport)
 	{
 		const auto& View = *InMain.Viewport;

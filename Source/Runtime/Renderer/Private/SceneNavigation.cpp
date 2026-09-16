@@ -12,6 +12,18 @@ FVec3 Rotate(FVec3 InValue, FVec3 InAxis, float InAngle)
 	return Add(Add(ScaleVector(InValue, Cosine), ScaleVector(Cross(InAxis, InValue), std::sin(InAngle))),
 	           ScaleVector(InAxis, Dot(InAxis, InValue) * (1 - Cosine)));
 }
+
+FSceneCameraPose RotateCameraPose(FSceneCameraPose InPose, float InYaw, float InPitch)
+{
+	InPose.Forward = Rotate(InPose.Forward, {0, 1, 0}, InYaw);
+	InPose.Up = Rotate(InPose.Up, {0, 1, 0}, InYaw);
+	InPose.Right = Normalize(Cross(InPose.Forward, InPose.Up));
+	const float Elevation = std::asin(std::clamp(-InPose.Forward.Y, -1.f, 1.f));
+	const float Pitch = std::clamp(Elevation + InPitch, -1.5f, 1.5f) - Elevation;
+	InPose.Forward = Rotate(InPose.Forward, InPose.Right, -Pitch);
+	InPose.Up = Rotate(InPose.Up, InPose.Right, -Pitch);
+	return InPose;
+}
 } // namespace
 
 std::optional<FSceneHandle> GetSceneNavigationCamera(const FSceneInstance& InScene)
@@ -52,15 +64,29 @@ void OrbitSceneCamera(FSceneInstance& InScene, float InYaw, float InPitch)
 	InScene.GetCameraPose(*Handle, Pose);
 	const auto Camera = *InScene.FindNode(*Handle)->Camera;
 	const auto Pivot = Add(Pose.Eye, ScaleVector(Pose.Forward, Camera.FocusDistance));
-	auto Forward = Rotate(Pose.Forward, {0, 1, 0}, InYaw);
-	auto Up = Rotate(Pose.Up, {0, 1, 0}, InYaw);
-	const auto Right = Normalize(Cross(Forward, Up));
-	const float Elevation = std::asin(std::clamp(-Forward.Y, -1.f, 1.f));
-	const float Pitch = std::clamp(Elevation + InPitch, -1.5f, 1.5f) - Elevation;
-	Forward = Rotate(Forward, Right, -Pitch);
-	Up = Rotate(Up, Right, -Pitch);
+	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
 	InScene.SetCameraView(
-	    *Handle, SceneCameraTransform(Subtract(Pivot, ScaleVector(Forward, Camera.FocusDistance)), Pivot, Up), Camera);
+	    *Handle,
+	    SceneCameraTransform(Subtract(Pivot, ScaleVector(Rotated.Forward, Camera.FocusDistance)), Pivot, Rotated.Up),
+	    Camera);
+}
+
+void RotateSceneCamera(FSceneInstance& InScene, float InYaw, float InPitch)
+{
+	if (InYaw == 0 && InPitch == 0)
+	{
+		return;
+	}
+	const auto Handle = GetSceneNavigationCamera(InScene);
+	if (!Handle)
+	{
+		return;
+	}
+	FSceneCameraPose Pose;
+	InScene.GetCameraPose(*Handle, Pose);
+	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
+	const auto Camera = *InScene.FindNode(*Handle)->Camera;
+	InScene.SetCameraView(*Handle, SceneCameraTransform(Pose.Eye, Add(Pose.Eye, Rotated.Forward), Rotated.Up), Camera);
 }
 
 void DollySceneCamera(FSceneInstance& InScene, float InFactor, float InMinimum, float InMaximum,

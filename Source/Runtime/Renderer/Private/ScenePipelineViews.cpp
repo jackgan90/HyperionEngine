@@ -63,6 +63,12 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 	auto DisplayView = InMain;
 	DisplayView.ExcludedPasses = {"HdrForwardOpaque", "DeferredBase", "HdrCompatibility", "HdrTransparent"};
 	auto DisplayTargets = Session.FrameTargets({}, InMain.DepthConvention);
+	if (OutputTarget.Kind == ERenderTargetKind::Texture)
+	{
+		DisplayTargets = OutputTargets();
+		DisplayTargets.Color->View = EGraphColorView::DrawBatch;
+		DisplayTargets.DepthStencil = DepthTarget(EAttachmentLoad::Clear);
+	}
 	DisplayTargets.Name = "Display/LegacyMaterials";
 	AddView(Views, Targets, DisplayView, "Forward", std::move(DisplayTargets), 4);
 	return Result;

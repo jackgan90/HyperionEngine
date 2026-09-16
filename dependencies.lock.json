@@ -85,10 +85,10 @@
   },
   "imgui": {
     "repository": "ocornut/imgui",
-    "version": "v1.92.9b",
-    "commit": "f1cc2ae15e53a861a874c3034aae6798fde194ab",
-    "url": "https://codeload.github.com/ocornut/imgui/zip/f1cc2ae15e53a861a874c3034aae6798fde194ab",
-    "sha256": "008e1f3398e1c6e4d317ae4a05d2dec597bd360f4f3717b1d96e9edb66dba34f"
+    "version": "v1.92.9b-docking",
+    "commit": "b48d1afbe8ee8b238e2961dc363a949dd7304e23",
+    "url": "https://codeload.github.com/ocornut/imgui/zip/b48d1afbe8ee8b238e2961dc363a949dd7304e23",
+    "sha256": "21c822d9d4f3390baae2242da8711635e2349aecb239477264950ce035012686"
   },
   "implot": {
     "repository": "epezent/implot",

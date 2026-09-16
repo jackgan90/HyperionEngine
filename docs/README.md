@@ -5,6 +5,7 @@
 ## 开始使用与开发
 
 - [Visual Studio 与构建](VisualStudio.md)、[验证指南](Verification.md)
+- [编辑器工作区与场景视口](Editor.md)
 - [代码规范](CodingStyle.md)、[源码组织](SourceLayout.md)、[架构契约](Architecture.md)
 - [锁定依赖](Dependencies.md)、[功能范围与扩展边界](Roadmap.md)
 - [性能分析工具](Profiling.md)、[RenderDoc 抓帧](RenderDoc.md)

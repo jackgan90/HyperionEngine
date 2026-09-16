@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneMaterialAssets.h"
+#include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/NativeAssetSupport.h"
 #include "Support/ShaderSourceSupport.h"
@@ -314,6 +315,85 @@ void CheckSectionVariants(FFixture& InFixture)
 	             "texture/sampler Save As round-trip passed\n";
 }
 
+FImage RenderLegacyOffscreen(FFixture& InFixture, FSceneInstance& InScene, bool bInDeferPreparation)
+{
+	auto& F = InFixture;
+	F.Await(InScene);
+	FSceneRenderPipeline Pipeline(*F.Session, F.Device->GetCapabilities());
+	FRenderTargetSource Output{ERenderTargetKind::Texture,
+	                           std::make_shared<const FMaterialTextureSource>(
+	                               FMaterialColorTexture{320, 240, EMaterialColorFormat::Rgba8Unorm}),
+	                           F.Session->GetResources().CreateScopeLifetime(), false};
+	const auto Seed = F.Session->FreezeSceneFrame(InScene.GetToken());
+	FImage Image;
+	F.Tasks.Wait(
+	    F.Tasks.Dispatch({EDomain::Render},
+	                     [&]
+	                     {
+		                     FRenderGraph Graph;
+		                     Pipeline.SetOutputTarget(Output);
+		                     FSceneViewRequest Request;
+		                     Request.Width = 320;
+		                     Request.Height = 240;
+		                     FCascadedShadowSettings Shadows;
+		                     Shadows.bEnabled = false;
+		                     Pipeline.Build(Graph, Request, Seed, Shadows, {}, {}, bInDeferPreparation);
+		                     FFullscreenPassDesc Copy;
+		                     Copy.Material = MakeFullscreenMaterial("Read encoded viewport", "CopyOutput.hlsl");
+		                     Copy.Targets = FRenderPassTargets::ColorOnly(FVec4{});
+		                     Copy.Targets.Reads = {Output};
+		                     Copy.Lifetime = Output.Lifetime;
+		                     Copy.Viewport = {0, 0, 320, 240};
+		                     Copy.Parameters = {{"Pixel:Image", FMaterialValue::FromTexture(Output.Texture)}};
+		                     AddFullscreenPass(*F.Session, Graph, Copy, bInDeferPreparation);
+		                     Image = ExecuteGraph(std::move(Graph), F.Tasks, *F.Swapchain, {320, 240}, false, true);
+	                     }));
+	return Image;
+}
+
+void CheckLegacyOffscreen(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	FLocalFileSystem Files;
+	const std::string_view Shader = "Texture2D<float4> Image : register(t0);\n"
+	                                "float4 PSMain(float4 Position : SV_Position) : SV_Target0 { return "
+	                                "Image.Load(int3(int2(Position.xy), 0)); }\n";
+	Files.WriteAtomic(TestShaderRoot() / "CopyOutput.hlsl", std::as_bytes(std::span(Shader)));
+	auto LinearMaterial = *F.Assets.LoadAsync<FMaterialAsset>(F.Directory / "Material.hasset").Get(F.Tasks);
+	LinearMaterial.Passes[0].bSrgbTarget = false;
+	const auto Linear = Store(F.IO, F.Directory / "LinearOutput.hasset", LinearMaterial);
+	FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
+	Scene.Load(F.Directory / "Scene.hasset");
+	F.Await(Scene);
+	for (std::size_t Index = 0; Index < Scene.GetModels().size(); ++Index)
+	{
+		FSceneMaterialAsset Selection;
+		Selection.Reference = Index == 0 ? Linear : F.Material;
+		Selection.Values.push_back({"Tint", PersistMaterialValue(FMaterialValue::Float(FVec4{.25f, .5f, .75f, 1}))});
+		const auto Handle = Scene.GetModels()[Index].Handle;
+		auto Model = *Scene.Find(Handle);
+		Model.Surface = *LoadSceneMaterialSelection(F.Assets, F.Tasks, F.Session->GetResources(), Selection,
+		                                            F.Directory / "Scene.hasset")
+		                     .Get(F.Tasks);
+		HYP_CHECK(Scene.Update(Handle, std::move(Model)));
+	}
+	const auto Reference = F.Frame(Scene);
+	Pixel(Reference, 110, {.25f, .5f, .75f});
+	Pixel(Reference, 210, {.537f, .735f, .881f});
+	for (const bool bDeferred : {false, true})
+	{
+		const auto Image = RenderLegacyOffscreen(F, Scene, bDeferred);
+		Pixel(Image, 110, {.25f, .5f, .75f});
+		Pixel(Image, 210, {.537f, .735f, .881f});
+	}
+	F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Rhi, 0},
+	                              [&]
+	                              {
+		                              HYP_CHECK(F.Device->Statistics().ValidationErrors == 0);
+	                              }));
+	std::cout << "Offscreen legacy mixed linear/sRGB materials match backbuffer pixels in both preparation modes\n";
+}
+
 void CheckRawCacheUpgrade(FFixture& InFixture, FSceneInstance& InScene,
                           const std::shared_ptr<const FSceneModelData>& InData)
 {
@@ -448,6 +528,7 @@ int main()
 		FFixture Fixture;
 		CheckSharingAndSave(Fixture);
 		CheckSectionVariants(Fixture);
+		CheckLegacyOffscreen(Fixture);
 		CheckDependencyRevision(Fixture, true);
 		CheckDependencyRevision(Fixture, false);
 		CheckMissingAndRevision(Fixture);

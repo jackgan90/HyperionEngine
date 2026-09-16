@@ -1,0 +1,3 @@
+add_library(hyperion_gui_renderer STATIC Private/GuiRenderer.cpp)
+hyp_module(hyperion_gui_renderer)
+target_link_libraries(hyperion_gui_renderer PUBLIC hyperion_gui hyperion_render PRIVATE hyperion_core)

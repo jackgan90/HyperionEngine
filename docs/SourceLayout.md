@@ -27,16 +27,18 @@ Source/
     RHI/           # 公共图形契约、能力查询、后端注册表
     Renderer/      # render session / primitive / resources / SceneInstance / Model 桥接 / RenderGraph
     Gui/           # ImGui / ImPlot wrapper 和引擎绘制数据
+    GuiRenderer/   # 通用 GUI RHI 绘制、字体及保留纹理绑定
     Capture/       # 可选 RenderDoc API wrapper，不依赖原生 RHI 后端
   Backends/
     D3D12/         # 独立的 D3D12 RHI provider
   Plugins/
     Triangle/      # 三角形实验
-    DebugUI/       # 调试 UI 的渲染插件
+    DebugUI/       # 调试 UI 插件，委托通用 GuiRenderer 绘制
     ModelViewer/   # 异步静态模型显示与相机
     SceneViewer/   # 场景节点编辑、相机手势及空间剔除诊断
     RenderDoc/     # 可选抓帧服务的设备创建前生命周期
   Applications/
+    Editor/        # 可停靠工作区、场景打开、视口输入与应用组装
     Viewer/        # 原生资产应用入口与模块组装
     AssetTool/     # 独立 import / inspect / validate / catalog / upgrade CLI
   Tests/           # 对应模块的单元测试及 Integration 验收
@@ -70,3 +72,5 @@ Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Con
 材质的 CPU/编译/绑定边界及扩展入口见 [Materials.md](Materials.md)。Materials 与 Scene 的传递依赖同样接受 `CheckBoundaries.py` 检查，禁止引入 RHI、Renderer 和原生后端。
 
 场景相机与光源以 `Scene` 节点为唯一业务权威。`Renderer/SceneBridge` 发布几何及不可变 metadata，`SceneFrame` 将带精确 publication token 的 seed 解析为最终材质帧和 View；Forward/Deferred/CSM 共用该入口。`SceneNavigation` 通过 `FSceneInstance` 编辑节点，Gui wrappers 的 ImGui 调用仍只位于 Gui 私有 adapter。
+
+`Gui` 只组织控件和生成引擎自有绘制数据；`GuiRenderer` 通过 Renderer/RHI 创建纹理、buffer、管线及绑定。Editor 将场景输出纹理交给 GuiRenderer 合成，公共接口不暴露 ImGui 或原生 D3D12 类型。具体帧顺序和扩展位置见 [Editor.md](Editor.md)。

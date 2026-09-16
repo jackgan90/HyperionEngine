@@ -137,10 +137,17 @@ void ValidateTransitions(const FD3D12DeviceState& InState, const FPassCommands& 
 D3D12_CPU_DESCRIPTOR_HANDLE ColorView(const FD3D12DeviceState& InState, const FColorAttachment& InAttachment,
                                       const FD3D12FrameTargets& InFrame)
 {
-	return InAttachment.Target.Kind == ERenderTargetKind::Backbuffer
-	           ? (InAttachment.GetFormat() == ERHIColorFormat::Rgba8Srgb ? InFrame.SrgbView : InFrame.ColorView)
-	           : NativeResource<FD3D12Texture>(InAttachment.Target.Texture.Payload, &InState)
-	                 .ColorViews->GetCPUDescriptorHandleForHeapStart();
+	if (InAttachment.Target.Kind == ERenderTargetKind::Backbuffer)
+	{
+		return InAttachment.GetFormat() == ERHIColorFormat::Rgba8Srgb ? InFrame.SrgbView : InFrame.ColorView;
+	}
+	const auto& Texture = NativeResource<FD3D12Texture>(InAttachment.Target.Texture.Payload, &InState);
+	auto Handle = Texture.ColorViews->GetCPUDescriptorHandleForHeapStart();
+	if (Texture.ColorFormat == ERHIColorFormat::Rgba8Unorm && InAttachment.GetFormat() == ERHIColorFormat::Rgba8Srgb)
+	{
+		Handle.ptr += InState.Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	}
+	return Handle;
 }
 
 FSize ValidateColor(const FD3D12DeviceState& InState, const FColorAttachment& InAttachment,
@@ -168,7 +175,9 @@ FSize ValidateColor(const FD3D12DeviceState& InState, const FColorAttachment& In
 		throw std::invalid_argument("Invalid color attachment kind");
 	}
 	const auto& Texture = NativeResource<FD3D12Texture>(InAttachment.Target.Texture.Payload, &InState);
-	if (!Texture.ColorViews || Texture.ColorFormat != InAttachment.GetFormat())
+	const bool bSrgbView =
+	    Texture.ColorFormat == ERHIColorFormat::Rgba8Unorm && InAttachment.GetFormat() == ERHIColorFormat::Rgba8Srgb;
+	if (!Texture.ColorViews || (Texture.ColorFormat != InAttachment.GetFormat() && !bSrgbView))
 	{
 		throw std::invalid_argument("Color texture format or render view mismatch");
 	}

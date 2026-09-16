@@ -91,6 +91,8 @@ public:
 	void RequestClose();
 	std::string Clipboard() const;
 	void SetClipboard(const std::string& InText);
+	// Requests a black native title bar with light text; returns false when unsupported.
+	bool SetDarkTitleBar(bool bInEnabled);
 
 private:
 	struct FImpl;

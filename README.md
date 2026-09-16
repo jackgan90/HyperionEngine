@@ -1,6 +1,6 @@
 # Hyperion
 
-Hyperion 是一个 C++20 渲染实验框架，当前运行平台为 Windows x64 / D3D12。项目提供模块化运行时、原生资产工具和交互式 Viewer，用于开发与验证渲染功能。
+Hyperion 是一个 C++20 渲染实验框架，当前运行平台为 Windows x64 / D3D12。项目提供模块化运行时、原生资产工具、交互式 Viewer 和独立场景编辑器，用于开发与验证渲染功能。
 
 ## 功能
 
@@ -9,6 +9,7 @@ Hyperion 是一个 C++20 渲染实验框架，当前运行平台为 Windows x64 
 - 可配置参数与资源的 compute pipeline、按消费者请求生成的 HZB，以及可动态切换的 Deferred contact shadows。
 - 静态 glTF/GLB 离线导入，独立模型、材质、纹理、场景和天空 `.hasset` 资产，异步加载与共享资源管理。
 - 场景层级、相机和光源节点编辑、原生场景保存、BVH 视锥剔除、实例批处理和增量渲染准备。
+- 深色可停靠编辑器工作区，支持菜单打开场景、独立场景视口、镜头导航、对象层级和属性查看；GUI 与场景均通过引擎 Renderer/RHI 渲染。
 - Main / Render / RHI CPU 帧管线、独立 IO 线程和 oneTBB Worker 任务；反射配置、调试 GUI，以及可选 Tracy 和 RenderDoc 集成。
 
 Vulkan/Metal 尚无运行时后端；SPIR-V/MSL 支持编译与反射。静态模型导入不支持动画、蒙皮、morph target 或压缩 glTF 扩展。具体边界见 [资产管线](docs/AssetPipeline.md) 和 [功能范围](docs/Roadmap.md)。
@@ -42,6 +43,9 @@ python tools/Bootstrap.py
 从仓库根目录运行：
 
 ```powershell
+# 场景编辑器：启动后选择 File > Open Scene... > /Game/Scenes/Sponza.hasset
+./out/build/release/bin/hyperion_editor.exe
+
 # Sponza 场景
 ./out/build/release/bin/hyperion_viewer.exe --config experiments/Scene.json
 
@@ -53,6 +57,8 @@ python tools/Bootstrap.py
 ```
 
 SceneViewer 的 WASDQE 用于连续移动，右键拖动环绕，滚轮推拉，Home 取景，Tab 切换面板。Sponza 默认显示调试面板，可编辑相机、模型、光源和天空并保存场景。详见 [场景管理](docs/SceneManagement.md) 和 [Sponza 示例](docs/SponzaMigration.md)。
+
+Editor 使用共享控制器的飞行模式：在视口中按住右键后 WASDQE 才能平移，右键拖动在当前位置调整朝向，滚轮推拉、Home 取景。第一版的 Details 为只读检查面板。面板可以拖动停靠，布局在退出时保存。启动、挂载和功能范围见 [编辑器](docs/Editor.md)。
 
 自定义模型先离线导入，再交给 Viewer：
 
@@ -69,7 +75,7 @@ SceneViewer 的 WASDQE 用于连续移动，右键拖动环绕，滚轮推拉，
 
 - `Source/Runtime`：按概念划分的运行时模块，各自拥有 Public / Private 和 CMake target。
 - `Source/Backends`：原生图形后端；`Source/Plugins`：实验与 UI 插件。
-- `Source/Applications`：Viewer 与 AssetTool；`Source/Tests`：单元测试和集成验收。
+- `Source/Applications`：Editor、Viewer 与 AssetTool；`Source/Tests`：单元测试和集成验收。
 - `Content`：引擎内置资源与 Shader；HyperionAssets：独立样例资源仓库。
 - `experiments`：实验配置；`tools`：构建、资产重建和检查工具。
 - `openspec`：功能规范与变更归档。

@@ -56,11 +56,13 @@ FTexture FD3D12RHIDevice::CreateColorTexture(const FColorTextureDesc& InDesc)
 	Desc.Height = InDesc.Height;
 	Desc.DepthOrArraySize = 1;
 	Desc.MipLevels = 1;
-	Desc.Format = NativeColorFormat(InDesc.Format);
+	const auto ViewFormat = NativeColorFormat(InDesc.Format);
+	const bool bDualViews = InDesc.Format == ERHIColorFormat::Rgba8Unorm;
+	Desc.Format = bDualViews ? DXGI_FORMAT_R8G8B8A8_TYPELESS : ViewFormat;
 	Desc.SampleDesc.Count = 1;
 	Desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 	D3D12_CLEAR_VALUE Clear{};
-	Clear.Format = Desc.Format;
+	Clear.Format = ViewFormat;
 	std::copy(ClearValues.begin(), ClearValues.end(), Clear.Color);
 	D3D12MA::ALLOCATION_DESC Allocation{};
 	Allocation.HeapType = D3D12_HEAP_TYPE_DEFAULT;
@@ -69,19 +71,28 @@ FTexture FD3D12RHIDevice::CreateColorTexture(const FColorTextureDesc& InDesc)
 	      "Create sampled color target");
 	D3D12_DESCRIPTOR_HEAP_DESC Heap{};
 	Heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	Heap.NumDescriptors = 1;
+	Heap.NumDescriptors = bDualViews ? 2 : 1;
 	Check(State->Device->CreateDescriptorHeap(&Heap, IID_PPV_ARGS(&Texture->ColorViews)), "Create color view heap");
-	State->Device->CreateRenderTargetView(Texture->Resource.Get(), nullptr,
-	                                      Texture->ColorViews->GetCPUDescriptorHandleForHeapStart());
+	D3D12_RENDER_TARGET_VIEW_DESC View{};
+	View.Format = ViewFormat;
+	View.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	auto Handle = Texture->ColorViews->GetCPUDescriptorHandleForHeapStart();
+	State->Device->CreateRenderTargetView(Texture->Resource.Get(), &View, Handle);
+	if (bDualViews)
+	{
+		Handle.ptr += State->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		View.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+		State->Device->CreateRenderTargetView(Texture->Resource.Get(), &View, Handle);
+	}
 	Texture->SourceDescriptor = State->ResourceSources.Reserve(1);
 	D3D12_SHADER_RESOURCE_VIEW_DESC Srv{};
-	Srv.Format = Desc.Format;
+	Srv.Format = ViewFormat;
 	Srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	Srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	Srv.Texture2D.MipLevels = 1;
 	State->Device->CreateShaderResourceView(Texture->Resource.Get(), &Srv,
 	                                        State->ResourceSources.Cpu(Texture->SourceDescriptor.Offset));
-	State->DescriptorAllocations += 2;
+	State->DescriptorAllocations += Heap.NumDescriptors + 1;
 	InitializeColor(*State, *Texture, InDesc.Clear);
 	return {std::move(Texture)};
 }

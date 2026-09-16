@@ -8,7 +8,7 @@ All direct calls are isolated behind the indicated engine wrapper. Full commits 
 | [d3d12ma](https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator) | v3.2.0 | RHI resource allocation |
 | [dxc](https://github.com/microsoft/DirectXShaderCompiler) | v1.9.2607 | Shader compilation |
 | [glm](https://github.com/g-truc/glm) | 1.0.3 | Math |
-| [imgui](https://github.com/ocornut/imgui) | v1.92.9b | Gui |
+| [imgui](https://github.com/ocornut/imgui) | v1.92.9b-docking | Gui; private docking adapter |
 | [implot](https://github.com/epezent/implot) | v1.0 | Gui plots |
 | [json](https://github.com/nlohmann/json) | v3.12.0 | Reflection serialization |
 | [mimalloc](https://github.com/microsoft/mimalloc) | v3.5.1 | Core allocation / PMR |

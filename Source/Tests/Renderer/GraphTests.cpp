@@ -448,6 +448,56 @@ void CheckGraphMoves()
 	HYP_CHECK(Moved.ImportBackbuffer().Graph != Color.Graph);
 }
 
+void CheckOffscreenColorViews()
+{
+	class FColorTexture final : public IRHITexture
+	{
+	public:
+		ERHIColorFormat Format = ERHIColorFormat::Rgba8Unorm;
+
+		FRHITextureInfo GetInfo() const noexcept override
+		{
+			return {64, 64, ERHIDepthFormat::None, Format, true};
+		}
+
+		const void* GetDeviceIdentity() const noexcept override
+		{
+			return this;
+		}
+	};
+
+	for (const auto Format : {ERHIColorFormat::Rgba8Unorm, ERHIColorFormat::Rgba16Float})
+	{
+		for (const auto View : {EGraphColorView::Srgb, EGraphColorView::DrawBatch})
+		{
+			FRenderGraph Graph;
+			auto Texture = std::make_shared<FColorTexture>();
+			Texture->Format = Format;
+			FGraphTextureImport Import{"Output", FRenderTarget::FromTexture({Texture}), {64, 64}};
+			Import.ColorFormat = Format;
+			const auto Target = Graph.Import(Import);
+			FGraphicsPass Pass;
+			Pass.Name = "Output views";
+			Pass.Color = FGraphColorAttachment{Target, {EAttachmentLoad::Clear}, {}, View};
+			Pass.Batches = {{{}, false}, {{}, true}};
+			Graph.Add(Pass);
+			if (Format != ERHIColorFormat::Rgba8Unorm || View != EGraphColorView::DrawBatch)
+			{
+				Rejects(
+				    [&]
+				    {
+					    Graph.Compile();
+				    });
+				continue;
+			}
+			const auto Plan = Graph.Compile();
+			HYP_CHECK(Plan.size() == 2 && !Plan[0].IsSrgb() && Plan[1].IsSrgb());
+			HYP_CHECK(Plan[0].Color->Actions.Load == EAttachmentLoad::Clear);
+			HYP_CHECK(Plan[1].Color->Actions.Load == EAttachmentLoad::Load);
+		}
+	}
+}
+
 void CheckInvalidDeclarations()
 {
 	FRenderGraph Graph;
@@ -537,6 +587,7 @@ int main()
 		CheckPhysicalImports();
 		CheckGraphMoves();
 		CheckColorTargets();
+		CheckOffscreenColorViews();
 		CheckFractionalRegions();
 		std::cout << "Explicit graph attachments, hazards, content lifetime and packet ownership passed\n";
 	}

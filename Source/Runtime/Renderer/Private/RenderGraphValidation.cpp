@@ -133,7 +133,8 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 		    !std::isfinite(Attachment.Clear.W) ||
 		    (Attachment.View != EGraphColorView::Linear && Attachment.View != EGraphColorView::Srgb &&
 		     Attachment.View != EGraphColorView::DrawBatch) ||
-		    (Color.Target.Kind == ERenderTargetKind::Texture && Attachment.View != EGraphColorView::Linear))
+		    (Color.Target.Kind == ERenderTargetKind::Texture && Attachment.View != EGraphColorView::Linear &&
+		     Color.ColorFormat != ERHIColorFormat::Rgba8Unorm))
 		{
 			throw std::invalid_argument("Invalid graph color attachment, view or duplicate target");
 		}

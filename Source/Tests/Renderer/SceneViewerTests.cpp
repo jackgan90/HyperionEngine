@@ -8,6 +8,7 @@
 #include "Support/NativeAssetSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
+#include <array>
 #include <chrono>
 #include <iostream>
 #include <limits>
@@ -366,6 +367,251 @@ void CheckReusableMouse(FViewerFixture& InFixture)
 	Scene.SetCameraView(Handle, Original, Camera);
 }
 
+FInputEvent CameraButton(bool bInDown = true)
+{
+	FInputEvent Event;
+	Event.Type = EEventType::MouseButton;
+	Event.Button = 1;
+	Event.bDown = bInDown;
+	Event.X = 200;
+	Event.Y = 100;
+	return Event;
+}
+
+FSceneCameraPose ReadCameraPose(FSceneInstance& InScene, FSceneHandle InHandle)
+{
+	FSceneCameraPose Pose;
+	HYP_CHECK(InScene.GetCameraPose(InHandle, Pose));
+	return Pose;
+}
+
+FInputEvent CameraWheel(float InDelta)
+{
+	FInputEvent Event;
+	Event.Type = EEventType::MouseWheel;
+	Event.Y = InDelta;
+	return Event;
+}
+
+void CheckFlyWheel(FSceneInstance& InScene, FSceneHandle InHandle, const FSceneCamera& InCamera)
+{
+	FSceneCameraController Controller(ESceneCameraNavigationMode::Fly);
+	const auto Start = SceneCameraTransform({2, 3, 9}, {3, 4, 8});
+	InScene.SetCameraView(InHandle, Start, InCamera);
+	const auto Before = ReadCameraPose(InScene, InHandle);
+	const float InitialSpeed = Controller.GetMovementSpeed(InScene);
+	const std::array Faster{CameraButton(), CameraWheel(1)};
+	Controller.Input(InScene, Faster, false, false);
+	const float Speed = Controller.GetMovementSpeed(InScene);
+	HYP_CHECK(std::abs(Speed - InitialSpeed * 1.2f) < .0001f);
+	const auto Adjusted = ReadCameraPose(InScene, InHandle);
+	HYP_CHECK(Length(Subtract(Adjusted.Eye, Before.Eye)) == 0);
+	HYP_CHECK(Length(Subtract(Adjusted.Forward, Before.Forward)) == 0);
+	HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+	const auto Key = CameraKey(EKey::W);
+	Controller.Input(InScene, {&Key, 1}, false, false);
+	Controller.Advance(InScene, .02f);
+	const auto Moved = ReadCameraPose(InScene, InHandle);
+	HYP_CHECK(std::abs(Length(Subtract(Moved.Eye, Before.Eye)) - Speed * .02f) < .0001f);
+	HYP_CHECK(Dot(Normalize(Subtract(Moved.Eye, Before.Eye)), Before.Forward) > .9999f);
+	const std::array Dolly{CameraButton(false), CameraWheel(1)};
+	Controller.Input(InScene, Dolly, false, false);
+	const auto Dollied = ReadCameraPose(InScene, InHandle);
+	HYP_CHECK(Dot(Normalize(Subtract(Dollied.Eye, Moved.Eye)), Before.Forward) > .9999f);
+	HYP_CHECK(std::abs(Length(Subtract(Dollied.Eye, Moved.Eye)) - InCamera.FocusDistance * .15f) < .0001f);
+	HYP_CHECK(Controller.GetMovementSpeed(InScene) == Speed);
+	Controller.Advance(InScene, .02f);
+	HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Dollied.Eye)) == 0);
+	const std::array Slower{CameraButton(), CameraWheel(-.5f), CameraWheel(-.5f)};
+	Controller.Input(InScene, Slower, false, false);
+	HYP_CHECK(std::abs(Controller.GetMovementSpeed(InScene) - InitialSpeed) < .0001f);
+	HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Dollied.Eye)) == 0);
+	InScene.SetCameraView(InHandle, Start, InCamera);
+}
+
+void CheckFlySpeedInterruptions(FSceneInstance& InScene, FSceneHandle InHandle)
+{
+	FSceneCameraController Controller(ESceneCameraNavigationMode::Fly);
+	const auto Before = ReadCameraPose(InScene, InHandle);
+	const std::array Faster{CameraButton(), CameraWheel(1)};
+	Controller.Input(InScene, Faster, false, false);
+	const float Speed = Controller.GetMovementSpeed(InScene);
+	Controller.Reset();
+	HYP_CHECK(Controller.GetMovementSpeed(InScene) == Speed);
+	Controller.Input(InScene, Faster, true, true);
+	HYP_CHECK(Controller.GetMovementSpeed(InScene) == Speed);
+	FInputEvent Focus;
+	Focus.Type = EEventType::Focus;
+	Controller.Input(InScene, {&Focus, 1}, false, false);
+	Controller.Input(InScene, Faster, false, false);
+	HYP_CHECK(Controller.GetMovementSpeed(InScene) == Speed);
+	Focus.bDown = true;
+	Controller.Input(InScene, {&Focus, 1}, false, false);
+	HYP_CHECK(Controller.GetMovementSpeed(InScene) == Speed);
+	const auto Press = CameraButton();
+	Controller.Input(InScene, {&Press, 1}, false, false);
+	for (const float Delta : {0.f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()})
+	{
+		const auto Wheel = CameraWheel(Delta);
+		Controller.Input(InScene, {&Wheel, 1}, false, false);
+		HYP_CHECK(Controller.GetMovementSpeed(InScene) == Speed);
+	}
+	for (const float Delta : {std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()})
+	{
+		const auto Wheel = CameraWheel(Delta);
+		Controller.Input(InScene, {&Wheel, 1}, false, false);
+		const float Limit = Controller.GetMovementSpeed(InScene);
+		HYP_CHECK(std::isfinite(Limit) && Limit > 0);
+		HYP_CHECK(Delta > 0 ? Limit > Speed : Limit < Speed);
+		Controller.Input(InScene, {&Wheel, 1}, false, false);
+		HYP_CHECK(Controller.GetMovementSpeed(InScene) == Limit);
+	}
+	HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Before.Eye)) == 0);
+}
+
+void CheckFlyTranslation(FSceneInstance& InScene, FSceneHandle InHandle, const FSceneCamera& InCamera)
+{
+	FSceneCameraController Controller(ESceneCameraNavigationMode::Fly);
+	const auto Press = CameraButton();
+	const auto Release = CameraButton(false);
+	const auto Start = SceneCameraTransform({2, 3, 9}, {2, 3, 8});
+	const float Distance = std::max(1.f, InCamera.FocusDistance) * .02f;
+	for (const auto Key : {EKey::W, EKey::A, EKey::S, EKey::D, EKey::Q, EKey::E, EKey::Up, EKey::Left, EKey::Down,
+	                       EKey::Right, EKey::PageDown, EKey::PageUp})
+	{
+		Controller.Reset();
+		InScene.SetCameraView(InHandle, Start, InCamera);
+		const auto Before = ReadCameraPose(InScene, InHandle);
+		const auto KeyDown = CameraKey(Key);
+		Controller.Input(InScene, {&KeyDown, 1}, false, false);
+		Controller.Advance(InScene, .02f);
+		HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Before.Eye)) == 0);
+		Controller.Input(InScene, {&Press, 1}, false, false);
+		Controller.Advance(InScene, .02f);
+		const auto Moved = ReadCameraPose(InScene, InHandle);
+		HYP_CHECK(std::abs(Length(Subtract(Moved.Eye, Before.Eye)) - Distance) < .0001f);
+		HYP_CHECK(Length(Subtract(Moved.Forward, Before.Forward)) < .0001f);
+		HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+		Controller.Input(InScene, {&Release, 1}, false, false);
+		Controller.Advance(InScene, .02f);
+		HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Moved.Eye)) == 0);
+		// A physically held key can resume when RMB is pressed again.
+		Controller.Input(InScene, {&Press, 1}, false, false);
+		Controller.Advance(InScene, .02f);
+		const auto Resumed = ReadCameraPose(InScene, InHandle);
+		HYP_CHECK(std::abs(Length(Subtract(Resumed.Eye, Moved.Eye)) - Distance) < .0001f);
+		const auto KeyUp = CameraKey(Key, false);
+		Controller.Input(InScene, {&KeyUp, 1}, false, false);
+		Controller.Advance(InScene, .02f);
+		HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Resumed.Eye)) == 0);
+	}
+	// Releasing RMB in the same event batch as a key press must still stop movement.
+	const std::array Events{CameraKey(EKey::W), Release};
+	const auto Before = ReadCameraPose(InScene, InHandle);
+	Controller.Input(InScene, Events, false, false);
+	Controller.Advance(InScene, .02f);
+	HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Before.Eye)) == 0);
+}
+
+void CheckFlyLook(FSceneInstance& InScene, FSceneHandle InHandle, const FSceneCamera& InCamera)
+{
+	FSceneCameraController Controller(ESceneCameraNavigationMode::Fly);
+	InScene.SetCameraView(InHandle, SceneCameraTransform({2, 3, 9}, {2, 3, 8}), InCamera);
+	const auto Before = ReadCameraPose(InScene, InHandle);
+	const auto Press = CameraButton();
+	FInputEvent Move;
+	Move.Type = EEventType::MouseMove;
+	Move.X = 220;
+	Move.Y = 110;
+	Controller.Input(InScene, {&Move, 1}, false, false);
+	HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Forward, Before.Forward)) == 0);
+	Controller.Input(InScene, {&Press, 1}, false, false);
+	Controller.Input(InScene, {&Move, 1}, false, false);
+	const auto Looked = ReadCameraPose(InScene, InHandle);
+	HYP_CHECK(Looked.Forward.X > 0 && Looked.Forward.Y < 0);
+	HYP_CHECK(Length(Subtract(Looked.Eye, Before.Eye)) == 0);
+	HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+	const auto Key = CameraKey(EKey::W);
+	Controller.Input(InScene, {&Key, 1}, false, false);
+	Controller.Advance(InScene, .02f);
+	const auto Moved = ReadCameraPose(InScene, InHandle);
+	const auto Direction = Normalize(Subtract(Moved.Eye, Looked.Eye));
+	HYP_CHECK(Dot(Direction, Looked.Forward) > .9999f);
+	for (unsigned Index = 0; Index < 100; ++Index)
+	{
+		Move.X += 15;
+		Move.Y += 500;
+		Controller.Input(InScene, {&Move, 1}, false, false);
+	}
+	const auto Clamped = ReadCameraPose(InScene, InHandle);
+	HYP_CHECK(Length(Subtract(Clamped.Eye, Moved.Eye)) == 0);
+	HYP_CHECK(IsFinite(Clamped.Forward) && std::abs(Clamped.Forward.Y) < 1);
+	HYP_CHECK(std::abs(Dot(Clamped.Forward, Clamped.Up)) < .0001f);
+	HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+	const auto Release = CameraButton(false);
+	Controller.Input(InScene, {&Release, 1}, false, false);
+	Move.X += 20;
+	Controller.Input(InScene, {&Move, 1}, false, false);
+	Controller.Advance(InScene, .02f);
+	const auto Stopped = ReadCameraPose(InScene, InHandle);
+	HYP_CHECK(Length(Subtract(Stopped.Eye, Clamped.Eye)) == 0);
+	HYP_CHECK(Length(Subtract(Stopped.Forward, Clamped.Forward)) == 0);
+}
+
+void CheckFlyInterruptions(FSceneInstance& InScene, FSceneHandle InHandle)
+{
+	FSceneCameraController Controller(ESceneCameraNavigationMode::Fly);
+	const std::array Press{CameraButton(), CameraKey(EKey::W)};
+	for (unsigned Mode = 0; Mode < 4; ++Mode)
+	{
+		Controller.Input(InScene, Press, false, false);
+		Controller.Advance(InScene, .02f);
+		const auto Before = ReadCameraPose(InScene, InHandle);
+		if (Mode < 2)
+		{
+			Controller.Input(InScene, {}, Mode == 0, Mode == 1);
+		}
+		else if (Mode == 2)
+		{
+			FInputEvent Focus;
+			Focus.Type = EEventType::Focus;
+			Controller.Input(InScene, {&Focus, 1}, true, true);
+			Focus.bDown = true;
+			Controller.Input(InScene, {&Focus, 1}, true, true);
+		}
+		else
+		{
+			Controller.Reset();
+		}
+		const auto Repeat = CameraKey(EKey::W, true, true);
+		Controller.Input(InScene, {&Repeat, 1}, false, false);
+		Controller.Advance(InScene, .02f);
+		HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Before.Eye)) == 0);
+		Controller.Input(InScene, Press, false, false);
+		Controller.Advance(InScene, .02f);
+		HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Before.Eye)) > .001f);
+		Controller.Reset();
+	}
+}
+
+void CheckFlyCamera(FViewerFixture& InFixture)
+{
+	auto& Scene = InFixture.Plugin->GetSceneInstance();
+	const auto Handle = *GetSceneNavigationCamera(Scene);
+	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	FSceneNodeView View;
+	HYP_CHECK(Scene.GetNodeView(Handle, View));
+	const auto Original = View.World;
+	CheckFlyTranslation(Scene, Handle, Camera);
+	CheckFlyLook(Scene, Handle, Camera);
+	CheckFlyInterruptions(Scene, Handle);
+	CheckFlyWheel(Scene, Handle, Camera);
+	CheckFlySpeedInterruptions(Scene, Handle);
+	Scene.SetCameraView(Handle, Original, Camera);
+	std::cout
+	    << "Fly camera: RMB gating, fixed-eye look, wheel speed/dolly, speed limits and interruption recovery passed\n";
+}
+
 void CheckSaveReload(FViewerFixture& InFixture)
 {
 	auto& Plugin = *InFixture.Plugin;
@@ -533,6 +779,7 @@ int main()
 		CheckControls(Fixture);
 		CheckContinuousCamera(Fixture);
 		CheckCameraInterruptions(Fixture);
+		CheckFlyCamera(Fixture);
 		CheckReusableMouse(Fixture);
 		CheckSaveReload(Fixture);
 		CheckSnapshotIsolationAndFailure(Fixture);

@@ -39,6 +39,8 @@ public:
 	FSceneRenderPipeline(FRenderSession& InSession, FRHICapabilities InCapabilities,
 	                     FScenePipelineSettings InSettings = {});
 	void Configure(FScenePipelineSettings InSettings);
+	// Render domain: presentation defaults to the backbuffer; RGBA8 output is encoded through an sRGB view.
+	void SetOutputTarget(FRenderTargetSource InTarget = {ERenderTargetKind::Backbuffer});
 	void Build(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
 	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
@@ -50,6 +52,8 @@ public:
 	std::uint64_t TargetBytes() const;
 
 private:
+	FRenderTargetSource OutputTarget{ERenderTargetKind::Backbuffer};
+	FRenderPassTargets OutputTargets(std::optional<FVec4> InClear = {}) const;
 	void BuildResolved(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	                   const FCascadedShadowSettings& InShadows, FVec4 InClear,
 	                   const std::function<void(FRenderGraph&)>& InExtensions, bool bInDeferPreparation);

@@ -147,7 +147,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 	Result.Lifetime = Lifetime;
 	Result.Statistics = FullscreenStatistics;
 	Result.Viewport = Viewport(InMain);
-	Result.Targets = FRenderPassTargets::ColorOnly();
+	Result.Targets = OutputTargets();
 	Result.Targets.Name = "Deferred/GBuffer debug";
 	for (std::size_t Index = 0; Index < GBuffer.size(); ++Index)
 	{
@@ -172,7 +172,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Tonemap(const FRenderView& InMain) con
 	Result.bFullTargetViewport = true;
 	// Initialize the entire presentation surface even for a sub-viewport.
 	Result.Viewport = {0, 0, float(InMain.Width), float(InMain.Height)};
-	Result.Targets = FRenderPassTargets::ColorOnly(FVec4{});
+	Result.Targets = OutputTargets(FVec4{});
 	Result.Targets.Name = "Output/Tonemap";
 	Result.Targets.Reads = {{ERenderTargetKind::Texture, SceneColor, Lifetime, false}};
 	Result.Parameters = {{"Pixel:SceneColor", FMaterialValue::FromTexture(SceneColor)},

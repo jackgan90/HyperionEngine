@@ -6,6 +6,8 @@
 
 `FGraphicsPass` declares an optional single `Color` or ordered `Colors` list (mutually exclusive), and an optional depth/stencil attachment, viewport, sampled reads and `After` dependencies. Color view selects linear, sRGB or material draw-batch view. Each aspect has Load/Clear/Discard and Store/Discard actions. A missing attachment never selects an implicit target. Export backbuffer to Present and sampled depth to ShaderRead explicitly.
 
+RGBA8 UNORM offscreen color targets also support an sRGB attachment view or a per-material draw-batch view. The latter preserves mixed linear/sRGB legacy material output. Their sampled view remains UNORM, so consumers must account for the encoded content; the editor GUI performs this conversion explicitly. Other offscreen color formats require a linear attachment view.
+
 ```cpp
 FRenderGraph Graph;
 const auto Color = Graph.ImportBackbuffer({640, 480});
