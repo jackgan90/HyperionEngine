@@ -5,6 +5,8 @@ add_executable(hyperion_viewer
   Private/ViewerFrame.cpp Private/ViewerFramePipeline.cpp Private/ViewerOutput.cpp Private/ViewerBenchmark.cpp Private/ViewerProfiling.cpp Private/ViewerShadows.cpp
   Private/ViewerCapture.cpp Private/ViewerCaptureScope.h)
 hyp_executable(hyperion_viewer)
+target_sources(hyperion_viewer PRIVATE "${PROJECT_SOURCE_DIR}/Source/Applications/Resources/Hyperion.rc")
+target_include_directories(hyperion_viewer PRIVATE "${PROJECT_SOURCE_DIR}/Source/Applications/Resources")
 target_sources(hyperion_viewer PRIVATE Private/ViewerContactAcceptance.cpp)
 target_link_libraries(hyperion_viewer PRIVATE hyperion_render hyperion_debug_ui hyperion_triangle hyperion_model_viewer hyperion_scene_viewer hyperion_io hyperion_assets hyperion_rhi_d3d12 hyperion_core hyperion_tasks hyperion_config)
 target_compile_definitions(hyperion_viewer PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
