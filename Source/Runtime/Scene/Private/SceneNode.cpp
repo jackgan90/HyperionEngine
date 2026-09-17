@@ -24,41 +24,38 @@ bool FSceneModelComponent::operator==(const FSceneModelComponent& InOther) const
 {
 	return Asset == InOther.Asset && Data == InOther.Data && bVisible == InOther.bVisible &&
 	       EqualOverride(Material, InOther.Material) && Surface == InOther.Surface &&
-	       SectionSurfaces == InOther.SectionSurfaces;
+	       SectionSurfaces == InOther.SectionSurfaces && SourceNode == InOther.SourceNode &&
+	       Sections == InOther.Sections && SourcePrimitive == InOther.SourcePrimitive;
 }
 
 bool FSceneNode::operator==(const FSceneNode& InOther) const
 {
-	return Id == InOther.Id && Name == InOther.Name && Parent == InOther.Parent &&
-	       Local.Values == InOther.Local.Values && bEnabled == InOther.bEnabled && Model == InOther.Model &&
-	       Camera == InOther.Camera && DirectionalLight == InOther.DirectionalLight &&
-	       EnvironmentLight == InOther.EnvironmentLight && PointLight == InOther.PointLight &&
-	       SpotLight == InOther.SpotLight;
+	return Id == InOther.Id && Name == InOther.Name && bEnabled == InOther.bEnabled && Components == InOther.Components;
 }
 
 ESceneNodeKind FSceneNode::GetKind() const
 {
-	if (Model)
+	if (Model())
 	{
 		return ESceneNodeKind::Model;
 	}
-	if (Camera)
+	if (Camera())
 	{
 		return ESceneNodeKind::Camera;
 	}
-	if (DirectionalLight)
+	if (DirectionalLight())
 	{
 		return ESceneNodeKind::DirectionalLight;
 	}
-	if (EnvironmentLight)
+	if (EnvironmentLight())
 	{
 		return ESceneNodeKind::EnvironmentLight;
 	}
-	if (PointLight)
+	if (PointLight())
 	{
 		return ESceneNodeKind::PointLight;
 	}
-	if (SpotLight)
+	if (SpotLight())
 	{
 		return ESceneNodeKind::SpotLight;
 	}
@@ -105,59 +102,75 @@ bool HasChange(ESceneChangeMask InMask, ESceneChangeMask InFlags)
 
 FSceneModel SceneModelTransfer(const FSceneNode& InNode, const FMat4& InWorld, bool bInEffectiveEnabled)
 {
-	if (!InNode.Model)
+	if (!InNode.Model())
 	{
 		throw std::invalid_argument("Scene node is not a model");
 	}
-	const auto& Component = *InNode.Model;
+	const auto& Component = *InNode.Model();
 	return {InNode.Name,
 	        Component.Data,
 	        InWorld,
 	        bInEffectiveEnabled && Component.bVisible,
 	        Component.Material,
 	        Component.Surface,
-	        Component.SectionSurfaces};
+	        Component.SectionSurfaces,
+	        Component.SourceNode,
+	        Component.Sections,
+	        Component.SourcePrimitive};
 }
 
 FSceneModelComponent SceneModelComponent(const FSceneModel& InModel)
 {
-	return {{}, InModel.Data, InModel.bVisible, InModel.Material, InModel.Surface, InModel.SectionSurfaces};
+	return {{},
+	        InModel.Data,
+	        InModel.bVisible,
+	        InModel.Material,
+	        InModel.Surface,
+	        InModel.SectionSurfaces,
+	        InModel.SourceNode,
+	        InModel.Sections,
+	        InModel.SourcePrimitive};
 }
 
 void ValidateSceneNode(const FSceneNode& InNode)
 {
-	const auto Payloads = unsigned(InNode.Model.has_value()) + unsigned(InNode.Camera.has_value()) +
-	                      unsigned(InNode.DirectionalLight.has_value()) +
-	                      unsigned(InNode.EnvironmentLight.has_value()) + unsigned(InNode.PointLight.has_value()) +
-	                      unsigned(InNode.SpotLight.has_value());
-	if (InNode.Id.empty() || Payloads > 1 || !IsAffine(InNode.Local))
+	if (InNode.Id.empty())
 	{
-		throw std::invalid_argument("Invalid scene node ID, transform or mutually exclusive payload");
+		throw std::invalid_argument("Scene object requires an ID");
 	}
-	if (InNode.Camera)
+	InNode.Components.Validate();
+	if (InNode.Camera())
 	{
-		ValidateSceneCamera(*InNode.Camera);
+		ValidateSceneCamera(*InNode.Camera());
 	}
-	if (InNode.DirectionalLight)
+	if (InNode.DirectionalLight())
 	{
-		ValidateSceneDirectionalLight(*InNode.DirectionalLight);
+		ValidateSceneDirectionalLight(*InNode.DirectionalLight());
 	}
-	if (InNode.EnvironmentLight)
+	if (InNode.EnvironmentLight())
 	{
-		ValidateSceneEnvironmentLight(*InNode.EnvironmentLight);
+		ValidateSceneEnvironmentLight(*InNode.EnvironmentLight());
 	}
-	if (InNode.PointLight)
+	if (InNode.PointLight())
 	{
-		ValidateScenePointLight(*InNode.PointLight);
+		ValidateScenePointLight(*InNode.PointLight());
 	}
-	if (InNode.SpotLight)
+	if (InNode.SpotLight())
 	{
-		ValidateSceneSpotLight(*InNode.SpotLight);
+		ValidateSceneSpotLight(*InNode.SpotLight());
 	}
-	if (InNode.Model)
+	if (InNode.Model())
 	{
-		ValidateMaterialOverride(InNode.Model->Material);
-		ValidateSceneMaterialSelections(SceneModelTransfer(InNode, InNode.Local, true));
+		if (InNode.Model()->Data && !InNode.Model()->SourceNode.empty())
+		{
+			const auto& Instances = InNode.Model()->Data->NodeInstances.at(InNode.Model()->SourceNode);
+			if (Instances.empty())
+			{
+				throw std::invalid_argument("Static Mesh source node has no mesh sections");
+			}
+		}
+		ValidateMaterialOverride(InNode.Model()->Material);
+		ValidateSceneMaterialSelections(SceneModelTransfer(InNode, InNode.Local(), true));
 	}
 }
 
@@ -167,7 +180,7 @@ void ValidateSceneWorld(const FSceneNode& InNode, const FMat4& InWorld)
 	{
 		throw std::invalid_argument("Scene hierarchy produces a nonfinite or nonaffine world transform");
 	}
-	if (InNode.Camera || InNode.DirectionalLight || InNode.SpotLight)
+	if (InNode.Camera() || InNode.DirectionalLight() || InNode.SpotLight())
 	{
 		ExtractScenePose(InWorld);
 	}

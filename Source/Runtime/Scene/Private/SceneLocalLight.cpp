@@ -24,11 +24,12 @@ template<> const FRecordDescriptor& RecordType<FScenePointLight>()
 {
 	static const auto Type = []
 	{
-		auto Result = MakeRecord<FScenePointLight>("hyperion.scenepointlight",
-		                                           {Member("color", &FScenePointLight::Color),
-		                                            Member("intensity", &FScenePointLight::Intensity),
-		                                            Member("range", &FScenePointLight::Range)},
-		                                           1, ValidateScenePointLight);
+		auto Result = MakeRecord<FScenePointLight>(
+		    "hyperion.scenepointlight",
+		    {Member("color", &FScenePointLight::Color, Inspect("Color", 0, {})),
+		     Member("intensity", &FScenePointLight::Intensity, Inspect("Intensity", 0, {})),
+		     Member("range", &FScenePointLight::Range, Inspect("Range", .000001, {}))},
+		    1, ValidateScenePointLight);
 		Result.bRejectUnknownFields = true;
 		return Result;
 	}();
@@ -38,7 +39,7 @@ template<> const FRecordDescriptor& RecordType<FScenePointLight>()
 const FScenePointLight* FScene::FindPointLight(FSceneHandle InHandle) const
 {
 	const auto* Node = FindNode(InHandle);
-	return Node && Node->PointLight ? &*Node->PointLight : nullptr;
+	return Node && Node->PointLight() ? &*Node->PointLight() : nullptr;
 }
 
 bool FScene::SetPointLight(FSceneHandle InHandle, FScenePointLight InLight)
@@ -48,12 +49,12 @@ bool FScene::SetPointLight(FSceneHandle InHandle, FScenePointLight InLight)
 	{
 		return false;
 	}
-	if (!Existing->PointLight)
+	if (!Existing->PointLight())
 	{
 		throw std::invalid_argument("Scene node has the wrong payload kind");
 	}
 	auto Node = *Existing;
-	Node.PointLight = std::move(InLight);
+	Node.PointLight() = std::move(InLight);
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -61,7 +62,7 @@ FSceneNode MakeScenePointLightNode(std::string InId)
 {
 	FSceneNode Node;
 	Node.Id = std::move(InId);
-	Node.PointLight = FScenePointLight{};
+	Node.PointLight() = FScenePointLight{};
 	return Node;
 }
 
@@ -95,9 +96,11 @@ template<> const FRecordDescriptor& RecordType<FSceneSpotLight>()
 	{
 		auto Result = MakeRecord<FSceneSpotLight>(
 		    "hyperion.scenespotlight",
-		    {Member("color", &FSceneSpotLight::Color), Member("intensity", &FSceneSpotLight::Intensity),
-		     Member("range", &FSceneSpotLight::Range), Member("innerRadians", &FSceneSpotLight::InnerRadians),
-		     Member("outerRadians", &FSceneSpotLight::OuterRadians)},
+		    {Member("color", &FSceneSpotLight::Color, Inspect("Color", 0, {})),
+		     Member("intensity", &FSceneSpotLight::Intensity, Inspect("Intensity", 0, {})),
+		     Member("range", &FSceneSpotLight::Range, Inspect("Range", .000001, {})),
+		     Member("innerRadians", &FSceneSpotLight::InnerRadians, Inspect("Inner cone (radians)", 0, {})),
+		     Member("outerRadians", &FSceneSpotLight::OuterRadians, Inspect("Outer cone (radians)", .000001, {}))},
 		    1, ValidateSceneSpotLight);
 		Result.bRejectUnknownFields = true;
 		return Result;
@@ -108,7 +111,7 @@ template<> const FRecordDescriptor& RecordType<FSceneSpotLight>()
 const FSceneSpotLight* FScene::FindSpotLight(FSceneHandle InHandle) const
 {
 	const auto* Node = FindNode(InHandle);
-	return Node && Node->SpotLight ? &*Node->SpotLight : nullptr;
+	return Node && Node->SpotLight() ? &*Node->SpotLight() : nullptr;
 }
 
 bool FScene::SetSpotLight(FSceneHandle InHandle, FSceneSpotLight InLight)
@@ -118,12 +121,12 @@ bool FScene::SetSpotLight(FSceneHandle InHandle, FSceneSpotLight InLight)
 	{
 		return false;
 	}
-	if (!Existing->SpotLight)
+	if (!Existing->SpotLight())
 	{
 		throw std::invalid_argument("Scene node has the wrong payload kind");
 	}
 	auto Node = *Existing;
-	Node.SpotLight = std::move(InLight);
+	Node.SpotLight() = std::move(InLight);
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -131,7 +134,7 @@ FSceneNode MakeSceneSpotLightNode(std::string InId)
 {
 	FSceneNode Node;
 	Node.Id = std::move(InId);
-	Node.SpotLight = FSceneSpotLight{};
+	Node.SpotLight() = FSceneSpotLight{};
 	return Node;
 }
 

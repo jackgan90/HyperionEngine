@@ -267,7 +267,7 @@ void RegisterSceneImporter(FAssetImportService& InImports)
 {
 	RegisterSkyImporter(InImports);
 	InImports.Register({"hyperion.scene-json",
-	                    4,
+	                    7,
 	                    &RecordType<FSceneManifest>(),
 	                    {".json"},
 	                    [](FAssetImportContext& InContext)
@@ -277,7 +277,7 @@ void RegisterSceneImporter(FAssetImportService& InImports)
 		                        DecodeSceneManifest({reinterpret_cast<const char*>(Bytes.data()), Bytes.size()}));
 	                    }});
 	InImports.Register({"hyperion.native-scene-upgrade",
-	                    4,
+	                    7,
 	                    &RecordType<FSceneManifest>(),
 	                    {".hasset"},
 	                    [](FAssetImportContext& InContext)

@@ -24,6 +24,16 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 			Result.bExercise = true;
 			continue;
 		}
+		if (Argument == "--benchmark-camera")
+		{
+			Result.bBenchmarkCamera = true;
+			continue;
+		}
+		if (Argument == "--benchmark-collapsed")
+		{
+			Result.bBenchmarkCollapsed = true;
+			continue;
+		}
 		if (Index + 1 >= InCount)
 		{
 			throw std::invalid_argument("Missing value for " + Argument);
@@ -49,6 +59,26 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		{
 			Result.Report = Value;
 		}
+		else if (Argument == "--benchmark")
+		{
+			Result.Benchmark = Value;
+		}
+		else if (Argument == "--exercise-document")
+		{
+			Result.ExerciseDocument = Value;
+		}
+		else if (Argument == "--exercise-views")
+		{
+			Result.ExerciseViews = Value;
+		}
+		else if (Argument == "--benchmark-warmup")
+		{
+			Result.BenchmarkWarmup = static_cast<std::uint32_t>(std::stoul(Value));
+		}
+		else if (Argument == "--benchmark-samples")
+		{
+			Result.BenchmarkSamples = static_cast<std::uint32_t>(std::stoul(Value));
+		}
 		else if (Argument == "--frames")
 		{
 			Result.Frames = static_cast<std::uint32_t>(std::stoul(Value));
@@ -57,6 +87,12 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		{
 			throw std::invalid_argument("Unknown editor option: " + Argument);
 		}
+	}
+	if ((!Result.Benchmark.empty() && (Result.Scene.empty() || !Result.BenchmarkSamples || Result.bExercise)) ||
+	    (Result.bBenchmarkCamera && Result.Benchmark.empty()))
+	{
+		throw std::invalid_argument(
+		    "Editor benchmark requires a scene and positive sample count; exercise is separate");
 	}
 	return Result;
 }

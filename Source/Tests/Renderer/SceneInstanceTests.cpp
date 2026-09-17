@@ -355,6 +355,7 @@ void CheckPendingMaterialEdits(FSceneFixture& InFixture)
 	      });
 	RejectPendingSnapshot(Scene);
 	const auto FailedSource = Scene.GetModels()[0].Handle;
+	HYP_CHECK(CanInitializeSceneBrowsingView(Scene));
 	const auto FailedCopy = Scene.DuplicateNode(FailedSource);
 	Scene.Tick();
 	HYP_CHECK(Scene.GetStatus().FailedModels == 2);
@@ -372,7 +373,7 @@ std::array<FSceneHandle, 3> CopyPendingModels(FSceneInstance& InScene)
 {
 	const auto Source = InScene.GetModels()[0].Handle;
 	const auto Plain = InScene.DuplicateNode(Source);
-	auto Model = *InScene.FindNode(Source)->Model;
+	auto Model = *InScene.FindNode(Source)->Model();
 	Model.Surface.Overrides = {{"Pbr.RoughnessFactor", FMaterialValue::Float(.62f)}};
 	Model.SectionSurfaces[0].Overrides = {{"Pbr.MetallicFactor", FMaterialValue::Float(.4f)}};
 	InScene.SetModelComponent(Source, Model);
@@ -460,6 +461,14 @@ void CheckPendingMaterialCopies(FSceneFixture& InFixture)
 			      });
 		}
 		std::cout << "Pending copy stage=duplicate\n";
+		// CPU asset readiness alone is insufficient while selected materials block geometry publication.
+		HYP_CHECK(!CanInitializeSceneBrowsingView(Scene));
+		auto Settings = Scene.GetSettings();
+		Settings.InitialView = FSceneCameraView{};
+		Scene.SetSettings(Settings);
+		HYP_CHECK(CanInitializeSceneBrowsingView(Scene));
+		Settings.InitialView.reset();
+		Scene.SetSettings(Settings);
 		const auto Copies = CopyPendingModels(Scene);
 		F.Files->bRelease = true;
 		Await(Scene,
@@ -468,6 +477,7 @@ void CheckPendingMaterialCopies(FSceneFixture& InFixture)
 			      return Scene.GetStatus().ReadyModels == 3;
 		      });
 		CheckCopiedMaterialValues(Scene, Copies);
+		HYP_CHECK(CanInitializeSceneBrowsingView(Scene));
 		const auto Snapshot = Scene.Snapshot("DuplicateSaved.hasset");
 		F.Assets.SaveAsync("DuplicateSaved.hasset", std::make_shared<const FSceneManifest>(Snapshot)).Get(F.Tasks);
 		std::array<std::string, 3> Ids;
@@ -501,10 +511,10 @@ void CheckNodeOnlySnapshot(FSceneFixture& InFixture)
 	HYP_CHECK(Scene.GetToken() == EmptyToken && Scene.GetStatus().bReady && !Scene.GetStatus().bHasActiveCamera);
 	FSceneNode Rig;
 	Rig.Id = "rig";
-	Rig.Local = Translation({1, 2, 3});
+	Rig.Local() = Translation({1, 2, 3});
 	const auto Parent = Scene.AddNode(Rig);
 	auto CameraNode = MakeSceneCameraNode("camera", {0, 0, 8}, {});
-	CameraNode.Parent = "rig";
+	CameraNode.Parent() = "rig";
 	const auto Camera = Scene.AddNode(CameraNode);
 	const auto Other = Scene.AddNode(MakeSceneCameraNode("other", {2, 0, 8}, {}));
 	const auto Sun = Scene.AddNode(MakeSceneDirectionalLightNode("sun"));
@@ -614,6 +624,77 @@ void ExpectInputRejection(const std::function<void()>& InAction)
 	HYP_CHECK(bRejected);
 }
 
+void CheckStrictCameraPreview(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
+	const auto Default = Scene.AddNode(MakeSceneCameraNode("default"));
+	FSceneNode Parent;
+	Parent.Id = "parent";
+	const auto ParentHandle = Scene.AddNode(Parent);
+	auto Node = MakeSceneCameraNode("preview", {4, 2, 8}, {});
+	Node.Parent() = Parent.Id;
+	const auto Preview = Scene.AddNode(Node);
+	Scene.SetSettings({Default, {}, {}});
+	FSceneViewRequest Request;
+	Request.Width = 400;
+	Request.Height = 200;
+	Request.Camera = Preview;
+	Request.bAllowCameraFallback = false;
+	const auto CheckView = [&](bool bInAvailable)
+	{
+		Scene.Tick();
+		const auto Seed = F.Session->FreezeSceneFrame(Scene.GetToken());
+		F.Tasks.Wait(
+		    F.Tasks.Dispatch({EDomain::Render},
+		                     [&]
+		                     {
+			                     const auto Frame = F.Session->ResolveSceneFrame(*Seed, Request);
+			                     HYP_CHECK(Frame.HasCamera() == bInAvailable);
+			                     if (bInAvailable)
+			                     {
+				                     HYP_CHECK(Frame.Camera == Preview && Frame.View.Eye.X == 4);
+				                     HYP_CHECK(Frame.View.Camera->VerticalRadians == Node.Camera()->VerticalRadians);
+			                     }
+			                     else
+			                     {
+				                     auto Fallback = Request;
+				                     Fallback.bAllowCameraFallback = true;
+				                     HYP_CHECK(F.Session->ResolveSceneFrame(*Seed, Fallback).Camera == Default);
+			                     }
+		                     }));
+	};
+	CheckView(true);
+	Node.Camera()->VerticalRadians = .8f;
+	Scene.EditNode(Preview, Node, Scene.GetRevision());
+	CheckView(true);
+	Scene.SetEnabled(Preview, false);
+	CheckView(false);
+	Scene.SetEnabled(Preview, true);
+	Scene.SetEnabled(ParentHandle, false);
+	CheckView(false);
+	Scene.SetEnabled(ParentHandle, true);
+	auto NoCamera = Node;
+	NoCamera.Camera().reset();
+	Scene.EditNode(Preview, NoCamera, Scene.GetRevision());
+	CheckView(false);
+	Scene.EditNode(Preview, Node, Scene.GetRevision());
+	CheckView(true);
+	Scene.RemoveSubtree(Preview);
+	const auto Replacement = Scene.AddNode(MakeSceneCameraNode("replacement"));
+	HYP_CHECK(Replacement != Preview);
+	CheckView(false);
+	const auto Revision = Scene.GetRevision();
+	const auto Browsing = MakeSceneBrowsingView(Scene, 2);
+	HYP_CHECK(Scene.GetRevision() == Revision && !Scene.GetSettings().InitialView);
+	auto Settings = Scene.GetSettings();
+	Settings.InitialView = FSceneCameraView{FSceneCamera{}, Translation({90, 20, 10})};
+	Scene.SetSettings(Settings);
+	HYP_CHECK(MakeSceneBrowsingView(Scene, 1) == *Settings.InitialView);
+	HYP_CHECK(Scene.Snapshot("view.hasset").InitialView == Settings.InitialView);
+	HYP_CHECK(Browsing.World.Values != Settings.InitialView->World.Values);
+}
+
 void CheckSceneViewSelection(FSceneFixture& InFixture)
 {
 	auto& F = InFixture;
@@ -625,6 +706,8 @@ void CheckSceneViewSelection(FSceneFixture& InFixture)
 	FSceneViewRequest Request;
 	Request.Width = 400;
 	Request.Height = 200;
+	const FSceneCameraView EditorCamera{*Scene.FindNode(A)->Camera(), Translation({9, 0, 8})};
+	const auto AuthoredRevision = Scene.GetRevision();
 	const auto Seed = F.Session->FreezeSceneFrame(Scene.GetToken());
 	F.Tasks.Wait(F.Tasks.Dispatch(
 	    {EDomain::Render},
@@ -638,6 +721,10 @@ void CheckSceneViewSelection(FSceneFixture& InFixture)
 		    const auto Second = F.Session->ResolveSceneFrame(*Seed, Request);
 		    HYP_CHECK(First.Frame == Second.Frame && First.View.Eye.X == 0 && Second.View.Eye.X == 3);
 		    HYP_CHECK(First.View.ViewProjection.Values != Second.View.ViewProjection.Values);
+		    auto EditorRequest = Request;
+		    EditorRequest.CameraOverride = EditorCamera;
+		    const auto EditorFrame = F.Session->ResolveSceneFrame(*Seed, EditorRequest);
+		    HYP_CHECK(EditorFrame.HasCamera() && !EditorFrame.Camera && EditorFrame.View.Eye.X == 9);
 		    auto Invalid = Request;
 		    Invalid.Camera->Scene += 100;
 		    ExpectInputRejection(
@@ -670,6 +757,7 @@ void CheckSceneViewSelection(FSceneFixture& InFixture)
 		    Invalid.Viewport->Width = 0;
 		    HYP_CHECK(F.Session->ResolveSceneFrame(*Seed, Invalid).CameraStatus == ESceneCameraStatus::EmptyViewport);
 	    }));
+	HYP_CHECK(Scene.GetRevision() == AuthoredRevision);
 	Scene.RemoveSubtree(B);
 	Scene.Tick();
 	const auto Fallback = F.Session->FreezeSceneFrame(Scene.GetToken());
@@ -903,10 +991,10 @@ void CheckSceneNavigation(FSceneFixture& InFixture)
 	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
 	FSceneNode Rig;
 	Rig.Id = "navigation-rig";
-	Rig.Local = Translation({2, 0, 0});
+	Rig.Local() = Translation({2, 0, 0});
 	const auto Parent = Scene.AddNode(Rig);
 	auto Node = MakeSceneCameraNode("navigation", {0, 0, 8}, {});
-	Node.Parent = Rig.Id;
+	Node.Parent() = Rig.Id;
 	const auto Camera = Scene.AddNode(Node);
 	Scene.SetSettings({Camera, {}, {}});
 	FSceneCameraPose Pose;
@@ -914,7 +1002,7 @@ void CheckSceneNavigation(FSceneFixture& InFixture)
 	DollySceneCamera(Scene, .5f);
 	HYP_CHECK(Scene.GetCameraPose(Camera, Pose));
 	HYP_CHECK(std::abs(Pose.Eye.X - 4) < .0001f && std::abs(Pose.Eye.Z - 4) < .0001f);
-	HYP_CHECK(Scene.FindNode(Camera)->Camera->FocusDistance == 4);
+	HYP_CHECK(Scene.FindNode(Camera)->Camera()->FocusDistance == 4);
 	OrbitSceneCamera(Scene, 1.57079632679f, 0);
 	HYP_CHECK(Scene.GetCameraPose(Camera, Pose));
 	HYP_CHECK(std::abs(Pose.Eye.X - 8) < .0001f && std::abs(Pose.Eye.Z) < .0001f);
@@ -973,7 +1061,7 @@ void CheckPendingHierarchy()
 	Scene.Reparent(Kept, Parent, ESceneReparentMode::KeepLocal);
 	Scene.SetLocalTransform(Kept, Translation({4, 0, 0}));
 	auto CameraNode = MakeSceneCameraNode("pending-camera", {0, 0, 8}, {});
-	CameraNode.Parent = "pending-rig";
+	CameraNode.Parent() = "pending-rig";
 	const auto Camera = Scene.AddNode(CameraNode);
 	const auto Light = Scene.AddNode(MakeSceneDirectionalLightNode("pending-light"));
 	Scene.SetCamera(Camera, {.9f, .02f, 70, 6});
@@ -986,7 +1074,7 @@ void CheckPendingHierarchy()
 	const auto Replacement = Scene.Add({"replacement after subtree"}, "good");
 	Scene.SetSettings({Camera, Light, {}});
 	Scene.Tick();
-	HYP_CHECK(Scene.GetStatus().bHasActiveCamera && !Scene.FindNode(Kept)->Model->Data);
+	HYP_CHECK(Scene.GetStatus().bHasActiveCamera && !Scene.FindNode(Kept)->Model()->Data);
 	F.Files->bRelease = true;
 	Await(Scene,
 	      [&]
@@ -995,12 +1083,12 @@ void CheckPendingHierarchy()
 	      });
 	FSceneNodeView View;
 	HYP_CHECK(Scene.GetNodeView(Kept, View) && View.World.Values[12] == 7);
-	HYP_CHECK(Scene.FindNode(Kept)->Local.Values[12] == 4 && Scene.FindNode(Replacement)->Model->Data);
+	HYP_CHECK(Scene.FindNode(Kept)->Local().Values[12] == 4 && Scene.FindNode(Replacement)->Model()->Data);
 	HYP_CHECK(!Scene.FindNode(Removed) && !Scene.FindNode(DeletedParent));
 	FSceneCameraPose Pose;
 	HYP_CHECK(Scene.GetCameraPose(Camera, Pose) && Pose.Eye.X == 3 && Pose.Eye.Z == 8);
-	HYP_CHECK(Scene.FindNode(Camera)->Camera->FocusDistance == 6);
-	HYP_CHECK(Scene.FindNode(Light)->DirectionalLight->Color.Z == .6f);
+	HYP_CHECK(Scene.FindNode(Camera)->Camera()->FocusDistance == 6);
+	HYP_CHECK(Scene.FindNode(Light)->DirectionalLight()->Color.Z == .6f);
 	HYP_CHECK(Scene.GetSettings().MainDirectionalLight == Light);
 	std::cout << "Gated model completion preserves parent, camera/light edits and subtree tombstones\n";
 }
@@ -1028,6 +1116,7 @@ int main()
 		CheckNodeOnlySnapshot(Fixture);
 		CheckSceneFrameTokens(Fixture);
 		CheckSceneViewSelection(Fixture);
+		CheckStrictCameraPreview(Fixture);
 		CheckSceneMaterialGuards(Fixture);
 		CheckSceneNavigation(Fixture);
 		CheckNavigationPrecision(Fixture);

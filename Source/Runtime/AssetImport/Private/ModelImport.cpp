@@ -136,6 +136,7 @@ FModelSourceAssets SplitModelSource(const FModelSource& InSource)
 			Primitive.Material = *Default;
 		}
 	}
+	AssignModelSubresourceIds(Model);
 	ValidateModel(Model);
 	return std::move(Splitter.Result);
 }

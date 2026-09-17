@@ -72,10 +72,10 @@ FMat4 FSceneStorage::ToLocal(std::uint32_t InParent, const FMat4& InWorld) const
 
 FSceneHandle FSceneStorage::AddNode(FSceneNode InNode)
 {
-	const auto Parent = InNode.Parent.empty() ? InvalidSlot : FindId(InNode.Parent);
-	if (!InNode.Parent.empty() && Parent == InvalidSlot)
+	const auto Parent = InNode.Parent().empty() ? InvalidSlot : FindId(InNode.Parent());
+	if (!InNode.Parent().empty() && Parent == InvalidSlot)
 	{
-		throw std::invalid_argument("Missing scene node parent: " + InNode.Parent);
+		throw std::invalid_argument("Missing scene node parent: " + InNode.Parent());
 	}
 	FMutation Mutation(*this);
 	const auto Slot = Mutation.Add(std::move(InNode), Parent);
@@ -103,14 +103,14 @@ std::vector<FSceneHandle> FSceneStorage::LoadNodes(std::vector<FSceneNode> InNod
 	std::vector<std::size_t> Parents(InNodes.size(), InNodes.size());
 	for (std::size_t Index = 0; Index < InNodes.size(); ++Index)
 	{
-		if (InNodes[Index].Parent.empty())
+		if (InNodes[Index].Parent().empty())
 		{
 			continue;
 		}
-		const auto Parent = Indices.find(InNodes[Index].Parent);
+		const auto Parent = Indices.find(InNodes[Index].Parent());
 		if (Parent == Indices.end())
 		{
-			throw std::invalid_argument("Missing scene node parent: " + InNodes[Index].Parent);
+			throw std::invalid_argument("Missing scene node parent: " + InNodes[Index].Parent());
 		}
 		Parents[Index] = Parent->second;
 	}
@@ -157,17 +157,30 @@ bool FSceneStorage::EditNode(FSceneHandle InHandle, FSceneNode InNode)
 		return false;
 	}
 	const auto& Before = *Slots[Slot]->Node;
-	if (InNode.Id != Before.Id || InNode.Parent != Before.Parent || InNode.GetKind() != Before.GetKind())
+	if (InNode.Id != Before.Id)
 	{
-		throw std::invalid_argument("Scene node identity and kind are immutable; use Reparent for hierarchy changes");
+		throw std::invalid_argument("Scene object identity is immutable");
 	}
 	ValidateSceneNode(InNode);
 	if (InNode == Before)
 	{
 		return true;
 	}
-	ESceneChangeMask Mask = ESceneChangeMask::None;
-	const bool bTransformChanged = Before.Local.Values != InNode.Local.Values;
+	ESceneChangeMask Mask = ESceneChangeMask::Metadata;
+	const bool bTransformChanged = Before.Local().Values != InNode.Local().Values;
+	const bool bParentChanged = Before.Parent() != InNode.Parent();
+	const auto Parent = InNode.Parent().empty() ? InvalidSlot : FindId(InNode.Parent());
+	if (!InNode.Parent().empty() && Parent == InvalidSlot)
+	{
+		throw std::invalid_argument("Missing scene parent: " + InNode.Parent());
+	}
+	for (auto Ancestor = Parent; Ancestor != InvalidSlot; Ancestor = Slots[Ancestor]->Parent)
+	{
+		if (Ancestor == Slot)
+		{
+			throw std::invalid_argument("Component edit would create a hierarchy cycle");
+		}
+	}
 	const bool bEnabledChanged = Before.bEnabled != InNode.bEnabled;
 	if (bTransformChanged)
 	{
@@ -181,23 +194,43 @@ bool FSceneStorage::EditNode(FSceneHandle InHandle, FSceneNode InNode)
 	{
 		Mask |= ESceneChangeMask::Metadata;
 	}
-	if (Before.Model != InNode.Model)
+	if (Before.Model() != InNode.Model())
 	{
 		Mask |= ESceneChangeMask::Model;
 	}
-	if (Before.Camera != InNode.Camera)
+	if (Before.Camera() != InNode.Camera())
 	{
 		Mask |= ESceneChangeMask::Camera;
 	}
-	if (Before.DirectionalLight != InNode.DirectionalLight || Before.EnvironmentLight != InNode.EnvironmentLight ||
-	    Before.PointLight != InNode.PointLight || Before.SpotLight != InNode.SpotLight)
+	if (Before.DirectionalLight() != InNode.DirectionalLight() ||
+	    Before.EnvironmentLight() != InNode.EnvironmentLight() || Before.PointLight() != InNode.PointLight() ||
+	    Before.SpotLight() != InNode.SpotLight())
 	{
 		Mask |= ESceneChangeMask::Light;
 	}
 	FMutation Mutation(*this);
 	Mutation.Edit(Slot).Node = std::move(InNode);
+	if (bParentChanged)
+	{
+		Mutation.Unlink(Slot);
+		Mutation.Link(Slot, Parent);
+		Mask |= ESceneChangeMask::Structure;
+	}
+	const auto& Edited = *Mutation.Read(Slot).Node;
+	if (Mutation.Settings.DefaultCamera == InHandle && !Edited.Camera())
+	{
+		Mutation.Settings.DefaultCamera.reset();
+	}
+	if (Mutation.Settings.MainDirectionalLight == InHandle && !Edited.DirectionalLight())
+	{
+		Mutation.Settings.MainDirectionalLight.reset();
+	}
+	if (Mutation.Settings.EnvironmentLight == InHandle && !Edited.EnvironmentLight())
+	{
+		Mutation.Settings.EnvironmentLight.reset();
+	}
 	Mutation.Mark(Slot, Mask);
-	if (bTransformChanged || bEnabledChanged)
+	if (bTransformChanged || bEnabledChanged || bParentChanged)
 	{
 		Mutation.Derive(Slot);
 	}
@@ -237,11 +270,11 @@ bool FSceneStorage::Reparent(FSceneHandle InHandle, std::optional<FSceneHandle> 
 		return true;
 	}
 	const auto Local =
-	    InMode == ESceneReparentMode::KeepWorld ? ToLocal(Parent, Slots[Slot]->World) : Slots[Slot]->Node->Local;
+	    InMode == ESceneReparentMode::KeepWorld ? ToLocal(Parent, Slots[Slot]->World) : Slots[Slot]->Node->Local();
 	FMutation Mutation(*this);
 	Mutation.Unlink(Slot);
 	Mutation.Link(Slot, Parent);
-	Mutation.Edit(Slot).Node->Local = Local;
+	Mutation.Edit(Slot).Node->Local() = Local;
 	Mutation.Mark(Slot, ESceneChangeMask::Structure);
 	Mutation.Derive(Slot);
 	Mutation.Commit();
@@ -265,7 +298,7 @@ bool FSceneStorage::RemoveNodes(FSceneHandle InHandle, bool bInKeepChildren)
 			const auto Local = ToLocal(Parent, Slots[Child]->World);
 			Mutation.Unlink(Child);
 			Mutation.Link(Child, Parent);
-			Mutation.Edit(Child).Node->Local = Local;
+			Mutation.Edit(Child).Node->Local() = Local;
 			Mutation.Mark(Child, ESceneChangeMask::Structure);
 			Mutation.Derive(Child);
 		}
@@ -284,6 +317,10 @@ bool FSceneStorage::RemoveNodes(FSceneHandle InHandle, bool bInKeepChildren)
 
 void FSceneStorage::ValidateSettings(const FSceneSettings& InSettings) const
 {
+	if (InSettings.InitialView)
+	{
+		ValidateSceneCameraView(*InSettings.InitialView);
+	}
 	const auto Validate = [&](const std::optional<FSceneHandle>& InHandle, ESceneNodeKind InKind)
 	{
 		if (!InHandle)
@@ -291,7 +328,7 @@ void FSceneStorage::ValidateSettings(const FSceneSettings& InSettings) const
 			return;
 		}
 		const auto Slot = Live(*InHandle);
-		if (Slot == InvalidSlot || Slots[Slot]->Node->GetKind() != InKind)
+		if (Slot == InvalidSlot || !Slots[Slot]->Node->Has(InKind))
 		{
 			throw std::invalid_argument(std::string("Scene selection requires a live ") + ToString(InKind));
 		}

@@ -244,7 +244,7 @@ void CheckLegacyAndVariants(FFixture& InFixture)
 	const auto Output = F.Directory / "Upgraded.hasset";
 	F.IO.WriteAsync(Output, Legacy.Bytes).Get(F.Tasks);
 	const auto Upgraded = F.Imports.ImportAsync(Path, Output, F.Options).Get(F.Tasks);
-	HYP_CHECK(Upgraded->Header.Id == Legacy.Header.Id && Upgraded->Header.SchemaVersion == 2);
+	HYP_CHECK(Upgraded->Header.Id == Legacy.Header.Id && Upgraded->Header.SchemaVersion == 3);
 	F.Assets.Invalidate(Output);
 	const auto Graph = F.Assets.LoadGraphAsync(Output).Get(F.Tasks);
 	HYP_CHECK(Graph->Failures.empty());

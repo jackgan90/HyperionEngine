@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 import shutil
-from NativeContent import import_asset
+from NativeContent import import_asset, set_initial_view_from_camera
 
 viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
@@ -41,11 +41,14 @@ def run(name, mode="bvh", show_ui=False, verify=True):
 
 source.write_text(json.dumps(scene), encoding="utf-8")
 import_asset(viewer, source, manifest)
+set_initial_view_from_camera(viewer, manifest)
 images = []
 statistics = {}
+# Readiness counts whole-model placements, independently of their primitive counts.
+expected_models = len(instances)
 for mode in ("none", "linear", "bvh"):
     code, log, capture = run(mode, mode)
-    assert code == 0 and "514/514 models ready" in log and "validation errors: 0" in log, log
+    assert code == 0 and f"{expected_models}/{expected_models} models ready" in log and "validation errors: 0" in log, log
     values = re.search(r"groups=(\d+) visits=(\d+) group_tests=(\d+) collects=(\d+) items=(\d+) draws=(\d+)", log)
     assert values, log
     statistics[mode] = tuple(map(int, values.groups()))
@@ -62,6 +65,7 @@ scene["assets"].append({"id": "broken", "path": "Broken.gltf"})
 scene["instances"].append({"id": "failed", "asset": "broken"})
 source.write_text(json.dumps(scene), encoding="utf-8")
 import_asset(viewer, source, manifest)
+set_initial_view_from_camera(viewer, manifest)
 tool = viewer.with_name("hyperion_asset_tool" + viewer.suffix)
 inspection = subprocess.check_output([str(tool), "inspect", str(manifest)], text=True)
 relative = re.search(r"assets\[2\]\.reference -> (.+?) id=", inspection).group(1)
@@ -69,7 +73,7 @@ missing = (manifest.parent / relative).resolve()
 assert missing.is_relative_to(work.resolve())
 missing.unlink()
 code, log, capture = run("partial-failure", verify=False)
-assert code == 0 and "514/515 models ready | 1 failed" in log, log
+assert code == 0 and f"{expected_models}/{expected_models + 1} models ready | 1 failed" in log, log
 assert capture.read_bytes() == images[2], "A failed asset interrupted valid scene rendering"
 scene["instances"][1]["id"] = "center"
 source.write_text(json.dumps(scene), encoding="utf-8")

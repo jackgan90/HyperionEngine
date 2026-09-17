@@ -54,6 +54,9 @@ struct FSceneNodeModel
 	FMaterialOverride Material;
 	FSceneMaterialAsset Surface;
 	std::vector<FSceneSectionMaterial> SectionSurfaces;
+	std::string SourceNode;
+	std::vector<FSceneMeshSection> Sections;
+	std::string SourcePrimitive;
 };
 
 struct FSceneNodeEntry
@@ -69,6 +72,9 @@ struct FSceneNodeEntry
 	std::optional<FSceneEnvironmentLight> EnvironmentLight;
 	std::optional<FScenePointLight> PointLight;
 	std::optional<FSceneSpotLight> SpotLight;
+	// Typed fields are a loading DTO. The canonical archive is one component array.
+	std::map<std::string, std::string> ComponentIds;
+	FSceneComponents Extensions;
 };
 
 struct FSceneManifest
@@ -78,6 +84,7 @@ struct FSceneManifest
 	std::string DefaultCamera;
 	std::string MainDirectionalLight;
 	std::string EnvironmentLight;
+	std::optional<FSceneCameraView> InitialView;
 };
 
 void ValidateLegacySceneManifest(const FLegacySceneManifest& InManifest);
@@ -87,6 +94,9 @@ FSceneNodeEntry SceneEntryFromNode(const FSceneNode& InNode);
 std::vector<FSceneNode> NodesFromSceneManifest(const FSceneManifest& InManifest);
 FSceneSettings ResolveSceneSettings(const FSceneManifest& InManifest, const class FScene& InScene);
 std::size_t SceneModelCount(const FSceneManifest& InManifest);
+// Explicit authoring operation only; importing, upgrading and loading never call this automatically.
+void ExpandSceneModels(FSceneManifest& InManifest,
+                       const std::map<std::string, std::shared_ptr<const FModelAsset>>& InModels);
 template<> const FRecordDescriptor& RecordType<FLegacySceneManifest>();
 template<> const FRecordDescriptor& RecordType<FSceneNodeModel>();
 template<> const FRecordDescriptor& RecordType<FSceneNodeEntry>();

@@ -9,13 +9,13 @@ void FSceneViewerPlugin::FImpl::DrawSkyControls(FGui& InGui)
 {
 	const auto Handle = Scene.GetSettings().EnvironmentLight;
 	const auto* Node = Handle ? Scene.FindNode(*Handle) : nullptr;
-	if (!Node || !Node->EnvironmentLight)
+	if (!Node || !Node->EnvironmentLight())
 	{
 		return;
 	}
 	try
 	{
-		auto Light = *Node->EnvironmentLight;
+		auto Light = *Node->EnvironmentLight();
 		InGui.Text("Sky / active environment");
 		const bool bRefresh = InGui.Button("Refresh sky assets");
 		if (!bSkyChoicesInitialized || bRefresh)
@@ -39,10 +39,10 @@ void FSceneViewerPlugin::FImpl::DrawSkyControls(FGui& InGui)
 			Scene.SetEnvironmentLight(*Handle, std::move(Light));
 		}
 		InGui.TextWrapped(Scene.GetSkyStatus(*Handle));
-		if (const auto* Current = Scene.FindNode(*Handle); Current->EnvironmentLight->Sky)
+		if (const auto* Current = Scene.FindNode(*Handle); Current->EnvironmentLight()->Sky)
 		{
-			const auto& Requested = *Current->EnvironmentLight->Sky;
-			const auto& Active = Current->EnvironmentLight->Data;
+			const auto& Requested = *Current->EnvironmentLight()->Sky;
+			const auto& Active = Current->EnvironmentLight()->Data;
 			InGui.TextWrapped(Active ? "Active sky: " + Active->Name : "Active: awaiting sky asset");
 			if (!Active || Active->Reference.Id != Requested.Id || Active->Reference.Revision != Requested.Revision)
 			{

@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Platform/Window.h"
+#include "Hyperion/Reflection/Record.h"
 #include <span>
 
 namespace Hyperion
@@ -73,7 +74,16 @@ public:
 	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex);
 	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true);
 	bool InputFloat(const char* InLabel, float& InValue);
+	bool InputNumber(const char* InLabel, double& InValue);
+	bool InputInteger(const char* InLabel, std::int64_t& InValue);
+	bool InputInteger(const char* InLabel, std::uint64_t& InValue);
+	void BeginDisabled(bool bInDisabled);
+	void EndDisabled();
+	bool EditRecord(FRecordDraft& InDraft, std::string_view InIdentity,
+	                const std::function<void(std::string_view, FVec4)>& InObserve = {});
 	bool InputVector(const char* InLabel, FVec3& InValue);
+	bool InputVectorRow(const char* InLabel, FVec3& InValue, std::string_view InUnit, std::string_view InTooltip,
+	                    std::array<FVec4, 3>& OutBounds);
 	bool InputMatrix(const char* InLabel, FMat4& InValue);
 	FVec4 LastItemBounds();
 	bool EditProperties(const FTypeDescriptor& InType, void* InObject, std::span<const std::string_view> InIds);
@@ -94,12 +104,13 @@ public:
 	bool MenuItem(const char* InLabel, const char* InShortcut = nullptr, bool bInSelected = false);
 	void SameLine();
 	void SetNextItemWidth(float InWidth);
-	bool Section(const char* InLabel);
+	bool Section(const char* InLabel, bool bInDefaultOpen = true);
 	bool BeginTable(const char* InId, const char* InFirst, const char* InSecond);
 	void NextRow();
 	void NextColumn();
 	void EndTable();
-	bool TreeItem(const char* InId, const char* InLabel, bool bInLeaf, bool bInSelected, bool& bOutClicked);
+	bool TreeItem(const char* InId, const char* InLabel, bool bInLeaf, bool bInSelected, bool& bOutClicked,
+	              bool bInDefaultOpen = true);
 	void EndTree();
 	void Property(const char* InLabel, const std::string& InValue);
 	FGuiImageRegion Image(std::uint64_t InTextureId);

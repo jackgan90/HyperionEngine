@@ -35,15 +35,16 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 	Result.DefaultCamera = SelectionId(P.Scene, Settings.DefaultCamera);
 	Result.MainDirectionalLight = SelectionId(P.Scene, Settings.MainDirectionalLight);
 	Result.EnvironmentLight = SelectionId(P.Scene, Settings.EnvironmentLight);
+	Result.InitialView = Settings.InitialView;
 	std::set<std::string> Used;
 	const auto Destination = P.Assets.NormalizePath(InDestination);
 	for (const auto Handle : P.Scene.GetNodes())
 	{
 		const auto& Node = *P.Scene.FindNode(Handle);
 		auto Entry = SceneEntryFromNode(Node);
-		if (Node.Model)
+		if (Node.Model())
 		{
-			if (Node.Model->Asset.empty())
+			if (Node.Model()->Asset.empty())
 			{
 				throw std::runtime_error("Cannot persist source-less model: " + Node.Name);
 			}
@@ -52,12 +53,12 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 			{
 				throw std::runtime_error("Cannot save pending or failed material selection: " + Node.Id);
 			}
-			Entry.Model->Surface = PersistSceneMaterialSelection(Node.Model->Surface);
-			for (const auto& [Section, Selection] : Node.Model->SectionSurfaces)
+			Entry.Model->Surface = PersistSceneMaterialSelection(Node.Model()->Surface);
+			for (const auto& [Section, Selection] : Node.Model()->SectionSurfaces)
 			{
 				Entry.Model->SectionSurfaces.push_back({Section, PersistSceneMaterialSelection(Selection)});
 			}
-			Used.insert(Node.Model->Asset);
+			Used.insert(Node.Model()->Asset);
 		}
 		Result.Nodes.push_back(std::move(Entry));
 	}
@@ -78,7 +79,7 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 		}
 		Result.Assets.push_back(*Entry);
 	}
-	// Visit the complete v4 snapshot, including optional model payload material/texture dependencies.
+	// Visit all component state, including custom component and material/texture dependencies.
 	VisitRecord(RecordType<FSceneManifest>(), &Result,
 	            [&](const FRecordDescriptor& InType, const void* InValue, std::string_view)
 	            {

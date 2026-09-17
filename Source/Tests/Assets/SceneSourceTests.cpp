@@ -46,6 +46,9 @@ void CheckSourceNodes()
 	const auto ValidSingular = DecodeSceneManifest(
 	    R"({"type":"hyperion.scene","schema_version":2,"assets":[],"nodes":[{"id":"camera","camera":{},"scale":[0,1,1]}]})");
 	HYP_CHECK(ValidSingular.Nodes.size() == 1);
+	const auto Composed = DecodeSceneManifest(
+	    R"({"type":"hyperion.scene","schema_version":2,"assets":[],"nodes":[{"id":"a","camera":{},"directionalLight":{}}]})");
+	HYP_CHECK(Composed.Nodes[0].Camera && Composed.Nodes[0].DirectionalLight);
 	HYP_CHECK(Matrix.Nodes[0].Transform.Values[4] == .3f && Matrix.Nodes[0].Transform.Values[10] == -2);
 }
 
@@ -53,8 +56,7 @@ void CheckInvalidSourceNodes()
 {
 	for (const auto* Node :
 	     {R"({"id":"a","camra":{}})", R"({"id":"a","camera":{"projection":"orthographic"}})",
-	      R"({"id":"a","camera":{},"directionalLight":{}})", R"({"id":"a","parent":"missing"})",
-	      R"({"id":"a","parent":"a"})", R"({"id":"a","camera":{"near":3,"far":2}})",
+	      R"({"id":"a","parent":"missing"})", R"({"id":"a","parent":"a"})", R"({"id":"a","camera":{"near":3,"far":2}})",
 	      R"({"id":"a","camera":{},"scale":[1,0,1]})", R"({"id":"a","directionalLight":{"intensity":-1}})",
 	      R"({"id":"a","environmentLight":{"color":[1,-1,1]}})", R"({"id":"a","model":{"asset":"missing"}})",
 	      R"({"id":"a","rotation":[0,0,0,0]})", R"({"id":"a","id":"b"})",
@@ -148,7 +150,7 @@ void CheckLocalLightSources()
 		HYP_CHECK(NodeFromSceneEntry(Entry) == *Scene.FindNode(Handle));
 	}
 	for (const auto* Payload : {R"("pointLight":{"range":0})", R"("spotLight":{"innerRadians":0.8,"outerRadians":0.7})",
-	                            R"("pointLight":{},"spotLight":{})", R"("pointLight":{"rang":4})"})
+	                            R"("pointLight":{"rang":4})"})
 	{
 		Rejects(
 		    [&]

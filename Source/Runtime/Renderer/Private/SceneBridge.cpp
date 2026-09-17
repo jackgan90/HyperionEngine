@@ -91,7 +91,7 @@ std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(con
 	std::map<FSceneHandle, std::uint64_t> Changed;
 	for (const auto& Change : InChanges)
 	{
-		if (Change.Kind == ESceneNodeKind::Model &&
+		if ((Change.Model || Attachments.contains(Change.Handle)) &&
 		    HasChange(Change.Mask, ESceneChangeMask::Structure | ESceneChangeMask::Transform |
 		                               ESceneChangeMask::Enabled | ESceneChangeMask::Model))
 		{
@@ -146,7 +146,9 @@ std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(con
 		}
 		FPending Work;
 		Work.Handle = Handle;
-		if (Entry == Attachments.end() || Entry->second.Data != State.Data)
+		if (Entry == Attachments.end() || Entry->second.Data != State.Data ||
+		    Entry->second.Model->Current.SourceNode != State.SourceNode ||
+		    Entry->second.Model->Current.SourcePrimitive != State.SourcePrimitive)
 		{
 			Work.NewModel =
 			    std::unique_ptr<FModel>(new FModel(Session.GetScene(), Session.GetResources(), State, true));
@@ -195,7 +197,9 @@ void FSceneRenderBridge::PublishChanges(std::vector<FPending>& InPending, const 
 		}
 		const auto& Entry = Existing->second;
 		const auto State = Scene.Find(Handle);
-		if (!State || !State->Data || State->Data != Entry.Data)
+		if (!State || !State->Data || State->Data != Entry.Data ||
+		    State->SourceNode != Entry.Model->Current.SourceNode ||
+		    State->SourcePrimitive != Entry.Model->Current.SourcePrimitive)
 		{
 			for (const auto& Binding : Entry.Model->Bindings)
 			{

@@ -1,5 +1,7 @@
 #include "EditorApplication.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Core/Profiling/Measurement.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include <algorithm>
 #include <fstream>
@@ -77,7 +79,7 @@ void FEditorApplication::Initialize()
 	Gui->UseEditorStyle();
 	const auto FontBytes = IO.ReadAsync("/Engine/Fonts/RobotoMedium.ttf").Get(Tasks);
 	Gui->LoadFont(*FontBytes, 15);
-	if (!Options.bExercise)
+	if (!Options.bExercise && Options.Benchmark.empty())
 	{
 		std::ifstream Stream(Options.Layout, std::ios::binary);
 		if (Stream)
@@ -97,7 +99,14 @@ void FEditorApplication::Initialize()
 
 void FEditorApplication::OpenScene(const std::string& InPath)
 {
+	if (IsDirty() || HasDrafts() || PendingSave)
+	{
+		PendingOpen = InPath;
+		bDiscardDialog = bRequestDiscard = true;
+		return;
+	}
 	Camera.Reset();
+	bViewportCameraInitialized = false;
 	bCameraDragging = false;
 	Selection.reset();
 	Error.clear();
@@ -106,6 +115,7 @@ void FEditorApplication::OpenScene(const std::string& InPath)
 	try
 	{
 		Scene->Load(InPath);
+		ResetDocument();
 		CurrentPath = InPath;
 		++OpenCount;
 		Log(ELogLevel::Info, "Editor opening scene: " + CurrentPath);
@@ -179,16 +189,94 @@ void FEditorApplication::Shutdown()
 	}
 }
 
+bool FEditorApplication::AdvanceFrame(float InDelta)
+{
+	BenchmarkFrame = {};
+	const auto FrameStarted = Options.Benchmark.empty() ? 0 : ClockNanoseconds();
+	{
+		HYP_PERF_SCOPE_C(Frame, EditorSceneUpdate);
+		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
+		Scene->Tick();
+	}
+	bLoadErrorObserved |= !Scene->GetStatus().Error.empty();
+	InitializeViewportCamera();
+	std::vector<FInputEvent> Events(Window->Events().begin(), Window->Events().end());
+	if (Options.bExercise)
+	{
+		ExerciseInput(Events);
+	}
+	if (!Options.ExerciseDocument.empty())
+	{
+		ExerciseDocumentInput(Events);
+	}
+	if (!Options.ExerciseViews.empty())
+	{
+		ExerciseViewInput(Events);
+	}
+	FGuiDrawData Data;
+	{
+		HYP_PERF_SCOPE_C(Frame, EditorGui);
+		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.GuiMilliseconds);
+		Data = DrawGui(std::clamp(InDelta, .001f, .1f), Events);
+	}
+	{
+		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
+		if (Options.Benchmark.empty())
+		{
+			RouteCamera(Options.bExercise ? 1.f / 60 : InDelta, Events);
+		}
+		else
+		{
+			BenchmarkCamera();
+		}
+		Scene->Tick();
+	}
+	// Async scene readiness is independent of render frame rate.
+	const bool bExerciseComplete =
+	    (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified || bViewsVerified;
+	const bool bCapture =
+	    !Options.Capture.empty() &&
+	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames));
+	{
+		HYP_PERF_SCOPE_C(Frame, EditorRenderWait);
+		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.RenderMilliseconds);
+		Render(std::move(Data), bCapture);
+	}
+	if (!Options.Benchmark.empty())
+	{
+		BenchmarkFrame.FrameMilliseconds = double(ClockNanoseconds() - FrameStarted) / 1e6;
+		RecordBenchmark();
+	}
+	++FrameCount;
+	if (Scene->GetStatus().bReady && !CurrentPath.empty())
+	{
+		++ReadyFrames;
+		if (!bReadyLogged)
+		{
+			Log(ELogLevel::Info, "Editor scene ready: " + CurrentPath);
+			bReadyLogged = true;
+		}
+	}
+	return bExerciseComplete || (!Options.Benchmark.empty() && BenchmarkSamples.size() == Options.BenchmarkSamples);
+}
+
 void FEditorApplication::Run()
 {
+	BenchmarkStarted = ClockNanoseconds();
 	Initialize();
 	const auto Started = ClockNanoseconds();
 	auto Previous = Started;
-	while (!Window->ShouldClose() && (Options.bExercise || !Options.Frames || FrameCount < Options.Frames))
+	while (Options.bExercise || !Options.Frames || FrameCount < Options.Frames)
 	{
 		Window->Poll();
+		PollSave();
+		if (PollClose())
+		{
+			break;
+		}
 		const auto Now = ClockNanoseconds();
-		if (Options.bExercise && Now - Started > 75'000'000'000ull)
+		if ((Options.bExercise || !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty()) &&
+		    Now - Started > 90'000'000'000ull)
 		{
 			throw std::runtime_error("Editor interaction acceptance timed out");
 		}
@@ -201,38 +289,16 @@ void FEditorApplication::Run()
 			std::this_thread::sleep_for(std::chrono::milliseconds(20));
 			continue;
 		}
-		Scene->Tick();
-		bLoadErrorObserved |= !Scene->GetStatus().Error.empty();
-		std::vector<FInputEvent> Events(Window->Events().begin(), Window->Events().end());
-		if (Options.bExercise)
-		{
-			ExerciseInput(Events);
-		}
-		auto Data = DrawGui(std::clamp(Delta, .001f, .1f), Events);
-		RouteCamera(Options.bExercise ? 1.f / 60 : Delta, Events);
-		Scene->Tick();
-		// Async scene readiness is independent of render frame rate.
-		const bool bExerciseComplete = Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8;
-		const bool bCapture =
-		    !Options.Capture.empty() &&
-		    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames));
-		Render(std::move(Data), bCapture);
-		++FrameCount;
-		if (Scene->GetStatus().bReady && !CurrentPath.empty())
-		{
-			++ReadyFrames;
-			if (!bReadyLogged)
-			{
-				Log(ELogLevel::Info, "Editor scene ready: " + CurrentPath);
-				bReadyLogged = true;
-			}
-		}
-		if (bExerciseComplete)
+		if (AdvanceFrame(Delta))
 		{
 			break;
 		}
 	}
-	SaveLayout();
+	SaveBenchmark();
+	if (Options.Benchmark.empty())
+	{
+		SaveLayout();
+	}
 	WriteReport();
 	Shutdown();
 	if (Options.bExercise && (!CurrentPath.ends_with("/Sponza.hasset") || OpenCount < 2 || !ReadyFrames ||

@@ -59,8 +59,9 @@ template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
 {
 	static const auto Type = MakeRecord<FSceneDirectionalLight>(
 	    "hyperion.scenedirectionallight",
-	    {Member("color", &FSceneDirectionalLight::Color), Member("intensity", &FSceneDirectionalLight::Intensity),
-	     Member("castShadows", &FSceneDirectionalLight::bCastShadows)},
+	    {Member("color", &FSceneDirectionalLight::Color, Inspect("Color", 0, {})),
+	     Member("intensity", &FSceneDirectionalLight::Intensity, Inspect("Intensity", 0, {})),
+	     Member("castShadows", &FSceneDirectionalLight::bCastShadows, Inspect("Cast shadows"))},
 	    1, ValidateSceneDirectionalLight);
 	return Type;
 }
@@ -77,10 +78,14 @@ template<> const FRecordDescriptor& RecordType<FSceneEnvironmentLight>()
 	{
 		auto Result = MakeRecord<FSceneEnvironmentLight>(
 		    "hyperion.sceneenvironmentlight",
-		    {Member("color", &FSceneEnvironmentLight::Color), Member("intensity", &FSceneEnvironmentLight::Intensity),
-		     Member("source", &FSceneEnvironmentLight::Source), Member("sky", &FSceneEnvironmentLight::Sky),
-		     Member("yawRadians", &FSceneEnvironmentLight::YawRadians),
-		     Member("visible", &FSceneEnvironmentLight::bVisible)},
+		    {Member("color", &FSceneEnvironmentLight::Color, Inspect("Color", 0, {})),
+		     Member("intensity", &FSceneEnvironmentLight::Intensity, Inspect("Intensity", 0, {})),
+		     Member(
+		         "source", &FSceneEnvironmentLight::Source,
+		         {.Inspector = FPropertyPresentation{.Label = "Source", .Choices = {"Constant color", "Sky asset"}}}),
+		     Member("sky", &FSceneEnvironmentLight::Sky, Inspect("Sky asset")),
+		     Member("yawRadians", &FSceneEnvironmentLight::YawRadians, Inspect("Yaw (radians)")),
+		     Member("visible", &FSceneEnvironmentLight::bVisible, Inspect("Visible"))},
 		    2, ValidateSceneEnvironmentLight);
 		Result.Migrations.emplace(1,
 		                          [](FArchiveNode::FObject&)

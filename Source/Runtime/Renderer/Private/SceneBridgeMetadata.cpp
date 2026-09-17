@@ -14,9 +14,12 @@ std::shared_ptr<const FSceneMetadata> FSceneRenderBridge::PrepareMetadata(
 	Result->Settings = Scene.GetSettings();
 	const bool bLocalChanged = std::any_of(
 	    InChanges.begin(), InChanges.end(),
-	    [](const FSceneChange& InChange)
+	    [&](const FSceneChange& InChange)
 	    {
-		    return (InChange.Kind == ESceneNodeKind::PointLight || InChange.Kind == ESceneNodeKind::SpotLight) &&
+		    const bool bHasLocal = InChange.Node && (InChange.Node->PointLight() || InChange.Node->SpotLight());
+		    const bool bHadLocal =
+		        Result->PointLights.contains(InChange.Handle) || Result->SpotLights.contains(InChange.Handle);
+		    return (bHasLocal || bHadLocal) &&
 		           HasChange(InChange.Mask, ESceneChangeMask::Structure | ESceneChangeMask::Transform |
 		                                        ESceneChangeMask::Enabled | ESceneChangeMask::Light);
 	    });
@@ -30,66 +33,56 @@ std::shared_ptr<const FSceneMetadata> FSceneRenderBridge::PrepareMetadata(
 	}
 	for (const auto& Change : InChanges)
 	{
-		if (Change.Kind == ESceneNodeKind::Camera)
+		if (HasChange(Change.Mask, ESceneChangeMask::Settings))
 		{
-			if (Change.bRemoved)
-			{
-				Result->Cameras.erase(Change.Handle);
-			}
-			else if (Change.Node)
-			{
-				Result->Cameras[Change.Handle] = {*Change.Node->Camera, ExtractScenePose(Change.World),
-				                                  Change.bEffectiveEnabled};
-			}
+			continue;
 		}
-		else if (Change.Kind == ESceneNodeKind::DirectionalLight)
+		const auto* Node = Change.Node ? &*Change.Node : nullptr;
+		if (Node && Node->Camera())
 		{
-			if (Change.bRemoved)
-			{
-				Result->DirectionalLights.erase(Change.Handle);
-			}
-			else if (Change.Node)
-			{
-				Result->DirectionalLights[Change.Handle] = {*Change.Node->DirectionalLight,
-				                                            ScaleVector(ExtractScenePose(Change.World).Forward, -1),
-				                                            Change.bEffectiveEnabled};
-			}
+			Result->Cameras[Change.Handle] = {*Node->Camera(), ExtractScenePose(Change.World),
+			                                  Change.bEffectiveEnabled};
 		}
-		else if (Change.Kind == ESceneNodeKind::PointLight)
+		else
 		{
-			if (Change.bRemoved)
-			{
-				Result->PointLights.erase(Change.Handle);
-			}
-			else if (Change.Node)
-			{
-				const auto Position = Transform(Change.World, {0, 0, 0, 1});
-				Result->PointLights[Change.Handle] = {
-				    *Change.Node->PointLight, {Position.X, Position.Y, Position.Z}, Change.bEffectiveEnabled};
-			}
+			Result->Cameras.erase(Change.Handle);
 		}
-		else if (Change.Kind == ESceneNodeKind::SpotLight)
+		if (Node && Node->DirectionalLight())
 		{
-			if (Change.bRemoved)
-			{
-				Result->SpotLights.erase(Change.Handle);
-			}
-			else if (Change.Node)
-			{
-				Result->SpotLights[Change.Handle] = {*Change.Node->SpotLight, ExtractScenePose(Change.World),
-				                                     Change.bEffectiveEnabled};
-			}
+			Result->DirectionalLights[Change.Handle] = {*Node->DirectionalLight(),
+			                                            ScaleVector(ExtractScenePose(Change.World).Forward, -1),
+			                                            Change.bEffectiveEnabled};
 		}
-		else if (Change.Kind == ESceneNodeKind::EnvironmentLight)
+		else
 		{
-			if (Change.bRemoved)
-			{
-				Result->EnvironmentLights.erase(Change.Handle);
-			}
-			else if (Change.Node)
-			{
-				Result->EnvironmentLights[Change.Handle] = {*Change.Node->EnvironmentLight, Change.bEffectiveEnabled};
-			}
+			Result->DirectionalLights.erase(Change.Handle);
+		}
+		if (Node && Node->PointLight())
+		{
+			const auto Position = Transform(Change.World, {0, 0, 0, 1});
+			Result->PointLights[Change.Handle] = {
+			    *Node->PointLight(), {Position.X, Position.Y, Position.Z}, Change.bEffectiveEnabled};
+		}
+		else
+		{
+			Result->PointLights.erase(Change.Handle);
+		}
+		if (Node && Node->SpotLight())
+		{
+			Result->SpotLights[Change.Handle] = {*Node->SpotLight(), ExtractScenePose(Change.World),
+			                                     Change.bEffectiveEnabled};
+		}
+		else
+		{
+			Result->SpotLights.erase(Change.Handle);
+		}
+		if (Node && Node->EnvironmentLight())
+		{
+			Result->EnvironmentLights[Change.Handle] = {*Node->EnvironmentLight(), Change.bEffectiveEnabled};
+		}
+		else
+		{
+			Result->EnvironmentLights.erase(Change.Handle);
 		}
 	}
 	return Result;

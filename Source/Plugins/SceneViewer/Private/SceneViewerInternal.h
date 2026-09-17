@@ -38,6 +38,9 @@ struct FSceneViewerPlugin::FImpl
 	bool bSkyChoicesInitialized{};
 	bool bStopped{};
 	FSceneCameraController CameraController;
+	FSceneCameraView ViewCamera;
+	bool bViewInitialized{};
+	std::shared_ptr<const FSceneManifest> ViewManifest;
 	bool bFrozen{};
 	bool bBounds{};
 	bool bLightBounds{};

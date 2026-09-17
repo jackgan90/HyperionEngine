@@ -105,8 +105,16 @@ FResolvedSceneFrame ResolveView(const FSceneMetadata& InMetadata, const FSceneVi
 	}
 	Result.Camera = InRequest.Camera ? InRequest.Camera : InMetadata.Settings.DefaultCamera;
 	const auto* Selected = Camera(InMetadata, Result.Camera);
+	FPublishedSceneCamera ViewCamera;
+	if (InRequest.CameraOverride)
+	{
+		ValidateSceneCamera(InRequest.CameraOverride->Lens);
+		ViewCamera = {InRequest.CameraOverride->Lens, ExtractScenePose(InRequest.CameraOverride->World), true};
+		Selected = &ViewCamera;
+		Result.Camera.reset();
+	}
 	bool bFallback{};
-	if (!Selected && InRequest.Camera)
+	if (!Selected && InRequest.Camera && InRequest.bAllowCameraFallback)
 	{
 		Result.Camera = InMetadata.Settings.DefaultCamera;
 		Selected = Camera(InMetadata, Result.Camera);

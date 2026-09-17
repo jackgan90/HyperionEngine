@@ -14,8 +14,15 @@ struct FEditorOptions
 	std::filesystem::path Layout;
 	std::filesystem::path Capture;
 	std::filesystem::path Report;
+	std::filesystem::path Benchmark;
+	std::filesystem::path ExerciseDocument;
+	std::filesystem::path ExerciseViews;
 	std::string Scene;
 	std::uint32_t Frames{};
+	std::uint32_t BenchmarkWarmup = 120;
+	std::uint32_t BenchmarkSamples = 300;
+	bool bBenchmarkCamera{};
+	bool bBenchmarkCollapsed{};
 	bool bHidden{};
 	bool bExercise{};
 };
@@ -31,6 +38,7 @@ public:
 
 private:
 	void Initialize();
+	bool AdvanceFrame(float InDelta);
 	void LoadCatalogs();
 	void Shutdown();
 	void OpenScene(const std::string& InPath);
@@ -50,11 +58,44 @@ private:
 	void ResizeViewport();
 	void SaveLayout();
 	void ExerciseInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseDocumentInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseViewInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseViewHistory();
+	void ExerciseViewPreview(std::vector<FInputEvent>& InEvents);
+	bool ExerciseTransformInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseCamera(std::vector<FInputEvent>& InEvents);
 	void ExerciseMovement(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX, float InY);
 	void ExerciseWheel(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX, float InY);
 	void ExerciseClick(std::vector<FInputEvent>& InEvents, FVec4 InBounds);
 	void WriteReport();
+	void BenchmarkCamera();
+	void RecordBenchmark();
+	void SaveBenchmark();
+	void ResetDocument();
+	void InitializeViewportCamera();
+	void DrawViewControls();
+	void DrawCameraActions(FSceneHandle InHandle);
+	void SetPreviewCamera(std::optional<FSceneHandle> InHandle);
+	bool IsPreviewAvailable() const;
+	void SetInitialView();
+	void ApplyEditorView(FSceneHandle InHandle);
+	void CreateCameraFromView();
+	void CommitSettings(FSceneSettings InSettings);
+	void RestoreHistory(std::size_t InIndex, bool bInAfter);
+	void RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAfter);
+	void DrawComponentInspector(const FSceneNodeView& InView);
+	bool DrawComponent(const FSceneNodeView& InView, const FSceneComponent& InComponent, std::uint64_t InRevision);
+	void CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision);
+	void Undo();
+	void Redo();
+	void SaveScene(const std::string& InDestination);
+	void PollSave();
+	void DrawSaveDialog();
+	void DrawDiscardDialog();
+	void SelectObject(FSceneHandle InHandle);
+	bool HasDrafts() const;
+	bool PollClose();
+	bool IsDirty() const;
 
 	FEditorOptions Options;
 	std::shared_ptr<FMountedFileSystem> Files;
@@ -71,6 +112,9 @@ private:
 	std::unique_ptr<FGuiRenderer> GuiRenderer;
 	std::unique_ptr<FSceneInstance> Scene;
 	FSceneCameraController Camera{ESceneCameraNavigationMode::Fly};
+	FSceneCameraView ViewCamera;
+	std::optional<FSceneHandle> PreviewCamera;
+	bool bViewportCameraInitialized{};
 	FRenderTargetSource ViewportTarget;
 	FSize ViewportSize;
 	FGuiImageRegion ViewportRegion;
@@ -121,5 +165,76 @@ private:
 	bool bInputIsolationVerified{};
 	bool bLoadErrorObserved{};
 	FSceneCameraPose ExercisePose;
+
+	struct FBenchmarkSample
+	{
+		double FrameMilliseconds{};
+		double SceneMilliseconds{};
+		double GuiMilliseconds{};
+		double RenderMilliseconds{};
+		FForwardPipelineStatistics Pipeline;
+		std::size_t Nodes{};
+	};
+
+	FBenchmarkSample BenchmarkFrame;
+	std::vector<FBenchmarkSample> BenchmarkSamples;
+	std::uint64_t BenchmarkStarted{};
+	double LoadMilliseconds{};
+
+	struct FHistoryEntry
+	{
+		FSceneHandle Handle;
+		std::optional<FSceneNode> Before;
+		std::optional<FSceneNode> After;
+		FSceneSettings BeforeSettings;
+		FSceneSettings AfterSettings;
+		std::uint64_t BeforeState{};
+		std::uint64_t AfterState{};
+	};
+
+	std::vector<FHistoryEntry> History;
+	std::size_t HistoryCursor{};
+	std::uint64_t NextDocumentState{};
+	std::uint64_t DocumentState{};
+	std::uint64_t SavedState{};
+	std::uint64_t DocumentEpoch{};
+
+	struct FInspectionDraft
+	{
+		FRecordDraft Record;
+		std::uint64_t Revision{};
+		bool bModified{};
+	};
+
+	std::optional<FSceneHandle> InspectedObject;
+	std::map<std::string, FInspectionDraft> InspectorDrafts;
+
+	struct FPendingSave
+	{
+		TAsyncResult<bool> Result;
+		std::string Destination;
+		std::uint64_t Epoch{};
+		std::uint64_t State{};
+		std::uint64_t Started{};
+	};
+
+	std::optional<FPendingSave> PendingSave;
+	std::string SavePath;
+	std::string SaveStatus;
+	double LastSaveMilliseconds{};
+	bool bSaveDialog{};
+	bool bRequestSaveDialog{};
+	bool bDiscardDialog{};
+	bool bRequestDiscard{};
+	bool bPendingClose{};
+	std::string PendingOpen;
+	std::map<std::string, FVec4> InspectionBounds;
+	FSceneNode ExerciseOriginal;
+	std::uint32_t TransformExerciseStep{};
+	FMat4 ExerciseTransformResult;
+	bool bDocumentVerified{};
+	bool bViewsVerified{};
+	FSceneCameraView ExerciseInitialView;
+	FSceneCameraView ExerciseEditorView;
 };
 } // namespace Hyperion

@@ -24,6 +24,11 @@ void ValidateRecordDescriptor(const FRecordDescriptor& InType)
 		throw std::logic_error("Invalid reflected type descriptor: " + InType.Id);
 	}
 	std::set<std::string> Names;
+	if (InType.DisplayLayout &&
+	    (!InType.DisplayLayout->Record || !InType.DisplayLayout->Project || !InType.DisplayLayout->Apply))
+	{
+		throw std::logic_error("Incomplete reflected display layout: " + InType.Id);
+	}
 	for (const auto& Field : InType.Members)
 	{
 		if (Field.Id.empty() || !Names.insert(Field.Id).second || !Field.Read || !Field.Write || !Field.Visit)
@@ -35,6 +40,15 @@ void ValidateRecordDescriptor(const FRecordDescriptor& InType)
 			if (Alias.empty() || !Names.insert(Alias).second)
 			{
 				throw std::logic_error("Duplicate reflected alias: " + InType.Id + "." + Alias);
+			}
+		}
+		if (Field.Options.Inspector)
+		{
+			const auto& Presentation = *Field.Options.Inspector;
+			if (!Field.Shape ||
+			    (Presentation.Minimum && Presentation.Maximum && *Presentation.Minimum > *Presentation.Maximum))
+			{
+				throw std::logic_error("Invalid reflected inspection contract: " + InType.Id + "." + Field.Id);
 			}
 		}
 	}
@@ -238,7 +252,9 @@ void FRecordRegistry::Register(const FRecordDescriptor& InType)
 			               return InLeft.Id == InRight.Id && InLeft.Options.bRequired == InRight.Options.bRequired &&
 			                      InLeft.Options.bPersistent == InRight.Options.bPersistent &&
 			                      InLeft.Options.Aliases == InRight.Options.Aliases && InLeft.Write == InRight.Write &&
-			                      InLeft.Read == InRight.Read && InLeft.Visit == InRight.Visit;
+			                      InLeft.Read == InRight.Read && InLeft.Visit == InRight.Visit &&
+			                      InLeft.Options.Inspector == InRight.Options.Inspector &&
+			                      InLeft.Shape == InRight.Shape;
 		               });
 		if (Existing.CppType != InType.CppType || Existing.Version != InType.Version ||
 		    Existing.Definition != InType.Definition || Existing.Create != InType.Create ||
@@ -246,7 +262,8 @@ void FRecordRegistry::Register(const FRecordDescriptor& InType)
 		    Existing.MinimumVersion != InType.MinimumVersion || Existing.Migrations != InType.Migrations ||
 		    Existing.ContextMigrations != InType.ContextMigrations ||
 		    Existing.RejectedFields != InType.RejectedFields ||
-		    Existing.bRejectUnknownFields != InType.bRejectUnknownFields || !bMembersMatch)
+		    Existing.bRejectUnknownFields != InType.bRejectUnknownFields ||
+		    Existing.DisplayLayout != InType.DisplayLayout || !bMembersMatch)
 		{
 			throw std::logic_error("Conflicting reflected type registration: " + InType.Id);
 		}

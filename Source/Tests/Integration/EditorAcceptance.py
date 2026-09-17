@@ -43,6 +43,17 @@ def main():
     assert capture.stat().st_size > 100_000, 'Missing scene image'
     run_editor(executable, root, output, 'close-during-load', '--frames', '2',
                '--scene', '/Game/Scenes/Sponza.hasset')
+
+    document, _ = run_editor(executable, root, output, 'document',
+                            '--scene', '/Game/Scenes/Sponza.hasset',
+                            '--exercise-document', str(output / 'Edited.hasset'))
+    assert document['document_verified'] and not document['document_dirty'], document
+    assert document['save_ms'] > 0 and document['validation_errors'] == 0, document
+    views, _ = run_editor(executable, root, output, 'views',
+                           '--scene', '/Game/Scenes/Sponza.hasset',
+                           '--exercise-views', str(output / 'Views.hasset'))
+    assert views['views_verified'] and not views['document_dirty'], views
+    assert views['validation_errors'] == 0 and not views['scene_error'], views
     report, _ = run_editor(executable, root, output, 'missing-scene', '--frames', '20',
                             '--scene', '/Game/Scenes/DoesNotExist.hasset')
     assert report['scene_error'] and report['validation_errors'] == 0, report

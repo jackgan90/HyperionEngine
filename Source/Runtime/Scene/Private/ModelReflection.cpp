@@ -2,6 +2,25 @@
 
 namespace Hyperion
 {
+template<> const FRecordDescriptor& RecordType<FSceneMeshSection>()
+{
+	static const auto Type = MakeRecord<FSceneMeshSection>(
+	    "hyperion.meshsection",
+	    {Member("primitive", &FSceneMeshSection::Primitive, Inspect("Primitive ID", {}, {}, true)),
+	     Member("visible", &FSceneMeshSection::bVisible, Inspect("Visible")),
+	     Member("material", &FSceneMeshSection::Material, Inspect("Material overrides"))},
+	    1,
+	    [](const FSceneMeshSection& InSection)
+	    {
+		    if (InSection.Primitive.empty())
+		    {
+			    throw std::invalid_argument("Mesh section requires a stable primitive ID");
+		    }
+		    ValidateMaterialOverride(InSection.Material);
+	    });
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FMaterialOverride>()
 {
 	static const auto Type = MakeRecord<FMaterialOverride>("hyperion.materialoverride",
@@ -40,22 +59,40 @@ template<> const FRecordDescriptor& RecordType<FMat4>()
 
 template<> const FRecordDescriptor& RecordType<FModelPrimitive>()
 {
-	static const auto Type = MakeRecord<FModelPrimitive>(
-	    "hyperion.modelprimitive",
-	    {Member("name", &FModelPrimitive::Name), Member("positions", &FModelPrimitive::Positions),
-	     Member("normals", &FModelPrimitive::Normals), Member("tangents", &FModelPrimitive::Tangents),
-	     Member("colors", &FModelPrimitive::Colors), Member("texCoords0", &FModelPrimitive::TexCoords0),
-	     Member("texCoords1", &FModelPrimitive::TexCoords1), Member("indices", &FModelPrimitive::Indices),
-	     Member("material", &FModelPrimitive::Material)});
+	static const auto Type = []
+	{
+		auto Result = MakeRecord<FModelPrimitive>(
+		    "hyperion.modelprimitive",
+		    {Member("id", &FModelPrimitive::Id), Member("name", &FModelPrimitive::Name),
+		     Member("positions", &FModelPrimitive::Positions), Member("normals", &FModelPrimitive::Normals),
+		     Member("tangents", &FModelPrimitive::Tangents), Member("colors", &FModelPrimitive::Colors),
+		     Member("texCoords0", &FModelPrimitive::TexCoords0), Member("texCoords1", &FModelPrimitive::TexCoords1),
+		     Member("indices", &FModelPrimitive::Indices), Member("material", &FModelPrimitive::Material)},
+		    2);
+		Result.Migrations.emplace(1,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
+		return Result;
+	}();
 	return Type;
 }
 
 template<> const FRecordDescriptor& RecordType<FModelNode>()
 {
-	static const auto Type = MakeRecord<FModelNode>(
-	    "hyperion.modelnode",
-	    {Member("name", &FModelNode::Name), Member("local", &FModelNode::Local),
-	     Member("primitives", &FModelNode::Primitives), Member("children", &FModelNode::Children)});
+	static const auto Type = []
+	{
+		auto Result = MakeRecord<FModelNode>(
+		    "hyperion.modelnode",
+		    {Member("id", &FModelNode::Id), Member("name", &FModelNode::Name), Member("local", &FModelNode::Local),
+		     Member("primitives", &FModelNode::Primitives), Member("children", &FModelNode::Children)},
+		    2);
+		Result.Migrations.emplace(1,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
+		return Result;
+	}();
 	return Type;
 }
 
@@ -68,7 +105,25 @@ template<> const FRecordDescriptor& RecordType<FModelAsset>()
 		    {Member("name", &FModelAsset::Name), Member("primitives", &FModelAsset::Primitives),
 		     Member("materialSlots", &FModelAsset::MaterialSlots), Member("nodes", &FModelAsset::Nodes),
 		     Member("roots", &FModelAsset::Roots), Member("diagnostics", &FModelAsset::Diagnostics)},
-		    2, ValidateModel);
+		    3, ValidateModel);
+		Result.Migrations.emplace(
+		    2,
+		    [](FArchiveNode::FObject& InFields)
+		    {
+			    for (const auto& [Field, Prefix] : {std::pair{"nodes", "node-"}, std::pair{"primitives", "primitive-"}})
+			    {
+				    auto& Values = std::get<FArchiveNode::FArray>(InFields.at(Field).Value);
+				    for (std::size_t Index = 0; Index < Values.size(); ++Index)
+				    {
+					    auto& Record = std::get<FArchiveNode::FObject>(Values[Index].Value);
+					    auto& Fields = std::get<FArchiveNode::FObject>(Record.at("fields").Value);
+					    if (!Fields.contains("id") || ReadValue<std::string>(Fields.at("id")).empty())
+					    {
+						    Fields["id"] = WriteValue(std::string(Prefix) + std::to_string(Index));
+					    }
+				    }
+			    }
+		    });
 		Result.Migrations.emplace(
 		    1,
 		    [](FArchiveNode::FObject&)

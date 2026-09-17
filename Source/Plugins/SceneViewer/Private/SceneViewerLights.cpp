@@ -37,9 +37,9 @@ void Ring(FGui& InGui, const FMat4& InClip, FVec3 InCenter, FVec3 InRight, FVec3
 void FSceneViewerPlugin::FImpl::DrawLightProperties(FGui& InGui, const FSceneNode& InNode)
 {
 	// The caller owns this node snapshot; scene edits replace and release the live node storage.
-	if (InNode.PointLight)
+	if (InNode.PointLight())
 	{
-		auto Light = *InNode.PointLight;
+		auto Light = *InNode.PointLight();
 		bool bChanged = InGui.InputVector("Point color", Light.Color);
 		bChanged |= InGui.InputFloat("Point intensity", Light.Intensity);
 		bChanged |= InGui.InputFloat("Point range (world units)", Light.Range);
@@ -48,9 +48,9 @@ void FSceneViewerPlugin::FImpl::DrawLightProperties(FGui& InGui, const FSceneNod
 			Scene.SetPointLight(Selected, Light);
 		}
 	}
-	if (InNode.SpotLight)
+	if (InNode.SpotLight())
 	{
-		auto Light = *InNode.SpotLight;
+		auto Light = *InNode.SpotLight();
 		bool bChanged = InGui.InputVector("Spot color", Light.Color);
 		bChanged |= InGui.InputFloat("Spot intensity", Light.Intensity);
 		bChanged |= InGui.InputFloat("Spot range (world units)", Light.Range);
@@ -76,19 +76,19 @@ void FSceneViewerPlugin::FImpl::DrawLightBounds(FGui& InGui) const
 		{
 			continue;
 		}
-		if (View.Node->PointLight)
+		if (View.Node->PointLight())
 		{
 			const auto Value = Transform(View.World, {0, 0, 0, 1});
 			const FVec3 Position{Value.X, Value.Y, Value.Z};
-			const float Radius = View.Node->PointLight->Range;
+			const float Radius = View.Node->PointLight()->Range;
 			Ring(InGui, LastView.ViewProjection, Position, {1, 0, 0}, {0, 1, 0}, Radius);
 			Ring(InGui, LastView.ViewProjection, Position, {1, 0, 0}, {0, 0, 1}, Radius);
 			Ring(InGui, LastView.ViewProjection, Position, {0, 1, 0}, {0, 0, 1}, Radius);
 		}
-		if (View.Node->SpotLight)
+		if (View.Node->SpotLight())
 		{
 			const auto Pose = ExtractScenePose(View.World);
-			const auto& Light = *View.Node->SpotLight;
+			const auto& Light = *View.Node->SpotLight();
 			for (const float Angle : {Light.InnerRadians, Light.OuterRadians})
 			{
 				const auto Center = Add(Pose.Eye, ScaleVector(Pose.Forward, Light.Range * std::cos(Angle)));

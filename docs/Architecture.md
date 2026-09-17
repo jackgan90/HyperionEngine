@@ -30,7 +30,7 @@ Task handles carry completion and exceptions. Dependencies are continuation driv
 
 [RenderPrimitives.md](RenderPrimitives.md) defines the standard runtime flow, message and lifetime contracts. Main logical objects hold opaque bindings; Render owns persistent primitives and collects independent frame items. A device/session resource service shares immutable geometry/materials and retires native handles on RHI 0 after uploads, frame references and GPU fences permit it. Control and retirement progress continue without new presented frames.
 
-Scene-backed viewers own FSceneInstance on Main. Cameras and lights are scene nodes; the bridge publishes geometry and metadata under one exact publication token. Render resolves an immutable scene-frame seed through FSceneViewRequest. Application code must not reconstruct a bound frame by copying its public material inputs or bypass scene camera selection with a separate view. Reusable navigation is provided by FSceneCameraController; see [SceneManagement.md](SceneManagement.md).
+Scene-backed viewers own FSceneInstance on Main. Authored cameras and lights are scene nodes; the bridge publishes geometry and metadata under one exact publication token. Render resolves an immutable scene-frame seed through FSceneViewRequest. Application code must not reconstruct a bound frame by copying public material inputs. Editor and SceneViewer use CameraOverride for independent browsing views initialized from optional InitialView metadata or deterministic framing. Editor camera preview resolves an explicit scene handle with fallback disabled; ModelViewer retains its authored-camera workflow. Reusable navigation is provided by FSceneCameraController; see [SceneManagement.md](SceneManagement.md).
 
 ## Adding an experiment
 
@@ -46,7 +46,7 @@ The graph imports explicit texture mips/buffers, tracks read/write dependencies 
 
 See [AssetPipeline.md](AssetPipeline.md) for the single IO thread, resumable worker import, reflected `.hasset` records, immutable Scene assets, asynchronous fenced texture upload and the supported glTF boundary. Existing configuration reflection remains compatible; `FRecordDescriptor` adds nested data and bulk serialization without exposing GPU or vendor objects.
 
-Reflection descriptors expose stable property IDs, kinds, ranges, getters and setters. JSON serialization uses a type ID and schema version. Unknown properties are ignored, missing properties preserve defaults, and incompatible future versions fail. GPU handles are never serialized; persistent assets store identity and source paths.
+Record reflection exposes stable property IDs, typed value shapes, validation and optional Inspector metadata. Scene objects compose registered value components; inspection drafts validate detached candidates before scene transactions. See [SceneComponents.md](SceneComponents.md). Configuration descriptors also expose their existing property getters/setters. JSON serialization uses a type ID and schema version. Unknown properties are ignored, missing properties preserve defaults, and incompatible future versions fail. GPU handles are never serialized; persistent assets store identity and source paths.
 
 `Allocate` / `Deallocate` must be paired, with a power-of-two alignment and a `EMemoryTag`. A `FMemoryResource` adapts these hooks to PMR containers. There is no global `new` override; allocator replacement remains local to the core adapter. Third-party allocators are hooked where supported, without claiming full process coverage.
 

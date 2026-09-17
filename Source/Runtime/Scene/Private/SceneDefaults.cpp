@@ -7,10 +7,10 @@ FSceneNode MakeSceneCameraNode(std::string InId, FVec3 InEye, FVec3 InTarget, FS
 	FSceneNode Node;
 	Node.Id = std::move(InId);
 	Node.Name = Node.Id;
-	Node.Local = SceneCameraTransform(InEye, InTarget);
+	Node.Local() = SceneCameraTransform(InEye, InTarget);
 	InCamera.FocusDistance = Length(Subtract(InTarget, InEye));
 	ValidateSceneCamera(InCamera);
-	Node.Camera = InCamera;
+	Node.Camera() = InCamera;
 	return Node;
 }
 
@@ -19,8 +19,8 @@ FSceneNode MakeSceneDirectionalLightNode(std::string InId)
 	FSceneNode Node;
 	Node.Id = std::move(InId);
 	Node.Name = Node.Id;
-	Node.Local = SceneCameraTransform({}, {.45f, -.8f, -.65f});
-	Node.DirectionalLight = FSceneDirectionalLight{{3.f, 2.85f, 2.7f}, 1.f, true};
+	Node.Local() = SceneCameraTransform({}, {.45f, -.8f, -.65f});
+	Node.DirectionalLight() = FSceneDirectionalLight{{3.f, 2.85f, 2.7f}, 1.f, true};
 	return Node;
 }
 
@@ -29,7 +29,7 @@ FSceneNode MakeSceneEnvironmentLightNode(std::string InId)
 	FSceneNode Node;
 	Node.Id = std::move(InId);
 	Node.Name = Node.Id;
-	Node.EnvironmentLight = FSceneEnvironmentLight{{.22f, .25f, .3f}, 1.f};
+	Node.EnvironmentLight() = FSceneEnvironmentLight{{.22f, .25f, .3f}, 1.f};
 	return Node;
 }
 

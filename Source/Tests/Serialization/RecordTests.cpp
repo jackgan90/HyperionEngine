@@ -449,6 +449,9 @@ void CheckWire()
 }
 } // namespace
 
+void CheckDisplayLayouts();
+void CheckInspectionRanges();
+
 void CheckRecordEvolution()
 {
 	FSchemaObject Original;
@@ -481,4 +484,6 @@ void CheckRecordEvolution()
 	CheckContextMigrationContract();
 	CheckStrictUnknownFields();
 	CheckWire();
+	CheckDisplayLayouts();
+	CheckInspectionRanges();
 }

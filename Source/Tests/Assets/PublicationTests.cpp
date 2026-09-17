@@ -5,6 +5,7 @@
 #include <iostream>
 
 void CheckSceneSources();
+void CheckModelReferences();
 
 namespace Hyperion
 {
@@ -343,17 +344,26 @@ void CheckModelToScene()
 	const auto Output = std::filesystem::absolute("publication-model-scene/scene.hasset");
 	FAssetImportOptions Options;
 	Options.bScene = true;
+	Options.bForce = true;
 	Options.Name = "Imported model scene";
 	const auto Result = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
 	HYP_CHECK(Result->Header.TypeId == RecordType<FSceneManifest>().Id && Result->Header.Dependencies.size() == 1);
 	FAssetService Assets(IO);
 	RegisterSceneAssetTypes(Assets.Types());
 	const auto Graph = Assets.LoadGraphAsync(Output).Get(Tasks);
-	HYP_CHECK(Graph->Failures.empty() && SceneModelCount(*Graph->Root->As<FSceneManifest>()) == 1 &&
-	          Graph->Root->As<FSceneManifest>()->Nodes.size() == 4);
+	HYP_CHECK(Graph->Failures.empty());
 	const auto Model =
 	    Assets.LoadReferenceAsync<FModelAsset>(Result->Header.Dependencies[0].Reference, Output).Get(Tasks);
 	HYP_CHECK(ModelInstances(*Model).size() == 4 && Model->MaterialSlots.size() == 4);
+	const auto& Scene = *Graph->Root->As<FSceneManifest>();
+	HYP_CHECK(Scene.Nodes.size() == 3 && SceneModelCount(Scene) == 1 && Scene.DefaultCamera.empty());
+	const auto Found = std::find_if(Scene.Nodes.begin(), Scene.Nodes.end(),
+	                                [](const auto& InNode)
+	                                {
+		                                return InNode.Model.has_value();
+	                                });
+	HYP_CHECK(Found != Scene.Nodes.end() && Found->Id == "instance");
+	HYP_CHECK(Found->Model->SourceNode.empty() && Found->Model->SourcePrimitive.empty());
 }
 
 void CheckSceneImporterCache()
@@ -373,7 +383,7 @@ void CheckSceneImporterCache()
 	FAssetImportOptions Force;
 	Force.bForce = true;
 	const auto First = Imports.ImportAsync(Source, Output, Force).Get(Tasks);
-	HYP_CHECK(First->Header.SchemaVersion == 5 && First->Header.Import->ImporterVersion == 4);
+	HYP_CHECK(First->Header.SchemaVersion == 7 && First->Header.Import->ImporterVersion == 7);
 	HYP_CHECK(First->Header.Import->Importer == "hyperion.scene-json");
 	const auto Same = Imports.ImportAsync(Source, Output).Get(Tasks);
 	HYP_CHECK(Same->bUpToDate && Same->WrittenAssets == 0);
@@ -392,13 +402,13 @@ void CheckSceneImporterCache()
 	const auto LegacyPath = Directory / "legacy.hasset";
 	IO.WriteAsync(LegacyPath, EncodeAsset(RecordType<FLegacySceneManifest>(), &Legacy).Bytes).Get(Tasks);
 	const auto Upgraded = Imports.ImportAsync(LegacyPath, Directory / "upgraded.hasset", Force).Get(Tasks);
-	HYP_CHECK(Upgraded->Header.SchemaVersion == 5 && Upgraded->Header.Import->ImporterVersion == 4);
+	HYP_CHECK(Upgraded->Header.SchemaVersion == 7 && Upgraded->Header.Import->ImporterVersion == 7);
 	HYP_CHECK(Upgraded->Header.Import->Importer == "hyperion.native-scene-upgrade");
 	FAssetService Assets(IO);
 	RegisterSceneAssetTypes(Assets.Types());
 	const auto Loaded = Assets.LoadAsync<FSceneManifest>(Directory / "upgraded.hasset").Get(Tasks);
 	HYP_CHECK(Loaded->Nodes.size() == 3 && Loaded->Nodes[0].Camera->FocusDistance == 8);
-	std::cout << "Scene source and native importer version 4: v5, unchanged cache, changed camera fingerprint passed\n";
+	std::cout << "Scene component source/native migration, unchanged cache and changed camera fingerprint passed\n";
 }
 
 void CheckExternalImageReimport()
@@ -465,6 +475,7 @@ int main()
 		CheckCrossVolumeImport();
 		CheckCyclesAndOrdering();
 		CheckModelToScene();
+		CheckModelReferences();
 		CheckSceneImporterCache();
 		CheckLocalLease();
 		CheckExternalImageReimport();

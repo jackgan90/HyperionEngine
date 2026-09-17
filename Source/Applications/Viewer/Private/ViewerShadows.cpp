@@ -141,7 +141,7 @@ void FViewerApplication::DrawShadowGui()
 		FSceneNodeView LightView;
 		if (Handle && Scene->GetNodeView(*Handle, LightView))
 		{
-			auto Light = *LightView.Node->DirectionalLight;
+			auto Light = *LightView.Node->DirectionalLight();
 			bool bLightChanged = Gui->InputVector("Main light color", Light.Color);
 			bLightChanged |= Gui->InputFloat("Main light intensity", Light.Intensity);
 			bLightChanged |= Gui->Checkbox("Main light casts shadows", Light.bCastShadows);

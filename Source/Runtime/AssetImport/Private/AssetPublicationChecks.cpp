@@ -58,6 +58,12 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	Provenance.Settings["type"] = SourceType;
 	Provenance.Settings["source"] = ImportPathString(Source.filename());
 	Provenance.Settings["scene"] = InOptions.bScene ? "true" : "false";
+	if (InOptions.bScene || SourceType == RecordType<FSceneManifest>().Id)
+	{
+		// Publication policy also applies to --scene with only the model importer registered.
+		Provenance.Settings["scene_model_policy"] = "whole-model-reference";
+		Provenance.Settings["scene_view_policy"] = "independent-browsing-view";
+	}
 	Provenance.Settings["name"] = InOptions.Name;
 	Provenance.Settings["library"] = ImportRelativePath(Library, Output.parent_path());
 	if (!SourceId.empty())

@@ -17,6 +17,7 @@
 - [glTF 资产管线](AssetPipeline.md)、[原生资产](NativeAssets.md)
 - [共享材质与纹理资产](SharedMaterialAssets.md)
 - [场景管理与相机操作](SceneManagement.md)、[Sponza 示例](SponzaMigration.md)
+- [场景组件、反射 Inspector 与编辑契约](SceneComponents.md)
 
 ## 渲染契约
 
@@ -31,6 +32,7 @@
 这些文档保留基线、测量方法、回退数据和当时的设计取舍。功能边界以以上契约文档为准；表中的旧配置、模型数、测试数和耗时不是当前默认值或性能保证。
 
 - [SceneViewer 性能定位](ScenePerformance.md)
+- [Component 与编辑器迭代性能对比](ComponentEditorPerformance.md)
 - [材质性能](MaterialPerformance.md)、[实例批处理性能](InstanceBatchPerformance.md)
 - [Renderer CPU 提交](RendererCpuPerformance.md)、[保留渲染帧](RetainedRenderFrames.md)
 - [增量渲染更新](IncrementalRenderUpdates.md)、[合批规划数据](BatchPlanningData.md)

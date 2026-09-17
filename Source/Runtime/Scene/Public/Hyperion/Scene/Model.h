@@ -10,7 +10,18 @@ struct FMaterialOverride
 	std::optional<FVec4> BaseColor;
 	std::optional<float> Metallic;
 	std::optional<float> Roughness;
+	bool operator==(const FMaterialOverride& InOther) const;
 };
+
+struct FSceneMeshSection
+{
+	std::string Primitive;
+	bool bVisible = true;
+	FMaterialOverride Material;
+	bool operator==(const FSceneMeshSection&) const = default;
+};
+
+template<> const FRecordDescriptor& RecordType<FSceneMeshSection>();
 
 void ValidateMaterialOverride(const FMaterialOverride& InMaterial);
 template<> const FRecordDescriptor& RecordType<FMaterialOverride>();
@@ -26,6 +37,7 @@ struct FModelPrimitive
 	std::vector<float> TexCoords1;
 	std::vector<std::uint32_t> Indices;
 	std::int32_t Material = -1;
+	std::string Id;
 };
 
 struct FModelNode
@@ -34,6 +46,7 @@ struct FModelNode
 	FMat4 Local = Identity();
 	std::vector<std::uint32_t> Primitives;
 	std::vector<std::uint32_t> Children;
+	std::string Id;
 };
 
 struct FModelAsset
@@ -55,6 +68,10 @@ struct FModelInstance
 void ValidateModel(const FModelAsset& InModel);
 void ValidateNodeHierarchy(std::span<const FModelNode> InNodes);
 std::vector<FModelInstance> ModelInstances(const FModelAsset& InModel);
+std::string ModelNodeId(const FModelAsset& InModel, std::size_t InIndex);
+std::string ModelPrimitiveId(const FModelAsset& InModel, std::size_t InIndex);
+void AssignModelSubresourceIds(FModelAsset& InModel);
+std::vector<FModelInstance> SelectedModelInstances(const FModelAsset& InModel, std::string_view InSourceNode);
 FBounds ModelBounds(const FModelAsset& InModel);
 void GenerateMeshDirections(FModelPrimitive& InPrimitive, std::uint32_t InTangentUv = 0);
 

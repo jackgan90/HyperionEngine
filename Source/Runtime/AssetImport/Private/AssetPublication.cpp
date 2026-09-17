@@ -91,12 +91,20 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	if (InOptions.bScene && Converted.Type->CppType == typeid(FModelAsset))
 	{
 		Publication.Converted.emplace(std::make_pair(InSource, Converted.Type->Id), Converted);
-		FLegacySceneManifest Scene;
+		FSceneManifest Scene;
 		Scene.Assets.push_back({"model", {"", ImportPathString(InSource.filename()), Converted.Type->Id, ""}});
-		Scene.Instances.push_back({"instance", "model", Identity(), true, InOptions.Name});
+		FSceneNodeEntry Model;
+		Model.Id = "instance";
+		Model.Name = InOptions.Name.empty() ? "Model" : InOptions.Name;
+		Model.Model = FSceneNodeModel{"model"};
+		Scene.Nodes.push_back(std::move(Model));
+		Scene.MainDirectionalLight = "light-main";
+		Scene.EnvironmentLight = "light-environment";
+		Scene.Nodes.push_back(SceneEntryFromNode(MakeSceneDirectionalLightNode(Scene.MainDirectionalLight)));
+		Scene.Nodes.push_back(SceneEntryFromNode(MakeSceneEnvironmentLightNode(Scene.EnvironmentLight)));
 		Converted.Products.clear();
 		Converted.Type = std::make_shared<const FRecordDescriptor>(RecordType<FSceneManifest>());
-		Converted.Object = std::make_shared<const FSceneManifest>(UpgradeLegacyScene(Scene));
+		Converted.Object = std::make_shared<const FSceneManifest>(std::move(Scene));
 		Converted.NativeHeader.reset();
 	}
 	if (!InOptions.Name.empty() && Converted.Type->CppType == typeid(FModelAsset))

@@ -580,8 +580,8 @@ void CheckStationaryLocalRetirement(FFixture& InFixture, FScene& InScene, FScene
 	for (unsigned Index = 0; Index < 12; ++Index)
 	{
 		auto Node = MakeScenePointLightNode("retirement-" + std::to_string(Index));
-		Node.Local = Translation({0, 0, 2});
-		Node.PointLight = FScenePointLight{{1, 1, 1}, float(Index + 1), 4};
+		Node.Local() = Translation({0, 0, 2});
+		Node.PointLight() = FScenePointLight{{1, 1, 1}, float(Index + 1), 4};
 		Added.push_back(InScene.AddNode(Node));
 	}
 	InBridge.Flush();
@@ -679,7 +679,7 @@ void CheckClusteredDirectionalAndDense(FFixture& InFixture, FScene& InScene, FSc
 	}
 	const auto Original = InScene.GetSettings();
 	auto SunNode = MakeSceneDirectionalLightNode("cluster sun");
-	SunNode.DirectionalLight = FSceneDirectionalLight{{1, 1, 1}, .5f, false};
+	SunNode.DirectionalLight() = FSceneDirectionalLight{{1, 1, 1}, .5f, false};
 	const auto Sun = InScene.AddNode(SunNode);
 	auto Settings = Original;
 	Settings.MainDirectionalLight = Sun;
@@ -697,8 +697,8 @@ void CheckClusteredDirectionalAndDense(FFixture& InFixture, FScene& InScene, FSc
 	for (unsigned Index = 0; Index < 80; ++Index)
 	{
 		auto Node = MakeScenePointLightNode("dense-" + std::to_string(Index));
-		Node.Local = Translation({0, 0, 2});
-		Node.PointLight = FScenePointLight{{1, 1, 1}, .02f, 4};
+		Node.Local() = Translation({0, 0, 2});
+		Node.PointLight() = FScenePointLight{{1, 1, 1}, .02f, 4};
 		Added.push_back(InScene.AddNode(Node));
 	}
 	InBridge.Flush();
@@ -729,8 +729,8 @@ void CheckOwnedLocalLights(FFixture& InFixture)
 	Material.Emissive = {.02f, .02f, .02f};
 	const auto Surface = Scene.Add({"receiver", PrepareSourceModel(Quad(Material)), Scale({20, 20, 1})});
 	auto Node = MakeScenePointLightNode("point");
-	Node.Local = Translation({0, 0, 2});
-	Node.PointLight = FScenePointLight{{1, 1, 1}, 5, 4};
+	Node.Local() = Translation({0, 0, 2});
+	Node.PointLight() = FScenePointLight{{1, 1, 1}, 5, 4};
 	const auto Point = Scene.AddNode(Node);
 	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
 	F.LogicalBridge = &Bridge;
@@ -773,8 +773,8 @@ void CheckOwnedLocalLights(FFixture& InFixture)
 	CheckLocalLightCulling(F, Scene, Point, Bridge);
 	Scene.SetEnabled(Point, false);
 	auto Cone = MakeSceneSpotLightNode("spot");
-	Cone.Local = Translation({0, 0, 2});
-	Cone.SpotLight = FSceneSpotLight{{1, 1, 1}, 5, 4, .2f, .65f};
+	Cone.Local() = Translation({0, 0, 2});
+	Cone.SpotLight() = FSceneSpotLight{{1, 1, 1}, 5, 4, .2f, .65f};
 	const auto Spot = Scene.AddNode(Cone);
 	Bridge.Flush();
 	HYP_CHECK(std::abs(HdrPixel(F.Frame()) - One) < .01f);
@@ -803,8 +803,8 @@ void CheckClusteredMaterialCapacity(FFixture& InFixture)
 	FScene Scene;
 	AddDefaultSceneContent(Scene, {0, 0, 5}, {}, {1, .1f, 40, 5});
 	auto Point = MakeScenePointLightNode("capacity point");
-	Point.Local = Translation({0, 0, 2});
-	Point.PointLight = FScenePointLight{{1, 1, 1}, 5, 4};
+	Point.Local() = Translation({0, 0, 2});
+	Point.PointLight() = FScenePointLight{{1, 1, 1}, 5, 4};
 	Scene.AddNode(Point);
 	std::vector<FSceneHandle> Models;
 	for (unsigned Index = 0; Index < 32; ++Index)
@@ -842,7 +842,7 @@ void CheckOwnedOffscreenShadow(FFixture& InFixture)
 	Scene.SetDirectionalLight(Sun, {{1, 1, 1}, 3, true});
 	FSceneNode Parent;
 	Parent.Id = "caster-parent";
-	Parent.Local = Translation({3.5f, 0, 1});
+	Parent.Local() = Translation({3.5f, 0, 1});
 	const auto Rig = Scene.AddNode(Parent);
 	FModelMaterial Material;
 	Material.BaseColor = {.6f, .6f, .6f, 1};
@@ -853,10 +853,10 @@ void CheckOwnedOffscreenShadow(FFixture& InFixture)
 	const auto Ground = Scene.Add(Receiver);
 	FSceneNode Caster;
 	Caster.Id = "offscreen-caster";
-	Caster.Parent = "caster-parent";
-	Caster.Local = Scale({.4f, .4f, 1});
-	Caster.Model = FSceneModelComponent{};
-	Caster.Model->Data = Data;
+	Caster.Parent() = "caster-parent";
+	Caster.Local() = Scale({.4f, .4f, 1});
+	Caster.Model() = FSceneModelComponent{};
+	Caster.Model()->Data = Data;
 	const auto Occluder = Scene.AddNode(Caster);
 	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
 	F.LogicalBridge = &Bridge;
@@ -913,18 +913,18 @@ void CheckOwnedCameraLightRoutes(FFixture& InFixture)
 	FScene Scene;
 	FSceneNode Rig;
 	Rig.Id = "rig";
-	Rig.Local = Translation({.2f, 0, 0});
+	Rig.Local() = Translation({.2f, 0, 0});
 	const auto Parent = Scene.AddNode(Rig);
 	auto CameraNode = MakeSceneCameraNode("camera", {-.2f, 0, 5}, {-.2f, 0, 0}, {1, .1f, 40, 5});
-	CameraNode.Parent = "rig";
+	CameraNode.Parent() = "rig";
 	const auto Camera = Scene.AddNode(CameraNode);
 	auto SunNode = MakeSceneDirectionalLightNode("sun");
-	SunNode.Parent = "rig";
-	SunNode.Local = SceneCameraTransform({}, {-1, 0, -1});
-	SunNode.DirectionalLight = FSceneDirectionalLight{{1, 1, 1}, 3, true};
+	SunNode.Parent() = "rig";
+	SunNode.Local() = SceneCameraTransform({}, {-1, 0, -1});
+	SunNode.DirectionalLight() = FSceneDirectionalLight{{1, 1, 1}, 3, true};
 	const auto Sun = Scene.AddNode(SunNode);
 	auto Environment = MakeSceneEnvironmentLightNode("environment");
-	Environment.EnvironmentLight = FSceneEnvironmentLight{{1, 1, 1}, .2f};
+	Environment.EnvironmentLight() = FSceneEnvironmentLight{{1, 1, 1}, .2f};
 	const auto Ambient = Scene.AddNode(Environment);
 	Scene.SetSettings({Camera, Sun, Ambient});
 	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);

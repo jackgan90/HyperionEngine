@@ -5,6 +5,22 @@
 
 namespace Hyperion
 {
+std::size_t FScene::CountNodes() const
+{
+	RequireMain();
+	return Storage->Order.size();
+}
+
+bool FScene::EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision)
+{
+	RequireMain();
+	if (Storage->Revision != InExpectedRevision)
+	{
+		return false;
+	}
+	return Storage->EditNode(InHandle, std::move(InNode));
+}
+
 FScene::FScene() : Storage(std::make_unique<FSceneStorage>())
 {
 	static std::atomic_uint64_t NextIdentity{1};
@@ -118,32 +134,32 @@ bool FScene::IsEffectivelyEnabled(FSceneHandle InHandle) const
 const FSceneCamera* FScene::FindCamera(FSceneHandle InHandle) const
 {
 	const auto* Node = FindNode(InHandle);
-	return Node && Node->Camera ? &*Node->Camera : nullptr;
+	return Node && Node->Camera() ? &*Node->Camera() : nullptr;
 }
 
 const FSceneDirectionalLight* FScene::FindDirectionalLight(FSceneHandle InHandle) const
 {
 	const auto* Node = FindNode(InHandle);
-	return Node && Node->DirectionalLight ? &*Node->DirectionalLight : nullptr;
+	return Node && Node->DirectionalLight() ? &*Node->DirectionalLight() : nullptr;
 }
 
 const FSceneEnvironmentLight* FScene::FindEnvironmentLight(FSceneHandle InHandle) const
 {
 	const auto* Node = FindNode(InHandle);
-	return Node && Node->EnvironmentLight ? &*Node->EnvironmentLight : nullptr;
+	return Node && Node->EnvironmentLight() ? &*Node->EnvironmentLight() : nullptr;
 }
 
 const FSceneModelComponent* FScene::FindModelComponent(FSceneHandle InHandle) const
 {
 	const auto* Node = FindNode(InHandle);
-	return Node && Node->Model ? &*Node->Model : nullptr;
+	return Node && Node->Model() ? &*Node->Model() : nullptr;
 }
 
 bool FScene::GetCameraPose(FSceneHandle InHandle, FSceneCameraPose& OutPose) const
 {
 	RequireMain();
 	const auto Slot = Storage->Live(InHandle);
-	return Slot != FSceneStorage::InvalidSlot && Storage->Slots[Slot]->Node->Camera &&
+	return Slot != FSceneStorage::InvalidSlot && Storage->Slots[Slot]->Node->Camera() &&
 	       TryExtractScenePose(Storage->Slots[Slot]->World, OutPose);
 }
 
@@ -159,7 +175,7 @@ std::vector<FSceneHandle> FScene::GetNodes(ESceneNodeKind InKind) const
 	std::vector<FSceneHandle> Result;
 	for (const auto Slot : Storage->Order)
 	{
-		if (Storage->Slots[Slot]->Node->GetKind() == InKind)
+		if (Storage->Slots[Slot]->Node->Has(InKind))
 		{
 			Result.push_back(Storage->Handle(Slot));
 		}
@@ -226,16 +242,16 @@ bool FScene::SetModelVisible(FSceneHandle InHandle, bool bInVisible)
 	{
 		return false;
 	}
-	if (!Existing->Model)
+	if (!Existing->Model())
 	{
 		throw std::invalid_argument("Scene node is not a model");
 	}
-	if (Existing->Model->bVisible == bInVisible)
+	if (Existing->Model()->bVisible == bInVisible)
 	{
 		return true;
 	}
 	auto Node = *Existing;
-	Node.Model->bVisible = bInVisible;
+	Node.Model()->bVisible = bInVisible;
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -246,12 +262,12 @@ bool FScene::SetModelComponent(FSceneHandle InHandle, FSceneModelComponent InVal
 	{
 		return false;
 	}
-	if (!Existing->Model)
+	if (!Existing->Model())
 	{
 		throw std::invalid_argument("Scene node has the wrong payload kind");
 	}
 	auto Node = *Existing;
-	Node.Model = std::move(InValue);
+	Node.Model() = std::move(InValue);
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -264,14 +280,14 @@ bool FScene::SetCameraView(FSceneHandle InHandle, FMat4 InWorld, FSceneCamera In
 		return false;
 	}
 	auto Node = *Storage->Slots[Slot]->Node;
-	if (!Node.Camera)
+	if (!Node.Camera())
 	{
 		throw std::invalid_argument("Scene node has the wrong payload kind");
 	}
-	Node.Camera = InCamera;
+	Node.Camera() = InCamera;
 	if (Storage->Slots[Slot]->World.Values != InWorld.Values)
 	{
-		Node.Local = Storage->ToLocal(Storage->Slots[Slot]->Parent, InWorld);
+		Node.Local() = Storage->ToLocal(Storage->Slots[Slot]->Parent, InWorld);
 	}
 	return Storage->EditNode(InHandle, std::move(Node));
 }
@@ -283,12 +299,12 @@ bool FScene::SetCamera(FSceneHandle InHandle, FSceneCamera InValue)
 	{
 		return false;
 	}
-	if (!Existing->Camera)
+	if (!Existing->Camera())
 	{
 		throw std::invalid_argument("Scene node has the wrong payload kind");
 	}
 	auto Node = *Existing;
-	Node.Camera = std::move(InValue);
+	Node.Camera() = std::move(InValue);
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -299,12 +315,12 @@ bool FScene::SetDirectionalLight(FSceneHandle InHandle, FSceneDirectionalLight I
 	{
 		return false;
 	}
-	if (!Existing->DirectionalLight)
+	if (!Existing->DirectionalLight())
 	{
 		throw std::invalid_argument("Scene node has the wrong payload kind");
 	}
 	auto Node = *Existing;
-	Node.DirectionalLight = std::move(InValue);
+	Node.DirectionalLight() = std::move(InValue);
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -315,12 +331,12 @@ bool FScene::SetEnvironmentLight(FSceneHandle InHandle, FSceneEnvironmentLight I
 	{
 		return false;
 	}
-	if (!Existing->EnvironmentLight)
+	if (!Existing->EnvironmentLight())
 	{
 		throw std::invalid_argument("Scene node has the wrong payload kind");
 	}
 	auto Node = *Existing;
-	Node.EnvironmentLight = std::move(InValue);
+	Node.EnvironmentLight() = std::move(InValue);
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -331,12 +347,12 @@ bool FScene::SetLocalTransform(FSceneHandle InHandle, FMat4 InLocal)
 	{
 		return false;
 	}
-	if (Existing->Local.Values == InLocal.Values)
+	if (Existing->Local().Values == InLocal.Values)
 	{
 		return true;
 	}
 	auto Node = *Existing;
-	Node.Local = InLocal;
+	Node.Local() = InLocal;
 	return Storage->EditNode(InHandle, std::move(Node));
 }
 
@@ -451,15 +467,15 @@ FSceneHandle FScene::Add(FSceneModel InModel)
 	RequireMain();
 	FSceneNode Node;
 	Node.Name = std::move(InModel.Name);
-	Node.Local = InModel.World;
-	Node.Model = SceneModelComponent(InModel);
+	Node.Local() = InModel.World;
+	Node.Model() = SceneModelComponent(InModel);
 	return AddNode(std::move(Node));
 }
 
 bool FScene::Update(FSceneHandle InHandle, FSceneModel InModel)
 {
 	const auto* Existing = FindNode(InHandle);
-	if (!Existing || !Existing->Model)
+	if (!Existing || !Existing->Model())
 	{
 		return false;
 	}
@@ -468,17 +484,17 @@ bool FScene::Update(FSceneHandle InHandle, FSceneModel InModel)
 	const auto& Entry = *Storage->Slots[InHandle.Slot];
 	if (Entry.World.Values != InModel.World.Values)
 	{
-		Node.Local = Storage->ToLocal(Entry.Parent, InModel.World);
+		Node.Local() = Storage->ToLocal(Entry.Parent, InModel.World);
 	}
-	Node.Model = SceneModelComponent(InModel);
+	Node.Model() = SceneModelComponent(InModel);
 	// Find exposes effective visibility. An unchanged transfer bit must not author inherited hiding.
 	if (InModel.bVisible == Entry.Transfer.bVisible)
 	{
-		Node.Model->bVisible = Existing->Model->bVisible;
+		Node.Model()->bVisible = Existing->Model()->bVisible;
 	}
-	if (Existing->Model->Data == Node.Model->Data)
+	if (Existing->Model()->Data == Node.Model()->Data)
 	{
-		Node.Model->Asset = Existing->Model->Asset;
+		Node.Model()->Asset = Existing->Model()->Asset;
 	}
 	return Storage->EditNode(InHandle, std::move(Node));
 }
@@ -486,15 +502,15 @@ bool FScene::Update(FSceneHandle InHandle, FSceneModel InModel)
 bool FScene::Remove(FSceneHandle InHandle)
 {
 	const auto* Existing = FindNode(InHandle);
-	return Existing && Existing->Model ? RemoveNodeKeepChildren(InHandle) : false;
+	return Existing && Existing->Model() ? RemoveNodeKeepChildren(InHandle) : false;
 }
 
 const FSceneModel* FScene::Find(FSceneHandle InHandle) const
 {
 	RequireMain();
 	const auto Slot = Storage->Live(InHandle);
-	return Slot == FSceneStorage::InvalidSlot || !Storage->Slots[Slot]->Node->Model ? nullptr
-	                                                                                : &Storage->Slots[Slot]->Transfer;
+	return Slot == FSceneStorage::InvalidSlot || !Storage->Slots[Slot]->Node->Model() ? nullptr
+	                                                                                  : &Storage->Slots[Slot]->Transfer;
 }
 
 std::vector<FSceneHandle> FScene::GetHandles() const

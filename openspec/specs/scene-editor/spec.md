@@ -2,7 +2,6 @@
 
 ## Purpose
 Provide a docked scene editor with mounted scene opening, an embedded rendered viewport, reusable fly-camera navigation, and safe input and resource lifetimes.
-
 ## Requirements
 ### Requirement: Docked editor workspace
 The engine SHALL provide a standalone editor with a compact charcoal and blue-accent workspace, menu bar, docked scene viewport, Outliner, Details, scene browser, and persisted resettable layout.
@@ -55,3 +54,21 @@ The scene image SHALL follow the viewport content pixel size and declare texture
 #### Scenario: Resize and close
 - **WHEN** the viewport is resized, hidden, restored or the editor closes during loading
 - **THEN** rendering remains valid and resources and pending work are retired safely
+
+### Requirement: Editable document history and save points
+Editor SHALL provide component property and object structural editing, undo/redo, native scene save/save-as and a document dirty indicator. Save SHALL capture immutable authored state, and asynchronous completion SHALL not mark subsequent edits as saved. Asset replacement SHALL use explicit reference resolution and reject stale results.
+
+#### Scenario: Edit undo save reload
+- **WHEN** an instance property is edited, undone, redone, saved and reopened
+- **THEN** its final authored value and independent identity survive without changing other instances
+
+#### Scenario: Edit while saving
+- **WHEN** another edit is committed after a save captures its snapshot
+- **THEN** successful save completion leaves the document dirty
+
+### Requirement: Independent editor camera
+Editor viewport navigation SHALL retain the established fly input and speed behavior while using an independent pose/lens override. Ordinary navigation SHALL not mutate authored scene cameras or document history.
+
+#### Scenario: Browse and save
+- **WHEN** the user navigates the editor viewport and saves without editing scene content
+- **THEN** scene camera transforms and settings remain unchanged

@@ -1,7 +1,19 @@
 #include "Hyperion/Scene/Scene.h"
+#include <algorithm>
 
 namespace Hyperion
 {
+bool FMaterialOverride::operator==(const FMaterialOverride& InOther) const
+{
+	if (BaseColor.has_value() != InOther.BaseColor.has_value())
+	{
+		return false;
+	}
+	return (!BaseColor || (BaseColor->X == InOther.BaseColor->X && BaseColor->Y == InOther.BaseColor->Y &&
+	                       BaseColor->Z == InOther.BaseColor->Z && BaseColor->W == InOther.BaseColor->W)) &&
+	       Metallic == InOther.Metallic && Roughness == InOther.Roughness;
+}
+
 std::shared_ptr<const FSceneModelData> PrepareSceneModel(
     std::shared_ptr<const FModelAsset> InAsset, std::vector<std::shared_ptr<const FMaterialAssetData>> InMaterials)
 {
@@ -31,7 +43,57 @@ std::shared_ptr<const FSceneModelData> PrepareSceneModel(
 		Data->Bounds = bFirst ? Bounds : UnionBounds(Data->Bounds, Bounds);
 		bFirst = false;
 	}
+	for (std::size_t Index = 0; Index < Data->Asset->Nodes.size(); ++Index)
+	{
+		const auto Id = ModelNodeId(*Data->Asset, Index);
+		auto& Instances = Data->NodeInstances[Id];
+		auto& Bounds = Data->NodeBounds[Id];
+		for (const auto Primitive : Data->Asset->Nodes[Index].Primitives)
+		{
+			Instances.push_back({Primitive, Identity()});
+			const auto& Local = Data->PrimitiveBounds[Primitive];
+			Bounds = Bounds.bValid ? UnionBounds(Bounds, Local) : Local;
+		}
+	}
 	return Data;
+}
+
+FBounds SceneModelBounds(const FSceneModel& InModel)
+{
+	if (!InModel.Data)
+	{
+		return {};
+	}
+	if (!InModel.SourcePrimitive.empty())
+	{
+		const auto Instances = SceneModelInstances(InModel);
+		return InModel.Data->PrimitiveBounds.at(Instances.front().Primitive);
+	}
+	return InModel.SourceNode.empty() ? InModel.Data->Bounds : InModel.Data->NodeBounds.at(InModel.SourceNode);
+}
+
+std::vector<FModelInstance> SceneModelInstances(const FSceneModel& InModel)
+{
+	auto Result =
+	    InModel.SourceNode.empty() ? InModel.Data->Instances : InModel.Data->NodeInstances.at(InModel.SourceNode);
+	if (!InModel.SourcePrimitive.empty())
+	{
+		if (InModel.SourceNode.empty())
+		{
+			throw std::invalid_argument("Primitive selection requires a source node");
+		}
+		std::erase_if(Result,
+		              [&](const auto& InInstance)
+		              {
+			              return ModelPrimitiveId(*InModel.Data->Asset, InInstance.Primitive) !=
+			                     InModel.SourcePrimitive;
+		              });
+		if (Result.empty())
+		{
+			throw std::invalid_argument("Primitive selection is absent from its source node");
+		}
+	}
+	return Result;
 }
 
 void ValidateMaterialOverride(const FMaterialOverride& InMaterial)

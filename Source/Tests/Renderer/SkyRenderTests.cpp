@@ -51,7 +51,7 @@ struct FSkyFixture
 		Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets);
 		Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities());
 		auto Node = MakeSceneCameraNode("camera");
-		Node.Local = Translation({0, 0, 4});
+		Node.Local() = Translation({0, 0, 4});
 		Camera = Scene->AddNode(Node);
 		Environment = Scene->AddNode(MakeSceneEnvironmentLightNode("environment"));
 		Scene->SetSettings({Camera, {}, Environment});
@@ -120,7 +120,7 @@ struct FSkyFixture
 
 	void Select(FAssetRef InReference)
 	{
-		auto Light = *Scene->FindNode(Environment)->EnvironmentLight;
+		auto Light = *Scene->FindNode(Environment)->EnvironmentLight();
 		Light.Source = ESceneEnvironmentSource::SkyAsset;
 		Light.Sky = std::move(InReference);
 		Scene->SetEnvironmentLight(Environment, Light);
@@ -260,9 +260,14 @@ void CheckDirections(FSkyFixture& InFixture)
 		}
 	}
 	InFixture.Scene->SetLocalTransform(InFixture.Camera, SceneCameraTransform({}, {0, 0, 1}));
-	auto Light = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight;
+	auto Light = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
 	Light.YawRadians = 1.570796327f;
-	InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Light);
+	auto Edited = *InFixture.Scene->FindNode(InFixture.Environment);
+	Edited.EnvironmentLight() = Light;
+	const auto PreviousData = Light.Data;
+	HYP_CHECK(InFixture.Scene->EditNode(InFixture.Environment, std::move(Edited), InFixture.Scene->GetRevision()));
+	HYP_CHECK(InFixture.Scene->GetSkyStatus(InFixture.Environment) == "Ready");
+	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data == PreviousData);
 	const auto Rotated = InFixture.Frame();
 	HYP_CHECK(Pixel(Rotated, 128, 96, 1) > .6f && Pixel(Rotated, 128, 96, 0) < .03f);
 	Light.YawRadians = 0;
@@ -323,7 +328,7 @@ void CheckSourceToggle(FSkyFixture& InFixture, const FAssetRef& InReference)
 {
 	InFixture.Select(InReference);
 	InFixture.Await();
-	const auto Active = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight;
+	const auto Active = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
 	const auto Before = InFixture.Frame();
 	for (const bool bSeparateTicks : {false, true})
 	{
@@ -337,9 +342,9 @@ void CheckSourceToggle(FSkyFixture& InFixture, const FAssetRef& InReference)
 		InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Active);
 		InFixture.Scene->Tick();
 		HYP_CHECK(!InFixture.Scene->GetStatus().bReady ||
-		          InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data);
+		          InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data);
 		InFixture.Await();
-		const auto Data = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data;
+		const auto Data = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data;
 		HYP_CHECK(Data && Data->Reference == Active.Data->Reference);
 		Similar(Before, InFixture.Frame());
 	}
@@ -348,7 +353,7 @@ void CheckSourceToggle(FSkyFixture& InFixture, const FAssetRef& InReference)
 
 void CheckFailedRetry(FSkyFixture& InFixture, const FAssetRef& InReference, bool bInWrongType)
 {
-	const auto Previous = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data;
+	const auto Previous = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data;
 	const auto Name = "Retry" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 	const FAssetRef Missing{"", PathToUtf8(std::filesystem::absolute("sky-test-data/" + Name + ".hasset")),
 	                        RecordType<FSkyAsset>().Id, ""};
@@ -358,15 +363,15 @@ void CheckFailedRetry(FSkyFixture& InFixture, const FAssetRef& InReference, bool
 	}
 	InFixture.Select(Missing);
 	InFixture.Await(true);
-	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data == Previous);
+	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data == Previous);
 	const auto Loaded = InFixture.Assets.LoadReferenceAsync(InReference, {}).Get(InFixture.Tasks);
 	auto Sky = *Loaded->As<FSkyAsset>();
 	Sky.Name = Name;
 	const auto Repaired = InFixture.Write(Name, Sky);
 	InFixture.Select(Missing);
-	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data == Previous);
+	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data == Previous);
 	InFixture.Await();
-	const auto Data = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data;
+	const auto Data = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data;
 	HYP_CHECK(Data && Data->Reference.Id == Repaired.Id && Data->Reference.Revision == Repaired.Revision);
 	HYP_CHECK(InFixture.Scene->GetStatus().FailedSkies == 0);
 	std::cout << "Applying the same failed sky path retries and publishes the repaired file (wrong type="
@@ -396,7 +401,7 @@ void CheckPixels(FSkyFixture& InFixture, const FAssetRef& InRed)
 		HYP_CHECK(Pixel(Deferred, 128, 96) > Pixel(Deferred, 128, 96, 2) + .15f);
 		InFixture.Settings.Pipeline = ESceneRenderPipeline::Forward;
 		Similar(Deferred, InFixture.Frame());
-		auto Light = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight;
+		auto Light = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
 		Light.bVisible = false;
 		InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Light);
 		const auto Hidden = InFixture.Frame();
@@ -420,8 +425,8 @@ void CheckClustered(FSkyFixture& InFixture)
 {
 	const auto Surface = InFixture.Scene->Add({"Cluster surface", Quad(.5f)});
 	auto Point = MakeScenePointLightNode("point");
-	Point.Local = Translation({0, 1, 2});
-	Point.PointLight->Intensity = 2;
+	Point.Local() = Translation({0, 1, 2});
+	Point.PointLight()->Intensity = 2;
 	const auto PointHandle = InFixture.Scene->AddNode(Point);
 	InFixture.Await();
 	for (const bool bDirectional : {false, true})
@@ -490,14 +495,14 @@ void CheckRoughness(FSkyFixture& InFixture)
 
 void CheckReplacement(FSkyFixture& InFixture, const FAssetRef& InRed, const FAssetRef& InBlue)
 {
-	const auto Previous = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data;
+	const auto Previous = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data;
 	auto Missing = InBlue;
 	Missing.Id.clear();
 	Missing.Revision.clear();
 	Missing.Path = PathToUtf8(std::filesystem::absolute("sky-test-data/Missing.hasset"));
 	InFixture.Select(Missing);
 	InFixture.Await(true);
-	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight->Data == Previous);
+	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data == Previous);
 	const auto Destination = std::filesystem::absolute("sky-test-data/saved/Scene.hasset");
 	const auto FailedSnapshot = InFixture.Scene->Snapshot(Destination);
 	HYP_CHECK(FailedSnapshot.Nodes.back().EnvironmentLight->Sky->Path.find("Missing.hasset") != std::string::npos);

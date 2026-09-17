@@ -7,6 +7,8 @@
 #include <random>
 
 void CheckSceneNodes();
+void CheckSceneComponents();
+void CheckSceneExpansion();
 
 namespace
 {
@@ -157,7 +159,10 @@ void CheckNativeNodeKinds()
 			auto& CameraRecord = std::get<FArchiveNode::FObject>(Camera.Value);
 			auto& CameraFields = std::get<FArchiveNode::FObject>(CameraRecord.at("fields").Value);
 			CameraFields[Name] = WriteValue(std::string("orthographic"));
-			NodeFields["camera"] = std::move(Camera);
+			auto& Components = std::get<FArchiveNode::FArray>(NodeFields.at("components").Value);
+			Components.emplace_back(FArchiveNode::FObject{{"id", WriteValue(std::string("lens"))},
+			                                              {"type", WriteValue(RecordType<FSceneCamera>().Id)},
+			                                              {"state", std::move(Camera)}});
 		}
 		else
 		{
@@ -224,6 +229,9 @@ void CheckManifest()
 }
 } // namespace
 
+void CheckTransformInspection();
+void CheckInitialViews();
+
 int main()
 {
 	try
@@ -231,6 +239,10 @@ int main()
 		CheckBounds();
 		CheckLogicalScene();
 		CheckSceneNodes();
+		CheckSceneComponents();
+		CheckTransformInspection();
+		CheckInitialViews();
+		CheckSceneExpansion();
 		CheckManifest();
 		CheckManifestMigration();
 		CheckNativeNodeKinds();

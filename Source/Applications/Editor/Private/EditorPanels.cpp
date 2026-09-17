@@ -23,7 +23,7 @@ bool Matches(std::string InText, std::string InFilter)
 
 std::string KindName(ESceneNodeKind InKind)
 {
-	constexpr std::array Names{"Folder",    "Static Mesh", "Camera",    "Directional Light",
+	constexpr std::array Names{"Folder",    "Model",       "Camera",    "Directional Light",
 	                           "Sky Light", "Point Light", "Spot Light"};
 	return Names.at(static_cast<std::size_t>(InKind));
 }
@@ -50,6 +50,17 @@ void FEditorApplication::ShowOpenScene()
 
 void FEditorApplication::DrawMenus()
 {
+	const auto Attempt = [&](const auto& InAction)
+	{
+		try
+		{
+			InAction();
+		}
+		catch (const std::exception& Failure)
+		{
+			Error = Failure.what();
+		}
+	};
 	if (Gui->BeginMenuBar())
 	{
 		Gui->Text(" HYPERION ");
@@ -62,11 +73,50 @@ void FEditorApplication::DrawMenus()
 				ShowOpenScene();
 			}
 			OpenMenuBounds = Gui->LastItemBounds();
+			Gui->BeginDisabled(CurrentPath.empty() || !Scene->GetStatus().bReady || PendingSave.has_value());
+			if (Gui->MenuItem("Save Scene"))
+			{
+				Attempt(
+				    [&]
+				    {
+					    SaveScene(CurrentPath);
+				    });
+			}
+			if (Gui->MenuItem("Save Scene As..."))
+			{
+				SavePath = CurrentPath;
+				bSaveDialog = bRequestSaveDialog = true;
+			}
+			Gui->EndDisabled();
 			Gui->Separator();
 			if (Gui->MenuItem("Exit"))
 			{
 				Window->RequestClose();
 			}
+			Gui->EndMenu();
+		}
+		if (Gui->BeginMenu("Edit"))
+		{
+			Gui->BeginDisabled(HistoryCursor == 0);
+			if (Gui->MenuItem("Undo"))
+			{
+				Attempt(
+				    [&]
+				    {
+					    Undo();
+				    });
+			}
+			Gui->EndDisabled();
+			Gui->BeginDisabled(HistoryCursor == History.size());
+			if (Gui->MenuItem("Redo"))
+			{
+				Attempt(
+				    [&]
+				    {
+					    Redo();
+				    });
+			}
+			Gui->EndDisabled();
 			Gui->EndMenu();
 		}
 		if (Gui->BeginMenu("Window"))
@@ -105,7 +155,8 @@ void FEditorApplication::DrawMenus()
 		}
 		Gui->SameLine();
 		Gui->Text("    " +
-		          (CurrentPath.empty() ? std::string("Untitled") : std::filesystem::path(CurrentPath).stem().string()));
+		          (CurrentPath.empty() ? std::string("Untitled") : std::filesystem::path(CurrentPath).stem().string()) +
+		          (IsDirty() ? " *" : ""));
 		Gui->EndMenuBar();
 	}
 }
@@ -119,9 +170,10 @@ void FEditorApplication::DrawToolbar()
 			ShowOpenScene();
 		}
 		Gui->SameLine();
-		if (Gui->Button("Frame Scene", Scene->GetStatus().bReady && !CurrentPath.empty()))
+		if (Gui->Button("Frame Scene", Scene->GetStatus().bReady && !CurrentPath.empty() && !PreviewCamera))
 		{
-			FitSceneCamera(*Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
+			FitSceneCamera(ViewCamera, *Scene,
+			               ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
 		}
 		Gui->SameLine();
 		Gui->Text("  |  Scene Editor");
@@ -140,11 +192,11 @@ void FEditorApplication::DrawNode(FSceneHandle InHandle)
 	Gui->NextRow();
 	Gui->NextColumn();
 	bool bClicked{};
-	const bool bOpen =
-	    Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(), Selection == InHandle, bClicked);
+	const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(), Selection == InHandle,
+	                                 bClicked, !Options.bBenchmarkCollapsed);
 	if (bClicked)
 	{
-		Selection = InHandle;
+		SelectObject(InHandle);
 	}
 	Gui->NextColumn();
 	Gui->Text(KindName(Node->GetKind()));
@@ -177,7 +229,7 @@ void FEditorApplication::DrawOutliner()
 		Gui->Text("Search objects");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##SearchObjects", Filter, false);
-		Gui->Text(std::to_string(Scene->GetNodes().size()) + " objects" + (Selection ? "  |  1 selected" : ""));
+		Gui->Text(std::to_string(Scene->GetStatus().Nodes) + " objects" + (Selection ? "  |  1 selected" : ""));
 		if (Gui->BeginTable("Objects", "Item Label", "Type"))
 		{
 			if (Filter.empty())
@@ -200,7 +252,7 @@ void FEditorApplication::DrawOutliner()
 					Gui->NextColumn();
 					if (Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection == Handle))
 					{
-						Selection = Handle;
+						SelectObject(Handle);
 					}
 					Gui->NextColumn();
 					Gui->Text(KindName(Node->GetKind()));
@@ -223,33 +275,17 @@ void FEditorApplication::DrawDetails()
 		FSceneNodeView View;
 		if (Selection && Scene->GetNodeView(*Selection, View))
 		{
-			const auto& Node = *View.Node;
-			Gui->Text(Node.Name);
-			Gui->Text(KindName(Node.GetKind()));
-			Gui->Separator();
-			if (Gui->Section("Transform"))
+			try
 			{
-				Gui->Property("Location X", Number(View.World.Values[12]));
-				Gui->Property("Location Y", Number(View.World.Values[13]));
-				Gui->Property("Location Z", Number(View.World.Values[14]));
+				DrawComponentInspector(View);
 			}
-			if (Gui->Section("Object"))
+			catch (const std::exception& Failure)
 			{
-				Gui->Property("Enabled", View.bEffectiveEnabled ? "Yes" : "No");
-				Gui->Property("Type", KindName(Node.GetKind()));
-				Gui->TextWrapped("ID: " + Node.Id);
+				Error = Failure.what();
 			}
-			if (Node.Model && Gui->Section("Static Mesh"))
+			if (!Error.empty())
 			{
-				Gui->TextWrapped(Node.Model->Asset);
-				Gui->Property("Visible", Node.Model->bVisible ? "Yes" : "No");
-				Gui->Property("Resource", Node.Model->Data ? "Ready" : "Loading");
-			}
-			if (Node.Camera && Gui->Section("Camera"))
-			{
-				Gui->Property("Near plane", Number(Node.Camera->Near));
-				Gui->Property("Far plane", Number(Node.Camera->Far));
-				Gui->Property("Focus distance", Number(Node.Camera->FocusDistance));
+				Gui->TextWrapped(Error);
 			}
 		}
 		else
@@ -354,7 +390,8 @@ void FEditorApplication::DrawViewport()
 	}
 	if (Gui->BeginWindow("Viewport", bShowViewport))
 	{
-		const float Speed = Camera.GetMovementSpeed(*Scene);
+		DrawViewControls();
+		const float Speed = Camera.GetMovementSpeed(ViewCamera);
 		Gui->Text("Perspective  |  Camera Speed " + (Speed > 0 ? Number(Speed, 3) + " u/s" : "--") + "  |  Lit");
 		Gui->SameLine();
 		Gui->SetNextItemWidth(120);
@@ -380,6 +417,10 @@ std::string FEditorApplication::StatusText() const
 	if (!Scene->GetStatus().PublicationError.empty())
 	{
 		return "Scene error: " + Scene->GetStatus().PublicationError;
+	}
+	if (!SaveStatus.empty())
+	{
+		return SaveStatus + (IsDirty() ? "  |  Unsaved changes" : "");
 	}
 	if (Scene->GetStatus().FailedModels || Scene->GetStatus().FailedSkies)
 	{
@@ -409,6 +450,8 @@ FGuiDrawData FEditorApplication::DrawGui(float InDelta, std::span<const FInputEv
 	DrawDetails();
 	DrawSceneBrowser();
 	DrawOpenDialog();
+	DrawSaveDialog();
+	DrawDiscardDialog();
 	return Gui->Render();
 }
 } // namespace Hyperion

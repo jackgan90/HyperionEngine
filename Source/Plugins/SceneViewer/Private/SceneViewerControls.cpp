@@ -7,7 +7,22 @@ namespace Hyperion
 {
 void FSceneViewerPlugin::FImpl::UpdateCamera(FRenderFrame& InFrame)
 {
+	const auto CurrentManifest = Scene.GetManifest();
+	if (CurrentManifest != ViewManifest)
+	{
+		ViewManifest = CurrentManifest;
+		bViewInitialized = false;
+		ViewCamera = {};
+		CameraController.Reset();
+	}
+	if (!bViewInitialized && CanInitializeSceneBrowsingView(Scene))
+	{
+		ViewCamera = MakeSceneBrowsingView(Scene, float(InFrame.Size.Width) / std::max(1u, InFrame.Size.Height));
+		CameraController.Reset();
+		bViewInitialized = true;
+	}
 	FSceneViewRequest Request;
+	Request.CameraOverride = ViewCamera;
 	Request.Width = InFrame.Size.Width;
 	Request.Height = InFrame.Size.Height;
 	Request.DepthConvention = InFrame.View.DepthConvention;
@@ -46,7 +61,7 @@ void FSceneViewerPlugin::Fit()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	FitSceneCamera(P.Scene, float(P.LastView.Width) / std::max(1u, P.LastView.Height));
+	FitSceneCamera(P.ViewCamera, P.Scene, float(P.LastView.Width) / std::max(1u, P.LastView.Height), true);
 }
 
 void FSceneViewerPlugin::DuplicateSelected()
@@ -68,7 +83,8 @@ void FSceneViewerPlugin::AddModel()
 		if (Asset.Data && Asset.Error.empty())
 		{
 			FSceneModel Model{"Added model", Asset.Data};
-			Model.World = Translation(GetSceneNavigationPivot(P.Scene));
+			const auto Pose = ExtractScenePose(P.ViewCamera.World);
+			Model.World = Translation(Add(Pose.Eye, ScaleVector(Pose.Forward, P.ViewCamera.Lens.FocusDistance)));
 			P.Selected = P.Scene.Add(std::move(Model), Asset.Id);
 			return;
 		}
@@ -89,9 +105,9 @@ void FSceneViewerPlugin::ToggleSelected()
 	{
 		return;
 	}
-	if (Node->Model)
+	if (Node->Model())
 	{
-		Impl->Scene.SetModelVisible(Impl->Selected, !Node->Model->bVisible);
+		Impl->Scene.SetModelVisible(Impl->Selected, !Node->Model()->bVisible);
 	}
 	else
 	{
@@ -112,13 +128,13 @@ void FSceneViewerPlugin::AdvanceCamera(float InDeltaSeconds)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.bStopped)
+	if (P.bStopped || !P.bViewInitialized)
 	{
 		return;
 	}
 	try
 	{
-		P.CameraController.Advance(P.Scene, InDeltaSeconds);
+		P.CameraController.Advance(P.ViewCamera, InDeltaSeconds);
 	}
 	catch (const std::exception& Failure)
 	{
@@ -130,13 +146,14 @@ void FSceneViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMo
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.bStopped)
+	if (P.bStopped || !P.bViewInitialized)
 	{
+		P.CameraController.SuspendInput(InEvents);
 		return;
 	}
 	try
 	{
-		P.CameraController.Input(P.Scene, InEvents, bInMouseCaptured, bInKeyboardCaptured);
+		P.CameraController.Input(P.ViewCamera, InEvents, bInMouseCaptured, bInKeyboardCaptured);
 	}
 	catch (const std::exception& Failure)
 	{

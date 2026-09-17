@@ -23,6 +23,16 @@ struct FRenderBindingStatus
 	std::string Error;
 };
 
+struct FRenderPrimitiveDiagnostic
+{
+	FRenderPrimitiveHandle Handle;
+	FRenderBindingStatus Status;
+	std::uint32_t Section{};
+	FMat4 AppliedWorld = Identity();
+	bool bAppliedVisible{};
+	FRenderDrawResult LastDraw;
+};
+
 struct FRenderPrimitiveUpdate
 {
 	FRenderPrimitiveHandle Handle;
@@ -44,6 +54,7 @@ public:
 	FRenderPrimitiveHandle GetHandle() const;
 	FRenderBindingStatus GetStatus() const;
 	FRenderDrawResult GetLastDrawResult() const;
+	FRenderPrimitiveDiagnostic GetDiagnostic() const;
 	FTaskHandle Remove();
 	static FTaskHandle RemoveBatch(std::span<FRenderBinding> InBindings);
 

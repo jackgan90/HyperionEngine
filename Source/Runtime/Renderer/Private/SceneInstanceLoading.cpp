@@ -62,7 +62,7 @@ void FSceneInstance::FImpl::UpdateStatus()
 	Status.Cameras = Scene.CountNodes(ESceneNodeKind::Camera);
 	Status.DirectionalLights = Scene.CountNodes(ESceneNodeKind::DirectionalLight);
 	Status.EnvironmentLights = Scene.CountNodes(ESceneNodeKind::EnvironmentLight);
-	Status.Nodes = Status.Groups + Status.Cameras + Status.DirectionalLights + Status.EnvironmentLights + Models.size();
+	Status.Nodes = Scene.CountNodes();
 	const auto Revision = Bridge->GetModelStatusRevision();
 	if (bModelStatusDirty || Status.ReadyModels != Models.size() || ModelStatusRevision != Revision)
 	{

@@ -43,25 +43,32 @@ void FSceneCameraController::Reset()
 	bDragging = false;
 }
 
-float FSceneCameraController::GetMovementSpeed(const FSceneInstance& InScene) const
+void FSceneCameraController::SuspendInput(std::span<const FInputEvent> InEvents)
 {
-	const auto Handle = GetSceneNavigationCamera(InScene);
-	if (!Handle)
+	Reset();
+	for (const auto& Event : InEvents)
 	{
-		return 0;
+		if (Event.Type == EEventType::Focus)
+		{
+			bFocused = Event.bDown;
+		}
 	}
-	const float SceneSpeed = std::max(1.f, InScene.FindNode(*Handle)->Camera->FocusDistance);
+}
+
+float FSceneCameraController::GetMovementSpeed(const FSceneCameraView& InCamera) const
+{
+	const float SceneSpeed = std::max(1.f, InCamera.Lens.FocusDistance);
 	return Mode == ESceneCameraNavigationMode::Fly
 	           ? FlyMovementSpeed.value_or(std::clamp(SceneSpeed, MinimumFlySpeed, MaximumFlySpeed))
 	           : SceneSpeed;
 }
 
-void FSceneCameraController::Input(FSceneInstance& InScene, std::span<const FInputEvent> InEvents,
+void FSceneCameraController::Input(FSceneCameraView& InCamera, std::span<const FInputEvent> InEvents,
                                    bool bInMouseCaptured, bool bInKeyboardCaptured)
 {
 	if (Mode == ESceneCameraNavigationMode::Fly && !FlyMovementSpeed)
 	{
-		const float Speed = GetMovementSpeed(InScene);
+		const float Speed = GetMovementSpeed(InCamera);
 		if (Speed > 0)
 		{
 			FlyMovementSpeed = Speed;
@@ -77,11 +84,11 @@ void FSceneCameraController::Input(FSceneInstance& InScene, std::span<const FInp
 	}
 	for (const auto& Event : InEvents)
 	{
-		HandleEvent(InScene, Event, bInMouseCaptured, bInKeyboardCaptured);
+		HandleEvent(InCamera, Event, bInMouseCaptured, bInKeyboardCaptured);
 	}
 }
 
-void FSceneCameraController::HandleEvent(FSceneInstance& InScene, const FInputEvent& InEvent, bool bInMouseCaptured,
+void FSceneCameraController::HandleEvent(FSceneCameraView& InCamera, const FInputEvent& InEvent, bool bInMouseCaptured,
                                          bool bInKeyboardCaptured)
 {
 	if (InEvent.Type == EEventType::Focus)
@@ -116,22 +123,22 @@ void FSceneCameraController::HandleEvent(FSceneInstance& InScene, const FInputEv
 			const float Pitch = (InEvent.Y - LastMouse.Y) * .006f;
 			if (Mode == ESceneCameraNavigationMode::Fly)
 			{
-				RotateSceneCamera(InScene, Yaw, Pitch);
+				RotateSceneCamera(InCamera, Yaw, Pitch);
 			}
 			else
 			{
-				OrbitSceneCamera(InScene, Yaw, Pitch);
+				OrbitSceneCamera(InCamera, Yaw, Pitch);
 			}
 		}
 		LastMouse = {InEvent.X, InEvent.Y};
 	}
 	if (InEvent.Type == EEventType::MouseWheel && bFocused && !bInMouseCaptured)
 	{
-		HandleWheel(InScene, InEvent.Y);
+		HandleWheel(InCamera, InEvent.Y);
 	}
 }
 
-void FSceneCameraController::HandleWheel(FSceneInstance& InScene, float InDelta)
+void FSceneCameraController::HandleWheel(FSceneCameraView& InCamera, float InDelta)
 {
 	if (!std::isfinite(InDelta))
 	{
@@ -146,18 +153,13 @@ void FSceneCameraController::HandleWheel(FSceneInstance& InScene, float InDelta)
 		}
 		return;
 	}
-	DollySceneCamera(InScene, std::pow(.85f, InDelta));
+	DollySceneCamera(InCamera, std::pow(.85f, InDelta));
 }
 
-void FSceneCameraController::Advance(FSceneInstance& InScene, float InDeltaSeconds)
+void FSceneCameraController::Advance(FSceneCameraView& InCamera, float InDeltaSeconds)
 {
 	if (HeldKeys.empty() || !bFocused || (Mode == ESceneCameraNavigationMode::Fly && !bDragging) ||
 	    !std::isfinite(InDeltaSeconds) || InDeltaSeconds <= 0)
-	{
-		return;
-	}
-	const auto Handle = GetSceneNavigationCamera(InScene);
-	if (!Handle)
 	{
 		return;
 	}
@@ -166,8 +168,7 @@ void FSceneCameraController::Advance(FSceneInstance& InScene, float InDeltaSecon
 		return float(HeldKeys.contains(InPositive) || HeldKeys.contains(InPositiveAlias)) -
 		       float(HeldKeys.contains(InNegative) || HeldKeys.contains(InNegativeAlias));
 	};
-	FSceneCameraPose Pose;
-	InScene.GetCameraPose(*Handle, Pose);
+	const auto Pose = ExtractScenePose(InCamera.World);
 	const auto Direction = Add(Add(ScaleVector(Pose.Right, Axis(EKey::D, EKey::Right, EKey::A, EKey::Left)),
 	                               ScaleVector(Pose.Forward, Axis(EKey::W, EKey::Up, EKey::S, EKey::Down))),
 	                           {0, Axis(EKey::E, EKey::PageUp, EKey::Q, EKey::PageDown), 0});
@@ -176,9 +177,47 @@ void FSceneCameraController::Advance(FSceneInstance& InScene, float InDeltaSecon
 	{
 		return;
 	}
-	const auto Camera = *InScene.FindNode(*Handle)->Camera;
-	const float Distance = GetMovementSpeed(InScene) * std::min(InDeltaSeconds, .1f);
+	const float Distance = GetMovementSpeed(InCamera) * std::min(InDeltaSeconds, .1f);
 	const auto Eye = Add(Pose.Eye, ScaleVector(Direction, Distance / Magnitude));
-	InScene.SetCameraView(*Handle, SceneCameraTransform(Eye, Add(Eye, Pose.Forward), Pose.Up), Camera);
+	InCamera.World = SceneCameraTransform(Eye, Add(Eye, Pose.Forward), Pose.Up);
+}
+
+float FSceneCameraController::GetMovementSpeed(const FSceneInstance& InScene) const
+{
+	FSceneCameraView View;
+	return GetSceneCameraView(InScene, View) ? GetMovementSpeed(View) : 0;
+}
+
+void FSceneCameraController::Input(FSceneInstance& InScene, std::span<const FInputEvent> InEvents,
+                                   bool bInMouseCaptured, bool bInKeyboardCaptured)
+{
+	FSceneCameraView View;
+	const auto Handle = GetSceneNavigationCamera(InScene);
+	if (!Handle || !GetSceneCameraView(InScene, View))
+	{
+		SuspendInput(InEvents);
+		return;
+	}
+	const auto Before = View;
+	Input(View, InEvents, bInMouseCaptured, bInKeyboardCaptured);
+	if (View.World.Values != Before.World.Values || View.Lens != Before.Lens)
+	{
+		InScene.SetCameraView(*Handle, View.World, View.Lens);
+	}
+}
+
+void FSceneCameraController::Advance(FSceneInstance& InScene, float InDeltaSeconds)
+{
+	FSceneCameraView View;
+	const auto Handle = GetSceneNavigationCamera(InScene);
+	if (Handle && GetSceneCameraView(InScene, View))
+	{
+		const auto Before = View.World;
+		Advance(View, InDeltaSeconds);
+		if (View.World.Values != Before.Values)
+		{
+			InScene.SetCameraView(*Handle, View.World, View.Lens);
+		}
+	}
 }
 } // namespace Hyperion

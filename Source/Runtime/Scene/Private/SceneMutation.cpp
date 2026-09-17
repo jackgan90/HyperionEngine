@@ -57,7 +57,7 @@ void FSceneStorage::FMutation::Link(std::uint32_t InSlot, std::uint32_t InParent
 {
 	auto& Entry = Edit(InSlot);
 	Entry.Parent = InParent;
-	Entry.Node->Parent = InParent == InvalidSlot ? std::string{} : Read(InParent).Node->Id;
+	Entry.Node->Parent() = InParent == InvalidSlot ? std::string{} : Read(InParent).Node->Id;
 	if (InParent == InvalidSlot)
 	{
 		if (!Roots)
@@ -150,7 +150,7 @@ void FSceneStorage::FMutation::Derive(std::uint32_t InRoot)
 		const auto Slot = Pending[Index];
 		auto& Entry = Edit(Slot);
 		const auto World =
-		    Entry.Parent == InvalidSlot ? Entry.Node->Local : Multiply(Read(Entry.Parent).World, Entry.Node->Local);
+		    Entry.Parent == InvalidSlot ? Entry.Node->Local() : Multiply(Read(Entry.Parent).World, Entry.Node->Local());
 		const bool bEnabled =
 		    Entry.Node->bEnabled && (Entry.Parent == InvalidSlot || Read(Entry.Parent).bEffectiveEnabled);
 		ValidateSceneWorld(*Entry.Node, World);
@@ -206,7 +206,7 @@ std::map<FSceneHandle, FSceneChange> FSceneStorage::FMutation::PrepareChanges(st
 	for (const auto& [Index, Mask] : Masks)
 	{
 		auto& Entry = Edit(Index);
-		if (Entry.Node && Entry.Node->Model)
+		if (Entry.Node && Entry.Node->Model())
 		{
 			Entry.Transfer = SceneModelTransfer(*Entry.Node, Entry.World, Entry.bEffectiveEnabled);
 		}
@@ -223,7 +223,7 @@ std::map<FSceneHandle, FSceneChange> FSceneStorage::FMutation::PrepareChanges(st
 		Change.Node = Entry.Node;
 		Change.World = Entry.World;
 		Change.bEffectiveEnabled = Entry.bEffectiveEnabled;
-		if (Entry.Node && Entry.Node->Model)
+		if (Entry.Node && Entry.Node->Model())
 		{
 			Change.Model = Entry.Transfer;
 		}
@@ -264,13 +264,17 @@ void FSceneStorage::FMutation::Commit(bool bInAdvanceRevision, bool bInForceSett
 	for (auto& [Index, Entry] : Slots)
 	{
 		auto& Previous = Storage.Slots[Index];
-		if (Previous && Previous->Node)
+		for (std::size_t Kind = 0; Kind < Storage.Counts.size(); ++Kind)
 		{
-			--Storage.Counts[static_cast<std::size_t>(Previous->Node->GetKind())];
-		}
-		if (Entry->Node)
-		{
-			++Storage.Counts[static_cast<std::size_t>(Entry->Node->GetKind())];
+			const auto Capability = static_cast<ESceneNodeKind>(Kind);
+			if (Previous && Previous->Node && Previous->Node->Has(Capability))
+			{
+				--Storage.Counts[Kind];
+			}
+			if (Entry->Node && Entry->Node->Has(Capability))
+			{
+				++Storage.Counts[Kind];
+			}
 		}
 		std::swap(Previous, Entry);
 	}

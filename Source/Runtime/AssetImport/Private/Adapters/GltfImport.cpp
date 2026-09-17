@@ -273,7 +273,7 @@ void RegisterGltfImporter(FAssetImportService& InImports)
 		                        DecodeAssetSourceJson(
 		                            {reinterpret_cast<const char*>(InContext.Bytes->data()), InContext.Bytes->size()}));
 	                    }});
-	InImports.Register({"hyperion.gltf", 4, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
+	InImports.Register({"hyperion.gltf", 5, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
 	InImports.Register({"hyperion.gltf-source",
 	                    1,
 	                    &RecordType<FModelSource>(),
@@ -283,7 +283,7 @@ void RegisterGltfImporter(FAssetImportService& InImports)
 		                    return FGltfImport(InContext).Run();
 	                    }});
 	InImports.Register({"hyperion.native-model-upgrade",
-	                    2,
+	                    3,
 	                    &RecordType<FModelAsset>(),
 	                    {".hasset"},
 	                    [](FAssetImportContext& InContext) -> std::shared_ptr<void>

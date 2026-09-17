@@ -55,6 +55,8 @@ public:
 	FTaskHandle GetReceipt() const;
 	void Close();
 	FSceneHandle AddNode(FSceneNode InNode);
+	std::uint64_t GetRevision() const;
+	bool EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision);
 	// Copy one node, including pending material selections; descendants remain with the source.
 	FSceneHandle DuplicateNode(FSceneHandle InHandle);
 	bool RemoveSubtree(FSceneHandle InHandle);
@@ -95,6 +97,8 @@ public:
 	std::string GetError(FSceneHandle InHandle) const;
 	std::string GetSkyStatus(FSceneHandle InHandle) const;
 	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
+	std::shared_ptr<const FSceneComponentDiagnostics> GetComponentDiagnostics(FSceneHandle InHandle,
+	                                                                          std::string_view InComponent) const;
 
 private:
 	struct FImpl;

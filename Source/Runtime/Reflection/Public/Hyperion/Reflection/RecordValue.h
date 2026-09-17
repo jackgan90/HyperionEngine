@@ -305,6 +305,83 @@ template<class T> void VisitValue(const T& InValue, const FRecordVisitor& InVisi
 	}
 }
 
+template<class T> FArchiveNode DefaultInspectionValue()
+{
+	if constexpr (std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_same_v<T, std::string> ||
+	              requires { typename T::value_type; })
+	{
+		return WriteValue(T{});
+	}
+	else
+	{
+		const auto& Type = RecordType<T>();
+		const auto Value = Type.Create();
+		FArchiveNode::FObject Fields;
+		for (const auto& Field : Type.Members)
+		{
+			if (Field.Options.bPersistent)
+			{
+				Fields.emplace(Field.Id, Field.Write(Value.get()));
+			}
+		}
+		return FArchiveNode(FArchiveNode::FObject{{"type", WriteValue(Type.Id)},
+		                                          {"version", WriteValue(Type.Version)},
+		                                          {"fields", FArchiveNode(std::move(Fields))}});
+	}
+}
+
+template<class T> const FRecordValueShape& RecordValueShape()
+{
+	static const FRecordValueShape Shape = []
+	{
+		FRecordValueShape Result;
+		Result.DefaultValue = &DefaultInspectionValue<T>;
+		if constexpr (requires(T InValue) { InValue.has_value(); })
+		{
+			Result = RecordValueShape<typename T::value_type>();
+			Result.bOptional = true;
+		}
+		else if constexpr (std::is_same_v<T, bool>)
+		{
+			Result.Kind = ERecordValueKind::Boolean;
+		}
+		else if constexpr (std::is_same_v<T, std::string>)
+		{
+			Result.Kind = ERecordValueKind::String;
+		}
+		else if constexpr (std::is_enum_v<T>)
+		{
+			Result = RecordValueShape<std::underlying_type_t<T>>();
+		}
+		else if constexpr (std::is_integral_v<T> || std::is_same_v<T, std::byte>)
+		{
+			Result.Kind = std::is_signed_v<T> ? ERecordValueKind::Integer : ERecordValueKind::UnsignedInteger;
+			Result.ElementBytes = sizeof(T);
+		}
+		else if constexpr (std::is_floating_point_v<T>)
+		{
+			Result.Kind = ERecordValueKind::Number;
+			Result.ElementBytes = sizeof(T);
+		}
+		else if constexpr (requires { typename T::mapped_type; })
+		{
+			Result.Kind = ERecordValueKind::Map;
+			Result.Element = std::make_shared<const FRecordValueShape>(RecordValueShape<typename T::mapped_type>());
+		}
+		else if constexpr (requires { typename T::value_type; })
+		{
+			Result.Kind = ERecordValueKind::Sequence;
+			Result.Element = std::make_shared<const FRecordValueShape>(RecordValueShape<typename T::value_type>());
+		}
+		else
+		{
+			Result.Record = &RecordType<T>;
+		}
+		return Result;
+	}();
+	return Shape;
+}
+
 template<class T, class M> FRecordMember Member(std::string InId, M T::* InMember, FRecordMemberOptions InOptions = {})
 {
 	return {std::move(InId),
@@ -320,7 +397,8 @@ template<class T, class M> FRecordMember Member(std::string InId, M T::* InMembe
 	        {
 		        VisitValue(static_cast<const T*>(InObject)->*InMember, InVisitor, InPath);
 	        },
-	        std::move(InOptions)};
+	        std::move(InOptions),
+	        &RecordValueShape<M>};
 }
 
 template<class T>

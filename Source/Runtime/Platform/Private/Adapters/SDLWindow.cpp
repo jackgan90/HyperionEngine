@@ -280,6 +280,12 @@ void FWindow::RequestClose()
 	Impl->bClose = true;
 }
 
+void FWindow::CancelClose()
+{
+	Impl->RequireOwner();
+	Impl->bClose = false;
+}
+
 std::string FWindow::Clipboard() const
 {
 	Impl->RequireOwner();

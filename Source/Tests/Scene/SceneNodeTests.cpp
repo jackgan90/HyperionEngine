@@ -14,8 +14,8 @@ FSceneNode Group(std::string InId, std::string InParent = {}, FMat4 InLocal = Id
 	FSceneNode Node;
 	Node.Id = std::move(InId);
 	Node.Name = Node.Id;
-	Node.Parent = std::move(InParent);
-	Node.Local = InLocal;
+	Node.Parent() = std::move(InParent);
+	Node.Local() = InLocal;
 	return Node;
 }
 
@@ -112,7 +112,7 @@ void CheckNodeIdentityAndChanges()
 	FScene Scene;
 	const auto Parent = Scene.AddNode(Group("parent", {}, Translation({5, 0, 0})));
 	auto ModelNode = Group("model", "parent", Translation({2, 0, 0}));
-	ModelNode.Model = FSceneModelComponent{};
+	ModelNode.Model() = FSceneModelComponent{};
 	const auto Model = Scene.AddNode(ModelNode);
 	HYP_CHECK(World(Scene, Model).Values[12] == 7 && Scene.Find(Model)->World.Values[12] == 7);
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera"));
@@ -125,20 +125,20 @@ void CheckNodeIdentityAndChanges()
 		HYP_CHECK(Scene.CountNodes(Kind) == 1 && Scene.GetNodes(Kind).size() == 1);
 	}
 	Scene.Acknowledge(Scene.GetRevision());
-	auto CameraValue = *Scene.FindNode(Camera)->Camera;
+	auto CameraValue = *Scene.FindNode(Camera)->Camera();
 	CameraValue.Far = 600;
 	CameraValue.FocusDistance = 20;
 	HYP_CHECK(Scene.SetCamera(Camera, CameraValue));
 	HYP_CHECK(Scene.SetLocalTransform(Camera, Translation({0, 2, 8})));
 	HYP_CHECK(Scene.SetName(Camera, "changed"));
 	const auto Changes = Scene.GetChanges();
-	HYP_CHECK(Changes.size() == 1 && Changes[0].Node->Camera == CameraValue && Changes[0].Node->Name == "changed");
+	HYP_CHECK(Changes.size() == 1 && Changes[0].Node->Camera() == CameraValue && Changes[0].Node->Name == "changed");
 	HYP_CHECK(HasChange(Changes[0].Mask, ESceneChangeMask::Camera) &&
 	          HasChange(Changes[0].Mask, ESceneChangeMask::Transform) &&
 	          HasChange(Changes[0].Mask, ESceneChangeMask::Metadata));
 	const auto Revision = Scene.GetRevision();
 	HYP_CHECK(Scene.SetCamera(Camera, CameraValue) && Scene.SetWorldTransform(Camera, World(Scene, Camera)));
-	HYP_CHECK(Scene.SetModelComponent(Model, *Scene.FindNode(Model)->Model) && Scene.SetEnabled(Parent, true));
+	HYP_CHECK(Scene.SetModelComponent(Model, *Scene.FindNode(Model)->Model()) && Scene.SetEnabled(Parent, true));
 	HYP_CHECK(Scene.Reparent(Model, Parent, ESceneReparentMode::KeepWorld) && Scene.GetRevision() == Revision);
 	Scene.SetSettings({Camera, Light, Ambient});
 	Scene.Acknowledge(Scene.GetRevision());
@@ -182,10 +182,10 @@ void CheckInheritedEnabledAndRemoval()
 	const auto Root = Scene.AddNode(Group("root", {}, Translation({3, 0, 0})));
 	const auto Other = Scene.AddNode(Group("other"));
 	auto ModelNode = Group("model", "root", Translation({2, 0, 0}));
-	ModelNode.Model = FSceneModelComponent{};
+	ModelNode.Model() = FSceneModelComponent{};
 	const auto Model = Scene.AddNode(ModelNode);
 	auto CameraNode = MakeSceneCameraNode("camera");
-	CameraNode.Parent = "model";
+	CameraNode.Parent() = "model";
 	const auto Camera = Scene.AddNode(CameraNode);
 	Scene.SetModelVisible(Model, false);
 	HYP_CHECK(!Scene.Find(Model)->bVisible && Scene.IsEffectivelyEnabled(Camera));
@@ -201,10 +201,10 @@ void CheckInheritedEnabledAndRemoval()
 	HYP_CHECK(!Scene.IsEffectivelyEnabled(Camera));
 	const auto Before = World(Scene, Camera);
 	Scene.RemoveNodeKeepChildren(Model);
-	HYP_CHECK(Scene.FindNode(Camera)->Parent == "root" && Near(World(Scene, Camera), Before));
+	HYP_CHECK(Scene.FindNode(Camera)->Parent() == "root" && Near(World(Scene, Camera), Before));
 	HYP_CHECK(!Scene.IsEffectivelyEnabled(Camera));
 	Scene.RemoveNodeKeepChildren(Root);
-	HYP_CHECK(Scene.FindNode(Camera)->Parent.empty() && Near(World(Scene, Camera), Before) &&
+	HYP_CHECK(Scene.FindNode(Camera)->Parent().empty() && Near(World(Scene, Camera), Before) &&
 	          Scene.IsEffectivelyEnabled(Camera));
 	HYP_CHECK(Scene.GetNodes().size() == 2 && Scene.CountNodes(ESceneNodeKind::Model) == 0);
 	Scene.SetSettings({Camera, {}, {}});
@@ -217,7 +217,7 @@ void CheckCompatibilityVisibility()
 	FScene Scene;
 	const auto Parent = Scene.AddNode(Group("parent", {}, ComposeTRS({3, 2, 1}, {0, .6f, 0, .8f}, {2, 3, 4})));
 	auto Node = Group("model", "parent", Translation({2, 0, 0}));
-	Node.Model = FSceneModelComponent{};
+	Node.Model() = FSceneModelComponent{};
 	const auto Model = Scene.AddNode(Node);
 	for (const auto Disabled : {Parent, Model})
 	{
@@ -258,16 +258,16 @@ void CheckHierarchyOracleAndTransactions()
 	const auto Parent = Scene.AddNode(Group("parent", {}, ParentWorld));
 	const auto Child = Scene.AddNode(Group("child", "parent", Translation({1, 2, 3})));
 	const auto Grand = Scene.AddNode(Group("grand", "child", Scale({.5f, 3, 2})));
-	HYP_CHECK(Near(World(Scene, Child), ProductOracle(ParentWorld, Scene.FindNode(Child)->Local)));
-	HYP_CHECK(Near(World(Scene, Grand), ProductOracle(ProductOracle(ParentWorld, Scene.FindNode(Child)->Local),
-	                                                  Scene.FindNode(Grand)->Local)));
+	HYP_CHECK(Near(World(Scene, Child), ProductOracle(ParentWorld, Scene.FindNode(Child)->Local())));
+	HYP_CHECK(Near(World(Scene, Grand), ProductOracle(ProductOracle(ParentWorld, Scene.FindNode(Child)->Local()),
+	                                                  Scene.FindNode(Grand)->Local())));
 	const auto Other = Scene.AddNode(Group("other", {}, Translation({-5, 2, 1})));
 	const auto OldWorld = World(Scene, Grand);
 	Scene.Reparent(Grand, Other, ESceneReparentMode::KeepWorld);
 	HYP_CHECK(Near(World(Scene, Grand), OldWorld));
-	const auto Local = Scene.FindNode(Grand)->Local;
+	const auto Local = Scene.FindNode(Grand)->Local();
 	Scene.Reparent(Grand, Child, ESceneReparentMode::KeepLocal);
-	HYP_CHECK(Scene.FindNode(Grand)->Local.Values == Local.Values &&
+	HYP_CHECK(Scene.FindNode(Grand)->Local().Values == Local.Values &&
 	          Near(World(Scene, Grand), ProductOracle(World(Scene, Child), Local)));
 	Scene.SetWorldTransform(Grand, Translation({7, 8, 9}));
 	HYP_CHECK(Near(World(Scene, Grand), Translation({7, 8, 9})));
@@ -288,7 +288,7 @@ void CheckHierarchyOracleAndTransactions()
 		                Scene.Reparent(Grand, Singular, ESceneReparentMode::KeepWorld);
 	                });
 	auto CameraNode = MakeSceneCameraNode("camera");
-	CameraNode.Parent = "child";
+	CameraNode.Parent() = "child";
 	Scene.AddNode(CameraNode);
 	RejectUnchanged(Scene,
 	                [&]
@@ -323,15 +323,15 @@ void CheckDocumentInstallation()
 		                });
 	}
 	auto Camera = MakeSceneCameraNode("camera");
-	Camera.Parent = "flat";
+	Camera.Parent() = "flat";
 	RejectUnchanged(Scene,
 	                [&]
 	                {
 		                Scene.LoadNodes({Camera, Group("flat", {}, Scale({1, 0, 1}))});
 	                });
 	auto Bad = Group("");
-	Bad.Camera = FSceneCamera{};
-	Bad.Local = Scale({1, 0, 1});
+	Bad.Camera() = FSceneCamera{};
+	Bad.Local() = Scale({1, 0, 1});
 	RejectUnchanged(Scene,
 	                [&]
 	                {
@@ -364,7 +364,7 @@ void CheckCameraAndLightValues()
 {
 	FScene Scene;
 	auto CameraNode = Group("camera");
-	CameraNode.Camera = FSceneCamera{};
+	CameraNode.Camera() = FSceneCamera{};
 	const auto Camera = Scene.AddNode(CameraNode);
 	FSceneCameraPose Pose;
 	HYP_CHECK(Scene.GetCameraPose(Camera, Pose));
@@ -379,7 +379,7 @@ void CheckCameraAndLightValues()
 	HYP_CHECK(std::abs(Pose.Up.Y - 1) < 1e-5f && std::abs(Dot(Pose.Forward, Pose.Right)) < 1e-5f && Pose.Eye.Y == 5);
 	for (unsigned Case = 0; Case < 7; ++Case)
 	{
-		auto Lens = *Scene.FindNode(Camera)->Camera;
+		auto Lens = *Scene.FindNode(Camera)->Camera();
 		if (Case == 0)
 		{
 			Lens.VerticalRadians = .01f;
@@ -414,7 +414,7 @@ void CheckCameraAndLightValues()
 			                Scene.SetCamera(Camera, Lens);
 		                });
 	}
-	auto Lens = *Scene.FindNode(Camera)->Camera;
+	auto Lens = *Scene.FindNode(Camera)->Camera();
 	Lens.FocusDistance = 50;
 	Scene.SetCamera(Camera, Lens);
 	FSceneCameraPose After;
@@ -434,7 +434,7 @@ void CheckDefaultLightValues()
 	const auto LengthOracle = std::sqrt(.45f * .45f + .8f * .8f + .65f * .65f);
 	HYP_CHECK(std::abs(-LightPose.Forward.X - (-.45f / LengthOracle)) < 1e-5f);
 	HYP_CHECK(std::abs(-LightPose.Forward.Y - .8f / LengthOracle) < 1e-5f);
-	auto Light = *Defaults.FindNode(Handles[1])->DirectionalLight;
+	auto Light = *Defaults.FindNode(Handles[1])->DirectionalLight();
 	for (unsigned Case = 0; Case < 4; ++Case)
 	{
 		auto Bad = Light;
@@ -464,15 +464,15 @@ void CheckDefaultLightValues()
 	Light.Intensity = 0;
 	Light.bCastShadows = false;
 	Defaults.SetDirectionalLight(Handles[1], Light);
-	HYP_CHECK(Defaults.GetChanges()[0].Node->DirectionalLight == Light &&
+	HYP_CHECK(Defaults.GetChanges()[0].Node->DirectionalLight() == Light &&
 	          SceneLightRadiance(Light.Color, Light.Intensity).X == 0);
-	auto Ambient = *Defaults.FindNode(Handles[2])->EnvironmentLight;
+	auto Ambient = *Defaults.FindNode(Handles[2])->EnvironmentLight();
 	Ambient.Intensity = 2;
 	Defaults.SetEnvironmentLight(Handles[2], Ambient);
-	HYP_CHECK(Defaults.GetChanges().back().Node->EnvironmentLight == Ambient);
-	const auto BeforeAmbient = *Defaults.FindNode(Handles[2])->EnvironmentLight;
+	HYP_CHECK(Defaults.GetChanges().back().Node->EnvironmentLight() == Ambient);
+	const auto BeforeAmbient = *Defaults.FindNode(Handles[2])->EnvironmentLight();
 	Defaults.SetLocalTransform(Handles[2], Scale({0, 0, 0}));
-	HYP_CHECK(Defaults.FindNode(Handles[2])->EnvironmentLight == BeforeAmbient);
+	HYP_CHECK(Defaults.FindNode(Handles[2])->EnvironmentLight() == BeforeAmbient);
 }
 
 void CheckLocalLightNodes()
@@ -480,12 +480,12 @@ void CheckLocalLightNodes()
 	FScene Scene;
 	const auto Parent = Scene.AddNode(Group("local-rig", {}, Translation({3, 2, 1})));
 	auto Point = MakeScenePointLightNode("point");
-	Point.Parent = "local-rig";
-	Point.PointLight = FScenePointLight{{1, .5f, .2f}, 8, 4};
+	Point.Parent() = "local-rig";
+	Point.PointLight() = FScenePointLight{{1, .5f, .2f}, 8, 4};
 	const auto A = Scene.AddNode(Point);
 	auto Spot = MakeSceneSpotLightNode("spot");
-	Spot.Parent = "local-rig";
-	Spot.SpotLight = FSceneSpotLight{{.2f, .5f, 1}, 12, 6, .2f, .7f};
+	Spot.Parent() = "local-rig";
+	Spot.SpotLight() = FSceneSpotLight{{.2f, .5f, 1}, 12, 6, .2f, .7f};
 	const auto B = Scene.AddNode(Spot);
 	HYP_CHECK(Scene.CountNodes(ESceneNodeKind::PointLight) == 1 && Scene.CountNodes(ESceneNodeKind::SpotLight) == 1);
 	HYP_CHECK(World(Scene, A).Values[12] == 3 && Scene.FindSpotLight(B)->Range == 6);

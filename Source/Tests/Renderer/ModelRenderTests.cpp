@@ -306,14 +306,14 @@ void CheckCameraInput(FModelViewerPlugin& InPlugin, const FrameOperation& InFram
 	HYP_CHECK(InFrame(InPlugin, {480, 200}).Width == 480);
 	auto& Scene = InPlugin.GetSceneInstance();
 	const auto Camera = *Scene.GetSettings().DefaultCamera;
-	auto Lens = *Scene.FindNode(Camera)->Camera;
+	auto Lens = *Scene.FindNode(Camera)->Camera();
 	Lens.Far += 100;
 	Scene.SetCamera(Camera, Lens);
 	InPlugin.Input({}, false, false);
 	InFrame(InPlugin);
-	HYP_CHECK(Scene.FindNode(Camera)->Camera->Far == Lens.Far);
+	HYP_CHECK(Scene.FindNode(Camera)->Camera()->Far == Lens.Far);
 	InPlugin.Input(std::span(&Wheel, 1), true, false);
-	HYP_CHECK(Scene.FindNode(Camera)->Camera->Far == Lens.Far);
+	HYP_CHECK(Scene.FindNode(Camera)->Camera()->Far == Lens.Far);
 }
 
 template<class FrameOperation>

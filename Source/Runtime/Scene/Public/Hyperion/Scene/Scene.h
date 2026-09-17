@@ -18,6 +18,8 @@ public:
 	std::uint64_t GetIdentity() const;
 	std::uint64_t GetRevision() const;
 	FSceneHandle AddNode(FSceneNode InNode);
+	// Optimistic transaction: stale scene revisions or object generations never modify authority.
+	bool EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision);
 	// Batch installation requires an empty scene; returned handles follow input order.
 	// Full validation precedes installation, including cycles and inherited poses.
 	std::vector<FSceneHandle> LoadNodes(std::vector<FSceneNode> InNodes);
@@ -39,6 +41,7 @@ public:
 	std::vector<FSceneHandle> GetRoots() const;
 	std::vector<FSceneHandle> GetChildren(FSceneHandle InHandle) const;
 	std::size_t CountNodes(ESceneNodeKind InKind) const;
+	std::size_t CountNodes() const;
 	bool SetName(FSceneHandle InHandle, std::string InName);
 	bool SetEnabled(FSceneHandle InHandle, bool bInEnabled);
 	bool SetModelVisible(FSceneHandle InHandle, bool bInVisible);

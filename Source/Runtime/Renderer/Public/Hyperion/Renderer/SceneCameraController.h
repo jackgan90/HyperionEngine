@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Math/Math.h"
 #include "Hyperion/Platform/Window.h"
+#include "Hyperion/Scene/SceneCamera.h"
 #include <optional>
 #include <set>
 
@@ -25,14 +26,20 @@ public:
 	void Advance(FSceneInstance& InScene, float InDeltaSeconds);
 	// Translation speed in scene units per second; zero when no navigation camera exists.
 	float GetMovementSpeed(const FSceneInstance& InScene) const;
+	void Input(FSceneCameraView& InCamera, std::span<const FInputEvent> InEvents, bool bInMouseCaptured,
+	           bool bInKeyboardCaptured);
+	void Advance(FSceneCameraView& InCamera, float InDeltaSeconds);
+	float GetMovementSpeed(const FSceneCameraView& InCamera) const;
 	// Clear input on viewport deactivation/minimization, scene replacement and shutdown; retain fly speed.
 	void Reset();
+	// Track window focus while navigation is unavailable, without choosing speed from a placeholder view.
+	void SuspendInput(std::span<const FInputEvent> InEvents);
 
 private:
 	ESceneCameraNavigationMode Mode;
-	void HandleEvent(FSceneInstance& InScene, const FInputEvent& InEvent, bool bInMouseCaptured,
+	void HandleEvent(FSceneCameraView& InCamera, const FInputEvent& InEvent, bool bInMouseCaptured,
 	                 bool bInKeyboardCaptured);
-	void HandleWheel(FSceneInstance& InScene, float InDelta);
+	void HandleWheel(FSceneCameraView& InCamera, float InDelta);
 	std::optional<float> FlyMovementSpeed;
 	std::set<EKey> HeldKeys;
 	FVec2 LastMouse;

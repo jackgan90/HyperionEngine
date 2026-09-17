@@ -41,6 +41,36 @@ FRenderPrimitiveHandle FRenderBinding::GetHandle() const
 	return Handle;
 }
 
+FRenderPrimitiveDiagnostic FRenderBinding::GetDiagnostic() const
+{
+	if (Mailbox)
+	{
+		Mailbox->Tasks.Require({EDomain::Main});
+	}
+	FRenderPrimitiveDiagnostic Snapshot;
+	Snapshot.Handle = Handle;
+	if (!Result)
+	{
+		Snapshot.Status.State = ERenderPrimitiveStatus::Removed;
+		return Snapshot;
+	}
+	std::lock_guard Lock(Result->Mutex);
+	Snapshot.Status = Result->Status;
+	Snapshot.Section = Result->Section;
+	if (Result->Admitted)
+	{
+		Snapshot.AppliedWorld = Result->Admitted->World;
+		Snapshot.bAppliedVisible = Result->Admitted->bVisible;
+	}
+	Snapshot.LastDraw = Result->LastDraw;
+	if (Result->LastDrawFrame)
+	{
+		Snapshot.LastDraw.Frame =
+		    std::max(Snapshot.LastDraw.Frame, Result->LastDrawFrame->load(std::memory_order_acquire));
+	}
+	return Snapshot;
+}
+
 FRenderDrawResult FRenderBinding::GetLastDrawResult() const
 {
 	if (!Result)

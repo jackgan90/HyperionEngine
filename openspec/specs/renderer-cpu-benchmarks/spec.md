@@ -2,7 +2,6 @@
 
 ## Purpose
 Define reproducible layered CPU submission workloads, strict coverage validation, comparable latency evidence and reusable operation diagnostics.
-
 ## Requirements
 ### Requirement: Reproducible layered CPU submission evidence
 The repository SHALL provide repeatable full-scene/material and prepared-packet native recording workloads with explicit warmup, sample count, build identity and settings. Full-engine scans SHALL cover 0, 1, 100, 300, 600 and 1200 ordinary draws and camera/CSM variants. CPU recording SHALL be measured independently of Present waits. Reports SHALL distinguish inclusive parallel work from critical-path frame time.
@@ -21,3 +20,10 @@ Renderer and native recording SHALL expose reusable phase diagnostics through th
 #### Scenario: Explaining camera-motion cost
 - **WHEN** a profiling capture compares static and moving views
 - **THEN** material refresh, batching, scene preparation and native recording work can be attributed separately from presentation and scheduling waits
+
+### Requirement: Component editor iteration comparison
+The iteration SHALL deliver a reproducible baseline/candidate performance report using Debug and Release, static and deterministic moving camera cases, and Editor UI/scene/frame measurements. Runs SHALL retain raw evidence, build/content identities, settings, warmup/sample counts, mean/P95/P99, actual workloads and validation status. Load/save and memory effects SHALL be reported with their measurement scope. Unsupported baseline functionality SHALL be labeled rather than assigned invented performance.
+
+#### Scenario: Compare final Sponza
+- **WHEN** baseline Sponza and the final component-based whole-model candidate are measured
+- **THEN** rendering settings and camera workloads match, ready/nonempty coverage is verified, results include regressions, and object count/UI overhead is explained

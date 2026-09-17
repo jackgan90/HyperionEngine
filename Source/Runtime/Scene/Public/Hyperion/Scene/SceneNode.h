@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Materials/MaterialAsset.h"
 #include "Hyperion/Scene/SceneCamera.h"
+#include "Hyperion/Scene/SceneComponent.h"
 #include "Hyperion/Scene/SceneLight.h"
 #include <compare>
 
@@ -16,6 +17,8 @@ struct FSceneModelData
 	std::vector<std::shared_ptr<const FMaterialAssetData>> Materials;
 	// Optional renderer-prepared defaults belong to this resolved dependency revision, independently of geometry.
 	std::vector<std::shared_ptr<const FMaterialSnapshot>> MaterialSnapshots;
+	std::map<std::string, std::vector<FModelInstance>, std::less<>> NodeInstances;
+	std::map<std::string, FBounds, std::less<>> NodeBounds;
 };
 
 std::shared_ptr<const FSceneModelData> PrepareSceneModel(
@@ -52,9 +55,14 @@ struct FSceneModel
 	FMaterialOverride Material;
 	FSceneMaterialSelection Surface;
 	std::map<std::uint32_t, FSceneMaterialSelection> SectionSurfaces;
+	std::string SourceNode;
+	std::vector<FSceneMeshSection> Sections;
+	std::string SourcePrimitive;
 };
 
 void ValidateSceneMaterialSelections(const FSceneModel& InModel);
+FBounds SceneModelBounds(const FSceneModel& InModel);
+std::vector<FModelInstance> SceneModelInstances(const FSceneModel& InModel);
 
 enum class ESceneNodeKind : std::uint8_t
 {
@@ -75,22 +83,126 @@ struct FSceneModelComponent
 	FMaterialOverride Material;
 	FSceneMaterialSelection Surface;
 	std::map<std::uint32_t, FSceneMaterialSelection> SectionSurfaces;
+	std::string SourceNode;
+	std::vector<FSceneMeshSection> Sections;
+	std::string SourcePrimitive;
 	bool operator==(const FSceneModelComponent& InOther) const;
 };
 
-struct FSceneNode
+struct FSceneTransform
 {
-	std::string Id;
-	std::string Name;
 	std::string Parent;
 	FMat4 Local = Identity();
+
+	bool operator==(const FSceneTransform& InOther) const
+	{
+		return Parent == InOther.Parent && Local.Values == InOther.Local.Values;
+	}
+};
+
+struct FSceneModelSource
+{
+	std::string Asset;
+	std::string SourceNode;
+	std::string InstanceRoot;
+	bool operator==(const FSceneModelSource&) const = default;
+};
+
+template<> const FRecordDescriptor& RecordType<FSceneModelSource>();
+
+template<> const FRecordDescriptor& RecordType<FSceneTransform>();
+template<> const FRecordDescriptor& RecordType<FSceneModelComponent>();
+
+struct FSceneNode
+{
+	FSceneNode();
+	std::string Id;
+	std::string Name;
 	bool bEnabled = true;
-	std::optional<FSceneModelComponent> Model;
-	std::optional<FSceneCamera> Camera;
-	std::optional<FSceneDirectionalLight> DirectionalLight;
-	std::optional<FSceneEnvironmentLight> EnvironmentLight;
-	std::optional<FScenePointLight> PointLight;
-	std::optional<FSceneSpotLight> SpotLight;
+	FSceneComponents Components;
+
+	const std::string& Parent() const
+	{
+		return Components.Slot<FSceneTransform>().value().Parent;
+	}
+
+	std::string& Parent()
+	{
+		return Components.Slot<FSceneTransform>().value().Parent;
+	}
+
+	const FMat4& Local() const
+	{
+		return Components.Slot<FSceneTransform>().value().Local;
+	}
+
+	FMat4& Local()
+	{
+		return Components.Slot<FSceneTransform>().value().Local;
+	}
+
+	const std::optional<FSceneModelComponent>& Model() const
+	{
+		return Components.Slot<FSceneModelComponent>();
+	}
+
+	std::optional<FSceneModelComponent>& Model()
+	{
+		return Components.Slot<FSceneModelComponent>();
+	}
+
+	const std::optional<FSceneCamera>& Camera() const
+	{
+		return Components.Slot<FSceneCamera>();
+	}
+
+	std::optional<FSceneCamera>& Camera()
+	{
+		return Components.Slot<FSceneCamera>();
+	}
+
+	const std::optional<FSceneDirectionalLight>& DirectionalLight() const
+	{
+		return Components.Slot<FSceneDirectionalLight>();
+	}
+
+	std::optional<FSceneDirectionalLight>& DirectionalLight()
+	{
+		return Components.Slot<FSceneDirectionalLight>();
+	}
+
+	const std::optional<FSceneEnvironmentLight>& EnvironmentLight() const
+	{
+		return Components.Slot<FSceneEnvironmentLight>();
+	}
+
+	std::optional<FSceneEnvironmentLight>& EnvironmentLight()
+	{
+		return Components.Slot<FSceneEnvironmentLight>();
+	}
+
+	const std::optional<FScenePointLight>& PointLight() const
+	{
+		return Components.Slot<FScenePointLight>();
+	}
+
+	std::optional<FScenePointLight>& PointLight()
+	{
+		return Components.Slot<FScenePointLight>();
+	}
+
+	const std::optional<FSceneSpotLight>& SpotLight() const
+	{
+		return Components.Slot<FSceneSpotLight>();
+	}
+
+	std::optional<FSceneSpotLight>& SpotLight()
+	{
+		return Components.Slot<FSceneSpotLight>();
+	}
+
+	bool Has(ESceneNodeKind InKind) const;
+	// Compatibility display hint; a node can have more than one capability.
 	ESceneNodeKind GetKind() const;
 	bool operator==(const FSceneNode& InOther) const;
 };
@@ -108,6 +220,8 @@ struct FSceneSettings
 	std::optional<FSceneHandle> DefaultCamera;
 	std::optional<FSceneHandle> MainDirectionalLight;
 	std::optional<FSceneHandle> EnvironmentLight;
+	// Explicit browsing preset; independent of authored camera objects and runtime selection.
+	std::optional<FSceneCameraView> InitialView;
 	bool operator==(const FSceneSettings&) const = default;
 };
 

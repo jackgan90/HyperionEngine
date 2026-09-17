@@ -116,7 +116,7 @@ void FEditorApplication::ExerciseMovement(std::vector<FInputEvent>& InEvents, co
 void FEditorApplication::ExerciseWheel(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX,
                                        float InY)
 {
-	const float Speed = Camera.GetMovementSpeed(*Scene);
+	const float Speed = Camera.GetMovementSpeed(ViewCamera);
 	switch (ExerciseWheelStep)
 	{
 		case 0:
@@ -167,12 +167,7 @@ void FEditorApplication::ExerciseWheel(std::vector<FInputEvent>& InEvents, const
 
 void FEditorApplication::ExerciseCamera(std::vector<FInputEvent>& InEvents)
 {
-	FSceneCameraPose Pose;
-	const auto Handle = GetSceneNavigationCamera(*Scene);
-	if (Handle)
-	{
-		Scene->GetCameraPose(*Handle, Pose);
-	}
+	const auto Pose = ExtractScenePose(ViewCamera.World);
 	const float X = (ViewportRegion.Bounds.X + ViewportRegion.Bounds.Z) * .5f;
 	const float Y = (ViewportRegion.Bounds.Y + ViewportRegion.Bounds.W) * .5f;
 	switch (ExerciseStep)
@@ -210,7 +205,7 @@ void FEditorApplication::ExerciseCamera(std::vector<FInputEvent>& InEvents)
 			break;
 		case 13:
 			ExercisePose = Pose;
-			ExerciseSpeed = Camera.GetMovementSpeed(*Scene);
+			ExerciseSpeed = Camera.GetMovementSpeed(ViewCamera);
 			Button(InEvents, 1, true, X, Y);
 			Key(InEvents, true);
 			Wheel(InEvents, 1);
@@ -226,7 +221,7 @@ void FEditorApplication::ExerciseCamera(std::vector<FInputEvent>& InEvents)
 			Button(InEvents, 1, false, X, Y);
 			bInputIsolationVerified = Length(Subtract(Pose.Eye, ExercisePose.Eye)) < .00001f &&
 			                          Length(Subtract(Pose.Forward, ExercisePose.Forward)) < .00001f &&
-			                          Camera.GetMovementSpeed(*Scene) == ExerciseSpeed;
+			                          Camera.GetMovementSpeed(ViewCamera) == ExerciseSpeed;
 			++ExerciseStep;
 			break;
 		default:
@@ -307,6 +302,10 @@ void FEditorApplication::WriteReport()
 	Stream << std::boolalpha << "{\n"
 	       << "\"scene\": " << std::quoted(CurrentPath) << ",\n"
 	       << "\"open_count\": " << OpenCount << ",\n"
+	       << "\"document_verified\": " << bDocumentVerified << ",\n"
+	       << "\"views_verified\": " << bViewsVerified << ",\n"
+	       << "\"save_ms\": " << LastSaveMilliseconds << ",\n"
+	       << "\"document_dirty\": " << IsDirty() << ",\n"
 	       << "\"ready_frames\": " << ReadyFrames << ",\n"
 	       << "\"nodes\": " << Scene->GetNodes().size() << ",\n"
 	       << "\"scene_error\": " << std::quoted(Scene->GetStatus().Error) << ",\n"
@@ -323,7 +322,7 @@ void FEditorApplication::WriteReport()
 	       << "\"look\": " << bLookVerified << ",\n"
 	       << "\"dolly\": " << bDollyVerified << ",\n"
 	       << "\"wheel_speed\": " << bSpeedVerified << ",\n"
-	       << "\"movement_speed\": " << Camera.GetMovementSpeed(*Scene) << ",\n"
+	       << "\"movement_speed\": " << Camera.GetMovementSpeed(ViewCamera) << ",\n"
 	       << "\"input_isolation\": " << bInputIsolationVerified << "\n}\n";
 	if (!Stream)
 	{

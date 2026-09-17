@@ -1,6 +1,7 @@
 #include "Hyperion/Scene/Model.h"
 #include <algorithm>
 #include <functional>
+#include <set>
 
 namespace Hyperion
 {
@@ -74,6 +75,16 @@ void ValidateNodeHierarchy(std::span<const FModelNode> InNodes)
 
 void ValidateModel(const FModelAsset& InModel)
 {
+	std::set<std::string> NodeIds;
+	std::set<std::string> PrimitiveIds;
+	for (std::size_t Index = 0; Index < InModel.Nodes.size(); ++Index)
+	{
+		Require(NodeIds.insert(ModelNodeId(InModel, Index)).second, "Duplicate source node ID");
+	}
+	for (std::size_t Index = 0; Index < InModel.Primitives.size(); ++Index)
+	{
+		Require(PrimitiveIds.insert(ModelPrimitiveId(InModel, Index)).second, "Duplicate source primitive ID");
+	}
 	Require(!InModel.Roots.empty() && !InModel.Primitives.empty(), "Model has no renderable scene");
 	for (const auto& Primitive : InModel.Primitives)
 	{

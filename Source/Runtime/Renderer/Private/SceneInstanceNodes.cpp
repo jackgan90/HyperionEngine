@@ -3,13 +3,83 @@
 
 namespace Hyperion
 {
+std::uint64_t FSceneInstance::GetRevision() const
+{
+	Impl->RequireOpen();
+	return Impl->Scene.GetRevision();
+}
+
+bool FSceneInstance::EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision)
+{
+	auto& P = *Impl;
+	P.RequireOpen();
+	const auto* Existing = P.Scene.FindNode(InHandle);
+	if (!Existing || P.Scene.GetRevision() != InExpectedRevision)
+	{
+		return false;
+	}
+	if (InNode.Model() && Existing->Model() &&
+	    (InNode.Model()->Asset != Existing->Model()->Asset || InNode.Model()->Data != Existing->Model()->Data))
+	{
+		throw std::invalid_argument("Use asset instantiation to attach or replace model geometry");
+	}
+	const auto Pending = P.PendingMaterials.find(InHandle);
+	if (Pending != P.PendingMaterials.end())
+	{
+		throw std::invalid_argument("Wait for material loading before editing this object");
+	}
+	const bool bModelsChanged = Existing->Model().has_value() != InNode.Model().has_value();
+	auto Models = bModelsChanged ? P.Models : std::vector<FSceneInstanceModel>{};
+	if (bModelsChanged && InNode.Model())
+	{
+		const auto Load = P.Loads.find(InNode.Model()->Asset);
+		if (Load == P.Loads.end() || !Load->second.Data || InNode.Model()->Data != Load->second.Data)
+		{
+			throw std::invalid_argument("Static Mesh must select ready geometry from the scene asset table");
+		}
+		Models.push_back({InHandle, InNode.Model()->Asset, InNode.Id});
+	}
+	const auto Sky = P.SkyLoads.find(InHandle);
+	const auto& PreviousLight = Existing->EnvironmentLight();
+	auto& Light = InNode.EnvironmentLight();
+	const bool bSkyChanged =
+	    Sky != P.SkyLoads.end() && (!Light || !PreviousLight || Light->Source != PreviousLight->Source ||
+	                                Light->Sky != PreviousLight->Sky || !Sky->second->Error.empty());
+	if (Light)
+	{
+		Light->Data =
+		    Light->Source == ESceneEnvironmentSource::SkyAsset && PreviousLight ? PreviousLight->Data : nullptr;
+	}
+	if (bSkyChanged && Sky != P.SkyLoads.end())
+	{
+		P.RetiredSkyLoads.reserve(P.RetiredSkyLoads.size() + 1);
+	}
+	if (!P.Scene.EditNode(InHandle, std::move(InNode), InExpectedRevision))
+	{
+		return false;
+	}
+	if (bModelsChanged)
+	{
+		P.Models.swap(Models);
+		P.ForgetRemovedModels();
+	}
+	if (bSkyChanged && Sky != P.SkyLoads.end())
+	{
+		P.RetiredSkyLoads.push_back(Sky->second);
+		Sky->second->Cancellation.Cancel();
+		P.SkyLoads.erase(Sky);
+	}
+	P.bModelStatusDirty = true;
+	return true;
+}
+
 void FSceneInstance::FImpl::RefreshModels()
 {
 	std::vector<FSceneInstanceModel> Updated;
 	for (const auto Handle : Scene.GetNodes(ESceneNodeKind::Model))
 	{
 		const auto& Node = *Scene.FindNode(Handle);
-		Updated.push_back({Handle, Node.Model->Asset, Node.Id});
+		Updated.push_back({Handle, Node.Model()->Asset, Node.Id});
 	}
 	Models = std::move(Updated);
 	bModelStatusDirty = true;
@@ -20,41 +90,41 @@ void FSceneInstance::FImpl::ForgetRemovedModels()
 	std::erase_if(PendingMaterials,
 	              [this](const auto& InEntry)
 	              {
-		              return !Scene.FindNode(InEntry.first);
+		              return !Scene.FindModelComponent(InEntry.first);
 	              });
 	std::erase_if(SelectedMaterials,
 	              [this](const auto& InEntry)
 	              {
-		              return !Scene.FindNode(InEntry.first);
+		              return !Scene.FindModelComponent(InEntry.first);
 	              });
 	std::erase_if(Models,
 	              [this](const auto& InModel)
 	              {
-		              return !Scene.FindNode(InModel.Handle);
+		              return !Scene.FindModelComponent(InModel.Handle);
 	              });
 	bModelStatusDirty = true;
 }
 
 FSceneHandle FSceneInstance::FImpl::AddNode(FSceneNode InNode, bool bInResolveData)
 {
-	if (InNode.Model && !InNode.Model->Asset.empty())
+	if (InNode.Model() && !InNode.Model()->Asset.empty())
 	{
-		const auto Load = Loads.find(InNode.Model->Asset);
+		const auto Load = Loads.find(InNode.Model()->Asset);
 		if (Load == Loads.end())
 		{
 			throw std::invalid_argument("Unknown scene asset");
 		}
 		if (bInResolveData)
 		{
-			InNode.Model->Data = Load->second.Data;
+			InNode.Model()->Data = Load->second.Data;
 		}
 	}
-	Models.reserve(Models.size() + (InNode.Model ? 1 : 0));
+	Models.reserve(Models.size() + (InNode.Model() ? 1 : 0));
 	const auto Handle = Scene.AddNode(std::move(InNode));
 	const auto& Node = *Scene.FindNode(Handle);
-	if (Node.Model)
+	if (Node.Model())
 	{
-		Models.push_back({Handle, Node.Model->Asset, Node.Id});
+		Models.push_back({Handle, Node.Model()->Asset, Node.Id});
 	}
 	bModelStatusDirty = true;
 	return Handle;

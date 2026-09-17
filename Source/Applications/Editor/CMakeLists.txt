@@ -1,7 +1,11 @@
 add_executable(hyperion_editor
   Private/Main.cpp Private/Editor.manifest
-  Private/EditorApplication.cpp Private/EditorPanels.cpp Private/EditorFrame.cpp Private/EditorAcceptance.cpp)
+  Private/EditorApplication.cpp Private/EditorPanels.cpp Private/EditorFrame.cpp Private/EditorAcceptance.cpp
+  Private/EditorBenchmark.cpp Private/EditorDocument.cpp Private/EditorInspector.cpp Private/EditorDocumentAcceptance.cpp)
 hyp_executable(hyperion_editor)
+target_sources(hyperion_editor PRIVATE Private/EditorTransformAcceptance.cpp)
+target_sources(hyperion_editor PRIVATE Private/EditorViews.cpp Private/EditorHistory.cpp)
+target_sources(hyperion_editor PRIVATE Private/EditorViewAcceptance.cpp)
 target_sources(hyperion_editor PRIVATE "${PROJECT_SOURCE_DIR}/Source/Applications/Resources/Hyperion.rc")
 target_include_directories(hyperion_editor PRIVATE "${PROJECT_SOURCE_DIR}/Source/Applications/Resources")
 target_link_libraries(hyperion_editor PRIVATE hyperion_gui hyperion_gui_renderer hyperion_render hyperion_assets

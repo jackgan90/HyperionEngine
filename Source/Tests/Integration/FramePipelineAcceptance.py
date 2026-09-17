@@ -100,16 +100,20 @@ def check_scene_results():
     config = scene_fixture()
     snapshots = []
     rows = []
+    # Allow asynchronous model and material preparation to finish before the
+    # unchanged 60-frame workload.
+    warmup = 1200
+    frames = warmup + 60
     for a, b in ((0, 0), (2, 3)):
         path = work / f"Scene-{a}-{b}.csv"
         image = work / f"Scene-{a}-{b}.png"
-        log = run(f"Scene-{a}-{b}", 220, a, b, "--config", config, "--no-ui",
-                  "--benchmark", path, "--benchmark-warmup", "160", "--benchmark-camera",
+        log = run(f"Scene-{a}-{b}", frames, a, b, "--config", config, "--no-ui",
+                  "--benchmark", path, "--benchmark-warmup", str(warmup), "--benchmark-camera",
                   "--capture", image, "--verify-model")
         assert "models ready | 0 failed" in log, log
         with path.open(newline="", encoding="utf-8") as stream:
             samples = list(csv.DictReader(stream))
-        assert [int(row["frame"]) for row in samples] == list(range(160, 220)), samples
+        assert [int(row["frame"]) for row in samples] == list(range(warmup, frames)), samples
         for row in samples:
             assert int(row["gpu_sample_frame"]) == int(row["frame"]) + 1, row
             assert int(row["visible_items"]) > 0 and int(row["scene_draws"]) > 0, row

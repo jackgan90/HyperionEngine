@@ -31,8 +31,8 @@ bool ChooseNode(FGui& InGui, const char* InLabel, const FSceneInstance& InScene,
 void FSceneViewerPlugin::FImpl::DrawSceneSettings(FGui& InGui)
 {
 	auto Settings = Scene.GetSettings();
-	bool bChanged =
-	    ChooseNode(InGui, "Default camera", Scene, Scene.GetNodes(ESceneNodeKind::Camera), Settings.DefaultCamera);
+	bool bChanged = ChooseNode(InGui, "Runtime default camera", Scene, Scene.GetNodes(ESceneNodeKind::Camera),
+	                           Settings.DefaultCamera);
 	bChanged |= ChooseNode(InGui, "Main directional light", Scene, Scene.GetNodes(ESceneNodeKind::DirectionalLight),
 	                       Settings.MainDirectionalLight);
 	bChanged |= ChooseNode(InGui, "Environment light", Scene, Scene.GetNodes(ESceneNodeKind::EnvironmentLight),
@@ -42,7 +42,7 @@ void FSceneViewerPlugin::FImpl::DrawSceneSettings(FGui& InGui)
 		Scene.SetSettings(Settings);
 	}
 	InGui.TextWrapped("Select the main directional and environment lights here. Enabled local lights contribute in "
-	                  "Deferred. No default camera means clear + GUI.");
+	                  "Deferred. Browsing uses an independent view; the runtime default camera is optional.");
 }
 
 void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
@@ -57,7 +57,7 @@ void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
 	if (PropertySelection != Selected)
 	{
 		PropertySelection = Selected;
-		ProposedParent = Node.Parent.empty() ? std::optional<FSceneHandle>{} : Scene.FindHandle(Node.Parent);
+		ProposedParent = Node.Parent().empty() ? std::optional<FSceneHandle>{} : Scene.FindHandle(Node.Parent());
 	}
 	InGui.Text(std::string(ToString(Node.GetKind())) + " | " + Node.Id);
 	if (InGui.InputText("Name (Enter)", Node.Name))
@@ -68,9 +68,9 @@ void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
 	{
 		Scene.SetEnabled(Selected, Node.bEnabled);
 	}
-	if (InGui.InputMatrix("Local affine transform (Enter)", Node.Local))
+	if (InGui.InputMatrix("Local affine transform (Enter)", Node.Local()))
 	{
-		Scene.SetLocalTransform(Selected, Node.Local);
+		Scene.SetLocalTransform(Selected, Node.Local());
 	}
 	ChooseNode(InGui, "New parent", Scene, Scene.GetNodes(), ProposedParent);
 	InGui.Checkbox("Keep world on reparent", bKeepWorld);
@@ -79,13 +79,13 @@ void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
 		Scene.Reparent(Selected, ProposedParent,
 		               bKeepWorld ? ESceneReparentMode::KeepWorld : ESceneReparentMode::KeepLocal);
 	}
-	if (Node.Model && InGui.Checkbox("Model visible", Node.Model->bVisible))
+	if (Node.Model() && InGui.Checkbox("Model visible", Node.Model()->bVisible))
 	{
-		Scene.SetModelVisible(Selected, Node.Model->bVisible);
+		Scene.SetModelVisible(Selected, Node.Model()->bVisible);
 	}
-	if (Node.Camera)
+	if (Node.Camera())
 	{
-		auto Camera = *Node.Camera;
+		auto Camera = *Node.Camera();
 		bool bChanged = InGui.InputFloat("Vertical FOV (radians)", Camera.VerticalRadians);
 		bChanged |= InGui.InputFloat("Near", Camera.Near);
 		bChanged |= InGui.InputFloat("Far", Camera.Far);
@@ -95,9 +95,9 @@ void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
 			Scene.SetCamera(Selected, Camera);
 		}
 	}
-	if (Node.DirectionalLight)
+	if (Node.DirectionalLight())
 	{
-		auto Light = *Node.DirectionalLight;
+		auto Light = *Node.DirectionalLight();
 		bool bChanged = InGui.InputVector("Directional color", Light.Color);
 		bChanged |= InGui.InputFloat("Directional intensity", Light.Intensity);
 		bChanged |= InGui.Checkbox("Cast shadows", Light.bCastShadows);
@@ -106,9 +106,9 @@ void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
 			Scene.SetDirectionalLight(Selected, Light);
 		}
 	}
-	if (Node.EnvironmentLight)
+	if (Node.EnvironmentLight())
 	{
-		auto Light = *Node.EnvironmentLight;
+		auto Light = *Node.EnvironmentLight();
 		bool bChanged = InGui.InputVector("Environment color", Light.Color);
 		bChanged |= InGui.InputFloat("Environment intensity", Light.Intensity);
 		if (bChanged)
@@ -208,14 +208,14 @@ void FSceneViewerPlugin::FImpl::DrawNodes(FGui& InGui)
 		{
 			auto Node = MakeScenePointLightNode({});
 			Node.Name = "Point light";
-			Node.Local = Translation({0, 2, 0});
+			Node.Local() = Translation({0, 2, 0});
 			Selected = Scene.AddNode(std::move(Node));
 		}
 		if (InGui.Button("Add spot light"))
 		{
 			auto Node = MakeSceneSpotLightNode({});
 			Node.Name = "Spot light";
-			Node.Local = Translation({0, 2, 0});
+			Node.Local() = Translation({0, 2, 0});
 			Selected = Scene.AddNode(std::move(Node));
 		}
 		if (InGui.Button("Add loaded model"))

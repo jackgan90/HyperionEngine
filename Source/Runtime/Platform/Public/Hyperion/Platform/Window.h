@@ -89,6 +89,7 @@ public:
 	void Minimize();
 	void Restore();
 	void RequestClose();
+	void CancelClose();
 	std::string Clipboard() const;
 	void SetClipboard(const std::string& InText);
 	// Requests a black native title bar with light text; returns false when unsupported.

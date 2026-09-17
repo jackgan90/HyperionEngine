@@ -379,7 +379,9 @@ bool FGui::InputMatrix(const char* InLabel, FMat4& InValue)
 {
 	Impl->Select();
 	ImGui::PushID(InLabel);
-	ImGui::TextUnformatted(InLabel);
+	const std::string_view DisplayLabel(InLabel);
+	const auto Marker = DisplayLabel.find("##");
+	ImGui::TextUnformatted(InLabel, InLabel + (Marker == std::string_view::npos ? DisplayLabel.size() : Marker));
 	bool bChanged = false;
 	for (unsigned Column = 0; Column < 4; ++Column)
 	{

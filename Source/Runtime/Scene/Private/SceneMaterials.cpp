@@ -30,6 +30,25 @@ void ValidateSelection(const FSceneMaterialSelection& InSelection)
 
 void ValidateSceneMaterialSelections(const FSceneModel& InModel)
 {
+	std::set<std::string> PrimitiveIds;
+	if (InModel.Data && (!InModel.Sections.empty() || !InModel.SourcePrimitive.empty()))
+	{
+		const auto Instances = SceneModelInstances(InModel);
+		for (const auto& Instance : Instances)
+		{
+			PrimitiveIds.insert(ModelPrimitiveId(*InModel.Data->Asset, Instance.Primitive));
+		}
+	}
+	std::set<std::string> Sections;
+	for (const auto& Section : InModel.Sections)
+	{
+		if (Section.Primitive.empty() || !Sections.insert(Section.Primitive).second ||
+		    (InModel.Data && !PrimitiveIds.contains(Section.Primitive)))
+		{
+			throw std::invalid_argument("Invalid or duplicate Static Mesh section identity");
+		}
+		ValidateMaterialOverride(Section.Material);
+	}
 	ValidateSelection(InModel.Surface);
 	for (const auto& [Section, Selection] : InModel.SectionSurfaces)
 	{

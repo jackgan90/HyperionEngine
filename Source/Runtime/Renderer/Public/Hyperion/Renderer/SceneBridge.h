@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/Model.h"
+#include "Hyperion/Renderer/SceneDiagnostics.h"
 #include <set>
 
 namespace Hyperion
@@ -24,6 +25,8 @@ public:
 	std::string GetError(FSceneHandle InHandle) const;
 	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
 	std::size_t PrimitiveCount(FSceneHandle InHandle) const;
+	std::shared_ptr<const FSceneComponentDiagnostics> GetComponentDiagnostics(FSceneHandle InHandle,
+	                                                                          std::string_view InComponent) const;
 	std::pair<std::uint64_t, std::uint64_t> GetStatusRevision() const;
 	std::pair<std::uint64_t, std::uint64_t> GetModelStatusRevision() const;
 

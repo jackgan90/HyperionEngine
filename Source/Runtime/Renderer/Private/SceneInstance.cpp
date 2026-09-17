@@ -130,10 +130,11 @@ FSceneHandle FSceneInstance::Add(FSceneModel InModel, std::string InAsset)
 {
 	FSceneNode Node;
 	Node.Name = std::move(InModel.Name);
-	Node.Local = InModel.World;
-	Node.Model =
+	Node.Local() = InModel.World;
+	Node.Model() =
 	    FSceneModelComponent{std::move(InAsset), std::move(InModel.Data),    InModel.bVisible,
-	                         InModel.Material,   std::move(InModel.Surface), std::move(InModel.SectionSurfaces)};
+	                         InModel.Material,   std::move(InModel.Surface), std::move(InModel.SectionSurfaces),
+	                         InModel.SourceNode, InModel.Sections,           InModel.SourcePrimitive};
 	return AddNode(std::move(Node));
 }
 

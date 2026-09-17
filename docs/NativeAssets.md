@@ -2,7 +2,7 @@
 
 运行时只读取原生 .hasset。源 glTF/GLB 和场景 JSON 由独立 AssetImport 模块转换；Viewer 不链接 AssetImport，也不注册源格式 codec。现有实验配置仍是 JSON，model_source、scene_source、--model、--scene 保持原名，值改为原生资产路径。
 
-模型 schema 2 引用独立材质，材质引用独立纹理。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 必须先经 AssetTool 拆分升级。
+模型 schema 3 引用独立材质并保存源节点/primitive ID，材质引用独立纹理。schema 2 可只读迁移，加载不写回。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 必须先经 AssetTool 拆分升级。
 
 天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为带固定版本依赖的 `.hasset`；Viewer 不读取源 HDR/EXR。
 
@@ -25,7 +25,7 @@
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
-源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建真实 camera/directionalLight/environmentLight 节点及选择；--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
+源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor/SceneViewer 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
 普通 Viewer 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
@@ -145,7 +145,7 @@ Scene 面板的 Save edited scene 异步写出当前目录下 <原名>.edited.ha
 ./out/build/debug/bin/hyperion_viewer.exe --scene /Game/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
 ~~~
 
-FSceneInstance::Snapshot(destination) 保留每个实例的稳定 ID、名称、完整仿射矩阵、可见性和基础材质覆盖；新增实例获得独立 ID。它只保存仍在使用的模型引用，并按另存目标重新定位路径。相机、方向光、环境光、点光和聚光的节点 payload、层级及选择一起由 Scene 快照保存；相机镜头包含 FOV、near/far 和 focus distance，插件不再补写独立 eye/target。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
+FSceneInstance::Snapshot(destination) 保存 scene schema 7 的组件封装，保留对象/组件实例 ID、名称、完整仿射矩阵、可见性、几何选择和材质覆盖；新增实例获得独立 ID。自定义组件通过注册反射保存，未知组件阻止保存。它只保存仍在使用的模型引用，并按另存目标重新定位路径。相机、方向光、环境光、点光和聚光的节点 payload、层级及选择一起由 Scene 快照保存；相机镜头包含 FOV、near/far 和 focus distance。可选 initialView 保存显式初始浏览视图，导航不会修改它；插件不再补写独立 eye/target。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
 
 ## 验证与测量
 
@@ -164,4 +164,4 @@ AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、writt
 
 ## 场景节点记录
 
-当前 `hyperion.scene` 为 native schema v5，节点记录为 v2，plain JSON source 为 v3；新增独立点光与聚光 payload。Nodes 与三个 stable-ID 选择替代旧 Instances/Eye/Target；native v1/v2/v3 和 plain source v1 通过显式迁移保留模型、材质、矩阵与旧镜头/默认灯。native v4 与 source v2 继续兼容，迁移不添加局部光，新空场景不自动补节点。scene-json 和 native-scene-upgrade importer revision 4（包含天空依赖支持） 使旧缓存重新转换。Snapshot 从当前节点生成独立快照，包含 Local、parent、enabled、camera/light payload 和选择；异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。
+当前 `hyperion.scene` 为 native schema v7，节点记录为 v3，使用带稳定实例 ID 的组件封装；plain JSON source v3 继续兼容，也可使用反射记录 JSON 表达初始视图和自定义组件。旧 native v1–v6 的模型、材质、矩阵、镜头和灯光状态通过显式迁移保留，新空场景不自动补节点。scene-json 和 native-scene-upgrade importer revision 7 保留整模型引用，不自动展开内部节点或 primitive；旧的显式展开文档保持其子节点和编辑状态。模型导入为场景不创建占位相机；发布策略进入缓存设置，避免复用旧展开或强制相机输出。旧版本读取不自动删除相机。运行时兼容读取不会修改磁盘文件。Snapshot 从当前组件及设置生成独立快照，包含 Transform、enabled、camera/light 状态、选择和 initialView，异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneComponents.md](SceneComponents.md)、[SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。

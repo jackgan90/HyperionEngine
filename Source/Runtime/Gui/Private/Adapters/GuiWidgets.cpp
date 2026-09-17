@@ -3,6 +3,39 @@
 
 namespace Hyperion
 {
+bool FGui::InputNumber(const char* InLabel, double& InValue)
+{
+	Impl->Select();
+	return ImGui::InputScalar(InLabel, ImGuiDataType_Double, &InValue, nullptr, nullptr, "%.9g",
+	                          ImGuiInputTextFlags_EnterReturnsTrue);
+}
+
+bool FGui::InputInteger(const char* InLabel, std::int64_t& InValue)
+{
+	Impl->Select();
+	return ImGui::InputScalar(InLabel, ImGuiDataType_S64, &InValue, nullptr, nullptr, nullptr,
+	                          ImGuiInputTextFlags_EnterReturnsTrue);
+}
+
+bool FGui::InputInteger(const char* InLabel, std::uint64_t& InValue)
+{
+	Impl->Select();
+	return ImGui::InputScalar(InLabel, ImGuiDataType_U64, &InValue, nullptr, nullptr, nullptr,
+	                          ImGuiInputTextFlags_EnterReturnsTrue);
+}
+
+void FGui::BeginDisabled(bool bInDisabled)
+{
+	Impl->Select();
+	ImGui::BeginDisabled(bInDisabled);
+}
+
+void FGui::EndDisabled()
+{
+	Impl->Select();
+	ImGui::EndDisabled();
+}
+
 bool FGui::BeginMenuBar()
 {
 	Impl->Select();
@@ -45,11 +78,11 @@ void FGui::SetNextItemWidth(float InWidth)
 	ImGui::SetNextItemWidth(InWidth);
 }
 
-bool FGui::Section(const char* InLabel)
+bool FGui::Section(const char* InLabel, bool bInDefaultOpen)
 {
 	Impl->Select();
 	ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
-	const bool bOpen = ImGui::CollapsingHeader(InLabel, ImGuiTreeNodeFlags_DefaultOpen);
+	const bool bOpen = ImGui::CollapsingHeader(InLabel, bInDefaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0);
 	ImGui::PopStyleColor();
 	return bOpen;
 }
@@ -57,7 +90,7 @@ bool FGui::Section(const char* InLabel)
 bool FGui::BeginTable(const char* InId, const char* InFirst, const char* InSecond)
 {
 	Impl->Select();
-	if (!ImGui::BeginTable(InId, 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY))
+	if (!ImGui::BeginTable(InId, 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY))
 	{
 		return false;
 	}
@@ -86,11 +119,12 @@ void FGui::EndTable()
 	ImGui::EndTable();
 }
 
-bool FGui::TreeItem(const char* InId, const char* InLabel, bool bInLeaf, bool bInSelected, bool& bOutClicked)
+bool FGui::TreeItem(const char* InId, const char* InLabel, bool bInLeaf, bool bInSelected, bool& bOutClicked,
+                    bool bInDefaultOpen)
 {
 	Impl->Select();
 	const auto Flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAllColumns |
-	                   ImGuiTreeNodeFlags_DefaultOpen | (bInLeaf ? ImGuiTreeNodeFlags_Leaf : 0) |
+	                   (bInDefaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0) | (bInLeaf ? ImGuiTreeNodeFlags_Leaf : 0) |
 	                   (bInSelected ? ImGuiTreeNodeFlags_Selected : 0);
 	const bool bOpen = ImGui::TreeNodeEx(InId, Flags, "%s", InLabel);
 	bOutClicked = ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen();

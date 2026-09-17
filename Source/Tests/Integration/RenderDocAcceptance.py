@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+from NativeContent import set_initial_view_from_camera
 
 viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
@@ -75,6 +76,11 @@ def capture(experiment, frame_count, capture_frames):
     arguments = [viewer, '--config', root / ('experiments/' + experiment + '.json'),
                  '--frames', frame_count, '--hidden', '--renderdoc-library', library,
                  '--rdc-output', output, '--exercise-rdc-ui']
+    if experiment == 'Shadows':
+        # Keep all four cascades covered by the authored fixture camera.
+        scene = set_initial_view_from_camera(viewer, '/Game/Scenes/Shadows.hasset', work / 'Shadows.hasset',
+                                             mounts=root / 'ContentMounts.json')
+        arguments += ['--scene', scene]
     for frame in capture_frames:
         arguments += ['--capture-rdc', frame]
     text = run(experiment, arguments)

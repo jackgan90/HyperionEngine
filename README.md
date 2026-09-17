@@ -58,7 +58,7 @@ python tools/Bootstrap.py
 
 SceneViewer 的 WASDQE 用于连续移动，右键拖动环绕，滚轮推拉，Home 取景，Tab 切换面板。Sponza 默认显示调试面板，可编辑相机、模型、光源和天空并保存场景。详见 [场景管理](docs/SceneManagement.md) 和 [Sponza 示例](docs/SponzaMigration.md)。
 
-Editor 使用共享控制器的飞行模式：在视口中按住右键后 WASDQE 才能平移，右键拖动在当前位置调整朝向，滚轮推拉、Home 取景。第一版的 Details 为只读检查面板。面板可以拖动停靠，布局在退出时保存。启动、挂载和功能范围见 [编辑器](docs/Editor.md)。
+Editor 使用独立视口相机：按住右键后 WASDQE 平移，右键拖动调整朝向，滚轮推拉、Home 取景。Outliner 选择对象，Details 通过组件反射编辑属性，支持撤销重做、保存和另存。面板可拖动停靠，布局在退出时保存。启动、挂载和功能范围见 [编辑器](docs/Editor.md)。
 
 自定义模型先离线导入，再交给 Viewer：
 

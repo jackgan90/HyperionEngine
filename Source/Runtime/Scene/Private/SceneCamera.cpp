@@ -4,6 +4,21 @@
 
 namespace Hyperion
 {
+void ValidateSceneCameraView(const FSceneCameraView& InView)
+{
+	ValidateSceneCamera(InView.Lens);
+	ExtractScenePose(InView.World);
+}
+
+template<> const FRecordDescriptor& RecordType<FSceneCameraView>()
+{
+	static const auto Type = MakeRecord<FSceneCameraView>(
+	    "hyperion.sceneview",
+	    {Member("lens", &FSceneCameraView::Lens, {true}), Member("world", &FSceneCameraView::World, {true})}, 1,
+	    ValidateSceneCameraView);
+	return Type;
+}
+
 void ValidateSceneCamera(const FSceneCamera& InCamera)
 {
 	if (!std::isfinite(InCamera.VerticalRadians) || InCamera.VerticalRadians <= .01f ||
@@ -94,11 +109,14 @@ template<> const FRecordDescriptor& RecordType<FSceneCamera>()
 {
 	static const auto Type = []
 	{
-		auto Result = MakeRecord<FSceneCamera>("hyperion.scenecamera",
-		                                       {Member("verticalRadians", &FSceneCamera::VerticalRadians),
-		                                        Member("near", &FSceneCamera::Near), Member("far", &FSceneCamera::Far),
-		                                        Member("focusDistance", &FSceneCamera::FocusDistance)},
-		                                       1, ValidateSceneCamera);
+		auto Result = MakeRecord<FSceneCamera>(
+		    "hyperion.scenecamera",
+		    {Member("verticalRadians", &FSceneCamera::VerticalRadians,
+		            Inspect("Vertical field of view (radians)", .010001, 2.999999)),
+		     Member("near", &FSceneCamera::Near, Inspect("Near plane", .000001, {})),
+		     Member("far", &FSceneCamera::Far, Inspect("Far plane", .000001, {})),
+		     Member("focusDistance", &FSceneCamera::FocusDistance, Inspect("Focus distance", .000001, {}))},
+		    1, ValidateSceneCamera);
 		Result.bRejectUnknownFields = true;
 		return Result;
 	}();

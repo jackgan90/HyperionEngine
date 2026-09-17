@@ -4,7 +4,7 @@ import os
 import pathlib
 import subprocess
 import sys
-from NativeContent import import_asset
+from NativeContent import import_asset, set_initial_view_from_camera
 
 
 viewer = pathlib.Path(sys.argv[1]).resolve()
@@ -21,6 +21,7 @@ scene = {
 manifest = work / "Scene.json"
 manifest.write_text(json.dumps(scene), encoding="utf-8")
 manifest = import_asset(viewer, manifest)
+set_initial_view_from_camera(viewer, manifest)
 
 
 def run(name, config, application, pipeline, *extra):
@@ -41,6 +42,7 @@ def run(name, config, application, pipeline, *extra):
     assert result.returncode == 0 and "validation errors: 0" in log, log
     assert capture.stat().st_size > 1000, "Missing or empty application image"
     if application == "Scene":
+        # Each imported placement remains one whole-model scene reference.
         assert "2/2 models ready" in log, log
     return log, capture.read_bytes()
 

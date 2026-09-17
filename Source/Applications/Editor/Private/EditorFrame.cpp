@@ -6,6 +6,17 @@
 
 namespace Hyperion
 {
+void FEditorApplication::InitializeViewportCamera()
+{
+	if (bViewportCameraInitialized || !CanInitializeSceneBrowsingView(*Scene))
+	{
+		return;
+	}
+	ViewCamera =
+	    MakeSceneBrowsingView(*Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
+	bViewportCameraInitialized = true;
+}
+
 void FEditorApplication::ResizeViewport()
 {
 	if (!bViewportVisible)
@@ -35,11 +46,11 @@ void FEditorApplication::ResizeViewport()
 
 void FEditorApplication::RouteCamera(float InDelta, std::span<const FInputEvent> InEvents)
 {
-	if (!bViewportVisible || bOpenDialog || Gui->IsEditingText() || !ViewportRegion.bFocused)
+	if (PreviewCamera || !bViewportCameraInitialized || !bViewportVisible || bOpenDialog || bSaveDialog ||
+	    bDiscardDialog || Gui->IsEditingText() || !ViewportRegion.bFocused)
 	{
-		Camera.Reset();
 		// Focus recovery still reaches the controller while GUI navigation is blocked.
-		Camera.Input(*Scene, InEvents, true, true);
+		Camera.SuspendInput(InEvents);
 		bCameraDragging = false;
 		return;
 	}
@@ -56,11 +67,12 @@ void FEditorApplication::RouteCamera(float InDelta, std::span<const FInputEvent>
 		}
 		if (Event.Type == EEventType::Key && Event.Key == EKey::Home && Event.bDown && !Event.bRepeat)
 		{
-			FitSceneCamera(*Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
+			FitSceneCamera(ViewCamera, *Scene,
+			               ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
 		}
 	}
-	Camera.Input(*Scene, InEvents, !ViewportRegion.bHovered && !bCameraDragging, false);
-	Camera.Advance(*Scene, InDelta);
+	Camera.Input(ViewCamera, InEvents, !ViewportRegion.bHovered && !bCameraDragging, false);
+	Camera.Advance(ViewCamera, InDelta);
 }
 
 void FEditorApplication::Render(FGuiDrawData InGui, bool bInCapture)
@@ -71,6 +83,15 @@ void FEditorApplication::Render(FGuiDrawData InGui, bool bInCapture)
 	Request.Width = ViewportSize.Width;
 	Request.Height = ViewportSize.Height;
 	Request.DepthConvention = EDepthConvention::Reversed;
+	if (PreviewCamera)
+	{
+		Request.Camera = PreviewCamera;
+		Request.bAllowCameraFallback = false;
+	}
+	else
+	{
+		Request.CameraOverride = ViewCamera;
+	}
 	const auto Seed =
 	    Session->FreezeSceneFrame(Scene->GetToken(), static_cast<float>(double(ClockNanoseconds()) / 1e9));
 	const auto Target = ViewportTarget;
@@ -91,8 +112,8 @@ void FEditorApplication::Render(FGuiDrawData InGui, bool bInCapture)
 			                          Textures.push_back({2, Target});
 		                          }
 		                          GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
-		                          Capture = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size, !Options.bExercise,
-		                                                 bInCapture);
+		                          Capture = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size,
+		                                                 !Options.bExercise && Options.Benchmark.empty(), bInCapture);
 		                          if (bRenderScene)
 		                          {
 			                          RenderStats = Pipeline->GetFrame().Statistics();

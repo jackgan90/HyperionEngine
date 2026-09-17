@@ -1,0 +1,4715 @@
+{
+  "date": "2026-09-17",
+  "environment": {
+    "cpu": "AMD Ryzen 9 9950X3D",
+    "gpu": "NVIDIA GeForce RTX 5080",
+    "os": "Windows 11 10.0.26200",
+    "validation": "D3D12 debug layer enabled"
+  },
+  "method": "Main matrix: 3 x 300 ready frames per case, Editor warmup 120 ready frames, Viewer warmup 6000 frames. Static Editor controls rotate original/expanded/compact order over 3 repetitions. Timing is not frequency-locked.",
+  "identity": {
+    "source_fingerprint": "60eb40547a308370e44bed9430010dbb306a38d5dd7e94572b4e5b6568ed3001",
+    "source_manifest": {
+      "Source/Tests/CMakeLists.txt": "969e93240094c4c45dca670ea9b1c966421ca3a6cffff671f826d5407ec34309",
+      "Source/Tests/Assets/AssetTests.cpp": "0abe71509b88827fccdfdd20c55441913f444d26972d065c55eed40497889cd0",
+      "Source/Tests/Assets/EnvironmentTests.cpp": "6e8326f02620de816d6cb7bdb4c758686643a11dadf2609af289f2f484e0e4f8",
+      "Source/Tests/Assets/ImportTests.cpp": "6aee7f1d8d82f0ec81bfd39b3cb808e3c288355c08b8cd8e2160aba4fb974696",
+      "Source/Tests/Assets/ModelReferenceTests.cpp": "f5c8fc1b22b6de69265fc4760cad6e68073debd6f9a2338cf15d7743d760ced4",
+      "Source/Tests/Assets/NativeAssetTests.cpp": "f9064fbfa0f3a7fb192b4a67afca45996f3b68e7b69bfe1456db8fc4978a37af",
+      "Source/Tests/Assets/PublicationTests.cpp": "a7eba8617ab17808e710e6140da49c29c5cc2a86bd7bc51e90f2f06bc372a633",
+      "Source/Tests/Assets/SceneSourceTests.cpp": "b24d5a4a37e6e485ac2a0043e586974997b8ae2a9a139aff78fde3f1174f23d3",
+      "Source/Tests/Assets/SharedAssetPublicationTests.cpp": "a84de5cc45faac5e211f1791aad444fa3588963179161f43b866bed6384a375f",
+      "Source/Tests/Capture/CaptureTests.cpp": "bb55b4a32c5b1dba9567c0506c014c7711195698eddfff05e69a1bf374c7535c",
+      "Source/Tests/Config/ConfigTests.cpp": "718dc4d53272df6a6259f1285f4c1808dad045e6f5f3e4cd4e5a9718ec5b00f3",
+      "Source/Tests/Core/CoreTests.cpp": "ea1eff0a4d534ec90db88a43508570616a325b1923959e45fe27fda188fd007d",
+      "Source/Tests/Core/ProfilingBenchmark.cpp": "79d2fa3f06a6f9918f1a7b6b87ae547d8b9ad9bec64c03e1fe67ee58d80344b3",
+      "Source/Tests/Core/ProfilingTests.cpp": "c75265672f631aff0f418f7aa90f26ed13c41ae9f7fdf593e7b3a8f62ed68245",
+      "Source/Tests/Gui/CaptureControlsTests.cpp": "fc6084619e37c5c2d6f611c7010e39190ec5e8d2089a04ddc54ac39e85ac756a",
+      "Source/Tests/Gui/GuiDockingTests.cpp": "52c2f6f40bc8c740d592c1e13108462cd8f4f699f01c3fa12b6d1de815f6fec7",
+      "Source/Tests/Gui/GuiRenderingTests.cpp": "5f5e0f22eb4f39e5885561c1ddce3acda1c938a37fec70c478c7238c4d3c1747",
+      "Source/Tests/Gui/GuiTests.cpp": "a3ff9b6be6f590ec27f6bf379d1e289b574fa92d5a0ae6602c3df9f7075dffd4",
+      "Source/Tests/Gui/ProfilingControlsTests.cpp": "7c2199d6f27d00849ad981d3b913c9c6001bbdf24d3903ad31159847fc71c47e",
+      "Source/Tests/Gui/SkyControlsTests.cpp": "015983ebb831456883b94ed4273d215928cf27323ea457a70f9650c1b725e2fc",
+      "Source/Tests/Integration/DepthAcceptance.py": "c25b57f2bf0e9607800515df294cd4acd04542b7850339f0c4dcbdbc9fdf020e",
+      "Source/Tests/Integration/EditorAcceptance.py": "4e8641345cc6e6f88d2161ac9ee66db82959674ff15bf0f54ac3df4e9078ed47",
+      "Source/Tests/Integration/FramePipelineAcceptance.py": "d6600a2c85d1fe4c8fa1b48e4d32c53c22aba1dffd9e1285ede63c254db166cf",
+      "Source/Tests/Integration/LifecycleTests.cpp": "4b6a396504d9c9486964376e2ea45cb157024342ea7cdb7523d4de0151d51d8d",
+      "Source/Tests/Integration/ModelAcceptance.py": "3329b006095387e4de5431241ea5eb59785270273421a285c8bddc5f5bcae22d",
+      "Source/Tests/Integration/NativeContent.py": "6b4123792bd716e4ca37c7e3b8ebbc4c4550cabcc318c1b778f7d363e80c68a1",
+      "Source/Tests/Integration/OfflineStartup.py": "4664a93d56f6a41e7c0bd8f69881f1cab561b70f31e8706b7287b3bc6fbf2c17",
+      "Source/Tests/Integration/ProfilingAcceptance.py": "930869a98e161c5188050d59debf09f95c21e2191792e12f1024a7a7f219b009",
+      "Source/Tests/Integration/RenderDocAcceptance.py": "1f081510603c89b4bed53e4bb736241944a345020ea624e8ca9b510d905a0ddb",
+      "Source/Tests/Integration/SceneAcceptance.py": "1b01ea08e46327effe092ed691a72188df2c918fe5fc759f80c09607e18f0631",
+      "Source/Tests/Integration/ScenePerformance.py": "e537c0e7bf93a023932ba84acf66db11ac8dcdf1e9808352621573314e138403",
+      "Source/Tests/Integration/ViewerAcceptance.py": "de36ae9498ffdc4597dbb19c6dcf616a5e5b294673b620e5df72ac8b29a7b3a4",
+      "Source/Tests/IO/IOTests.cpp": "1aefee4fd6088538390f861392d820d778eb3ea88ce634a00328ede2535f12ca",
+      "Source/Tests/IO/MountedFileSystemTests.cpp": "964d5b408c130b7ce28f2902173d9de4f01ea7f8795147fb83a32e739c5618ef",
+      "Source/Tests/Materials/DescriptorTableTests.cpp": "c6ffea6eab0609ea825a98441b609426c8ffe210b13f4846cc2cf7d559dd7148",
+      "Source/Tests/Materials/MaterialAssetTests.cpp": "afe318a945d8a429f9742984a1964a9612e14bd5b0248e3cc5727a55debec19f",
+      "Source/Tests/Materials/MaterialBindingTests.cpp": "65f062ca3f52181d89563048b9de47ed1b6ea5ee2fca882d63802a7bdd98e16e",
+      "Source/Tests/Materials/MaterialBlockTests.cpp": "8d487e636b80c37c576094e14f960dc1e0a5d066337e21628a44e3e78f435187",
+      "Source/Tests/Materials/MaterialCacheTests.cpp": "1a51c52cf820ca12a45913786dc7bd54e48e93b3dac72ca31aa2e6763d47e2a2",
+      "Source/Tests/Materials/MaterialFrequencyTests.cpp": "75319bbb7a5789aea93e64d3a1b1f957bdffa5deb7531e385a1efac3d4f214e7",
+      "Source/Tests/Materials/MaterialGpuCacheTests.cpp": "dcf8e6bf74be0589e4439aa5f10c7cfad184117e11835db0b6ca289472a57268",
+      "Source/Tests/Materials/MaterialGpuTests.cpp": "0dbadab0d1aa9d75a35aa9c8065d0abad3412bfae7888fa10e5125801767165f",
+      "Source/Tests/Materials/MaterialPackingGpuTests.cpp": "3674de8158e57e10e2fba8bb8f3ab55cffc4ee37d07635530b4c9e5093efd056",
+      "Source/Tests/Materials/MaterialProviderTests.cpp": "c84245d86578ff4b503c2d6822f31ffeeb5e68a51685e4181f0e035678348c9e",
+      "Source/Tests/Materials/MaterialResourceTests.cpp": "3547372676b417842d399fc01382b966b6b9010a4dc2f887d250a9e0806e102f",
+      "Source/Tests/Materials/MaterialSessionTests.cpp": "6ae4424767962447cff25a851a86a2647f15eadc5a47e0dd92d097f45cb5fbb1",
+      "Source/Tests/Materials/MaterialStateGpuTests.cpp": "cd8eefc7c0d1c119e13a0786c01db3f16dcc0d683a5b3f07bb12667de6969376",
+      "Source/Tests/Materials/MaterialTests.cpp": "07531cb447c9c217e23c628510530aae74cba3325fb7143a12a71a095c27a150",
+      "Source/Tests/Renderer/BatchPlanningBenchmark.cpp": "93fbc80bf9ecc577615640fee6a2e4123247b98290a383a5664f995fea3c6839",
+      "Source/Tests/Renderer/CascadedShadowTests.cpp": "0f573d8cce3118e1f84494578cb6934209951f5d65a88a17f5d1e69caa455339",
+      "Source/Tests/Renderer/ClipSpace.hlsl": "fd9885a59345f2a6cf3db3c770b5e6876c1bfd513a532d2c3ecb2e041c65e56a",
+      "Source/Tests/Renderer/ClipSpaceTests.cpp": "17f54224423b5b51ac386e20b941325a5626b35b08f7bae371899a5b501cb08e",
+      "Source/Tests/Renderer/ClusteredLightTests.cpp": "4dca0a89360e53788a31eac78a7fd9921abb135dd0c2c0aecaebbc209063852b",
+      "Source/Tests/Renderer/ColorTargetTests.cpp": "31b22493a3f13605d7b8e729eb653eaa9866920a1a6254e4ab934de6a45e47cb",
+      "Source/Tests/Renderer/ComputeGraphTests.cpp": "4ffde5cbc5838545514771b8531fdd1955ca2b22ee50e712d6a93bf554c74bd5",
+      "Source/Tests/Renderer/ComputeRendererTests.cpp": "946663500920d66c47adca20f802d2e2b41851ff0966d786a17dd6458f34df4f",
+      "Source/Tests/Renderer/ContactShadowTests.cpp": "70cf1875f366b9bec0f35076ac87c142b27eedbdd667f3c8c6668788078eb15d",
+      "Source/Tests/Renderer/DeferredRenderTests.cpp": "14a19effcbf38de5eb553cef39afca810b173ee1b7bfcad9fac1d353f3fb8d30",
+      "Source/Tests/Renderer/DepthConventionTests.cpp": "94ff62e84e3d2f89481f817d6a30414073af728c8622823fe9274a9b441f1c7c",
+      "Source/Tests/Renderer/FrameOwnershipTests.cpp": "0dd320406e97291bbea93dd4f0f4979320d6e0dbfef487ac99fea370ca2a1a07",
+      "Source/Tests/Renderer/FramePipelineTests.cpp": "14a2a5952c7e35d5efe7a4e98ba8e0a6187d0b843571b5639eaafc541ba83a4c",
+      "Source/Tests/Renderer/FullscreenTests.cpp": "2ed945c860419b82b9eab01548167af6a596c3a09abc83235314ca7801b92167",
+      "Source/Tests/Renderer/GraphTests.cpp": "86e8cbbd17bff33fd9832de541212c5ad11183f46af738ccd4f07e895c206efa",
+      "Source/Tests/Renderer/HierarchicalDepthTests.cpp": "00a8b85d670f8da850abb00f607facd6b240ec7ebeabbc6b6ed9a7103ffb7ef1",
+      "Source/Tests/Renderer/InstanceBatchSupport.cpp": "521154de88bed334c23e4ef7f51988dae5683d6a562ac4c61a0abec311be5319",
+      "Source/Tests/Renderer/InstanceBatchSupport.h": "d9d6abca2b777926f7c01312958c24df2a4dd84bc651c33501b77775e60dac0e",
+      "Source/Tests/Renderer/InstanceBatchTests.cpp": "8d02fa189fc33cb3b11e78acf8fbb6444abb3b86e967777ad51145f0a9e66349",
+      "Source/Tests/Renderer/InstanceCacheTests.cpp": "c272305242f39675a5c22f26be123a24624fb31b8a6d12cf0ac1e638c2e4ce93",
+      "Source/Tests/Renderer/InstanceContractTests.cpp": "4f9126d5cc476a38ec1476c13f31109466500ac8ac70323b2a4fc2011c6521ee",
+      "Source/Tests/Renderer/InstanceData.hlsl": "0cff27064aabcd058fa6ca5d9d2be169a833f07d8f59726615dbe8433a7df0fc",
+      "Source/Tests/Renderer/InstanceFailureTests.cpp": "f65c68e584aa78cd29d5d812e438b036259bb2e889e45337c18ecd487840c650",
+      "Source/Tests/Renderer/InstanceLimits.hlsl": "3fa0b0a4557d97d9916472d58874cfc83ea76d0d2d34219c6c200827b31015ab",
+      "Source/Tests/Renderer/InstancePlanningTests.cpp": "c52dfa8847ac02f4f63a44939ceccc043ef4cbe18157a0a4562ff8a2a808df44",
+      "Source/Tests/Renderer/InstanceResourceTests.cpp": "d12e7973536d2da6c3c8321d878a2948432f34179ce6fb5adc32dcb0381ce59e",
+      "Source/Tests/Renderer/ModelRenderTests.cpp": "9ea1bfa08ff3db1961817b8c4e1bd4f481e646d98c55a0b872c2498439b89114",
+      "Source/Tests/Renderer/PrimitiveTests.cpp": "3e6c2b2ee3a0c212f99a309841616bf32359a4b990770feb3d6e281c74ea7314",
+      "Source/Tests/Renderer/ResourceTests.cpp": "e52f972bf9fa5418f4616699d236d1e4a8aac28e0b7ec0665b8c63c062047c0e",
+      "Source/Tests/Renderer/SceneDispatchFailureTests.cpp": "6912235087f93432d154ba9c6c7f23483de923e06d6d6ed57ebc3b0893fa00e3",
+      "Source/Tests/Renderer/SceneInstanceTests.cpp": "b92b00555d29b6951372e504d5e4daab5f78b75a10994ce4844f4bba1a208b61",
+      "Source/Tests/Renderer/SceneRenderTests.cpp": "7cc6d986b7c5e57039bdedf1e051df3041a45c3d94e80e7a21ac3eba7c46714d",
+      "Source/Tests/Renderer/SceneRetentionTests.cpp": "68eb03ec14dfe91fed1e57e3e4f6c2f647a2cfa5815be7f53487c3164b24861c",
+      "Source/Tests/Renderer/SceneViewerTests.cpp": "ac9f33ab5f5e6e6bca45473a06179b7103db5d8866ba55ceb7cfd1f302906343",
+      "Source/Tests/Renderer/ShadowDepthTests.cpp": "d47ea32c6c0376ae5bba814e495ebd8691d39bce7fb4dd90a1d483bc0f064ac3",
+      "Source/Tests/Renderer/ShadowRenderTests.cpp": "b50970d63741e8110e34207ea142e4b68595431475290deaf77c4f0b3de1dec0",
+      "Source/Tests/Renderer/SharedAssetGpuTests.cpp": "7ac00c12a9660e888cde28031b5395d7cb04474b47c397732439ca0198641e53",
+      "Source/Tests/Renderer/SkyRenderTests.cpp": "3dce7d7ecc1eac81d04907501d5c7e508e3a92f734e2dcf687dc35e37baafcde",
+      "Source/Tests/Renderer/SpatialTests.cpp": "ee74e0810b847a70dd24593cc0245381c12e28cb7aae16c36a8878f5bb6d9ac6",
+      "Source/Tests/RHI/ComputeRhiTests.cpp": "bb126092561e811d7ab2aede74af60e880b8768874ba8ef6824cfa68025f7c45",
+      "Source/Tests/RHI/D3D12DeviceTests.cpp": "dd45976b29ef35bfb4eac1f0b16d59a1454c782085a755c50c907361366b12dd",
+      "Source/Tests/RHI/RHIContractTests.cpp": "08c78c64ccad0006dfd349ac9bede4f2c8eec83254bd12c3314bfd793f34f121",
+      "Source/Tests/RHI/SubmissionBenchmark.cpp": "5f74254cf876cfa43ec7d968a5e421612d69cf85e90c33bfa25bab2bc964ac9f",
+      "Source/Tests/Scene/ModelTests.cpp": "9eaaffc27d6f053be09d6084ca27846befc9fcc96386b31a7d7e9e0b0c4549fb",
+      "Source/Tests/Scene/SceneComponentTests.cpp": "ba93f77f400dc0d8b9f3cf167619dbbd8bcfadcc230b472d0ef20e7b72f433e8",
+      "Source/Tests/Scene/SceneExpansionTests.cpp": "5d85825c18635b1111a84af98dd8601fecc509fa0b6b431af3846d3b146fa3cd",
+      "Source/Tests/Scene/SceneNodeTests.cpp": "054f14619cd4a66ede3fa551a69c1929851f918aac5d446abdf99b7d522a0d27",
+      "Source/Tests/Scene/SceneTests.cpp": "ec4c962354897e0e99588fc69df4165ac70d66885f380bc2e89cca4590802bd3",
+      "Source/Tests/Scene/TransformInspectionTests.cpp": "6dcfc731c054b4d5bc8ea6be5b59602d4f78fac2c0a9f5dd70daeb1568505395",
+      "Source/Tests/Serialization/ArchiveTests.cpp": "2542426549969094a79cf7e5d18cd83b8bd73e7aeca7cbbdfd50a5453a81edc1",
+      "Source/Tests/Serialization/DisplayLayoutTests.cpp": "42733516a67dbe0dac95181946f5feffb87c44dfc953aff03ffca8969641d2d4",
+      "Source/Tests/Serialization/RecordTests.cpp": "4e3229113c34fe45d63bf58028b7a1fc15e31234ad8c2f9bf1c3a51131cd3bc6",
+      "Source/Tests/Shaders/ComputeShaderTests.cpp": "edee7231a447578d8e1f540a2f042d32ac5c1a9b5c9a90e6cfb7f9b22fe0c385",
+      "Source/Tests/Shaders/DeferredShaderTests.cpp": "dfc31a2779db2cbcea47736b72a450aba4a97c341914ab618f577ca9bcb92f9e",
+      "Source/Tests/Shaders/MountedShaderTests.cpp": "79dea15bdb0c67a05ae4d5b5dfb9108280f2a3e47226e656e0f9c867208c44c9",
+      "Source/Tests/Shaders/ShaderReflectionTests.cpp": "772c9b6727ace26c5806bedcb2ad32dffe37c0fd04ef42c0b90a8ff75d51fc61",
+      "Source/Tests/Shaders/ShaderTests.cpp": "deb21cc9e1dec655865b8eff36418d0bfd171365221b3653db7131e51832182b",
+      "Source/Tests/Support/DispatchAllocationFailure.h": "47aeaf8d25c2613f75d1ec4d59bf71ab8b1c9fa246db1e660cd0d60292d47071",
+      "Source/Tests/Support/GraphTestSupport.h": "5e135314a7b2db344d942055821a5deeaf5591fd76b87bb319bbb2a2787cd9a4",
+      "Source/Tests/Support/ModelAssetSupport.h": "34fcad90d8d0f65355a293a18a622640efe1b414c5689252dbab2f54887ad1e4",
+      "Source/Tests/Support/NativeAssetSupport.h": "f3292db55ff53d1746851659020c393a5d78246189f7eafc64bea3e01980145c",
+      "Source/Tests/Support/ShaderSourceSupport.h": "4346ee55a18bfb2a846d3fe8c2dfcdd896098121fedf5915a222c247cb02399c",
+      "Source/Tests/Support/TestSupport.h": "8a7b906c6d5553fcb240cec7903b0bb5be0f74d57a13144c8fb7121c7d5ffb98",
+      "Source/Tests/Tasks/TaskTests.cpp": "12ced580345a875736e7bed950eed9e53d7f3a0e7797e05e5d3742ad184c3170",
+      "Source/Tests/Private/Adapters/DispatchAllocationFailure.cpp": "774796dda8cfa88395384166b507dae9229a2f1f933960d0ba52e735a0ccec95",
+      "Source/Runtime/AssetImport/CMakeLists.txt": "9ac04e345120357bd669fc4b1defb0d2ebb676677ca31d3eae16275205379c41",
+      "Source/Runtime/Assets/CMakeLists.txt": "50c75cb02ae3d15f0d882965d4386db30ecc7c3887dab61e10e512c0c63768e7",
+      "Source/Runtime/AssetTypes/CMakeLists.txt": "6b1d9a44ccef310de4e16a9f762669b8a4b747122f8c10e78a2df8410d1fecf1",
+      "Source/Runtime/Capture/CMakeLists.txt": "7f73f8d89a8860fd7b28aedca39af1e9eb819578304b43132192da7041e94ef5",
+      "Source/Runtime/Config/CMakeLists.txt": "f2243c38d5044aee809cf064bd6dd18892512a1f75c081ab16d14f7445615fa4",
+      "Source/Runtime/Core/CMakeLists.txt": "9febb92be1141effdc43e93ad9b81d15d75c936deeced7c80902e1c174d86cfd",
+      "Source/Runtime/Environment/CMakeLists.txt": "8beabb92b9e7cd088095a96eafa41af28eb54b92b7938315ac096e75ef08e157",
+      "Source/Runtime/Gui/CMakeLists.txt": "ddeed50e25ce33f06b04f04bce87d3ffa18e378270c287518c71af04b44e788f",
+      "Source/Runtime/GuiRenderer/CMakeLists.txt": "ab53fd3f49f7812417912434d8459b793668956d6f1b4fb7c18d476aa5169ed9",
+      "Source/Runtime/IO/CMakeLists.txt": "3da7c4c75cc77bfbbd82e178db7394b208eedd8e5256e2015f6507b02332af90",
+      "Source/Runtime/Materials/CMakeLists.txt": "c2e690e84c5fabc143b2beeebfb020840c5b56cf8f62cb71dc44e22dfcda2877",
+      "Source/Runtime/Math/CMakeLists.txt": "abe10bb84d32d1967ab7e1db23c47943936b8bede8fb27381cb4a2985bf979cc",
+      "Source/Runtime/Platform/CMakeLists.txt": "8f2212d329a72f851166e4793f6bcceba710168a6f65882906e8f74257e8e7e6",
+      "Source/Runtime/Plugins/CMakeLists.txt": "a92d406db63ee9a7f04b56188cf4eb57a64e8c0ac416de3a83f7f4c1ab65b8b1",
+      "Source/Runtime/Reflection/CMakeLists.txt": "03e48c051b926f5cf848aebdeb54d5d90610b51612738797d0ee83a5f416831d",
+      "Source/Runtime/Renderer/CMakeLists.txt": "b9cf0e8f17bb30c0f8bbecc93fafe7f89762ed1425368c6b8a314cb30ebaaefc",
+      "Source/Runtime/RHI/CMakeLists.txt": "bf4412fe916761c653d9566a93b32f822794ba090e7a6ada40e705cf54ccc6c7",
+      "Source/Runtime/Scene/CMakeLists.txt": "8fe3614eb253f11ba39707ed655776b824136f0d7ede83e1fbfbb4b99f88b426",
+      "Source/Runtime/Serialization/CMakeLists.txt": "ef4e6bfcfd6d6042328f3876046cd350b87144c52e5a397326f481b914f5e252",
+      "Source/Runtime/Shaders/CMakeLists.txt": "9f5b9e1cfbbb6667adc5d74d6a679949d96d3b0fbc063528ec4c5340c2d44ee6",
+      "Source/Runtime/Tasks/CMakeLists.txt": "7a6f95cba6fe914ced9d2735b3c537abe14d5db37cbf331bafe04bb834d14562",
+      "Source/Runtime/Textures/CMakeLists.txt": "7c6b30101685ee78dcb30278fb3718105d21c5bdc5f36078456c641ed3f30698",
+      "Source/Runtime/Textures/Private/TextureAsset.cpp": "904b270d137195b4231924295a52c1fa39831cee5d1e9ff0989708634477ee7e",
+      "Source/Runtime/Textures/Private/TextureMips.cpp": "2a1b10bf0e1530e2568c645c5871f71622bdf0dd5ea3cbb59860907e44a60447",
+      "Source/Runtime/Textures/Private/TexturePixels.cpp": "d91026dcbbcb0917208f35ef0dba647ee23cc3fc02772b60ca63b0d3ff08abf9",
+      "Source/Runtime/Textures/Public/Hyperion/Textures/TextureAsset.h": "7fb5251303eed4e50bea6f3233f1073ed3f09065883549f4c0d32c2ca267dc5e",
+      "Source/Runtime/Tasks/Public/Hyperion/Tasks/AsyncResult.h": "f31ed0959d40adfd25efb87db6b8c5f84f40b5536ce9056787de973f8fb281f3",
+      "Source/Runtime/Tasks/Public/Hyperion/Tasks/TaskSystem.h": "8b161c64d065d2c4d0e9855cf2b2a561d0f22bb42d6b1f894fd0e35451819885",
+      "Source/Runtime/Tasks/Private/Adapters/TaskSystem.cpp": "38950b27fd05d2d2aad36faedaee7a36bd776ab7b892964b24a5e4fb1dd7c2b7",
+      "Source/Runtime/Shaders/Public/Hyperion/Shaders/ShaderCompiler.h": "cd28474c573e3de2b6acaf34de17b0d530e6d0e0b709111d00b8d55e2c6743da",
+      "Source/Runtime/Shaders/Private/Adapters/DxilReflection.cpp": "d279e32e2c30a0378f6840c74fd21652166ad2e1c753b60bd8ced574e0a06275",
+      "Source/Runtime/Shaders/Private/Adapters/ShaderCompiler.cpp": "ce49911b25e93b76b603ba207a9e6b5c4b55b883ff5b5bf77c590fbaaf3cf330",
+      "Source/Runtime/Shaders/Private/Adapters/ShaderReflection.h": "273c8cd4f383c82b333c48bb74f7499e1eed90d23ee6e63419b4f8299a2c1172",
+      "Source/Runtime/Shaders/Private/Adapters/SpirvReflection.cpp": "8f52e70e4a18d79bb5c842352eb5ba257b5b58497400970ca4a2a0c113203919",
+      "Source/Runtime/Serialization/Private/Archive.cpp": "f7f034ab6bf53ef8f3a38c776cb9800dff5159a12623a4ff9a39f8bc2ad2534c",
+      "Source/Runtime/Serialization/Private/ArchiveEncoding.cpp": "4743a97c532baf0507e8257086934fe0b997be3dde418d2ac937b7e3a9075078",
+      "Source/Runtime/Serialization/Private/ArchiveInternal.h": "b29b04e3d990c5e14c1ac064b226edb03e79e43cb886a41eca0169be4575d56c",
+      "Source/Runtime/Serialization/Private/ArchiveReader.cpp": "3aaa1702626ae8b58b941f3bcc9b83d7a5e8ecb26fb0917af4d813a15c9250ed",
+      "Source/Runtime/Serialization/Public/Hyperion/Serialization/Archive.h": "fff7847dcf27de54f99e6600b4b1b07efc3b94ec314498b93ed0942c820ecaa2",
+      "Source/Runtime/Scene/Private/Model.cpp": "7d637eb956958cc00fd3b4d6fd79684b3417ebce5c43605eba807d7a0d13ab51",
+      "Source/Runtime/Scene/Private/ModelIdentity.cpp": "2cf2e16843e10c76e35ab1189340d3e1681d86f037427a70601c2d618aa676fe",
+      "Source/Runtime/Scene/Private/ModelReflection.cpp": "5650b6f969b0c2ba1956ee181cb7cc49338120e61b2132f9b5cfead061cda8de",
+      "Source/Runtime/Scene/Private/ModelSource.cpp": "47b86239b8c4eeb3289331daaa4251199c1643ac5225023e0d547ca74fdc6330",
+      "Source/Runtime/Scene/Private/ModelSourceReflection.cpp": "b5dd59318ae62c38546d340f055382f230ea98cde0b23dbf287c46784f0b6919",
+      "Source/Runtime/Scene/Private/Scene.cpp": "ee4067ac26098092d1b84ea07d1f2664bb50c19020345cf6aad8824174e0c6ee",
+      "Source/Runtime/Scene/Private/SceneCamera.cpp": "423d50eecc8ac337617b4f769913cbf8b6fe38b708f5d347f8b46e8b1945e54e",
+      "Source/Runtime/Scene/Private/SceneComponent.cpp": "7627fc0d08097fc7a7a686937fb23978ae8ab31045d1cbbd7e549017c79b1f6f",
+      "Source/Runtime/Scene/Private/SceneComponentArchive.cpp": "77b02e83b407789f540f145b8cc1fc41bf64b49cdb708c72d409703ed6432c54",
+      "Source/Runtime/Scene/Private/SceneComponents.cpp": "5c23cfe385d047c1bb9bbad981ff8b98f1088a32818d6f2c1075c4e6720593f6",
+      "Source/Runtime/Scene/Private/SceneDefaults.cpp": "181fc077154c8fd671f376454a11ef0702b4f66d647c52bdd0cf0c505e91220f",
+      "Source/Runtime/Scene/Private/SceneHierarchy.cpp": "369f1cecac6c81381d9422f0f7e114f59416b8cba659739d5dfe0a284133f37c",
+      "Source/Runtime/Scene/Private/SceneInternal.h": "81fb2007b7c37ac0af27ab0d03cf6ac19d91eb620690fcb2701ead2e885f3104",
+      "Source/Runtime/Scene/Private/SceneLegacy.cpp": "0a74ac5d8bfbca9f75912133172029ad606189cc153896fab51dcd8f7f1e3c7d",
+      "Source/Runtime/Scene/Private/SceneLight.cpp": "bcc03b1f4aa0f9f8aaae48d907dcbfe47d5b837d771c08840c783c06e20c6378",
+      "Source/Runtime/Scene/Private/SceneLocalLight.cpp": "8742f52003b324ddc97540c606af94be4158cc2d87fe178037fca5cda487d41a",
+      "Source/Runtime/Scene/Private/SceneManifest.cpp": "a65907306207c3c5df11590dc3eac8e4804b48d9b8fcfc745d375dd69cc45720",
+      "Source/Runtime/Scene/Private/SceneMaterialAssets.cpp": "66f117e98cd5b66ae34202293628f318d1cb9bbec2ae5d1f6f351c8940438ef1",
+      "Source/Runtime/Scene/Private/SceneMaterials.cpp": "54217538a700d57ad62d2f8ffe0db46b31675d2f4029d19cccaa63e3955ac2d8",
+      "Source/Runtime/Scene/Private/SceneMigration.cpp": "5e571659df636c1aeeefe0e3a494ec8eea9f02242de5593e636215c3e59988bc",
+      "Source/Runtime/Scene/Private/SceneModel.cpp": "21f77819a713b10b4868d0d52af3c4801fba135927a3436f068a1e32f12963ad",
+      "Source/Runtime/Scene/Private/SceneModelExpansion.cpp": "8ac917ed1b1e41a16a5d010f3269c68796bc6e575a5fded3f6b1b44558fd88ba",
+      "Source/Runtime/Scene/Private/SceneMutation.cpp": "91917ad40c587fb073de1c36bc8b7d20a75ca027d842d4ffb489282ed28c1a8b",
+      "Source/Runtime/Scene/Private/SceneNode.cpp": "0b302edc657e8887e7f336c3fc4e732f3298500bbf0580f8c44fd59ccb9b6770",
+      "Source/Runtime/Scene/Private/SceneTransform.cpp": "8b35237069cefa30f74421396c219013c55f3f1b54f9dabc9739340f6e680db4",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/Model.h": "dfc0a54f25f97e56e1c433221a1c44301f03818836abb9380be89b914faf1c87",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/ModelSource.h": "e81dd8eb9d44b54337ab223ac715e0fae25fe7d2a82be352c592bb577f3764b0",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/Scene.h": "974925f34bb8008eb962953bb8d9fe808894ff90399fb5f56e70a4c3c8b7c00a",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/SceneCamera.h": "9f30992a665821959a9e40aaf4196dc549405e11b15d6dd53620bbffab104a4b",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/SceneComponent.h": "a3e4a7cbcab03f377126a7aa6fc0f19a452d701c00c1eb659af2bb8f4030d5df",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/SceneLight.h": "f2d5665dfd6303757abbcd263a969e3212ae28dbe24915b884b7cc806e580ed8",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/SceneManifest.h": "664de0da2dd2aac399d1b849256da89d9613e07ebccc5404bd458b4ddd42a58f",
+      "Source/Runtime/Scene/Public/Hyperion/Scene/SceneNode.h": "aa4e26621c6636230b6f59a280dc559b1c580fba678d8f7a300ea9144c4e399c",
+      "Source/Runtime/RHI/Private/RHIBackend.cpp": "fea36b0435f07060c617afe33f22ce930e996d103f2e2834cecaa6fce52cf682",
+      "Source/Runtime/RHI/Private/RHIPipeline.cpp": "cd8016a57d18b7b00cf7ae0fbdf806e1b0080240c2394b593c05314664e13802",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHIBackend.h": "78aa0ec8f88cc0be61fd29f8f6398980262f2e59e947c2ae164ef8ebf0a8997d",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHIBindings.h": "e38d5dd14086b509f58d9cedd6285fa9e327dcbcbe61e0c35f7fd7b2a4365487",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHICapabilities.h": "96ba4186d271c245686548ef7c5c79ff6322680a78e1ad1376f3a857bbacdf05",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHIDevice.h": "0633e1f4568432f785a5b42b71a0dd421878463ea44d34c8acb778ec19ed6d89",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHIGraphicsState.h": "b78aa4621179d740c46afb4c4afc968816b3c16aaadc3e566fe3df4d6ea7117e",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHIPipeline.h": "e2276e6d7797d0864c0fb6a96b5fdf3b96aaf1e2a3a96f64be6e39de58c91c8e",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHIResources.h": "53139b155657f15e8ca0741b949fa097335db1b18089631420d269260ad3b8bb",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHISwapchain.h": "fc0666e826b9a1744d083a45c1326a7335c39464911e3e4e61be0dc35139e32b",
+      "Source/Runtime/RHI/Public/Hyperion/RHI/RHITypes.h": "c43a6f8fda2bec2b9ffc0cb58b152cca4d35514712170f4cee7bc62926ce5dcc",
+      "Source/Runtime/Renderer/Private/BatchCache.cpp": "ba6b86ee72de365da21927f04d17e887c9a01f770afed0070f7c0e6e9d84bfe6",
+      "Source/Runtime/Renderer/Private/BatchCompatibility.cpp": "d69cc4ddbb1473896b08f39ceea3dba3f9c018f266644b4083d999bb2b19bbdf",
+      "Source/Runtime/Renderer/Private/BatchPlanCache.cpp": "11911ea09caefaa2914a7b7b8df73d3a32da05e98850c96b631a0cad5f4f8bf2",
+      "Source/Runtime/Renderer/Private/BatchPreparation.cpp": "e2ede78267199d0545c0ed74e7fa3b706c6aeb2ef0a880301245f11281aff511",
+      "Source/Runtime/Renderer/Private/CascadedShadowMap.cpp": "65528fe7bc6043555083b78503e477223484740980e38bd057e3aa964dbedf3c",
+      "Source/Runtime/Renderer/Private/ClusteredLights.cpp": "8bff887032a46d81a8a764a21b9136edd2852ab4c85f00f33c3d35b8d412b4fd",
+      "Source/Runtime/Renderer/Private/ComputePass.cpp": "75a7b107d96af3b0d0c5e549fce18d6f6fd4086b4cd76edd4c0cf3c977fa5d5f",
+      "Source/Runtime/Renderer/Private/ComputeResources.cpp": "2e8f620c4f16254032a23934f29aac64a4a05010c8a4d2c89bb91031989ae894",
+      "Source/Runtime/Renderer/Private/ComputeResources.h": "aa02ddfc4b39a46e557abf9c17028702ddadd20cf0ac7e148c961fa931bd6eb9",
+      "Source/Runtime/Renderer/Private/ContactShadows.cpp": "edddcf21b1d62e0bc205cfa1f53e798e0a1a7a709db2970a2c7ea4e57d2766f1",
+      "Source/Runtime/Renderer/Private/DepthPreview.cpp": "fa65b55106b5d320148bbf02dde64b6a1729623dce9716b4da7034426174d94f",
+      "Source/Runtime/Renderer/Private/EnvironmentParameters.cpp": "5587d9c443cb0a12ce9c61ac24000189fff2d91acd4de90ad89f87bd8d4b058b",
+      "Source/Runtime/Renderer/Private/EnvironmentParameters.h": "b2d6ef9c2055c14844dca5d8123a363a9573d389e35e96fa3b35880e5dacd096",
+      "Source/Runtime/Renderer/Private/ForwardRenderPipeline.cpp": "4a31baf779d71ea4df24b8e1a025c859ecaed3c0dfe97f055591b38d6c5ea096",
+      "Source/Runtime/Renderer/Private/FramePipeline.cpp": "9e25b73fba468d9f371ad0a7c871e2a751ef32537a052b36ecffd08bbe0698cc",
+      "Source/Runtime/Renderer/Private/FullscreenPass.cpp": "c55bc7a914eda1afc3a8d78db0d726b8a0fc707e6c4b09a96ae4550768b8510a",
+      "Source/Runtime/Renderer/Private/FullscreenPass.h": "54f48a407b9230d88934f4a6032905228882bd59c56583a76407f8d73e3d72e8",
+      "Source/Runtime/Renderer/Private/HierarchicalDepth.cpp": "420a71f83f5dc110f50d68d939c5a420cf1f551c9e1e429f8f3e993839d598ba",
+      "Source/Runtime/Renderer/Private/IncrementalBatchHistory.cpp": "a406552414b98c022fec15ad6c9831a421ed056642bf09d9ed1a10b2ef97405f",
+      "Source/Runtime/Renderer/Private/IncrementalBatchHistory.h": "019b7afce882553527380c7525d79f83767920f06cbec5ff92f1fb226be2baf9",
+      "Source/Runtime/Renderer/Private/IncrementalBatchPlan.cpp": "32f93d94f7cd10b34d15e4a45f4c61fd4a6a045c0e69c2a56d8e510068820984",
+      "Source/Runtime/Renderer/Private/InstanceBatchData.cpp": "2d6c31367e0f8ecfa7c9ce2f696aeffd91e9bda3d76fd4bd38959ff20971882f",
+      "Source/Runtime/Renderer/Private/InstanceDataCache.cpp": "64babdbc9a20ab1e1822d516a96878115b292af2c622891e6f4c3870580cfbbe",
+      "Source/Runtime/Renderer/Private/InstanceDataCache.h": "5c71facef3de76367de19d5372c5744845590c6f27706bed9e15572f1df95ef4",
+      "Source/Runtime/Renderer/Private/LightVolumePass.cpp": "bb09db52d2862c2f35d344f6211ee9de563e6091e94a0f182ba13a5a3aecd30d",
+      "Source/Runtime/Renderer/Private/LightVolumeResources.cpp": "e04d1a8543be73886e539a886a5a0a4ae5358dd635b26f79930adc45c08a4570",
+      "Source/Runtime/Renderer/Private/LightVolumeResources.h": "d925812813424d449dc9599e8a9fb29efde36c05a94c791024b315830d7bf72d",
+      "Source/Runtime/Renderer/Private/LocalLights.cpp": "edf7e4742613c1f1719388fd60a4542d28b455c8dec07d14046f395245fbf3aa",
+      "Source/Runtime/Renderer/Private/LocalMaterialPreparation.cpp": "6f624d13ec141f54e67c659f8a1d63a543aa21c09fd952133dc86b0ef705b1ce",
+      "Source/Runtime/Renderer/Private/LocalMaterialPreparation.h": "21bc8517adb07a494033eca8bf58b41eb3f3fb875a85db817429a804e4830b4a",
+      "Source/Runtime/Renderer/Private/MaterialBindingContext.cpp": "270e48f9905c774732817dc5eb76a22b6afba6024f87368904fb95d5c03872af",
+      "Source/Runtime/Renderer/Private/MaterialBindingGroups.cpp": "b4867b63263ec5a2c77a07ca4498ad9a208f0d4a30cd81d86523b2e48d69bf1f",
+      "Source/Runtime/Renderer/Private/MaterialBindingGroups.h": "d2703be3dabb705749093075a9e992bc28703e0a4ec8d574a111c0fd8ceaf884",
+      "Source/Runtime/Renderer/Private/MaterialBlocks.cpp": "7eb823fd3802a5703d6816d66469ddf020084b0a798654807cffbe1700c59ea1",
+      "Source/Runtime/Renderer/Private/MaterialConstantCache.cpp": "6151cdaba74fc5007b4739cc8e3d4d0afe412cbaa22004e987108fafe7fab792",
+      "Source/Runtime/Renderer/Private/MaterialDraw.cpp": "cb605fcc4581f11a395d5bf6200a4570086ccef83b8497721f067541df06418f",
+      "Source/Runtime/Renderer/Private/MaterialEvaluationCache.h": "65029119fc8f3b0f02b6941f1ed41217cd5220ddd11404190de1c0fa62d1cdec",
+      "Source/Runtime/Renderer/Private/MaterialGpuCache.cpp": "420bf7a9dcb883b7cf727df62f2afc8cbcdf6d902d744eea06de2c9f96269316",
+      "Source/Runtime/Renderer/Private/MaterialGpuCacheInternal.h": "c39ff95d1476bdfe69d56b4b000f144e75b19d6c93de4a83685a1d64573090ce",
+      "Source/Runtime/Renderer/Private/MaterialGpuLifetime.cpp": "a35864263a0c9e5e9e4d75e0f508eadf02241762dd0b30d31ce93a85ec57d604",
+      "Source/Runtime/Renderer/Private/MaterialGpuSources.cpp": "edbf25ea0b285e1486731345bdac2b87ac01706a53cad92905052ff3752a5816",
+      "Source/Runtime/Renderer/Private/MaterialInputValues.cpp": "d6706ad622ac703714b782ccaac57b3ff6f3415ec5905a80721305d8cddf30cb",
+      "Source/Runtime/Renderer/Private/MaterialInstances.cpp": "55a3c28f18a679cb2a7980bb6c6fb827f01d7e51a7df949ab6c6660a02ea82a4",
+      "Source/Runtime/Renderer/Private/MaterialInterface.cpp": "9aa7ab6f1a03d0ef0897bafd00423a2fdaec0cbf1d626839e5ae45937cbd3ec8",
+      "Source/Runtime/Renderer/Private/MaterialPacking.cpp": "732608f806ed3225341061c10ac4ea0d8c73eb4fccd4432520358af2c58816c6",
+      "Source/Runtime/Renderer/Private/MaterialPipeline.cpp": "6fea17f92a466cc0f08d2b41b9aee3382e42f6d10de7ed841a161b09d931a331",
+      "Source/Runtime/Renderer/Private/MaterialPreparation.cpp": "472cda716b84c1a32a03f36105b650cc62b32ded27ee473f6c6622d692f2441e",
+      "Source/Runtime/Renderer/Private/MaterialProfiling.cpp": "95b14d0d8a2b4f2ae986afd1601230dc0509699ff1549134b36716d770c08c99",
+      "Source/Runtime/Renderer/Private/MaterialProfiling.h": "0763e2ccb3749bde2a118d14fa8d5a40ee7ff8ccd1aafee0294383f9df535dbc",
+      "Source/Runtime/Renderer/Private/MaterialProviders.cpp": "c9b6ac2be3c52b975532c94c61ff599f86af46aec7fd099c85e550fb0d5a4398",
+      "Source/Runtime/Renderer/Private/MaterialResourceProgress.cpp": "93c2a505e30a7f24a1ca34a1c875bcc337bf517e36da043ae1c434d3707cc37a",
+      "Source/Runtime/Renderer/Private/MaterialResourceService.cpp": "ea2634bdda622a4fe6fdc3f1b754ad8fcd25d4436c53022881a966c8f3bb6c00",
+      "Source/Runtime/Renderer/Private/MaterialSharedBinding.cpp": "627722faa342406121f314c0eb81b9b3a43e822124b7774bc86e75bcb333318c",
+      "Source/Runtime/Renderer/Private/MaterialSharedBinding.h": "0d0a39b66315c11e252ee8bd44b8820ff64ebbf666a1286d7590217252b4a266",
+      "Source/Runtime/Renderer/Private/Model.cpp": "44b056feb0be555de5ed1ee1186f16a2bbc33bd524839c2683917d1f6290e6d7",
+      "Source/Runtime/Renderer/Private/ModelMaterials.cpp": "0cac9b26fab5a299907e95a847b4b8cfea74cd4a31f881dd33c74f88eeb58a62",
+      "Source/Runtime/Renderer/Private/ModelMaterials.h": "a5ab67cb1346cc0b5b9ed546e4e1cf866226697722d7f3c5be4c18d86d2e1084",
+      "Source/Runtime/Renderer/Private/ModelPreparation.cpp": "5b4aff08e5f75d80636b2c90b23c0262af96660bc4411f2113005407eac99368",
+      "Source/Runtime/Renderer/Private/ModelResources.cpp": "b9abd2d16e2035b5409fb0d09ef8a6e8775fa0bf3cc3d629917bd993c471d4fb",
+      "Source/Runtime/Renderer/Private/NativeModel.cpp": "59f6af50b7f23aeb9069129cf5400fea8d9ce701f6b52d3a5253b73fb4fbdacc",
+      "Source/Runtime/Renderer/Private/PrimitiveMaterialParameters.cpp": "d5aded0e478f2f9d868d3aa848a64d8b1d0992ff0c3a4bcd8f55bbb7d54bd819",
+      "Source/Runtime/Renderer/Private/RenderBatch.cpp": "bbc417979e2aafb8379af8cda88b58be219f8de2f248660eae65dfd2ecc4bf66",
+      "Source/Runtime/Renderer/Private/RenderBatchInternal.h": "c262758650a35cd843dfc447f7d5f18f52fb1e1ec15607a20d948d2360b20ed3",
+      "Source/Runtime/Renderer/Private/RenderBatchStats.cpp": "78e86e3a3f7a08cde9056b3bf7747f22e7dc3a5dcb7644869f0b15c160667bdc",
+      "Source/Runtime/Renderer/Private/RenderGraph.cpp": "af9fcedffb28cdc50d5d62323effb3e1cda1dc9d2099b3d0432f88dc72c8f54d",
+      "Source/Runtime/Renderer/Private/RenderGraphBuffers.cpp": "9a8925000640dc99b466b10f98a2d1766aa80a0649e17f1c3ae45f2e76badd21",
+      "Source/Runtime/Renderer/Private/RenderGraphBuffers.h": "6e924f76da992332b3c13ad655d68fa3d8c3d8d0b9059d787f76972e740fe267",
+      "Source/Runtime/Renderer/Private/RenderGraphContent.cpp": "e7d8bf8e548c97af5feaad5d6893cbe8151a4d74864aacd551c6cd8c9f40552e",
+      "Source/Runtime/Renderer/Private/RenderGraphExecution.cpp": "aa5fa072e845f40ba156de2531ae4a3b936e61c09fc1aa97bdd476f36c5d9aa3",
+      "Source/Runtime/Renderer/Private/RenderGraphPreparation.cpp": "0a466c3fe7edc533576186dcb410eac07b4214326fdef5f7bf00bf078b1402d3",
+      "Source/Runtime/Renderer/Private/RenderGraphResources.cpp": "f40e3b2717bc2edcc6e321762cc8c8b3965bc168c40898b44a99c5358fba4093",
+      "Source/Runtime/Renderer/Private/RenderGraphResources.h": "631bfef3efa3f10459b390f94a5657fe594821f8f74acb869794d05bf9bdc2c4",
+      "Source/Runtime/Renderer/Private/RenderGraphValidation.cpp": "091d2827e8d6899f6c414b6b8fe0bd6081f0f5a979d4c6a0703e0acaab060956",
+      "Source/Runtime/Renderer/Private/RenderItemList.cpp": "a11ef9d97b19790c41c20f6d55cb2cfc3434d9d296b1f9dd8a32a7463f316517",
+      "Source/Runtime/Renderer/Private/RenderMaterial.cpp": "0aea33b26cc7b36c760da523507206b8cb1b8c55d3d85cdd91a0c361ee32c12f",
+      "Source/Runtime/Renderer/Private/RenderPass.cpp": "c289e929631549f5793eebf3db4d069e7733d9bb49ca12904f6bdb93c139a95f",
+      "Source/Runtime/Renderer/Private/RenderPassDeclaration.cpp": "477ee6b0e491e2d3c70a63ea7c36200a672ee3d56c0ebc25c8c384ef24f1e29b",
+      "Source/Runtime/Renderer/Private/RenderPassDeclaration.h": "07e4b8f2462ba557bb66f57a6ce9fb1881fe34f36f30e11ae4c26d4706e2e210",
+      "Source/Runtime/Renderer/Private/RenderPrimitive.cpp": "19541b8f4e0d12771fa92bd19c1558a3f5f18043636904d0674a29d869f79ac6",
+      "Source/Runtime/Renderer/Private/RenderResourceClose.cpp": "a22f5629e1b732e37a4b0fb9bf03f5be95abdb7c53c581421a9678068c242e02",
+      "Source/Runtime/Renderer/Private/RenderResourceLifetime.cpp": "a477548c71a8dd928ad983a725994f04f84f27eba9dce4b3714826db58959046",
+      "Source/Runtime/Renderer/Private/RenderResourceService.cpp": "b66964a1b058ecd94264fc83095b084865a8f5478c60bff8637fafc4643d9ea4",
+      "Source/Runtime/Renderer/Private/RenderResourcesInternal.h": "cd5f62ce08c89394a2a18482fe6b4d46cd7004cd0ffe6a58ed11aa215d849edd",
+      "Source/Runtime/Renderer/Private/RenderScene.cpp": "644964935cdc08e9f686916cb7e97832d462ec0cb4fe14951bc992e7408617f3",
+      "Source/Runtime/Renderer/Private/RenderSceneClient.cpp": "f2fe97a465692819e14e1e096990a0a55ea77600deabfcbdc56a0b55de1567c7",
+      "Source/Runtime/Renderer/Private/RenderSceneInternal.h": "4ce9c12790124757c1aae5342086c36a584c7afc3f8ceafe960b75b1f55ba153",
+      "Source/Runtime/Renderer/Private/RenderSession.cpp": "aabb097aa37c77dd0f0899cc7ad1a6d92cbca8cee0185a51564ca5dc9d6cc6a7",
+      "Source/Runtime/Renderer/Private/SceneBatchDraws.cpp": "ddc70575e234d8eb746f664e5fe44690192ee5907324ab2b1de6525f3c7e071b",
+      "Source/Runtime/Renderer/Private/SceneBridge.cpp": "679ba50774b1169d72b4b9749a6051ef650966b9ec163a472ba7f8844390ac2a",
+      "Source/Runtime/Renderer/Private/SceneBridgeMetadata.cpp": "8bffdc560abf5867904906270ff40cf68e7862a4ebdd13ecfce4809568953177",
+      "Source/Runtime/Renderer/Private/SceneBvh.cpp": "4f32d4980a2493fc2c39b7d1cd187a610ea966177a5f784ca68950aad1155ccc",
+      "Source/Runtime/Renderer/Private/SceneCameraController.cpp": "340fcd6a122ff7e860f93e1e694e76b925c2fab0f1ec61997265dda1aa918b18",
+      "Source/Runtime/Renderer/Private/SceneCollection.cpp": "3d2f51ac307b7fd94bdb525d91ba2d5c2732be6767e385ec4e85d6970a7a7e3b",
+      "Source/Runtime/Renderer/Private/SceneCollectionReuse.cpp": "1534ce8402d3f2ad81f6d9eec2fdc4440f86cf78b77e44094485c39ac6ab1ab4",
+      "Source/Runtime/Renderer/Private/SceneCollectionReuse.h": "3f35f258b6a9b3f3e99d6cb7900997d32c0406b6d52e70d42d59f77ffeae3c8e",
+      "Source/Runtime/Renderer/Private/SceneDiagnostics.cpp": "3165146736fdfaaa7c3ab8611412f71fc1ecdde3de3403b3f0edd1d6beb4f3e4",
+      "Source/Runtime/Renderer/Private/SceneDraws.cpp": "52f3aa6ad97c1858f75c60553e8859d567bc5b10bd947f8c7fe0802c1b69732a",
+      "Source/Runtime/Renderer/Private/SceneDrawsInternal.h": "cae7618a3afe557624e56408e43efd1777f6f5279dadfdbd85efec6a70d5f3b2",
+      "Source/Runtime/Renderer/Private/SceneFrame.cpp": "f4908c5af46986f37976c46ef5027d01e0c55b6fb752a2a617c609567d67b6cd",
+      "Source/Runtime/Renderer/Private/SceneInstance.cpp": "4076f0cae8d46b1f86f32a868fc044c85cdc4e765430c8d7f43e773eded05c7d",
+      "Source/Runtime/Renderer/Private/SceneInstanceInternal.h": "fb7c2d8058c84ccb485bf12a7716b81bfc76c2afb9304ee843296c0587ae371e",
+      "Source/Runtime/Renderer/Private/SceneInstanceLoading.cpp": "b1d5f3e867a8086d14af1806f770e96268e7413bbf01ce3b6dad9a0d30517319",
+      "Source/Runtime/Renderer/Private/SceneInstanceMaterials.cpp": "9a1998258672625a7fc488aa93019a1f1e99dabdcc3080d7e3c9abaffa6d9913",
+      "Source/Runtime/Renderer/Private/SceneInstanceNodes.cpp": "c695f1cc06155d3ed287466bf55a1f7f4604fabc73679a13055548aeba706d9c",
+      "Source/Runtime/Renderer/Private/SceneInstanceSky.cpp": "737f31cbba3b5dd20ba0e7a32a9652cead4a079d9d1f5a9de0ec507a3fe42b8b",
+      "Source/Runtime/Renderer/Private/SceneInstanceSnapshot.cpp": "791c37c19bf23677f5430154bae5fe217b4ba0986f02a330944c135de27c7aaf",
+      "Source/Runtime/Renderer/Private/SceneItemPreparation.h": "52976b10ff045fc1f171d1299c5356be17054dd6e77e9bc28f1a31151cb9f735",
+      "Source/Runtime/Renderer/Private/SceneMaterialAssets.cpp": "d2cfb0c15d962cafbdb25b70b5bc30f520ce0e91e62c8c3be6b0664859e0e8c5",
+      "Source/Runtime/Renderer/Private/SceneMaterialPublication.cpp": "b81ff0c6ee90ed5da2e808defc410e5341ae7e5d80adc733fa8e2cf027aac850",
+      "Source/Runtime/Renderer/Private/SceneMetadata.cpp": "382456beda680d031ba8d6e57f40672922c0aa6852928a7d8d6effe9ff06db1c",
+      "Source/Runtime/Renderer/Private/SceneNavigation.cpp": "a56e42ab37be40e847dca5a02b4239251af945992e0e9d613c571a96b45b321c",
+      "Source/Runtime/Renderer/Private/ScenePassCache.cpp": "852805a72f05bbb4b6a398ab2439c6601483df54af52e9739210ca3e1b753db6",
+      "Source/Runtime/Renderer/Private/ScenePassRefresh.cpp": "548330c6d04eb2ec096537f57beb47b982044761d4b18ca647f297dbdab98a69",
+      "Source/Runtime/Renderer/Private/ScenePipelineClusters.cpp": "467159515070a47195cfc2bc91fe9ae520b665db5b2eff2fedbe92663264b3dd",
+      "Source/Runtime/Renderer/Private/ScenePipelineContactShadows.cpp": "52ed6ba41f6f2f1f77652ea3bf99cff7cff6d04a0b4157cbdb256481de4a91de",
+      "Source/Runtime/Renderer/Private/ScenePipelineFullscreen.cpp": "7ccfd60118b187ec2394e17261c614aefbd1a3486a40e8201197618149702d38",
+      "Source/Runtime/Renderer/Private/ScenePipelineLocalLights.cpp": "11e3c6624a5078e34f310b893296127023b784bd5562c2ba77c94b387cc5997c",
+      "Source/Runtime/Renderer/Private/ScenePipelineOutput.cpp": "4453e3bc8a8ce04f4dc7f3aaf93b6fc7f1eef764db6d32d97f93f192ab7b1ec4",
+      "Source/Runtime/Renderer/Private/ScenePipelineSky.cpp": "ea2b97389fef6b6867f87f8a432a2033ff8d81f9b2e665c36b4d3f134d943bc4",
+      "Source/Runtime/Renderer/Private/ScenePipelineTargets.cpp": "34ccb360227079f1b42ee65b6ce270321d5fe0c8fb2068cb50fc8aa8573707b5",
+      "Source/Runtime/Renderer/Private/ScenePipelineViews.cpp": "c75cfb1de96c6583e2c0de0434b3486336ee89fc7a52bcca511f2505eaf03c05",
+      "Source/Runtime/Renderer/Private/ScenePreparedCollection.cpp": "b96677ea206d092df4bb8fcb08e5f3b72bb2afb06421cff6534af1c45c7ec8c6",
+      "Source/Runtime/Renderer/Private/SceneRemoval.cpp": "c6e9add7cf814c411799abbdf068d0582361f7e7f4ba7073699753ac6cac3587",
+      "Source/Runtime/Renderer/Private/SceneRenderPipeline.cpp": "5e9156bf299912105ebbe39615b7a97c578fc9f1e51e24103cea8a335cda056e",
+      "Source/Runtime/Renderer/Private/SceneVisibility.cpp": "803e0a002755dd9eb1a52edc42e225909a1225927847ed1da25105d5d82f7ab1",
+      "Source/Runtime/Renderer/Private/SessionMaterialBinding.cpp": "c3c5dd4714e81bb7920a9398ff04c4f1776cac178067acc56f170b16dec580d4",
+      "Source/Runtime/Renderer/Private/SessionMaterialEvaluation.cpp": "8351e6313d42e862282a9190303c7e881472c62821ad15a04257159ac4980524",
+      "Source/Runtime/Renderer/Private/SessionMaterialFrame.cpp": "7e296f62282a5f5ffb04f7ecdf8ed7aaaad5d20f7bfcbaef49db00d452eb86ec",
+      "Source/Runtime/Renderer/Private/SessionMaterialsInternal.h": "7d2428bff992d9f63b415780c81582633db07568853f8fc71868ed394d7ef5bb",
+      "Source/Runtime/Renderer/Private/SessionViewCache.cpp": "00a8415baada1ccff5d3f6d65b583c8ceef22b2ed4618f4f4f878d02889c4645",
+      "Source/Runtime/Renderer/Private/ShadowParameters.cpp": "92085f8eecd66910da3bdf1906f1c699d53070a0ac3137c823481cbf6c546359",
+      "Source/Runtime/Renderer/Private/SharedMaterialEvaluation.cpp": "e16ec4b778badfc96efeaeb2f59f044ded24edcc378dbeac929c1033fac387c4",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/CascadedShadowMap.h": "baa769e4e52450bf6d426f9120cdb3f71cd8c1faddb017d73d71ab24cef48f46",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/ClusteredLights.h": "c2060d8f7e99f52cc03271bc8c1caff5ded79de42cd1f182918ac25dbedd5c6d",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/ComputePass.h": "29da152640a50e43940ad73a10170d14ac69e6a959ea24cf9af9a65b78e822d1",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/ContactShadows.h": "8ea4878c3687a5de7967bce7fdb90af87ce7ae402b7da696364b6f2ca55d9230",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/ForwardRenderPipeline.h": "abdc6db543b7987956968b75a51c5d2b7dc6648c7b4396b28611c514929e46bf",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/FramePipeline.h": "dbaf60355742c8ba8abde57f726eb4d33623711439ac29e440556f5359912fe5",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/FullscreenPass.h": "bcda66fed3696a8b5cecc4b0aa0eba0f937407a9f5cf4b570f2464fd929dc0e3",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/HierarchicalDepth.h": "d2708c52b2631246f07d63cd75be1bf5752a0fdb913c0f00c7f423eca812f18d",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/LightVolumePass.h": "329b7c6f33028c26667bc9b504ae9839e845e11040e1ae9aa46819968ddbfa75",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/LocalLights.h": "99b9f9c05587cf6c96a696598798f03abc992bb0b2be864edc4738377b9b0ba1",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialBindingContext.h": "802894692ccde94d7d81366cd228c2c48a933c6fe87211b3492151b537205a54",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialBlocks.h": "c30d4fe92fa5f3c7cf2aada21b725d2edc0fec1f262fb09edf05227fe57eca97",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialConstantCache.h": "e16916d8fab81bbafb618602511574e54615dc11dd4b1dd9e950c0a0371ca772",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialFrame.h": "670beabc4c9129fc21607991da616eb73a29068a414e7ab8e4e2068ae36c880b",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialGpuCache.h": "d800e884f8ccd0cc8a13cc3e93fbf838a2da6207989587c7152b796693bfd109",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialInputValues.h": "faa0f543787909604e2e2dbbbcf0743f876ede5f43168de09aa971e43f484aaf",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialPacking.h": "7cd442fd115038f754110700bfcb24f7d4a6cdc68c3e99635f8846fd56d7e4e9",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialParameterTable.h": "cd6bc686fcee57e27bba2b13bc27829e4f6a86ff1eddae02490c9acd508cce38",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialPipeline.h": "23975f555c80d5bd2c3bb403cc51d837e77ca55b2f1b0c636963e449add7affe",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialPreparation.h": "7b6e4761550fa81d1d80d0d2ef7fc5a63d4dcc410710034074552b98c0087bdb",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/MaterialProviders.h": "ab968a61b383912b51303c9f2cca1b0f212a2888abb52779bd8f3e8e395e9f00",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/Model.h": "cde954d8a8f52dfb87a243f1716837edd5e85151848021a73032ebd066d66f32",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/ModelPreparation.h": "16df1b1e90b02f7ea3f6ff5fcacac02a57a9883367abd1cf3843df3477fae818",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/NativeModel.h": "266b6d02a21d9b04664f9a4720be5b343f1cb58c6bb5f795dcb3dfc1c36b2e36",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderBatch.h": "5c38dca264d69d235cdbb098ef483c899ba02d1136532a3afe7a37a7edfe1ce8",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderBatchStats.h": "0ad1082f30c2a3ec2b00dd725bf6b3d80471340bbdffc99d3296e436353820b7",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderGraph.h": "cb6a7e5d46fa9293e0b69eaaa15978ee870b06d4524940d2e3b9d852636e2c0b",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderItemList.h": "e252071c3011cbf76b88b2f6b56a72914199de33413a8a5dfcac9372f718751e",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderMaterial.h": "4b2f7af24dde6273949f6455be4b380ab5c9a7d0f7f26c302743db85ba111425",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderPass.h": "5f17636b0e7c0f45ac314e5f0b6046c2a568d5e7631ff44a0287b56507198641",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderPlugin.h": "2f1637bb0fdd68c2bf9b6a99f71413afe5f0b206e85da2675745e1e110f700c9",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderPrimitive.h": "7bac4104ea91751b7c10a34041dfeaf325c8109a607af9d9e2a9352f3cb62b81",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderResources.h": "c5b3bd40e0c6abb336300def9353fccc73cabec958729e8deff14061fc749058",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderScene.h": "6f94fa457deb4a13929f7d603e32c4bd2359fdff1781a7bebe17aeca213fe66d",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/RenderSession.h": "8ffe21efc9be166fde1d34dc10a634eb63c27cc448e44c1585a861aa284c4d6b",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneBridge.h": "eece1fb1104a6c4b0c8ba0ccd69b85f2df0fda03119f59e37500f0e8562f4102",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneCameraController.h": "c39df12cd86c7b77832b409a78f5dafeb18347d7f6662158054ce126c605bdbe",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneDiagnostics.h": "6a50d0592754c5f9753f85dbfb1d7df0e9f133665c85a1e503f730640f20d20b",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneFrame.h": "af4b17fd79d4a58a85eb00fe9ebb69ddae3d1497172fca9f60522c93a0c140ba",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneInstance.h": "cb378ea23bfccd574c5f9125f8fe155900a09e0f300eca2204b4f12ce5c48811",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneMaterialAssets.h": "5866f49da0110e8b262588e8a25fbdf21208d442e5bad225fbc6a071fb2b6eee",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneNavigation.h": "16b41db6bc8303506ad5ad6f0cd524c8bd6b6be9e03a5b3a8f59e3c9db7032fa",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/ScenePublication.h": "15a1ed1bc480f3b13054d798cdbe8e3baa81d2d6a8b6117d59ca6312ab06beec",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneRenderPipeline.h": "6c9ec0e57fe63f3e070644803fe214c21b3ed3bd6ff3a290d768afa5a4378eac",
+      "Source/Runtime/Renderer/Public/Hyperion/Renderer/SceneSpatialIndex.h": "d3fbd5f89e6dd47f61a6c959aefca3b4bdcdec246b5927fc2be242f3e4c41f5c",
+      "Source/Runtime/Reflection/Private/Inspection.cpp": "2d570f3b136032ccaeac94768a9232a8a82fc71ba4918fe87aa64ce6c1424663",
+      "Source/Runtime/Reflection/Private/Record.cpp": "ad11ade79ffe510dc01aec9ff6c26ac0f4616a0d33bc5b8a4d52968a6c68313d",
+      "Source/Runtime/Reflection/Public/Hyperion/Reflection/ArchiveNode.h": "b9e1aee246c68383c6d574626f7831ae87433bdd78bba8abd951b335e9cd8bc6",
+      "Source/Runtime/Reflection/Public/Hyperion/Reflection/Record.h": "6319cbd27940f082f0c879e62f7f0577a29f126d017d2769bfbfea3ca4bfce7a",
+      "Source/Runtime/Reflection/Public/Hyperion/Reflection/RecordCallback.h": "9afcf25d0f9b14df3d15bd03ff5228303d5f0478083129ab522c946f293523ab",
+      "Source/Runtime/Reflection/Public/Hyperion/Reflection/RecordValue.h": "6d7e9fbfa2e48fa1238d406e958368807dbf6db2986021f7e3768500fe5a2ba1",
+      "Source/Runtime/Reflection/Public/Hyperion/Reflection/Reflection.h": "291fb4630deb8f209fd9f9bd6277db7ecb33aaa9ccf28b453aaaafa9901559b8",
+      "Source/Runtime/Reflection/Private/Adapters/JsonSerialization.cpp": "456f985e9a281a6050c4a9ab4755c37cb99c4530b16068e13bb2a4e766b5929e",
+      "Source/Runtime/Plugins/Private/PluginRuntime.cpp": "41ad12b3bac93c9c7913f05d88bce0bafc744aeebcb42205b81248e72211bea8",
+      "Source/Runtime/Plugins/Public/Hyperion/Plugins/PluginRuntime.h": "ee19f2d442a180c720990f6528c7ff13fcb3505fa78a787315a8f50007e6b8a2",
+      "Source/Runtime/Platform/Public/Hyperion/Platform/Window.h": "4e8dacec7d1037774a4ad9940171e9562418aae0f8f7ebc17bf08bebf8d680d7",
+      "Source/Runtime/Platform/Private/Adapters/SDLWindow.cpp": "68f1ff9a503e0a9a52dd13d5ba0763b6490c2a411a85f2af1c9397cb8dcfc4c4",
+      "Source/Runtime/Math/Private/Bounds.cpp": "07a886c781c09b247c2343963054d67d2d5438423ca3d1fc61392fb488770b56",
+      "Source/Runtime/Math/Public/Hyperion/Math/AffineTransform.h": "3ae30cdc720e1f9cc448e1ad28c4c6f1326be94e81973726435c88d4e540039a",
+      "Source/Runtime/Math/Public/Hyperion/Math/Bounds.h": "3bc9e91cf2af1bc9eeb391d3ab409e08be7efcf28f7f077bb6009b8101e91c01",
+      "Source/Runtime/Math/Public/Hyperion/Math/DepthConvention.h": "f5580ddca4918bb49bb5ae1fc78a92ab111bdd7fe14d3fd80520ebd46c0a742f",
+      "Source/Runtime/Math/Public/Hyperion/Math/Math.h": "22c118231e30778619c2cbb2c1e9692802499adaa631d5bc15b848c76e8cabdf",
+      "Source/Runtime/Math/Private/Adapters/AffineTransform.cpp": "9006052a47ea01d80f01d15cc818171cc9524f52c139fb5ed4444860caddd388",
+      "Source/Runtime/Math/Private/Adapters/Math.cpp": "dd040133c54044b50c6b339df5ecca3f3ad19ac4b937e9f0a1c1120b2c3a49b3",
+      "Source/Runtime/Materials/Private/MaterialAsset.cpp": "4a38c59d1bee6551463ec40cfd8d3afd2a8ee345d08c6d699ecf6a2b56aa7cd8",
+      "Source/Runtime/Materials/Private/MaterialAssetEnums.cpp": "439f0c628411d0fd9db53e82d0def974309b931047662a85bab423c8958880bf",
+      "Source/Runtime/Materials/Private/MaterialAssetReflection.cpp": "940cb1b7a84aad602f47143ef5f0a4ef5be1d43503e62ab1b4e6bb0f2c7b6ea0",
+      "Source/Runtime/Materials/Private/MaterialBlocks.cpp": "cbc35490523514d45c799079246571e2de354452515225ca65dafe283687583b",
+      "Source/Runtime/Materials/Private/MaterialDefinition.cpp": "42456956e6ad14c497cdd7d4f2a084fbf1fda6818d471af1272ab02216d56af4",
+      "Source/Runtime/Materials/Private/MaterialIdentity.h": "fbccb5f6c6dcfe6068112062349d2bee08ca4cf8165cc83932597a1442de8487",
+      "Source/Runtime/Materials/Private/MaterialInstance.cpp": "c355ec60a7ee12078e1a4109be2cabaccf00b0cea5f744cd9a2ffbe401e8e5ab",
+      "Source/Runtime/Materials/Private/MaterialParameters.cpp": "b1910b30dfe30d8375c87df99ad326606fbd04bd52fe04bc54fc17f8032546eb",
+      "Source/Runtime/Materials/Private/MaterialResources.cpp": "ec30138eb9b24ae00356506697284c6479b485b8abfcf128ca3385370ddda4ec",
+      "Source/Runtime/Materials/Private/MaterialSemantics.cpp": "768936d4c13eb643bff990844c7f941536358d9541324385d84144245f41a4a1",
+      "Source/Runtime/Materials/Private/MaterialStateReflection.cpp": "97600b63e3c5d525184cfd323679dfc5fc15c0a137b81e977c87e6e4ed1449d9",
+      "Source/Runtime/Materials/Private/PbrMaterial.cpp": "49b40ba7e01f6065e33b688a24e1f7c23e9f3ca64e0408b07a16e5bc93985312",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/Material.h": "b210d064cbed1e75b899f88a445be2f10d93479000b1916bba435d515c4de0b6",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/MaterialAsset.h": "2038f99210512771b88ddd8547fb7db9f38dde59b4a6ff2d4df54c6e8a2bbf47",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/MaterialBlocks.h": "1f1f27807e01a960f0f17989a02a56421f968d84ffcbeec8b9941c839d1e3bbc",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/MaterialParameters.h": "f0c5080e71f110e5faf1b243dbeafd4ce52db8ca032fddf399019cfb51721e13",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/MaterialResources.h": "9fa80cdc4d4f1fc1f87f04bd175f56542fbe9ca82532e9ea78d39aa5f3b79004",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/MaterialSemantics.h": "5ff2c745a7e8fc603eae3a143fd34b98432a65c6422f39c93605d752809a2ed3",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/MaterialState.h": "4dd63e9bc76cb21814b74bdc6a39a8c78d07a481f7c8def9d182240503fb8333",
+      "Source/Runtime/Materials/Public/Hyperion/Materials/PbrMaterial.h": "2c9cf5098590bcfe4765f120cde49498ab29ffe45a926f83a134068b93d711c0",
+      "Source/Runtime/IO/Private/FileLease.cpp": "c228cfd549ad9d24f9dd1cb3060799d026584395bdec8f213109ee570480dedc",
+      "Source/Runtime/IO/Private/IOService.cpp": "82de9f5065e7e1a794805e45a365ead3bccf1d0fe94dc117a6c18287056d68a9",
+      "Source/Runtime/IO/Private/LocalPath.h": "2f2ce9412d5fd2157d231f3db73ee508ce904820d24719a8ed0be55ec796c657",
+      "Source/Runtime/IO/Private/MountedFileSystem.cpp": "011d51f29032607d5eadb3cfda14b81dd85a62ee86607a9d67598849c0d68915",
+      "Source/Runtime/IO/Private/Path.cpp": "9b4bd7b2b0510e04e0279a2c0a98bce3a5872c08cf16fea32e5cc72ab4e29096",
+      "Source/Runtime/IO/Public/Hyperion/IO/IOService.h": "2293640a27002d16c04981f7e3cd8198143f064ca071f8a309472c65901c6daa",
+      "Source/Runtime/IO/Public/Hyperion/IO/MountedFileSystem.h": "6dadf803b290a7ead9fb5c70beda4ae37cca310b9a50b690a810a57aafaf8573",
+      "Source/Runtime/IO/Public/Hyperion/IO/Path.h": "4664163bb3b96df5f53ab4e6e804806b6b7fd1a8194396de3d2235ff85f5aaed",
+      "Source/Runtime/IO/Private/Adapters/ContentMounts.cpp": "a99a765d5d2a7ea2f1f63cf1de4785f8bfbee44a8bcc1d3dd5c5503bb111d924",
+      "Source/Runtime/IO/Private/Adapters/FileLease.cpp": "dc9b776c0f79e2e75929bc44e44d1662e3912667775dcc01d4f5c1e87b31a970",
+      "Source/Runtime/IO/Private/Adapters/FileSystem.cpp": "af4740b4bc7966435da369d07dda07af628ab2e3bfdc34da0a013dd2ae4857b1",
+      "Source/Runtime/IO/Private/Adapters/LocalPath.cpp": "d7088e69440e67c3e4cd22423a5a58e0d915da5b897f876d3c8f79ed04f9e03e",
+      "Source/Runtime/GuiRenderer/Private/GuiRenderer.cpp": "6101be76a76634b28fda3ce9589823680419fd70809ab2e14f0014d664103a0a",
+      "Source/Runtime/GuiRenderer/Public/Hyperion/GuiRenderer/GuiRenderer.h": "eaeb1c86a0e6cb06c1a7929644bb6866dd0b68af91de8e5425ddfad5bc08880e",
+      "Source/Runtime/Gui/Private/GuiInspection.cpp": "64b64507fff5a8c2ac4d533c6063e242b154ea509752a439c3e2fd4053ed4ad2",
+      "Source/Runtime/Gui/Public/Hyperion/Gui/Gui.h": "c5c8c574f62d4b3af4ff42f6fe5305e22f84b3d1f6cd964590901063b983f7dd",
+      "Source/Runtime/Gui/Private/Adapters/Gui.cpp": "29a68b2e3f941ab6940327e76eac610bc447bd18b94d326d4fbcb0b882f5c154",
+      "Source/Runtime/Gui/Private/Adapters/GuiDocking.cpp": "ed3860b7d4000e0ee283d6b8e41361b006fe999dc7a1648780ad383c63d8fde1",
+      "Source/Runtime/Gui/Private/Adapters/GuiInternal.h": "505b4aefc559434ec5bac880f5ffb9746b52a38af30694b2eca6cdbc6196559a",
+      "Source/Runtime/Gui/Private/Adapters/GuiVector.cpp": "8c41eb8db3608c0490c2e56423f8ac7ff584145a57ccddf624751208efc923d8",
+      "Source/Runtime/Gui/Private/Adapters/GuiWidgets.cpp": "354de403dc908135a201d3136ee1ba919329f0e2109c14e5cc4f7f1eb925ed9a",
+      "Source/Runtime/Environment/Private/Cubemap.cpp": "67aa9c7fc3ef8c91f41f17607abf0d8ae739c3d6e5dda78406db3683e3be042e",
+      "Source/Runtime/Environment/Private/EnvironmentBake.cpp": "c57f9081399ca62f2aa1cfab634dc5c20d50b51cfab2236b41b5cca853a7c5d4",
+      "Source/Runtime/Environment/Private/EnvironmentBrdf.cpp": "64c008d4f20d94b9271bf92e1fc0a25195c79edc8d3960f5a89a3389df79dee4",
+      "Source/Runtime/Environment/Private/EnvironmentSampling.h": "2cde2d960ea20770edb8de86600039e21eb90e13ab9540e903efa6682d234548",
+      "Source/Runtime/Environment/Private/SkyAsset.cpp": "35f62b243e88daac32e0a24e878f25c1fdcb3052be5a9af1dcec0a273befd543",
+      "Source/Runtime/Environment/Public/Hyperion/Environment/SkyAsset.h": "f48f439507a795a6d4e5e6653a6a00ebf01beaa35bd17f523724e136485a45fd",
+      "Source/Runtime/Core/Public/Hyperion/Core/ContentHash.h": "bd4de067a421f30539869673e4ee782bec9787d911e3feae7d1d3137d737c044",
+      "Source/Runtime/Core/Public/Hyperion/Core/Core.h": "ced9576a95f3996d89c4c4bffbe2dab2870c6cef087bfa17a085de05e8134bf9",
+      "Source/Runtime/Core/Public/Hyperion/Core/Profiling.h": "10a88fb1ff1a41434ce5cf4154a935f3a25571780b099d22590834f51aa09250",
+      "Source/Runtime/Core/Public/Hyperion/Core/ProfilingGpu.h": "c273a0faba28098ffed0cb35d309139f8f53d12eb3722902b420dae56b1c0827",
+      "Source/Runtime/Core/Public/Hyperion/Core/Profiling/Measurement.h": "e3cb0f8068186f7d1c01110f6eb5d5c693d4a51c6b76a16b7eecd3e5f49682d7",
+      "Source/Runtime/Core/Private/Adapters/ContentHash.cpp": "6911f3e1da0231f7f53e051ba11f24eb9f8397c149eea059ab7dfe681865e3ea",
+      "Source/Runtime/Core/Private/Adapters/Core.cpp": "9a2a824caf44f02c2e599bb2dfb9f781e9665747ebfbf40ffe0c330804a42872",
+      "Source/Runtime/Core/Private/Adapters/Profiling.cpp": "4a52f7270d192431716223f6c826d7cde24d08064dc4be0ddc23877f244253ea",
+      "Source/Runtime/Core/Private/Adapters/ProfilingControl.cpp": "329452bd7c07779bd2437a457d41f9533dde2eebf6214cf776ed89a86b23c827",
+      "Source/Runtime/Core/Private/Adapters/ProfilingGpu.cpp": "dbf1bfb98433a07991650e701a4709450c6dd69202ca57977250c82b31680e30",
+      "Source/Runtime/Core/Private/Adapters/ProfilingInternal.h": "b9f5b033742ee2321f537a8bf18ba9b4b5b900b7997a7270467688b8a06a83ef",
+      "Source/Runtime/Config/Private/AppSettings.cpp": "793883eb3da57964d92ba8fb1fb5e5d89754b036c74974f945bbf096dbdc139f",
+      "Source/Runtime/Config/Public/Hyperion/Config/AppSettings.h": "c1c24413fd463f5234a99beb4586094a53b1146c19ced3bb95d3a036ad7d3f8d",
+      "Source/Runtime/Capture/Public/Hyperion/Capture/FrameCapture.h": "411d122e54572dec9107ba63c54a4d8a2a3c3a95080c36741e7821171baea572",
+      "Source/Runtime/Capture/Private/Adapters/FrameCapture.cpp": "9d7fc4ccdb1951582adffef0fc15f847609b219d66142cfd570793ef99368faf",
+      "Source/Runtime/Capture/Private/Adapters/FrameCaptureFailureTests.cpp": "3401f1c58fb34f403feac9772528d8f7632ed14234359bc6717621a0c751eb56",
+      "Source/Runtime/AssetTypes/Private/AssetTypes.cpp": "f4bf3a67e5679bddde900d2691b39643b6640b69888f184e94e8cc3a6032f6b0",
+      "Source/Runtime/AssetTypes/Public/Hyperion/AssetTypes/AssetTypes.h": "64dea4de8e148640393a16fd5924421da2d5060330b23b2a7acf3f4e284340af",
+      "Source/Runtime/Assets/Private/AssetCache.cpp": "c460b10eb91fdb8b715132b3d5cc3a11111fa3f6dc2548cd58084127bbc301c4",
+      "Source/Runtime/Assets/Private/AssetDependencies.cpp": "d5e2f0878592b71f83c7360a955b584d7ed31fe8f3efb7790abd8a3f9c29a5fc",
+      "Source/Runtime/Assets/Private/AssetReference.cpp": "c2b8c89aabdf052afc5d99b434193b832c2c2451c85c25fa29ea6ebc8088d222",
+      "Source/Runtime/Assets/Private/AssetService.cpp": "659a07a6a29d23d1c23ee268015b911d4f240d32adba6c74416cf832adfdcdba",
+      "Source/Runtime/Assets/Private/AssetServiceInternal.h": "61be53fc93f9fcf1b197ef4656d363de7095dc74a9d1d80c4e6ceb6ee57116c6",
+      "Source/Runtime/Assets/Private/NativeAsset.cpp": "e0858ff5903faa199bdc483ab280a20e179041a544a65593cfcdd68f5edf3596",
+      "Source/Runtime/Assets/Public/Hyperion/Assets/Assets.h": "5fb777129b6905cf28642a8a78e51fa264be9db592b39aacd2a674a5dcf0d840",
+      "Source/Runtime/Assets/Public/Hyperion/Assets/AssetService.h": "26f84208497267d560cd5e3929e62cd91956ed47a92efdedc4df716da7fbee1e",
+      "Source/Runtime/Assets/Public/Hyperion/Assets/NativeAsset.h": "722f82df21c072382736236bea0649a100057773285f6ea9a0ca05e82b34ddb0",
+      "Source/Runtime/Assets/Private/Adapters/Images.cpp": "06c1da49cc82cf6bbc16823bb46eb92e2a0024673e400d23216c70349eb1a359",
+      "Source/Runtime/AssetImport/Private/AssetImportInternal.h": "5ff2daed32d96515e561d560cc503ef63fbd3a86aadf8e7935cd2630c9aabbfd",
+      "Source/Runtime/AssetImport/Private/AssetImportProducts.cpp": "8eada0b27106967b0ba081c368b884061682c3acf99eb0c4b2ee8323eb721c0c",
+      "Source/Runtime/AssetImport/Private/AssetImportService.cpp": "e6f45cc5624adbe66cc80b48c9905a48aecf4388ba501c4f9086656dea092901",
+      "Source/Runtime/AssetImport/Private/AssetLibrary.cpp": "475cdb49a725806457546c938ec4ce09603c289421be7e181c472cbf4578ae66",
+      "Source/Runtime/AssetImport/Private/AssetPublication.cpp": "3434cfb7d55c0533a8d3b2d462162511b1611f781e3f8fa78fb7a64934f8e342",
+      "Source/Runtime/AssetImport/Private/AssetPublicationChecks.cpp": "7a2572a81cc7ec783976148a0c2ba2fcfb64fde2c6389caa7d55e8732f864ebe",
+      "Source/Runtime/AssetImport/Private/AssetPublicationGraph.cpp": "9de09ba22c30532d754989132232b78994ef61d974572dcec12fd9d2af90930e",
+      "Source/Runtime/AssetImport/Private/AssetPublicationInternal.h": "9268fa3beb90b97bd7ccb6ed1464a2aa10465162e9067e65c4642ffd39999472",
+      "Source/Runtime/AssetImport/Private/ModelImport.cpp": "7c9039a0e908fd2cf6d5385e13b6ec8dc84b8273a2177a8e818144b3a4391c6d",
+      "Source/Runtime/AssetImport/Public/Hyperion/AssetImport/AssetImportService.h": "63bc75c635121d9de404b211fefdf774146f19fb796b295d22a414a48202cc52",
+      "Source/Runtime/AssetImport/Public/Hyperion/AssetImport/GltfImport.h": "4e94c5ee54660f9100f0186b046d50939640467be5c9721ac19f59a18e73f589",
+      "Source/Runtime/AssetImport/Public/Hyperion/AssetImport/MaterialImport.h": "91f63a7b8162bc4071f4b8a7a30b5bf9b553650f56b9f5ed0fd03874940f8e0b",
+      "Source/Runtime/AssetImport/Public/Hyperion/AssetImport/ModelImport.h": "cd49a8a1fd2d0b9748942f2bca6f581a2d818e48c711aa8f8c171d49d5d113a4",
+      "Source/Runtime/AssetImport/Public/Hyperion/AssetImport/SceneImport.h": "d40acbf262b947b1db6e00cd727ec693307fa041ac4692a0cb27f1b71ddae893",
+      "Source/Runtime/AssetImport/Public/Hyperion/AssetImport/SkyImport.h": "e3ca8c1e390bbc7829370deb52cc357f4226ed58fbc95e342389627f26321176",
+      "Source/Runtime/AssetImport/Private/Adapters/AssetSourceJson.cpp": "8bff1336cca2a90141bebac60a34b85f34a3230913b987f5d4749a440376b376",
+      "Source/Runtime/AssetImport/Private/Adapters/GltfAccessors.cpp": "2583beb34ca437229bbe60ca0e85ace1f1841f1d06ecb87c0bfee0571480c045",
+      "Source/Runtime/AssetImport/Private/Adapters/GltfImport.cpp": "28ac8e4d40c5d7fe835113a3a75173fd649bdcbea81649873456c53d3662093f",
+      "Source/Runtime/AssetImport/Private/Adapters/GltfImportInternal.h": "115bc14e9e861206557fa114bf3bc019cfaacc2f79f527d1b08144e203905b2f",
+      "Source/Runtime/AssetImport/Private/Adapters/GltfMaterials.cpp": "e51c931adb9b4500a4ffde86e174e9d6ea01c8465f3428daf22e94b61ba40d53",
+      "Source/Runtime/AssetImport/Private/Adapters/GltfPrimitive.cpp": "982b029ad71f0036ca40519e6f8d0dd76e2dde5a333a274d15b6cf7f89636cd2",
+      "Source/Runtime/AssetImport/Private/Adapters/GltfPrimitives.cpp": "f8699eb612b9cd0f2500a1bbb30ffaf4a5aa21ee5237d847cf62d89a84cc0147",
+      "Source/Runtime/AssetImport/Private/Adapters/SceneJson.cpp": "c2927f4cb3a7f5ed1c058b6a915bd3966b9a8aeaf303d5cac75e417b3985aa81",
+      "Source/Runtime/AssetImport/Private/Adapters/SkyImport.cpp": "6c0fb8c92f2af4229cc5f4846276107289079de97385c5ca64845f8aef86a9dc",
+      "Source/Plugins/DebugUI/CMakeLists.txt": "6a4816a9e3da9e80fb471f25c24d65c0acac1b40ba97d6dc3203781be6846c25",
+      "Source/Plugins/ModelViewer/CMakeLists.txt": "bea0e2b7936c93f0eae03a887714437815313297f132671c11dc746cfce72f00",
+      "Source/Plugins/RenderDoc/CMakeLists.txt": "6e392bfa9fe45328ce57c7619dc455e39c2cfd6e60bacbc785773afd1c1a79b6",
+      "Source/Plugins/SceneViewer/CMakeLists.txt": "8cc4e0af184e2d297f0ebc96e99518ef2f98b0244511f16cd6b7aebce720d504",
+      "Source/Plugins/Triangle/CMakeLists.txt": "9ad4c6add90db99750501eacbc91fb14dd884f894fd4915a11cf511b1b6a13d9",
+      "Source/Plugins/Triangle/Private/TrianglePlugin.cpp": "ae466f35d193e299f5d9dda1dbfe28c22f8b529ed13c1bbd36b5e26cc67e80e7",
+      "Source/Plugins/Triangle/Public/Hyperion/Triangle/TrianglePlugin.h": "0a7ed33c25fe42fe6f81f8f0fc014f727b27100ebdaf74b25c964e801d8a4d54",
+      "Source/Plugins/SceneViewer/Private/SceneViewerControls.cpp": "7e9ec3e4fa69d7d15a1381ea5e447bf4839dc46f7a4288dea9b780754d8ed276",
+      "Source/Plugins/SceneViewer/Private/SceneViewerGui.cpp": "a123e5dd67e7da9b4b514c359b97148fe306d7bed63e92bd7a706927cb77f3d4",
+      "Source/Plugins/SceneViewer/Private/SceneViewerInternal.h": "cc1fe67ae935a008fd77116d3ed8c4fb8bd2c5d0d08227fb91cfa57429fd7f77",
+      "Source/Plugins/SceneViewer/Private/SceneViewerLights.cpp": "ee9e0454568d3816466b41efcbc5d0b7f44fbcac47fc98888f7eee2613f3fecd",
+      "Source/Plugins/SceneViewer/Private/SceneViewerNodes.cpp": "486e2463026e2681a17fcfc35765dc69d09b19857cf40f8f6896474e63a31643",
+      "Source/Plugins/SceneViewer/Private/SceneViewerPersistence.cpp": "b4178e042eafd50d3150feb84fe4eef8c50ddae88ccf2b5b31a0937b6eb1858d",
+      "Source/Plugins/SceneViewer/Private/SceneViewerPlugin.cpp": "67abcbef52ad08b71b6fd8ff044f927d43e6bd0da719c687c1be2e9c3c9855ce",
+      "Source/Plugins/SceneViewer/Private/SceneViewerSky.cpp": "4a23ce63d212a7c5163cc966d409a594a0b2df575e12004a9a6d193d1020cbad",
+      "Source/Plugins/SceneViewer/Private/SkyControls.cpp": "af3951494b6e21944232e66dcfe896ed31f79356a43ae982db71c1589b43bbbf",
+      "Source/Plugins/SceneViewer/Public/Hyperion/SceneViewer/SceneViewerPlugin.h": "86f0b1cb4f3286cf3a25faa8b007be76f0805a174d1a0a05e7ffc1027568cd6f",
+      "Source/Plugins/SceneViewer/Public/Hyperion/SceneViewer/SkyControls.h": "4c34b6e471d15f4d3314f2dc30f11c0a25b542ad3de51acfc792435a7f2bdaeb",
+      "Source/Plugins/RenderDoc/Private/RenderDocPlugin.cpp": "24d79f438a411d9d7793d320e40aabb867b7062b7046eacec1456d2a53d33a2f",
+      "Source/Plugins/RenderDoc/Public/Hyperion/RenderDoc/RenderDocPlugin.h": "d6a80eb8354c2b88ea68b4461fff8d6c92697e905e4de9c534fec4961be9a146",
+      "Source/Plugins/ModelViewer/Private/ModelViewerPlugin.cpp": "93c980bb0a4bec22bdd9dfb03647d8ab2450faacd0ec493a4aabdd9853da90e0",
+      "Source/Plugins/ModelViewer/Public/Hyperion/ModelViewer/ModelViewerPlugin.h": "5a5517a219a05a8e4715ca9cf6484211eaff10f749aafcbee4c14ed1970f96e9",
+      "Source/Plugins/DebugUI/Private/DebugUIPlugin.cpp": "d2a59799c41d5bdf86ce35098a169a7ab24fde8a77b8f31b52b86a966696a95f",
+      "Source/Plugins/DebugUI/Private/ProfilingControls.cpp": "a6bfde72ab9c0956535ceb34d3287f2e12444f6a62074efe28fe6b684a13c176",
+      "Source/Plugins/DebugUI/Public/Hyperion/DebugUI/DebugUIPlugin.h": "a2c489d3e825756c20a1e4754c4204630fae3964377043ea2941161eea7ed801",
+      "Source/Backends/D3D12/CMakeLists.txt": "b77b6479b9f4fe03ed645e75931bb1627fdfdc5a9a147bb315a79fc110ccf351",
+      "Source/Backends/D3D12/Private/D3D12BindingLayout.cpp": "8454f564758ee0510549a5f56166b14ebbef12b109df30cd1486cb067e87bfe0",
+      "Source/Backends/D3D12/Private/D3D12Bindings.cpp": "9383ffa7cf604b354b524b541ac81681123d922c7e3895eedf879ed1440330cd",
+      "Source/Backends/D3D12/Private/D3D12Bindings.h": "1d7958cf047f46af75a70acc4566b6bf884b2f5123dcbc2acce3c722d7796192",
+      "Source/Backends/D3D12/Private/D3D12Buffers.cpp": "750614e4d52b0a4aafa9b54fe5961502778620195fd02699440ffb248ef08cc0",
+      "Source/Backends/D3D12/Private/D3D12ColorTextures.cpp": "88a1933147750b45c398d1a0645b74955b2706103bf92a5493e374b72b5cae72",
+      "Source/Backends/D3D12/Private/D3D12ComputeResources.cpp": "589010a28400df8d4bf4c145d227ba47bafae6919133febae84f54ef6bf93d84",
+      "Source/Backends/D3D12/Private/D3D12DepthTextures.cpp": "8d411b978a1b8ec3fa81a8ee3a6ecf66d8d1a2bb0e5585c3846b8480a5456f29",
+      "Source/Backends/D3D12/Private/D3D12Descriptors.cpp": "c2aeda40666d90570ca607edc740428f1bac3928591dc357a6e7aebe63a69088",
+      "Source/Backends/D3D12/Private/D3D12Descriptors.h": "6e5b54e1220b7c5ea2806b6345470f742c29e87aaceafcfffc6690b52cacdfb7",
+      "Source/Backends/D3D12/Private/D3D12DeviceState.cpp": "e4d13679f9867816d0897787c6f6c87e1a18ac727234bed4afb8c1a9751898f3",
+      "Source/Backends/D3D12/Private/D3D12DeviceState.h": "ed29a583d772741af95c0a929cf9f510f7a2fd25972f677953cce5ebfc35d252",
+      "Source/Backends/D3D12/Private/D3D12Dispatch.cpp": "65e5102a78077b4fd29081274e869a831ea029749883aac0c6653ba6409f6d78",
+      "Source/Backends/D3D12/Private/D3D12Dispatch.h": "171d01db4395cb4d82349e40aa4d9519d077da5f74e129c78a283dfb9ce89054",
+      "Source/Backends/D3D12/Private/D3D12DrawPlan.cpp": "e3cb18c9b1fac6adbb5eb661ef79b45c0295ef85675b77c4b005eff72c53db3a",
+      "Source/Backends/D3D12/Private/D3D12Draws.cpp": "d9f00bf5999c22deff2ef37523ffc9ab70c1360dbffffbfba6efc0208973d703",
+      "Source/Backends/D3D12/Private/D3D12Draws.h": "f46a6e825babd9151335864991f9c11636aeea1e0f5a966396075c8059c36dc9",
+      "Source/Backends/D3D12/Private/D3D12FrameFailureTests.cpp": "a8bbc255da9b455280b1b8839d0fac8b0da50bfe6f09005b56ecc4dfcdc2ba6e",
+      "Source/Backends/D3D12/Private/D3D12GraphicsState.cpp": "5b8c94d185f0d32235f2c84defde6166ae38461392c07942f1c6cd953dfb80b4",
+      "Source/Backends/D3D12/Private/D3D12GraphicsState.h": "3fc54cb4f69aa45bad42a778a5db628999f68001856a87e9954f238bdb4ee6e5",
+      "Source/Backends/D3D12/Private/D3D12PassAttachments.cpp": "7536f750b84dc81d3a61c0f8e7ee35ee1818d17f2e6ad32b5cf1744ec2db8556",
+      "Source/Backends/D3D12/Private/D3D12PassAttachments.h": "4a60fd1aa3be445c77da9fd39bc70a96e88fffc6d8bc039a2103c105397fe042",
+      "Source/Backends/D3D12/Private/D3D12PassTimings.cpp": "b0e2679fa8696959e138c40a30ac8a4e66085f4f58ea1196ad5f02f676092235",
+      "Source/Backends/D3D12/Private/D3D12PassTimings.h": "d4d083f24b718726cc0567fd518a76c009222ea2fc89bcf1f07d6c34334cb531",
+      "Source/Backends/D3D12/Private/D3D12PipelineValidation.cpp": "5a9120610c12a2c8401230f0cc258bd50927171410b46d23aff9e9704186391f",
+      "Source/Backends/D3D12/Private/D3D12Profiling.cpp": "af086ef57aacc6168d2f80bb12d1532c48494c8ba2f0b8f25f1c30c7fa49653d",
+      "Source/Backends/D3D12/Private/D3D12Profiling.h": "3313b65ba07367a8f70e42c90c1cf1337b2369455c78056611ed0dceaa96c76c",
+      "Source/Backends/D3D12/Private/D3D12ResourceAccess.cpp": "45a0cf47215a908840410b7c36f6d1c5a05316f95bbc248d25a4dd451e79c4e0",
+      "Source/Backends/D3D12/Private/D3D12ResourceReadback.cpp": "f275de4c8e676552eb4446f75e13eb0d918504247f1a73460e7af0985b5a8415",
+      "Source/Backends/D3D12/Private/D3D12Resources.h": "4a6734479b03780b6fa88668baa013e570e3a8b67a3d603f4595f1ca649dc6d5",
+      "Source/Backends/D3D12/Private/D3D12RHIBackend.cpp": "6db186a490003561ff6cc6e9f3b5103cd82053169a40da3004596ea10bdf327c",
+      "Source/Backends/D3D12/Private/D3D12RHIDevice.cpp": "e6807010db9100faedb8d9766161cff50a765518638c32f18582c22aecf0c300",
+      "Source/Backends/D3D12/Private/D3D12RHIDevice.h": "317bc52f7a5b3150c988f71f4798f135644a849316a772b67c0a117609b6aeae",
+      "Source/Backends/D3D12/Private/D3D12RHISwapchain.cpp": "c6ef22efde154608d26d4cda6686debfced2165e0792933bfc57eb46ab7a6764",
+      "Source/Backends/D3D12/Private/D3D12RHISwapchain.h": "364e545bc34f7e533f15e8c3792f5bb18d0a61ec9dc79a18d6041883f49d4c93",
+      "Source/Backends/D3D12/Private/D3D12Uploads.cpp": "62320b6518a4e4678212a53bf44841a567205f5e082ce268e2d771078815a457",
+      "Source/Backends/D3D12/Private/D3D12Utilities.h": "4a07f09ae9862b94c994f8d82cd93401e0d2d3bb1f8e90f7aabf8b1c677f460f",
+      "Source/Backends/D3D12/Public/Hyperion/D3D12/D3D12RHIBackend.h": "43f4c4cfebd0f8d9f4a5e82d4c54fb0ed304003f36241263f04457be0de03bc7",
+      "Source/Applications/AssetTool/CMakeLists.txt": "a89923e98f6dc819779b811e01606f7ac9ec4911bf7a72b21df42a52c3079482",
+      "Source/Applications/Editor/CMakeLists.txt": "a62baf4eb5de0bffe03a0a08808ec34c745bd9215f24d48b39f7a56e5c255994",
+      "Source/Applications/Resources/Hyperion.ico": "5c3f37f92d169b74b01d20431c773fad8ea7683279b4972fccc61ba26bec0772",
+      "Source/Applications/Resources/Hyperion.png": "8e787b24719fbfb91743f7fe126dec719a47faf04d80ca252b8efa42e4f47c06",
+      "Source/Applications/Resources/Hyperion.rc": "222af2abbfcf99286bbac06e4587d8f43877fa5a2f3615a010210039aceb0c87",
+      "Source/Applications/Resources/README.md": "4039dea8b451b36e41615e5acb3d19b97df17840ae7b5f64743e9df76a92d6ea",
+      "Source/Applications/Viewer/CMakeLists.txt": "ab428878e4532a4cb4859802a519606d7862118f52fbc8787dc3e8f34509ab32",
+      "Source/Applications/Viewer/Private/Main.cpp": "862618741a4cfab0d844b0c2c56a920f241c9baea7b72b43b4698f80413b724b",
+      "Source/Applications/Viewer/Private/Viewer.manifest": "ae18e973ee276ee777cf40fa0ccf4c73e23ec0280d3abd4bca39f205145ebf9a",
+      "Source/Applications/Viewer/Private/ViewerApplication.cpp": "464bd893af68c5a6975031602b57d09052717a44a1c02c275f07cf9816d1ab63",
+      "Source/Applications/Viewer/Private/ViewerApplication.h": "d83bbffe66680ada0dc58b6cbde2ec511570917c03853139ec3238050d8293bd",
+      "Source/Applications/Viewer/Private/ViewerBenchmark.cpp": "9484aa85b0364572310a4823f6e9a917e49a3c19bfcd3a0598fee207d37a9236",
+      "Source/Applications/Viewer/Private/ViewerCapture.cpp": "60e4905c5d1284e9fd359f9cd7a32591c7852b843a42e48cca0d5a4f2a2fd61f",
+      "Source/Applications/Viewer/Private/ViewerCaptureScope.h": "a3159b3d533765b48a8d1d07a467eaf9ae9657fe4012726b843dff0580ea480f",
+      "Source/Applications/Viewer/Private/ViewerContactAcceptance.cpp": "15f5717fc49feb0278725dac99e0464746477bc371700a602b3fa2eacb992fd6",
+      "Source/Applications/Viewer/Private/ViewerFrame.cpp": "444abc54321d8fef14a0f0d8199bca48a7b15c1100f0e119a8aac8a45fa5ee18",
+      "Source/Applications/Viewer/Private/ViewerFramePipeline.cpp": "d89466d108546ac367d25ef4218c723805f87dd0d15ce3755c29b885488bd7f5",
+      "Source/Applications/Viewer/Private/ViewerOptions.cpp": "046160a39ef76b69a5fe33f74705d6b8f0f75543dd40efbe0616e820bcb673ef",
+      "Source/Applications/Viewer/Private/ViewerOptions.h": "2850020c8d236340f77f70570db2df636698e6682e3d61320aa6c961d68814aa",
+      "Source/Applications/Viewer/Private/ViewerOutput.cpp": "60b397fcecacb9fecc9c845b6fc658f6216593388ace711d495a6940eb68f231",
+      "Source/Applications/Viewer/Private/ViewerProfiling.cpp": "7f9b141cb4d4a8692425eaca1a2310fd1d5f4bcd80a2f0692845ce2904c5a223",
+      "Source/Applications/Viewer/Private/ViewerShadows.cpp": "d2f25429c82843e23790a03a8b7b3c9769c4112c606442f18e3338abcd8a7b4e",
+      "Source/Applications/Editor/Private/Editor.manifest": "ae18e973ee276ee777cf40fa0ccf4c73e23ec0280d3abd4bca39f205145ebf9a",
+      "Source/Applications/Editor/Private/EditorAcceptance.cpp": "b451020d9dbde677fe83cb6c7014576a6c4c401ea4c254d5781b57afb6e00b9d",
+      "Source/Applications/Editor/Private/EditorApplication.cpp": "52d85a54797eccd2277cee394d133c3ce59968eacd13cc29f48a2e8962850085",
+      "Source/Applications/Editor/Private/EditorApplication.h": "3fc089e55b31513cf0dbeebe7ef6ab4d131bc633e0032654f34ad3b162e81700",
+      "Source/Applications/Editor/Private/EditorBenchmark.cpp": "41e49d422ae3985c3083c507e2ceebafbbe5171d16eff3ee4c6872ca507dbb32",
+      "Source/Applications/Editor/Private/EditorDocument.cpp": "36552082804939cb63a7d8b61a0ea0e3598deaf7a87393663de3f6bfb57ab7d5",
+      "Source/Applications/Editor/Private/EditorDocumentAcceptance.cpp": "95530f7e7d290a1f36ff84d034d6aa7c6a93cc149371ac513973a3c2e1548979",
+      "Source/Applications/Editor/Private/EditorFrame.cpp": "05e9a5f83d418fad006090f5c4383ede13567e0396cb5c6f272e56259ba1e336",
+      "Source/Applications/Editor/Private/EditorInspector.cpp": "374ac9daa7fb9936a279a42b3a93cafc44f50677582102c2fde285c7cf85778d",
+      "Source/Applications/Editor/Private/EditorPanels.cpp": "b0502de0f3074ddeb448c57ff5d313ab60ad403876a609bf605ca581446984f1",
+      "Source/Applications/Editor/Private/EditorTransformAcceptance.cpp": "d7d45b2d05cdc935a7a4f792b5e02faa5dc2e0ed9e7dbbc484f2b25996e054f8",
+      "Source/Applications/Editor/Private/Main.cpp": "744e972bbd12bd2d08f4c9178c8b6b02b1d1709365f16fdaf9f424b1342afdb2",
+      "Source/Applications/AssetTool/Private/AssetCommands.cpp": "8af25b840398c0af39e0780ffedf98de324eec8cc3a5c2345087e73a82db1d22",
+      "Source/Applications/AssetTool/Private/AssetCommands.h": "79357035e410e627033dd456e74e39a996749fd823bf1e16f54749e1431d403e",
+      "Source/Applications/AssetTool/Private/AssetTool.manifest": "ae18e973ee276ee777cf40fa0ccf4c73e23ec0280d3abd4bca39f205145ebf9a",
+      "Source/Applications/AssetTool/Private/Main.cpp": "10d5744f4f71c3cedf34b10334f6451a673e59ae35366c3898eb614a57ffc09a",
+      "Source/Applications/AssetTool/Private/Adapters/ProcessStatistics.cpp": "3fde30a48788092039acc9ea828563df9b2d7f7204d5e09ab1174265a1f2b260",
+      "Source/Applications/AssetTool/Private/Adapters/ProcessStatistics.h": "6d628d000855f09aad4056c83781f7503c7a4c379798267cb8be4be4c437e829",
+      "tools/BatchPlannerComparison.py": "c3f94adafd29e4f089864ac11a438156476e5114abab83cc5385d40f19431527",
+      "tools/Bootstrap.py": "df152afbdb232477e142ef908e7504861482f70d95db021623d7ab48a370669e",
+      "tools/Build.ps1": "2f5eb0366b8197881ba510463ddacfa506945df8bf1a4aca9522195cb455e01b",
+      "tools/BuildNativeFixtures.py": "39b0cf1ed765ef1f5b54a0c530a3132934cc02a282b2be3b6fec8bfbb573ed1e",
+      "tools/BuildProfilingTools.ps1": "3ddd40ba8128257e83cf18355449d40a9b1e0178d6eb798b5e6d0cdc2f5799f6",
+      "tools/CheckBoundaries.py": "75f1b8aa5787c90a2ef4f7ca77793582bf76054b2340982a5b5c9ebd8a5c766b",
+      "tools/CheckStyle.py": "690e644689d66960ec3b72f985b2dcc3c6e834b3d813bd5b256933ba6cc1a3d1",
+      "tools/ComponentEditorBenchmark.py": "c25afac4cec60866402f979ef217f12ff38d540b88bcafdfa852177d5b8669b5",
+      "tools/CpuSubmissionBenchmark.py": "9cb1bd43cfe3412ebe67d00ef1e27ad049a958a97848e5922970724b681268dd",
+      "tools/GenerateModelFixtures.py": "a75926fcc08cd2ff4935f21f10b36d0de004f7457253ae4717b15c680f2fb61b",
+      "tools/GenerateShadowFixtures.py": "a6d9b6ccb8e1e16f564ec0995dca9c29f9809270cf21ee37ee3912164addc463",
+      "tools/GenerateSolution.ps1": "3beb1f912c5c627b51996867dc9432dcb196b0c961d6cf2340ee6aa56ec010fa",
+      "tools/InstanceBenchmark.py": "7d7c7493c4a23fa626c0a3709d5b2d2cee40a3e9586c809931a70f0221bb1135",
+      "tools/MeasureAssets.py": "c71914ca8e312ba7d026a0ce42ce6222254dffd36ac9740ab7e966695f6d6494",
+      "tools/MeasureDeferred.py": "b5244d53f043a2230c3ad8d4102197985e0a75d16a8874f1dfef9c3a1fd02430",
+      "tools/MeasureShadows.py": "3b22cbf733e040be879f82834852ebb1b4f13698fbad44a9ab4cd28a50ec37b8",
+      "tools/PrepareContent.py": "0a36c6fe4a1198b897a04f4d15bbabb0a53c4ff4c5298449b96741b39d0a3b42",
+      "tools/PrepareTestSources.py": "2b06df4def7bdab173a97b8c75fc7633260f6c48bb6d4bf18f44b5650f8cf9a1",
+      "tools/Profile.py": "3b5e4b4146012ab235c55a6a18ca76753a571b37d9ed0135c44406305db75276",
+      "tools/VisualStudio.py": "4f1c5263d8fd4daa4a9fe730da3dcec470ba762b3fea0f8f20fe6ed7367e2ea1",
+      "cmake/Dependencies.cmake": "60a057525717be4030107c609d54ea23c99f4659996dd9897abf43cf146e82c3",
+      "cmake/Modules.cmake": "da690016f8e113768bc6bce0520c515a834b8099cdc60237cb71ca5a0a59278b",
+      "cmake/NativeContent.cmake": "4217d7e39183851ba5bd2b4e6699c63fa26a4004d8b2f87409e8f71ddacca21b",
+      "cmake/ViewerContent.cmake": "858ad7646606ad0bc3038bedf59dbc409fd56bc68d88e7783dad8ebbcd632e80",
+      "cmake/VisualStudio.cmake": "27f5aa4bd7e7d8f58f48265e5164bb911e927b65beb2c381555489452b2592ad",
+      "cmake/ProfilingTools/CMakeLists.txt": "5ca121f07e515ffb08a0e040a13effe452f8963123fc28342de0bc93ebaa0841",
+      "experiments/Model.json": "12392a6c73f057c90aa61118445031d92f24dca3b2d37bdaef3ef57817adcbfa",
+      "experiments/Scene.json": "fc77941f0c22a3430e263b9cfa1d085a433a3ab3c9ad2aa8409b20c70b3692ba",
+      "experiments/Shadows.json": "099680918e9d822d24340cb1584b3a4201bafb328c52468ece22e9aa1b43b64a",
+      "experiments/Triangle.json": "1bc28ad83be5f5d61a215753478a98654b83df90d2782bc9a9c3cc9a5a568bfb",
+      "CMakeLists.txt": "c3292685762e59903376aa62242d44622cf0a0305dca2069b6c6af1bb4b775e1",
+      "CMakePresets.json": "5ca13e12b8a132596ba35d566e13f0cfab08f72cf5ac4323deb4e820cc12ee21",
+      "dependencies.lock.json": "92f2f7c76a66d206c786b768f20bd01fcf726e3b00d7bd38b4747f25c140418f"
+    },
+    "executables": {
+      "debug/editor": "358292fe8f3e7b56fbd9b465a01d5ba90cac10926c0278f93b1e35a41885be74",
+      "debug/viewer": "9b3e946dc9701b356c4796f8837bf796cb07b299905b99d3ea93faa22fb5ce7c",
+      "release/editor": "4f907ecb035ec6b20cd8559d046e7ddaaf5dcf8a1a36eaaf863e9934bd6101c7",
+      "release/viewer": "7fc2d57a2845e69904d6611be7c91fdfe37e903944b1acef47ead29ce3c0aad5"
+    },
+    "scene": {
+      "sha256": "94a5323f06762d5c04e27af99c22088bcb0290def469be9cebd1db5f0ebe7eca",
+      "bytes": 39472
+    },
+    "objects": 7,
+    "model_instances": 1
+  },
+  "historical_baseline": {
+    "release-editor-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 4.900323,
+          "median": 4.8302,
+          "min": 3.7057,
+          "max": 8.4075,
+          "p95": 5.8226,
+          "p99": 6.3799
+        },
+        "scene_ms": {
+          "mean": 0.004279,
+          "median": 0.004,
+          "min": 0.0024,
+          "max": 0.0103,
+          "p95": 0.0066,
+          "p99": 0.008
+        },
+        "gui_ms": {
+          "mean": 0.12012633333333333,
+          "median": 0.1175,
+          "min": 0.0774,
+          "max": 0.2381,
+          "p95": 0.1508,
+          "p99": 0.1839
+        },
+        "render_wait_ms": {
+          "mean": 4.775663777777778,
+          "median": 4.7073,
+          "min": 3.6053,
+          "max": 8.2828,
+          "p95": 5.6757,
+          "p99": 6.2795
+        },
+        "preparation_ms": {
+          "mean": 0.8047194444444444,
+          "median": 0.7779499999999999,
+          "min": 0.2463,
+          "max": 1.8595,
+          "p95": 1.3412,
+          "p99": 1.4897
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "load_ms": {
+          "mean": 1811.6613333333332,
+          "median": 1803.1616,
+          "min": 1789.3003,
+          "max": 1842.5221,
+          "p95": 1842.5221,
+          "p99": 1842.5221
+        },
+        "nodes": {
+          "mean": 7.0,
+          "median": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        4.934398666666667,
+        4.810419333333333,
+        4.956151
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 597023402.6666666,
+          "median": 596508672,
+          "min": 596492288,
+          "max": 598069248,
+          "p95": 598069248,
+          "p99": 598069248
+        },
+        "private_bytes": {
+          "mean": 1252469418.6666667,
+          "median": 1252937728,
+          "min": 1250586624,
+          "max": 1253883904,
+          "p95": 1253883904,
+          "p99": 1253883904
+        }
+      },
+      "executables_sha256": [
+        "f547314c9524b3fdbce5d5680ab84f527c313e974c71a018263e5226b20cbb87"
+      ]
+    },
+    "release-editor-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 7.082141666666667,
+          "median": 6.99465,
+          "min": 4.705,
+          "max": 9.8755,
+          "p95": 8.3203,
+          "p99": 8.8764
+        },
+        "scene_ms": {
+          "mean": 0.02824877777777778,
+          "median": 0.0274,
+          "min": 0.0064,
+          "max": 0.0672,
+          "p95": 0.0374,
+          "p99": 0.0437
+        },
+        "gui_ms": {
+          "mean": 0.13421766666666668,
+          "median": 0.1304,
+          "min": 0.0941,
+          "max": 0.2696,
+          "p95": 0.1739,
+          "p99": 0.2022
+        },
+        "render_wait_ms": {
+          "mean": 6.919374111111111,
+          "median": 6.83285,
+          "min": 4.5605,
+          "max": 9.6374,
+          "p95": 8.148,
+          "p99": 8.7044
+        },
+        "preparation_ms": {
+          "mean": 2.5452457777777777,
+          "median": 2.52365,
+          "min": 0.731,
+          "max": 4.8832,
+          "p95": 3.2344,
+          "p99": 3.5261
+        },
+        "material_ms": {
+          "mean": 0.036858888888888885,
+          "median": 0.0355,
+          "min": 0.0,
+          "max": 0.1136,
+          "p95": 0.0532,
+          "p99": 0.0706
+        },
+        "load_ms": {
+          "mean": 1816.7022333333334,
+          "median": 1827.0414,
+          "min": 1777.2201,
+          "max": 1845.8452,
+          "p95": 1845.8452,
+          "p99": 1845.8452
+        },
+        "nodes": {
+          "mean": 7.0,
+          "median": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        7.097179,
+        7.169182666666667,
+        6.980063333333334
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 598357333.3333334,
+          "median": 598564864,
+          "min": 597544960,
+          "max": 598962176,
+          "p95": 598962176,
+          "p99": 598962176
+        },
+        "private_bytes": {
+          "mean": 1309797034.6666667,
+          "median": 1321070592,
+          "min": 1254551552,
+          "max": 1353768960,
+          "p95": 1353768960,
+          "p99": 1353768960
+        }
+      },
+      "executables_sha256": [
+        "f547314c9524b3fdbce5d5680ab84f527c313e974c71a018263e5226b20cbb87"
+      ]
+    },
+    "release-viewer-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 5.099235,
+          "median": 4.9887,
+          "min": 4.2175,
+          "max": 12.0751,
+          "p95": 5.969,
+          "p99": 6.7503
+        },
+        "pipeline_prepare_ms": {
+          "mean": 0.6850844444444445,
+          "median": 0.6392,
+          "min": 0.3082,
+          "max": 1.9737,
+          "p95": 1.2836,
+          "p99": 1.5363
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.28142737777777777,
+          "median": 0.273312,
+          "min": 0.26384,
+          "max": 2.9808,
+          "p95": 0.281888,
+          "p99": 0.466048
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527332329.24444443,
+          "median": 527327232.0,
+          "min": 527327232.0,
+          "max": 527785984.0,
+          "p95": 527327232.0,
+          "p99": 527785984.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 8.0,
+          "median": 8.0,
+          "min": 8.0,
+          "max": 8.0,
+          "p95": 8.0,
+          "p99": 8.0
+        },
+        "contained_item_tests": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        }
+      },
+      "run_frame_means_ms": [
+        5.168508666666667,
+        5.087120666666666,
+        5.042075666666666
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 614457344,
+          "median": 614703104,
+          "min": 613666816,
+          "max": 615002112,
+          "p95": 615002112,
+          "p99": 615002112
+        },
+        "private_bytes": {
+          "mean": 1272375978.6666667,
+          "median": 1272467456,
+          "min": 1271873536,
+          "max": 1272786944,
+          "p95": 1272786944,
+          "p99": 1272786944
+        }
+      },
+      "executables_sha256": [
+        "663e334cd16060c3d7e7ba73dedb4b52c98c05b1fa63b6ba6f9ecd596f23eb89"
+      ]
+    },
+    "release-viewer-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 6.328474888888889,
+          "median": 6.19125,
+          "min": 4.7268,
+          "max": 21.9579,
+          "p95": 7.3888,
+          "p99": 8.1446
+        },
+        "pipeline_prepare_ms": {
+          "mean": 2.162200888888889,
+          "median": 2.14635,
+          "min": 0.4707,
+          "max": 3.4366,
+          "p95": 2.8306,
+          "p99": 3.1909
+        },
+        "material_ms": {
+          "mean": 0.17181,
+          "median": 0.1707,
+          "min": 0.0,
+          "max": 0.3089,
+          "p95": 0.2255,
+          "p99": 0.2636
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.28986293333333335,
+          "median": 0.282112,
+          "min": 0.267136,
+          "max": 2.603264,
+          "p95": 0.292416,
+          "p99": 0.475808
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527384685.2266667,
+          "median": 527392768.0,
+          "min": 527327232.0,
+          "max": 527523840.0,
+          "p95": 527458304.0,
+          "p99": 527523840.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 0.5966666666666667,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 8.0,
+          "p95": 2.0,
+          "p99": 3.0
+        },
+        "contained_item_tests": {
+          "mean": 350.2133333333333,
+          "median": 408.0,
+          "min": 0.0,
+          "max": 408.0,
+          "p95": 408.0,
+          "p99": 408.0
+        }
+      },
+      "run_frame_means_ms": [
+        6.334798,
+        6.389512666666667,
+        6.261114
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 614315349.3333334,
+          "median": 614055936,
+          "min": 613343232,
+          "max": 615546880,
+          "p95": 615546880,
+          "p99": 615546880
+        },
+        "private_bytes": {
+          "mean": 1274366634.6666667,
+          "median": 1274118144,
+          "min": 1272041472,
+          "max": 1276940288,
+          "p95": 1276940288,
+          "p99": 1276940288
+        }
+      },
+      "executables_sha256": [
+        "663e334cd16060c3d7e7ba73dedb4b52c98c05b1fa63b6ba6f9ecd596f23eb89"
+      ]
+    },
+    "debug-editor-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 12.077481333333333,
+          "median": 11.9195,
+          "min": 10.5926,
+          "max": 21.7455,
+          "p95": 13.5689,
+          "p99": 14.4871
+        },
+        "scene_ms": {
+          "mean": 0.045457444444444446,
+          "median": 0.0446,
+          "min": 0.024,
+          "max": 0.1012,
+          "p95": 0.0593,
+          "p99": 0.0719
+        },
+        "gui_ms": {
+          "mean": 0.5921971111111111,
+          "median": 0.56085,
+          "min": 0.5025,
+          "max": 1.7062,
+          "p95": 0.8485,
+          "p99": 0.975
+        },
+        "render_wait_ms": {
+          "mean": 11.435974666666667,
+          "median": 11.29365,
+          "min": 10.0276,
+          "max": 21.1601,
+          "p95": 12.8513,
+          "p99": 13.7528
+        },
+        "preparation_ms": {
+          "mean": 4.3011946666666665,
+          "median": 4.2578,
+          "min": 3.8031,
+          "max": 5.3801,
+          "p95": 4.8149,
+          "p99": 5.203
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "load_ms": {
+          "mean": 5577.3437,
+          "median": 5571.3212,
+          "min": 5534.4189,
+          "max": 5626.291,
+          "p95": 5626.291,
+          "p99": 5626.291
+        },
+        "nodes": {
+          "mean": 7.0,
+          "median": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        12.005605333333333,
+        12.238063,
+        11.988775666666667
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 677590357.3333334,
+          "median": 677208064,
+          "min": 677064704,
+          "max": 678498304,
+          "p95": 678498304,
+          "p99": 678498304
+        },
+        "private_bytes": {
+          "mean": 1358118912,
+          "median": 1339523072,
+          "min": 1336516608,
+          "max": 1398317056,
+          "p95": 1398317056,
+          "p99": 1398317056
+        }
+      },
+      "executables_sha256": [
+        "01555b837be6793bd9576e7c2e29756bb697820c16f613c6bfab7e98fae77c4d"
+      ]
+    },
+    "debug-editor-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 27.557061666666666,
+          "median": 27.8256,
+          "min": 11.6649,
+          "max": 34.1035,
+          "p95": 30.571,
+          "p99": 32.0872
+        },
+        "scene_ms": {
+          "mean": 0.21734533333333333,
+          "median": 0.2129,
+          "min": 0.0298,
+          "max": 0.3943,
+          "p95": 0.2546,
+          "p99": 0.3077
+        },
+        "gui_ms": {
+          "mean": 0.6110582222222222,
+          "median": 0.5739,
+          "min": 0.5282,
+          "max": 1.407,
+          "p95": 0.8551,
+          "p99": 0.9622
+        },
+        "render_wait_ms": {
+          "mean": 26.724194555555556,
+          "median": 27.003749999999997,
+          "min": 11.0365,
+          "max": 33.2842,
+          "p95": 29.6772,
+          "p99": 31.2658
+        },
+        "preparation_ms": {
+          "mean": 17.866165444444444,
+          "median": 18.2091,
+          "min": 4.1722,
+          "max": 23.8555,
+          "p95": 20.2106,
+          "p99": 21.379
+        },
+        "material_ms": {
+          "mean": 0.5471922222222222,
+          "median": 0.41085,
+          "min": 0.0,
+          "max": 1.7082,
+          "p95": 1.2481,
+          "p99": 1.4678
+        },
+        "load_ms": {
+          "mean": 5619.437666666667,
+          "median": 5597.6705,
+          "min": 5568.3486,
+          "max": 5692.2939,
+          "p95": 5692.2939,
+          "p99": 5692.2939
+        },
+        "nodes": {
+          "mean": 7.0,
+          "median": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        27.426479,
+        27.614925666666668,
+        27.629780333333333
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 678619818.6666666,
+          "median": 679116800,
+          "min": 677466112,
+          "max": 679276544,
+          "p95": 679276544,
+          "p99": 679276544
+        },
+        "private_bytes": {
+          "mean": 1368808106.6666667,
+          "median": 1399103488,
+          "min": 1305051136,
+          "max": 1402269696,
+          "p95": 1402269696,
+          "p99": 1402269696
+        }
+      },
+      "executables_sha256": [
+        "01555b837be6793bd9576e7c2e29756bb697820c16f613c6bfab7e98fae77c4d"
+      ]
+    },
+    "debug-viewer-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 14.830027666666666,
+          "median": 14.67295,
+          "min": 13.1514,
+          "max": 22.7193,
+          "p95": 16.4696,
+          "p99": 18.3039
+        },
+        "pipeline_prepare_ms": {
+          "mean": 12.15981588888889,
+          "median": 12.22365,
+          "min": 8.955,
+          "max": 19.1042,
+          "p95": 13.9788,
+          "p99": 15.1371
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.3066483911111111,
+          "median": 0.288224,
+          "min": 0.275648,
+          "max": 1.497728,
+          "p95": 0.429024,
+          "p99": 0.547648
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527327232.0,
+          "median": 527327232.0,
+          "min": 527327232.0,
+          "max": 527327232.0,
+          "p95": 527327232.0,
+          "p99": 527327232.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 8.0,
+          "median": 8.0,
+          "min": 8.0,
+          "max": 8.0,
+          "p95": 8.0,
+          "p99": 8.0
+        },
+        "contained_item_tests": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        }
+      },
+      "run_frame_means_ms": [
+        14.807356,
+        14.783388333333333,
+        14.899338666666667
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 708497408,
+          "median": 708673536,
+          "min": 707723264,
+          "max": 709095424,
+          "p95": 709095424,
+          "p99": 709095424
+        },
+        "private_bytes": {
+          "mean": 1382808234.6666667,
+          "median": 1381105664,
+          "min": 1367871488,
+          "max": 1399447552,
+          "p95": 1399447552,
+          "p99": 1399447552
+        }
+      },
+      "executables_sha256": [
+        "128f49c9c2e5deb0ebfdf6570075983e8afc422dfde41d4c203bfcd28814547c"
+      ]
+    },
+    "debug-viewer-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 24.627899,
+          "median": 24.849249999999998,
+          "min": 12.6942,
+          "max": 30.9359,
+          "p95": 27.28,
+          "p99": 29.435
+        },
+        "pipeline_prepare_ms": {
+          "mean": 27.673485222222222,
+          "median": 27.854100000000003,
+          "min": 10.3138,
+          "max": 37.2112,
+          "p95": 31.7043,
+          "p99": 33.2013
+        },
+        "material_ms": {
+          "mean": 2.9454464444444444,
+          "median": 3.07435,
+          "min": 0.0,
+          "max": 5.2031,
+          "p95": 3.6148,
+          "p99": 4.0406
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.30724579555555553,
+          "median": 0.289088,
+          "min": 0.278048,
+          "max": 0.741536,
+          "p95": 0.433696,
+          "p99": 0.51504
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527384321.1377778,
+          "median": 527392768.0,
+          "min": 527327232.0,
+          "max": 527523840.0,
+          "p95": 527458304.0,
+          "p99": 527458304.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 0.5966666666666667,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 8.0,
+          "p95": 2.0,
+          "p99": 3.0
+        },
+        "contained_item_tests": {
+          "mean": 350.2133333333333,
+          "median": 408.0,
+          "min": 0.0,
+          "max": 408.0,
+          "p95": 408.0,
+          "p99": 408.0
+        }
+      },
+      "run_frame_means_ms": [
+        24.576691666666665,
+        24.72566266666667,
+        24.581342666666668
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 710541312,
+          "median": 710471680,
+          "min": 710201344,
+          "max": 710950912,
+          "p95": 710950912,
+          "p99": 710950912
+        },
+        "private_bytes": {
+          "mean": 1346615978.6666667,
+          "median": 1337171968,
+          "min": 1333628928,
+          "max": 1369047040,
+          "p95": 1369047040,
+          "p99": 1369047040
+        }
+      },
+      "executables_sha256": [
+        "128f49c9c2e5deb0ebfdf6570075983e8afc422dfde41d4c203bfcd28814547c"
+      ]
+    }
+  },
+  "historical_expanded": {
+    "debug-viewer-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 24.95265322222222,
+          "median": 25.090200000000003,
+          "min": 13.9359,
+          "max": 37.9528,
+          "p95": 27.7099,
+          "p99": 29.8357
+        },
+        "pipeline_prepare_ms": {
+          "mean": 29.41293622222222,
+          "median": 29.842750000000002,
+          "min": 11.2979,
+          "max": 43.3243,
+          "p95": 33.1373,
+          "p99": 34.6335
+        },
+        "material_ms": {
+          "mean": 2.929822222222222,
+          "median": 3.0267999999999997,
+          "min": 0.0,
+          "max": 5.6177,
+          "p95": 3.5507,
+          "p99": 3.8652
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.30659644444444445,
+          "median": 0.288144,
+          "min": 0.277216,
+          "max": 2.454784,
+          "p95": 0.431296,
+          "p99": 0.473536
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527385340.58666664,
+          "median": 527392768.0,
+          "min": 527327232.0,
+          "max": 527523840.0,
+          "p95": 527458304.0,
+          "p99": 527523840.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 0.5966666666666667,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 8.0,
+          "p95": 2.0,
+          "p99": 3.0
+        },
+        "contained_item_tests": {
+          "mean": 350.2133333333333,
+          "median": 408.0,
+          "min": 0.0,
+          "max": 408.0,
+          "p95": 408.0,
+          "p99": 408.0
+        }
+      },
+      "run_frame_means_ms": [
+        25.249911,
+        24.983970333333332,
+        24.624078333333333
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 713572352,
+          "median": 712687616,
+          "min": 712491008,
+          "max": 715538432,
+          "p95": 715538432,
+          "p99": 715538432
+        },
+        "private_bytes": {
+          "mean": 1390706688,
+          "median": 1416925184,
+          "min": 1337442304,
+          "max": 1417752576,
+          "p95": 1417752576,
+          "p99": 1417752576
+        }
+      },
+      "executables_sha256": [
+        "bc6ecd69a082180508e54e71aace1317a0ae5388d7d6bbd102f43a6c5b465d36"
+      ]
+    },
+    "release-editor-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 4.4218618888888885,
+          "median": 4.3572500000000005,
+          "min": 3.4338,
+          "max": 13.5492,
+          "p95": 5.2264,
+          "p99": 5.8122
+        },
+        "scene_ms": {
+          "mean": 0.017613888888888887,
+          "median": 0.0163,
+          "min": 0.0095,
+          "max": 0.055,
+          "p95": 0.0291,
+          "p99": 0.0342
+        },
+        "gui_ms": {
+          "mean": 0.17718966666666666,
+          "median": 0.17295,
+          "min": 0.1212,
+          "max": 0.3236,
+          "p95": 0.2342,
+          "p99": 0.2612
+        },
+        "render_wait_ms": {
+          "mean": 4.226749444444445,
+          "median": 4.15195,
+          "min": 3.2579,
+          "max": 13.3498,
+          "p95": 5.0065,
+          "p99": 5.5758
+        },
+        "preparation_ms": {
+          "mean": 0.6033041111111112,
+          "median": 0.59395,
+          "min": 0.2269,
+          "max": 8.9995,
+          "p95": 0.7949,
+          "p99": 1.0354
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "load_ms": {
+          "mean": 1779.2065333333335,
+          "median": 1782.7651,
+          "min": 1743.4337,
+          "max": 1811.4208,
+          "p95": 1811.4208,
+          "p99": 1811.4208
+        },
+        "nodes": {
+          "mean": 111.0,
+          "median": 111.0,
+          "min": 111.0,
+          "max": 111.0,
+          "p95": 111.0,
+          "p99": 111.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        4.517758333333333,
+        4.458791333333333,
+        4.289036
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 599273472,
+          "median": 599179264,
+          "min": 598036480,
+          "max": 600604672,
+          "p95": 600604672,
+          "p99": 600604672
+        },
+        "private_bytes": {
+          "mean": 1276547072,
+          "median": 1256808448,
+          "min": 1252966400,
+          "max": 1319866368,
+          "p95": 1319866368,
+          "p99": 1319866368
+        }
+      },
+      "executables_sha256": [
+        "f5f3481e14867aec56d4fa124102d5ad2630a57a17088d88b3eadd5e2d0d3d9c"
+      ]
+    },
+    "release-editor-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 6.698464333333333,
+          "median": 6.6444,
+          "min": 4.1565,
+          "max": 12.914,
+          "p95": 7.7891,
+          "p99": 8.6551
+        },
+        "scene_ms": {
+          "mean": 0.026109777777777777,
+          "median": 0.0254,
+          "min": 0.0116,
+          "max": 0.0597,
+          "p95": 0.0373,
+          "p99": 0.045
+        },
+        "gui_ms": {
+          "mean": 0.20334977777777777,
+          "median": 0.1988,
+          "min": 0.1209,
+          "max": 0.3525,
+          "p95": 0.2618,
+          "p99": 0.2963
+        },
+        "render_wait_ms": {
+          "mean": 6.468604444444445,
+          "median": 6.4153,
+          "min": 3.9726,
+          "max": 12.6714,
+          "p95": 7.554,
+          "p99": 8.4253
+        },
+        "preparation_ms": {
+          "mean": 2.373559111111111,
+          "median": 2.3464,
+          "min": 0.5519,
+          "max": 8.3576,
+          "p95": 2.9294,
+          "p99": 3.3151
+        },
+        "material_ms": {
+          "mean": 0.03524555555555556,
+          "median": 0.034,
+          "min": 0.0,
+          "max": 0.395,
+          "p95": 0.0463,
+          "p99": 0.0605
+        },
+        "load_ms": {
+          "mean": 1805.0949,
+          "median": 1804.7818,
+          "min": 1782.039,
+          "max": 1828.4639,
+          "p95": 1828.4639,
+          "p99": 1828.4639
+        },
+        "nodes": {
+          "mean": 111.0,
+          "median": 111.0,
+          "min": 111.0,
+          "max": 111.0,
+          "p95": 111.0,
+          "p99": 111.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        6.634308,
+        6.746721,
+        6.714364
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 601609557.3333334,
+          "median": 601993216,
+          "min": 600629248,
+          "max": 602206208,
+          "p95": 602206208,
+          "p99": 602206208
+        },
+        "private_bytes": {
+          "mean": 1279886677.3333333,
+          "median": 1257574400,
+          "min": 1257242624,
+          "max": 1324843008,
+          "p95": 1324843008,
+          "p99": 1324843008
+        }
+      },
+      "executables_sha256": [
+        "f5f3481e14867aec56d4fa124102d5ad2630a57a17088d88b3eadd5e2d0d3d9c"
+      ]
+    },
+    "release-viewer-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 5.039816555555555,
+          "median": 4.96095,
+          "min": 4.3139,
+          "max": 8.3811,
+          "p95": 5.84,
+          "p99": 6.2871
+        },
+        "pipeline_prepare_ms": {
+          "mean": 0.6140816666666666,
+          "median": 0.6004,
+          "min": 0.3143,
+          "max": 1.9378,
+          "p95": 0.9578,
+          "p99": 1.1164
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.28184156444444447,
+          "median": 0.276064,
+          "min": 0.265472,
+          "max": 2.350464,
+          "p95": 0.281184,
+          "p99": 0.44832
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527332329.24444443,
+          "median": 527327232.0,
+          "min": 527327232.0,
+          "max": 527785984.0,
+          "p95": 527327232.0,
+          "p99": 527785984.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 8.0,
+          "median": 8.0,
+          "min": 8.0,
+          "max": 8.0,
+          "p95": 8.0,
+          "p99": 8.0
+        },
+        "contained_item_tests": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        }
+      },
+      "run_frame_means_ms": [
+        5.094261,
+        5.042855666666667,
+        4.982333
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 618752682.6666666,
+          "median": 618921984,
+          "min": 618172416,
+          "max": 619163648,
+          "p95": 619163648,
+          "p99": 619163648
+        },
+        "private_bytes": {
+          "mean": 1330211498.6666667,
+          "median": 1315610624,
+          "min": 1310924800,
+          "max": 1364099072,
+          "p95": 1364099072,
+          "p99": 1364099072
+        }
+      },
+      "executables_sha256": [
+        "281722aaab4b8c4cc7725faa8c58688909e925b97556c5f714aefb27ab51b0f1"
+      ]
+    },
+    "release-viewer-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 6.252800888888889,
+          "median": 6.1442499999999995,
+          "min": 4.2965,
+          "max": 14.618,
+          "p95": 7.2351,
+          "p99": 7.9129
+        },
+        "pipeline_prepare_ms": {
+          "mean": 2.2435062222222224,
+          "median": 2.22525,
+          "min": 0.3668,
+          "max": 3.5824,
+          "p95": 2.8444,
+          "p99": 3.1766
+        },
+        "material_ms": {
+          "mean": 0.17269344444444445,
+          "median": 0.17085,
+          "min": 0.0,
+          "max": 0.394,
+          "p95": 0.2294,
+          "p99": 0.2774
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.29123136,
+          "median": 0.284512,
+          "min": 0.269472,
+          "max": 1.734208,
+          "p95": 0.293056,
+          "p99": 0.475808
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527385923.1288889,
+          "median": 527392768.0,
+          "min": 527327232.0,
+          "max": 527785984.0,
+          "p95": 527458304.0,
+          "p99": 527523840.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 0.5966666666666667,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 8.0,
+          "p95": 2.0,
+          "p99": 3.0
+        },
+        "contained_item_tests": {
+          "mean": 350.2133333333333,
+          "median": 408.0,
+          "min": 0.0,
+          "max": 408.0,
+          "p95": 408.0,
+          "p99": 408.0
+        }
+      },
+      "run_frame_means_ms": [
+        6.224669333333333,
+        6.3407333333333336,
+        6.193
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 618056362.6666666,
+          "median": 618184704,
+          "min": 617791488,
+          "max": 618192896,
+          "p95": 618192896,
+          "p99": 618192896
+        },
+        "private_bytes": {
+          "mean": 1277896021.3333333,
+          "median": 1277235200,
+          "min": 1277206528,
+          "max": 1279246336,
+          "p95": 1279246336,
+          "p99": 1279246336
+        }
+      },
+      "executables_sha256": [
+        "281722aaab4b8c4cc7725faa8c58688909e925b97556c5f714aefb27ab51b0f1"
+      ]
+    },
+    "debug-editor-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 12.213315111111111,
+          "median": 12.0892,
+          "min": 10.9118,
+          "max": 16.4784,
+          "p95": 13.4488,
+          "p99": 14.2223
+        },
+        "scene_ms": {
+          "mean": 0.10102833333333333,
+          "median": 0.0994,
+          "min": 0.047,
+          "max": 0.1917,
+          "p95": 0.1374,
+          "p99": 0.1581
+        },
+        "gui_ms": {
+          "mean": 1.2838732222222222,
+          "median": 1.29805,
+          "min": 0.8465,
+          "max": 2.007,
+          "p95": 1.4737,
+          "p99": 1.5889
+        },
+        "render_wait_ms": {
+          "mean": 10.824139888888888,
+          "median": 10.70945,
+          "min": 9.5377,
+          "max": 15.1261,
+          "p95": 12.1296,
+          "p99": 12.8538
+        },
+        "preparation_ms": {
+          "mean": 4.319168333333334,
+          "median": 4.2738,
+          "min": 3.9417,
+          "max": 5.791,
+          "p95": 4.713,
+          "p99": 5.1312
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "load_ms": {
+          "mean": 5698.1128,
+          "median": 5690.8578,
+          "min": 5679.2981,
+          "max": 5724.1825,
+          "p95": 5724.1825,
+          "p99": 5724.1825
+        },
+        "nodes": {
+          "mean": 111.0,
+          "median": 111.0,
+          "min": 111.0,
+          "max": 111.0,
+          "p95": 111.0,
+          "p99": 111.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        12.227213,
+        12.217492333333333,
+        12.19524
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 680966826.6666666,
+          "median": 681238528,
+          "min": 679993344,
+          "max": 681668608,
+          "p95": 681668608,
+          "p99": 681668608
+        },
+        "private_bytes": {
+          "mean": 1349223765.3333333,
+          "median": 1336221696,
+          "min": 1308450816,
+          "max": 1402998784,
+          "p95": 1402998784,
+          "p99": 1402998784
+        }
+      },
+      "executables_sha256": [
+        "4289bf4da880cf46e73d74b85cafd85d8d2d813172bdf63c2a97860b1483fbe2"
+      ]
+    },
+    "debug-editor-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 28.26976677777778,
+          "median": 28.57475,
+          "min": 11.4075,
+          "max": 35.4721,
+          "p95": 30.994,
+          "p99": 32.5915
+        },
+        "scene_ms": {
+          "mean": 0.12470411111111111,
+          "median": 0.12145,
+          "min": 0.0885,
+          "max": 0.2381,
+          "p95": 0.1607,
+          "p99": 0.1796
+        },
+        "gui_ms": {
+          "mean": 1.2893693333333334,
+          "median": 1.29895,
+          "min": 0.8857,
+          "max": 1.7374,
+          "p95": 1.472,
+          "p99": 1.6172
+        },
+        "render_wait_ms": {
+          "mean": 26.850883,
+          "median": 27.1451,
+          "min": 9.9571,
+          "max": 34.1705,
+          "p95": 29.5049,
+          "p99": 31.1954
+        },
+        "preparation_ms": {
+          "mean": 18.748503666666668,
+          "median": 19.15045,
+          "min": 4.0214,
+          "max": 24.3529,
+          "p95": 20.9304,
+          "p99": 21.9522
+        },
+        "material_ms": {
+          "mean": 0.5063202222222222,
+          "median": 0.3978,
+          "min": 0.0,
+          "max": 1.8275,
+          "p95": 1.1312,
+          "p99": 1.3805
+        },
+        "load_ms": {
+          "mean": 5764.983066666667,
+          "median": 5784.0642,
+          "min": 5693.6229,
+          "max": 5817.2621,
+          "p95": 5817.2621,
+          "p99": 5817.2621
+        },
+        "nodes": {
+          "mean": 111.0,
+          "median": 111.0,
+          "min": 111.0,
+          "max": 111.0,
+          "p95": 111.0,
+          "p99": 111.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "median": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        }
+      },
+      "run_frame_means_ms": [
+        28.304252333333334,
+        28.259563333333332,
+        28.245484666666666
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 683302912,
+          "median": 683732992,
+          "min": 682303488,
+          "max": 683872256,
+          "p95": 683872256,
+          "p99": 683872256
+        },
+        "private_bytes": {
+          "mean": 1382334464,
+          "median": 1404432384,
+          "min": 1337290752,
+          "max": 1405280256,
+          "p95": 1405280256,
+          "p99": 1405280256
+        }
+      },
+      "executables_sha256": [
+        "4289bf4da880cf46e73d74b85cafd85d8d2d813172bdf63c2a97860b1483fbe2"
+      ]
+    },
+    "debug-viewer-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 15.20555188888889,
+          "median": 15.132449999999999,
+          "min": 13.6028,
+          "max": 22.7813,
+          "p95": 16.3581,
+          "p99": 17.6119
+        },
+        "pipeline_prepare_ms": {
+          "mean": 13.319758444444444,
+          "median": 13.3718,
+          "min": 8.8233,
+          "max": 16.2748,
+          "p95": 14.7653,
+          "p99": 15.5246
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.30030968888888887,
+          "median": 0.287408,
+          "min": 0.277888,
+          "max": 1.527488,
+          "p95": 0.424352,
+          "p99": 0.478336
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "median": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "shadow_items": {
+          "mean": 404.0,
+          "median": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "failed_items": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "median": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_payload_bytes": {
+          "mean": 67108864.0,
+          "median": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527327232.0,
+          "median": 527327232.0,
+          "min": 527327232.0,
+          "max": 527327232.0,
+          "p95": 527327232.0,
+          "p99": 527327232.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "median": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "batch_cached_inputs": {
+          "mean": 483.0,
+          "median": 483.0,
+          "min": 483.0,
+          "max": 483.0,
+          "p95": 483.0,
+          "p99": 483.0
+        },
+        "collection_reuses": {
+          "mean": 8.0,
+          "median": 8.0,
+          "min": 8.0,
+          "max": 8.0,
+          "p95": 8.0,
+          "p99": 8.0
+        },
+        "contained_item_tests": {
+          "mean": 0.0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        }
+      },
+      "run_frame_means_ms": [
+        15.184373,
+        15.226066333333334,
+        15.206216333333334
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 712897877.3333334,
+          "median": 713117696,
+          "min": 711892992,
+          "max": 713682944,
+          "p95": 713682944,
+          "p99": 713682944
+        },
+        "private_bytes": {
+          "mean": 1375110485.3333333,
+          "median": 1370808320,
+          "min": 1338765312,
+          "max": 1415757824,
+          "p95": 1415757824,
+          "p99": 1415757824
+        }
+      },
+      "executables_sha256": [
+        "bc6ecd69a082180508e54e71aace1317a0ae5388d7d6bbd102f43a6c5b465d36"
+      ]
+    }
+  },
+  "final": {
+    "release-editor-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 5.9080377777777775,
+          "min": 3.5765,
+          "max": 13.95,
+          "p95": 7.3617,
+          "p99": 9.693
+        },
+        "scene_ms": {
+          "mean": 0.005290222222222222,
+          "min": 0.0033,
+          "max": 0.0306,
+          "p95": 0.0076,
+          "p99": 0.0108
+        },
+        "gui_ms": {
+          "mean": 0.14328455555555555,
+          "min": 0.0981,
+          "max": 0.6211,
+          "p95": 0.2063,
+          "p99": 0.2688
+        },
+        "render_wait_ms": {
+          "mean": 5.759140333333334,
+          "min": 3.4649,
+          "max": 13.7391,
+          "p95": 7.1767,
+          "p99": 9.5441
+        },
+        "load_ms": {
+          "mean": 2722.3225,
+          "min": 2642.0769,
+          "max": 2854.4865,
+          "p95": 2854.4865,
+          "p99": 2854.4865
+        },
+        "nodes": {
+          "mean": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "preparation_ms": {
+          "mean": 0.5989108888888889,
+          "min": 0.2242,
+          "max": 5.7411,
+          "p95": 1.0742,
+          "p99": 2.4423
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        }
+      },
+      "run_frame_means_ms": [
+        5.976589333333333,
+        5.9529586666666665,
+        5.794565333333333
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 600225109.3333334,
+          "min": 599801856,
+          "max": 600576000,
+          "p95": 600576000,
+          "p99": 600576000
+        },
+        "private_bytes": {
+          "mean": 1278827178.6666667,
+          "min": 1254514688,
+          "max": 1323048960,
+          "p95": 1323048960,
+          "p99": 1323048960
+        }
+      },
+      "executables_sha256": [
+        "4f907ecb035ec6b20cd8559d046e7ddaaf5dcf8a1a36eaaf863e9934bd6101c7"
+      ]
+    },
+    "release-editor-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 8.205182222222222,
+          "min": 5.1687,
+          "max": 30.7341,
+          "p95": 10.4133,
+          "p99": 11.6558
+        },
+        "scene_ms": {
+          "mean": 0.009294333333333333,
+          "min": 0.0048,
+          "max": 0.0999,
+          "p95": 0.0146,
+          "p99": 0.0239
+        },
+        "gui_ms": {
+          "mean": 0.165977,
+          "min": 0.1046,
+          "max": 0.5537,
+          "p95": 0.2411,
+          "p99": 0.3348
+        },
+        "render_wait_ms": {
+          "mean": 8.02957288888889,
+          "min": 4.9918,
+          "max": 30.4872,
+          "p95": 10.2306,
+          "p99": 11.4794
+        },
+        "load_ms": {
+          "mean": 2643.6232,
+          "min": 2586.1657,
+          "max": 2748.8057,
+          "p95": 2748.8057,
+          "p99": 2748.8057
+        },
+        "nodes": {
+          "mean": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "preparation_ms": {
+          "mean": 2.5548276666666667,
+          "min": 0.2944,
+          "max": 22.0077,
+          "p95": 3.5402,
+          "p99": 4.3407
+        },
+        "material_ms": {
+          "mean": 0.04298277777777778,
+          "min": 0.0,
+          "max": 0.6632,
+          "p95": 0.0625,
+          "p99": 0.0918
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        }
+      },
+      "run_frame_means_ms": [
+        8.177958,
+        8.309728666666667,
+        8.12786
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 600679765.3333334,
+          "min": 599875584,
+          "max": 601960448,
+          "p95": 601960448,
+          "p99": 601960448
+        },
+        "private_bytes": {
+          "mean": 1278674261.3333333,
+          "min": 1255526400,
+          "max": 1291083776,
+          "p95": 1291083776,
+          "p99": 1291083776
+        }
+      },
+      "executables_sha256": [
+        "4f907ecb035ec6b20cd8559d046e7ddaaf5dcf8a1a36eaaf863e9934bd6101c7"
+      ]
+    },
+    "release-viewer-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 6.226956222222222,
+          "min": 3.805,
+          "max": 15.6617,
+          "p95": 7.6859,
+          "p99": 8.5359
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "pipeline_prepare_ms": {
+          "mean": 0.7303404444444445,
+          "min": 0.3483,
+          "max": 3.3533,
+          "p95": 1.1983,
+          "p99": 1.5078
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527381262.7911111,
+          "min": 527327232.0,
+          "max": 527785984.0,
+          "p95": 527785984.0,
+          "p99": 527785984.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.2928989155555556,
+          "min": 0.262752,
+          "max": 4.034848,
+          "p95": 0.296512,
+          "p99": 0.515296
+        }
+      },
+      "run_frame_means_ms": [
+        6.33276,
+        6.376776666666666,
+        5.971332
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 617360042.6666666,
+          "min": 616263680,
+          "max": 619286528,
+          "p95": 619286528,
+          "p99": 619286528
+        },
+        "private_bytes": {
+          "mean": 1360991573.3333333,
+          "min": 1293455360,
+          "max": 1481437184,
+          "p95": 1481437184,
+          "p99": 1481437184
+        }
+      },
+      "executables_sha256": [
+        "7fc2d57a2845e69904d6611be7c91fdfe37e903944b1acef47ead29ce3c0aad5"
+      ]
+    },
+    "release-viewer-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 7.311202111111111,
+          "min": 4.4608,
+          "max": 26.1079,
+          "p95": 9.2822,
+          "p99": 11.0046
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "pipeline_prepare_ms": {
+          "mean": 2.3200813333333334,
+          "min": 0.4181,
+          "max": 21.9501,
+          "p95": 3.2493,
+          "p99": 3.8536
+        },
+        "material_ms": {
+          "mean": 0.20835722222222222,
+          "min": 0.0,
+          "max": 0.4212,
+          "p95": 0.2889,
+          "p99": 0.3501
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527409588.9066667,
+          "min": 527327232.0,
+          "max": 527982592.0,
+          "p95": 527785984.0,
+          "p99": 527851520.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.28542414222222223,
+          "min": 0.26208,
+          "max": 2.445568,
+          "p95": 0.293984,
+          "p99": 0.475456
+        }
+      },
+      "run_frame_means_ms": [
+        7.913044666666667,
+        6.90722,
+        7.113341666666667
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 619544576,
+          "min": 618373120,
+          "max": 620335104,
+          "p95": 620335104,
+          "p99": 620335104
+        },
+        "private_bytes": {
+          "mean": 1312858112,
+          "min": 1275826176,
+          "max": 1383358464,
+          "p95": 1383358464,
+          "p99": 1383358464
+        }
+      },
+      "executables_sha256": [
+        "7fc2d57a2845e69904d6611be7c91fdfe37e903944b1acef47ead29ce3c0aad5"
+      ]
+    },
+    "debug-editor-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 14.384480111111111,
+          "min": 11.0108,
+          "max": 22.704,
+          "p95": 17.842,
+          "p99": 20.4692
+        },
+        "scene_ms": {
+          "mean": 0.050362555555555556,
+          "min": 0.0288,
+          "max": 0.1448,
+          "p95": 0.0773,
+          "p99": 0.1048
+        },
+        "gui_ms": {
+          "mean": 0.9295584444444445,
+          "min": 0.5959,
+          "max": 1.817,
+          "p95": 1.2445,
+          "p99": 1.4561
+        },
+        "render_wait_ms": {
+          "mean": 13.400226333333334,
+          "min": 9.9915,
+          "max": 21.6636,
+          "p95": 16.7491,
+          "p99": 19.4914
+        },
+        "load_ms": {
+          "mean": 7899.1514,
+          "min": 7794.7065,
+          "max": 8103.3162,
+          "p95": 8103.3162,
+          "p99": 8103.3162
+        },
+        "nodes": {
+          "mean": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "preparation_ms": {
+          "mean": 5.307933333333334,
+          "min": 3.8743,
+          "max": 11.0656,
+          "p95": 6.8554,
+          "p99": 7.5438
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        }
+      },
+      "run_frame_means_ms": [
+        14.703168333333334,
+        14.059108333333333,
+        14.391163666666667
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 678263466.6666666,
+          "min": 677462016,
+          "max": 678834176,
+          "p95": 678834176,
+          "p99": 678834176
+        },
+        "private_bytes": {
+          "mean": 1455603712,
+          "min": 1367973888,
+          "max": 1534009344,
+          "p95": 1534009344,
+          "p99": 1534009344
+        }
+      },
+      "executables_sha256": [
+        "358292fe8f3e7b56fbd9b465a01d5ba90cac10926c0278f93b1e35a41885be74"
+      ]
+    },
+    "debug-editor-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 36.445056111111114,
+          "min": 14.6098,
+          "max": 56.1383,
+          "p95": 43.5623,
+          "p99": 47.6343
+        },
+        "scene_ms": {
+          "mean": 0.08384366666666666,
+          "min": 0.0534,
+          "max": 0.2365,
+          "p95": 0.112,
+          "p99": 0.145
+        },
+        "gui_ms": {
+          "mean": 1.046879,
+          "min": 0.6841,
+          "max": 2.1454,
+          "p95": 1.4162,
+          "p99": 1.6478
+        },
+        "render_wait_ms": {
+          "mean": 35.309072,
+          "min": 13.609,
+          "max": 54.7901,
+          "p95": 42.2571,
+          "p99": 45.7968
+        },
+        "load_ms": {
+          "mean": 8099.958500000001,
+          "min": 7937.5878,
+          "max": 8216.494,
+          "p95": 8216.494,
+          "p99": 8216.494
+        },
+        "nodes": {
+          "mean": 7.0,
+          "min": 7.0,
+          "max": 7.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "preparation_ms": {
+          "mean": 24.131851555555556,
+          "min": 4.4994,
+          "max": 35.9368,
+          "p95": 29.6805,
+          "p99": 32.3423
+        },
+        "material_ms": {
+          "mean": 0.6929687777777778,
+          "min": 0.0,
+          "max": 1.9515,
+          "p95": 1.3787,
+          "p99": 1.6543
+        },
+        "shadow_bytes": {
+          "mean": 67108864.0,
+          "min": 67108864.0,
+          "max": 67108864.0,
+          "p95": 67108864.0,
+          "p99": 67108864.0
+        },
+        "scene_target_bytes": {
+          "mean": 25594632.0,
+          "min": 25594632.0,
+          "max": 25594632.0,
+          "p95": 25594632.0,
+          "p99": 25594632.0
+        }
+      },
+      "run_frame_means_ms": [
+        35.349850333333336,
+        35.89682633333333,
+        38.08849166666667
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 679459498.6666666,
+          "min": 679006208,
+          "max": 679755776,
+          "p95": 679755776,
+          "p99": 679755776
+        },
+        "private_bytes": {
+          "mean": 1545035776,
+          "min": 1532608512,
+          "max": 1568739328,
+          "p95": 1568739328,
+          "p99": 1568739328
+        }
+      },
+      "executables_sha256": [
+        "358292fe8f3e7b56fbd9b465a01d5ba90cac10926c0278f93b1e35a41885be74"
+      ]
+    },
+    "debug-viewer-static": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 17.459574333333332,
+          "min": 13.8517,
+          "max": 27.0395,
+          "p95": 21.4382,
+          "p99": 23.2487
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "pipeline_prepare_ms": {
+          "mean": 14.588051444444444,
+          "min": 8.5874,
+          "max": 22.4859,
+          "p95": 17.7113,
+          "p99": 19.7372
+        },
+        "material_ms": {
+          "mean": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527327232.0,
+          "min": 527327232.0,
+          "max": 527327232.0,
+          "p95": 527327232.0,
+          "p99": 527327232.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.30686211555555554,
+          "min": 0.27936,
+          "max": 4.194976,
+          "p95": 0.299744,
+          "p99": 0.487488
+        }
+      },
+      "run_frame_means_ms": [
+        18.861103,
+        16.212310333333335,
+        17.305309666666666
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 711090176,
+          "min": 708464640,
+          "max": 713170944,
+          "p95": 713170944,
+          "p99": 713170944
+        },
+        "private_bytes": {
+          "mean": 1528497493.3333333,
+          "min": 1513725952,
+          "max": 1551618048,
+          "p95": 1551618048,
+          "p99": 1551618048
+        }
+      },
+      "executables_sha256": [
+        "9b3e946dc9701b356c4796f8837bf796cb07b299905b99d3ea93faa22fb5ce7c"
+      ]
+    },
+    "debug-viewer-moving": {
+      "samples": 900,
+      "statistics": {
+        "frame_ms": {
+          "mean": 31.09569388888889,
+          "min": 17.0802,
+          "max": 50.177,
+          "p95": 36.4091,
+          "p99": 40.2279
+        },
+        "visible_items": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "scene_draws": {
+          "mean": 79.0,
+          "min": 79.0,
+          "max": 79.0,
+          "p95": 79.0,
+          "p99": 79.0
+        },
+        "pipeline_prepare_ms": {
+          "mean": 35.739610444444445,
+          "min": 13.2386,
+          "max": 58.7325,
+          "p95": 41.5066,
+          "p99": 45.5268
+        },
+        "material_ms": {
+          "mean": 3.8588625555555556,
+          "min": 0.0,
+          "max": 6.8467,
+          "p95": 4.7845,
+          "p99": 5.4233
+        },
+        "gpu_allocation_bytes": {
+          "mean": 527384685.2266667,
+          "min": 527327232.0,
+          "max": 527523840.0,
+          "p95": 527458304.0,
+          "p99": 527523840.0
+        },
+        "descriptor_allocations": {
+          "mean": 273.0,
+          "min": 273.0,
+          "max": 273.0,
+          "p95": 273.0,
+          "p99": 273.0
+        },
+        "scene_target_bytes": {
+          "mean": 37739520.0,
+          "min": 37739520.0,
+          "max": 37739520.0,
+          "p95": 37739520.0,
+          "p99": 37739520.0
+        },
+        "shadow_draws": {
+          "mean": 404.0,
+          "min": 404.0,
+          "max": 404.0,
+          "p95": 404.0,
+          "p99": 404.0
+        },
+        "total_gpu_pass_ms": {
+          "mean": 0.30717137777777775,
+          "min": 0.278976,
+          "max": 2.456224,
+          "p95": 0.417632,
+          "p99": 0.552576
+        }
+      },
+      "run_frame_means_ms": [
+        30.561619333333333,
+        31.572677666666667,
+        31.152784666666665
+      ],
+      "memory_bytes": {
+        "peak_working_set": {
+          "mean": 713079466.6666666,
+          "min": 711966720,
+          "max": 714219520,
+          "p95": 714219520,
+          "p99": 714219520
+        },
+        "private_bytes": {
+          "mean": 1397278037.3333333,
+          "min": 1338208256,
+          "max": 1482301440,
+          "p95": 1482301440,
+          "p99": 1482301440
+        }
+      },
+      "executables_sha256": [
+        "9b3e946dc9701b356c4796f8837bf796cb07b299905b99d3ea93faa22fb5ce7c"
+      ]
+    }
+  },
+  "static_editor_controls": {
+    "original": {
+      "release-editor-static": {
+        "samples": 900,
+        "statistics": {
+          "frame_ms": {
+            "mean": 5.901021555555555,
+            "min": 4.0766,
+            "max": 11.4326,
+            "p95": 7.6654,
+            "p99": 8.3962
+          },
+          "scene_ms": {
+            "mean": 0.005221333333333333,
+            "min": 0.0025,
+            "max": 0.0138,
+            "p95": 0.0084,
+            "p99": 0.0107
+          },
+          "gui_ms": {
+            "mean": 0.13781444444444443,
+            "min": 0.077,
+            "max": 0.3336,
+            "p95": 0.1884,
+            "p99": 0.2265
+          },
+          "render_wait_ms": {
+            "mean": 5.7576744444444445,
+            "min": 3.9762,
+            "max": 11.2431,
+            "p95": 7.504,
+            "p99": 8.2419
+          },
+          "load_ms": {
+            "mean": 1916.8918333333334,
+            "min": 1842.0331,
+            "max": 2033.0424,
+            "p95": 2033.0424,
+            "p99": 2033.0424
+          },
+          "nodes": {
+            "mean": 7.0,
+            "min": 7.0,
+            "max": 7.0,
+            "p95": 7.0,
+            "p99": 7.0
+          },
+          "visible_items": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "scene_draws": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "preparation_ms": {
+            "mean": 0.7957905555555556,
+            "min": 0.247,
+            "max": 4.2111,
+            "p95": 1.1583,
+            "p99": 1.3956
+          },
+          "material_ms": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "shadow_bytes": {
+            "mean": 67108864.0,
+            "min": 67108864.0,
+            "max": 67108864.0,
+            "p95": 67108864.0,
+            "p99": 67108864.0
+          },
+          "scene_target_bytes": {
+            "mean": 25594632.0,
+            "min": 25594632.0,
+            "max": 25594632.0,
+            "p95": 25594632.0,
+            "p99": 25594632.0
+          }
+        },
+        "run_frame_means_ms": [
+          5.836156666666667,
+          5.544748333333334,
+          6.322159666666667
+        ],
+        "memory_bytes": {
+          "peak_working_set": {
+            "mean": 597217280,
+            "min": 596455424,
+            "max": 598347776,
+            "p95": 598347776,
+            "p99": 598347776
+          },
+          "private_bytes": {
+            "mean": 1252805290.6666667,
+            "min": 1251045376,
+            "max": 1253703680,
+            "p95": 1253703680,
+            "p99": 1253703680
+          }
+        },
+        "executables_sha256": [
+          "f547314c9524b3fdbce5d5680ab84f527c313e974c71a018263e5226b20cbb87"
+        ]
+      },
+      "debug-editor-static": {
+        "samples": 900,
+        "statistics": {
+          "frame_ms": {
+            "mean": 15.355099777777777,
+            "min": 12.6674,
+            "max": 23.4004,
+            "p95": 17.8049,
+            "p99": 18.9262
+          },
+          "scene_ms": {
+            "mean": 0.05550688888888889,
+            "min": 0.0245,
+            "max": 0.1095,
+            "p95": 0.0755,
+            "p99": 0.0889
+          },
+          "gui_ms": {
+            "mean": 0.7462213333333333,
+            "min": 0.4774,
+            "max": 1.5808,
+            "p95": 1.0511,
+            "p99": 1.2977
+          },
+          "render_wait_ms": {
+            "mean": 14.548677444444445,
+            "min": 12.0305,
+            "max": 22.6071,
+            "p95": 16.9049,
+            "p99": 18.0497
+          },
+          "load_ms": {
+            "mean": 6825.293366666667,
+            "min": 6465.1149,
+            "max": 7509.4098,
+            "p95": 7509.4098,
+            "p99": 7509.4098
+          },
+          "nodes": {
+            "mean": 7.0,
+            "min": 7.0,
+            "max": 7.0,
+            "p95": 7.0,
+            "p99": 7.0
+          },
+          "visible_items": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "scene_draws": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "preparation_ms": {
+            "mean": 5.3205713333333335,
+            "min": 4.1867,
+            "max": 7.7205,
+            "p95": 6.5205,
+            "p99": 6.9461
+          },
+          "material_ms": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "shadow_bytes": {
+            "mean": 67108864.0,
+            "min": 67108864.0,
+            "max": 67108864.0,
+            "p95": 67108864.0,
+            "p99": 67108864.0
+          },
+          "scene_target_bytes": {
+            "mean": 25594632.0,
+            "min": 25594632.0,
+            "max": 25594632.0,
+            "p95": 25594632.0,
+            "p99": 25594632.0
+          }
+        },
+        "run_frame_means_ms": [
+          15.197173,
+          15.297895,
+          15.570231333333334
+        ],
+        "memory_bytes": {
+          "peak_working_set": {
+            "mean": 677208064,
+            "min": 677044224,
+            "max": 677462016,
+            "p95": 677462016,
+            "p99": 677462016
+          },
+          "private_bytes": {
+            "mean": 1345653418.6666667,
+            "min": 1333481472,
+            "max": 1365532672,
+            "p95": 1365532672,
+            "p99": 1365532672
+          }
+        },
+        "executables_sha256": [
+          "01555b837be6793bd9576e7c2e29756bb697820c16f613c6bfab7e98fae77c4d"
+        ]
+      }
+    },
+    "expanded": {
+      "release-editor-static": {
+        "samples": 900,
+        "statistics": {
+          "frame_ms": {
+            "mean": 5.427551888888889,
+            "min": 3.6915,
+            "max": 9.7898,
+            "p95": 7.0845,
+            "p99": 7.9774
+          },
+          "scene_ms": {
+            "mean": 0.022907666666666666,
+            "min": 0.0099,
+            "max": 0.2666,
+            "p95": 0.0403,
+            "p99": 0.0523
+          },
+          "gui_ms": {
+            "mean": 0.21689366666666668,
+            "min": 0.1187,
+            "max": 0.6032,
+            "p95": 0.3062,
+            "p99": 0.382
+          },
+          "render_wait_ms": {
+            "mean": 5.187400444444444,
+            "min": 3.5242,
+            "max": 9.624,
+            "p95": 6.8022,
+            "p99": 7.7106
+          },
+          "load_ms": {
+            "mean": 1860.9144999999999,
+            "min": 1802.4965,
+            "max": 1908.7422,
+            "p95": 1908.7422,
+            "p99": 1908.7422
+          },
+          "nodes": {
+            "mean": 111.0,
+            "min": 111.0,
+            "max": 111.0,
+            "p95": 111.0,
+            "p99": 111.0
+          },
+          "visible_items": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "scene_draws": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "preparation_ms": {
+            "mean": 0.6551058888888889,
+            "min": 0.2463,
+            "max": 3.6604,
+            "p95": 0.9223,
+            "p99": 1.2389
+          },
+          "material_ms": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "shadow_bytes": {
+            "mean": 67108864.0,
+            "min": 67108864.0,
+            "max": 67108864.0,
+            "p95": 67108864.0,
+            "p99": 67108864.0
+          },
+          "scene_target_bytes": {
+            "mean": 25594632.0,
+            "min": 25594632.0,
+            "max": 25594632.0,
+            "p95": 25594632.0,
+            "p99": 25594632.0
+          }
+        },
+        "run_frame_means_ms": [
+          5.144877,
+          5.394483,
+          5.743295666666667
+        ],
+        "memory_bytes": {
+          "peak_working_set": {
+            "mean": 597841237.3333334,
+            "min": 597721088,
+            "max": 597917696,
+            "p95": 597917696,
+            "p99": 597917696
+          },
+          "private_bytes": {
+            "mean": 1253669546.6666667,
+            "min": 1252065280,
+            "max": 1255329792,
+            "p95": 1255329792,
+            "p99": 1255329792
+          }
+        },
+        "executables_sha256": [
+          "2aefa8d60b87468855aee3146bed4f1ab91e82119225c4ad520b48a71d443b54"
+        ]
+      },
+      "debug-editor-static": {
+        "samples": 900,
+        "statistics": {
+          "frame_ms": {
+            "mean": 15.322394,
+            "min": 12.9579,
+            "max": 23.9262,
+            "p95": 17.6262,
+            "p99": 18.7045
+          },
+          "scene_ms": {
+            "mean": 0.12275255555555556,
+            "min": 0.0462,
+            "max": 0.2969,
+            "p95": 0.1628,
+            "p99": 0.188
+          },
+          "gui_ms": {
+            "mean": 1.5886453333333332,
+            "min": 0.8041,
+            "max": 2.2943,
+            "p95": 1.9319,
+            "p99": 2.1039
+          },
+          "render_wait_ms": {
+            "mean": 13.605883222222221,
+            "min": 11.2764,
+            "max": 22.1637,
+            "p95": 15.9339,
+            "p99": 16.9347
+          },
+          "load_ms": {
+            "mean": 6866.0336333333335,
+            "min": 6809.5829,
+            "max": 6903.0817,
+            "p95": 6903.0817,
+            "p99": 6903.0817
+          },
+          "nodes": {
+            "mean": 111.0,
+            "min": 111.0,
+            "max": 111.0,
+            "p95": 111.0,
+            "p99": 111.0
+          },
+          "visible_items": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "scene_draws": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "preparation_ms": {
+            "mean": 5.204655777777778,
+            "min": 4.1208,
+            "max": 7.8664,
+            "p95": 6.3561,
+            "p99": 7.0401
+          },
+          "material_ms": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "shadow_bytes": {
+            "mean": 67108864.0,
+            "min": 67108864.0,
+            "max": 67108864.0,
+            "p95": 67108864.0,
+            "p99": 67108864.0
+          },
+          "scene_target_bytes": {
+            "mean": 25594632.0,
+            "min": 25594632.0,
+            "max": 25594632.0,
+            "p95": 25594632.0,
+            "p99": 25594632.0
+          }
+        },
+        "run_frame_means_ms": [
+          15.333531333333333,
+          15.394825666666666,
+          15.238825
+        ],
+        "memory_bytes": {
+          "peak_working_set": {
+            "mean": 680591360,
+            "min": 679886848,
+            "max": 681140224,
+            "p95": 681140224,
+            "p99": 681140224
+          },
+          "private_bytes": {
+            "mean": 1381408768,
+            "min": 1337622528,
+            "max": 1436717056,
+            "p95": 1436717056,
+            "p99": 1436717056
+          }
+        },
+        "executables_sha256": [
+          "821c82790d91563d86bf9d53082c7c75af0a920a7e01ddc6dd1c4055f7d393ad"
+        ]
+      }
+    },
+    "compact": {
+      "release-editor-static": {
+        "samples": 900,
+        "statistics": {
+          "frame_ms": {
+            "mean": 5.948705666666667,
+            "min": 4.0984,
+            "max": 12.3642,
+            "p95": 7.8013,
+            "p99": 8.7866
+          },
+          "scene_ms": {
+            "mean": 0.0072246666666666666,
+            "min": 0.0021,
+            "max": 0.0211,
+            "p95": 0.0123,
+            "p99": 0.0152
+          },
+          "gui_ms": {
+            "mean": 0.17109366666666667,
+            "min": 0.0953,
+            "max": 0.4103,
+            "p95": 0.2394,
+            "p99": 0.2858
+          },
+          "render_wait_ms": {
+            "mean": 5.769968555555556,
+            "min": 3.9689,
+            "max": 12.1257,
+            "p95": 7.6075,
+            "p99": 8.4803
+          },
+          "load_ms": {
+            "mean": 1881.3562333333334,
+            "min": 1868.2353,
+            "max": 1893.6764,
+            "p95": 1893.6764,
+            "p99": 1893.6764
+          },
+          "nodes": {
+            "mean": 7.0,
+            "min": 7.0,
+            "max": 7.0,
+            "p95": 7.0,
+            "p99": 7.0
+          },
+          "visible_items": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "scene_draws": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "preparation_ms": {
+            "mean": 0.786857,
+            "min": 0.2641,
+            "max": 6.4339,
+            "p95": 1.1494,
+            "p99": 1.4071
+          },
+          "material_ms": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "shadow_bytes": {
+            "mean": 67108864.0,
+            "min": 67108864.0,
+            "max": 67108864.0,
+            "p95": 67108864.0,
+            "p99": 67108864.0
+          },
+          "scene_target_bytes": {
+            "mean": 25594632.0,
+            "min": 25594632.0,
+            "max": 25594632.0,
+            "p95": 25594632.0,
+            "p99": 25594632.0
+          }
+        },
+        "run_frame_means_ms": [
+          5.8178323333333335,
+          5.563168,
+          6.465116666666667
+        ],
+        "memory_bytes": {
+          "peak_working_set": {
+            "mean": 598149802.6666666,
+            "min": 596312064,
+            "max": 599068672,
+            "p95": 599068672,
+            "p99": 599068672
+          },
+          "private_bytes": {
+            "mean": 1254384981.3333333,
+            "min": 1252261888,
+            "max": 1256361984,
+            "p95": 1256361984,
+            "p99": 1256361984
+          }
+        },
+        "executables_sha256": [
+          "4f907ecb035ec6b20cd8559d046e7ddaaf5dcf8a1a36eaaf863e9934bd6101c7"
+        ]
+      },
+      "debug-editor-static": {
+        "samples": 900,
+        "statistics": {
+          "frame_ms": {
+            "mean": 15.359155555555555,
+            "min": 12.6214,
+            "max": 21.8101,
+            "p95": 17.7776,
+            "p99": 18.8746
+          },
+          "scene_ms": {
+            "mean": 0.06523255555555556,
+            "min": 0.0245,
+            "max": 0.3106,
+            "p95": 0.0879,
+            "p99": 0.1048
+          },
+          "gui_ms": {
+            "mean": 0.9310216666666666,
+            "min": 0.5683,
+            "max": 1.9564,
+            "p95": 1.3958,
+            "p99": 1.7006
+          },
+          "render_wait_ms": {
+            "mean": 14.357863444444444,
+            "min": 11.5121,
+            "max": 20.6989,
+            "p95": 16.6828,
+            "p99": 17.7754
+          },
+          "load_ms": {
+            "mean": 6650.900466666667,
+            "min": 6561.7372,
+            "max": 6815.4986,
+            "p95": 6815.4986,
+            "p99": 6815.4986
+          },
+          "nodes": {
+            "mean": 7.0,
+            "min": 7.0,
+            "max": 7.0,
+            "p95": 7.0,
+            "p99": 7.0
+          },
+          "visible_items": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "scene_draws": {
+            "mean": 79.0,
+            "min": 79.0,
+            "max": 79.0,
+            "p95": 79.0,
+            "p99": 79.0
+          },
+          "preparation_ms": {
+            "mean": 5.2492486666666665,
+            "min": 4.2767,
+            "max": 8.2966,
+            "p95": 6.3922,
+            "p99": 6.8995
+          },
+          "material_ms": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "shadow_bytes": {
+            "mean": 67108864.0,
+            "min": 67108864.0,
+            "max": 67108864.0,
+            "p95": 67108864.0,
+            "p99": 67108864.0
+          },
+          "scene_target_bytes": {
+            "mean": 25594632.0,
+            "min": 25594632.0,
+            "max": 25594632.0,
+            "p95": 25594632.0,
+            "p99": 25594632.0
+          }
+        },
+        "run_frame_means_ms": [
+          15.477187333333333,
+          15.36137,
+          15.238909333333334
+        ],
+        "memory_bytes": {
+          "peak_working_set": {
+            "mean": 677579434.6666666,
+            "min": 677216256,
+            "max": 677875712,
+            "p95": 677875712,
+            "p99": 677875712
+          },
+          "private_bytes": {
+            "mean": 1359182506.6666667,
+            "min": 1336922112,
+            "max": 1370398720,
+            "p95": 1370398720,
+            "p99": 1370398720
+          }
+        },
+        "executables_sha256": [
+          "358292fe8f3e7b56fbd9b465a01d5ba90cac10926c0278f93b1e35a41885be74"
+        ]
+      }
+    }
+  },
+  "controls_order": [
+    {
+      "stage": "original",
+      "run": "release-editor-static-1"
+    },
+    {
+      "stage": "expanded",
+      "run": "release-editor-static-1"
+    },
+    {
+      "stage": "compact",
+      "run": "release-editor-static-1"
+    },
+    {
+      "stage": "expanded",
+      "run": "release-editor-static-2"
+    },
+    {
+      "stage": "compact",
+      "run": "release-editor-static-2"
+    },
+    {
+      "stage": "original",
+      "run": "release-editor-static-2"
+    },
+    {
+      "stage": "compact",
+      "run": "release-editor-static-3"
+    },
+    {
+      "stage": "original",
+      "run": "release-editor-static-3"
+    },
+    {
+      "stage": "expanded",
+      "run": "release-editor-static-3"
+    },
+    {
+      "stage": "original",
+      "run": "debug-editor-static-1"
+    },
+    {
+      "stage": "expanded",
+      "run": "debug-editor-static-1"
+    },
+    {
+      "stage": "compact",
+      "run": "debug-editor-static-1"
+    },
+    {
+      "stage": "expanded",
+      "run": "debug-editor-static-2"
+    },
+    {
+      "stage": "compact",
+      "run": "debug-editor-static-2"
+    },
+    {
+      "stage": "original",
+      "run": "debug-editor-static-2"
+    },
+    {
+      "stage": "compact",
+      "run": "debug-editor-static-3"
+    },
+    {
+      "stage": "original",
+      "run": "debug-editor-static-3"
+    },
+    {
+      "stage": "expanded",
+      "run": "debug-editor-static-3"
+    }
+  ],
+  "raw_sha256": {
+    "out/WholeModelReference/Measurements/debug-editor-moving-1.csv": "b3c115ddb2baa51524d8bf37fff1dd3d4ed30b00714089b90bafbb15bcfaf6cf",
+    "out/WholeModelReference/Measurements/debug-editor-moving-1.log": "f6f91f369654d1b3910967ca7e9a2239560998ee4d25c225fd0126751c8c76b8",
+    "out/WholeModelReference/Measurements/debug-editor-moving-2.csv": "1daec1ff65899d21ba52fe65f72a1522bd6332b342bc00423caffb82981daf25",
+    "out/WholeModelReference/Measurements/debug-editor-moving-2.log": "5dea568fb2531a9cdedafcbcbd1adde550768e2e680f84c370954fce5f8e85c5",
+    "out/WholeModelReference/Measurements/debug-editor-moving-3.csv": "58363a9bb97dabb6b12e2adc8ea31f9a31a053003962a218b7d9fa4f0df9d9c1",
+    "out/WholeModelReference/Measurements/debug-editor-moving-3.log": "c344b03678db02d2c32ad307884b80d16c920d30bb2035c8c5f5f3d1f2e1e8b1",
+    "out/WholeModelReference/Measurements/debug-editor-static-1.csv": "c996ce3f14eef276c95526943d104be6d431e0fb14ae0ceb4b0dc425271d2c9a",
+    "out/WholeModelReference/Measurements/debug-editor-static-1.log": "17174ece384b45243543cd41b4508e679c89292c51eace797ad6c46935e4714e",
+    "out/WholeModelReference/Measurements/debug-editor-static-2.csv": "82a311b7a371924876e3f925b80268ed483458ecc63317dd782913355712a384",
+    "out/WholeModelReference/Measurements/debug-editor-static-2.log": "b0164e6f635b056950f187db194a4b90ae277d72c50727638f8095794242d5f6",
+    "out/WholeModelReference/Measurements/debug-editor-static-3.csv": "7d80bbf345eba042d125e0bdd46fe7e730341a3e71466a717ee97cf1ef330aa2",
+    "out/WholeModelReference/Measurements/debug-editor-static-3.log": "f8b8ce09bcc5f5d6ab74d47cdea20809112fd83e1e0ffd6144502fe1e25b9f6c",
+    "out/WholeModelReference/Measurements/debug-viewer-moving-1.csv": "6847cfa4ab062dadfa361548f302da9a16b602b9d4ad63ffa3624c426a77e0dd",
+    "out/WholeModelReference/Measurements/debug-viewer-moving-1.log": "82a69f52ebb5c9d4ed886c89bf97c946daa39d39504777b6af47f8afab55b67b",
+    "out/WholeModelReference/Measurements/debug-viewer-moving-2.csv": "9d1589fc69cebd758260c2c91302dc50dcf663625a0c683dcf8ca6fd0e127537",
+    "out/WholeModelReference/Measurements/debug-viewer-moving-2.log": "bd3ded6fc469041f01c9ee2194a41c826bf5868922fcc58bf9367d339e0bcd26",
+    "out/WholeModelReference/Measurements/debug-viewer-moving-3.csv": "60b344c6666a015fb43abd83a87cc22fcfd928e802e3b2e75e6604d293c855eb",
+    "out/WholeModelReference/Measurements/debug-viewer-moving-3.log": "a248568b4919ce73c9891eae5a9c3019eb28aa3881bc9c3e96db4e4baeb3c6c9",
+    "out/WholeModelReference/Measurements/debug-viewer-static-1.csv": "f16c58fc50a71b67d98f446d25ca4b3f29a904ab4d78446b8cfa7def506f6ee6",
+    "out/WholeModelReference/Measurements/debug-viewer-static-1.log": "39e53d072c9bec27f8fc6efb4e49f9dbeff6591f2beb6036f8a78772b1f10d9d",
+    "out/WholeModelReference/Measurements/debug-viewer-static-2.csv": "444bfad95827955633a11929b06663c00de193b0fb71c07a588aa6949241ef77",
+    "out/WholeModelReference/Measurements/debug-viewer-static-2.log": "51d8b11423fe4573a925854624bfc3ecd0912122fc1a59f94b70c2a1f6d24a0c",
+    "out/WholeModelReference/Measurements/debug-viewer-static-3.csv": "c678db8b6066949c47666e6ed07788b941f348ebd4cb446bd949daf027413d1e",
+    "out/WholeModelReference/Measurements/debug-viewer-static-3.log": "f774dd92532c90e363b0b868b9270005710616b367ef8503c4e6af2ff8a76d33",
+    "out/WholeModelReference/Measurements/release-editor-moving-1.csv": "4f8e5a0f94d90d976c4e46e5d29e3449b5ec64aa2f91ed66300364245bd3a95c",
+    "out/WholeModelReference/Measurements/release-editor-moving-1.log": "213f92ce58712ec2f19b7395367de5817dda4441a7ccbf2d329961ec5e8818e8",
+    "out/WholeModelReference/Measurements/release-editor-moving-2.csv": "519787e5e54f606b2bf3248700197e5f58371115b2ade2d19cb7c7f10175e7f2",
+    "out/WholeModelReference/Measurements/release-editor-moving-2.log": "82e52579bfd90ec4001de8bf109a8cee4be94686f5d25d174504a07a16c7408c",
+    "out/WholeModelReference/Measurements/release-editor-moving-3.csv": "8153d1ffd6480f67e8ea2508a9468610c205f0dbd4694bc8116c0a7899ee4f4f",
+    "out/WholeModelReference/Measurements/release-editor-moving-3.log": "438fb501543e721427b090c9270de24debabfba9dc52031b74140fc699d89450",
+    "out/WholeModelReference/Measurements/release-editor-static-1.csv": "3e66e8960f94070be33d1ff2d5cfb12ee2aa4c8e01ecb94123df82269e6af073",
+    "out/WholeModelReference/Measurements/release-editor-static-1.log": "cf179f46ade430330fcbfa81deb9514fe7adef899052348bcdc888ab9a27e3d6",
+    "out/WholeModelReference/Measurements/release-editor-static-2.csv": "98a13259aa401771e1d130e4e19d7fc2412a9faa12c119dbc897d937ca0b0431",
+    "out/WholeModelReference/Measurements/release-editor-static-2.log": "22a62306f37a033a1d931c7b3fb23a549c41dfcea271881209715aa639b671d7",
+    "out/WholeModelReference/Measurements/release-editor-static-3.csv": "49334454107b9bfa670eee93c1513b0d1ee3db8f2ace8caeebd26e890f8e0fd7",
+    "out/WholeModelReference/Measurements/release-editor-static-3.log": "ba6dc5d44df1a4f244d5efed6b601db50a29b9575e96b14432c00b2405c0a7ed",
+    "out/WholeModelReference/Measurements/release-viewer-moving-1.csv": "0671afe405e5e841c9daae70e1ed789d856daabbb2a60e973e38ad05c7dfaa7b",
+    "out/WholeModelReference/Measurements/release-viewer-moving-1.log": "464860e844d1b7772eeecb4be6ff1a4ee6a3cd16af628450fde27c08d24e0a59",
+    "out/WholeModelReference/Measurements/release-viewer-moving-2.csv": "4b4183040a2509539a87f7ddf8280a81474633e0101e6d6123ead07b4d58abad",
+    "out/WholeModelReference/Measurements/release-viewer-moving-2.log": "6b9b93ab681e8eeb6d0c66a1e77292605323f317ede36ec12ecb3c527d33f6b5",
+    "out/WholeModelReference/Measurements/release-viewer-moving-3.csv": "4d2b7a379b9096c9f2423077adb5646ce23977106418b747116e84bf5d5dd426",
+    "out/WholeModelReference/Measurements/release-viewer-moving-3.log": "321d32d8b4d64088c0f0f71f351a9c8af0e9f73758d05c97512ea4f14fd34f0e",
+    "out/WholeModelReference/Measurements/release-viewer-static-1.csv": "db1e4ccb71047442b73c40f400fae0ba1621ba24e333fbdb7dd4b1ce7a99ad66",
+    "out/WholeModelReference/Measurements/release-viewer-static-1.log": "a69c6a31c8045aa97574ef26c37cc907806a72bb63f728ff0f664350cebf153f",
+    "out/WholeModelReference/Measurements/release-viewer-static-2.csv": "2b14600a768263c9065f4dfa36a602976657b47f4ae515ac521f8b3c656588d7",
+    "out/WholeModelReference/Measurements/release-viewer-static-2.log": "e5b2ef4dc933dc9befb052be68cd9cdc01c00ebea05eb0c151dd908b348a9c11",
+    "out/WholeModelReference/Measurements/release-viewer-static-3.csv": "2be86c4a49612abfd94694de0024900724aeae80f0b76ed6189122d0ab7e32da",
+    "out/WholeModelReference/Measurements/release-viewer-static-3.log": "01dc0bf8bada4ad2afa2b5ea454855049ca795e6e223c9999b0e552102e7203f",
+    "out/WholeModelReference/Measurements/Results.json": "8b3316755933aee19ec4491a6540af512383a02b3ace9d0635fbab3a875e98f8",
+    "out/WholeModelReference/Controls/Results.json": "570cfb7d79b0b389283e00bb2aaa8f9a9ffbb247c6414f05e47b20d868d58621",
+    "out/WholeModelReference/Controls/compact/debug-editor-static-1.csv": "cf324a67b69f1efecb6bdcac61bc3835a973d74558f165ca29b7ce52e95ad6f8",
+    "out/WholeModelReference/Controls/compact/debug-editor-static-1.log": "7132115b075bef0cf77d4024a85ee57009e7ef3a63e7e94e96e934421d49689d",
+    "out/WholeModelReference/Controls/compact/debug-editor-static-2.csv": "9511e413be472f29501e44ae56243efc6ca7973dc612434379ba2d8da85be38f",
+    "out/WholeModelReference/Controls/compact/debug-editor-static-2.log": "60cbd5f4993a00436c94d72c7792f76734523078c743e995ac4d296f83cb6b7b",
+    "out/WholeModelReference/Controls/compact/debug-editor-static-3.csv": "c05b41a251da7a8194c1b15fe9c04029c967ee6f383045ff9c3e41c5414a41f1",
+    "out/WholeModelReference/Controls/compact/debug-editor-static-3.log": "af485f8ae409a6d1e309dea069f99f607751a2b8d4f77debf84a7418f9fff907",
+    "out/WholeModelReference/Controls/compact/release-editor-static-1.csv": "0ea50d23a8f3ff93baaafeaed6c2878bb5e7de705f6eb47347a5e8025ec19301",
+    "out/WholeModelReference/Controls/compact/release-editor-static-1.log": "9d33422f61621dbe793ee8667796e645b3b8c1dd448a5818b49038f0f381959c",
+    "out/WholeModelReference/Controls/compact/release-editor-static-2.csv": "23b4b5c13d88950353f3c0f8d0ae6b71164341cc5297f55fee6072216a17d9e7",
+    "out/WholeModelReference/Controls/compact/release-editor-static-2.log": "b56b52b2661f248966bf4f9ae5fd4a99d73dce4cfb2bdc574781751d94948473",
+    "out/WholeModelReference/Controls/compact/release-editor-static-3.csv": "746f5766f14dc24e83992983fa09f9c72a95372f8e3ee15352f9799531bdbd58",
+    "out/WholeModelReference/Controls/compact/release-editor-static-3.log": "6dfd901a19def7d7191869e2570ce901e094aea62d61268d63d1cdc742ec3f47",
+    "out/WholeModelReference/Controls/expanded/debug-editor-static-1.csv": "79371f31c2e8ecf8a74c757ce66b0c990f4af4b6e5ea11ebb3ab788770dfc2d0",
+    "out/WholeModelReference/Controls/expanded/debug-editor-static-1.log": "ab7a772df3d53525f2be05e129a4155bd0e59283631da8bde363f6231fcee5ed",
+    "out/WholeModelReference/Controls/expanded/debug-editor-static-2.csv": "4cdddc2027ce745b31b20ee62d05ea3a5cbf945a4a8bf2a210bab3045f72767e",
+    "out/WholeModelReference/Controls/expanded/debug-editor-static-2.log": "c2be95230cba0cb433c885d40118f8223801e0baf9a6c4550aa662bff047e166",
+    "out/WholeModelReference/Controls/expanded/debug-editor-static-3.csv": "e91395d984fd1f944edcddee006b6ad1879081455318031729ccaab58e4e2473",
+    "out/WholeModelReference/Controls/expanded/debug-editor-static-3.log": "22285b570721ed91290ea05e8434d198a39214ec5835b71d0ce1095b1fd75f58",
+    "out/WholeModelReference/Controls/expanded/release-editor-static-1.csv": "0d8b1e13b9bcec825c557188e3eb10260b8e3607b06ac4f5a5bdd8c7a5b89045",
+    "out/WholeModelReference/Controls/expanded/release-editor-static-1.log": "473d4259f2c08a9806cc491fd5e3018db51bee09d6c98d525323715eea3b7345",
+    "out/WholeModelReference/Controls/expanded/release-editor-static-2.csv": "4a3a4a8db3d50c88e4d408af576d2334f51e2f59ce7aabc4f04251e2774cd5b0",
+    "out/WholeModelReference/Controls/expanded/release-editor-static-2.log": "a5e2f45e877ca34cb9b2a6193fc0b1ba2da9ea270a95c26c144a2d437167de37",
+    "out/WholeModelReference/Controls/expanded/release-editor-static-3.csv": "e1c9e531729a6b04dc22327750ec4a1cba29e2ad85f66fcbf1a164ea0e086d2b",
+    "out/WholeModelReference/Controls/expanded/release-editor-static-3.log": "dcc43ba500e9346c95a4aadf5dc9774810f01095be90cb42ded6e54afd8cab2d",
+    "out/WholeModelReference/Controls/original/debug-editor-static-1.csv": "adf3b3279f312a8abf6244e91dae626cd1d0971c437c565c71af302bb774576c",
+    "out/WholeModelReference/Controls/original/debug-editor-static-1.log": "b344000426b725bc2281c4822558bb9fbc7405f2d3ae917e7a4945734aed540b",
+    "out/WholeModelReference/Controls/original/debug-editor-static-2.csv": "98eb2d6829f647ea9567d8a8732630a261a8c5e3eff38e6b2e54dde4278b4f69",
+    "out/WholeModelReference/Controls/original/debug-editor-static-2.log": "4c1e99bd1073e7514ca6b6a33470be789a4a12d4315a1761914ca793d8de05e3",
+    "out/WholeModelReference/Controls/original/debug-editor-static-3.csv": "4ab3ff83b51b72c869ada345b726f7486538c12c501d4c13c7cae99216b3e407",
+    "out/WholeModelReference/Controls/original/debug-editor-static-3.log": "9eb7ba8e1bba5495d35ff10b2d0810e6416154f77cc6ce63948def07eac68933",
+    "out/WholeModelReference/Controls/original/release-editor-static-1.csv": "95088853994a8bbec321996ade9a2b8d30c55f8437b95e292860d8be7f928593",
+    "out/WholeModelReference/Controls/original/release-editor-static-1.log": "3852780b0b92f6c7f3b30f215a7af086973ff07fb10f9e2f81d53763b322bca2",
+    "out/WholeModelReference/Controls/original/release-editor-static-2.csv": "63f389c5ab23515b9751f6706f25c6cf3ef99e96042638a526e1b1ef2387e707",
+    "out/WholeModelReference/Controls/original/release-editor-static-2.log": "97b1abe5fbe5d882cfab68639517545d58d3964973f142538d4c6b17efdd5a3d",
+    "out/WholeModelReference/Controls/original/release-editor-static-3.csv": "0d68ec545f67d11f881264e14430fc370a11cfef7241f82df14a79519a30f1a3",
+    "out/WholeModelReference/Controls/original/release-editor-static-3.log": "7a1d991dba52dc6574c8c33f88775ca61797a9eb2d8150037fc06fe043acb0c7",
+    "out/WholeModelReference/Identity.json": "fd40bef6a5c3c19646fa1960d75330615b6aaa0d3b35bc637d3e9023114847e4",
+    "out/WholeModelReference/MigrationGuards.json": "4a62511cc36339d69dd4da8a04ee2e867a10aa7e05b02a5776eb6bfbc86030d9",
+    "out/WholeModelReference/BeforeDependencies.json": "a554835b46f306682c69a19110be7af8c6631e845c1b214db58320f3f268e6e0",
+    "out/WholeModelReference/StageImageParity.json": "129517de245cb427fd2034f2e229184699578c5d06ecd7d2de5de80f524ce61b",
+    "out/WholeModelReference/StagePreview.json": "b4b8526b28a56d74d50811a3e90fe2968d41a08b39947e03d38ae3080fc90649",
+    "out/WholeModelReference/StageDocument.json": "5fd20432fb270828c5bf22c33770ec739a61047fd1ef26c10ed75563db370d0d",
+    "out/WholeModelReference/PublishedCache.log": "6a445446e3ae02f25271b2f18ebc03dd9b09a4fb6dc916267df1140340bd0552"
+  }
+}

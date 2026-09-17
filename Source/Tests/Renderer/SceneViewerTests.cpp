@@ -23,10 +23,15 @@ class FSaveFileSystem final : public IFileSystem
 public:
 	std::atomic<bool> bReleaseWrite{false};
 	std::atomic<bool> bFailWrite{false};
+	std::atomic<bool> bHoldReload{false};
 	FNativeOnlyFileSystem Native;
 
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
 	{
+		while (InPath.filename() == "FocusReload.hasset" && bHoldReload)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
 		return Native.Read(InPath, InLimit);
 	}
 
@@ -94,6 +99,7 @@ struct FViewerFixture
 	~FViewerFixture()
 	{
 		Files->bReleaseWrite = true;
+		Files->bHoldReload = false;
 		Plugin->Stop();
 		Plugin.reset();
 		Assets.Drain();
@@ -210,7 +216,7 @@ void CheckContinuousCamera(FViewerFixture& InFixture)
 {
 	auto& Scene = InFixture.Plugin->GetSceneInstance();
 	const auto Handle = *GetSceneNavigationCamera(Scene);
-	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	const auto Camera = *Scene.FindNode(Handle)->Camera();
 	FSceneNodeView View;
 	Scene.GetNodeView(Handle, View);
 	const auto Original = View.World;
@@ -239,7 +245,7 @@ void CheckContinuousCamera(FViewerFixture& InFixture)
 			Controller.Advance(Scene, 1.f / InRate);
 		}
 		HYP_CHECK(Length(Subtract(Pose().Forward, Before.Forward)) < .0001f);
-		HYP_CHECK(Scene.FindNode(Handle)->Camera->FocusDistance == Camera.FocusDistance);
+		HYP_CHECK(Scene.FindNode(Handle)->Camera()->FocusDistance == Camera.FocusDistance);
 		return Subtract(Pose().Eye, Before.Eye);
 	};
 	const auto Forward = Simulate({EKey::W}, 60);
@@ -263,7 +269,7 @@ void CheckCameraInterruptions(FViewerFixture& InFixture)
 {
 	auto& Scene = InFixture.Plugin->GetSceneInstance();
 	const auto Handle = *GetSceneNavigationCamera(Scene);
-	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	const auto Camera = *Scene.FindNode(Handle)->Camera();
 	FSceneNodeView View;
 	Scene.GetNodeView(Handle, View);
 	const auto Original = View.World;
@@ -329,7 +335,7 @@ void CheckReusableMouse(FViewerFixture& InFixture)
 {
 	auto& Scene = InFixture.Plugin->GetSceneInstance();
 	const auto Handle = *GetSceneNavigationCamera(Scene);
-	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	const auto Camera = *Scene.FindNode(Handle)->Camera();
 	FSceneNodeView View;
 	Scene.GetNodeView(Handle, View);
 	const auto Original = View.World;
@@ -360,9 +366,9 @@ void CheckReusableMouse(FViewerFixture& InFixture)
 	Wheel.Type = EEventType::MouseWheel;
 	Wheel.Y = 1;
 	Controller.Input(Scene, {&Wheel, 1}, true, false);
-	HYP_CHECK(Scene.FindNode(Handle)->Camera->FocusDistance == Camera.FocusDistance);
+	HYP_CHECK(Scene.FindNode(Handle)->Camera()->FocusDistance == Camera.FocusDistance);
 	Controller.Input(Scene, {&Wheel, 1}, false, false);
-	HYP_CHECK(std::abs(Scene.FindNode(Handle)->Camera->FocusDistance - Camera.FocusDistance * .85f) < .0001f);
+	HYP_CHECK(std::abs(Scene.FindNode(Handle)->Camera()->FocusDistance - Camera.FocusDistance * .85f) < .0001f);
 	HYP_CHECK(Length(Subtract(GetSceneNavigationPivot(Scene), Pivot)) < .0001f);
 	Scene.SetCameraView(Handle, Original, Camera);
 }
@@ -407,7 +413,7 @@ void CheckFlyWheel(FSceneInstance& InScene, FSceneHandle InHandle, const FSceneC
 	const auto Adjusted = ReadCameraPose(InScene, InHandle);
 	HYP_CHECK(Length(Subtract(Adjusted.Eye, Before.Eye)) == 0);
 	HYP_CHECK(Length(Subtract(Adjusted.Forward, Before.Forward)) == 0);
-	HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+	HYP_CHECK(*InScene.FindNode(InHandle)->Camera() == InCamera);
 	const auto Key = CameraKey(EKey::W);
 	Controller.Input(InScene, {&Key, 1}, false, false);
 	Controller.Advance(InScene, .02f);
@@ -491,7 +497,7 @@ void CheckFlyTranslation(FSceneInstance& InScene, FSceneHandle InHandle, const F
 		const auto Moved = ReadCameraPose(InScene, InHandle);
 		HYP_CHECK(std::abs(Length(Subtract(Moved.Eye, Before.Eye)) - Distance) < .0001f);
 		HYP_CHECK(Length(Subtract(Moved.Forward, Before.Forward)) < .0001f);
-		HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+		HYP_CHECK(*InScene.FindNode(InHandle)->Camera() == InCamera);
 		Controller.Input(InScene, {&Release, 1}, false, false);
 		Controller.Advance(InScene, .02f);
 		HYP_CHECK(Length(Subtract(ReadCameraPose(InScene, InHandle).Eye, Moved.Eye)) == 0);
@@ -530,7 +536,7 @@ void CheckFlyLook(FSceneInstance& InScene, FSceneHandle InHandle, const FSceneCa
 	const auto Looked = ReadCameraPose(InScene, InHandle);
 	HYP_CHECK(Looked.Forward.X > 0 && Looked.Forward.Y < 0);
 	HYP_CHECK(Length(Subtract(Looked.Eye, Before.Eye)) == 0);
-	HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+	HYP_CHECK(*InScene.FindNode(InHandle)->Camera() == InCamera);
 	const auto Key = CameraKey(EKey::W);
 	Controller.Input(InScene, {&Key, 1}, false, false);
 	Controller.Advance(InScene, .02f);
@@ -547,7 +553,7 @@ void CheckFlyLook(FSceneInstance& InScene, FSceneHandle InHandle, const FSceneCa
 	HYP_CHECK(Length(Subtract(Clamped.Eye, Moved.Eye)) == 0);
 	HYP_CHECK(IsFinite(Clamped.Forward) && std::abs(Clamped.Forward.Y) < 1);
 	HYP_CHECK(std::abs(Dot(Clamped.Forward, Clamped.Up)) < .0001f);
-	HYP_CHECK(*InScene.FindNode(InHandle)->Camera == InCamera);
+	HYP_CHECK(*InScene.FindNode(InHandle)->Camera() == InCamera);
 	const auto Release = CameraButton(false);
 	Controller.Input(InScene, {&Release, 1}, false, false);
 	Move.X += 20;
@@ -598,7 +604,7 @@ void CheckFlyCamera(FViewerFixture& InFixture)
 {
 	auto& Scene = InFixture.Plugin->GetSceneInstance();
 	const auto Handle = *GetSceneNavigationCamera(Scene);
-	const auto Camera = *Scene.FindNode(Handle)->Camera;
+	const auto Camera = *Scene.FindNode(Handle)->Camera();
 	FSceneNodeView View;
 	HYP_CHECK(Scene.GetNodeView(Handle, View));
 	const auto Original = View.World;
@@ -612,9 +618,144 @@ void CheckFlyCamera(FViewerFixture& InFixture)
 	    << "Fly camera: RMB gating, fixed-eye look, wheel speed/dolly, speed limits and interruption recovery passed\n";
 }
 
+void CheckIndependentBrowsing(FViewerFixture& InFixture)
+{
+	auto& Plugin = *InFixture.Plugin;
+	auto& Scene = Plugin.GetSceneInstance();
+	InFixture.Tick();
+	const auto Before = Serialize(Scene.Snapshot("independent.hasset"));
+	const auto Revision = Scene.GetRevision();
+	const auto View = *InFixture.Frame.SceneView->CameraOverride;
+	auto Input = CameraKey(EKey::Right);
+	Plugin.Input({&Input, 1}, false, false);
+	Plugin.AdvanceCamera(.1f);
+	Input.bDown = false;
+	Plugin.Input({&Input, 1}, false, false);
+	InFixture.Tick();
+	HYP_CHECK(Scene.GetRevision() == Revision && Serialize(Scene.Snapshot("independent.hasset")) == Before);
+	HYP_CHECK(*InFixture.Frame.SceneView->CameraOverride != View && InFixture.Frame.View.Camera);
+	const auto Camera = Scene.GetSettings().DefaultCamera;
+	if (Camera)
+	{
+		Scene.SetEnabled(*Camera, false);
+		InFixture.Tick();
+		HYP_CHECK(InFixture.Frame.View.Camera && !InFixture.Frame.View.SceneCamera);
+		Scene.SetEnabled(*Camera, true);
+	}
+	Plugin.Fit();
+	InFixture.Tick();
+}
+
+void CheckSuspendedNavigation()
+{
+	FSceneCameraController Controller(ESceneCameraNavigationMode::Fly);
+	FInputEvent Focus;
+	Focus.Type = EEventType::Focus;
+	Controller.SuspendInput({&Focus, 1});
+	Focus.bDown = true;
+	Controller.SuspendInput({&Focus, 1});
+	FSceneCameraView Camera;
+	Camera.Lens.FocusDistance = 120;
+	Controller.Input(Camera, {}, false, false);
+	HYP_CHECK(Controller.GetMovementSpeed(Camera) == 120);
+	Controller.SuspendInput({});
+	Camera.Lens.FocusDistance = 240;
+	Controller.Input(Camera, {}, false, false);
+	HYP_CHECK(Controller.GetMovementSpeed(Camera) == 120);
+}
+
+void CheckFocusDuringReload(FViewerFixture& InFixture)
+{
+	auto& Plugin = *InFixture.Plugin;
+	auto& Scene = Plugin.GetSceneInstance();
+	FSceneManifest Manifest;
+	Manifest.InitialView = InFixture.Frame.SceneView->CameraOverride;
+	InFixture.IO.WriteAsync("FocusReload.hasset", EncodeAsset(RecordType<FSceneManifest>(), &Manifest).Bytes)
+	    .Get(InFixture.Tasks);
+	FInputEvent Focus;
+	Focus.Type = EEventType::Focus;
+	Plugin.Input({&Focus, 1}, false, false);
+	InFixture.Files->bHoldReload = true;
+	Scene.Load("FocusReload.hasset");
+	InFixture.Tick();
+	HYP_CHECK(!Plugin.Ready());
+	Focus.bDown = true;
+	const auto Key = CameraKey(EKey::W);
+	const std::array LoadingInput{Focus, Key};
+	Plugin.Input(LoadingInput, false, false);
+	InFixture.Files->bHoldReload = false;
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	do
+	{
+		InFixture.Tick();
+	} while (!Plugin.Ready() && std::chrono::steady_clock::now() < Deadline);
+	HYP_CHECK(Plugin.Ready());
+	const auto Before = *InFixture.Frame.SceneView->CameraOverride;
+	const auto Revision = Scene.GetRevision();
+	Plugin.AdvanceCamera(.1f);
+	InFixture.Tick();
+	HYP_CHECK(*InFixture.Frame.SceneView->CameraOverride == Before);
+	Plugin.Input({&Key, 1}, false, false);
+	Plugin.AdvanceCamera(.1f);
+	InFixture.Tick();
+	HYP_CHECK(*InFixture.Frame.SceneView->CameraOverride != Before && Scene.GetRevision() == Revision);
+}
+
+void CheckPartialFailureBrowsing(FViewerFixture& InFixture)
+{
+	auto& Plugin = *InFixture.Plugin;
+	auto& Scene = Plugin.GetSceneInstance();
+	FSceneManifest Manifest;
+	Manifest.Assets = {
+	    {"valid",
+	     {"", (std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/native/Showcase-gltf.hasset").generic_string(),
+	      RecordType<FModelAsset>().Id, ""}},
+	    {"missing", {"", "MissingBrowsingModel.hasset", RecordType<FModelAsset>().Id, ""}}};
+	for (const auto& Asset : Manifest.Assets)
+	{
+		FSceneNodeEntry Node;
+		Node.Id = Node.Name = Asset.Id;
+		Node.Model = FSceneNodeModel{Asset.Id};
+		Manifest.Nodes.push_back(std::move(Node));
+	}
+	for (const bool bPreset : {false, true})
+	{
+		if (bPreset)
+		{
+			Manifest.InitialView = FSceneCameraView{};
+			Manifest.InitialView->World = SceneCameraTransform({3, 2, 9}, {});
+		}
+		const auto Path = bPreset ? "PartialBrowsingPreset.hasset" : "PartialBrowsingFit.hasset";
+		InFixture.IO.WriteAsync(Path, EncodeAsset(RecordType<FSceneManifest>(), &Manifest).Bytes).Get(InFixture.Tasks);
+		Scene.Load(Path);
+		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+		do
+		{
+			InFixture.Tick();
+		} while ((Scene.GetStatus().ReadyModels != 1 || Scene.GetStatus().FailedModels != 1) &&
+		         std::chrono::steady_clock::now() < Deadline);
+		HYP_CHECK(Scene.GetStatus().ReadyModels == 1 && Scene.GetStatus().FailedModels == 1 && !Plugin.Ready());
+		HYP_CHECK(CanInitializeSceneBrowsingView(Scene));
+		const auto Before = *InFixture.Frame.SceneView->CameraOverride;
+		HYP_CHECK(Before == MakeSceneBrowsingView(Scene, 640.f / 480));
+		const auto Revision = Scene.GetRevision();
+		auto Key = CameraKey(EKey::W);
+		Plugin.Input({&Key, 1}, false, false);
+		Plugin.AdvanceCamera(.1f);
+		Key.bDown = false;
+		Plugin.Input({&Key, 1}, false, false);
+		InFixture.Tick();
+		HYP_CHECK(*InFixture.Frame.SceneView->CameraOverride != Before && Scene.GetRevision() == Revision);
+	}
+}
+
 void CheckSaveReload(FViewerFixture& InFixture)
 {
 	auto& Plugin = *InFixture.Plugin;
+	// Saving a repeatable browsing start is explicit; ordinary navigation never writes the camera object.
+	auto Settings = Plugin.GetSceneInstance().GetSettings();
+	Settings.InitialView = InFixture.Frame.SceneView->CameraOverride;
+	Plugin.GetSceneInstance().SetSettings(Settings);
 	Plugin.MoveSelected(1.25f);
 	Plugin.DuplicateSelected();
 	Plugin.ToggleSelected();
@@ -635,11 +776,9 @@ void CheckSaveReload(FViewerFixture& InFixture)
 	HYP_CHECK(SceneModelCount(*Saved) == 2);
 	const auto Models = Plugin.GetSceneInstance().GetNodes(ESceneNodeKind::Model);
 	HYP_CHECK(Plugin.GetSceneInstance().FindNode(Models[0])->Id != Plugin.GetSceneInstance().FindNode(Models[1])->Id);
-	HYP_CHECK(!Plugin.GetSceneInstance().FindNode(Models[1])->Model->bVisible);
-	FScene Restored;
-	Restored.LoadNodes(NodesFromSceneManifest(*Saved));
-	FSceneCameraPose Pose;
-	HYP_CHECK(Restored.GetCameraPose(Restored.FindHandle(Saved->DefaultCamera), Pose));
+	HYP_CHECK(!Plugin.GetSceneInstance().FindNode(Models[1])->Model()->bVisible);
+	HYP_CHECK(Saved->InitialView.has_value());
+	const auto Pose = ExtractScenePose(Saved->InitialView->World);
 	HYP_CHECK(std::abs(Pose.Eye.X - InFixture.Frame.View.Eye.X) < .0001f &&
 	          std::abs(Pose.Eye.Y - InFixture.Frame.View.Eye.Y) < .0001f);
 	Plugin.Stop();
@@ -675,12 +814,12 @@ void CheckSnapshotIsolationAndFailure(FViewerFixture& InFixture)
 	auto& Scene = Plugin.GetSceneInstance();
 	FSceneNode Rig;
 	Rig.Id = "save-rig";
-	Rig.Local = Translation({1, 2, 0});
+	Rig.Local() = Translation({1, 2, 0});
 	const auto Parent = Scene.AddNode(Rig);
 	const auto Model = Scene.GetNodes(ESceneNodeKind::Model).front();
 	Scene.Reparent(Model, Parent, ESceneReparentMode::KeepWorld);
 	auto CameraNode = MakeSceneCameraNode("save-camera", {2, 1, 9}, {});
-	CameraNode.Parent = "save-rig";
+	CameraNode.Parent() = "save-rig";
 	const auto Camera = Scene.AddNode(CameraNode);
 	const auto Light = Scene.AddNode(MakeSceneDirectionalLightNode("save-light"));
 	auto Settings = Scene.GetSettings();
@@ -737,13 +876,13 @@ void CheckEmptyAndNodeOnlySave(FViewerFixture& InFixture)
 		{
 			FSceneNode Group;
 			Group.Id = "saved-group";
-			Group.Local = Translation({2, 0, 0});
+			Group.Local() = Translation({2, 0, 0});
 			Scene.AddNode(Group);
 		}
 		if (Stage == 2)
 		{
 			auto Camera = MakeSceneCameraNode("saved-camera", {0, 1, 6}, {});
-			Camera.Parent = "saved-group";
+			Camera.Parent() = "saved-group";
 			FSceneSettings Settings;
 			Settings.DefaultCamera = Scene.AddNode(Camera);
 			Settings.MainDirectionalLight = Scene.AddNode(MakeSceneDirectionalLightNode("saved-sun"));
@@ -781,9 +920,17 @@ int main()
 		CheckCameraInterruptions(Fixture);
 		CheckFlyCamera(Fixture);
 		CheckReusableMouse(Fixture);
+		CheckIndependentBrowsing(Fixture);
 		CheckSaveReload(Fixture);
 		CheckSnapshotIsolationAndFailure(Fixture);
 		CheckEmptyAndNodeOnlySave(Fixture);
+		const auto Camera = Fixture.Plugin->GetSceneInstance().GetSettings().DefaultCamera;
+		Fixture.Plugin->GetSceneInstance().RemoveSubtree(*Camera);
+		CheckIndependentBrowsing(Fixture);
+		CheckSuspendedNavigation();
+		CheckFocusDuringReload(Fixture);
+		CheckPartialFailureBrowsing(Fixture);
+		std::cout << "Loading focus recovery and deferred fly speed initialization passed\n";
 		std::cout
 		    << "Scene Viewer visible hide/move/duplicate/remove, frozen view, fit and empty-scene recovery passed\n";
 	}

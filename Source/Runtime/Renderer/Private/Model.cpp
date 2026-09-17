@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/Model.h"
+#include <algorithm>
 
 namespace Hyperion
 {
@@ -18,7 +19,9 @@ FModel::FModel(FRenderSceneClient& InScene, FRenderResourceService& InResources,
 	}
 	Data = InModel.Data;
 	Asset = Data->Asset;
-	Instances = Data->Instances;
+	Instances = SceneModelInstances(InModel);
+	Current.SourceNode = InModel.SourceNode;
+	Current.SourcePrimitive = InModel.SourcePrimitive;
 	DefaultMaterials = Data->MaterialSnapshots;
 	if (DefaultMaterials.empty())
 	{
@@ -69,7 +72,8 @@ std::shared_ptr<const FMaterialSnapshot> FModel::FreezeSelection(const FSceneMat
 FModel::FPreparedUpdate FModel::PrepareState(const FSceneModel& InModel, FFrozenMaterials& InFrozen) const
 {
 	Scene.RequireMain();
-	if (InModel.Data != Data || !IsAffine(InModel.World))
+	if (InModel.Data != Data || InModel.SourceNode != Current.SourceNode ||
+	    InModel.SourcePrimitive != Current.SourcePrimitive || !IsAffine(InModel.World))
 	{
 		throw std::invalid_argument("Model state requires the same prepared asset and an affine transform");
 	}
@@ -86,6 +90,28 @@ FModel::FPreparedUpdate FModel::PrepareState(const FSceneModel& InModel, FFrozen
 		State.Revision = Result.Revision;
 		State.bVisible = InModel.bVisible;
 		State.Material = InModel.Material;
+		const auto PrimitiveId = ModelPrimitiveId(*Asset, State.Section);
+		const auto Section = std::find_if(InModel.Sections.begin(), InModel.Sections.end(),
+		                                  [&](const auto& InSection)
+		                                  {
+			                                  return InSection.Primitive == PrimitiveId;
+		                                  });
+		if (Section != InModel.Sections.end())
+		{
+			State.bVisible &= Section->bVisible;
+			if (Section->Material.BaseColor)
+			{
+				State.Material.BaseColor = Section->Material.BaseColor;
+			}
+			if (Section->Material.Metallic)
+			{
+				State.Material.Metallic = Section->Material.Metallic;
+			}
+			if (Section->Material.Roughness)
+			{
+				State.Material.Roughness = Section->Material.Roughness;
+			}
+		}
 		State.LocalBounds = Data->PrimitiveBounds[State.Section];
 		State.ObjectParameters = InModel.Surface.Overrides;
 		auto Snapshot = ModelSnapshot;

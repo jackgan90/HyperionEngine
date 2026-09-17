@@ -3,8 +3,10 @@ import csv
 import json
 import math
 import pathlib
+import re
 import subprocess
 import sys
+from NativeContent import set_initial_view_from_camera
 
 
 viewer = pathlib.Path(sys.argv[1]).resolve()
@@ -12,7 +14,6 @@ root = pathlib.Path(sys.argv[2]).resolve()
 work = pathlib.Path.cwd() / "scene-performance"
 work.mkdir(exist_ok=True)
 source = json.loads((root / "out/fixtures/Sources/Scenes/Showcase.json").read_text(encoding="utf-8"))
-model_count = sum("model" in node for node in source["nodes"])
 # Keep this regression's original 190-210 item workload independent of shipped camera calibration.
 for asset in source["assets"]:
     asset["path"] = str((root / "out/fixtures/Sources/Scenes" / asset["path"]).resolve())
@@ -27,6 +28,13 @@ imported = subprocess.run([str(asset_tool), "import", str(source_path), str(scen
                           cwd=root, capture_output=True, text=True, timeout=60)
 (work / "Import.log").write_text(imported.stdout + imported.stderr, encoding="utf-8")
 assert imported.returncode == 0, imported.stdout + imported.stderr
+set_initial_view_from_camera(viewer, scene_path)
+inspected = subprocess.run([str(asset_tool), "inspect", str(scene_path)], cwd=root,
+                           capture_output=True, text=True, timeout=60)
+assert inspected.returncode == 0, inspected.stdout + inspected.stderr
+model_count = int(re.search(r"^instances=(\d+)$", inspected.stdout, re.MULTILINE).group(1))
+warmup = 1200
+frames = warmup + 100
 
 
 def run(name, batched):
@@ -34,7 +42,7 @@ def run(name, batched):
     capture = work / f"{name}.png"
     args = [str(viewer), "--config", str(root / "experiments/Scene.json"),
             "--scene", str(scene_path), "--pipeline", "forward",
-            "--frames", "340", "--benchmark-warmup", "240", "--benchmark", str(output),
+            "--frames", str(frames), "--benchmark-warmup", str(warmup), "--benchmark", str(output),
             "--capture", str(capture), "--benchmark-camera", "--no-vsync", "--hidden", "--no-ui"]
     if not batched:
         args.append("--no-instance-batching")
@@ -46,7 +54,7 @@ def run(name, batched):
     assert "vsync=off" in log and "Benchmark: 100 frames" in log, log
     with output.open(newline="", encoding="utf-8") as stream:
         samples = list(csv.DictReader(stream))
-    assert [int(row["frame"]) for row in samples] == list(range(240, 340))
+    assert [int(row["frame"]) for row in samples] == list(range(warmup, frames))
     assert all(math.isfinite(float(row["frame_ms"])) and float(row["frame_ms"]) > 0 for row in samples)
     assert all(190 <= int(row["visible_items"]) <= 210 for row in samples), samples
     assert all(int(row["failed_items"]) == 0 for row in samples), samples

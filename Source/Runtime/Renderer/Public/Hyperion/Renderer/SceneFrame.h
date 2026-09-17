@@ -31,6 +31,9 @@ struct FSceneViewRequest
 	bool bInstanceBatching = true;
 	FMaterialParameterValues Parameters;
 	FMaterialParameterValues PassParameters;
+	std::optional<FSceneCameraView> CameraOverride;
+	// Tools previewing an explicit camera can require that exact target to remain available.
+	bool bAllowCameraFallback = true;
 };
 
 enum class ESceneCameraStatus : std::uint8_t

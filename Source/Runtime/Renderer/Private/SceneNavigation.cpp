@@ -30,7 +30,7 @@ std::optional<FSceneHandle> GetSceneNavigationCamera(const FSceneInstance& InSce
 {
 	const auto Handle = InScene.GetSettings().DefaultCamera;
 	FSceneNodeView View;
-	if (!Handle || !InScene.GetNodeView(*Handle, View) || !View.Node->Camera || !View.bEffectiveEnabled)
+	if (!Handle || !InScene.GetNodeView(*Handle, View) || !View.Node->Camera() || !View.bEffectiveEnabled)
 	{
 		return {};
 	}
@@ -46,108 +46,180 @@ FVec3 GetSceneNavigationPivot(const FSceneInstance& InScene)
 	}
 	FSceneCameraPose Pose;
 	InScene.GetCameraPose(*Handle, Pose);
-	return Add(Pose.Eye, ScaleVector(Pose.Forward, InScene.FindNode(*Handle)->Camera->FocusDistance));
+	return Add(Pose.Eye, ScaleVector(Pose.Forward, InScene.FindNode(*Handle)->Camera()->FocusDistance));
 }
+
+bool GetSceneCameraView(const FSceneInstance& InScene, FSceneCameraView& OutView)
+{
+	const auto Handle = GetSceneNavigationCamera(InScene);
+	FSceneNodeView View;
+	if (!Handle || !InScene.GetNodeView(*Handle, View))
+	{
+		return false;
+	}
+	OutView = {*View.Node->Camera(), View.World};
+	return true;
+}
+
+bool CanInitializeSceneBrowsingView(const FSceneInstance& InScene)
+{
+	const auto& Status = InScene.GetStatus();
+	if (!Status.bLoaded || Status.bClosed || !Status.Error.empty())
+	{
+		return false;
+	}
+	if (InScene.GetSettings().InitialView)
+	{
+		return true;
+	}
+	const auto Models = InScene.GetModels();
+	return std::all_of(Models.begin(), Models.end(),
+	                   [&](const FSceneInstanceModel& InInstance)
+	                   {
+		                   const auto* Model = InScene.Find(InInstance.Handle);
+		                   return Model && (Model->Data || !InScene.GetError(InInstance.Handle).empty());
+	                   });
+}
+
+FSceneCameraView MakeSceneBrowsingView(const FSceneInstance& InScene, float InAspect)
+{
+	if (InScene.GetSettings().InitialView)
+	{
+		return *InScene.GetSettings().InitialView;
+	}
+	FSceneCameraView View;
+	View.World = SceneCameraTransform({0, 3, 12}, {});
+	FitSceneCamera(View, InScene, InAspect, true);
+	return View;
+}
+
+namespace
+{
+template<class T> void Navigate(FSceneInstance& InScene, const T& InOperation)
+{
+	const auto Handle = GetSceneNavigationCamera(InScene);
+	FSceneCameraView Camera;
+	if (Handle && GetSceneCameraView(InScene, Camera))
+	{
+		InOperation(Camera);
+		InScene.SetCameraView(*Handle, Camera.World, Camera.Lens);
+	}
+}
+} // namespace
 
 void OrbitSceneCamera(FSceneInstance& InScene, float InYaw, float InPitch)
 {
-	if (InYaw == 0 && InPitch == 0)
-	{
-		return;
-	}
-	const auto Handle = GetSceneNavigationCamera(InScene);
-	if (!Handle)
-	{
-		return;
-	}
-	FSceneCameraPose Pose;
-	InScene.GetCameraPose(*Handle, Pose);
-	const auto Camera = *InScene.FindNode(*Handle)->Camera;
-	const auto Pivot = Add(Pose.Eye, ScaleVector(Pose.Forward, Camera.FocusDistance));
-	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
-	InScene.SetCameraView(
-	    *Handle,
-	    SceneCameraTransform(Subtract(Pivot, ScaleVector(Rotated.Forward, Camera.FocusDistance)), Pivot, Rotated.Up),
-	    Camera);
+	Navigate(InScene,
+	         [&](FSceneCameraView& InView)
+	         {
+		         OrbitSceneCamera(InView, InYaw, InPitch);
+	         });
 }
 
 void RotateSceneCamera(FSceneInstance& InScene, float InYaw, float InPitch)
 {
-	if (InYaw == 0 && InPitch == 0)
-	{
-		return;
-	}
-	const auto Handle = GetSceneNavigationCamera(InScene);
-	if (!Handle)
-	{
-		return;
-	}
-	FSceneCameraPose Pose;
-	InScene.GetCameraPose(*Handle, Pose);
-	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
-	const auto Camera = *InScene.FindNode(*Handle)->Camera;
-	InScene.SetCameraView(*Handle, SceneCameraTransform(Pose.Eye, Add(Pose.Eye, Rotated.Forward), Rotated.Up), Camera);
+	Navigate(InScene,
+	         [&](FSceneCameraView& InView)
+	         {
+		         RotateSceneCamera(InView, InYaw, InPitch);
+	         });
 }
 
 void DollySceneCamera(FSceneInstance& InScene, float InFactor, float InMinimum, float InMaximum,
                       std::optional<float> InFarPadding)
 {
-	const auto Handle = GetSceneNavigationCamera(InScene);
-	if (!Handle)
+	Navigate(InScene,
+	         [&](FSceneCameraView& InView)
+	         {
+		         DollySceneCamera(InView, InFactor, InMinimum, InMaximum, InFarPadding);
+	         });
+}
+
+void PanSceneCamera(FSceneInstance& InScene, FVec3 InSteps)
+{
+	Navigate(InScene,
+	         [&](FSceneCameraView& InView)
+	         {
+		         PanSceneCamera(InView, InSteps);
+	         });
+}
+
+void FitSceneCamera(FSceneInstance& InScene, float InAspect, bool bInModelViewerLens)
+{
+	Navigate(InScene,
+	         [&](FSceneCameraView& InView)
+	         {
+		         FitSceneCamera(InView, InScene, InAspect, bInModelViewerLens);
+	         });
+}
+
+void OrbitSceneCamera(FSceneCameraView& InCamera, float InYaw, float InPitch)
+{
+	if (InYaw == 0 && InPitch == 0)
 	{
 		return;
 	}
-	FSceneCameraPose Pose;
-	InScene.GetCameraPose(*Handle, Pose);
-	auto Camera = *InScene.FindNode(*Handle)->Camera;
+	const auto Pose = ExtractScenePose(InCamera.World);
+	const auto& Camera = InCamera.Lens;
+	const auto Pivot = Add(Pose.Eye, ScaleVector(Pose.Forward, Camera.FocusDistance));
+	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
+	InCamera.World =
+	    SceneCameraTransform(Subtract(Pivot, ScaleVector(Rotated.Forward, Camera.FocusDistance)), Pivot, Rotated.Up);
+}
+
+void RotateSceneCamera(FSceneCameraView& InCamera, float InYaw, float InPitch)
+{
+	if (InYaw == 0 && InPitch == 0)
+	{
+		return;
+	}
+	const auto Pose = ExtractScenePose(InCamera.World);
+	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
+	InCamera.World = SceneCameraTransform(Pose.Eye, Add(Pose.Eye, Rotated.Forward), Rotated.Up);
+}
+
+void DollySceneCamera(FSceneCameraView& InCamera, float InFactor, float InMinimum, float InMaximum,
+                      std::optional<float> InFarPadding)
+{
+	const auto Pose = ExtractScenePose(InCamera.World);
+	auto& Camera = InCamera.Lens;
 	const auto Pivot = Add(Pose.Eye, ScaleVector(Pose.Forward, Camera.FocusDistance));
 	Camera.FocusDistance = std::clamp(Camera.FocusDistance * InFactor, InMinimum, InMaximum);
 	if (InFarPadding)
 	{
 		Camera.Far = Camera.FocusDistance + *InFarPadding;
 	}
-	InScene.SetCameraView(
-	    *Handle, SceneCameraTransform(Subtract(Pivot, ScaleVector(Pose.Forward, Camera.FocusDistance)), Pivot, Pose.Up),
-	    Camera);
+	InCamera.World =
+	    SceneCameraTransform(Subtract(Pivot, ScaleVector(Pose.Forward, Camera.FocusDistance)), Pivot, Pose.Up);
 }
 
-void PanSceneCamera(FSceneInstance& InScene, FVec3 InSteps)
+void PanSceneCamera(FSceneCameraView& InCamera, FVec3 InSteps)
 {
-	const auto Handle = GetSceneNavigationCamera(InScene);
-	if (!Handle)
-	{
-		return;
-	}
-	FSceneCameraPose Pose;
-	InScene.GetCameraPose(*Handle, Pose);
-	const auto Camera = *InScene.FindNode(*Handle)->Camera;
+	const auto Pose = ExtractScenePose(InCamera.World);
+	const auto& Camera = InCamera.Lens;
 	const auto Right = Normalize(FVec3{Pose.Right.X, 0, Pose.Right.Z});
 	const auto Forward = Normalize(FVec3{Pose.Forward.X, 0, Pose.Forward.Z});
 	const float Step = std::max(.1f, Camera.FocusDistance * .08f);
 	const auto Offset =
 	    ScaleVector(Add(Add(ScaleVector(Right, InSteps.X), ScaleVector(Forward, InSteps.Z)), {0, InSteps.Y, 0}), Step);
 	const auto Eye = Add(Pose.Eye, Offset);
-	InScene.SetCameraView(*Handle, SceneCameraTransform(Eye, Add(Eye, Pose.Forward), Pose.Up), Camera);
+	InCamera.World = SceneCameraTransform(Eye, Add(Eye, Pose.Forward), Pose.Up);
 }
 
-void FitSceneCamera(FSceneInstance& InScene, float InAspect, bool bInModelViewerLens)
+void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, float InAspect, bool bInModelViewerLens)
 {
-	const auto Handle = GetSceneNavigationCamera(InScene);
-	if (!Handle)
-	{
-		return;
-	}
 	FBounds Bounds;
-	for (const auto ModelHandle : InScene.GetNodes(ESceneNodeKind::Model))
+	for (const auto& ModelHandle : InScene.GetNodes(ESceneNodeKind::Model))
 	{
 		FSceneNodeView View;
 		InScene.GetNodeView(ModelHandle, View);
-		const auto& Model = *View.Node->Model;
+		const auto& Model = *View.Node->Model();
 		if (!View.bEffectiveEnabled || !Model.bVisible || !Model.Data)
 		{
 			continue;
 		}
-		const auto WorldBounds = TransformBounds(Model.Data->Bounds, View.World);
+		const auto BoundsValue = SceneModelBounds(SceneModelTransfer(*View.Node, View.World, View.bEffectiveEnabled));
+		const auto WorldBounds = TransformBounds(BoundsValue, View.World);
 		if (IsUsable(WorldBounds))
 		{
 			Bounds = IsUsable(Bounds) ? UnionBounds(Bounds, WorldBounds) : WorldBounds;
@@ -157,9 +229,8 @@ void FitSceneCamera(FSceneInstance& InScene, float InAspect, bool bInModelViewer
 	{
 		return;
 	}
-	FSceneCameraPose Pose;
-	InScene.GetCameraPose(*Handle, Pose);
-	auto Camera = *InScene.FindNode(*Handle)->Camera;
+	const auto Pose = ExtractScenePose(InCamera.World);
+	auto& Camera = InCamera.Lens;
 	const auto Center = ScaleVector(Add(Bounds.Minimum, Bounds.Maximum), .5f);
 	const float Radius = std::max(.01f, Length(Subtract(Bounds.Maximum, Center)));
 	const float Half = Camera.VerticalRadians * .5f;
@@ -170,9 +241,7 @@ void FitSceneCamera(FSceneInstance& InScene, float InAspect, bool bInModelViewer
 		Camera.Near = std::max(.0001f, Radius * .001f);
 		Camera.Far = Camera.FocusDistance + Radius * 10;
 	}
-	InScene.SetCameraView(
-	    *Handle,
-	    SceneCameraTransform(Subtract(Center, ScaleVector(Pose.Forward, Camera.FocusDistance)), Center, Pose.Up),
-	    Camera);
+	InCamera.World =
+	    SceneCameraTransform(Subtract(Center, ScaleVector(Pose.Forward, Camera.FocusDistance)), Center, Pose.Up);
 }
 } // namespace Hyperion
