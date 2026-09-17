@@ -97,7 +97,7 @@ def prepare_dependencies(environment, renderdoc=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vs-version", choices=("auto", "2022", "2026"), default="auto")
-    parser.add_argument("--configuration", choices=("Debug", "Release"), default="Debug")
+    parser.add_argument("--configuration", choices=("Debug", "Release", "RelWithDebInfo"), default="Debug")
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--open", action="store_true")
@@ -129,7 +129,7 @@ def main():
     configure = [cmake, "-S", ROOT, "-B", directory, "-G", generator, "-A", "x64",
                  "-DCMAKE_GENERATOR_INSTANCE=" + str(selected["directory"]),
                  "-DCMAKE_MAKE_PROGRAM=" + str(selected["msbuild"]),
-                 "-DCMAKE_CONFIGURATION_TYPES=Debug;Release", "-DBUILD_TESTING=ON",
+                 "-DCMAKE_CONFIGURATION_TYPES=Debug;Release;RelWithDebInfo", "-DBUILD_TESTING=ON",
                  "-DPython3_EXECUTABLE=" + sys.executable]
     configure.append("-DHYP_ENABLE_RENDERDOC=" + ("ON" if renderdoc else "OFF"))
     if args.tracy is not None:
@@ -144,7 +144,7 @@ def main():
         if args.test:
             command += ["--target", "hyperion_check"]
         run(command, environment)
-    print(f"\nSolution: {solution}\nOpen in Visual Studio, select Debug/Release | x64, then press F5.\n"
+    print(f"\nSolution: {solution}\nOpen in Visual Studio, select Debug/Release/RelWithDebInfo | x64, then press F5.\n"
           "To run all tests: right-click hyperion_check under Hyperion/Tests and choose Build.", flush=True)
     if args.open:
         if not selected["ide"].is_file():

@@ -24,7 +24,7 @@ Vulkan/Metal 尚无运行时后端；SPIR-V/MSL 支持编译与反射。静态�
 ./tools/GenerateSolution.ps1 -Open
 ```
 
-在生成的解决方案中选择 `Debug | x64` 或 `Release | x64`，启动项目为 `hyperion_viewer`。生成 `hyperion_check` 项目会构建并运行测试。更多选项见 [Visual Studio 开发流程](docs/VisualStudio.md)。
+在生成的解决方案中选择 `Debug | x64`、`Release | x64` 或 `RelWithDebInfo | x64`，启动项目为 `hyperion_viewer`。RelWithDebInfo 使用 O2 优化并生成 PDB 调试信息。生成 `hyperion_check` 项目会构建并运行测试。更多选项见 [Visual Studio 开发流程](docs/VisualStudio.md)。
 
 使用 Ninja 构建并测试：
 
@@ -34,6 +34,7 @@ Vulkan/Metal 尚无运行时后端；SPIR-V/MSL 支持编译与反射。静态�
 python tools/Bootstrap.py
 ./tools/Build.ps1 -Preset debug -Test
 ./tools/Build.ps1 -Preset release -Test
+./tools/Build.ps1 -Preset relwithdebinfo -Test
 ```
 
 依赖版本、commit 和 SHA-256 固定在 `dependencies.lock.json`。首次准备依赖需要下载；依赖源码和缓存位于 `out/deps`、`out/downloads`。Viewer 构建直接使用已发布资源；示例需检出同级 HyperionAssets 并执行 `git lfs pull`。挂载配置、离线重建及源导入测试准备见 [Content 与虚拟文件系统](docs/ContentFileSystem.md)。构建产物、日志与截图保存在被 Git 忽略的 `out` 中。

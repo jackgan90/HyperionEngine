@@ -13,16 +13,18 @@
 
 缺少的依赖自动按 `dependencies.lock.json` 下载/校验。已有依赖时不需要网络。脚本只规范化子进程环境，处理 MSBuild 遇到的 `PATH`/`Path` 重复问题，不修改系统环境变量。CMD 入口的执行策略参数也仅对该 PowerShell 进程生效。
 
-默认生成 `out/build/vs2022/Hyperion.sln`；选择 VS 2026 时为 `out/build/vs2026/Hyperion.sln`。Debug 与 Release 共用一个 `.sln`，在 IDE 顶部切换。原有 Ninja 构建目录独立保留。
+默认生成 `out/build/vs2022/Hyperion.sln`；选择 VS 2026 时为 `out/build/vs2026/Hyperion.sln`。Debug、Release 与 RelWithDebInfo 共用一个 `.sln`，在 IDE 顶部切换。原有 Ninja 构建目录独立保留。
+
+RelWithDebInfo 使用 `/O2` 优化、Release CRT（`/MD`）和 `NDEBUG`；自有模块使用 `/Zi` 生成编译调试信息，可执行文件使用 `/DEBUG:FULL /INCREMENTAL:NO /OPT:REF /OPT:ICF` 链接，完整 PDB 与 exe 一同输出到 `bin/RelWithDebInfo`。可在 VS 中按 F5 调试，但优化可能导致部分变量不可见或单步顺序变化。该配置不自动开启 Tracy；Ninja 对应 `tools/Build.ps1 -Preset relwithdebinfo`。
 
 ## 在解决方案里工作
 
-1. 打开 `Hyperion.sln`，选择 `Debug | x64` 或 `Release | x64`。
+1. 打开 `Hyperion.sln`，选择 `Debug | x64`、`Release | x64` 或 `RelWithDebInfo | x64`。
 2. 默认启动项目为 `hyperion_viewer`，按 F5 编译并调试渲染器；Ctrl+F5 不附加调试器运行。已有 `.suo` 的启动偏好可能优先，此时手动设一次启动项目。
 3. `Hyperion/Applications` 放 Editor、Viewer 和独立 AssetTool，`Hyperion/Runtime` 放运行时模块，`Hyperion/Backends` 放图形后端，`Hyperion/Plugins` 放实验插件，`Hyperion/Tests` 放测试，`ThirdParty` 放依赖。模块源码显示在各自的 `Public` / `Private` 筛选器中；Viewer 项目也列出 shader、实验配置和文档。将 `hyperion_editor` 设为启动项目即可运行编辑器。
 4. HLSL 在工程里用于查看/编辑，实际由引擎 DXC wrapper 编译，不走 Visual Studio 的默认 FXC 规则。
 
-Viewer 的调试工作目录为仓库根目录，可以在项目属性的“调试 → 命令参数”中填写 `--config experiments/Triangle.json` 等选项。生成的可执行文件在 `out/build/vs2022/bin/Debug` 或 `bin/Release`，所需 DLL 会自动复制到旁边。
+Viewer 的调试工作目录为仓库根目录，可以在项目属性的“调试 → 命令参数”中填写 `--config experiments/Triangle.json` 等选项。生成的可执行文件在 `out/build/vs2022/bin/Debug`、`bin/Release` 或 `bin/RelWithDebInfo`，所需 DLL 会自动复制到旁边。
 
 Viewer 构建不再转换样例来源；示例从挂载的 HyperionAssets 加载。`native_sample_content` 保留为兼容目标，显式重建使用 `tools/PrepareContent.py`。源导入集成测试需要预先恢复来源缓存。参见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
@@ -42,6 +44,7 @@ Viewer 构建不再转换样例来源；示例从挂载的 HyperionAssets 加载
 
 # 生成并编译
 .\tools\GenerateSolution.ps1 -Build -Configuration Debug
+.\tools\GenerateSolution.ps1 -Build -Configuration RelWithDebInfo
 
 # 生成、编译所需项目、运行完整测试
 .\tools\GenerateSolution.ps1 -Test -Configuration Debug
@@ -78,7 +81,7 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 .\tools\Build.ps1 -NoTracy
 ```
 
-原生 CMake 对应 `-DHYP_ENABLE_TRACY=ON/OFF`。开关作用于该构建目录中所有链接 Core 的 exe；同一 VS 解决方案的 Debug/Release 共用此选项，各配置需要分别重编译。不传开关会保留该构建目录的选择；全新配置（或 `-Fresh`）默认关闭，除非同时传入 `-Tracy`。
+原生 CMake 对应 `-DHYP_ENABLE_TRACY=ON/OFF`。开关作用于该构建目录中所有链接 Core 的 exe；同一 VS 解决方案的 Debug/Release/RelWithDebInfo 共用此选项，各配置需要分别重编译。不传开关会保留该构建目录的选择；全新配置（或 `-Fresh`）默认关闭，除非同时传入 `-Tracy`。
 
 Tracy 的 `TRACY_ON_DEMAND` 只延迟采集，仍会监听连接，因此启用 Tracy 的 exe 可能触发 Windows 防火墙授权。Windows 的此类提示主要针对入站监听，是否再次提示取决于 exe 路径、网络配置文件、已有防火墙规则和系统策略，并非所有出站联网都弹窗，详见 [微软防火墙规则说明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules)。此构建选项只控制 Tracy；显式加载 RenderDoc 或以后引入其他网络功能时，应由对应功能按需启用。构建脚本不修改防火墙规则或通知设置。
 

@@ -16,6 +16,7 @@ function(hyp_module target)
   target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Public")
   target_compile_features(${target} PUBLIC cxx_std_20)
   target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /EHsc)
+  target_compile_options(${target} PRIVATE "$<$<CONFIG:RelWithDebInfo>:/O2>" "$<$<CONFIG:RelWithDebInfo>:/Zi>")
   target_compile_definitions(${target} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
   if(HYP_ENABLE_TRACY)
     target_compile_options(${target} PRIVATE /Zi)
@@ -34,6 +35,10 @@ function(hyp_module target)
 endfunction()
 function(hyp_executable target)
   hyp_module(${target})
+  # Keep complete PDBs and optimized linking independently of optional Tracy support.
+  target_link_options(${target} PRIVATE "$<$<CONFIG:RelWithDebInfo>:/DEBUG:FULL>"
+    "$<$<CONFIG:RelWithDebInfo>:/INCREMENTAL:NO>"
+    "$<$<CONFIG:RelWithDebInfo>:/OPT:REF>" "$<$<CONFIG:RelWithDebInfo>:/OPT:ICF>")
   if(HYP_ENABLE_TRACY)
     target_link_options(${target} PRIVATE /DEBUG:FULL /INCREMENTAL:NO)
     # /DEBUG changes the linker's defaults; keep ordinary Release optimizations for measurements.

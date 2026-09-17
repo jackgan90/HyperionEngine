@@ -1,6 +1,6 @@
 param(
     [ValidateSet('auto', '2022', '2026')][string]$VisualStudioVersion = 'auto',
-    [ValidateSet('Debug', 'Release')][string]$Configuration = 'Debug',
+    [ValidateSet('Debug', 'Release', 'RelWithDebInfo')][string]$Configuration = 'Debug',
     [switch]$Build,
     [switch]$Test,
     [switch]$Open,
