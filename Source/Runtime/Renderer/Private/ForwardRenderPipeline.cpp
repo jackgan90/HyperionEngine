@@ -1,6 +1,7 @@
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Core/Profiling.h"
-#include "Hyperion/Renderer/FullscreenPass.h"
+#include "PipelineShadows.h"
+#include <algorithm>
 #include <bit>
 #include <chrono>
 #include <stdexcept>
@@ -79,28 +80,11 @@ void FForwardRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView In
 		Light = {std::bit_cast<float>(Direction->Words[0]), std::bit_cast<float>(Direction->Words[1]),
 		         std::bit_cast<float>(Direction->Words[2])};
 	}
-	const auto SceneRevision = Session.GetScene().GetCollectionRevision();
-	const auto SceneState =
-	    SceneRevision ? std::optional(std::array{*SceneRevision, Session.GetResources().GetPublicationRevision()})
-	                  : std::nullopt;
-	auto EffectiveShadows = InShadows;
-	EffectiveShadows.bEnabled &= !InFrame->GetSceneToken() || InFrame->CastsSceneShadows();
-	LastStatistics.bShadows = ShadowMaps.Prepare(
-	    InMain, Light, EffectiveShadows,
-	    [this](const ISceneVisibility& InVolume)
-	    {
-		    return Session.GetScene().QueryBounds(InVolume);
-	    },
-	    SceneState);
+	LastStatistics.bShadows = PreparePipelineShadows(Session, ShadowMaps, InMain, *InFrame, InShadows, Light);
 	LastStatistics.ShadowSetupMilliseconds =
 	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
-	if (AllocatedShadowBytes != ShadowMaps.TextureBytes() || ShadowDepthConvention != InMain.DepthConvention)
-	{
-		// Replacing resolution retires the previous attachment set after its submitted users complete.
-		Lifetime = Session.GetResources().CreateScopeLifetime();
-		AllocatedShadowBytes = ShadowMaps.TextureBytes();
-		ShadowDepthConvention = InMain.DepthConvention;
-	}
+	UpdatePipelineShadowLifetime(Session.GetResources(), ShadowMaps, InMain.DepthConvention, Lifetime,
+	                             AllocatedShadowBytes, ShadowDepthConvention);
 	auto Views = ShadowMaps.Views(InMain);
 	auto Targets = ShadowMaps.Targets(Lifetime);
 	auto MainTargets = Session.FrameTargets({}, InMain.DepthConvention);
@@ -129,49 +113,6 @@ void FForwardRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView In
 	{
 		InExtensions(InGraph);
 	}
-}
-
-FSceneVisibilityStats FForwardPipelineStatistics::MainView() const
-{
-	FSceneVisibilityStats Result;
-	bool bFirst = true;
-	for (const auto& View : Views)
-	{
-		if (View.Usage == "ShadowDepth")
-		{
-			continue;
-		}
-		if (bFirst)
-		{
-			Result = View.Visibility;
-			Result.VisibleItems = 0;
-			Result.Draws = 0;
-			Result.Batches = {};
-			bFirst = false;
-		}
-		Result.VisibleItems += View.Visibility.VisibleItems;
-		Result.Draws += View.Visibility.Draws;
-		Result.Batches += View.Visibility.Batches;
-	}
-	return Result;
-}
-
-FForwardPipelineStatistics FForwardFrame::Statistics() const
-{
-	auto Result = Base;
-	if (bDeferred)
-	{
-		const auto Family = Preparation.Statistics();
-		Result.PreparationMilliseconds += Family.Milliseconds;
-		Result.Views = Family.Views;
-	}
-	if (Fullscreen)
-	{
-		Result.FullscreenPreparationMilliseconds = Fullscreen->Milliseconds;
-		Result.FullscreenDraws = Fullscreen->Draws;
-		Result.PreparationMilliseconds += Fullscreen->Milliseconds;
-	}
-	return Result;
 }
 
 FForwardFrame FForwardRenderPipeline::GetFrame() const

@@ -37,7 +37,9 @@ private:
 
 	std::shared_ptr<const FMaterialTextureSource> Texture(const std::shared_ptr<const FTextureAsset>& InAsset);
 	void Trim();
+	std::shared_ptr<std::mutex> Preparation(const FKey& InKey);
 	mutable std::mutex Mutex;
+	std::map<FKey, std::weak_ptr<std::mutex>> Preparations;
 	std::map<FKey, FMaterialEntry> Materials;
 	std::map<const FTextureAsset*, FTextureEntry> Textures;
 	std::map<const FMaterialDefinition*, FMaterialEntry> Programs;

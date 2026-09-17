@@ -8,6 +8,8 @@ import pathlib
 import statistics
 import subprocess
 
+from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -30,7 +32,7 @@ def summarize(rows):
 def run(args, motion, trial, enabled):
     name = f"{motion}-{trial}-{'on' if enabled else 'off'}"
     path = args.output / f"{name}.csv"
-    command = [str(args.viewer), "--config", str(ROOT / "experiments/Scene.json"), "--hidden", "--no-vsync",
+    command = [str(args.viewer), "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-vsync",
                "--frames", str(args.warmup + args.frames), "--benchmark-warmup", str(args.warmup),
                "--benchmark", str(path)]
     if motion == "moving":
@@ -42,11 +44,12 @@ def run(args, motion, trial, enabled):
     completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
     log = completed.stdout + completed.stderr
     (args.output / f"{name}.log").write_text(log, encoding="utf-8")
-    if completed.returncode or "validation errors: 0" not in log or "78/78 models ready | 0 failed" not in log:
+    if completed.returncode or "validation errors: 0" not in log:
         raise RuntimeError(f"Invalid workload: {name}; see log")
     with path.open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
     assert [int(row["frame"]) for row in rows] == list(range(args.warmup, args.warmup + args.frames))
+    validate_workload(log, rows)
     result = {"name": name, "motion": motion, "trial": trial, "enabled": enabled,
               "command": command, **summarize(rows)}
     print(f"{name}: {result['mean_ms']:.4f} ms, plan {result['plan_ms']['mean']:.4f} ms, "
@@ -71,7 +74,7 @@ def main():
     results = []
     metadata = {"viewer": str(args.viewer), "sha256": hashlib.sha256(args.viewer.read_bytes()).hexdigest(),
                 "warmup": args.warmup, "frames": args.frames, "trials": args.trials, "ui": not args.no_ui,
-                "config": json.loads((ROOT / "experiments/Scene.json").read_text()), "runs": results}
+                "config": json.loads((benchmark_config_path(ROOT)).read_text()), "runs": results}
     cache = args.viewer.parent.parent / "CMakeCache.txt"
     if cache.is_file():
         (args.output / "CMakeCache.txt").write_text(cache.read_text(), encoding="utf-8")

@@ -190,7 +190,6 @@ void FSceneStorage::FMutation::Remove(std::uint32_t InSlot)
 	{
 		Order = Storage.Order;
 	}
-	std::erase(*Order, InSlot);
 	if (!Free)
 	{
 		Free = Storage.Free;
@@ -254,6 +253,15 @@ void FSceneStorage::FMutation::Commit(bool bInAdvanceRevision, bool bInForceSett
 	}
 	const auto PublishedRevision = Storage.Revision + (bInAdvanceRevision ? 1 : 0);
 	auto PendingChanges = PrepareChanges(PublishedRevision, bSettingsChanged || bInForceSettings);
+	if (Order && !RemovedIds.empty())
+	{
+		std::erase_if(*Order,
+		              [&](std::uint32_t InSlot)
+		              {
+			              const auto Entry = Slots.find(InSlot);
+			              return Entry != Slots.end() && !Entry->second->Node;
+		              });
+	}
 	// All value validation and allocations finish before the first authoritative write.
 	Storage.Slots.reserve(SlotCount);
 	static_assert(std::is_nothrow_swappable_v<std::unique_ptr<FSlot>>);

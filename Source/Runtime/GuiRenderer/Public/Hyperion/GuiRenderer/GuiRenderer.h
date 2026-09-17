@@ -5,6 +5,7 @@
 namespace Hyperion
 {
 // Texture ID 1 is reserved for the font. Sources and scope owners are retained per submitted frame.
+// The reuse cache also retains the latest prepared frame's bounded set of image leases until replacement or Stop.
 // Images contain display-encoded RGB sampled through an ordinary UNORM view, matching GUI vertex colors.
 struct FGuiTextureBinding
 {

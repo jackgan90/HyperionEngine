@@ -20,6 +20,8 @@ thread_local bool bInjected{};
 HANDLE SymbolProcess{};
 std::uintptr_t DispatchStart{};
 std::uintptr_t DispatchEnd{};
+const char* AllocationSymbol{};
+bool bCustomFunction{};
 
 void InjectAllocationFailure()
 {
@@ -32,13 +34,18 @@ void InjectAllocationFailure()
 	FailureIndex = -1;
 	std::array<void*, 32> Frames{};
 	const auto Count = CaptureStackBackTrace(0, static_cast<DWORD>(Frames.size()), Frames.data(), nullptr);
-	bool bControlBlock{};
+	bool bControlBlock = bCustomFunction && !AllocationSymbol;
 	alignas(SYMBOL_INFO) std::array<char, sizeof(SYMBOL_INFO) + MAX_SYM_NAME> Storage{};
 	auto* Symbol = reinterpret_cast<SYMBOL_INFO*>(Storage.data());
 	Symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 	Symbol->MaxNameLen = MAX_SYM_NAME;
 	for (unsigned Index = 0; Index < Count; ++Index)
 	{
+		if (AllocationSymbol && SymFromAddr(SymbolProcess, reinterpret_cast<DWORD64>(Frames[Index]), nullptr, Symbol) &&
+		    std::strstr(Symbol->Name, AllocationSymbol) && std::strstr(Symbol->Name, "::emplace<"))
+		{
+			bControlBlock = true;
+		}
 		if (SymFromAddr(SymbolProcess, reinterpret_cast<DWORD64>(Frames[Index]), nullptr, Symbol) &&
 		    std::strstr(Symbol->Name, "_Setpd") &&
 		    (std::strstr(Symbol->Name, "FTaskSystem::FImpl::FWork") || std::strstr(Symbol->Name, "FTaskState")))
@@ -69,7 +76,12 @@ void InjectAllocationFailure()
 
 } // namespace
 
-FDispatchAllocationFailure::FDispatchAllocationFailure(int InIndex)
+FDispatchAllocationFailure::FDispatchAllocationFailure(int InIndex) : FDispatchAllocationFailure(InIndex, nullptr)
+{
+}
+
+FDispatchAllocationFailure::FDispatchAllocationFailure(int InIndex, const char* InFunction,
+                                                       const char* InAllocationSymbol)
 {
 	_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 	_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
@@ -85,12 +97,14 @@ FDispatchAllocationFailure::FDispatchAllocationFailure(int InIndex)
 	auto* Symbol = reinterpret_cast<SYMBOL_INFO*>(Storage.data());
 	Symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 	Symbol->MaxNameLen = MAX_SYM_NAME;
-	HYP_CHECK(SymFromName(Process, "Hyperion::FTaskSystem::Dispatch", Symbol));
+	HYP_CHECK(SymFromName(Process, InFunction ? InFunction : "Hyperion::FTaskSystem::Dispatch", Symbol));
 	DispatchStart = Symbol->Address;
 	DispatchEnd = DispatchStart + Symbol->Size;
 	HYP_CHECK(DispatchEnd > DispatchStart);
 	SymbolProcess = Process;
 	bInjected = false;
+	bCustomFunction = InFunction != nullptr;
+	AllocationSymbol = InAllocationSymbol;
 	FailureIndex = InIndex;
 }
 

@@ -5,6 +5,7 @@
 #include <cctype>
 #include <iomanip>
 #include <sstream>
+#include <vector>
 
 namespace Hyperion
 {
@@ -183,30 +184,48 @@ void FEditorApplication::DrawToolbar()
 
 void FEditorApplication::DrawNode(FSceneHandle InHandle)
 {
-	const auto* Node = Scene->FindNode(InHandle);
-	if (!Node)
+	struct FNodeVisit
 	{
-		return;
-	}
-	const auto Children = Scene->GetChildren(InHandle);
-	Gui->NextRow();
-	Gui->NextColumn();
-	bool bClicked{};
-	const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(), Selection == InHandle,
-	                                 bClicked, !Options.bBenchmarkCollapsed);
-	if (bClicked)
+		FSceneHandle Handle;
+		bool bEndTree{};
+	};
+
+	std::vector<FNodeVisit> Pending{{InHandle}};
+	while (!Pending.empty())
 	{
-		SelectObject(InHandle);
-	}
-	Gui->NextColumn();
-	Gui->Text(KindName(Node->GetKind()));
-	if (bOpen)
-	{
-		for (const auto Child : Children)
+		const FNodeVisit Visit = Pending.back();
+		Pending.pop_back();
+		if (Visit.bEndTree)
 		{
-			DrawNode(Child);
+			Gui->EndTree();
+			continue;
 		}
-		Gui->EndTree();
+		const auto* Node = Scene->FindNode(Visit.Handle);
+		if (!Node)
+		{
+			continue;
+		}
+		const auto Children = Scene->GetChildren(Visit.Handle);
+		Gui->NextRow();
+		Gui->NextColumn();
+		bool bClicked{};
+		const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(),
+		                                 Selection == Visit.Handle, bClicked, !Options.bBenchmarkCollapsed);
+		if (bClicked)
+		{
+			SelectObject(Visit.Handle);
+		}
+		Gui->NextColumn();
+		Gui->Text(KindName(Node->GetKind()));
+		if (bOpen)
+		{
+			// Keep the parent tree scope open until its children have been visited in order.
+			Pending.push_back({Visit.Handle, true});
+			for (auto Child = Children.rbegin(); Child != Children.rend(); ++Child)
+			{
+				Pending.push_back({*Child});
+			}
+		}
 	}
 }
 

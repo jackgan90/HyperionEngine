@@ -25,10 +25,56 @@ FRenderBatchCandidate Candidate(FFixture& InFixture, FMaterialDescription InDesc
 	    ResolveMaterialBindingContext(Item.State.Surface->GetSnapshot(), *Compiled, Compiled->GetPass(), Item.Context));
 	return DescribeBatchCandidate(Item, InFixture.View, {false, ERHIDepthFormat::D32S8});
 }
+
+void CheckPackingCompatibility(FFixture& InFixture)
+{
+	auto Items = Snapshot(InFixture, 2);
+	const std::array<std::size_t, 2> Indices{0, 1};
+	const auto Baseline = PackInstanceBatch(Items, Indices);
+	const auto Original = InFixture.Resource->GetMaterial(0)->GetSnapshot()->Definition->GetDescription();
+	const auto Select = [&](FMaterialDescription InDescription)
+	{
+		auto& Item = Items.Items[1];
+		Item.State.Surface = InFixture.Material(std::move(InDescription));
+		const auto Program = Item.State.Surface->GetCompiled();
+		Item.ResolvedParameters = std::make_shared<const FResolvedMaterialParameters>(ResolveMaterialBindingContext(
+		    Item.State.Surface->GetSnapshot(), *Program, Program->GetPass(), Item.Context));
+	};
+	auto Reordered = Original;
+	std::reverse(Reordered.Parameters.begin(), Reordered.Parameters.end());
+	Select(std::move(Reordered));
+	const auto Compatible = PackInstanceBatch(Items, Indices);
+	HYP_CHECK(Compatible->Constants.size() == Baseline->Constants.size());
+	for (std::size_t Index = 0; Index < Baseline->Constants.size(); ++Index)
+	{
+		HYP_CHECK(*Compatible->Constants[Index].Bytes == *Baseline->Constants[Index].Bytes);
+	}
+	auto Renamed = Original;
+	const auto Placement = std::find_if(Renamed.Parameters.begin(), Renamed.Parameters.end(),
+	                                    [](const auto& InParameter)
+	                                    {
+		                                    return InParameter.Name == "Placement";
+	                                    });
+	HYP_CHECK(Placement != Renamed.Parameters.end());
+	Placement->Name = "OtherPlacement";
+	Items.Items[1].Context.ObjectParameters.front().Name = "OtherPlacement";
+	Select(std::move(Renamed));
+	bool bRejected{};
+	try
+	{
+		(void)PackInstanceBatch(Items, Indices);
+	}
+	catch (const std::invalid_argument&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+}
 } // namespace
 
 void RunInstanceResourceTests(FFixture& InFixture)
 {
+	CheckPackingCompatibility(InFixture);
 	const auto Original = InFixture.Resource->GetMaterial(0)->GetSnapshot()->Definition->GetDescription();
 	const auto Base = Candidate(InFixture, Original);
 	HYP_CHECK(Base.Signature == Candidate(InFixture, Original).Signature);

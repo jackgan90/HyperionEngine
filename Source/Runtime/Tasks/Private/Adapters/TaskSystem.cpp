@@ -406,16 +406,26 @@ FTaskHandle FTaskSystem::Dispatch(FTarget InTarget, std::function<void()> InBody
 			S.Schedule(Work);
 		}
 	};
-	for (const auto& Dependency : InDependencies)
+	try
 	{
-		if (Dependency.State)
+		for (const auto& Dependency : InDependencies)
 		{
-			Dependency.State->Subscribe(Arrived);
+			if (Dependency.State)
+			{
+				Dependency.State->Subscribe(Arrived);
+			}
+			else
+			{
+				Arrived();
+			}
 		}
-		else
-		{
-			Arrived();
-		}
+	}
+	catch (...)
+	{
+		// Keep the admission sentinel: already subscribed callbacks cannot schedule this work.
+		Work->Body = {};
+		S.Finish(Work->State, std::current_exception());
+		throw;
 	}
 	Arrived();
 	return FTaskHandle(Work->State);

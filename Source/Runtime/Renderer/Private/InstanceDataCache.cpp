@@ -1,10 +1,10 @@
 #include "InstanceDataCache.h"
 #include "Hyperion/Renderer/MaterialInputValues.h"
-#include "Hyperion/Renderer/MaterialPacking.h"
-#include "SceneItemPreparation.h"
+#include "InstancePacking.h"
 #include <algorithm>
 #include <list>
 #include <map>
+#include <stdexcept>
 #include <tuple>
 #include <unordered_map>
 
@@ -15,16 +15,7 @@ namespace
 struct FRecordLayout
 {
 	std::uint64_t Identity{};
-	EShaderFormat Format{};
-	std::uint32_t Stride{};
-	std::vector<FShaderMember> Members;
-	std::vector<std::pair<std::string, std::string>> Mapping;
-
-	bool Matches(const FRecordLayout& InOther) const
-	{
-		return Format == InOther.Format && Stride == InOther.Stride && Members == InOther.Members &&
-		       Mapping == InOther.Mapping;
-	}
+	FInstanceRecordLayout Contract;
 };
 
 struct FPackedRecord
@@ -155,18 +146,11 @@ struct FInstanceDataCache::FImpl
 			return It->second.Layout;
 		}
 		FRecordLayout Candidate;
-		Candidate.Format = InPass.Vertex.Format;
-		Candidate.Stride = Binding.InstanceStride;
-		for (const auto& Member : Binding.Members)
-		{
-			Candidate.Members.push_back(Member.Layout);
-			const auto& Parameter = InProgram->Interface.Schema->GetParameters().at(Member.ParameterIndex);
-			Candidate.Mapping.emplace_back(Parameter.Name, Parameter.Semantic);
-		}
+		Candidate.Contract = DescribeInstanceRecordLayout(*InProgram, InPass, Binding);
 		std::shared_ptr<const FRecordLayout> Result;
 		for (const auto& [ExistingKey, Existing] : Layouts)
 		{
-			if (Existing.Layout->Matches(Candidate))
+			if (Existing.Layout->Contract.Matches(Candidate.Contract))
 			{
 				Result = Existing.Layout;
 				break;
@@ -226,11 +210,8 @@ struct FInstanceDataCache::FImpl
 			++OutStats.ReusedRecords;
 			return Existing->second.Packed;
 		}
-		const auto Parameters = InItem.SharedParameters
-		                            ? ComposeMaterialParameters(*InItem.ResolvedParameters, *InItem.SharedParameters)
-		                            : *InItem.ResolvedParameters;
-		FPackedRecord Result{++NextIdentity, std::make_shared<const std::vector<std::byte>>(
-		                                         PackMaterialConstants(InBinding, Parameters.Values))};
+		FPackedRecord Result{++NextIdentity,
+		                     std::make_shared<const std::vector<std::byte>>(PackInstanceRecord(InItem, InBinding))};
 		++OutStats.PackedRecords;
 		OutStats.PackedBytes += Result.Data->size();
 		std::size_t Bytes = sizeof(FRecord) + Result.Data->size() + Values.capacity() * sizeof(Values.front());
@@ -253,7 +234,15 @@ struct FInstanceDataCache::FImpl
 			RecentRecords.push_back(Key);
 			FRecord Entry{Result, std::move(Values), InItem.Lifetime, Bytes, std::prev(RecentRecords.end())};
 			Entry.RetainLocal(InItem);
-			Records.emplace(Key, std::move(Entry));
+			try
+			{
+				Records.emplace(Key, std::move(Entry));
+			}
+			catch (...)
+			{
+				RecentRecords.pop_back();
+				throw;
+			}
 			RecordBytes += Bytes;
 		}
 		return Result;
@@ -278,7 +267,7 @@ struct FInstanceDataCache::FImpl
 			return It->second.Data;
 		}
 		auto Result = std::make_shared<std::vector<std::byte>>();
-		Result->reserve(InRecords.size() * InLayout.Stride);
+		Result->reserve(InRecords.size() * InLayout.Contract.Stride);
 		for (const auto& Record : InRecords)
 		{
 			Result->insert(Result->end(), Record.Data->begin(), Record.Data->end());
@@ -296,7 +285,15 @@ struct FInstanceDataCache::FImpl
 				++OutStats.Evictions;
 			}
 			RecentBlocks.push_back(Key);
-			Blocks.emplace(Key, FBlock{Result, InOwners, Bytes, std::prev(RecentBlocks.end())});
+			try
+			{
+				Blocks.emplace(Key, FBlock{Result, InOwners, Bytes, std::prev(RecentBlocks.end())});
+			}
+			catch (...)
+			{
+				RecentBlocks.pop_back();
+				throw;
+			}
 			BlockBytes += Bytes;
 		}
 		return Result;
@@ -320,12 +317,7 @@ std::shared_ptr<const FInstanceBatchData> FInstanceDataCache::Pack(const FRender
 	auto Result = std::make_shared<FInstanceBatchData>();
 	Result->InstanceCount = static_cast<std::uint32_t>(InItems.size());
 	const auto& First = InSnapshot.Items.At(InItems.front());
-	const auto Program = First.Preparation && First.Preparation->Program ? First.Preparation->Program
-	                                                                     : First.State.Surface->GetCompiled();
-	if (!Program)
-	{
-		throw std::invalid_argument("Instance packing requires a ready material program");
-	}
+	const auto Program = GetInstanceProgram(First);
 	const auto& Pass = Program->GetPass(InSnapshot.View.Usage, "Instance");
 	bool bStable = true;
 	for (const auto Index : InItems)
@@ -351,12 +343,7 @@ std::shared_ptr<const FInstanceBatchData> FInstanceDataCache::Pack(const FRender
 		for (const auto Index : InItems)
 		{
 			const auto& Item = InSnapshot.Items.At(Index);
-			const auto ItemProgram = Item.Preparation && Item.Preparation->Program ? Item.Preparation->Program
-			                                                                       : Item.State.Surface->GetCompiled();
-			if (!ItemProgram)
-			{
-				throw std::invalid_argument("Instance packing requires a ready material program");
-			}
+			const auto ItemProgram = GetInstanceProgram(Item);
 			if (ItemProgram == Program)
 			{
 				Records.push_back(Impl->Record(Item, Binding, *Layout, OutStats));
@@ -364,7 +351,7 @@ std::shared_ptr<const FInstanceBatchData> FInstanceDataCache::Pack(const FRender
 			}
 			const auto& ItemPass = ItemProgram->GetPass(InSnapshot.View.Usage, "Instance");
 			const auto ItemLayout = Impl->Layout(ItemProgram, ItemPass, Slot);
-			if (ItemLayout != Layout && !ItemLayout->Matches(*Layout))
+			if (ItemLayout != Layout && !ItemLayout->Contract.Matches(Layout->Contract))
 			{
 				throw std::invalid_argument("Incompatible instance record layout");
 			}

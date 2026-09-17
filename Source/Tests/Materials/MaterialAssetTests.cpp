@@ -156,12 +156,50 @@ void CheckMaterials()
 }
 } // namespace
 
+void CheckCubeMaterial()
+{
+	FMaterialAssetValue Cube;
+	Cube.Type = FMaterialParameterType::Resource(EMaterialValueKind::TextureCube);
+	Cube.Texture = FAssetRef{"", "cube.hasset", RecordType<FTextureAsset>().Id, ""};
+	ValidateMaterialAssetValue(Cube);
+	FMaterialAsset Material;
+	Material.Name = "Persistent cube material";
+	FMaterialPass Pass;
+	Pass.Vertex = {"Cube.hlsl", "VSMain"};
+	Pass.Pixel = {"Cube.hlsl", "PSMain"};
+	Material.Passes.push_back(Pass);
+	FMaterialAssetParameter Parameter;
+	Parameter.Name = "Environment";
+	Parameter.Type = Cube.Type;
+	Parameter.Default = Cube;
+	Material.Parameters.push_back(Parameter);
+	Material.Values.push_back({Parameter.Name, Cube});
+	ValidateMaterialAsset(Material);
+	const auto Encoded = EncodeAsset(RecordType<FMaterialAsset>(), &Material);
+	const auto Document = DecodeAsset(std::make_shared<const std::vector<std::byte>>(Encoded.Bytes));
+	const auto Loaded =
+	    std::static_pointer_cast<FMaterialAsset>(ReadRecord(RecordType<FMaterialAsset>(), Document.Object));
+	ValidateMaterialAsset(*Loaded);
+	Reject(
+	    [&]
+	    {
+		    ResolveMaterialAssetDescription(Material,
+		                                    [](const FAssetRef&)
+		                                    {
+			                                    return std::make_shared<const FMaterialTextureSource>(
+			                                        EMaterialTextureEncoding::Linear,
+			                                        std::vector<FMaterialTextureMip>{{1, 1, {255, 255, 255, 255}}});
+		                                    });
+	    });
+}
+
 int main()
 {
 	try
 	{
 		CheckTextures();
 		CheckMaterials();
+		CheckCubeMaterial();
 		std::cout << "PASS: reflected material/texture assets, typed values, shader state and resource boundaries\n";
 		return 0;
 	}

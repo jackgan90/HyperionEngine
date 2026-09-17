@@ -54,6 +54,8 @@ python tools/PrepareContent.py --restore-only
 
 默认源缓存是 `HyperionAssets/.cache/Sources`，可通过 `--cache` 改到其他未跟踪目录。`Metadata/Sources.json` 记录固定来源/哈希、生成器、完整自创配方和发布根。`--source-root` 与 `--source-id` 必须一起提供；逻辑来源 ID 在不同机器上保持不变。保留 `.asset-library.hasset` 以复用既有身份，不把它当作运行时 catalog。依赖先发布到 `.assets/<Id>-<Revision>.hasset`，最后发布根；旧代际不自动删除。
 
+`--source-id` 建议使用与物理位置无关的名称，例如 `custom`。导入会把源根规范为绝对路径及 `/` 分隔符，再以该根加 `/` 作为物理前缀；逻辑 ID 加 `/` 不得包含这个前缀，除非两者完全相等。例如源根为 `D:/Sources` 时，`D:/Sources/logical` 和 `logical/D:/Sources` 会被明确拒绝，避免重导入时反复迁移 key、改变资产身份。`D:/Sources` 这个完全相等的 ID 仍可使用并稳定重导入，但搬迁物理来源时仍须保留该逻辑 ID，通常不如位置无关的名称清晰。此约束不改变既有 library 的持久化格式。
+
 已有虚拟原生引用在导入时经过依赖图及 ID/Revision 校验后保留。天空的通用 GGX Smith BRDF LUT 位于 `/Engine/Textures/EnvironmentBrdf.hasset`，不会随每个天空重复发布。引擎 LUT 可显式重建：
 
 ```powershell

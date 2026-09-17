@@ -7,10 +7,12 @@ import pathlib
 import statistics
 import subprocess
 
+from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+
 
 def measure(viewer, root, work, name, motion, enabled, samples, warmup, resolution):
     output = work / f"{name}.csv"
-    args = [str(viewer), "--config", str(root / "experiments/Scene.json"),
+    args = [str(viewer), "--config", str(benchmark_config_path(root)),
             "--hidden", "--no-ui", "--no-vsync", "--frames", str(samples + warmup),
             "--benchmark-warmup", str(warmup), "--benchmark", str(output),
             "--shadow-resolution", str(resolution)]
@@ -21,8 +23,6 @@ def measure(viewer, root, work, name, motion, enabled, samples, warmup, resoluti
     log = result.stdout + result.stderr
     (work / f"{name}.log").write_text(log, encoding="utf-8")
     assert result.returncode == 0 and "validation errors: 0" in log, log
-    model_count = sum("model" in node for node in json.loads((root / "out/fixtures/Sources/Scenes/Showcase.json").read_text(encoding="utf-8"))["nodes"])
-    assert f"{model_count}/{model_count} models ready | 0 failed" in log, log
     with output.open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
     assert len(rows) == samples
@@ -30,7 +30,7 @@ def measure(viewer, root, work, name, motion, enabled, samples, warmup, resoluti
     gpu_ids = [int(row["gpu_sample_frame"]) for row in rows]
     assert cpu_ids == list(range(warmup, warmup + samples))
     assert gpu_ids == [frame + 1 for frame in cpu_ids], "GPU submissions must cover the exact interval once"
-    assert all(190 <= int(row["visible_items"]) <= 210 for row in rows)
+    validate_workload(log, rows)
     assert all(int(row["failed_items"]) == int(row["shadow_failed"]) == 0 for row in rows)
     assert all(int(row["shadows"]) == enabled for row in rows)
     if enabled:

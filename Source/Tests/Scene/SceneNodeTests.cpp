@@ -212,6 +212,92 @@ void CheckInheritedEnabledAndRemoval()
 	HYP_CHECK(!Scene.GetSettings().DefaultCamera && Scene.GetNodes() == std::vector<FSceneHandle>{Other});
 }
 
+void CheckBulkClear(FScene& InScene)
+{
+	const auto Handles = InScene.GetNodes();
+	const auto Revision = InScene.GetRevision();
+	InScene.Acknowledge(Revision);
+	InScene.Clear();
+	HYP_CHECK(InScene.GetRevision() == Revision + 1);
+	HYP_CHECK(InScene.GetNodes().empty() && InScene.GetRoots().empty() && InScene.CountNodes() == 0);
+	HYP_CHECK(InScene.CountNodes(ESceneNodeKind::Camera) == 0 && !InScene.GetSettings().DefaultCamera);
+	const auto Changes = InScene.GetChanges();
+	const auto RemovedCount = std::count_if(Changes.begin(), Changes.end(),
+	                                        [](const FSceneChange& InChange)
+	                                        {
+		                                        return InChange.bRemoved;
+	                                        });
+	HYP_CHECK(static_cast<std::size_t>(RemovedCount) == Handles.size());
+	for (const auto Handle : Handles)
+	{
+		HYP_CHECK(!InScene.FindNode(Handle));
+	}
+	InScene.Clear();
+	HYP_CHECK(InScene.GetRevision() == Revision + 1);
+	const auto Reused = InScene.AddNode(Group("reused-after-clear"));
+	HYP_CHECK(Reused.Slot == Handles.back().Slot && Reused.Generation != Handles.back().Generation);
+	HYP_CHECK(InScene.FindNode(Reused) && !InScene.FindNode(Handles.back()));
+}
+
+void CheckWideKeepChildren()
+{
+	constexpr std::size_t Width = 128;
+	FScene Scene;
+	std::vector<FSceneNode> Nodes{Group("root", {}, Translation({3, 0, 0})), Group("other"), Group("before", "root"),
+	                              Group("removed", "root", Translation({2, 0, 0})), Group("after", "root")};
+	Nodes[3].bEnabled = false;
+	for (std::size_t Index = 0; Index < Width; ++Index)
+	{
+		auto Node = Group("wide-" + std::to_string(Index), "removed", Translation({static_cast<float>(Index), 1, 0}));
+		if (Index == 0)
+		{
+			Node.Camera() = FSceneCamera{};
+		}
+		Nodes.push_back(std::move(Node));
+	}
+	Nodes.push_back(Group("grandchild", "wide-" + std::to_string(Width - 1), Translation({0, 0, 2})));
+	Scene.LoadNodes(std::move(Nodes));
+	const auto Root = Scene.FindHandle("root");
+	const auto Removed = Scene.FindHandle("removed");
+	const auto Grandchild = Scene.FindHandle("grandchild");
+	const auto GrandWorld = World(Scene, Grandchild);
+	const auto Children = Scene.GetChildren(Removed);
+	std::vector<FMat4> Worlds;
+	for (const auto Child : Children)
+	{
+		Worlds.push_back(World(Scene, Child));
+		HYP_CHECK(!Scene.IsEffectivelyEnabled(Child));
+	}
+	Scene.SetSettings({Children.front(), {}, {}});
+	auto ExpectedOrder = Scene.GetNodes();
+	std::erase(ExpectedOrder, Removed);
+	std::vector<FSceneHandle> ExpectedChildren{Scene.FindHandle("before"), Scene.FindHandle("after")};
+	ExpectedChildren.insert(ExpectedChildren.end(), Children.begin(), Children.end());
+	const auto Roots = Scene.GetRoots();
+	const auto Revision = Scene.GetRevision();
+	Scene.Acknowledge(Revision);
+	HYP_CHECK(Scene.RemoveNodeKeepChildren(Removed));
+	HYP_CHECK(Scene.GetRevision() == Revision + 1 && !Scene.FindNode(Removed));
+	HYP_CHECK(Scene.GetNodes() == ExpectedOrder && Scene.GetRoots() == Roots);
+	HYP_CHECK(Scene.GetChildren(Root) == ExpectedChildren && Scene.GetSettings().DefaultCamera == Children.front());
+	for (std::size_t Index = 0; Index < Children.size(); ++Index)
+	{
+		const auto Child = Children[Index];
+		HYP_CHECK(Scene.FindNode(Child)->Parent() == "root");
+		HYP_CHECK(Scene.FindHandle("wide-" + std::to_string(Index)) == Child);
+		HYP_CHECK(Near(World(Scene, Child), Worlds[Index]) && Scene.IsEffectivelyEnabled(Child));
+	}
+	HYP_CHECK(Near(World(Scene, Grandchild), GrandWorld) && Scene.IsEffectivelyEnabled(Grandchild));
+	const auto Changes = Scene.GetChanges();
+	const auto RemovedChange = std::find_if(Changes.begin(), Changes.end(),
+	                                        [&](const FSceneChange& InChange)
+	                                        {
+		                                        return InChange.Handle == Removed;
+	                                        });
+	HYP_CHECK(RemovedChange != Changes.end() && RemovedChange->bRemoved);
+	CheckBulkClear(Scene);
+}
+
 void CheckCompatibilityVisibility()
 {
 	FScene Scene;
@@ -533,6 +619,7 @@ void CheckSceneNodes()
 {
 	CheckNodeIdentityAndChanges();
 	CheckInheritedEnabledAndRemoval();
+	CheckWideKeepChildren();
 	CheckCompatibilityVisibility();
 	CheckHierarchyOracleAndTransactions();
 	CheckDocumentInstallation();

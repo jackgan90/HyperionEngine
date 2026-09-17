@@ -280,7 +280,7 @@ FShaderCompileOptions CompileOptions(const FMaterialShader& InShader, const FMat
 
 FCompiledMaterialPass CompileVariant(FShaderCompiler& InCompiler, const FMaterialDefinition& InDefinition,
                                      EShaderFormat InFormat, const FMaterialVariantRequest& InVariant,
-                                     FInterfaceBuilder& InBuilder)
+                                     const FShaderSourceSnapshot& InSources, FInterfaceBuilder& InBuilder)
 {
 	const FMaterialPass& Pass = InDefinition.GetPass(InVariant.Usage);
 	InBuilder.Usage = InVariant.Usage;
@@ -290,12 +290,12 @@ FCompiledMaterialPass CompileVariant(FShaderCompiler& InCompiler, const FMateria
 	Compiled.Variant = InVariant.Name;
 	Compiled.VariantDefines = InVariant.Defines;
 	Compiled.Vertex = InCompiler.Compile(Pass.Vertex.Path, Pass.Vertex.Entry, EShaderStage::Vertex, InFormat,
-	                                     CompileOptions(Pass.Vertex, InVariant));
+	                                     CompileOptions(Pass.Vertex, InVariant), InSources);
 	BindStage(InBuilder, Compiled, Compiled.Vertex, Pass);
 	if (!Pass.Pixel.Path.empty())
 	{
 		Compiled.Pixel = InCompiler.Compile(Pass.Pixel.Path, Pass.Pixel.Entry, EShaderStage::Pixel, InFormat,
-		                                    CompileOptions(Pass.Pixel, InVariant));
+		                                    CompileOptions(Pass.Pixel, InVariant), InSources);
 		BindStage(InBuilder, Compiled, Compiled.Pixel, Pass);
 	}
 	Compiled.Bindings = MergeMaterialBindings(std::move(Compiled.Bindings));
@@ -334,8 +334,8 @@ FCompiledMaterialPass CompileVariant(FShaderCompiler& InCompiler, const FMateria
 }
 
 void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefinition& InDefinition,
-                              EShaderFormat InFormat, FInterfaceBuilder& InBuilder,
-                              FCompiledMaterialDefinition& OutResult)
+                              EShaderFormat InFormat, const FShaderSourceSnapshot& InSources,
+                              FInterfaceBuilder& InBuilder, FCompiledMaterialDefinition& OutResult)
 {
 	const auto Count = OutResult.Passes.size();
 	for (std::size_t Index = 0; Index < Count; ++Index)
@@ -354,7 +354,7 @@ void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefini
 		try
 		{
 			auto Instance = CompileVariant(InCompiler, InDefinition, InFormat,
-			                               {Default.Usage, "Instance", Default.VariantDefines}, Trial);
+			                               {Default.Usage, "Instance", Default.VariantDefines}, InSources, Trial);
 			if (!std::includes(Default.ActiveParameters.begin(), Default.ActiveParameters.end(),
 			                   Instance.ActiveParameters.begin(), Instance.ActiveParameters.end()))
 			{
@@ -394,6 +394,21 @@ FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompile
 		          return std::tie(InA.Usage, InA.Name) < std::tie(InB.Usage, InB.Name);
 	          });
 	std::set<std::pair<std::string, std::string>> Variants;
+	std::vector<std::filesystem::path> SourcePaths;
+	for (const FMaterialVariantRequest& Variant : InVariants)
+	{
+		if (Variant.Name.empty() || !Variants.emplace(Variant.Usage, Variant.Name).second)
+		{
+			throw std::invalid_argument("Duplicate or empty material variant");
+		}
+		const auto& Pass = InDefinition->GetPass(Variant.Usage);
+		SourcePaths.push_back(Pass.Vertex.Path);
+		if (!Pass.Pixel.Path.empty())
+		{
+			SourcePaths.push_back(Pass.Pixel.Path);
+		}
+	}
+	const auto Sources = InCompiler.CaptureSources(SourcePaths);
 	FInterfaceBuilder Builder;
 	Builder.Semantics = &InDefinition->GetSemantics();
 	Builder.Parameters = InDefinition->GetSchema()->GetParameters();
@@ -407,17 +422,13 @@ FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompile
 	             std::to_string(InDefinition->GetDescription().Version);
 	for (const FMaterialVariantRequest& Variant : InVariants)
 	{
-		if (Variant.Name.empty() || !Variants.emplace(Variant.Usage, Variant.Name).second)
-		{
-			throw std::invalid_argument("Duplicate or empty material variant");
-		}
-		auto Compiled = CompileVariant(InCompiler, *InDefinition, InFormat, Variant, Builder);
+		auto Compiled = CompileVariant(InCompiler, *InDefinition, InFormat, Variant, Sources, Builder);
 		Result.Key += "/" + std::to_string(Variant.Usage.size()) + ":" + Variant.Usage +
 		              std::to_string(Variant.Name.size()) + ":" + Variant.Name + "/" + Compiled.Vertex.CacheKey + "/" +
 		              Compiled.Pixel.CacheKey;
 		Result.Passes.push_back(std::move(Compiled));
 	}
-	CompileOptionalInstances(InCompiler, *InDefinition, InFormat, Builder, Result);
+	CompileOptionalInstances(InCompiler, *InDefinition, InFormat, Sources, Builder, Result);
 	// Register reflected aliases only after binding all stages/variants: authored targets drive matching.
 	for (const auto& Mapping : Builder.Mappings)
 	{

@@ -1,8 +1,9 @@
 #pragma once
+#include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Hyperion/Renderer/ClusteredLights.h"
 #include "Hyperion/Renderer/ContactShadows.h"
-#include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/FullscreenPass.h"
+#include "Hyperion/Renderer/RenderPipelineFrame.h"
 
 namespace Hyperion
 {

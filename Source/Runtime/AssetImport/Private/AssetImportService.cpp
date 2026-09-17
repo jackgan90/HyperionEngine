@@ -8,14 +8,12 @@ namespace Hyperion
 {
 std::string ImportPathString(const std::filesystem::path& InPath)
 {
-	const auto Utf8 = InPath.generic_u8string();
-	return {reinterpret_cast<const char*>(Utf8.data()), Utf8.size()};
+	return PathToUtf8(InPath);
 }
 
 std::string ImportRelativePath(const std::filesystem::path& InPath, const std::filesystem::path& InBase)
 {
-	const auto Relative = InPath.lexically_relative(InBase);
-	return ImportPathString(IsPackagePath(InPath) || Relative.empty() ? InPath : Relative);
+	return PathRelativeToUtf8(InPath, InBase);
 }
 
 std::filesystem::path ImportPath(const std::filesystem::path& InPath)

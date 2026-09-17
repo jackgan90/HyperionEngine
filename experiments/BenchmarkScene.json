@@ -1,0 +1,17 @@
+{
+  "type": "hyperion.application-settings",
+  "schema_version": 1,
+  "properties": {
+    "reversed_z": true,
+    "title": "Hyperion | Showcase Benchmark",
+    "width": 1440,
+    "height": 900,
+    "scene_source": "/Game/Scenes/Showcase.hasset",
+    "plugins": ["scene-viewer", "debug-ui"],
+    "vsync": false,
+    "show_gui": true,
+    "clear_red": 0.025,
+    "clear_green": 0.035,
+    "clear_blue": 0.065
+  }
+}

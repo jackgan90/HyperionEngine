@@ -79,6 +79,13 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	{
 		throw std::invalid_argument("Source root and source ID must be supplied together");
 	}
+	const auto Prefix = ImportPathString(Publication.SourceRoot) + "/";
+	const auto Replacement = Publication.SourceId + "/";
+	if (!Publication.SourceRoot.empty() && Replacement != Prefix && Replacement.find(Prefix) != std::string::npos)
+	{
+		// Such keys cannot be distinguished from physical keys when loading legacy libraries.
+		throw std::invalid_argument("Source ID must not embed the source root prefix");
+	}
 	const auto LibraryLease =
 	    IO.AcquireWriteLeaseAsync(Publication.Library / ".asset-library.hasset", Cancellation).Get(IO.TaskSystem());
 	Publication.LoadLibrary();

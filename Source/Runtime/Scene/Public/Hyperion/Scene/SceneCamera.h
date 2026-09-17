@@ -37,6 +37,7 @@ void ValidateSceneCameraView(const FSceneCameraView& InView);
 bool TryExtractScenePose(const FMat4& InWorld, FSceneCameraPose& OutPose);
 FSceneCameraPose ExtractScenePose(const FMat4& InWorld);
 FMat4 SceneCameraTransform(FVec3 InEye, FVec3 InTarget, FVec3 InUp = {0, 1, 0});
+FMat4 SceneCameraTransform(const FSceneCameraPose& InPose);
 template<> const FRecordDescriptor& RecordType<FSceneCamera>();
 template<> const FRecordDescriptor& RecordType<FSceneCameraView>();
 } // namespace Hyperion

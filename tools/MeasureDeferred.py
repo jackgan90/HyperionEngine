@@ -9,6 +9,8 @@ import pathlib
 import statistics
 import subprocess
 
+from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+
 
 TIMINGS = ("frame_ms", "cpu_latency_ms", "pipeline_prepare_ms", "fullscreen_prepare_ms",
            "plan_ms", "prepare_ms", "material_ms", "shadow_gpu_ms", "forward_gpu_ms",
@@ -25,7 +27,7 @@ def run_case(viewer, root, output, scene, size, moving, shadows, pipeline, layou
              repeat, samples, warmup, main_lead=1, render_lead=1):
     width, height = size
     name = f"{scene}-{width}x{height}-{'moving' if moving else 'static'}-csm{int(shadows)}-{pipeline}-{layout}-{repeat}"
-    config = json.loads((root / "experiments" / f"{scene}.json").read_text(encoding="utf-8"))
+    config = json.loads((benchmark_config_path(root, scene)).read_text(encoding="utf-8"))
     config["properties"].update(width=width, height=height)
     config_path = output / f"{name}.json"
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -53,8 +55,7 @@ def run_case(viewer, root, output, scene, size, moving, shadows, pipeline, layou
     assert all(int(row["shadows"]) == int(shadows) for row in rows), name
     assert all(int(row["main_render_lead"]) == main_lead and int(row["render_rhi_lead"]) == render_lead
                for row in rows), name
-    minimum, maximum = (190, 210) if scene == "Scene" else (4, 4)
-    assert all(minimum <= int(row["visible_items"]) <= maximum and int(row["scene_draws"]) > 0 for row in rows), name
+    validate_workload(log, rows, scene)
     expected_bytes = width * height * (12 if pipeline == "forward" else 44 if layout == "high" else 36)
     assert all(int(row["scene_target_bytes"]) == expected_bytes for row in rows), name
     assert all(float(row["tonemap_gpu_ms"]) > 0 for row in rows), name

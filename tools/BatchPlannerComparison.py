@@ -9,6 +9,8 @@ import pathlib
 import statistics
 import subprocess
 
+from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -39,7 +41,7 @@ def planner(args, executable, name):
 def viewer(args, executable, name, motion):
     output = args.output / f"{name}.csv"
     capture = args.output / f"{name}.png"
-    command = [str(executable), "--config", str(ROOT / "experiments/Scene.json"), "--hidden", "--no-ui",
+    command = [str(executable), "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-ui",
                "--no-vsync", "--frames", str(args.warmup + args.samples), "--benchmark-warmup", str(args.warmup),
                "--benchmark", str(output), "--capture", str(capture)]
     if motion != "stable":
@@ -47,12 +49,12 @@ def viewer(args, executable, name, motion):
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
     log = result.stdout + result.stderr
     (args.output / f"{name}.log").write_text(log, encoding="utf-8")
-    count = sum("model" in node for node in json.loads((ROOT / "out/fixtures/Sources/Scenes/Showcase.json").read_text(encoding="utf-8"))["nodes"])
-    if result.returncode or "validation errors: 0" not in log or f"{count}/{count} models ready | 0 failed" not in log:
+    if result.returncode or "validation errors: 0" not in log:
         raise RuntimeError(f"Viewer readiness or validation failed: {name}")
     assert "vsync=off" in log
     rows = list(csv.DictReader(io.StringIO(output.read_text(encoding="utf-8"))))
     assert [int(row["frame"]) for row in rows] == list(range(args.warmup, args.warmup + args.samples))
+    validate_workload(log, rows)
     for row in rows:
         assert int(row["visible_items"]) > 0 and int(row["failed_items"]) == 0 and int(row["shadow_failed"]) == 0
         assert int(row["instanced_items"]) + int(row["single_draws"]) == int(row["visible_items"])

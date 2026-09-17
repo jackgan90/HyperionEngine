@@ -85,6 +85,10 @@ void FViewerApplication::VerifyOutputs()
 		                         " items=" + std::to_string(SceneStatistics.VisibleItems) +
 		                         " draws=" + std::to_string(SceneStatistics.Draws));
 	}
+	if (ModelPlugin)
+	{
+		Log(ELogLevel::Info, "Model: " + ModelPlugin->Status() + " | ready=" + std::to_string(ModelPlugin->Ready()));
+	}
 	const auto& Lights = PipelineStatistics.LocalLights;
 	const auto& Depth = PipelineStatistics.HierarchicalDepth;
 	Log(ELogLevel::Info,

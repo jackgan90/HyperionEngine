@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -143,6 +144,18 @@ struct FShaderArtifact
 	FShaderReflection Reflection;
 };
 
+// Immutable source bytes for an explicit compilation batch. Capture again to observe file changes.
+class FShaderSourceSnapshot
+{
+public:
+	FShaderSourceSnapshot() = default;
+
+private:
+	friend class FShaderCompiler;
+	struct FImpl;
+	std::shared_ptr<const FImpl> Impl;
+};
+
 class FShaderCompiler
 {
 public:
@@ -150,10 +163,16 @@ public:
 	FShaderCompiler(std::filesystem::path InSourceRoot, std::filesystem::path InCacheRoot,
 	                std::shared_ptr<class IFileSystem> InFiles);
 	~FShaderCompiler();
+	FShaderSourceSnapshot CaptureSources(std::span<const std::filesystem::path> InSources);
+	// These overloads capture fresh inputs on every call, including arbitrary-extension includes.
 	FShaderArtifact Compile(const std::filesystem::path& InSource, std::string InEntry, EShaderStage InStage,
 	                        EShaderFormat InFormat);
 	FShaderArtifact Compile(const std::filesystem::path& InSource, std::string InEntry, EShaderStage InStage,
 	                        EShaderFormat InFormat, FShaderCompileOptions InOptions);
+	// The snapshot must come from this compiler and contain the source's allowed shader roots.
+	FShaderArtifact Compile(const std::filesystem::path& InSource, std::string InEntry, EShaderStage InStage,
+	                        EShaderFormat InFormat, FShaderCompileOptions InOptions,
+	                        const FShaderSourceSnapshot& InSources);
 
 private:
 	struct FImpl;

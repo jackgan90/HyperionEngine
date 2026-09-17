@@ -295,13 +295,19 @@ void CheckCameraInput(FModelViewerPlugin& InPlugin, const FrameOperation& InFram
 	Drag[1].Type = EEventType::MouseButton;
 	Drag[1].Button = 1;
 	Drag[1].bDown = true;
+	Drag[1].X = 100;
+	Drag[1].Y = 100;
 	Drag[2] = Drag[0];
 	Drag[2].X = 180;
 	Drag[3] = Drag[1];
 	Drag[3].bDown = false;
-	InPlugin.Input(Drag, false, false);
+	// A button event supplies the initial pointer position; no preceding move is required.
+	InPlugin.Input(std::span(Drag).subspan(1), false, false);
 	const auto Orbited = InFrame(InPlugin);
 	HYP_CHECK(Difference(InReadyImage, Orbited) > .003f);
+	InPlugin.Input(std::span(&Drag[1], 1), false, false);
+	InPlugin.Input(std::span(&Drag[2], 1), true, false);
+	HYP_CHECK(Difference(Orbited, InFrame(InPlugin)) < .0001f);
 	SaveImage(InRoot / "out/captures/model-orbit.png", Orbited);
 	HYP_CHECK(InFrame(InPlugin, {480, 200}).Width == 480);
 	auto& Scene = InPlugin.GetSceneInstance();

@@ -296,7 +296,7 @@ bool FSceneStorage::RemoveNodes(FSceneHandle InHandle, bool bInKeepChildren)
 		for (const auto Child : Slots[Slot]->Children)
 		{
 			const auto Local = ToLocal(Parent, Slots[Child]->World);
-			Mutation.Unlink(Child);
+			// The removed parent's complete child list is discarded below; do not compact it per child.
 			Mutation.Link(Child, Parent);
 			Mutation.Edit(Child).Node->Local() = Local;
 			Mutation.Mark(Child, ESceneChangeMask::Structure);

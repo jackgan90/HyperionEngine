@@ -7,6 +7,7 @@
 void CheckDeferredShaders();
 void CheckComputeShaders(const std::filesystem::path& InRoot);
 void TestMountedShaders();
+void TestShaderSnapshots();
 void CheckMaterialShaderReflection(const std::filesystem::path& InRoot);
 
 namespace
@@ -28,6 +29,7 @@ int main()
 	try
 	{
 		TestMountedShaders();
+		TestShaderSnapshots();
 		auto Root = std::filesystem::absolute("shader-test/source");
 		std::filesystem::create_directories(Root);
 		for (auto Name : {"Triangle.hlsl", "Gui.hlsl", "Common.hlsli"})

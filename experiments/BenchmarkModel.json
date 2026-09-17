@@ -1,0 +1,20 @@
+{
+  "type": "hyperion.application-settings",
+  "schema_version": 1,
+  "properties": {
+    "reversed_z": true,
+    "title": "Hyperion | Showcase Model Benchmark",
+    "width": 1440,
+    "height": 900,
+    "workers": 4,
+    "rhi_threads": 2,
+    "rhi_backend": "d3d12",
+    "model_source": "/Game/Models/Showcase.hasset",
+    "plugins": ["model-viewer", "debug-ui"],
+    "show_gui": true,
+    "vsync": false,
+    "clear_red": 0.025,
+    "clear_green": 0.035,
+    "clear_blue": 0.065
+  }
+}

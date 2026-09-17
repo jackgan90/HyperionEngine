@@ -8,6 +8,33 @@ namespace Hyperion
 {
 struct FGuiRenderer::FImpl
 {
+	struct FGeometry
+	{
+		std::vector<std::byte> Bytes;
+		FBuffer Buffer;
+	};
+
+	struct FImageBinding
+	{
+		FTexture Texture;
+		FResourceBindingSet Bindings;
+		FRenderTargetSource Source;
+	};
+
+	FGeometry Vertices;
+	FGeometry Indices;
+	FMat4 Projection{};
+	FBufferSlice ProjectionSlice;
+	std::map<std::uint64_t, FImageBinding> Images;
+	FBuffer Geometry(FGeometry& InCache, std::span<const std::byte> InBytes, ERHIBufferUsage InUsage);
+	FBufferSlice Constants(const FGuiDrawData& InData);
+	std::map<std::uint64_t, FResourceBindingSet> ResolveImages(const std::vector<FGuiTextureBinding>& InTextures);
+
+	FImpl(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont)
+	    : Device(InDevice), Compiler(InCompiler), Tasks(InTasks), Font(std::move(InFont))
+	{
+	}
+
 	IRHIDevice& Device;
 	FShaderCompiler& Compiler;
 	FTaskSystem& Tasks;
@@ -24,7 +51,7 @@ struct FGuiRenderer::FImpl
 
 FGuiRenderer::FGuiRenderer(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont,
                            FRenderResourceService* InResources)
-    : Impl(std::make_shared<FImpl>(FImpl{InDevice, InCompiler, InTasks, std::move(InFont), {}, {}, {}}))
+    : Impl(std::make_shared<FImpl>(InDevice, InCompiler, InTasks, std::move(InFont)))
 {
 	if (InResources)
 	{
@@ -85,12 +112,71 @@ void FGuiRenderer::Stop() noexcept
 	                                      [this]
 	                                      {
 		                                      Impl->Draws.clear();
+		                                      Impl->Vertices = {};
+		                                      Impl->Indices = {};
+		                                      Impl->ProjectionSlice = {};
+		                                      Impl->Images.clear();
 		                                      Impl->Pipeline = {};
 		                                      Impl->Texture = {};
 		                                      Impl->Bindings = {};
 		                                      Impl->Layout = {};
 		                                      Impl->Sampler = {};
 	                                      }));
+}
+
+FBuffer FGuiRenderer::FImpl::Geometry(FGeometry& InCache, std::span<const std::byte> InBytes, ERHIBufferUsage InUsage)
+{
+	if (!std::equal(InBytes.begin(), InBytes.end(), InCache.Bytes.begin(), InCache.Bytes.end()))
+	{
+		std::vector<std::byte> Bytes(InBytes.begin(), InBytes.end());
+		auto Buffer = Device.CreateBuffer({InBytes.size(), BufferUsage(InUsage)}, InBytes);
+		InCache.Bytes = std::move(Bytes);
+		InCache.Buffer = std::move(Buffer);
+	}
+	return InCache.Buffer;
+}
+
+FBufferSlice FGuiRenderer::FImpl::Constants(const FGuiDrawData& InData)
+{
+	auto Matrix = Identity();
+	const float W = InData.DisplaySize.X;
+	const float H = InData.DisplaySize.Y;
+	Matrix.Values[0] = 2 / W;
+	Matrix.Values[5] = -2 / H;
+	Matrix.Values[12] = -1 - 2 * InData.DisplayPosition.X / W;
+	Matrix.Values[13] = 1 + 2 * InData.DisplayPosition.Y / H;
+	if (!ProjectionSlice.Buffer || Matrix.Values != Projection.Values)
+	{
+		const auto Buffer = Device.CreateBuffer({256, BufferUsage(ERHIBufferUsage::Constant)});
+		auto Slice = Device.PublishConstantSlice(Buffer, 0, std::as_bytes(std::span(&Matrix, 1)));
+		Projection = Matrix;
+		ProjectionSlice = std::move(Slice);
+	}
+	return ProjectionSlice;
+}
+
+std::map<std::uint64_t, FResourceBindingSet> FGuiRenderer::FImpl::ResolveImages(
+    const std::vector<FGuiTextureBinding>& InTextures)
+{
+	std::map<std::uint64_t, FResourceBindingSet> Result{{1, Bindings}};
+	std::map<std::uint64_t, FImageBinding> Next;
+	for (const auto& Binding : InTextures)
+	{
+		if (Binding.Id <= 1 || Result.contains(Binding.Id) || !Preparation)
+		{
+			throw std::invalid_argument("Invalid or duplicate GUI texture binding");
+		}
+		// Resolve every frame to validate the current owner and retain its resource lifetime.
+		const auto Image = Preparation->ResolveTexture(Binding.Source.Texture, Binding.Source.Lifetime);
+		const auto Cached = Images.find(Binding.Id);
+		auto Set = Cached != Images.end() && Cached->second.Texture == Image
+		               ? Cached->second.Bindings
+		               : Device.CreateBindingSet({Layout, {{1, {Image}}, {2, {Sampler}}}});
+		Next.emplace(Binding.Id, FImageBinding{Image, Set, Binding.Source});
+		Result.emplace(Binding.Id, std::move(Set));
+	}
+	Images.swap(Next);
+	return Result;
 }
 
 void FGuiRenderer::Prepare(const FGuiDrawData& InData)
@@ -110,32 +196,17 @@ void FGuiRenderer::FImpl::Prepare(const FGuiDrawData& InData, const std::vector<
 	P.Draws.clear();
 	if (InData.Vertices.empty() || InData.Indices.empty())
 	{
+		P.Vertices = {};
+		P.Indices = {};
+		P.Images.clear();
 		return;
 	}
-	const auto VertexBytes = std::as_bytes(std::span(InData.Vertices));
-	const auto IndexBytes = std::as_bytes(std::span(InData.Indices));
-	auto Vertices = P.Device.CreateBuffer({VertexBytes.size(), BufferUsage(ERHIBufferUsage::Vertex)}, VertexBytes);
-	auto Indices = P.Device.CreateBuffer({IndexBytes.size(), BufferUsage(ERHIBufferUsage::Index)}, IndexBytes);
-	auto Matrix = Identity();
+	const auto VertexBuffer = Geometry(P.Vertices, std::as_bytes(std::span(InData.Vertices)), ERHIBufferUsage::Vertex);
+	const auto IndexBuffer = Geometry(P.Indices, std::as_bytes(std::span(InData.Indices)), ERHIBufferUsage::Index);
+	const auto Slice = Constants(InData);
+	const auto TextureBindings = ResolveImages(InTextures);
 	const float W = InData.DisplaySize.X;
 	const float H = InData.DisplaySize.Y;
-	Matrix.Values[0] = 2 / W;
-	Matrix.Values[5] = -2 / H;
-	Matrix.Values[12] = -1 - 2 * InData.DisplayPosition.X / W;
-	Matrix.Values[13] = 1 + 2 * InData.DisplayPosition.Y / H;
-	const auto Constants = P.Device.CreateBuffer({256, BufferUsage(ERHIBufferUsage::Constant)});
-	const auto Slice = P.Device.PublishConstantSlice(Constants, 0, std::as_bytes(std::span(&Matrix, 1)));
-	std::map<std::uint64_t, FResourceBindingSet> TextureBindings{{1, P.Bindings}};
-	for (const auto& Binding : InTextures)
-	{
-		if (Binding.Id <= 1 || TextureBindings.contains(Binding.Id) || !P.Preparation)
-		{
-			throw std::invalid_argument("Invalid or duplicate GUI texture binding");
-		}
-		const auto ImageTexture = P.Preparation->ResolveTexture(Binding.Source.Texture, Binding.Source.Lifetime);
-		TextureBindings.emplace(Binding.Id,
-		                        P.Device.CreateBindingSet({P.Layout, {{1, {ImageTexture}}, {2, {P.Sampler}}}}));
-	}
 	for (const auto& Command : InData.Commands)
 	{
 		FRect Scissor{static_cast<std::int32_t>(
@@ -154,8 +225,8 @@ void FGuiRenderer::FImpl::Prepare(const FGuiDrawData& InData, const std::vector<
 		}
 		FDrawPacket Draw;
 		Draw.Pipeline = P.Pipeline;
-		Draw.Vertices = Vertices;
-		Draw.Indices = Indices;
+		Draw.Vertices = VertexBuffer;
+		Draw.Indices = IndexBuffer;
 		const auto Found = TextureBindings.find(Command.TextureId);
 		if (Found == TextureBindings.end())
 		{
@@ -215,6 +286,11 @@ void FGuiRenderer::BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData, std
 	{
 		Pass.Name = "Debug UI";
 		Pass.Color = FGraphColorAttachment{InGraph.ImportBackbuffer(), {}, {}, EGraphColorView::Srgb};
+		if (bInClear)
+		{
+			Pass.Color->Actions.Load = EAttachmentLoad::Clear;
+			Pass.Color->Clear = {.01f, .01f, .01f, 1};
+		}
 	}
 	Pass.Prepare = [Owner = std::weak_ptr<FImpl>(Impl), Data = std::move(InData), Textures = std::move(InTextures)]
 	{

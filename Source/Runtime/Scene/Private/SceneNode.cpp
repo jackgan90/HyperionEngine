@@ -3,29 +3,12 @@
 
 namespace Hyperion
 {
-namespace
-{
-bool EqualOverride(const FMaterialOverride& InA, const FMaterialOverride& InB)
-{
-	if (InA.BaseColor.has_value() != InB.BaseColor.has_value())
-	{
-		return false;
-	}
-	if (InA.BaseColor && (InA.BaseColor->X != InB.BaseColor->X || InA.BaseColor->Y != InB.BaseColor->Y ||
-	                      InA.BaseColor->Z != InB.BaseColor->Z || InA.BaseColor->W != InB.BaseColor->W))
-	{
-		return false;
-	}
-	return InA.Metallic == InB.Metallic && InA.Roughness == InB.Roughness;
-}
-} // namespace
-
 bool FSceneModelComponent::operator==(const FSceneModelComponent& InOther) const
 {
 	return Asset == InOther.Asset && Data == InOther.Data && bVisible == InOther.bVisible &&
-	       EqualOverride(Material, InOther.Material) && Surface == InOther.Surface &&
-	       SectionSurfaces == InOther.SectionSurfaces && SourceNode == InOther.SourceNode &&
-	       Sections == InOther.Sections && SourcePrimitive == InOther.SourcePrimitive;
+	       Material == InOther.Material && Surface == InOther.Surface && SectionSurfaces == InOther.SectionSurfaces &&
+	       SourceNode == InOther.SourceNode && Sections == InOther.Sections &&
+	       SourcePrimitive == InOther.SourcePrimitive;
 }
 
 bool FSceneNode::operator==(const FSceneNode& InOther) const

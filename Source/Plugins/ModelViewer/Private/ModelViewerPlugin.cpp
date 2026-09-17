@@ -1,6 +1,7 @@
 #include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Renderer/NativeModel.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include <algorithm>
 #include <cmath>
@@ -26,9 +27,8 @@ struct FModelViewerPlugin::FImpl
 	std::string Status = "Loading model...";
 	std::string Error;
 	bool bIsReady{};
-	bool bDragging{};
+	FSceneCameraController CameraController;
 	bool bFitRequested = true;
-	FVec2 LastMouse;
 	FVec3 Center;
 	float Radius = 1;
 };
@@ -60,6 +60,7 @@ void FModelViewerPlugin::Start()
 	const auto Environment = P.Scene.AddNode(MakeSceneEnvironmentLightNode({}));
 	P.Scene.SetSettings({CameraHandle, Light, Environment});
 	P.Cancellation = {};
+	P.CameraController.Reset();
 	P.Preparation = LoadNativeModel(P.Assets, P.Tasks, P.Path, P.Cancellation, &P.Session.GetResources());
 }
 
@@ -134,23 +135,13 @@ void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMo
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
+	P.CameraController.Input(P.Scene, {}, bInMouseCaptured, bInKeyboardCaptured);
 	for (const auto& Event : InEvents)
 	{
-		if (Event.Type == EEventType::Focus && !Event.bDown)
+		if (Event.Type == EEventType::Focus || Event.Type == EEventType::MouseButton ||
+		    Event.Type == EEventType::MouseMove)
 		{
-			P.bDragging = false;
-		}
-		if (Event.Type == EEventType::MouseButton && Event.Button == 1)
-		{
-			P.bDragging = Event.bDown && !bInMouseCaptured;
-		}
-		if (Event.Type == EEventType::MouseMove)
-		{
-			if (P.bDragging)
-			{
-				OrbitSceneCamera(P.Scene, -(Event.X - P.LastMouse.X) * .006f, (Event.Y - P.LastMouse.Y) * .006f);
-			}
-			P.LastMouse = {Event.X, Event.Y};
+			P.CameraController.Input(P.Scene, std::span(&Event, 1), bInMouseCaptured, bInKeyboardCaptured);
 		}
 		if (Event.Type == EEventType::MouseWheel && !bInMouseCaptured)
 		{
@@ -187,6 +178,7 @@ void FModelViewerPlugin::Stop() noexcept
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
 	P.Cancellation.Cancel();
+	P.CameraController.Reset();
 	try
 	{
 		P.Tasks.Wait(P.Preparation.Task());

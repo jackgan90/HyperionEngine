@@ -7,6 +7,7 @@ class FDispatchAllocationFailure
 {
 public:
 	explicit FDispatchAllocationFailure(int InIndex);
+	FDispatchAllocationFailure(int InIndex, const char* InFunction, const char* InAllocationSymbol = nullptr);
 	~FDispatchAllocationFailure();
 	FDispatchAllocationFailure(const FDispatchAllocationFailure&) = delete;
 	FDispatchAllocationFailure& operator=(const FDispatchAllocationFailure&) = delete;

@@ -35,6 +35,7 @@ struct FPublication
 	std::map<std::pair<std::filesystem::path, std::string>, FPublishedAsset> Published;
 	std::set<std::pair<std::filesystem::path, std::string>> Active;
 	std::map<std::filesystem::path, std::string> Sources;
+	std::map<std::filesystem::path, FAssetRef> ExternalAssets;
 	std::map<std::string, std::string> PreviousIds;
 	std::size_t Written{};
 	std::size_t Bytes{};

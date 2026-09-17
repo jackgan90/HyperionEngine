@@ -38,6 +38,19 @@ bool FPublication::PreserveExternal(FAssetRef& InReference)
 	{
 		return false;
 	}
+	const auto Normalized = NormalizeFilePath(Path);
+	if (const auto Existing = ExternalAssets.find(Normalized); Existing != ExternalAssets.end())
+	{
+		ValidateAssetRef(InReference);
+		const auto& Identity = Existing->second;
+		if (Identity.TypeId != InReference.TypeId || (!InReference.Id.empty() && Identity.Id != InReference.Id) ||
+		    (!InReference.Revision.empty() && Identity.Revision != InReference.Revision))
+		{
+			throw std::runtime_error("External asset reference identity/type/revision mismatch: " + InReference.Path);
+		}
+		InReference = Identity;
+		return true;
+	}
 	FAssetService Assets(IO);
 	for (const auto& Importer : Importers)
 	{
@@ -66,6 +79,7 @@ bool FPublication::PreserveExternal(FAssetRef& InReference)
 	}
 	const auto& Root = *Graph->Root;
 	InReference = {Root.Header.Id, PathToUtf8(Root.Path), Root.Header.TypeId, Root.Header.Revision};
+	ExternalAssets.emplace(Normalized, InReference);
 	return true;
 }
 

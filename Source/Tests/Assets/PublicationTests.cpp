@@ -3,6 +3,7 @@
 #include "Hyperion/AssetImport/SceneImport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
+#include <map>
 
 void CheckSceneSources();
 void CheckModelReferences();
@@ -54,9 +55,11 @@ public:
 	FBytes Replacement;
 	unsigned ReplaceOnRead{};
 	unsigned ReplacementReads{};
+	std::map<std::filesystem::path, std::size_t> ReadCounts;
 
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
 	{
+		++ReadCounts[InPath];
 		if (InPath == ReplacementPath && ++ReplacementReads == ReplaceOnRead)
 		{
 			Memory.WriteAtomic(InPath, Replacement);
@@ -205,6 +208,90 @@ void CheckExternalPublicationChanges()
 		Assets.Types().Register<FImportFixture>();
 		HYP_CHECK(Assets.LoadGraphAsync(Output).Get(Tasks)->Failures.empty());
 	}
+}
+
+void CheckExternalCachedIdentities(FTaskSystem& InTasks, FIOService& InIO, FAssetImportService& InImports,
+                                   FImportStorage& InFiles, const FAssetRef& InValid)
+{
+	const auto Source = std::filesystem::absolute("external-cache/root.source");
+	const auto Output = std::filesystem::absolute("external-cache/root.hasset");
+	const auto Previous = InIO.ReadAsync(Output).Get(InTasks);
+	FAssetImportOptions Options;
+	Options.bForce = true;
+	for (unsigned Case = 0; Case < 3; ++Case)
+	{
+		auto Invalid = InValid;
+		if (Case == 0)
+		{
+			Invalid.Id[0] = Invalid.Id[0] == '0' ? '1' : '0';
+		}
+		else if (Case == 1)
+		{
+			Invalid.Revision[0] = Invalid.Revision[0] == '0' ? '1' : '0';
+		}
+		else
+		{
+			Invalid.TypeId = "test.other";
+		}
+		InIO.WriteAsync(Source, Serialize(FImportFixture{"root", "", {InValid, Invalid}})).Get(InTasks);
+		InFiles.ReadCounts.clear();
+		std::string Error;
+		try
+		{
+			InImports.ImportAsync(Source, Output, Options).Get(InTasks);
+		}
+		catch (const std::runtime_error& Failure)
+		{
+			Error = Failure.what();
+		}
+		HYP_CHECK(Error.find("External asset reference identity/type/revision mismatch") != std::string::npos);
+		// The first reference loads and validates the graph; the invalid cache hit prevents commit.
+		HYP_CHECK(InFiles.ReadCounts.at(InValid.Path) == 2);
+		HYP_CHECK(*InIO.ReadAsync(Output).Get(InTasks) == *Previous);
+	}
+}
+
+void CheckExternalPublicationCache()
+{
+	FTaskSystem Tasks(1, 1);
+	auto Files = std::make_shared<FImportStorage>();
+	FIOService IO(Tasks, Files);
+	FAssetImportService Imports(IO);
+	Imports.Register(FixtureImporter());
+	const auto Source = std::filesystem::absolute("external-cache/root.source");
+	const auto Output = std::filesystem::absolute("external-cache/root.hasset");
+	const auto Type = RecordType<FImportFixture>().Id;
+	const std::filesystem::path LeafPath = "/Game/CachedLeaf.hasset";
+	const std::filesystem::path ExternalPath = "/Game/CachedExternal.hasset";
+	const auto Leaf = StoreNative(IO, LeafPath, {"leaf"});
+	FImportFixture Child{"external", "", {{Leaf.Id, "/Game/CachedLeaf.hasset", Type, Leaf.Revision}}};
+	const auto External = StoreNative(IO, ExternalPath, Child);
+	const FAssetRef Reference{"", "/Game/CachedExternal.hasset", Type, ""};
+	FAssetImportOptions Options;
+	Options.bForce = true;
+	for (const std::size_t Count : {1, 10, 100})
+	{
+		FImportFixture Root{"root", "", std::vector<FAssetRef>(Count, Reference)};
+		IO.WriteAsync(Source, Serialize(Root)).Get(Tasks);
+		Files->ReadCounts.clear();
+		const auto Published = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
+		HYP_CHECK(Published->Header.Dependencies.size() == Count);
+		for (const auto& Dependency : Published->Header.Dependencies)
+		{
+			HYP_CHECK(Dependency.Reference.Id == External.Id && Dependency.Reference.Revision == External.Revision);
+		}
+		// Per graph asset: one load, one snapshot verification, one final CheckSources read.
+		HYP_CHECK(Files->ReadCounts.at(ExternalPath) == 3 && Files->ReadCounts.at(LeafPath) == 3);
+	}
+	Child.Name = "external changed between publications";
+	const auto Changed = StoreNative(IO, ExternalPath, Child, External);
+	Files->ReadCounts.clear();
+	const auto Republished = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
+	HYP_CHECK(Changed.Id == External.Id && Changed.Revision != External.Revision);
+	HYP_CHECK(Republished->Header.Dependencies.front().Reference.Revision == Changed.Revision);
+	HYP_CHECK(Files->ReadCounts.at(ExternalPath) == 3 && Files->ReadCounts.at(LeafPath) == 3);
+	CheckExternalCachedIdentities(Tasks, IO, Imports, *Files,
+	                              {Changed.Id, "/Game/CachedExternal.hasset", Type, Changed.Revision});
 }
 
 void CheckPinnedNativeImport()
@@ -471,6 +558,7 @@ int main()
 		CheckSceneSources();
 		CheckPublication();
 		CheckExternalPublicationChanges();
+		CheckExternalPublicationCache();
 		CheckPinnedNativeImport();
 		CheckCrossVolumeImport();
 		CheckCyclesAndOrdering();

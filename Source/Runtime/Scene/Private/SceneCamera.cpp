@@ -105,6 +105,17 @@ FMat4 SceneCameraTransform(FVec3 InEye, FVec3 InTarget, FVec3 InUp)
 	return World;
 }
 
+FMat4 SceneCameraTransform(const FSceneCameraPose& InPose)
+{
+	// Build orientation at the origin so eye magnitude cannot round away the direction.
+	auto World = SceneCameraTransform({}, InPose.Forward, InPose.Up);
+	World.Values[12] = InPose.Eye.X;
+	World.Values[13] = InPose.Eye.Y;
+	World.Values[14] = InPose.Eye.Z;
+	ExtractScenePose(World);
+	return World;
+}
+
 template<> const FRecordDescriptor& RecordType<FSceneCamera>()
 {
 	static const auto Type = []

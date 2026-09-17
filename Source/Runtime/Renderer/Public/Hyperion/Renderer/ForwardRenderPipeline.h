@@ -1,48 +1,9 @@
 #pragma once
 #include "Hyperion/Renderer/CascadedShadowMap.h"
-#include "Hyperion/Renderer/HierarchicalDepth.h"
-#include "Hyperion/Renderer/LocalLights.h"
-#include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/RenderPipelineFrame.h"
 
 namespace Hyperion
 {
-struct FFullscreenPreparationStatistics;
-
-struct FForwardPipelineStatistics
-{
-	double PreparationMilliseconds{};
-	double ShadowSetupMilliseconds{};
-	double FullscreenPreparationMilliseconds{};
-	std::uint64_t SceneTargetBytes{};
-	std::size_t FullscreenDraws{};
-	FSceneVisibilityStats Spatial;
-	FLocalLightStatistics LocalLights;
-	std::vector<FRenderViewStatistics> Views;
-	std::uint64_t ShadowTextureBytes{};
-	bool bShadows{};
-	bool bContactShadows{};
-	FHierarchicalDepthStats HierarchicalDepth;
-	std::optional<FScenePublicationToken> SceneToken;
-	ESceneCameraStatus CameraStatus = ESceneCameraStatus::Active;
-	std::optional<FRenderView> MainCameraView;
-	FSceneVisibilityStats MainView() const;
-};
-
-// Captured on Render; read after this frame's RHI graph execution completes.
-class FForwardFrame
-{
-public:
-	FForwardPipelineStatistics Statistics() const;
-
-private:
-	FForwardPipelineStatistics Base;
-	FRenderViewPreparation Preparation;
-	std::shared_ptr<FFullscreenPreparationStatistics> Fullscreen;
-	bool bDeferred{};
-	friend class FForwardRenderPipeline;
-	friend class FSceneRenderPipeline;
-};
-
 // Render-owned orchestration: all shadow depth views -> forward -> extension passes.
 class FForwardRenderPipeline
 {

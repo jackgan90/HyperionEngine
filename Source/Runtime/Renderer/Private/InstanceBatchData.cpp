@@ -1,6 +1,5 @@
-#include "Hyperion/Renderer/MaterialPacking.h"
 #include "Hyperion/Renderer/RenderBatch.h"
-#include "Hyperion/Renderer/RenderMaterial.h"
+#include "InstancePacking.h"
 #include <algorithm>
 #include <stdexcept>
 
@@ -35,7 +34,7 @@ std::shared_ptr<const FInstanceBatchData> PackInstanceBatch(const FRenderSceneSn
 	auto Result = std::make_shared<FInstanceBatchData>();
 	Result->InstanceCount = static_cast<std::uint32_t>(InItems.size());
 	const auto& First = InSnapshot.Items.At(InItems.front());
-	const auto Program = First.State.Surface->GetCompiled();
+	const auto Program = GetInstanceProgram(First);
 	const auto& Pass = Program->GetPass(InSnapshot.View.Usage, "Instance");
 	for (std::uint32_t Slot = 0; Slot < Pass.Bindings.size(); ++Slot)
 	{
@@ -49,21 +48,21 @@ std::shared_ptr<const FInstanceBatchData> PackInstanceBatch(const FRenderSceneSn
 			throw std::invalid_argument("Instance batch exceeds shader capacity");
 		}
 		FInstanceConstantBlock Block{Slot};
+		const auto Layout = DescribeInstanceRecordLayout(*Program, Pass, Binding);
 		auto Packed = std::make_shared<std::vector<std::byte>>();
 		Packed->reserve(InItems.size() * Binding.InstanceStride);
 		for (const auto Index : InItems)
 		{
 			const auto& Item = InSnapshot.Items.At(Index);
-			const auto ItemProgram = Item.State.Surface->GetCompiled();
-			const auto& ItemBinding = ItemProgram->GetPass(InSnapshot.View.Usage, "Instance").Bindings.at(Slot);
-			if (ItemBinding.InstanceStride != Binding.InstanceStride)
+			const auto ItemProgram = GetInstanceProgram(Item);
+			const auto& ItemPass = ItemProgram->GetPass(InSnapshot.View.Usage, "Instance");
+			const auto& ItemBinding = ItemPass.Bindings.at(Slot);
+			if (ItemProgram != Program &&
+			    !Layout.Matches(DescribeInstanceRecordLayout(*ItemProgram, ItemPass, ItemBinding)))
 			{
 				throw std::invalid_argument("Incompatible instance record layout");
 			}
-			const auto Values = Item.SharedParameters
-			                        ? ComposeMaterialParameters(*Item.ResolvedParameters, *Item.SharedParameters)
-			                        : *Item.ResolvedParameters;
-			const auto Bytes = PackMaterialConstants(ItemBinding, Values.Values);
+			const auto Bytes = PackInstanceRecord(Item, ItemBinding);
 			Packed->insert(Packed->end(), Bytes.begin(), Bytes.end());
 		}
 		Block.Bytes = std::move(Packed);

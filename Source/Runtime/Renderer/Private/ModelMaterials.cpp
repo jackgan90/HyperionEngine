@@ -50,6 +50,11 @@ std::vector<FVertexAttribute> ModelVertexAttributes()
 
 void FMaterialAssetCache::Trim()
 {
+	std::erase_if(Preparations,
+	              [](const auto& InEntry)
+	              {
+		              return InEntry.second.expired();
+	              });
 	std::erase_if(Programs,
 	              [](const auto& InEntry)
 	              {
@@ -89,6 +94,7 @@ std::shared_ptr<const FMaterialTextureSource> FMaterialAssetCache::Texture(
 	{
 		throw std::invalid_argument("Null resolved texture asset");
 	}
+	std::lock_guard Lock(Mutex);
 	const auto It = Textures.find(InAsset.get());
 	if (It != Textures.end() && It->second.Asset.lock() == InAsset)
 	{
@@ -114,6 +120,21 @@ std::shared_ptr<const FMaterialTextureSource> FMaterialAssetCache::Texture(
 	return Source;
 }
 
+std::shared_ptr<std::mutex> FMaterialAssetCache::Preparation(const FKey& InKey)
+{
+	std::lock_guard Lock(Mutex);
+	++Stats.Requests;
+	Trim();
+	auto& Entry = Preparations[InKey];
+	auto Result = Entry.lock();
+	if (!Result)
+	{
+		Result = std::make_shared<std::mutex>();
+		Entry = Result;
+	}
+	return Result;
+}
+
 FRenderMaterialDesc FMaterialAssetCache::Prepare(const std::shared_ptr<const FMaterialAssetData>& InData,
                                                  FShaderCompiler& InCompiler, EShaderFormat InFormat, bool bInCompile)
 {
@@ -121,15 +142,15 @@ FRenderMaterialDesc FMaterialAssetCache::Prepare(const std::shared_ptr<const FMa
 	{
 		throw std::invalid_argument("Material preparation requires resolved native data");
 	}
-	std::lock_guard Lock(Mutex);
-	++Stats.Requests;
-	Trim();
 	std::vector<const FTextureAsset*> Identity;
 	for (const auto& [Reference, Asset] : InData->Textures)
 	{
 		Identity.push_back(Asset.get());
 	}
 	const FKey Key{InData->Asset.get(), std::move(Identity), InFormat};
+	const auto Coordinator = Preparation(Key);
+	std::lock_guard PrepareLock(*Coordinator);
+	std::unique_lock Lock(Mutex);
 	std::shared_ptr<const FMaterialSnapshot> Existing;
 	std::shared_ptr<const FMaterialSnapshot> Declared;
 	std::shared_ptr<const FCompiledMaterialDefinition> Compiled;
@@ -149,6 +170,7 @@ FRenderMaterialDesc FMaterialAssetCache::Prepare(const std::shared_ptr<const FMa
 			return {Existing, std::move(Compiled)};
 		}
 	}
+	Lock.unlock();
 	const auto Resolve = [&](const FAssetRef& InReference)
 	{
 		const auto It = InData->Textures.find(InReference);
@@ -168,7 +190,10 @@ FRenderMaterialDesc FMaterialAssetCache::Prepare(const std::shared_ptr<const FMa
 			Instance.Set(Entry.Name, std::move(Entry.Value));
 		}
 		Existing = Instance.Freeze();
-		++Stats.MaterialPreparations;
+		{
+			std::lock_guard StatsLock(Mutex);
+			++Stats.MaterialPreparations;
+		}
 	}
 	auto Surface = std::make_shared<FMaterialSnapshot>(*Existing);
 	if (bInCompile)
@@ -185,10 +210,15 @@ FRenderMaterialDesc FMaterialAssetCache::Prepare(const std::shared_ptr<const FMa
 	{
 		Declared = Surface;
 	}
-	Materials[Key] = {Surface, Compiled, ++Clock, Declared};
+	Lock.lock();
+	Trim();
+	// Allocate both publication slots before making either successful result visible.
+	const auto MaterialEntry = Materials.try_emplace(Key).first;
+	const auto ProgramEntry = Compiled ? Programs.try_emplace(Surface->Definition.get()).first : Programs.end();
+	MaterialEntry->second = {Surface, Compiled, ++Clock, Declared};
 	if (Compiled)
 	{
-		Programs[Surface->Definition.get()] = {Surface, Compiled, ++Clock};
+		ProgramEntry->second = {Surface, Compiled, ++Clock};
 	}
 	return {std::move(Surface), std::move(Compiled)};
 }
@@ -213,8 +243,10 @@ std::shared_ptr<const FCompiledMaterialDefinition> FMaterialAssetCache::FindComp
 FMaterialParameterValues FMaterialAssetCache::ResolveValues(
     const FMaterialAssetValues& InValues, const std::map<FAssetRef, std::shared_ptr<const FTextureAsset>>& InTextures)
 {
-	std::lock_guard Lock(Mutex);
-	Trim();
+	{
+		std::lock_guard Lock(Mutex);
+		Trim();
+	}
 	return ResolveMaterialAssetValues(InValues,
 	                                  [&](const FAssetRef& InReference)
 	                                  {

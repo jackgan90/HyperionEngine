@@ -15,7 +15,9 @@
 #include <cstring>
 #include <dxcapi.h>
 #include <fstream>
+#include <map>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 
 namespace Hyperion
@@ -24,6 +26,14 @@ using Microsoft::WRL::ComPtr;
 
 namespace
 {
+struct FShaderSourceTree
+{
+	std::map<std::filesystem::path, std::string> Files;
+	std::string Digest;
+};
+
+using FShaderSourceTrees = std::map<std::filesystem::path, FShaderSourceTree>;
+
 void Checked(HRESULT InHr, const char* InOperation)
 {
 	if (FAILED(InHr))
@@ -42,16 +52,39 @@ std::string Read(const std::filesystem::path& InPath)
 	return {std::istreambuf_iterator<char>(Stream), {}};
 }
 
-std::string ReadSource(IFileSystem& InFiles, const std::filesystem::path& InPath)
+const std::string& ReadSource(const FShaderSourceTrees& InSources, const std::filesystem::path& InRoot,
+                              const std::filesystem::path& InAdditionalRoot, const std::filesystem::path& InPath)
 {
-	const auto Bytes = InFiles.Read(InPath, 16u * 1024u * 1024u);
-	return {reinterpret_cast<const char*>(Bytes.data()), Bytes.size()};
+	for (const auto& Root : {InRoot, InAdditionalRoot})
+	{
+		const auto Tree = InSources.find(Root);
+		if (Tree == InSources.end())
+		{
+			continue;
+		}
+		const auto File = Tree->second.Files.find(InPath);
+		if (File != Tree->second.Files.end())
+		{
+			return File->second;
+		}
+	}
+	throw std::runtime_error("Cannot read captured shader file: " + PathToUtf8(InPath));
 }
 
 std::filesystem::path PackageRoot(const std::filesystem::path& InPath)
 {
 	const auto Relative = InPath.relative_path();
 	return std::filesystem::path("/") / *Relative.begin();
+}
+
+std::filesystem::path AdditionalShaderRoot(const std::filesystem::path& InPath)
+{
+	return IsPackagePath(InPath) ? PackageRoot(InPath) / "Shaders" : std::filesystem::path{};
+}
+
+void AppendIdentity(std::string& OutIdentity, const std::string& InPart)
+{
+	OutIdentity += std::to_string(InPart.size()) + ":" + InPart;
 }
 
 std::string Sha256(const std::string& InBytes)
@@ -113,13 +146,41 @@ bool Within(const std::filesystem::path& InPath, const std::filesystem::path& In
 	return !Rel.empty() && !Rel.is_absolute() && *Rel.begin() != "..";
 }
 
+FShaderSourceTree CaptureSourceTree(IFileSystem& InFiles, const std::filesystem::path& InRoot)
+{
+	FShaderSourceTree Result;
+	// DXC accepts arbitrary include extensions; capture every source-root file.
+	for (auto& File : InFiles.ReadTree(InRoot, {}, 16u * 1024u * 1024u))
+	{
+		auto Path = InFiles.Normalize(File.Path);
+		if (!IsPackagePath(Path))
+		{
+			Path = std::filesystem::weakly_canonical(Path);
+		}
+		if (!Within(Path, InRoot))
+		{
+			throw std::invalid_argument("Captured shader file outside source root: " + PathToUtf8(Path));
+		}
+		Result.Files.emplace(std::move(Path),
+		                     std::string(reinterpret_cast<const char*>(File.Bytes.data()), File.Bytes.size()));
+	}
+	std::string Identity;
+	for (const auto& [Path, Bytes] : Result.Files)
+	{
+		AppendIdentity(Identity, Path.lexically_relative(InRoot).generic_string());
+		AppendIdentity(Identity, Bytes);
+	}
+	Result.Digest = Sha256(Identity);
+	return Result;
+}
+
 class FIncludeHandler final : public IDxcIncludeHandler
 {
 public:
 	FIncludeHandler(IDxcUtils* InUtils, std::filesystem::path InRoot, IFileSystem& InFiles,
-	                std::filesystem::path InAdditionalRoot, std::string& OutError)
+	                std::filesystem::path InAdditionalRoot, const FShaderSourceTrees& InSources, std::string& OutError)
 	    : Utils(InUtils), Root(std::move(InRoot)), Files(InFiles), AdditionalRoot(std::move(InAdditionalRoot)),
-	      Error(OutError)
+	      Sources(InSources), Error(OutError)
 	{
 	}
 
@@ -192,7 +253,7 @@ public:
 				return E_ACCESSDENIED;
 			}
 			ComPtr<IDxcBlobEncoding> Blob;
-			const auto Content = ReadSource(Files, Path);
+			const auto& Content = ReadSource(Sources, Root, AdditionalRoot, Path);
 			auto Hr = Utils->CreateBlob(Content.data(), static_cast<UINT32>(Content.size()), DXC_CP_UTF8, &Blob);
 			if (FAILED(Hr))
 			{
@@ -214,9 +275,16 @@ private:
 	std::filesystem::path Root;
 	IFileSystem& Files;
 	std::filesystem::path AdditionalRoot;
+	const FShaderSourceTrees& Sources;
 	std::string& Error;
 };
 } // namespace
+
+struct FShaderSourceSnapshot::FImpl
+{
+	std::shared_ptr<const void> Owner;
+	FShaderSourceTrees Trees;
+};
 
 struct FShaderCompiler::FImpl
 {
@@ -226,6 +294,27 @@ struct FShaderCompiler::FImpl
 	std::mutex Mutex;
 	ComPtr<IDxcUtils> Utils;
 	ComPtr<IDxcCompiler3> Compiler;
+	std::shared_ptr<const void> SnapshotOwner = std::make_shared<const int>(0);
+
+	FShaderArtifact Compile(const std::filesystem::path& InPath, const std::string& InEntry, EShaderStage InStage,
+	                        EShaderFormat InFormat, const FShaderCompileOptions& InOptions,
+	                        const FShaderSourceTrees& InSources);
+
+	std::filesystem::path SourcePath(const std::filesystem::path& InSource) const
+	{
+		auto Path = Files->Normalize(InSource.is_absolute() || IsPackagePath(InSource) ? InSource : Root / InSource);
+		if (!IsPackagePath(Path))
+		{
+			Path = std::filesystem::weakly_canonical(Path);
+		}
+		const bool bMountedShader =
+		    IsPackagePath(Path) && IsPackagePath(Root) && Within(Path, AdditionalShaderRoot(Path));
+		if (!Within(Path, Root) && !bMountedShader)
+		{
+			throw std::invalid_argument("Shader outside source root");
+		}
+		return Path;
+	}
 
 	FImpl(std::filesystem::path InR, std::filesystem::path InC, std::shared_ptr<IFileSystem> InFiles)
 	    : Files(std::move(InFiles)), Root(Files->Normalize(InR)), Cache(std::filesystem::absolute(InC))
@@ -263,16 +352,40 @@ FShaderCompiler::FShaderCompiler(std::filesystem::path InRoot, std::filesystem::
 
 FShaderCompiler::~FShaderCompiler() = default;
 
+FShaderSourceSnapshot FShaderCompiler::CaptureSources(std::span<const std::filesystem::path> InSources)
+{
+	std::lock_guard Lock(Impl->Mutex);
+	HYP_PERF_SCOPE_C(Assets, ShaderSourceCapture);
+	std::set<std::filesystem::path> Roots{Impl->Root};
+	for (const auto& Source : InSources)
+	{
+		const auto Additional = AdditionalShaderRoot(Impl->SourcePath(Source));
+		if (!Additional.empty())
+		{
+			Roots.insert(Additional);
+		}
+	}
+	auto Captured = std::make_shared<FShaderSourceSnapshot::FImpl>();
+	Captured->Owner = Impl->SnapshotOwner;
+	for (const auto& Root : Roots)
+	{
+		Captured->Trees.emplace(Root, CaptureSourceTree(*Impl->Files, Root));
+	}
+	FShaderSourceSnapshot Result;
+	Result.Impl = std::move(Captured);
+	return Result;
+}
+
 namespace
 {
 std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::filesystem::path& InRoot,
                            const std::string& InEntry, EShaderStage InStage, EShaderFormat InFormat,
-                           const FShaderCompileOptions& InOptions, IFileSystem& InFiles)
+                           const FShaderCompileOptions& InOptions, const FShaderSourceTrees& InSources)
 {
-	std::string Identity = "hyperion-shader-v9-mounted-msl20:" HYP_TOOLCHAIN_ID;
+	std::string Identity = "hyperion-shader-v10-snapshot-msl20:" HYP_TOOLCHAIN_ID;
 	auto Append = [&](const std::string& InPart)
 	{
-		Identity += std::to_string(InPart.size()) + ":" + InPart;
+		AppendIdentity(Identity, InPart);
 	};
 	Append(InPath.lexically_relative(InRoot).generic_string());
 	Append(InEntry);
@@ -286,24 +399,12 @@ std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::files
 		Append(Define.Name);
 		Append(Define.Value);
 	}
-	// DXC accepts include files with arbitrary extensions; every source-root file participates.
-	auto Files = InFiles.ReadTree(InRoot, {}, 16u * 1024u * 1024u);
-	if (IsPackagePath(InPath) && !Within(InPath, InRoot))
+	Append(InSources.at(InRoot).Digest);
+	const auto Additional = AdditionalShaderRoot(InPath);
+	if (!Additional.empty() && Additional != InRoot)
 	{
-		for (auto& File : InFiles.ReadTree(PackageRoot(InPath) / "Shaders", {}, 16u * 1024u * 1024u))
-		{
-			Files.push_back(std::move(File));
-		}
-	}
-	std::sort(Files.begin(), Files.end(),
-	          [](const FFileContents& InA, const FFileContents& InB)
-	          {
-		          return InA.Path < InB.Path;
-	          });
-	for (const auto& File : Files)
-	{
-		Append(File.Path.lexically_relative(InRoot).generic_string());
-		Append({reinterpret_cast<const char*>(File.Bytes.data()), File.Bytes.size()});
+		Append(Additional.lexically_relative(InRoot).generic_string());
+		Append(InSources.at(Additional).Digest);
 	}
 	return Sha256(Identity);
 }
@@ -332,9 +433,10 @@ void NormalizeOptions(FShaderCompileOptions& InOptions)
 
 std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const std::filesystem::path& InPath,
                            const std::filesystem::path& InRoot, const std::string& InEntry, EShaderStage InStage,
-                           EShaderFormat InFormat, const FShaderCompileOptions& InOptions, IFileSystem& InFiles)
+                           EShaderFormat InFormat, const FShaderCompileOptions& InOptions, IFileSystem& InFiles,
+                           const FShaderSourceTrees& InSources)
 {
-	const std::string Content = ReadSource(InFiles, InPath);
+	const auto& Content = ReadSource(InSources, InRoot, AdditionalShaderRoot(InPath), InPath);
 	DxcBuffer Buffer{Content.data(), Content.size(), DXC_CP_UTF8};
 	std::vector<std::wstring> Arguments{InPath.generic_wstring(),
 	                                    L"-E",
@@ -381,9 +483,8 @@ std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const 
 	}
 	ComPtr<IDxcIncludeHandler> Include;
 	std::string IncludeError;
-	Include.Attach(new FIncludeHandler(
-	    InUtils, InRoot, InFiles, IsPackagePath(InPath) ? PackageRoot(InPath) / "Shaders" : std::filesystem::path{},
-	    IncludeError));
+	Include.Attach(
+	    new FIncludeHandler(InUtils, InRoot, InFiles, AdditionalShaderRoot(InPath), InSources, IncludeError));
 	ComPtr<IDxcResult> Result;
 	Checked(InCompiler->Compile(&Buffer, Pointers.data(), static_cast<UINT32>(Pointers.size()), Include.Get(),
 	                            IID_PPV_ARGS(&Result)),
@@ -413,6 +514,14 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, std::string InEntry,
                                          EShaderStage InStage, EShaderFormat InFormat, FShaderCompileOptions InOptions)
 {
+	const std::array Sources{InSource};
+	return Compile(InSource, std::move(InEntry), InStage, InFormat, std::move(InOptions), CaptureSources(Sources));
+}
+
+FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, std::string InEntry,
+                                         EShaderStage InStage, EShaderFormat InFormat, FShaderCompileOptions InOptions,
+                                         const FShaderSourceSnapshot& InSources)
+{
 	NormalizeOptions(InOptions);
 	if (InEntry.empty() ||
 	    (InStage != EShaderStage::Vertex && InStage != EShaderStage::Pixel && InStage != EShaderStage::Compute) ||
@@ -420,32 +529,32 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 	{
 		throw std::invalid_argument("Unsupported shader entry, stage or target");
 	}
+	if (!InSources.Impl || InSources.Impl->Owner != Impl->SnapshotOwner)
+	{
+		throw std::invalid_argument("Shader snapshot belongs to a different compiler or is empty");
+	}
+	std::lock_guard Lock(Impl->Mutex);
+	return Impl->Compile(Impl->SourcePath(InSource), InEntry, InStage, InFormat, InOptions, InSources.Impl->Trees);
+}
+
+FShaderArtifact FShaderCompiler::FImpl::Compile(const std::filesystem::path& InPath, const std::string& InEntry,
+                                                EShaderStage InStage, EShaderFormat InFormat,
+                                                const FShaderCompileOptions& InOptions,
+                                                const FShaderSourceTrees& InSources)
+{
+	HYP_PERF_SCOPE_C(Assets, ShaderCompilation);
 	// Logical HLSL types can be lowered (notably bool -> uint) by SPIR-V. Preserve their DXIL source types,
 	// while reflecting every offset and stride from the actual SPIR-V intermediate.
 	FShaderArtifact Logical{};
 	if (InFormat != EShaderFormat::Dxil)
 	{
-		Logical = Compile(InSource, InEntry, InStage, EShaderFormat::Dxil, InOptions);
-	}
-	std::lock_guard Lock(Impl->Mutex);
-	HYP_PERF_SCOPE_C(Assets, ShaderCompilation);
-	auto Path =
-	    Impl->Files->Normalize(InSource.is_absolute() || IsPackagePath(InSource) ? InSource : Impl->Root / InSource);
-	if (!IsPackagePath(Path))
-	{
-		Path = std::filesystem::weakly_canonical(Path);
-	}
-	const bool bMountedShader =
-	    IsPackagePath(Path) && IsPackagePath(Impl->Root) && Within(Path, PackageRoot(Path) / "Shaders");
-	if (!Within(Path, Impl->Root) && !bMountedShader)
-	{
-		throw std::invalid_argument("Shader outside source root");
+		Logical = Compile(InPath, InEntry, InStage, EShaderFormat::Dxil, InOptions, InSources);
 	}
 	FShaderArtifact Artifact{};
 	Artifact.Format = InFormat;
 	Artifact.Stage = InStage;
-	Artifact.CacheKey = ShaderCacheKey(Path, Impl->Root, InEntry, InStage, InFormat, InOptions, *Impl->Files);
-	const auto CacheFile = Impl->Cache / (Artifact.CacheKey + ".bin");
+	Artifact.CacheKey = ShaderCacheKey(InPath, Root, InEntry, InStage, InFormat, InOptions, InSources);
+	const auto CacheFile = Cache / (Artifact.CacheKey + ".bin");
 	std::string Payload;
 	if (std::filesystem::exists(CacheFile))
 	{
@@ -458,8 +567,8 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 	}
 	if (!Artifact.bCacheHit)
 	{
-		Payload = CompilePayload(Impl->Compiler.Get(), Impl->Utils.Get(), Path, Impl->Root, InEntry, InStage, InFormat,
-		                         InOptions, *Impl->Files);
+		Payload = CompilePayload(Compiler.Get(), Utils.Get(), InPath, Root, InEntry, InStage, InFormat, InOptions,
+		                         *Files, InSources);
 	}
 	const std::string Intermediate = Payload;
 	if (InFormat == EShaderFormat::Dxil)

@@ -41,10 +41,7 @@ void ValidateNodeHierarchy(std::span<const FModelNode> InNodes)
 	std::vector<unsigned> Parents(InNodes.size());
 	for (const auto& Node : InNodes)
 	{
-		for (float Value : Node.Local.Values)
-		{
-			Require(std::isfinite(Value), "Non-finite node transform");
-		}
+		Require(IsAffine(Node.Local), "Model node transform must be finite and affine");
 		for (auto Child : Node.Children)
 		{
 			Require(Child < InNodes.size(), "Invalid child node");

@@ -1,5 +1,7 @@
 #include <Hyperion/Platform/Window.h>
 #include <SDL3/SDL.h>
+#include <map>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -74,6 +76,71 @@ EKey Translate(SDL_Keycode InKey)
 	}
 }
 
+std::optional<FInputEvent> Translate(const SDL_Event& InNative)
+{
+	FInputEvent Event;
+	switch (InNative.type)
+	{
+		case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+			Event.Type = EEventType::Quit;
+			break;
+		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+			Event.Type = EEventType::Resize;
+			Event.X = static_cast<float>(InNative.window.data1);
+			Event.Y = static_cast<float>(InNative.window.data2);
+			break;
+		case SDL_EVENT_MOUSE_MOTION:
+			Event.Type = EEventType::MouseMove;
+			Event.X = InNative.motion.x;
+			Event.Y = InNative.motion.y;
+			break;
+		case SDL_EVENT_MOUSE_BUTTON_DOWN:
+		case SDL_EVENT_MOUSE_BUTTON_UP:
+			Event.Type = EEventType::MouseButton;
+			Event.X = InNative.button.x;
+			Event.Y = InNative.button.y;
+			Event.bDown = InNative.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+			Event.Button = InNative.button.button == SDL_BUTTON_LEFT     ? 0
+			               : InNative.button.button == SDL_BUTTON_RIGHT  ? 1
+			               : InNative.button.button == SDL_BUTTON_MIDDLE ? 2
+			               : InNative.button.button == SDL_BUTTON_X1     ? 3
+			                                                             : 4;
+			break;
+		case SDL_EVENT_MOUSE_WHEEL:
+			Event.Type = EEventType::MouseWheel;
+			Event.X = InNative.wheel.x;
+			Event.Y = InNative.wheel.y;
+			if (InNative.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
+			{
+				Event.X = -Event.X;
+				Event.Y = -Event.Y;
+			}
+			break;
+		case SDL_EVENT_KEY_DOWN:
+		case SDL_EVENT_KEY_UP:
+			Event.Type = EEventType::Key;
+			Event.bDown = InNative.type == SDL_EVENT_KEY_DOWN;
+			Event.Key = Translate(InNative.key.key);
+			Event.bRepeat = InNative.key.repeat;
+			Event.Modifiers =
+			    ((InNative.key.mod & SDL_KMOD_CTRL) ? 1u : 0u) | ((InNative.key.mod & SDL_KMOD_SHIFT) ? 2u : 0u) |
+			    ((InNative.key.mod & SDL_KMOD_ALT) ? 4u : 0u) | ((InNative.key.mod & SDL_KMOD_GUI) ? 8u : 0u);
+			break;
+		case SDL_EVENT_TEXT_INPUT:
+			Event.Type = EEventType::Text;
+			Event.Text = InNative.text.text;
+			break;
+		case SDL_EVENT_WINDOW_FOCUS_GAINED:
+		case SDL_EVENT_WINDOW_FOCUS_LOST:
+			Event.Type = EEventType::Focus;
+			Event.bDown = InNative.type == SDL_EVENT_WINDOW_FOCUS_GAINED;
+			break;
+		default:
+			return std::nullopt;
+	}
+	return Event;
+}
+
 void Check(bool bInOk)
 {
 	if (!bInOk)
@@ -86,6 +153,8 @@ struct FSDLSession
 {
 	FSDLSession()
 	{
+		// Engine window-close events are routed individually, including hidden windows.
+		SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
 		Check(SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
 	}
 
@@ -98,18 +167,21 @@ struct FSDLSession
 
 struct FWindow::FImpl
 {
+	inline static thread_local std::map<SDL_WindowID, FImpl*> Windows;
 	// Balanced subsystem references keep surviving windows alive.
 	FSDLSession Session;
 	SDL_Window* Window{};
 	FNativeSurface Surface;
 	std::thread::id Owner = std::this_thread::get_id();
 	std::vector<FInputEvent> Events;
+	std::vector<FInputEvent> PendingEvents;
 	bool bClose = false;
 
 	~FImpl()
 	{
 		if (Window)
 		{
+			Windows.erase(SDL_GetWindowID(Window));
 			SDL_DestroyWindow(Window);
 		}
 	}
@@ -138,6 +210,7 @@ FWindow::FWindow(std::string InTitle, FSize InSize, bool bInHidden) : Impl(std::
 	    SDL_GetPointerProperty(SDL_GetWindowProperties(Impl->Window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
 #endif
 	SDL_StartTextInput(Impl->Window);
+	FImpl::Windows.emplace(SDL_GetWindowID(Impl->Window), Impl.get());
 }
 
 FWindow::~FWindow() = default;
@@ -149,70 +222,30 @@ void FWindow::Poll()
 	SDL_Event Native;
 	while (SDL_PollEvent(&Native))
 	{
-		FInputEvent Event;
-		switch (Native.type)
+		if (Native.type == SDL_EVENT_QUIT)
 		{
-			case SDL_EVENT_QUIT:
-			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+			for (const auto& [Id, Window] : FImpl::Windows)
+			{
+				FInputEvent Event;
 				Event.Type = EEventType::Quit;
-				Impl->bClose = true;
-				break;
-			case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-				Event.Type = EEventType::Resize;
-				Event.X = static_cast<float>(Native.window.data1);
-				Event.Y = static_cast<float>(Native.window.data2);
-				break;
-			case SDL_EVENT_MOUSE_MOTION:
-				Event.Type = EEventType::MouseMove;
-				Event.X = Native.motion.x;
-				Event.Y = Native.motion.y;
-				break;
-			case SDL_EVENT_MOUSE_BUTTON_DOWN:
-			case SDL_EVENT_MOUSE_BUTTON_UP:
-				Event.Type = EEventType::MouseButton;
-				Event.X = Native.button.x;
-				Event.Y = Native.button.y;
-				Event.bDown = Native.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
-				Event.Button = Native.button.button == SDL_BUTTON_LEFT     ? 0
-				               : Native.button.button == SDL_BUTTON_RIGHT  ? 1
-				               : Native.button.button == SDL_BUTTON_MIDDLE ? 2
-				               : Native.button.button == SDL_BUTTON_X1     ? 3
-				                                                           : 4;
-				break;
-			case SDL_EVENT_MOUSE_WHEEL:
-				Event.Type = EEventType::MouseWheel;
-				Event.X = Native.wheel.x;
-				Event.Y = Native.wheel.y;
-				if (Native.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
-				{
-					Event.X = -Event.X;
-					Event.Y = -Event.Y;
-				}
-				break;
-			case SDL_EVENT_KEY_DOWN:
-			case SDL_EVENT_KEY_UP:
-				Event.Type = EEventType::Key;
-				Event.bDown = Native.type == SDL_EVENT_KEY_DOWN;
-				Event.Key = Translate(Native.key.key);
-				Event.bRepeat = Native.key.repeat;
-				Event.Modifiers =
-				    ((Native.key.mod & SDL_KMOD_CTRL) ? 1u : 0u) | ((Native.key.mod & SDL_KMOD_SHIFT) ? 2u : 0u) |
-				    ((Native.key.mod & SDL_KMOD_ALT) ? 4u : 0u) | ((Native.key.mod & SDL_KMOD_GUI) ? 8u : 0u);
-				break;
-			case SDL_EVENT_TEXT_INPUT:
-				Event.Type = EEventType::Text;
-				Event.Text = Native.text.text;
-				break;
-			case SDL_EVENT_WINDOW_FOCUS_GAINED:
-			case SDL_EVENT_WINDOW_FOCUS_LOST:
-				Event.Type = EEventType::Focus;
-				Event.bDown = Native.type == SDL_EVENT_WINDOW_FOCUS_GAINED;
-				break;
-			default:
-				continue;
+				Window->PendingEvents.push_back(std::move(Event));
+				Window->bClose = true;
+			}
+			continue;
 		}
-		Impl->Events.push_back(std::move(Event));
+		const auto Window = SDL_GetWindowFromEvent(&Native);
+		const auto Target = Window ? FImpl::Windows.find(SDL_GetWindowID(Window)) : FImpl::Windows.end();
+		if (Target == FImpl::Windows.end())
+		{
+			continue;
+		}
+		if (auto Event = Translate(Native))
+		{
+			Target->second->bClose |= Event->Type == EEventType::Quit;
+			Target->second->PendingEvents.push_back(std::move(*Event));
+		}
 	}
+	Impl->Events.swap(Impl->PendingEvents);
 }
 
 bool FWindow::ShouldClose() const

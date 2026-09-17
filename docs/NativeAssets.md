@@ -162,6 +162,10 @@ AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、writt
 
 这两个测量不包括 GPU 上传；peak_resident_bytes 是整个短进程的峰值驻留集，不能当作缓存字节。首次运行与系统文件缓存也会影响耗时。实际 Debug/Release 结果和完整套件证据记录在当前 OpenSpec change 的 verification.md 中。
 
+## 兼容入口
+
+旧的 `FAssetReference` / `AssetReferenceType`、`LoadImageFile` 和 `LoadGltfPrimitive` 保留为兼容入口。新资产图使用包含类型、身份和版本的 `FAssetRef`；旧引用的任意字符串 ID 不能无损转换为该协议。`LoadGltfPrimitive` 已委托共享 glTF 转换核心，只适配旧 `FMesh` 返回类型。新源图像导入通过受预算约束的字节解码入口；同步 `LoadImageFile` 的 PNG/EXR 接受范围不与它们合并，以保留既有调用行为。
+
 ## 场景节点记录
 
 当前 `hyperion.scene` 为 native schema v7，节点记录为 v3，使用带稳定实例 ID 的组件封装；plain JSON source v3 继续兼容，也可使用反射记录 JSON 表达初始视图和自定义组件。旧 native v1–v6 的模型、材质、矩阵、镜头和灯光状态通过显式迁移保留，新空场景不自动补节点。scene-json 和 native-scene-upgrade importer revision 7 保留整模型引用，不自动展开内部节点或 primitive；旧的显式展开文档保持其子节点和编辑状态。模型导入为场景不创建占位相机；发布策略进入缓存设置，避免复用旧展开或强制相机输出。旧版本读取不自动删除相机。运行时兼容读取不会修改磁盘文件。Snapshot 从当前组件及设置生成独立快照，包含 Transform、enabled、camera/light 状态、选择和 initialView，异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneComponents.md](SceneComponents.md)、[SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。

@@ -144,10 +144,18 @@ std::shared_ptr<const FRenderBatchCandidate> FRenderBatchSystem::FImpl::Describe
 			++OutStats.Evictions;
 		}
 		RecentItems.push_back(Key);
-		Items.emplace(Key, FItemEntry{InItem.ResolvedParameters, InItem.ResolvedParameters->ResourceIdentity,
-		                              InItem.Lifetime, Result, InItem.State.Section,
-		                              Determinant(InItem.State.World) < 0, InItem.DynamicState,
-		                              std::prev(RecentItems.end()), InItem.SharedParameters, InItem.LocalPreparation});
+		try
+		{
+			Items.emplace(
+			    Key, FItemEntry{InItem.ResolvedParameters, InItem.ResolvedParameters->ResourceIdentity, InItem.Lifetime,
+			                    Result, InItem.State.Section, Determinant(InItem.State.World) < 0, InItem.DynamicState,
+			                    std::prev(RecentItems.end()), InItem.SharedParameters, InItem.LocalPreparation});
+		}
+		catch (...)
+		{
+			RecentItems.pop_back();
+			throw;
+		}
 	}
 	return Result;
 }
@@ -209,7 +217,15 @@ std::shared_ptr<const FInstanceBatchData> FRenderBatchSystem::FImpl::Data(const 
 		Entry.Access = Access;
 		RecentChunks.push_back(Key);
 		Entry.Recent = std::prev(RecentChunks.end());
-		Chunks.emplace(Key, std::move(Entry));
+		try
+		{
+			Chunks.emplace(Key, std::move(Entry));
+		}
+		catch (...)
+		{
+			RecentChunks.pop_back();
+			throw;
+		}
 		ChunkBytes += Bytes;
 	}
 	return Result;

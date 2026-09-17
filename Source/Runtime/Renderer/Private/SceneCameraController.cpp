@@ -178,8 +178,9 @@ void FSceneCameraController::Advance(FSceneCameraView& InCamera, float InDeltaSe
 		return;
 	}
 	const float Distance = GetMovementSpeed(InCamera) * std::min(InDeltaSeconds, .1f);
-	const auto Eye = Add(Pose.Eye, ScaleVector(Direction, Distance / Magnitude));
-	InCamera.World = SceneCameraTransform(Eye, Add(Eye, Pose.Forward), Pose.Up);
+	auto Moved = Pose;
+	Moved.Eye = Add(Pose.Eye, ScaleVector(Direction, Distance / Magnitude));
+	InCamera.World = SceneCameraTransform(Moved);
 }
 
 float FSceneCameraController::GetMovementSpeed(const FSceneInstance& InScene) const

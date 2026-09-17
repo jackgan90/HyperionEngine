@@ -56,4 +56,10 @@ std::string PathToUtf8(const std::filesystem::path& InPath)
 	const auto Text = InPath.generic_u8string();
 	return {reinterpret_cast<const char*>(Text.data()), Text.size()};
 }
+
+std::string PathRelativeToUtf8(const std::filesystem::path& InPath, const std::filesystem::path& InBase)
+{
+	const auto Relative = InPath.lexically_relative(InBase);
+	return PathToUtf8(IsPackagePath(InPath) || Relative.empty() ? InPath : Relative);
+}
 } // namespace Hyperion

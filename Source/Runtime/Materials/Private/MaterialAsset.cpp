@@ -120,8 +120,10 @@ FMaterialAsset PersistMaterialDescription(const FMaterialDescription& InDescript
 	return Result;
 }
 
-FMaterialDescription ResolveMaterialAssetDescription(const FMaterialAsset& InAsset,
-                                                     const FMaterialTextureResolver& InResolve)
+namespace
+{
+FMaterialDescription ResolveDescription(const FMaterialAsset& InAsset, const FMaterialTextureResolver& InResolve,
+                                        bool bInValidationOnly)
 {
 	FMaterialDescription Result;
 	Result.Name = InAsset.Name;
@@ -141,15 +143,15 @@ FMaterialDescription ResolveMaterialAssetDescription(const FMaterialAsset& InAss
 		Parameter.bActive = Stored.bActive;
 		if (Stored.Default)
 		{
-			Parameter.Default = ResolveMaterialAssetValue(*Stored.Default, InResolve);
+			Parameter.Default = ResolveValue(*Stored.Default, InResolve, 0, bInValidationOnly);
 		}
 		Result.Parameters.push_back(std::move(Parameter));
 	}
 	return Result;
 }
 
-FMaterialParameterValues ResolveMaterialAssetValues(const FMaterialAssetValues& InValues,
-                                                    const FMaterialTextureResolver& InResolve)
+FMaterialParameterValues ResolveValues(const FMaterialAssetValues& InValues, const FMaterialTextureResolver& InResolve,
+                                       bool bInValidationOnly)
 {
 	FMaterialParameterValues Result;
 	std::set<std::string> Names;
@@ -159,15 +161,28 @@ FMaterialParameterValues ResolveMaterialAssetValues(const FMaterialAssetValues& 
 		{
 			throw std::invalid_argument("Empty or duplicate persistent material value name");
 		}
-		Result.push_back({Entry.Name, ResolveMaterialAssetValue(Entry.Value, InResolve)});
+		Result.push_back({Entry.Name, ResolveValue(Entry.Value, InResolve, 0, bInValidationOnly)});
 	}
 	return Result;
+}
+} // namespace
+
+FMaterialDescription ResolveMaterialAssetDescription(const FMaterialAsset& InAsset,
+                                                     const FMaterialTextureResolver& InResolve)
+{
+	return ResolveDescription(InAsset, InResolve, false);
+}
+
+FMaterialParameterValues ResolveMaterialAssetValues(const FMaterialAssetValues& InValues,
+                                                    const FMaterialTextureResolver& InResolve)
+{
+	return ResolveValues(InValues, InResolve, false);
 }
 
 void ValidateMaterialAsset(const FMaterialAsset& InAsset)
 {
-	const FMaterialDefinition Definition(ResolveMaterialAssetDescription(InAsset, ValidationTexture));
-	for (const auto& Entry : ResolveMaterialAssetValues(InAsset.Values, ValidationTexture))
+	const FMaterialDefinition Definition(ResolveDescription(InAsset, ValidationTexture, true));
+	for (const auto& Entry : ResolveValues(InAsset.Values, ValidationTexture, true))
 	{
 		const auto& Schema = *Definition.GetSchema();
 		ValidateMaterialOverride(Schema.Get(Schema.Find(Entry.Name)), Entry.Value, EMaterialScope::Material);

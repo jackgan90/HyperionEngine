@@ -1,4 +1,5 @@
 #include "D3D12Bindings.h"
+#include "D3D12GraphicsState.h"
 #include "D3D12RHIDevice.h"
 #include "Hyperion/Core/Profiling.h"
 #include <algorithm>
@@ -144,7 +145,9 @@ void WriteDescriptor(FD3D12DeviceState& InState, D3D12_CPU_DESCRIPTOR_HANDLE InD
 		else
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC Desc{};
-			Desc.Format = Texture.DepthViews ? DXGI_FORMAT_R32_FLOAT : Texture.Resource->GetDesc().Format;
+			Desc.Format = Texture.DepthViews   ? DXGI_FORMAT_R32_FLOAT
+			              : Texture.ColorViews ? NativeColorFormat(Texture.ColorFormat)
+			                                   : Texture.Resource->GetDesc().Format;
 			Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 			Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			Desc.Texture2D.MostDetailedMip = View->FirstMip;

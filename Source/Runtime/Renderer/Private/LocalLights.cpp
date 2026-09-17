@@ -72,14 +72,14 @@ void FLocalLightIndex::Update(const FSceneMetadata& InMetadata, FSceneVisibility
 	{
 		if (Source.bEnabled && Source.Light.Intensity > 0)
 		{
-			Updated.emplace(std::uint64_t(Handle.Slot) + 1, Point(Handle, Source));
+			Updated.emplace(std::uint64_t(Handle.Slot) * 2 + 1, Point(Handle, Source));
 		}
 	}
 	for (const auto& [Handle, Source] : InMetadata.SpotLights)
 	{
 		if (Source.bEnabled && Source.Light.Intensity > 0)
 		{
-			Updated.emplace(std::uint64_t(Handle.Slot) + 1, Spot(Handle, Source));
+			Updated.emplace(std::uint64_t(Handle.Slot) * 2 + 2, Spot(Handle, Source));
 		}
 	}
 	for (const auto& [Id, Light] : Lights)

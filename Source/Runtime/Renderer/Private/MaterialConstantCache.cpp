@@ -598,8 +598,17 @@ std::vector<FConstantBinding> FMaterialConstantCache::BindInstances(std::shared_
 			}
 			Impl->RecentInstances.push_back(Key);
 			Entry.Recent = std::prev(Impl->RecentInstances.end());
-			Impl->InstanceBytes += Entry.Bytes;
-			Impl->Instances.emplace(Key, std::move(Entry));
+			const auto Bytes = Entry.Bytes;
+			try
+			{
+				Impl->Instances.emplace(Key, std::move(Entry));
+			}
+			catch (...)
+			{
+				Impl->RecentInstances.pop_back();
+				throw;
+			}
+			Impl->InstanceBytes += Bytes;
 		}
 	}
 	return Result;

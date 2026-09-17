@@ -22,9 +22,11 @@ std::string FPublication::PortableKey(std::string InKey) const
 	if (!SourceRoot.empty())
 	{
 		const auto Prefix = ImportPathString(SourceRoot) + "/";
-		for (auto Position = InKey.find(Prefix); Position != std::string::npos; Position = InKey.find(Prefix))
+		const auto Replacement = SourceId + "/";
+		for (auto Position = InKey.find(Prefix); Position != std::string::npos;
+		     Position = InKey.find(Prefix, Position + Replacement.size()))
 		{
-			InKey.replace(Position, Prefix.size(), SourceId + "/");
+			InKey.replace(Position, Prefix.size(), Replacement);
 		}
 	}
 	return InKey;

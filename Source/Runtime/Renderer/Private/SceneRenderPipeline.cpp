@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Hyperion/Core/Profiling.h"
+#include "PipelineShadows.h"
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -95,26 +96,12 @@ void FSceneRenderPipeline::PrepareShadows(const FRenderView& InMain, const FMate
                                           const FCascadedShadowSettings& InShadows)
 {
 	const auto Start = std::chrono::steady_clock::now();
-	const auto Revision = Session.GetScene().GetCollectionRevision();
-	const auto State =
-	    Revision ? std::optional(std::array{*Revision, Session.GetResources().GetPublicationRevision()}) : std::nullopt;
-	auto Effective = InShadows;
-	Effective.bEnabled &= !InFrame.GetSceneToken() || InFrame.CastsSceneShadows();
-	LastStatistics.bShadows = ShadowMaps.Prepare(
-	    InMain, Direction(Session, InFrame), Effective,
-	    [this](const ISceneVisibility& InVolume)
-	    {
-		    return Session.GetScene().QueryBounds(InVolume);
-	    },
-	    State);
+	LastStatistics.bShadows =
+	    PreparePipelineShadows(Session, ShadowMaps, InMain, InFrame, InShadows, Direction(Session, InFrame));
 	LastStatistics.ShadowSetupMilliseconds =
 	    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
-	if (!ShadowLifetime || ShadowBytes != ShadowMaps.TextureBytes() || ShadowDepthConvention != InMain.DepthConvention)
-	{
-		ShadowLifetime = Session.GetResources().CreateScopeLifetime();
-		ShadowBytes = ShadowMaps.TextureBytes();
-		ShadowDepthConvention = InMain.DepthConvention;
-	}
+	UpdatePipelineShadowLifetime(Session.GetResources(), ShadowMaps, InMain.DepthConvention, ShadowLifetime,
+	                             ShadowBytes, ShadowDepthConvention);
 }
 
 void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMain,

@@ -162,9 +162,9 @@ void OrbitSceneCamera(FSceneCameraView& InCamera, float InYaw, float InPitch)
 	const auto Pose = ExtractScenePose(InCamera.World);
 	const auto& Camera = InCamera.Lens;
 	const auto Pivot = Add(Pose.Eye, ScaleVector(Pose.Forward, Camera.FocusDistance));
-	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
-	InCamera.World =
-	    SceneCameraTransform(Subtract(Pivot, ScaleVector(Rotated.Forward, Camera.FocusDistance)), Pivot, Rotated.Up);
+	auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
+	Rotated.Eye = Subtract(Pivot, ScaleVector(Rotated.Forward, Camera.FocusDistance));
+	InCamera.World = SceneCameraTransform(Rotated);
 }
 
 void RotateSceneCamera(FSceneCameraView& InCamera, float InYaw, float InPitch)
@@ -175,7 +175,7 @@ void RotateSceneCamera(FSceneCameraView& InCamera, float InYaw, float InPitch)
 	}
 	const auto Pose = ExtractScenePose(InCamera.World);
 	const auto Rotated = RotateCameraPose(Pose, InYaw, InPitch);
-	InCamera.World = SceneCameraTransform(Pose.Eye, Add(Pose.Eye, Rotated.Forward), Rotated.Up);
+	InCamera.World = SceneCameraTransform(Rotated);
 }
 
 void DollySceneCamera(FSceneCameraView& InCamera, float InFactor, float InMinimum, float InMaximum,
@@ -189,8 +189,9 @@ void DollySceneCamera(FSceneCameraView& InCamera, float InFactor, float InMinimu
 	{
 		Camera.Far = Camera.FocusDistance + *InFarPadding;
 	}
-	InCamera.World =
-	    SceneCameraTransform(Subtract(Pivot, ScaleVector(Pose.Forward, Camera.FocusDistance)), Pivot, Pose.Up);
+	auto Moved = Pose;
+	Moved.Eye = Subtract(Pivot, ScaleVector(Pose.Forward, Camera.FocusDistance));
+	InCamera.World = SceneCameraTransform(Moved);
 }
 
 void PanSceneCamera(FSceneCameraView& InCamera, FVec3 InSteps)
@@ -202,8 +203,9 @@ void PanSceneCamera(FSceneCameraView& InCamera, FVec3 InSteps)
 	const float Step = std::max(.1f, Camera.FocusDistance * .08f);
 	const auto Offset =
 	    ScaleVector(Add(Add(ScaleVector(Right, InSteps.X), ScaleVector(Forward, InSteps.Z)), {0, InSteps.Y, 0}), Step);
-	const auto Eye = Add(Pose.Eye, Offset);
-	InCamera.World = SceneCameraTransform(Eye, Add(Eye, Pose.Forward), Pose.Up);
+	auto Moved = Pose;
+	Moved.Eye = Add(Pose.Eye, Offset);
+	InCamera.World = SceneCameraTransform(Moved);
 }
 
 void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, float InAspect, bool bInModelViewerLens)
@@ -241,7 +243,8 @@ void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, f
 		Camera.Near = std::max(.0001f, Radius * .001f);
 		Camera.Far = Camera.FocusDistance + Radius * 10;
 	}
-	InCamera.World =
-	    SceneCameraTransform(Subtract(Center, ScaleVector(Pose.Forward, Camera.FocusDistance)), Center, Pose.Up);
+	auto Moved = Pose;
+	Moved.Eye = Subtract(Center, ScaleVector(Pose.Forward, Camera.FocusDistance));
+	InCamera.World = SceneCameraTransform(Moved);
 }
 } // namespace Hyperion

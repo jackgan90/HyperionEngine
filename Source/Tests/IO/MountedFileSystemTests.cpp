@@ -1,4 +1,5 @@
 #include "Hyperion/IO/MountedFileSystem.h"
+#include "Hyperion/IO/Path.h"
 #include "Support/TestSupport.h"
 
 namespace
@@ -142,5 +143,10 @@ void TestMountedFileSystem()
 		    }));
 		std::filesystem::remove(Root / "Game/Escape");
 	}
+	HYP_CHECK(PathRelativeToUtf8("/Game/Asset.hasset", "/Game/Scenes") == "/Game/Asset.hasset");
+#ifdef _WIN32
+	HYP_CHECK(PathRelativeToUtf8("F:/Assets/Asset.hasset", "C:/Output") == "F:/Assets/Asset.hasset");
+	HYP_CHECK(PathRelativeToUtf8("F:/Assets/Asset.hasset", "F:/Output") == "../Assets/Asset.hasset");
+#endif
 	Tasks.Shutdown();
 }

@@ -83,7 +83,8 @@ float4 PSRead():SV_Target0
 		Read.Layout = Device.CreateBindingLayout({{{ERHIBindingKind::Texture2D, ERHIShaderVisibility::Pixel, 0},
 		                                           {ERHIBindingKind::Texture2D, ERHIShaderVisibility::Pixel, 1}}});
 		Consumer.Pipeline = Device.CreatePipeline(Read);
-		Consumer.Bindings = Device.CreateBindingSet({Read.Layout, {{0, {Colors[0]}}, {1, {Colors[1]}}}});
+		Consumer.Bindings = Device.CreateBindingSet(
+		    {Read.Layout, {{0, {FTextureView{Colors[0], 0, 1}}}, {1, {FTextureView{Colors[1], 0, 1}}}}});
 	}
 
 	FGraphTexture Import(FRenderGraph& InGraph, std::size_t InIndex, bool bInInitialized) const

@@ -2,6 +2,7 @@
 #include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
 #include <iostream>
@@ -278,6 +279,87 @@ void CheckJson(FFixture& InFixture)
 		    });
 	}
 }
+
+std::set<std::string> AssetIdentities(const FAssetGraph& InGraph)
+{
+	HYP_CHECK(InGraph.Failures.empty());
+	std::set<std::string> Result;
+	for (const auto& [Path, Asset] : InGraph.Assets)
+	{
+		Result.insert(Asset->Header.Id);
+	}
+	return Result;
+}
+
+void CheckRejectedSourceIds(FFixture& InFixture, const std::filesystem::path& InSource,
+                            const std::filesystem::path& InOutput, FAssetImportOptions InOptions)
+{
+	const auto Previous = InFixture.IO.ReadAsync(InOutput).Get(InFixture.Tasks);
+	const auto LibraryPath = InOptions.Library / ".asset-library.hasset";
+	const auto Library = InFixture.IO.ReadAsync(LibraryPath).Get(InFixture.Tasks);
+	const auto Root = PathToUtf8(InOptions.SourceRoot);
+	for (const auto& SourceId : {Root + "/nested", "logical/" + Root})
+	{
+		InOptions.SourceId = SourceId;
+		bool bRejected{};
+		try
+		{
+			InFixture.Imports.ImportAsync(InSource, InOutput, InOptions).Get(InFixture.Tasks);
+		}
+		catch (const std::invalid_argument& Error)
+		{
+			bRejected =
+			    std::string(Error.what()).find("Source ID must not embed the source root prefix") != std::string::npos;
+		}
+		HYP_CHECK(bRejected);
+		HYP_CHECK(*InFixture.IO.ReadAsync(InOutput).Get(InFixture.Tasks) == *Previous);
+		HYP_CHECK(*InFixture.IO.ReadAsync(LibraryPath).Get(InFixture.Tasks) == *Library);
+	}
+}
+
+void CheckPortableSourceIds(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	const auto Fixtures = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
+	for (const bool bEqualRoot : {false, true})
+	{
+		const auto Directory = F.Directory / (bEqualRoot ? "equal-root" : "logical-source");
+		for (const auto* Name : {"Showcase.gltf", "Showcase.bin", "Checker.png"})
+		{
+			F.IO.WriteAsync(Directory / Name, *F.IO.ReadAsync(Fixtures / Name).Get(F.Tasks)).Get(F.Tasks);
+		}
+		FAssetImportOptions Options;
+		Options.Library = Directory / "library";
+		Options.SourceRoot = Directory;
+		Options.SourceId = bEqualRoot ? PathToUtf8(Directory) : "stable-test-source";
+		Options.bForce = true;
+		const auto Source = Directory / "Showcase.gltf";
+		const auto Output = Directory / "Model.hasset";
+		const auto Initial = F.Imports.ImportAsync(Source, Output, Options).Get(F.Tasks);
+		FAssetService Assets(F.IO);
+		RegisterSceneAssetTypes(Assets.Types());
+		const auto InitialGraph = Assets.LoadGraphAsync(Output).Get(F.Tasks);
+		const auto Ids = AssetIdentities(*InitialGraph);
+		const auto Textures = TextureReferences(*InitialGraph);
+		const auto Forced = F.Imports.ImportAsync(Source, Output, Options).Get(F.Tasks);
+		HYP_CHECK(Forced->Header.Id == Initial->Header.Id && Forced->Header.Revision == Initial->Header.Revision);
+		Assets.Invalidate(Output);
+		HYP_CHECK(AssetIdentities(*Assets.LoadGraphAsync(Output).Get(F.Tasks)) == Ids);
+		FImage White{4, 4, EColorSpace::Srgb, std::vector<float>(4 * 4 * 4, 1)};
+		F.IO.WriteAsync(Directory / "Checker.png", EncodePng(White)).Get(F.Tasks);
+		Options.bForce = false;
+		const auto Changed = F.Imports.ImportAsync(Source, Output, Options).Get(F.Tasks);
+		HYP_CHECK(Changed->Header.Id == Initial->Header.Id && Changed->Header.Revision != Initial->Header.Revision);
+		Assets.Invalidate(Output);
+		const auto ChangedGraph = Assets.LoadGraphAsync(Output).Get(F.Tasks);
+		HYP_CHECK(AssetIdentities(*ChangedGraph) == Ids);
+		const auto ChangedTextures = TextureReferences(*ChangedGraph);
+		HYP_CHECK(ChangedTextures.at("Checker.png").Id == Textures.at("Checker.png").Id);
+		HYP_CHECK(ChangedTextures.at("Checker.png").Revision != Textures.at("Checker.png").Revision);
+		Options.bForce = true;
+		CheckRejectedSourceIds(F, Source, Output, Options);
+	}
+}
 } // namespace
 
 int main()
@@ -290,6 +372,7 @@ int main()
 		CheckSourceProductConflict(Fixture);
 		CheckLegacyAndVariants(Fixture);
 		CheckJson(Fixture);
+		CheckPortableSourceIds(Fixture);
 		std::cout << "Shared source identities, concurrent roots, old revisions, explicit legacy split, roles/samplers "
 		             "and JSON passed\n";
 	}

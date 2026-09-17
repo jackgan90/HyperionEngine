@@ -9,17 +9,6 @@ namespace Hyperion
 {
 namespace
 {
-std::filesystem::path Path(std::string_view InValue)
-{
-	return std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(InValue.data()), InValue.size()));
-}
-
-std::string PathText(const std::filesystem::path& InPath)
-{
-	const auto Text = InPath.generic_u8string();
-	return {reinterpret_cast<const char*>(Text.data()), Text.size()};
-}
-
 void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std::ostream& InOutput)
 {
 	if (InArguments.size() < 3)
@@ -41,11 +30,11 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 		}
 		else if (Argument == "--library" && Index + 1 < InArguments.size())
 		{
-			Options.Library = Path(InArguments[++Index]);
+			Options.Library = PathFromUtf8(InArguments[++Index]);
 		}
 		else if (Argument == "--source-root" && Index + 1 < InArguments.size())
 		{
-			Options.SourceRoot = Path(InArguments[++Index]);
+			Options.SourceRoot = PathFromUtf8(InArguments[++Index]);
 		}
 		else if (Argument == "--source-id" && Index + 1 < InArguments.size())
 		{
@@ -64,8 +53,9 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 	FAssetImportService Imports(InIO);
 	RegisterGltfImporter(Imports);
 	RegisterSceneImporter(Imports);
-	const auto Result = Imports.ImportAsync(Path(InArguments[1]), Path(InArguments[2]), Options).Get(InIO.TaskSystem());
-	InOutput << (Result->bUpToDate ? "Up to date: " : "Published: ") << PathText(Result->Output)
+	const auto Result =
+	    Imports.ImportAsync(PathFromUtf8(InArguments[1]), PathFromUtf8(InArguments[2]), Options).Get(InIO.TaskSystem());
+	InOutput << (Result->bUpToDate ? "Up to date: " : "Published: ") << PathToUtf8(Result->Output)
 	         << "\nid=" << Result->Header.Id << " type=" << Result->Header.TypeId
 	         << " schema=" << Result->Header.SchemaVersion << " revision=" << Result->Header.Revision
 	         << " written_assets=" << Result->WrittenAssets << '\n';
@@ -74,7 +64,7 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 void Inspect(const FLoadedAsset& InAsset, std::ostream& InOutput)
 {
 	const auto& Header = InAsset.Header;
-	InOutput << "path=" << PathText(InAsset.Path) << "\nid=" << Header.Id << " type=" << Header.TypeId
+	InOutput << "path=" << PathToUtf8(InAsset.Path) << "\nid=" << Header.Id << " type=" << Header.TypeId
 	         << " schema=" << Header.SchemaVersion << " revision=" << Header.Revision
 	         << " dependencies=" << Header.Dependencies.size() << '\n';
 	for (const auto& Dependency : Header.Dependencies)
@@ -107,7 +97,7 @@ std::shared_ptr<const FAssetGraph> Validate(FAssetService& InAssets, FTaskSystem
 	if (!Graph->Failures.empty())
 	{
 		const auto& Failure = Graph->Failures.front();
-		throw std::runtime_error(PathText(Failure.Parent) + ":" + Failure.Field + ": " + Failure.Error);
+		throw std::runtime_error(PathToUtf8(Failure.Parent) + ":" + Failure.Field + ": " + Failure.Error);
 	}
 	return Graph;
 }
@@ -118,8 +108,8 @@ void ExportJson(std::span<const std::string_view> InArguments, FAssetService& In
 	{
 		throw std::invalid_argument("export-json INPUT.hasset OUTPUT.json");
 	}
-	const auto Asset = InAssets.LoadAsync(Path(InArguments[1])).Get(InIO.TaskSystem());
-	const auto Output = InAssets.NormalizePath(Path(InArguments[2]));
+	const auto Asset = InAssets.LoadAsync(PathFromUtf8(InArguments[1])).Get(InIO.TaskSystem());
+	const auto Output = InAssets.NormalizePath(PathFromUtf8(InArguments[2]));
 	auto Object = ReadRecord(*Asset->Type, WriteRecord(*Asset->Type, Asset->Object.get()));
 	VisitRecord(*Asset->Type, Object.get(),
 	            [&](const FRecordDescriptor& InType, const void* InValue, std::string_view)
@@ -130,9 +120,7 @@ void ExportJson(std::span<const std::string_view> InArguments, FAssetService& In
 			            if (!Reference.Path.empty())
 			            {
 				            const auto Absolute = InAssets.Resolve(Reference, Asset->Path);
-				            const auto Relative = Absolute.lexically_relative(Output.parent_path());
-				            Reference.Path =
-				                PathText(IsPackagePath(Absolute) || Relative.empty() ? Absolute : Relative);
+				            Reference.Path = PathRelativeToUtf8(Absolute, Output.parent_path());
 			            }
 		            }
 	            });
@@ -148,18 +136,16 @@ void Catalog(std::span<const std::string_view> InArguments, FAssetService& InAss
 	{
 		throw std::invalid_argument("catalog OUTPUT.hasset ROOT.hasset [ROOT.hasset ...]");
 	}
-	const auto Output = InAssets.NormalizePath(Path(InArguments[1]));
+	const auto Output = InAssets.NormalizePath(PathFromUtf8(InArguments[1]));
 	FAssetCatalog CatalogValue;
 	std::map<std::string, FAssetRef> Unique;
 	for (std::size_t Index = 2; Index < InArguments.size(); ++Index)
 	{
-		const auto Graph = Validate(InAssets, InTasks, Path(InArguments[Index]));
+		const auto Graph = Validate(InAssets, InTasks, PathFromUtf8(InArguments[Index]));
 		for (const auto& [AssetPath, Asset] : Graph->Assets)
 		{
-			FAssetRef Reference{
-			    Asset->Header.Id,
-			    PathText(IsPackagePath(AssetPath) ? AssetPath : AssetPath.lexically_relative(Output.parent_path())),
-			    Asset->Header.TypeId, Asset->Header.Revision};
+			FAssetRef Reference{Asset->Header.Id, PathRelativeToUtf8(AssetPath, Output.parent_path()),
+			                    Asset->Header.TypeId, Asset->Header.Revision};
 			const auto [It, bInserted] = Unique.emplace(Reference.Id, Reference);
 			if (!bInserted && It->second != Reference)
 			{
@@ -172,7 +158,7 @@ void Catalog(std::span<const std::string_view> InArguments, FAssetService& InAss
 		CatalogValue.Assets.push_back(Reference);
 	}
 	InAssets.SaveAsync(Output, std::make_shared<const FAssetCatalog>(std::move(CatalogValue))).Get(InTasks);
-	InOutput << "Catalog: " << PathText(Output) << " assets=" << Unique.size() << '\n';
+	InOutput << "Catalog: " << PathToUtf8(Output) << " assets=" << Unique.size() << '\n';
 }
 } // namespace
 
@@ -195,17 +181,17 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	const auto Command = InArguments[0];
 	if (Command == "export-envelope" && InArguments.size() == 3)
 	{
-		const auto Document = DecodeAsset(InIO.ReadAsync(Path(InArguments[1])).Get(InIO.TaskSystem()));
+		const auto Document = DecodeAsset(InIO.ReadAsync(PathFromUtf8(InArguments[1])).Get(InIO.TaskSystem()));
 		const auto Text = EncodeAssetSourceJson(Document.Object);
 		const auto Bytes = std::as_bytes(std::span(Text));
-		InIO.WriteAsync(Path(InArguments[2]), FBytes(Bytes.begin(), Bytes.end())).Get(InIO.TaskSystem());
+		InIO.WriteAsync(PathFromUtf8(InArguments[2]), FBytes(Bytes.begin(), Bytes.end())).Get(InIO.TaskSystem());
 		return;
 	}
 	if (Command == "measure-source" && InArguments.size() == 2)
 	{
 		FAssetImportService Imports(InIO);
 		RegisterGltfImporter(Imports);
-		const auto Model = Imports.LoadAsync<FModelAsset>(Path(InArguments[1])).Get(InIO.TaskSystem());
+		const auto Model = Imports.LoadAsync<FModelAsset>(PathFromUtf8(InArguments[1])).Get(InIO.TaskSystem());
 		if (Model->Primitives.empty() || ModelInstances(*Model).empty())
 		{
 			throw std::runtime_error("Cannot measure an empty model");
@@ -228,7 +214,7 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		FAssetHeader Header;
 		Header.Id = "00000000000000000000000000000001";
 		const auto Encoded = EncodeAsset(RecordType<FTextureAsset>(), &Brdf, Header);
-		InIO.WriteAsync(Path(InArguments[1]), Encoded.Bytes).Get(InIO.TaskSystem());
+		InIO.WriteAsync(PathFromUtf8(InArguments[1]), Encoded.Bytes).Get(InIO.TaskSystem());
 	}
 	else if (Command == "export-json")
 	{
@@ -240,7 +226,7 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	}
 	else if ((Command == "inspect" || Command == "validate") && InArguments.size() == 2)
 	{
-		const auto Graph = Validate(Assets, InIO.TaskSystem(), Path(InArguments[1]));
+		const auto Graph = Validate(Assets, InIO.TaskSystem(), PathFromUtf8(InArguments[1]));
 		Inspect(*Graph->Root, InOutput);
 		InOutput << "Validated native graph: " << Graph->Assets.size() << " assets\n";
 	}
