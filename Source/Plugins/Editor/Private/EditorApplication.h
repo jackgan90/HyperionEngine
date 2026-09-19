@@ -13,6 +13,8 @@ struct FEditorOptions
 {
 	std::filesystem::path Mounts;
 	std::filesystem::path Layout;
+	std::filesystem::path UiPreferences;
+	std::optional<float> ApplicationScale;
 	std::filesystem::path Capture;
 	std::filesystem::path Report;
 	std::filesystem::path Benchmark;
@@ -50,6 +52,7 @@ private:
 	void OpenScene(const std::string& InPath);
 	void ShowOpenScene();
 	void DrawMenus();
+	void DrawApplicationScale();
 	void DrawToolbar();
 	void DrawOutliner();
 	void DrawNode(FSceneHandle InHandle);

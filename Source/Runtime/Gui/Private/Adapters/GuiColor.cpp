@@ -27,9 +27,9 @@ void Observe(const std::function<void(std::string_view, FVec4)>& InObserve, std:
 	}
 }
 
-bool ColorPickerValues(float* InColor, const std::function<void(std::string_view, FVec4)>& InObserve)
+bool ColorPickerValues(float* InColor, const std::function<void(std::string_view, FVec4)>& InObserve, float InScale)
 {
-	ImGui::SetNextItemWidth(300);
+	ImGui::SetNextItemWidth(300 * InScale);
 	bool bChanged = ImGui::ColorPicker3("##picker", InColor,
 	                                    ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_PickerHueWheel |
 	                                        ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoAlpha |
@@ -45,7 +45,7 @@ bool ColorPickerValues(float* InColor, const std::function<void(std::string_view
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted(Labels[Channel]);
 		ImGui::SameLine();
-		ImGui::SetNextItemWidth(280);
+		ImGui::SetNextItemWidth(280 * InScale);
 		if (DragNumericValue("##value", ImGuiDataType_S32, &Value, 1, "%d", &Minimum, &Maximum))
 		{
 			InColor[Channel] = float(Value) / 255;
@@ -57,7 +57,7 @@ bool ColorPickerValues(float* InColor, const std::function<void(std::string_view
 }
 
 bool ColorPopup(FVec3& InValue, ImGuiStorage& InStorage, const std::array<ImGuiID, 4>& InKeys,
-                const std::function<void(std::string_view, FVec4)>& InObserve, bool bInLive)
+                const std::function<void(std::string_view, FVec4)>& InObserve, bool bInLive, float InScale)
 {
 	if (!ImGui::BeginPopup("Color picker"))
 	{
@@ -66,7 +66,7 @@ bool ColorPopup(FVec3& InValue, ImGuiStorage& InStorage, const std::array<ImGuiI
 	float Color[]{InStorage.GetFloat(InKeys[0]), InStorage.GetFloat(InKeys[1]), InStorage.GetFloat(InKeys[2])};
 	bool bChanged{};
 	ImGui::TextUnformatted("Color picker");
-	if (ColorPickerValues(Color, InObserve))
+	if (ColorPickerValues(Color, InObserve, InScale))
 	{
 		for (unsigned Channel = 0; Channel < 3; ++Channel)
 		{
@@ -133,7 +133,7 @@ bool FGui::InputColor(const char* InLabel, FVec3& InValue,
 		ImGui::SetTooltip("sRGB: %d, %d, %d", int(std::lround(Color[0] * 255)), int(std::lround(Color[1] * 255)),
 		                  int(std::lround(Color[2] * 255)));
 	}
-	bool bChanged = ColorPopup(InValue, Storage, Keys, InObserve, Impl->bLiveEdit);
+	bool bChanged = ColorPopup(InValue, Storage, Keys, InObserve, Impl->bLiveEdit, Impl->AppliedScale);
 	Impl->TrackEdit(Id, ImGui::IsPopupOpen("Color picker"), bOpened, bChanged);
 	if (bExpanded)
 	{

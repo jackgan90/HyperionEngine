@@ -11,6 +11,7 @@ def run_editor(executable, root, output, name, *arguments):
     report = output / f'{name}.json'
     capture = output / f'{name}.png'
     command = [str(executable), '--hidden', '--layout', str(output / f'{name}.ini'),
+               '--ui-preferences', str(output / f'{name}-scale.ini'),
                '--report', str(report), '--capture', str(capture), *arguments]
     result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=100)
     (output / f'{name}.log').write_text(result.stdout + result.stderr, encoding='utf-8')

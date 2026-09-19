@@ -50,6 +50,31 @@ void FEditorPlugin::ShowOpenScene()
 	}
 }
 
+void FEditorPlugin::DrawApplicationScale()
+{
+	if (!Gui->BeginMenu("Application Scale"))
+	{
+		return;
+	}
+	constexpr std::array Presets{1.f, 1.25f, 1.5f, 1.75f, 2.f};
+	constexpr std::array Labels{"100%", "125%", "150%", "175%", "200%"};
+	for (std::size_t Index = 0; Index < Presets.size(); ++Index)
+	{
+		if (Gui->MenuItem(Labels[Index], nullptr, Gui->ApplicationScale() == Presets[Index]))
+		{
+			Gui->SetApplicationScale(Presets[Index]);
+		}
+	}
+	Gui->Separator();
+	Gui->SetNextItemWidth(160);
+	Gui->ApplicationScaleControl("Custom");
+	if (Gui->MenuItem("Reset to default (125%)"))
+	{
+		Gui->SetApplicationScale(1.25f);
+	}
+	Gui->EndMenu();
+}
+
 void FEditorPlugin::DrawMenus()
 {
 	const auto Attempt = [&](const auto& InAction)
@@ -123,6 +148,7 @@ void FEditorPlugin::DrawMenus()
 		}
 		if (Gui->BeginMenu("Window"))
 		{
+			DrawApplicationScale();
 			if (Gui->MenuItem("Viewport", nullptr, bShowViewport))
 			{
 				bShowViewport = !bShowViewport;

@@ -81,7 +81,12 @@ void RegisterViewerServices(FPluginRegistry& InRegistry, const FOptions& InOptio
 	                          InOptions.Benchmark.empty()
 	                              ? 0u
 	                              : static_cast<std::uint32_t>(InOptions.Frames > 0 ? InOptions.Frames : 65536)});
-	RegisterGuiServices(InRegistry, {});
+	FGuiServiceOptions GuiOptions;
+	if (InOptions.Benchmark.empty() && !InOptions.bHidden)
+	{
+		GuiOptions.Preferences = std::filesystem::path(HYP_SOURCE_DIR) / "out/viewer/UiScale.ini";
+	}
+	RegisterGuiServices(InRegistry, std::move(GuiOptions));
 	RegisterContactShadowServices(InRegistry);
 }
 } // namespace

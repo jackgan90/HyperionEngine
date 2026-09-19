@@ -7,6 +7,7 @@ void FGui::UseEditorStyle()
 {
 	Impl->Select();
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	ImGui::GetStyle() = Impl->BaseStyle;
 	ImGui::StyleColorsDark();
 	auto& Style = ImGui::GetStyle();
 	Style.WindowRounding = 0;
@@ -55,6 +56,9 @@ void FGui::UseEditorStyle()
 	Colors[ImGuiCol_DockingEmptyBg] = {.065f, .065f, .065f, 1};
 	Colors[ImGuiCol_TableHeaderBg] = {.16f, .16f, .16f, 1};
 	Colors[ImGuiCol_TableRowBgAlt] = {1, 1, 1, .025f};
+	Impl->BaseStyle = Style;
+	Style.ScaleAllSizes(Impl->AppliedScale);
+	Style.FontScaleMain = 1 / Impl->FontDensity;
 }
 
 void FGui::LoadLayout(std::string_view InLayout)
@@ -75,7 +79,12 @@ void FGui::DockSpace(const FGuiDockLayout& InLayout, bool bInReset)
 {
 	Impl->Select();
 	const auto Id = ImGui::GetID("HyperionWorkspace");
-	const auto* Viewport = ImGui::GetMainViewport();
+	auto* Viewport = static_cast<ImGuiViewportP*>(ImGui::GetMainViewport());
+	// Side bars reserve their current-frame space in BuildWorkInset. ImGui's
+	// public WorkPos/WorkSize otherwise lag a frame behind runtime scale changes.
+	const auto WorkRect = Viewport->GetBuildWorkRect();
+	Viewport->WorkPos = WorkRect.Min;
+	Viewport->WorkSize = WorkRect.GetSize();
 	if (bInReset || !ImGui::DockBuilderGetNode(Id))
 	{
 		ImGui::DockBuilderRemoveNode(Id);
@@ -109,7 +118,7 @@ void FGui::EndWindow()
 bool FGui::BeginToolbar()
 {
 	Impl->Select();
-	return ImGui::BeginViewportSideBar("##Toolbar", ImGui::GetMainViewport(), ImGuiDir_Up, 38,
+	return ImGui::BeginViewportSideBar("##Toolbar", ImGui::GetMainViewport(), ImGuiDir_Up, Scale(38),
 	                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
 }
 
@@ -121,7 +130,7 @@ void FGui::EndToolbar()
 void FGui::StatusBar(const std::string& InText)
 {
 	Impl->Select();
-	if (ImGui::BeginViewportSideBar("##Status", ImGui::GetMainViewport(), ImGuiDir_Down, 26,
+	if (ImGui::BeginViewportSideBar("##Status", ImGui::GetMainViewport(), ImGuiDir_Down, Scale(26),
 	                                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings))
 	{
 		ImGui::TextUnformatted(InText.c_str());

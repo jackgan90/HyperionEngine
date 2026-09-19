@@ -1,6 +1,7 @@
 #include "GuiInternal.h"
 #include "Hyperion/Core/Core.h"
 #include <algorithm>
+#include <cmath>
 #include <imgui.h>
 #include <implot.h>
 #include <limits>
@@ -138,6 +139,8 @@ FGui::FGui(FWindow* InWindow) : Impl(std::make_unique<FImpl>())
 	Style.Colors[ImGuiCol_CheckMark] = {.27f, .87f, .74f, 1};
 	Style.Colors[ImGuiCol_SliderGrab] = {.27f, .87f, .74f, 1};
 	ImPlot::StyleColorsDark();
+	Impl->BaseStyle = Style;
+	Impl->BasePlotStyle = ImPlot::GetStyle();
 }
 
 FGui::~FGui() = default;
@@ -145,25 +148,23 @@ FGui::~FGui() = default;
 void FGui::LoadFont(std::span<const std::byte> InBytes, float InPixels)
 {
 	Impl->Select();
-	if (InBytes.empty() || InBytes.size() > 16 * 1024 * 1024 || InPixels < 8 || InPixels > 64)
+	if (InBytes.empty() || InBytes.size() > 16 * 1024 * 1024 || !std::isfinite(InPixels) || InPixels < 8 ||
+	    InPixels > 64)
 	{
 		throw std::invalid_argument("Invalid GUI font data or size");
 	}
-	auto* Fonts = ImGui::GetIO().Fonts;
-	Fonts->Clear();
 	Impl->FontBytes.assign(InBytes.begin(), InBytes.end());
-	ImFontConfig Configuration;
-	Configuration.FontDataOwnedByAtlas = false;
-	if (!Fonts->AddFontFromMemoryTTF(Impl->FontBytes.data(), static_cast<int>(Impl->FontBytes.size()), InPixels,
-	                                 &Configuration))
-	{
-		throw std::runtime_error("Could not load GUI font");
-	}
+	Impl->FontPixels = InPixels;
+	Impl->RebuildFont();
 }
 
 FImage FGui::FontImage()
 {
 	Impl->Select();
+	if (ImGui::GetIO().Fonts->Fonts.empty())
+	{
+		Impl->RebuildFont();
+	}
 	unsigned char* Pixels{};
 	int Width{};
 	int Height{};
@@ -176,6 +177,7 @@ FImage FGui::FontImage()
 	{
 		Image.Rgba[I] = Pixels[I] / 255.f;
 	}
+	Impl->FontAtlas = std::make_shared<const FImage>(Image);
 	return Image;
 }
 
@@ -226,6 +228,11 @@ void FGui::BeginFrame(FSize InLogical, FSize InPixels, float InDelta, std::span<
 				break;
 		}
 	}
+	Impl->ApplyScale(std::max(Io.DisplayFramebufferScale.x, Io.DisplayFramebufferScale.y));
+	if (!Impl->FontAtlas)
+	{
+		FontImage();
+	}
 	ImGui::NewFrame();
 }
 
@@ -248,7 +255,7 @@ void FGui::EndPanel()
 void FGui::BeginScrollRegion(const char* InId, float InHeight)
 {
 	Impl->Select();
-	ImGui::BeginChild(InId, {0, InHeight}, ImGuiChildFlags_Borders);
+	ImGui::BeginChild(InId, {0, InHeight > 0 ? Scale(InHeight) : InHeight}, ImGuiChildFlags_Borders);
 }
 
 void FGui::EndScrollRegion()
@@ -313,7 +320,7 @@ bool FGui::Slider(const char* InLabel, float& InValue, float InMinimum, float In
 bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth)
 {
 	Impl->Select();
-	const float Indent = float(std::min(InDepth, 16u)) * 12;
+	const float Indent = float(std::min(InDepth, 16u)) * Scale(12);
 	if (Indent)
 	{
 		ImGui::Indent(Indent);
@@ -416,7 +423,7 @@ bool FGui::EditProperties(const FTypeDescriptor& InType, void* InObject, std::sp
 {
 	Impl->Select();
 	bool bEdited = false;
-	ImGui::PushItemWidth(155);
+	ImGui::PushItemWidth(Scale(155));
 	for (const auto& P : InType.Properties)
 	{
 		if (std::find(InIds.begin(), InIds.end(), P.Id) == InIds.end())
@@ -460,7 +467,7 @@ bool FGui::EditProperties(const FTypeDescriptor& InType, void* InObject, std::sp
 void FGui::Plot(const char* InLabel, std::span<const float> InValues, float InMaximum)
 {
 	Impl->Select();
-	if (ImPlot::BeginPlot(InLabel, {-1, 105},
+	if (ImPlot::BeginPlot(InLabel, {-1, Scale(105)},
 	                      ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText |
 	                          ImPlotFlags_NoBoxSelect))
 	{
@@ -501,6 +508,7 @@ FGuiDrawData FGui::Render()
 	}
 	const auto* Source = ImGui::GetDrawData();
 	FGuiDrawData Out;
+	Out.FontAtlas = Impl->FontAtlas;
 	Out.DisplayPosition = {Source->DisplayPos.x, Source->DisplayPos.y};
 	Out.DisplaySize = {Source->DisplaySize.x, Source->DisplaySize.y};
 	Out.FramebufferScale = {Source->FramebufferScale.x, Source->FramebufferScale.y};

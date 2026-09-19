@@ -4,6 +4,14 @@
 
 原生标题栏默认使用黑色背景和浅色文字，由 Platform 封装 Windows DWM 设置。精确标题栏颜色需要 Windows 11；不支持时保留系统可用的外观，不影响编辑器启动。
 
+## 界面缩放
+
+**Window > Application Scale** 统一调整文字、控件、间距、工具栏和状态栏，下一帧生效。默认 125%，支持 100% / 125% / 150% / 175% / 200% 预设、自定义数值及恢复默认。左右拖动 Custom 数值可实时调整，Ctrl+单击可直接输入倍率；鼠标停下后倍率保持不变。字体按目标字号重新生成，停靠分区比例、场景数据和相机状态保持不变。放大后面板可显示的内容减少，可使用滚动或调整停靠分区。
+
+正常退出时偏好保存到 `out/editor/UiScale.ini`，独立于场景和 `Layout.ini`。`--ui-scale 1.5` 覆盖启动倍率，`--ui-preferences <path>` 指定偏好文件；有效范围为 1–2。缺失或损坏的偏好回退到 125%。验收和 benchmark 运行不读写用户偏好。Viewer 诊断面板也提供 Application Scale，其交互运行偏好保存在 `out/viewer/UiScale.ini`。
+
+Application Scale 不调整原生标题栏、场景镜头或渲染分辨率；framebuffer 像素密度仍独立处理。这不是自动的跨显示器 DPI 布局策略。
+
 ## 构建与打开 Sponza
 
 与 Viewer 使用同一套依赖和内容挂载。检出同级 HyperionAssets 并执行 `git lfs pull`；挂载与内容准备见 [ContentFileSystem.md](ContentFileSystem.md)。从引擎仓库根目录运行：

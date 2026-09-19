@@ -1,7 +1,10 @@
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include <cmath>
 #include <fstream>
+#include <iomanip>
 
 namespace Hyperion
 {
@@ -18,6 +21,7 @@ public:
 	{
 		auto& Tasks = InContext.Require<FTaskSystem>();
 		Gui = std::make_unique<FGui>(&InContext.Require<FWindow>());
+		LoadPreferences();
 		if (Options.bEditorStyle)
 		{
 			Gui->UseEditorStyle();
@@ -54,7 +58,52 @@ public:
 		Gui.reset();
 	}
 
+	void Quiesce() noexcept override
+	{
+		if (Options.Preferences.empty() || !Gui)
+		{
+			return;
+		}
+		try
+		{
+			if (Options.Preferences.has_parent_path())
+			{
+				std::filesystem::create_directories(Options.Preferences.parent_path());
+			}
+			std::ofstream Stream(Options.Preferences);
+			Stream << std::setprecision(9) << Gui->ApplicationScale() << '\n';
+			Stream.close();
+			if (!Stream)
+			{
+				throw std::runtime_error("Could not write GUI preferences");
+			}
+		}
+		catch (const std::exception& Failure)
+		{
+			Log(ELogLevel::Warning, "GUI preference save failed: " + std::string(Failure.what()));
+		}
+	}
+
 private:
+	void LoadPreferences()
+	{
+		float Scale = 1.25f;
+		if (!Options.Preferences.empty())
+		{
+			std::ifstream Stream(Options.Preferences);
+			float Saved{};
+			if ((Stream >> Saved) && std::isfinite(Saved) && Saved >= 1 && Saved <= 2)
+			{
+				Stream >> std::ws;
+				if (Stream.eof())
+				{
+					Scale = Saved;
+				}
+			}
+		}
+		Gui->SetApplicationScale(Options.ApplicationScale.value_or(Scale));
+	}
+
 	FGuiServiceOptions Options;
 	std::unique_ptr<FGui> Gui;
 	std::unique_ptr<FGuiRenderer> Renderer;

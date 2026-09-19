@@ -13,9 +13,11 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterWindowServices(Registry, {"Hyperion Editor", {1600, 960}, Options.bHidden, true});
 	RegisterGraphicsServices(
 	    Registry, {std::move(InBackends), "d3d12", std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache", true});
-	RegisterGuiServices(Registry,
-	                    {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
-	                     !Options.bExercise && Options.Benchmark.empty() ? Options.Layout : std::filesystem::path{}});
+	const bool bPersistGui = !Options.bExercise && Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
+	                         Options.ExerciseViews.empty();
+	RegisterGuiServices(
+	    Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15, bPersistGui ? Options.Layout : std::filesystem::path{},
+	               bPersistGui ? Options.UiPreferences : std::filesystem::path{}, Options.ApplicationScale});
 	RegisterContactShadowServices(Registry);
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "editor";

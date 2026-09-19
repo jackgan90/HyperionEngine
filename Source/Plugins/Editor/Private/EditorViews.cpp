@@ -118,7 +118,7 @@ void FEditorPlugin::DrawViewControls()
 		}
 		if (PreviewCamera)
 		{
-			Gui->SameLine();
+			Gui->SameLineIfFits("Return to editor view");
 			if (Gui->Button("Return to editor view"))
 			{
 				SetPreviewCamera({});
@@ -130,13 +130,13 @@ void FEditorPlugin::DrawViewControls()
 		}
 		else
 		{
-			Gui->SameLine();
+			Gui->SameLineIfFits("Set initial view");
 			if (Gui->Button("Set initial view", bViewportCameraInitialized))
 			{
 				SetInitialView();
 			}
 			InspectionBounds["view/initial"] = Gui->LastItemBounds();
-			Gui->SameLine();
+			Gui->SameLineIfFits("Create camera from view");
 			if (Gui->Button("Create camera from view", bViewportCameraInitialized))
 			{
 				CreateCameraFromView();
@@ -157,7 +157,7 @@ void FEditorPlugin::DrawCameraActions(FSceneHandle InHandle)
 		SetPreviewCamera(InHandle);
 	}
 	InspectionBounds["view/preview"] = Gui->LastItemBounds();
-	Gui->SameLine();
+	Gui->SameLineIfFits("Apply editor view to camera");
 	if (Gui->Button("Apply editor view to camera", bViewportCameraInitialized))
 	{
 		ApplyEditorView(InHandle);

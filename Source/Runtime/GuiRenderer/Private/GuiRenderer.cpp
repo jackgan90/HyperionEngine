@@ -39,6 +39,7 @@ struct FGuiRenderer::FImpl
 	FShaderCompiler& Compiler;
 	FTaskSystem& Tasks;
 	FImage Font;
+	std::shared_ptr<const FImage> FontAtlas;
 	FPipeline Pipeline;
 	FTexture Texture;
 	std::vector<FDrawPacket> Draws;
@@ -121,6 +122,7 @@ void FGuiRenderer::Stop() noexcept
 		                                      Impl->Bindings = {};
 		                                      Impl->Layout = {};
 		                                      Impl->Sampler = {};
+		                                      Impl->FontAtlas.reset();
 	                                      }));
 }
 
@@ -194,6 +196,14 @@ void FGuiRenderer::FImpl::Prepare(const FGuiDrawData& InData, const std::vector<
 		throw std::logic_error("GUI preparation requires a started renderer");
 	}
 	P.Draws.clear();
+	if (InData.FontAtlas && P.FontAtlas != InData.FontAtlas)
+	{
+		const auto FontTexture = P.Device.CreateTexture(*InData.FontAtlas);
+		const auto FontBindings = P.Device.CreateBindingSet({P.Layout, {{1, {FontTexture}}, {2, {P.Sampler}}}});
+		P.Texture = FontTexture;
+		P.Bindings = FontBindings;
+		P.FontAtlas = InData.FontAtlas;
+	}
 	if (InData.Vertices.empty() || InData.Indices.empty())
 	{
 		P.Vertices = {};

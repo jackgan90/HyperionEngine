@@ -3,6 +3,7 @@
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Plugins/PluginRuntime.h"
 #include "Hyperion/RHI/RHIBackend.h"
+#include <optional>
 
 namespace Hyperion
 {
@@ -38,6 +39,8 @@ struct FGuiServiceOptions
 	std::string Font;
 	float FontSize = 15;
 	std::filesystem::path Layout;
+	std::filesystem::path Preferences;
+	std::optional<float> ApplicationScale;
 };
 
 void RegisterAssetServices(FPluginRegistry& InRegistry, FAssetServiceOptions InOptions);

@@ -17,6 +17,15 @@ struct FGui::FImpl
 	FWindow* Window{};
 	std::string Clipboard;
 	std::vector<std::byte> FontBytes;
+	ImGuiStyle BaseStyle;
+	ImPlotStyle BasePlotStyle;
+	float RequestedScale = 1;
+	float AppliedScale = 1;
+	float FontPixels = 13;
+	float FontDensity = 1;
+	std::shared_ptr<const FImage> FontAtlas;
+	void ApplyScale(float InDensity);
+	void RebuildFont();
 	bool bLiveEdit{};
 	FGuiEditState EditState;
 	ImGuiID EditItem{};

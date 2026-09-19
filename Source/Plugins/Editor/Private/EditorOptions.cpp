@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include <cmath>
 
 namespace Hyperion
 {
@@ -9,6 +10,7 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 	Result.Mounts = Root / (std::filesystem::exists(Root / "ContentMounts.local.json") ? "ContentMounts.local.json"
 	                                                                                   : "ContentMounts.json");
 	Result.Layout = Root / "out/editor/Layout.ini";
+	Result.UiPreferences = Root / "out/editor/UiScale.ini";
 	for (int Index = 1; Index < InCount; ++Index)
 	{
 		const std::string Argument = InValues[Index];
@@ -57,6 +59,20 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		else if (Argument == "--scene")
 		{
 			Result.Scene = Value;
+		}
+		else if (Argument == "--ui-preferences")
+		{
+			Result.UiPreferences = Value;
+		}
+		else if (Argument == "--ui-scale")
+		{
+			std::size_t Consumed{};
+			const float Scale = std::stof(Value, &Consumed);
+			if (Consumed != Value.size() || !std::isfinite(Scale) || Scale < 1 || Scale > 2)
+			{
+				throw std::invalid_argument("--ui-scale must be finite and between 1 and 2");
+			}
+			Result.ApplicationScale = Scale;
 		}
 		else if (Argument == "--capture")
 		{

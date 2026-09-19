@@ -31,7 +31,7 @@ void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded)
 	const auto Marker = Label.find("##");
 	const char* End = InLabel + (Marker == std::string_view::npos ? Label.size() : Marker);
 	const float LabelWidth = std::max(ImGui::CalcTextSize(InLabel, End).x + ImGui::GetStyle().ItemInnerSpacing.x,
-	                                  std::clamp(Available * .38f, 76.f, 160.f));
+	                                  std::clamp(Available * .38f, Scale(76), Scale(160)));
 	ImGui::AlignTextToFramePadding();
 	if (bOutExpanded)
 	{
@@ -103,7 +103,19 @@ void FGui::SameLine()
 void FGui::SetNextItemWidth(float InWidth)
 {
 	Impl->Select();
-	ImGui::SetNextItemWidth(InWidth);
+	ImGui::SetNextItemWidth(InWidth > 0 ? Scale(InWidth) : InWidth);
+}
+
+void FGui::SameLineIfFits(const char* InButtonLabel)
+{
+	Impl->Select();
+	const auto& Style = ImGui::GetStyle();
+	const float Right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+	const float Width = ImGui::CalcTextSize(InButtonLabel, nullptr, true).x + Style.FramePadding.x * 2;
+	if (ImGui::GetItemRectMax().x + Style.ItemSpacing.x + Width <= Right)
+	{
+		ImGui::SameLine();
+	}
 }
 
 bool FGui::Section(const char* InLabel, bool bInDefaultOpen)
@@ -169,7 +181,7 @@ void FGui::Property(const char* InLabel, const std::string& InValue)
 {
 	Impl->Select();
 	ImGui::TextDisabled("%s", InLabel);
-	ImGui::SameLine(std::max(90.f, ImGui::GetContentRegionAvail().x * .38f));
+	ImGui::SameLine(std::max(Scale(90), ImGui::GetContentRegionAvail().x * .38f));
 	ImGui::TextUnformatted(InValue.c_str());
 }
 
@@ -201,7 +213,7 @@ void FGui::OpenPopup(const char* InTitle)
 bool FGui::BeginModal(const char* InTitle, bool& bInOpen)
 {
 	Impl->Select();
-	ImGui::SetNextWindowSize({660, 460}, ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize({Scale(660), Scale(460)}, ImGuiCond_FirstUseEver);
 	const auto* Viewport = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(Viewport->GetCenter(), ImGuiCond_Appearing, {.5f, .5f});
 	return ImGui::BeginPopupModal(InTitle, &bInOpen, ImGuiWindowFlags_NoCollapse);

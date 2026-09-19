@@ -30,6 +30,8 @@ struct FGuiDrawData
 	std::vector<FGuiVertex> Vertices;
 	std::vector<std::uint32_t> Indices;
 	std::vector<FGuiCommand> Commands;
+	// Immutable atlas retained across queued frames and scale changes.
+	std::shared_ptr<const FImage> FontAtlas;
 };
 
 struct FGuiImageRegion
@@ -61,6 +63,13 @@ public:
 	explicit FGui(FWindow* InClipboardWindow = nullptr);
 	~FGui();
 	FImage FontImage();
+	// Requested scale is applied at the next BeginFrame; valid range is [1, 2].
+	void SetApplicationScale(float InScale);
+	float ApplicationScale() const;
+	// Relative dragging and Ctrl-click input avoid scale-dependent slider feedback.
+	bool ApplicationScaleControl(const char* InLabel);
+	// Convert a baseline logical dimension using the currently applied scale.
+	float Scale(float InSize) const;
 	void LoadFont(std::span<const std::byte> InBytes, float InPixels);
 	void BeginFrame(FSize InLogical, FSize InPixels, float InDeltaSeconds, std::span<const FInputEvent> InEvents);
 	bool BeginPanel(const char* InTitle, FVec2 InPosition, FVec2 InSize);
@@ -106,6 +115,7 @@ public:
 	void UseEditorStyle();
 	void LoadLayout(std::string_view InLayout);
 	std::string SaveLayout();
+	// Call after menu/tool/status bars so docking consumes their current-frame reservations.
 	void DockSpace(const FGuiDockLayout& InLayout, bool bInReset = false);
 	bool BeginWindow(const char* InTitle, bool& bInOpen);
 	void EndWindow();
@@ -117,6 +127,8 @@ public:
 	void EndMenu();
 	bool MenuItem(const char* InLabel, const char* InShortcut = nullptr, bool bInSelected = false);
 	void SameLine();
+	// Keep the next button on this line only when its label and padding fit.
+	void SameLineIfFits(const char* InButtonLabel);
 	void SetNextItemWidth(float InWidth);
 	bool Section(const char* InLabel, bool bInDefaultOpen = true);
 	bool BeginTable(const char* InId, const char* InFirst, const char* InSecond);

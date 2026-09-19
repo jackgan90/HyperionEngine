@@ -11,7 +11,7 @@ bool FGui::InputVectorRow(const char* InLabel, FVec3& InValue, std::string_view 
 	BeginPropertyRow(InLabel);
 	const float Start = ImGui::GetCursorPosX();
 	const float Spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-	const float Width = std::max(24.f, (ImGui::GetContentRegionAvail().x - Spacing * 4) / 3);
+	const float Width = std::max(Scale(24), (ImGui::GetContentRegionAvail().x - Spacing * 4) / 3);
 	std::string Format = "%.6g";
 	if (!InUnit.empty())
 	{
@@ -36,7 +36,7 @@ bool FGui::InputVectorRow(const char* InLabel, FVec3& InValue, std::string_view 
 		ImGui::TextColored(Colors[Axis], "%c", 'X' + Axis);
 		const float AxisWidth = ImGui::GetItemRectSize().x;
 		ImGui::SameLine(0, Spacing);
-		ImGui::SetNextItemWidth(std::max(16.f, Width - AxisWidth - Spacing));
+		ImGui::SetNextItemWidth(std::max(Scale(16), Width - AxisWidth - Spacing));
 		bChanged |= Impl->DragNumber("##value", ImGuiDataType_Float, &Values[Axis], .01f, Format.c_str());
 		const auto Minimum = ImGui::GetItemRectMin();
 		const auto Maximum = ImGui::GetItemRectMax();

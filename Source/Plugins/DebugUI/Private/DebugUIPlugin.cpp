@@ -100,9 +100,11 @@ FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, co
 FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebugMetrics& InMetrics, FSize InLogicalSize)
 {
 	FDebugActions Actions;
-	if (InGui.BeginPanel("Hyperion diagnostics", {24, 24}, {326, std::max(150.f, float(InLogicalSize.Height) - 48)}))
+	if (InGui.BeginPanel("Hyperion diagnostics", {InGui.Scale(24), InGui.Scale(24)},
+	                     {InGui.Scale(326), std::max(InGui.Scale(150), float(InLogicalSize.Height) - InGui.Scale(48))}))
 	{
 		InGui.Text("H Y P E R I O N");
+		InGui.ApplicationScaleControl("Application Scale");
 		InGui.Text("Rendering lab  /  " + InSettings.RHIBackend);
 		InGui.Checkbox("Contact shadows", InSettings.bContactShadows);
 		Actions.ContactShadowBounds = InGui.LastItemBounds();

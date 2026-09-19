@@ -10,6 +10,45 @@ namespace
 {
 using namespace Hyperion;
 
+void CheckFontSnapshots(FGui& InGui, FGuiRenderer& InRenderer, FTaskSystem& InTasks, IRHISwapchain& InSwapchain)
+{
+	const auto MakeFrame = [&](float InScale)
+	{
+		InGui.SetApplicationScale(InScale);
+		InGui.BeginFrame({400, 300}, {400, 300}, 1.f / 60, {});
+		InGui.BeginPanel("Font snapshot", {0, 0}, {400, 300});
+		InGui.Text("Application Scale 0123456789");
+		InGui.Button("Button");
+		InGui.EndPanel();
+		return InGui.Render();
+	};
+	MakeFrame(1);
+	const auto Small = MakeFrame(1);
+	const auto Large = MakeFrame(2);
+	HYP_CHECK(Small.FontAtlas != Large.FontAtlas);
+	const auto Render = [&](const FGuiDrawData& InData)
+	{
+		FImage Result;
+		InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+		                              [&]
+		                              {
+			                              FRenderGraph Graph;
+			                              InRenderer.BuildDeferred(Graph, InData, {}, true);
+			                              Result = ExecuteGraph(std::move(Graph), InTasks, InSwapchain, {400, 300},
+			                                                    false, true);
+		                              }));
+		return Result;
+	};
+	// Both snapshots were produced before either was submitted. Rendering the older
+	// snapshot again must restore its atlas, rather than using mutable GUI state.
+	const auto First = Render(Small);
+	const auto Second = Render(Large);
+	HYP_CHECK(First.Rgba != Second.Rgba);
+	HYP_CHECK(Render(Small).Rgba == First.Rgba);
+	HYP_CHECK(Render(Large).Rgba == Second.Rgba);
+	InGui.SetApplicationScale(1);
+}
+
 void CheckTextureComposition()
 {
 	FTaskSystem Tasks(2, 1);
@@ -99,6 +138,8 @@ void CheckTextureComposition()
 	HYP_CHECK(bRejected);
 	Render();
 	const std::weak_ptr<const void> CachedOwner = Source.Lifetime;
+	CheckFontSnapshots(Gui, Renderer, Tasks, *Swapchain);
+	Render();
 	Source = {};
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 	                          [&]

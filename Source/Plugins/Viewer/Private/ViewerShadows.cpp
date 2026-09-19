@@ -115,14 +115,17 @@ void FViewerPlugin::DrawShadowGui()
 {
 	const auto Size = Gui->DisplaySize();
 	const bool bPreview = ShadowSettings.bEnabled && ShadowSettings.DebugMode >= 2;
-	const float PreviewSize = std::min({256.f, Size.X, Size.Y / 3});
-	const float PanelHeight = std::min(680.f, Size.Y - (bPreview ? PreviewSize + 48 : 32));
+	const float PreviewSize = std::min({Gui->Scale(256), Size.X, Size.Y / 3});
+	const float PanelHeight =
+	    std::min(Gui->Scale(680), Size.Y - (bPreview ? PreviewSize + Gui->Scale(48) : Gui->Scale(32)));
 	if (bPreview)
 	{
-		ShadowSettings.PreviewViewport = {std::min(368.f, std::max(0.f, Size.X - PreviewSize)),
-		                                  std::max(0.f, Size.Y - PreviewSize - 16), PreviewSize, PreviewSize};
+		ShadowSettings.PreviewViewport = {std::min(Gui->Scale(368), std::max(0.f, Size.X - PreviewSize)),
+		                                  std::max(0.f, Size.Y - PreviewSize - Gui->Scale(16)), PreviewSize,
+		                                  PreviewSize};
 	}
-	if (Gui->BeginPanel("Directional shadows", {368, 16}, {400, std::max(100.f, PanelHeight)}))
+	if (Gui->BeginPanel("Directional shadows", {Gui->Scale(368), Gui->Scale(16)},
+	                    {Gui->Scale(400), std::max(Gui->Scale(100), PanelHeight)}))
 	{
 		Gui->Checkbox("Enable cascaded shadows", ShadowSettings.bEnabled);
 		Gui->Text("4 cascades | every frame | " + std::to_string(ShadowSettings.Resolution) + " px");
