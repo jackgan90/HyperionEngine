@@ -3,13 +3,14 @@
 
 namespace Hyperion
 {
-void FEditorPlugin::SelectObject(FSceneHandle InHandle)
+void FEditorPlugin::SelectObject(std::optional<FSceneHandle> InHandle)
 {
 	if (Selection != InHandle)
 	{
 		FinishInspectorEdit();
 	}
 	Selection = InHandle;
+	bSelectionInitialized = true;
 }
 
 bool FEditorPlugin::PollClose()

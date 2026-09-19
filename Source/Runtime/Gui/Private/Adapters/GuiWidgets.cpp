@@ -198,15 +198,23 @@ FGuiImageRegion FGui::Image(std::uint64_t InTextureId)
 	ImGui::Image(ImTextureID(InTextureId), {std::max(1.f, Available.x), std::max(1.f, Available.y)});
 	const auto Minimum = ImGui::GetItemRectMin();
 	const auto Maximum = ImGui::GetItemRectMax();
+	// Images have no input ID by default: a held click becomes a window-background drag.
+	// Register the image as an interactive item so ownership survives until release.
+	const ImRect Bounds(Minimum, Maximum);
+	if (ImGui::ItemAdd(Bounds, CaptureId, nullptr, ImGuiItemFlags_NoNav))
+	{
+		bool bButtonHovered{};
+		bool bButtonHeld{};
+		ImGui::ButtonBehavior(Bounds, CaptureId, &bButtonHovered, &bButtonHeld, ImGuiButtonFlags_NoNavFocus);
+	}
 	const bool bHovered = ImGui::IsItemHovered();
 	if (bHovered && (ImGui::IsMouseClicked(0) || ImGui::IsMouseClicked(1)))
 	{
 		ImGui::SetWindowFocus();
 	}
-	const bool bFocused =
-	    ImGui::IsWindowFocused() &&
-	    (!ImGui::IsAnyItemActive() || (Impl->ImagePointerCapture == CaptureId && ImGui::GetActiveID() == CaptureId)) &&
-	    !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+	const bool bFocused = ImGui::IsWindowFocused() &&
+	                      (!ImGui::IsAnyItemActive() || ImGui::GetActiveID() == CaptureId) &&
+	                      !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 	ImGui::GetWindowDrawList()->AddRect(Minimum, Maximum,
 	                                    bFocused ? IM_COL32(206, 153, 50, 255) : IM_COL32(45, 45, 45, 255));
 	return {{Minimum.x, Minimum.y, Maximum.x, Maximum.y}, bHovered, bFocused};

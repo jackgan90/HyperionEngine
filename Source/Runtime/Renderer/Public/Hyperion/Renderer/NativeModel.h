@@ -16,9 +16,11 @@ TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSyst
                                               const FAssetRef& InReference,
                                               const std::filesystem::path& InContainingAsset,
                                               FCancellationToken InCancellation = {},
-                                              FRenderResourceService* InResources = nullptr);
+                                              FRenderResourceService* InResources = nullptr,
+                                              bool bInPrepareQueries = false);
 TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSystem& InTasks,
                                               const std::filesystem::path& InPath,
                                               FCancellationToken InCancellation = {},
-                                              FRenderResourceService* InResources = nullptr);
+                                              FRenderResourceService* InResources = nullptr,
+                                              bool bInPrepareQueries = false);
 } // namespace Hyperion

@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderFeatures.h"
 #include "Hyperion/Renderer/RenderPipelineFrame.h"
+#include "Hyperion/Scene/SceneQuery.h"
 
 namespace Hyperion
 {
@@ -12,6 +13,9 @@ enum class ESceneRenderPipeline : std::uint8_t
 	Deferred,
 	Forward
 };
+
+// CPU query policy for the pipeline's scheduled color passes, including legacy exclusions.
+FSceneRayOptions MakeSceneRayOptions(ESceneRenderPipeline InPipeline);
 
 struct FGBufferLayout
 {

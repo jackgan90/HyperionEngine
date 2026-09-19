@@ -4,6 +4,11 @@ namespace Hyperion
 {
 namespace
 {
+std::vector<std::string> LegacyPassExclusions()
+{
+	return {"HdrForwardOpaque", "DeferredBase", "HdrCompatibility", "HdrTransparent"};
+}
+
 void AddView(std::vector<FRenderView>& InViews, std::vector<FRenderPassTargets>& InTargets, FRenderView InMain,
              std::string InUsage, FRenderPassTargets InTarget, std::uint64_t InIdentity)
 {
@@ -14,6 +19,17 @@ void AddView(std::vector<FRenderView>& InViews, std::vector<FRenderPassTargets>&
 	InTargets.push_back(std::move(InTarget));
 }
 } // namespace
+
+FSceneRayOptions MakeSceneRayOptions(ESceneRenderPipeline InPipeline)
+{
+	FSceneRayOptions Result;
+	Result.MaterialUsages =
+	    InPipeline == ESceneRenderPipeline::Deferred
+	        ? std::vector<std::string>{"DeferredBase", "HdrCompatibility", "HdrTransparent", "Forward"}
+	        : std::vector<std::string>{"HdrForwardOpaque", "HdrTransparent", "Forward"};
+	Result.MaterialUsageExclusions["Forward"] = LegacyPassExclusions();
+	return Result;
+}
 
 FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView InMain, FVec4 InClear) const
 {
@@ -61,7 +77,7 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 	AddView(Views, Targets, InMain, "HdrTransparent", std::move(Transparent), 3);
 	Result.TransparentIndex = Views.size() - 1;
 	auto DisplayView = InMain;
-	DisplayView.ExcludedPasses = {"HdrForwardOpaque", "DeferredBase", "HdrCompatibility", "HdrTransparent"};
+	DisplayView.ExcludedPasses = LegacyPassExclusions();
 	auto DisplayTargets = Session.FrameTargets({}, InMain.DepthConvention);
 	if (OutputTarget.Kind == ERenderTargetKind::Texture)
 	{

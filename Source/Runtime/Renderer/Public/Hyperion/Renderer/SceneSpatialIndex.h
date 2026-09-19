@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/Math/Bounds.h"
+#include "Hyperion/Math/BoundsBvh.h"
 #include "Hyperion/Renderer/RenderBatchStats.h"
 #include <cstdint>
 #include <memory>
@@ -50,7 +50,7 @@ struct FSceneVisibilityStats
 };
 
 // CPU conservative candidate test. Future GPU stages are separate RenderGraph work.
-class ISceneVisibility
+class ISceneVisibility : public IBoundsVisibility
 {
 public:
 	virtual ~ISceneVisibility() = default;

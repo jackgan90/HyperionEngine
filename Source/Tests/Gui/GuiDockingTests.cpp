@@ -5,6 +5,61 @@
 
 namespace
 {
+void CheckImagePointerOwnership()
+{
+	using namespace Hyperion;
+	FGui Gui;
+	Gui.UseEditorStyle();
+	bool bOpen = true;
+	const auto Frame = [&](std::span<const FInputEvent> InEvents, bool bInOverlay = false)
+	{
+		Gui.BeginFrame({800, 600}, {800, 600}, 1.f / 60, InEvents);
+		Gui.DockSpace({"View", "Objects", "Details", "Content"});
+		Gui.BeginWindow("View", bOpen);
+		const auto Region = Gui.Image(42);
+		const auto Pointer = Gui.PointerState();
+		if (bInOverlay && Pointer.bPressed)
+		{
+			Gui.CaptureImagePointer(true);
+		}
+		if (bInOverlay && Pointer.bReleased)
+		{
+			Gui.CaptureImagePointer(false);
+		}
+		Gui.EndWindow();
+		Gui.Render();
+		return Region;
+	};
+	Frame({});
+	const auto Bounds = Frame({}).Bounds;
+	for (const bool bOverlay : {false, true})
+	{
+		FInputEvent Move;
+		Move.Type = EEventType::MouseMove;
+		Move.X = (Bounds.X + Bounds.Z) * .5f;
+		Move.Y = (Bounds.Y + Bounds.W) * .5f;
+		FInputEvent Button;
+		Button.Type = EEventType::MouseButton;
+		Button.bDown = true;
+		const std::array Press{Move, Button};
+		const auto Pressed = Frame(Press, bOverlay);
+		HYP_CHECK(Pressed.bFocused && Pressed.bHovered && Gui.PointerState().bPressed);
+		for (unsigned Index = 0; Index < 8; ++Index)
+		{
+			const auto Held = Frame({}, bOverlay);
+			HYP_CHECK(Held.bFocused && Held.bHovered && Gui.PointerState().bDown);
+		}
+		Move.X += 3;
+		const auto Moved = Frame({&Move, 1}, bOverlay);
+		HYP_CHECK(Moved.bFocused && Moved.bHovered);
+		HYP_CHECK(Moved.Bounds.X == Bounds.X && Moved.Bounds.Y == Bounds.Y);
+		Button.bDown = false;
+		const auto Released = Frame({&Button, 1}, bOverlay);
+		HYP_CHECK(Released.bFocused && Released.bHovered && Gui.PointerState().bReleased);
+		Frame({});
+	}
+}
+
 void CheckWorkspaceScaleTransition()
 {
 	using namespace Hyperion;
@@ -51,6 +106,7 @@ int main()
 	using namespace Hyperion;
 	try
 	{
+		CheckImagePointerOwnership();
 		CheckWorkspaceScaleTransition();
 		FGui Gui;
 		Gui.UseEditorStyle();

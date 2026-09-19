@@ -263,6 +263,19 @@ void FSceneStorage::FMutation::Commit(bool bInAdvanceRevision, bool bInForceSett
 		              });
 	}
 	// All value validation and allocations finish before the first authoritative write.
+	std::set<std::uint32_t> PendingQueryDirty;
+	if (Storage.QueryIndex)
+	{
+		const auto QueryMask = ESceneChangeMask::Structure | ESceneChangeMask::Transform | ESceneChangeMask::Enabled |
+		                       ESceneChangeMask::Model;
+		for (const auto& [Index, Mask] : Masks)
+		{
+			if ((static_cast<unsigned>(Mask) & static_cast<unsigned>(QueryMask)) != 0)
+			{
+				PendingQueryDirty.insert(Index);
+			}
+		}
+	}
 	Storage.Slots.reserve(SlotCount);
 	static_assert(std::is_nothrow_swappable_v<std::unique_ptr<FSlot>>);
 	while (Storage.Slots.size() < SlotCount)
@@ -311,5 +324,6 @@ void FSceneStorage::FMutation::Commit(bool bInAdvanceRevision, bool bInForceSett
 	Storage.Settings = Settings;
 	Storage.NextSerial = NextSerial;
 	Storage.Revision = PublishedRevision;
+	Storage.QueryDirty.merge(PendingQueryDirty);
 }
 } // namespace Hyperion

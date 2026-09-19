@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Scene/Scene.h"
 #include <limits>
+#include <set>
 #include <thread>
 
 namespace Hyperion
@@ -60,6 +61,8 @@ public:
 	FSceneSettings Settings;
 	std::array<std::size_t, 7> Counts{};
 	bool bSynchronizing{};
+	std::unique_ptr<IBoundsSpatialIndex> QueryIndex;
+	std::set<std::uint32_t> QueryDirty;
 
 	std::uint32_t Live(FSceneHandle InHandle) const;
 	std::uint32_t FindId(std::string_view InId) const;

@@ -70,7 +70,7 @@ void FEditorPlugin::Initialize()
 	GuiRenderer = &Context.Require<FGuiRenderer>();
 	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
 	                                                  Context.Require<FRenderFeatureRegistry>().Create());
-	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets);
+	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
 	if (!Options.Scene.empty())
 	{
 		OpenScene(Options.Scene);
@@ -89,6 +89,8 @@ void FEditorPlugin::OpenScene(const std::string& InPath)
 	bViewportCameraInitialized = false;
 	bCameraDragging = false;
 	Selection.reset();
+	bSelectionInitialized = false;
+	ViewportClick.reset();
 	Error.clear();
 	bReadyLogged = false;
 	ReadyFrames = 0;
@@ -183,6 +185,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	{
 		ExerciseGizmoInput(Events);
 	}
+	if (Options.bExercisePicking)
+	{
+		ExercisePickingInput(Events);
+	}
 	FGuiDrawData Data;
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorGui);
@@ -195,7 +201,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	}
 	// Async scene readiness is independent of render frame rate.
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
-	                               bViewsVerified || bGizmoVerified;
+	                               bViewsVerified || bGizmoVerified || bPickingVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames));
@@ -240,7 +246,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		Finish();
 		return;
 	}
-	if ((Options.bExercise || Options.bExerciseGizmo || !Options.ExerciseDocument.empty() ||
+	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || !Options.ExerciseDocument.empty() ||
 	     !Options.ExerciseViews.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
@@ -248,6 +254,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	}
 	if (Window->Minimized() || !Window->PixelSize().Width || !Window->PixelSize().Height)
 	{
+		ViewportClick.reset();
 		FinishGizmo();
 		Scene->Tick();
 		Camera.Reset();
@@ -263,6 +270,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (Options.bExercisePicking && !bPickingVerified)
+	{
+		throw std::runtime_error("Editor picking acceptance did not complete");
+	}
 	if (Options.bExerciseGizmo && !bGizmoVerified)
 	{
 		throw std::runtime_error("Editor gizmo acceptance did not complete");

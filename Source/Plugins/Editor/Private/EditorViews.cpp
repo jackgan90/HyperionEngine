@@ -7,6 +7,7 @@ namespace Hyperion
 {
 void FEditorPlugin::SetPreviewCamera(std::optional<FSceneHandle> InHandle)
 {
+	ViewportClick.reset();
 	if (InHandle)
 	{
 		FinishInspectorEdit();

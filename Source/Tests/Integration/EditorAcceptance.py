@@ -58,6 +58,9 @@ def main():
     gizmo, _ = run_editor(executable, root, output, 'gizmo', '--exercise-gizmo',
                           '--scene', '/Game/Scenes/Sponza.hasset')
     assert gizmo['gizmo_verified'] and gizmo['validation_errors'] == 0, gizmo
+    picking, _ = run_editor(executable, root, output, 'picking', '--exercise-picking',
+                           '--scene', '/Game/Scenes/Sponza.hasset')
+    assert picking['picking_verified'] and picking['validation_errors'] == 0, picking
     report, _ = run_editor(executable, root, output, 'missing-scene', '--frames', '20',
                             '--scene', '/Game/Scenes/DoesNotExist.hasset')
     assert report['scene_error'] and report['validation_errors'] == 0, report

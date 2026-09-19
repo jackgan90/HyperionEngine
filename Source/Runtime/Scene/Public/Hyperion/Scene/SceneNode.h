@@ -7,10 +7,13 @@
 
 namespace Hyperion
 {
+struct FSceneModelGeometry;
+
 // Prepared once on a loader/Worker, shared by independently transformed instances.
 struct FSceneModelData
 {
 	std::shared_ptr<const FModelAsset> Asset;
+	std::shared_ptr<const FSceneModelGeometry> QueryGeometry;
 	std::vector<FModelInstance> Instances;
 	std::vector<FBounds> PrimitiveBounds;
 	FBounds Bounds;

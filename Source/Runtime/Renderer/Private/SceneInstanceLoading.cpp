@@ -17,8 +17,8 @@ void FSceneInstance::FImpl::BeginManifest()
 		Load.Epoch = LoadEpoch;
 		try
 		{
-			Load.Preparation =
-			    LoadNativeModel(Assets, Tasks, Entry.Reference, Path, Load.Cancellation, &Session.GetResources());
+			Load.Preparation = LoadNativeModel(Assets, Tasks, Entry.Reference, Path, Load.Cancellation,
+			                                   &Session.GetResources(), bPrepareQueries);
 		}
 		catch (const std::exception& Failure)
 		{

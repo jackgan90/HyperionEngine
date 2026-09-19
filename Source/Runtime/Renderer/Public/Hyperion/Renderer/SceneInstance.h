@@ -45,7 +45,9 @@ struct FSceneInstanceStatus
 class FSceneInstance
 {
 public:
-	FSceneInstance(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets);
+	FSceneInstance(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
+	               bool bInPrepareQueries = false);
+	FSceneRayResult Raycast(FRay InRay, const FSceneRayOptions& InOptions = {});
 	~FSceneInstance();
 	FSceneInstance(const FSceneInstance&) = delete;
 	FSceneInstance& operator=(const FSceneInstance&) = delete;

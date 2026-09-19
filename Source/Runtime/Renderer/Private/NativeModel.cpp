@@ -80,7 +80,8 @@ std::shared_ptr<const FSceneModelData> ResolveModelAssetGraph(const FAssetGraph&
 TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSystem& InTasks,
                                               const FAssetRef& InReference,
                                               const std::filesystem::path& InContainingAsset,
-                                              FCancellationToken InCancellation, FRenderResourceService* InResources)
+                                              FCancellationToken InCancellation, FRenderResourceService* InResources,
+                                              bool bInPrepareQueries)
 {
 	RegisterSceneAssetTypes(InAssets.Types());
 	if (InReference.TypeId != RecordType<FModelAsset>().Id)
@@ -90,11 +91,19 @@ TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSyst
 	auto Graph = InAssets.LoadGraphAsync(InReference, InContainingAsset);
 	return DispatchAsync<FSceneModelData>(
 	    InTasks, {EDomain::Worker},
-	    [Graph, &InAssets, &InTasks, InCancellation, InResources]
+	    [Graph, &InAssets, &InTasks, InCancellation, InResources, bInPrepareQueries]
 	    {
 		    const auto Loaded = Graph.Get(InTasks);
 		    InCancellation.Check();
 		    auto Data = *ResolveModelAssetGraph(*Loaded, InAssets);
+		    if (bInPrepareQueries)
+		    {
+			    Data.QueryGeometry = PrepareSceneModelGeometry(*Data.Asset,
+			                                                   [InCancellation]
+			                                                   {
+				                                                   InCancellation.Check();
+			                                                   });
+		    }
 		    if (InResources)
 		    {
 			    for (const auto& Material : Data.Materials)
@@ -110,10 +119,10 @@ TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSyst
 
 TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSystem& InTasks,
                                               const std::filesystem::path& InPath, FCancellationToken InCancellation,
-                                              FRenderResourceService* InResources)
+                                              FRenderResourceService* InResources, bool bInPrepareQueries)
 {
 	return LoadNativeModel(InAssets, InTasks,
 	                       {"", PathToUtf8(InAssets.NormalizePath(InPath)), RecordType<FModelAsset>().Id, ""}, {},
-	                       InCancellation, InResources);
+	                       InCancellation, InResources, bInPrepareQueries);
 }
 } // namespace Hyperion

@@ -59,6 +59,16 @@ Native `hyperion.scene` records use schema v7; reflected nodes use v3 component 
 
 Native node records reject unknown fields that could hide an unsupported payload or misspelled kind. Native camera records also reject unsupported projection fields. Other reflection records retain their usual unknown-field diagnostics.
 
+## CPU ray queries
+
+`FScene::Raycast(FRay, FSceneRayOptions)` queries current Main-owned static geometry. Scene normalizes the input direction; Minimum/Maximum and returned Distance are world distances. Results contain Hit/Miss/Unavailable, a generation-checked scene handle, instance/primitive/triangle indices, position and barycentrics. A Hit with `bIncomplete` is the nearest prepared geometry while other candidates remain unavailable. A query with no hit and unavailable candidates returns Unavailable, not a confirmed Miss.
+
+`PrepareSceneModelGeometry` builds compact immutable per-primitive triangle BVHs; attach the result to `FSceneModelData::QueryGeometry` before publishing the data. `FSceneInstance` and `LoadNativeModel` accept an optional `bInPrepareQueries` flag, default false. Editor enables it so preparation runs on Worker with the existing cancellation/join lifecycle. Consumers providing explicit model data prepare and attach their own query geometry; it is never built implicitly on Main. Instances sharing model data share its triangle acceleration.
+
+The scene object index is allocated lazily and updated from successful transactions independently of Render's acknowledged changes. Bounds transforms refit the tree; topology changes rebuild it. Camera/light/metadata changes do not rebuild model geometry. Main and Render own separate mutable indices using Math's bounds BVH algorithm. `FSceneRayStats` reports builds/refits, candidates, instance tests, triangle nodes and exact triangle tests. Material options specify two-sided geometry or an ordered list of scheduled pass usages with per-usage exclusions for culling. Renderer's `MakeSceneRayOptions` supplies the Forward or Deferred pipeline policy, including legacy Forward exclusions. Reported hit distances use float precision; traversal retains rounded-distance ties without widening the original clipping interval. These are geometric queries, without alpha-discard or shader-deformation evaluation.
+
+Renderer's `MakeViewportRay` uses normalized image coordinates (top-left origin), the actual pixel extent and the shared scene camera projection construction. It supports both depth conventions and returns a world-distance interval clipped to the camera's near/far planes.
+
 ## Runtime scene entity
 
 `FSceneInstance` is the Main-owned Renderer entity alongside `FModel`. Construct it with a render session, task system and asset service; call `Load(path)`, `Tick()` on every Main tick (including minimized frames), then `Close()` before closing the session. It owns the logical `FScene`, its `FSceneRenderBridge`, asynchronous manifest/model requests and instance-to-asset bookkeeping. Register native descriptors with `RegisterSceneAssetTypes(Assets.Types())` before loading.

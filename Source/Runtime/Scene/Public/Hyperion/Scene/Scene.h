@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Scene/SceneNode.h"
+#include "Hyperion/Scene/SceneQuery.h"
 
 namespace Hyperion
 {
@@ -15,6 +16,8 @@ public:
 	FScene(const FScene&) = delete;
 	FScene& operator=(const FScene&) = delete;
 	void RequireMain() const;
+	// Normalizes Direction; Minimum/Maximum are world distances. Never waits for Render or builds triangles.
+	FSceneRayResult Raycast(FRay InRay, const FSceneRayOptions& InOptions = {});
 	std::uint64_t GetIdentity() const;
 	std::uint64_t GetRevision() const;
 	FSceneHandle AddNode(FSceneNode InNode);

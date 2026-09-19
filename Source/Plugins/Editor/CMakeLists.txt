@@ -15,6 +15,8 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorTransformAcceptance.cpp
   Private/EditorViewAcceptance.cpp
   Private/EditorViews.cpp
+  Private/EditorPicking.cpp
+  Private/EditorPickingAcceptance.cpp
 )
 hyp_module(hyperion_editor_plugin)
 target_link_libraries(hyperion_editor_plugin PUBLIC hyperion_application_services

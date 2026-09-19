@@ -138,7 +138,7 @@ template<typename Predicate> void Await(FSceneInstance& InScene, const Predicate
 
 void CheckLoadingEdits(FSceneFixture& InFixture)
 {
-	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
+	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets, true);
 
 	// Release the IO gate before Scene unwinds even when an assertion fails.
 	struct FRelease
@@ -159,6 +159,7 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	      });
 	const auto Removed = Scene.GetModels()[0].Handle;
 	const auto Kept = Scene.GetModels()[1].Handle;
+	HYP_CHECK(Scene.Raycast({{0, 0, 5}, {0, 0, -1}, 0, 10}).Status == ESceneRayStatus::Unavailable);
 	const auto Failed = Scene.GetModels()[2].Handle;
 	HYP_CHECK(Scene.Remove(Removed));
 	const auto Added = Scene.Add({"replacement"}, "good");
@@ -182,6 +183,10 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	HYP_CHECK(!Scene.Find(Removed) && !Scene.Remove(Removed));
 	HYP_CHECK(Scene.Find(Kept)->World.Values[12] == 4 && !Scene.Find(Kept)->bVisible);
 	HYP_CHECK(Scene.Find(Kept)->Data == Scene.Find(Added)->Data);
+	HYP_CHECK(Scene.Find(Kept)->Data->QueryGeometry);
+	HYP_CHECK(Scene.Find(Kept)->Data->QueryGeometry == Scene.Find(Added)->Data->QueryGeometry);
+	const auto QueryHit = Scene.Raycast({{0, 0, 5}, {0, 0, -1}, 0, 10}, {true});
+	HYP_CHECK(QueryHit.Status == ESceneRayStatus::Hit && QueryHit.Handle == Added && QueryHit.bIncomplete);
 	HYP_CHECK(Scene.Find(Overridden)->Data == Explicit.Data);
 	bool bSnapshotRejected{};
 	try
@@ -248,7 +253,7 @@ void CheckClosePending(FSceneFixture& InFixture)
 	InFixture.Assets.ClearCache();
 	InFixture.Files->bRelease = false;
 	InFixture.Files->bEntered = false;
-	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
+	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets, true);
 	std::jthread Release(
 	    [&]
 	    {
@@ -337,6 +342,7 @@ void CheckPendingMaterialEdits(FSceneFixture& InFixture)
 	HYP_CHECK(Scene.Find(Handle)->Surface.Overrides[0].Value == FMaterialValue::Float(.62f));
 	HYP_CHECK(Scene.Find(Handle)->SectionSurfaces.at(0).Overrides[0].Value == FMaterialValue::Float(.4f));
 	HYP_CHECK(Scene.Find(Handle)->World.Values[12] == 2);
+	HYP_CHECK(!Scene.Find(Handle)->Data->QueryGeometry);
 	HYP_CHECK(!Scene.Find(Cleared)->Surface.Reference && Scene.Find(Cleared)->Surface.Overrides.empty());
 	HYP_CHECK(Scene.Find(Cleared)->SectionSurfaces.empty());
 	const auto Snapshot = Scene.Snapshot("SavedMaterialEdits.hasset");

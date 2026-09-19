@@ -9,7 +9,8 @@ namespace Hyperion
 {
 struct FSceneInstance::FImpl
 {
-	FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets);
+	FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets, bool bInPrepareQueries);
+	bool bPrepareQueries{};
 
 	struct FLoad
 	{

@@ -230,6 +230,10 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 		bool bClicked{};
 		const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(),
 		                                 Selection == Visit.Handle, bClicked, !Options.bBenchmarkCollapsed);
+		if (Options.bExercisePicking && Node->Id == "light-courtyard-3")
+		{
+			PickingLightBounds = Gui->LastItemBounds();
+		}
 		if (bClicked)
 		{
 			SelectObject(Visit.Handle);
@@ -256,8 +260,9 @@ void FEditorPlugin::DrawOutliner()
 	}
 	if (Gui->BeginWindow("Outliner", bShowOutliner))
 	{
-		if (!Selection && Scene->GetStatus().bReady)
+		if (!bSelectionInitialized && !Selection && Scene->GetStatus().bReady)
 		{
+			bSelectionInitialized = true;
 			const auto Models = Scene->GetNodes(ESceneNodeKind::Model);
 			if (!Models.empty())
 			{
@@ -440,6 +445,7 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 		DrawViewControls();
 		ViewportRegion = Gui->Image(2);
 		bViewportVisible = true;
+		ResizeViewport();
 		DrawGizmo();
 		if (Options.Benchmark.empty())
 		{
@@ -449,6 +455,7 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 		{
 			BenchmarkCamera();
 		}
+		RouteViewportPicking(InEvents);
 		DrawGizmoOverlay();
 	}
 	Gui->EndWindow();
@@ -499,6 +506,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawViewport(InDelta, InEvents);
 	if (!bViewportVisible)
 	{
+		ViewportClick.reset();
 		FinishGizmo();
 		RouteCamera(InDelta, InEvents);
 	}

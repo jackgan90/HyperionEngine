@@ -32,6 +32,7 @@ struct FEditorOptions
 	std::vector<std::string> DisabledPlugins;
 	bool bExercise{};
 	bool bExerciseGizmo{};
+	bool bExercisePicking{};
 };
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
@@ -68,6 +69,11 @@ private:
 	void UpdateGizmoDrag(const FGuiPointerState& InPointer);
 	void FinishGizmo(bool bInCancel = false);
 	void ExerciseGizmoInput(std::vector<FInputEvent>& InEvents);
+	void ExercisePickingInput(std::vector<FInputEvent>& InEvents);
+	void PreparePickingExercise();
+	bool ExercisePickingScene(std::vector<FInputEvent>& InEvents);
+	void ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter, FVec2 InEmpty);
+	void ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec2 InCenter);
 	void CheckGizmoHistory(unsigned InPhase);
 	void ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 InEnd, std::vector<FInputEvent>& InEvents);
 	std::string StatusText() const;
@@ -75,6 +81,8 @@ private:
 	void RouteCamera(float InDelta, std::span<const FInputEvent> InEvents);
 	void Render(FGuiDrawData InGui, bool bInCapture);
 	void ResizeViewport();
+	void RouteViewportPicking(std::span<const FInputEvent> InEvents);
+	std::optional<FSceneCameraView> PickingCamera() const;
 	void SaveLayout();
 	void ExerciseInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseDocumentInput(std::vector<FInputEvent>& InEvents);
@@ -119,7 +127,7 @@ private:
 	void PollSave();
 	void DrawSaveDialog();
 	void DrawDiscardDialog();
-	void SelectObject(FSceneHandle InHandle);
+	void SelectObject(std::optional<FSceneHandle> InHandle);
 	bool PollClose();
 	bool IsDirty() const;
 
@@ -172,6 +180,25 @@ private:
 	FDeviceStats DeviceStats;
 	std::vector<std::string> ScenePaths;
 	std::optional<FSceneHandle> Selection;
+	bool bSelectionInitialized{};
+	unsigned PickingExerciseStep{};
+	unsigned PickingSceneStep{};
+	FVec4 PickingLightBounds;
+	FSceneHandle PickingNear;
+	FSceneHandle PickingFar;
+	FSceneHandle PickingPreview;
+	bool bPickingVerified{};
+
+	struct FViewportClick
+	{
+		FVec2 Start;
+		FVec4 Bounds;
+		FSize Size;
+		FSceneCameraView Camera;
+		std::uint64_t Revision{};
+	};
+
+	std::optional<FViewportClick> ViewportClick;
 	std::string OpenPath;
 	std::string CurrentPath;
 	std::string Error;

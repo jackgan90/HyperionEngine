@@ -1,4 +1,5 @@
 #include "EnvironmentParameters.h"
+#include "Hyperion/Renderer/ViewportRay.h"
 #include "SessionMaterialsInternal.h"
 #include <cmath>
 
@@ -55,16 +56,6 @@ const FPublishedSceneCamera* Camera(const FSceneMetadata& InMetadata, std::optio
 	}
 	const auto Entry = InMetadata.Cameras.find(*InHandle);
 	return Entry != InMetadata.Cameras.end() && Entry->second.bEnabled ? &Entry->second : nullptr;
-}
-
-FMat4 CameraView(const FSceneCameraPose& InPose)
-{
-	const auto& Right = InPose.Right;
-	const auto& Up = InPose.Up;
-	const auto& Forward = InPose.Forward;
-	// Pose already owns an orthonormal basis. Eye + unit Forward loses direction at large coordinates.
-	return {{Right.X, Up.X, -Forward.X, 0, Right.Y, Up.Y, -Forward.Y, 0, Right.Z, Up.Z, -Forward.Z, 0,
-	         -Dot(Right, InPose.Eye), -Dot(Up, InPose.Eye), Dot(Forward, InPose.Eye), 1}};
 }
 
 FResolvedSceneFrame ResolveView(const FSceneMetadata& InMetadata, const FSceneViewRequest& InRequest)
@@ -130,9 +121,7 @@ FResolvedSceneFrame ResolveView(const FSceneMetadata& InMetadata, const FSceneVi
 	View.Eye = Pose.Eye;
 	View.Camera = FRenderCamera{Pose.Forward, Pose.Up, Lens.VerticalRadians, Lens.Near, Lens.Far};
 	View.SceneCamera = Result.Camera;
-	View.ViewProjection = Multiply(
-	    Perspective(Lens.VerticalRadians, Viewport.Width / Viewport.Height, Lens.Near, Lens.Far, View.DepthConvention),
-	    CameraView(Pose));
+	View.ViewProjection = SceneCameraViewProjection(Pose, Lens, Viewport.Width / Viewport.Height, View.DepthConvention);
 	Result.CameraStatus = bFallback ? ESceneCameraStatus::DefaultFallback : ESceneCameraStatus::Active;
 	return Result;
 }

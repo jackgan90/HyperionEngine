@@ -5,8 +5,9 @@
 
 namespace Hyperion
 {
-FSceneInstance::FImpl::FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets)
-    : Session(InSession), Tasks(InTasks), Assets(InAssets)
+FSceneInstance::FImpl::FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
+                             bool bInPrepareQueries)
+    : bPrepareQueries(bInPrepareQueries), Session(InSession), Tasks(InTasks), Assets(InAssets)
 {
 	Tasks.Require({EDomain::Main});
 	Bridge = std::make_unique<FSceneRenderBridge>(Scene, Session, Tasks);
@@ -22,14 +23,21 @@ void FSceneInstance::FImpl::RequireOpen() const
 	}
 }
 
-FSceneInstance::FSceneInstance(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets)
-    : Impl(std::make_unique<FImpl>(InSession, InTasks, InAssets))
+FSceneInstance::FSceneInstance(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
+                               bool bInPrepareQueries)
+    : Impl(std::make_unique<FImpl>(InSession, InTasks, InAssets, bInPrepareQueries))
 {
 }
 
 FSceneInstance::~FSceneInstance()
 {
 	Close();
+}
+
+FSceneRayResult FSceneInstance::Raycast(FRay InRay, const FSceneRayOptions& InOptions)
+{
+	Impl->Tasks.Require({EDomain::Main});
+	return Impl->Status.bClosed ? FSceneRayResult{} : Impl->Scene.Raycast(InRay, InOptions);
 }
 
 void FSceneInstance::Load(const std::filesystem::path& InPath)
