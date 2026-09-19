@@ -41,6 +41,7 @@ void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
 	P.PollSave();
+	AdvanceCamera(InFrame.DeltaSeconds);
 	P.UpdateCamera(InFrame);
 	if (P.bStopped || !P.Error.empty())
 	{
@@ -64,7 +65,7 @@ void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
 		if (P.bAnimate)
 		{
 			const float Previous = std::sin(P.AnimationTime);
-			P.AnimationTime += .02f;
+			P.AnimationTime += std::clamp(InFrame.DeltaSeconds, 0.f, .1f) * 1.2f;
 			MoveSelected((std::sin(P.AnimationTime) - Previous) * 30);
 		}
 		P.Scene.Tick();
@@ -135,11 +136,29 @@ std::size_t FSceneViewerPlugin::ModelCount() const
 void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, FTaskSystem& InTasks,
                                FAssetService& InAssets, const std::filesystem::path& InPath)
 {
-	InRegistry.Add({"scene-viewer",
-	                {},
-	                [&InSession, &InTasks, &InAssets, Path = InPath]
-	                {
-		                return std::make_unique<FSceneViewerPlugin>(InSession, InTasks, InAssets, Path);
-	                }});
+	FPluginDescriptor Descriptor{"scene-viewer",
+	                             {},
+	                             [&InSession, &InTasks, &InAssets, Path = InPath]
+	                             {
+		                             return std::make_unique<FSceneViewerPlugin>(InSession, InTasks, InAssets, Path);
+	                             }};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor)};
+	InRegistry.Add(std::move(Descriptor));
+}
+
+void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, const std::filesystem::path& InPath)
+{
+	FPluginDescriptor Descriptor;
+	Descriptor.Id = "scene-viewer";
+	Descriptor.Dependencies = {"graphics", "assets"};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor)};
+	Descriptor.Requires = {typeid(FRenderSession), typeid(FTaskSystem), typeid(FAssetService)};
+	Descriptor.CreateWithContext = [Path = InPath](FPluginContext& InContext)
+	{
+		return std::make_unique<FSceneViewerPlugin>(InContext.Require<FRenderSession>(),
+		                                            InContext.Require<FTaskSystem>(),
+		                                            InContext.Require<FAssetService>(), Path);
+	};
+	InRegistry.Add(std::move(Descriptor));
 }
 } // namespace Hyperion

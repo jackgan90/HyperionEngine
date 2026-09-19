@@ -1,8 +1,8 @@
 #pragma once
 #include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Hyperion/Renderer/ClusteredLights.h"
-#include "Hyperion/Renderer/ContactShadows.h"
 #include "Hyperion/Renderer/FullscreenPass.h"
+#include "Hyperion/Renderer/RenderFeatures.h"
 #include "Hyperion/Renderer/RenderPipelineFrame.h"
 
 namespace Hyperion
@@ -38,7 +38,8 @@ class FSceneRenderPipeline
 {
 public:
 	FSceneRenderPipeline(FRenderSession& InSession, FRHICapabilities InCapabilities,
-	                     FScenePipelineSettings InSettings = {});
+	                     FScenePipelineSettings InSettings = {},
+	                     FRenderFeatureList InFeatures = MakeDefaultRenderFeatures());
 	void Configure(FScenePipelineSettings InSettings);
 	// Render domain: presentation defaults to the backbuffer; RGBA8 output is encoded through an sRGB view.
 	void SetOutputTarget(FRenderTargetSource InTarget = {ERenderTargetKind::Backbuffer});
@@ -53,6 +54,9 @@ public:
 	std::uint64_t TargetBytes() const;
 
 private:
+	void ValidateView(const FRenderView& InView, const FCascadedShadowSettings& InShadows) const;
+	FRenderFeatureContext BeginFeatures(FRenderGraph& InGraph, const FRenderView& InView,
+	                                    const FMaterialFrameContext& InFrame, bool bInDeferPreparation);
 	FRenderTargetSource OutputTarget{ERenderTargetKind::Backbuffer};
 	FRenderPassTargets OutputTargets(std::optional<FVec4> InClear = {}) const;
 	void BuildResolved(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
@@ -77,13 +81,9 @@ private:
 	FLocalLightIndex LocalLightIndex;
 	FClusteredLights Clusters;
 	FMaterialParameterValues ClusterParameters;
-	FHierarchicalDepthProducer HierarchicalDepth;
-	FHierarchicalDepthProduct ContactDepth;
-	std::shared_ptr<const FMaterialTextureSource> ContactMask;
-	std::shared_ptr<const void> ContactLifetime;
-	void AddContactShadows(FRenderGraph& InGraph, const FRenderView& InView, const FMaterialFrameContext& InFrame,
-	                       FVec3 InDirection, bool bInDeferPreparation);
-	void AddContactDebug(FRenderGraph& InGraph, const FRenderView& InView, bool bInDeferPreparation) const;
+	FRenderFeatureList Features;
+	FRenderFeatureResources FeatureResources;
+	void BuildFeatures(ERenderFeatureStage InStage, FRenderFeatureContext& InContext);
 	std::shared_ptr<const void> ClusterLifetime;
 	void PrepareClusters(const FRenderView& InView, const FMaterialFrameContext& InFrame, bool bInEnabled);
 	void AddLocalLights(FRenderGraph& InGraph, const FRenderView& InView, const FMaterialFrameContext& InFrame,

@@ -65,7 +65,8 @@ def verify_capture(document, experiment):
     if experiment == 'Shadows':
         for cascade in range(4):
             assert submitted[f'Shadow cascade {cascade}/0'] > 0, f'missing cascade {cascade} draws'
-    assert submitted['Debug UI/0'] > 0, f'{experiment}: missing submitted GUI draws'
+    # Shared GuiRenderer uses the session preparation path; legacy standalone renderers use Debug UI.
+    assert submitted['GUI/0'] + submitted['Debug UI/0'] > 0, f'{experiment}: missing submitted GUI draws'
     assert any('Present' in name for name in chunks), f'{experiment}: missing Present'
     assert any('CreateGraphicsPipeline' in name for name in chunks), f'{experiment}: missing pipeline'
     return submitted

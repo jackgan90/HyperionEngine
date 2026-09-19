@@ -207,6 +207,58 @@ void Similar(const FImage& InA, const FImage& InB, float InTolerance = .025f)
 	HYP_CHECK(Maximum < InTolerance);
 }
 
+class FStageProbe final : public IRenderFeature
+{
+public:
+	explicit FStageProbe(std::vector<ERenderFeatureStage>& InStages) : Stages(InStages)
+	{
+	}
+
+	void Build(ERenderFeatureStage InStage, FRenderFeatureContext& InContext) override
+	{
+		HYP_CHECK(InContext.Resources.Depth.Texture && InContext.Resources.Depth.Lifetime);
+		HYP_CHECK(InContext.Resources.Depth.Texture->GetDepthTarget()->Width == InContext.View.Width);
+		Stages.push_back(InStage);
+	}
+
+private:
+	std::vector<ERenderFeatureStage>& Stages;
+};
+
+void CheckFeatureSelection(FFixture& InFixture)
+{
+	FRenderFeatureRegistry Features;
+	std::vector<ERenderFeatureStage> Stages;
+	Features.Add("probe",
+	             [&]
+	             {
+		             return std::make_unique<FStageProbe>(Stages);
+	             });
+	InFixture.Pipeline = std::make_unique<FSceneRenderPipeline>(*InFixture.Session, InFixture.Device->GetCapabilities(),
+	                                                            FScenePipelineSettings{}, Features.Create());
+	InFixture.Settings.ContactShadows.bEnabled = true;
+	InFixture.Frame();
+	HYP_CHECK(!InFixture.Statistics.bContactShadows && InFixture.Statistics.HierarchicalDepth.Bytes == 0);
+	HYP_CHECK((Stages == std::vector<ERenderFeatureStage>{
+	                         ERenderFeatureStage::AfterOpaque, ERenderFeatureStage::BeforeLighting,
+	                         ERenderFeatureStage::BeforeTonemap, ERenderFeatureStage::AfterTonemap}));
+	bool bRejected{};
+	try
+	{
+		Features.Add("late", MakeContactShadowFeature);
+	}
+	catch (const std::logic_error&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+	Features.Remove("probe");
+	HYP_CHECK(Features.Create().empty());
+	InFixture.Settings.ContactShadows = {};
+	InFixture.Pipeline =
+	    std::make_unique<FSceneRenderPipeline>(*InFixture.Session, InFixture.Device->GetCapabilities());
+}
+
 void CheckConfiguration(FFixture& InFixture)
 {
 	const auto Caps = InFixture.Device->GetCapabilities();
@@ -1197,6 +1249,7 @@ int main()
 		for (const auto Convention : {EDepthConvention::Standard, EDepthConvention::Reversed})
 		{
 			FFixture Fixture(Convention);
+			CheckFeatureSelection(Fixture);
 			CheckConfiguration(Fixture);
 			CheckContactRoutes(Fixture);
 			CheckHdrAndRoutes(Fixture);

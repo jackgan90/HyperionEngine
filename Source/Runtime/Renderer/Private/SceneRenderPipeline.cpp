@@ -61,11 +61,11 @@ void FSceneRenderPipeline::Build(FRenderGraph& InGraph, const FSceneViewRequest&
 	else
 	{
 		LastStatistics = {};
-		HierarchicalDepth.BeginFrame(InGraph);
-		HierarchicalDepth.EndFrame();
-		ContactDepth = {};
-		ContactMask.reset();
-		ContactLifetime.reset();
+		FeatureResources = {};
+		for (const auto& Feature : Features)
+		{
+			Feature->Reset();
+		}
 		bPending = false;
 		FullscreenStatistics.reset();
 		auto Disabled = InShadows;
@@ -104,6 +104,55 @@ void FSceneRenderPipeline::PrepareShadows(const FRenderView& InMain, const FMate
 	                             ShadowBytes, ShadowDepthConvention);
 }
 
+void FSceneRenderPipeline::ValidateView(const FRenderView& InView, const FCascadedShadowSettings& InShadows) const
+{
+	if (const auto* Output = OutputTarget.Texture ? OutputTarget.Texture->GetColorTarget() : nullptr)
+	{
+		if (Output->Width != InView.Width || Output->Height != InView.Height || InShadows.DebugMode ||
+		    Settings.ContactShadows.DebugMode)
+		{
+			throw std::invalid_argument("Offscreen scene output requires matching dimensions and no depth overlays");
+		}
+	}
+	if (Settings.Pipeline == ESceneRenderPipeline::Deferred && InView.Viewport)
+	{
+		const auto& View = *InView.Viewport;
+		const float Range = View.MaxDepth - View.MinDepth;
+		if (!(Range > 0) || !std::isfinite(1.f / Range))
+		{
+			throw std::invalid_argument("Deferred reconstruction requires a positive invertible viewport depth range");
+		}
+	}
+}
+
+FRenderFeatureContext FSceneRenderPipeline::BeginFeatures(FRenderGraph& InGraph, const FRenderView& InView,
+                                                          const FMaterialFrameContext& InFrame,
+                                                          bool bInDeferPreparation)
+{
+	FeatureResources = {};
+	FeatureResources.Depth = {ERenderTargetKind::Texture, SceneDepth, Lifetime, false};
+	FeatureResources.Color = {ERenderTargetKind::Texture, SceneColor, Lifetime, false};
+	FeatureResources.Output = OutputTarget;
+	for (std::size_t Index = 0; Index < GBuffer.size(); ++Index)
+	{
+		FeatureResources.GBuffer[Index] = {ERenderTargetKind::Texture, GBuffer[Index], Lifetime, false};
+	}
+	FRenderFeatureContext FeatureContext{Session,
+	                                     InGraph,
+	                                     InView,
+	                                     InFrame,
+	                                     Settings,
+	                                     FeatureResources,
+	                                     LastStatistics,
+	                                     FullscreenStatistics,
+	                                     bInDeferPreparation};
+	for (const auto& Feature : Features)
+	{
+		Feature->BeginFrame(FeatureContext);
+	}
+	return FeatureContext;
+}
+
 void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMain,
                                          std::shared_ptr<const FMaterialFrameContext> InFrame,
                                          const FCascadedShadowSettings& InShadows, FVec4 InClear,
@@ -117,28 +166,11 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		throw std::invalid_argument("Scene pipeline requires a frozen material frame");
 	}
 	Session.ValidateSceneFrame(*InFrame);
-	if (const auto* Output = OutputTarget.Texture ? OutputTarget.Texture->GetColorTarget() : nullptr)
-	{
-		if (Output->Width != InMain.Width || Output->Height != InMain.Height || InShadows.DebugMode ||
-		    Settings.ContactShadows.DebugMode)
-		{
-			throw std::invalid_argument("Offscreen scene output requires matching dimensions and no depth overlays");
-		}
-	}
-	if (Settings.Pipeline == ESceneRenderPipeline::Deferred && InMain.Viewport)
-	{
-		const auto& View = *InMain.Viewport;
-		const float Range = View.MaxDepth - View.MinDepth;
-		if (!(Range > 0) || !std::isfinite(1.f / Range))
-		{
-			throw std::invalid_argument("Deferred reconstruction requires a positive invertible viewport depth range");
-		}
-	}
+	ValidateView(InMain, InShadows);
 	Resize(InMain.Width, InMain.Height, InMain.DepthConvention);
 	LastStatistics = {};
-	HierarchicalDepth.BeginFrame(InGraph);
-	ContactDepth = {};
 	FullscreenStatistics = std::make_shared<FFullscreenPreparationStatistics>();
+	auto FeatureContext = BeginFeatures(InGraph, InMain, *InFrame, bInDeferPreparation);
 	LastStatistics.Spatial = Session.GetScene().BeginViews();
 	PrepareShadows(InMain, *InFrame, InShadows);
 	const FVec4 Clear{ClearHdr(InClear.X, Settings.Exposure), ClearHdr(InClear.Y, Settings.Exposure),
@@ -157,36 +189,34 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	}
 	PrepareClusters(InMain, *InFrame, Settings.bClusteredLighting && !InShadows.DebugMode);
 	auto Family = MakeViews(InMain, Clear);
-	Session.BuildViews(
-	    InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
-	    [&](std::size_t InIndex)
-	    {
-		    if (bDeferred && InIndex == Family.BaseIndex)
-		    {
-			    AddContactShadows(InGraph, InMain, *InFrame, Direction(Session, *InFrame), bInDeferPreparation);
-			    AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear), bInDeferPreparation);
-			    if (!InShadows.DebugMode && !Settings.bClusteredLighting)
-			    {
-				    AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
-			    }
-		    }
-		    if (InIndex + 1 == Family.TransparentIndex)
-		    {
-			    AddSky(InGraph, InMain, *InFrame, bInDeferPreparation);
-		    }
-		    if (InIndex == Family.TransparentIndex)
-		    {
-			    AddFullscreenPass(Session, InGraph, Tonemap(InMain), bInDeferPreparation);
-		    }
-	    });
+	Session.BuildViews(InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
+	                   [&](std::size_t InIndex)
+	                   {
+		                   if (InIndex == Family.BaseIndex)
+		                   {
+			                   BuildFeatures(ERenderFeatureStage::AfterOpaque, FeatureContext);
+		                   }
+		                   if (bDeferred && InIndex == Family.BaseIndex)
+		                   {
+			                   BuildFeatures(ERenderFeatureStage::BeforeLighting, FeatureContext);
+			                   AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear),
+			                                     bInDeferPreparation);
+			                   if (!InShadows.DebugMode && !Settings.bClusteredLighting)
+			                   {
+				                   AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
+			                   }
+		                   }
+		                   if (InIndex + 1 == Family.TransparentIndex)
+		                   {
+			                   AddSky(InGraph, InMain, *InFrame, bInDeferPreparation);
+		                   }
+		                   if (InIndex == Family.TransparentIndex)
+		                   {
+			                   BuildFeatures(ERenderFeatureStage::BeforeTonemap, FeatureContext);
+			                   AddFullscreenPass(Session, InGraph, Tonemap(InMain), bInDeferPreparation);
+		                   }
+	                   });
 	bPending = bInDeferPreparation;
-	HierarchicalDepth.EndFrame();
-	LastStatistics.HierarchicalDepth = HierarchicalDepth.Statistics();
-	if (!LastStatistics.bContactShadows)
-	{
-		ContactMask.reset();
-		ContactLifetime.reset();
-	}
 	if (bDeferred && Settings.DebugMode)
 	{
 		AddFullscreenPass(Session, InGraph, Debug(InMain), bInDeferPreparation);
@@ -200,9 +230,10 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		        FViewport{float(InMain.Width) - Size, float(InMain.Height) - Size, Size, Size}),
 		    bInDeferPreparation);
 	}
-	if (bDeferred)
+	BuildFeatures(ERenderFeatureStage::AfterTonemap, FeatureContext);
+	for (const auto& Feature : Features)
 	{
-		AddContactDebug(InGraph, InMain, bInDeferPreparation);
+		Feature->EndFrame(FeatureContext);
 	}
 	LastStatistics.Views = Session.ViewStatistics();
 	LastStatistics.ShadowTextureBytes = ShadowMaps.TextureBytes();
@@ -212,6 +243,14 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	if (InExtensions)
 	{
 		InExtensions(InGraph);
+	}
+}
+
+void FSceneRenderPipeline::BuildFeatures(ERenderFeatureStage InStage, FRenderFeatureContext& InContext)
+{
+	for (const auto& Feature : Features)
+	{
+		Feature->Build(InStage, InContext);
 	}
 }
 

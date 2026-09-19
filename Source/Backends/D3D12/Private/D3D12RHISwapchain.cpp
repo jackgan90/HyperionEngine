@@ -16,6 +16,7 @@ namespace Hyperion
 #if defined(HYP_TEST_D3D12_PRESENT)
 // Linked only by the native fault-injection test target; normal builds call DXGI directly.
 HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval);
+void SwapchainDestroyedForTesting(const std::shared_ptr<FD3D12DeviceState>& InState);
 #endif
 
 struct FD3D12RHISwapchain::FImpl
@@ -216,6 +217,11 @@ FD3D12RHISwapchain::~FD3D12RHISwapchain()
 	{
 		Log(ELogLevel::Error, Error.what());
 	}
+#if defined(HYP_TEST_D3D12_PRESENT)
+	auto State = Impl->State;
+	Impl.reset();
+	SwapchainDestroyedForTesting(State);
+#endif
 }
 
 const FRHICapabilities& FD3D12RHISwapchain::GetCapabilities() const noexcept

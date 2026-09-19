@@ -3,6 +3,7 @@
 
 namespace Hyperion
 {
+void RegisterTrianglePlugin(FPluginRegistry& InRegistry);
 class FRenderSession;
 void RegisterTrianglePlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, IRHIDevice& InDevice,
                             FShaderCompiler& InCompiler, FTaskSystem& InTasks);

@@ -98,6 +98,7 @@ const FTypeDescriptor& SettingsType()
 	     Field("clear_red", "Background red", &FAppSettings::ClearRed, 0, 1),
 	     Field("clear_green", "Background green", &FAppSettings::ClearGreen, 0, 1),
 	     Field("clear_blue", "Background blue", &FAppSettings::ClearBlue, 0, 1),
+	     Field("disabled_plugins", "Disabled plugins (restart)", &FAppSettings::DisabledPlugins),
 	     Field("plugins", "Enabled plugins (restart)", &FAppSettings::Plugins)}};
 	return Type;
 }

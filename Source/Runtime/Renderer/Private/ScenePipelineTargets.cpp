@@ -54,8 +54,9 @@ std::uint32_t FGBufferLayout::BytesPerPixel() const
 }
 
 FSceneRenderPipeline::FSceneRenderPipeline(FRenderSession& InSession, FRHICapabilities InCapabilities,
-                                           FScenePipelineSettings InSettings)
-    : Session(InSession), Capabilities(std::move(InCapabilities)), Settings(std::move(InSettings))
+                                           FScenePipelineSettings InSettings, FRenderFeatureList InFeatures)
+    : Session(InSession), Capabilities(std::move(InCapabilities)), Settings(std::move(InSettings)),
+      Features(std::move(InFeatures))
 {
 	Configure(Settings);
 }
@@ -114,8 +115,6 @@ void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight,
 	SceneColor = std::move(NewColor);
 	SceneDepth = std::move(NewDepth);
 	GBuffer = std::move(NewGBuffer);
-	ContactMask.reset();
-	ContactLifetime.reset();
 	Width = InWidth;
 	Height = InHeight;
 	DepthConvention = InConvention;
@@ -162,9 +161,14 @@ FRenderDepthTarget FSceneRenderPipeline::DepthTarget(EAttachmentLoad InLoad) con
 
 std::uint64_t FSceneRenderPipeline::TargetBytes() const
 {
+	std::uint64_t FeatureBytes{};
+	for (const auto& Feature : Features)
+	{
+		FeatureBytes += Feature->ResourceBytes();
+	}
 	return std::uint64_t(Width) * Height *
 	           (12 + (Settings.Pipeline == ESceneRenderPipeline::Deferred ? Settings.GBuffer.BytesPerPixel() : 0)) +
-	       HierarchicalDepth.Statistics().Bytes + (ContactMask ? std::uint64_t(Width) * Height : 0);
+	       FeatureBytes;
 }
 
 const FCascadedShadowMap& FSceneRenderPipeline::Shadows() const

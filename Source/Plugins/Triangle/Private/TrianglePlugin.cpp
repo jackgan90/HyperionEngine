@@ -110,11 +110,29 @@ private:
 void RegisterTrianglePlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, IRHIDevice& InDevice,
                             FShaderCompiler& InCompiler, FTaskSystem& InTasks)
 {
-	InRegistry.Add({"triangle",
-	                {},
-	                [&]
-	                {
-		                return std::make_unique<FTrianglePlugin>(InSession, InDevice, InCompiler, InTasks);
-	                }});
+	FPluginDescriptor Descriptor{"triangle",
+	                             {},
+	                             [&]
+	                             {
+		                             return std::make_unique<FTrianglePlugin>(InSession, InDevice, InCompiler, InTasks);
+	                             }};
+	Descriptor.Provides = {typeid(IScenePlugin)};
+	InRegistry.Add(std::move(Descriptor));
+}
+
+void RegisterTrianglePlugin(FPluginRegistry& InRegistry)
+{
+	FPluginDescriptor Descriptor;
+	Descriptor.Id = "triangle";
+	Descriptor.Dependencies = {"graphics"};
+	Descriptor.Provides = {typeid(IScenePlugin)};
+	Descriptor.Requires = {typeid(FRenderSession), typeid(IRHIDevice), typeid(FShaderCompiler), typeid(FTaskSystem)};
+	Descriptor.CreateWithContext = [](FPluginContext& InContext)
+	{
+		return std::make_unique<FTrianglePlugin>(InContext.Require<FRenderSession>(), InContext.Require<IRHIDevice>(),
+		                                         InContext.Require<FShaderCompiler>(),
+		                                         InContext.Require<FTaskSystem>());
+	};
+	InRegistry.Add(std::move(Descriptor));
 }
 } // namespace Hyperion

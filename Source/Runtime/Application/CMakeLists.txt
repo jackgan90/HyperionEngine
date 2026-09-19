@@ -1,0 +1,3 @@
+add_library(hyperion_application STATIC Private/ApplicationHost.cpp)
+hyp_module(hyperion_application)
+target_link_libraries(hyperion_application PUBLIC hyperion_plugins hyperion_tasks PRIVATE hyperion_core)

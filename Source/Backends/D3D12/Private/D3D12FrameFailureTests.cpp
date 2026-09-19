@@ -1,5 +1,7 @@
 // Native fault injection stays inside the backend and is compiled only into this test executable.
 #include "D3D12Resources.h"
+#include "Hyperion/Application/ApplicationHost.h"
+#include "Hyperion/ApplicationServices/ApplicationServices.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderSession.h"
@@ -17,6 +19,9 @@ namespace
 {
 bool bFailPresent = false;
 bool bSkipPresent = false;
+bool bInjectShutdownError = false;
+bool bShutdownErrorInjected = false;
+std::weak_ptr<FD3D12DeviceState> ShutdownDevice;
 
 void CheckCondition(bool bInCondition, std::source_location InLocation = std::source_location::current())
 {
@@ -24,6 +29,51 @@ void CheckCondition(bool bInCondition, std::source_location InLocation = std::so
 	{
 		throw std::runtime_error("Frame failure check failed at line " + std::to_string(InLocation.line()));
 	}
+}
+
+void CheckGraphicsShutdown(bool bInInjectError)
+{
+	std::unique_ptr<FIOService> IO;
+	FApplicationHost Host(1, 1);
+	auto& Tasks = Host.GetTasks();
+	IO = std::make_unique<FIOService>(Tasks, std::make_shared<FMemoryFileSystem>());
+	Host.GetServices().AddExternal(*IO);
+	FPluginRegistry Registry;
+	Registry.Add({"assets",
+	              {},
+	              []
+	              {
+		              return std::make_unique<FPlugin>();
+	              }});
+	RegisterWindowServices(Registry, {"Graphics shutdown validation", {64, 64}, true});
+	RegisterGraphicsServices(Registry, {RegisterD3D12RHIBackend, "d3d12", "shutdown-shader-cache"});
+	Host.Start(Registry, {{"graphics"}});
+	CheckCondition(Host.GetPlugins().IsActive("graphics"));
+	auto& Device = Host.GetServices().Require<IRHIDevice>();
+	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+	                          [&]
+	                          {
+		                          const auto Stats = Device.Statistics();
+		                          CheckCondition(Stats.bDebugLayer && Stats.ValidationErrors == 0);
+	                          }));
+	bShutdownErrorInjected = false;
+	bInjectShutdownError = bInInjectError;
+	Host.Stop();
+	bInjectShutdownError = false;
+	Host.Stop();
+	CheckCondition(bShutdownErrorInjected == bInInjectError);
+	CheckCondition(ShutdownDevice.expired() && !Host.GetServices().Find<IRHIDevice>());
+	bool bReported = false;
+	try
+	{
+		Host.GetServices().Require<FApplicationControl>().RethrowFailure();
+	}
+	catch (const std::runtime_error& Failure)
+	{
+		CheckCondition(std::string(Failure.what()) == "GPU validation errors after graphics shutdown: 1");
+		bReported = true;
+	}
+	CheckCondition(bReported == bInInjectError);
 }
 
 struct FFrameFixture
@@ -616,12 +666,30 @@ HRESULT PresentForTesting(IDXGISwapChain3* InSwapchain, UINT InInterval)
 	}
 	return bSkipPresent ? S_OK : InSwapchain->Present(InInterval, 0);
 }
+
+void SwapchainDestroyedForTesting(const std::shared_ptr<FD3D12DeviceState>& InState)
+{
+	ShutdownDevice = InState;
+	if (bInjectShutdownError && InState->Info)
+	{
+		bShutdownErrorInjected = SUCCEEDED(InState->Info->AddApplicationMessage(
+		    D3D12_MESSAGE_SEVERITY_ERROR, "Injected validation error after swapchain destruction"));
+	}
+}
 } // namespace Hyperion
 
 int main(int InArgc, char** InArgv)
 {
 	try
 	{
+		if (InArgc == 2 && std::string_view(InArgv[1]) == "--graphics-shutdown")
+		{
+			Hyperion::CheckGraphicsShutdown(false);
+			Hyperion::CheckGraphicsShutdown(true);
+			Hyperion::CheckGraphicsShutdown(false);
+			std::cout << "Graphics shutdown reports late validation and releases the device\n";
+			return 0;
+		}
 #if HYP_ENABLE_PROFILING
 		if (InArgc == 2 && std::string_view(InArgv[1]) == "--profile-wait")
 		{

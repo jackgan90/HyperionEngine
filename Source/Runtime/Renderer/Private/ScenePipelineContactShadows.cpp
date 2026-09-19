@@ -1,66 +1,155 @@
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include <algorithm>
+#include <bit>
 
 namespace Hyperion
 {
-void FSceneRenderPipeline::AddContactShadows(FRenderGraph& InGraph, const FRenderView& InView,
-                                             const FMaterialFrameContext& InFrame, FVec3 InDirection,
-                                             bool bInDeferPreparation)
+namespace
 {
-	const auto Direct = Session.ResolveFrameSemantic(InFrame, "Engine.Scene.MainDirectionalLightColor");
-	const bool bDirectional = Direct && Direct->Words != FMaterialValue::Float(FVec3{}).Words;
-	LastStatistics.bContactShadows =
-	    Settings.ContactShadows.bEnabled && bDirectional && (!InFrame.GetSceneToken() || InFrame.CastsSceneShadows());
-	const FHierarchicalDepthRequest Request{{ERenderTargetKind::Texture, SceneDepth, Lifetime, false}, InView};
-	if (LastStatistics.bContactShadows)
+class FContactShadowFeature final : public IRenderFeature
+{
+public:
+	void BeginFrame(FRenderFeatureContext& InContext) override;
+	void Build(ERenderFeatureStage InStage, FRenderFeatureContext& InContext) override;
+	void EndFrame(FRenderFeatureContext& InContext) override;
+	void Reset() override;
+	std::uint64_t ResourceBytes() const override;
+
+private:
+	void AddShadows(FRenderFeatureContext& InContext);
+	void AddDebug(FRenderFeatureContext& InContext);
+	FHierarchicalDepthProducer HierarchicalDepth;
+	FHierarchicalDepthProduct Depth;
+	FRenderTargetSource Source;
+	FRenderTargetSource Mask;
+	bool bActive{};
+};
+
+void FContactShadowFeature::BeginFrame(FRenderFeatureContext& InContext)
+{
+	if (Source.Texture != InContext.Resources.Depth.Texture)
 	{
-		ContactDepth = HierarchicalDepth.Request(Session, InGraph, Request, bInDeferPreparation);
-		if (!ContactMask)
-		{
-			ContactLifetime = Session.GetResources().CreateScopeLifetime();
-			ContactMask = std::make_shared<const FMaterialTextureSource>(
-			    FMaterialColorTexture{Width, Height, EMaterialColorFormat::R8Unorm});
-		}
-		FContactShadowInputs Inputs;
-		Inputs.Depth = ContactDepth;
-		Inputs.Normals = {ERenderTargetKind::Texture, GBuffer[1], Lifetime, false};
-		Inputs.Surface = {ERenderTargetKind::Texture, GBuffer[2], Lifetime, false};
-		Inputs.Mask = {ERenderTargetKind::Texture, ContactMask, ContactLifetime, false};
-		Inputs.View = InView;
-		Inputs.LightDirection = InDirection;
-		Inputs.Settings = Settings.ContactShadows;
-		auto Pass = MakeContactShadowPass(InGraph, Inputs);
-		Pass.Statistics = FullscreenStatistics;
-		AddFullscreenPass(Session, InGraph, std::move(Pass), bInDeferPreparation);
+		Mask = {};
 	}
-	if (Settings.ContactShadows.DebugMode == 2)
+	Source = InContext.Resources.Depth;
+	Depth = {};
+	bActive = false;
+	HierarchicalDepth.BeginFrame(InContext.Graph);
+}
+
+void FContactShadowFeature::Build(ERenderFeatureStage InStage, FRenderFeatureContext& InContext)
+{
+	if (InContext.Settings.Pipeline != ESceneRenderPipeline::Deferred)
 	{
-		ContactDepth = HierarchicalDepth.Request(Session, InGraph, Request, bInDeferPreparation);
+		return;
+	}
+	if (InStage == ERenderFeatureStage::BeforeLighting)
+	{
+		AddShadows(InContext);
+	}
+	else if (InStage == ERenderFeatureStage::AfterTonemap)
+	{
+		AddDebug(InContext);
 	}
 }
 
-void FSceneRenderPipeline::AddContactDebug(FRenderGraph& InGraph, const FRenderView& InView,
-                                           bool bInDeferPreparation) const
+void FContactShadowFeature::AddShadows(FRenderFeatureContext& InContext)
 {
-	const bool bDepth = Settings.ContactShadows.DebugMode == 2;
-	if ((!bDepth && (!Settings.ContactShadows.DebugMode || !LastStatistics.bContactShadows)) ||
-	    (bDepth && !ContactDepth.Texture))
+	auto& Session = InContext.Session;
+	const auto& Settings = InContext.Settings.ContactShadows;
+	const auto Direct = Session.ResolveFrameSemantic(InContext.Frame, "Engine.Scene.MainDirectionalLightColor");
+	const bool bDirectional = Direct && Direct->Words != FMaterialValue::Float(FVec3{}).Words;
+	bActive =
+	    Settings.bEnabled && bDirectional && (!InContext.Frame.GetSceneToken() || InContext.Frame.CastsSceneShadows());
+	InContext.Statistics.bContactShadows = bActive;
+	const FHierarchicalDepthRequest Request{Source, InContext.View};
+	if (bActive)
+	{
+		Depth = HierarchicalDepth.Request(Session, InContext.Graph, Request, InContext.bDeferPreparation);
+		if (!Mask.Texture)
+		{
+			Mask = {ERenderTargetKind::Texture,
+			        std::make_shared<const FMaterialTextureSource>(FMaterialColorTexture{
+			            InContext.View.Width, InContext.View.Height, EMaterialColorFormat::R8Unorm}),
+			        Session.GetResources().CreateScopeLifetime(), false};
+		}
+		const auto Direction =
+		    Session.ResolveFrameSemantic(InContext.Frame, "Engine.Scene.MainDirectionalLightDirection");
+		if (!Direction || Direction->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
+		{
+			throw std::invalid_argument("Contact shadows require a scene light direction");
+		}
+		FContactShadowInputs Inputs;
+		Inputs.Depth = Depth;
+		Inputs.Normals = InContext.Resources.GBuffer[1];
+		Inputs.Surface = InContext.Resources.GBuffer[2];
+		Inputs.Mask = Mask;
+		Inputs.View = InContext.View;
+		Inputs.LightDirection = {std::bit_cast<float>(Direction->Words[0]), std::bit_cast<float>(Direction->Words[1]),
+		                         std::bit_cast<float>(Direction->Words[2])};
+		Inputs.Settings = Settings;
+		auto Pass = MakeContactShadowPass(InContext.Graph, Inputs);
+		Pass.Statistics = InContext.FullscreenStatistics;
+		AddFullscreenPass(Session, InContext.Graph, std::move(Pass), InContext.bDeferPreparation);
+		InContext.Resources.DirectionalVisibility = Mask;
+	}
+	if (Settings.DebugMode == 2)
+	{
+		Depth = HierarchicalDepth.Request(Session, InContext.Graph, Request, InContext.bDeferPreparation);
+	}
+}
+
+void FContactShadowFeature::AddDebug(FRenderFeatureContext& InContext)
+{
+	const auto& Settings = InContext.Settings.ContactShadows;
+	const bool bDepth = Settings.DebugMode == 2;
+	if ((!bDepth && (!Settings.DebugMode || !bActive)) || (bDepth && !Depth.Texture))
 	{
 		return;
 	}
 	if (bDepth)
 	{
-		ContactDepth.Validate(InGraph, InView);
+		Depth.Validate(InContext.Graph, InContext.View);
 	}
-	const FRenderTargetSource Source{ERenderTargetKind::Texture, bDepth ? ContactDepth.Texture : ContactMask,
-	                                 bDepth ? ContactDepth.Lifetime : ContactLifetime, false};
-	const auto Mip = bDepth ? std::min(Settings.ContactShadows.PreviewMip,
-	                                   static_cast<std::uint32_t>(ContactDepth.MipSizes.size() - 1))
-	                        : 0;
-	const auto Viewport = InView.Viewport.value_or(FViewport{0, 0, float(Width), float(Height)});
-	auto Pass =
-	    MakeScreenTexturePreview(Source, Viewport, Mip, bDepth && InView.DepthConvention == EDepthConvention::Standard);
-	Pass.Statistics = FullscreenStatistics;
-	AddFullscreenPass(Session, InGraph, std::move(Pass), bInDeferPreparation);
+	const auto Input =
+	    bDepth ? FRenderTargetSource{ERenderTargetKind::Texture, Depth.Texture, Depth.Lifetime, false} : Mask;
+	const auto Mip = bDepth ? std::min(Settings.PreviewMip, static_cast<std::uint32_t>(Depth.MipSizes.size() - 1)) : 0;
+	const auto Viewport =
+	    InContext.View.Viewport.value_or(FViewport{0, 0, float(InContext.View.Width), float(InContext.View.Height)});
+	auto Pass = MakeScreenTexturePreview(Input, Viewport, Mip,
+	                                     bDepth && InContext.View.DepthConvention == EDepthConvention::Standard);
+	Pass.Statistics = InContext.FullscreenStatistics;
+	AddFullscreenPass(InContext.Session, InContext.Graph, std::move(Pass), InContext.bDeferPreparation);
+}
+
+void FContactShadowFeature::EndFrame(FRenderFeatureContext& InContext)
+{
+	HierarchicalDepth.EndFrame();
+	InContext.Statistics.HierarchicalDepth = HierarchicalDepth.Statistics();
+	if (!bActive)
+	{
+		Mask = {};
+	}
+}
+
+void FContactShadowFeature::Reset()
+{
+	HierarchicalDepth = {};
+	Depth = {};
+	Source = {};
+	Mask = {};
+	bActive = false;
+}
+
+std::uint64_t FContactShadowFeature::ResourceBytes() const
+{
+	const auto* Texture = Mask.Texture ? Mask.Texture->GetColorTarget() : nullptr;
+	return HierarchicalDepth.Statistics().Bytes + (Texture ? std::uint64_t(Texture->Width) * Texture->Height : 0);
+}
+} // namespace
+
+std::unique_ptr<IRenderFeature> MakeContactShadowFeature()
+{
+	return std::make_unique<FContactShadowFeature>();
 }
 } // namespace Hyperion

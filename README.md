@@ -11,6 +11,7 @@ Hyperion 是一个 C++20 渲染实验框架，当前运行平台为 Windows x64 
 - 场景层级、相机和光源节点编辑、原生场景保存、BVH 视锥剔除、实例批处理和增量渲染准备。
 - 深色可停靠编辑器工作区，支持菜单打开场景、独立场景视口、镜头导航、对象层级和属性查看；GUI 与场景均通过引擎 Renderer/RHI 渲染。
 - Main / Render / RHI CPU 帧管线、独立 IO 线程和 oneTBB Worker 任务；反射配置、调试 GUI，以及可选 Tracy 和 RenderDoc 集成。
+- Viewer / Editor 共享静态插件宿主，支持启动依赖、统一生命周期、类型化服务、作用域事件和渲染阶段扩展；详见 [插件系统](docs/PluginSystem.md)。
 
 Vulkan/Metal 尚无运行时后端；SPIR-V/MSL 支持编译与反射。静态模型导入不支持动画、蒙皮、morph target 或压缩 glTF 扩展。具体边界见 [资产管线](docs/AssetPipeline.md) 和 [功能范围](docs/Roadmap.md)。
 

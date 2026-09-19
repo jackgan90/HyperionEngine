@@ -4,6 +4,8 @@
 
 源码以概念模块聚合，每个模块有自己的 `CMakeLists.txt`。公共头文件只从该模块的 `Public` 导出，实现和第三方 wrapper 留在 `Private`，没有全仓库共享的头文件搜索路径。
 
+新增模块或调整功能归属时，必须同时遵守 [插件系统的开发强制约束](PluginSystem.md#开发强制约束)：Runtime 提供可复用能力，插件持有功能与生命周期，应用入口负责组合，最小宿主不得吸收具体功能。
+
 ```text
 Source/
   Runtime/
@@ -14,7 +16,8 @@ Source/
     Reflection/    # 类型描述及 JSON 序列化 wrapper
     Serialization/ # 反射记录的原生二进制内存 Archive
     Config/        # 应用/实验配置，依赖 Reflection
-    Plugins/       # 逻辑插件注册、依赖和生命周期
+    Plugins/       # 静态规划、类型化服务、作用域事件和生命周期
+    Application/   # 仅 Tasks、Main 消息泵、帧时钟及退出控制
     Platform/      # 窗口、输入与 SDL wrapper
     AssetTypes/    # 轻量引用、头部、来源记录和 catalog
     Assets/        # 原生异步加载/保存、依赖解析、缓存和图片 wrapper
@@ -32,14 +35,17 @@ Source/
   Backends/
     D3D12/         # 独立的 D3D12 RHI provider
   Plugins/
+    ApplicationServices/ # assets/window/graphics/gui/contact-shadows 逻辑插件
+    Viewer/        # Viewer 输入、帧提交、输出与启动组合
+    Editor/        # 文档、历史、停靠面板与 viewport
     Triangle/      # 三角形实验
     DebugUI/       # 调试 UI 插件，委托通用 GuiRenderer 绘制
     ModelViewer/   # 异步静态模型显示与相机
     SceneViewer/   # 场景节点编辑、相机手势及空间剔除诊断
     RenderDoc/     # 可选抓帧服务的设备创建前生命周期
   Applications/
-    Editor/        # 可停靠工作区、场景打开、视口输入与应用组装
-    Viewer/        # 原生资产应用入口与模块组装
+    Editor/        # 选择原生后端，启动 Editor 插件宿主
+    Viewer/        # 选择原生后端，启动 Viewer 插件宿主
     AssetTool/     # 独立 import / inspect / validate / catalog / upgrade CLI
   Tests/           # 对应模块的单元测试及 Integration 验收
 ```

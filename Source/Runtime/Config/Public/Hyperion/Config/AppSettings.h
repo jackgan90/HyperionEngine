@@ -38,6 +38,7 @@ struct FAppSettings
 	double ClearGreen = 0.035;
 	double ClearBlue = 0.065;
 	std::vector<std::string> Plugins{"triangle", "debug-ui"};
+	std::vector<std::string> DisabledPlugins;
 };
 
 const FTypeDescriptor& SettingsType();

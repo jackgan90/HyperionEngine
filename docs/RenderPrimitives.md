@@ -63,7 +63,7 @@ Render 先冻结资源组就绪状态，过滤隐藏和未就绪 item，以局�
 
 兼容的 item 聚合到场景 pass，每个 view 的输出由独立的 `FRenderPassTargets` 声明，depth/stencil 的初始化来自显式 load action。depth 开关由各 draw 的 pipeline 控制；pass 只因 view/viewport、linear/sRGB 目标或显式用途边界分开，不能按 Model/primitive 数量创建。RHI 0 按真实反射布局打包并共享各 scope 的不可变常量 slice，沿用 RenderGraph 验证、并行录制、提交和错误取消。队列排序仅移动索引，保持 opaque/mask 等深次序与全场景透明顺序。
 
-场景插件实现 `IScenePlugin`：`Start/Update/Stop` 在 Main 执行，注册资源和 binding；`Update` 可生成 owned view/settings snapshot。ModelViewer 管理加载、相机与 `FModel`；Triangle 使用通用 geometry/material 描述和自己的 shader。Renderer 不识别它们的类型或 ID。非场景插件实现 `IRenderPlugin::Build`，在 Render 添加 GUI 等 pass；其 Main 生命周期自行 dispatch RHI 资源工作。
+场景插件实现 `IScenePlugin`：`Start/Update/Stop` 在 Main 执行，注册资源和 binding；`Update` 可生成 owned view/settings snapshot。ModelViewer 管理加载、相机与 `FModel`；Triangle 使用通用 geometry/material 描述和自己的 shader。Renderer 不识别它们的类型或 ID。非场景插件通过 IRenderFeature 注册 Render 阶段贡献，GUI 在 Main 通过作用域事件贡献控件，再由共享 GuiRenderer 提交 owned draw data；原 IRenderPlugin::Build 保留供直接调用的兼容接口。参见 [插件系统](PluginSystem.md)。
 
 未来 GPU instancing 需要在此基础上实现兼容性键、可见实例压缩、instance buffer 生命周期及 shader/RHI 支持。共享 VB/IB 目前仍提交普通 indexed draws，不宣称已经合批。骨骼、动画、LOD、粒子和通用离屏图需要独立扩展。
 

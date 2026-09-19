@@ -44,9 +44,11 @@ void CheckSettingsPersistence()
 	Settings.MainRenderLead = 2;
 	Settings.RenderRhiLead = 3;
 	Settings.Plugins = {"triangle"};
+	Settings.DisabledPlugins = {"debug-ui"};
 	Hyperion::SaveSettings("test-settings.json", Settings);
 	const auto Loaded = Hyperion::LoadSettings("test-settings.json");
 	HYP_CHECK(!Loaded.bReversedZ);
+	HYP_CHECK(Loaded.DisabledPlugins == Settings.DisabledPlugins);
 	HYP_CHECK(!Loaded.bClusteredLighting);
 	HYP_CHECK(Loaded.MainRenderLead == 2 && Loaded.RenderRhiLead == 3);
 	HYP_CHECK(Loaded.Width == 960 && Loaded.TriangleScale == 0.6 && Loaded.Plugins == Settings.Plugins);

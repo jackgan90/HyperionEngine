@@ -9,6 +9,7 @@ class FRenderDocPlugin final : public FPlugin
 public:
 	explicit FRenderDocPlugin(FFrameCaptureSettings InSettings);
 	void Start() override;
+	void Start(FPluginContext& InContext) override;
 	void Stop() noexcept override;
 	FFrameCapture& Capture();
 

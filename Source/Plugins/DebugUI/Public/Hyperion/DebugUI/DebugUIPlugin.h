@@ -1,6 +1,6 @@
 #pragma once
-#include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Gui/Gui.h"
+#include "Hyperion/GuiRenderer/Diagnostics.h"
 #include "Hyperion/Renderer/FramePipeline.h"
 #include "Hyperion/Renderer/RenderPlugin.h"
 #include <array>
@@ -8,53 +8,7 @@
 
 namespace Hyperion
 {
-struct FFrameCaptureMetrics
-{
-	bool bCompiled = false;
-	bool bAvailable = false;
-	bool bBusy = false;
-	std::string Status = "RenderDoc support is not compiled in";
-	std::string LastCapture;
-	std::string OpenStatus;
-};
-
-struct FDebugMetrics
-{
-	FDeviceStats Device;
-	FFramePipelineProgress FramePipeline;
-	FFramePipelineLimits FrameLimits;
-	std::uint64_t ResultFrame{};
-	std::size_t LegacyDisplayItems{};
-	std::uint64_t SceneTargetBytes{};
-	std::uint32_t HierarchicalDepthConsumers{};
-	std::uint32_t HierarchicalDepthDispatches{};
-	std::uint64_t HierarchicalDepthBytes{};
-	bool bContactShadows{};
-	std::vector<FExecutionStats> Threads;
-	std::vector<float> FrameMilliseconds;
-	std::string AssetStatus;
-	bool bSceneViewer{};
-	bool bActiveReversedZ{};
-	FFrameCaptureMetrics FrameCapture;
-	FProfileStatus Profiling;
-};
-
-struct FDebugActions
-{
-	bool bSave{};
-	bool bCapture{};
-	bool bCaptureRdc{};
-	bool bOpenRdc{};
-	std::optional<std::uint32_t> ProfilingMask;
-	std::optional<bool> Sampling;
-	// Logical pixel bounds allow normalized input acceptance without OS input injection.
-	FVec4 CaptureRdcBounds;
-	FVec4 OpenRdcBounds;
-	FVec4 AutoOpenRdcBounds;
-	FVec4 ContactShadowBounds;
-	std::array<FVec4, 4> ProfilingBounds;
-};
-
+class FGuiRenderer;
 FDebugActions DrawFrameCaptureControls(FGui& InGui, FAppSettings& InSettings, const FFrameCaptureMetrics& InMetrics);
 FDebugActions DrawProfilingControls(FGui& InGui, const FProfileStatus& InStatus);
 
@@ -65,8 +19,10 @@ class FDebugUiPlugin final : public IRenderPlugin
 {
 public:
 	FDebugUiPlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont);
+	explicit FDebugUiPlugin(FGuiRenderer& InRenderer);
 	~FDebugUiPlugin() override;
 	void Start() override;
+	void Start(FPluginContext& InContext) override;
 	void Stop() noexcept override;
 	void Prepare(const FGuiDrawData& InData);
 	void Build(FRenderGraph& InGraph, const FRenderFrame& InFrame) override;
@@ -79,4 +35,6 @@ private:
 
 void RegisterDebugUiPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FShaderCompiler& InCompiler,
                            FTaskSystem& InTasks, const FImage& InFont);
+void RegisterDebugUiPlugin(FPluginRegistry& InRegistry);
+
 } // namespace Hyperion

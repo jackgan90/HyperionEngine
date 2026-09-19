@@ -14,13 +14,19 @@ public:
 	                   std::filesystem::path InPath);
 	~FModelViewerPlugin() override;
 	void Start() override;
-	FSceneInstance& GetSceneInstance();
+
+	bool HasScene() const override
+	{
+		return true;
+	}
+
+	FSceneInstance& GetSceneInstance() override;
 	void Update(FRenderFrame& InFrame) override;
 	void Stop() noexcept override;
-	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured);
-	const std::string& Status() const;
-	const std::string& Error() const;
-	bool Ready() const;
+	void Input(std::span<const FInputEvent> InEvents, bool bInMouseCaptured, bool bInKeyboardCaptured) override;
+	const std::string& Status() const override;
+	const std::string& Error() const override;
+	bool Ready() const override;
 
 private:
 	struct FImpl;
@@ -29,4 +35,5 @@ private:
 
 void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, FTaskSystem& InTasks,
                                FAssetService& InAssets, const std::filesystem::path& InPath);
+void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, const std::filesystem::path& InPath);
 } // namespace Hyperion

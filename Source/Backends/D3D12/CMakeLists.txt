@@ -11,6 +11,7 @@ if(BUILD_TESTING)
   target_include_directories(d3d12_frame_failure_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
   target_compile_definitions(d3d12_frame_failure_tests PRIVATE HYP_TEST_D3D12_PRESENT=1 HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   target_link_libraries(d3d12_frame_failure_tests PRIVATE hyperion_rhi_d3d12 hyperion_render hyperion_core hyperion_tasks hyperion_platform hyp_d3d12ma)
+  target_link_libraries(d3d12_frame_failure_tests PRIVATE hyperion_application_services)
   set_target_properties(d3d12_frame_failure_tests PROPERTIES FOLDER "Hyperion/Tests"
     VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 endif()

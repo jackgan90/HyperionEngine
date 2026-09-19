@@ -84,7 +84,7 @@ Graph 在 BeginFrame 前展开并验证 deferred entries，正确翻译展开后
 
 此外，本轮移除闲置维护后暴露出旧 GPU timing capture 的边界问题：上一个 capture 或 capture 开始前提交的帧，可能在稍后完成时进入当前 capture。现在给 submission 标注 capture epoch，仅把当前 epoch 的完成结果加入 capture，同时仍更新一般 GPU 统计。该修复没有新增 wait/flush，并有受控 queue gate 的确定性测试。
 
-相关实现：[RenderGraphPreparation.cpp](../Source/Runtime/Renderer/Private/RenderGraphPreparation.cpp)、[RenderGraphExecution.cpp](../Source/Runtime/Renderer/Private/RenderGraphExecution.cpp)、[ViewerFrame.cpp](../Source/Applications/Viewer/Private/ViewerFrame.cpp)。
+相关实现：[RenderGraphPreparation.cpp](../Source/Runtime/Renderer/Private/RenderGraphPreparation.cpp)、[RenderGraphExecution.cpp](../Source/Runtime/Renderer/Private/RenderGraphExecution.cpp)、[ViewerFrame.cpp](../Source/Plugins/Viewer/Private/ViewerFrame.cpp)。
 
 ## 测量方法与完整结果
 

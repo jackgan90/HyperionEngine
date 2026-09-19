@@ -44,7 +44,8 @@ initial.write_text(json.dumps(base), encoding="utf-8")
 run("--config", initial, "--capture", work / "disabled.png", "--verify-clear")
 base["properties"]["plugins"] = ["does-not-exist"]
 initial.write_text(json.dumps(base), encoding="utf-8")
-run("--config", initial, fail=True)
+output = run("--config", initial)
+assert "Missing plugin: does-not-exist" in output, output
 run("--config", saved, "--backend", "vulkan", fail="RHI backend is not registered: vulkan")
 run("--config", saved, "--backend", "typo", fail="Unknown RHI backend")
 base["properties"].update(plugins=[], rhi_backend="metal")

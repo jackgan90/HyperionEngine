@@ -16,6 +16,12 @@ void FRenderDocPlugin::Stop() noexcept
 	Service.Shutdown();
 }
 
+void FRenderDocPlugin::Start(FPluginContext& InContext)
+{
+	Start();
+	InContext.Provide(Service);
+}
+
 FFrameCapture& FRenderDocPlugin::Capture()
 {
 	return Service;
@@ -23,11 +29,14 @@ FFrameCapture& FRenderDocPlugin::Capture()
 
 void RegisterRenderDocPlugin(FPluginRegistry& InRegistry, FFrameCaptureSettings InSettings)
 {
-	InRegistry.Add({"renderdoc",
-	                {},
-	                [Settings = std::move(InSettings)]
-	                {
-		                return std::make_unique<FRenderDocPlugin>(Settings);
-	                }});
+	FPluginDescriptor Descriptor{"renderdoc",
+	                             {},
+	                             [Settings = std::move(InSettings)]
+	                             {
+		                             return std::make_unique<FRenderDocPlugin>(Settings);
+	                             }};
+	Descriptor.Before = {"window", "graphics"};
+	Descriptor.Provides = {typeid(FFrameCapture)};
+	InRegistry.Add(std::move(Descriptor));
 }
 } // namespace Hyperion

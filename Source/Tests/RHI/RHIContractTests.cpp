@@ -1,3 +1,5 @@
+#include "Hyperion/Application/ApplicationHost.h"
+#include "Hyperion/ApplicationServices/ApplicationServices.h"
 #include "Hyperion/DebugUI/DebugUIPlugin.h"
 #include "Hyperion/RHI/RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
@@ -35,6 +37,14 @@ class FTestSwapchain final : public IRHISwapchain
 public:
 	explicit FTestSwapchain(const FRHICapabilities& InCapabilities) : Capabilities(InCapabilities)
 	{
+	}
+
+	~FTestSwapchain() override
+	{
+		if (OnDestroy)
+		{
+			OnDestroy();
+		}
 	}
 
 	const FRHICapabilities& GetCapabilities() const noexcept override
@@ -99,6 +109,7 @@ public:
 	FRHICapabilities Capabilities;
 	std::function<void(std::uint32_t)> OnRecord;
 	std::function<void()> OnCancel;
+	std::function<void()> OnDestroy;
 	bool bActive{};
 	bool bFailEnd{};
 	std::uint32_t Begun{};
@@ -111,12 +122,21 @@ public:
 class FTestDevice final : public IRHIDevice
 {
 public:
+	~FTestDevice() override
+	{
+		if (OnDestroy)
+		{
+			OnDestroy();
+		}
+	}
+
 	FTestDevice()
 	{
 		Capabilities.Backend = ERHIBackend::Vulkan; // Test identity only, no claim of a Vulkan implementation.
 		Capabilities.ShaderFormat = EShaderFormat::Spirv;
 		Capabilities.MaxRecordingContexts = 2;
 		Capabilities.Features[static_cast<std::size_t>(ERHIFeature::Graphics)] = {true, true};
+		Capabilities.Features[static_cast<std::size_t>(ERHIFeature::TextureSampling)] = {true, true};
 		Capabilities.Features[static_cast<std::size_t>(ERHIFeature::Readback)] = {true, true};
 		Capabilities.Features[static_cast<std::size_t>(ERHIFeature::RayTracing)] = {true, false};
 	}
@@ -166,6 +186,7 @@ public:
 	}
 
 	bool bFailNextIdle{};
+	std::function<void()> OnDestroy;
 
 private:
 	FRHICapabilities Capabilities;
@@ -400,12 +421,77 @@ void CheckDeferredGuiOwner(bool bInDestroy)
 	    });
 	HYP_CHECK(Swapchain.Begun == 0);
 }
+
+void CheckGraphicsShutdownWaitFailure()
+{
+	std::vector<std::pair<char, std::thread::id>> Destroyed;
+	Destroyed.reserve(2);
+	std::unique_ptr<FIOService> IO;
+	FApplicationHost Host(1, 1);
+	auto& Tasks = Host.GetTasks();
+	IO = std::make_unique<FIOService>(Tasks, std::make_shared<FMemoryFileSystem>());
+	Host.GetServices().AddExternal(*IO);
+	FPluginRegistry Registry;
+	Registry.Add({"assets",
+	              {},
+	              []
+	              {
+		              return std::make_unique<FPlugin>();
+	              }});
+	RegisterWindowServices(Registry, {"Graphics wait failure", {64, 64}, true});
+	RegisterGraphicsServices(Registry, {[](FRHIBackendRegistry& InRegistry)
+	                                    {
+		                                    InRegistry.Register(std::make_unique<FTestBackend>());
+	                                    },
+	                                    "vulkan", "shutdown-shader-cache"});
+	Host.Start(Registry, {{"graphics"}});
+	auto& Device = dynamic_cast<FTestDevice&>(Host.GetServices().Require<IRHIDevice>());
+	auto& Swapchain = dynamic_cast<FTestSwapchain&>(Host.GetServices().Require<IRHISwapchain>());
+	Device.OnDestroy = [&]
+	{
+		Destroyed.emplace_back('d', std::this_thread::get_id());
+	};
+	Swapchain.OnDestroy = [&]
+	{
+		Destroyed.emplace_back('s', std::this_thread::get_id());
+	};
+	// Close the session first so the injected failure belongs to the graphics owner's final wait.
+	Host.GetServices().Require<FRenderSession>().Close();
+	std::thread::id RhiThread;
+	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+	                          [&]
+	                          {
+		                          RhiThread = std::this_thread::get_id();
+		                          Device.bFailNextIdle = true;
+	                          }));
+	Host.Stop();
+	bool bReported{};
+	try
+	{
+		Host.GetServices().Require<FApplicationControl>().RethrowFailure();
+	}
+	catch (const std::runtime_error& Failure)
+	{
+		bReported = std::string(Failure.what()) == "injected one-time WaitIdle failure";
+	}
+	HYP_CHECK(bReported && Destroyed.size() == 2);
+	HYP_CHECK(Destroyed[0].first == 's' && Destroyed[1].first == 'd');
+	HYP_CHECK(Destroyed[0].second == RhiThread && Destroyed[1].second == RhiThread);
+	Host.Stop();
+	HYP_CHECK(Destroyed.size() == 2);
+}
 } // namespace
 
-int main()
+int main(int InArgc, char** InArgv)
 {
 	try
 	{
+		if (InArgc == 2 && std::string_view(InArgv[1]) == "--graphics-shutdown-wait")
+		{
+			CheckGraphicsShutdownWaitFailure();
+			std::cout << "Graphics wait failure releases swapchain then device on RHI 0\n";
+			return 0;
+		}
 		static_assert(std::is_abstract_v<IRHIDevice> && std::is_abstract_v<IRHISwapchain>);
 		static_assert(std::has_virtual_destructor_v<IRHIDevice> && std::has_virtual_destructor_v<IRHIResource>);
 		HYP_CHECK(ParseRHIBackend("d3d12") == ERHIBackend::D3D12);

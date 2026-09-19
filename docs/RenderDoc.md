@@ -39,7 +39,7 @@
 
 面板操作：
 
-- `RenderDoc plugin (restart)` 修改下次启动的插件列表，点击 `Save experiment` 保存后重启生效。`--renderdoc` 会强制本次启用，关闭时也要移除该启动参数。
+- `RenderDoc plugin (restart)` 修改下次启动的插件列表，点击 `Save experiment` 保存后重启生效。`--renderdoc` 会请求本次启用；`disabled_plugins` 或 `--disable-plugin renderdoc` 优先于该请求。
 - `Capture RDC` 请求一个完整渲染帧；正在等待/捕获或运行库不可用时禁用。
 - `Open last capture` 打开最近成功抓取的文件。删除文件后会明确报错。
 - `Open automatically after capture` 即时切换自动打开，默认关闭；保存实验后持久化。
@@ -56,7 +56,7 @@
 }
 ```
 
-相对输出目录基于工作目录；Visual Studio 调试工作目录和文档命令均为仓库根目录。默认实验不启用运行库。未编译插件却请求 `renderdoc` 会给出配置错误；已编译但 DLL 不可用时 Viewer 保持运行，面板说明原因。
+相对输出目录基于工作目录；Visual Studio 调试工作目录和文档命令均为仓库根目录。默认实验不启用运行库。未编译插件却请求 `renderdoc` 会记录缺失诊断并继续运行；已编译但 DLL 不可用时 Viewer 保持运行，面板说明原因。
 
 ## 引擎接口和线程契约
 

@@ -66,10 +66,11 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	const bool bNoDirectional = bClustered && Direct->Words == FMaterialValue::Float(FVec3{}).Words;
 	FFullscreenPassDesc Result;
 	Result.Material = bClustered ? (bNoDirectional ? ClusterOnly : Clustered) : Material;
-	if (LastStatistics.bContactShadows && !bNoDirectional)
+	if (FeatureResources.DirectionalVisibility.Texture && !bNoDirectional)
 	{
 		Result.Material = bClustered ? ClusterContact : Contact;
-		Result.Parameters.push_back({"Pixel:ContactVisibility", FMaterialValue::FromTexture(ContactMask)});
+		Result.Parameters.push_back(
+		    {"Pixel:ContactVisibility", FMaterialValue::FromTexture(FeatureResources.DirectionalVisibility.Texture)});
 		FMaterialSampler Sampler;
 		Sampler.U = Sampler.V = Sampler.W = EMaterialAddressMode::Clamp;
 		Sampler.bMinLinear = false;
@@ -91,9 +92,9 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	Result.Viewport = Viewport(InMain);
 	Result.Targets =
 	    ColorTargets("Deferred/Lighting", InMain.Viewport ? EAttachmentLoad::Load : EAttachmentLoad::Clear, InClear);
-	if (LastStatistics.bContactShadows && !bNoDirectional)
+	if (FeatureResources.DirectionalVisibility.Texture && !bNoDirectional)
 	{
-		Result.Targets.Reads.push_back({ERenderTargetKind::Texture, ContactMask, ContactLifetime, false});
+		Result.Targets.Reads.push_back(FeatureResources.DirectionalVisibility);
 	}
 	if (bClustered)
 	{

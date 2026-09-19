@@ -191,10 +191,15 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 
 struct FDebugUiPlugin::FImpl
 {
-	FGuiRenderer Renderer;
+	std::unique_ptr<FGuiRenderer> Owned;
+	FGuiRenderer& Renderer;
 
 	FImpl(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FTaskSystem& InTasks, FImage InFont)
-	    : Renderer(InDevice, InCompiler, InTasks, std::move(InFont))
+	    : Owned(std::make_unique<FGuiRenderer>(InDevice, InCompiler, InTasks, std::move(InFont))), Renderer(*Owned)
+	{
+	}
+
+	explicit FImpl(FGuiRenderer& InRenderer) : Renderer(InRenderer)
 	{
 	}
 };
@@ -206,14 +211,34 @@ FDebugUiPlugin::FDebugUiPlugin(IRHIDevice& InDevice, FShaderCompiler& InCompiler
 
 FDebugUiPlugin::~FDebugUiPlugin() = default;
 
+FDebugUiPlugin::FDebugUiPlugin(FGuiRenderer& InRenderer) : Impl(std::make_shared<FImpl>(InRenderer))
+{
+}
+
+void FDebugUiPlugin::Start(FPluginContext& InContext)
+{
+	Start();
+	InContext.Subscribe<FDebugPanelEvent>(
+	    [](const FDebugPanelEvent& InEvent)
+	    {
+		    InEvent.Actions = DrawDebugPanel(InEvent.Gui, InEvent.Settings, InEvent.Metrics, InEvent.LogicalSize);
+	    });
+}
+
 void FDebugUiPlugin::Start()
 {
-	Impl->Renderer.Start();
+	if (Impl->Owned)
+	{
+		Impl->Renderer.Start();
+	}
 }
 
 void FDebugUiPlugin::Stop() noexcept
 {
-	Impl->Renderer.Stop();
+	if (Impl->Owned)
+	{
+		Impl->Renderer.Stop();
+	}
 }
 
 void FDebugUiPlugin::Prepare(const FGuiDrawData& InData)
@@ -240,5 +265,18 @@ void RegisterDebugUiPlugin(FPluginRegistry& InRegistry, IRHIDevice& InDevice, FS
 	                {
 		                return std::make_unique<FDebugUiPlugin>(InDevice, InCompiler, InTasks, InFont);
 	                }});
+}
+
+void RegisterDebugUiPlugin(FPluginRegistry& InRegistry)
+{
+	FPluginDescriptor Descriptor;
+	Descriptor.Id = "debug-ui";
+	Descriptor.Dependencies = {"gui"};
+	Descriptor.Requires = {typeid(FGuiRenderer)};
+	Descriptor.CreateWithContext = [](FPluginContext& InContext)
+	{
+		return std::make_unique<FDebugUiPlugin>(InContext.Require<FGuiRenderer>());
+	};
+	InRegistry.Add(std::move(Descriptor));
 }
 } // namespace Hyperion

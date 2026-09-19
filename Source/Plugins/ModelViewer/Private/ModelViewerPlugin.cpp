@@ -214,11 +214,29 @@ bool FModelViewerPlugin::Ready() const
 void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, FTaskSystem& InTasks,
                                FAssetService& InAssets, const std::filesystem::path& InPath)
 {
-	InRegistry.Add({"model-viewer",
-	                {},
-	                [&InSession, &InTasks, &InAssets, Path = InPath]
-	                {
-		                return std::make_unique<FModelViewerPlugin>(InSession, InTasks, InAssets, Path);
-	                }});
+	FPluginDescriptor Descriptor{"model-viewer",
+	                             {},
+	                             [&InSession, &InTasks, &InAssets, Path = InPath]
+	                             {
+		                             return std::make_unique<FModelViewerPlugin>(InSession, InTasks, InAssets, Path);
+	                             }};
+	Descriptor.Provides = {typeid(IScenePlugin)};
+	InRegistry.Add(std::move(Descriptor));
+}
+
+void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, const std::filesystem::path& InPath)
+{
+	FPluginDescriptor Descriptor;
+	Descriptor.Id = "model-viewer";
+	Descriptor.Dependencies = {"graphics", "assets"};
+	Descriptor.Provides = {typeid(IScenePlugin)};
+	Descriptor.Requires = {typeid(FRenderSession), typeid(FTaskSystem), typeid(FAssetService)};
+	Descriptor.CreateWithContext = [Path = InPath](FPluginContext& InContext)
+	{
+		return std::make_unique<FModelViewerPlugin>(InContext.Require<FRenderSession>(),
+		                                            InContext.Require<FTaskSystem>(),
+		                                            InContext.Require<FAssetService>(), Path);
+	};
+	InRegistry.Add(std::move(Descriptor));
 }
 } // namespace Hyperion
