@@ -13,8 +13,8 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterWindowServices(Registry, {"Hyperion Editor", {1600, 960}, Options.bHidden, true});
 	RegisterGraphicsServices(
 	    Registry, {std::move(InBackends), "d3d12", std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache", true});
-	const bool bPersistGui = !Options.bExercise && Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
-	                         Options.ExerciseViews.empty();
+	const bool bPersistGui = !Options.bExercise && !Options.bExerciseGizmo && Options.Benchmark.empty() &&
+	                         Options.ExerciseDocument.empty() && Options.ExerciseViews.empty();
 	RegisterGuiServices(
 	    Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15, bPersistGui ? Options.Layout : std::filesystem::path{},
 	               bPersistGui ? Options.UiPreferences : std::filesystem::path{}, Options.ApplicationScale});
@@ -58,7 +58,8 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 			}
 		}
 		if (!Options.Capture.empty() || !Options.Report.empty() || !Options.Benchmark.empty() ||
-		    !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || Options.bExercise)
+		    !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || Options.bExercise ||
+		    Options.bExerciseGizmo)
 		{
 			throw std::runtime_error("Requested Editor output is unavailable: editor plugin did not start");
 		}

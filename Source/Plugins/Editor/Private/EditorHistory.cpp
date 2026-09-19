@@ -5,6 +5,7 @@ namespace Hyperion
 {
 void FEditorPlugin::FinishInspectorEdit()
 {
+	FinishGizmo();
 	if (Gui && (InspectorInteraction || InspectorTransaction))
 	{
 		Gui->FinishEditing();

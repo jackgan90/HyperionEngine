@@ -5,6 +5,8 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorDocument.cpp
   Private/EditorDocumentAcceptance.cpp
   Private/EditorFrame.cpp
+  Private/EditorGizmo.cpp
+  Private/EditorGizmoAcceptance.cpp
   Private/EditorHistory.cpp
   Private/EditorHost.cpp
   Private/EditorInspector.cpp

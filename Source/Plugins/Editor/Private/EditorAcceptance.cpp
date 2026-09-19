@@ -304,6 +304,7 @@ void FEditorPlugin::WriteReport()
 	       << "\"open_count\": " << OpenCount << ",\n"
 	       << "\"document_verified\": " << bDocumentVerified << ",\n"
 	       << "\"views_verified\": " << bViewsVerified << ",\n"
+	       << "\"gizmo_verified\": " << bGizmoVerified << ",\n"
 	       << "\"save_ms\": " << LastSaveMilliseconds << ",\n"
 	       << "\"document_dirty\": " << IsDirty() << ",\n"
 	       << "\"ready_frames\": " << ReadyFrames << ",\n"

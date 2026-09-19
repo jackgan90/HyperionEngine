@@ -29,6 +29,11 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 			Result.bExercise = true;
 			continue;
 		}
+		if (Argument == "--exercise-gizmo")
+		{
+			Result.bExerciseGizmo = true;
+			continue;
+		}
 		if (Argument == "--benchmark-camera")
 		{
 			Result.bBenchmarkCamera = true;

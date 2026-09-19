@@ -38,7 +38,7 @@ The editor SHALL reuse SceneCameraController in fly mode: WASDQE and arrow/Page 
 
 #### Scenario: Adjust and display translation speed
 - **WHEN** the right mouse button is held in the viewport and the wheel scrolls up or down
-- **THEN** translation speed increases or decreases within positive finite bounds without changing the camera pose, lens or focus distance; subsequent held-key movement uses that speed and the viewport toolbar displays it in scene units per second
+- **THEN** translation speed increases or decreases within positive finite bounds without changing the camera pose, lens or focus distance; subsequent held-key movement uses that speed and viewport options display it in scene units per second
 
 #### Scenario: Dolly without changing translation speed
 - **WHEN** the wheel scrolls without the right mouse button held
@@ -72,3 +72,14 @@ Editor viewport navigation SHALL retain the established fly input and speed beha
 #### Scenario: Browse and save
 - **WHEN** the user navigates the editor viewport and saves without editing scene content
 - **THEN** scene camera transforms and settings remain unchanged
+
+### Requirement: Compact viewport transform toolbar
+Editor SHALL provide a single-row viewport toolbar with theme-consistent Position, Rotation and Scale icons, an active-mode indication and hover descriptions. Viewport options SHALL retain camera speed, exposure and view actions. A view-source selector SHALL use available row space and remain accessible through options when the row is too narrow.
+
+#### Scenario: Choose a transform operation
+- **WHEN** the user hovers or clicks a PRS toolbar icon
+- **THEN** hovering describes its operation and clicking selects the corresponding manipulation mode with an active visual state
+
+#### Scenario: Narrow the viewport
+- **WHEN** the viewport cannot fit the inline view-source selector
+- **THEN** the toolbar stays on one row and the view-source selector remains available in viewport options

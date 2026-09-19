@@ -1,4 +1,7 @@
 #include "EditorApplication.h"
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
 
 namespace Hyperion
 {
@@ -87,6 +90,27 @@ void FEditorPlugin::CreateCameraFromView()
 
 void FEditorPlugin::DrawViewControls()
 {
+	if (Gui->IconButton("##ViewOptions", EGuiIcon::Options, "Viewport options - camera, exposure and view actions",
+	                    bViewOptionsOpen))
+	{
+		Gui->OpenPopup("ViewportOptions");
+	}
+	InspectionBounds["view/options"] = Gui->LastItemBounds();
+	Gui->SameLine();
+	const float Width = Gui->AvailableWidth();
+	if (Width >= 60)
+	{
+		DrawViewSelector(std::min(180.f, Width));
+	}
+	else
+	{
+		Gui->Text("");
+	}
+	DrawViewOptions();
+}
+
+void FEditorPlugin::DrawViewSelector(float InWidth)
+{
 	try
 	{
 		std::vector<std::string> Labels{"Editor view"};
@@ -111,17 +135,44 @@ void FEditorPlugin::DrawViewControls()
 			Labels.push_back("Unavailable camera");
 			Cameras.push_back(PreviewCamera);
 		}
-		Gui->SetNextItemWidth(260);
-		if (Gui->Combo("View source", Labels, Index))
+		Gui->SetNextItemWidth(InWidth);
+		if (Gui->Combo("##ViewSource", Labels, Index))
 		{
 			SetPreviewCamera(Cameras.at(Index));
 		}
+		Gui->Tooltip(PreviewCamera ? "View source - camera preview" : "View source - editor perspective");
+	}
+	catch (const std::exception& Failure)
+	{
+		Error = Failure.what();
+	}
+}
+
+void FEditorPlugin::DrawViewOptions()
+{
+	bViewOptionsOpen = Gui->BeginPopup("ViewportOptions");
+	if (!bViewOptionsOpen)
+	{
+		return;
+	}
+	Gui->Text("Perspective / Lit");
+	Gui->Text("View source");
+	DrawViewSelector(240);
+	std::ostringstream Speed;
+	Speed << "Camera speed: " << std::fixed << std::setprecision(3) << Camera.GetMovementSpeed(ViewCamera) << " u/s";
+	Gui->Text(Speed.str());
+	Gui->Tooltip("Hold right mouse and scroll to adjust movement speed");
+	Gui->SetNextItemWidth(180);
+	Gui->Slider("Exposure", Exposure, .1f, 8);
+	Gui->Separator();
+	try
+	{
 		if (PreviewCamera)
 		{
-			Gui->SameLineIfFits("Return to editor view");
 			if (Gui->Button("Return to editor view"))
 			{
 				SetPreviewCamera({});
+				Gui->ClosePopup();
 			}
 			InspectionBounds["view/return"] = Gui->LastItemBounds();
 			Gui->TextWrapped(IsPreviewAvailable()
@@ -130,16 +181,16 @@ void FEditorPlugin::DrawViewControls()
 		}
 		else
 		{
-			Gui->SameLineIfFits("Set initial view");
 			if (Gui->Button("Set initial view", bViewportCameraInitialized))
 			{
 				SetInitialView();
+				Gui->ClosePopup();
 			}
 			InspectionBounds["view/initial"] = Gui->LastItemBounds();
-			Gui->SameLineIfFits("Create camera from view");
 			if (Gui->Button("Create camera from view", bViewportCameraInitialized))
 			{
 				CreateCameraFromView();
+				Gui->ClosePopup();
 			}
 			InspectionBounds["view/create"] = Gui->LastItemBounds();
 		}
@@ -148,6 +199,7 @@ void FEditorPlugin::DrawViewControls()
 	{
 		Error = Failure.what();
 	}
+	Gui->EndPopup();
 }
 
 void FEditorPlugin::DrawCameraActions(FSceneHandle InHandle)

@@ -6,6 +6,7 @@
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
+#include "Hyperion/Renderer/TransformGizmo.h"
 
 namespace Hyperion
 {
@@ -30,6 +31,7 @@ struct FEditorOptions
 	bool bKernelOnly{};
 	std::vector<std::string> DisabledPlugins;
 	bool bExercise{};
+	bool bExerciseGizmo{};
 };
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
@@ -59,7 +61,15 @@ private:
 	void DrawDetails();
 	void DrawSceneBrowser();
 	void DrawOpenDialog();
-	void DrawViewport();
+	void DrawViewport(float InDelta, std::span<const FInputEvent> InEvents);
+	void DrawGizmoToolbar();
+	void DrawGizmo();
+	void DrawGizmoOverlay();
+	void UpdateGizmoDrag(const FGuiPointerState& InPointer);
+	void FinishGizmo(bool bInCancel = false);
+	void ExerciseGizmoInput(std::vector<FInputEvent>& InEvents);
+	void CheckGizmoHistory(unsigned InPhase);
+	void ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 InEnd, std::vector<FInputEvent>& InEvents);
 	std::string StatusText() const;
 	FGuiDrawData DrawGui(float InDelta, std::span<const FInputEvent> InEvents);
 	void RouteCamera(float InDelta, std::span<const FInputEvent> InEvents);
@@ -86,6 +96,8 @@ private:
 	void ResetDocument();
 	void InitializeViewportCamera();
 	void DrawViewControls();
+	void DrawViewSelector(float InWidth);
+	void DrawViewOptions();
 	void DrawCameraActions(FSceneHandle InHandle);
 	void SetPreviewCamera(std::optional<FSceneHandle> InHandle);
 	bool IsPreviewAvailable() const;
@@ -132,9 +144,30 @@ private:
 	FSceneCameraView ViewCamera;
 	std::optional<FSceneHandle> PreviewCamera;
 	bool bViewportCameraInitialized{};
+	bool bViewOptionsOpen{};
 	FRenderTargetSource ViewportTarget;
 	FSize ViewportSize;
 	FGuiImageRegion ViewportRegion;
+	FTransformGizmo Gizmo;
+	ETransformGizmoMode GizmoMode = ETransformGizmoMode::Position;
+
+	struct FGizmoEdit
+	{
+		FSceneHandle Handle;
+		FMat4 Initial;
+		FMat4 Preview;
+		std::uint64_t Revision{};
+		FVec4 Bounds;
+	};
+
+	std::optional<FGizmoEdit> GizmoEdit;
+	bool bGizmoUsedMouse{};
+	std::array<FVec4, 3> GizmoButtonBounds;
+	std::uint32_t GizmoExerciseStep{};
+	FMat4 GizmoExerciseBefore;
+	FMat4 GizmoExerciseAfter;
+	FSceneCameraView GizmoExerciseCamera;
+	bool bGizmoVerified{};
 	FForwardPipelineStatistics RenderStats;
 	FDeviceStats DeviceStats;
 	std::vector<std::string> ScenePaths;

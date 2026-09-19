@@ -1,5 +1,6 @@
 #include "GuiInternal.h"
 #include <algorithm>
+#include <imgui_internal.h>
 
 namespace Hyperion
 {
@@ -188,6 +189,11 @@ void FGui::Property(const char* InLabel, const std::string& InValue)
 FGuiImageRegion FGui::Image(std::uint64_t InTextureId)
 {
 	Impl->Select();
+	const auto CaptureId = ImGui::GetID("##ImageOverlayPointer");
+	if (Impl->ImagePointerCapture == CaptureId)
+	{
+		ImGui::KeepAliveID(CaptureId);
+	}
 	const auto Available = ImGui::GetContentRegionAvail();
 	ImGui::Image(ImTextureID(InTextureId), {std::max(1.f, Available.x), std::max(1.f, Available.y)});
 	const auto Minimum = ImGui::GetItemRectMin();
@@ -197,11 +203,73 @@ FGuiImageRegion FGui::Image(std::uint64_t InTextureId)
 	{
 		ImGui::SetWindowFocus();
 	}
-	const bool bFocused = ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() &&
-	                      !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+	const bool bFocused =
+	    ImGui::IsWindowFocused() &&
+	    (!ImGui::IsAnyItemActive() || (Impl->ImagePointerCapture == CaptureId && ImGui::GetActiveID() == CaptureId)) &&
+	    !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 	ImGui::GetWindowDrawList()->AddRect(Minimum, Maximum,
 	                                    bFocused ? IM_COL32(206, 153, 50, 255) : IM_COL32(45, 45, 45, 255));
 	return {{Minimum.x, Minimum.y, Maximum.x, Maximum.y}, bHovered, bFocused};
+}
+
+FGuiPointerState FGui::PointerState() const
+{
+	Impl->Select();
+	const auto Position = ImGui::GetMousePos();
+	return {{Position.x, Position.y},
+	        ImGui::IsMouseClicked(0),
+	        ImGui::IsMouseDown(0),
+	        ImGui::IsMouseReleased(0),
+	        ImGui::IsKeyPressed(ImGuiKey_Escape),
+	        ImGui::IsMouseDown(1),
+	        ImGui::IsMousePosValid(&Position)};
+}
+
+void FGui::CaptureImagePointer(bool bInCapture)
+{
+	Impl->Select();
+	if (bInCapture)
+	{
+		Impl->ImagePointerCapture = ImGui::GetID("##ImageOverlayPointer");
+		ImGui::SetActiveID(Impl->ImagePointerCapture, ImGui::GetCurrentWindow());
+		ImGui::KeepAliveID(Impl->ImagePointerCapture);
+	}
+	else
+	{
+		if (Impl->ImagePointerCapture && ImGui::GetActiveID() == Impl->ImagePointerCapture)
+		{
+			ImGui::ClearActiveID();
+		}
+		Impl->ImagePointerCapture = 0;
+	}
+}
+
+void FGui::DrawImageOverlay(FVec4 InClip, std::span<const FVec2> InPoints, FVec4 InColor, float InThickness,
+                            bool bInFilled)
+{
+	Impl->Select();
+	if (InPoints.size() < 2)
+	{
+		return;
+	}
+	std::vector<ImVec2> Points;
+	Points.reserve(InPoints.size());
+	for (const auto Point : InPoints)
+	{
+		Points.emplace_back(Point.X, Point.Y);
+	}
+	auto* Draw = ImGui::GetWindowDrawList();
+	Draw->PushClipRect({InClip.X, InClip.Y}, {InClip.Z, InClip.W}, true);
+	const auto Color = ImGui::ColorConvertFloat4ToU32({InColor.X, InColor.Y, InColor.Z, InColor.W});
+	if (bInFilled && Points.size() >= 3)
+	{
+		Draw->AddConvexPolyFilled(Points.data(), static_cast<int>(Points.size()), Color);
+	}
+	else
+	{
+		Draw->AddPolyline(Points.data(), static_cast<int>(Points.size()), Color, ImDrawFlags_None, InThickness);
+	}
+	Draw->PopClipRect();
 }
 
 void FGui::OpenPopup(const char* InTitle)

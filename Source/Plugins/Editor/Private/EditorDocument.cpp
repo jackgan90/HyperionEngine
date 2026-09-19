@@ -70,7 +70,8 @@ void FEditorPlugin::DrawDiscardDialog()
 
 bool FEditorPlugin::IsDirty() const
 {
-	return DocumentState != SavedState;
+	const auto* Node = GizmoEdit ? Scene->FindNode(GizmoEdit->Handle) : nullptr;
+	return DocumentState != SavedState || (Node && Node->Local().Values != GizmoEdit->Initial.Values);
 }
 
 void FEditorPlugin::ResetDocument()

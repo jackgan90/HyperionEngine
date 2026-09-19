@@ -4,8 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <iomanip>
-#include <sstream>
 #include <vector>
 
 namespace Hyperion
@@ -30,12 +28,6 @@ std::string KindName(ESceneNodeKind InKind)
 	return Names.at(static_cast<std::size_t>(InKind));
 }
 
-std::string Number(float InValue, int InPrecision = 2)
-{
-	std::ostringstream Stream;
-	Stream << std::fixed << std::setprecision(InPrecision) << InValue;
-	return Stream.str();
-}
 } // namespace
 
 void FEditorPlugin::ShowOpenScene()
@@ -433,7 +425,7 @@ void FEditorPlugin::DrawOpenDialog()
 	}
 }
 
-void FEditorPlugin::DrawViewport()
+void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InEvents)
 {
 	bViewportVisible = false;
 	ViewportRegion = {};
@@ -443,16 +435,21 @@ void FEditorPlugin::DrawViewport()
 	}
 	if (Gui->BeginWindow("Viewport", bShowViewport))
 	{
+		DrawGizmoToolbar();
+		Gui->SameLine();
 		DrawViewControls();
-		const float Speed = Camera.GetMovementSpeed(ViewCamera);
-		Gui->Text("Perspective  |  Camera Speed " + (Speed > 0 ? Number(Speed, 3) + " u/s" : "--") + "  |  Lit");
-		Gui->SameLine();
-		Gui->SetNextItemWidth(120);
-		Gui->Slider("Exposure", Exposure, .1f, 8);
-		Gui->SameLine();
-		Gui->Text(CurrentPath.empty() ? "Open a scene to begin" : std::filesystem::path(CurrentPath).stem().string());
 		ViewportRegion = Gui->Image(2);
 		bViewportVisible = true;
+		DrawGizmo();
+		if (Options.Benchmark.empty())
+		{
+			RouteCamera(Options.bExercise ? 1.f / 60 : InDelta, InEvents);
+		}
+		else
+		{
+			BenchmarkCamera();
+		}
+		DrawGizmoOverlay();
 	}
 	Gui->EndWindow();
 }
@@ -492,13 +489,19 @@ std::string FEditorPlugin::StatusText() const
 
 FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> InEvents)
 {
-	Gui->BeginFrame(Window->LogicalSize(), Window->PixelSize(), InDelta, InEvents);
+	Gui->BeginFrame(Window->LogicalSize(), Window->PixelSize(), std::clamp(InDelta, .001f, .1f), InEvents);
+	bGizmoUsedMouse = false;
 	DrawMenus();
 	DrawToolbar();
 	Gui->StatusBar(StatusText());
 	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser"}, bResetLayout);
 	bResetLayout = false;
-	DrawViewport();
+	DrawViewport(InDelta, InEvents);
+	if (!bViewportVisible)
+	{
+		FinishGizmo();
+		RouteCamera(InDelta, InEvents);
+	}
 	DrawOutliner();
 	InspectorInteraction = 0;
 	PendingInspectorEdit.reset();

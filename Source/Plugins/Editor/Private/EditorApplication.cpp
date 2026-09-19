@@ -179,27 +179,23 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 		ExerciseViewInput(Events);
 	}
 	RouteHistoryShortcuts(Events);
+	if (Options.bExerciseGizmo)
+	{
+		ExerciseGizmoInput(Events);
+	}
 	FGuiDrawData Data;
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorGui);
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.GuiMilliseconds);
-		Data = DrawGui(std::clamp(InDelta, .001f, .1f), Events);
+		Data = DrawGui(InDelta, Events);
 	}
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
-		if (Options.Benchmark.empty())
-		{
-			RouteCamera(Options.bExercise ? 1.f / 60 : InDelta, Events);
-		}
-		else
-		{
-			BenchmarkCamera();
-		}
 		Scene->Tick();
 	}
 	// Async scene readiness is independent of render frame rate.
-	const bool bExerciseComplete =
-	    (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified || bViewsVerified;
+	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
+	                               bViewsVerified || bGizmoVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames));
@@ -244,13 +240,15 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		Finish();
 		return;
 	}
-	if ((Options.bExercise || !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty()) &&
+	if ((Options.bExercise || Options.bExerciseGizmo || !Options.ExerciseDocument.empty() ||
+	     !Options.ExerciseViews.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out");
 	}
 	if (Window->Minimized() || !Window->PixelSize().Width || !Window->PixelSize().Height)
 	{
+		FinishGizmo();
 		Scene->Tick();
 		Camera.Reset();
 		bCameraDragging = false;
@@ -265,6 +263,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (Options.bExerciseGizmo && !bGizmoVerified)
+	{
+		throw std::runtime_error("Editor gizmo acceptance did not complete");
+	}
 	bFinished = true;
 	SaveBenchmark();
 	if (Options.Benchmark.empty())

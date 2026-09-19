@@ -55,6 +55,9 @@ def main():
                            '--exercise-views', str(output / 'Views.hasset'))
     assert views['views_verified'] and not views['document_dirty'], views
     assert views['validation_errors'] == 0 and not views['scene_error'], views
+    gizmo, _ = run_editor(executable, root, output, 'gizmo', '--exercise-gizmo',
+                          '--scene', '/Game/Scenes/Sponza.hasset')
+    assert gizmo['gizmo_verified'] and gizmo['validation_errors'] == 0, gizmo
     report, _ = run_editor(executable, root, output, 'missing-scene', '--frames', '20',
                             '--scene', '/Game/Scenes/DoesNotExist.hasset')
     assert report['scene_error'] and report['validation_errors'] == 0, report

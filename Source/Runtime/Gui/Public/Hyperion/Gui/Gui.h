@@ -41,6 +41,17 @@ struct FGuiImageRegion
 	bool bFocused{};
 };
 
+struct FGuiPointerState
+{
+	FVec2 Position;
+	bool bPressed{};
+	bool bDown{};
+	bool bReleased{};
+	bool bCancel{};
+	bool bRightDown{};
+	bool bPositionValid{};
+};
+
 struct FGuiDockLayout
 {
 	std::string Center;
@@ -54,6 +65,14 @@ struct FGuiEditState
 {
 	std::uint64_t ChangedInteraction{};
 	std::uint64_t ActiveInteraction{};
+};
+
+enum class EGuiIcon
+{
+	Translate,
+	Rotate,
+	Scale,
+	Options
 };
 
 // All GUI context and widget operations belong to the creating Main thread.
@@ -85,6 +104,9 @@ public:
 	bool WantsKeyboard() const;
 	void Separator();
 	bool Button(const char* InLabel, bool bInEnabled = true);
+	bool IconButton(const char* InId, EGuiIcon InIcon, const char* InTooltip, bool bInSelected = false);
+	void Tooltip(const char* InText);
+	float AvailableWidth() const;
 	bool Checkbox(const char* InLabel, bool& bInValue);
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
 	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0);
@@ -140,7 +162,15 @@ public:
 	void EndTree();
 	void Property(const char* InLabel, const std::string& InValue);
 	FGuiImageRegion Image(std::uint64_t InTextureId);
+	FGuiPointerState PointerState() const;
+	// Own a left drag started on an image overlay, including motion beyond the image bounds.
+	void CaptureImagePointer(bool bInCapture);
+	// Current window draw list, clipped to a logical image rectangle; never draws over other windows.
+	void DrawImageOverlay(FVec4 InClip, std::span<const FVec2> InPoints, FVec4 InColor, float InThickness,
+	                      bool bInFilled = false);
 	void OpenPopup(const char* InTitle);
+	bool BeginPopup(const char* InId);
+	void EndPopup();
 	bool BeginModal(const char* InTitle, bool& bInOpen);
 	void EndModal();
 	void ClosePopup();

@@ -142,6 +142,13 @@ void FEditorPlugin::ExerciseViewInput(std::vector<FInputEvent>& InEvents)
 	{
 		return;
 	}
+	if ((ExerciseStep == 0 || ExerciseStep == 1 || ExerciseStep == 6) && !bViewOptionsOpen)
+	{
+		const auto Step = ExerciseStep;
+		ExerciseClick(InEvents, InspectionBounds.at("view/options"));
+		ExerciseStep = Step;
+		return;
+	}
 	if (ExerciseStep >= 3 && ExerciseStep <= 7)
 	{
 		ExerciseViewPreview(InEvents);

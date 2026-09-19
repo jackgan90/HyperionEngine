@@ -28,6 +28,7 @@ struct FGui::FImpl
 	void RebuildFont();
 	bool bLiveEdit{};
 	FGuiEditState EditState;
+	ImGuiID ImagePointerCapture{};
 	ImGuiID EditItem{};
 	std::uint64_t EditSerial{};
 	int EditFrame = -2;

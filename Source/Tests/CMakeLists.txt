@@ -45,6 +45,7 @@ target_sources(scene_tests PRIVATE Scene/SceneNodeTests.cpp Scene/SceneComponent
 target_sources(scene_tests PRIVATE Scene/TransformInspectionTests.cpp)
 target_sources(scene_tests PRIVATE Scene/SceneViewTests.cpp)
 hyp_test(spatial_tests scene_spatial_visibility hyperion_render Renderer/SpatialTests.cpp)
+hyp_test(transform_gizmo_tests transform_gizmo hyperion_render Renderer/TransformGizmoTests.cpp)
 hyp_test(scene_boundary_tests scene_boundary_contracts hyperion_render Renderer/SceneBoundaryTests.cpp)
 hyp_test(model_material_cache_tests model_material_cache hyperion_render Renderer/ModelMaterialCacheTests.cpp)
 target_link_libraries(model_material_cache_tests PRIVATE hyperion_rhi_d3d12)
