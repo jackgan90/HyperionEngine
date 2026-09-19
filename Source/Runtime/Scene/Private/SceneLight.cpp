@@ -59,7 +59,8 @@ template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
 {
 	static const auto Type = MakeRecord<FSceneDirectionalLight>(
 	    "hyperion.scenedirectionallight",
-	    {Member("color", &FSceneDirectionalLight::Color, Inspect("Color", 0, {})),
+	    {Member("color", &FSceneDirectionalLight::Color,
+	            {.Inspector = FPropertyPresentation{.Label = "Color", .Widget = EPropertyWidget::Color3}}),
 	     Member("intensity", &FSceneDirectionalLight::Intensity, Inspect("Intensity", 0, {})),
 	     Member("castShadows", &FSceneDirectionalLight::bCastShadows, Inspect("Cast shadows"))},
 	    1, ValidateSceneDirectionalLight);
@@ -78,7 +79,8 @@ template<> const FRecordDescriptor& RecordType<FSceneEnvironmentLight>()
 	{
 		auto Result = MakeRecord<FSceneEnvironmentLight>(
 		    "hyperion.sceneenvironmentlight",
-		    {Member("color", &FSceneEnvironmentLight::Color, Inspect("Color", 0, {})),
+		    {Member("color", &FSceneEnvironmentLight::Color,
+		            {.Inspector = FPropertyPresentation{.Label = "Color", .Widget = EPropertyWidget::Color3}}),
 		     Member("intensity", &FSceneEnvironmentLight::Intensity, Inspect("Intensity", 0, {})),
 		     Member(
 		         "source", &FSceneEnvironmentLight::Source,

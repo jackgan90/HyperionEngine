@@ -1,13 +1,53 @@
 #include "EditorApplication.h"
+#include <algorithm>
 
 namespace Hyperion
 {
+void FEditorPlugin::FinishInspectorEdit()
+{
+	if (Gui && (InspectorInteraction || InspectorTransaction))
+	{
+		Gui->FinishEditing();
+	}
+	PendingInspectorEdit.reset();
+	InspectorTransaction.reset();
+	InspectorInteraction = 0;
+}
+
+void FEditorPlugin::RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents)
+{
+	const bool bAllowHistory =
+	    !bOpenDialog && !bSaveDialog && !bDiscardDialog && (!Gui->IsEditingText() || InspectorInteraction != 0);
+	std::erase_if(InEvents,
+	              [&](const FInputEvent& InEvent)
+	              {
+		              if (!bAllowHistory || InEvent.Type != EEventType::Key || !InEvent.bDown ||
+		                  !(InEvent.Modifiers & 1) || (InEvent.Key != EKey::Z && InEvent.Key != EKey::Y))
+		              {
+			              return false;
+		              }
+		              try
+		              {
+			              if (InEvent.Key == EKey::Y || (InEvent.Modifiers & 2))
+			              {
+				              Redo();
+			              }
+			              else
+			              {
+				              Undo();
+			              }
+		              }
+		              catch (const std::exception& Failure)
+		              {
+			              Error = Failure.what();
+		              }
+		              return true;
+	              });
+}
+
 void FEditorPlugin::CommitSettings(FSceneSettings InSettings)
 {
-	if (HasDrafts())
-	{
-		throw std::runtime_error("Apply or revert component drafts before changing scene settings");
-	}
+	FinishInspectorEdit();
 	if (Scene->GetSettings() == InSettings)
 	{
 		return;

@@ -6,6 +6,9 @@
 
 namespace Hyperion
 {
+bool DragNumericValue(const char* InLabel, ImGuiDataType InType, void* InValue, float InSpeed,
+                      const char* InFormat = nullptr, const void* InMinimum = nullptr, const void* InMaximum = nullptr);
+
 struct FGui::FImpl
 {
 	ImGuiContext* Context{};
@@ -14,6 +17,22 @@ struct FGui::FImpl
 	FWindow* Window{};
 	std::string Clipboard;
 	std::vector<std::byte> FontBytes;
+	bool bLiveEdit{};
+	FGuiEditState EditState;
+	ImGuiID EditItem{};
+	std::uint64_t EditSerial{};
+	int EditFrame = -2;
+
+	ImGuiInputTextFlags InputFlags() const
+	{
+		return bLiveEdit ? ImGuiInputTextFlags_NoUndoRedo : ImGuiInputTextFlags_EnterReturnsTrue;
+	}
+
+	bool DragNumber(const char* InLabel, ImGuiDataType InType, void* InValue, float InSpeed,
+	                const char* InFormat = nullptr, const void* InMinimum = nullptr, const void* InMaximum = nullptr);
+	bool DragComponents(const char* InLabel, float* InValues, int InCount);
+	bool TrackEdit(bool bInChanged);
+	bool TrackEdit(ImGuiID InId, bool bInActive, bool bInActivated, bool bInChanged);
 
 	void Select()
 	{

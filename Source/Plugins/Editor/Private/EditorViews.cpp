@@ -6,10 +6,7 @@ void FEditorPlugin::SetPreviewCamera(std::optional<FSceneHandle> InHandle)
 {
 	if (InHandle)
 	{
-		if (HasDrafts())
-		{
-			throw std::runtime_error("Apply or revert component drafts before selecting a preview camera");
-		}
+		FinishInspectorEdit();
 		Selection = InHandle;
 	}
 	PreviewCamera = InHandle;
@@ -37,9 +34,9 @@ void FEditorPlugin::SetInitialView()
 void FEditorPlugin::ApplyEditorView(FSceneHandle InHandle)
 {
 	const auto* Node = Scene->FindNode(InHandle);
-	if (HasDrafts() || !bViewportCameraInitialized || !Node || !Node->Camera())
+	if (!bViewportCameraInitialized || !Node || !Node->Camera())
 	{
-		throw std::runtime_error("Select a camera and apply or revert its drafts first");
+		throw std::runtime_error("Select an available camera first");
 	}
 	auto Candidate = *Node;
 	Candidate.Camera() = ViewCamera.Lens;
@@ -63,9 +60,10 @@ void FEditorPlugin::ApplyEditorView(FSceneHandle InHandle)
 
 void FEditorPlugin::CreateCameraFromView()
 {
-	if (HasDrafts() || !bViewportCameraInitialized || PreviewCamera)
+	FinishInspectorEdit();
+	if (!bViewportCameraInitialized || PreviewCamera)
 	{
-		throw std::runtime_error("Return to the editor view and apply or revert drafts before creating a camera");
+		throw std::runtime_error("Return to the editor view before creating a camera");
 	}
 	FSceneNode Node;
 	Node.Name = "Camera";
@@ -83,7 +81,7 @@ void FEditorPlugin::CreateCameraFromView()
 	DocumentState = Entry.AfterState;
 	History.push_back(std::move(Entry));
 	++HistoryCursor;
-	InspectorDrafts.clear();
+	FinishInspectorEdit();
 	Error.clear();
 }
 
@@ -114,12 +112,10 @@ void FEditorPlugin::DrawViewControls()
 			Cameras.push_back(PreviewCamera);
 		}
 		Gui->SetNextItemWidth(260);
-		Gui->BeginDisabled(HasDrafts());
 		if (Gui->Combo("View source", Labels, Index))
 		{
 			SetPreviewCamera(Cameras.at(Index));
 		}
-		Gui->EndDisabled();
 		if (PreviewCamera)
 		{
 			Gui->SameLine();
@@ -135,13 +131,13 @@ void FEditorPlugin::DrawViewControls()
 		else
 		{
 			Gui->SameLine();
-			if (Gui->Button("Set initial view", bViewportCameraInitialized && !HasDrafts()))
+			if (Gui->Button("Set initial view", bViewportCameraInitialized))
 			{
 				SetInitialView();
 			}
 			InspectionBounds["view/initial"] = Gui->LastItemBounds();
 			Gui->SameLine();
-			if (Gui->Button("Create camera from view", bViewportCameraInitialized && !HasDrafts()))
+			if (Gui->Button("Create camera from view", bViewportCameraInitialized))
 			{
 				CreateCameraFromView();
 			}
@@ -156,13 +152,13 @@ void FEditorPlugin::DrawViewControls()
 
 void FEditorPlugin::DrawCameraActions(FSceneHandle InHandle)
 {
-	if (Gui->Button("Preview camera", !HasDrafts()))
+	if (Gui->Button("Preview camera"))
 	{
 		SetPreviewCamera(InHandle);
 	}
 	InspectionBounds["view/preview"] = Gui->LastItemBounds();
 	Gui->SameLine();
-	if (Gui->Button("Apply editor view to camera", bViewportCameraInitialized && !HasDrafts()))
+	if (Gui->Button("Apply editor view to camera", bViewportCameraInitialized))
 	{
 		ApplyEditorView(InHandle);
 	}

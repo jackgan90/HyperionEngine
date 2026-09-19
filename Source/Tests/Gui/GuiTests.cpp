@@ -5,6 +5,9 @@
 #include <iostream>
 #include <stdexcept>
 
+void CheckColorControls();
+void CheckDragControls();
+
 namespace
 {
 using namespace Hyperion;
@@ -80,6 +83,8 @@ int main()
 				Check(std::size_t(Cmd.FirstIndex) + Cmd.IndexCount <= First.Indices.size(), "Copied index range");
 			}
 		}
+		CheckColorControls();
+		CheckDragControls();
 		Check(MemoryStats(EMemoryTag::Gui).LiveBytes == 0, "GUI allocations released");
 		std::cout << "GUI input, reflection, owned draw data and cleanup passed\n";
 		return 0;

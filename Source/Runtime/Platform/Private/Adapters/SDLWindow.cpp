@@ -176,9 +176,19 @@ struct FWindow::FImpl
 	std::vector<FInputEvent> Events;
 	std::vector<FInputEvent> PendingEvents;
 	bool bClose = false;
+	bool bCursorHidden{};
+	std::map<EMouseCursor, SDL_Cursor*> Cursors;
 
 	~FImpl()
 	{
+		if (bCursorHidden)
+		{
+			SDL_ShowCursor();
+		}
+		for (const auto& [Type, Cursor] : Cursors)
+		{
+			SDL_DestroyCursor(Cursor);
+		}
 		if (Window)
 		{
 			Windows.erase(SDL_GetWindowID(Window));
@@ -215,6 +225,61 @@ FWindow::FWindow(std::string InTitle, FSize InSize, bool bInHidden) : Impl(std::
 
 FWindow::~FWindow() = default;
 
+void FWindow::SetMouseCursor(EMouseCursor InCursor)
+{
+	Impl->RequireOwner();
+	// SDL cursors are global; background windows must not override the focused window.
+	const auto* MouseWindow = SDL_GetMouseFocus();
+	if ((MouseWindow && MouseWindow != Impl->Window) || (!MouseWindow && SDL_GetKeyboardFocus() != Impl->Window))
+	{
+		return;
+	}
+	if (InCursor == EMouseCursor::Hidden)
+	{
+		Impl->bCursorHidden = true;
+		SDL_HideCursor();
+		return;
+	}
+	SDL_SystemCursor Type = SDL_SYSTEM_CURSOR_DEFAULT;
+	switch (InCursor)
+	{
+		case EMouseCursor::TextInput:
+			Type = SDL_SYSTEM_CURSOR_TEXT;
+			break;
+		case EMouseCursor::ResizeAll:
+			Type = SDL_SYSTEM_CURSOR_MOVE;
+			break;
+		case EMouseCursor::ResizeVertical:
+			Type = SDL_SYSTEM_CURSOR_NS_RESIZE;
+			break;
+		case EMouseCursor::ResizeHorizontal:
+			Type = SDL_SYSTEM_CURSOR_EW_RESIZE;
+			break;
+		case EMouseCursor::ResizeDiagonalNE:
+			Type = SDL_SYSTEM_CURSOR_NESW_RESIZE;
+			break;
+		case EMouseCursor::ResizeDiagonalNW:
+			Type = SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+			break;
+		case EMouseCursor::Hand:
+			Type = SDL_SYSTEM_CURSOR_POINTER;
+			break;
+		case EMouseCursor::NotAllowed:
+			Type = SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+			break;
+		default:
+			break;
+	}
+	auto& Cursor = Impl->Cursors[InCursor];
+	if (!Cursor)
+	{
+		Cursor = SDL_CreateSystemCursor(Type);
+	}
+	SDL_SetCursor(Cursor ? Cursor : SDL_GetDefaultCursor());
+	Impl->bCursorHidden = false;
+	SDL_ShowCursor();
+}
+
 void FWindow::Poll()
 {
 	Impl->RequireOwner();
@@ -238,6 +303,11 @@ void FWindow::Poll()
 		if (Target == FImpl::Windows.end())
 		{
 			continue;
+		}
+		if (Native.type == SDL_EVENT_WINDOW_FOCUS_LOST && Target->second->bCursorHidden)
+		{
+			SDL_ShowCursor();
+			Target->second->bCursorHidden = false;
 		}
 		if (auto Event = Translate(Native))
 		{

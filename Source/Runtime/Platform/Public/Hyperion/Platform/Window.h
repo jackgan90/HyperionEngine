@@ -71,6 +71,20 @@ struct FInputEvent
 	bool bRepeat{};
 };
 
+enum class EMouseCursor
+{
+	Hidden,
+	Arrow,
+	TextInput,
+	ResizeAll,
+	ResizeVertical,
+	ResizeHorizontal,
+	ResizeDiagonalNE,
+	ResizeDiagonalNW,
+	Hand,
+	NotAllowed
+};
+
 class FWindow
 {
 public:
@@ -79,6 +93,7 @@ public:
 	FWindow(const FWindow&) = delete;
 	FWindow& operator=(const FWindow&) = delete;
 	void Poll();
+	void SetMouseCursor(EMouseCursor InCursor);
 	bool ShouldClose() const;
 	bool Minimized() const;
 	FSize PixelSize() const;

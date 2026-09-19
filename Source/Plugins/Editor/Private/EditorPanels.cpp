@@ -100,7 +100,7 @@ void FEditorPlugin::DrawMenus()
 		if (Gui->BeginMenu("Edit"))
 		{
 			Gui->BeginDisabled(HistoryCursor == 0);
-			if (Gui->MenuItem("Undo"))
+			if (Gui->MenuItem("Undo", "Ctrl+Z"))
 			{
 				Attempt(
 				    [&]
@@ -110,7 +110,7 @@ void FEditorPlugin::DrawMenus()
 			}
 			Gui->EndDisabled();
 			Gui->BeginDisabled(HistoryCursor == History.size());
-			if (Gui->MenuItem("Redo"))
+			if (Gui->MenuItem("Redo", "Ctrl+Y / Ctrl+Shift+Z"))
 			{
 				Attempt(
 				    [&]
@@ -298,6 +298,13 @@ void FEditorPlugin::DrawDetails()
 			try
 			{
 				DrawComponentInspector(View);
+				// Commit after drawing so all widgets keep stable bounds during continuous editing.
+				if (PendingInspectorEdit)
+				{
+					auto Edit = std::move(*PendingInspectorEdit);
+					PendingInspectorEdit.reset();
+					CommitEdit(Edit.Handle, std::move(Edit.Candidate), Edit.Revision, Edit.Interaction);
+				}
 			}
 			catch (const std::exception& Failure)
 			{
@@ -467,7 +474,13 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	bResetLayout = false;
 	DrawViewport();
 	DrawOutliner();
+	InspectorInteraction = 0;
+	PendingInspectorEdit.reset();
 	DrawDetails();
+	if (InspectorTransaction && InspectorTransaction->Interaction != InspectorInteraction)
+	{
+		InspectorTransaction.reset();
+	}
 	DrawSceneBrowser();
 	DrawOpenDialog();
 	DrawSaveDialog();

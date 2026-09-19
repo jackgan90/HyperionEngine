@@ -79,7 +79,7 @@ void FEditorPlugin::Initialize()
 
 void FEditorPlugin::OpenScene(const std::string& InPath)
 {
-	if (IsDirty() || HasDrafts() || PendingSave)
+	if (IsDirty() || PendingSave)
 	{
 		PendingOpen = InPath;
 		bDiscardDialog = bRequestDiscard = true;
@@ -178,6 +178,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	{
 		ExerciseViewInput(Events);
 	}
+	RouteHistoryShortcuts(Events);
 	FGuiDrawData Data;
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorGui);

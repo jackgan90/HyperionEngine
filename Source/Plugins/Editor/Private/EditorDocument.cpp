@@ -3,24 +3,11 @@
 
 namespace Hyperion
 {
-bool FEditorPlugin::HasDrafts() const
-{
-	for (const auto& [Id, Draft] : InspectorDrafts)
-	{
-		if (Draft.bModified)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
 void FEditorPlugin::SelectObject(FSceneHandle InHandle)
 {
-	if (Selection != InHandle && HasDrafts())
+	if (Selection != InHandle)
 	{
-		Error = "Apply or revert component drafts before changing selection";
-		return;
+		FinishInspectorEdit();
 	}
 	Selection = InHandle;
 }
@@ -31,7 +18,7 @@ bool FEditorPlugin::PollClose()
 	{
 		return false;
 	}
-	if (!IsDirty() && !HasDrafts() && !PendingSave)
+	if (!IsDirty() && !PendingSave)
 	{
 		return true;
 	}
@@ -53,7 +40,7 @@ void FEditorPlugin::DrawDiscardDialog()
 		return;
 	}
 	Gui->TextWrapped(PendingSave ? "Wait for the current save to finish."
-	                             : "The scene or component drafts have unsaved changes. Discard them to continue, or "
+	                             : "The scene has unsaved changes. Discard them to continue, or "
 	                               "cancel to review and save.");
 	if (Gui->Button("Discard changes", !PendingSave))
 	{
@@ -93,22 +80,30 @@ void FEditorPlugin::ResetDocument()
 	HistoryCursor = 0;
 	DocumentState = SavedState = ++NextDocumentState;
 	++DocumentEpoch;
-	InspectorDrafts.clear();
-	InspectedObject.reset();
+	FinishInspectorEdit();
 	SaveStatus.clear();
 }
 
-void FEditorPlugin::CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision)
+void FEditorPlugin::CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision,
+                               std::uint64_t InInteraction)
 {
+	if (!InInteraction)
+	{
+		FinishInspectorEdit();
+	}
 	const auto* Before = Scene->FindNode(InHandle);
 	if (!Before || Scene->GetRevision() != InExpectedRevision)
 	{
-		throw std::runtime_error("The object changed while editing. Revert the draft and try again.");
+		throw std::runtime_error("The object changed while editing. Try again with its current values.");
 	}
-	if (*Before == InCandidate)
+	if (!InInteraction && *Before == InCandidate)
 	{
 		return;
 	}
+	const bool bMerge = InInteraction && InspectorTransaction && InspectorTransaction->Interaction == InInteraction &&
+	                    InspectorTransaction->Handle == InHandle &&
+	                    InspectorTransaction->Revision == InExpectedRevision && HistoryCursor == History.size() &&
+	                    InspectorTransaction->HistoryIndex + 1 == HistoryCursor;
 	FHistoryEntry Entry{InHandle, *Before, InCandidate, Scene->GetSettings(), {}, DocumentState, ++NextDocumentState};
 	History.reserve(HistoryCursor + 1);
 	if (!Scene->EditNode(InHandle, std::move(InCandidate), InExpectedRevision))
@@ -116,19 +111,31 @@ void FEditorPlugin::CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, st
 		throw std::runtime_error("The edit target is no longer current");
 	}
 	Entry.AfterSettings = Scene->GetSettings();
-	History.resize(HistoryCursor);
 	DocumentState = Entry.AfterState;
-	History.push_back(std::move(Entry));
-	++HistoryCursor;
+	if (bMerge)
+	{
+		auto& Previous = History.back();
+		Previous.After = std::move(Entry.After);
+		Previous.AfterSettings = std::move(Entry.AfterSettings);
+		Previous.AfterState = Entry.AfterState;
+	}
+	else
+	{
+		History.resize(HistoryCursor);
+		History.push_back(std::move(Entry));
+		++HistoryCursor;
+	}
+	if (InInteraction)
+	{
+		InspectorTransaction = FInspectorTransaction{InInteraction, InHandle, HistoryCursor - 1, Scene->GetRevision()};
+	}
 	Error.clear();
 }
 
 void FEditorPlugin::Undo()
 {
-	if (HasDrafts())
-	{
-		throw std::runtime_error("Apply or revert component drafts before undoing");
-	}
+	FinishInspectorEdit();
+	Error.clear();
 	if (!HistoryCursor)
 	{
 		return;
@@ -136,15 +143,12 @@ void FEditorPlugin::Undo()
 	RestoreHistory(HistoryCursor - 1, false);
 	--HistoryCursor;
 	DocumentState = History[HistoryCursor].BeforeState;
-	InspectorDrafts.clear();
 }
 
 void FEditorPlugin::Redo()
 {
-	if (HasDrafts())
-	{
-		throw std::runtime_error("Apply or revert component drafts before redoing");
-	}
+	FinishInspectorEdit();
+	Error.clear();
 	if (HistoryCursor == History.size())
 	{
 		return;
@@ -152,15 +156,11 @@ void FEditorPlugin::Redo()
 	RestoreHistory(HistoryCursor, true);
 	DocumentState = History[HistoryCursor].AfterState;
 	++HistoryCursor;
-	InspectorDrafts.clear();
 }
 
 void FEditorPlugin::SaveScene(const std::string& InDestination)
 {
-	if (HasDrafts())
-	{
-		throw std::runtime_error("Apply or revert component drafts before saving");
-	}
+	FinishInspectorEdit();
 	if (PendingSave)
 	{
 		throw std::runtime_error("A scene save is already in progress");

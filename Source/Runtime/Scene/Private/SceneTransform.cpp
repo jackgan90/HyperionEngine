@@ -65,14 +65,14 @@ template<> const FRecordDescriptor& RecordType<FTransformDisplay>()
 	    {Member("position", &FTransformDisplay::Position,
 	            VectorRow("Position", {}, "Local position relative to the parent origin.")),
 	     Member("rotation", &FTransformDisplay::Rotation,
-	            VectorRow("Rotation", "deg",
+	            VectorRow("Rotation", "",
 	                      "Local Euler angles in degrees. Right-handed fixed axes: X, then Y, then Z (Rz * Ry * Rx). "
 	                      "Shear is retained.")),
 	     Member(
 	         "scale", &FTransformDisplay::Scale,
 	         VectorRow("Scale", {},
 	                   "Local signed scale. Reflections use a canonical signed X axis; existing shear is retained.")),
-	     Member("parent", &FTransformDisplay::Parent, Inspect("Parent ID (local)"))},
+	     Member("parent", &FTransformDisplay::Parent)},
 	    1,
 	    [](const FTransformDisplay& InValue)
 	    {

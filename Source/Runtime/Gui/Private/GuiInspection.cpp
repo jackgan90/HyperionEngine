@@ -30,10 +30,22 @@ bool EditVectorValue(FGui& InGui, FArchiveNode& InValue, const FPropertyPresenta
 	return false;
 }
 
-bool EditScalar(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InShape,
-                const FPropertyPresentation& InPresentation, const std::string& InId)
+bool EditColorValue(FGui& InGui, FArchiveNode& InValue, const FPropertyPresentation& InPresentation,
+                    const std::string& InId)
 {
-	const auto Name = Label(InPresentation, InId);
+	auto Color = ReadValue<FVec3>(InValue);
+	if (InGui.InputColor(Label(InPresentation, InId).c_str(), Color))
+	{
+		InValue = WriteValue(Color);
+		return true;
+	}
+	return false;
+}
+
+bool EditScalar(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InShape,
+                const FPropertyPresentation& InPresentation)
+{
+	const std::string Name = "##value";
 	if (!InPresentation.Choices.empty())
 	{
 		auto Index = ReadInteger<std::size_t>(InValue);
@@ -221,10 +233,15 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 	InGui.BeginDisabled(InPresentation.bReadOnly);
 	bool bChanged{};
 	bool bPresent = !std::holds_alternative<std::monostate>(InValue.Value);
-	if (InShape.bOptional && InGui.Checkbox(("Override " + Label(InPresentation, InId)).c_str(), bPresent))
+	if (InShape.bOptional)
 	{
-		InValue = bPresent ? InShape.DefaultValue() : FArchiveNode(std::monostate{});
-		bChanged = true;
+		InGui.BeginPropertyRow(("Override " + Label(InPresentation, InId)).c_str());
+		if (InGui.Checkbox("##value", bPresent))
+		{
+			InValue = bPresent ? InShape.DefaultValue() : FArchiveNode(std::monostate{});
+			bChanged = true;
+		}
+		InGui.EndPropertyRow();
 	}
 	if (bPresent)
 	{
@@ -232,6 +249,10 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 		{
 			std::array<FVec4, 3> Bounds;
 			bChanged |= EditVectorValue(InGui, InValue, InPresentation, InId, Bounds);
+		}
+		else if (InPresentation.Widget == EPropertyWidget::Color3)
+		{
+			bChanged |= EditColorValue(InGui, InValue, InPresentation, InId);
 		}
 		else if (InShape.Kind == ERecordValueKind::Record)
 		{
@@ -243,7 +264,9 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 		}
 		else
 		{
-			bChanged |= EditScalar(InGui, InValue, InShape, InPresentation, InId);
+			InGui.BeginPropertyRow(Label(InPresentation, InId).c_str());
+			bChanged |= EditScalar(InGui, InValue, InShape, InPresentation);
+			InGui.EndPropertyRow();
 		}
 	}
 	InGui.EndDisabled();

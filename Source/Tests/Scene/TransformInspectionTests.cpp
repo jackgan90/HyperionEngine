@@ -71,16 +71,29 @@ void CheckAffineRoundTrips()
 void CheckTransformDraft()
 {
 	FSceneTransform Source;
+	Source.Parent = "parent";
 	Source.Local = ComposeAffine({{7, 8, 9}, {.2f, -.6f, .8f}, {-2, 3, 4}, {.3f, -.4f, .8f}});
 	const auto Original = Source.Local.Values;
 	FRecordDraft Draft(RecordType<FSceneTransform>(), &Source);
 	HYP_CHECK(Draft.GetValues().contains("position") && Draft.GetValues().contains("rotation"));
 	HYP_CHECK(!Draft.GetValues().contains("local"));
+	const auto Rotation = std::find_if(Draft.GetType().Members.begin(), Draft.GetType().Members.end(),
+	                                   [](const auto& InMember)
+	                                   {
+		                                   return InMember.Id == "rotation";
+	                                   });
+	HYP_CHECK(Rotation != Draft.GetType().Members.end() && Rotation->Options.Inspector->Unit.empty());
+	const auto Parent = std::find_if(Draft.GetType().Members.begin(), Draft.GetType().Members.end(),
+	                                 [](const auto& InMember)
+	                                 {
+		                                 return InMember.Id == "parent";
+	                                 });
+	HYP_CHECK(Parent != Draft.GetType().Members.end() && !Parent->Options.Inspector);
+
 	auto Candidate = Source;
 	Draft.ApplyToCandidate(&Candidate);
 	HYP_CHECK(Candidate.Local.Values == Original);
-	Draft.GetValues().at("parent") = WriteValue(std::string("parent"));
-	Draft.ApplyToCandidate(&Candidate);
+	HYP_CHECK(!Draft.GetValues().contains("parent"));
 	HYP_CHECK(Candidate.Local.Values == Original && Candidate.Parent == "parent");
 	Draft.GetValues().at("position") = WriteValue(FVec3{11, 12, 13});
 	Draft.ApplyToCandidate(&Candidate);

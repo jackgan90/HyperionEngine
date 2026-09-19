@@ -69,6 +69,9 @@ private:
 	void ExerciseViewHistory();
 	void ExerciseViewPreview(std::vector<FInputEvent>& InEvents);
 	bool ExerciseTransformInput(std::vector<FInputEvent>& InEvents);
+	bool ExerciseTransformHistory(std::vector<FInputEvent>& InEvents);
+	bool ExerciseTransformDrag(std::vector<FInputEvent>& InEvents);
+	bool ExerciseUnchangedHistory(std::vector<FInputEvent>& InEvents);
 	void ExerciseCamera(std::vector<FInputEvent>& InEvents);
 	void ExerciseMovement(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX, float InY);
 	void ExerciseWheel(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX, float InY);
@@ -91,7 +94,10 @@ private:
 	void RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAfter);
 	void DrawComponentInspector(const FSceneNodeView& InView);
 	bool DrawComponent(const FSceneNodeView& InView, const FSceneComponent& InComponent, std::uint64_t InRevision);
-	void CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision);
+	void CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision,
+	                std::uint64_t InInteraction = 0);
+	void FinishInspectorEdit();
+	void RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents);
 	void Undo();
 	void Redo();
 	void SaveScene(const std::string& InDestination);
@@ -99,7 +105,6 @@ private:
 	void DrawSaveDialog();
 	void DrawDiscardDialog();
 	void SelectObject(FSceneHandle InHandle);
-	bool HasDrafts() const;
 	bool PollClose();
 	bool IsDirty() const;
 
@@ -208,15 +213,26 @@ private:
 	std::uint64_t SavedState{};
 	std::uint64_t DocumentEpoch{};
 
-	struct FInspectionDraft
+	struct FInspectorTransaction
 	{
-		FRecordDraft Record;
+		std::uint64_t Interaction{};
+		FSceneHandle Handle;
+		std::size_t HistoryIndex{};
 		std::uint64_t Revision{};
-		bool bModified{};
 	};
 
-	std::optional<FSceneHandle> InspectedObject;
-	std::map<std::string, FInspectionDraft> InspectorDrafts;
+	std::optional<FInspectorTransaction> InspectorTransaction;
+	std::uint64_t InspectorInteraction{};
+
+	struct FPendingInspectorEdit
+	{
+		FSceneHandle Handle;
+		FSceneNode Candidate;
+		std::uint64_t Revision{};
+		std::uint64_t Interaction{};
+	};
+
+	std::optional<FPendingInspectorEdit> PendingInspectorEdit;
 
 	struct FPendingSave
 	{

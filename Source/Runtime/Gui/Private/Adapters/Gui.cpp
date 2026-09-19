@@ -88,10 +88,15 @@ FGui::FGui(FWindow* InWindow) : Impl(std::make_unique<FImpl>())
 	Impl->Plot = ImPlot::CreateContext();
 	Impl->Window = InWindow;
 	auto& Io = ImGui::GetIO();
+	Io.ConfigDragClickToInputText = true;
 	Io.IniFilename = nullptr;
 	Io.LogFilename = nullptr;
 	Io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	Io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+	if (InWindow)
+	{
+		Io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
+	}
 	Io.BackendRendererName = "Hyperion RHI";
 	Io.BackendPlatformName = "Hyperion Platform";
 	auto& Platform = ImGui::GetPlatformIO();
@@ -290,19 +295,19 @@ bool FGui::Button(const char* InLabel, bool bInEnabled)
 	ImGui::BeginDisabled(!bInEnabled);
 	const bool bPressed = ImGui::Button(InLabel);
 	ImGui::EndDisabled();
-	return bPressed;
+	return Impl->TrackEdit(bPressed);
 }
 
 bool FGui::Checkbox(const char* InLabel, bool& bInValue)
 {
 	Impl->Select();
-	return ImGui::Checkbox(InLabel, &bInValue);
+	return Impl->TrackEdit(ImGui::Checkbox(InLabel, &bInValue));
 }
 
 bool FGui::Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum)
 {
 	Impl->Select();
-	return ImGui::SliderFloat(InLabel, &InValue, InMinimum, InMaximum, "%.2f");
+	return Impl->TrackEdit(ImGui::SliderFloat(InLabel, &InValue, InMinimum, InMaximum, "%.2f"));
 }
 
 bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth)
@@ -326,7 +331,10 @@ bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, st
 	Impl->Select();
 	bool bChanged = false;
 	const char* Preview = InIndex < InChoices.size() ? InChoices[InIndex].c_str() : "None";
-	if (ImGui::BeginCombo(InLabel, Preview))
+	const ImGuiID Id = ImGui::GetID(InLabel);
+	const bool bOpen = ImGui::BeginCombo(InLabel, Preview);
+	const bool bActivated = ImGui::IsItemActivated();
+	if (bOpen)
 	{
 		for (std::size_t Index = 0; Index < InChoices.size(); ++Index)
 		{
@@ -340,7 +348,7 @@ bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, st
 		}
 		ImGui::EndCombo();
 	}
-	return bChanged;
+	return Impl->TrackEdit(Id, bOpen && !bChanged, bActivated, bChanged);
 }
 
 bool FGui::InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter)
@@ -348,8 +356,10 @@ bool FGui::InputText(const char* InLabel, std::string& InValue, bool bInCommitOn
 	Impl->Select();
 	std::vector<char> Buffer(InValue.size() + 1024, 0);
 	std::copy(InValue.begin(), InValue.end(), Buffer.begin());
-	if (!ImGui::InputText(InLabel, Buffer.data(), Buffer.size(),
-	                      bInCommitOnEnter ? ImGuiInputTextFlags_EnterReturnsTrue : 0))
+	if (!Impl->TrackEdit(ImGui::InputText(InLabel, Buffer.data(), Buffer.size(),
+	                                      Impl->bLiveEdit
+	                                          ? ImGuiInputTextFlags_NoUndoRedo
+	                                          : (bInCommitOnEnter ? ImGuiInputTextFlags_EnterReturnsTrue : 0))))
 	{
 		return false;
 	}
@@ -360,14 +370,14 @@ bool FGui::InputText(const char* InLabel, std::string& InValue, bool bInCommitOn
 bool FGui::InputFloat(const char* InLabel, float& InValue)
 {
 	Impl->Select();
-	return ImGui::InputFloat(InLabel, &InValue, 0, 0, "%.6g", ImGuiInputTextFlags_EnterReturnsTrue);
+	return Impl->DragNumber(InLabel, ImGuiDataType_Float, &InValue, .01f, "%.6g");
 }
 
 bool FGui::InputVector(const char* InLabel, FVec3& InValue)
 {
 	Impl->Select();
 	float Values[]{InValue.X, InValue.Y, InValue.Z};
-	if (!ImGui::InputFloat3(InLabel, Values, "%.6g", ImGuiInputTextFlags_EnterReturnsTrue))
+	if (!Impl->DragComponents(InLabel, Values, 3))
 	{
 		return false;
 	}
@@ -386,8 +396,9 @@ bool FGui::InputMatrix(const char* InLabel, FMat4& InValue)
 	for (unsigned Column = 0; Column < 4; ++Column)
 	{
 		const auto Label = "Column " + std::to_string(Column);
-		bChanged |= ImGui::InputFloat4(Label.c_str(), InValue.Values.data() + Column * 4, "%.6g",
-		                               ImGuiInputTextFlags_EnterReturnsTrue);
+		BeginPropertyRow(Label.c_str());
+		bChanged |= Impl->DragComponents("##value", InValue.Values.data() + Column * 4, 4);
+		EndPropertyRow();
 	}
 	ImGui::PopID();
 	return bChanged;
@@ -484,6 +495,10 @@ FGuiDrawData FGui::Render()
 {
 	Impl->Select();
 	ImGui::Render();
+	if (Impl->Window)
+	{
+		Impl->Window->SetMouseCursor(MouseCursor());
+	}
 	const auto* Source = ImGui::GetDrawData();
 	FGuiDrawData Out;
 	Out.DisplayPosition = {Source->DisplayPos.x, Source->DisplayPos.y};

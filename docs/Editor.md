@@ -40,9 +40,10 @@ python tools/Bootstrap.py
 - 复用 Runtime 的 `FSceneCameraController` 飞行模式。SceneViewer 使用默认环绕模式，其他视口宿主也可以显式选择飞行模式。
 - **Home** 或工具栏 **Frame Scene** 将镜头对准场景范围。
 - **Exposure** 调整视口曝光，不写回资产。
-- Outliner 支持搜索和层级选择，一个完整模型实例对应一个模型对象，内部 primitive 不自动成为场景子对象。Details 展示反射属性，Apply 提交组件修改，Revert 放弃草稿。模型整体及 section 材质 override 仍属于实例，不改变共享资产；已有显式展开的场景继续兼容。
-- **Edit > Undo / Redo** 撤销重做；**File > Save Scene / Save Scene As** 保存文档。标题 `*` 表示未保存修改，保存期间的新修改仍保持为脏。
-- **Transform (Local)** 分为 Position、Rotation、Scale 三行，分别提供 X/Y/Z 输入。Rotation 使用度数，绕固定 X、Y、Z 轴依次旋转；悬停查看具体约定。输入数值并按 Enter 后形成草稿，Apply 提交，Revert 放弃。原有剪切信息保留，重新挂接父对象保持局部矩阵。组件菜单支持添加注册的 CPU 组件和移除非必需组件，提交前验证完整场景。
+- Outliner 支持搜索和层级选择，一个完整模型实例对应一个模型对象，内部 primitive 不自动成为场景子对象。Details 展示反射属性，合法输入实时更新场景，无需 Apply/Revert；无效中间输入不写入场景。模型整体及 section 材质 override 仍属于实例，不改变共享资产；已有显式展开的场景继续兼容。
+- **Ctrl+Z** 或 **Edit > Undo** 撤销，**Ctrl+Y / Ctrl+Shift+Z** 或 **Edit > Redo** 重做。一次连续输入、拖动或颜色选择器会话合并为一条历史，切换属性、结束输入或关闭选择器后开始新的记录。即使值改回原值，本次操作仍标记为修改，直到撤销回到保存点。连续撤销按操作逐项恢复；撤销后进行新编辑会清除重做分支。Inspector 文本输入也使用文档级撤销，其他文本框保留自身编辑行为。保存、切换对象或场景操作会结束当前编辑；**File > Save Scene / Save Scene As** 保存文档。标题 `*` 表示未保存修改，保存期间的新修改仍保持为脏。
+- **Transform (Local)** 分为 Position、Rotation、Scale 三行，分别提供 X/Y/Z 输入。Rotation 使用度数（不显示 deg 后缀），绕固定 X、Y、Z 轴依次旋转；悬停查看具体约定。数值框支持单击输入和按住左键左右拖拽调节；悬停显示左右箭头，拖拽期间隐藏指针，松开恢复。一次拖拽作为一条撤销记录。输入数值即时生效，Enter 或失焦结束本次编辑，Ctrl+Z 恢复本次编辑前的值。原有剪切信息保留，Parent ID 不在属性面板中显示，已有父子关系保持不变。组件菜单支持添加注册的 CPU 组件和移除非必需组件，提交前验证完整场景。
+- 灯光 **Color** 显示颜色预览块，点击打开色轮选择器，选色过程中实时更新场景，Close 或点击外部关闭，Ctrl+Z 撤销整次选色。展开 Color 可输入 0～255 的 R/G/B 分量（sRGB），实时生效。引擎保留线性 RGB 存储，亮度通过 Intensity 调整。
 - **Rendering diagnostics (read only)** 显示对应 primitive 的已应用状态和最近 draw。属性来自 Main，诊断来自 Render 发布的只读副本。组件与扩展契约见 [SceneComponents.md](SceneComponents.md)。
 - 拖动标签可调整停靠位置；**Window** 菜单可重新显示关闭的面板，**Reset Layout** 恢复默认布局。
 
@@ -54,9 +55,9 @@ python tools/Bootstrap.py
 
 视口的 **Set initial view** 将当前编辑器视角的位置、朝向与镜头参数写入场景设置。它支持 Undo/Redo，保存后下次打开采用该视图。它没有 Enabled、父对象或 Outliner 节点。导航不会自动更新这个预设。
 
-Camera 组件用于用户明确创作的场景相机。点击 **Create camera from view** 创建可撤销的相机对象；它不会自动成为运行时默认相机。选择相机后，**Preview camera** 或视口的 **View source** 可切换为该相机的实时预览。此时导航与 Frame Scene 停用，修改 Transform/Camera 组件并 Apply 后直接看到效果。**Return to editor view** 恢复进入预览前的独立浏览视角。
+Camera 组件用于用户明确创作的场景相机。点击 **Create camera from view** 创建可撤销的相机对象；它不会自动成为运行时默认相机。选择相机后，**Preview camera** 或视口的 **View source** 可切换为该相机的实时预览。此时导航与 Frame Scene 停用，修改 Transform/Camera 组件时直接看到效果。**Return to editor view** 恢复进入预览前的独立浏览视角。
 
-预览相机或其父对象禁用、相机删除、Camera 组件移除时，视口清空并显示不可用原因，不保留旧相机副本，也不切换到其他相机。**Apply editor view to camera** 把保留的编辑器视角应用到所选相机；有父对象时换算为局部变换，父变换不可逆则拒绝整次修改。该操作同时写入镜头参数，支持 Undo/Redo。存在组件草稿时须先 Apply/Revert。当前版本不提供 Pilot、相机画中画或视锥 Gizmo。
+预览相机或其父对象禁用、相机删除、Camera 组件移除时，视口清空并显示不可用原因，不保留旧相机副本，也不切换到其他相机。**Apply editor view to camera** 把保留的编辑器视角应用到所选相机；有父对象时换算为局部变换，父变换不可逆则拒绝整次修改。该操作同时写入镜头参数，支持 Undo/Redo。当前版本不提供 Pilot、相机画中画或视锥 Gizmo。
 
 ## 模块与帧顺序
 
@@ -92,7 +93,7 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 `gui_docking` 验证布局保存恢复和纹理 ID；`gui_texture_rendering` 验证真实 RHI 离屏 sRGB 输出、GUI 采样和无效绑定拒绝。`scene_viewer_controls` 覆盖共享控制器的默认环绕模式、飞行模式的按键门槛、固定位置旋转、滚轮调速/推拉分流、速度与位移一致性、速度边界及输入中断恢复。`editor_acceptance` 使用真实控件位置产生 Platform 格式的输入事件，覆盖菜单打开 Sponza、右键移动门槛、松开右键停止、原地旋转、右键滚轮调速、普通滚轮推拉、模态输入隔离、视口隐藏与恢复、窗口缩放、场景重开、加载错误恢复和加载中退出。GPU 验收需要 D3D12 环境及挂载的 Sponza 资产。
 
-文档验收通过 `--exercise-document OUTPUT.hasset` 点击反射属性和 Apply，验证草稿保护、Render 已应用状态、Undo/Redo、异步保存期间的新修改、重载、无效/过期提交拒绝、只读挂载保存失败和独立视口相机。`--report` 输出验收结果及保存耗时；输出场景写到指定测试目录。
+文档验收通过 `--exercise-document OUTPUT.hasset` 编辑反射属性，验证 Enter 前实时生效、按属性合并历史、连续 Ctrl+Z/Redo、改回原值仍保留修改记录、重做分支截断、Render 已应用状态、异步保存期间的新修改、重载、无效/过期提交拒绝、只读挂载保存失败和独立视口相机。`--report` 输出验收结果及保存耗时；输出场景写到指定测试目录。
 
 文档验收还使用真实键盘输入编辑 Position X、Rotation Z 和 Scale Y，检查度数到矩阵的转换、精确 Undo/Redo 及保存重载。
 

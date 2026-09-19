@@ -17,49 +17,33 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	{
 		return false;
 	}
-	auto Draft = InspectorDrafts.find(InComponent.Id);
-	if (Draft != InspectorDrafts.end() && !Draft->second.bModified && Draft->second.Revision != InRevision)
-	{
-		InspectorDrafts.erase(Draft);
-		Draft = InspectorDrafts.end();
-	}
-	if (Draft == InspectorDrafts.end())
-	{
-		Draft = InspectorDrafts
-		            .emplace(InComponent.Id,
-		                     FInspectionDraft{FRecordDraft(*InComponent.Type->Record, InComponent.Get()), InRevision})
-		            .first;
-	}
-	auto& State = Draft->second;
-	State.bModified |= Gui->EditRecord(State.Record, Identity, Options.ExerciseDocument.empty() ?
+	FRecordDraft Record(*InComponent.Type->Record, InComponent.Get());
+	Gui->BeginLiveEdit();
+	const bool bChanged = Gui->EditRecord(Record, Identity, Options.ExerciseDocument.empty() ?
 	    std::function<void(std::string_view, FVec4)>{} : [&](std::string_view InField, FVec4 InBounds)
 	    { InspectionBounds[InComponent.Type->Id + "/" + std::string(InField)] = InBounds; });
-	if (State.bModified && State.Revision != InRevision)
+	const auto Edit = Gui->EndLiveEdit();
+	if (Edit.ActiveInteraction)
 	{
-		Gui->TextWrapped("This draft is stale. Revert to read the current component.");
+		InspectorInteraction = Edit.ActiveInteraction;
 	}
-	if (Gui->Button(("Apply##" + Identity).c_str(), State.bModified && State.Revision == InRevision))
+	if (bChanged)
 	{
-		auto Candidate = Node;
-		State.Record.ApplyToCandidate(Candidate.Components.Find(InComponent.Id)->Edit());
-		CommitEdit(InView.Handle, std::move(Candidate), State.Revision);
-		InspectorDrafts.erase(Draft);
-		return true;
-	}
-	if (!Options.ExerciseDocument.empty())
-	{
-		InspectionBounds[InComponent.Type->Id + "/apply"] = Gui->LastItemBounds();
-	}
-	Gui->SameLine();
-	if (Gui->Button(("Revert##" + Identity).c_str(), State.bModified))
-	{
-		InspectorDrafts.erase(Draft);
-		return true;
+		try
+		{
+			auto Candidate = Node;
+			Record.ApplyToCandidate(Candidate.Components.Find(InComponent.Id)->Edit());
+			PendingInspectorEdit =
+			    FPendingInspectorEdit{InView.Handle, std::move(Candidate), InRevision, Edit.ChangedInteraction};
+		}
+		catch (const std::exception& Failure)
+		{
+			Error = Failure.what();
+		}
 	}
 	if (!InComponent.Type->bRequired)
 	{
-		Gui->SameLine();
-		if (Gui->Button(("Remove##" + Identity).c_str(), !HasDrafts()))
+		if (Gui->Button(("Remove##" + Identity).c_str()))
 		{
 			auto Candidate = Node;
 			Candidate.Components.Remove(InComponent.Id);
@@ -84,22 +68,27 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 {
 	const auto& Node = *InView.Node;
 	const auto Revision = Scene->GetRevision();
-	if (InspectedObject != InView.Handle)
-	{
-		InspectorDrafts.clear();
-		InspectedObject = InView.Handle;
-	}
 	auto Name = Node.Name;
 	bool bEnabled = Node.bEnabled;
-	const bool bNameChanged = Gui->InputText("Object name", Name);
-	const bool bEnabledChanged = Gui->Checkbox("Enabled", bEnabled);
+	Gui->BeginLiveEdit();
+	Gui->BeginPropertyRow("Object name");
+	const bool bNameChanged = Gui->InputText("##value", Name);
+	Gui->EndPropertyRow();
+	Gui->BeginPropertyRow("Enabled");
+	const bool bEnabledChanged = Gui->Checkbox("##value", bEnabled);
+	Gui->EndPropertyRow();
+	const auto Edit = Gui->EndLiveEdit();
+	if (Edit.ActiveInteraction)
+	{
+		InspectorInteraction = Edit.ActiveInteraction;
+	}
 	if (bNameChanged || bEnabledChanged)
 	{
 		auto Candidate = Node;
 		Candidate.Name = std::move(Name);
 		Candidate.bEnabled = bEnabled;
-		CommitEdit(InView.Handle, std::move(Candidate), Revision);
-		return;
+		PendingInspectorEdit =
+		    FPendingInspectorEdit{InView.Handle, std::move(Candidate), Revision, Edit.ChangedInteraction};
 	}
 	Gui->TextWrapped("Object ID: " + Node.Id);
 	if (Node.Camera())
@@ -127,7 +116,6 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 	}
 	if (Gui->BeginMenu("Add component"))
 	{
-		Gui->BeginDisabled(HasDrafts());
 		for (const auto& Type : SceneComponentRegistry().All())
 		{
 			const bool bPresent =
@@ -139,7 +127,6 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 			if (!bPresent && !Type->bRequired && Type->CppType != typeid(FSceneModelComponent) &&
 			    Type->CppType != typeid(FSceneModelSource) && Gui->MenuItem(Type->Label.c_str()))
 			{
-				Gui->EndDisabled();
 				Gui->EndMenu();
 				auto Candidate = Node;
 				Candidate.Components.Add(Type->Id + "-" + std::to_string(Revision + 1), Type->Id);
@@ -147,7 +134,6 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 				return;
 			}
 		}
-		Gui->EndDisabled();
 		Gui->EndMenu();
 	}
 }

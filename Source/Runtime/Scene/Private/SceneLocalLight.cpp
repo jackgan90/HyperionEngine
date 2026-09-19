@@ -26,7 +26,8 @@ template<> const FRecordDescriptor& RecordType<FScenePointLight>()
 	{
 		auto Result = MakeRecord<FScenePointLight>(
 		    "hyperion.scenepointlight",
-		    {Member("color", &FScenePointLight::Color, Inspect("Color", 0, {})),
+		    {Member("color", &FScenePointLight::Color,
+		            {.Inspector = FPropertyPresentation{.Label = "Color", .Widget = EPropertyWidget::Color3}}),
 		     Member("intensity", &FScenePointLight::Intensity, Inspect("Intensity", 0, {})),
 		     Member("range", &FScenePointLight::Range, Inspect("Range", .000001, {}))},
 		    1, ValidateScenePointLight);
@@ -96,7 +97,8 @@ template<> const FRecordDescriptor& RecordType<FSceneSpotLight>()
 	{
 		auto Result = MakeRecord<FSceneSpotLight>(
 		    "hyperion.scenespotlight",
-		    {Member("color", &FSceneSpotLight::Color, Inspect("Color", 0, {})),
+		    {Member("color", &FSceneSpotLight::Color,
+		            {.Inspector = FPropertyPresentation{.Label = "Color", .Widget = EPropertyWidget::Color3}}),
 		     Member("intensity", &FSceneSpotLight::Intensity, Inspect("Intensity", 0, {})),
 		     Member("range", &FSceneSpotLight::Range, Inspect("Range", .000001, {})),
 		     Member("innerRadians", &FSceneSpotLight::InnerRadians, Inspect("Inner cone (radians)", 0, {})),

@@ -63,18 +63,15 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, InspectionBounds.at(MeshType + "/visible"));
 			break;
 		case 3:
-			Check(HasDrafts(), "Inspector click did not create a component draft");
-			Reject(
-			    [&]
-			    {
-				    SaveScene(Options.ExerciseDocument.string());
-			    });
-			ExerciseClick(InEvents, InspectionBounds.at(MeshType + "/apply"));
+			Check(IsDirty() && !Scene->FindNode(*Selection)->Model()->bVisible,
+			      "Inspector change was not applied immediately");
+			Check(HistoryCursor == 1 && History.size() == 1, "New editing did not truncate the redo branch");
+			++ExerciseStep;
 			break;
 		case 4:
 		{
-			Check(IsDirty() && !HasDrafts() && !Scene->FindNode(*Selection)->Model()->bVisible,
-			      "Inspector Apply did not commit the component");
+			Check(IsDirty() && !Scene->FindNode(*Selection)->Model()->bVisible,
+			      "Live inspector did not commit the component");
 			const auto Readback = Scene->GetComponentDiagnostics(*Selection, MeshType);
 			if (!Readback || !Readback->bApplied)
 			{

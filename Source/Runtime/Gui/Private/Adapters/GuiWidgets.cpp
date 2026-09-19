@@ -6,22 +6,50 @@ namespace Hyperion
 bool FGui::InputNumber(const char* InLabel, double& InValue)
 {
 	Impl->Select();
-	return ImGui::InputScalar(InLabel, ImGuiDataType_Double, &InValue, nullptr, nullptr, "%.9g",
-	                          ImGuiInputTextFlags_EnterReturnsTrue);
+	return Impl->DragNumber(InLabel, ImGuiDataType_Double, &InValue, .01f, "%.9g");
 }
 
 bool FGui::InputInteger(const char* InLabel, std::int64_t& InValue)
 {
 	Impl->Select();
-	return ImGui::InputScalar(InLabel, ImGuiDataType_S64, &InValue, nullptr, nullptr, nullptr,
-	                          ImGuiInputTextFlags_EnterReturnsTrue);
+	return Impl->DragNumber(InLabel, ImGuiDataType_S64, &InValue, 1);
 }
 
 bool FGui::InputInteger(const char* InLabel, std::uint64_t& InValue)
 {
 	Impl->Select();
-	return ImGui::InputScalar(InLabel, ImGuiDataType_U64, &InValue, nullptr, nullptr, nullptr,
-	                          ImGuiInputTextFlags_EnterReturnsTrue);
+	return Impl->DragNumber(InLabel, ImGuiDataType_U64, &InValue, 1);
+}
+
+void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded)
+{
+	Impl->Select();
+	ImGui::PushID(InLabel);
+	const float Start = ImGui::GetCursorPosX();
+	const float Available = ImGui::GetContentRegionAvail().x;
+	const std::string_view Label(InLabel);
+	const auto Marker = Label.find("##");
+	const char* End = InLabel + (Marker == std::string_view::npos ? Label.size() : Marker);
+	const float LabelWidth = std::max(ImGui::CalcTextSize(InLabel, End).x + ImGui::GetStyle().ItemInnerSpacing.x,
+	                                  std::clamp(Available * .38f, 76.f, 160.f));
+	ImGui::AlignTextToFramePadding();
+	if (bOutExpanded)
+	{
+		*bOutExpanded =
+		    ImGui::TreeNodeEx("##expand", ImGuiTreeNodeFlags_NoTreePushOnOpen, "%.*s", int(End - InLabel), InLabel);
+	}
+	else
+	{
+		ImGui::TextUnformatted(InLabel, End);
+	}
+	ImGui::SameLine(Start + LabelWidth);
+	ImGui::SetNextItemWidth(std::max(1.f, ImGui::GetContentRegionAvail().x));
+}
+
+void FGui::EndPropertyRow()
+{
+	Impl->Select();
+	ImGui::PopID();
 }
 
 void FGui::BeginDisabled(bool bInDisabled)

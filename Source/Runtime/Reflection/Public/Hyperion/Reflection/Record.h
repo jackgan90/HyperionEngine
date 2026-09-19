@@ -46,7 +46,9 @@ struct FRecordValueShape
 enum class EPropertyWidget : std::uint8_t
 {
 	Default,
-	Vector3
+	Vector3,
+	// Linear RGB storage with an sRGB color picker and 0-255 display channels.
+	Color3
 };
 
 // Presentation is independent of persistence. Absence hides a top-level member from inspection.
