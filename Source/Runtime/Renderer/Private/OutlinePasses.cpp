@@ -26,7 +26,7 @@ std::shared_ptr<const FMaterialDefinition> OutlineMaterial(bool bInComposite)
 
 void AddSilhouetteOutlinePass(FRenderSession& InSession, FRenderGraph& InGraph, FRenderTargetSource InMask,
                               FRenderTargetSource InOutput, FViewport InViewport, float InWidth, bool bInClear,
-                              bool bInDeferPreparation, std::string InName)
+                              bool bInDeferPreparation, std::string InName, std::optional<FRect> InScissor)
 {
 	static const auto Material = OutlineMaterial(false);
 	const auto* Mask = InMask.Texture ? InMask.Texture->GetColorTarget() : nullptr;
@@ -42,6 +42,9 @@ void AddSilhouetteOutlinePass(FRenderSession& InSession, FRenderGraph& InGraph, 
 	Pass.Material = Material;
 	Pass.Lifetime = InOutput.Lifetime;
 	Pass.Viewport = InViewport;
+	Pass.Scissor = InScissor;
+	// The composite samples the whole attachment; scissor still limits the exterior shader's work.
+	Pass.bFullTargetViewport = bInClear;
 	Pass.Targets.Name = std::move(InName);
 	Pass.Targets.Color = FRenderColorTarget{
 	    InOutput, {bInClear ? EAttachmentLoad::Clear : EAttachmentLoad::Load}, {}, EGraphColorView::Linear};

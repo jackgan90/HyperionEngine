@@ -3,11 +3,63 @@
 #include "OutlineMaterials.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace Hyperion
 {
 namespace
 {
+FRect OutlineScissor(const FRenderItemList& InItems, const FRenderView& InView, float InWidth)
+{
+	const auto View = InView.Viewport.value_or(FViewport{0, 0, float(InView.Width), float(InView.Height)});
+	const FRect Full{int(View.X), int(View.Y), int(View.X + View.Width), int(View.Y + View.Height)};
+	FRect Result{Full.Right, Full.Bottom, Full.Left, Full.Top};
+	// Include the shader's discrete neighbourhood, sample resolve and raster rounding.
+	const float Margin = std::ceil(InWidth + .5f) + 1;
+	for (const auto& Item : InItems)
+	{
+		const auto Bounds = RenderPrimitiveWorldBounds(Item.State);
+		if (!IsUsable(Bounds))
+		{
+			return Full;
+		}
+		FVec2 Minimum{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+		FVec2 Maximum{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
+		for (unsigned Corner = 0; Corner < 8; ++Corner)
+		{
+			const auto World = BoundsCorner(Bounds, Corner);
+			const auto Clip = Transform(InView.ViewProjection, {World.X, World.Y, World.Z, 1});
+			// Perspective extrema are bounded by corners only when the box does not cross a clip plane.
+			if (!std::isfinite(Clip.W) || Clip.W <= 1e-6f || !std::isfinite(Clip.Z) || Clip.Z <= 0 || Clip.Z >= Clip.W)
+			{
+				return Full;
+			}
+			const FVec2 Pixel{View.X + (Clip.X / Clip.W + 1) * View.Width * .5f,
+			                  View.Y + (1 - Clip.Y / Clip.W) * View.Height * .5f};
+			if (!std::isfinite(Pixel.X) || !std::isfinite(Pixel.Y))
+			{
+				return Full;
+			}
+			Minimum.X = std::min(Minimum.X, Pixel.X);
+			Minimum.Y = std::min(Minimum.Y, Pixel.Y);
+			Maximum.X = std::max(Maximum.X, Pixel.X);
+			Maximum.Y = std::max(Maximum.Y, Pixel.Y);
+		}
+		const FRect ItemRect{int(std::clamp(std::floor(Minimum.X - Margin), float(Full.Left), float(Full.Right))),
+		                     int(std::clamp(std::floor(Minimum.Y - Margin), float(Full.Top), float(Full.Bottom))),
+		                     int(std::clamp(std::ceil(Maximum.X + Margin), float(Full.Left), float(Full.Right))),
+		                     int(std::clamp(std::ceil(Maximum.Y + Margin), float(Full.Top), float(Full.Bottom)))};
+		if (ItemRect.Left < ItemRect.Right && ItemRect.Top < ItemRect.Bottom)
+		{
+			Result.Left = std::min(Result.Left, ItemRect.Left);
+			Result.Top = std::min(Result.Top, ItemRect.Top);
+			Result.Right = std::max(Result.Right, ItemRect.Right);
+			Result.Bottom = std::max(Result.Bottom, ItemRect.Bottom);
+		}
+	}
+	return Result;
+}
+
 class FSelectionOutlineFeature final : public IRenderFeature
 {
 public:
@@ -29,7 +81,7 @@ public:
 
 private:
 	void Resize(FRenderResourceService& InResources, const FRenderView& InView, bool bInSupersample);
-	void AddObject(FRenderFeatureContext& InContext, const FSelectionOutlineSettings& InSettings,
+	bool AddObject(FRenderFeatureContext& InContext, const FSelectionOutlineSettings& InSettings,
 	               std::span<const FRenderPrimitiveHandle> InHandles, bool bInFirst);
 	FOutlineMaterials Materials;
 	FRHICapabilities Capabilities;
@@ -73,7 +125,7 @@ void FSelectionOutlineFeature::Resize(FRenderResourceService& InResources, const
 	           Lifetime, false};
 }
 
-void FSelectionOutlineFeature::AddObject(FRenderFeatureContext& InContext, const FSelectionOutlineSettings& InSettings,
+bool FSelectionOutlineFeature::AddObject(FRenderFeatureContext& InContext, const FSelectionOutlineSettings& InSettings,
                                          std::span<const FRenderPrimitiveHandle> InHandles, bool bInFirst)
 {
 	auto View = InContext.View;
@@ -121,15 +173,29 @@ void FSelectionOutlineFeature::AddObject(FRenderFeatureContext& InContext, const
 	}
 	Snapshot.Items = std::move(Items);
 	InContext.Statistics.SelectionOutline.Items += Snapshot.Items.Size();
+	const auto Scissor = OutlineScissor(Snapshot.Items, InContext.View, InSettings.Width);
+	if (Scissor.Right <= Scissor.Left || Scissor.Bottom <= Scissor.Top)
+	{
+		return false;
+	}
 	Snapshot.Frame = InContext.FrameOwner;
 	const auto Group = std::to_string(InContext.Statistics.SelectionOutline.MaskPasses);
+	if (bInFirst && InContext.View.Viewport)
+	{
+		// Sampled reads include the whole mask. Keep pixels outside a sub-viewport defined and zero.
+		FRenderSceneSnapshot Clear;
+		Clear.Targets.Name = "Outline/MaskInitialize";
+		Clear.Targets.Color = FRenderColorTarget{Mask, {EAttachmentLoad::Clear}, {}, EGraphColorView::Linear};
+		InContext.Graph.Add(InContext.Session.GetResources().GetPreparation().DeclarePass(InContext.Graph, Clear));
+	}
 	Snapshot.Targets.Name = "Outline/Mask/" + Group;
 	Snapshot.Targets.Color = FRenderColorTarget{Mask, {EAttachmentLoad::Clear}, {}, EGraphColorView::Linear};
 	InContext.Session.AppendTransientGeometry(InContext.Graph, std::move(Snapshot), InContext.bDeferPreparation);
 	++InContext.Statistics.SelectionOutline.MaskPasses;
 	const auto Viewport = InContext.View.Viewport.value_or(FViewport{0, 0, float(Width), float(Height)});
 	AddSilhouetteOutlinePass(InContext.Session, InContext.Graph, Mask, Outline, Viewport, InSettings.Width, bInFirst,
-	                         InContext.bDeferPreparation, "Outline/Exterior/" + Group);
+	                         InContext.bDeferPreparation, "Outline/Exterior/" + Group, Scissor);
+	return true;
 }
 
 void FSelectionOutlineFeature::Build(ERenderFeatureStage InStage, FRenderFeatureContext& InContext)
@@ -176,19 +242,20 @@ void FSelectionOutlineFeature::Build(ERenderFeatureStage InStage, FRenderFeature
 		}
 		else
 		{
-			AddObject(InContext, Settings, Object, bFirst);
-			bFirst = false;
+			if (AddObject(InContext, Settings, Object, bFirst))
+			{
+				bFirst = false;
+			}
 		}
 	}
 	if (!Union.empty())
 	{
-		AddObject(InContext, Settings, Union, true);
-		bFirst = false;
+		bFirst = !AddObject(InContext, Settings, Union, true);
 	}
 	Materials.EndFrame();
 	if (bFirst)
 	{
-		Reset();
+		// Keep pending mask materials alive; an empty/offscreen selection does not read the old outline.
 		return;
 	}
 	AddOutlineCompositePass(InContext.Session, InContext.Graph, Outline, InContext.Resources.Output,

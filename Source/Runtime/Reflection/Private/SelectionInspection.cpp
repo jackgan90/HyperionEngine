@@ -83,26 +83,52 @@ const FArchiveNode& FRecordSelectionDraft::GetValue(const FInspectionPath& InPat
 
 bool FRecordSelectionDraft::IsMixed(const FInspectionPath& InPath) const
 {
+	if (const auto Found = Mixed.find(InPath); Found != Mixed.end())
+	{
+		return Found->second;
+	}
 	const auto& First = GetValue(InPath);
-	return std::any_of(Drafts.begin() + 1, Drafts.end(),
-	                   [&](const auto& InDraft)
-	                   {
-		                   return !EqualInspectionValue(First, ValueAt(InDraft, InPath));
-	                   });
+	const bool bMixed = std::any_of(Drafts.begin() + 1, Drafts.end(),
+	                                [&](const auto& InDraft)
+	                                {
+		                                return !EqualInspectionValue(First, ValueAt(InDraft, InPath));
+	                                });
+	Mixed.emplace(InPath, bMixed);
+	return bMixed;
 }
 
 bool FRecordSelectionDraft::IsPresenceMixed(const FInspectionPath& InPath) const
 {
+	if (const auto Found = PresenceMixed.find(InPath); Found != PresenceMixed.end())
+	{
+		return Found->second;
+	}
 	const bool bAbsent = std::holds_alternative<std::monostate>(GetValue(InPath).Value);
-	return std::any_of(Drafts.begin() + 1, Drafts.end(),
-	                   [&](const auto& InDraft)
-	                   {
-		                   return bAbsent != std::holds_alternative<std::monostate>(ValueAt(InDraft, InPath).Value);
-	                   });
+	const bool bMixed =
+	    std::any_of(Drafts.begin() + 1, Drafts.end(),
+	                [&](const auto& InDraft)
+	                {
+		                return bAbsent != std::holds_alternative<std::monostate>(ValueAt(InDraft, InPath).Value);
+	                });
+	PresenceMixed.emplace(InPath, bMixed);
+	return bMixed;
 }
 
 bool FRecordSelectionDraft::CanEditCollection(const FInspectionPath& InPath,
                                               const FPropertyPresentation& InPresentation) const
+{
+	const auto Key = std::pair{InPath, InPresentation.ElementIdentity};
+	if (const auto Found = EditableCollections.find(Key); Found != EditableCollections.end())
+	{
+		return Found->second;
+	}
+	const bool bEditable = EvaluateCollection(InPath, InPresentation);
+	EditableCollections.emplace(Key, bEditable);
+	return bEditable;
+}
+
+bool FRecordSelectionDraft::EvaluateCollection(const FInspectionPath& InPath,
+                                               const FPropertyPresentation& InPresentation) const
 {
 	const auto* First = std::get_if<FArchiveNode::FArray>(&GetValue(InPath).Value);
 	if (!First)
@@ -141,6 +167,7 @@ bool FRecordSelectionDraft::CanEditCollection(const FInspectionPath& InPath,
 
 void FRecordSelectionDraft::SetValue(const FInspectionPath& InPath, const FArchiveNode& InValue)
 {
+	InvalidateComparisons();
 	for (auto& Draft : Drafts)
 	{
 		ValueAt(Draft, InPath) = InValue;
@@ -149,6 +176,7 @@ void FRecordSelectionDraft::SetValue(const FInspectionPath& InPath, const FArchi
 
 void FRecordSelectionDraft::SetPresent(const FInspectionPath& InPath, const FRecordValueShape& InShape, bool bInPresent)
 {
+	InvalidateComparisons();
 	for (auto& Draft : Drafts)
 	{
 		auto& Value = ValueAt(Draft, InPath);
@@ -166,5 +194,12 @@ void FRecordSelectionDraft::SetPresent(const FInspectionPath& InPath, const FRec
 void FRecordSelectionDraft::ApplyToCandidate(std::size_t InTarget, void* InCandidate) const
 {
 	Drafts.at(InTarget).ApplyToCandidate(InCandidate);
+}
+
+void FRecordSelectionDraft::InvalidateComparisons()
+{
+	Mixed.clear();
+	PresenceMixed.clear();
+	EditableCollections.clear();
 }
 } // namespace Hyperion

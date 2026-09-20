@@ -43,7 +43,12 @@ FBounds IRenderPrimitive::GetWorldBounds() const
 
 FBounds FStaticMeshRenderPrimitive::GetWorldBounds() const
 {
-	const auto& Current = GetState();
+	return RenderPrimitiveWorldBounds(GetState());
+}
+
+FBounds RenderPrimitiveWorldBounds(const FRenderPrimitiveState& InState)
+{
+	const auto& Current = InState;
 	if (Current.bClipSpace)
 	{
 		return {};

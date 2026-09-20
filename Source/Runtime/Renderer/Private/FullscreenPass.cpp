@@ -164,8 +164,9 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 	Draw.Bindings = Bindings.Set;
 	Draw.ConstantBindings = Owner.MaterialConstants->Bind(Program, *Snapshot->Schema, Values);
 	const auto& View = InPass.Viewport;
-	Draw.Scissor = {static_cast<int>(View.X), static_cast<int>(View.Y), static_cast<int>(View.X + View.Width),
-	                static_cast<int>(View.Y + View.Height)};
+	Draw.Scissor =
+	    InPass.Scissor.value_or(FRect{static_cast<int>(View.X), static_cast<int>(View.Y),
+	                                  static_cast<int>(View.X + View.Width), static_cast<int>(View.Y + View.Height)});
 	FGraphicsDrawBatch Result;
 	Result.bSrgb = MaterialPass.bSrgbTarget;
 	Result.Commands.Draws.push_back(std::move(Draw));

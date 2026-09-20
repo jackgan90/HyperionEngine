@@ -222,7 +222,12 @@ public:
 	void ApplyToCandidate(std::size_t InTarget, void* InCandidate) const;
 
 private:
+	bool EvaluateCollection(const FInspectionPath& InPath, const FPropertyPresentation& InPresentation) const;
+	void InvalidateComparisons();
 	std::vector<FRecordDraft> Drafts;
+	mutable std::map<FInspectionPath, bool> Mixed;
+	mutable std::map<FInspectionPath, bool> PresenceMixed;
+	mutable std::map<std::pair<FInspectionPath, std::string>, bool> EditableCollections;
 };
 } // namespace Hyperion
 

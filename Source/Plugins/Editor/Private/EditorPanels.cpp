@@ -359,8 +359,10 @@ void FEditorPlugin::DrawDetails()
 {
 	if (!bShowDetails)
 	{
+		InspectorDrafts.Clear();
 		return;
 	}
+	InspectorDrafts.Prepare(DocumentEpoch, Scene->GetRevision(), Selection.All());
 	if (Gui->BeginWindow("Details", bShowDetails))
 	{
 		FSceneNodeView View;

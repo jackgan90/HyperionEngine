@@ -20,7 +20,8 @@ struct FFullscreenPassDesc
 	FMaterialParameterValues Parameters;
 	FRenderPassTargets Targets;
 	FViewport Viewport;
-	bool bFullTargetViewport{}; // Omit graph viewport when initializing the whole attachment.
+	std::optional<FRect> Scissor; // Restrict pixel work without changing projection or attachment clears.
+	bool bFullTargetViewport{};   // Omit graph viewport when initializing the whole attachment.
 	std::shared_ptr<FFullscreenPreparationStatistics> Statistics;
 	std::shared_ptr<const void> Lifetime;
 	std::shared_ptr<const void> ParameterLifetime;

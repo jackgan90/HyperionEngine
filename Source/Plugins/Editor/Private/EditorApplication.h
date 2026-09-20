@@ -1,4 +1,6 @@
 #pragma once
+#include "EditorHistoryState.h"
+#include "EditorInspectionCache.h"
 #include "EditorPreferences.h"
 #include "EditorSelection.h"
 #if HYP_ENABLE_RENDERDOC
@@ -184,6 +186,7 @@ private:
 	void CommitSettings(FSceneSettings InSettings);
 	void RestoreHistory(std::size_t InIndex, bool bInAfter);
 	void RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAfter);
+	void RemapHistoryHandles(const FEditorHandleMap& InMapping);
 	void DrawComponentInspector(const FSceneNodeView& InView);
 	void DrawSelectionInspector();
 	void DrawSharedComponent(std::span<const FSceneHandle> InTargets, const FSceneComponentDescriptor& InType,
@@ -433,27 +436,8 @@ private:
 	std::uint64_t BenchmarkStarted{};
 	double LoadMilliseconds{};
 
-	struct FNodeHistory
-	{
-		FSceneHandle Handle;
-		FSceneNode Before;
-		FSceneNode After;
-	};
-
-	struct FHistoryEntry
-	{
-		FSceneHandle Handle;
-		std::optional<FSceneNode> Before;
-		std::optional<FSceneNode> After;
-		FSceneSettings BeforeSettings;
-		FSceneSettings AfterSettings;
-		std::uint64_t BeforeState{};
-		std::uint64_t AfterState{};
-		std::vector<std::pair<FSceneHandle, FSceneNode>> DeletedSubtree;
-		std::vector<FNodeHistory> Edits;
-		std::vector<FSceneHandle> DeletedRoots;
-		FEditorSelection BeforeSelection;
-	};
+	using FNodeHistory = FEditorNodeHistory;
+	using FHistoryEntry = FEditorHistoryEntry;
 
 	unsigned DeletionExerciseStep{};
 	FSceneHandle DeletionExerciseHandle;
@@ -488,6 +472,7 @@ private:
 	};
 
 	std::optional<FPendingInspectorEdit> PendingInspectorEdit;
+	FEditorInspectionCache InspectorDrafts;
 
 	struct FPendingSave
 	{

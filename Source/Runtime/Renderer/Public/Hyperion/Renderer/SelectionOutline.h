@@ -31,7 +31,8 @@ std::unique_ptr<IRenderFeature> MakeSelectionOutlineFeature(FRHICapabilities InC
 // InMask is binary coverage: 1 for covered samples, 0 outside. Supersampling is resolved by this pass.
 void AddSilhouetteOutlinePass(FRenderSession& InSession, FRenderGraph& InGraph, FRenderTargetSource InMask,
                               FRenderTargetSource InOutput, FViewport InViewport, float InWidth, bool bInClear,
-                              bool bInDeferPreparation = true, std::string InName = "Outline/Exterior");
+                              bool bInDeferPreparation = true, std::string InName = "Outline/Exterior",
+                              std::optional<FRect> InScissor = {});
 void AddOutlineCompositePass(FRenderSession& InSession, FRenderGraph& InGraph, FRenderTargetSource InOutline,
                              FRenderTargetSource InOutput, FViewport InViewport, FVec4 InColor,
                              bool bInDeferPreparation = true, std::string InName = "Outline/Composite");

@@ -21,48 +21,79 @@ const FSceneComponent* FindComponent(const FSceneNode& InNode, const FSceneCompo
 	}
 	return Result;
 }
-} // namespace
 
-void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
-                                        const FSceneComponentDescriptor& InType, std::uint64_t InRevision)
+FEditorInspectionCache::FSelectionEntry* PrepareSelection(FEditorInspectionCache& InCache, FSceneInstance& InScene,
+                                                          std::span<const FSceneHandle> InTargets,
+                                                          const FSceneComponentDescriptor& InType)
 {
+	if (auto* Cached = InCache.FindSelection(InType))
+	{
+		return Cached;
+	}
 	std::vector<const void*> Values;
-	std::vector<std::string> Ids;
+	FEditorInspectionCache::FSelectionEntry Entry;
 	bool bSameModelAsset = true;
-	const auto* Primary = Scene->FindNode(InTargets.front());
+	const auto* Primary = InScene.FindNode(InTargets.front());
 	for (const auto Handle : InTargets)
 	{
-		const auto* Node = Scene->FindNode(Handle);
+		const auto* Node = InScene.FindNode(Handle);
 		const auto* Component = Node ? FindComponent(*Node, InType) : nullptr;
 		if (!Component)
 		{
-			return;
+			return nullptr;
 		}
+		Entry.Type = Component->Type;
 		Values.push_back(Component->Get());
-		Ids.push_back(Component->Id);
+		Entry.Components.push_back(Component->Id);
 		if (Primary->Model() && Node->Model())
 		{
 			bSameModelAsset &=
 			    Primary->Model()->Asset == Node->Model()->Asset && Primary->Model()->Data == Node->Model()->Data;
 		}
 	}
+	Entry.Draft = std::make_unique<FRecordSelectionDraft>(*InType.Record, Values);
+	if (InType.CppType == typeid(FSceneModelComponent) && !bSameModelAsset)
+	{
+		Entry.Blocked = {"sections"};
+	}
+	return &InCache.StoreSelection(std::move(Entry));
+}
+} // namespace
+
+void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
+                                        const FSceneComponentDescriptor& InType, std::uint64_t InRevision)
+{
+	const auto* Primary = Scene->FindNode(InTargets.front());
 	const auto Identity = "selection/" + Primary->Id + "/" + InType.Id;
+	// Establish component intersection before showing a header, including collapsed sections.
+	if (!InspectorDrafts.FindSelection(InType))
+	{
+		for (const auto Handle : InTargets)
+		{
+			const auto* Node = Scene->FindNode(Handle);
+			if (!Node || !FindComponent(*Node, InType))
+			{
+				return;
+			}
+		}
+	}
 	if (!Gui->Section((InType.Label + "##" + Identity).c_str()))
 	{
 		return;
 	}
-	FRecordSelectionDraft Draft(*InType.Record, Values);
-	const std::vector<std::string> Blocked = InType.CppType == typeid(FSceneModelComponent) && !bSameModelAsset
-	                                             ? std::vector<std::string>{"sections"}
-	                                             : std::vector<std::string>{};
+	auto* Cached = PrepareSelection(InspectorDrafts, *Scene, InTargets, InType);
+	if (!Cached)
+	{
+		return;
+	}
 	Gui->BeginLiveEdit();
 	const bool bChanged = Gui->EditRecord(
-	    Draft, Identity,
+	    *Cached->Draft, Identity,
 	    [&](std::string_view InField, FVec4 InBounds)
 	    {
 		    InspectionBounds[InType.Id + "/" + std::string(InField)] = InBounds;
 	    },
-	    Blocked);
+	    Cached->Blocked);
 	const auto Edit = Gui->EndLiveEdit();
 	if (Edit.ActiveInteraction)
 	{
@@ -70,13 +101,14 @@ void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
 	}
 	if (bChanged)
 	{
+		auto Edited = InspectorDrafts.TakeSelection(InType.Id);
 		FPendingInspectorEdit Pending;
 		Pending.Revision = InRevision;
 		Pending.Interaction = Edit.ChangedInteraction;
 		for (std::size_t Index = 0; Index < InTargets.size(); ++Index)
 		{
 			auto Candidate = *Scene->FindNode(InTargets[Index]);
-			Draft.ApplyToCandidate(Index, Candidate.Components.Find(Ids[Index])->Edit());
+			Edited->ApplyToCandidate(Index, Candidate.Components.Find(Cached->Components[Index])->Edit());
 			Pending.Edits.push_back({InTargets[Index], std::move(Candidate)});
 		}
 		PendingInspectorEdit = std::move(Pending);

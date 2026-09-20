@@ -17,7 +17,7 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	{
 		return false;
 	}
-	FRecordDraft Record(*InComponent.Type->Record, InComponent.Get());
+	auto& Record = InspectorDrafts.Single(InComponent);
 	Gui->BeginLiveEdit();
 	const bool bChanged = Gui->EditRecord(Record, Identity, Options.ExerciseDocument.empty() ?
 	    std::function<void(std::string_view, FVec4)>{} : [&](std::string_view InField, FVec4 InBounds)
@@ -29,10 +29,12 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	}
 	if (bChanged)
 	{
+		// Even rejected edits must rebuild from authoritative values on the next frame.
+		auto Edited = InspectorDrafts.TakeSingle(InComponent.Id);
 		try
 		{
 			auto Candidate = Node;
-			Record.ApplyToCandidate(Candidate.Components.Find(InComponent.Id)->Edit());
+			Edited->ApplyToCandidate(Candidate.Components.Find(InComponent.Id)->Edit());
 			PendingInspectorEdit =
 			    FPendingInspectorEdit{InView.Handle, std::move(Candidate), InRevision, Edit.ChangedInteraction};
 		}

@@ -49,6 +49,9 @@ struct FRenderPrimitiveState
 	FMaterialParameterValues ObjectInputs; // Semantic provider inputs, independently owned.
 };
 
+// Invalid bounds mean that callers must conservatively retain the entire view.
+FBounds RenderPrimitiveWorldBounds(const FRenderPrimitiveState& InState);
+
 struct FRenderCamera
 {
 	FVec3 Forward{0, 0, -1};

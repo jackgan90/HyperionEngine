@@ -1,6 +1,8 @@
 #include "SceneInternal.h"
 #include <algorithm>
 #include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace Hyperion
 {
@@ -71,28 +73,58 @@ void FSceneStorage::FMutation::StageNode(std::uint32_t InSlot, FSceneNode InNode
 
 void FSceneStorage::FMutation::ValidateHierarchy(std::span<const std::uint32_t> InSlots) const
 {
+	// Sparse shared state visits each affected ancestor once, without scanning the entire scene.
+	std::unordered_map<std::uint32_t, bool> Completed;
+	std::vector<std::uint32_t> Path;
 	for (const auto Slot : InSlots)
 	{
-		std::set<std::uint32_t> Ancestors{Slot};
-		for (auto Parent = Read(Slot).Parent; Parent != InvalidSlot; Parent = Read(Parent).Parent)
+		Path.clear();
+		for (auto Current = Slot; Current != InvalidSlot; Current = Read(Current).Parent)
 		{
-			if (!Ancestors.insert(Parent).second)
+			const auto [Found, bInserted] = Completed.emplace(Current, false);
+			if (!bInserted)
 			{
-				throw std::invalid_argument("Component edit would create a hierarchy cycle");
+				if (!Found->second)
+				{
+					throw std::invalid_argument("Component edit would create a hierarchy cycle");
+				}
+				break;
 			}
+			Path.push_back(Current);
+		}
+		for (const auto Current : Path)
+		{
+			Completed.at(Current) = true;
 		}
 	}
 }
 
 void FSceneStorage::FMutation::DeriveRoots(std::span<const std::uint32_t> InSlots)
 {
-	const std::set<std::uint32_t> Candidates(InSlots.begin(), InSlots.end());
+	const std::unordered_set<std::uint32_t> Candidates(InSlots.begin(), InSlots.end());
+	std::unordered_map<std::uint32_t, bool> Covered;
+	std::vector<std::uint32_t> Path;
 	for (const auto Slot : InSlots)
 	{
 		bool bCovered{};
+		Path.clear();
 		for (auto Parent = Read(Slot).Parent; Parent != InvalidSlot; Parent = Read(Parent).Parent)
 		{
-			bCovered |= Candidates.contains(Parent);
+			if (Candidates.contains(Parent))
+			{
+				bCovered = true;
+				break;
+			}
+			if (const auto Found = Covered.find(Parent); Found != Covered.end())
+			{
+				bCovered = Found->second;
+				break;
+			}
+			Path.push_back(Parent);
+		}
+		for (const auto Parent : Path)
+		{
+			Covered.emplace(Parent, bCovered);
 		}
 		if (!bCovered)
 		{
@@ -106,6 +138,7 @@ bool FSceneStorage::EditNodes(std::vector<FSceneNodeEdit> InEdits)
 	FMutation Mutation(*this);
 	std::set<std::uint32_t> Seen;
 	std::vector<std::uint32_t> Derived;
+	std::vector<std::uint32_t> Reparented;
 	for (auto& Edit : InEdits)
 	{
 		const auto Slot = Live(Edit.Handle);
@@ -118,6 +151,10 @@ bool FSceneStorage::EditNodes(std::vector<FSceneNodeEdit> InEdits)
 			throw std::invalid_argument("Duplicate batch edit target");
 		}
 		const auto& Before = *Slots[Slot]->Node;
+		if (Before.Parent() != Edit.Node.Parent())
+		{
+			Reparented.push_back(Slot);
+		}
 		if (Before.Local().Values != Edit.Node.Local().Values || Before.Parent() != Edit.Node.Parent() ||
 		    Before.bEnabled != Edit.Node.bEnabled)
 		{
@@ -125,7 +162,7 @@ bool FSceneStorage::EditNodes(std::vector<FSceneNodeEdit> InEdits)
 		}
 		Mutation.StageNode(Slot, std::move(Edit.Node));
 	}
-	Mutation.ValidateHierarchy(Derived);
+	Mutation.ValidateHierarchy(Reparented);
 	Mutation.DeriveRoots(Derived);
 	for (const auto Slot : Seen)
 	{

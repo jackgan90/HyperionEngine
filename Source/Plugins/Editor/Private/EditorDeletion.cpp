@@ -72,16 +72,20 @@ void FEditorPlugin::RestoreDeletedSubtree(std::size_t InIndex)
 	auto& Entry = History.at(InIndex);
 	std::vector<FSceneNode> Nodes;
 	std::vector<FSceneHandle> Original;
+	FEditorHandleMap Mapping;
+	Mapping.reserve(Entry.DeletedSubtree.size());
 	for (const auto& [Handle, Node] : Entry.DeletedSubtree)
 	{
 		Original.push_back(Handle);
 		Nodes.push_back(Node);
+		Mapping.emplace(Handle, FSceneHandle{});
 	}
 	const auto Restored = Scene->AddNodes(std::move(Nodes));
 	for (std::size_t Index = 0; Index < Restored.size(); ++Index)
 	{
-		RemapHistoryHandle(Original[Index], Restored[Index]);
+		Mapping.at(Original[Index]) = Restored[Index];
 	}
+	RemapHistoryHandles(Mapping);
 	SetSelection(Entry.BeforeSelection);
 }
 } // namespace Hyperion

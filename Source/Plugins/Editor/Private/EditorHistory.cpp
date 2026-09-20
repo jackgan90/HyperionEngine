@@ -100,45 +100,14 @@ void FEditorPlugin::CommitSettings(FSceneSettings InSettings)
 
 void FEditorPlugin::RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAfter)
 {
-	for (auto& Entry : History)
-	{
-		Entry.BeforeSelection.Remap(InBefore, InAfter);
-		std::replace(Entry.DeletedRoots.begin(), Entry.DeletedRoots.end(), InBefore, InAfter);
-		for (auto& Edit : Entry.Edits)
-		{
-			if (Edit.Handle == InBefore)
-			{
-				Edit.Handle = InAfter;
-			}
-		}
-		for (auto& [Handle, Node] : Entry.DeletedSubtree)
-		{
-			if (Handle == InBefore)
-			{
-				Handle = InAfter;
-			}
-		}
-		if (Entry.Handle == InBefore)
-		{
-			Entry.Handle = InAfter;
-		}
-		for (auto* Settings : {&Entry.BeforeSettings, &Entry.AfterSettings})
-		{
-			for (auto* Reference :
-			     {&Settings->DefaultCamera, &Settings->MainDirectionalLight, &Settings->EnvironmentLight})
-			{
-				if (*Reference == InBefore)
-				{
-					*Reference = InAfter;
-				}
-			}
-		}
-	}
-	if (PreviewCamera == InBefore)
-	{
-		PreviewCamera = InAfter;
-	}
-	Selection.Remap(InBefore, InAfter);
+	RemapHistoryHandles(FEditorHandleMap{{InBefore, InAfter}});
+}
+
+void FEditorPlugin::RemapHistoryHandles(const FEditorHandleMap& InMapping)
+{
+	RemapEditorHistory(History, InMapping);
+	RemapEditorHandle(PreviewCamera, InMapping);
+	Selection.Remap(InMapping);
 }
 
 void FEditorPlugin::RestoreHistory(std::size_t InIndex, bool bInAfter)

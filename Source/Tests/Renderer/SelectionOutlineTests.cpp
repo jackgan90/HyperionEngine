@@ -66,6 +66,7 @@ struct FFixture
 	FSceneViewRequest View;
 	FForwardPipelineStatistics Statistics;
 	FScenePipelineSettings Settings;
+	float OutlineWidth = 2;
 
 	FFixture()
 	{
@@ -126,6 +127,7 @@ struct FFixture
 		}
 		Outline->Settings.Overlap = InMode;
 		Outline->Settings.bSupersample = bInSmooth;
+		Outline->Settings.Width = OutlineWidth;
 		for (const auto Object : InObjects)
 		{
 			Outline->Objects.push_back(Bridge->ResolveRenderPrimitives(Object));
@@ -270,9 +272,14 @@ void TestCoverage(FFixture& InFixture)
 	HYP_CHECK(Orange(InFixture.Frame(Objects)) == 0);
 }
 
-std::shared_ptr<const FMaterialDefinition> CustomMaskDefinition()
+std::shared_ptr<const FMaterialDefinition> CustomMaskDefinition(bool bInUnbounded = false, bool bInDisplaced = false)
 {
-	std::ofstream Shader(TestShaderRoot() / "CustomOutline.hlsl");
+	const std::string Path = bInDisplaced ? "DisplacedOutline.hlsl" : "CustomOutline.hlsl";
+	std::ofstream Shader(TestShaderRoot() / Path);
+	if (bInDisplaced)
+	{
+		Shader << "#define HYP_OUTLINE_DISPLACEMENT\n";
+	}
 	Shader << "#define HYP_MATERIAL_VIEW_V1\n#define HYP_MATERIAL_OBJECT_V1\n"
 	          "#include \"MaterialBlocks.hlsli\"\n"
 	          R"SHADER(cbuffer CustomV1 : register(b4)
@@ -289,6 +296,9 @@ FOutput VSMain(float3 InPosition : POSITION, float2 InUv : TEXCOORD0)
 {
 	FOutput Result;
 	Result.Position = mul(ViewProjection, mul(World, float4(InPosition, 1)));
+#ifdef HYP_OUTLINE_DISPLACEMENT
+	Result.Position += mul(ViewProjection, float4(2, 0, 0, 0));
+#endif
 	Result.Uv = InUv;
 	return Result;
 }
@@ -306,9 +316,10 @@ float PSMask(FOutput InInput) : SV_Target0
 	FMaterialDescription Description;
 	Description.Name = "Reflected custom outline";
 	FMaterialPass Pass;
-	Pass.Vertex = {"CustomOutline.hlsl", "VSMain"};
-	Pass.Pixel = {"CustomOutline.hlsl", "PSMain"};
+	Pass.Vertex = {Path, "VSMain"};
+	Pass.Pixel = {Path, "PSMain"};
 	Pass.State.Cull = EMaterialCull::None;
+	Pass.bRequiresConservativeBounds = bInUnbounded;
 	Description.Passes.push_back(Pass);
 	Pass.Usage = "SilhouetteMask";
 	Pass.Pixel.Entry = "PSMask";
@@ -415,6 +426,99 @@ void TestLifecycle(FFixture& InFixture)
 	InFixture.Scene.Remove(Outer);
 	HYP_CHECK(InFixture.Bridge->ResolveRenderPrimitives(Outer).empty());
 }
+
+std::shared_ptr<const FMaterialSnapshot> ScissorMaterial(FFixture& InFixture, bool bInUnbounded,
+                                                         bool bInDisplaced = false)
+{
+	const auto Definition = CustomMaskDefinition(bInUnbounded, bInDisplaced);
+	FCompiledMaterialDefinition Compiled;
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Worker},
+	                                              [&]
+	                                              {
+		                                              Compiled = CompileMaterialDefinition(
+		                                                  InFixture.Compiler, Definition,
+		                                                  InFixture.Device->GetCapabilities().ShaderFormat);
+	                                              }));
+	FMaterialInstance Instance(Compiled.Interface);
+	Instance.Set("Cutoff", FMaterialValue::Float(.25f));
+	Instance.Set("ColorOnly", FMaterialValue::Float(FVec4{.1f, .1f, .1f, 1}));
+	return Instance.Freeze();
+}
+
+void TestScissorEquivalence(FFixture& InFixture)
+{
+	const auto Bounded = ScissorMaterial(InFixture, false);
+	const auto Full = ScissorMaterial(InFixture, true);
+	const auto A = InFixture.Add(Quad());
+	const auto B = InFixture.Add(Quad(), Multiply(Translation({.4f, .3f, 0}), Scale({.25f, .25f, 1})));
+	const std::array Objects{A, B};
+	const std::array Transforms{Multiply(Translation({-.2f, -.2f, 0}), Scale({.3f, .3f, 1})),
+	                            Translation({-3.7f, 0, 0}), Translation({20, 0, 0}),
+	                            ComposeTRS({0, 0, 4.95f}, {0, std::sin(.6f), 0, std::cos(.6f)}, {1, 1, 1})};
+	for (const auto Depth : {EDepthConvention::Standard, EDepthConvention::Reversed})
+	{
+		InFixture.View.DepthConvention = Depth;
+		InFixture.View.Viewport =
+		    Depth == EDepthConvention::Reversed ? std::optional{FViewport{23, 17, 231, 171}} : std::nullopt;
+		for (const bool bSmooth : {false, true})
+		{
+			for (const auto Mode : {EOutlineOverlapMode::Union, EOutlineOverlapMode::PerObject})
+			{
+				for (const auto& Transform : Transforms)
+				{
+					InFixture.OutlineWidth = bSmooth ? 8.f : 2.f;
+					auto Model = *InFixture.Scene.Find(A);
+					Model.World = Transform;
+					Model.Surface.Snapshot = Bounded;
+					InFixture.Scene.Update(A, Model);
+					auto Other = *InFixture.Scene.Find(B);
+					Other.Surface.Snapshot = Bounded;
+					InFixture.Scene.Update(B, Other);
+					const auto Optimized = InFixture.Ready(Objects, Mode, bSmooth);
+					Model.Surface.Snapshot = Full;
+					InFixture.Scene.Update(A, Model);
+					Other.Surface.Snapshot = Full;
+					InFixture.Scene.Update(B, Other);
+					const auto Reference = InFixture.Ready(Objects, Mode, bSmooth);
+					HYP_CHECK(Optimized.Rgba == Reference.Rgba);
+				}
+			}
+		}
+	}
+	InFixture.View.Viewport.reset();
+	auto Offscreen = *InFixture.Scene.Find(A);
+	Offscreen.World = Translation({20, 0, 0});
+	Offscreen.Surface.Snapshot = Bounded;
+	InFixture.Scene.Update(A, Offscreen);
+	const std::array Single{A};
+	HYP_CHECK(Orange(InFixture.Ready(Single)) == 0 && InFixture.Statistics.SelectionOutline.MaskPasses == 0);
+	Offscreen = *InFixture.Scene.Find(B);
+	Offscreen.World = Translation({-20, 0, 0});
+	Offscreen.Surface.Snapshot = Bounded;
+	InFixture.Scene.Update(B, Offscreen);
+	HYP_CHECK(Orange(InFixture.Ready(Objects)) == 0 && InFixture.Statistics.SelectionOutline.MaskPasses == 0);
+	InFixture.Scene.Remove(B);
+	InFixture.Scene.Remove(A);
+	InFixture.OutlineWidth = 2;
+}
+
+void TestDisplacedBounds(FFixture& InFixture)
+{
+	const auto Displaced = ScissorMaterial(InFixture, true, true);
+	const auto Ordinary = ScissorMaterial(InFixture, false);
+	const auto Object = InFixture.Add(Quad(), Scale({.25f, .25f, 1}));
+	auto Model = *InFixture.Scene.Find(Object);
+	Model.Surface.Snapshot = Displaced;
+	InFixture.Scene.Update(Object, Model);
+	const std::array Objects{Object};
+	const auto Image = InFixture.Ready(Objects, EOutlineOverlapMode::Union, true);
+	HYP_CHECK(Orange(Image) > 10);
+	Model.World = Multiply(Translation({2, 0, 0}), Scale({.25f, .25f, 1}));
+	Model.Surface.Snapshot = Ordinary;
+	InFixture.Scene.Update(Object, Model);
+	HYP_CHECK(Image.Rgba == InFixture.Ready(Objects, EOutlineOverlapMode::Union, true).Rgba);
+	InFixture.Scene.Remove(Object);
+}
 } // namespace
 
 int main()
@@ -425,6 +529,8 @@ int main()
 		TestOverlap(Fixture);
 		TestCoverage(Fixture);
 		TestCustomCoverage(Fixture);
+		TestScissorEquivalence(Fixture);
+		TestDisplacedBounds(Fixture);
 		TestLifecycle(Fixture);
 		Fixture.Tasks.Wait(Fixture.Tasks.Dispatch({EDomain::Rhi, 0},
 		                                          [&]
