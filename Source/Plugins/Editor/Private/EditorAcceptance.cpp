@@ -250,10 +250,21 @@ void FEditorPlugin::ExerciseInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, SponzaBounds);
 			break;
 		case 3:
+			if (!bExerciseMouseDown && !bOpenDialog)
+			{
+				throw std::runtime_error("Single scene click unexpectedly opened the scene");
+			}
+			ExerciseWait = 2;
+			ExerciseClick(InEvents, SponzaBounds);
+			break;
 		case 20:
 			ExerciseClick(InEvents, OpenButtonBounds);
 			break;
 		case 4:
+			if (bOpenDialog || !CurrentPath.ends_with("/Sponza.hasset"))
+			{
+				throw std::runtime_error("Double scene click did not open the selected scene");
+			}
 			if (ReadyFrames > 8)
 			{
 				ExerciseClick(InEvents, ViewportRegion.Bounds);

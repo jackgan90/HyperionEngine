@@ -330,7 +330,7 @@ bool FGui::Slider(const char* InLabel, float& InValue, float InMinimum, float In
 	return Impl->TrackEdit(ImGui::SliderFloat(InLabel, &InValue, InMinimum, InMaximum, "%.2f"));
 }
 
-bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth)
+bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth, bool* bOutDoubleClicked)
 {
 	Impl->Select();
 	const float Indent = float(std::min(InDepth, 16u)) * Scale(12);
@@ -338,7 +338,12 @@ bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth)
 	{
 		ImGui::Indent(Indent);
 	}
-	const bool bSelected = ImGui::Selectable(InLabel, bInSelected);
+	const bool bSelected =
+	    ImGui::Selectable(InLabel, bInSelected, bOutDoubleClicked ? ImGuiSelectableFlags_AllowDoubleClick : 0);
+	if (bOutDoubleClicked)
+	{
+		*bOutDoubleClicked = bSelected && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+	}
 	if (Indent)
 	{
 		ImGui::Unindent(Indent);

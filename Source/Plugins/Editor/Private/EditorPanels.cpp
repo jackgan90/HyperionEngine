@@ -392,6 +392,7 @@ void FEditorPlugin::DrawOpenDialog()
 	}
 	if (Gui->BeginModal("Open Scene", bOpenDialog))
 	{
+		bool bOpenSelected{};
 		Gui->Text("Choose a scene from mounted content");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##FilterScenes", SceneFilter, false);
@@ -402,9 +403,11 @@ void FEditorPlugin::DrawOpenDialog()
 			{
 				continue;
 			}
-			if (Gui->Selectable(Path.c_str(), OpenPath == Path))
+			bool bDoubleClicked{};
+			if (Gui->Selectable(Path.c_str(), OpenPath == Path, 0, &bDoubleClicked))
 			{
 				OpenPath = Path;
+				bOpenSelected = bDoubleClicked;
 			}
 			if (Path.ends_with("/Sponza.hasset"))
 			{
@@ -418,7 +421,7 @@ void FEditorPlugin::DrawOpenDialog()
 		Gui->EndScrollRegion();
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##ScenePath", OpenPath, false);
-		if (Gui->Button("Open", !OpenPath.empty()))
+		if (Gui->Button("Open", !OpenPath.empty()) || bOpenSelected)
 		{
 			OpenScene(OpenPath);
 			bOpenDialog = false;

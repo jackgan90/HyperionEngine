@@ -117,7 +117,7 @@ public:
 	float AvailableWidth() const;
 	bool Checkbox(const char* InLabel, bool& bInValue);
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
-	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0);
+	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0, bool* bOutDoubleClicked = nullptr);
 	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex);
 	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true);
 	bool InputFloat(const char* InLabel, float& InValue);

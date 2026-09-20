@@ -24,7 +24,7 @@ python tools/Bootstrap.py
 
 选择 **File > Open Scene...**，在场景列表中选择 `/Game/Scenes/Sponza.hasset`，点击 **Open**。列表来自已挂载库的 `Catalog.hasset`；也可以输入原生场景的虚拟路径。首次加载期间状态栏显示进度，资源就绪后出现在视口中。失败时状态栏显示错误，可以再次打开其他场景。
 
-工具栏的 **Open Scene** 和 Content Browser 的 **Browse / Open...** 打开同一个对话框。Content Browser 列出场景资产；此版本尚未提供通用资产缩略图浏览。
+工具栏的 **Open Scene** 和 Content Browser 的 **Browse / Open...** 打开同一个对话框。对话框中单击条目只选中，双击条目等价于选中后点击 **Open**，同样遵循未保存修改提示。Content Browser 列出场景资产；此版本尚未提供通用资产缩略图浏览。
 
 可选启动参数：
 
