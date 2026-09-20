@@ -41,6 +41,9 @@ public:
 	ETransformGizmoHandle HitTest(FVec2 InPointer) const;
 	bool Begin(FVec2 InPointer);
 	bool Drag(FVec2 InPointer, FMat4& OutLocal);
+	// Common world operation matching the primary's single-object result. Rotation does not invert stretch.
+	// Throws for undefined group scale ratios or singular required parent mappings.
+	FMat4 GroupDelta(const FMat4& InEditedLocal) const;
 	void End();
 
 	bool IsDragging() const
@@ -66,6 +69,7 @@ private:
 	float RingAngle(FVec2 InPointer, unsigned InAxis) const;
 	FMat4 Initial = Identity();
 	FMat4 ParentInverse = Identity();
+	FMat4 ParentWorld = Identity();
 	FMat4 Rotation = Identity();
 	FAffineTransform Parts;
 	FSceneCameraPose Camera;

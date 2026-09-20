@@ -48,7 +48,8 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	}
 	if (Pointer.bPressed)
 	{
-		ViewportClick = FViewportClick{Pointer.Position, Bounds, ViewportSize, *ActiveCamera, Scene->GetRevision()};
+		ViewportClick =
+		    FViewportClick{Pointer.Position, Pointer.bCtrl, Bounds, ViewportSize, *ActiveCamera, Scene->GetRevision()};
 	}
 	if (!ViewportClick)
 	{
@@ -74,10 +75,11 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 		}
 		return;
 	}
+	const bool bToggle = Click.bToggle;
 	ViewportClick.reset();
 	if (const auto Light = PickLightMarker(Pointer.Position))
 	{
-		SelectObject(Light);
+		ClickObject(Light, bToggle);
 		return;
 	}
 	const FVec2 Position{(Pointer.Position.X - Bounds.X) / (Bounds.Z - Bounds.X),
@@ -93,11 +95,11 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	const auto Hit = Scene->Raycast(*Ray, QueryOptions);
 	if (Hit.Status == ESceneRayStatus::Hit)
 	{
-		SelectObject(Hit.Handle);
+		ClickObject(Hit.Handle, bToggle);
 	}
 	else if (Hit.Status == ESceneRayStatus::Miss)
 	{
-		SelectObject(std::nullopt);
+		ClickObject(std::nullopt, bToggle);
 	}
 }
 } // namespace Hyperion

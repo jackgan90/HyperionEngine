@@ -44,6 +44,9 @@ public:
 		std::uint32_t Add(FSceneNode InNode, std::uint32_t InParent);
 		void Derive(std::uint32_t InRoot);
 		void Remove(std::uint32_t InSlot);
+		void StageNode(std::uint32_t InSlot, FSceneNode InNode);
+		void ValidateHierarchy(std::span<const std::uint32_t> InSlots) const;
+		void DeriveRoots(std::span<const std::uint32_t> InSlots);
 		std::map<FSceneHandle, FSceneChange> PrepareChanges(std::uint64_t InRevision, bool bInSettingsChanged);
 		void Commit(bool bInAdvanceRevision = true, bool bInForceSettings = false);
 	};
@@ -72,6 +75,9 @@ public:
 	FSceneHandle AddNode(FSceneNode InNode);
 	std::vector<FSceneHandle> LoadNodes(std::vector<FSceneNode> InNodes);
 	bool EditNode(FSceneHandle InHandle, FSceneNode InNode);
+	bool EditNodes(std::vector<FSceneNodeEdit> InEdits);
+	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes);
+	bool RemoveSubtrees(std::span<const FSceneHandle> InHandles);
 	bool Reparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);
 	bool RemoveNodes(FSceneHandle InHandle, bool bInKeepChildren);
 	FMat4 ToLocal(std::uint32_t InParent, const FMat4& InWorld) const;

@@ -102,6 +102,15 @@ void FEditorPlugin::RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAft
 {
 	for (auto& Entry : History)
 	{
+		Entry.BeforeSelection.Remap(InBefore, InAfter);
+		std::replace(Entry.DeletedRoots.begin(), Entry.DeletedRoots.end(), InBefore, InAfter);
+		for (auto& Edit : Entry.Edits)
+		{
+			if (Edit.Handle == InBefore)
+			{
+				Edit.Handle = InAfter;
+			}
+		}
 		for (auto& [Handle, Node] : Entry.DeletedSubtree)
 		{
 			if (Handle == InBefore)
@@ -129,13 +138,26 @@ void FEditorPlugin::RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAft
 	{
 		PreviewCamera = InAfter;
 	}
+	Selection.Remap(InBefore, InAfter);
 }
 
 void FEditorPlugin::RestoreHistory(std::size_t InIndex, bool bInAfter)
 {
 	auto& Entry = History.at(InIndex);
 	const auto& Node = bInAfter ? Entry.After : Entry.Before;
-	if (!Entry.DeletedSubtree.empty() && !bInAfter)
+	if (!Entry.Edits.empty())
+	{
+		std::vector<FSceneNodeEdit> Edits;
+		for (const auto& Edit : Entry.Edits)
+		{
+			Edits.push_back({Edit.Handle, bInAfter ? Edit.After : Edit.Before});
+		}
+		if (!Scene->EditNodes(std::move(Edits), Scene->GetRevision()))
+		{
+			throw std::runtime_error("History targets no longer exist");
+		}
+	}
+	else if (!Entry.DeletedSubtree.empty() && !bInAfter)
 	{
 		RestoreDeletedSubtree(InIndex);
 	}
@@ -143,13 +165,26 @@ void FEditorPlugin::RestoreHistory(std::size_t InIndex, bool bInAfter)
 	{
 		if (!Node)
 		{
-			if (!Scene->RemoveSubtree(Entry.Handle))
+			const auto Roots = Entry.DeletedRoots.empty() ? std::vector{Entry.Handle} : Entry.DeletedRoots;
+			if (!Scene->RemoveSubtrees(Roots))
 			{
 				throw std::runtime_error("Undo target no longer exists");
 			}
-			if (!Entry.DeletedSubtree.empty() || (Selection && !Scene->FindNode(*Selection)))
+			if (!Entry.DeletedSubtree.empty())
 			{
 				SelectObject(std::nullopt);
+			}
+			else
+			{
+				auto Updated = Selection;
+				for (const auto Handle : Selection.All())
+				{
+					if (!Scene->FindNode(Handle))
+					{
+						Updated.Toggle(Handle);
+					}
+				}
+				SetSelection(std::move(Updated));
 			}
 			if (PreviewCamera && !Scene->FindNode(*PreviewCamera))
 			{

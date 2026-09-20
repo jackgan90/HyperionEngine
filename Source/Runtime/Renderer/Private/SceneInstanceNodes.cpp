@@ -11,66 +11,7 @@ std::uint64_t FSceneInstance::GetRevision() const
 
 bool FSceneInstance::EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision)
 {
-	auto& P = *Impl;
-	P.RequireOpen();
-	const auto* Existing = P.Scene.FindNode(InHandle);
-	if (!Existing || P.Scene.GetRevision() != InExpectedRevision)
-	{
-		return false;
-	}
-	if (InNode.Model() && Existing->Model() &&
-	    (InNode.Model()->Asset != Existing->Model()->Asset || InNode.Model()->Data != Existing->Model()->Data))
-	{
-		throw std::invalid_argument("Use asset instantiation to attach or replace model geometry");
-	}
-	const auto Pending = P.PendingMaterials.find(InHandle);
-	if (Pending != P.PendingMaterials.end())
-	{
-		throw std::invalid_argument("Wait for material loading before editing this object");
-	}
-	const bool bModelsChanged = Existing->Model().has_value() != InNode.Model().has_value();
-	auto Models = bModelsChanged ? P.Models : std::vector<FSceneInstanceModel>{};
-	if (bModelsChanged && InNode.Model())
-	{
-		const auto Load = P.Loads.find(InNode.Model()->Asset);
-		if (Load == P.Loads.end() || !Load->second.Data || InNode.Model()->Data != Load->second.Data)
-		{
-			throw std::invalid_argument("Static Mesh must select ready geometry from the scene asset table");
-		}
-		Models.push_back({InHandle, InNode.Model()->Asset, InNode.Id});
-	}
-	const auto Sky = P.SkyLoads.find(InHandle);
-	const auto& PreviousLight = Existing->EnvironmentLight();
-	auto& Light = InNode.EnvironmentLight();
-	const bool bSkyChanged =
-	    Sky != P.SkyLoads.end() && (!Light || !PreviousLight || Light->Source != PreviousLight->Source ||
-	                                Light->Sky != PreviousLight->Sky || !Sky->second->Error.empty());
-	if (Light)
-	{
-		Light->Data =
-		    Light->Source == ESceneEnvironmentSource::SkyAsset && PreviousLight ? PreviousLight->Data : nullptr;
-	}
-	if (bSkyChanged && Sky != P.SkyLoads.end())
-	{
-		P.RetiredSkyLoads.reserve(P.RetiredSkyLoads.size() + 1);
-	}
-	if (!P.Scene.EditNode(InHandle, std::move(InNode), InExpectedRevision))
-	{
-		return false;
-	}
-	if (bModelsChanged)
-	{
-		P.Models.swap(Models);
-		P.ForgetRemovedModels();
-	}
-	if (bSkyChanged && Sky != P.SkyLoads.end())
-	{
-		P.RetiredSkyLoads.push_back(Sky->second);
-		Sky->second->Cancellation.Cancel();
-		P.SkyLoads.erase(Sky);
-	}
-	P.bModelStatusDirty = true;
-	return true;
+	return EditNodes({{InHandle, std::move(InNode)}}, InExpectedRevision);
 }
 
 void FSceneInstance::FImpl::RefreshModels()

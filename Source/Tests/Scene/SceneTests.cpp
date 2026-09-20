@@ -231,6 +231,7 @@ void CheckManifest()
 
 void CheckTransformInspection();
 void CheckInitialViews();
+void CheckSceneBatches();
 
 int main()
 {
@@ -242,6 +243,7 @@ int main()
 		CheckSceneComponents();
 		CheckTransformInspection();
 		CheckInitialViews();
+		CheckSceneBatches();
 		CheckSceneExpansion();
 		CheckManifest();
 		CheckManifestMigration();

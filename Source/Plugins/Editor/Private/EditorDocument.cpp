@@ -5,12 +5,31 @@ namespace Hyperion
 {
 void FEditorPlugin::SelectObject(std::optional<FSceneHandle> InHandle)
 {
-	if (Selection != InHandle)
+	SetSelection(FEditorSelection(InHandle));
+}
+
+void FEditorPlugin::SetSelection(FEditorSelection InSelection)
+{
+	if (Selection != InSelection)
 	{
 		FinishInspectorEdit();
 	}
-	Selection = InHandle;
+	Selection = std::move(InSelection);
 	bSelectionInitialized = true;
+}
+
+void FEditorPlugin::ClickObject(std::optional<FSceneHandle> InHandle, bool bInToggle)
+{
+	if (!bInToggle)
+	{
+		SelectObject(InHandle);
+	}
+	else if (InHandle)
+	{
+		auto Updated = Selection;
+		Updated.Toggle(*InHandle);
+		SetSelection(std::move(Updated));
+	}
 }
 
 bool FEditorPlugin::PollClose()
@@ -71,8 +90,18 @@ void FEditorPlugin::DrawDiscardDialog()
 
 bool FEditorPlugin::IsDirty() const
 {
-	const auto* Node = GizmoEdit ? Scene->FindNode(GizmoEdit->Handle) : nullptr;
-	return DocumentState != SavedState || (Node && Node->Local().Values != GizmoEdit->Initial.Values);
+	if (GizmoEdit)
+	{
+		for (const auto& Target : GizmoEdit->Targets)
+		{
+			const auto* Node = Scene->FindNode(Target.Handle);
+			if (Node && Node->Local().Values != Target.Initial.Values)
+			{
+				return true;
+			}
+		}
+	}
+	return DocumentState != SavedState;
 }
 
 void FEditorPlugin::ResetDocument()
@@ -89,49 +118,7 @@ void FEditorPlugin::ResetDocument()
 void FEditorPlugin::CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision,
                                std::uint64_t InInteraction)
 {
-	if (!InInteraction)
-	{
-		FinishInspectorEdit();
-	}
-	const auto* Before = Scene->FindNode(InHandle);
-	if (!Before || Scene->GetRevision() != InExpectedRevision)
-	{
-		throw std::runtime_error("The object changed while editing. Try again with its current values.");
-	}
-	if (!InInteraction && *Before == InCandidate)
-	{
-		return;
-	}
-	const bool bMerge = InInteraction && InspectorTransaction && InspectorTransaction->Interaction == InInteraction &&
-	                    InspectorTransaction->Handle == InHandle &&
-	                    InspectorTransaction->Revision == InExpectedRevision && HistoryCursor == History.size() &&
-	                    InspectorTransaction->HistoryIndex + 1 == HistoryCursor;
-	FHistoryEntry Entry{InHandle, *Before, InCandidate, Scene->GetSettings(), {}, DocumentState, ++NextDocumentState};
-	History.reserve(HistoryCursor + 1);
-	if (!Scene->EditNode(InHandle, std::move(InCandidate), InExpectedRevision))
-	{
-		throw std::runtime_error("The edit target is no longer current");
-	}
-	Entry.AfterSettings = Scene->GetSettings();
-	DocumentState = Entry.AfterState;
-	if (bMerge)
-	{
-		auto& Previous = History.back();
-		Previous.After = std::move(Entry.After);
-		Previous.AfterSettings = std::move(Entry.AfterSettings);
-		Previous.AfterState = Entry.AfterState;
-	}
-	else
-	{
-		History.resize(HistoryCursor);
-		History.push_back(std::move(Entry));
-		++HistoryCursor;
-	}
-	if (InInteraction)
-	{
-		InspectorTransaction = FInspectorTransaction{InInteraction, InHandle, HistoryCursor - 1, Scene->GetRevision()};
-	}
-	Error.clear();
+	CommitEdits({{InHandle, std::move(InCandidate)}}, InExpectedRevision, InInteraction);
 }
 
 void FEditorPlugin::Undo()

@@ -2,6 +2,7 @@ add_library(hyperion_scene STATIC Private/Model.cpp Private/ModelIdentity.cpp Pr
 hyp_module(hyperion_scene)
 target_sources(hyperion_scene PRIVATE Private/SceneGeometry.cpp Private/SceneQuery.cpp Private/SceneRaycast.cpp)
 target_sources(hyperion_scene PRIVATE Private/SceneTransform.cpp)
+target_sources(hyperion_scene PRIVATE Private/SceneBatch.cpp)
 target_sources(hyperion_scene PRIVATE Private/PrimitiveShapes.cpp)
 target_sources(hyperion_scene PRIVATE Private/ObjectPlacement.cpp)
 target_link_libraries(hyperion_scene PUBLIC hyperion_asset_types hyperion_math hyperion_reflection hyperion_materials hyperion_environment)

@@ -107,7 +107,7 @@ void FEditorPlugin::DrawLightMarkers()
 {
 	for (const auto& Marker : CollectLightMarkers())
 	{
-		DrawLightMarker(*Marker.View.Node, Marker.View.World, Selection == Marker.View.Handle);
+		DrawLightMarker(*Marker.View.Node, Marker.View.World, Selection.Contains(Marker.View.Handle));
 	}
 	if (Placement.GetPreview())
 	{

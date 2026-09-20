@@ -117,14 +117,14 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 			Button(InEvents, false);
 			break;
 		case 12:
-			Check(!Placement.IsActive() && Selection.has_value(), Type + " did not finish its drop");
+			Check(!Placement.IsActive() && bool(Selection), Type + " did not finish its drop");
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1 &&
 			          HistoryCursor == PlacementExerciseBaseHistory + 1,
 			      Type + " did not create exactly one transaction: " + Error);
 			PlacementExerciseIds.push_back(Scene->FindNode(*Selection)->Id);
 			if (Type == "DirectionalLight")
 			{
-				Check(Scene->GetSettings().MainDirectionalLight == Selection,
+				Check(Scene->GetSettings().MainDirectionalLight == Selection.Primary(),
 				      "first directional light did not become main");
 			}
 			Undo();

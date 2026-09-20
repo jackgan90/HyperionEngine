@@ -49,6 +49,7 @@ bool FTransformGizmo::Configure(const FSceneCameraView& InCamera, FVec4 InViewpo
 		return false;
 	}
 	Initial = InLocal;
+	ParentWorld = InParent;
 	try
 	{
 		Parts = DecomposeAffine(InLocal);

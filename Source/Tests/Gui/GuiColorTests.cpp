@@ -17,6 +17,8 @@ public:
 	bool bDisabled{};
 	bool bLive{};
 	FGuiEditState Edit;
+	std::array<bool, 3> Mixed{};
+	std::array<bool, 3> Edited{};
 
 	FColorControls()
 	{
@@ -35,11 +37,20 @@ public:
 		{
 			Gui.BeginLiveEdit();
 		}
-		bChanged |= Gui.InputColor("Color##test", Color,
-		                           [&](std::string_view InId, FVec4 InBounds)
-		                           {
-			                           Bounds[std::string(InId)] = InBounds;
-		                           });
+		bChanged |= Gui.InputColor(
+		    "Color##test", Color,
+		    [&](std::string_view InId, FVec4 InBounds)
+		    {
+			    Bounds[std::string(InId)] = InBounds;
+		    },
+		    Mixed, &Edited);
+		for (unsigned Channel = 0; Channel < 3; ++Channel)
+		{
+			if (Edited[Channel])
+			{
+				Mixed[Channel] = false;
+			}
+		}
 		if (bLive)
 		{
 			Edit = Gui.EndLiveEdit();
@@ -174,6 +185,23 @@ void CheckLiveColorPopup()
 	Test.Frame();
 	HYP_CHECK(!Test.bChanged && !Test.Bounds.contains("picker"));
 }
+
+void CheckMixedColor()
+{
+	FColorControls Test;
+	Test.bLive = true;
+	Test.Mixed = {true, true, false};
+	Test.Frame();
+	Test.Click("expand", .05f);
+	Test.Type("R", "128");
+	HYP_CHECK(Test.bChanged && !Test.Mixed[0] && Test.Mixed[1]);
+	HYP_CHECK(Test.Color.Y == .5f && Test.Color.Z == .75f);
+	Test.bChanged = false;
+	Test.Click("swatch");
+	Test.Click("accept");
+	HYP_CHECK(Test.bChanged && !Test.Mixed[0] && !Test.Mixed[1] && !Test.Mixed[2]);
+	HYP_CHECK(Test.Color.Y == .5f && Test.Color.Z == .75f);
+}
 } // namespace
 
 void CheckColorControls()
@@ -182,4 +210,5 @@ void CheckColorControls()
 	CheckColorPopup();
 	CheckLiveColorPopup();
 	CheckLiveInputRestoration();
+	CheckMixedColor();
 }

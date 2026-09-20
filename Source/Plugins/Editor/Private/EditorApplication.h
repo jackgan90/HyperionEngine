@@ -1,5 +1,6 @@
 #pragma once
 #include "EditorPreferences.h"
+#include "EditorSelection.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
 #endif
@@ -47,6 +48,7 @@ struct FEditorOptions
 	bool bExercise{};
 	bool bExerciseGizmo{};
 	bool bExercisePicking{};
+	bool bExerciseMultiSelection{};
 };
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
@@ -129,6 +131,15 @@ private:
 	void PreparePickingExercise();
 	bool ExercisePickingScene(std::vector<FInputEvent>& InEvents);
 	void ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter, FVec2 InEmpty);
+	void ExerciseMultiSelection(std::vector<FInputEvent>& InEvents);
+	void PrepareMultiSelection();
+	void ExerciseMultiSelectionClicks(std::vector<FInputEvent>& InEvents);
+	void ExerciseMultiDetails(std::vector<FInputEvent>& InEvents);
+	void ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents);
+	void ExerciseMultiHistory();
+	void ExerciseMultiCancellation();
+	void PrepareMultiSelectionMarkers();
+	void CheckMultiSelectionMarkerDraws(const FGuiDrawData& InData);
 	void ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec2 InCenter);
 	void CheckGizmoHistory(unsigned InPhase);
 	void ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 InEnd, std::vector<FInputEvent>& InEvents);
@@ -174,6 +185,9 @@ private:
 	void RestoreHistory(std::size_t InIndex, bool bInAfter);
 	void RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAfter);
 	void DrawComponentInspector(const FSceneNodeView& InView);
+	void DrawSelectionInspector();
+	void DrawSharedComponent(std::span<const FSceneHandle> InTargets, const FSceneComponentDescriptor& InType,
+	                         std::uint64_t InRevision);
 	bool DrawComponent(const FSceneNodeView& InView, const FSceneComponent& InComponent, std::uint64_t InRevision);
 	void CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision,
 	                std::uint64_t InInteraction = 0);
@@ -191,6 +205,15 @@ private:
 	void DrawSaveDialog();
 	void DrawDiscardDialog();
 	void SelectObject(std::optional<FSceneHandle> InHandle);
+	void CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision,
+	                 std::uint64_t InInteraction = 0);
+	void SetSelection(FEditorSelection InSelection);
+	void ClickObject(std::optional<FSceneHandle> InHandle, bool bInToggle);
+	void DrawSelectionMarkers();
+	void PruneSelection();
+	void BeginGizmoEdit(const FSceneNodeView& InView, FVec4 InBounds);
+	void PreviewGizmoEdit(const FMat4& InPrimaryLocal);
+	std::vector<FSceneHandle> SelectedRoots() const;
 	bool PollClose();
 	bool IsDirty() const;
 
@@ -284,6 +307,15 @@ private:
 	bool bPlacementVerified{};
 	ETransformGizmoMode GizmoMode = ETransformGizmoMode::Position;
 
+	struct FGizmoTarget
+	{
+		FSceneHandle Handle;
+		FMat4 Initial;
+		FMat4 World;
+		FMat4 ParentInverse;
+		FMat4 Preview;
+	};
+
 	struct FGizmoEdit
 	{
 		FSceneHandle Handle;
@@ -291,6 +323,8 @@ private:
 		FMat4 Preview;
 		std::uint64_t Revision{};
 		FVec4 Bounds;
+		std::vector<FGizmoTarget> Targets;
+		bool bGroup{};
 	};
 
 	std::optional<FGizmoEdit> GizmoEdit;
@@ -304,7 +338,7 @@ private:
 	FForwardPipelineStatistics RenderStats;
 	FDeviceStats DeviceStats;
 	std::vector<std::string> ScenePaths;
-	std::optional<FSceneHandle> Selection;
+	FEditorSelection Selection;
 	FSelectionOutlineSettings OutlineSettings;
 	std::vector<FSceneHandle> OutlineExerciseObjects;
 	FSceneHandle OutlineExerciseWall;
@@ -313,6 +347,13 @@ private:
 	unsigned OutlineExerciseWait{};
 	bool bOutlinesVerified{};
 	bool bSelectionInitialized{};
+	unsigned MultiSelectionStep{};
+	unsigned MultiSelectionWait{};
+	bool bMultiSelectionVerified{};
+	std::vector<FSceneHandle> MultiSelectionObjects;
+	std::map<std::string, FVec4> MultiSelectionRows;
+	std::array<FMat4, 2> MultiSelectionInitial;
+	std::array<FMat4, 2> MultiSelectionFinal;
 	unsigned PickingExerciseStep{};
 	unsigned PickingSceneStep{};
 	FVec4 PickingLightBounds;
@@ -324,6 +365,7 @@ private:
 	struct FViewportClick
 	{
 		FVec2 Start;
+		bool bToggle{};
 		FVec4 Bounds;
 		FSize Size;
 		FSceneCameraView Camera;
@@ -339,6 +381,7 @@ private:
 	std::string CatalogError;
 	bool bShowViewport = true;
 	bool bShowOutliner = true;
+	bool bOutlinerToggle{};
 	bool bShowDetails = true;
 	bool bShowBrowser = true;
 	bool bOpenDialog{};
@@ -390,6 +433,13 @@ private:
 	std::uint64_t BenchmarkStarted{};
 	double LoadMilliseconds{};
 
+	struct FNodeHistory
+	{
+		FSceneHandle Handle;
+		FSceneNode Before;
+		FSceneNode After;
+	};
+
 	struct FHistoryEntry
 	{
 		FSceneHandle Handle;
@@ -400,6 +450,9 @@ private:
 		std::uint64_t BeforeState{};
 		std::uint64_t AfterState{};
 		std::vector<std::pair<FSceneHandle, FSceneNode>> DeletedSubtree;
+		std::vector<FNodeHistory> Edits;
+		std::vector<FSceneHandle> DeletedRoots;
+		FEditorSelection BeforeSelection;
 	};
 
 	unsigned DeletionExerciseStep{};
@@ -419,6 +472,7 @@ private:
 		FSceneHandle Handle;
 		std::size_t HistoryIndex{};
 		std::uint64_t Revision{};
+		std::vector<FSceneHandle> Targets;
 	};
 
 	std::optional<FInspectorTransaction> InspectorTransaction;
@@ -430,6 +484,7 @@ private:
 		FSceneNode Candidate;
 		std::uint64_t Revision{};
 		std::uint64_t Interaction{};
+		std::vector<FSceneNodeEdit> Edits;
 	};
 
 	std::optional<FPendingInspectorEdit> PendingInspectorEdit;

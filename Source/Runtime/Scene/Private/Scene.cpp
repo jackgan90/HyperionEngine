@@ -21,6 +21,24 @@ bool FScene::EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t In
 	return Storage->EditNode(InHandle, std::move(InNode));
 }
 
+bool FScene::EditNodes(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision)
+{
+	RequireMain();
+	return Storage->Revision == InExpectedRevision && Storage->EditNodes(std::move(InEdits));
+}
+
+std::vector<FSceneHandle> FScene::AddNodes(std::vector<FSceneNode> InNodes)
+{
+	RequireMain();
+	return Storage->AddNodes(std::move(InNodes));
+}
+
+bool FScene::RemoveSubtrees(std::span<const FSceneHandle> InHandles)
+{
+	RequireMain();
+	return Storage->RemoveSubtrees(InHandles);
+}
+
 FScene::FScene() : Storage(std::make_unique<FSceneStorage>())
 {
 	static std::atomic_uint64_t NextIdentity{1};

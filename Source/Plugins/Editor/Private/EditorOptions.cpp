@@ -40,6 +40,11 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 			Result.bExercisePicking = true;
 			continue;
 		}
+		if (Argument == "--exercise-multiselect")
+		{
+			Result.bExerciseMultiSelection = true;
+			continue;
+		}
 		if (Argument == "--benchmark-camera")
 		{
 			Result.bBenchmarkCamera = true;

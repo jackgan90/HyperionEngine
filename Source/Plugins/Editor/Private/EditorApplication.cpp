@@ -96,7 +96,7 @@ void FEditorPlugin::OpenScene(const std::string& InPath)
 	Camera.Reset();
 	bViewportCameraInitialized = false;
 	bCameraDragging = false;
-	Selection.reset();
+	Selection.Clear();
 	bSelectionInitialized = false;
 	ViewportClick.reset();
 	Error.clear();
@@ -182,6 +182,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
 		Scene->Tick();
 	}
+	PruneSelection();
 	bLoadErrorObserved |= !Scene->GetStatus().Error.empty();
 	InitializeViewportCamera();
 	PollPlacementResources();
@@ -211,6 +212,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	{
 		ExercisePickingInput(Events);
 	}
+	if (Options.bExerciseMultiSelection)
+	{
+		ExerciseMultiSelection(Events);
+	}
 	if (!Options.ExercisePlacement.empty())
 	{
 		ExercisePlacementInput(Events);
@@ -229,6 +234,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	{
 		CheckPlacementMarkerDraws(Data);
 	}
+	if (Options.bExerciseMultiSelection)
+	{
+		CheckMultiSelectionMarkerDraws(Data);
+	}
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
 		Scene->Tick();
@@ -236,7 +245,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	// Async scene readiness is independent of render frame rate.
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
-	                               bOutlinesVerified;
+	                               bOutlinesVerified || bMultiSelectionVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -283,9 +292,9 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		Finish();
 		return;
 	}
-	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || !Options.ExerciseDocument.empty() ||
-	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
-	     !Options.ExerciseCapture.empty()) &&
+	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
+	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
+	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out");
@@ -309,6 +318,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (Options.bExerciseMultiSelection && !bMultiSelectionVerified)
+	{
+		throw std::runtime_error("Editor multi-selection acceptance did not complete");
+	}
 	if (!Options.ExerciseOutlines.empty() && !bOutlinesVerified)
 	{
 		throw std::runtime_error("Editor outline acceptance did not complete");

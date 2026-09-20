@@ -107,9 +107,12 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Object));
 		}
 	}
-	else if (Selection)
+	else
 	{
-		Outline->Objects.push_back(Scene->ResolveRenderPrimitives(*Selection));
+		for (const auto Handle : Selection.All())
+		{
+			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Handle));
+		}
 	}
 	const bool bRenderScene = bViewportVisible;
 	const auto Preview = FreezePlacementPreview();

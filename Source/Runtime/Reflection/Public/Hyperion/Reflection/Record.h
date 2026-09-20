@@ -65,6 +65,8 @@ struct FPropertyPresentation
 	EPropertyWidget Widget = EPropertyWidget::Default;
 	std::string Unit;
 	std::string Tooltip;
+	// Stable field in sequence elements; mixed collections without correspondence are read-only.
+	std::string ElementIdentity;
 	bool operator==(const FPropertyPresentation&) const = default;
 };
 
@@ -187,6 +189,11 @@ public:
 		return Values;
 	}
 
+	const std::map<std::string, FArchiveNode>& GetValues() const
+	{
+		return Values;
+	}
+
 	void ApplyToCandidate(void* InCandidate) const;
 
 private:
@@ -194,6 +201,28 @@ private:
 	const FRecordDescriptor* Type;
 	std::shared_ptr<void> OriginalDisplay;
 	std::map<std::string, FArchiveNode> Values;
+};
+
+using FInspectionPath = std::vector<std::string>;
+
+bool EqualInspectionValue(const FArchiveNode& InLeft, const FArchiveNode& InRight);
+
+// Each target keeps its own display projection. Explicit leaf edits never copy unrelated primary fields.
+class FRecordSelectionDraft
+{
+public:
+	FRecordSelectionDraft(const FRecordDescriptor& InType, std::span<const void* const> InValues);
+	const FRecordDescriptor& GetType() const;
+	const FArchiveNode& GetValue(const FInspectionPath& InPath, std::size_t InTarget = 0) const;
+	bool IsMixed(const FInspectionPath& InPath) const;
+	bool IsPresenceMixed(const FInspectionPath& InPath) const;
+	bool CanEditCollection(const FInspectionPath& InPath, const FPropertyPresentation& InPresentation) const;
+	void SetValue(const FInspectionPath& InPath, const FArchiveNode& InValue);
+	void SetPresent(const FInspectionPath& InPath, const FRecordValueShape& InShape, bool bInPresent);
+	void ApplyToCandidate(std::size_t InTarget, void* InCandidate) const;
+
+private:
+	std::vector<FRecordDraft> Drafts;
 };
 } // namespace Hyperion
 

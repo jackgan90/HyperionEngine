@@ -25,48 +25,6 @@ void FEditorPlugin::DrawGizmoToolbar()
 	}
 }
 
-void FEditorPlugin::FinishGizmo(bool bInCancel)
-{
-	Gizmo.End();
-	if (Gui)
-	{
-		Gui->CaptureImagePointer(false);
-	}
-	if (!GizmoEdit)
-	{
-		return;
-	}
-	const auto Edit = std::exchange(GizmoEdit, {});
-	try
-	{
-		const auto* Node = Scene->FindNode(Edit->Handle);
-		if (!Node || Node->Local().Values != Edit->Preview.Values)
-		{
-			return;
-		}
-		const auto After = *Node;
-		if (After.Local().Values == Edit->Initial.Values)
-		{
-			return;
-		}
-		// Only own the transform: asynchronous changes to other properties must survive this transaction.
-		auto Before = After;
-		Before.Local() = Edit->Initial;
-		if (!Scene->EditNode(Edit->Handle, std::move(Before), Scene->GetRevision()))
-		{
-			throw std::runtime_error("Transform target is no longer current");
-		}
-		if (!bInCancel)
-		{
-			CommitEdit(Edit->Handle, After, Scene->GetRevision());
-		}
-	}
-	catch (const std::exception& Failure)
-	{
-		Error = Failure.what();
-	}
-}
-
 void FEditorPlugin::DrawGizmo()
 {
 	FSceneNodeView View;
@@ -113,9 +71,18 @@ void FEditorPlugin::DrawGizmo()
 		FinishInspectorEdit();
 		if (Gizmo.Begin(Pointer.Position))
 		{
-			GizmoEdit = FGizmoEdit{*Selection, View.Node->Local(), View.Node->Local(), Scene->GetRevision(), Bounds};
-			Gui->CaptureImagePointer(true);
-			Camera.Reset();
+			bGizmoUsedMouse = true;
+			try
+			{
+				BeginGizmoEdit(View, Bounds);
+				Gui->CaptureImagePointer(true);
+				Camera.Reset();
+			}
+			catch (const std::exception& Failure)
+			{
+				Gizmo.End();
+				Error = Failure.what();
+			}
 		}
 	}
 	UpdateGizmoDrag(Pointer);
@@ -162,19 +129,11 @@ void FEditorPlugin::UpdateGizmoDrag(const FGuiPointerState& InPointer)
 	{
 		bGizmoUsedMouse = true;
 		FMat4 Local;
-		if (Gizmo.Drag(InPointer.Position, Local) && Local.Values != Scene->FindNode(*Selection)->Local().Values)
+		if (Gizmo.Drag(InPointer.Position, Local))
 		{
 			try
 			{
-				auto Candidate = *Scene->FindNode(*Selection);
-				Candidate.Local() = Local;
-				if (!Scene->EditNode(*Selection, std::move(Candidate), GizmoEdit->Revision))
-				{
-					FinishGizmo();
-					return;
-				}
-				GizmoEdit->Preview = Local;
-				GizmoEdit->Revision = Scene->GetRevision();
+				PreviewGizmoEdit(Local);
 			}
 			catch (const std::exception& Failure)
 			{

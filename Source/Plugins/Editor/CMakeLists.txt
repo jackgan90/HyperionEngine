@@ -8,10 +8,16 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorDocumentAcceptance.cpp
   Private/EditorFrame.cpp
   Private/EditorGizmo.cpp
+  Private/EditorGizmoTransaction.cpp
   Private/EditorGizmoAcceptance.cpp
+  Private/EditorMultiSelectionAcceptance.cpp
+  Private/EditorMultiTransformAcceptance.cpp
   Private/EditorHistory.cpp
+  Private/EditorSelection.cpp
+  Private/EditorBatchHistory.cpp
   Private/EditorHost.cpp
   Private/EditorInspector.cpp
+  Private/EditorSelectionInspector.cpp
   Private/EditorOptions.cpp
   Private/EditorOutlineAcceptance.cpp
   Private/EditorPanels.cpp

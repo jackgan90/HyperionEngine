@@ -263,14 +263,18 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 		Gui->NextColumn();
 		bool bClicked{};
 		const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(),
-		                                 Selection == Visit.Handle, bClicked, !Options.bBenchmarkCollapsed);
+		                                 Selection.Contains(Visit.Handle), bClicked, !Options.bBenchmarkCollapsed);
 		if (Options.bExercisePicking && Node->Id == "light-courtyard-3")
 		{
 			PickingLightBounds = Gui->LastItemBounds();
 		}
 		if (bClicked)
 		{
-			SelectObject(Visit.Handle);
+			ClickObject(Visit.Handle, bOutlinerToggle);
+		}
+		if (Options.bExerciseMultiSelection)
+		{
+			MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 		}
 		Gui->NextColumn();
 		Gui->Text(KindName(Node->GetKind()));
@@ -294,6 +298,11 @@ void FEditorPlugin::DrawOutliner()
 	}
 	if (Gui->BeginWindow("Outliner", bShowOutliner))
 	{
+		const auto Pointer = Gui->PointerState();
+		if (Pointer.bPressed)
+		{
+			bOutlinerToggle = Pointer.bCtrl;
+		}
 		if (!bSelectionInitialized && !Selection && Scene->GetStatus().bReady)
 		{
 			bSelectionInitialized = true;
@@ -306,7 +315,8 @@ void FEditorPlugin::DrawOutliner()
 		Gui->Text("Search objects");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##SearchObjects", Filter, false);
-		Gui->Text(std::to_string(Scene->GetStatus().Nodes) + " objects" + (Selection ? "  |  1 selected" : ""));
+		Gui->Text(std::to_string(Scene->GetStatus().Nodes) + " objects" +
+		          ("  |  " + std::to_string(Selection.All().size()) + " selected"));
 		if (Gui->BeginTable("Objects", "Item Label", "Type"))
 		{
 			if (Filter.empty())
@@ -327,9 +337,13 @@ void FEditorPlugin::DrawOutliner()
 					}
 					Gui->NextRow();
 					Gui->NextColumn();
-					if (Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection == Handle))
+					if (Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle)))
 					{
-						SelectObject(Handle);
+						ClickObject(Handle, bOutlinerToggle);
+					}
+					if (Options.bExerciseMultiSelection)
+					{
+						MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 					}
 					Gui->NextColumn();
 					Gui->Text(KindName(Node->GetKind()));
@@ -354,13 +368,27 @@ void FEditorPlugin::DrawDetails()
 		{
 			try
 			{
-				DrawComponentInspector(View);
+				if (Selection.All().size() > 1)
+				{
+					DrawSelectionInspector();
+				}
+				else
+				{
+					DrawComponentInspector(View);
+				}
 				// Commit after drawing so all widgets keep stable bounds during continuous editing.
 				if (PendingInspectorEdit)
 				{
 					auto Edit = std::move(*PendingInspectorEdit);
 					PendingInspectorEdit.reset();
-					CommitEdit(Edit.Handle, std::move(Edit.Candidate), Edit.Revision, Edit.Interaction);
+					if (!Edit.Edits.empty())
+					{
+						CommitEdits(std::move(Edit.Edits), Edit.Revision, Edit.Interaction);
+					}
+					else
+					{
+						CommitEdit(Edit.Handle, std::move(Edit.Candidate), Edit.Revision, Edit.Interaction);
+					}
 				}
 			}
 			catch (const std::exception& Failure)
@@ -495,6 +523,7 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 		}
 		RouteViewportPicking(InEvents);
 		DrawLightMarkers();
+		DrawSelectionMarkers();
 		DrawGizmoOverlay();
 	}
 	Gui->EndWindow();

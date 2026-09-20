@@ -144,6 +144,77 @@ void CheckRotation()
 	HYP_CHECK(IsAffine(Result));
 }
 
+void CheckGroupTransforms()
+{
+	const auto Parent = ComposeAffine({{}, {}, {2, 3, 4}, {.2f, .1f, .3f}});
+	const auto Initial = ComposeAffine({{}, {}, {-1, 2, 3}, {.1f, .2f, .3f}});
+	const auto PrimaryWorld = Multiply(Parent, Initial);
+	const auto Secondary = Translation({3, 0, 0});
+	for (const auto Mode : {ETransformGizmoMode::Position, ETransformGizmoMode::Rotation, ETransformGizmoMode::Scale})
+	{
+		FTransformGizmo Gizmo;
+		HYP_CHECK(Gizmo.Configure(Camera(), {0, 0, 800, 600}, Initial, Parent, Mode));
+		FVec2 Start{400, 300};
+		FVec2 End{485, 300};
+		if (Mode == ETransformGizmoMode::Rotation)
+		{
+			std::vector<FVec2> Ring;
+			for (const auto& Stroke : Gizmo.Geometry())
+			{
+				if (Stroke.Handle == ETransformGizmoHandle::Z)
+				{
+					Ring.push_back(Stroke.Points.front());
+				}
+			}
+			Start = Ring.at(12);
+			End = Ring.at(36);
+		}
+		HYP_CHECK(Gizmo.Begin(Start));
+		FMat4 Local;
+		HYP_CHECK(Gizmo.Drag(End, Local));
+		const auto Delta = Gizmo.GroupDelta(Local);
+		const auto Actual = Multiply(Delta, PrimaryWorld);
+		const auto Expected = Multiply(Parent, Local);
+		for (unsigned Index = 0; Index < 16; ++Index)
+		{
+			Near(Actual.Values[Index], Expected.Values[Index]);
+		}
+		HYP_CHECK(Multiply(Delta, Secondary).Values != Secondary.Values);
+	}
+	FTransformGizmo Gizmo;
+	HYP_CHECK(Gizmo.Configure(Camera(), {0, 0, 800, 600}, Initial, Parent, ETransformGizmoMode::Scale));
+	HYP_CHECK(Gizmo.Begin({400, 300}));
+	for (const float Factor : {0.f, -1.f, 1.f})
+	{
+		FMat4 Local;
+		HYP_CHECK(Gizmo.Drag({400 + 85 * (Factor - 1), 300}, Local));
+		const auto Delta = Gizmo.GroupDelta(Local);
+		Near(Multiply(Delta, Secondary).Values[12], 3 * Factor);
+	}
+	Gizmo.End();
+	HYP_CHECK(Gizmo.Configure(Camera(), {0, 0, 800, 600}, Scale({0, 1, 1}), Identity(), ETransformGizmoMode::Scale));
+	HYP_CHECK(Gizmo.Begin({400, 300}));
+	bool bRejected{};
+	try
+	{
+		(void)Gizmo.GroupDelta(Scale({0, 1, 1}));
+	}
+	catch (const std::exception&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected);
+	Gizmo.End();
+	HYP_CHECK(Gizmo.Configure(Camera(), {0, 0, 800, 600}, Scale({0, 0, 0}), Identity(), ETransformGizmoMode::Rotation));
+	const float Diagonal = 85 / std::sqrt(2.f);
+	HYP_CHECK(Gizmo.Begin({400 + Diagonal, 300 - Diagonal}));
+	FMat4 Local;
+	HYP_CHECK(Gizmo.Drag({400 - Diagonal, 300 - Diagonal}, Local));
+	const auto Rotated = Multiply(Gizmo.GroupDelta(Local), Secondary);
+	Near(Rotated.Values[12], 0);
+	Near(Rotated.Values[13], 3);
+}
+
 void CheckDegenerate()
 {
 	FTransformGizmo Gizmo;
@@ -186,6 +257,7 @@ int main()
 		CheckPosition();
 		CheckRotation();
 		CheckDegenerate();
+		CheckGroupTransforms();
 		std::cout << "Transform gizmo tests passed\n";
 		return 0;
 	}

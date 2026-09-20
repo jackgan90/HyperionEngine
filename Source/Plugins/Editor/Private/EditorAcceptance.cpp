@@ -322,6 +322,7 @@ void FEditorPlugin::WriteReport()
 	       << "\"document_verified\": " << bDocumentVerified << ",\n"
 	       << "\"views_verified\": " << bViewsVerified << ",\n"
 	       << "\"gizmo_verified\": " << bGizmoVerified << ",\n"
+	       << "\"multiselect_verified\": " << bMultiSelectionVerified << ",\n"
 	       << "\"picking_verified\": " << bPickingVerified << ",\n"
 	       << "\"outlines_verified\": " << bOutlinesVerified << ",\n"
 	       << "\"placement_verified\": " << bPlacementVerified << ",\n"

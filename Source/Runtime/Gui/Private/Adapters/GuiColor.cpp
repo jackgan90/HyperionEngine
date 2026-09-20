@@ -57,7 +57,8 @@ bool ColorPickerValues(float* InColor, const std::function<void(std::string_view
 }
 
 bool ColorPopup(FVec3& InValue, ImGuiStorage& InStorage, const std::array<ImGuiID, 4>& InKeys,
-                const std::function<void(std::string_view, FVec4)>& InObserve, bool bInLive, float InScale)
+                const std::function<void(std::string_view, FVec4)>& InObserve, bool bInLive, float InScale,
+                bool bInMixed)
 {
 	if (!ImGui::BeginPopup("Color picker"))
 	{
@@ -79,7 +80,7 @@ bool ColorPopup(FVec3& InValue, ImGuiStorage& InStorage, const std::array<ImGuiI
 			bChanged = true;
 		}
 	}
-	if (ImGui::Button(bInLive ? "Close" : "OK"))
+	if (ImGui::Button(bInMixed ? "Apply color" : bInLive ? "Close" : "OK"))
 	{
 		// Opening and accepting must not quantize or clamp an untouched source color.
 		bChanged |= !bInLive && InStorage.GetBool(InKeys[3]);
@@ -87,6 +88,7 @@ bool ColorPopup(FVec3& InValue, ImGuiStorage& InStorage, const std::array<ImGuiI
 		{
 			InValue = {ToLinear(Color[0]), ToLinear(Color[1]), ToLinear(Color[2])};
 		}
+		bChanged |= bInMixed;
 		ImGui::CloseCurrentPopup();
 	}
 	Observe(InObserve, "accept");
@@ -102,9 +104,16 @@ bool ColorPopup(FVec3& InValue, ImGuiStorage& InStorage, const std::array<ImGuiI
 } // namespace
 
 bool FGui::InputColor(const char* InLabel, FVec3& InValue,
-                      const std::function<void(std::string_view, FVec4)>& InObserve)
+                      const std::function<void(std::string_view, FVec4)>& InObserve, const std::array<bool, 3>& InMixed,
+                      std::array<bool, 3>* OutEdited)
 {
 	Impl->Select();
+	const bool bMixed = std::ranges::any_of(InMixed,
+	                                        [](bool bInValue)
+	                                        {
+		                                        return bInValue;
+	                                        });
+	std::array<bool, 3> Edited{};
 	ImGui::BeginGroup();
 	bool bExpanded{};
 	BeginPropertyRow(InLabel, &bExpanded);
@@ -115,7 +124,7 @@ bool FGui::InputColor(const char* InLabel, FVec3& InValue,
 	const std::array Keys{ImGui::GetID("picker-r"), ImGui::GetID("picker-g"), ImGui::GetID("picker-b"),
 	                      ImGui::GetID("picker-modified")};
 	const float Color[]{ToSrgb(InValue.X), ToSrgb(InValue.Y), ToSrgb(InValue.Z)};
-	if (ImGui::ColorButton("##swatch", {Color[0], Color[1], Color[2], 1},
+	if (ImGui::ColorButton("##swatch", bMixed ? ImVec4(.2f, .2f, .2f, 1) : ImVec4(Color[0], Color[1], Color[2], 1),
 	                       ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_NoTooltip,
 	                       {std::max(1.f, ImGui::GetContentRegionAvail().x), ImGui::GetFrameHeight()}))
 	{
@@ -128,12 +137,19 @@ bool FGui::InputColor(const char* InLabel, FVec3& InValue,
 		bOpened = true;
 	}
 	Observe(InObserve, "swatch");
+	if (bMixed)
+	{
+		const auto Position = ImGui::GetItemRectMin();
+		ImGui::GetWindowDrawList()->AddText({Position.x + 3, Position.y + ImGui::GetStyle().FramePadding.y},
+		                                    ImGui::GetColorU32(ImGuiCol_Text), "Multiple Values");
+	}
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 	{
 		ImGui::SetTooltip("sRGB: %d, %d, %d", int(std::lround(Color[0] * 255)), int(std::lround(Color[1] * 255)),
 		                  int(std::lround(Color[2] * 255)));
 	}
-	bool bChanged = ColorPopup(InValue, Storage, Keys, InObserve, Impl->bLiveEdit, Impl->AppliedScale);
+	bool bChanged = ColorPopup(InValue, Storage, Keys, InObserve, Impl->bLiveEdit, Impl->AppliedScale, bMixed);
+	Edited.fill(bChanged);
 	Impl->TrackEdit(Id, ImGui::IsPopupOpen("Color picker"), bOpened, bChanged);
 	if (bExpanded)
 	{
@@ -145,10 +161,11 @@ bool FGui::InputColor(const char* InLabel, FVec3& InValue,
 			int Value = int(std::lround(ToSrgb(*Channels[Channel]) * 255));
 			const int Minimum = 0;
 			const int Maximum = 255;
-			if (Impl->DragNumber("##value", ImGuiDataType_S32, &Value, 1, "%d", &Minimum, &Maximum))
+			if (Impl->DragNumber("##value", ImGuiDataType_S32, &Value, 1, "%d", &Minimum, &Maximum, InMixed[Channel]))
 			{
 				*Channels[Channel] = ToLinear(float(std::clamp(Value, 0, 255)) / 255);
 				bChanged = true;
+				Edited[Channel] = true;
 			}
 			Observe(InObserve, Labels[Channel]);
 			EndPropertyRow();
@@ -156,6 +173,10 @@ bool FGui::InputColor(const char* InLabel, FVec3& InValue,
 	}
 	EndPropertyRow();
 	ImGui::EndGroup();
+	if (OutEdited)
+	{
+		*OutEdited = Edited;
+	}
 	return bChanged;
 }
 } // namespace Hyperion

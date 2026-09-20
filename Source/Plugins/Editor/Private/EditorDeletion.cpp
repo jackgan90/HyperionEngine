@@ -38,7 +38,9 @@ void FEditorPlugin::CommitDelete()
 		return;
 	}
 	FHistoryEntry Entry{*Selection, {}, {}, Scene->GetSettings(), {}, DocumentState, ++NextDocumentState};
-	std::vector<FSceneHandle> Pending{*Selection};
+	Entry.BeforeSelection = Selection;
+	Entry.DeletedRoots = SelectedRoots();
+	std::vector<FSceneHandle> Pending = Entry.DeletedRoots;
 	for (std::size_t Index = 0; Index < Pending.size(); ++Index)
 	{
 		const auto Handle = Pending[Index];
@@ -47,7 +49,7 @@ void FEditorPlugin::CommitDelete()
 		Pending.insert(Pending.end(), Children.begin(), Children.end());
 	}
 	History.reserve(HistoryCursor + 1);
-	if (!Scene->RemoveSubtree(Entry.Handle))
+	if (!Scene->RemoveSubtrees(Entry.DeletedRoots))
 	{
 		throw std::runtime_error("Delete target no longer exists");
 	}
@@ -68,28 +70,18 @@ void FEditorPlugin::CommitDelete()
 void FEditorPlugin::RestoreDeletedSubtree(std::size_t InIndex)
 {
 	auto& Entry = History.at(InIndex);
-	std::vector<FSceneHandle> Restored;
-	Restored.reserve(Entry.DeletedSubtree.size());
-	try
+	std::vector<FSceneNode> Nodes;
+	std::vector<FSceneHandle> Original;
+	for (const auto& [Handle, Node] : Entry.DeletedSubtree)
 	{
-		// Parents precede children, whose serialized parent IDs stay stable across generations.
-		for (const auto& [Handle, Node] : Entry.DeletedSubtree)
-		{
-			Restored.push_back(Scene->AddNode(Node));
-		}
+		Original.push_back(Handle);
+		Nodes.push_back(Node);
 	}
-	catch (...)
-	{
-		if (!Restored.empty())
-		{
-			Scene->RemoveSubtree(Restored.front());
-		}
-		throw;
-	}
+	const auto Restored = Scene->AddNodes(std::move(Nodes));
 	for (std::size_t Index = 0; Index < Restored.size(); ++Index)
 	{
-		RemapHistoryHandle(Entry.DeletedSubtree[Index].first, Restored[Index]);
+		RemapHistoryHandle(Original[Index], Restored[Index]);
 	}
-	SelectObject(Restored.front());
+	SetSelection(Entry.BeforeSelection);
 }
 } // namespace Hyperion

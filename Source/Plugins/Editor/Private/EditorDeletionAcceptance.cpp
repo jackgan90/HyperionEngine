@@ -22,7 +22,7 @@ bool FEditorPlugin::ExerciseDeletionInput(std::vector<FInputEvent>& InEvents)
 	switch (DeletionExerciseStep++)
 	{
 		case 0:
-			CheckDeletion(Selection.has_value(), "click did not select deletion target");
+			CheckDeletion(bool(Selection), "click did not select deletion target");
 			DeletionExerciseHandle = *Selection;
 			DeletionExerciseId = Scene->FindNode(*Selection)->Id;
 			Key.bRepeat = true;
@@ -114,6 +114,6 @@ void FEditorPlugin::ExerciseDeletionHistory()
 	}
 	CheckDeletion(Scene->GetSettings() == Settings && !IsDirty(), "history lost original settings/save point");
 	ResetDocument();
-	SelectObject(PreviousSelection);
+	SetSelection(PreviousSelection);
 }
 } // namespace Hyperion

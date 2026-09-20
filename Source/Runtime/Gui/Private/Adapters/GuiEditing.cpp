@@ -1,4 +1,6 @@
 #include "GuiInternal.h"
+#include <charconv>
+#include <cmath>
 #include <imgui_internal.h>
 
 namespace Hyperion
@@ -20,10 +22,71 @@ bool DragNumericValue(const char* InLabel, ImGuiDataType InType, void* InValue, 
 	return bChanged;
 }
 
-bool FGui::FImpl::DragNumber(const char* InLabel, ImGuiDataType InType, void* InValue, float InSpeed,
-                             const char* InFormat, const void* InMinimum, const void* InMaximum)
+namespace
 {
-	return TrackEdit(DragNumericValue(InLabel, InType, InValue, InSpeed, InFormat, InMinimum, InMaximum));
+bool ValidNumber(ImGuiID InId, ImGuiDataType InType)
+{
+	const auto* State = ImGui::GetInputTextState(InId);
+	if (!State)
+	{
+		return false;
+	}
+	std::string_view Text(State->TextA.Data);
+	const auto Start = Text.find_first_not_of(" \t+");
+	if (Start == std::string_view::npos)
+	{
+		return false;
+	}
+	Text.remove_prefix(Start);
+	Text = Text.substr(0, Text.find_last_not_of(" \t") + 1);
+	const auto Parse = [&]<class T>(T InValue)
+	{
+		const auto Result = std::from_chars(Text.data(), Text.data() + Text.size(), InValue);
+		return Result.ec == std::errc{} && Result.ptr == Text.data() + Text.size() && std::isfinite(double(InValue));
+	};
+	if (InType == ImGuiDataType_U64)
+	{
+		return Parse(std::uint64_t{});
+	}
+	if (InType == ImGuiDataType_S64 || InType == ImGuiDataType_S32)
+	{
+		return Parse(std::int64_t{});
+	}
+	return Parse(double{});
+}
+} // namespace
+
+bool FGui::FImpl::DragNumber(const char* InLabel, ImGuiDataType InType, void* InValue, float InSpeed,
+                             const char* InFormat, const void* InMinimum, const void* InMaximum, bool bInMixed)
+{
+	const auto Id = ImGui::GetID(InLabel);
+	const bool bSubmitted = bInMixed && ImGui::TempInputIsActive(Id) &&
+	                        (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) &&
+	                        ValidNumber(Id, InType);
+	const bool bHideText = bInMixed && !ImGui::TempInputIsActive(Id);
+	if (bHideText)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+	}
+	const bool bChanged = DragNumericValue(InLabel, InType, InValue, InSpeed, InFormat, InMinimum, InMaximum);
+	const auto* TextState = ImGui::GetInputTextState(Id);
+	// DragScalar reports numeric differences only; an explicit same-value edit still assigns mixed targets.
+	const bool bTyped = bInMixed && bLiveEdit && ImGui::TempInputIsActive(Id) && TextState &&
+	                    TextState->EditedThisFrame && ValidNumber(Id, InType);
+	if (bHideText)
+	{
+		ImGui::PopStyleColor();
+		if (!ImGui::TempInputIsActive(Id))
+		{
+			const auto Min = ImGui::GetItemRectMin();
+			const auto Max = ImGui::GetItemRectMax();
+			ImGui::GetWindowDrawList()->PushClipRect(Min, Max, true);
+			ImGui::GetWindowDrawList()->AddText({Min.x + 3, Min.y + ImGui::GetStyle().FramePadding.y},
+			                                    ImGui::GetColorU32(ImGuiCol_Text), "Multiple Values");
+			ImGui::GetWindowDrawList()->PopClipRect();
+		}
+	}
+	return TrackEdit(bChanged || bSubmitted || bTyped);
 }
 
 bool FGui::FImpl::DragComponents(const char* InLabel, float* InValues, int InCount)

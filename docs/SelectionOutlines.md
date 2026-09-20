@@ -11,7 +11,7 @@
 
 两种模式最后都只合成一次颜色；交叉处取覆盖率最大值，不重复加亮。**Smooth outlines (2x)** 使用两倍宽高的 mask，平均子像素覆盖率，轮廓宽度仍以原视口像素计量。超出设备贴图尺寸限制时退回普通质量。
 
-当前选择手势仍为单选，因此日常单选时两种模式的结果一致。Renderer 输入从一开始就接受多个对象；相同对象的所有 primitives 必须放在同一个分组中。选择父节点不会隐式递归其子节点。非几何灯光/相机图标沿用编辑器自身显示。
+Outliner、视口模型和灯光图标支持 Ctrl+左键增减选择，所有已选对象共同参与高亮；普通点击替换选择。单选时两种描边模式的结果一致，多选时根据重叠关系产生表中差别。相同对象的所有 primitives 放在同一个分组中。选择父节点不会隐式递归其子节点。灯光图标同步选中高亮，其他非几何对象及隐藏/禁用对象由编辑器绘制原点标记；主对象拥有唯一的 gizmo。
 
 ## 数据与模块边界
 
@@ -43,6 +43,6 @@ out/build/debug/bin/hyperion_editor.exe --exercise-outlines out/outline-comparis
 ctest --test-dir out/build/debug -R '^(selection_outlines|editor_outlines)$' --output-on-failure
 ```
 
-对比入口构造两个重叠 Cube，输出 `Union.png`、`PerObject.png`、`UnionAgain.png`、`Occluded.png`、`Smooth.png`、`Cleared.png` 后退出，不保存测试场景。它通过正常 SceneInstance、Editor 离屏视口和 GUI 合成路径提交多目标请求，不改变日常选择手势。图像在指定输出目录，可重复运行比较。
+对比入口构造两个重叠 Cube，输出 `Union.png`、`PerObject.png`、`UnionAgain.png`、`Occluded.png`、`Smooth.png`、`Cleared.png` 后退出，不保存测试场景。它通过正常 SceneInstance、Editor 离屏视口和 GUI 合成路径提交多目标请求；`editor_multiselect` 另验证真实 Ctrl 多选生成的描边请求。图像在指定输出目录，可重复运行比较。
 
 `selection_outlines` 使用 D3D12 图像读回验证重叠与完全包含、遮挡、section 合并、alpha mask、镜像/零缩放、曝光、Forward/Deferred、深度约定、选择清除与失效、resize、无相机、无 feature 和 GPU validation。`editor_outlines` 验证真实编辑器合成、模式切换、取消选择、文档不变及插件不可用时的受控失败。

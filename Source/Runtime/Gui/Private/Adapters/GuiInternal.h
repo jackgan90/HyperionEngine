@@ -40,7 +40,8 @@ struct FGui::FImpl
 	}
 
 	bool DragNumber(const char* InLabel, ImGuiDataType InType, void* InValue, float InSpeed,
-	                const char* InFormat = nullptr, const void* InMinimum = nullptr, const void* InMaximum = nullptr);
+	                const char* InFormat = nullptr, const void* InMinimum = nullptr, const void* InMaximum = nullptr,
+	                bool bInMixed = false);
 	bool DragComponents(const char* InLabel, float* InValues, int InCount);
 	bool TrackEdit(bool bInChanged);
 	bool TrackEdit(ImGuiID InId, bool bInActive, bool bInActivated, bool bInChanged);

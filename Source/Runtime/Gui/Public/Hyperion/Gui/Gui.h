@@ -50,6 +50,7 @@ struct FGuiPointerState
 	bool bCancel{};
 	bool bRightDown{};
 	bool bPositionValid{};
+	bool bCtrl{};
 };
 
 struct FGuiDockLayout
@@ -132,12 +133,19 @@ public:
 	void EndDisabled();
 	bool EditRecord(FRecordDraft& InDraft, std::string_view InIdentity,
 	                const std::function<void(std::string_view, FVec4)>& InObserve = {});
+	bool EditRecord(FRecordSelectionDraft& InDraft, std::string_view InIdentity,
+	                const std::function<void(std::string_view, FVec4)>& InObserve = {},
+	                std::span<const std::string> InReadOnlyFields = {});
+	bool EditMixedScalar(FArchiveNode& InValue, const FRecordValueShape& InShape,
+	                     const FPropertyPresentation& InPresentation, bool bInMixed);
 	bool InputVector(const char* InLabel, FVec3& InValue);
 	bool InputVectorRow(const char* InLabel, FVec3& InValue, std::string_view InUnit, std::string_view InTooltip,
-	                    std::array<FVec4, 3>& OutBounds);
+	                    std::array<FVec4, 3>& OutBounds, const std::array<bool, 3>& InMixed = {},
+	                    std::array<bool, 3>* OutEdited = nullptr);
 	// Linear RGB value; UI uses sRGB, with integer channels in [0, 255].
 	bool InputColor(const char* InLabel, FVec3& InValue,
-	                const std::function<void(std::string_view, FVec4)>& InObserve = {});
+	                const std::function<void(std::string_view, FVec4)>& InObserve = {},
+	                const std::array<bool, 3>& InMixed = {}, std::array<bool, 3>* OutEdited = nullptr);
 	bool InputMatrix(const char* InLabel, FMat4& InValue);
 	FVec4 LastItemBounds();
 	bool EditProperties(const FTypeDescriptor& InType, void* InObject, std::span<const std::string_view> InIds);

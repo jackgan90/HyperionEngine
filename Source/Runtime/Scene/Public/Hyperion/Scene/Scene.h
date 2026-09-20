@@ -6,6 +6,12 @@ namespace Hyperion
 {
 class FSceneStorage;
 
+struct FSceneNodeEdit
+{
+	FSceneHandle Handle;
+	FSceneNode Node;
+};
+
 // Main-owned logical scene. Derived state is current after every successful transaction.
 // Const pointers are Main-only borrows, invalidated by subsequent mutations.
 class FScene
@@ -23,6 +29,10 @@ public:
 	FSceneHandle AddNode(FSceneNode InNode);
 	// Optimistic transaction: stale scene revisions or object generations never modify authority.
 	bool EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision);
+	bool EditNodes(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision);
+	// Atomic insertion into an existing scene; parents can be existing or part of this batch.
+	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes);
+	bool RemoveSubtrees(std::span<const FSceneHandle> InHandles);
 	// Batch installation requires an empty scene; returned handles follow input order.
 	// Full validation precedes installation, including cycles and inherited poses.
 	std::vector<FSceneHandle> LoadNodes(std::vector<FSceneNode> InNodes);
