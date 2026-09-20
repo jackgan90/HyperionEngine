@@ -58,6 +58,14 @@ struct FGuiDockLayout
 	std::string RightTop;
 	std::string RightBottom;
 	std::string Bottom;
+	std::string Left;
+};
+
+struct FGuiDragPayload
+{
+	std::string Type;
+	std::string Value;
+	bool bDelivery{};
 };
 
 // Interaction tokens identify one activation/drag/popup, rather than individual changed frames.
@@ -162,6 +170,15 @@ public:
 	void EndTree();
 	void Property(const char* InLabel, const std::string& InValue);
 	FGuiImageRegion Image(std::uint64_t InTextureId);
+	void Image(std::uint64_t InTextureId, FVec2 InSize);
+	void FocusWindow(const char* InTitle);
+	// Attach to the preceding item. Payload bytes are copied for the entire gesture.
+	bool DragSource(const char* InType, std::string_view InValue, const char* InLabel);
+	std::optional<FGuiDragPayload> DragPayload() const;
+	// Delivery consumes the gesture; the returned owned payload remains valid after this call.
+	std::optional<FGuiDragPayload> DropTarget(const char* InType);
+	void CancelDragDrop();
+	void DrawImageOverlay(std::uint64_t InTextureId, FVec4 InClip, FVec4 InBounds, FVec4 InTint = {1, 1, 1, 1});
 	FGuiPointerState PointerState() const;
 	// Own a left drag started on an image overlay, including motion beyond the image bounds.
 	void CaptureImagePointer(bool bInCapture);

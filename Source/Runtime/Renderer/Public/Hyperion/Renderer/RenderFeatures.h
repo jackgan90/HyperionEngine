@@ -5,6 +5,7 @@
 namespace Hyperion
 {
 struct FScenePipelineSettings;
+struct FTransientGeometry;
 enum class ERenderFeatureStage
 {
 	AfterOpaque,
@@ -36,6 +37,8 @@ struct FRenderFeatureContext
 	FForwardPipelineStatistics& Statistics;
 	std::shared_ptr<FFullscreenPreparationStatistics> FullscreenStatistics;
 	bool bDeferPreparation{};
+	std::shared_ptr<const FMaterialFrameContext> FrameOwner;
+	std::shared_ptr<const FTransientGeometry> TransientGeometry;
 };
 
 class IRenderFeature

@@ -91,6 +91,11 @@ void FGui::DockSpace(const FGuiDockLayout& InLayout, bool bInReset)
 		ImGui::DockBuilderAddNode(Id, ImGuiDockNodeFlags_DockSpace);
 		ImGui::DockBuilderSetNodeSize(Id, Viewport->WorkSize);
 		auto Center = Id;
+		if (!InLayout.Left.empty())
+		{
+			const auto Left = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Left, .20f, nullptr, &Center);
+			ImGui::DockBuilderDockWindow(InLayout.Left.c_str(), Left);
+		}
 		const auto Bottom = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Down, .21f, nullptr, &Center);
 		auto Right = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Right, .25f, nullptr, &Center);
 		const auto Top = ImGui::DockBuilderSplitNode(Right, ImGuiDir_Up, .43f, nullptr, &Right);

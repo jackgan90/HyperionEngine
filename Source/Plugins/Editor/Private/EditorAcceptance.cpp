@@ -298,6 +298,12 @@ void FEditorPlugin::WriteReport()
 	{
 		std::filesystem::create_directories(Options.Report.parent_path());
 	}
+	const auto Objects = PlacementRegistry.Search("All", {});
+	const auto Unavailable = std::count_if(Objects.begin(), Objects.end(),
+	                                       [&](const auto* InObject)
+	                                       {
+		                                       return !PlacementUnavailableReason(*InObject).empty();
+	                                       });
 	std::ofstream Stream(Options.Report);
 	Stream << std::boolalpha << "{\n"
 	       << "\"scene\": " << std::quoted(CurrentPath) << ",\n"
@@ -306,6 +312,9 @@ void FEditorPlugin::WriteReport()
 	       << "\"views_verified\": " << bViewsVerified << ",\n"
 	       << "\"gizmo_verified\": " << bGizmoVerified << ",\n"
 	       << "\"picking_verified\": " << bPickingVerified << ",\n"
+	       << "\"placement_verified\": " << bPlacementVerified << ",\n"
+	       << "\"placement_status\": " << std::quoted(PlacementStatus) << ",\n"
+	       << "\"placement_unavailable\": " << Unavailable << ",\n"
 	       << "\"save_ms\": " << LastSaveMilliseconds << ",\n"
 	       << "\"document_dirty\": " << IsDirty() << ",\n"
 	       << "\"ready_frames\": " << ReadyFrames << ",\n"

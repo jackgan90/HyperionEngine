@@ -104,6 +104,10 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		{
 			Result.ExerciseViews = Value;
 		}
+		else if (Argument == "--exercise-placement")
+		{
+			Result.ExercisePlacement = Value;
+		}
 		else if (Argument == "--benchmark-warmup")
 		{
 			Result.BenchmarkWarmup = static_cast<std::uint32_t>(std::stoul(Value));

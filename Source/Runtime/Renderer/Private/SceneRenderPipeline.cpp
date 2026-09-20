@@ -125,8 +125,13 @@ void FSceneRenderPipeline::ValidateView(const FRenderView& InView, const FCascad
 	}
 }
 
+void FSceneRenderPipeline::SetTransientGeometry(std::shared_ptr<const FTransientGeometry> InGeometry)
+{
+	TransientGeometry = std::move(InGeometry);
+}
+
 FRenderFeatureContext FSceneRenderPipeline::BeginFeatures(FRenderGraph& InGraph, const FRenderView& InView,
-                                                          const FMaterialFrameContext& InFrame,
+                                                          std::shared_ptr<const FMaterialFrameContext> InFrame,
                                                           bool bInDeferPreparation)
 {
 	FeatureResources = {};
@@ -140,12 +145,14 @@ FRenderFeatureContext FSceneRenderPipeline::BeginFeatures(FRenderGraph& InGraph,
 	FRenderFeatureContext FeatureContext{Session,
 	                                     InGraph,
 	                                     InView,
-	                                     InFrame,
+	                                     *InFrame,
 	                                     Settings,
 	                                     FeatureResources,
 	                                     LastStatistics,
 	                                     FullscreenStatistics,
-	                                     bInDeferPreparation};
+	                                     bInDeferPreparation,
+	                                     InFrame,
+	                                     TransientGeometry};
 	for (const auto& Feature : Features)
 	{
 		Feature->BeginFrame(FeatureContext);
@@ -170,7 +177,7 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	Resize(InMain.Width, InMain.Height, InMain.DepthConvention);
 	LastStatistics = {};
 	FullscreenStatistics = std::make_shared<FFullscreenPreparationStatistics>();
-	auto FeatureContext = BeginFeatures(InGraph, InMain, *InFrame, bInDeferPreparation);
+	auto FeatureContext = BeginFeatures(InGraph, InMain, InFrame, bInDeferPreparation);
 	LastStatistics.Spatial = Session.GetScene().BeginViews();
 	PrepareShadows(InMain, *InFrame, InShadows);
 	const FVec4 Clear{ClearHdr(InClear.X, Settings.Exposure), ClearHdr(InClear.Y, Settings.Exposure),

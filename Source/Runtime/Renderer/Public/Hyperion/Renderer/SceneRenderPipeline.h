@@ -47,6 +47,8 @@ public:
 	void Configure(FScenePipelineSettings InSettings);
 	// Render domain: presentation defaults to the backbuffer; RGBA8 output is encoded through an sRGB view.
 	void SetOutputTarget(FRenderTargetSource InTarget = {ERenderTargetKind::Backbuffer});
+	// Render only: replacement is immutable and applies to subsequent builds, including an empty packet.
+	void SetTransientGeometry(std::shared_ptr<const FTransientGeometry> InGeometry);
 	void Build(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
 	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
@@ -60,7 +62,8 @@ public:
 private:
 	void ValidateView(const FRenderView& InView, const FCascadedShadowSettings& InShadows) const;
 	FRenderFeatureContext BeginFeatures(FRenderGraph& InGraph, const FRenderView& InView,
-	                                    const FMaterialFrameContext& InFrame, bool bInDeferPreparation);
+	                                    std::shared_ptr<const FMaterialFrameContext> InFrame, bool bInDeferPreparation);
+	std::shared_ptr<const FTransientGeometry> TransientGeometry;
 	FRenderTargetSource OutputTarget{ERenderTargetKind::Backbuffer};
 	FRenderPassTargets OutputTargets(std::optional<FVec4> InClear = {}) const;
 	void BuildResolved(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,

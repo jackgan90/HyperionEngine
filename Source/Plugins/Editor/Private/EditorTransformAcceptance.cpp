@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/Math/AffineTransform.h"
 #include <cmath>
 #include <numbers>
@@ -177,9 +178,18 @@ bool FEditorPlugin::ExerciseTransformDrag(std::vector<FInputEvent>& InEvents)
 	const unsigned Phase = TransformExerciseStep - 48;
 	if (Phase == 0)
 	{
-		FInputEvent Modifiers;
-		Modifiers.Type = EEventType::Key;
-		InEvents.push_back(Modifiers);
+		// A fast Release run must start a new gesture, not double-click the preceding text edit.
+		if (!TransformDragReadyAt)
+		{
+			TransformDragReadyAt = ClockNanoseconds() + 500'000'000;
+			FInputEvent Modifiers;
+			Modifiers.Type = EEventType::Key;
+			InEvents.push_back(Modifiers);
+		}
+		if (ClockNanoseconds() < TransformDragReadyAt)
+		{
+			return false;
+		}
 	}
 	if (Phase < 3)
 	{
@@ -202,7 +212,10 @@ bool FEditorPlugin::ExerciseTransformDrag(std::vector<FInputEvent>& InEvents)
 		if (!IsDirty() || HistoryCursor != 1 || History.size() != 1 ||
 		    Scene->FindNode(*Selection)->Local().Values == ExerciseOriginal.Local().Values)
 		{
-			throw std::runtime_error("Numeric drag did not create exactly one live undo transaction");
+			throw std::runtime_error("Numeric drag did not create exactly one live undo transaction: history=" +
+			                         std::to_string(HistoryCursor) + "/" + std::to_string(History.size()) +
+			                         " text=" + std::to_string(Gui->IsEditingText()) +
+			                         " interaction=" + std::to_string(InspectorInteraction));
 		}
 	}
 	if (Phase == 5 || Phase == 6)

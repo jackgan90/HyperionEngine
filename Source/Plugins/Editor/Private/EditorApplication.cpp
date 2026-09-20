@@ -68,9 +68,12 @@ void FEditorPlugin::Initialize()
 	Session = &Context.Require<FRenderSession>();
 	Gui = &Context.Require<FGui>();
 	GuiRenderer = &Context.Require<FGuiRenderer>();
+	auto Features = Context.Require<FRenderFeatureRegistry>().Create();
+	Features.push_back(MakeTransientGeometryFeature());
 	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
-	                                                  Context.Require<FRenderFeatureRegistry>().Create());
+	                                                  std::move(Features));
 	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
+	InitializePlacement();
 	if (!Options.Scene.empty())
 	{
 		OpenScene(Options.Scene);
@@ -97,6 +100,10 @@ void FEditorPlugin::OpenScene(const std::string& InPath)
 	try
 	{
 		Scene->Load(InPath);
+		CancelPlacement();
+		PlacementModels.clear();
+		PlacementPublication.reset();
+		PlacementPublicationPreview.reset();
 		ResetDocument();
 		CurrentPath = InPath;
 		++OpenCount;
@@ -136,6 +143,11 @@ void FEditorPlugin::Shutdown()
 	Camera.Reset();
 	Scene.reset();
 	Assets.Drain();
+	PlacementModels.clear();
+	PlacementIcons.clear();
+	PlacementPublicationPreview.reset();
+	PlacementMaterial.reset();
+	PlacementLifetime.reset();
 	Pipeline.reset();
 	ViewportTarget = {};
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
@@ -167,6 +179,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	}
 	bLoadErrorObserved |= !Scene->GetStatus().Error.empty();
 	InitializeViewportCamera();
+	PollPlacementResources();
 	std::vector<FInputEvent> Events(Window->Events().begin(), Window->Events().end());
 	if (Options.bExercise)
 	{
@@ -189,11 +202,19 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	{
 		ExercisePickingInput(Events);
 	}
+	if (!Options.ExercisePlacement.empty())
+	{
+		ExercisePlacementInput(Events);
+	}
 	FGuiDrawData Data;
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorGui);
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.GuiMilliseconds);
 		Data = DrawGui(InDelta, Events);
+	}
+	if (!Options.ExercisePlacement.empty())
+	{
+		CheckPlacementMarkerDraws(Data);
 	}
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
@@ -201,7 +222,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	}
 	// Async scene readiness is independent of render frame rate.
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
-	                               bViewsVerified || bGizmoVerified || bPickingVerified;
+	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames));
@@ -247,13 +268,14 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || !Options.ExerciseDocument.empty() ||
-	     !Options.ExerciseViews.empty()) &&
+	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out");
 	}
 	if (Window->Minimized() || !Window->PixelSize().Width || !Window->PixelSize().Height)
 	{
+		CancelPlacement();
 		ViewportClick.reset();
 		FinishGizmo();
 		Scene->Tick();
@@ -270,6 +292,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExercisePlacement.empty() && !bPlacementVerified)
+	{
+		throw std::runtime_error("Editor placement acceptance did not complete");
+	}
 	if (Options.bExercisePicking && !bPickingVerified)
 	{
 		throw std::runtime_error("Editor picking acceptance did not complete");

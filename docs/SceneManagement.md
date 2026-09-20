@@ -28,6 +28,8 @@ The separately selectable Showcase example contains 78 model instances plus one 
 
 Add reuses a loaded asset and works after deleting every instance. The Save edited scene button writes the edited snapshot asynchronously to <name>.edited.hasset; --save-scene PATH selects a CLI output. Stable IDs, parent links, local matrices, enabled/visibility flags, material overrides, every camera/light payload, the three scene selections and optional initial view persist. Ordinary navigation never updates this preset or authored camera objects. Fit adjusts the independent browsing lens to the model bounds.
 
+`FSceneInstance::RegisterModelAsset` prepares additional native model references on Main without creating a node or changing the document revision. Identical resolved references share preparation, visible through `GetAssets`; `AddNode` consumes the returned asset ID. This also works in a new empty instance. Snapshots emit only references used by live nodes, independent of the originally loaded manifest. Unused failed or cached registrations do not block unrelated scene models. Load/Close cancel and join all registrations. The Editor uses this path for [Place Object](Editor.md#放置对象).
+
 ## Source manifest (offline import)
 
 ```json

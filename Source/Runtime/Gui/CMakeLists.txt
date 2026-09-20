@@ -1,6 +1,7 @@
 add_library(hyperion_gui STATIC Private/Adapters/Gui.cpp Private/Adapters/GuiDocking.cpp Private/Adapters/GuiWidgets.cpp Private/GuiInspection.cpp)
 hyp_module(hyperion_gui)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiIcons.cpp)
+target_sources(hyperion_gui PRIVATE Private/Adapters/GuiDragDrop.cpp)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiScale.cpp)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiVector.cpp Private/Adapters/GuiColor.cpp Private/Adapters/GuiEditing.cpp)
 target_link_libraries(hyperion_gui PUBLIC hyperion_assets hyperion_platform hyperion_reflection PRIVATE hyperion_core hyp_imgui hyp_implot)

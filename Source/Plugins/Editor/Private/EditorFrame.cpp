@@ -46,8 +46,9 @@ void FEditorPlugin::ResizeViewport()
 
 void FEditorPlugin::RouteCamera(float InDelta, std::span<const FInputEvent> InEvents)
 {
-	if (Gizmo.IsDragging() || bGizmoUsedMouse || PreviewCamera || !bViewportCameraInitialized || !bViewportVisible ||
-	    bOpenDialog || bSaveDialog || bDiscardDialog || Gui->IsEditingText() || !ViewportRegion.bFocused)
+	if (Placement.IsActive() || bPlacementUsedMouse || Gizmo.IsDragging() || bGizmoUsedMouse || PreviewCamera ||
+	    !bViewportCameraInitialized || !bViewportVisible || bOpenDialog || bSaveDialog || bDiscardDialog ||
+	    Gui->IsEditingText() || !ViewportRegion.bFocused)
 	{
 		// Focus recovery still reaches the controller while GUI navigation is blocked.
 		Camera.SuspendInput(InEvents);
@@ -96,24 +97,36 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	    Session->FreezeSceneFrame(Scene->GetToken(), static_cast<float>(double(ClockNanoseconds()) / 1e9));
 	const auto Target = ViewportTarget;
 	const bool bRenderScene = bViewportVisible;
+	const auto Preview = FreezePlacementPreview();
+	std::vector<FGuiTextureBinding> IconTextures;
+	for (const auto& [Id, Icon] : PlacementIcons)
+	{
+		if (Icon.Source.Texture)
+		{
+			IconTextures.push_back({Icon.Texture, Icon.Source});
+		}
+	}
 	FImage Capture;
+	const bool bCaptureFrame = bInCapture || !PlacementCapture.empty();
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-	                          [&, Data = std::move(InGui)]() mutable
+	                          [&, Data = std::move(InGui), Preview, IconTextures = std::move(IconTextures)]() mutable
 	                          {
 		                          FRenderGraph Graph;
-		                          std::vector<FGuiTextureBinding> Textures;
+		                          auto Textures = std::move(IconTextures);
 		                          if (bRenderScene)
 		                          {
 			                          FScenePipelineSettings Settings;
 			                          Settings.Exposure = Exposure;
 			                          Pipeline->Configure(Settings);
 			                          Pipeline->SetOutputTarget(Target);
+			                          Pipeline->SetTransientGeometry(Preview);
 			                          Pipeline->Build(Graph, Request, Seed, {}, {.13f, .13f, .13f, 1}, {}, true);
 			                          Textures.push_back({2, Target});
 		                          }
 		                          GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
-		                          Capture = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size,
-		                                                 !Options.bExercise && Options.Benchmark.empty(), bInCapture);
+		                          Capture =
+		                              ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size,
+		                                           !Options.bExercise && Options.Benchmark.empty(), bCaptureFrame);
 		                          if (bRenderScene)
 		                          {
 			                          RenderStats = Pipeline->GetFrame().Statistics();
@@ -126,6 +139,12 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 			std::filesystem::create_directories(Options.Capture.parent_path());
 		}
 		SaveImage(Options.Capture, Capture);
+	}
+	if (!PlacementCapture.empty())
+	{
+		std::filesystem::create_directories(PlacementCapture.parent_path());
+		SaveImage(PlacementCapture, Capture);
+		PlacementCapture.clear();
 	}
 }
 } // namespace Hyperion

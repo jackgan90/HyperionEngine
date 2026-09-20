@@ -128,6 +128,8 @@ void CheckTransformsAndReadiness()
 		Scene.SetWorldTransform(Handle, World);
 		const auto Hit = Scene.Raycast(Ray);
 		HYP_CHECK(Hit.Status == ESceneRayStatus::Hit && std::abs(Hit.Distance - 4) < .0001f);
+		HYP_CHECK(std::abs(Hit.Normal.X) < .00001f && std::abs(Hit.Normal.Y) < .00001f);
+		HYP_CHECK(std::abs(Hit.Normal.Z - (ScaleValue.X < 0 ? -1.f : 1.f)) < .00001f);
 	}
 	Scene.SetWorldTransform(Handle, Identity());
 	HYP_CHECK(Scene.Raycast({Ray.Origin, Ray.Direction, 0, 4}).Status == ESceneRayStatus::Miss);

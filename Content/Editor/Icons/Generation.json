@@ -1,0 +1,17 @@
+{
+  "tool": "built-in image_gen",
+  "assets": [
+    {
+      "name": "PointLight",
+      "prompt": "Use case: stylized-concept. Asset type: a single game engine editor light-object icon, legible at 48 pixels, square canvas, truly transparent alpha background. Warm ivory and pale yellow lit center, thick dark brown outline, subtle bronze shaded border, clean polished slightly dimensional UI sprite. Centered isolated symbol occupying 80 percent of canvas with generous transparent margins. No text, no letters, no logos, no watermark, no floor, no backdrop, no transform gizmo, no cursor, no cast shadow outside the symbol. Consistent crisp silhouette, simple forms, similar visual language to traditional 3D editor light sprites. Subject: one upright classic incandescent light bulb, rounded glowing cream glass bulb and short bronze screw base with three horizontal ridges, symmetrical front view."
+    },
+    {
+      "name": "DirectionalLight",
+      "prompt": "Use case: stylized-concept. Asset type: a single game engine editor light-object icon, legible at 48 pixels, square canvas, truly transparent alpha background. Warm ivory and pale yellow lit center, thick dark brown outline, subtle bronze shaded border, clean polished slightly dimensional UI sprite. Centered isolated symbol occupying 80 percent of canvas with generous transparent margins. No text, no letters, no logos, no watermark, no floor, no backdrop, no transform gizmo, no cursor, no cast shadow outside the symbol. Consistent crisp silhouette, simple forms, similar visual language to traditional 3D editor light sprites. Subject: one symmetrical sun symbol, circular glowing ivory disk with bronze dark brown border and eight short thick evenly spaced ivory rays, cardinal and diagonal rays, front view. Do not include an arrow."
+    },
+    {
+      "name": "SpotLight",
+      "prompt": "Use case: stylized-concept. Asset type: a single game engine editor light-object icon, legible at 48 pixels, square canvas, truly transparent alpha background. Warm ivory and pale yellow lit center, thick dark brown outline, subtle bronze shaded border, clean polished slightly dimensional UI sprite. Centered isolated symbol occupying 80 percent of canvas with generous transparent margins. No text, no letters, no logos, no watermark, no floor, no backdrop, no transform gizmo, no cursor, no cast shadow outside the symbol. Consistent crisp silhouette, simple forms, similar visual language to traditional 3D editor light sprites. Subject: a compact bronze stage spotlight lamp seen in simple side three-quarter view aimed diagonally down to the right, with a short pale yellow triangular cone of light. Clear chunky silhouette, limited detail, match warm bulb/sun editor icon styling."
+    }
+  ]
+}

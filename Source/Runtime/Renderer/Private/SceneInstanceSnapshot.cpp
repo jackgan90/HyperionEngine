@@ -64,20 +64,12 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 	}
 	for (const auto& Id : Used)
 	{
-		if (!P.Manifest)
-		{
-			throw std::logic_error("Missing asset manifest");
-		}
-		const auto Entry = std::find_if(P.Manifest->Assets.begin(), P.Manifest->Assets.end(),
-		                                [&](const FSceneAssetEntry& InEntry)
-		                                {
-			                                return InEntry.Id == Id;
-		                                });
-		if (Entry == P.Manifest->Assets.end())
+		const auto Entry = P.Loads.find(Id);
+		if (Entry == P.Loads.end())
 		{
 			throw std::logic_error("Missing scene asset reference");
 		}
-		Result.Assets.push_back(*Entry);
+		Result.Assets.push_back({Id, Entry->second.Reference});
 	}
 	// Visit all component state, including custom component and material/texture dependencies.
 	VisitRecord(RecordType<FSceneManifest>(), &Result,

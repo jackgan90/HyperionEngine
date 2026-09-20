@@ -70,8 +70,8 @@ void FEditorPlugin::FinishGizmo(bool bInCancel)
 void FEditorPlugin::DrawGizmo()
 {
 	FSceneNodeView View;
-	if (!Selection || !Scene->GetNodeView(*Selection, View) || !bViewportCameraInitialized || bOpenDialog ||
-	    bSaveDialog || bDiscardDialog || PreviewCamera)
+	if (Placement.IsActive() || bPlacementUsedMouse || !Selection || !Scene->GetNodeView(*Selection, View) ||
+	    !bViewportCameraInitialized || bOpenDialog || bSaveDialog || bDiscardDialog || PreviewCamera)
 	{
 		FinishGizmo();
 		return;

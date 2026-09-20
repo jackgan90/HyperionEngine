@@ -14,6 +14,7 @@ struct FSceneInstance::FImpl
 
 	struct FLoad
 	{
+		FAssetRef Reference;
 		std::uint64_t Epoch{};
 		FCancellationToken Cancellation;
 		TAsyncResult<FSceneModelData> Preparation;

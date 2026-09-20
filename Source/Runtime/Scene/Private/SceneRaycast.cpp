@@ -69,11 +69,13 @@ struct FModelRaycast
 	FSceneRayResult& Result;
 	void CastInstance(const FModelInstance& InInstance, std::uint32_t InIndex);
 	void Accept(std::uint32_t InInstance, std::uint32_t InPrimitive, std::uint32_t InTriangle,
-	            const FRayTriangleHit& InHit, const FMaterialState& InMaterial, float& OutMaximum);
+	            const FRayTriangleHit& InHit, const FMaterialState& InMaterial, const FMat4& InWorld,
+	            float& OutMaximum);
 };
 
 void FModelRaycast::Accept(std::uint32_t InInstance, std::uint32_t InPrimitive, std::uint32_t InTriangle,
-                           const FRayTriangleHit& InHit, const FMaterialState& InMaterial, float& OutMaximum)
+                           const FRayTriangleHit& InHit, const FMaterialState& InMaterial, const FMat4& InWorld,
+                           float& OutMaximum)
 {
 	const bool bFront = InHit.bFrontFacing == InMaterial.bFrontCounterClockwise;
 	if ((bFront && InMaterial.Cull == EMaterialCull::Front) || (!bFront && InMaterial.Cull == EMaterialCull::Back))
@@ -95,6 +97,16 @@ void FModelRaycast::Accept(std::uint32_t InInstance, std::uint32_t InPrimitive, 
 	Result.Triangle = InTriangle;
 	Result.Distance = InHit.Distance;
 	Result.Position = Add(WorldRay.Origin, ScaleVector(WorldRay.Direction, InHit.Distance));
+	const auto& Primitive = Model.Data->Asset->Primitives[InPrimitive];
+	const auto Point = [&](unsigned InCorner)
+	{
+		const auto Position = Vertex(Primitive, InTriangle, InCorner);
+		return Transform(InWorld, {Position.X, Position.Y, Position.Z, 1});
+	};
+	const auto A = Point(0);
+	const auto B = Point(1);
+	const auto C = Point(2);
+	Result.Normal = Normalize(Cross(FVec3{B.X - A.X, B.Y - A.Y, B.Z - A.Z}, FVec3{C.X - A.X, C.Y - A.Y, C.Z - A.Z}));
 	Result.Barycentrics = InHit.Barycentrics;
 	OutMaximum = SceneRayMaximum(Result, OutMaximum);
 }
@@ -165,7 +177,7 @@ void FModelRaycast::CastInstance(const FModelInstance& InInstance, std::uint32_t
 		Limited.Maximum = OutMaximum;
 		if (const auto Hit = IntersectRayTriangle(Limited, A, B, C))
 		{
-			Accept(InIndex, InInstance.Primitive, InTriangle, *Hit, Material, OutMaximum);
+			Accept(InIndex, InInstance.Primitive, InTriangle, *Hit, Material, World, OutMaximum);
 		}
 	};
 	if (bLocal)

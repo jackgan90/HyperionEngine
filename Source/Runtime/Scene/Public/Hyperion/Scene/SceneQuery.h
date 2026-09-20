@@ -48,6 +48,7 @@ struct FSceneRayResult
 	std::uint32_t Triangle{};
 	float Distance{};
 	FVec3 Position;
+	FVec3 Normal; // Unit world geometric normal, following transformed triangle winding.
 	FVec3 Barycentrics;
 	// A hit is the nearest prepared geometry; unloaded candidates may still be present.
 	bool bIncomplete{};

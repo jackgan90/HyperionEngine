@@ -101,6 +101,8 @@ void FEditorPlugin::DrawMenus()
 					    SaveScene(CurrentPath);
 				    });
 			}
+			Gui->EndDisabled();
+			Gui->BeginDisabled(!Scene->GetStatus().bReady || PendingSave.has_value());
 			if (Gui->MenuItem("Save Scene As..."))
 			{
 				SavePath = CurrentPath;
@@ -138,33 +140,7 @@ void FEditorPlugin::DrawMenus()
 			Gui->EndDisabled();
 			Gui->EndMenu();
 		}
-		if (Gui->BeginMenu("Window"))
-		{
-			DrawApplicationScale();
-			if (Gui->MenuItem("Viewport", nullptr, bShowViewport))
-			{
-				bShowViewport = !bShowViewport;
-			}
-			if (Gui->MenuItem("Outliner", nullptr, bShowOutliner))
-			{
-				bShowOutliner = !bShowOutliner;
-			}
-			if (Gui->MenuItem("Details", nullptr, bShowDetails))
-			{
-				bShowDetails = !bShowDetails;
-			}
-			if (Gui->MenuItem("Content Browser", nullptr, bShowBrowser))
-			{
-				bShowBrowser = !bShowBrowser;
-			}
-			Gui->Separator();
-			if (Gui->MenuItem("Reset Layout"))
-			{
-				bResetLayout = true;
-				bShowViewport = bShowOutliner = bShowDetails = bShowBrowser = true;
-			}
-			Gui->EndMenu();
-		}
+		DrawWindowMenu();
 		if (Gui->BeginMenu("Help"))
 		{
 			Gui->Text("Click the viewport to focus");
@@ -181,6 +157,40 @@ void FEditorPlugin::DrawMenus()
 	}
 }
 
+void FEditorPlugin::DrawWindowMenu()
+{
+	const bool bOpen = Gui->BeginMenu("Window");
+	InspectionBounds["placement/window-menu"] = Gui->LastItemBounds();
+	if (!bOpen)
+	{
+		return;
+	}
+	DrawApplicationScale();
+	if (Gui->MenuItem("Place Object", nullptr, bShowPlacement))
+	{
+		bShowPlacement = true;
+		bFocusPlacement = true;
+	}
+	InspectionBounds["placement/open-panel"] = Gui->LastItemBounds();
+	for (const auto& [Label, Visible] : {std::pair{"Viewport", &bShowViewport},
+	                                     {"Outliner", &bShowOutliner},
+	                                     {"Details", &bShowDetails},
+	                                     {"Content Browser", &bShowBrowser}})
+	{
+		if (Gui->MenuItem(Label, nullptr, *Visible))
+		{
+			*Visible = !*Visible;
+		}
+	}
+	Gui->Separator();
+	if (Gui->MenuItem("Reset Layout"))
+	{
+		bResetLayout = true;
+		bShowViewport = bShowOutliner = bShowDetails = bShowBrowser = bShowPlacement = true;
+	}
+	Gui->EndMenu();
+}
+
 void FEditorPlugin::DrawToolbar()
 {
 	if (Gui->BeginToolbar())
@@ -190,7 +200,7 @@ void FEditorPlugin::DrawToolbar()
 			ShowOpenScene();
 		}
 		Gui->SameLine();
-		if (Gui->Button("Frame Scene", Scene->GetStatus().bReady && !CurrentPath.empty() && !PreviewCamera))
+		if (Gui->Button("Frame Scene", Scene->GetStatus().bReady && !PreviewCamera))
 		{
 			FitSceneCamera(ViewCamera, *Scene,
 			               ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
@@ -446,6 +456,7 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 		ViewportRegion = Gui->Image(2);
 		bViewportVisible = true;
 		ResizeViewport();
+		RoutePlacement();
 		DrawGizmo();
 		if (Options.Benchmark.empty())
 		{
@@ -456,6 +467,7 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 			BenchmarkCamera();
 		}
 		RouteViewportPicking(InEvents);
+		DrawLightMarkers();
 		DrawGizmoOverlay();
 	}
 	Gui->EndWindow();
@@ -498,14 +510,17 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 {
 	Gui->BeginFrame(Window->LogicalSize(), Window->PixelSize(), std::clamp(InDelta, .001f, .1f), InEvents);
 	bGizmoUsedMouse = false;
+	bPlacementUsedMouse = false;
 	DrawMenus();
 	DrawToolbar();
 	Gui->StatusBar(StatusText());
-	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser"}, bResetLayout);
+	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser", "Place Object"}, bResetLayout);
 	bResetLayout = false;
+	DrawPlacementPanel();
 	DrawViewport(InDelta, InEvents);
 	if (!bViewportVisible)
 	{
+		CancelPlacement();
 		ViewportClick.reset();
 		FinishGizmo();
 		RouteCamera(InDelta, InEvents);

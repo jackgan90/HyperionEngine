@@ -29,6 +29,7 @@ struct FGui::FImpl
 	bool bLiveEdit{};
 	FGuiEditState EditState;
 	ImGuiID ImagePointerCapture{};
+	bool bDragCancelled{};
 	ImGuiID EditItem{};
 	std::uint64_t EditSerial{};
 	int EditFrame = -2;

@@ -1108,6 +1108,116 @@ void CheckClosedDependencies()
 	Scene->Close();
 	Scene.reset();
 }
+
+void CheckRegisteredAssets(FSceneFixture& InFixture)
+{
+	InFixture.Files->bRelease = true;
+	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets, true);
+	Scene.Tick();
+	const auto Revision = Scene.GetRevision();
+	FAssetRef Reference{"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""};
+	const auto Id = Scene.RegisterModelAsset(Reference);
+	HYP_CHECK(Scene.RegisterModelAsset(Reference) == Id && Scene.GetRevision() == Revision);
+	HYP_CHECK(Scene.GetNodes().empty() && Scene.Snapshot("Registered.hasset").Assets.empty());
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetAssets().front().Data != nullptr;
+	      });
+	FSceneNode Node;
+	Node.Id = "placed-model";
+	Node.Name = "Placed model";
+	Node.Model() = FSceneModelComponent{};
+	Node.Model()->Asset = Id;
+	const auto Handle = Scene.AddNode(Node);
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	HYP_CHECK(Scene.Raycast({{0, 0, 5}, {0, 0, -1}, 0, 10}).Handle == Handle);
+	const auto Snapshot = Scene.Snapshot("Registered.hasset");
+	HYP_CHECK(Snapshot.Assets.size() == 1 && Snapshot.Nodes.size() == 1);
+	InFixture.Assets.SaveAsync("Registered.hasset", std::make_shared<const FSceneManifest>(Snapshot))
+	    .Get(InFixture.Tasks);
+	Scene.Load("Registered.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	HYP_CHECK(Scene.GetNodes().size() == 1 && Scene.FindNode(Scene.GetNodes().front())->Model()->Data);
+	HYP_CHECK(Scene.RegisterModelAsset(Reference) == Id);
+	Reference.Path = "AbsentPlacementModel.hasset";
+	const auto Missing = Scene.RegisterModelAsset(Reference);
+	Await(Scene,
+	      [&]
+	      {
+		      const auto Entries = Scene.GetAssets();
+		      return std::any_of(Entries.begin(), Entries.end(),
+		                         [&](const auto& InEntry)
+		                         {
+			                         return InEntry.Id == Missing && !InEntry.Error.empty();
+		                         });
+	      });
+	HYP_CHECK(Scene.GetStatus().bReady && Scene.GetNodes().size() == 1);
+	HYP_CHECK(Scene.Snapshot("RegisteredAgain.hasset").Assets.size() == 1);
+	Scene.RemoveSubtree(Scene.GetNodes().front());
+	HYP_CHECK(Scene.Snapshot("EmptyRegistered.hasset").Assets.empty());
+}
+
+void CheckRegistrationWithUnresolvedAsset(FSceneFixture& InFixture)
+{
+	FSceneManifest Manifest;
+	const FAssetRef Unresolved{"0123456789abcdef0123456789abcdef", "", RecordType<FModelAsset>().Id, ""};
+	Manifest.Assets.push_back({"unavailable", Unresolved});
+	InFixture.Assets.SaveAsync("UnresolvedRegistration.hasset", std::make_shared<const FSceneManifest>(Manifest))
+	    .Get(InFixture.Tasks);
+	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets, true);
+	Scene.Load("UnresolvedRegistration.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	HYP_CHECK(Scene.GetNodes().empty() && Scene.GetAssets().size() == 1);
+	const auto Failure = Scene.GetAssets().front().Error;
+	HYP_CHECK(!Failure.empty());
+	const FAssetRef Reference{"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""};
+	const auto Id = Scene.RegisterModelAsset(Reference);
+	HYP_CHECK(Scene.RegisterModelAsset(Reference) == Id && Scene.GetAssets().size() == 2);
+	bool bRejected{};
+	try
+	{
+		Scene.RegisterModelAsset(Unresolved);
+	}
+	catch (const std::runtime_error&)
+	{
+		bRejected = true;
+	}
+	HYP_CHECK(bRejected && Scene.GetAssets().size() == 2);
+	const auto Assets = Scene.GetAssets();
+	HYP_CHECK(std::any_of(Assets.begin(), Assets.end(),
+	                      [&](const auto& InAsset)
+	                      {
+		                      return InAsset.Id == "unavailable" && InAsset.Error == Failure;
+	                      }));
+	FSceneNode Node;
+	Node.Id = "valid-placement";
+	Node.Model() = FSceneModelComponent{};
+	Node.Model()->Asset = Id;
+	const auto Handle = Scene.AddNode(Node);
+	Scene.Tick();
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	HYP_CHECK(Scene.Raycast({{0, 0, 5}, {0, 0, -1}, 0, 10}).Handle == Handle);
+	const auto Snapshot = Scene.Snapshot("RegisteredBesideFailure.hasset");
+	HYP_CHECK(Snapshot.Assets.size() == 1 && Snapshot.Assets.front().Id == Id && Snapshot.Nodes.size() == 1);
+	std::cout << "An unresolved old asset stays isolated from valid model registration and deduplication\n";
+}
 } // namespace
 
 int main()
@@ -1120,6 +1230,8 @@ int main()
 		CheckPendingMaterialEdits(Fixture);
 		CheckPendingMaterialCopies(Fixture);
 		CheckNodeOnlySnapshot(Fixture);
+		CheckRegisteredAssets(Fixture);
+		CheckRegistrationWithUnresolvedAsset(Fixture);
 		CheckSceneFrameTokens(Fixture);
 		CheckSceneViewSelection(Fixture);
 		CheckStrictCameraPreview(Fixture);

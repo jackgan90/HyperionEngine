@@ -7,6 +7,9 @@
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Hyperion/Renderer/TransformGizmo.h"
+#include "Hyperion/Renderer/TransientGeometry.h"
+#include "Hyperion/Renderer/ViewportPlacement.h"
+#include "Hyperion/Scene/ObjectPlacement.h"
 
 namespace Hyperion
 {
@@ -21,6 +24,7 @@ struct FEditorOptions
 	std::filesystem::path Benchmark;
 	std::filesystem::path ExerciseDocument;
 	std::filesystem::path ExerciseViews;
+	std::filesystem::path ExercisePlacement;
 	std::string Scene;
 	std::uint32_t Frames{};
 	std::uint32_t BenchmarkWarmup = 120;
@@ -48,6 +52,13 @@ public:
 	void Finish();
 
 private:
+	struct FProjectedLightMarker
+	{
+		FSceneNodeView View;
+		FVec4 Bounds;
+		float Depth{};
+	};
+
 	void Initialize();
 	bool AdvanceFrame(float InDelta);
 	void LoadCatalogs();
@@ -55,12 +66,30 @@ private:
 	void OpenScene(const std::string& InPath);
 	void ShowOpenScene();
 	void DrawMenus();
+	void DrawWindowMenu();
 	void DrawApplicationScale();
 	void DrawToolbar();
 	void DrawOutliner();
 	void DrawNode(FSceneHandle InHandle);
 	void DrawDetails();
 	void DrawSceneBrowser();
+	void InitializePlacement();
+	void DrawPlacementPanel();
+	void PollPlacementResources();
+	void PollPlacementIcons();
+	std::string PlacementUnavailableReason(const FPlaceableObject& InObject) const;
+	void RoutePlacement();
+	void UpdatePlacementPreview(const FPlaceableObject& InObject, const FSceneCameraView& InCamera, FVec2 InPointer);
+	void CancelPlacement();
+	void CommitPlacement(const FPlaceableObject& InObject, FVec3 InPosition);
+	FSceneHandle CommitCreate(FSceneNode InNode);
+	std::shared_ptr<const FTransientGeometry> FreezePlacementPreview() const;
+	void DrawLightMarkers();
+	std::vector<FProjectedLightMarker> CollectLightMarkers() const;
+	void DrawLightMarker(const FSceneNode& InNode, const FMat4& InWorld, bool bInSelected);
+	std::optional<FSceneHandle> PickLightMarker(FVec2 InPoint) const;
+	std::uint64_t LightTexture(const FSceneNode& InNode) const;
+	void DrawMainLightAction(FSceneHandle InHandle);
 	void DrawOpenDialog();
 	void DrawViewport(float InDelta, std::span<const FInputEvent> InEvents);
 	void DrawGizmoToolbar();
@@ -70,6 +99,14 @@ private:
 	void FinishGizmo(bool bInCancel = false);
 	void ExerciseGizmoInput(std::vector<FInputEvent>& InEvents);
 	void ExercisePickingInput(std::vector<FInputEvent>& InEvents);
+	void ExercisePlacementInput(std::vector<FInputEvent>& InEvents);
+	bool ExercisePlacementMenu(std::vector<FInputEvent>& InEvents);
+	void ExercisePlacementDrag(std::vector<FInputEvent>& InEvents);
+	void ExercisePlacementCancel(std::vector<FInputEvent>& InEvents);
+	void ExercisePlacementHistory();
+	void ExercisePlacementMarkers(std::vector<FInputEvent>& InEvents);
+	void CheckPlacementMarkerDraws(const FGuiDrawData& InData) const;
+	void ExercisePlacementDocument(std::vector<FInputEvent>& InEvents);
 	void PreparePickingExercise();
 	bool ExercisePickingScene(std::vector<FInputEvent>& InEvents);
 	void ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter, FVec2 InEmpty);
@@ -157,6 +194,56 @@ private:
 	FSize ViewportSize;
 	FGuiImageRegion ViewportRegion;
 	FTransformGizmo Gizmo;
+	FObjectPlacementRegistry PlacementRegistry;
+	FViewportPlacementSession Placement;
+	std::string PlacementFilter;
+	std::string PlacementCategory = "All";
+	bool bShowPlacement = true;
+	bool bFocusPlacement{};
+	bool bShowLightMarkers = true;
+	bool bPlacementUsedMouse{};
+	std::string PlacementStatus;
+
+	struct FPlacementModel
+	{
+		std::string Asset;
+		std::shared_ptr<const FSceneModelData> Data;
+		std::shared_ptr<const FRenderResource> Resource;
+		std::string Error;
+	};
+
+	std::map<std::string, FPlacementModel> PlacementModels;
+
+	struct FPlacementIcon
+	{
+		std::uint64_t Texture{};
+		TAssetRequest<FTextureAsset> Request;
+		FRenderTargetSource Source;
+		FRenderTargetSource PendingSource;
+		std::string Error;
+		bool bComplete{};
+	};
+
+	std::map<std::string, FPlacementIcon> PlacementIcons;
+	std::shared_ptr<const FRenderMaterial> PlacementMaterial;
+	std::shared_ptr<const void> PlacementLifetime;
+	std::optional<FSceneHandle> PlacementPublication;
+	FMat4 PlacementPublicationLocal;
+	std::shared_ptr<const FTransientGeometry> PlacementPublicationPreview;
+	std::uint32_t PlacementExerciseStep{};
+	std::uint32_t PlacementMenuStep{};
+	std::uint32_t PlacementExerciseType{};
+	std::uint32_t PlacementCancelCase{};
+	std::uint32_t PlacementMarkerCase{};
+	std::uint32_t PlacementMarkerStep{};
+	std::array<FMat4, 2> PlacementMarkerTransforms;
+	std::size_t PlacementExerciseBaseNodes{};
+	std::size_t PlacementExerciseBaseHistory{};
+	std::uint64_t PlacementExerciseBaseState{};
+	FVec3 PlacementExercisePosition;
+	std::vector<std::string> PlacementExerciseIds;
+	std::filesystem::path PlacementCapture;
+	bool bPlacementVerified{};
 	ETransformGizmoMode GizmoMode = ETransformGizmoMode::Position;
 
 	struct FGizmoEdit
@@ -319,6 +406,7 @@ private:
 	std::map<std::string, FVec4> InspectionBounds;
 	FSceneNode ExerciseOriginal;
 	std::uint32_t TransformExerciseStep{};
+	std::uint64_t TransformDragReadyAt{};
 	FMat4 ExerciseTransformResult;
 	bool bDocumentVerified{};
 	bool bViewsVerified{};

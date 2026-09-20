@@ -2,7 +2,6 @@
 
 ## Purpose
 Define accelerated geometric ray queries over current Main-owned scene state, with shared immutable triangle data, incremental bounds updates, stable object handles and explicit query availability.
-
 ## Requirements
 ### Requirement: Main-owned scene queries
 Scene SHALL expose nearest geometric ray queries over current Main state without reading Render-owned objects or consuming the render synchronization change stream. Results SHALL distinguish Hit, Miss and Unavailable and carry a generation-checked scene handle.
@@ -48,3 +47,10 @@ Queries SHALL select the nearest accepted triangle within the world ray interval
 #### Scenario: Partially loaded scene
 - **WHEN** some geometry is prepared and other potentially intersecting geometry is unavailable
 - **THEN** ready geometry remains queryable and uncertainty is reported without claiming a confirmed empty-space miss
+
+### Requirement: Geometric hit normals
+An accepted scene ray hit SHALL include a finite normalized world-space geometric triangle normal consistent with the transformed triangle winding. Nonuniform scale, reflection, shear and supported singular transforms SHALL use transformed geometry rather than an invalid inverse-normal calculation.
+
+#### Scenario: Transformed surface placement
+- **WHEN** a ray hits a mirrored or nonuniformly scaled triangle
+- **THEN** the returned world hit position and normal describe that triangle and support placement without penetrating the surface

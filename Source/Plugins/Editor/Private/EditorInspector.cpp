@@ -91,6 +91,14 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 		    FPendingInspectorEdit{InView.Handle, std::move(Candidate), Revision, Edit.ChangedInteraction};
 	}
 	Gui->TextWrapped("Object ID: " + Node.Id);
+	if (Node.DirectionalLight())
+	{
+		DrawMainLightAction(InView.Handle);
+		if (Scene->GetRevision() != Revision)
+		{
+			return;
+		}
+	}
 	if (Node.Camera())
 	{
 		DrawCameraActions(InView.Handle);

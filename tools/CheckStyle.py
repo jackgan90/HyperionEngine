@@ -73,7 +73,9 @@ def check_boolean_names(tool, path, build_dir):
                  'isExpansionInFileMatching("[/\\\\]Source[/\\\\]"), '
                  'unless(matchesName("(^|::)b[A-Z][A-Za-z0-9]*$")))')
         arguments += ['-c', query]
-    non_boolean = 'unless(anyOf(' + ', '.join(f'hasType({kind})' for kind in types) + '))'
+    # Nullable boolean outputs (for example bool* bOutExpanded) may retain the boolean prefix.
+    allowed_prefix_types = (*types, 'pointsTo(booleanType())')
+    non_boolean = 'unless(anyOf(' + ', '.join(f'hasType({kind})' for kind in allowed_prefix_types) + '))'
     query = ('match namedDecl(anyOf(varDecl(' + non_boolean + '), fieldDecl(' + non_boolean + ')), '
              'isExpansionInFileMatching("[/\\\\]Source[/\\\\]"), '
              'matchesName("(^|::)b[A-Z][A-Za-z0-9]*$"))')

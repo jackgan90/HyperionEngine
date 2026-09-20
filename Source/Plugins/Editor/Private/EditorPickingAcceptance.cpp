@@ -5,7 +5,7 @@ namespace Hyperion
 {
 namespace
 {
-void CheckPicking(bool bInCondition, const char* InMessage)
+void CheckPicking(bool bInCondition, const std::string& InMessage)
 {
 	if (!bInCondition)
 	{
@@ -85,6 +85,8 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::PreparePickingExercise()
 {
+	// This synthetic fixture isolates triangle picking; icon priority is exercised by placement acceptance.
+	bShowLightMarkers = false;
 	const auto Models = Scene->GetNodes(ESceneNodeKind::Model);
 	CheckPicking(!Models.empty(), "requires a prepared scene");
 	const auto Original = Scene->Find(Models.front())->Data;
@@ -138,7 +140,9 @@ void FEditorPlugin::ExercisePickingSelection(std::vector<FInputEvent>& InEvents,
 			Pointer(InEvents, InCenter, false);
 			break;
 		case 4:
-			CheckPicking(Selection == PickingNear, "nearest triangle was not selected");
+			CheckPicking(Selection == PickingNear,
+			             "nearest triangle was not selected; selected " +
+			                 (Selection ? Scene->FindNode(*Selection)->Id : std::string("nothing")));
 			CheckPicking(History.empty() && !IsDirty(), "selection changed document history");
 			break;
 		case 5:
@@ -264,6 +268,7 @@ void FEditorPlugin::ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec
 		case 39:
 			CheckPicking(Selection == PickingFar, "picking stole a gizmo gesture");
 			CheckPicking(History.empty() && !IsDirty(), "interaction authored unintended edits");
+			bShowLightMarkers = true;
 			OpenScene(CurrentPath);
 			break;
 		case 40:

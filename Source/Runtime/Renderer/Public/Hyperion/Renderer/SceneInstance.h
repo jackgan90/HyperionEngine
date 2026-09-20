@@ -56,6 +56,9 @@ public:
 	FScenePublicationToken GetToken() const;
 	FTaskHandle GetReceipt() const;
 	void Close();
+	// Main: register a native model without creating a node or modifying a loaded manifest.
+	// Repeated identical resolved references share preparation. GetAssets reports readiness/errors.
+	std::string RegisterModelAsset(FAssetRef InReference, const std::filesystem::path& InContainingAsset = {});
 	FSceneHandle AddNode(FSceneNode InNode);
 	std::uint64_t GetRevision() const;
 	bool EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision);

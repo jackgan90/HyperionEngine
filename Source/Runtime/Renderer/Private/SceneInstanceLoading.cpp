@@ -14,6 +14,7 @@ void FSceneInstance::FImpl::BeginManifest()
 	for (const auto& Entry : Manifest->Assets)
 	{
 		auto& Load = Loads[Entry.Id];
+		Load.Reference = Entry.Reference;
 		Load.Epoch = LoadEpoch;
 		try
 		{

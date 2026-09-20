@@ -1,4 +1,5 @@
 #include "AssetCommands.h"
+#include "EngineContent.h"
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
@@ -170,6 +171,7 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		            "[--library DIRECTORY] [--source-root DIRECTORY --source-id ID]\n"
 		         << "Global options: --mounts CONFIG.json [--authoring]\n"
 		         << "hyperion_asset_tool build-brdf OUTPUT.hasset\n"
+		         << "hyperion_asset_tool --authoring build-placement\n"
 		         << "hyperion_asset_tool upgrade LEGACY.hasset OUTPUT.hasset\n"
 		         << "hyperion_asset_tool inspect|validate ROOT.hasset\n"
 		         << "hyperion_asset_tool export-json INPUT.hasset OUTPUT.json\n"
@@ -179,6 +181,11 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		return;
 	}
 	const auto Command = InArguments[0];
+	if (Command == "build-placement" && InArguments.size() == 1)
+	{
+		BuildEnginePlacementContent(InIO, InOutput);
+		return;
+	}
 	if (Command == "export-envelope" && InArguments.size() == 3)
 	{
 		const auto Document = DecodeAsset(InIO.ReadAsync(PathFromUtf8(InArguments[1])).Get(InIO.TaskSystem()));

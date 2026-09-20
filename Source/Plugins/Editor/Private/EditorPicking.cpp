@@ -32,10 +32,10 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	                });
 	const auto Pointer = Gui->PointerState();
 	const auto ActiveCamera = PickingCamera();
-	if (bInputInterrupted || !ActiveCamera || !bViewportVisible || !ViewportRegion.bFocused ||
-	    !ViewportRegion.bHovered || bOpenDialog || bSaveDialog || bDiscardDialog || Gui->IsEditingText() ||
-	    !Pointer.bPositionValid || Pointer.bCancel || Pointer.bRightDown || bCameraDragging || bGizmoUsedMouse ||
-	    Gizmo.IsDragging())
+	if (Placement.IsActive() || bPlacementUsedMouse || bInputInterrupted || !ActiveCamera || !bViewportVisible ||
+	    !ViewportRegion.bFocused || !ViewportRegion.bHovered || bOpenDialog || bSaveDialog || bDiscardDialog ||
+	    Gui->IsEditingText() || !Pointer.bPositionValid || Pointer.bCancel || Pointer.bRightDown || bCameraDragging ||
+	    bGizmoUsedMouse || Gizmo.IsDragging())
 	{
 		ViewportClick.reset();
 		return;
@@ -75,6 +75,11 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 		return;
 	}
 	ViewportClick.reset();
+	if (const auto Light = PickLightMarker(Pointer.Position))
+	{
+		SelectObject(Light);
+		return;
+	}
 	const FVec2 Position{(Pointer.Position.X - Bounds.X) / (Bounds.Z - Bounds.X),
 	                     (Pointer.Position.Y - Bounds.Y) / (Bounds.W - Bounds.Y)};
 	const auto Ray =

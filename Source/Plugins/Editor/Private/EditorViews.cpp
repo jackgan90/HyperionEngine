@@ -7,6 +7,7 @@ namespace Hyperion
 {
 void FEditorPlugin::SetPreviewCamera(std::optional<FSceneHandle> InHandle)
 {
+	CancelPlacement();
 	ViewportClick.reset();
 	if (InHandle)
 	{
@@ -71,22 +72,9 @@ void FEditorPlugin::CreateCameraFromView()
 	}
 	FSceneNode Node;
 	Node.Name = "Camera";
-	do
-	{
-		Node.Id = "camera-" + std::to_string(++NextDocumentState);
-	} while (Scene->FindHandle(Node.Id).Scene);
 	Node.Local() = ViewCamera.World;
 	Node.Camera() = ViewCamera.Lens;
-	FHistoryEntry Entry{{}, {}, Node, Scene->GetSettings(), Scene->GetSettings(), DocumentState, NextDocumentState};
-	History.reserve(HistoryCursor + 1);
-	Entry.Handle = Scene->AddNode(std::move(Node));
-	Selection = Entry.Handle;
-	History.resize(HistoryCursor);
-	DocumentState = Entry.AfterState;
-	History.push_back(std::move(Entry));
-	++HistoryCursor;
-	FinishInspectorEdit();
-	Error.clear();
+	CommitCreate(std::move(Node));
 }
 
 void FEditorPlugin::DrawViewControls()
@@ -165,6 +153,7 @@ void FEditorPlugin::DrawViewOptions()
 	Gui->Tooltip("Hold right mouse and scroll to adjust movement speed");
 	Gui->SetNextItemWidth(180);
 	Gui->Slider("Exposure", Exposure, .1f, 8);
+	Gui->Checkbox("Show light icons", bShowLightMarkers);
 	Gui->Separator();
 	try
 	{

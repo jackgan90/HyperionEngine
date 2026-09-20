@@ -234,6 +234,19 @@ void FGui::BeginFrame(FSize InLogical, FSize InPixels, float InDelta, std::span<
 		FontImage();
 	}
 	ImGui::NewFrame();
+	if (!ImGui::IsMouseDown(0))
+	{
+		Impl->bDragCancelled = false;
+	}
+	const bool bLostFocus = std::any_of(InEvents.begin(), InEvents.end(),
+	                                    [](const FInputEvent& InEvent)
+	                                    {
+		                                    return InEvent.Type == EEventType::Focus && !InEvent.bDown;
+	                                    });
+	if (bLostFocus || ImGui::IsKeyPressed(ImGuiKey_Escape))
+	{
+		CancelDragDrop();
+	}
 }
 
 bool FGui::BeginPanel(const char* InTitle, FVec2 InPosition, FVec2 InSize)

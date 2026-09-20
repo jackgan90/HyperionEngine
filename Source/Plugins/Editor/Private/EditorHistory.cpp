@@ -3,6 +3,40 @@
 
 namespace Hyperion
 {
+FSceneHandle FEditorPlugin::CommitCreate(FSceneNode InNode)
+{
+	FinishInspectorEdit();
+	do
+	{
+		InNode.Id = "object-" + std::to_string(++NextDocumentState);
+	} while (Scene->FindHandle(InNode.Id).Scene);
+	FHistoryEntry Entry{{}, {}, InNode, Scene->GetSettings(), Scene->GetSettings(), DocumentState, NextDocumentState};
+	History.reserve(HistoryCursor + 1);
+	Entry.Handle = Scene->AddNode(std::move(InNode));
+	try
+	{
+		if (Entry.After->DirectionalLight() && !Entry.BeforeSettings.MainDirectionalLight)
+		{
+			Entry.AfterSettings.MainDirectionalLight = Entry.Handle;
+			Scene->SetSettings(Entry.AfterSettings);
+		}
+	}
+	catch (...)
+	{
+		Scene->RemoveSubtree(Entry.Handle);
+		throw;
+	}
+	Selection = Entry.Handle;
+	bSelectionInitialized = true;
+	History.resize(HistoryCursor);
+	DocumentState = Entry.AfterState;
+	const auto Handle = Entry.Handle;
+	History.push_back(std::move(Entry));
+	++HistoryCursor;
+	Error.clear();
+	return Handle;
+}
+
 void FEditorPlugin::FinishInspectorEdit()
 {
 	FinishGizmo();
@@ -17,8 +51,8 @@ void FEditorPlugin::FinishInspectorEdit()
 
 void FEditorPlugin::RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents)
 {
-	const bool bAllowHistory =
-	    !bOpenDialog && !bSaveDialog && !bDiscardDialog && (!Gui->IsEditingText() || InspectorInteraction != 0);
+	const bool bAllowHistory = !Placement.IsActive() && !Gui->DragPayload() && !bOpenDialog && !bSaveDialog &&
+	                           !bDiscardDialog && (!Gui->IsEditingText() || InspectorInteraction != 0);
 	std::erase_if(InEvents,
 	              [&](const FInputEvent& InEvent)
 	              {

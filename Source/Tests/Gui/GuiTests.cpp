@@ -8,6 +8,7 @@
 void CheckColorControls();
 void CheckDragControls();
 void CheckApplicationScale();
+void CheckObjectDrag();
 
 namespace
 {
@@ -86,6 +87,7 @@ int main()
 		}
 		CheckColorControls();
 		CheckDragControls();
+		CheckObjectDrag();
 		CheckApplicationScale();
 		Check(MemoryStats(EMemoryTag::Gui).LiveBytes == 0, "GUI allocations released");
 		std::cout << "GUI input, reflection, owned draw data and cleanup passed\n";
