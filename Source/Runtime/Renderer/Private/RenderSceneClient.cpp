@@ -404,6 +404,18 @@ FSceneVisibilityStats FRenderSceneClient::BeginViews() const
 	return Mailbox->Scene->BeginViews();
 }
 
+FRenderSceneSnapshot FRenderSceneClient::CollectPrimitives(FRenderView InView,
+                                                           std::span<const FRenderPrimitiveHandle> InHandles) const
+{
+	Mailbox->Tasks.Require({EDomain::Render});
+	if (!Mailbox->Scene)
+	{
+		throw std::logic_error("Render scene is closed");
+	}
+	Mailbox->Scene->RequireHealthy();
+	return Mailbox->Scene->CollectPrimitives(std::move(InView), InHandles);
+}
+
 std::vector<FBounds> FRenderSceneClient::QueryBounds(const ISceneVisibility& InVisibility) const
 {
 	Mailbox->Tasks.Require({EDomain::Render});

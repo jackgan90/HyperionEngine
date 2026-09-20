@@ -25,6 +25,7 @@ public:
 	std::string GetError(FSceneHandle InHandle) const;
 	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
 	std::size_t PrimitiveCount(FSceneHandle InHandle) const;
+	std::vector<FRenderPrimitiveHandle> ResolveRenderPrimitives(FSceneHandle InHandle) const;
 	std::shared_ptr<const FSceneComponentDiagnostics> GetComponentDiagnostics(FSceneHandle InHandle,
 	                                                                          std::string_view InComponent) const;
 	std::pair<std::uint64_t, std::uint64_t> GetStatusRevision() const;

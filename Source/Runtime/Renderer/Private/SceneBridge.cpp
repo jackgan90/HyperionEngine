@@ -354,4 +354,19 @@ std::size_t FSceneRenderBridge::PrimitiveCount(FSceneHandle InHandle) const
 	const auto It = Attachments.find(InHandle);
 	return It == Attachments.end() ? 0 : It->second.Model->PrimitiveCount();
 }
+
+std::vector<FRenderPrimitiveHandle> FSceneRenderBridge::ResolveRenderPrimitives(FSceneHandle InHandle) const
+{
+	Tasks.Require({EDomain::Main});
+	std::vector<FRenderPrimitiveHandle> Result;
+	const auto It = Attachments.find(InHandle);
+	if (!bClosed && Scene.FindNode(InHandle) && It != Attachments.end())
+	{
+		for (const auto& Binding : It->second.Model->Bindings)
+		{
+			Result.push_back(Binding.GetHandle());
+		}
+	}
+	return Result;
+}
 } // namespace Hyperion

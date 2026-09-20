@@ -3,6 +3,12 @@
 
 namespace Hyperion
 {
+std::vector<FRenderPrimitiveHandle> FSceneInstance::ResolveRenderPrimitives(FSceneHandle InHandle) const
+{
+	Impl->RequireOpen();
+	return Impl->Bridge->ResolveRenderPrimitives(InHandle);
+}
+
 std::shared_ptr<const FSceneComponentDiagnostics> FSceneRenderBridge::GetComponentDiagnostics(
     FSceneHandle InHandle, std::string_view InComponent) const
 {

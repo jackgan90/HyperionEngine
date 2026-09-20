@@ -96,6 +96,20 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	const auto Seed =
 	    Session->FreezeSceneFrame(Scene->GetToken(), static_cast<float>(double(ClockNanoseconds()) / 1e9));
 	const auto Target = ViewportTarget;
+	auto Outline = std::make_shared<FSelectionOutlineRequest>();
+	Outline->Publication = Seed->GetToken();
+	Outline->Settings = OutlineSettings;
+	if (!OutlineExerciseObjects.empty())
+	{
+		for (const auto Object : OutlineExerciseObjects)
+		{
+			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Object));
+		}
+	}
+	else if (Selection)
+	{
+		Outline->Objects.push_back(Scene->ResolveRenderPrimitives(*Selection));
+	}
 	const bool bRenderScene = bViewportVisible;
 	const auto Preview = FreezePlacementPreview();
 	std::vector<FGuiTextureBinding> IconTextures;
@@ -107,31 +121,33 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 		}
 	}
 	FImage Capture;
-	const bool bCaptureFrame = bInCapture || !PlacementCapture.empty();
-	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-	                          [&, Data = std::move(InGui), Preview, IconTextures = std::move(IconTextures)]() mutable
-	                          {
-		                          FRenderGraph Graph;
-		                          auto Textures = std::move(IconTextures);
-		                          if (bRenderScene)
-		                          {
-			                          FScenePipelineSettings Settings;
-			                          Settings.Exposure = Exposure;
-			                          Pipeline->Configure(Settings);
-			                          Pipeline->SetOutputTarget(Target);
-			                          Pipeline->SetTransientGeometry(Preview);
-			                          Pipeline->Build(Graph, Request, Seed, {}, {.13f, .13f, .13f, 1}, {}, true);
-			                          Textures.push_back({2, Target});
-		                          }
-		                          GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
-		                          Capture =
-		                              ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size,
-		                                           !Options.bExercise && Options.Benchmark.empty(), bCaptureFrame);
-		                          if (bRenderScene)
-		                          {
-			                          RenderStats = Pipeline->GetFrame().Statistics();
-		                          }
-	                          }));
+	const auto ExerciseCapture = OutlineCapture.empty() ? PlacementCapture : OutlineCapture;
+	const bool bCaptureFrame = bInCapture || !ExerciseCapture.empty();
+	Tasks.Wait(
+	    Tasks.Dispatch({EDomain::Render},
+	                   [&, Data = std::move(InGui), Preview, Outline, IconTextures = std::move(IconTextures)]() mutable
+	                   {
+		                   FRenderGraph Graph;
+		                   auto Textures = std::move(IconTextures);
+		                   if (bRenderScene)
+		                   {
+			                   FScenePipelineSettings Settings;
+			                   Settings.Exposure = Exposure;
+			                   Pipeline->Configure(Settings);
+			                   Pipeline->SetOutputTarget(Target);
+			                   Pipeline->SetTransientGeometry(Preview);
+			                   Pipeline->SetSelectionOutline(Outline);
+			                   Pipeline->Build(Graph, Request, Seed, {}, {.13f, .13f, .13f, 1}, {}, true);
+			                   Textures.push_back({2, Target});
+		                   }
+		                   GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
+		                   Capture = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size,
+		                                          !Options.bExercise && Options.Benchmark.empty(), bCaptureFrame);
+		                   if (bRenderScene)
+		                   {
+			                   RenderStats = Pipeline->GetFrame().Statistics();
+		                   }
+	                   }));
 	if (bInCapture)
 	{
 		if (!Options.Capture.parent_path().empty())
@@ -140,11 +156,12 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 		}
 		SaveImage(Options.Capture, Capture);
 	}
-	if (!PlacementCapture.empty())
+	if (!ExerciseCapture.empty())
 	{
-		std::filesystem::create_directories(PlacementCapture.parent_path());
-		SaveImage(PlacementCapture, Capture);
+		std::filesystem::create_directories(ExerciseCapture.parent_path());
+		SaveImage(ExerciseCapture, Capture);
 		PlacementCapture.clear();
+		OutlineCapture.clear();
 	}
 }
 } // namespace Hyperion

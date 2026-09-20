@@ -6,6 +6,7 @@
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
+#include "Hyperion/Renderer/SelectionOutline.h"
 #include "Hyperion/Renderer/TransformGizmo.h"
 #include "Hyperion/Renderer/TransientGeometry.h"
 #include "Hyperion/Renderer/ViewportPlacement.h"
@@ -25,6 +26,7 @@ struct FEditorOptions
 	std::filesystem::path ExerciseDocument;
 	std::filesystem::path ExerciseViews;
 	std::filesystem::path ExercisePlacement;
+	std::filesystem::path ExerciseOutlines;
 	std::string Scene;
 	std::uint32_t Frames{};
 	std::uint32_t BenchmarkWarmup = 120;
@@ -99,6 +101,8 @@ private:
 	void FinishGizmo(bool bInCancel = false);
 	void ExerciseGizmoInput(std::vector<FInputEvent>& InEvents);
 	void ExercisePickingInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseOutlines();
+	void PrepareOutlineExercise();
 	void ExercisePlacementInput(std::vector<FInputEvent>& InEvents);
 	bool ExercisePlacementMenu(std::vector<FInputEvent>& InEvents);
 	void ExercisePlacementDrag(std::vector<FInputEvent>& InEvents);
@@ -272,6 +276,13 @@ private:
 	FDeviceStats DeviceStats;
 	std::vector<std::string> ScenePaths;
 	std::optional<FSceneHandle> Selection;
+	FSelectionOutlineSettings OutlineSettings;
+	std::vector<FSceneHandle> OutlineExerciseObjects;
+	FSceneHandle OutlineExerciseWall;
+	std::filesystem::path OutlineCapture;
+	unsigned OutlineExerciseStep{};
+	unsigned OutlineExerciseWait{};
+	bool bOutlinesVerified{};
 	bool bSelectionInitialized{};
 	unsigned PickingExerciseStep{};
 	unsigned PickingSceneStep{};

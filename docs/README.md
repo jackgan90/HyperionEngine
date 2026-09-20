@@ -25,6 +25,7 @@
 - [Render primitives 与生命周期](RenderPrimitives.md)、[CPU 帧管线](CpuFramePipeline.md)
 - [Render Graph](RenderGraph.md)、[材质系统](Materials.md)、[实例批处理](InstanceBatching.md)
 - [Deferred 与线性 HDR](DeferredRendering.md)、[深度约定](DepthConventions.md)
+- [选中物体轮廓与多目标对比](SelectionOutlines.md)
 - [Compute pipelines](ComputePipelines.md)、[HZB 与 Contact shadows](ContactShadows.md)
 - [级联阴影](CascadedShadows.md)、[局部光](LocalLights.md)、[聚簇光照](ClusteredLighting.md)、[天空与 IBL](SkyLighting.md)
 

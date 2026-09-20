@@ -13,6 +13,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorHost.cpp
   Private/EditorInspector.cpp
   Private/EditorOptions.cpp
+  Private/EditorOutlineAcceptance.cpp
   Private/EditorPanels.cpp
   Private/EditorPlacement.cpp
   Private/EditorPlacementAcceptance.cpp

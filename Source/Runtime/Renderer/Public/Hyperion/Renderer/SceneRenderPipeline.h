@@ -49,6 +49,7 @@ public:
 	void SetOutputTarget(FRenderTargetSource InTarget = {ERenderTargetKind::Backbuffer});
 	// Render only: replacement is immutable and applies to subsequent builds, including an empty packet.
 	void SetTransientGeometry(std::shared_ptr<const FTransientGeometry> InGeometry);
+	void SetSelectionOutline(std::shared_ptr<const FSelectionOutlineRequest> InRequest);
 	void Build(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,
 	           const FCascadedShadowSettings& InShadows, FVec4 InClear,
 	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
@@ -64,6 +65,7 @@ private:
 	FRenderFeatureContext BeginFeatures(FRenderGraph& InGraph, const FRenderView& InView,
 	                                    std::shared_ptr<const FMaterialFrameContext> InFrame, bool bInDeferPreparation);
 	std::shared_ptr<const FTransientGeometry> TransientGeometry;
+	std::shared_ptr<const FSelectionOutlineRequest> SelectionOutline;
 	FRenderTargetSource OutputTarget{ERenderTargetKind::Backbuffer};
 	FRenderPassTargets OutputTargets(std::optional<FVec4> InClear = {}) const;
 	void BuildResolved(FRenderGraph& InGraph, FRenderView InMain, std::shared_ptr<const FMaterialFrameContext> InFrame,

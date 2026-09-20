@@ -33,6 +33,15 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 	{
 		return true;
 	}
+	if (PickingSceneStep == 10)
+	{
+		const auto& Outline = RenderStats.SelectionOutline;
+		CheckPicking(Outline.UnsupportedItems == 0, "native scene material has no outline coverage");
+		if (!Outline.Items || Outline.PendingItems)
+		{
+			return false;
+		}
+	}
 	if ((PickingSceneStep == 3 || PickingSceneStep == 9) && !ExerciseDeletionInput(InEvents))
 	{
 		return false;

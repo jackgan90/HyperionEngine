@@ -6,6 +6,9 @@
 #ifndef HYP_SHADOW_CASTER
 #define HYP_SHADOW_CASTER 0
 #endif
+#ifndef HYP_SILHOUETTE_MASK
+#define HYP_SILHOUETTE_MASK 0
+#endif
 
 Texture2D BaseColorTexture : register(t0);
 Texture2D MetallicRoughnessTexture : register(t1);
@@ -97,7 +100,13 @@ void ClipModelAlpha(FVertexOutput InInput, float InAlpha)
 	}
 }
 
-#if HYP_SHADOW_CASTER
+#if HYP_SILHOUETTE_MASK
+float PSMain(FVertexOutput InInput) : SV_Target0
+{
+	ClipModelAlpha(InInput, ModelBaseColor(InInput).a);
+	return 1;
+}
+#elif HYP_SHADOW_CASTER
 void PSMain(FVertexOutput InInput)
 {
 	ClipModelAlpha(InInput, ModelBaseColor(InInput).a);

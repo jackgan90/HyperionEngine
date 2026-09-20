@@ -323,6 +323,7 @@ void FEditorPlugin::WriteReport()
 	       << "\"views_verified\": " << bViewsVerified << ",\n"
 	       << "\"gizmo_verified\": " << bGizmoVerified << ",\n"
 	       << "\"picking_verified\": " << bPickingVerified << ",\n"
+	       << "\"outlines_verified\": " << bOutlinesVerified << ",\n"
 	       << "\"placement_verified\": " << bPlacementVerified << ",\n"
 	       << "\"placement_status\": " << std::quoted(PlacementStatus) << ",\n"
 	       << "\"placement_unavailable\": " << Unavailable << ",\n"

@@ -71,6 +71,7 @@ void FRenderSession::AppendTransientGeometry(FRenderGraph& InGraph, FRenderScene
 	ValidateSceneFrame(*InSnapshot.Frame);
 	InSnapshot = PrepareSceneSnapshot(std::move(InSnapshot));
 	PrepareMaterials(InSnapshot, false);
+	InSnapshot.Batches = Batches.Build(InSnapshot, InSnapshot.View.bInstanceBatching);
 	const auto Snapshot = std::make_shared<const FRenderSceneSnapshot>(std::move(InSnapshot));
 	const auto Preparation = Resources.GetPreparation();
 	auto Pass = Preparation.DeclarePass(InGraph, *Snapshot);

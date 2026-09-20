@@ -70,6 +70,7 @@ void FEditorPlugin::Initialize()
 	GuiRenderer = &Context.Require<FGuiRenderer>();
 	auto Features = Context.Require<FRenderFeatureRegistry>().Create();
 	Features.push_back(MakeTransientGeometryFeature());
+	Features.push_back(MakeSelectionOutlineFeature(Device->GetCapabilities()));
 	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
 	                                                  std::move(Features));
 	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
@@ -206,6 +207,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	{
 		ExercisePlacementInput(Events);
 	}
+	if (!Options.ExerciseOutlines.empty())
+	{
+		ExerciseOutlines();
+	}
 	FGuiDrawData Data;
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorGui);
@@ -222,7 +227,8 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	}
 	// Async scene readiness is independent of render frame rate.
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
-	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified;
+	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
+	                               bOutlinesVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames));
@@ -268,7 +274,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || !Options.ExerciseDocument.empty() ||
-	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty()) &&
+	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out");
@@ -292,6 +298,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExerciseOutlines.empty() && !bOutlinesVerified)
+	{
+		throw std::runtime_error("Editor outline acceptance did not complete");
+	}
 	if (!Options.ExercisePlacement.empty() && !bPlacementVerified)
 	{
 		throw std::runtime_error("Editor placement acceptance did not complete");

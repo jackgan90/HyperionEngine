@@ -49,6 +49,7 @@ public:
 	FRenderSceneSnapshot CollectPrepared(FRenderView InView, std::uint64_t InResourceRevision,
 	                                     FRenderSceneSnapshot* InPrevious = nullptr);
 	FSceneVisibilityStats BeginViews();
+	FRenderSceneSnapshot CollectPrimitives(FRenderView InView, std::span<const FRenderPrimitiveHandle> InHandles);
 	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;
 

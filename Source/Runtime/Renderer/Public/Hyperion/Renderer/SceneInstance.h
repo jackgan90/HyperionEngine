@@ -54,6 +54,7 @@ public:
 	void Load(const std::filesystem::path& InPath);
 	void Tick();
 	FScenePublicationToken GetToken() const;
+	std::vector<FRenderPrimitiveHandle> ResolveRenderPrimitives(FSceneHandle InHandle) const;
 	FTaskHandle GetReceipt() const;
 	void Close();
 	// Main: register a native model without creating a node or modifying a loaded manifest.

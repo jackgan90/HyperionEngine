@@ -110,6 +110,8 @@ public:
 	FRenderSceneSnapshot CollectPrepared(FRenderView InView, std::uint64_t InResourceRevision,
 	                                     FRenderSceneSnapshot* InPrevious = nullptr) const;
 	FSceneVisibilityStats BeginViews() const;
+	// Render only: owned subset, generation checked, without scene occlusion culling or draw receipts.
+	FRenderSceneSnapshot CollectPrimitives(FRenderView InView, std::span<const FRenderPrimitiveHandle> InHandles) const;
 	std::optional<std::uint64_t> GetCollectionRevision() const;
 	std::vector<FBounds> QueryBounds(const ISceneVisibility& InVisibility) const;
 

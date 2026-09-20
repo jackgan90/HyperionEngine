@@ -198,4 +198,18 @@ FMaterialParameterValues FRenderResourceService::PrepareAssetValues(
 {
 	return AssetCache->ResolveValues(InValues, InTextures);
 }
+
+std::shared_ptr<const FRenderMaterial> FRenderResourceService::RequestAuxiliaryMaterial(
+    std::shared_ptr<const FMaterialSnapshot> InSnapshot)
+{
+	auto& Owner = *Coordinator;
+	Owner.Tasks.Require({EDomain::Render});
+	std::shared_ptr<const FRenderMaterial> Result;
+	{
+		std::lock_guard Lock(Owner.Mutex);
+		Result = Owner.AcquireMaterial(std::move(InSnapshot), {});
+	}
+	Owner.Schedule();
+	return Result;
+}
 } // namespace Hyperion

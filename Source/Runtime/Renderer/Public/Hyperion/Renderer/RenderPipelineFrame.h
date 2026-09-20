@@ -7,6 +7,16 @@ namespace Hyperion
 {
 struct FFullscreenPreparationStatistics;
 
+struct FSelectionOutlineStatistics
+{
+	std::size_t Objects{};
+	std::size_t MaskPasses{};
+	std::size_t Items{};
+	std::size_t PendingItems{};
+	std::size_t UnsupportedItems{};
+	bool bRejectedPublication{};
+};
+
 // Shared pipeline statistics; the original public name remains source compatible.
 struct FForwardPipelineStatistics
 {
@@ -17,6 +27,7 @@ struct FForwardPipelineStatistics
 	std::size_t FullscreenDraws{};
 	FSceneVisibilityStats Spatial;
 	FLocalLightStatistics LocalLights;
+	FSelectionOutlineStatistics SelectionOutline;
 	std::vector<FRenderViewStatistics> Views;
 	std::uint64_t ShadowTextureBytes{};
 	bool bShadows{};

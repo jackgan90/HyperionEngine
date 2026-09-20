@@ -130,6 +130,11 @@ void FSceneRenderPipeline::SetTransientGeometry(std::shared_ptr<const FTransient
 	TransientGeometry = std::move(InGeometry);
 }
 
+void FSceneRenderPipeline::SetSelectionOutline(std::shared_ptr<const FSelectionOutlineRequest> InRequest)
+{
+	SelectionOutline = std::move(InRequest);
+}
+
 FRenderFeatureContext FSceneRenderPipeline::BeginFeatures(FRenderGraph& InGraph, const FRenderView& InView,
                                                           std::shared_ptr<const FMaterialFrameContext> InFrame,
                                                           bool bInDeferPreparation)
@@ -152,7 +157,8 @@ FRenderFeatureContext FSceneRenderPipeline::BeginFeatures(FRenderGraph& InGraph,
 	                                     FullscreenStatistics,
 	                                     bInDeferPreparation,
 	                                     InFrame,
-	                                     TransientGeometry};
+	                                     TransientGeometry,
+	                                     SelectionOutline};
 	for (const auto& Feature : Features)
 	{
 		Feature->BeginFrame(FeatureContext);

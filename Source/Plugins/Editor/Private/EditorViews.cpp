@@ -154,6 +154,17 @@ void FEditorPlugin::DrawViewOptions()
 	Gui->SetNextItemWidth(180);
 	Gui->Slider("Exposure", Exposure, .1f, 8);
 	Gui->Checkbox("Show light icons", bShowLightMarkers);
+	const std::array<std::string, 2> OutlineModes{"Union", "Per object"};
+	std::size_t OutlineMode = static_cast<std::size_t>(OutlineSettings.Overlap);
+	Gui->SetNextItemWidth(180);
+	if (Gui->Combo("Selection outline", OutlineModes, OutlineMode))
+	{
+		OutlineSettings.Overlap = static_cast<EOutlineOverlapMode>(OutlineMode);
+	}
+	InspectionBounds["outline/mode"] = Gui->LastItemBounds();
+	Gui->Tooltip("Union outlines the selected group. Per object preserves every object's outline through overlaps.");
+	Gui->Checkbox("Smooth outlines (2x)", OutlineSettings.bSupersample);
+	InspectionBounds["outline/quality"] = Gui->LastItemBounds();
 	Gui->Separator();
 	try
 	{

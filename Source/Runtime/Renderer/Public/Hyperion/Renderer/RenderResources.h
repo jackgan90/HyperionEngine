@@ -154,6 +154,9 @@ public:
 	    const FMaterialAssetValues& InValues,
 	    const std::map<FAssetRef, std::shared_ptr<const FTextureAsset>>& InTextures);
 	std::shared_ptr<const FRenderMaterial> RequestMaterial(std::shared_ptr<const FMaterialSnapshot> InSnapshot);
+	// Render-only feature material admission. Immutable inputs; compilation/upload follow the normal coordinator.
+	std::shared_ptr<const FRenderMaterial> RequestAuxiliaryMaterial(
+	    std::shared_ptr<const FMaterialSnapshot> InSnapshot);
 	std::shared_ptr<const void> CreateScopeLifetime() const;
 	// Changes only when resource readiness/error publication changes; safe to observe from Main or Render.
 	std::uint64_t GetPublicationRevision() const;

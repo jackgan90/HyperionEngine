@@ -22,6 +22,7 @@ add_library(hyperion_render STATIC Private/SceneCameraController.cpp Private/Sce
 hyp_module(hyperion_render)
 target_sources(hyperion_render PRIVATE Private/ViewportRay.cpp)
 target_sources(hyperion_render PRIVATE Private/TransientGeometry.cpp)
+target_sources(hyperion_render PRIVATE Private/SelectionOutline.cpp Private/OutlineMaterials.cpp Private/OutlinePasses.cpp Private/ScenePrimitiveSubset.cpp)
 target_sources(hyperion_render PRIVATE Private/SceneInstanceAssets.cpp Private/ViewportPlacement.cpp)
 target_sources(hyperion_render PRIVATE Private/TransformGizmo.cpp Private/TransformGizmoGeometry.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderPlugin.cpp)
