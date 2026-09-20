@@ -116,30 +116,7 @@ void FEditorPlugin::DrawMenus()
 			}
 			Gui->EndMenu();
 		}
-		if (Gui->BeginMenu("Edit"))
-		{
-			Gui->BeginDisabled(HistoryCursor == 0);
-			if (Gui->MenuItem("Undo", "Ctrl+Z"))
-			{
-				Attempt(
-				    [&]
-				    {
-					    Undo();
-				    });
-			}
-			Gui->EndDisabled();
-			Gui->BeginDisabled(HistoryCursor == History.size());
-			if (Gui->MenuItem("Redo", "Ctrl+Y / Ctrl+Shift+Z"))
-			{
-				Attempt(
-				    [&]
-				    {
-					    Redo();
-				    });
-			}
-			Gui->EndDisabled();
-			Gui->EndMenu();
-		}
+		DrawEditMenu();
 		DrawWindowMenu();
 		if (Gui->BeginMenu("Help"))
 		{
@@ -154,6 +131,53 @@ void FEditorPlugin::DrawMenus()
 		          (CurrentPath.empty() ? std::string("Untitled") : std::filesystem::path(CurrentPath).stem().string()) +
 		          (IsDirty() ? " *" : ""));
 		Gui->EndMenuBar();
+	}
+}
+
+void FEditorPlugin::DrawEditMenu()
+{
+	const auto Attempt = [this](const auto& InAction)
+	{
+		try
+		{
+			InAction();
+		}
+		catch (const std::exception& Failure)
+		{
+			Error = Failure.what();
+		}
+	};
+	const bool bOpen = Gui->BeginMenu("Edit");
+	EditMenuBounds = Gui->LastItemBounds();
+	if (bOpen)
+	{
+		Gui->BeginDisabled(HistoryCursor == 0);
+		if (Gui->MenuItem("Undo", "Ctrl+Z"))
+		{
+			Attempt(
+			    [&]
+			    {
+				    Undo();
+			    });
+		}
+		Gui->EndDisabled();
+		Gui->BeginDisabled(HistoryCursor == History.size());
+		if (Gui->MenuItem("Redo", "Ctrl+Y / Ctrl+Shift+Z"))
+		{
+			Attempt(
+			    [&]
+			    {
+				    Redo();
+			    });
+		}
+		Gui->EndDisabled();
+		Gui->Separator();
+		if (Gui->MenuItem("Editor preference"))
+		{
+			bPreferencesDialog = bRequestPreferences = true;
+		}
+		PreferencesMenuBounds = Gui->LastItemBounds();
+		Gui->EndMenu();
 	}
 }
 
@@ -515,6 +539,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	bGizmoUsedMouse = false;
 	bPlacementUsedMouse = false;
 	DrawMenus();
+	CaptureButtonBounds = {};
 	DrawToolbar();
 	Gui->StatusBar(StatusText());
 	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser", "Place Object"}, bResetLayout);
@@ -540,6 +565,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawOpenDialog();
 	DrawSaveDialog();
 	DrawDiscardDialog();
+	DrawPreferences();
 	Context.Publish(FGuiPanelEvent{*Gui});
 	RouteDeleteShortcut(InEvents);
 	return Gui->Render();

@@ -27,6 +27,13 @@ void DrawIcon(ImDrawList& InDraw, EGuiIcon InIcon, ImVec2 InOrigin, float InScal
 	};
 	switch (InIcon)
 	{
+		case EGuiIcon::Capture:
+			InDraw.AddRect(Point(3, 7), Point(21, 20), InColor, 2 * InScale, ImDrawFlags_None, 1.5f * InScale);
+			InDraw.AddCircle(Point(12, 13), 4 * InScale, InColor, 20, 1.5f * InScale);
+			Line(7, 7, 9, 4);
+			Line(9, 4, 15, 4);
+			Line(15, 4, 17, 7);
+			break;
 		case EGuiIcon::Translate:
 			Line(4, 12, 20, 12);
 			Line(12, 4, 12, 20);

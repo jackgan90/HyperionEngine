@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace Hyperion
 {
@@ -48,7 +49,7 @@ void FEditorPlugin::RouteCamera(float InDelta, std::span<const FInputEvent> InEv
 {
 	if (Placement.IsActive() || bPlacementUsedMouse || Gizmo.IsDragging() || bGizmoUsedMouse || PreviewCamera ||
 	    !bViewportCameraInitialized || !bViewportVisible || bOpenDialog || bSaveDialog || bDiscardDialog ||
-	    Gui->IsEditingText() || !ViewportRegion.bFocused)
+	    bPreferencesDialog || Gui->IsEditingText() || !ViewportRegion.bFocused)
 	{
 		// Focus recovery still reaches the controller while GUI navigation is blocked.
 		Camera.SuspendInput(InEvents);
@@ -123,31 +124,33 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	FImage Capture;
 	const auto ExerciseCapture = OutlineCapture.empty() ? PlacementCapture : OutlineCapture;
 	const bool bCaptureFrame = bInCapture || !ExerciseCapture.empty();
-	Tasks.Wait(
-	    Tasks.Dispatch({EDomain::Render},
-	                   [&, Data = std::move(InGui), Preview, Outline, IconTextures = std::move(IconTextures)]() mutable
-	                   {
-		                   FRenderGraph Graph;
-		                   auto Textures = std::move(IconTextures);
-		                   if (bRenderScene)
-		                   {
-			                   FScenePipelineSettings Settings;
-			                   Settings.Exposure = Exposure;
-			                   Pipeline->Configure(Settings);
-			                   Pipeline->SetOutputTarget(Target);
-			                   Pipeline->SetTransientGeometry(Preview);
-			                   Pipeline->SetSelectionOutline(Outline);
-			                   Pipeline->Build(Graph, Request, Seed, {}, {.13f, .13f, .13f, 1}, {}, true);
-			                   Textures.push_back({2, Target});
-		                   }
-		                   GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
-		                   Capture = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size,
-		                                          !Options.bExercise && Options.Benchmark.empty(), bCaptureFrame);
-		                   if (bRenderScene)
-		                   {
-			                   RenderStats = Pipeline->GetFrame().Statistics();
-		                   }
-	                   }));
+	const auto Surface = Window->Surface();
+	const bool bCaptureRdc = std::exchange(bCaptureRequested, false);
+	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+	                          [&, Data = std::move(InGui), Preview, Outline, IconTextures = std::move(IconTextures),
+	                           Surface, bCaptureRdc]() mutable
+	                          {
+		                          FRenderGraph Graph;
+		                          auto Textures = std::move(IconTextures);
+		                          if (bRenderScene)
+		                          {
+			                          FScenePipelineSettings Settings;
+			                          Settings.Exposure = Exposure;
+			                          Pipeline->Configure(Settings);
+			                          Pipeline->SetOutputTarget(Target);
+			                          Pipeline->SetTransientGeometry(Preview);
+			                          Pipeline->SetSelectionOutline(Outline);
+			                          Pipeline->Build(Graph, Request, Seed, {}, {.13f, .13f, .13f, 1}, {}, true);
+			                          Textures.push_back({2, Target});
+		                          }
+		                          GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
+		                          Capture =
+		                              ExecuteEditorGraph(std::move(Graph), Size, bCaptureFrame, Surface, bCaptureRdc);
+		                          if (bRenderScene)
+		                          {
+			                          RenderStats = Pipeline->GetFrame().Statistics();
+		                          }
+	                          }));
 	if (bInCapture)
 	{
 		if (!Options.Capture.parent_path().empty())

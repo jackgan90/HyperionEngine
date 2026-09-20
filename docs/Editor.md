@@ -4,6 +4,14 @@
 
 原生标题栏默认使用黑色背景和浅色文字，由 Platform 封装 Windows DWM 设置。精确标题栏颜色需要 Windows 11；不支持时保留系统可用的外观，不影响编辑器启动。
 
+## Editor preference 与抓帧
+
+通过 **Edit > Editor preference** 打开偏好弹窗。首个选项 **Enable RenderDoc capture** 默认关闭，修改后立即保存到 `out/editor/Preferences.ini`，下次启动保留；`--editor-preferences <path>` 可指定独立的本地偏好文件。该文件与场景、布局及界面缩放配置分开，保存失败会在弹窗中显示错误并提供重试。
+
+需要通过 `tools/Build.ps1 -RenderDoc` 或 `tools/GenerateSolution.ps1 -RenderDoc` 编入 RenderDoc 支持，并安装 RenderDoc。首次启用后重启编辑器，使 hooks 在图形设备创建之前加载。开启偏好后，Viewport 工具栏右侧显示相机形抓帧按钮；点击会捕获包含场景、GUI 和 Present 的完整帧，保存到 `out/captures`，并启动 RenderDoc 打开本次生成的 RDC。与 Scene Viewer 共用抓帧和自动打开逻辑。
+
+关闭偏好立即隐藏按钮；插件 hooks 在退出前保留，不会运行中卸载。未编入支持、运行库不可用、尚未重启或显式传入 `--disable-plugin renderdoc` 时，按钮禁用，悬停提示及偏好弹窗显示原因，其他编辑功能仍可用。抓帧或打开失败也可在这些位置查看状态。
+
 ## 界面缩放
 
 **Window > Application Scale** 统一调整文字、控件、间距、工具栏和状态栏，下一帧生效。默认 125%，支持 100% / 125% / 150% / 175% / 200% 预设、自定义数值及恢复默认。左右拖动 Custom 数值可实时调整，Ctrl+单击可直接输入倍率；鼠标停下后倍率保持不变。字体按目标字号重新生成，停靠分区比例、场景数据和相机状态保持不变。放大后面板可显示的内容减少，可使用滚动或调整停靠分区。

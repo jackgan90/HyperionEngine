@@ -1,4 +1,8 @@
 #pragma once
+#include "EditorPreferences.h"
+#if HYP_ENABLE_RENDERDOC
+#include "Hyperion/Capture/FrameCapture.h"
+#endif
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
@@ -19,6 +23,10 @@ struct FEditorOptions
 	std::filesystem::path Mounts;
 	std::filesystem::path Layout;
 	std::filesystem::path UiPreferences;
+	std::filesystem::path PreferencesPath;
+	FEditorPreferences Preferences;
+	std::string PreferenceError;
+	std::string ExerciseCapture;
 	std::optional<float> ApplicationScale;
 	std::filesystem::path Capture;
 	std::filesystem::path Report;
@@ -68,6 +76,13 @@ private:
 	void OpenScene(const std::string& InPath);
 	void ShowOpenScene();
 	void DrawMenus();
+	void DrawEditMenu();
+	void DrawPreferences();
+	void DrawCaptureButton();
+	std::string CaptureStatus() const;
+	bool CanCapture() const;
+	void SavePreferences();
+	void ExerciseCaptureInput(std::vector<FInputEvent>& InEvents);
 	void DrawWindowMenu();
 	void DrawApplicationScale();
 	void DrawToolbar();
@@ -121,6 +136,8 @@ private:
 	FGuiDrawData DrawGui(float InDelta, std::span<const FInputEvent> InEvents);
 	void RouteCamera(float InDelta, std::span<const FInputEvent> InEvents);
 	void Render(FGuiDrawData InGui, bool bInCapture);
+	FImage ExecuteEditorGraph(FRenderGraph InGraph, FSize InSize, bool bInScreenshot, FNativeSurface InSurface,
+	                          bool bInCaptureRdc);
 	void ResizeViewport();
 	void RouteViewportPicking(std::span<const FInputEvent> InEvents);
 	std::optional<FSceneCameraView> PickingCamera() const;
@@ -178,6 +195,18 @@ private:
 	bool IsDirty() const;
 
 	FEditorOptions Options;
+	bool bPreferencesDialog{};
+	bool bRequestPreferences{};
+	bool bCaptureRequested{};
+	FVec4 EditMenuBounds;
+	FVec4 PreferencesMenuBounds;
+	FVec4 CapturePreferenceBounds;
+	FVec4 PreferencesCloseBounds;
+	FVec4 CaptureButtonBounds;
+	bool bInitialCapturePreference{};
+#if HYP_ENABLE_RENDERDOC
+	FFrameCapture* FrameCapture{};
+#endif
 	FMountedFileSystem* Files;
 	FPluginContext& Context;
 	FApplicationControl& Control;

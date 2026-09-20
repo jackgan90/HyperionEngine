@@ -1,6 +1,8 @@
 #include "Hyperion/Core/Core.h"
 #include "ViewerApplication.h"
-#include "ViewerCaptureScope.h"
+#if HYP_ENABLE_RENDERDOC
+#include "Hyperion/Capture/FrameCaptureScope.h"
+#endif
 
 namespace Hyperion
 {
@@ -23,25 +25,21 @@ std::function<void()> FViewerPlugin::PrepareFrame(FViewerFrameInput InInput,
 	]() mutable
 	{
 #if HYP_ENABLE_RENDERDOC
+		FFrameCaptureScope CaptureScope(*Tasks, Capture, Surface, bCaptureRdc);
 		if (Capture && bCaptureRdc)
 		{
-			if (!Capture->RequestCapture())
+			if (!CaptureScope.IsAccepted())
 			{
 				throw std::runtime_error("Requested RDC capture was not produced: " + Capture->Status().Message);
 			}
 			Log(ELogLevel::Info, "RenderDoc target CPU frame: " + std::to_string(FrameId));
 		}
-		FFrameCaptureScope CaptureScope(*Tasks, Capture, Surface);
 #endif
 		Result->Screenshot = ExecuteGraphOnRhi(std::move(Graph), *Tasks, *Swapchain, Size, bVsync, bTakeCapture);
 		Result->Device = Device->Statistics();
 		Result->Pipeline = Prepared.Statistics();
 #if HYP_ENABLE_RENDERDOC
-		if (CaptureScope.Finish() && bAutoOpen)
-		{
-			// Open this capture before a later queued frame can replace LastCapture.
-			Capture->OpenLastCapture();
-		}
+		CaptureScope.Finish(bAutoOpen);
 #endif
 		Result->CompletedAt = ClockNanoseconds();
 	};

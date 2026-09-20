@@ -7,7 +7,7 @@ void FEditorPlugin::RouteDeleteShortcut(std::span<const FInputEvent> InEvents)
 {
 	if (!Selection || !Scene->GetStatus().bReady || Gui->IsEditingText() || Gui->DragPayload() ||
 	    Placement.IsActive() || Gizmo.IsDragging() || bCameraDragging || bOpenDialog || bSaveDialog || bDiscardDialog ||
-	    Gui->PointerState().bCancel)
+	    bPreferencesDialog || Gui->PointerState().bCancel)
 	{
 		return;
 	}

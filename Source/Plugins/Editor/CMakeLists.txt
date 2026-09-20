@@ -15,6 +15,9 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorOptions.cpp
   Private/EditorOutlineAcceptance.cpp
   Private/EditorPanels.cpp
+  Private/EditorPreferences.cpp
+  Private/EditorCapture.cpp
+  Private/EditorCaptureAcceptance.cpp
   Private/EditorPlacement.cpp
   Private/EditorPlacementAcceptance.cpp
   Private/EditorPlacementResources.cpp
@@ -32,3 +35,15 @@ target_link_libraries(hyperion_editor_plugin PUBLIC hyperion_application_service
   hyperion_asset_types hyperion_scene hyperion_materials hyperion_platform hyperion_io hyperion_core hyperion_tasks
   hyperion_shaders hyperion_rhi hyperion_math hyperion_config)
 target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_ENABLE_RENDERDOC=$<BOOL:${HYP_ENABLE_RENDERDOC}>)
+if(HYP_ENABLE_RENDERDOC)
+  target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
+endif()
+if(BUILD_TESTING)
+  add_executable(editor_preferences_tests Private/EditorPreferencesTests.cpp Private/EditorPreferences.cpp)
+  hyp_executable(editor_preferences_tests)
+  target_link_libraries(editor_preferences_tests PRIVATE hyperion_io)
+  set_target_properties(editor_preferences_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_preferences COMMAND editor_preferences_tests)
+  set_tests_properties(editor_preferences PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+endif()

@@ -68,6 +68,10 @@ void FEditorPlugin::Initialize()
 	Session = &Context.Require<FRenderSession>();
 	Gui = &Context.Require<FGui>();
 	GuiRenderer = &Context.Require<FGuiRenderer>();
+	bInitialCapturePreference = Options.Preferences.bRenderDocCapture;
+#if HYP_ENABLE_RENDERDOC
+	FrameCapture = Context.Find<FFrameCapture>();
+#endif
 	auto Features = Context.Require<FRenderFeatureRegistry>().Create();
 	Features.push_back(MakeTransientGeometryFeature());
 	Features.push_back(MakeSelectionOutlineFeature(Device->GetCapabilities()));
@@ -194,6 +198,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	{
 		ExerciseViewInput(Events);
 	}
+	if (!Options.ExerciseCapture.empty())
+	{
+		ExerciseCaptureInput(Events);
+	}
 	RouteHistoryShortcuts(Events);
 	if (Options.bExerciseGizmo)
 	{
@@ -231,7 +239,9 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	                               bOutlinesVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
-	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames));
+	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
+	     (Options.ExerciseCapture == "toggle" && bPreferencesDialog && ExerciseStep == 2 && ExerciseWait == 2) ||
+	     (Options.ExerciseCapture == "capture" && ExerciseStep == 1));
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorRenderWait);
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.RenderMilliseconds);
@@ -274,7 +284,8 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || !Options.ExerciseDocument.empty() ||
-	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty()) &&
+	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
+	     !Options.ExerciseCapture.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out");

@@ -85,6 +85,7 @@ void FEditorPlugin::DrawViewControls()
 		Gui->OpenPopup("ViewportOptions");
 	}
 	InspectionBounds["view/options"] = Gui->LastItemBounds();
+	DrawCaptureButton();
 	Gui->SameLine();
 	const float Width = Gui->AvailableWidth();
 	if (Width >= 60)

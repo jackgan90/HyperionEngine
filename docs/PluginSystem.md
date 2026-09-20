@@ -64,6 +64,8 @@ Contact-shadow feature 自行管理 HZB 请求、visibility mask、debug preview
 
 `plugins` 决定实验插件；`disabled_plugins` 具有最终优先级，可阻止被依赖拉起的插件。Viewer profile 默认加入 viewer 和 contact-shadows，Editor profile 默认加入 editor 和 contact-shadows。保存的 `scene_source`、`model_source` 只是数据，不再修改插件选择；`--scene`、`--model` 作为显式便捷命令仍选择对应插件，但不能覆盖 disable。诊断 UI 中修改列表在重启后生效。
 
+Editor 的 **Edit > Editor preference > Enable RenderDoc capture** 是独立保存的显式启动选择，默认关闭。启用时在设备创建前请求 `renderdoc`，通过可选 `FFrameCapture` 服务供 viewport 使用；`--disable-plugin renderdoc` 仍具有最终优先级。运行中关闭偏好只隐藏操作入口，不卸载插件；首次启用需要重启。详见 [Editor](Editor.md#editor-preference-与抓帧)。
+
 ```powershell
 # 无窗口、无资产挂载、无 GPU；可用于验证宿主
 hyperion_viewer --kernel-only --frames 8

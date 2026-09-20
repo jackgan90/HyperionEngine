@@ -1,14 +1,29 @@
 #include "EditorApplication.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Editor/EditorPlugin.h"
+#if HYP_ENABLE_RENDERDOC
+#include "Hyperion/RenderDoc/RenderDocPlugin.h"
+#endif
 
 namespace Hyperion
 {
 void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBackends)
 {
-	const auto Options = ParseEditorOptions(InCount, InValues);
+	auto Options = ParseEditorOptions(InCount, InValues);
+	try
+	{
+		Options.Preferences = LoadEditorPreferences(Options.PreferencesPath);
+	}
+	catch (const std::exception& Failure)
+	{
+		Options.PreferenceError = "Could not load editor preferences: " + std::string(Failure.what());
+		Log(ELogLevel::Warning, Options.PreferenceError);
+	}
 	FApplicationHost Host(4, 1);
 	FPluginRegistry Registry;
+#if HYP_ENABLE_RENDERDOC
+	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
+#endif
 	RegisterAssetServices(Registry, {Options.Mounts, false});
 	RegisterWindowServices(Registry, {"Hyperion Editor", {1600, 960}, Options.bHidden, true});
 	RegisterGraphicsServices(
@@ -16,7 +31,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	const bool bPersistGui = !Options.bExercise && !Options.bExerciseGizmo && !Options.bExercisePicking &&
 	                         Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
 	                         Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() &&
-	                         Options.ExerciseOutlines.empty();
+	                         Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
 	RegisterGuiServices(
 	    Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15, bPersistGui ? Options.Layout : std::filesystem::path{},
 	               bPersistGui ? Options.UiPreferences : std::filesystem::path{}, Options.ApplicationScale});
@@ -25,6 +40,9 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	Descriptor.Id = "editor";
 	Descriptor.Dependencies = {"gui"};
 	Descriptor.After = {"contact-shadows"};
+#if HYP_ENABLE_RENDERDOC
+	Descriptor.Optional = {typeid(FFrameCapture)};
+#endif
 	Descriptor.Requires = {typeid(FApplicationControl),
 	                       typeid(FTaskSystem),
 	                       typeid(FMountedFileSystem),
@@ -48,6 +66,10 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	if (!Options.bKernelOnly)
 	{
 		Selection.Requested = {"contact-shadows", "editor"};
+		if (Options.Preferences.bRenderDocCapture)
+		{
+			Selection.Requested.push_back("renderdoc");
+		}
 	}
 	Host.Start(Registry, Selection);
 	if (!Host.GetPlugins().IsActive("editor"))
@@ -62,7 +84,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 		if (!Options.Capture.empty() || !Options.Report.empty() || !Options.Benchmark.empty() ||
 		    !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || Options.bExercise ||
 		    Options.bExerciseGizmo || Options.bExercisePicking || !Options.ExercisePlacement.empty() ||
-		    !Options.ExerciseOutlines.empty())
+		    !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty())
 		{
 			throw std::runtime_error("Requested Editor output is unavailable: editor plugin did not start");
 		}

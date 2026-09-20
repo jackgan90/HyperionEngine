@@ -1,5 +1,7 @@
 // Test-only executable source: vendor fault injection stays inside the private adapter boundary.
 #include "Hyperion/Capture/FrameCapture.h"
+#include "Hyperion/Capture/FrameCaptureScope.h"
+#include "Hyperion/Tasks/TaskSystem.h"
 #include <Windows.h>
 #include <iostream>
 #include <renderdoc_app.h>
@@ -67,6 +69,39 @@ struct FScopedFailure
 		Api = Original;
 	}
 };
+
+void CheckScope()
+{
+	using namespace Hyperion;
+	FFrameCapture Capture({{}, "capture-failure-tests", "Scope"});
+	Capture.Initialize();
+	const auto GetApi =
+	    reinterpret_cast<pRENDERDOC_GetAPI>(GetProcAddress(GetModuleHandleW(L"renderdoc.dll"), "RENDERDOC_GetAPI"));
+	RENDERDOC_API_1_6_0* Api = nullptr;
+	Check(GetApi && GetApi(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&Api)) && Api);
+	FScopedFailure Failure(*Api);
+	bStopsOnFailure = true;
+	FTaskSystem Tasks(1, 1);
+	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+	                          [&]
+	                          {
+		                          FFrameCaptureScope Disabled(Tasks, &Capture, {}, false);
+		                          Check(!Disabled.IsAccepted() && !bCapturing && !Disabled.Finish(true));
+		                          try
+		                          {
+			                          FFrameCaptureScope Scope(Tasks, &Capture, {}, true);
+			                          Check(Scope.IsAccepted() && bCapturing);
+			                          throw 1;
+		                          }
+		                          catch (int)
+		                          {
+		                          }
+		                          Check(!bCapturing && DiscardCalls == 1);
+		                          FFrameCaptureScope Failed(Tasks, &Capture, {}, true);
+		                          Check(Failed.IsAccepted() && !Failed.Finish(true));
+		                          Check(Capture.Status().ReplayProcessId == 0 && Capture.Status().LastCapture.empty());
+	                          }));
+}
 } // namespace
 
 int main()
@@ -130,7 +165,8 @@ int main()
 			Check(DiscardCalls == 2 && !bCapturing);
 			Check(!Capture.Status().bAvailable);
 		}
-		std::cout << "Cancel/End/Shutdown failure ownership, retry and inactive-error recovery passed\n";
+		CheckScope();
+		std::cout << "Cancel/End/Shutdown failure ownership, scope cleanup, retry and inactive-error recovery passed\n";
 		return 0;
 	}
 	catch (const std::exception& Error)

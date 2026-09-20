@@ -11,6 +11,7 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 	                                                                                   : "ContentMounts.json");
 	Result.Layout = Root / "out/editor/Layout.ini";
 	Result.UiPreferences = Root / "out/editor/UiScale.ini";
+	Result.PreferencesPath = Root / "out/editor/Preferences.ini";
 	for (int Index = 1; Index < InCount; ++Index)
 	{
 		const std::string Argument = InValues[Index];
@@ -69,6 +70,18 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		else if (Argument == "--scene")
 		{
 			Result.Scene = Value;
+		}
+		else if (Argument == "--editor-preferences")
+		{
+			Result.PreferencesPath = Value;
+		}
+		else if (Argument == "--exercise-capture")
+		{
+			if (Value != "toggle" && Value != "capture" && Value != "unavailable")
+			{
+				throw std::invalid_argument("--exercise-capture expects toggle, capture or unavailable");
+			}
+			Result.ExerciseCapture = Value;
 		}
 		else if (Argument == "--ui-preferences")
 		{
@@ -134,6 +147,10 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 	{
 		throw std::invalid_argument(
 		    "Editor benchmark requires a scene and positive sample count; exercise is separate");
+	}
+	if (!Result.ExerciseCapture.empty() && Result.PreferencesPath == Root / "out/editor/Preferences.ini")
+	{
+		throw std::invalid_argument("Capture acceptance requires an isolated --editor-preferences path");
 	}
 	return Result;
 }

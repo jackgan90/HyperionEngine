@@ -1,5 +1,7 @@
 # RenderDoc 抓帧
 
+Editor 可通过 **Edit > Editor preference > Enable RenderDoc capture** 保存启动选择，重启后使用 Viewport 工具栏相机图标抓取并打开最新帧，见 [编辑器偏好](Editor.md#editor-preference-与抓帧)。Editor 与 Viewer 共用 `Runtime/Capture` 的 `FFrameCaptureScope`，在 RHI 0 上管理请求、完整帧边界、异常取消和成功后的精确结果打开。
+
 当前支持 Windows x64 / D3D12、单设备和单窗口。Triangle、ModelViewer 与 SceneViewer 共用 RDC 控件。`Capture screenshot` / `--capture` 保存 PNG；RDC 保存可由 RenderDoc 回放的 GPU 命令、流水线和资源。
 
 ## 启用构建

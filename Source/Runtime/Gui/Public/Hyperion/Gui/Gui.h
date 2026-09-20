@@ -80,7 +80,8 @@ enum class EGuiIcon
 	Translate,
 	Rotate,
 	Scale,
-	Options
+	Options,
+	Capture
 };
 
 // All GUI context and widget operations belong to the creating Main thread.

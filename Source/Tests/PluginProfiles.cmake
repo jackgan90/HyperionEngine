@@ -14,5 +14,5 @@ get_property(hyperion_profile_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${hyperion_profile_tests} PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_custom_target(hyperion_check
   COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${PROJECT_BINARY_DIR}" -C "$<CONFIG>" --output-on-failure
-  DEPENDS core_tests task_tests config_tests plugin_tests graph_tests hyperion_viewer hyperion_editor d3d12_frame_failure_tests
+  DEPENDS core_tests task_tests config_tests plugin_tests graph_tests hyperion_viewer hyperion_editor editor_preferences_tests d3d12_frame_failure_tests
   USES_TERMINAL)

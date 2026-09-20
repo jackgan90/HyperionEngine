@@ -1,6 +1,6 @@
 """Real optional D3D12 captures, widget input, XML inspection and GPU replay."""
-from collections import Counter
 import os
+import json
 import pathlib
 import re
 import subprocess
@@ -8,6 +8,7 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 from NativeContent import set_initial_view_from_camera
+from RdcValidation import verify_capture
 
 viewer = pathlib.Path(sys.argv[1]).resolve()
 root = pathlib.Path(sys.argv[2]).resolve()
@@ -30,51 +31,15 @@ def run(name, arguments, expect_success=True):
     assert (result.returncode == 0) == expect_success, text
     return text
 
-
-def verify_capture(document, experiment):
-    # Recorders interleave chunks: track marker scopes per command list, then count
-    # draws only when that list is submitted. GUI draws cannot stand in for a scene.
-    markers = {}
-    recorded = {}
-    submitted = Counter()
-    chunks = []
-    for node in document.iter('chunk'):
-        name = node.get('name', '')
-        chunks.append(name)
-        command_list = node.findtext("ResourceId[@name='pCommandList']", '')
-        if name == 'ID3D12GraphicsCommandList::Reset':
-            markers[command_list] = []
-            recorded[command_list] = Counter()
-        elif name == 'ID3D12GraphicsCommandList::BeginEvent':
-            markers.setdefault(command_list, []).append(node.findtext("string[@name='MarkerText']", ''))
-        elif name == 'ID3D12GraphicsCommandList::EndEvent':
-            if markers.get(command_list):
-                markers[command_list].pop()
-        elif name == 'ID3D12GraphicsCommandList::DrawIndexedInstanced':
-            indices = int(node.findtext("uint[@name='IndexCountPerInstance']", '0'))
-            instances = int(node.findtext("uint[@name='InstanceCount']", '0'))
-            if indices > 0 and instances > 0:
-                recorded.setdefault(command_list, Counter()).update(markers.get(command_list, []))
-        elif name == 'ID3D12CommandQueue::ExecuteCommandLists':
-            for submitted_list in node.findall("array[@name='ppCommandLists']/ResourceId"):
-                submitted.update(recorded.get(submitted_list.text, {}))
-    # Ordinary sessions retain their structured identity. The forward pipeline owns stage names.
-    scene_draws = sum(count for marker, count in submitted.items()
-                      if re.fullmatch(r'(Scene [1-9]\d*/[1-9]\d*/[1-9]\d*/[1-9]\d*/Forward|Forward|Forward/HDR|Deferred/BasePass|Deferred/Compatibility|Scene/Transparent|Display/LegacyMaterials)/\d+', marker))
-    assert scene_draws > 0, f'{experiment}: missing submitted session scene draws'
-    if experiment == 'Shadows':
-        for cascade in range(4):
-            assert submitted[f'Shadow cascade {cascade}/0'] > 0, f'missing cascade {cascade} draws'
-    # Shared GuiRenderer uses the session preparation path; legacy standalone renderers use Debug UI.
-    assert submitted['GUI/0'] + submitted['Debug UI/0'] > 0, f'{experiment}: missing submitted GUI draws'
-    assert any('Present' in name for name in chunks), f'{experiment}: missing Present'
-    assert any('CreateGraphicsPipeline' in name for name in chunks), f'{experiment}: missing pipeline'
-    return submitted
-
-
 def capture(experiment, frame_count, capture_frames):
     output = work / (experiment + ' RDC 空格')
-    arguments = [viewer, '--config', root / ('experiments/' + experiment + '.json'),
+    # Keep the actual capture widget inside the panel at the default 125% scale.
+    # The 720px sample window clips it below the scroll region.
+    settings = json.loads((root / ('experiments/' + experiment + '.json')).read_text())
+    settings['properties']['height'] = 1080
+    config = work / f'{experiment}.json'
+    config.write_text(json.dumps(settings), encoding='utf-8')
+    arguments = [viewer, '--config', config,
                  '--frames', frame_count, '--hidden', '--renderdoc-library', library,
                  '--rdc-output', output, '--exercise-rdc-ui']
     if experiment == 'Shadows':

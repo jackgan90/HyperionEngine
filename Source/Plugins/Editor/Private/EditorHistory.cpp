@@ -52,7 +52,8 @@ void FEditorPlugin::FinishInspectorEdit()
 void FEditorPlugin::RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents)
 {
 	const bool bAllowHistory = !Placement.IsActive() && !Gui->DragPayload() && !bOpenDialog && !bSaveDialog &&
-	                           !bDiscardDialog && (!Gui->IsEditingText() || InspectorInteraction != 0);
+	                           !bDiscardDialog && !bPreferencesDialog &&
+	                           (!Gui->IsEditingText() || InspectorInteraction != 0);
 	std::erase_if(InEvents,
 	              [&](const FInputEvent& InEvent)
 	              {
