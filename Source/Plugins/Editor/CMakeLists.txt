@@ -3,6 +3,8 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorApplication.cpp
   Private/EditorBenchmark.cpp
   Private/EditorDocument.cpp
+  Private/EditorDeletion.cpp
+  Private/EditorDeletionAcceptance.cpp
   Private/EditorDocumentAcceptance.cpp
   Private/EditorFrame.cpp
   Private/EditorGizmo.cpp

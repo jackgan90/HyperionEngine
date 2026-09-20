@@ -33,6 +33,10 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 	{
 		return true;
 	}
+	if ((PickingSceneStep == 3 || PickingSceneStep == 9) && !ExerciseDeletionInput(InEvents))
+	{
+		return false;
+	}
 	const auto Light = Scene->FindHandle("light-courtyard-3");
 	CheckPicking(Light.Scene != 0, "requires Sponza courtyard light 3");
 	const auto Bounds = ViewportRegion.Bounds;
@@ -75,6 +79,7 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 			CheckPicking(History.empty() && !IsDirty(), "Sponza selection authored an edit");
 			break;
 		case 10:
+			ExerciseDeletionHistory();
 			CheckPicking(Selection && Gizmo.InitialLocal().Values == Scene->FindNode(*Selection)->Local().Values,
 			             "gizmo retained the light transform after selecting Sponza");
 			break;

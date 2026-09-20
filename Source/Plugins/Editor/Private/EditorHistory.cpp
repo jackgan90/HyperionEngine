@@ -101,6 +101,13 @@ void FEditorPlugin::RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAft
 {
 	for (auto& Entry : History)
 	{
+		for (auto& [Handle, Node] : Entry.DeletedSubtree)
+		{
+			if (Handle == InBefore)
+			{
+				Handle = InAfter;
+			}
+		}
 		if (Entry.Handle == InBefore)
 		{
 			Entry.Handle = InAfter;
@@ -127,7 +134,11 @@ void FEditorPlugin::RestoreHistory(std::size_t InIndex, bool bInAfter)
 {
 	auto& Entry = History.at(InIndex);
 	const auto& Node = bInAfter ? Entry.After : Entry.Before;
-	if (Entry.Handle.Scene)
+	if (!Entry.DeletedSubtree.empty() && !bInAfter)
+	{
+		RestoreDeletedSubtree(InIndex);
+	}
+	else if (Entry.Handle.Scene)
 	{
 		if (!Node)
 		{
@@ -135,9 +146,13 @@ void FEditorPlugin::RestoreHistory(std::size_t InIndex, bool bInAfter)
 			{
 				throw std::runtime_error("Undo target no longer exists");
 			}
-			if (Selection == Entry.Handle)
+			if (!Entry.DeletedSubtree.empty() || (Selection && !Scene->FindNode(*Selection)))
 			{
-				Selection.reset();
+				SelectObject(std::nullopt);
+			}
+			if (PreviewCamera && !Scene->FindNode(*PreviewCamera))
+			{
+				SetPreviewCamera(std::nullopt);
 			}
 		}
 		else if (!Entry.Before && bInAfter)

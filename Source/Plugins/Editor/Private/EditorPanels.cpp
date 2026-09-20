@@ -538,6 +538,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawSaveDialog();
 	DrawDiscardDialog();
 	Context.Publish(FGuiPanelEvent{*Gui});
+	RouteDeleteShortcut(InEvents);
 	return Gui->Render();
 }
 } // namespace Hyperion

@@ -158,6 +158,11 @@ private:
 	                std::uint64_t InInteraction = 0);
 	void FinishInspectorEdit();
 	void RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents);
+	void RouteDeleteShortcut(std::span<const FInputEvent> InEvents);
+	void CommitDelete();
+	void RestoreDeletedSubtree(std::size_t InIndex);
+	bool ExerciseDeletionInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseDeletionHistory();
 	void Undo();
 	void Redo();
 	void SaveScene(const std::string& InDestination);
@@ -354,7 +359,12 @@ private:
 		FSceneSettings AfterSettings;
 		std::uint64_t BeforeState{};
 		std::uint64_t AfterState{};
+		std::vector<std::pair<FSceneHandle, FSceneNode>> DeletedSubtree;
 	};
+
+	unsigned DeletionExerciseStep{};
+	FSceneHandle DeletionExerciseHandle;
+	std::string DeletionExerciseId;
 
 	std::vector<FHistoryEntry> History;
 	std::size_t HistoryCursor{};
