@@ -55,6 +55,7 @@ public:
 	                                             std::span<const std::string> InSemantics);
 	FMaterialProvidedValue EvaluateOne(const FMaterialProviderInputs& InInputs, std::string_view InSemantic);
 	void Collect();
+	void ClearCache();
 	FMaterialProviderStats Statistics() const;
 
 private:

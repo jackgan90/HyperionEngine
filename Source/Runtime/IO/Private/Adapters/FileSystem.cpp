@@ -88,6 +88,37 @@ FBytes FLocalFileSystem::Read(const std::filesystem::path& InPath, std::size_t I
 	return Bytes;
 }
 
+std::vector<FDirectoryEntry> IFileSystem::ListDirectory(const std::filesystem::path& InDirectory)
+{
+	std::vector<FDirectoryEntry> Result;
+	for (const auto& Path : Enumerate(InDirectory, false))
+	{
+		Result.push_back({Path});
+	}
+	return Result;
+}
+
+std::vector<FDirectoryEntry> FLocalFileSystem::ListDirectory(const std::filesystem::path& InDirectory)
+{
+	RequireLocalPath(InDirectory);
+	std::vector<FDirectoryEntry> Result;
+	for (const auto& Entry : std::filesystem::directory_iterator(InDirectory))
+	{
+		const auto Attributes = GetFileAttributesW(Entry.path().c_str());
+		FDirectoryEntry Item{Entry.path()};
+		if (Attributes == INVALID_FILE_ATTRIBUTES || (Attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+		{
+			Item.Error = "Linked or inaccessible content is unavailable";
+		}
+		else
+		{
+			Item.bDirectory = (Attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+		}
+		Result.push_back(std::move(Item));
+	}
+	return Result;
+}
+
 void FLocalFileSystem::WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes)
 {
 	RequireLocalPath(InPath);

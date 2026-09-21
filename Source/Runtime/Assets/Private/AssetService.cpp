@@ -297,6 +297,19 @@ void FAssetRequest::Validate(const FLoadedAsset& InAsset) const
 	}
 }
 
+void FAssetService::ResetContent(FAssetService& InPreparedCatalog)
+{
+	Impl->IO.TaskSystem().Require({EDomain::Main});
+	if (this == &InPreparedCatalog)
+	{
+		throw std::invalid_argument("Content reset requires an independent prepared catalog");
+	}
+	Drain();
+	std::scoped_lock Lock(Impl->Mutex, InPreparedCatalog.Impl->Mutex);
+	Impl->Catalog.swap(InPreparedCatalog.Impl->Catalog);
+	Impl->bClosing = false;
+}
+
 std::shared_ptr<const FLoadedAsset> FAssetRequest::GetReady() const
 {
 	Cancellation.Check();

@@ -24,7 +24,15 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 #if HYP_ENABLE_RENDERDOC
 	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
 #endif
-	RegisterAssetServices(Registry, {Options.Mounts, false});
+	const bool bInteractive = Options.ExerciseContent.empty() && !Options.bExercise && !Options.bExerciseGizmo &&
+	                          !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
+	                          Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
+	                          Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() &&
+	                          Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
+	const auto RestoredRoot = !Options.bExplicitMounts && bInteractive && !Options.Preferences.AssetRoot.empty()
+	                              ? std::optional(Options.Preferences.AssetRoot)
+	                              : std::nullopt;
+	RegisterAssetServices(Registry, {Options.Mounts, false, RestoredRoot});
 	RegisterWindowServices(Registry, {"Hyperion Editor", {1600, 960}, Options.bHidden, true});
 	RegisterGraphicsServices(
 	    Registry, {std::move(InBackends), "d3d12", std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache", true});
@@ -33,9 +41,11 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	                         Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
 	                         Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
 	                         Options.ExerciseCapture.empty();
-	RegisterGuiServices(
-	    Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15, bPersistGui ? Options.Layout : std::filesystem::path{},
-	               bPersistGui ? Options.UiPreferences : std::filesystem::path{}, Options.ApplicationScale});
+	const bool bPersistContentLayout = bPersistGui && Options.ExerciseContent.empty();
+	RegisterGuiServices(Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
+	                               bPersistContentLayout ? Options.Layout : std::filesystem::path{},
+	                               bPersistContentLayout ? Options.UiPreferences : std::filesystem::path{},
+	                               Options.ApplicationScale});
 	RegisterContactShadowServices(Registry);
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "editor";
@@ -45,6 +55,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	Descriptor.Optional = {typeid(FFrameCapture)};
 #endif
 	Descriptor.Requires = {typeid(FApplicationControl),
+	                       typeid(FContentRootService),
 	                       typeid(FTaskSystem),
 	                       typeid(FMountedFileSystem),
 	                       typeid(FIOService),
@@ -85,7 +96,8 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 		if (!Options.Capture.empty() || !Options.Report.empty() || !Options.Benchmark.empty() ||
 		    !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || Options.bExercise ||
 		    Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
-		    !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty())
+		    !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
+		    !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty())
 		{
 			throw std::runtime_error("Requested Editor output is unavailable: editor plugin did not start");
 		}

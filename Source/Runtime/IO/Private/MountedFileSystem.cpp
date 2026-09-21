@@ -91,6 +91,23 @@ std::filesystem::path FMountedFileSystem::Normalize(const std::filesystem::path&
 	return Path;
 }
 
+void FMountedFileSystem::ReplaceExclusive(FMountedFileSystem& InPrepared) noexcept
+{
+	Mounts.swap(InPrepared.Mounts);
+}
+
+std::vector<FDirectoryEntry> FMountedFileSystem::ListDirectory(const std::filesystem::path& InDirectory)
+{
+	const auto Directory = Normalize(InDirectory);
+	const auto Physical = Resolve(Directory);
+	auto Entries = Local.ListDirectory(Physical);
+	for (auto& Entry : Entries)
+	{
+		Entry.Path = Directory / Entry.Path.filename();
+	}
+	return Entries;
+}
+
 std::filesystem::path FMountedFileSystem::Resolve(const std::filesystem::path& InPath, bool bInWrite) const
 {
 	const auto Path = Normalize(InPath);

@@ -66,6 +66,7 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		}
 		else if (Argument == "--mounts")
 		{
+			Result.bExplicitMounts = true;
 			Result.Mounts = Value;
 		}
 		else if (Argument == "--layout")
@@ -129,6 +130,10 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		else if (Argument == "--exercise-outlines")
 		{
 			Result.ExerciseOutlines = Value;
+		}
+		else if (Argument == "--exercise-content")
+		{
+			Result.ExerciseContent = Value;
 		}
 		else if (Argument == "--benchmark-warmup")
 		{

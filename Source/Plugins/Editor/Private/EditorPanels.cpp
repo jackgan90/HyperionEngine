@@ -32,6 +32,8 @@ std::string KindName(ESceneNodeKind InKind)
 
 void FEditorPlugin::ShowOpenScene()
 {
+	RefreshContent();
+	SponzaBounds = OpenButtonBounds = CancelButtonBounds = {};
 	bRequestOpen = true;
 	bOpenDialog = true;
 	Camera.Reset();
@@ -67,6 +69,31 @@ void FEditorPlugin::DrawApplicationScale()
 	Gui->EndMenu();
 }
 
+void FEditorPlugin::DrawRootMenu()
+{
+	Gui->BeginDisabled(PendingRoot.has_value());
+	if (Gui->MenuItem("Open..."))
+	{
+		bRequestRootDialog = true;
+	}
+	if (Gui->BeginMenu("Recent"))
+	{
+		if (Options.Preferences.RecentRoots.empty())
+		{
+			Gui->Text("No recent asset roots");
+		}
+		for (const auto& Root : Options.Preferences.RecentRoots)
+		{
+			if (Gui->MenuItem(PathToUtf8(Root).c_str()))
+			{
+				QueueContentRoot(Root);
+			}
+		}
+		Gui->EndMenu();
+	}
+	Gui->EndDisabled();
+}
+
 void FEditorPlugin::DrawMenus()
 {
 	const auto Attempt = [&](const auto& InAction)
@@ -82,11 +109,12 @@ void FEditorPlugin::DrawMenus()
 	};
 	if (Gui->BeginMenuBar())
 	{
-		Gui->Text(" HYPERION ");
 		const bool bFileOpen = Gui->BeginMenu("File");
 		FileMenuBounds = Gui->LastItemBounds();
 		if (bFileOpen)
 		{
+			DrawRootMenu();
+			Gui->Separator();
 			if (Gui->MenuItem("Open Scene..."))
 			{
 				ShowOpenScene();
@@ -410,33 +438,6 @@ void FEditorPlugin::DrawDetails()
 	Gui->EndWindow();
 }
 
-void FEditorPlugin::DrawSceneBrowser()
-{
-	if (!bShowBrowser)
-	{
-		return;
-	}
-	if (Gui->BeginWindow("Content Browser", bShowBrowser))
-	{
-		Gui->Text("Scenes");
-		Gui->SameLine();
-		if (Gui->Button("Browse / Open..."))
-		{
-			ShowOpenScene();
-		}
-		Gui->Separator();
-		for (const auto& Path : ScenePaths)
-		{
-			const auto Label = std::filesystem::path(Path).stem().string() + "##Content" + Path;
-			if (Gui->Selectable(Label.c_str(), OpenPath == Path))
-			{
-				OpenPath = Path;
-			}
-		}
-	}
-	Gui->EndWindow();
-}
-
 void FEditorPlugin::DrawOpenDialog()
 {
 	if (bRequestOpen)
@@ -447,18 +448,24 @@ void FEditorPlugin::DrawOpenDialog()
 	if (Gui->BeginModal("Open Scene", bOpenDialog))
 	{
 		bool bOpenSelected{};
-		Gui->Text("Choose a scene from mounted content");
+		if (Gui->Button("Refresh"))
+		{
+			RefreshContent();
+		}
+		Gui->Text(Browser->IsScanning() ? "Scanning scenes..." : "Scene scan complete");
+		Gui->Text("Choose a scene from the current asset root");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##FilterScenes", SceneFilter, false);
 		Gui->BeginScrollRegion("SceneList", 250);
 		for (const auto& Path : ScenePaths)
 		{
-			if (!Matches(Path, SceneFilter))
+			const auto Label = ContentRelativePath(Path);
+			if (!Matches(Label, SceneFilter))
 			{
 				continue;
 			}
 			bool bDoubleClicked{};
-			if (Gui->Selectable(Path.c_str(), OpenPath == Path, 0, &bDoubleClicked))
+			if (Gui->Selectable(Label.c_str(), OpenPath == Path, 0, &bDoubleClicked))
 			{
 				OpenPath = Path;
 				bOpenSelected = bDoubleClicked;
@@ -470,11 +477,16 @@ void FEditorPlugin::DrawOpenDialog()
 		}
 		if (ScenePaths.empty())
 		{
-			Gui->TextWrapped("No catalog scenes found. Enter a mounted scene path below.");
+			Gui->TextWrapped("No scenes found under the current asset root.");
 		}
 		Gui->EndScrollRegion();
 		Gui->SetNextItemWidth(-1);
-		Gui->InputText("##ScenePath", OpenPath, false);
+		auto DisplayPath = ContentRelativePath(OpenPath);
+		if (Gui->InputText("##ScenePath", DisplayPath, false))
+		{
+			OpenPath =
+			    DisplayPath.empty() || PathFromUtf8(DisplayPath).has_root_path() ? DisplayPath : "/Game/" + DisplayPath;
+		}
 		if (Gui->Button("Open", !OpenPath.empty()) || bOpenSelected)
 		{
 			OpenScene(OpenPath);
@@ -569,6 +581,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	Gui->BeginFrame(Window->LogicalSize(), Window->PixelSize(), std::clamp(InDelta, .001f, .1f), InEvents);
 	bGizmoUsedMouse = false;
 	bPlacementUsedMouse = false;
+	Gui->BeginDisabled(PendingRoot.has_value());
 	DrawMenus();
 	CaptureButtonBounds = {};
 	DrawToolbar();
@@ -593,10 +606,12 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 		InspectorTransaction.reset();
 	}
 	DrawSceneBrowser();
+	Gui->EndDisabled();
 	DrawOpenDialog();
 	DrawSaveDialog();
 	DrawDiscardDialog();
 	DrawPreferences();
+	DrawAssetMessage();
 	Context.Publish(FGuiPanelEvent{*Gui});
 	RouteDeleteShortcut(InEvents);
 	return Gui->Render();

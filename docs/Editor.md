@@ -30,9 +30,21 @@ python tools/Bootstrap.py
 ./out/build/release/bin/hyperion_editor.exe
 ```
 
-选择 **File > Open Scene...**，在场景列表中选择 `/Game/Scenes/Sponza.hasset`，点击 **Open**。列表来自已挂载库的 `Catalog.hasset`；也可以输入原生场景的虚拟路径。首次加载期间状态栏显示进度，资源就绪后出现在视口中。失败时状态栏显示错误，可以再次打开其他场景。
+选择 **File > Open...**，在系统目录对话框中选择资产根目录，例如 `F:\HyperionAssets`；该目录直接映射为 `/Game`。然后通过 **File > Open Scene...** 选择 `Scenes/Sponza.hasset`，点击 **Open**。列表和路径输入框显示相对于资产根目录的路径，内部仍使用 `/Game/Scenes/Sponza.hasset` 加载。列表异步递归扫描当前根目录中的 `.hasset`，根据文件内的资产类型识别场景，不要求场景列入 `Catalog.hasset` 或放在固定子目录；也可以直接输入相对根目录的场景路径。首次加载期间状态栏显示进度，资源就绪后出现在视口中。失败时状态栏显示错误，可以再次打开其他场景。
 
-工具栏的 **Open Scene** 和 Content Browser 的 **Browse / Open...** 打开同一个对话框。对话框中单击条目只选中，双击条目等价于选中后点击 **Open**，同样遵循未保存修改提示。Content Browser 列出场景资产；此版本尚未提供通用资产缩略图浏览。
+工具栏的 **Open Scene** 打开同一个对话框。对话框中单击条目只选中，双击条目等价于选中后点击 **Open**，同样遵循未保存修改提示。
+
+### 资产根目录与 Content Browser
+
+Content Browser 的根节点和顶部路径显示为 **All**，子目录路径显示为 `All/Scenes` 等；`/Game` 仅作为内部挂载标识。
+
+**File > Recent** 显示最近最多五个成功选择的根目录，按最近使用排序并去重。下次启动自动恢复最后成功选择的目录，保持空场景；显式 `--scene` 仍可指定启动场景。显式 `--mounts` 优先于保存的根目录。保存目录已经失效时显示错误并保持 `/Game` 未挂载，可重新选择目录；不会悄悄使用另一个 Game 目录。根目录和历史与 RenderDoc 偏好一起保存在 `Preferences.ini`。
+
+Content Browser 左侧显示 `/Game` 目录树，右侧显示所选目录的直接子目录和 `.hasset` 文件，文件夹排在文件前面。中间分隔条可拖动；双击文件夹进入，双击场景打开，其他有效资产显示暂不支持打开该类型的提示，损坏文件显示读取错误。采用文件夹/文件图标，暂不生成资产内容缩略图。默认布局中浏览器位于 Viewport 下方，右侧 Outliner / Details 保留完整高度；已有布局保持不变，**Window > Reset Layout** 可应用新默认布局。**Refresh**、进入目录和保存场景后更新目录；尚未监听系统文件变化。Open Scene 对话框每次打开和点击 Refresh 都重新扫描。
+
+默认隐藏 `.assets`、`.asset-library.hasset` 和 `Catalog.hasset`；**Show Internal Assets** 可显示这些内容，也影响场景发现。`.cache`、`.git` 始终不展示、不扫描。该过滤仅影响浏览：`.assets/<Id>-<Revision>.hasset` 是正式发布的共享依赖资产，仍正常参与模型、材质等加载，不能当作可随意删除的缓存。
+
+切换根目录前验证新目录和 catalog。当前场景有未保存修改时，可选择 **Save and switch**、**Discard changes** 或 **Cancel**；未命名场景先选择保存路径，保存完成前 `/Game` 仍指向旧目录。取消、保存失败或新目录无效都会保留当前文档。成功切换时结束旧扫描、加载和渲染工作，释放旧场景、选择、撤销历史与预览，再替换 `/Game` 并进入空文档；`/Engine` 映射保留。重复选择同一规范目录只更新最近使用顺序。
 
 可选启动参数：
 

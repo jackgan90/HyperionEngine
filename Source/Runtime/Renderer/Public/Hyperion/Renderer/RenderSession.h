@@ -87,6 +87,8 @@ public:
 	                             bool bInDeferPreparation = true);
 	void ResetViewHistory(); // Render: discard cached view preparation after structural pipeline changes.
 	void Close();
+	// Main between frames, after logical scenes and external previews have been closed.
+	void ResetContent();
 
 private:
 	FTaskSystem& Tasks;

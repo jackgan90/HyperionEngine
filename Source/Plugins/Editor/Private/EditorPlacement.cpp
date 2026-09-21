@@ -93,8 +93,8 @@ void FEditorPlugin::RoutePlacement()
 	const auto CameraView = PickingCamera();
 	const auto Pointer = Gui->PointerState();
 	const auto* Object = PlacementRegistry.Find(Payload->Value);
-	if (!Object || !CameraView || !bViewportVisible || bOpenDialog || bSaveDialog || bDiscardDialog ||
-	    bViewOptionsOpen || Pointer.bCancel || Pointer.bRightDown || Gizmo.IsDragging())
+	if (!Object || !CameraView || !bViewportVisible || bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot ||
+	    bDiscardDialog || bViewOptionsOpen || Pointer.bCancel || Pointer.bRightDown || Gizmo.IsDragging())
 	{
 		CancelPlacement();
 		return;

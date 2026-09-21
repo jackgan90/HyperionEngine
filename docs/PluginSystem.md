@@ -19,7 +19,7 @@ Viewer、Editor 的可执行入口位于 `Applications`，只选择 D3D12 provid
 
 | ID | 所有权 / 服务 | 依赖 |
 |---|---|---|
-| `assets` | 挂载文件系统、IO、资产服务及目录注册 | 宿主 Tasks |
+| `assets` | 挂载文件系统、IO、资产服务、目录注册及内容根目录准备/提交服务 | 宿主 Tasks |
 | `window` | FWindow、Main 事件轮询 | 无 |
 | `graphics` | Device、Swapchain、ShaderCompiler、RenderSession、渲染扩展注册表 | assets、window |
 | `gui` | FGui、通用 FGuiRenderer | graphics |

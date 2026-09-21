@@ -29,7 +29,8 @@ void FEditorPlugin::DrawGizmo()
 {
 	FSceneNodeView View;
 	if (Placement.IsActive() || bPlacementUsedMouse || !Selection || !Scene->GetNodeView(*Selection, View) ||
-	    !bViewportCameraInitialized || bOpenDialog || bSaveDialog || bDiscardDialog || PreviewCamera)
+	    !bViewportCameraInitialized || bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot || bDiscardDialog ||
+	    PreviewCamera)
 	{
 		FinishGizmo();
 		return;
@@ -92,7 +93,7 @@ void FEditorPlugin::DrawGizmoOverlay()
 {
 	FSceneNodeView View;
 	if (!Selection || !Scene->GetNodeView(*Selection, View) || !bViewportCameraInitialized || PreviewCamera ||
-	    bOpenDialog || bSaveDialog || bDiscardDialog)
+	    bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot || bDiscardDialog)
 	{
 		return;
 	}

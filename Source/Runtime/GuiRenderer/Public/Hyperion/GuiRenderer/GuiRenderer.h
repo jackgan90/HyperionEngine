@@ -21,6 +21,8 @@ public:
 	~FGuiRenderer();
 	void Start();
 	void Stop() noexcept;
+	// Main between frames: release the retained image bindings and prepared draw packets.
+	void ReleaseFrame();
 	void Prepare(const FGuiDrawData& InData);
 	void Build(FRenderGraph& InGraph);
 	void BuildDeferred(FRenderGraph& InGraph, FGuiDrawData InData, std::vector<FGuiTextureBinding> InTextures = {},

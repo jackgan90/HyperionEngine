@@ -169,6 +169,8 @@ public:
 	                                     std::shared_ptr<const void> InLifetime, FViewport InViewport);
 	FRenderResourceStats Statistics() const;
 	void Close();
+	// Main, after all frame/scene consumers have released their leases.
+	void ResetContent();
 
 private:
 	// Resolve declared CPU values only; shader compilation remains in the existing Worker program preparation.

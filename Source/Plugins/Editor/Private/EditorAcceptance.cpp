@@ -231,6 +231,11 @@ void FEditorPlugin::ExerciseCamera(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseInput(std::vector<FInputEvent>& InEvents)
 {
+	if (bOpenDialog && Browser->IsScanning())
+	{
+		ExerciseWait = 0;
+		return;
+	}
 	if (FrameCount < 3)
 	{
 		return;
@@ -318,6 +323,9 @@ void FEditorPlugin::WriteReport()
 	std::ofstream Stream(Options.Report);
 	Stream << std::boolalpha << "{\n"
 	       << "\"scene\": " << std::quoted(CurrentPath) << ",\n"
+	       << "\"asset_root\": " << std::quoted(PathToUtf8(Context.Require<FContentRootService>().Directory())) << ",\n"
+	       << "\"content_verified\": " << bContentVerified << ",\n"
+	       << "\"root_restore_failed\": " << !Context.Require<FContentRootService>().StartupError.empty() << ",\n"
 	       << "\"open_count\": " << OpenCount << ",\n"
 	       << "\"document_verified\": " << bDocumentVerified << ",\n"
 	       << "\"views_verified\": " << bViewsVerified << ",\n"

@@ -22,6 +22,13 @@ struct FFileContents
 	FBytes Bytes;
 };
 
+struct FDirectoryEntry
+{
+	std::filesystem::path Path;
+	bool bDirectory{};
+	std::string Error;
+};
+
 class IFileWriteLease
 {
 public:
@@ -42,6 +49,7 @@ public:
 	virtual void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) = 0;
 	virtual std::filesystem::path Normalize(const std::filesystem::path& InPath) const;
 	virtual bool Exists(const std::filesystem::path& InPath);
+	virtual std::vector<FDirectoryEntry> ListDirectory(const std::filesystem::path& InDirectory);
 	virtual std::vector<std::filesystem::path> Enumerate(const std::filesystem::path& InDirectory, bool bInRecursive);
 };
 
@@ -53,6 +61,7 @@ public:
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override;
 	void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) override;
 	bool Exists(const std::filesystem::path& InPath) override;
+	std::vector<FDirectoryEntry> ListDirectory(const std::filesystem::path& InDirectory) override;
 	std::vector<std::filesystem::path> Enumerate(const std::filesystem::path& InDirectory, bool bInRecursive) override;
 };
 

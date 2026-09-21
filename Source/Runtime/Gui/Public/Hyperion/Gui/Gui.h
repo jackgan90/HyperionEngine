@@ -117,6 +117,11 @@ public:
 	bool IconButton(const char* InId, EGuiIcon InIcon, const char* InTooltip, bool bInSelected = false);
 	void Tooltip(const char* InText);
 	float AvailableWidth() const;
+	bool BeginSplitPane(const char* InId, float InLeftWidth = 220);
+	bool BeginTileGrid(const char* InId, float InTileWidth = 108);
+	bool FileTile(const char* InId, const char* InLabel, bool bInFolder, bool bInSelected, bool& bOutDoubleClicked);
+	void SetNextTreeOpen(bool bInOpen);
+	void ClosePopups();
 	bool Checkbox(const char* InLabel, bool& bInValue);
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
 	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0, bool* bOutDoubleClicked = nullptr);

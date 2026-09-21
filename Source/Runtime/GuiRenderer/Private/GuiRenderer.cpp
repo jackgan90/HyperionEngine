@@ -62,6 +62,18 @@ FGuiRenderer::FGuiRenderer(IRHIDevice& InDevice, FShaderCompiler& InCompiler, FT
 
 FGuiRenderer::~FGuiRenderer() = default;
 
+void FGuiRenderer::ReleaseFrame()
+{
+	Impl->Tasks.Require({EDomain::Main});
+	Impl->Tasks.Wait(Impl->Tasks.Dispatch({EDomain::Rhi, 0},
+	                                      [this]
+	                                      {
+		                                      Impl->Draws.clear();
+		                                      Impl->Images.clear();
+		                                      Impl->ProjectionSlice = {};
+	                                      }));
+}
+
 void FGuiRenderer::Start()
 {
 	auto& P = *Impl;

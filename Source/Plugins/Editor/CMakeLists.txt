@@ -1,6 +1,10 @@
 add_library(hyperion_editor_plugin STATIC
   Private/EditorAcceptance.cpp
   Private/EditorApplication.cpp
+  Private/ContentBrowser.cpp
+  Private/EditorContent.cpp
+  Private/EditorContentTransition.cpp
+  Private/EditorContentAcceptance.cpp
   Private/EditorBenchmark.cpp
   Private/EditorDocument.cpp
   Private/EditorDeletion.cpp
@@ -46,6 +50,24 @@ if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
+  add_executable(editor_content_tests Private/ContentBrowserTests.cpp Private/ContentBrowser.cpp Private/EditorPreferences.cpp)
+  hyp_executable(editor_content_tests)
+  target_compile_definitions(editor_content_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+  target_link_libraries(editor_content_tests PRIVATE hyperion_application_services hyperion_assets hyperion_io hyperion_scene hyperion_textures hyperion_tasks)
+  set_target_properties(editor_content_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_content COMMAND editor_content_tests)
+  set_tests_properties(editor_content PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}" FIXTURES_SETUP editor_content_fixture)
+  add_test(NAME editor_content_transition COMMAND hyperion_editor
+    --exercise-content "${PROJECT_BINARY_DIR}/editor-content-tests"
+    --editor-preferences "${PROJECT_BINARY_DIR}/editor-content-tests/EditorPreferences.ini"
+    --layout "${PROJECT_BINARY_DIR}/editor-content-tests/Layout.ini"
+    --capture "${PROJECT_BINARY_DIR}/editor-content-tests/Browser.png" --hidden)
+  set_tests_properties(editor_content_transition PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    FIXTURES_REQUIRED editor_content_fixture TIMEOUT 120 RUN_SERIAL TRUE LABELS "gpu;desktop")
+  add_test(NAME editor_content_startup COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/ContentRootAcceptance.py" $<TARGET_FILE:hyperion_editor>
+    "${PROJECT_SOURCE_DIR}" "${PROJECT_BINARY_DIR}/editor-content-tests")
+  set_tests_properties(editor_content_startup PROPERTIES FIXTURES_REQUIRED editor_content_fixture TIMEOUT 150 RUN_SERIAL TRUE LABELS "gpu;desktop")
   add_executable(editor_state_tests Private/EditorStateTests.cpp)
   hyp_executable(editor_state_tests)
   target_link_libraries(editor_state_tests PRIVATE hyperion_scene)

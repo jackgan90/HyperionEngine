@@ -2,6 +2,7 @@ add_library(hyperion_gui STATIC Private/Adapters/Gui.cpp Private/Adapters/GuiDoc
 hyp_module(hyperion_gui)
 target_sources(hyperion_gui PRIVATE Private/GuiSelectionInspection.cpp Private/Adapters/GuiMixed.cpp)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiIcons.cpp)
+target_sources(hyperion_gui PRIVATE Private/Adapters/GuiContent.cpp)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiDragDrop.cpp)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiScale.cpp)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiVector.cpp Private/Adapters/GuiColor.cpp Private/Adapters/GuiEditing.cpp)

@@ -131,6 +131,15 @@ void TestMountedFileSystem()
 	std::filesystem::create_directory_symlink(Root / "Engine", Root / "Game/Escape", Error);
 	if (!Error)
 	{
+		bool bLinkReported{};
+		for (const auto& Entry : Files->ListDirectory("/Game"))
+		{
+			if (Entry.Path == "/Game/Escape")
+			{
+				bLinkReported = !Entry.Error.empty();
+			}
+		}
+		HYP_CHECK(bLinkReported);
 		HYP_CHECK(Fails(
 		    [&]
 		    {

@@ -6,8 +6,8 @@ namespace Hyperion
 void FEditorPlugin::RouteDeleteShortcut(std::span<const FInputEvent> InEvents)
 {
 	if (!Selection || !Scene->GetStatus().bReady || Gui->IsEditingText() || Gui->DragPayload() ||
-	    Placement.IsActive() || Gizmo.IsDragging() || bCameraDragging || bOpenDialog || bSaveDialog || bDiscardDialog ||
-	    bPreferencesDialog || Gui->PointerState().bCancel)
+	    Placement.IsActive() || Gizmo.IsDragging() || bCameraDragging || bOpenDialog || bSaveDialog || bAssetMessage ||
+	    PendingRoot || bDiscardDialog || bPreferencesDialog || Gui->PointerState().bCancel)
 	{
 		return;
 	}

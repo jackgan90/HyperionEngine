@@ -364,4 +364,23 @@ void FRenderSession::Close()
 	Resources.Close();
 	bClosed = true;
 }
+
+void FRenderSession::ResetContent()
+{
+	Tasks.Require({EDomain::Main});
+	Tasks.Wait(Scene.Flush());
+	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+	                          [this]
+	                          {
+		                          Batches.Clear();
+		                          ResetViewHistory();
+		                          PendingFamily.reset();
+		                          MaterialState->ResolvedSceneFrame.reset();
+		                          MaterialState->EffectiveSceneInputs = {};
+		                          MaterialState->Providers.ClearCache();
+		                          LastStatistics = {};
+		                          LastViews.clear();
+	                          }));
+	Resources.ResetContent();
+}
 } // namespace Hyperion

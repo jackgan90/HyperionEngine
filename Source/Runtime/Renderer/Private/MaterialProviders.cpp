@@ -300,6 +300,14 @@ struct FMaterialProviderRegistry::FImpl
 	}
 };
 
+void FMaterialProviderRegistry::ClearCache()
+{
+	Impl->Cache.clear();
+	Impl->Recent.clear();
+	Impl->Stats.CachedEntries = 0;
+	Impl->Stats.CachedValueBytes = 0;
+}
+
 FMaterialProviderRegistry::FMaterialProviderRegistry(std::shared_ptr<const FMaterialSemanticRegistry> InSemantics,
                                                      FMaterialProviderLimits InLimits)
     : Impl(std::make_unique<FImpl>())

@@ -178,6 +178,8 @@ public:
 	void ClearCache();
 	FAssetCacheStats Statistics();
 	void Drain();
+	// Main, after all consumers are quiescent. Keeps type registration and service identity.
+	void ResetContent(FAssetService& InPreparedCatalog);
 
 private:
 	FAssetRequest Load(const std::filesystem::path& InPath, bool bInGraphDependency);

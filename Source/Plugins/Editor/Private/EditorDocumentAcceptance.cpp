@@ -63,8 +63,13 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, InspectionBounds.at(MeshType + "/visible"));
 			break;
 		case 3:
-			Check(IsDirty() && !Scene->FindNode(*Selection)->Model()->bVisible,
-			      "Inspector change was not applied immediately");
+			if (!IsDirty() || Scene->FindNode(*Selection)->Model()->bVisible)
+			{
+				const auto Bounds = InspectionBounds.at(MeshType + "/visible");
+				throw std::runtime_error(
+				    "Inspector change was not applied immediately; target=" + std::to_string(Bounds.X) + "," +
+				    std::to_string(Bounds.Y) + "," + std::to_string(Bounds.Z) + "," + std::to_string(Bounds.W));
+			}
 			Check(HistoryCursor == 1 && History.size() == 1, "New editing did not truncate the redo branch");
 			++ExerciseStep;
 			break;

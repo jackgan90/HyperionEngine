@@ -24,11 +24,13 @@
 }
 ```
 
-挂载配置在应用组合层加载，构造后不可修改。包路径使用 UTF-8 和 `/`，名称大小写必须与磁盘一致；拒绝越过挂载根的 `..`、重复/重叠映射及挂载根之下的符号链接/junction。Engine 默认只读；工具显式 `--authoring` 才可覆盖挂载的只读设置。路径查找失败不会退回旧目录。
+挂载配置在应用组合层加载，请求运行期间保持冻结。编辑器通过 assets 插件提供的 `FContentRootService` 验证候选挂载和 catalog；调用者停止旧内容生产、释放场景及渲染引用并等待工作结束后，才可在 Main 独占提交新 `/Game`。提交清空旧资产缓存和 catalog，并替换已验证的挂载集合，文件系统与服务对象地址保持稳定。其他调用者不得在存在请求或旧内容引用时直接替换挂载。
+
+包路径使用 UTF-8 和 `/`，名称大小写必须与磁盘一致；拒绝越过挂载根的 `..`、重复/重叠映射及挂载根之下的符号链接/junction。Engine 默认只读；工具显式 `--authoring` 才可覆盖挂载的只读设置。路径查找失败不会退回旧目录。编辑器的目录选择、最近目录和启动恢复规则见 [Editor.md](Editor.md)。
 
 ## API 与模块
 
-`Runtime/IO` 的 `FMountedFileSystem` 实现 `IFileSystem`，提供 Normalize、Resolve、Read、ReadTree、WriteAtomic、Exists、Enumerate 和 AcquireWriteLease。ReadTree 将递归枚举、扩展名筛选和读取合并，返回文件路径与字节；每个文件独立受读取大小上限约束。目录和链接检查在本次操作内完成，不跨请求缓存文件内容或校验结果，不承诺多个文件的原子快照。`FIOService` 保留 IO 域调度、统计、取消和原子发布能力。实际文件访问在本地后端完成，内存文件系统仍用于独立测试。
+`Runtime/IO` 的 `FMountedFileSystem` 实现 `IFileSystem`，提供 Normalize、Resolve、Read、ReadTree、WriteAtomic、Exists、Enumerate、ListDirectory 和 AcquireWriteLease。ListDirectory 返回直接子文件、目录及逐项诊断，保留空目录并阻止跟随挂载内链接。ReadTree 将递归枚举、扩展名筛选和读取合并，返回文件路径与字节；每个文件独立受读取大小上限约束。目录和链接检查在本次操作内完成，不跨请求缓存文件内容或校验结果，不承诺多个文件的原子快照。`FIOService` 保留 IO 域调度、统计、取消和原子发布能力。实际文件访问在本地后端完成，内存文件系统仍用于独立测试。
 
 `FAssetService` 在缓存、写入顺序、失效和依赖图处理中使用同一规范路径；`AddCatalog` 合并 Engine/Game catalog，冲突 ID 报错。引用继续检查 ID、类型和固定 Revision。旧相对引用可读；新挂载资产的发布和场景保存使用包路径，搬迁只需修改挂载配置。
 

@@ -204,4 +204,16 @@ void FRenderResourceService::Close()
 		                                      State->CloseNativeResources();
 	                                      }));
 }
+
+void FRenderResourceService::ResetContent()
+{
+	Close();
+	AssetCache = std::make_shared<FMaterialAssetCache>();
+	std::lock_guard Lock(Coordinator->Mutex);
+	Coordinator->bClosed = false;
+	Coordinator->bNativeClosed = false;
+	Coordinator->bScheduled = false;
+	Coordinator->Progress = {};
+	++Coordinator->PublicationRevision;
+}
 } // namespace Hyperion

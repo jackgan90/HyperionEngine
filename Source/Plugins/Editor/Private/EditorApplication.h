@@ -1,8 +1,10 @@
 #pragma once
+#include "ContentBrowser.h"
 #include "EditorHistoryState.h"
 #include "EditorInspectionCache.h"
 #include "EditorPreferences.h"
 #include "EditorSelection.h"
+#include "Hyperion/ApplicationServices/ContentRootService.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
 #endif
@@ -18,6 +20,7 @@
 #include "Hyperion/Renderer/TransientGeometry.h"
 #include "Hyperion/Renderer/ViewportPlacement.h"
 #include "Hyperion/Scene/ObjectPlacement.h"
+#include <semaphore>
 
 namespace Hyperion
 {
@@ -38,6 +41,7 @@ struct FEditorOptions
 	std::filesystem::path ExerciseViews;
 	std::filesystem::path ExercisePlacement;
 	std::filesystem::path ExerciseOutlines;
+	std::filesystem::path ExerciseContent;
 	std::string Scene;
 	std::uint32_t Frames{};
 	std::uint32_t BenchmarkWarmup = 120;
@@ -46,6 +50,7 @@ struct FEditorOptions
 	bool bBenchmarkCollapsed{};
 	bool bHidden{};
 	bool bKernelOnly{};
+	bool bExplicitMounts{};
 	std::vector<std::string> DisabledPlugins;
 	bool bExercise{};
 	bool bExerciseGizmo{};
@@ -75,7 +80,26 @@ private:
 
 	void Initialize();
 	bool AdvanceFrame(float InDelta);
-	void LoadCatalogs();
+	void InitializeContentBrowser();
+	void RefreshContent();
+	void PollContent();
+	void DrawContentTree(const std::string& InPath);
+	void DrawContentGrid();
+	void DrawAssetMessage();
+	void RequestOpenAsset(const std::string& InPath);
+	void QueueContentRoot(const std::filesystem::path& InDirectory);
+	void ProcessContentRoot();
+	void CloseContentDocument();
+	void CancelContentRequests();
+	void ExerciseContentInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseContentSwitch(std::vector<FInputEvent>& InEvents);
+	void ExerciseContentBrowser(std::vector<FInputEvent>& InEvents);
+	void ExerciseContentFailures(std::vector<FInputEvent>& InEvents);
+	void ExerciseContentDismissal(std::vector<FInputEvent>& InEvents);
+	void ExerciseContentClose(std::vector<FInputEvent>& InEvents);
+	void PrepareContentRoot();
+	void CompleteContentRoot();
+	void DrawRootMenu();
 	void Shutdown();
 	void OpenScene(const std::string& InPath);
 	void ShowOpenScene();
@@ -207,6 +231,7 @@ private:
 	void PollSave();
 	void DrawSaveDialog();
 	void DrawDiscardDialog();
+	void CancelDiscardAction();
 	void SelectObject(std::optional<FSceneHandle> InHandle);
 	void CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision,
 	                 std::uint64_t InInteraction = 0);
@@ -377,6 +402,29 @@ private:
 
 	std::optional<FViewportClick> ViewportClick;
 	std::string OpenPath;
+	std::unique_ptr<FContentBrowser> Browser;
+	std::optional<TAsyncResult<FAssetHeader>> PendingAssetOpen;
+	FCancellationToken AssetOpenCancellation;
+	std::string AssetOpenPath;
+	std::string AssetMessage;
+	bool bAssetMessage{};
+	bool bRequestAssetMessage{};
+	bool bShowInternalAssets{};
+	bool bRevealContentTree{};
+	bool bRequestRootDialog{};
+	std::filesystem::path RequestedRoot;
+	std::optional<FContentRootCandidate> PendingRoot;
+	bool bSaveThenSwitch{};
+	bool bCommitRoot{};
+	bool bContentVerified{};
+	FVec4 SaveSwitchBounds;
+	FVec4 DiscardChangesBounds;
+	FVec4 CancelChangesBounds;
+	FVec4 DiscardTitleBounds;
+	std::shared_ptr<std::binary_semaphore> ContentSaveGate;
+	std::map<std::string, FVec4> ContentTileBounds;
+	FVec4 InternalAssetsBounds;
+	FVec4 ContentClickBounds;
 	std::string CurrentPath;
 	std::string Error;
 	std::string Filter;

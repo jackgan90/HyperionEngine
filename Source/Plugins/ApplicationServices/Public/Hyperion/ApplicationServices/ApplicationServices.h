@@ -14,6 +14,7 @@ struct FAssetServiceOptions
 {
 	std::filesystem::path Mounts;
 	bool bRequireCatalogs{};
+	std::optional<std::filesystem::path> RestoredGameRoot;
 };
 
 struct FWindowServiceOptions

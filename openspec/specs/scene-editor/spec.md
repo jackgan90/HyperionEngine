@@ -11,15 +11,19 @@ The engine SHALL provide a standalone editor with a compact charcoal and blue-ac
 - **THEN** panels can dock inside the main window and the layout can be restored on the next launch or reset to the default
 
 ### Requirement: Open mounted scenes
-The editor SHALL let the user choose File > Open Scene and select a native scene from mounted content, including Sponza, and SHALL display loading status and recoverable errors.
+The editor SHALL let the user choose File > Open Scene and select a native scene discovered recursively under the active Game asset root by stored asset type, independently of fixed names, directory names or mandatory Catalog entries. It SHALL display loading status and recoverable errors. Root changes and explicit refresh SHALL rebuild the list; same-named scenes SHALL be distinguished by package path.
 
 #### Scenario: Open Sponza
-- **WHEN** the user selects Sponza and confirms opening
+- **WHEN** the user selects Sponza from the current root and confirms opening
 - **THEN** its scene loads asynchronously, nodes appear in the Outliner and its rendered image appears inside the viewport
 
 #### Scenario: Failed scene then valid scene
 - **WHEN** opening a scene fails and the user subsequently opens a valid scene
 - **THEN** the error is visible, the editor stays usable and the valid scene can load
+
+#### Scenario: Uncataloged scene
+- **WHEN** a valid scene hasset is added to any browsable directory under the active root and the list is refreshed
+- **THEN** it appears in Open Scene without requiring a catalog update
 
 ### Requirement: Scoped viewport navigation
 The editor SHALL reuse SceneCameraController in fly mode: WASDQE and arrow/Page aliases translate the camera only while the right mouse button is held in the viewport, and right-button dragging changes its world orientation while preserving its world position, lens and focus distance. Wheel input with the right button held SHALL adjust translation speed; wheel input without the right button SHALL retain forward/backward dolly. Home framing remains available. Navigation SHALL be isolated from menus, modal dialogs and text fields and reset on interruption.

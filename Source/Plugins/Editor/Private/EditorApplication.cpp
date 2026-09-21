@@ -33,34 +33,15 @@ void FEditorPlugin::Stop() noexcept
 	bStopped = true;
 }
 
-void FEditorPlugin::LoadCatalogs()
+void FEditorPlugin::InitializeContentBrowser()
 {
-	for (const auto& Mount : Files->GetMounts())
-	{
-		try
-		{
-			const auto Catalog = Assets.LoadAsync<FAssetCatalog>(Mount.Root / "Catalog.hasset").Get(Tasks);
-			for (const auto& Reference : Catalog->Assets)
-			{
-				if (Reference.TypeId == "hyperion.scene")
-				{
-					const auto Path = std::filesystem::path(Reference.Path);
-					ScenePaths.push_back((Path.is_absolute() ? Path : Mount.Root / Path).generic_string());
-				}
-			}
-		}
-		catch (const std::exception& Failure)
-		{
-			CatalogError += Mount.Root.generic_string() + ": " + Failure.what() + "\n";
-		}
-	}
-	std::sort(ScenePaths.begin(), ScenePaths.end());
-	ScenePaths.erase(std::unique(ScenePaths.begin(), ScenePaths.end()), ScenePaths.end());
+	Browser = std::make_unique<FContentBrowser>(IO);
+	RefreshContent();
 }
 
 void FEditorPlugin::Initialize()
 {
-	LoadCatalogs();
+	InitializeContentBrowser();
 	Window = &Context.Require<FWindow>();
 	Device = &Context.Require<IRHIDevice>();
 	Swapchain = &Context.Require<IRHISwapchain>();
@@ -78,6 +59,7 @@ void FEditorPlugin::Initialize()
 	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
 	                                                  std::move(Features));
 	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
+	Error = Context.Require<FContentRootService>().StartupError;
 	InitializePlacement();
 	if (!Options.Scene.empty())
 	{
@@ -145,6 +127,7 @@ void FEditorPlugin::Shutdown()
 	{
 		return;
 	}
+	CancelContentRequests();
 	Camera.Reset();
 	Scene.reset();
 	Assets.Drain();
@@ -225,6 +208,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 		ExerciseOutlines();
 	}
 	FGuiDrawData Data;
+	if (!Options.ExerciseContent.empty())
+	{
+		ExerciseContentInput(Events);
+	}
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorGui);
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.GuiMilliseconds);
@@ -245,7 +232,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	// Async scene readiness is independent of render frame rate.
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
-	                               bOutlinesVerified || bMultiSelectionVerified;
+	                               bOutlinesVerified || bMultiSelectionVerified || bContentVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -287,6 +274,12 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	PollSave();
+	PollContent();
+	ProcessContentRoot();
+	if (bFinished)
+	{
+		return;
+	}
 	if (PollClose() || (!Options.bExercise && Options.Frames && FrameCount >= Options.Frames))
 	{
 		Finish();
@@ -294,7 +287,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	}
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
-	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty()) &&
+	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out");
@@ -318,6 +311,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExerciseContent.empty() && (!bContentVerified || IsDirty() || !Window->ShouldClose()))
+	{
+		throw std::runtime_error("Content transition acceptance did not complete a clean close");
+	}
 	if (Options.bExerciseMultiSelection && !bMultiSelectionVerified)
 	{
 		throw std::runtime_error("Editor multi-selection acceptance did not complete");

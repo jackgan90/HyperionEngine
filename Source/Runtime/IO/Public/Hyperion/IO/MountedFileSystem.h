@@ -11,11 +11,13 @@ struct FContentMount
 	bool bReadOnly = true;
 };
 
-// Immutable after construction. Physical paths are an explicit tool/test compatibility boundary.
+// Frozen during requests. Exclusive replacement requires all consumers and IO to be quiescent.
 class FMountedFileSystem final : public IFileSystem
 {
 public:
 	explicit FMountedFileSystem(std::vector<FContentMount> InMounts);
+	void ReplaceExclusive(FMountedFileSystem& InPrepared) noexcept;
+	std::vector<FDirectoryEntry> ListDirectory(const std::filesystem::path& InDirectory) override;
 
 	const std::vector<FContentMount>& GetMounts() const
 	{
