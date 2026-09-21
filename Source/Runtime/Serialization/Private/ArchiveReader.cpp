@@ -38,7 +38,7 @@ void FArchiveReader::Header()
 	}
 	Position = 4;
 	const auto Version = Scalar<std::uint32_t>();
-	if (Version == 1)
+	if (Version == 1 && !bMetadataOnly)
 	{
 		bLegacy = true;
 		return;
@@ -60,20 +60,25 @@ void FArchiveReader::Header()
 		throw std::runtime_error("Invalid archive metadata length");
 	}
 	const auto MetadataEnd = Prefix + static_cast<std::size_t>(MetadataSize);
+	const auto Total = bMetadataOnly ? TotalBytes : Bytes.size();
+	if (Total < MetadataEnd || Total > Limits.MaxBytes)
+	{
+		throw std::runtime_error("Invalid archive total length");
+	}
 	auto Next = MetadataEnd;
 	Blocks.reserve(Count);
 	for (std::uint32_t Index = 0; Index < Count; ++Index)
 	{
 		const auto Offset = Scalar<std::uint64_t>();
 		const auto Size = Scalar<std::uint64_t>();
-		if (Offset != Next || Size > Bytes.size() - Next)
+		if (Offset != Next || Size > Total - Next)
 		{
 			throw std::runtime_error("Invalid archive bulk range");
 		}
 		Blocks.emplace_back(Next, static_cast<std::size_t>(Size));
 		Next += static_cast<std::size_t>(Size);
 	}
-	if (Next != Bytes.size())
+	if (Next != Total)
 	{
 		throw std::runtime_error("Trailing archive bulk data");
 	}
@@ -113,6 +118,10 @@ FArchiveNode FArchiveReader::Bulk()
 		throw std::runtime_error("Invalid bulk element alignment");
 	}
 	// Account for final typed storage as well as an intermediate copy when no owner is supplied.
+	if (bMetadataOnly)
+	{
+		return FArchiveNode(std::monostate{});
+	}
 	Charge(Size);
 	if (Storage)
 	{

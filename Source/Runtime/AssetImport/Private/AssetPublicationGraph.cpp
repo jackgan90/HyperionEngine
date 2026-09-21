@@ -49,13 +49,10 @@ bool FPublication::PreserveExternal(FAssetRef& InReference)
 			throw std::runtime_error("External asset reference identity/type/revision mismatch: " + InReference.Path);
 		}
 		InReference = Identity;
+		InReference.Revision.clear();
 		return true;
 	}
-	FAssetService Assets(IO);
-	for (const auto& Importer : Importers)
-	{
-		Assets.Types().Register(*Importer.Type);
-	}
+	auto& Assets = IndexedAssets();
 	const auto Graph = Assets.LoadGraphAsync(InReference, {}).Get(IO.TaskSystem());
 	if (!Graph->Failures.empty())
 	{
@@ -80,6 +77,7 @@ bool FPublication::PreserveExternal(FAssetRef& InReference)
 	const auto& Root = *Graph->Root;
 	InReference = {Root.Header.Id, PathToUtf8(Root.Path), Root.Header.TypeId, Root.Header.Revision};
 	ExternalAssets.emplace(Normalized, InReference);
+	InReference.Revision.clear();
 	return true;
 }
 
@@ -152,65 +150,49 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 	                         : !InAsset.StableKey.empty() ? InAsset.StableKey
 	                         : InAsset.NativeHeader ? "native/" + InAsset.NativeHeader->Id + "|" + InAsset.Type->Id
 	                                                : "source/" + StableSourceKey(InSource) + "|" + InAsset.Type->Id;
-	std::string Id;
-	if (bInRoot && Previous)
-	{
-		Id = Previous->Header.Id;
-	}
-	else if (const auto It = LibraryIndex.Entries.find(IdentityKey); !bInRoot && It != LibraryIndex.Entries.end())
-	{
-		Id = It->second.Id;
-	}
-	else if (InAsset.NativeHeader)
-	{
-		Id = InAsset.NativeHeader->Id;
-	}
-	else if (const auto It = PreviousIds.find(IdentityKey); It != PreviousIds.end())
-	{
-		Id = It->second;
-	}
-	else
-	{
-		Id = CreateIdentifier();
-	}
-	Provenance.OutputIds[IdentityKey] = Id;
-	const auto Destination = bInRoot ? Output : Library / ".assets" / (Id + ".hasset");
+	auto Id = SelectId(IdentityKey, InAsset, bInRoot);
+	auto Destination = bInRoot ? Output : ProductDestination(Id, InAsset);
 	Rewrite(Object.get(), *InAsset.Type, InAsset.ProductRoot.empty() ? InSource : InAsset.ProductRoot, Destination);
-	FAssetHeader Header;
-	Header.Id = Id;
-	if (bInRoot)
+	std::string TextureContent;
+	if (!bInRoot && !InAsset.NativeHeader && InAsset.Type->Id == "hyperion.textureasset")
 	{
-		CheckSources();
-		for (const auto& [Path, Fingerprint] : Sources)
+		auto Record = WriteRecord(*InAsset.Type, Object.get());
+		std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value)["name"] =
+		    WriteValue(std::string{});
+		TextureContent = HashArchive(Record);
+		if (!ExistingAssets.contains(Id))
 		{
-			Provenance.Sources.push_back({ImportRelativePath(Path, Source.parent_path()), Fingerprint});
+			if (const auto Reused = ReuseTexture(TextureContent))
+			{
+				ClaimProduct(Reused->Reference.Id, IdentityKey, TextureContent);
+				Provenance.OutputIds[IdentityKey] = Reused->Reference.Id;
+				Published.emplace(Key, *Reused);
+				LibraryProducts[IdentityKey] = Reused->Reference;
+				Active.erase(Key);
+				return *Reused;
+			}
 		}
-		Header.Import = Provenance;
 	}
+	auto Header = MakeHeader(Id, IdentityKey, TextureContent, bInRoot);
 	auto Encoded = EncodeAsset(*InAsset.Type, Object.get(), std::move(Header));
-	const auto Path = bInRoot ? Output : Destination.parent_path() / (Id + "-" + Encoded.Header.Revision + ".hasset");
-	if (bInRoot)
+	const auto Path = Destination;
+	if (!bInRoot)
 	{
-		SaveLibrary();
-	}
-	else
-	{
-		if (const auto It = SharedProducts.find(IdentityKey); !InAsset.NativeHeader && It != SharedProducts.end() &&
-		                                                      It->second.Reference.Revision != Encoded.Header.Revision)
+		if (const auto [It, bInserted] = ProductRevisions.emplace(IdentityKey, Encoded.Header.Revision);
+		    !bInserted && It->second != Encoded.Header.Revision)
 		{
 			throw std::runtime_error("Conflicting products claim one shared import identity: " + IdentityKey);
 		}
-		LibraryIndex.Entries[IdentityKey] = {Id, ImportRelativePath(Path, Library), Encoded.Header.TypeId,
-		                                     Encoded.Header.Revision};
+		ClaimProduct(Id, IdentityKey, TextureContent.empty() ? Encoded.Header.Revision : TextureContent);
+		LibraryProducts[IdentityKey] = {Id, ImportRelativePath(Path, Library), Encoded.Header.TypeId, {}};
 	}
 	Write(Path, Encoded);
-	FPublishedAsset Result{{Id, ImportPathString(Path.filename()), Encoded.Header.TypeId, Encoded.Header.Revision},
-	                       Path,
-	                       SourceIdentity(InAsset)};
+	FPublishedAsset Result{
+	    {Id, ImportPathString(Path.filename()), Encoded.Header.TypeId, {}}, Path, SourceIdentity(InAsset)};
 	Published.emplace(Key, Result);
-	if (!bInRoot)
+	if (!TextureContent.empty())
 	{
-		SharedProducts[IdentityKey] = Result;
+		TextureProducts[TextureContent] = Result;
 	}
 	Active.erase(Key);
 	if (bInRoot)

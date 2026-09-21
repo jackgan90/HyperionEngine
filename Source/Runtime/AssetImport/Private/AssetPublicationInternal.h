@@ -4,12 +4,6 @@
 
 namespace Hyperion
 {
-struct FAssetLibraryIndex
-{
-	std::map<std::string, FAssetRef> Entries;
-};
-
-template<> const FRecordDescriptor& RecordType<FAssetLibraryIndex>();
 std::filesystem::path ImportProductPath(const std::filesystem::path& InSource, std::string_view InKey);
 
 struct FPublishedAsset
@@ -40,9 +34,14 @@ struct FPublication
 	std::size_t Written{};
 	std::size_t Bytes{};
 	std::filesystem::path Library;
-	FAssetLibraryIndex LibraryIndex;
-	FAssetHeader LibraryHeader;
-	std::map<std::string, FPublishedAsset> SharedProducts;
+	std::map<std::string, FAssetRef> LibraryProducts;
+	std::map<std::string, FPublishedAsset> ExistingAssets;
+	std::map<std::string, FPublishedAsset> TextureProducts;
+	std::map<std::filesystem::path, FEncodedAsset> Staged;
+	std::map<std::string, std::string> ProductRevisions;
+	std::map<std::string, std::pair<std::string, std::string>> ProductContents;
+	std::unique_ptr<FAssetService> NativeAssets;
+	std::string RootId;
 	std::filesystem::path SourceRoot;
 	std::string SourceId;
 	std::string StableSourceKey(const std::filesystem::path& InPath) const;
@@ -50,11 +49,19 @@ struct FPublication
 	bool PreserveExternal(FAssetRef& InReference);
 
 	void LoadLibrary();
-	void SaveLibrary();
+	FAssetService& IndexedAssets();
+	void ClaimProduct(const std::string& InId, const std::string& InKey, const std::string& InContent);
+	void Commit();
+	std::string SelectId(const std::string& InKey, const FConvertedAsset& InAsset, bool bInRoot) const;
+	std::filesystem::path ProductDestination(std::string_view InId, const FConvertedAsset& InAsset) const;
+	std::optional<FPublishedAsset> ReuseTexture(const std::string& InContent);
+	FAssetHeader MakeHeader(const std::string& InId, const std::string& InKey, const std::string& InTextureContent,
+	                        bool bInRoot);
 	void AddProducts(const std::filesystem::path& InSource, const FConvertedAsset& InAsset);
 
 	void Prepare(const FAssetImportOptions& InOptions);
 	bool IsCurrent();
+	bool SourcesCurrent(const FAssetGraph& InGraph) const;
 	void CheckSources() const;
 	void Track(const FConvertedAsset& InAsset);
 	FPublishedAsset Build(const std::filesystem::path& InSource, const FConvertedAsset& InAsset, bool bInRoot);

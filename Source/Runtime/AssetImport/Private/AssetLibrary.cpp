@@ -1,16 +1,17 @@
 #include "AssetPublicationInternal.h"
+#include "Hyperion/Assets/AssetAuthoring.h"
+#include "Hyperion/Assets/AssetRegistry.h"
+#include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
+#include "Hyperion/Scene/SceneManifest.h"
+#include <cctype>
 
 namespace Hyperion
 {
 std::string FPublication::StableSourceKey(const std::filesystem::path& InPath) const
 {
-	if (SourceRoot.empty())
-	{
-		return ImportPathString(InPath);
-	}
 	const auto Relative = InPath.lexically_relative(SourceRoot);
-	if (Relative.empty() || Relative.is_absolute() || *Relative.begin() == "..")
+	if (Relative.empty() || Relative.is_absolute())
 	{
 		throw std::runtime_error("Import source is outside configured source root: " + ImportPathString(InPath));
 	}
@@ -19,6 +20,16 @@ std::string FPublication::StableSourceKey(const std::filesystem::path& InPath) c
 
 std::string FPublication::PortableKey(std::string InKey) const
 {
+	if (InKey.starts_with("image/"))
+	{
+		const auto Srgb = InKey.rfind("/srgb/");
+		const auto Linear = InKey.rfind("/linear/");
+		const auto End = Srgb == std::string::npos ? Linear : Srgb;
+		if (End != std::string::npos)
+		{
+			return "image/" + StableSourceKey(PathFromUtf8(InKey.substr(6, End - 6))) + InKey.substr(End);
+		}
+	}
 	if (!SourceRoot.empty())
 	{
 		const auto Prefix = ImportPathString(SourceRoot) + "/";
@@ -29,14 +40,11 @@ std::string FPublication::PortableKey(std::string InKey) const
 			InKey.replace(Position, Prefix.size(), Replacement);
 		}
 	}
+	if (InKey.find(":/") != std::string::npos || InKey.find('\\') != std::string::npos)
+	{
+		throw std::runtime_error("Import product key contains a local machine path");
+	}
 	return InKey;
-}
-
-template<> const FRecordDescriptor& RecordType<FAssetLibraryIndex>()
-{
-	static const auto Type =
-	    MakeRecord<FAssetLibraryIndex>("hyperion.assetlibraryindex", {Member("entries", &FAssetLibraryIndex::Entries)});
-	return Type;
 }
 
 std::filesystem::path ImportProductPath(const std::filesystem::path& InSource, std::string_view InKey)
@@ -47,30 +55,106 @@ std::filesystem::path ImportProductPath(const std::filesystem::path& InSource, s
 
 void FPublication::LoadLibrary()
 {
-	const auto Existing = IO.TryReadAsync(Library / ".asset-library.hasset", Cancellation).Get(IO.TaskSystem());
-	if (*Existing)
+	const auto Discovery = DispatchAsync<FAssetDiscovery>(
+	                           IO.TaskSystem(), {EDomain::Io},
+	                           [Storage = IO.FileSystem(), Directory = Library]
+	                           {
+		                           return DiscoverAssets(*Storage, Directory);
+	                           },
+	                           Cancellation)
+	                           .Get(IO.TaskSystem());
+	for (const auto& [Path, Error] : Discovery->Errors)
 	{
-		const auto Document = DecodeAsset(**Existing);
-		LibraryIndex = *std::static_pointer_cast<FAssetLibraryIndex>(
-		    ReadRecord(RecordType<FAssetLibraryIndex>(), Document.Object));
-		LibraryHeader = Document.Header;
-		if (!SourceRoot.empty())
+		if (Path != Output)
 		{
-			std::map<std::string, FAssetRef> Entries;
-			for (const auto& [Key, Value] : LibraryIndex.Entries)
+			throw std::runtime_error(ImportPathString(Path) + ": " + Error);
+		}
+	}
+	for (const auto& Entry : Discovery->Entries)
+	{
+		ExistingAssets.emplace(Entry.Header.Id, FPublishedAsset{{Entry.Header.Id, ImportPathString(Entry.Path),
+		                                                         Entry.Header.TypeId, Entry.Header.Revision},
+		                                                        Entry.Path});
+	}
+	for (const auto& Entry : Discovery->Entries)
+	{
+		if (!Entry.Header.Import)
+		{
+			continue;
+		}
+		if (const auto It = Entry.Header.Import->Settings.find("texture_content");
+		    It != Entry.Header.Import->Settings.end())
+		{
+			TextureProducts.try_emplace(It->second, ExistingAssets.at(Entry.Header.Id));
+		}
+		for (const auto& [Key, Id] : Entry.Header.Import->OutputIds)
+		{
+			const auto Target = ExistingAssets.find(Id);
+			if (Key == "$root" || Target == ExistingAssets.end())
 			{
-				Entries.emplace(PortableKey(Key), Value);
+				continue;
 			}
-			LibraryIndex.Entries = std::move(Entries);
+			const auto [It, bInserted] = LibraryProducts.emplace(Key, Target->second.Reference);
+			if (!bInserted && It->second.Id != Id)
+			{
+				throw std::runtime_error("Conflicting import product identity: " + Key);
+			}
 		}
 	}
 }
 
-void FPublication::SaveLibrary()
+FAssetService& FPublication::IndexedAssets()
 {
-	auto Encoded = EncodeAsset(RecordType<FAssetLibraryIndex>(), &LibraryIndex, LibraryHeader);
-	Write(Library / ".asset-library.hasset", Encoded);
-	LibraryHeader = std::move(Encoded.Header);
+	if (!NativeAssets)
+	{
+		auto Assets = std::make_unique<FAssetService>(IO);
+		for (const auto& Importer : Importers)
+		{
+			Assets->Types().Register(*Importer.Type);
+		}
+		Assets->Types().Register<FSceneManifest>();
+		DispatchAsync<bool>(
+		    IO.TaskSystem(), {EDomain::Io},
+		    [&]
+		    {
+			    IndexDiscoveredAssets(*Assets, Library);
+			    return true;
+		    },
+		    Cancellation)
+		    .Get(IO.TaskSystem());
+		NativeAssets = std::move(Assets);
+	}
+	return *NativeAssets;
+}
+
+std::string FPublication::SelectId(const std::string& InKey, const FConvertedAsset& InAsset, bool bInRoot) const
+{
+	if (bInRoot)
+	{
+		return RootId;
+	}
+	if (const auto It = PreviousIds.find(InKey); It != PreviousIds.end() && ExistingAssets.contains(It->second))
+	{
+		return It->second;
+	}
+	if (const auto It = LibraryProducts.find(InKey); It != LibraryProducts.end())
+	{
+		return It->second.Id;
+	}
+	return InAsset.NativeHeader ? InAsset.NativeHeader->Id : CreateIdentifier();
+}
+
+std::filesystem::path FPublication::ProductDestination(std::string_view InId, const FConvertedAsset& InAsset) const
+{
+	if (const auto It = ExistingAssets.find(std::string(InId)); It != ExistingAssets.end())
+	{
+		if (It->second.Reference.TypeId != InAsset.Type->Id)
+		{
+			throw std::runtime_error("Import product changed native type");
+		}
+		return It->second.Path;
+	}
+	return AssetProductPath(*InAsset.Type, InAsset.Object.get(), Library, InId);
 }
 
 void FPublication::AddProducts(const std::filesystem::path& InSource, const FConvertedAsset& InAsset)

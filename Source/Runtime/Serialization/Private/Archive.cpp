@@ -123,6 +123,15 @@ FArchiveNode DecodeArchive(std::span<const std::byte> InBytes, FArchiveLimits In
 	return Decode({InLimits, InBytes, {}, 0, 0, InBytes.size()});
 }
 
+FArchiveNode DecodeArchiveMetadata(std::span<const std::byte> InBytes, std::size_t InTotalBytes,
+                                   FArchiveLimits InLimits)
+{
+	Private::FArchiveReader Reader{InLimits, InBytes, {}, 0, 0, InBytes.size()};
+	Reader.bMetadataOnly = true;
+	Reader.TotalBytes = InTotalBytes;
+	return Decode(std::move(Reader));
+}
+
 FArchiveNode DecodeArchive(std::shared_ptr<const std::vector<std::byte>> InBytes, std::size_t InOffset,
                            FArchiveLimits InLimits)
 {

@@ -50,34 +50,36 @@ void WriteFixture(const std::filesystem::path& InRoot, const std::string& InName
 		std::filesystem::permissions(InRoot / "Other/Scene.hasset", std::filesystem::perms::owner_all);
 	}
 	Files.WriteAtomic(InRoot / "Scene.hasset", SceneBytes.Bytes);
-	Files.WriteAtomic(InRoot / "Other" / "Scene.hasset", SceneBytes.Bytes);
-	Files.WriteAtomic(InRoot / ".assets" / "Internal.hasset", SceneBytes.Bytes);
+	Files.WriteAtomic(InRoot / "Other" / "Scene.hasset", EncodeAsset(RecordType<FSceneManifest>(), &Scene).Bytes);
+	Files.WriteAtomic(InRoot / ".assets" / "Internal.hasset", EncodeAsset(RecordType<FSceneManifest>(), &Scene).Bytes);
 	Files.WriteAtomic(InRoot / ".cache" / "Cache.hasset", SceneBytes.Bytes);
 	Files.WriteAtomic(InRoot / ".git" / "Git.hasset", SceneBytes.Bytes);
 	const auto Primitive = std::filesystem::path(HYP_SOURCE_DIR) / "Content/Models/Primitives" /
 	                       (InName == "A" ? "Cube.hasset" : "Sphere.hasset");
-	Files.WriteAtomic(InRoot / "Model.hasset", Files.Read(Primitive, 16 * 1024 * 1024));
+	const auto NativeModel = ReadValue<FModelAsset>(DecodeAsset(Files.Read(Primitive, 16 * 1024 * 1024)).Object);
+	Files.WriteAtomic(InRoot / "Model.hasset", EncodeAsset(RecordType<FModelAsset>(), &NativeModel).Bytes);
 	std::ofstream(InRoot / "Ignored.json") << "{}";
 	std::ofstream(InRoot / "Broken.hasset") << "not a native asset";
 }
 
 void CheckBrowser(FIOService& InIO)
 {
-	const auto Listing = ReadContentDirectory(*InIO.FileSystem(), "/Game", false);
+	const auto Listing = ReadContentDirectory(*InIO.FileSystem(), "/Game");
 	Check(Listing.Error.empty());
-	Check(Listing.Entries.size() == 6);
-	Check(Listing.Entries.front().bDirectory && Listing.Entries.front().Path == "/Game/Empty");
-	Check(ReadContentDirectory(*InIO.FileSystem(), "/Game/Empty", false).Entries.empty());
-	const auto Scenes = DiscoverContentScenes(InIO, false);
-	Check(Scenes.Paths == std::vector<std::string>{"/Game/Other/Scene.hasset", "/Game/Scene.hasset"});
+	Check(Listing.Entries.size() == 7);
+	Check(Listing.Entries.front().bDirectory && Listing.Entries.front().Path == "/Game/.assets");
+	Check(ReadContentDirectory(*InIO.FileSystem(), "/Game/Empty").Entries.empty());
+	const auto Scenes = DiscoverContentScenes(InIO);
+	Check(Scenes.Paths ==
+	      std::vector<std::string>{"/Game/.assets/Internal.hasset", "/Game/Other/Scene.hasset", "/Game/Scene.hasset"});
 	Check(Scenes.Error.find("Broken.hasset") != std::string::npos);
-	const auto Internal = DiscoverContentScenes(InIO, true);
+	const auto Internal = DiscoverContentScenes(InIO);
 	Check(Internal.Paths.size() == 3);
 	Check(ReadContentHeader(InIO, "/Game/Texture.hasset").TypeId == "hyperion.textureasset");
 	FContentBrowser Browser(InIO);
-	Browser.Refresh(true, false);
+	Browser.Refresh(true);
 	(void)Browser.Directory("/Game");
-	Browser.Refresh(true, true);
+	Browser.Refresh(true);
 	Browser.Stop();
 }
 

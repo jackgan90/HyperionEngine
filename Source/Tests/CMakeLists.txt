@@ -83,6 +83,8 @@ target_compile_definitions(scene_viewer_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_
 set_tests_properties(scene_viewer_controls PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 target_link_libraries(model_tests PRIVATE hyperion_serialization)
 hyp_test(native_asset_tests native_asset_management hyperion_assets Assets/NativeAssetTests.cpp)
+hyp_test(asset_registry_tests native_asset_registry hyperion_assets Assets/AssetRegistryTests.cpp)
+target_link_libraries(asset_registry_tests PRIVATE hyperion_core)
 target_link_libraries(native_asset_tests PRIVATE hyperion_core)
 hyp_test(import_tests async_gltf_import hyperion_asset_import Assets/ImportTests.cpp)
 target_compile_definitions(import_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
@@ -315,6 +317,7 @@ target_compile_definitions(publication_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_S
 set_tests_properties(native_asset_publication PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120)
 
 add_dependencies(hyperion_check native_asset_tests publication_tests hyperion_asset_tool)
+add_dependencies(hyperion_check asset_registry_tests)
 set_tests_properties(native_model_fixtures native_asset_publication PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 
 hyp_test(material_asset_tests material_asset_contracts hyperion_materials Materials/MaterialAssetTests.cpp)
@@ -330,6 +333,9 @@ hyp_test(shared_asset_publication_tests shared_asset_publication hyperion_asset_
 target_compile_definitions(shared_asset_publication_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(shared_asset_publication PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_dependencies(hyperion_check shared_asset_publication_tests)
+
+add_test(NAME native_publication_cli COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/NativePublication.py" $<TARGET_FILE:hyperion_asset_tool> "${PROJECT_SOURCE_DIR}/out/fixtures")
+set_tests_properties(native_publication_cli PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 
 hyp_test(shared_asset_gpu_tests shared_asset_rendering hyperion_render Renderer/SharedAssetGpuTests.cpp)
 target_link_libraries(shared_asset_gpu_tests PRIVATE hyperion_rhi_d3d12)

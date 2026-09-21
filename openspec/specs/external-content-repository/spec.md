@@ -4,22 +4,22 @@
 Define engine and sample content ownership, native distribution through Git LFS, recoverable source recipes and migration acceptance.
 ## Requirements
 ### Requirement: Content ownership and distribution
-The engine SHALL track only engine-essential content under Content, including text shaders and the shared BRDF LUT. HyperionAssets SHALL hold non-engine native content and text shaders, track hasset files through Git LFS and retain provenance and license metadata. Raw downloaded inputs SHALL remain untracked local cache data.
+The engine SHALL track engine-essential Content including text shaders and shared BRDF data. HyperionAssets SHALL contain visible current native assets and supported text shaders, track hassets with Git LFS and retain license metadata. Historical native generations and mandatory management hassets SHALL be removed. Runtime use SHALL not require original inputs or source provenance.
 
 #### Scenario: Native-only distribution
-- **WHEN** external content is checked out with LFS objects available and mounted as Game
-- **THEN** samples load without original glTF, images or HDR/EXR inputs
+- **WHEN** external content is cloned to a different local path with LFS objects and mounted as Game
+- **THEN** all migrated roots and dependencies load without original source assets or persisted catalog/library files
 
 ### Requirement: Recoverable content recipes
-A versioned manifest SHALL record fixed source locations, hashes, import settings, authored recipes and stable logical source identities. Explicit tooling SHALL reconstruct inputs in an ignored cache and publish validated native graphs using AssetTool.
+Sample source recipes SHALL be optional development tooling. When retained, their source identities and publication configuration SHALL be portable and rebuilding SHALL use the same native importer. Arbitrary native-only content roots SHALL not require a manifest.
 
 #### Scenario: Rebuild on another machine
-- **WHEN** the manifest is rebuilt with a different source cache directory
-- **THEN** asset identities remain stable and unchanged inputs do not cause unnecessary native rewrites
+- **WHEN** unchanged sample inputs are available under a different physical source cache
+- **THEN** reimport of mapped existing targets retains their native identities without persisting that cache path
 
 ### Requirement: Migration acceptance
-Migration SHALL verify dependency closure, relocation, source isolation, scene save/reload, text shader compilation and rendering before delivery. Both repositories SHALL remain uncommitted until explicit user authorization to commit.
+Migration SHALL preserve every currently usable public asset and dependency, authored scene edits and valid cross-mount sharing. It SHALL not restore absent historical library entries. Acceptance SHALL verify complete dependency closure, visible single-current identities, source independence, relocation, scene save/reload, shaders and rendering. Migration SHALL not commit either repository without explicit user authorization.
 
 #### Scenario: New structure acceptance
-- **WHEN** legacy asset directories are unavailable and the new mounts are configured
-- **THEN** Sponza and supplied sky/material examples operate with no dependency on the old paths
+- **WHEN** the former .assets and management files are absent
+- **THEN** all migrated content operates from its visible native files and reconstructed registry

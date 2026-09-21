@@ -30,9 +30,9 @@
 
 ## API 与模块
 
-`Runtime/IO` 的 `FMountedFileSystem` 实现 `IFileSystem`，提供 Normalize、Resolve、Read、ReadTree、WriteAtomic、Exists、Enumerate、ListDirectory 和 AcquireWriteLease。ListDirectory 返回直接子文件、目录及逐项诊断，保留空目录并阻止跟随挂载内链接。ReadTree 将递归枚举、扩展名筛选和读取合并，返回文件路径与字节；每个文件独立受读取大小上限约束。目录和链接检查在本次操作内完成，不跨请求缓存文件内容或校验结果，不承诺多个文件的原子快照。`FIOService` 保留 IO 域调度、统计、取消和原子发布能力。实际文件访问在本地后端完成，内存文件系统仍用于独立测试。
+`Runtime/IO` 的 `FMountedFileSystem` 实现 `IFileSystem`，提供 Normalize、Resolve、Read、ReadRange、ReadTree、WriteAtomic、Remove、Exists、Enumerate、ListDirectory 和 AcquireWriteLease。ListDirectory 返回直接子文件、目录及逐项诊断，保留空目录并阻止跟随挂载内链接。ReadTree 将递归枚举、扩展名筛选和读取合并，返回文件路径与字节；每个文件独立受读取大小上限约束。目录和链接检查在本次操作内完成，不跨请求缓存文件内容或校验结果，不承诺多个文件的原子快照。`FIOService` 保留 IO 域调度、统计、取消和原子发布能力。实际文件访问在本地后端完成，内存文件系统仍用于独立测试。
 
-`FAssetService` 在缓存、写入顺序、失效和依赖图处理中使用同一规范路径；`AddCatalog` 合并 Engine/Game catalog，冲突 ID 报错。引用继续检查 ID、类型和固定 Revision。旧相对引用可读；新挂载资产的发布和场景保存使用包路径，搬迁只需修改挂载配置。
+`FAssetService` 在缓存、写入顺序、失效和依赖图处理中使用同一规范路径；启动和换根从文件头重建 Engine/Game 索引，重复 ID 报错，不需要持久化 Catalog。引用检查 ID 和类型；作者保存/导入的引用不固定 Revision。旧相对引用可读；新挂载资产的发布和场景保存使用包路径，搬迁只需修改挂载配置。
 
 源导入、截图、缓存和隔离测试仍可显式使用本地路径。业务资源入口使用 `/Engine/...` 或 `/Game/...`。Scene、Environment 等 CPU 数据模块不依赖 Renderer/RHI。
 
@@ -51,14 +51,14 @@ python tools/PrepareContent.py --assets-root ../HyperionAssets --offline
 python tools/PrepareContent.py --restore-only
 
 ./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json import D:/Sources/Model.glb /Game/Models/Custom.hasset --library /Game --source-root D:/Sources --source-id custom
-./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json validate /Game/Catalog.hasset
+./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json validate-library /Game
 ```
 
-默认源缓存是 `HyperionAssets/.cache/Sources`，可通过 `--cache` 改到其他未跟踪目录。`Metadata/Sources.json` 记录固定来源/哈希、生成器、完整自创配方和发布根。`--source-root` 与 `--source-id` 必须一起提供；逻辑来源 ID 在不同机器上保持不变。保留 `.asset-library.hasset` 以复用既有身份，不把它当作运行时 catalog。依赖先发布到 `.assets/<Id>-<Revision>.hasset`，最后发布根；旧代际不自动删除。
+默认源缓存是 `HyperionAssets/.cache/Sources`，可通过 `--cache` 改到其他未跟踪目录。`Metadata/Sources.json` 记录固定来源/哈希、生成器、完整自创配方和发布根。`--source-root` 与 `--source-id` 必须一起提供；逻辑来源 ID 在不同机器上保持不变。来源记录是可选的，运行时只需要原生资产及文本 Shader。导入映射从现存 hasset 的可选 Import.OutputIds 重建；依赖存放在可见类型目录中，每个 ID 只有一个当前文件，历史由 Git/LFS 管理。
 
-`--source-id` 建议使用与物理位置无关的名称，例如 `custom`。导入会把源根规范为绝对路径及 `/` 分隔符，再以该根加 `/` 作为物理前缀；逻辑 ID 加 `/` 不得包含这个前缀，除非两者完全相等。例如源根为 `D:/Sources` 时，`D:/Sources/logical` 和 `logical/D:/Sources` 会被明确拒绝，避免重导入时反复迁移 key、改变资产身份。`D:/Sources` 这个完全相等的 ID 仍可使用并稳定重导入，但搬迁物理来源时仍须保留该逻辑 ID，通常不如位置无关的名称清晰。此约束不改变既有 library 的持久化格式。
+`--source-id` 是位置无关的逻辑名称，例如 `custom`，不能包含盘符、反斜杠或绝对目录。两项都省略时，导入器使用目标资产 ID 作为逻辑来源空间；同一目标可从另一机器重新选择源文件而保持身份。源文件与资产仓库的本地位置不写入 hasset。跨卷位置提示无法表达为相对路径时，应配置内容挂载或共同的源目录布局。
 
-已有虚拟原生引用在导入时经过依赖图及 ID/Revision 校验后保留。天空的通用 GGX Smith BRDF LUT 位于 `/Engine/Textures/EnvironmentBrdf.hasset`，不会随每个天空重复发布。引擎 LUT 可显式重建：
+已有虚拟原生引用在导入时经过依赖图和身份校验后保留，并清除作者引用的 revision 约束。天空的通用 GGX Smith BRDF LUT 位于 `/Engine/Textures/EnvironmentBrdf.hasset`，不会随每个天空重复发布。引擎 LUT 可显式重建：
 
 ```powershell
 ./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json --authoring build-brdf /Engine/Textures/EnvironmentBrdf.hasset

@@ -11,7 +11,7 @@ void FEditorPlugin::RefreshContent()
 	}
 	ScenePaths.clear();
 	CatalogError.clear();
-	Browser->Refresh(!Context.Require<FContentRootService>().Directory().empty(), bShowInternalAssets);
+	Browser->Refresh(!Context.Require<FContentRootService>().Directory().empty());
 }
 
 void FEditorPlugin::PollContent()
@@ -179,14 +179,6 @@ void FEditorPlugin::DrawSceneBrowser()
 		{
 			RefreshContent();
 		}
-		Gui->SameLine();
-		if (Gui->Checkbox("Show Internal Assets", bShowInternalAssets))
-		{
-			Browser->SelectedDirectory = "/Game";
-			Browser->SelectedFile.clear();
-			RefreshContent();
-		}
-		InternalAssetsBounds = Gui->LastItemBounds();
 		if (Root.empty())
 		{
 			Gui->TextWrapped("Choose an asset root with File > Open...");

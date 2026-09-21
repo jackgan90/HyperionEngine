@@ -88,6 +88,38 @@ FBytes FLocalFileSystem::Read(const std::filesystem::path& InPath, std::size_t I
 	return Bytes;
 }
 
+FBytes FLocalFileSystem::ReadRange(const std::filesystem::path& InPath, std::size_t InOffset, std::size_t InSize)
+{
+	RequireLocalPath(InPath);
+	std::ifstream File(InPath, std::ios::binary | std::ios::ate);
+	if (!File)
+	{
+		throw std::runtime_error("Cannot read file: " + PathToUtf8(InPath));
+	}
+	const auto Size = File.tellg();
+	if (Size < 0 || InOffset > static_cast<std::uint64_t>(Size) || InSize > static_cast<std::uint64_t>(Size) - InOffset)
+	{
+		throw std::runtime_error("Invalid file read range");
+	}
+	FBytes Bytes(InSize);
+	File.seekg(static_cast<std::streamoff>(InOffset));
+	if (!File.read(reinterpret_cast<char*>(Bytes.data()), static_cast<std::streamsize>(InSize)))
+	{
+		throw std::runtime_error("Incomplete file range read");
+	}
+	return Bytes;
+}
+
+void FLocalFileSystem::Remove(const std::filesystem::path& InPath)
+{
+	RequireLocalPath(InPath);
+	if (std::filesystem::is_directory(InPath))
+	{
+		throw std::invalid_argument("Cannot remove a directory as a file");
+	}
+	std::filesystem::remove(InPath);
+}
+
 std::vector<FDirectoryEntry> IFileSystem::ListDirectory(const std::filesystem::path& InDirectory)
 {
 	std::vector<FDirectoryEntry> Result;

@@ -3,7 +3,8 @@ add_library(hyperion_asset_import STATIC
   Private/AssetImportProducts.cpp
   Private/ModelImport.cpp Private/AssetPublication.cpp
   Private/AssetLibrary.cpp
-  Private/AssetPublicationChecks.cpp Private/AssetPublicationGraph.cpp
+  Private/AssetPublicationProducts.cpp
+  Private/AssetPublicationChecks.cpp Private/AssetPublicationGraph.cpp Private/AssetPublicationCommit.cpp
   Private/Adapters/AssetSourceJson.cpp Private/Adapters/SceneJson.cpp Private/Adapters/SkyImport.cpp Private/Adapters/GltfPrimitive.cpp
   Private/Adapters/GltfImport.cpp Private/Adapters/GltfImportInternal.h
   Private/Adapters/GltfAccessors.cpp Private/Adapters/GltfMaterials.cpp

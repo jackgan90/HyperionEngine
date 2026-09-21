@@ -11,8 +11,13 @@ void RebaseReference(FAssetRef& InReference, FAssetService& InAssets, const std:
                      const std::filesystem::path& InDestination)
 {
 	const auto Target = InAssets.Resolve(InReference, InSource);
+	InReference.Revision.clear();
 	const auto Relative = Target.lexically_relative(InDestination.parent_path());
-	const auto Text = (IsPackagePath(Target) || Relative.empty() ? Target : Relative).generic_u8string();
+	if (!IsPackagePath(Target) && Relative.empty())
+	{
+		throw std::runtime_error("Scene reference cannot be made portable; configure content mounts");
+	}
+	const auto Text = (IsPackagePath(Target) ? Target : Relative).generic_u8string();
 	InReference.Path.assign(reinterpret_cast<const char*>(Text.data()), Text.size());
 }
 

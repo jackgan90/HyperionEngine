@@ -13,7 +13,17 @@ std::string ImportPathString(const std::filesystem::path& InPath)
 
 std::string ImportRelativePath(const std::filesystem::path& InPath, const std::filesystem::path& InBase)
 {
-	return PathRelativeToUtf8(InPath, InBase);
+	if (IsPackagePath(InPath))
+	{
+		return PathToUtf8(InPath);
+	}
+	const auto Relative = InPath.lexically_relative(InBase);
+	if (Relative.empty() || Relative.is_absolute())
+	{
+		throw std::runtime_error(
+		    "Import path cannot be made portable; use a logical content mount or common source root");
+	}
+	return PathToUtf8(Relative);
 }
 
 std::filesystem::path ImportPath(const std::filesystem::path& InPath)

@@ -409,7 +409,6 @@ private:
 	std::string AssetMessage;
 	bool bAssetMessage{};
 	bool bRequestAssetMessage{};
-	bool bShowInternalAssets{};
 	bool bRevealContentTree{};
 	bool bRequestRootDialog{};
 	std::filesystem::path RequestedRoot;
@@ -423,7 +422,6 @@ private:
 	FVec4 DiscardTitleBounds;
 	std::shared_ptr<std::binary_semaphore> ContentSaveGate;
 	std::map<std::string, FVec4> ContentTileBounds;
-	FVec4 InternalAssetsBounds;
 	FVec4 ContentClickBounds;
 	std::string CurrentPath;
 	std::string Error;

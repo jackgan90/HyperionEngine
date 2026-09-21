@@ -8,7 +8,7 @@ namespace
 {
 FAssetRef LoadedReference(const FLoadedAsset& InAsset)
 {
-	return {InAsset.Header.Id, PathToUtf8(InAsset.Path), InAsset.Header.TypeId, InAsset.Header.Revision};
+	return {InAsset.Header.Id, PathToUtf8(InAsset.Path), InAsset.Header.TypeId, {}};
 }
 
 void LoadValueTextures(const FSceneMaterialAsset& InSelection, const std::filesystem::path& InContaining,

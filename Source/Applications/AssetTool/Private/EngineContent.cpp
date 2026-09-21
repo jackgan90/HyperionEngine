@@ -17,7 +17,7 @@ FAssetRef Publish(FIOService& InIO, const std::string& InPath, const T& InValue,
 	Header.Id = InId;
 	const auto Encoded = EncodeAsset(RecordType<T>(), &InValue, Header);
 	InIO.WriteAsync(InPath, Encoded.Bytes).Get(InIO.TaskSystem());
-	return {Encoded.Header.Id, InPath, Encoded.Header.TypeId, Encoded.Header.Revision};
+	return {Encoded.Header.Id, InPath, Encoded.Header.TypeId, {}};
 }
 
 FAssetRef BuildDefaultMaterial(FIOService& InIO)

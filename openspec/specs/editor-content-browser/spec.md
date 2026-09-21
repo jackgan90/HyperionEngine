@@ -35,11 +35,11 @@ Content Browser SHALL show a left directory tree rooted at `/Game` and a resizab
 - **AND** tile names are horizontally centered beneath their icons, including each wrapped line of a long name
 
 ### Requirement: Internal asset visibility
-Editor SHALL hide `.assets`, `.asset-library.hasset` and `Catalog.hasset` by default and expose them through Show Internal Assets. `.git` and `.cache` subtrees SHALL always be excluded from browsing and scene discovery. Visibility SHALL not restrict dependency loading.
+Editor SHALL show all native project assets by default without an internal-assets toggle. Git, source caches and publication temporaries SHALL be excluded from browsing and scene discovery. Asset classification SHALL continue to use stored TypeId; unsupported editors SHALL report controlled messages without disturbing the scene.
 
-#### Scenario: Toggle internal assets
-- **WHEN** Show Internal Assets is enabled
-- **THEN** published dependencies and management hassets become visible but Git/source cache directories remain excluded
+#### Scenario: Browse native dependencies
+- **WHEN** a migrated project contains model, material, texture, sky and scene hassets
+- **THEN** all files are browsable without an opt-in visibility setting and Git/cache folders remain excluded
 
 ### Requirement: User-facing content paths
 All editor asset-path presentation, including status/loading/saved messages, error dialogs, Open Scene, Save Scene As, tooltips and Details asset references, SHALL display paths relative to the asset root without the `/Game/` prefix. Content Browser SHALL label its root `All` and display child breadcrumbs under `All`. Editable asset paths SHALL resolve relative input against the active asset root, including after clearing a field. Asset resolution, widget identity and persisted references SHALL retain their internal package paths; native absolute paths and other virtual mounts SHALL retain their meaning.

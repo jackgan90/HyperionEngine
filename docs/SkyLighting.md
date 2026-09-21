@@ -41,7 +41,7 @@ HDR/EXR can be imported directly with default settings, or through a tracked sou
 }
 ```
 
-`source` resolves relative to the descriptor. Source bytes, settings and importer revision participate in incremental import. Runtime Viewer loads only `.hasset` files and their pinned dependencies; it does not link AssetImport or read HDR/EXR sources. Catalog generation includes all three shipped skies. Keep the generated dependency library with the sky root when copying content.
+`source` resolves relative to the descriptor. Source bytes, settings and importer revision participate in incremental import. Runtime Viewer loads only `.hasset` files and their current shared dependencies; it does not link AssetImport or read HDR/EXR sources. Asset discovery rebuilds the registry from native metadata. Copy the sky and its referenced native textures together; catalog and import-library files are not required.
 
 Input is a 2:1 equirectangular Radiance `.hdr` or ordinary RGB OpenEXR image (optional alpha). Decoding uses the existing private stb_image/TinyEXR adapters. RGB values are scene-linear, assumed to use linear sRGB/Rec.709 primaries; EXR chromaticities, arbitrary layered channels, multipart/deep images, camera exposure metadata and other panorama projections are not color-managed or converted. Alpha does not control sky coverage. Negative, non-finite or RGB values above `1e20` are rejected, rather than tone-mapped into the bake. Encoded input is bounded to 256 MiB and decoded RGBA to 512 MiB.
 

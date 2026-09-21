@@ -80,16 +80,13 @@ def main():
     tool = args.tool.resolve()
     if not (ROOT / "Content/Textures/EnvironmentBrdf.hasset").is_file():
         run_tool(tool, mounts, "--authoring", "build-brdf", "/Engine/Textures/EnvironmentBrdf.hasset")
-    outputs = []
     for entry in manifest["outputs"]:
         output = "/Game/" + entry["path"]
         options = ["--library", "/Game", "--source-root", str(cache), "--source-id", manifest["source_id"]]
         if args.force:
             options.append("--force")
         run_tool(tool, mounts, "import", contained(cache, entry["source"]), output, *options)
-        outputs.append(output)
-    run_tool(tool, mounts, "catalog", "/Game/Catalog.hasset", *outputs)
-    run_tool(tool, mounts, "validate", "/Game/Catalog.hasset")
+    run_tool(tool, mounts, "validate-library", "/Game")
 
 
 if __name__ == "__main__":

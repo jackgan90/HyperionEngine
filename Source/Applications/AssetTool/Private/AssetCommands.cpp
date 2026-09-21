@@ -3,7 +3,9 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/Path.h"
+#include "NativeMigration.h"
 #include <set>
 
 namespace Hyperion
@@ -110,6 +112,7 @@ void ExportJson(std::span<const std::string_view> InArguments, FAssetService& In
 		throw std::invalid_argument("export-json INPUT.hasset OUTPUT.json");
 	}
 	const auto Asset = InAssets.LoadAsync(PathFromUtf8(InArguments[1])).Get(InIO.TaskSystem());
+	IndexDiscoveredAssets(InAssets, Asset->Path.parent_path());
 	const auto Output = InAssets.NormalizePath(PathFromUtf8(InArguments[2]));
 	auto Object = ReadRecord(*Asset->Type, WriteRecord(*Asset->Type, Asset->Object.get()));
 	VisitRecord(*Asset->Type, Object.get(),
@@ -142,6 +145,7 @@ void Catalog(std::span<const std::string_view> InArguments, FAssetService& InAss
 	std::map<std::string, FAssetRef> Unique;
 	for (std::size_t Index = 2; Index < InArguments.size(); ++Index)
 	{
+		IndexDiscoveredAssets(InAssets, InAssets.NormalizePath(PathFromUtf8(InArguments[Index])).parent_path());
 		const auto Graph = Validate(InAssets, InTasks, PathFromUtf8(InArguments[Index]));
 		for (const auto& [AssetPath, Asset] : Graph->Assets)
 		{
@@ -174,6 +178,8 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		         << "hyperion_asset_tool --authoring build-placement\n"
 		         << "hyperion_asset_tool upgrade LEGACY.hasset OUTPUT.hasset\n"
 		         << "hyperion_asset_tool inspect|validate ROOT.hasset\n"
+		         << "hyperion_asset_tool validate-library ROOT\n"
+		         << "hyperion_asset_tool --mounts CONFIG.json migrate-library /Game EMPTY_STAGING_DIRECTORY\n"
 		         << "hyperion_asset_tool export-json INPUT.hasset OUTPUT.json\n"
 		         << "hyperion_asset_tool export-envelope INPUT.hasset OUTPUT.json\n"
 		         << "hyperion_asset_tool measure-source SOURCE.gltf|SOURCE.glb\n"
@@ -181,6 +187,16 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		return;
 	}
 	const auto Command = InArguments[0];
+	if (Command == "migrate-library" && InArguments.size() == 3)
+	{
+		MigrateNativeLibrary(InIO, PathFromUtf8(InArguments[1]), PathFromUtf8(InArguments[2]), InOutput);
+		return;
+	}
+	if (Command == "validate-library" && InArguments.size() == 2)
+	{
+		ValidateNativeLibrary(InIO, PathFromUtf8(InArguments[1]), InOutput);
+		return;
+	}
 	if (Command == "build-placement" && InArguments.size() == 1)
 	{
 		BuildEnginePlacementContent(InIO, InOutput);
@@ -233,6 +249,7 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	}
 	else if ((Command == "inspect" || Command == "validate") && InArguments.size() == 2)
 	{
+		IndexDiscoveredAssets(Assets, Assets.NormalizePath(PathFromUtf8(InArguments[1])).parent_path());
 		const auto Graph = Validate(Assets, InIO.TaskSystem(), PathFromUtf8(InArguments[1]));
 		Inspect(*Graph->Root, InOutput);
 		InOutput << "Validated native graph: " << Graph->Assets.size() << " assets\n";

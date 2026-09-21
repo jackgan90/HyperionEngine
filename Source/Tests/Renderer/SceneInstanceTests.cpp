@@ -452,6 +452,11 @@ void CheckPendingMaterialCopies(FSceneFixture& InFixture)
 
 		std::cout << "Pending copy case=" << Case << " stage=wait-gate\n";
 		Scene.Load(ManifestPath);
+		if (Case == 1)
+		{
+			// Load refreshes native inputs. Prime this case after that boundary, before blocking selected-material IO.
+			F.Assets.LoadGraphAsync("SceneRuntime.model.hasset").Get(F.Tasks);
+		}
 		Await(Scene,
 		      [&]
 		      {
@@ -503,6 +508,41 @@ void CheckPendingMaterialCopies(FSceneFixture& InFixture)
 		Scene.Close();
 	}
 	F.Files->GateName = "SceneRuntime.model.hasset";
+}
+
+void CheckCurrentAssetReload(FSceneFixture& InFixture)
+{
+	auto& F = InFixture;
+	F.Files->bRelease = true;
+	const auto Model = F.Assets.LoadAsync<FModelAsset>("SceneRuntime.model.hasset").GetAsset(F.Tasks);
+	FSceneManifest Manifest;
+	Manifest.Assets.push_back({"model", {Model->Header.Id, "SceneRuntime.model.hasset", Model->Header.TypeId, ""}});
+	FSceneNodeEntry Node;
+	Node.Id = "model";
+	Node.Model = FSceneNodeModel{"model"};
+	Manifest.Nodes.push_back(Node);
+	F.Assets.SaveAsync("CurrentReload.hasset", std::make_shared<const FSceneManifest>(Manifest)).Get(F.Tasks);
+	const auto SceneBytes = F.IO.ReadAsync("CurrentReload.hasset").Get(F.Tasks);
+	FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
+	Scene.Load("CurrentReload.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	const auto Held = Scene.GetAssets()[0].Data;
+	auto Edited = *Model->As<FModelAsset>();
+	Edited.Name = "Current shared model";
+	F.Assets.SaveAsync("SceneRuntime.model.hasset", std::make_shared<const FModelAsset>(Edited)).Get(F.Tasks);
+	Scene.Load("CurrentReload.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	HYP_CHECK(Scene.GetAssets()[0].Data->Asset->Name == Edited.Name);
+	HYP_CHECK(Held->Asset->Name != Edited.Name);
+	HYP_CHECK(*F.IO.ReadAsync("CurrentReload.hasset").Get(F.Tasks) == *SceneBytes);
 }
 
 void CheckNodeOnlySnapshot(FSceneFixture& InFixture)
@@ -1229,6 +1269,7 @@ int main()
 		CheckClosePending(Fixture);
 		CheckPendingMaterialEdits(Fixture);
 		CheckPendingMaterialCopies(Fixture);
+		CheckCurrentAssetReload(Fixture);
 		CheckNodeOnlySnapshot(Fixture);
 		CheckRegisteredAssets(Fixture);
 		CheckRegistrationWithUnresolvedAsset(Fixture);

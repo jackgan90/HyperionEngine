@@ -19,9 +19,9 @@ struct FContentScenes
 };
 
 std::string ContentRelativePath(std::string_view InPath);
-bool IsBrowserEntry(const FDirectoryEntry& InEntry, bool bInInternal);
-FContentDirectory ReadContentDirectory(IFileSystem& InFiles, const std::filesystem::path& InPath, bool bInInternal);
-FContentScenes DiscoverContentScenes(FIOService& InIO, bool bInInternal, FCancellationToken InCancellation = {});
+bool IsBrowserEntry(const FDirectoryEntry& InEntry);
+FContentDirectory ReadContentDirectory(IFileSystem& InFiles, const std::filesystem::path& InPath);
+FContentScenes DiscoverContentScenes(FIOService& InIO, FCancellationToken InCancellation = {});
 FAssetHeader ReadContentHeader(FIOService& InIO, const std::filesystem::path& InPath,
                                FCancellationToken InCancellation = {});
 
@@ -33,7 +33,7 @@ public:
 	}
 
 	~FContentBrowser();
-	void Refresh(bool bInMounted, bool bInInternal);
+	void Refresh(bool bInMounted);
 	void Stop();
 	void Navigate(const std::string& InPath);
 	const FContentDirectory* Directory(const std::string& InPath);
@@ -50,7 +50,6 @@ public:
 private:
 	FIOService& IO;
 	FCancellationToken Cancellation;
-	bool bInternal{};
 	bool bMounted{};
 	std::map<std::string, TAsyncResult<FContentDirectory>> Directories;
 	std::optional<TAsyncResult<FContentScenes>> Scenes;

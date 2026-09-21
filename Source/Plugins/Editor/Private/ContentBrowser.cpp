@@ -1,4 +1,5 @@
 #include "ContentBrowser.h"
+#include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/Path.h"
 #include <algorithm>
 #include <cctype>
@@ -27,28 +28,24 @@ std::string ContentRelativePath(std::string_view InPath)
 	return std::string(InPath.starts_with("/Game/") ? InPath.substr(6) : InPath);
 }
 
-bool IsBrowserEntry(const FDirectoryEntry& InEntry, bool bInInternal)
+bool IsBrowserEntry(const FDirectoryEntry& InEntry)
 {
 	const auto Name = FoldName(PathToUtf8(InEntry.Path.filename()));
-	if (Name == ".git" || Name == ".cache")
-	{
-		return false;
-	}
-	if (!bInInternal && (Name == ".assets" || Name == ".asset-library.hasset" || Name == "catalog.hasset"))
+	if (Name == ".git" || Name == ".cache" || Name.starts_with(".publish-"))
 	{
 		return false;
 	}
 	return InEntry.bDirectory || !InEntry.Error.empty() || FoldName(PathToUtf8(InEntry.Path.extension())) == ".hasset";
 }
 
-FContentDirectory ReadContentDirectory(IFileSystem& InFiles, const std::filesystem::path& InPath, bool bInInternal)
+FContentDirectory ReadContentDirectory(IFileSystem& InFiles, const std::filesystem::path& InPath)
 {
 	FContentDirectory Result;
 	try
 	{
 		for (auto Entry : InFiles.ListDirectory(InPath))
 		{
-			if (!IsBrowserEntry(Entry, bInInternal))
+			if (!IsBrowserEntry(Entry))
 			{
 				continue;
 			}
@@ -78,12 +75,17 @@ FContentDirectory ReadContentDirectory(IFileSystem& InFiles, const std::filesyst
 
 FAssetHeader ReadContentHeader(FIOService& InIO, const std::filesystem::path& InPath, FCancellationToken InCancellation)
 {
-	const auto Bytes = InIO.ReadAsync(InPath, InCancellation).Get(InIO.TaskSystem());
-	InCancellation.Check();
-	return DecodeAsset(Bytes).Header;
+	return *DispatchAsync<FAssetHeader>(
+	            InIO.TaskSystem(), {EDomain::Io},
+	            [Files = InIO.FileSystem(), InPath]
+	            {
+		            return ReadAssetHeader(*Files, InPath);
+	            },
+	            InCancellation)
+	            .Get(InIO.TaskSystem());
 }
 
-FContentScenes DiscoverContentScenes(FIOService& InIO, bool bInInternal, FCancellationToken InCancellation)
+FContentScenes DiscoverContentScenes(FIOService& InIO, FCancellationToken InCancellation)
 {
 	FContentScenes Result;
 	std::vector<std::filesystem::path> Pending{"/Game"};
@@ -94,9 +96,9 @@ FContentScenes DiscoverContentScenes(FIOService& InIO, bool bInInternal, FCancel
 		Pending.pop_back();
 		const auto Listing = DispatchAsync<FContentDirectory>(
 		    InIO.TaskSystem(), {EDomain::Io},
-		    [Files = InIO.FileSystem(), Path, bInInternal]
+		    [Files = InIO.FileSystem(), Path]
 		    {
-			    return ReadContentDirectory(*Files, Path, bInInternal);
+			    return ReadContentDirectory(*Files, Path);
 		    },
 		    InCancellation);
 		const auto Directory = *Listing.Get(InIO.TaskSystem());
@@ -167,19 +169,18 @@ void FContentBrowser::Stop()
 	bMounted = false;
 }
 
-void FContentBrowser::Refresh(bool bInMounted, bool bInInternal)
+void FContentBrowser::Refresh(bool bInMounted)
 {
 	Stop();
 	Cancellation = {};
 	bMounted = bInMounted;
-	bInternal = bInInternal;
 	if (bMounted)
 	{
 		Scenes = DispatchAsync<FContentScenes>(
 		    IO.TaskSystem(), {EDomain::Worker},
-		    [Service = &IO, bInInternal, Token = Cancellation]
+		    [Service = &IO, Token = Cancellation]
 		    {
-			    return DiscoverContentScenes(*Service, bInInternal, Token);
+			    return DiscoverContentScenes(*Service, Token);
 		    },
 		    Cancellation);
 	}
@@ -198,9 +199,9 @@ const FContentDirectory* FContentBrowser::Directory(const std::string& InPath)
 	}
 	Directories.emplace(InPath, DispatchAsync<FContentDirectory>(
 	                                IO.TaskSystem(), {EDomain::Io},
-	                                [Files = IO.FileSystem(), Path = PathFromUtf8(InPath), bShowInternal = bInternal]
+	                                [Files = IO.FileSystem(), Path = PathFromUtf8(InPath)]
 	                                {
-		                                return ReadContentDirectory(*Files, Path, bShowInternal);
+		                                return ReadContentDirectory(*Files, Path);
 	                                },
 	                                Cancellation));
 	return nullptr;

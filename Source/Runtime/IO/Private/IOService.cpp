@@ -5,6 +5,47 @@
 
 namespace Hyperion
 {
+FBytes IFileSystem::ReadRange(const std::filesystem::path& InPath, std::size_t InOffset, std::size_t InSize)
+{
+	const auto Bytes = Read(InPath, 512u * 1024u * 1024u);
+	if (InOffset > Bytes.size() || InSize > Bytes.size() - InOffset)
+	{
+		throw std::runtime_error("Invalid file read range");
+	}
+	return {Bytes.begin() + InOffset, Bytes.begin() + InOffset + InSize};
+}
+
+void IFileSystem::Remove(const std::filesystem::path&)
+{
+	throw std::logic_error("Storage backend does not support file removal");
+}
+
+void FMemoryFileSystem::Remove(const std::filesystem::path& InPath)
+{
+	std::lock_guard Lock(Mutex);
+	Files.erase(InPath.lexically_normal());
+}
+
+std::vector<FDirectoryEntry> FMemoryFileSystem::ListDirectory(const std::filesystem::path& InDirectory)
+{
+	std::lock_guard Lock(Mutex);
+	std::map<std::filesystem::path, bool> Entries;
+	for (const auto& [Path, Bytes] : Files)
+	{
+		const auto Relative = Path.lexically_relative(InDirectory);
+		if (!Relative.empty() && *Relative.begin() != ".." && Relative != ".")
+		{
+			Entries[InDirectory / *Relative.begin()] = Relative.has_parent_path();
+		}
+	}
+	std::vector<FDirectoryEntry> Result;
+	for (const auto& [Path, bDirectory] : Entries)
+	{
+		Result.push_back({Path, bDirectory});
+	}
+	return Result;
+}
+
 std::vector<FFileContents> IFileSystem::ReadTree(const std::filesystem::path& InDirectory,
                                                  std::span<const std::string_view> InExtensions, std::size_t InLimit)
 {

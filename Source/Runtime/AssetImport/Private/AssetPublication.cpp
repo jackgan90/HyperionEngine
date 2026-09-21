@@ -79,17 +79,15 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	{
 		throw std::invalid_argument("Source root and source ID must be supplied together");
 	}
-	const auto Prefix = ImportPathString(Publication.SourceRoot) + "/";
-	const auto Replacement = Publication.SourceId + "/";
-	if (!Publication.SourceRoot.empty() && Replacement != Prefix && Replacement.find(Prefix) != std::string::npos)
+	if (Publication.SourceId.find(':') != std::string::npos || Publication.SourceId.find('\\') != std::string::npos ||
+	    Publication.SourceId.starts_with('/') || Publication.SourceId.find("..") != std::string::npos)
 	{
-		// Such keys cannot be distinguished from physical keys when loading legacy libraries.
-		throw std::invalid_argument("Source ID must not embed the source root prefix");
+		throw std::invalid_argument("Source ID must be a portable logical name");
 	}
 	const auto LibraryLease =
-	    IO.AcquireWriteLeaseAsync(Publication.Library / ".asset-library.hasset", Cancellation).Get(IO.TaskSystem());
-	Publication.LoadLibrary();
+	    IO.AcquireWriteLeaseAsync(Publication.Library / ".publish-library", Cancellation).Get(IO.TaskSystem());
 	Publication.Prepare(InOptions);
+	Publication.LoadLibrary();
 	if (!InOptions.bForce && Publication.IsCurrent())
 	{
 		return {Publication.Previous->Header, InOutput, 0, true};
@@ -121,6 +119,7 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 		Converted.Object = std::move(Model);
 	}
 	Publication.Build(InSource, Converted, true);
+	Publication.Commit();
 	return {Publication.Root->Header, InOutput, Publication.Written, false};
 }
 } // namespace Hyperion

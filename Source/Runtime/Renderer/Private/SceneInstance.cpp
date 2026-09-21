@@ -53,6 +53,7 @@ void FSceneInstance::Load(const std::filesystem::path& InPath)
 	P.Status = {};
 	P.bModelStatusDirty = true;
 	P.Path = P.Assets.NormalizePath(InPath);
+	P.Assets.ClearCache();
 	P.ManifestRequest = P.Assets.LoadAsync<FSceneManifest>(P.Path);
 }
 

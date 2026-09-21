@@ -2,6 +2,7 @@
 #include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
@@ -32,7 +33,7 @@ struct FFixture
 	FIOService IO{Tasks};
 	FAssetImportService Imports{IO};
 	FAssetService Assets{IO};
-	std::filesystem::path Directory = std::filesystem::absolute("shared-publication");
+	std::filesystem::path Directory = std::filesystem::absolute("shared-publication-current") / CreateIdentifier();
 	FAssetImportOptions Options;
 
 	FFixture()
@@ -95,18 +96,20 @@ void CheckSharedLibrary(FFixture& InFixture)
 	F.IO.WriteAsync(F.Directory / "Checker.png", EncodePng(White)).Get(F.Tasks);
 	const auto Changed =
 	    F.Imports.ImportAsync(F.Directory / "Showcase.gltf", F.Directory / "one/Model.hasset", F.Options).Get(F.Tasks);
-	HYP_CHECK(Changed->Header.Id == A->Header.Id && Changed->Header.Revision != A->Header.Revision);
-	const auto OldGraph = F.Assets.LoadGraphAsync(F.Directory / "one/Old.hasset").Get(F.Tasks);
-	HYP_CHECK(OldGraph->Failures.empty() && TextureReferences(*OldGraph) == Textures);
-	F.Assets.Invalidate(F.Directory / "one/Model.hasset");
+	HYP_CHECK(Changed->Header.Id == A->Header.Id && Changed->Header.Revision == A->Header.Revision);
+	HYP_CHECK(TextureReferences(*GraphA) == Textures); // Held snapshots retain the old content.
+	F.Assets.ClearCache();
 	const auto NewGraph = F.Assets.LoadGraphAsync(F.Directory / "one/Model.hasset").Get(F.Tasks);
 	const auto NewTextures = TextureReferences(*NewGraph);
 	HYP_CHECK(NewTextures.at("Checker.png").Id == Textures.at("Checker.png").Id);
 	HYP_CHECK(NewTextures.at("Checker.png").Revision != Textures.at("Checker.png").Revision);
+	const auto OtherGraph = F.Assets.LoadGraphAsync(F.Directory / "two/Model.hasset").Get(F.Tasks);
+	HYP_CHECK(TextureReferences(*OtherGraph) == NewTextures);
+	HYP_CHECK(!F.IO.FileSystem()->Exists(F.Options.Library / ".asset-library.hasset"));
 	// A held library lease prevents publication through another service.
 	FAssetImportService Other(F.IO);
 	RegisterGltfImporter(Other);
-	const auto Lease = F.IO.AcquireWriteLeaseAsync(F.Options.Library / ".asset-library.hasset").Get(F.Tasks);
+	const auto Lease = F.IO.AcquireWriteLeaseAsync(F.Options.Library / ".publish-library").Get(F.Tasks);
 	Rejects(
 	    [&]
 	    {
@@ -114,41 +117,38 @@ void CheckSharedLibrary(FFixture& InFixture)
 	    });
 }
 
-void CheckPinnedGenerations(FFixture& InFixture)
+void CheckCurrentParents(FFixture& InFixture)
 {
 	auto& F = InFixture;
-	const auto Old = F.Assets.LoadGraphAsync(F.Directory / "one/Old.hasset").Get(F.Tasks);
-	const auto New = F.Assets.LoadGraphAsync(F.Directory / "one/Model.hasset").Get(F.Tasks);
+	const auto ModelPath = F.Directory / "one/Model.hasset";
+	const auto Loaded = F.Assets.LoadAsync<FModelAsset>(ModelPath).GetAsset(F.Tasks);
 	FSceneManifest Scene;
-	for (const auto& Entry : {std::pair{"old", Old}, std::pair{"new", New}})
+	Scene.Assets.push_back(
+	    {"model", {Loaded->Header.Id, "one/Model.hasset", Loaded->Header.TypeId, Loaded->Header.Revision}});
+	FSceneNodeEntry Node;
+	Node.Id = "model";
+	Node.Model = FSceneNodeModel{"model"};
+	Scene.Nodes.push_back(Node);
+	for (const auto* Name : {"ParentA.hasset", "ParentB.hasset"})
 	{
-		const auto& Header = Entry.second->Root->Header;
-		Scene.Assets.push_back(
-		    {Entry.first,
-		     {Header.Id, std::string("one/") + (Entry.first == std::string_view("old") ? "Old.hasset" : "Model.hasset"),
-		      Header.TypeId, Header.Revision}});
-		FSceneNodeEntry Node;
-		Node.Id = Entry.first;
-		Node.Model = FSceneNodeModel{Entry.first};
-		Scene.Nodes.push_back(std::move(Node));
+		F.Assets.SaveAsync(F.Directory / Name, std::make_shared<const FSceneManifest>(Scene)).Get(F.Tasks);
 	}
-	const auto Source = F.Directory / "MixedGenerations.source.hasset";
-	F.IO.WriteAsync(Source, EncodeAsset(RecordType<FSceneManifest>(), &Scene).Bytes).Get(F.Tasks);
-	const auto Output = F.Directory / "MixedGenerations.hasset";
-	F.Imports.ImportAsync(Source, Output, F.Options).Get(F.Tasks);
-	const auto Graph = F.Assets.LoadGraphAsync(Output).Get(F.Tasks);
-	HYP_CHECK(Graph->Failures.empty());
-	std::map<std::string, std::set<std::string>> Revisions;
-	for (const auto& [Path, Asset] : Graph->Assets)
+	const auto BeforeA = F.IO.ReadAsync(F.Directory / "ParentA.hasset").Get(F.Tasks);
+	const auto BeforeB = F.IO.ReadAsync(F.Directory / "ParentB.hasset").Get(F.Tasks);
+	auto Edited = *Loaded->As<FModelAsset>();
+	Edited.Name = "Edited shared model";
+	F.Assets.SaveAsync(ModelPath, std::make_shared<const FModelAsset>(Edited)).Get(F.Tasks);
+	F.Assets.ClearCache();
+	for (const auto* Name : {"ParentA.hasset", "ParentB.hasset"})
 	{
-		Revisions[Asset->Header.Id].insert(Asset->Header.Revision);
+		const auto Graph = F.Assets.LoadGraphAsync(F.Directory / Name).Get(F.Tasks);
+		HYP_CHECK(Graph->Failures.empty());
+		HYP_CHECK(Graph->Root->Header.Dependencies.front().Reference.Revision.empty());
+		HYP_CHECK(Graph->Assets.at(ModelPath)->As<FModelAsset>()->Name == Edited.Name);
 	}
-	const auto MaterialId = Old->Root->As<FModelAsset>()->MaterialSlots[0].Id;
-	HYP_CHECK(Revisions.at(MaterialId).size() == 2);
-	const auto TextureId = TextureReferences(*Old).at("Checker.png").Id;
-	HYP_CHECK(Revisions.at(TextureId).size() == 2);
-	HYP_CHECK(F.Imports.ImportAsync(Source, Output, F.Options).Get(F.Tasks)->bUpToDate);
-	std::cout << "Pinned material/texture generations coexist in one published scene\n";
+	HYP_CHECK(*F.IO.ReadAsync(F.Directory / "ParentA.hasset").Get(F.Tasks) == *BeforeA);
+	HYP_CHECK(*F.IO.ReadAsync(F.Directory / "ParentB.hasset").Get(F.Tasks) == *BeforeB);
+	HYP_CHECK(Loaded->As<FModelAsset>()->Name != Edited.Name);
 }
 
 void CheckSourceProductConflict(FFixture& InFixture)
@@ -174,8 +174,9 @@ void CheckSourceProductConflict(FFixture& InFixture)
 			                  Parameter.Name = Name;
 			                  Parameter.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
 			                  Description.Parameters.push_back(Parameter);
-			                  auto Texture = std::make_shared<const FTextureAsset>(BuildTextureAsset(
-			                      Name, EMaterialTextureEncoding::Linear, {1, 1, {255, 255, 255, 255}}));
+			                  auto Texture = std::make_shared<const FTextureAsset>(
+			                      BuildTextureAsset(Name, EMaterialTextureEncoding::Linear,
+			                                        {1, 1, {static_cast<std::uint8_t>(Name[0]), 255, 255, 255}}));
 			                  FMaterialAssetValue Value;
 			                  Value.Type = Parameter.Type;
 			                  Value.Texture = InContext.Emit(
@@ -246,7 +247,7 @@ void CheckLegacyAndVariants(FFixture& InFixture)
 	F.IO.WriteAsync(Output, Legacy.Bytes).Get(F.Tasks);
 	const auto Upgraded = F.Imports.ImportAsync(Path, Output, F.Options).Get(F.Tasks);
 	HYP_CHECK(Upgraded->Header.Id == Legacy.Header.Id && Upgraded->Header.SchemaVersion == 3);
-	F.Assets.Invalidate(Output);
+	F.Assets.ClearCache();
 	const auto Graph = F.Assets.LoadGraphAsync(Output).Get(F.Tasks);
 	HYP_CHECK(Graph->Failures.empty());
 	HYP_CHECK(Graph->Root->As<FModelAsset>()->Primitives[0].Positions == Source->Primitives[0].Positions);
@@ -295,8 +296,6 @@ void CheckRejectedSourceIds(FFixture& InFixture, const std::filesystem::path& In
                             const std::filesystem::path& InOutput, FAssetImportOptions InOptions)
 {
 	const auto Previous = InFixture.IO.ReadAsync(InOutput).Get(InFixture.Tasks);
-	const auto LibraryPath = InOptions.Library / ".asset-library.hasset";
-	const auto Library = InFixture.IO.ReadAsync(LibraryPath).Get(InFixture.Tasks);
 	const auto Root = PathToUtf8(InOptions.SourceRoot);
 	for (const auto& SourceId : {Root + "/nested", "logical/" + Root})
 	{
@@ -309,11 +308,10 @@ void CheckRejectedSourceIds(FFixture& InFixture, const std::filesystem::path& In
 		catch (const std::invalid_argument& Error)
 		{
 			bRejected =
-			    std::string(Error.what()).find("Source ID must not embed the source root prefix") != std::string::npos;
+			    std::string(Error.what()).find("Source ID must be a portable logical name") != std::string::npos;
 		}
 		HYP_CHECK(bRejected);
 		HYP_CHECK(*InFixture.IO.ReadAsync(InOutput).Get(InFixture.Tasks) == *Previous);
-		HYP_CHECK(*InFixture.IO.ReadAsync(LibraryPath).Get(InFixture.Tasks) == *Library);
 	}
 }
 
@@ -330,8 +328,8 @@ void CheckPortableSourceIds(FFixture& InFixture)
 		}
 		FAssetImportOptions Options;
 		Options.Library = Directory / "library";
-		Options.SourceRoot = Directory;
-		Options.SourceId = bEqualRoot ? PathToUtf8(Directory) : "stable-test-source";
+		Options.SourceRoot = bEqualRoot ? std::filesystem::path{} : Directory;
+		Options.SourceId = bEqualRoot ? "" : "stable-test-source";
 		Options.bForce = true;
 		const auto Source = Directory / "Showcase.gltf";
 		const auto Output = Directory / "Model.hasset";
@@ -343,19 +341,28 @@ void CheckPortableSourceIds(FFixture& InFixture)
 		const auto Textures = TextureReferences(*InitialGraph);
 		const auto Forced = F.Imports.ImportAsync(Source, Output, Options).Get(F.Tasks);
 		HYP_CHECK(Forced->Header.Id == Initial->Header.Id && Forced->Header.Revision == Initial->Header.Revision);
-		Assets.Invalidate(Output);
+		Assets.ClearCache();
 		HYP_CHECK(AssetIdentities(*Assets.LoadGraphAsync(Output).Get(F.Tasks)) == Ids);
 		FImage White{4, 4, EColorSpace::Srgb, std::vector<float>(4 * 4 * 4, 1)};
 		F.IO.WriteAsync(Directory / "Checker.png", EncodePng(White)).Get(F.Tasks);
 		Options.bForce = false;
 		const auto Changed = F.Imports.ImportAsync(Source, Output, Options).Get(F.Tasks);
-		HYP_CHECK(Changed->Header.Id == Initial->Header.Id && Changed->Header.Revision != Initial->Header.Revision);
-		Assets.Invalidate(Output);
+		HYP_CHECK(Changed->Header.Id == Initial->Header.Id && Changed->Header.Revision == Initial->Header.Revision);
+		Assets.ClearCache();
 		const auto ChangedGraph = Assets.LoadGraphAsync(Output).Get(F.Tasks);
 		HYP_CHECK(AssetIdentities(*ChangedGraph) == Ids);
 		const auto ChangedTextures = TextureReferences(*ChangedGraph);
 		HYP_CHECK(ChangedTextures.at("Checker.png").Id == Textures.at("Checker.png").Id);
 		HYP_CHECK(ChangedTextures.at("Checker.png").Revision != Textures.at("Checker.png").Revision);
+		const auto Clone = Directory.parent_path() / (Directory.filename().string() + "-clone");
+		std::filesystem::copy(Directory, Clone, std::filesystem::copy_options::recursive);
+		Options.Library = Clone / "library";
+		Options.SourceRoot = bEqualRoot ? std::filesystem::path{} : Clone;
+		const auto Relocated =
+		    F.Imports.ImportAsync(Clone / "Showcase.gltf", Clone / "Model.hasset", Options).Get(F.Tasks);
+		HYP_CHECK(Relocated->bUpToDate && Relocated->WrittenAssets == 0);
+		Options.Library = Directory / "library";
+		Options.SourceRoot = Directory;
 		Options.bForce = true;
 		CheckRejectedSourceIds(F, Source, Output, Options);
 	}
@@ -368,13 +375,14 @@ int main()
 	{
 		FFixture Fixture;
 		CheckSharedLibrary(Fixture);
-		CheckPinnedGenerations(Fixture);
+		CheckCurrentParents(Fixture);
 		CheckSourceProductConflict(Fixture);
 		CheckLegacyAndVariants(Fixture);
 		CheckJson(Fixture);
 		CheckPortableSourceIds(Fixture);
-		std::cout << "Shared source identities, concurrent roots, old revisions, explicit legacy split, roles/samplers "
-		             "and JSON passed\n";
+		std::cout
+		    << "Shared source identities, concurrent roots, current references, explicit legacy split, roles/samplers "
+		       "and JSON passed\n";
 	}
 	catch (const std::exception& Error)
 	{

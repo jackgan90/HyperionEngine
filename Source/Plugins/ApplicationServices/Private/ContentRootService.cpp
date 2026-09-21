@@ -1,4 +1,6 @@
 #include "Hyperion/ApplicationServices/ContentRootService.h"
+#include "Hyperion/Assets/AssetRegistry.h"
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include <algorithm>
 
@@ -45,10 +47,16 @@ FContentRootCandidate FContentRootService::Prepare(const std::filesystem::path& 
 	RegisterSceneAssetTypes(Result.Assets->Types());
 	for (const auto& Mount : Result.Files->GetMounts())
 	{
-		if (Result.Files->Exists(Mount.Root / "Catalog.hasset"))
+		const auto Discovery = DispatchAsync<FAssetDiscovery>(Tasks, {EDomain::Io},
+		                                                      [Storage = Result.Files, Root = Mount.Root]
+		                                                      {
+			                                                      return DiscoverAssets(*Storage, Root);
+		                                                      })
+		                           .Get(Tasks);
+		Result.Assets->AddCatalog(BuildAssetCatalog(Discovery->Entries), Mount.Root);
+		for (const auto& [Path, Error] : Discovery->Errors)
 		{
-			const auto Catalog = Result.Assets->LoadAsync<FAssetCatalog>(Mount.Root / "Catalog.hasset").Get(Tasks);
-			Result.Assets->AddCatalog(*Catalog, Mount.Root);
+			Log(ELogLevel::Warning, "Asset unavailable: " + PathToUtf8(Path) + ": " + Error);
 		}
 	}
 	return Result;

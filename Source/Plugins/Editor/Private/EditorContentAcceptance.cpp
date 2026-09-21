@@ -164,22 +164,15 @@ void FEditorPlugin::ExerciseContentBrowser(std::vector<FInputEvent>& InEvents)
 		case 17:
 			if (Scene->GetStatus().bReady && ReadyFrames > 8 && CurrentPath == "/Game/Other/Scene.hasset")
 			{
-				ExerciseClick(InEvents, InternalAssetsBounds);
+				Browser->Navigate("/Game");
+				++ExerciseStep;
 			}
 			break;
 		case 18:
 			if (!Browser->IsScanning() && ContentTileBounds.contains("/Game/.assets"))
 			{
-				CheckContent(bShowInternalAssets && !ContentTileBounds.contains("/Game/.cache"),
-				             "Internal asset filter is incorrect");
-				ExerciseClick(InEvents, InternalAssetsBounds);
-			}
-			break;
-		case 19:
-			if (!Browser->IsScanning() && !ContentTileBounds.empty())
-			{
-				CheckContent(!ContentTileBounds.contains("/Game/.assets"), "Internal assets remained visible");
-				++ExerciseStep;
+				CheckContent(!ContentTileBounds.contains("/Game/.cache"), "Cache directory remained visible");
+				ExerciseStep = 20;
 			}
 			break;
 		default:

@@ -1,6 +1,7 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/Core/ContentHash.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 #include <map>
@@ -55,7 +56,19 @@ public:
 	FBytes Replacement;
 	unsigned ReplaceOnRead{};
 	unsigned ReplacementReads{};
+	unsigned FailOnWrite{};
+	unsigned WriteCalls{};
 	std::map<std::filesystem::path, std::size_t> ReadCounts;
+
+	std::vector<FDirectoryEntry> ListDirectory(const std::filesystem::path& InPath) override
+	{
+		return Memory.ListDirectory(InPath);
+	}
+
+	void Remove(const std::filesystem::path& InPath) override
+	{
+		Memory.Remove(InPath);
+	}
 
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
 	{
@@ -73,8 +86,13 @@ public:
 
 	void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) override
 	{
-		if (bFailDependencyWrites && InPath.parent_path().filename() == ".assets")
+		if (++WriteCalls == FailOnWrite)
 		{
+			throw std::runtime_error("Injected transaction write failure");
+		}
+		if (bFailDependencyWrites && InPath.parent_path().filename() == "Assets")
+		{
+			bFailDependencyWrites = false;
 			throw std::runtime_error("Injected dependency publication failure");
 		}
 		Memory.WriteAtomic(InPath, InBytes);
@@ -119,7 +137,7 @@ void CheckPublication()
 	IO.WriteAsync(Directory / "child.source", Serialize(Child)).Get(Tasks);
 	IO.WriteAsync(Directory / "data.bin", {std::byte{1}}).Get(Tasks);
 	const auto First = Imports.ImportAsync(Source, Output).Get(Tasks);
-	HYP_CHECK(!First->bUpToDate && First->WrittenAssets == 3 && First->Header.Dependencies.size() == 2);
+	HYP_CHECK(!First->bUpToDate && First->WrittenAssets == 2 && First->Header.Dependencies.size() == 2);
 	HYP_CHECK(First->Header.Dependencies[0].Reference == First->Header.Dependencies[1].Reference);
 	const auto Old = IO.ReadAsync(Output).Get(Tasks);
 	const auto Writes = IO.Statistics().Writes.load();
@@ -128,7 +146,7 @@ void CheckPublication()
 	IO.WriteAsync(Directory / "data.bin", {std::byte{2}}).Get(Tasks);
 	const auto Changed = Imports.ImportAsync(Source, Output).Get(Tasks);
 	HYP_CHECK(!Changed->bUpToDate && Changed->Header.Id == First->Header.Id &&
-	          Changed->Header.Revision != First->Header.Revision);
+	          Changed->Header.Revision == First->Header.Revision);
 	HYP_CHECK(Changed->Header.Dependencies[0].Reference.Id == First->Header.Dependencies[0].Reference.Id);
 	const auto Previous = IO.ReadAsync(Output).Get(Tasks);
 	IO.WriteAsync(Directory / "data.bin", {std::byte{3}}).Get(Tasks);
@@ -158,7 +176,7 @@ void CheckPublication()
 	    Native.LoadReferenceAsync(OldGraph->Root->Header.Dependencies[0].Reference, OldGraph->Root->Path)
 	        .Get(Tasks)
 	        ->As<FImportFixture>();
-	HYP_CHECK(OldChild->Data == std::vector<std::uint8_t>{1});
+	HYP_CHECK(OldChild->Data == std::vector<std::uint8_t>{2});
 }
 
 FAssetHeader StoreNative(FIOService& InIO, const std::filesystem::path& InPath, const FImportFixture& InObject,
@@ -203,7 +221,7 @@ void CheckExternalPublicationChanges()
 		const auto Published = Imports.ImportAsync(Source, Output).Get(Tasks);
 		HYP_CHECK(Published->Header.Dependencies.size() == 2);
 		HYP_CHECK(Published->Header.Dependencies[0].Reference.Path == "/Game/External.hasset");
-		HYP_CHECK(Published->Header.Dependencies[0].Reference.Revision == Original.Header.Revision);
+		HYP_CHECK(Published->Header.Dependencies[0].Reference.Revision.empty());
 		FAssetService Assets(IO);
 		Assets.Types().Register<FImportFixture>();
 		HYP_CHECK(Assets.LoadGraphAsync(Output).Get(Tasks)->Failures.empty());
@@ -278,7 +296,7 @@ void CheckExternalPublicationCache()
 		HYP_CHECK(Published->Header.Dependencies.size() == Count);
 		for (const auto& Dependency : Published->Header.Dependencies)
 		{
-			HYP_CHECK(Dependency.Reference.Id == External.Id && Dependency.Reference.Revision == External.Revision);
+			HYP_CHECK(Dependency.Reference.Id == External.Id && Dependency.Reference.Revision.empty());
 		}
 		// Per graph asset: one load, one snapshot verification, one final CheckSources read.
 		HYP_CHECK(Files->ReadCounts.at(ExternalPath) == 3 && Files->ReadCounts.at(LeafPath) == 3);
@@ -288,7 +306,7 @@ void CheckExternalPublicationCache()
 	Files->ReadCounts.clear();
 	const auto Republished = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
 	HYP_CHECK(Changed.Id == External.Id && Changed.Revision != External.Revision);
-	HYP_CHECK(Republished->Header.Dependencies.front().Reference.Revision == Changed.Revision);
+	HYP_CHECK(Republished->Header.Dependencies.front().Reference.Revision.empty());
 	HYP_CHECK(Files->ReadCounts.at(ExternalPath) == 3 && Files->ReadCounts.at(LeafPath) == 3);
 	CheckExternalCachedIdentities(Tasks, IO, Imports, *Files,
 	                              {Changed.Id, "/Game/CachedExternal.hasset", Type, Changed.Revision});
@@ -372,26 +390,12 @@ void CheckCrossVolumeImport()
 	IO.WriteAsync(Source, Serialize(Root)).Get(Tasks);
 	IO.WriteAsync(Other / "a.source", Serialize(FImportFixture{"a"})).Get(Tasks);
 	IO.WriteAsync(Other / "b.source", Serialize(FImportFixture{"b"})).Get(Tasks);
-	const auto First = Imports.ImportAsync(Source, Output).Get(Tasks);
-	const auto Same = Imports.ImportAsync(Source, Output).Get(Tasks);
-	HYP_CHECK(Same->bUpToDate && Serialize(Same->Header) == Serialize(First->Header));
-	FAssetImportOptions Options;
-	Options.bForce = true;
-	const auto Forced = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
-	HYP_CHECK(Forced->Header.Dependencies == First->Header.Dependencies);
-	HYP_CHECK(Forced->Header.Dependencies[0].Reference.Id != Forced->Header.Dependencies[1].Reference.Id);
-	for (const auto& Entry : Forced->Header.Import->Sources)
-	{
-		HYP_CHECK(!Entry.Path.empty());
-	}
-	IO.WriteAsync(Other / "a.source", Serialize(FImportFixture{"changed"})).Get(Tasks);
-	const auto Changed = Imports.ImportAsync(Source, Output).Get(Tasks);
-	HYP_CHECK(!Changed->bUpToDate);
-	HYP_CHECK(Changed->Header.Dependencies[0].Reference.Id == First->Header.Dependencies[0].Reference.Id);
-	HYP_CHECK(Changed->Header.Dependencies[1].Reference == First->Header.Dependencies[1].Reference);
-	FAssetService Assets(IO);
-	Assets.Types().Register<FImportFixture>();
-	HYP_CHECK(Assets.LoadGraphAsync(Output).Get(Tasks)->Failures.empty());
+	Rejects(
+	    [&]
+	    {
+		    Imports.ImportAsync(Source, Output).Get(Tasks);
+	    });
+	HYP_CHECK(!IO.FileSystem()->Exists(Output));
 }
 
 void CheckCyclesAndOrdering()
@@ -519,17 +523,69 @@ void CheckExternalImageReimport()
 	FImage White{64, 64, EColorSpace::Srgb, std::vector<float>(64 * 64 * 4, 1)};
 	IO.WriteAsync(Directory / "Checker.png", EncodePng(White)).Get(Tasks);
 	const auto Second = Imports.ImportAsync(Source, Output).Get(Tasks);
-	HYP_CHECK(First->Header.Id == Second->Header.Id && First->Header.Revision != Second->Header.Revision);
+	HYP_CHECK(First->Header.Id == Second->Header.Id && First->Header.Revision == Second->Header.Revision);
 	Assets.Invalidate(Output);
 	const auto After = Assets.LoadAsync<FModelAsset>(Output).Get(Tasks);
-	HYP_CHECK(After->MaterialSlots != Before->MaterialSlots);
+	HYP_CHECK(After->MaterialSlots == Before->MaterialSlots);
 	HYP_CHECK(After->Primitives[0].Positions == Before->Primitives[0].Positions);
 	IO.WriteAsync(Output.parent_path() / "copy.hasset", Serialize(*Before)).Get(Tasks);
+	FAssetImportOptions UpgradeOptions;
+	UpgradeOptions.Library = Directory / "upgraded-library";
 	const auto Upgraded =
-	    Imports.ImportAsync(Output.parent_path() / "copy.hasset", Directory / "upgraded.hasset").Get(Tasks);
+	    Imports.ImportAsync(Output.parent_path() / "copy.hasset", Directory / "upgraded.hasset", UpgradeOptions)
+	        .Get(Tasks);
 	const auto Native = Assets.LoadAsync<FModelAsset>(Directory / "upgraded.hasset").GetAsset(Tasks);
 	HYP_CHECK(Native->Diagnostics.empty() && Native->Header.Id == Upgraded->Header.Id);
 	HYP_CHECK(Native->As<FModelAsset>()->Primitives[0].Positions == Before->Primitives[0].Positions);
+}
+
+void CheckRollback()
+{
+	FTaskSystem Tasks(1, 1);
+	auto Files = std::make_shared<FImportStorage>();
+	FIOService IO(Tasks, Files);
+	FAssetImportService Imports(IO);
+	Imports.Register(FixtureImporter());
+	const auto Directory = std::filesystem::absolute("rollback");
+	const auto Source = Directory / "Root.source";
+	const auto Output = Directory / "native/Root.hasset";
+	const auto Type = RecordType<FImportFixture>().Id;
+	FImportFixture Parent{"parent", "", {{"", "A.source", Type, ""}, {"", "B.source", Type, ""}}};
+	IO.WriteAsync(Source, Serialize(Parent)).Get(Tasks);
+	for (const auto* Name : {"A", "B", "C"})
+	{
+		IO.WriteAsync(Directory / (std::string(Name) + ".source"), Serialize(FImportFixture{Name})).Get(Tasks);
+	}
+	Imports.ImportAsync(Source, Output).Get(Tasks);
+	std::map<std::filesystem::path, FBytes> Before;
+	for (const auto& Path : Files->Memory.Enumerate(Output.parent_path(), true))
+	{
+		Before.emplace(Path, Files->Memory.Read(Path, 1024 * 1024));
+	}
+	Parent.Children.push_back({"", "C.source", Type, ""});
+	IO.WriteAsync(Source, Serialize(Parent)).Get(Tasks);
+	IO.WriteAsync(Directory / "A.source", Serialize(FImportFixture{"A", "", {}, {42}})).Get(Tasks);
+	IO.WriteAsync(Directory / "B.source", Serialize(FImportFixture{"B", "", {}, {42}})).Get(Tasks);
+	for (const unsigned Failure : {3u, 4u})
+	{
+		Files->WriteCalls = 0;
+		Files->FailOnWrite = Failure;
+		Rejects(
+		    [&]
+		    {
+			    Imports.ImportAsync(Source, Output).Get(Tasks);
+		    });
+		HYP_CHECK(Files->Memory.Enumerate(Output.parent_path(), true).size() == Before.size());
+		for (const auto& [Path, Bytes] : Before)
+		{
+			HYP_CHECK(Files->Memory.Read(Path, 1024 * 1024) == Bytes);
+		}
+	}
+	Files->FailOnWrite = 0;
+	Imports.ImportAsync(Source, Output).Get(Tasks);
+	FAssetService Assets(IO);
+	Assets.Types().Register<FImportFixture>();
+	HYP_CHECK(Assets.LoadGraphAsync(Output).Get(Tasks)->Assets.size() == 4);
 }
 
 void CheckLocalLease()
@@ -555,6 +611,9 @@ int main()
 {
 	try
 	{
+		const auto Work = std::filesystem::absolute("publication-current") / CreateIdentifier();
+		std::filesystem::create_directories(Work);
+		std::filesystem::current_path(Work);
 		CheckSceneSources();
 		CheckPublication();
 		CheckExternalPublicationChanges();
@@ -566,9 +625,10 @@ int main()
 		CheckModelReferences();
 		CheckSceneImporterCache();
 		CheckLocalLease();
+		CheckRollback();
 		CheckExternalImageReimport();
 		std::cout
-		    << "Generic incremental publication, source changes, immutable generations, failure and leases passed\n";
+		    << "Generic incremental publication, source changes, current shared contents, failure and leases passed\n";
 	}
 	catch (const std::exception& Error)
 	{

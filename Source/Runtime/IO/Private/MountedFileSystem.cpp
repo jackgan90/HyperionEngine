@@ -138,6 +138,16 @@ FBytes FMountedFileSystem::Read(const std::filesystem::path& InPath, std::size_t
 	return Local.Read(Resolve(InPath), InLimit);
 }
 
+FBytes FMountedFileSystem::ReadRange(const std::filesystem::path& InPath, std::size_t InOffset, std::size_t InSize)
+{
+	return Local.ReadRange(Resolve(InPath), InOffset, InSize);
+}
+
+void FMountedFileSystem::Remove(const std::filesystem::path& InPath)
+{
+	Local.Remove(Resolve(InPath, true));
+}
+
 std::vector<FFileContents> FMountedFileSystem::ReadTree(const std::filesystem::path& InDirectory,
                                                         std::span<const std::string_view> InExtensions,
                                                         std::size_t InLimit)

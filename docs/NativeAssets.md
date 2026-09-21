@@ -4,7 +4,7 @@
 
 模型 schema 3 引用独立材质并保存源节点/primitive ID，材质引用独立纹理。schema 2 可只读迁移，加载不写回。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 必须先经 AssetTool 拆分升级。
 
-天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为带固定版本依赖的 `.hasset`；Viewer 不读取源 HDR/EXR。
+天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为引用当前共享依赖的 `.hasset`；Viewer 不读取源 HDR/EXR。
 
 ## 构建和工具
 
@@ -21,7 +21,7 @@
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Scenes/Showcase.json out/my-content/showcase.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe inspect out/my-content/showcase.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe validate out/my-content/showcase.hasset
-./out/build/debug/bin/hyperion_asset_tool.exe catalog out/my-content/catalog.hasset out/my-content/showcase.hasset
+./out/build/debug/bin/hyperion_asset_tool.exe validate-library out/my-content
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
@@ -65,25 +65,29 @@ auto Graph = GraphRequest.Get(Tasks);      // Root、Assets、逐依赖 Failures
 auto Save = Assets.SaveAsync("out/saved-scene.hasset", Scene);
 Save.Get(Tasks);
 
-auto Catalog = Assets.LoadAsync<FAssetCatalog>("/Game/Catalog.hasset").Get(Tasks);
-Assets.AddCatalog(*Catalog, "/Game");
-auto ById = Assets.LoadByIdAsync(Catalog->Assets.front().Id);
+// AssetRegistry.h；实际扫描放在 IO 域。应用的 assets 插件在启动/换根时执行。
+auto Discovery = DispatchAsync<FAssetDiscovery>(Tasks, {EDomain::Io}, [&]
+{
+    return DiscoverAssets(*IO.FileSystem(), "/Game");
+}).Get(Tasks);
+Assets.AddCatalog(BuildAssetCatalog(Discovery->Entries), "/Game"); // 同时报告 Discovery->Errors。
+auto ById = Assets.LoadByIdAsync(Discovery->Entries.front().Header.Id);
 
 Assets.Drain();
 Tasks.Shutdown();
 ~~~
 
-类型化 LoadAsync<T>/SaveAsync<T> 自动注册 T 的 RecordType；无类型入口需预先注册可能遇到的类型。FLoadedAsset 保留头部、描述符、不可变对象、实际路径及迁移诊断。FAssetRef 可带 AssetId、相对路径、TypeId 和可选固定 Revision；解析相对路径时始终使用包含该引用的资产目录。catalog 优先解析匹配的 ID/Revision；找不到匹配 revision 时可退回引用自带的路径。结果会再检查 ID、类型和 revision，共享缓存不会绕过引用约束。
+类型化 LoadAsync<T>/SaveAsync<T> 自动注册 T 的 RecordType；无类型入口需预先注册可能遇到的类型。FLoadedAsset 保留头部、描述符、不可变对象、实际路径及迁移诊断。FAssetRef 的 AssetId 是稳定身份，Path 是包路径或相对位置提示，TypeId 约束类型。保存和导入不固定 Revision；资产头的 Revision 仍用于内容校验。发现索引优先按 ID 定位，因此移动文件后重建索引即可继续解析。显式低层 revision 请求仍会校验。共享缓存不会绕过 ID、类型或显式 revision 约束。
 
 依赖通过反射递归识别 FAssetRef，不按模型/场景名称分支。图遍历先检查活动路径以识别循环，再等待子资产；单个依赖失败不会丢弃其他已加载资产。默认图预算为 4096 个资产、32768 条边、128 层。对运行时场景，每个模型引用单独加载和报告错误。
 
 ## 缓存、保存与生命周期
 
-完成的 CPU 缓存默认最多 64 项、256 MiB 估算保留字节；它使用访问次序淘汰，完成后自动修剪。原生对象的权重保守按存储字节的两倍估算，属于缓存预算而非进程硬内存配额。未完成任务单独持有，默认最多 256 个在途任务（包括完成清理）。ClearCache 释放已完成缓存；Invalidate(path) 使后续请求重新读取。它们不销毁其他消费者仍持有的不可变快照，不提供自动文件监控。
+完成的 CPU 缓存默认最多 64 项、256 MiB 估算保留字节；它使用访问次序淘汰，完成后自动修剪。原生对象的权重保守按存储字节的两倍估算，属于缓存预算而非进程硬内存配额。未完成任务单独持有，默认最多 256 个在途任务（包括完成清理）。ClearCache 释放已完成缓存；Invalidate(path) 使后续请求重新读取。它们不销毁其他消费者仍持有的不可变快照。FSceneInstance::Load 在重新加载场景前清理已完成缓存；后台文件监控尚未实现。
 
 源转换缓存独立，完成项上限 16、128 MiB；ImportAsync 的增量判断始终重新校验源和发布结果，不会直接使用过期的转换缓存。两种服务均在完成和下一次请求时修剪内部任务列表。
 
-同一服务内，同一目标路径的保存按请求接受顺序执行。其后的加载等待对应保存；保存前已返回的对象保持原有内容。SaveAsync<T> 在接收请求时复制传入值，调用者后续修改原对象不改变已接收快照。保存既有文件保留 AssetId，内容变化产生新的 Revision，并移除旧导入来源记录，明确表示这是编辑后的原生内容。保存源格式扩展名会报错。
+同一服务内，同一目标路径的保存按请求接受顺序执行。其后的加载等待对应保存；保存前已返回的对象保持原有内容。SaveAsync<T> 在接收请求时复制传入值，调用者后续修改原对象不改变已接收快照。保存既有文件保留 AssetId，清除依赖的 revision 约束，内容变化产生新的 Revision，并移除旧导入来源记录，明确表示这是编辑后的原生内容。保存源格式扩展名会报错。
 
 一个消费者的 Cancel 不取消共享生产者；服务析构取消并 drain 自有工作。显式 Drain 关闭外部入口，允许已接受的依赖图继续派生内部读取，并等待所有生产者和清理任务结束；各请求的错误仍由 Get/GetReady 观察。调用方必须先关闭消费者，再关闭 Assets/AssetImport，最后销毁 IO/Tasks。已进入系统的写入可能成功，取消无法撤销已完成替换。
 
@@ -93,11 +97,19 @@ Tasks.Shutdown();
 
 每个 importer 有稳定 ID 和版本。FAssetImportContext::Read 跟踪根文件、外部 buffer、图片等实际读取内容的 SHA-256。发布头保存 importer/version、选项、相对来源路径与指纹，以及来源到输出身份的映射。增量检查重新读取所有来源，验证原生依赖图完整性、当前记录版本和导入设置；内容、设置、importer 版本或模式变化都会重建。相同结果不重写该原生文件。
 
-同一批次按规范化来源路径和类型去重。依赖先写为 `.assets/<AssetId>-<Revision>.hasset`；挂载发布使用完整包路径，隔离本地输出仍可使用相对引用。已有原生包引用先核对完整依赖图和 ID、类型、固定 Revision，然后保留为外部引用。共享发布通过 `--source-root`、`--source-id` 将来源指纹及身份键改为逻辑来源路径；迁移源缓存不会改变身份。来源在发布根文件前再次核对，最后原子替换根文件；转换或依赖写入失败不会改变旧根。根身份和对应来源的依赖身份在重导入间保持稳定，revision 是内容指纹。未指定逻辑来源身份的独立本地导入仍遵循本地来源路径语义。
+一个 AssetId 对应一个当前文件。生成依赖位于 Models、Materials、Textures、Skies 等可见目录，文件名由可读名称与稳定 ID 组成；已存在的 ID 优先沿用发现的路径。挂载发布使用包路径，隔离本地输出使用相对引用。已有原生包引用经完整图和身份校验后保留，并清除 revision 约束。
+
+导入身份从现存文件及其可选 Import.OutputIds 重建，不需要 `.asset-library.hasset`。未找到目标的历史映射不使用。同一输出重导入保留根及存活产品 ID；显式新输出有独立根 ID。默认逻辑来源空间基于根 ID，源位置以相对路径记录；可用 `--source-root`/`--source-id` 指定跨根共享的逻辑来源空间。物理路径只用于本次读取，不能作为持久化来源 ID。相同原生纹理数据及颜色/格式/mip 解释可复用；不同可编辑材质来源保持独立身份。
+
+一次发布中，如果多个来源要求同一个现存 AssetId 保存不同内容，导入会在写入前报告冲突，保留原生文件。当前不会自动拆分共享身份；需要统一这些来源的内容，或显式导入到独立库建立独立资源。纹理复用必须匹配实际暂存内容，不能复用已被本次导入更新的旧指纹。
+
+增量检查、跨挂载原生引用以及 AssetTool 的 inspect/validate/export-json 都使用发现索引。文件只改名且 ID 不变时，有效依赖继续解析，来源未变的重导入保持零写入。通过 `--mounts` 提供完整内容根；未配置挂载的单文件工具默认扫描输入文件所在目录，引用该目录之外已改名的资源时应配置包含它们的内容挂载。
 
 同一导入服务内，同一共享库按顺序发布；本地文件系统在 IO 域取得独占 Windows 文件 lease，其他活跃发布者会失败并返回明确错误。lease 文件关闭或进程退出时由系统删除。替代文件系统可覆盖 AcquireWriteLease；其默认实现仅提供当前进程、同一存储实例内的互斥。
 
-旧依赖代际不会自动删除。当前不提供代际回收命令；应由内容管理者在确认没有旧根/运行中消费者依赖它们后显式清理。这里只承诺单文件原子替换加不可变依赖，不承诺多个文件同时事务提交。
+完整图先转换、编码并暂存，重新检查输入后才写入当前文件；相同字节不重写。同步失败会恢复已修改文件并删除本批新建文件，回滚失败会附带诊断。调用方应在内容发布时使相关读取者静止；这里不承诺跨进程读者可见的多文件原子提交或断电恢复。活动 CPU/GPU 快照保留原有内容。历史由 Git/LFS 管理，不在工作树保留 revision 文件。
+
+Catalog 是可重建的内存 ID/路径索引。`DiscoverAssets` 递归扫描原生元数据，忽略 `.git`、`.cache` 和发布状态；本地/挂载存储通过范围读取跳过 bulk。重复 ID 报错；损坏文件提供逐项诊断，不伪装为有效资产。实际加载仍执行完整内容校验。`validate-library ROOT` 验证全库；`migrate-library /Game EMPTY_STAGING_DIRECTORY` 用当前原生图生成隔离迁移候选，不修改输入。可选 `catalog` 命令仅用于显式诊断导出。
 
 ## 反射契约与版本迁移
 

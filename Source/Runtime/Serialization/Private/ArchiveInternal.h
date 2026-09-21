@@ -70,6 +70,8 @@ struct FArchiveReader
 	bool bLegacy{};
 	std::vector<std::pair<std::size_t, std::size_t>> Blocks;
 	std::size_t BulkReads{};
+	bool bMetadataOnly{};
+	std::size_t TotalBytes{};
 
 	void Charge(std::size_t InBytes);
 	std::span<const std::byte> Raw(std::size_t InSize);

@@ -16,6 +16,9 @@ struct FArchiveLimits
 std::string HashArchive(const FArchiveNode& InNode, FArchiveLimits InLimits = {});
 std::vector<std::byte> EncodeArchive(const FArchiveNode& InNode, FArchiveLimits InLimits = {});
 FArchiveNode DecodeArchive(std::span<const std::byte> InBytes, FArchiveLimits InLimits = {});
+// Read a v2 prefix, directory and metadata only. Bulk nodes are replaced with null.
+FArchiveNode DecodeArchiveMetadata(std::span<const std::byte> InBytes, std::size_t InTotalBytes,
+                                   FArchiveLimits InLimits = {});
 // Bulk views retain InBytes; Offset allows an enclosing native asset header.
 FArchiveNode DecodeArchive(std::shared_ptr<const std::vector<std::byte>> InBytes, std::size_t InOffset = 0,
                            FArchiveLimits InLimits = {});

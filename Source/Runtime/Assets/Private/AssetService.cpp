@@ -1,4 +1,5 @@
 #include "AssetServiceInternal.h"
+#include "Hyperion/Assets/AssetAuthoring.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/IO/Path.h"
 #include <algorithm>
@@ -235,7 +236,9 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
 			    }
 			    Header.Id = Old.Header.Id;
 		    }
-		    auto Encoded = EncodeAsset(Type, Snapshot.get(), std::move(Header));
+		    auto Current = ReadRecord(Type, WriteRecord(Type, Snapshot.get()));
+		    PrepareAssetReferences(Type, Current.get(), *State->IO.FileSystem(), Path);
+		    auto Encoded = EncodeAsset(Type, Current.get(), std::move(Header));
 		    return *State->IO.WriteAsync(Path, std::move(Encoded.Bytes), State->Cancellation)
 		                .Get(State->IO.TaskSystem());
 	    },

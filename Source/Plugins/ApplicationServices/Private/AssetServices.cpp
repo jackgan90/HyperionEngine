@@ -1,5 +1,6 @@
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
 #include "Hyperion/ApplicationServices/ContentRootService.h"
+#include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Scene/SceneManifest.h"
 
@@ -42,23 +43,27 @@ public:
 		}
 		for (const auto& Mount : Files->GetMounts())
 		{
-			if (!IO->FileSystem()->Exists(Mount.Root / "Catalog.hasset"))
-			{
-				continue;
-			}
 			try
 			{
-				const auto Catalog = Assets->LoadAsync<FAssetCatalog>(Mount.Root / "Catalog.hasset")
-				                         .Get(InContext.Require<FTaskSystem>());
-				Assets->AddCatalog(*Catalog, Mount.Root);
+				const auto Discovery = DispatchAsync<FAssetDiscovery>(InContext.Require<FTaskSystem>(), {EDomain::Io},
+				                                                      [Storage = Files, Root = Mount.Root]
+				                                                      {
+					                                                      return DiscoverAssets(*Storage, Root);
+				                                                      })
+				                           .Get(InContext.Require<FTaskSystem>());
+				Assets->AddCatalog(BuildAssetCatalog(Discovery->Entries), Mount.Root);
+				for (const auto& [Path, Error] : Discovery->Errors)
+				{
+					Log(ELogLevel::Warning, "Asset unavailable: " + Path.string() + ": " + Error);
+				}
 			}
 			catch (const std::exception& Failure)
 			{
-				if (Options.bRequireCatalogs)
+				if (Options.bRequireDiscovery)
 				{
 					throw;
 				}
-				Log(ELogLevel::Warning, "Catalog unavailable: " + Mount.Root.string() + ": " + Failure.what());
+				Log(ELogLevel::Warning, "Asset discovery failed: " + Mount.Root.string() + ": " + Failure.what());
 			}
 		}
 		InContext.Provide(*Files);

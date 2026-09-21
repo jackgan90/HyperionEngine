@@ -66,10 +66,6 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	}
 	Provenance.Settings["name"] = InOptions.Name;
 	Provenance.Settings["library"] = ImportRelativePath(Library, Output.parent_path());
-	if (!SourceId.empty())
-	{
-		Provenance.Settings["source_id"] = StableSourceKey(Source);
-	}
 	const auto Existing = IO.TryReadAsync(Output, Cancellation).Get(IO.TaskSystem());
 	if (*Existing)
 	{
@@ -82,6 +78,19 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 		{
 		}
 	}
+	RootId = Previous ? Previous->Header.Id : CreateIdentifier();
+	const auto OutputType = InOptions.bScene ? RecordType<FSceneManifest>().Id : SourceType;
+	if (Previous && Previous->Header.TypeId != OutputType)
+	{
+		throw std::invalid_argument("Cannot reimport a different type over an existing native asset");
+	}
+	if (SourceId.empty())
+	{
+		SourceRoot = Source.parent_path();
+		SourceId = "asset/" + RootId;
+	}
+	Provenance.Settings["source_id"] = StableSourceKey(Source);
+	Provenance.Settings["publication"] = "current-native-v1";
 	if (Previous && Previous->Header.Import)
 	{
 		for (const auto& [Key, Id] : Previous->Header.Import->OutputIds)
@@ -89,6 +98,42 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 			PreviousIds.emplace(PortableKey(Key), Id);
 		}
 	}
+}
+
+bool FPublication::SourcesCurrent(const FAssetGraph& InGraph) const
+{
+	std::set<std::string> NativeFingerprints;
+	bool bReadNativeFingerprints{};
+	for (const auto& Entry : Previous->Header.Import->Sources)
+	{
+		const auto EntryPath = PathFromUtf8(Entry.Path);
+		if (IsPackagePath(EntryPath) && ImportExtension(EntryPath) == ".hasset")
+		{
+			if (!bReadNativeFingerprints)
+			{
+				for (const auto& [Path, Asset] : InGraph.Assets)
+				{
+					if (Path != Output)
+					{
+						NativeFingerprints.insert(ContentHash(*IO.ReadAsync(Path, Cancellation).Get(IO.TaskSystem())));
+					}
+				}
+				bReadNativeFingerprints = true;
+			}
+			// Full container fingerprints include identity. A renamed native dependency remains
+			// the same source even when its old path hint has been reused or renamed repeatedly.
+			if (NativeFingerprints.contains(Entry.Fingerprint))
+			{
+				continue;
+			}
+		}
+		const auto Path = IsPackagePath(EntryPath) ? EntryPath : Source.parent_path() / EntryPath;
+		if (ContentHash(*IO.ReadAsync(Path, Cancellation).Get(IO.TaskSystem())) != Entry.Fingerprint)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 bool FPublication::IsCurrent()
@@ -105,21 +150,7 @@ bool FPublication::IsCurrent()
 	}
 	try
 	{
-		for (const auto& Entry : Old.Sources)
-		{
-			const auto EntryPath = PathFromUtf8(Entry.Path);
-			const auto Path = IsPackagePath(EntryPath) ? EntryPath : Source.parent_path() / EntryPath;
-			if (ContentHash(*IO.ReadAsync(Path, Cancellation).Get(IO.TaskSystem())) != Entry.Fingerprint)
-			{
-				return false;
-			}
-		}
-		FAssetService Assets(IO);
-		for (const auto& Importer : Importers)
-		{
-			Assets.Types().Register(*Importer.Type);
-		}
-		Assets.Types().Register<FSceneManifest>();
+		auto& Assets = IndexedAssets();
 		const auto Graph = Assets.LoadGraphAsync(Output).Get(IO.TaskSystem());
 		if (!Graph->Failures.empty())
 		{
@@ -132,7 +163,7 @@ bool FPublication::IsCurrent()
 				return false;
 			}
 		}
-		return true;
+		return SourcesCurrent(*Graph);
 	}
 	catch (const std::runtime_error&)
 	{
@@ -168,12 +199,6 @@ void FPublication::CheckSources() const
 void FPublication::Write(const std::filesystem::path& InPath, const FEncodedAsset& InAsset)
 {
 	Cancellation.Check();
-	const auto Existing = IO.TryReadAsync(InPath, Cancellation).Get(IO.TaskSystem());
-	if (*Existing && **Existing == InAsset.Bytes)
-	{
-		return;
-	}
-	IO.WriteAsync(InPath, InAsset.Bytes, Cancellation).Get(IO.TaskSystem());
-	++Written;
+	Staged[InPath] = InAsset;
 }
 } // namespace Hyperion

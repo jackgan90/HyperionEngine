@@ -13,7 +13,7 @@ using FRegisterBackends = std::function<void(FRHIBackendRegistry&)>;
 struct FAssetServiceOptions
 {
 	std::filesystem::path Mounts;
-	bool bRequireCatalogs{};
+	bool bRequireDiscovery{};
 	std::optional<std::filesystem::path> RestoredGameRoot;
 };
 
