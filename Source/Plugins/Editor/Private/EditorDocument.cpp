@@ -280,7 +280,7 @@ void FEditorPlugin::DrawSaveDialog()
 	if (bSaveDialog && Gui->BeginModal("Save Scene As", bSaveDialog))
 	{
 		Gui->TextWrapped("Save the scene document. Shared model and material assets keep their references.");
-		Gui->InputText("Scene path", SavePath);
+		Gui->InputText("Scene path", SavePath, true, true);
 		if (Gui->Button("Save", !PendingSave && Scene->GetStatus().bReady))
 		{
 			try

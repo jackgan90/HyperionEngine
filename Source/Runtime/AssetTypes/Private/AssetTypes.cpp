@@ -85,11 +85,13 @@ std::vector<FAssetDependency> CollectAssetDependencies(const FRecordDescriptor& 
 
 template<> const FRecordDescriptor& RecordType<FAssetRef>()
 {
-	static const auto Type =
-	    MakeRecord<FAssetRef>("hyperion.assetref",
-	                          {Member("id", &FAssetRef::Id), Member("path", &FAssetRef::Path),
-	                           Member("type", &FAssetRef::TypeId, {true}), Member("revision", &FAssetRef::Revision)},
-	                          1, ValidateAssetRef);
+	static const auto Type = MakeRecord<FAssetRef>(
+	    "hyperion.assetref",
+	    {Member("id", &FAssetRef::Id),
+	     Member("path", &FAssetRef::Path,
+	            {.Inspector = FPropertyPresentation{.Label = "path", .Widget = EPropertyWidget::Path}}),
+	     Member("type", &FAssetRef::TypeId, {true}), Member("revision", &FAssetRef::Revision)},
+	    1, ValidateAssetRef);
 	return Type;
 }
 

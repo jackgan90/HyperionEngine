@@ -126,7 +126,9 @@ public:
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
 	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0, bool* bOutDoubleClicked = nullptr);
 	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex);
-	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true);
+	// Optional display root applies to messages and explicitly typed path inputs, never widget IDs.
+	void SetPathDisplayRoot(std::string InRoot);
+	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true, bool bInPath = false);
 	bool InputFloat(const char* InLabel, float& InValue);
 	bool InputNumber(const char* InLabel, double& InValue);
 	bool InputInteger(const char* InLabel, std::int64_t& InValue);

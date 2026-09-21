@@ -62,7 +62,8 @@ bool EditScalar(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InS
 		case ERecordValueKind::Boolean:
 			return InGui.Checkbox(Name.c_str(), std::get<bool>(InValue.Value));
 		case ERecordValueKind::String:
-			return InGui.InputText(Name.c_str(), std::get<std::string>(InValue.Value));
+			return InGui.InputText(Name.c_str(), std::get<std::string>(InValue.Value), true,
+			                       InPresentation.Widget == EPropertyWidget::Path);
 		case ERecordValueKind::Integer:
 			return InGui.InputInteger(Name.c_str(), std::get<std::int64_t>(InValue.Value));
 		case ERecordValueKind::UnsignedInteger:

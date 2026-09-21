@@ -42,11 +42,15 @@ Editor SHALL hide `.assets`, `.asset-library.hasset` and `Catalog.hasset` by def
 - **THEN** published dependencies and management hassets become visible but Git/source cache directories remain excluded
 
 ### Requirement: User-facing content paths
-The Open Scene list and path input SHALL display paths relative to the asset root, such as `Scenes/Sponza.hasset`, without the `/Game` prefix. Content Browser SHALL label its root `All` and display child breadcrumbs under `All`. Asset resolution and selection identity SHALL retain their internal package paths.
+All editor asset-path presentation, including status/loading/saved messages, error dialogs, Open Scene, Save Scene As, tooltips and Details asset references, SHALL display paths relative to the asset root without the `/Game/` prefix. Content Browser SHALL label its root `All` and display child breadcrumbs under `All`. Editable asset paths SHALL resolve relative input against the active asset root, including after clearing a field. Asset resolution, widget identity and persisted references SHALL retain their internal package paths; native absolute paths and other virtual mounts SHALL retain their meaning.
 
 #### Scenario: Display and open a scene
 - **WHEN** the user selects or enters `Scenes/Sponza.hasset` in Open Scene
 - **THEN** the editor opens `/Game/Scenes/Sponza.hasset` while the dialog displays the relative path
+
+#### Scenario: Display status and edit references
+- **WHEN** a scene is loaded or saved, an asset error is shown, or an asset reference is inspected and edited
+- **THEN** Game paths appear without the virtual root prefix, and committed relative path edits still reference the corresponding `/Game` asset
 
 ### Requirement: Typed asset opening
 Double-click SHALL classify a native asset by its stored TypeId. Scenes SHALL use the existing protected document-opening path; other valid types SHALL show an unsupported-type dialog, while unreadable or corrupt assets SHALL show a distinct error. Unsupported assets SHALL not close the current scene.

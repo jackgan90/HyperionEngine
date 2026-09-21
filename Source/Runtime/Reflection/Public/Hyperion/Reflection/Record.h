@@ -48,7 +48,9 @@ enum class EPropertyWidget : std::uint8_t
 	Default,
 	Vector3,
 	// Linear RGB storage with an sRGB color picker and 0-255 display channels.
-	Color3
+	Color3,
+	// Editable package path; the GUI may display it relative to its configured content root.
+	Path
 };
 
 // Presentation is independent of persistence. Absence hides a top-level member from inspection.

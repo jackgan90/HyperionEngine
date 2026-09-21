@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <implot.h>
 #include <limits>
 #include <stdexcept>
@@ -280,14 +281,14 @@ void FGui::EndScrollRegion()
 void FGui::Text(const std::string& InValue)
 {
 	Impl->Select();
-	ImGui::TextUnformatted(InValue.c_str());
+	ImGui::TextUnformatted(Impl->PathDisplay.Text(InValue).c_str());
 }
 
 void FGui::TextWrapped(const std::string& InValue)
 {
 	Impl->Select();
 	ImGui::PushTextWrapPos(0);
-	ImGui::TextUnformatted(InValue.c_str());
+	ImGui::TextUnformatted(Impl->PathDisplay.Text(InValue).c_str());
 	ImGui::PopTextWrapPos();
 }
 
@@ -376,11 +377,21 @@ bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, st
 	return Impl->TrackEdit(Id, bOpen && !bChanged, bActivated, bChanged);
 }
 
-bool FGui::InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter)
+void FGui::SetPathDisplayRoot(std::string InRoot)
 {
 	Impl->Select();
-	std::vector<char> Buffer(InValue.size() + 1024, 0);
-	std::copy(InValue.begin(), InValue.end(), Buffer.begin());
+	Impl->PathDisplay.Root = std::move(InRoot);
+}
+
+bool FGui::InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter, bool bInPath)
+{
+	Impl->Select();
+	const auto Display = bInPath ? Impl->PathDisplay.Value(InValue)
+	                     : (ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled)
+	                         ? Impl->PathDisplay.Text(InValue)
+	                         : InValue;
+	std::vector<char> Buffer(Display.size() + 1024, 0);
+	std::copy(Display.begin(), Display.end(), Buffer.begin());
 	if (!Impl->TrackEdit(ImGui::InputText(InLabel, Buffer.data(), Buffer.size(),
 	                                      Impl->bLiveEdit
 	                                          ? ImGuiInputTextFlags_NoUndoRedo
@@ -388,7 +399,7 @@ bool FGui::InputText(const char* InLabel, std::string& InValue, bool bInCommitOn
 	{
 		return false;
 	}
-	InValue = Buffer.data();
+	InValue = bInPath ? Impl->PathDisplay.Resolve(Buffer.data()) : Buffer.data();
 	return true;
 }
 

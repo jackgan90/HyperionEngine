@@ -36,7 +36,7 @@ python tools/Bootstrap.py
 
 ### 资产根目录与 Content Browser
 
-Content Browser 的根节点和顶部路径显示为 **All**，子目录路径显示为 `All/Scenes` 等；`/Game` 仅作为内部挂载标识。
+Content Browser 的根节点和顶部路径显示为 **All**，子目录路径显示为 `All/Scenes` 等；`/Game` 仅作为内部挂载标识。状态栏、保存提示、错误信息、Open Scene、Save Scene As 和 Details 中的资产路径统一省略 `/Game/` 前缀。资产路径输入按当前根目录解析，内部引用和保存数据仍保留完整虚拟路径；本地绝对路径与其他虚拟挂载路径不受影响。
 
 **File > Recent** 显示最近最多五个成功选择的根目录，按最近使用排序并去重。下次启动自动恢复最后成功选择的目录，保持空场景；显式 `--scene` 仍可指定启动场景。显式 `--mounts` 优先于保存的根目录。保存目录已经失效时显示错误并保持 `/Game` 未挂载，可重新选择目录；不会悄悄使用另一个 Game 目录。根目录和历史与 RenderDoc 偏好一起保存在 `Preferences.ini`。
 

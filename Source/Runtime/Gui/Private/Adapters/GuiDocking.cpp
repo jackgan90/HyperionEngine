@@ -138,7 +138,7 @@ void FGui::StatusBar(const std::string& InText)
 	if (ImGui::BeginViewportSideBar("##Status", ImGui::GetMainViewport(), ImGuiDir_Down, Scale(26),
 	                                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings))
 	{
-		ImGui::TextUnformatted(InText.c_str());
+		Text(InText);
 	}
 	ImGui::End();
 }

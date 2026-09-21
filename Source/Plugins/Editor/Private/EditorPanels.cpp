@@ -481,12 +481,7 @@ void FEditorPlugin::DrawOpenDialog()
 		}
 		Gui->EndScrollRegion();
 		Gui->SetNextItemWidth(-1);
-		auto DisplayPath = ContentRelativePath(OpenPath);
-		if (Gui->InputText("##ScenePath", DisplayPath, false))
-		{
-			OpenPath =
-			    DisplayPath.empty() || PathFromUtf8(DisplayPath).has_root_path() ? DisplayPath : "/Game/" + DisplayPath;
-		}
+		Gui->InputText("##ScenePath", OpenPath, false, true);
 		if (Gui->Button("Open", !OpenPath.empty()) || bOpenSelected)
 		{
 			OpenScene(OpenPath);

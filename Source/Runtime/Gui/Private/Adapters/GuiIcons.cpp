@@ -92,7 +92,7 @@ void FGui::Tooltip(const char* InText)
 	Impl->Select();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled))
 	{
-		ImGui::SetTooltip("%s", InText);
+		ImGui::SetTooltip("%s", Impl->PathDisplay.Text(InText).c_str());
 	}
 }
 

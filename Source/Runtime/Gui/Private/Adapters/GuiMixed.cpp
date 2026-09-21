@@ -54,10 +54,15 @@ bool FGui::EditMixedScalar(FArchiveNode& InValue, const FRecordValueShape& InSha
 		case ERecordValueKind::String:
 		{
 			auto& Value = std::get<std::string>(InValue.Value);
-			std::vector<char> Buffer(Value.size() + 1024, 0);
+			const bool bPath = InPresentation.Widget == EPropertyWidget::Path;
+			const auto Display = bPath ? Impl->PathDisplay.Value(Value)
+			                     : (ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled)
+			                         ? Impl->PathDisplay.Text(Value)
+			                         : Value;
+			std::vector<char> Buffer(Display.size() + 1024, 0);
 			if (!bInMixed)
 			{
-				std::copy(Value.begin(), Value.end(), Buffer.begin());
+				std::copy(Display.begin(), Display.end(), Buffer.begin());
 			}
 			const bool bSubmitted = bInMixed && ImGui::GetActiveID() == ImGui::GetID(Label) &&
 			                        (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
@@ -65,7 +70,7 @@ bool FGui::EditMixedScalar(FArchiveNode& InValue, const FRecordValueShape& InSha
 			                                               Buffer.size(), Impl->InputFlags());
 			if (Impl->TrackEdit(bChanged || bSubmitted))
 			{
-				Value = Buffer.data();
+				Value = bPath ? Impl->PathDisplay.Resolve(Buffer.data()) : Buffer.data();
 				return true;
 			}
 			return false;

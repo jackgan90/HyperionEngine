@@ -48,6 +48,7 @@ void FEditorPlugin::Initialize()
 	Compiler = &Context.Require<FShaderCompiler>();
 	Session = &Context.Require<FRenderSession>();
 	Gui = &Context.Require<FGui>();
+	Gui->SetPathDisplayRoot("/Game");
 	GuiRenderer = &Context.Require<FGuiRenderer>();
 	bInitialCapturePreference = Options.Preferences.bRenderDocCapture;
 #if HYP_ENABLE_RENDERDOC

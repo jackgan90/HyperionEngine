@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Gui/Gui.h"
+#include "Hyperion/Gui/PathDisplay.h"
 #include <imgui.h>
 #include <implot.h>
 #include <thread>
@@ -16,6 +17,7 @@ struct FGui::FImpl
 	std::thread::id Thread = std::this_thread::get_id();
 	FWindow* Window{};
 	std::string Clipboard;
+	FGuiPathDisplay PathDisplay;
 	std::vector<std::byte> FontBytes;
 	ImGuiStyle BaseStyle;
 	ImPlotStyle BasePlotStyle;
