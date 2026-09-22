@@ -32,7 +32,9 @@ bool FSceneInstance::FImpl::IsChangedReference(const FAssetRef& InReference,
 
 bool FSceneInstance::FImpl::UsesChangedAssets(const FLoad& InLoad) const
 {
-	if (IsChangedReference(InLoad.Reference, Path) || !InLoad.Data)
+	// Failed loads may have no dependency snapshot. Retry them once per publication,
+	// isolating their failures below so an unrelated missing asset cannot block healthy consumers.
+	if (!InLoad.Data || IsChangedReference(InLoad.Reference, Path))
 	{
 		return true;
 	}
@@ -103,10 +105,15 @@ FSceneNode FSceneInstance::RebindAssetResources(FSceneNode InNode)
 
 void FSceneInstance::FImpl::BeginAssetRefresh()
 {
+	std::set<std::string> Consumers;
+	for (const auto Handle : Scene.GetNodes(ESceneNodeKind::Model))
+	{
+		Consumers.insert(Scene.FindModelComponent(Handle)->Asset);
+	}
 	std::map<std::string, std::pair<FAssetRef, std::shared_ptr<const FSceneModelData>>> References;
 	for (const auto& [Id, Load] : Loads)
 	{
-		if (!UsesChangedAssets(Load))
+		if (!Consumers.contains(Id) || !UsesChangedAssets(Load))
 		{
 			continue;
 		}
@@ -129,6 +136,7 @@ void FSceneInstance::FImpl::BeginAssetRefresh()
 		}
 		FRefreshSelection Selection;
 		Selection.Handle = Handle;
+		Selection.Asset = Model.Asset;
 		Selection.Surface = PersistSceneMaterialSelection(Model.Surface);
 		for (const auto& [Section, Value] : Model.SectionSurfaces)
 		{
@@ -146,13 +154,29 @@ void FSceneInstance::FImpl::BeginAssetRefresh()
 		    for (const auto& [Id, Source] : References)
 		    {
 			    Token.Check();
-			    Result.Models.emplace(Id, LoadNativeModel(Assets, Tasks, Source.first, Path, Token,
-			                                              &Session.GetResources(), bPrepareQueries, Source.second)
-			                                  .Get(Tasks));
+			    try
+			    {
+				    Result.Models.emplace(Id, LoadNativeModel(Assets, Tasks, Source.first, Path, Token,
+				                                              &Session.GetResources(), bPrepareQueries, Source.second)
+				                                  .Get(Tasks));
+			    }
+			    catch (const std::exception& Failure)
+			    {
+				    Token.Check();
+				    if (Source.second)
+				    {
+					    throw;
+				    }
+				    Result.ModelErrors.emplace(Id, Failure.what());
+			    }
 		    }
 		    for (auto& Selection : Selections)
 		    {
 			    Token.Check();
+			    if (Result.ModelErrors.contains(Selection.Asset))
+			    {
+				    continue;
+			    }
 			    Selection.PreparedSurface =
 			        *LoadSceneMaterialSelection(Assets, Tasks, Session.GetResources(), Selection.Surface, Path, Token)
 			             .Get(Tasks);
@@ -162,6 +186,7 @@ void FSceneInstance::FImpl::BeginAssetRefresh()
 				        Section, *LoadSceneMaterialSelection(Assets, Tasks, Session.GetResources(), Value, Path, Token)
 				                      .Get(Tasks));
 			    }
+			    Selection.bPrepared = true;
 		    }
 		    Result.Selections = std::move(Selections);
 		    return Result;
@@ -210,12 +235,21 @@ void FSceneInstance::FImpl::PublishAssetRefresh(const FAssetRefresh& InRefresh)
 		if (auto It = Loads.find(Id); It != Loads.end())
 		{
 			It->second.Data = Data;
+			It->second.Error.clear();
+			It->second.bComplete = true;
+		}
+	}
+	for (const auto& [Id, Error] : InRefresh.ModelErrors)
+	{
+		if (auto It = Loads.find(Id); It != Loads.end() && !It->second.Data)
+		{
+			It->second.Error = Error;
 		}
 	}
 	for (const auto& Selection : InRefresh.Selections)
 	{
 		const auto* Current = Scene.FindModelComponent(Selection.Handle);
-		if (!Current)
+		if (!Current || !Selection.bPrepared)
 		{
 			continue;
 		}

@@ -180,11 +180,9 @@ void FEditorPlugin::ExerciseAssetNameInput(std::vector<FInputEvent>& InEvents)
 			break;
 		}
 		case 15:
-			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("canvas"));
-			if (ExerciseStep == 16)
-			{
-				PlacementCapture = Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + "-Input.png");
-			}
+			CheckAsset(AssetWorkspace->HasActiveInteraction(), "Name input lost its active live-edit interaction");
+			PlacementCapture = Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + "-Input.png");
+			++ExerciseStep;
 			break;
 		case 16:
 			CheckAsset(Document && Document->IsDirty() &&

@@ -198,7 +198,12 @@ void FAssetWorkspace::DrawTextureCanvas(FGui& InGui, FEntry& InEntry, const FTex
 		}
 	}
 	const auto Pointer = InGui.PointerState();
-	if (Pointer.bPressed && InEntry.Region.bHovered)
+	if (!Pointer.bPositionValid || !Pointer.bDown || Pointer.bCancel)
+	{
+		View.bDragging = false;
+		InGui.CaptureImagePointer(false);
+	}
+	if (Pointer.bPositionValid && Pointer.bPressed && !Pointer.bCancel && InEntry.Region.bHovered)
 	{
 		View.bDragging = true;
 		View.LastPointer = Pointer.Position;
@@ -209,11 +214,6 @@ void FAssetWorkspace::DrawTextureCanvas(FGui& InGui, FEntry& InEntry, const FTex
 		View.Pan.X += Pointer.Position.X - View.LastPointer.X;
 		View.Pan.Y += Pointer.Position.Y - View.LastPointer.Y;
 		View.LastPointer = Pointer.Position;
-		if (!Pointer.bDown || Pointer.bCancel)
-		{
-			View.bDragging = false;
-			InGui.CaptureImagePointer(false);
-		}
 	}
 	const float X = (B.X + B.Z - Mip.Width * View.Zoom) * .5f + View.Pan.X;
 	const float Y = (B.Y + B.W - Mip.Height * View.Zoom) * .5f + View.Pan.Y;
@@ -221,11 +221,13 @@ void FAssetWorkspace::DrawTextureCanvas(FGui& InGui, FEntry& InEntry, const FTex
 	{
 		InGui.DrawImageOverlay(InEntry.TextureId, B, {X, Y, X + Mip.Width * View.Zoom, Y + Mip.Height * View.Zoom});
 	}
-	const int Px = static_cast<int>(std::floor((Pointer.Position.X - X) / View.Zoom));
-	const int Py = static_cast<int>(std::floor((Pointer.Position.Y - Y) / View.Zoom));
-	if (InEntry.Region.bHovered && Px >= 0 && Py >= 0 && Px < static_cast<int>(Mip.Width) &&
-	    Py < static_cast<int>(Mip.Height))
+	const float PixelX = std::floor((Pointer.Position.X - X) / View.Zoom);
+	const float PixelY = std::floor((Pointer.Position.Y - Y) / View.Zoom);
+	if (Pointer.bPositionValid && InEntry.Region.bHovered && PixelX >= 0 && PixelY >= 0 && PixelX < Mip.Width &&
+	    PixelY < Mip.Height)
 	{
+		const auto Px = static_cast<std::uint32_t>(PixelX);
+		const auto Py = static_cast<std::uint32_t>(PixelY);
 		const auto Pixel = ReadTexturePixel(
 		    Mip, Texture->Format, View.Face * std::size_t(Mip.Width) * Mip.Height + std::size_t(Py) * Mip.Width + Px);
 		std::ostringstream Text;
@@ -266,12 +268,9 @@ void FAssetWorkspace::DrawTextureProperties(FGui& InGui, FEntry& InEntry)
 			InEntry.EncodingGeneration = InEntry.Document->Generation();
 			InEntry.EncodingEdit = DispatchAsync<FArchiveNode>(
 			    Tasks, {EDomain::Worker},
-			    [Texture, Encoding, Name = ReadValue<std::string>(InEntry.Document->Get("name"))]
+			    [Draft = InEntry.Document->Snapshot(), Encoding]
 			    {
-				    auto Draft = WriteValue(BuildTextureAsset(Name, static_cast<EMaterialTextureEncoding>(Encoding),
-				                                              Texture->Mips.front()));
-				    ShareAssetBulk(Draft);
-				    return Draft;
+				    return RebuildTextureEncodingDraft(Draft, static_cast<EMaterialTextureEncoding>(Encoding));
 			    },
 			    InEntry.Cancellation);
 		}

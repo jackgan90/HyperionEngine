@@ -25,6 +25,7 @@ public:
 	bool HasPendingEdits() const;
 	bool CanUndo() const;
 	bool CanRedo() const;
+	bool HasActiveInteraction() const;
 	void Undo();
 	void Redo();
 	void SaveActive();
@@ -47,6 +48,16 @@ public:
 private:
 	struct FEntry;
 
+	struct FReferenceSelection
+	{
+		std::uint64_t Generation{};
+		std::string Type;
+		std::optional<ETextureDimension> Dimension;
+		TAsyncResult<FAssetGraph> Request;
+		std::string Field;
+		FArchiveNode Candidate;
+	};
+
 	struct FPrepared
 	{
 		std::shared_ptr<const FLoadedAsset> Root;
@@ -54,6 +65,7 @@ private:
 		std::shared_ptr<const FSceneModelData> SecondModel;
 		std::set<std::string> Dependencies;
 		std::array<std::shared_ptr<const FTextureAsset>, 3> SkyProducts;
+		std::string Error;
 	};
 
 	struct FTextureView
@@ -85,6 +97,8 @@ private:
 		std::shared_ptr<FAssetEditorDocument> Document;
 		std::optional<TAsyncResult<std::shared_ptr<FAssetEditorDocument>>> Initialization;
 		std::optional<TAsyncResult<FArchiveNode>> EncodingEdit;
+		std::optional<FReferenceSelection> ReferenceEdit;
+		bool bSaveRequested{};
 		std::uint64_t EncodingGeneration{};
 		std::uint64_t GuiInteraction{};
 		bool bReadOnly{};
@@ -116,6 +130,12 @@ private:
 		FGuiImageRegion Region;
 		std::shared_ptr<const FSceneFrameSeed> Seed;
 		FTextureView Texture;
+
+		bool HasPendingEdit() const
+		{
+			return EncodingEdit.has_value() || ReferenceEdit.has_value();
+		}
+
 		float Exposure = 1;
 		float YawDegrees{};
 	};
@@ -123,6 +143,8 @@ private:
 	FPrepared Prepare(const FLoadedAsset& InLoaded, FArchiveNode InDraft, std::size_t InShape,
 	                  FCancellationToken InCancellation, std::shared_ptr<const FSceneModelData> InExisting);
 	void PollEntry(FEntry& InEntry);
+	void PollReferenceEdit(FEntry& InEntry);
+	void CommitReferenceEdit(FEntry& InEntry, std::string InField, FArchiveNode InCandidate);
 	void Publish(FEntry& InEntry, const FPrepared& InPrepared);
 	void Close(FEntry& InEntry);
 	void DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, std::span<const FInputEvent> InEvents);
@@ -144,27 +166,27 @@ private:
 	                           const FMaterialAssetParameter& InParameter);
 	void ObserveProperty(FGui& InGui, const std::string& InId);
 	void EditField(FGui& InGui, FEntry& InEntry, const char* InField, const std::function<bool()>& InWidget,
-	               const std::function<FArchiveNode()>& InValue);
+	               const std::function<FArchiveNode()>& InValue, bool bInAffectsPreview = true);
 	FAssetService& Assets;
 	FTaskSystem& Tasks;
 	FRenderSession& Session;
 	FRHICapabilities Capabilities;
 	std::vector<std::unique_ptr<FEntry>> Entries;
 	std::vector<FAssetRef> AssetIndex;
+
+	struct FReferenceChoices
+	{
+		std::vector<std::string> Labels;
+		std::vector<FAssetRef> References;
+		std::map<std::string, std::size_t, std::less<>> Indices;
+	};
+
+	std::map<std::string, FReferenceChoices, std::less<>> ReferenceChoices;
 	std::map<std::string, FVec4, std::less<>> Bounds;
 	std::string RevealControl;
 	FEntry* Active{};
 	FEntry* Closing{};
 
-	struct FReferenceSelection
-	{
-		std::filesystem::path Document;
-		std::string Control;
-		std::uint64_t Generation{};
-		TAsyncResult<FAssetGraph> Request;
-	};
-
-	std::optional<FReferenceSelection> ReferenceSelection;
 	std::uint64_t NextTexture = 100;
 	bool bRequestClose{};
 	bool bCloseModal{};

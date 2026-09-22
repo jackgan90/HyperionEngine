@@ -46,35 +46,36 @@ bool FAssetEditorWindow::ShouldClose() const
 
 void FAssetEditorWindow::RouteShortcuts(std::vector<FInputEvent>& InEvents)
 {
-	std::erase_if(
-	    InEvents,
-	    [&](const FInputEvent& InEvent)
-	    {
-		    if (InEvent.Type != EEventType::Key || !InEvent.bDown || InEvent.bRepeat || !(InEvent.Modifiers & 1))
-		    {
-			    return false;
-		    }
-		    if (InEvent.Key == EKey::S)
-		    {
-			    Gui->FinishEditing();
-			    Workspace.SaveActive();
-			    return true;
-		    }
-		    if ((InEvent.Key == EKey::Z || InEvent.Key == EKey::Y) && !Gui->IsEditingText() && !Gui->DragPayload())
-		    {
-			    Gui->FinishEditing();
-			    if (InEvent.Key == EKey::Y || (InEvent.Modifiers & 2))
-			    {
-				    Workspace.Redo();
-			    }
-			    else
-			    {
-				    Workspace.Undo();
-			    }
-			    return true;
-		    }
-		    return false;
-	    });
+	std::erase_if(InEvents,
+	              [&](const FInputEvent& InEvent)
+	              {
+		              if (InEvent.Type != EEventType::Key || !InEvent.bDown || InEvent.bRepeat ||
+		                  !(InEvent.Modifiers & 1))
+		              {
+			              return false;
+		              }
+		              if (InEvent.Key == EKey::S)
+		              {
+			              Gui->FinishEditing();
+			              Workspace.SaveActive();
+			              return true;
+		              }
+		              if ((InEvent.Key == EKey::Z || InEvent.Key == EKey::Y) &&
+		                  (!Gui->IsEditingText() || Workspace.HasActiveInteraction()) && !Gui->DragPayload())
+		              {
+			              Gui->FinishEditing();
+			              if (InEvent.Key == EKey::Y || (InEvent.Modifiers & 2))
+			              {
+				              Workspace.Redo();
+			              }
+			              else
+			              {
+				              Workspace.Undo();
+			              }
+			              return true;
+		              }
+		              return false;
+	              });
 }
 
 void FAssetEditorWindow::Advance(float InDelta, std::vector<FInputEvent> InEvents, float InScale, bool bInBlocked,
@@ -200,7 +201,7 @@ void FAssetEditorWindow::DrawCloseDialog()
 	Gui->TextWrapped("Save changes to all open assets before closing this window?");
 	if (Workspace.HasPendingEdits())
 	{
-		Gui->TextWrapped("Wait for pending texture edits to finish before saving, or discard them explicitly.");
+		Gui->TextWrapped("Wait for pending edits to finish before saving, or discard them explicitly.");
 	}
 	Gui->TextWrapped(Error);
 	if (Gui->Button("Save All and Close", !Workspace.HasPendingEdits() && !Workspace.IsSaving() && !bSaveThenClose))

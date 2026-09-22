@@ -82,64 +82,72 @@ FAssetWorkspace::FPrepared FAssetWorkspace::Prepare(const FLoadedAsset& InLoaded
                                                     std::size_t InShape, FCancellationToken InCancellation,
                                                     std::shared_ptr<const FSceneModelData> InExisting)
 {
-	InCancellation.Check();
-	auto Root = std::make_shared<FLoadedAsset>(InLoaded);
-	Root->Object = ReadRecord(*Root->Type, InDraft);
-	Root->Header.Dependencies = CollectAssetDependencies(*Root->Type, Root->Object.get());
 	FPrepared Result;
-	Result.Root = Root;
-	Result.Dependencies.insert(Root->Header.Id);
-	for (const auto& Dependency : Root->Header.Dependencies)
+	try
 	{
-		Result.Dependencies.insert(Dependency.Reference.Id);
-	}
-	const auto& Type = Root->Header.TypeId;
-	if (Type == RecordType<FTextureAsset>().Id)
-	{
-		return Result;
-	}
-	auto& Resources = Session.GetResources();
-	if (Type == RecordType<FModelAsset>().Id)
-	{
-		const auto Graph = DraftGraph(Assets, Tasks, Root, InCancellation);
-		for (const auto& [Path, Asset] : Graph.Assets)
+		InCancellation.Check();
+		auto Root = std::make_shared<FLoadedAsset>(InLoaded);
+		Root->Object = ReadRecord(*Root->Type, InDraft);
+		Root->Header.Dependencies = CollectAssetDependencies(*Root->Type, Root->Object.get());
+		Result.Root = Root;
+		Result.Dependencies.insert(Root->Header.Id);
+		for (const auto& Dependency : Root->Header.Dependencies)
 		{
-			Result.Dependencies.insert(Asset->Header.Id);
+			Result.Dependencies.insert(Dependency.Reference.Id);
 		}
-		auto Data = std::make_shared<FSceneModelData>(*ResolveModelAssetGraph(Graph, Assets));
-		for (const auto& Material : Data->Materials)
+		const auto& Type = Root->Header.TypeId;
+		if (Type == RecordType<FTextureAsset>().Id)
 		{
-			InCancellation.Check();
-			Data->MaterialSnapshots.push_back(Resources.PrepareMaterialAsset(Material));
+			return Result;
 		}
-		Result.Model = std::move(Data);
+		auto& Resources = Session.GetResources();
+		if (Type == RecordType<FModelAsset>().Id)
+		{
+			const auto Graph = DraftGraph(Assets, Tasks, Root, InCancellation);
+			for (const auto& [Path, Asset] : Graph.Assets)
+			{
+				Result.Dependencies.insert(Asset->Header.Id);
+			}
+			auto Data = std::make_shared<FSceneModelData>(*ResolveModelAssetGraph(Graph, Assets));
+			for (const auto& Material : Data->Materials)
+			{
+				InCancellation.Check();
+				Data->MaterialSnapshots.push_back(Resources.PrepareMaterialAsset(Material));
+			}
+			Result.Model = std::move(Data);
+		}
+		else if (Type == RecordType<FMaterialAsset>().Id)
+		{
+			const auto Graph = DraftGraph(Assets, Tasks, Root, InCancellation);
+			for (const auto& [Path, Asset] : Graph.Assets)
+			{
+				Result.Dependencies.insert(Asset->Header.Id);
+			}
+			const auto Material = ResolveMaterialAssetGraph(Graph, *Root, Assets);
+			Result.Model = PreviewModel(Assets, Tasks, Resources, InShape, Material, InCancellation, InExisting);
+		}
+		else
+		{
+			const auto Sky = Root->As<FSkyAsset>();
+			const std::array References{Sky->Radiance, Sky->Specular, Sky->Brdf};
+			for (std::size_t Index = 0; Index < References.size(); ++Index)
+			{
+				const auto Product = Assets.LoadReferenceAsync(References[Index], Root->Path).Get(Tasks);
+				Result.SkyProducts[Index] = Product->As<FTextureAsset>();
+				Result.Dependencies.insert(Product->Header.Id);
+			}
+			Result.Model =
+			    PreviewModel(Assets, Tasks, Resources, 0, ReferenceSurface(Assets, Tasks, false), InCancellation);
+			Result.SecondModel =
+			    PreviewModel(Assets, Tasks, Resources, 0, ReferenceSurface(Assets, Tasks, true), InCancellation);
+		}
+		InCancellation.Check();
 	}
-	else if (Type == RecordType<FMaterialAsset>().Id)
+	catch (const std::exception& Failure)
 	{
-		const auto Graph = DraftGraph(Assets, Tasks, Root, InCancellation);
-		for (const auto& [Path, Asset] : Graph.Assets)
-		{
-			Result.Dependencies.insert(Asset->Header.Id);
-		}
-		const auto Material = ResolveMaterialAssetGraph(Graph, *Root, Assets);
-		Result.Model = PreviewModel(Assets, Tasks, Resources, InShape, Material, InCancellation, InExisting);
+		InCancellation.Check();
+		Result.Error = Failure.what();
 	}
-	else
-	{
-		const auto Sky = Root->As<FSkyAsset>();
-		const std::array References{Sky->Radiance, Sky->Specular, Sky->Brdf};
-		for (std::size_t Index = 0; Index < References.size(); ++Index)
-		{
-			const auto Product = Assets.LoadReferenceAsync(References[Index], Root->Path).Get(Tasks);
-			Result.SkyProducts[Index] = Product->As<FTextureAsset>();
-			Result.Dependencies.insert(Product->Header.Id);
-		}
-		Result.Model =
-		    PreviewModel(Assets, Tasks, Resources, 0, ReferenceSurface(Assets, Tasks, false), InCancellation);
-		Result.SecondModel =
-		    PreviewModel(Assets, Tasks, Resources, 0, ReferenceSurface(Assets, Tasks, true), InCancellation);
-	}
-	InCancellation.Check();
 	return Result;
 }
 
@@ -215,7 +223,7 @@ void FAssetWorkspace::DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, s
 		InGui.TextWrapped(InEntry.Error.empty() ? "Loading asset..." : InEntry.Error);
 		return;
 	}
-	if (InGui.Button("Save", !InEntry.bReadOnly && !InEntry.EncodingEdit && !InEntry.Document->IsSaving()))
+	if (InGui.Button("Save", !InEntry.bReadOnly && !InEntry.HasPendingEdit() && !InEntry.Document->IsSaving()))
 	{
 		SaveActive();
 	}
@@ -230,7 +238,7 @@ void FAssetWorkspace::DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, s
 		Redo();
 	}
 	InGui.SameLine();
-	InGui.Text(InEntry.EncodingEdit           ? "Preparing texture edit..."
+	InGui.Text(InEntry.HasPendingEdit()       ? "Preparing edit..."
 	           : InEntry.Document->IsSaving() ? "Saving..."
 	           : InEntry.Document->IsDirty()  ? "Unsaved changes"
 	                                          : "Saved");

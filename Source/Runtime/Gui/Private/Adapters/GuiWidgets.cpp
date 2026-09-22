@@ -320,6 +320,7 @@ void FGui::ClosePopup()
 bool FGui::IsEditingText() const
 {
 	Impl->Select();
-	return ImGui::GetIO().WantTextInput;
+	// WantTextInput can retain the previous frame's request after FinishEditing clears the active widget.
+	return ImGui::GetIO().WantTextInput && ImGui::IsAnyItemActive();
 }
 } // namespace Hyperion

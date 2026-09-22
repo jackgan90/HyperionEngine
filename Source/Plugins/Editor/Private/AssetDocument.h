@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Assets/AssetService.h"
+#include "Hyperion/Textures/TextureAsset.h"
 
 namespace Hyperion
 {
@@ -9,7 +10,7 @@ class FAssetEditorDocument
 public:
 	explicit FAssetEditorDocument(std::shared_ptr<const FLoadedAsset> InAsset);
 	const FArchiveNode& Get(std::string_view InField) const;
-	void Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction = 0);
+	void Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction = 0, bool bInAffectsPreview = true);
 	void FinishInteraction();
 	void CancelInteraction(std::uint64_t InInteraction = 0);
 	bool Undo();
@@ -35,6 +36,7 @@ private:
 		std::uint64_t BeforeState{};
 		std::uint64_t AfterState{};
 		std::uint64_t Interaction{};
+		bool bAffectsPreview{};
 	};
 
 	std::shared_ptr<const FLoadedAsset> Asset;
@@ -52,4 +54,5 @@ private:
 };
 
 void ShareAssetBulk(FArchiveNode& InNode);
+FArchiveNode RebuildTextureEncodingDraft(const FArchiveNode& InDraft, EMaterialTextureEncoding InEncoding);
 } // namespace Hyperion

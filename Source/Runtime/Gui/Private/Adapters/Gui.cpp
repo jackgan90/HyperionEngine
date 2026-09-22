@@ -354,11 +354,11 @@ bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth, b
 }
 
 bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex,
-                 const std::function<void(std::size_t, FVec4)>& InObserve)
+                 const std::function<void(std::size_t, FVec4)>& InObserve, const char* InPreview)
 {
 	Impl->Select();
 	bool bChanged = false;
-	const char* Preview = InIndex < InChoices.size() ? InChoices[InIndex].c_str() : "None";
+	const char* Preview = InPreview ? InPreview : InIndex < InChoices.size() ? InChoices[InIndex].c_str() : "None";
 	const ImGuiID Id = ImGui::GetID(InLabel);
 	const bool bOpen = ImGui::BeginCombo(InLabel, Preview);
 	const bool bActivated = ImGui::IsItemActivated();

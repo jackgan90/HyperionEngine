@@ -99,15 +99,18 @@ struct FSceneInstance::FImpl
 	struct FRefreshSelection
 	{
 		FSceneHandle Handle;
+		std::string Asset;
 		FSceneMaterialAsset Surface;
 		std::map<std::uint32_t, FSceneMaterialAsset> Sections;
 		FSceneMaterialSelection PreparedSurface;
 		std::map<std::uint32_t, FSceneMaterialSelection> PreparedSections;
+		bool bPrepared{};
 	};
 
 	struct FAssetRefresh
 	{
 		std::map<std::string, std::shared_ptr<const FSceneModelData>> Models;
+		std::map<std::string, std::string> ModelErrors;
 		std::vector<FRefreshSelection> Selections;
 	};
 

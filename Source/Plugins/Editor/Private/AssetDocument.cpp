@@ -13,6 +13,19 @@ FArchiveNode& DocumentField(FArchiveNode& InDraft, std::string_view InField)
 }
 } // namespace
 
+FArchiveNode RebuildTextureEncodingDraft(const FArchiveNode& InDraft, EMaterialTextureEncoding InEncoding)
+{
+	const auto& Fields =
+	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InDraft.Value).at("fields").Value);
+	const auto& Base = std::get<FArchiveNode::FArray>(Fields.at("mips").Value).front();
+	auto Result = WriteValue(
+	    BuildTextureAsset(ReadValue<std::string>(Fields.at("name")), InEncoding, ReadValue<FMaterialTextureMip>(Base)));
+	ShareAssetBulk(Result);
+	// Encoding affects downsampling, never the stored top-level pixels.
+	std::get<FArchiveNode::FArray>(DocumentField(Result, "mips").Value).front() = Base;
+	return Result;
+}
+
 void ShareAssetBulk(FArchiveNode& InNode)
 {
 	if (auto* Bulk = std::get_if<FBulkData>(&InNode.Value); Bulk && !Bulk->Storage)
@@ -49,25 +62,28 @@ const FArchiveNode& FAssetEditorDocument::Get(std::string_view InField) const
 	    .at(std::string(InField));
 }
 
-void FAssetEditorDocument::Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction)
+void FAssetEditorDocument::Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction,
+                               bool bInAffectsPreview)
 {
+	bInAffectsPreview &= InField != "name";
 	ShareAssetBulk(InValue);
 	auto& Current = DocumentField(Draft, InField);
 	if (InInteraction && ActiveInteraction == InInteraction && Cursor && Cursor == History.size() &&
 	    History.back().Field == InField && State != SavedState && (!PendingSave || State != SubmittedState))
 	{
 		History.back().After = InValue;
+		History.back().bAffectsPreview |= bInAffectsPreview;
 	}
 	else
 	{
 		History.resize(Cursor);
-		History.push_back({std::move(InField), Current, InValue, State, ++NextState, InInteraction});
+		History.push_back({std::move(InField), Current, InValue, State, ++NextState, InInteraction, bInAffectsPreview});
 		++Cursor;
 	}
 	Current = std::move(InValue);
 	State = History.back().AfterState;
 	ActiveInteraction = InInteraction;
-	if (History.back().Field != "name")
+	if (bInAffectsPreview)
 	{
 		++PreviewRevision;
 	}
@@ -104,7 +120,7 @@ bool FAssetEditorDocument::Undo()
 	const auto& Edit = History[--Cursor];
 	DocumentField(Draft, Edit.Field) = Edit.Before;
 	State = Edit.BeforeState;
-	if (Edit.Field != "name")
+	if (Edit.bAffectsPreview)
 	{
 		++PreviewRevision;
 	}
@@ -122,7 +138,7 @@ bool FAssetEditorDocument::Redo()
 	const auto& Edit = History[Cursor++];
 	DocumentField(Draft, Edit.Field) = Edit.After;
 	State = Edit.AfterState;
-	if (Edit.Field != "name")
+	if (Edit.bAffectsPreview)
 	{
 		++PreviewRevision;
 	}

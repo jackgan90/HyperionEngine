@@ -52,90 +52,19 @@ void ModelTree(FGui& InGui, const std::vector<FModelNode>& InNodes, std::uint32_
 } // namespace
 
 void FAssetWorkspace::EditField(FGui& InGui, FEntry& InEntry, const char* InField,
-                                const std::function<bool()>& InWidget, const std::function<FArchiveNode()>& InValue)
+                                const std::function<bool()>& InWidget, const std::function<FArchiveNode()>& InValue,
+                                bool bInAffectsPreview)
 {
-	InGui.BeginLiveEdit();
+	FAssetLiveEditScope Editing(InGui);
 	const bool bChanged = InWidget();
-	const auto Interaction = InGui.EndLiveEdit();
+	const auto Interaction = Editing.Finish();
 	if (Interaction.ActiveInteraction)
 	{
 		InEntry.GuiInteraction = Interaction.ActiveInteraction;
 	}
 	if (bChanged)
 	{
-		InEntry.Document->Set(InField, InValue(), Interaction.ChangedInteraction);
-	}
-}
-
-bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef& InReference, std::string_view InType,
-                                    std::optional<ETextureDimension> InDimension)
-{
-	try
-	{
-		if (ReferenceSelection && ReferenceSelection->Document == Active->Path &&
-		    ReferenceSelection->Control == InLabel)
-		{
-			if (ReferenceSelection->Generation != Active->Document->Generation())
-			{
-				ReferenceSelection.reset();
-			}
-			else if (ReferenceSelection->Request.Ready())
-			{
-				const auto Request = ReferenceSelection->Request;
-				ReferenceSelection.reset();
-				const auto Graph = Request.GetReady();
-				if (!Graph->Root || !Graph->Failures.empty())
-				{
-					throw std::runtime_error("Selected asset has invalid dependencies");
-				}
-				const auto& Loaded = *Graph->Root;
-				if (Loaded.Header.TypeId != InType)
-				{
-					throw std::runtime_error("Selected asset has a different type");
-				}
-				if (InDimension && Loaded.As<FTextureAsset>()->Dimension != *InDimension)
-				{
-					throw std::runtime_error("Texture dimension does not match the material parameter");
-				}
-				InReference = {Loaded.Header.Id, PathToUtf8(Loaded.Path), Loaded.Header.TypeId, {}};
-				return true;
-			}
-			else
-			{
-				InGui.Text("Validating selection...");
-			}
-		}
-		std::vector<std::string> Choices{InReference.Path.empty() ? "None" : InReference.Path};
-		std::vector<FAssetRef> References{InReference};
-		for (const auto& Reference : AssetIndex)
-		{
-			if (Reference.TypeId == InType && Reference.Id != InReference.Id)
-			{
-				Choices.push_back(Reference.Path);
-				References.push_back(Reference);
-			}
-		}
-		std::size_t Selected{};
-		const bool bChanged =
-		    AssetCombo(InGui, InLabel, Choices, Selected,
-		               [&](std::size_t InIndex, FVec4)
-		               {
-			               ObserveProperty(InGui, "choice/" + std::string(InLabel) + Choices[InIndex]);
-		               });
-		ObserveProperty(InGui, InLabel);
-		if (!bChanged)
-		{
-			return false;
-		}
-		ReferenceSelection = FReferenceSelection{Active->Path, InLabel, Active->Document->Generation(),
-		                                         Assets.LoadGraphAsync(References.at(Selected), {})};
-		return false;
-	}
-	catch (const std::exception& Failure)
-	{
-		Active->Document->Error = Failure.what();
-		ReferenceSelection.reset();
-		return false;
+		InEntry.Document->Set(InField, InValue(), Interaction.ChangedInteraction, bInAffectsPreview);
 	}
 }
 
@@ -165,7 +94,7 @@ void FAssetWorkspace::DrawProperties(FGui& InGui)
 	auto& Document = *Entry.Document;
 	const auto& Header = Document.Loaded().Header;
 	const auto PreviousInteraction = std::exchange(Entry.GuiInteraction, 0);
-	InGui.BeginDisabled(Entry.bReadOnly || Entry.EncodingEdit.has_value());
+	InGui.BeginDisabled(Entry.bReadOnly || Entry.HasPendingEdit());
 	try
 	{
 		InGui.Text("Asset properties");
@@ -275,7 +204,7 @@ void FAssetWorkspace::DrawModelProperties(FGui& InGui, FEntry& InEntry)
 		{
 			if (EditReference(InGui, ("Slot " + std::to_string(I)).c_str(), Slots[I], RecordType<FMaterialAsset>().Id))
 			{
-				Document.Set("materialSlots", WriteValue(Slots));
+				CommitReferenceEdit(InEntry, "materialSlots", WriteValue(Slots));
 			}
 		}
 	}
@@ -308,7 +237,9 @@ void FAssetWorkspace::DrawModelNodes(FGui& InGui, FEntry& InEntry)
 		    {
 			    ValidateNodeHierarchy(Nodes);
 			    return WriteValue(Nodes);
-		    });
+		    },
+		    false);
+		ObserveProperty(InGui, "node/name");
 		auto Transform = DecomposeAffine(Node.Local);
 		EditField(
 		    InGui, InEntry, "nodes",
@@ -327,14 +258,11 @@ void FAssetWorkspace::DrawModelNodes(FGui& InGui, FEntry& InEntry)
 				    bChanged = true;
 			    }
 			    bChanged |= InGui.InputVectorRow("Scale", Transform.Scale, "", "Local scale", ComponentBounds);
-			    if (bChanged)
-			    {
-				    Node.Local = ComposeAffine(Transform);
-			    }
 			    return bChanged;
 		    },
 		    [&]
 		    {
+			    Node.Local = ComposeAffine(Transform);
 			    ValidateNodeHierarchy(Nodes);
 			    return WriteValue(Nodes);
 		    });
@@ -354,9 +282,11 @@ void FAssetWorkspace::DrawModelPrimitives(FGui& InGui, FEntry& InEntry, const FM
 		auto Primitives = Document.Get("primitives");
 		auto& Array = std::get<FArchiveNode::FArray>(Primitives.Value);
 		std::vector<std::string> Names;
-		for (const auto& Primitive : Model->Primitives)
+		for (auto& Primitive : Array)
 		{
-			Names.push_back(Primitive.Name + " [" + Primitive.Id + "]");
+			const auto& Values = Fields(Primitive);
+			Names.push_back(ReadValue<std::string>(Values.at("name")) + " [" + ReadValue<std::string>(Values.at("id")) +
+			                "]");
 		}
 		InEntry.SelectedPrimitive = std::min(InEntry.SelectedPrimitive, Names.size() - 1);
 		AssetCombo(InGui, "Selected primitive", Names, InEntry.SelectedPrimitive);
@@ -372,7 +302,8 @@ void FAssetWorkspace::DrawModelPrimitives(FGui& InGui, FEntry& InEntry, const FM
 		    {
 			    Primitive["name"] = WriteValue(Name);
 			    return Primitives;
-		    });
+		    },
+		    false);
 		const auto& Geometry = Model->Primitives[InEntry.SelectedPrimitive];
 		AssetInfo(InGui, "Vertices", std::to_string(Geometry.Positions.size() / 3));
 		AssetInfo(InGui, "Indices", std::to_string(Geometry.Indices.size()));

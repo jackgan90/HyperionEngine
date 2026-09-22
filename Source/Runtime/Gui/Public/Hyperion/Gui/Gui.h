@@ -130,7 +130,7 @@ public:
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
 	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0, bool* bOutDoubleClicked = nullptr);
 	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex,
-	           const std::function<void(std::size_t, FVec4)>& InObserve = {});
+	           const std::function<void(std::size_t, FVec4)>& InObserve = {}, const char* InPreview = nullptr);
 	// Optional display root applies to messages and explicitly typed path inputs, never widget IDs.
 	void SetPathDisplayRoot(std::string InRoot);
 	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true, bool bInPath = false);

@@ -46,11 +46,13 @@ void CheckDocuments(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSy
 	InAssets.Types().Register<FTextureAsset>();
 	FAssetEditorDocument A(InAssets.LoadAsync(Path).Get(InTasks));
 	FAssetEditorDocument B(InAssets.LoadAsync(Path).Get(InTasks));
+	const auto InitialPreview = A.PreviewGeneration();
 	A.Set("name", WriteValue(std::string("First")), 41);
 	A.Set("name", WriteValue(std::string("Second")), 41);
 	Check(A.IsDirty() && !B.IsDirty());
 	Check(A.Undo() && !A.IsDirty() && !A.CanUndo());
 	Check(A.Redo() && ReadValue<std::string>(A.Get("name")) == "Second");
+	Check(A.PreviewGeneration() == InitialPreview);
 	A.Set("name", WriteValue(std::string("Cancelled")), 42);
 	A.CancelInteraction();
 	Check(ReadValue<std::string>(A.Get("name")) == "Second" && !A.CanRedo());
@@ -130,6 +132,49 @@ void CheckModelEdits(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileS
 	Check(Length(Subtract(Actual.Position, Edited.Position)) < .0001f &&
 	      Length(Subtract(Actual.Shear, Edited.Shear)) < .0001f);
 	Check(Saved->Primitives.front().Positions == Primitive.Positions);
+	const auto Preview = Document.PreviewGeneration();
+	Nodes.front().Name = "Metadata only";
+	Document.Set("nodes", WriteValue(Nodes), 0, false);
+	Check(Document.IsDirty() && Document.PreviewGeneration() == Preview);
+	Check(Document.Undo() && !Document.IsDirty() && Document.PreviewGeneration() == Preview);
+	Check(Document.Redo() && Document.PreviewGeneration() == Preview);
+}
+
+void CheckTextureHistorySharing(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSystem& InFiles)
+{
+	const auto Path = InAssets.NormalizePath("texture-history.hasset");
+	FMaterialTextureMip Base{128, 128, std::vector<std::uint8_t>(128 * 128 * 4, 127)};
+	const auto Texture = BuildTextureAsset("Shared history", EMaterialTextureEncoding::Linear, Base);
+	InFiles.WriteAtomic(Path, EncodeAsset(RecordType<FTextureAsset>(), &Texture).Bytes);
+	FAssetEditorDocument Document(InAssets.LoadAsync(Path).Get(InTasks));
+	const auto BaseStorage = [&]()
+	{
+		const auto& Mip = std::get<FArchiveNode::FArray>(Document.Get("mips").Value).front();
+		const auto& Fields =
+		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Mip.Value).at("fields").Value);
+		return std::get<FBulkData>(Fields.at("bytes").Value).Storage;
+	};
+	const auto Original = BaseStorage();
+	std::vector<std::string> Hashes{HashArchive(Document.Snapshot())};
+	for (int Index = 0; Index < 6; ++Index)
+	{
+		const auto Encoding = Index % 2 ? EMaterialTextureEncoding::Linear : EMaterialTextureEncoding::Srgb;
+		Document.Set({}, RebuildTextureEncodingDraft(Document.Snapshot(), Encoding));
+		Check(BaseStorage() == Original);
+		Check(ReadValue<FTextureAsset>(Document.Snapshot()).Mips ==
+		      BuildTextureAsset(Texture.Name, Encoding, Base).Mips);
+		Hashes.push_back(HashArchive(Document.Snapshot()));
+	}
+	for (std::size_t Index = Hashes.size() - 1; Index > 0; --Index)
+	{
+		Check(Document.Undo() && HashArchive(Document.Snapshot()) == Hashes[Index - 1]);
+		Check(BaseStorage() == Original);
+	}
+	for (std::size_t Index = 1; Index < Hashes.size(); ++Index)
+	{
+		Check(Document.Redo() && HashArchive(Document.Snapshot()) == Hashes[Index]);
+		Check(BaseStorage() == Original);
+	}
 }
 
 void CheckObsoleteCatalog(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSystem& InFiles)
@@ -164,6 +209,7 @@ int main()
 		FAssetService Assets(IO);
 		CheckDocuments(Assets, Tasks, *Files);
 		CheckModelEdits(Assets, Tasks, *Files);
+		CheckTextureHistorySharing(Assets, Tasks, *Files);
 		CheckObsoleteCatalog(Assets, Tasks, *Files);
 		WriteAssetEditorFixture(std::filesystem::current_path() / "editor-asset-tests");
 		Assets.Drain();

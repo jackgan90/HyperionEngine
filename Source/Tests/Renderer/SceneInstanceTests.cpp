@@ -37,12 +37,17 @@ class FGateFileSystem final : public IFileSystem
 public:
 	std::atomic<bool> bRelease{false};
 	std::atomic<bool> bEntered{false};
+	std::atomic<std::size_t> MissingReads{};
 	bool bEnabled{};
 	std::string GateName = "SceneRuntime.model.hasset";
 	FLocalFileSystem Local;
 
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override
 	{
+		if (InPath.filename() == "MissingRuntime.hasset")
+		{
+			++MissingReads;
+		}
 		if (bEnabled && InPath.filename() == GateName)
 		{
 			bEntered = true;
@@ -1252,6 +1257,100 @@ void CheckConsumersAddedDuringRefresh()
 	std::cout << "Consumers added during asset refresh receive saved resources without losing authored edits\n";
 }
 
+void CheckRefreshBesideMissingModel()
+{
+	FSceneFixture Fixture;
+	Fixture.Files->bRelease = true;
+	FSceneInstance Scene(*Fixture.Session, Fixture.Tasks, Fixture.Assets, true);
+	Scene.Load("SceneRuntime.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().ReadyModels == 2 && Scene.GetStatus().FailedModels == 1;
+	      });
+	const auto Handle = Scene.FindHandle("one");
+	for (const bool bRemoveMissing : {false, true})
+	{
+		if (bRemoveMissing)
+		{
+			Scene.Remove(Scene.FindHandle("failed"));
+		}
+		const auto Previous = Scene.FindNode(Handle)->Model()->Data;
+		const auto Loaded = Fixture.Assets.LoadAsync("@material-0.hasset").Get(Fixture.Tasks);
+		auto Material = *Loaded->As<FMaterialAsset>();
+		Material.Name = bRemoveMissing ? "Missing consumer removed" : "Missing consumer still present";
+		const auto Saved =
+		    *Fixture.Assets
+		         .SaveDocumentAsync(Loaded->Path, *Loaded->Type, WriteValue(Material),
+		                            {Loaded->Header.Id, {}, Loaded->Header.TypeId, Loaded->Header.Revision})
+		         .Get(Fixture.Tasks);
+		Scene.RefreshAssets(std::array{Saved});
+		Await(Scene,
+		      [&]
+		      {
+			      return !Scene.GetStatus().AssetRefreshError.empty() ||
+			             Scene.FindNode(Handle)->Model()->Data != Previous;
+		      });
+		HYP_CHECK(Scene.GetStatus().AssetRefreshError.empty());
+		HYP_CHECK(Scene.FindNode(Handle)->Model()->Data->Materials.front()->Asset->Name == Material.Name);
+	}
+	std::cout << "Unrelated missing models, including removed consumers, do not block saved material refresh\n";
+}
+
+void CheckFailedDependencyRecovery()
+{
+	FSceneFixture Fixture;
+	Fixture.Files->bRelease = true;
+	const auto Original = Fixture.Assets.LoadAsync("@material-0.hasset").Get(Fixture.Tasks);
+	auto Broken = *Original->As<FMaterialAsset>();
+	for (auto& Entry : Broken.Values)
+	{
+		if (Entry.Name == "BaseColorTexture")
+		{
+			Entry.Value.Texture = FAssetRef{"", "RecoveryMissing.hasset", RecordType<FTextureAsset>().Id, {}};
+		}
+	}
+	const auto BadSaved =
+	    Fixture.Assets
+	        .SaveDocumentAsync(Original->Path, *Original->Type, WriteValue(Broken),
+	                           {Original->Header.Id, {}, Original->Header.TypeId, Original->Header.Revision})
+	        .Get(Fixture.Tasks);
+	FSceneInstance Scene(*Fixture.Session, Fixture.Tasks, Fixture.Assets, true);
+	Scene.Load("SceneRuntime.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().FailedModels == 3;
+	      });
+	const auto Handle = Scene.FindHandle("one");
+	HYP_CHECK(!Scene.FindNode(Handle)->Model()->Data);
+	const auto Fixed =
+	    Fixture.Assets
+	        .SaveDocumentAsync(Original->Path, *Original->Type, WriteValue(*Original->As<FMaterialAsset>()),
+	                           {BadSaved->Header.Id, {}, BadSaved->Header.TypeId, BadSaved->Header.Revision})
+	        .Get(Fixture.Tasks);
+	Scene.RefreshAssets(std::array{*Fixed});
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().ReadyModels == 2;
+	      });
+	HYP_CHECK(Scene.GetStatus().AssetRefreshError.empty() && Scene.GetStatus().FailedModels == 1);
+	HYP_CHECK(Scene.GetError(Handle).empty());
+	HYP_CHECK(!Scene.GetError(Scene.FindHandle("failed")).empty());
+	const auto Reads = Fixture.Files->MissingReads.load();
+	for (int Index = 0; Index < 40; ++Index)
+	{
+		Scene.Tick();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	HYP_CHECK(Fixture.Files->MissingReads == Reads);
+	Scene.Remove(Scene.FindHandle("failed"));
+	Scene.Tick();
+	HYP_CHECK(Scene.GetStatus().bReady && Scene.GetStatus().FailedModels == 0);
+	std::cout << "Failed dependencies recover beside missing models without stale errors or retry loops\n";
+}
+
 void CheckRegistrationWithUnresolvedAsset(FSceneFixture& InFixture)
 {
 	FSceneManifest Manifest;
@@ -1330,6 +1429,8 @@ int main()
 		CheckClosedDependencies();
 		CheckPendingHierarchy();
 		CheckConsumersAddedDuringRefresh();
+		CheckRefreshBesideMissingModel();
+		CheckFailedDependencyRecovery();
 		std::cout << "Independent scene loading, shared models, generation-safe edits and close passed\n";
 	}
 	catch (const std::exception& Error)

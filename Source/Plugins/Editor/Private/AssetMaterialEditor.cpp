@@ -9,6 +9,71 @@ namespace Hyperion
 {
 namespace
 {
+bool FitsInlineValue(const FMaterialParameterType& InType, std::size_t& InOutBudget)
+{
+	if (!InOutBudget)
+	{
+		return false;
+	}
+	--InOutBudget;
+	if (InType.Kind == EMaterialValueKind::Numeric)
+	{
+		const auto Words = std::size_t(InType.Rows) * InType.Columns;
+		if (Words > InOutBudget)
+		{
+			return false;
+		}
+		InOutBudget -= Words;
+	}
+	else if (InType.Kind == EMaterialValueKind::Array)
+	{
+		auto ElementBudget = InOutBudget;
+		if (!FitsInlineValue(InType.Members.at(0), ElementBudget))
+		{
+			return false;
+		}
+		const auto ElementCost = InOutBudget - ElementBudget;
+		if (InType.ArrayCount > InOutBudget / ElementCost)
+		{
+			return false;
+		}
+		InOutBudget -= InType.ArrayCount * ElementCost;
+	}
+	else if (InType.Kind == EMaterialValueKind::Structure)
+	{
+		for (const auto& Member : InType.Members)
+		{
+			if (!FitsInlineValue(Member, InOutBudget))
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+FMaterialAssetValue MakeEditableValue(const FMaterialParameterType& InType)
+{
+	FMaterialAssetValue Value;
+	Value.Type = InType;
+	if (InType.Kind == EMaterialValueKind::Numeric)
+	{
+		Value.Words.resize(InType.Rows * InType.Columns);
+	}
+	else if (InType.Kind == EMaterialValueKind::Structure)
+	{
+		for (const auto& Member : InType.Members)
+		{
+			Value.Elements.push_back(MakeEditableValue(Member));
+		}
+	}
+	else if (InType.Kind == EMaterialValueKind::Array)
+	{
+		Value.Elements.assign(InType.ArrayCount, MakeEditableValue(InType.Members.at(0)));
+	}
+	return Value;
+}
+
 bool EditSampler(FGui& InGui, const std::string& InId, FMaterialSampler& InSampler)
 {
 	bool bChanged{};
@@ -170,7 +235,9 @@ bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FM
 		{
 			const auto Name =
 			    Index < InValue.Type.MemberNames.size() ? InValue.Type.MemberNames[Index] : std::to_string(Index);
-			if (InGui.Section((Name + "##" + InId).c_str(), false))
+			const bool bOpen = InGui.Section((Name + "##" + InId).c_str(), false);
+			ObserveProperty(InGui, "element/" + InId + "/" + Name);
+			if (bOpen)
 			{
 				bChanged |= EditMaterialValue(InGui, InId + "/" + Name, InValue.Elements[Index]);
 			}
@@ -246,7 +313,10 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 		                                   return InValue.Name == InParameter.Name;
 	                                   });
 	const bool bOverridden = Override != InMaterial.Values.end();
-	const bool bEditable = CanEdit(InParameter);
+	// Count the type description before expanding arrays or copying authored values on Main.
+	std::size_t InlineBudget = 1024;
+	const bool bFitsInline = FitsInlineValue(InParameter.Type, InlineBudget);
+	const bool bEditable = CanEdit(InParameter) && bFitsInline;
 	const auto Label = InParameter.Name + (bEditable ? "" : " [read-only]") + "###parameter-" + InParameter.Name;
 	if (!InGui.Section(Label.c_str(), bEditable))
 	{
@@ -258,6 +328,11 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 	                                : "Engine / unset");
 	AssetInfo(InGui, "Semantic", InParameter.Semantic);
 	AssetInfo(InGui, "Type", MaterialTypeLabel(InParameter.Type));
+	if (!bFitsInline)
+	{
+		InGui.TextWrapped("This parameter is too large for inline editing.");
+		return;
+	}
 	if (!bOverridden && !InParameter.Default && !bEditable)
 	{
 		InGui.TextWrapped("Value supplied by runtime semantics; no authored value.");
@@ -274,16 +349,12 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 	}
 	else
 	{
-		Value.Type = InParameter.Type;
-		if (Value.Type.Kind == EMaterialValueKind::Numeric)
-		{
-			Value.Words.resize(Value.Type.Rows * Value.Type.Columns);
-		}
+		Value = MakeEditableValue(InParameter.Type);
 	}
 	InGui.BeginDisabled(!bEditable);
-	InGui.BeginLiveEdit();
+	FAssetLiveEditScope Editing(InGui);
 	const bool bChanged = EditMaterialValue(InGui, InParameter.Name, Value);
-	const auto Interaction = InGui.EndLiveEdit();
+	const auto Interaction = Editing.Finish();
 	if (Interaction.ActiveInteraction)
 	{
 		InEntry.GuiInteraction = Interaction.ActiveInteraction;
@@ -309,7 +380,14 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 			InMaterial.Values.push_back({InParameter.Name, std::move(Value)});
 		}
 		ValidateMaterialAsset(InMaterial);
-		InEntry.Document->Set("values", WriteValue(InMaterial.Values), Interaction.ChangedInteraction);
+		if (InEntry.ReferenceEdit)
+		{
+			CommitReferenceEdit(InEntry, "values", WriteValue(InMaterial.Values));
+		}
+		else
+		{
+			InEntry.Document->Set("values", WriteValue(InMaterial.Values), Interaction.ChangedInteraction);
+		}
 	}
 }
 } // namespace Hyperion

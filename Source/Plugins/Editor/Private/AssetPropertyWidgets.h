@@ -3,6 +3,36 @@
 
 namespace Hyperion
 {
+class FAssetLiveEditScope
+{
+public:
+	explicit FAssetLiveEditScope(FGui& InGui) : Gui(InGui)
+	{
+		Gui.BeginLiveEdit();
+	}
+
+	~FAssetLiveEditScope()
+	{
+		if (bActive)
+		{
+			Gui.EndLiveEdit();
+		}
+	}
+
+	FGuiEditState Finish()
+	{
+		bActive = false;
+		return Gui.EndLiveEdit();
+	}
+
+	FAssetLiveEditScope(const FAssetLiveEditScope&) = delete;
+	FAssetLiveEditScope& operator=(const FAssetLiveEditScope&) = delete;
+
+private:
+	FGui& Gui;
+	bool bActive = true;
+};
+
 inline bool AssetProperty(FGui& InGui, const char* InLabel, const std::function<bool()>& InWidget)
 {
 	InGui.BeginPropertyRow(InLabel);
@@ -57,12 +87,12 @@ inline bool AssetCheckbox(FGui& InGui, const char* InLabel, bool& bInValue)
 }
 
 inline bool AssetCombo(FGui& InGui, const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex,
-                       const std::function<void(std::size_t, FVec4)>& InObserve = {})
+                       const std::function<void(std::size_t, FVec4)>& InObserve = {}, const char* InPreview = nullptr)
 {
 	return AssetProperty(InGui, InLabel,
 	                     [&]
 	                     {
-		                     return InGui.Combo("##value", InChoices, InIndex, InObserve);
+		                     return InGui.Combo("##value", InChoices, InIndex, InObserve, InPreview);
 	                     });
 }
 

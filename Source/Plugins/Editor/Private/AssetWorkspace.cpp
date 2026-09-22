@@ -30,7 +30,7 @@ void FAssetWorkspace::Open(const std::filesystem::path& InPath, std::string_view
 			return;
 		}
 	}
-	AssetIndex = Assets.GetAssetIndex();
+	RefreshIndex();
 	auto Entry = std::make_unique<FEntry>();
 	Entry->Path = Path;
 	Entry->Identity = InIdentity;
@@ -55,10 +55,6 @@ void FAssetWorkspace::Open(const std::filesystem::path& InPath, std::string_view
 void FAssetWorkspace::Close(FEntry& InEntry)
 {
 	Bounds.erase("tab/" + PathToUtf8(InEntry.Path));
-	if (ReferenceSelection && ReferenceSelection->Document == InEntry.Path)
-	{
-		ReferenceSelection.reset();
-	}
 	InEntry.Cancellation.Cancel();
 	InEntry.Load.Cancel();
 	for (const auto Task : {InEntry.Initialization ? InEntry.Initialization->Task() : FTaskHandle{},
@@ -105,7 +101,7 @@ void FAssetWorkspace::CloseAll()
 		Close(*Entries.back());
 	}
 	AssetIndex.clear();
-	ReferenceSelection.reset();
+	ReferenceChoices.clear();
 	bRequestClose = bCloseModal = false;
 	Bounds.clear();
 }
@@ -207,14 +203,19 @@ FVec4 FAssetWorkspace::ObservedBounds(std::string_view InId) const
 	return It == Bounds.end() ? FVec4{} : It->second;
 }
 
+bool FAssetWorkspace::HasActiveInteraction() const
+{
+	return Active && Active->GuiInteraction != 0;
+}
+
 bool FAssetWorkspace::CanUndo() const
 {
-	return Active && Active->Document && !Active->EncodingEdit && Active->Document->CanUndo();
+	return Active && Active->Document && !Active->HasPendingEdit() && Active->Document->CanUndo();
 }
 
 bool FAssetWorkspace::CanRedo() const
 {
-	return Active && Active->Document && !Active->EncodingEdit && Active->Document->CanRedo();
+	return Active && Active->Document && !Active->HasPendingEdit() && Active->Document->CanRedo();
 }
 
 void FAssetWorkspace::Undo()
@@ -238,7 +239,7 @@ bool FAssetWorkspace::IsDirty() const
 	return std::any_of(Entries.begin(), Entries.end(),
 	                   [](const auto& InItem)
 	                   {
-		                   return InItem->EncodingEdit || (InItem->Document && InItem->Document->IsDirty());
+		                   return InItem->HasPendingEdit() || (InItem->Document && InItem->Document->IsDirty());
 	                   });
 }
 
@@ -247,7 +248,7 @@ bool FAssetWorkspace::HasPendingEdits() const
 	return std::any_of(Entries.begin(), Entries.end(),
 	                   [](const auto& InItem)
 	                   {
-		                   return InItem->EncodingEdit.has_value();
+		                   return InItem->HasPendingEdit();
 	                   });
 }
 
@@ -256,17 +257,24 @@ bool FAssetWorkspace::IsSaving() const
 	return std::any_of(Entries.begin(), Entries.end(),
 	                   [](const auto& InItem)
 	                   {
-		                   return InItem->Document && InItem->Document->IsSaving();
+		                   return InItem->bSaveRequested || (InItem->Document && InItem->Document->IsSaving());
 	                   });
 }
 
 void FAssetWorkspace::SaveActive()
 {
-	if (Active && Active->Document && !Active->bReadOnly && !Active->EncodingEdit)
+	if (Active && Active->Document && !Active->bReadOnly)
 	{
 		try
 		{
-			Active->Document->Save(Assets);
+			if (Active->HasPendingEdit() || Active->Document->IsSaving())
+			{
+				Active->bSaveRequested = true;
+			}
+			else
+			{
+				Active->Document->Save(Assets);
+			}
 		}
 		catch (const std::exception& Failure)
 		{
@@ -279,11 +287,18 @@ void FAssetWorkspace::SaveAll()
 {
 	for (const auto& Entry : Entries)
 	{
-		if (Entry->Document && Entry->Document->IsDirty() && !Entry->bReadOnly && !Entry->EncodingEdit)
+		if (Entry->Document && (Entry->Document->IsDirty() || Entry->HasPendingEdit()) && !Entry->bReadOnly)
 		{
 			try
 			{
-				Entry->Document->Save(Assets);
+				if (Entry->HasPendingEdit() || Entry->Document->IsSaving())
+				{
+					Entry->bSaveRequested = true;
+				}
+				else
+				{
+					Entry->Document->Save(Assets);
+				}
 			}
 			catch (const std::exception& Failure)
 			{
@@ -323,7 +338,7 @@ std::vector<FAssetSaveResult> FAssetWorkspace::Poll()
 	for (std::size_t IndexInEntries = Entries.size(); IndexInEntries > 0; --IndexInEntries)
 	{
 		auto& Entry = *Entries[IndexInEntries - 1];
-		if (Entry.bCloseAfterSave && !Entry.EncodingEdit && !Entry.Document->IsSaving())
+		if (Entry.bCloseAfterSave && !Entry.HasPendingEdit() && !Entry.Document->IsSaving())
 		{
 			Entry.bCloseAfterSave = false;
 			if (!Entry.Document->IsDirty())
@@ -346,14 +361,15 @@ void FAssetWorkspace::BeginFrame()
 void FAssetWorkspace::RefreshIndex()
 {
 	AssetIndex = Assets.GetAssetIndex();
+	ReferenceChoices.clear();
 }
 
 void FAssetWorkspace::RefreshDependencies(std::span<const FAssetSaveResult> InSaved)
 {
-	AssetIndex = Assets.GetAssetIndex();
+	RefreshIndex();
 	for (const auto& Entry : Entries)
 	{
-		bool bAffected = Entry->Pending.has_value();
+		bool bAffected = Entry->Pending.has_value() || (!Entry->Preview && !Entry->Error.empty());
 		for (const auto& Saved : InSaved)
 		{
 			bAffected |= Entry->Dependencies.contains(Saved.Header.Id);
@@ -395,6 +411,7 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 			    },
 			    InEntry.Cancellation);
 		}
+		PollReferenceEdit(InEntry);
 		if (InEntry.EncodingEdit && InEntry.EncodingEdit->Ready())
 		{
 			const auto Texture = InEntry.EncodingEdit->GetReady();
@@ -404,6 +421,11 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 				InEntry.Document->Set({}, *Texture);
 			}
 		}
+		if (InEntry.bSaveRequested && !InEntry.HasPendingEdit() && !InEntry.Document->IsSaving())
+		{
+			InEntry.bSaveRequested = false;
+			InEntry.Document->Save(Assets);
+		}
 		if (InEntry.Pending && InEntry.Pending->Ready())
 		{
 			const auto Generation = InEntry.RequestedGeneration;
@@ -411,15 +433,22 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 			InEntry.Pending.reset();
 			if (Generation == InEntry.Document->PreviewGeneration())
 			{
-				Publish(InEntry, *Result);
-				InEntry.PreparedGeneration = Generation;
+				InEntry.Dependencies = Result->Dependencies;
+				if (Result->Error.empty())
+				{
+					Publish(InEntry, *Result);
+					InEntry.PreparedGeneration = Generation;
+				}
+				else
+				{
+					InEntry.Error = Result->Error;
+				}
 			}
 		}
 		if (InEntry.Document && !InEntry.Pending && &InEntry == Active &&
-		    InEntry.PreparedGeneration != InEntry.Document->PreviewGeneration())
+		    InEntry.RequestedGeneration != InEntry.Document->PreviewGeneration())
 		{
 			InEntry.RequestedGeneration = InEntry.Document->PreviewGeneration();
-			InEntry.PreparedGeneration = InEntry.RequestedGeneration;
 			const auto Loaded = InEntry.Document->Loaded();
 			InEntry.Pending = DispatchAsync<FPrepared>(
 			    Tasks, {EDomain::Worker},
@@ -448,6 +477,7 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 		if (InEntry.EncodingEdit && InEntry.EncodingEdit->Ready())
 		{
 			InEntry.EncodingEdit.reset();
+			InEntry.bSaveRequested = false;
 		}
 		InEntry.Error = Failure.what();
 	}
@@ -472,7 +502,7 @@ void FAssetWorkspace::DrawTabs(FGui& InGui, float InDelta, std::span<const FInpu
 	{
 		bool bOpen = true;
 		const auto Label = PathToUtf8(Entry->Path.filename()) +
-		                   (Entry->EncodingEdit || (Entry->Document && Entry->Document->IsDirty()) ? " *" : "") +
+		                   (Entry->HasPendingEdit() || (Entry->Document && Entry->Document->IsDirty()) ? " *" : "") +
 		                   "###asset-" + std::to_string(Entry->TextureId);
 		const bool bSelected = InGui.BeginTabItem(Label.c_str(), &bOpen, std::exchange(Entry->bActivate, false));
 		Bounds["tab/" + PathToUtf8(Entry->Path)] = InGui.LastItemBounds();
@@ -489,7 +519,8 @@ void FAssetWorkspace::DrawTabs(FGui& InGui, float InDelta, std::span<const FInpu
 		}
 		if (!bOpen)
 		{
-			if (Entry->Document && (Entry->EncodingEdit || Entry->Document->IsDirty() || Entry->Document->IsSaving()))
+			if (Entry->Document &&
+			    (Entry->HasPendingEdit() || Entry->Document->IsDirty() || Entry->Document->IsSaving()))
 			{
 				Closing = Entry.get();
 				bRequestClose = true;
@@ -516,11 +547,11 @@ void FAssetWorkspace::DrawCloseDialog(FGui& InGui)
 	if (Closing && InGui.BeginModal("Unsaved Asset", bCloseModal))
 	{
 		InGui.TextWrapped("Save changes to " + PathToUtf8(Closing->Path.filename()) + "?");
-		if (Closing->EncodingEdit)
+		if (Closing->HasPendingEdit())
 		{
-			InGui.TextWrapped("Wait for the texture edit to finish before saving, or discard it explicitly.");
+			InGui.TextWrapped("Wait for the pending edit to finish before saving, or discard it explicitly.");
 		}
-		if (InGui.Button("Save and Close", !Closing->EncodingEdit && !Closing->Document->IsSaving()))
+		if (InGui.Button("Save and Close", !Closing->HasPendingEdit() && !Closing->Document->IsSaving()))
 		{
 			try
 			{
