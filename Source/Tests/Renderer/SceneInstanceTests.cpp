@@ -1206,6 +1206,52 @@ void CheckRegisteredAssets(FSceneFixture& InFixture)
 	HYP_CHECK(Scene.Snapshot("EmptyRegistered.hasset").Assets.empty());
 }
 
+void CheckConsumersAddedDuringRefresh()
+{
+	FSceneFixture Fixture;
+	Fixture.Files->bEnabled = false;
+	FLegacySceneManifest Manifest;
+	Manifest.Assets = {{"good", {"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""}}};
+	Manifest.Instances = {{"original", "good"}};
+	Fixture.IO.WriteAsync("RefreshConsumers.hasset", EncodeAsset(RecordType<FLegacySceneManifest>(), &Manifest).Bytes)
+	    .Get(Fixture.Tasks);
+	FSceneInstance Scene(*Fixture.Session, Fixture.Tasks, Fixture.Assets, true);
+	Scene.Load("RefreshConsumers.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	const auto Original = Scene.FindHandle("original");
+	const auto Previous = Scene.FindNode(Original)->Model()->Data;
+	const auto Loaded = Fixture.Assets.LoadAsync("@material-0.hasset").Get(Fixture.Tasks);
+	auto Material = *Loaded->As<FMaterialAsset>();
+	Material.Name = "Updated during scene editing";
+	const auto Saved = *Fixture.Assets
+	                        .SaveDocumentAsync(Loaded->Path, *Loaded->Type, WriteValue(Material),
+	                                           {Loaded->Header.Id, {}, Loaded->Header.TypeId, Loaded->Header.Revision})
+	                        .Get(Fixture.Tasks);
+	Scene.RefreshAssets(std::array{Saved});
+	Scene.Tick(); // Capture consumers; even a ready worker result publishes on a later Main tick.
+	const auto Duplicate = Scene.DuplicateNode(Original);
+	const auto Added = Scene.Add({"Added during refresh"}, "good");
+	Scene.SetName(Duplicate, "Authored copy");
+	const auto Local = Translation({3, 4, 5});
+	Scene.SetLocalTransform(Added, Local);
+	Await(Scene,
+	      [&]
+	      {
+		      const auto Current = Scene.FindNode(Original)->Model()->Data;
+		      return Current != Previous && Scene.FindNode(Duplicate)->Model()->Data == Current &&
+		             Scene.FindNode(Added)->Model()->Data == Current;
+	      });
+	HYP_CHECK(Scene.GetStatus().AssetRefreshError.empty());
+	HYP_CHECK(Scene.FindNode(Original)->Model()->Data->Materials.front()->Asset->Name == Material.Name);
+	HYP_CHECK(Scene.FindNode(Duplicate)->Name == "Authored copy" &&
+	          Scene.FindNode(Added)->Local().Values == Local.Values);
+	std::cout << "Consumers added during asset refresh receive saved resources without losing authored edits\n";
+}
+
 void CheckRegistrationWithUnresolvedAsset(FSceneFixture& InFixture)
 {
 	FSceneManifest Manifest;
@@ -1283,6 +1329,7 @@ int main()
 		CheckModelStatusCache();
 		CheckClosedDependencies();
 		CheckPendingHierarchy();
+		CheckConsumersAddedDuringRefresh();
 		std::cout << "Independent scene loading, shared models, generation-safe edits and close passed\n";
 	}
 	catch (const std::exception& Error)

@@ -103,6 +103,9 @@ public:
 	void Resize(FSize InSize);
 	void Minimize();
 	void Restore();
+	void Raise();
+	// Associates non-modal top-level windows. Destroy owned windows before their owner.
+	void SetOwner(FWindow* InOwner);
 	void RequestClose();
 	void CancelClose();
 	std::string Clipboard() const;

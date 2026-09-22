@@ -6,6 +6,10 @@
 
 天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为引用当前共享依赖的 `.hasset`；Viewer 不读取源 HDR/EXR。
 
+Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、简单属性编辑、保存和每文档 Undo/Redo；字段范围和交互见 [Editor.md](Editor.md#独立资产编辑)。Shader 继续使用文本格式。过时的 `hyperion.assetcatalog` 持久化类型及 AssetTool `catalog` 命令已删除；资产发现结果通过 `BuildAssetIndex` / `SetAssetIndex` / `AddAssetIndex` 进入内存索引，保留 UUID 查询和移动后引用解析。
+
+文档保存使用 `SaveDocumentAsync`，传入打开时的 ID、类型和 revision。写入在现有原子替换与 publication lease 下验证磁盘基线，返回包含路径与新头部的 `FAssetSaveResult`；成功后更新索引并由 Editor 通知相关消费者。普通工具的 `SaveAsync<T>` 保持原有接口。场景的 `RefreshAssets` 异步准备受影响依赖，在已有节点上安装结果，不重新加载场景；`RebindAssetResources` 用于恢复历史的 authored 值与当前资源绑定。
+
 ## 构建和工具
 
 从仓库根目录执行：
@@ -25,7 +29,7 @@
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
-源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor/SceneViewer 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空、场景和 catalog 类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
+源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor/SceneViewer 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空和场景类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
 普通 Viewer 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
@@ -35,7 +39,7 @@
 | --- | --- |
 | Reflection | 稳定类型/字段 ID、类型注册、递归字段读写/遍历、校验及模式迁移 |
 | Serialization | 与 C++ 布局无关的二进制编码、读取预算和 bulk 数据块 |
-| AssetTypes | FAssetRef、头部、来源记录、catalog 等轻量反射数据，仅依赖 Reflection |
+| AssetTypes | FAssetRef、头部、来源记录等轻量反射数据，仅依赖 Reflection |
 | Assets | 原生 envelope、CPU 对象缓存、引用解析、依赖图、异步保存 |
 | AssetImport | importer 注册、源读取跟踪、glTF/场景 JSON 转换、增量发布 |
 | Textures / Materials | 独立 CPU 纹理/材质反射记录与类型化参数 |
@@ -70,7 +74,7 @@ auto Discovery = DispatchAsync<FAssetDiscovery>(Tasks, {EDomain::Io}, [&]
 {
     return DiscoverAssets(*IO.FileSystem(), "/Game");
 }).Get(Tasks);
-Assets.AddCatalog(BuildAssetCatalog(Discovery->Entries), "/Game"); // 同时报告 Discovery->Errors。
+Assets.AddAssetIndex(BuildAssetIndex(Discovery->Entries), "/Game"); // 同时报告 Discovery->Errors。
 auto ById = Assets.LoadByIdAsync(Discovery->Entries.front().Header.Id);
 
 Assets.Drain();
@@ -109,7 +113,7 @@ Tasks.Shutdown();
 
 完整图先转换、编码并暂存，重新检查输入后才写入当前文件；相同字节不重写。同步失败会恢复已修改文件并删除本批新建文件，回滚失败会附带诊断。调用方应在内容发布时使相关读取者静止；这里不承诺跨进程读者可见的多文件原子提交或断电恢复。活动 CPU/GPU 快照保留原有内容。历史由 Git/LFS 管理，不在工作树保留 revision 文件。
 
-Catalog 是可重建的内存 ID/路径索引。`DiscoverAssets` 递归扫描原生元数据，忽略 `.git`、`.cache` 和发布状态；本地/挂载存储通过范围读取跳过 bulk。重复 ID 报错；损坏文件提供逐项诊断，不伪装为有效资产。实际加载仍执行完整内容校验。`validate-library ROOT` 验证全库；`migrate-library /Game EMPTY_STAGING_DIRECTORY` 用当前原生图生成隔离迁移候选，不修改输入。可选 `catalog` 命令仅用于显式诊断导出。
+资产索引是从元数据重建的内存 ID/路径映射，不是可持久化的资产类型。`DiscoverAssets` 递归扫描原生元数据，忽略 `.git`、`.cache` 和发布状态；本地/挂载存储通过范围读取跳过 bulk。重复 ID 报错；损坏文件提供逐项诊断，不伪装为有效资产。实际加载仍执行完整内容校验。`validate-library ROOT` 验证全库；`migrate-library /Game EMPTY_STAGING_DIRECTORY` 用当前原生图生成隔离迁移候选，不修改输入。旧 Catalog 资产类型和 `catalog` 创建命令已移除。
 
 ## 反射契约与版本迁移
 
@@ -161,7 +165,7 @@ FSceneInstance::Snapshot(destination) 保存 scene schema 7 的组件封装，�
 
 ## 验证与测量
 
-源格式回归验证 accessor/sparse/stride/normalized、拓扑、纹理和节点语义。原生测试验证第三种数据类型、类型误用、模式迁移、损坏/伪造元数据、依赖循环、目录移动、catalog、取消、缓存和保存顺序。发布测试覆盖实际外部文件变化、去重、旧代际可读、失败保留旧根、并发顺序和本地发布 lease。模型/场景 GPU 测试的存储后端拒绝源格式读取；场景测试也比较编辑保存重载后的真实 GPU readback。
+源格式回归验证 accessor/sparse/stride/normalized、拓扑、纹理和节点语义。原生测试验证第三种数据类型、类型误用、模式迁移、损坏/伪造元数据、依赖循环、目录移动、资产索引、取消、缓存和保存顺序。发布测试覆盖实际外部文件变化、去重、旧代际可读、失败保留旧根、并发顺序和本地发布 lease。模型/场景 GPU 测试的存储后端拒绝源格式读取；场景测试也比较编辑保存重载后的真实 GPU readback。
 
 AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、written_bytes 和 peak_resident_bytes。以下命令分别测量源 glTF 转换和原生 CPU 图加载，均包含校验：
 

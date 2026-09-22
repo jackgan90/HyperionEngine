@@ -40,6 +40,7 @@ FSceneSkyData LoadSky(FAssetService& InAssets, FTaskSystem& InTasks, FRenderReso
 		const FAssetRef Canonical{Loaded->Header.Id, PathToUtf8(Loaded->Path), Loaded->Header.TypeId,
 		                          Loaded->Header.Revision};
 		Textures.emplace(Canonical, Texture);
+		Result.Dependencies.push_back(Canonical);
 		FMaterialAssetValue Value;
 		Value.Type =
 		    FMaterialParameterType::Resource(bCube ? EMaterialValueKind::TextureCube : EMaterialValueKind::Texture2D);

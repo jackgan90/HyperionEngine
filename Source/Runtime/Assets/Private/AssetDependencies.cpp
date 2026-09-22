@@ -4,38 +4,66 @@
 
 namespace Hyperion
 {
-void FAssetService::SetCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory)
+namespace
 {
-	(void)WriteValue(InCatalog);
-	std::map<std::string, std::pair<FAssetRef, std::filesystem::path>> Catalog;
-	for (const auto& Asset : InCatalog.Assets)
+void ValidateIndex(std::span<const FAssetRef> InEntries)
+{
+	std::set<std::string> Ids;
+	for (const auto& Entry : InEntries)
+	{
+		ValidateAssetRef(Entry);
+		if (Entry.Id.empty() || Entry.Path.empty() || !Ids.insert(Entry.Id).second)
+		{
+			throw std::runtime_error("Duplicate or incomplete asset index identity");
+		}
+	}
+}
+} // namespace
+
+void FAssetService::SetAssetIndex(const std::vector<FAssetRef>& InEntries, const std::filesystem::path& InDirectory)
+{
+	ValidateIndex(InEntries);
+	std::map<std::string, std::pair<FAssetRef, std::filesystem::path>> Index;
+	for (const auto& Asset : InEntries)
 	{
 		const auto Path = PathFromUtf8(Asset.Path);
-		Catalog.emplace(Asset.Id,
-		                std::make_pair(Asset, NormalizePath(IsPackagePath(Path) ? Path : InDirectory / Path)));
+		Index.emplace(Asset.Id, std::make_pair(Asset, NormalizePath(IsPackagePath(Path) ? Path : InDirectory / Path)));
 	}
 	std::lock_guard Lock(Impl->Mutex);
 	Impl->RequireOpen();
-	Impl->Catalog = std::move(Catalog);
+	Impl->Index = std::move(Index);
 }
 
-void FAssetService::AddCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory)
+void FAssetService::AddAssetIndex(const std::vector<FAssetRef>& InEntries, const std::filesystem::path& InDirectory)
 {
-	(void)WriteValue(InCatalog);
+	ValidateIndex(InEntries);
 	std::lock_guard Lock(Impl->Mutex);
 	Impl->RequireOpen();
-	auto Catalog = Impl->Catalog;
-	for (const auto& Asset : InCatalog.Assets)
+	auto Index = Impl->Index;
+	for (const auto& Asset : InEntries)
 	{
 		const auto Path = PathFromUtf8(Asset.Path);
 		const auto Entry = std::make_pair(Asset, NormalizePath(IsPackagePath(Path) ? Path : InDirectory / Path));
-		const auto [It, bInserted] = Catalog.emplace(Asset.Id, Entry);
+		const auto [It, bInserted] = Index.emplace(Asset.Id, Entry);
 		if (!bInserted && It->second != Entry)
 		{
-			throw std::runtime_error("Conflicting catalog asset: " + Asset.Id);
+			throw std::runtime_error("Conflicting index asset: " + Asset.Id);
 		}
 	}
-	Impl->Catalog = std::move(Catalog);
+	Impl->Index = std::move(Index);
+}
+
+std::vector<FAssetRef> FAssetService::GetAssetIndex() const
+{
+	std::lock_guard Lock(Impl->Mutex);
+	std::vector<FAssetRef> Result;
+	for (const auto& [Id, Entry] : Impl->Index)
+	{
+		auto Reference = Entry.first;
+		Reference.Path = PathToUtf8(Entry.second);
+		Result.push_back(std::move(Reference));
+	}
+	return Result;
 }
 
 std::filesystem::path FAssetService::Resolve(const FAssetRef& InReference,
@@ -43,15 +71,14 @@ std::filesystem::path FAssetService::Resolve(const FAssetRef& InReference,
 {
 	ValidateAssetRef(InReference);
 	std::lock_guard Lock(Impl->Mutex);
-	const auto It = Impl->Catalog.find(InReference.Id);
-	if (It != Impl->Catalog.end() &&
-	    (InReference.Revision.empty() || InReference.Revision == It->second.first.Revision))
+	const auto It = Impl->Index.find(InReference.Id);
+	if (It != Impl->Index.end() && (InReference.Revision.empty() || InReference.Revision == It->second.first.Revision))
 	{
 		return It->second.second;
 	}
 	if (InReference.Path.empty())
 	{
-		throw std::runtime_error("Asset ID is absent from catalog: " + InReference.Id);
+		throw std::runtime_error("Asset ID is absent from index: " + InReference.Id);
 	}
 	const auto Path = PathFromUtf8(InReference.Path);
 	return NormalizePath(IsPackagePath(Path) ? Path : InContainingAsset.parent_path() / Path);
@@ -71,10 +98,10 @@ FAssetRequest FAssetService::LoadByIdAsync(std::string_view InId)
 	FAssetRef Reference;
 	{
 		std::lock_guard Lock(Impl->Mutex);
-		const auto It = Impl->Catalog.find(std::string(InId));
-		if (It == Impl->Catalog.end())
+		const auto It = Impl->Index.find(std::string(InId));
+		if (It == Impl->Index.end())
 		{
-			throw std::runtime_error("Unknown catalog asset: " + std::string(InId));
+			throw std::runtime_error("Unknown index asset: " + std::string(InId));
 		}
 		Reference = It->second.first;
 		Reference.Path = PathToUtf8(It->second.second);

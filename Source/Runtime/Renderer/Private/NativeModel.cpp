@@ -57,7 +57,8 @@ std::shared_ptr<const FMaterialAssetData> ResolveMaterialAssetGraph(const FAsset
 	return Data;
 }
 
-std::shared_ptr<const FSceneModelData> ResolveModelAssetGraph(const FAssetGraph& InGraph, const FAssetService& InAssets)
+std::shared_ptr<const FSceneModelData> ResolveModelAssetGraph(const FAssetGraph& InGraph, const FAssetService& InAssets,
+                                                              std::shared_ptr<const FSceneModelData> InExisting)
 {
 	RequireCompleteGraph(InGraph);
 	const auto Model = InGraph.Root->As<FModelAsset>();
@@ -74,6 +75,13 @@ std::shared_ptr<const FSceneModelData> ResolveModelAssetGraph(const FAssetGraph&
 		}
 		Materials.push_back(Data);
 	}
+	if (InExisting && InExisting->Asset == Model)
+	{
+		auto Data = std::make_shared<FSceneModelData>(*InExisting);
+		Data->Materials = std::move(Materials);
+		Data->MaterialSnapshots.clear();
+		return Data;
+	}
 	return PrepareSceneModel(Model, std::move(Materials));
 }
 
@@ -81,7 +89,7 @@ TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSyst
                                               const FAssetRef& InReference,
                                               const std::filesystem::path& InContainingAsset,
                                               FCancellationToken InCancellation, FRenderResourceService* InResources,
-                                              bool bInPrepareQueries)
+                                              bool bInPrepareQueries, std::shared_ptr<const FSceneModelData> InExisting)
 {
 	RegisterSceneAssetTypes(InAssets.Types());
 	if (InReference.TypeId != RecordType<FModelAsset>().Id)
@@ -91,12 +99,12 @@ TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSyst
 	auto Graph = InAssets.LoadGraphAsync(InReference, InContainingAsset);
 	return DispatchAsync<FSceneModelData>(
 	    InTasks, {EDomain::Worker},
-	    [Graph, &InAssets, &InTasks, InCancellation, InResources, bInPrepareQueries]
+	    [Graph, &InAssets, &InTasks, InCancellation, InResources, bInPrepareQueries, InExisting = std::move(InExisting)]
 	    {
 		    const auto Loaded = Graph.Get(InTasks);
 		    InCancellation.Check();
-		    auto Data = *ResolveModelAssetGraph(*Loaded, InAssets);
-		    if (bInPrepareQueries)
+		    auto Data = *ResolveModelAssetGraph(*Loaded, InAssets, InExisting);
+		    if (bInPrepareQueries && !Data.QueryGeometry)
 		    {
 			    Data.QueryGeometry = PrepareSceneModelGeometry(*Data.Asset,
 			                                                   [InCancellation]
@@ -119,10 +127,11 @@ TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSyst
 
 TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSystem& InTasks,
                                               const std::filesystem::path& InPath, FCancellationToken InCancellation,
-                                              FRenderResourceService* InResources, bool bInPrepareQueries)
+                                              FRenderResourceService* InResources, bool bInPrepareQueries,
+                                              std::shared_ptr<const FSceneModelData> InExisting)
 {
 	return LoadNativeModel(InAssets, InTasks,
 	                       {"", PathToUtf8(InAssets.NormalizePath(InPath)), RecordType<FModelAsset>().Id, ""}, {},
-	                       InCancellation, InResources, bInPrepareQueries);
+	                       InCancellation, InResources, bInPrepareQueries, std::move(InExisting));
 }
 } // namespace Hyperion

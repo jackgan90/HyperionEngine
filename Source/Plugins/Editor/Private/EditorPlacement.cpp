@@ -15,6 +15,7 @@ void FEditorPlugin::DrawPlacementPanel()
 	}
 	if (Gui->BeginWindow("Place Object", bShowPlacement))
 	{
+		InspectionBounds["placement/title"] = Gui->LastItemBounds();
 		if (bFocusPlacement)
 		{
 			Gui->FocusWindow("Place Object");
@@ -72,7 +73,11 @@ void FEditorPlugin::CancelPlacement()
 	Placement.Cancel();
 	if (Gui)
 	{
-		Gui->CancelDragDrop();
+		// Window docking also uses GUI drag payloads; cancel only the gesture owned by placement.
+		if (const auto Payload = Gui->DragPayload(); Payload && Payload->Type == PlacementPayload)
+		{
+			Gui->CancelDragDrop();
+		}
 	}
 }
 

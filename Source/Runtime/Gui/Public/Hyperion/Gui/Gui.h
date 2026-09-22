@@ -60,6 +60,7 @@ struct FGuiDockLayout
 	std::string RightBottom;
 	std::string Bottom;
 	std::string Left;
+	float RightFraction = .25f;
 };
 
 struct FGuiDragPayload
@@ -101,6 +102,8 @@ public:
 	float Scale(float InSize) const;
 	void LoadFont(std::span<const std::byte> InBytes, float InPixels);
 	void BeginFrame(FSize InLogical, FSize InPixels, float InDeltaSeconds, std::span<const FInputEvent> InEvents);
+	// Clear held input while a native window cannot draw; retain its documents and modal stack.
+	void ResetInput();
 	bool BeginPanel(const char* InTitle, FVec2 InPosition, FVec2 InSize);
 	void EndPanel();
 	void BeginScrollRegion(const char* InId, float InHeight);
@@ -108,6 +111,7 @@ public:
 	void Text(const std::string& InValue);
 	void TextWrapped(const std::string& InValue);
 	FVec2 DisplaySize() const;
+	FVec2 FramebufferScale() const;
 	void OverlayLine(FVec2 InNormalizedA, FVec2 InNormalizedB, std::uint32_t InColor);
 	EMouseCursor MouseCursor() const;
 	bool WantsMouse() const;
@@ -125,7 +129,8 @@ public:
 	bool Checkbox(const char* InLabel, bool& bInValue);
 	bool Slider(const char* InLabel, float& InValue, float InMinimum, float InMaximum);
 	bool Selectable(const char* InLabel, bool bInSelected, unsigned InDepth = 0, bool* bOutDoubleClicked = nullptr);
-	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex);
+	bool Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex,
+	           const std::function<void(std::size_t, FVec4)>& InObserve = {});
 	// Optional display root applies to messages and explicitly typed path inputs, never widget IDs.
 	void SetPathDisplayRoot(std::string InRoot);
 	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true, bool bInPath = false);
@@ -155,6 +160,7 @@ public:
 	                const std::array<bool, 3>& InMixed = {}, std::array<bool, 3>* OutEdited = nullptr);
 	bool InputMatrix(const char* InLabel, FMat4& InValue);
 	FVec4 LastItemBounds();
+	void RevealLastItem();
 	bool EditProperties(const FTypeDescriptor& InType, void* InObject, std::span<const std::string_view> InIds);
 	void Plot(const char* InLabel, std::span<const float> InValues, float InMaximum);
 	FGuiDrawData Render();
@@ -165,6 +171,10 @@ public:
 	void DockSpace(const FGuiDockLayout& InLayout, bool bInReset = false);
 	bool BeginWindow(const char* InTitle, bool& bInOpen);
 	void EndWindow();
+	bool BeginTabBar(const char* InId);
+	void EndTabBar();
+	bool BeginTabItem(const char* InLabel, bool* bInOpen = nullptr, bool bInActivate = false);
+	void EndTabItem();
 	bool BeginMenuBar();
 	void EndMenuBar();
 	bool BeginToolbar();
@@ -185,6 +195,7 @@ public:
 	              bool bInDefaultOpen = true);
 	void EndTree();
 	void Property(const char* InLabel, const std::string& InValue);
+	// Texture zero creates an interactive blank canvas for image overlays.
 	FGuiImageRegion Image(std::uint64_t InTextureId);
 	void Image(std::uint64_t InTextureId, FVec2 InSize);
 	void FocusWindow(const char* InTitle);

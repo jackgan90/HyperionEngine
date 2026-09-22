@@ -120,7 +120,7 @@ public:
 		FEditorSelection Updated;
 		Updated.Objects.reserve(Objects.size());
 		Updated.Membership.reserve(Objects.size());
-		for (const auto Handle : Objects)
+		for (const auto& Handle : Objects)
 		{
 			const auto Found = InMapping.find(Handle);
 			const auto Remapped = Found == InMapping.end() ? Handle : Found->second;

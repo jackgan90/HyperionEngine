@@ -19,7 +19,7 @@ SceneViewer 的 `experiments/Scene.json` 打开 HyperionAssets 中的 Khronos Sp
 | `Sponza.json`（见 HyperionAssets 的 Metadata 与本地源缓存） | 模型、初始视图、层级与光源节点 |
 | `Sponza.gltf`（见 HyperionAssets 的 Metadata 与本地源缓存） | 上游模型，关联 bin 和全部源图片 |
 | `HyperionAssets/Metadata/Sources.json` | 固定上游版本、下载 SHA-256 和场景配方 |
-| [PrepareContent.py](../tools/PrepareContent.py) | 显式恢复来源、调用 AssetTool 导入和构建 catalog |
+| [PrepareContent.py](../tools/PrepareContent.py) | 显式恢复来源、调用 AssetTool 导入；运行时从原生资产元数据发现索引 |
 
 Sponza 原生资产位于 HyperionAssets，由 `/Game/Scenes/Sponza.hasset` 加载。原始模型和图片仅保存在忽略的源缓存；固定版本、哈希和自创场景配方记录在 `Metadata/Sources.json`。普通构建不下载或转换样例；重建流程见 [ContentFileSystem.md](ContentFileSystem.md)。
 

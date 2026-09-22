@@ -1,4 +1,6 @@
 #pragma once
+#include "AssetEditorWindow.h"
+#include "AssetWorkspace.h"
 #include "ContentBrowser.h"
 #include "EditorHistoryState.h"
 #include "EditorInspectionCache.h"
@@ -42,6 +44,7 @@ struct FEditorOptions
 	std::filesystem::path ExercisePlacement;
 	std::filesystem::path ExerciseOutlines;
 	std::filesystem::path ExerciseContent;
+	std::filesystem::path ExerciseAssets;
 	std::string Scene;
 	std::uint32_t Frames{};
 	std::uint32_t BenchmarkWarmup = 120;
@@ -79,6 +82,63 @@ private:
 	};
 
 	void Initialize();
+	void EnsureAssetWindow();
+	void CloseAssetWindow();
+	bool IsAssetWindowBlocked() const;
+	void AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> InEvents,
+	                        const std::filesystem::path& InCapture = {});
+	void ExerciseAssetInput(std::vector<FInputEvent>& InEvents);
+	bool ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents);
+	bool ExerciseAssetPreviewHistory(std::vector<FInputEvent>& InEvents);
+
+	struct FAssetPreviewExercise
+	{
+		unsigned Step{};
+		unsigned Frames{};
+		FVec4 Canvas;
+		FVec2 Pointer;
+		std::string Before;
+		std::string After;
+		bool bSawPreparing{};
+		bool bSawReady{};
+	};
+
+	FAssetPreviewExercise AssetPreviewExercise;
+	void CheckAssetSaveShortcut();
+	void CheckPendingAssetEdit();
+	bool bPendingAssetEditChecked{};
+	void ExerciseAssetWindowInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetWindowSizing(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetWindowSaving(std::vector<FInputEvent>& InEvents);
+	std::uint64_t AssetExerciseFrames{};
+	std::shared_ptr<const FBytes> AssetExerciseSavedBytes;
+	float AssetExerciseScale{};
+	FSceneCameraView AssetExerciseSceneCamera;
+	void ExerciseAssetOpening(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetNameInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetSaving(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetReferences(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetWorkspaceInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetDiscardInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetPanelInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath);
+	void ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseCustomMaterialReset(std::vector<FInputEvent>& InEvents);
+	FVec4 AssetExercisePanelStart{};
+	FVec2 AssetExercisePointer{};
+	std::shared_ptr<const FSceneModelData> AssetExerciseModel;
+	float AssetExerciseRoughness{};
+	std::size_t AssetExerciseIndex{};
+	std::string AssetExerciseOriginalName;
+	std::string ContentRevealPath;
+	int AssetExerciseLoggedStep = -1;
+	bool bAssetsVerified{};
+	void CollectEditorInput(std::vector<FInputEvent>& InEvents, std::vector<FInputEvent>& InAssetEvents);
+	FGuiDrawData DrawMainWindow(float InDelta, std::span<const FInputEvent> InEvents, bool bInDrawable);
 	bool AdvanceFrame(float InDelta);
 	void InitializeContentBrowser();
 	void RefreshContent();
@@ -229,6 +289,8 @@ private:
 	void Redo();
 	void SaveScene(const std::string& InDestination);
 	void PollSave();
+	void SaveBeforeClose();
+	void PollSavedClose();
 	void DrawSaveDialog();
 	void DrawDiscardDialog();
 	void CancelDiscardAction();
@@ -274,6 +336,9 @@ private:
 	FGui* Gui{};
 	FGuiRenderer* GuiRenderer{};
 	std::unique_ptr<FSceneInstance> Scene;
+	std::unique_ptr<FAssetWorkspace> AssetWorkspace;
+	std::unique_ptr<FAssetEditorWindow> AssetWindow;
+	bool bAssetRefreshHistory{};
 	FSceneCameraController Camera{ESceneCameraNavigationMode::Fly};
 	FSceneCameraView ViewCamera;
 	std::optional<FSceneHandle> PreviewCamera;
@@ -538,6 +603,7 @@ private:
 	bool bDiscardDialog{};
 	bool bRequestDiscard{};
 	bool bPendingClose{};
+	bool bSaveThenClose{};
 	std::string PendingOpen;
 	std::map<std::string, FVec4> InspectionBounds;
 	FSceneNode ExerciseOriginal;

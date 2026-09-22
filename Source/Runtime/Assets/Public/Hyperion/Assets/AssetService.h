@@ -127,6 +127,12 @@ struct FAssetGraph
 	std::vector<FAssetDependencyFailure> Failures;
 };
 
+struct FAssetSaveResult
+{
+	std::filesystem::path Path;
+	FAssetHeader Header;
+};
+
 // Own before requests; destroy/drain before IO and Tasks. CPU readiness is separate from GPU readiness.
 class FAssetService
 {
@@ -140,8 +146,12 @@ public:
 	TAsyncResult<FAssetGraph> LoadGraphAsync(const std::filesystem::path& InPath);
 	TAsyncResult<FAssetGraph> LoadGraphAsync(const FAssetRef& InReference,
 	                                         const std::filesystem::path& InContainingAsset);
-	void SetCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory);
-	void AddCatalog(const FAssetCatalog& InCatalog, const std::filesystem::path& InDirectory);
+	void SetAssetIndex(const std::vector<FAssetRef>& InEntries, const std::filesystem::path& InDirectory);
+	void AddAssetIndex(const std::vector<FAssetRef>& InEntries, const std::filesystem::path& InDirectory);
+	std::vector<FAssetRef> GetAssetIndex() const;
+	// Owns the detached archive; expected identity/digest protects an existing editor document.
+	TAsyncResult<FAssetSaveResult> SaveDocumentAsync(std::filesystem::path InPath, const FRecordDescriptor& InType,
+	                                                 FArchiveNode InObject, FAssetRef InExpected);
 	std::filesystem::path NormalizePath(const std::filesystem::path& InPath) const;
 	const std::shared_ptr<IFileSystem>& FileSystem() const;
 	std::filesystem::path Resolve(const FAssetRef& InReference, const std::filesystem::path& InContainingAsset) const;
@@ -179,13 +189,16 @@ public:
 	FAssetCacheStats Statistics();
 	void Drain();
 	// Main, after all consumers are quiescent. Keeps type registration and service identity.
-	void ResetContent(FAssetService& InPreparedCatalog);
+	void ResetContent(FAssetService& InPreparedIndex);
 
 private:
 	FAssetRequest Load(const std::filesystem::path& InPath, bool bInGraphDependency);
 	TAsyncResult<FAssetGraph> LoadGraph(FAssetRequest InRoot);
 	TAsyncResult<bool> Save(std::filesystem::path InPath, const FRecordDescriptor& InType,
 	                        std::shared_ptr<const void> InSnapshot);
+	TAsyncResult<FAssetSaveResult> SaveNative(std::filesystem::path InPath, const FRecordDescriptor& InType,
+	                                          std::function<FArchiveNode()> InSnapshot,
+	                                          std::optional<FAssetRef> InExpected = {});
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;
 };

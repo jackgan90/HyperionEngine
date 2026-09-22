@@ -1,4 +1,4 @@
-# 场景编辑器
+# 场景与资产编辑器
 
 `hyperion_editor` 是独立的 Windows / D3D12 应用。提供 UE 风格的深色可停靠工作区：顶部菜单与工具栏、左侧 Place Object、中央 Viewport、右侧 Outliner / Details、底部 Content Browser 和状态栏。
 
@@ -30,7 +30,7 @@ python tools/Bootstrap.py
 ./out/build/release/bin/hyperion_editor.exe
 ```
 
-选择 **File > Open...**，在系统目录对话框中选择资产根目录，例如 `F:\HyperionAssets`；该目录直接映射为 `/Game`。然后通过 **File > Open Scene...** 选择 `Scenes/Sponza.hasset`，点击 **Open**。列表和路径输入框显示相对于资产根目录的路径，内部仍使用 `/Game/Scenes/Sponza.hasset` 加载。列表异步递归扫描当前根目录中的 `.hasset`，根据文件内的资产类型识别场景，不要求场景列入 `Catalog.hasset` 或放在固定子目录；也可以直接输入相对根目录的场景路径。首次加载期间状态栏显示进度，资源就绪后出现在视口中。失败时状态栏显示错误，可以再次打开其他场景。
+选择 **File > Open...**，在系统目录对话框中选择资产根目录，例如 `F:\HyperionAssets`；该目录直接映射为 `/Game`。然后通过 **File > Open Scene...** 选择 `Scenes/Sponza.hasset`，点击 **Open**。列表和路径输入框显示相对于资产根目录的路径，内部仍使用 `/Game/Scenes/Sponza.hasset` 加载。列表异步递归扫描当前根目录中的 `.hasset`，根据文件内的资产类型识别场景，不要求额外的目录资产或固定子目录；也可以直接输入相对根目录的场景路径。首次加载期间状态栏显示进度，资源就绪后出现在视口中。失败时状态栏显示错误，可以再次打开其他场景。
 
 工具栏的 **Open Scene** 打开同一个对话框。对话框中单击条目只选中，双击条目等价于选中后点击 **Open**，同样遵循未保存修改提示。
 
@@ -40,11 +40,13 @@ Content Browser 的根节点和顶部路径显示为 **All**，子目录路径�
 
 **File > Recent** 显示最近最多五个成功选择的根目录，按最近使用排序并去重。下次启动自动恢复最后成功选择的目录，保持空场景；显式 `--scene` 仍可指定启动场景。显式 `--mounts` 优先于保存的根目录。保存目录已经失效时显示错误并保持 `/Game` 未挂载，可重新选择目录；不会悄悄使用另一个 Game 目录。根目录和历史与 RenderDoc 偏好一起保存在 `Preferences.ini`。
 
-Content Browser 左侧显示 `/Game` 目录树，右侧显示所选目录的直接子目录和 `.hasset` 文件，文件夹排在文件前面。中间分隔条可拖动；双击文件夹进入，双击场景打开，其他有效资产显示暂不支持打开该类型的提示，损坏文件显示读取错误。采用文件夹/文件图标，暂不生成资产内容缩略图。默认布局中浏览器位于 Viewport 下方，右侧 Outliner / Details 保留完整高度；已有布局保持不变，**Window > Reset Layout** 可应用新默认布局。**Refresh**、进入目录和保存场景后更新目录；尚未监听系统文件变化。Open Scene 对话框每次打开和点击 Refresh 都重新扫描。
+Content Browser 左侧显示 `/Game` 目录树，右侧显示所选目录的直接子目录和 `.hasset` 文件，文件夹排在文件前面。中间分隔条可拖动；双击文件夹进入，双击场景打开场景文档，双击 Model、Texture、Material、Sky 打开各自资产页签，损坏文件和未知类型显示读取错误。采用文件夹/文件图标，暂不生成资产内容缩略图。默认布局中浏览器位于 Viewport 下方，右侧 Outliner / Details 保留完整高度；已有布局保持不变，**Window > Reset Layout** 可应用新默认布局。**Refresh**、进入目录和保存资产后更新目录；尚未监听系统文件变化。Open Scene 对话框每次打开和点击 Refresh 都重新扫描。
 
-所有 `.hasset` 默认可见，无需内部资产开关；`.cache`、`.git` 和发布临时状态不展示、不扫描。资产类型来自文件头，扫描不会读取纹理/几何 bulk。当前可打开场景，其余类型显示受控提示；模型、材质、贴图等专用编辑器与 Import 界面尚待实现。重新打开场景会读取共享依赖的当前内容。
+单击文件只改变选择，首次双击即可打开；从资产窗口或其他应用切回主窗口时，激活窗口的点击也计入双击，无需先选中文件或点击空白处。
 
-切换根目录前验证新目录和 catalog。当前场景有未保存修改时，可选择 **Save and switch**、**Discard changes** 或 **Cancel**；未命名场景先选择保存路径，保存完成前 `/Game` 仍指向旧目录。取消、保存失败或新目录无效都会保留当前文档。成功切换时结束旧扫描、加载和渲染工作，释放旧场景、选择、撤销历史与预览，再替换 `/Game` 并进入空文档；`/Engine` 映射保留。重复选择同一规范目录只更新最近使用顺序。
+所有 `.hasset` 默认可见，无需内部资产开关；`.cache`、`.git` 和发布临时状态不展示、不扫描。资产类型来自文件头，扫描不会读取纹理/几何 bulk。Shader 保留文本文件，不出现在 Content Browser，也没有专用编辑器。Import 界面尚待实现。Refresh 会同步更新当前 Game 资产的内存索引和引用选择列表。
+
+切换根目录前验证新目录和资产索引。任意场景或资产页签有未保存修改时，可选择 **Save and switch**、**Discard changes** 或 **Cancel**；未命名场景先选择保存路径，保存完成前 `/Game` 仍指向旧目录。取消、保存失败或新目录无效都会保留当前文档。成功切换时结束旧扫描、加载和渲染工作，释放旧场景、选择、撤销历史与预览，再替换 `/Game` 并进入空文档；`/Engine` 映射保留。重复选择同一规范目录只更新最近使用顺序。
 
 可选启动参数：
 
@@ -57,6 +59,31 @@ Content Browser 左侧显示 `/Game` 目录树，右侧显示所选目录的直�
 | `--benchmark out/editor/Frames.csv --benchmark-warmup 120 --benchmark-samples 300` | 资源就绪后预热并记录帧、场景、GUI 和渲染等待耗时 |
 | `--benchmark-camera` | 在采样期间执行确定性的移动相机路径 |
 | `--benchmark-collapsed` | 基准测试中默认收起 Outliner 层级，分离展开列表的成本 |
+
+## 独立资产编辑
+
+双击非场景资产会打开独立的 **Hyperion Asset Editor** 桌面窗口，多个资产在该窗口内以页签组织；重复打开同一资产身份会定位已有页签并恢复窗口。主窗口的场景 Viewport、Outliner 和场景 Details 始终独立可用，可以一边观察场景一边编辑资产。资产窗口包含 **Asset Preview** 和 **Asset Properties** 两个可停靠面板，属性不再占用场景 Details。
+
+**Window > Asset Editor** 可重新显示资产窗口。资产窗口是主窗口的非模态附属顶层窗口：点击场景或 Content Browser 时仍显示在主窗口上方，输入焦点留在实际点击的窗口；切换其他应用时遵循正常桌面层级，不全局置顶。两个窗口可分别移动和缩放；单独最小化资产窗口不影响场景，最小化主窗口会同时收起其资产窗口，恢复主窗口时一起恢复。Application Scale 跟随主窗口设置，资产面板布局单独保存到主布局路径加 `.assets.ini` 的文件。此版本不支持资产页签跨原生窗口拖拽或拆出多个资产窗口。
+
+资产属性采用左侧字段名、右侧输入控件表示可编辑字段，灰色信息值表示只读字段。文件名后的 `*` 表示未保存修改。所有资产都有名称、类型、ID、路径、schema、保存版本、依赖与错误信息。
+
+| 类型 | 主展示与只读信息 | 可保存编辑 |
+| --- | --- | --- |
+| Texture | 2D / Cube 六个面、Mip、RGBA/单通道、棋盘背景、浮点曝光、像素值；尺寸、格式、mip 数和字节数 | 名称；RGBA8 2D 的 Linear/sRGB。切换编码保留 mip0，并原子重建下层 mip；浮点和 Cube 编码只读 |
+| Model | 原生材质的 3D 预览；节点层级、稳定 ID、顶点/索引/三角形、属性通道、包围盒和材质槽 | 名称、节点/primitive 名称、节点局部 PRS（保留剪切）、现有 primitive 的材质槽、现有槽的 Material 引用 |
+| Sky | 原生天空背景、漫反射/反射参考球；Radiance、Specular、BRDF 产品尺寸/格式、SH9 和 bake convention | 名称；曝光和方向只改变预览 |
+| Material | 使用实际 Shader/Pass 的 Sphere / Plane / Cube 预览，支持自定义材质；参数类型、来源、语义和 Shader 路径 | 允许覆盖的标量/向量/颜色、简单固定结构叶值、Texture 引用、Sampler、PBR UV0/UV1；Reset 移除显式覆盖并使用声明默认值 |
+
+Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构和需要协调 Pass 的 AlphaMode / DoubleSided / Unlit 保持只读。必需参数没有声明默认值时，不能清空其唯一显式值。此版本没有材质节点图，也不编辑几何拓扑、层级或 Sky 烘焙结果。
+
+3D 预览复用场景相机导航，**Frame** 重新取景；Texture 支持滚轮缩放、左键平移、**Fit** 和 **1:1**。预览参数、相机和选中节点不进入资产历史。各 3D 页签有独立的场景、视图会话和渲染目标，共享渲染资源服务；隐藏页签停止绘制。
+
+资产窗口中的 **Ctrl+S** 和工具栏 **Save** 保存当前页签；**File > Save All Assets** 保存所有非场景资产。**Ctrl+Z / Ctrl+Y** 或工具栏 Undo/Redo 操作该资产的历史；主窗口的保存和 Undo/Redo 始终操作场景，两者互不抢占输入。一次连续输入/拖动合并为一条历史，Esc 取消当前交互。保存期间可以继续编辑，完成后只把提交时的状态记为已保存。
+
+未保存的草稿只影响自己的预览。保存成功后，当前场景和其他打开的预览自动重新准备受影响依赖；场景名称/变换、选择、局部材质覆盖和 Undo/Redo 历史保留。场景历史恢复时重新绑定最新已发布资源。保存失败保留草稿，依赖刷新失败另行报告。
+
+资产页签关闭支持 **Save and Close / Discard / Cancel**；关闭整个资产窗口支持 **Save All and Close / Discard / Cancel**，不会关闭主场景或退出应用。保存失败保留窗口和草稿。退出应用支持 **Save all and exit / Discard changes / Cancel**；切换资产根目录保护全部文档并关闭旧资产窗口。纹理编码重建期间也计为未保存修改，保存与 Undo/Redo 在重建完成后恢复可用；此时关闭仍需确认，Discard 可明确丢弃正在准备的编辑。保存检查打开时的 ID 和 revision，外部修改或删除、只读挂载不会被静默覆盖；需要关闭并重新打开已变化的资产，解决基线冲突。
 
 ## 操作
 
@@ -160,12 +187,14 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 ## 当前边界
 
-- 单个原生窗口，窗口内部可停靠和浮动；未启用跨原生窗口的 ImGui multi-viewport。
+- 一个主场景窗口和一个按需创建的原生资产窗口，各自内部可停靠和浮动；未启用跨原生窗口的 ImGui multi-viewport，也不支持将任意面板拖出为新的原生窗口。
 - 一个场景视口，默认 Deferred / reversed-Z；此版本不开放 offscreen 深度调试预览。
 - Details 支持单选/多选反射编辑、保存与撤销重做，并提供从编辑器视角创建相机的入口；可通过 FGuiPanelEvent 订阅绘制扩展面板；内置文档面板仍属于同一个 Editor 插件。PRS 支持成组操纵，Del 支持删除选中子树，Place Object 支持内置形状和三种灯光；尚无 Play、框选、范围选择、自定义轴心或通用资产选择器。任意资产的模型替换和实例创建使用 Runtime 或导入工具。
 - 界面使用内置 Roboto 字体和英文标签。字体 atlas 在启动时生成；中文字符显示与动态字体更新尚未加入。
 
 ## 验证入口
+
+`editor_asset_editors` 覆盖各类资产预览、属性保存和独立历史，以及场景与资产原生窗口同时渲染、窗口内快捷键路由、缩放、资产最小化、主窗口整组最小化/恢复、关闭取消/丢弃/保存失败重试和窗口重建。`gui_docking` 补充两个 GUI context 的布局与 framebuffer 缩放隔离；`window_event_routing` 验证原生窗口事件路由。`window_ownership` 会短暂创建可见原生窗口，验证激活主窗口后的层级/焦点、非全局置顶、最小化/恢复、关闭隔离与重建。
 
 `editor_multiselect` 使用真实编辑器输入验证 Outliner/Viewport Ctrl 增减选择、按下时的 Ctrl 状态、双目标描边、Details 混合值逐轴赋值、输入主对象已有数值、三个 gizmo 模式和整组 Undo/Redo，并检查父子选择、取消预览、无效批量提交、删除恢复及句柄重映射。独立入口为 `--exercise-multiselect`。`scene_management` 验证原子批量编辑/增删、最终层级校验及混合反射值；`transform_gizmo` 补充非均匀父级、剪切、跨零缩放和零缩放旋转的成组运算；`gui_input_and_data` 验证混合颜色逐通道编辑。
 

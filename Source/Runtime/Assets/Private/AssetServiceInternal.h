@@ -25,14 +25,16 @@ struct FAssetService::FImpl
 	bool bClosing{};
 	FCancellationToken Cancellation;
 	std::map<std::filesystem::path, FCacheEntry> Cache;
-	std::map<std::filesystem::path, TAsyncResult<bool>> Writes;
+	std::map<std::filesystem::path, TAsyncResult<FAssetSaveResult>> Writes;
 	std::map<std::filesystem::path, FTaskHandle> Operations;
-	std::map<std::string, std::pair<FAssetRef, std::filesystem::path>> Catalog;
+	std::map<std::string, std::pair<FAssetRef, std::filesystem::path>> Index;
 	std::vector<FTaskHandle> Pending;
 	std::uint64_t Access{};
 	FAssetCacheStats Trim();
 	void ScheduleTrim(FTaskHandle InTask);
 	void RequireOpen() const;
 	FLoadedAsset Read(const std::filesystem::path& InPath);
+	FAssetSaveResult WriteNative(const std::filesystem::path& InPath, const FRecordDescriptor& InType,
+	                             FArchiveNode InObject, const std::optional<FAssetRef>& InExpected);
 };
 } // namespace Hyperion

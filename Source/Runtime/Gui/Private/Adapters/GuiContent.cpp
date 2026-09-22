@@ -5,6 +5,12 @@
 
 namespace Hyperion
 {
+void FGui::RevealLastItem()
+{
+	Impl->Select();
+	ImGui::SetScrollHereY(.5f);
+}
+
 namespace
 {
 void DrawCenteredTileLabel(ImDrawList& InDraw, const char* InLabel, ImVec2 InMinimum, ImVec2 InMaximum)

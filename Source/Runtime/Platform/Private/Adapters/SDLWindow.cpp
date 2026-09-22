@@ -155,6 +155,8 @@ struct FSDLSession
 	{
 		// Engine window-close events are routed individually, including hidden windows.
 		SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
+		// Activation clicks belong to the target window's input stream, including double-clicks.
+		SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 		Check(SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
 	}
 
@@ -278,6 +280,29 @@ void FWindow::SetMouseCursor(EMouseCursor InCursor)
 	SDL_SetCursor(Cursor ? Cursor : SDL_GetDefaultCursor());
 	Impl->bCursorHidden = false;
 	SDL_ShowCursor();
+}
+
+void FWindow::Raise()
+{
+	Impl->RequireOwner();
+	SDL_RaiseWindow(Impl->Window);
+}
+
+void FWindow::SetOwner(FWindow* InOwner)
+{
+	Impl->RequireOwner();
+	if (InOwner)
+	{
+		InOwner->Impl->RequireOwner();
+		for (auto* Ancestor = InOwner->Impl->Window; Ancestor; Ancestor = SDL_GetWindowParent(Ancestor))
+		{
+			if (Ancestor == Impl->Window)
+			{
+				throw std::invalid_argument("Window ownership cannot contain a cycle");
+			}
+		}
+	}
+	Check(SDL_SetWindowParent(Impl->Window, InOwner ? InOwner->Impl->Window : nullptr));
 }
 
 void FWindow::Poll()

@@ -258,7 +258,7 @@ void ValidateNativeLibrary(FIOService& InIO, const std::filesystem::path& InRoot
 			{
 				throw std::runtime_error(Found.Errors.begin()->second);
 			}
-			Assets.AddCatalog(BuildAssetCatalog(Found.Entries), Mount.Root);
+			Assets.AddAssetIndex(BuildAssetIndex(Found.Entries), Mount.Root);
 			if (Mount.Root == InRoot)
 			{
 				Entries = Found.Entries;
@@ -273,7 +273,7 @@ void ValidateNativeLibrary(FIOService& InIO, const std::filesystem::path& InRoot
 			throw std::runtime_error(Found.Errors.begin()->second);
 		}
 		Entries = Found.Entries;
-		Assets.SetCatalog(BuildAssetCatalog(Entries), InRoot);
+		Assets.SetAssetIndex(BuildAssetIndex(Entries), InRoot);
 	}
 	for (const auto& Entry : Entries)
 	{

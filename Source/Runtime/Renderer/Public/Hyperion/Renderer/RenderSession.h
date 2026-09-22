@@ -41,6 +41,8 @@ public:
 	FRenderSession(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler);
 	FRenderSession(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler,
 	               ERHIDepthFormat InDepthFormat, std::shared_ptr<const FMaterialSemanticRegistry> InSemantics);
+	// Independent scene/view state sharing an existing resource service. The service must outlive this session.
+	FRenderSession(FTaskSystem& InTasks, FRenderResourceService& InResources, FRHICapabilities InCapabilities);
 	~FRenderSession();
 	FRenderSession(const FRenderSession&) = delete;
 	FRenderSession& operator=(const FRenderSession&) = delete;
@@ -92,7 +94,8 @@ public:
 
 private:
 	FTaskSystem& Tasks;
-	FRenderResourceService Resources;
+	std::unique_ptr<FRenderResourceService> OwnedResources;
+	FRenderResourceService& Resources;
 	FRenderSceneClient Scene;
 	FRenderBatchSystem Batches;
 	bool bClosed{};
@@ -106,6 +109,7 @@ private:
 	void PrepareMaterials(FRenderSceneSnapshot& InSnapshot, bool bInStableCollection);
 	FMaterialProviderInputs PrepareViewInputs(const FRenderSceneSnapshot& InSnapshot);
 	void InvalidatePreparedViews();
+	void InitializeMaterialScopes();
 	std::shared_ptr<const FRenderSceneSnapshot> PrepareView(const FRenderView& InView,
 	                                                        const FRenderPassTargets& InTargets,
 	                                                        std::shared_ptr<const FMaterialFrameContext> InFrame,

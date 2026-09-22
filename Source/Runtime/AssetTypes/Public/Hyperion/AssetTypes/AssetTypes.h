@@ -48,11 +48,6 @@ struct FAssetHeader
 	std::optional<FAssetProvenance> Import;
 };
 
-struct FAssetCatalog
-{
-	std::vector<FAssetRef> Assets;
-};
-
 bool IsAssetIdentifier(std::string_view InValue);
 bool IsAssetRevision(std::string_view InValue);
 void ValidateAssetRef(const FAssetRef& InReference);
@@ -64,5 +59,4 @@ template<> const FRecordDescriptor& RecordType<FAssetDependency>();
 template<> const FRecordDescriptor& RecordType<FAssetSource>();
 template<> const FRecordDescriptor& RecordType<FAssetProvenance>();
 template<> const FRecordDescriptor& RecordType<FAssetHeader>();
-template<> const FRecordDescriptor& RecordType<FAssetCatalog>();
 } // namespace Hyperion

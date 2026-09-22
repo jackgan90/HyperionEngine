@@ -115,6 +115,10 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		{
 			Result.Benchmark = Value;
 		}
+		else if (Argument == "--exercise-assets")
+		{
+			Result.ExerciseAssets = Value;
+		}
 		else if (Argument == "--exercise-document")
 		{
 			Result.ExerciseDocument = Value;

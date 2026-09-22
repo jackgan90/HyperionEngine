@@ -53,7 +53,7 @@ FContentRootCandidate FContentRootService::Prepare(const std::filesystem::path& 
 			                                                      return DiscoverAssets(*Storage, Root);
 		                                                      })
 		                           .Get(Tasks);
-		Result.Assets->AddCatalog(BuildAssetCatalog(Discovery->Entries), Mount.Root);
+		Result.Assets->AddAssetIndex(BuildAssetIndex(Discovery->Entries), Mount.Root);
 		for (const auto& [Path, Error] : Discovery->Errors)
 		{
 			Log(ELogLevel::Warning, "Asset unavailable: " + PathToUtf8(Path) + ": " + Error);

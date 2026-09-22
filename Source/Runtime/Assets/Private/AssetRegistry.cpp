@@ -104,12 +104,12 @@ FAssetDiscovery DiscoverAssets(IFileSystem& InFiles, const std::filesystem::path
 	return Result;
 }
 
-FAssetCatalog BuildAssetCatalog(std::span<const FAssetRegistryEntry> InEntries)
+std::vector<FAssetRef> BuildAssetIndex(std::span<const FAssetRegistryEntry> InEntries)
 {
-	FAssetCatalog Result;
+	std::vector<FAssetRef> Result;
 	for (const auto& Entry : InEntries)
 	{
-		Result.Assets.push_back({Entry.Header.Id, PathToUtf8(Entry.Path), Entry.Header.TypeId, {}});
+		Result.push_back({Entry.Header.Id, PathToUtf8(Entry.Path), Entry.Header.TypeId, {}});
 	}
 	return Result;
 }
@@ -137,7 +137,7 @@ void IndexDiscoveredAssets(FAssetService& InAssets, const std::filesystem::path&
 	for (const auto& Root : Roots)
 	{
 		const auto Found = DiscoverAssets(Files, Root);
-		InAssets.AddCatalog(BuildAssetCatalog(Found.Entries), Root);
+		InAssets.AddAssetIndex(BuildAssetIndex(Found.Entries), Root);
 	}
 }
 } // namespace Hyperion

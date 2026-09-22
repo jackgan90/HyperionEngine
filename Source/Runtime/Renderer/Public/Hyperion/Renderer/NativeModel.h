@@ -10,17 +10,19 @@ class FRenderResourceService;
 std::shared_ptr<const FMaterialAssetData> ResolveMaterialAssetGraph(const FAssetGraph& InGraph,
                                                                     const FLoadedAsset& InMaterial,
                                                                     const FAssetService& InAssets);
-std::shared_ptr<const FSceneModelData> ResolveModelAssetGraph(const FAssetGraph& InGraph,
-                                                              const FAssetService& InAssets);
+std::shared_ptr<const FSceneModelData> ResolveModelAssetGraph(const FAssetGraph& InGraph, const FAssetService& InAssets,
+                                                              std::shared_ptr<const FSceneModelData> InExisting = {});
 TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSystem& InTasks,
                                               const FAssetRef& InReference,
                                               const std::filesystem::path& InContainingAsset,
                                               FCancellationToken InCancellation = {},
                                               FRenderResourceService* InResources = nullptr,
-                                              bool bInPrepareQueries = false);
+                                              bool bInPrepareQueries = false,
+                                              std::shared_ptr<const FSceneModelData> InExisting = {});
 TAsyncResult<FSceneModelData> LoadNativeModel(FAssetService& InAssets, FTaskSystem& InTasks,
                                               const std::filesystem::path& InPath,
                                               FCancellationToken InCancellation = {},
                                               FRenderResourceService* InResources = nullptr,
-                                              bool bInPrepareQueries = false);
+                                              bool bInPrepareQueries = false,
+                                              std::shared_ptr<const FSceneModelData> InExisting = {});
 } // namespace Hyperion

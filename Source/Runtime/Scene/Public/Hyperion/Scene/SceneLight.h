@@ -26,6 +26,7 @@ struct FSceneSkyData
 	FAssetRef Reference;
 	FEnvironmentSh Irradiance{};
 	std::array<std::shared_ptr<const FMaterialTextureSource>, 3> Textures;
+	std::vector<FAssetRef> Dependencies;
 };
 
 struct FSceneEnvironmentLight

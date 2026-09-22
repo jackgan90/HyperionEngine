@@ -24,11 +24,11 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 #if HYP_ENABLE_RENDERDOC
 	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
 #endif
-	const bool bInteractive = Options.ExerciseContent.empty() && !Options.bExercise && !Options.bExerciseGizmo &&
-	                          !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
-	                          Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
-	                          Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() &&
-	                          Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
+	const bool bInteractive =
+	    Options.ExerciseAssets.empty() && Options.ExerciseContent.empty() && !Options.bExercise &&
+	    !Options.bExerciseGizmo && !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
+	    Options.Benchmark.empty() && Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
+	    Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
 	const auto RestoredRoot = !Options.bExplicitMounts && bInteractive && !Options.Preferences.AssetRoot.empty()
 	                              ? std::optional(Options.Preferences.AssetRoot)
 	                              : std::nullopt;
@@ -36,11 +36,11 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterWindowServices(Registry, {"Hyperion Editor", {1600, 960}, Options.bHidden, true});
 	RegisterGraphicsServices(
 	    Registry, {std::move(InBackends), "d3d12", std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache", true});
-	const bool bPersistGui = !Options.bExercise && !Options.bExerciseGizmo && !Options.bExercisePicking &&
-	                         !Options.bExerciseMultiSelection && Options.Benchmark.empty() &&
-	                         Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
-	                         Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
-	                         Options.ExerciseCapture.empty();
+	const bool bPersistGui = Options.ExerciseAssets.empty() && !Options.bExercise && !Options.bExerciseGizmo &&
+	                         !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
+	                         Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
+	                         Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() &&
+	                         Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
 	const bool bPersistContentLayout = bPersistGui && Options.ExerciseContent.empty();
 	RegisterGuiServices(Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
 	                               bPersistContentLayout ? Options.Layout : std::filesystem::path{},
@@ -97,7 +97,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 		    !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || Options.bExercise ||
 		    Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 		    !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
-		    !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty())
+		    !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty())
 		{
 			throw std::runtime_error("Requested Editor output is unavailable: editor plugin did not start");
 		}

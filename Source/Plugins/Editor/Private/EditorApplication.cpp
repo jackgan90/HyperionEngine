@@ -60,6 +60,7 @@ void FEditorPlugin::Initialize()
 	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
 	                                                  std::move(Features));
 	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
+	AssetWorkspace = std::make_unique<FAssetWorkspace>(Assets, Tasks, *Session, Device->GetCapabilities());
 	Error = Context.Require<FContentRootService>().StartupError;
 	InitializePlacement();
 	if (!Options.Scene.empty())
@@ -130,6 +131,11 @@ void FEditorPlugin::Shutdown()
 	}
 	CancelContentRequests();
 	Camera.Reset();
+	if (AssetWorkspace)
+	{
+		CloseAssetWindow();
+	}
+	AssetWorkspace.reset();
 	Scene.reset();
 	Assets.Drain();
 	PlacementModels.clear();
@@ -157,8 +163,94 @@ void FEditorPlugin::Shutdown()
 	}
 }
 
+void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::vector<FInputEvent>& InAssetEvents)
+{
+	if (Options.bExercise)
+	{
+		ExerciseInput(InEvents);
+	}
+	if (!Options.ExerciseDocument.empty())
+	{
+		ExerciseDocumentInput(InEvents);
+	}
+	if (!Options.ExerciseViews.empty())
+	{
+		ExerciseViewInput(InEvents);
+	}
+	if (!Options.ExerciseCapture.empty())
+	{
+		ExerciseCaptureInput(InEvents);
+	}
+	if (!Options.ExerciseAssets.empty())
+	{
+		const bool bAssetInput = (ExerciseStep >= 13 && ExerciseStep <= 20) ||
+		                         (ExerciseStep >= 100 && ExerciseStep <= 172) ||
+		                         (ExerciseStep >= 190 && ExerciseStep != 200 && ExerciseStep != 201);
+		ExerciseAssetInput(bAssetInput ? InAssetEvents : InEvents);
+	}
+	RouteHistoryShortcuts(InEvents);
+	if (Options.bExerciseGizmo)
+	{
+		ExerciseGizmoInput(InEvents);
+	}
+	if (Options.bExercisePicking)
+	{
+		ExercisePickingInput(InEvents);
+	}
+	if (Options.bExerciseMultiSelection)
+	{
+		ExerciseMultiSelection(InEvents);
+	}
+	if (!Options.ExercisePlacement.empty())
+	{
+		ExercisePlacementInput(InEvents);
+	}
+	if (!Options.ExerciseOutlines.empty())
+	{
+		ExerciseOutlines();
+	}
+	if (!Options.ExerciseContent.empty())
+	{
+		ExerciseContentInput(InEvents);
+	}
+}
+
+FGuiDrawData FEditorPlugin::DrawMainWindow(float InDelta, std::span<const FInputEvent> InEvents, bool bInDrawable)
+{
+	FGuiDrawData Data;
+	{
+		HYP_PERF_SCOPE_C(Frame, EditorGui);
+		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.GuiMilliseconds);
+		if (bInDrawable)
+		{
+			Data = DrawGui(InDelta, InEvents);
+		}
+		else
+		{
+			bViewportVisible = false;
+			Gui->ResetInput();
+			ViewportRegion = {};
+			CancelPlacement();
+			ViewportClick.reset();
+			FinishGizmo();
+			Camera.SuspendInput(InEvents);
+			bCameraDragging = false;
+		}
+	}
+	if (!Options.ExercisePlacement.empty())
+	{
+		CheckPlacementMarkerDraws(Data);
+	}
+	if (Options.bExerciseMultiSelection)
+	{
+		CheckMultiSelectionMarkerDraws(Data);
+	}
+	return Data;
+}
+
 bool FEditorPlugin::AdvanceFrame(float InDelta)
 {
+	const bool bMainDrawable = !Window->Minimized() && Window->PixelSize().Width && Window->PixelSize().Height;
 	BenchmarkFrame = {};
 	const auto FrameStarted = Options.Benchmark.empty() ? 0 : ClockNanoseconds();
 	{
@@ -171,61 +263,17 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	InitializeViewportCamera();
 	PollPlacementResources();
 	std::vector<FInputEvent> Events(Window->Events().begin(), Window->Events().end());
-	if (Options.bExercise)
+	std::vector<FInputEvent> AssetEvents;
+	if (AssetWindow)
 	{
-		ExerciseInput(Events);
+		const auto NativeEvents = AssetWindow->NativeWindow().Events();
+		AssetEvents.assign(NativeEvents.begin(), NativeEvents.end());
 	}
-	if (!Options.ExerciseDocument.empty())
-	{
-		ExerciseDocumentInput(Events);
-	}
-	if (!Options.ExerciseViews.empty())
-	{
-		ExerciseViewInput(Events);
-	}
-	if (!Options.ExerciseCapture.empty())
-	{
-		ExerciseCaptureInput(Events);
-	}
-	RouteHistoryShortcuts(Events);
-	if (Options.bExerciseGizmo)
-	{
-		ExerciseGizmoInput(Events);
-	}
-	if (Options.bExercisePicking)
-	{
-		ExercisePickingInput(Events);
-	}
-	if (Options.bExerciseMultiSelection)
-	{
-		ExerciseMultiSelection(Events);
-	}
-	if (!Options.ExercisePlacement.empty())
-	{
-		ExercisePlacementInput(Events);
-	}
-	if (!Options.ExerciseOutlines.empty())
-	{
-		ExerciseOutlines();
-	}
-	FGuiDrawData Data;
-	if (!Options.ExerciseContent.empty())
-	{
-		ExerciseContentInput(Events);
-	}
-	{
-		HYP_PERF_SCOPE_C(Frame, EditorGui);
-		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.GuiMilliseconds);
-		Data = DrawGui(InDelta, Events);
-	}
-	if (!Options.ExercisePlacement.empty())
-	{
-		CheckPlacementMarkerDraws(Data);
-	}
-	if (Options.bExerciseMultiSelection)
-	{
-		CheckMultiSelectionMarkerDraws(Data);
-	}
+	CollectEditorInput(Events, AssetEvents);
+	// Synthetic clicks use a fixed GUI clock: hidden swapchains can run fast enough
+	// to merge separate double-click sequences after the content grid scrolls.
+	const float GuiDelta = Options.ExerciseAssets.empty() ? InDelta : 1.f / 60;
+	auto Data = DrawMainWindow(GuiDelta, Events, bMainDrawable);
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
 		Scene->Tick();
@@ -239,10 +287,20 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
 	     (Options.ExerciseCapture == "toggle" && bPreferencesDialog && ExerciseStep == 2 && ExerciseWait == 2) ||
 	     (Options.ExerciseCapture == "capture" && ExerciseStep == 1));
+	const auto AssetCapture =
+	    !Options.ExerciseAssets.empty() ? std::exchange(PlacementCapture, {}) : std::filesystem::path{};
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorRenderWait);
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.RenderMilliseconds);
-		Render(std::move(Data), bCapture);
+		if (bMainDrawable)
+		{
+			Render(std::move(Data), bCapture);
+		}
+	}
+	AdvanceAssetWindow(GuiDelta, std::move(AssetEvents), AssetCapture);
+	if (!bMainDrawable && (!AssetWindow || !AssetWindow->IsDrawable()))
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	}
 	if (!Options.Benchmark.empty())
 	{
@@ -275,8 +333,24 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	PollSave();
+	const auto SavedAssets = AssetWorkspace->Poll();
+	if (!SavedAssets.empty())
+	{
+		bAssetRefreshHistory = true;
+		Scene->RefreshAssets(SavedAssets);
+		RefreshContent();
+	}
 	PollContent();
+	if (AssetWindow)
+	{
+		AssetWindow->Poll(IsAssetWindowBlocked());
+		if (AssetWindow->ShouldClose() && !IsAssetWindowBlocked())
+		{
+			CloseAssetWindow();
+		}
+	}
 	ProcessContentRoot();
+	PollSavedClose();
 	if (bFinished)
 	{
 		return;
@@ -288,21 +362,12 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	}
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
-	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty()) &&
+	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
+	     !Options.ExerciseAssets.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
-		throw std::runtime_error("Editor interaction acceptance timed out");
-	}
-	if (Window->Minimized() || !Window->PixelSize().Width || !Window->PixelSize().Height)
-	{
-		CancelPlacement();
-		ViewportClick.reset();
-		FinishGizmo();
-		Scene->Tick();
-		Camera.Reset();
-		bCameraDragging = false;
-		std::this_thread::sleep_for(std::chrono::milliseconds(20));
-		return;
+		throw std::runtime_error("Editor interaction acceptance timed out at step " + std::to_string(ExerciseStep) +
+		                         ": " + AssetWorkspace->ActiveStatus());
 	}
 	if (AdvanceFrame(InUpdate.DeltaSeconds))
 	{
@@ -312,6 +377,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExerciseAssets.empty() && !bAssetsVerified)
+	{
+		throw std::runtime_error("Asset editor acceptance incomplete");
+	}
 	if (!Options.ExerciseContent.empty() && (!bContentVerified || IsDirty() || !Window->ShouldClose()))
 	{
 		throw std::runtime_error("Content transition acceptance did not complete a clean close");

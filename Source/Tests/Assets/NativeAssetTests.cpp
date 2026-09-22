@@ -334,6 +334,34 @@ void CheckService(FTaskSystem& InTasks, FIOService& InIO, FMemoryFileSystem& InF
 	Assets.Drain();
 }
 
+void CheckDocumentSave(FTaskSystem& InTasks, FIOService& InIO, FMemoryFileSystem& InFiles,
+                       const std::filesystem::path& InRoot)
+{
+	FAssetService Assets(InIO);
+	Assets.Types().Register<FNativeFixture>();
+	const auto Path = InRoot / "document.hasset";
+	const auto Original = Store(InFiles, Path, {"original"});
+	const FAssetRef Expected{Original.Id, {}, Original.TypeId, Original.Revision};
+	auto Draft = WriteValue(FNativeFixture{"submitted"});
+	const auto Request = Assets.SaveDocumentAsync(Path, RecordType<FNativeFixture>(), Draft, Expected);
+	Draft = WriteValue(FNativeFixture{"later edit"});
+	const auto Saved = Request.Get(InTasks);
+	HYP_CHECK(Saved->Header.Id == Original.Id && Saved->Header.Revision != Original.Revision);
+	HYP_CHECK(Assets.LoadAsync<FNativeFixture>(Path).Get(InTasks)->Name == "submitted");
+	Reject(
+	    [&]
+	    {
+		    Assets.SaveDocumentAsync(Path, RecordType<FNativeFixture>(), Draft, Expected).Get(InTasks);
+	    },
+	    "changed on disk");
+	HYP_CHECK(DecodeAsset(InFiles.Read(Path, 1024 * 1024)).Header.Revision == Saved->Header.Revision);
+	const FAssetRef Current{Saved->Header.Id, {}, Saved->Header.TypeId, Saved->Header.Revision};
+	const auto Corrected = Assets.SaveDocumentAsync(Path, RecordType<FNativeFixture>(), Draft, Current).Get(InTasks);
+	HYP_CHECK(Corrected->Header.Id == Original.Id && Corrected->Header.Revision != Saved->Header.Revision);
+	HYP_CHECK(Assets.GetAssetIndex().size() == 1);
+	Assets.Drain();
+}
+
 void CheckGraph(FTaskSystem& InTasks, FIOService& InIO, FMemoryFileSystem& InFiles, const std::filesystem::path& InRoot)
 {
 	const auto Type = RecordType<FNativeFixture>().Id;
@@ -370,12 +398,12 @@ void CheckGraph(FTaskSystem& InTasks, FIOService& InIO, FMemoryFileSystem& InFil
 	InFiles.WriteAtomic(Moved / "root.hasset", InFiles.Read(InRoot / "root.hasset", 100000));
 	HYP_CHECK(Assets.LoadGraphAsync(Moved / "root.hasset").Get(InTasks)->Assets.size() == 2);
 	Reference = {Child.Id, "child.hasset", Type, Child.Revision};
-	Assets.SetCatalog({{Reference}}, Moved);
+	Assets.SetAssetIndex({Reference}, Moved);
 	HYP_CHECK(Assets.LoadByIdAsync(Child.Id).Get(InTasks)->Path == Moved / "child.hasset");
 	Reject(
 	    [&]
 	    {
-		    Assets.SetCatalog({{Reference, Reference}}, Moved);
+		    Assets.SetAssetIndex({Reference, Reference}, Moved);
 	    },
 	    "Duplicate");
 	Assets.Drain();
@@ -424,15 +452,15 @@ void CheckMountedNativeAssets()
 	const auto First = Assets.LoadAsync("/Game/Root.hasset").Get(Tasks);
 	HYP_CHECK(Assets.LoadAsync(Root / "Game/Root.hasset").Get(Tasks) == First);
 	HYP_CHECK(Assets.LoadGraphAsync("/Game/Root.hasset").Get(Tasks)->Assets.size() == 2);
-	Assets.AddCatalog(FAssetCatalog{{Reference}}, "/Engine");
-	Assets.AddCatalog(FAssetCatalog{{Reference}}, "/Game");
+	Assets.AddAssetIndex({Reference}, "/Engine");
+	Assets.AddAssetIndex({Reference}, "/Game");
 	HYP_CHECK(Assets.LoadByIdAsync(Reference.Id).Get(Tasks) == Child);
 	bool bRejected = false;
 	try
 	{
 		auto Conflict = Reference;
 		Conflict.Path = "/Game/Wrong.hasset";
-		Assets.AddCatalog(FAssetCatalog{{Conflict}}, "/Game");
+		Assets.AddAssetIndex({Conflict}, "/Game");
 	}
 	catch (const std::exception&)
 	{
@@ -468,6 +496,7 @@ int main()
 		FIOService IO(Tasks, Files);
 		const auto Root = std::filesystem::absolute("native-assets").lexically_normal();
 		CheckService(Tasks, IO, *Files, Root);
+		CheckDocumentSave(Tasks, IO, *Files, Root);
 		CheckGraph(Tasks, IO, *Files, Root);
 		CheckCache(Tasks, IO, *Files, Root);
 		Tasks.Shutdown();

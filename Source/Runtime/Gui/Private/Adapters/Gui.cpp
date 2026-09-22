@@ -88,6 +88,7 @@ FGui::FGui(FWindow* InWindow) : Impl(std::make_unique<FImpl>())
 	    });
 	Impl->Context = ImGui::CreateContext();
 	Impl->Plot = ImPlot::CreateContext();
+	Impl->Select();
 	Impl->Window = InWindow;
 	auto& Io = ImGui::GetIO();
 	Io.ConfigDragClickToInputText = true;
@@ -352,7 +353,8 @@ bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth, b
 	return bSelected;
 }
 
-bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex)
+bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex,
+                 const std::function<void(std::size_t, FVec4)>& InObserve)
 {
 	Impl->Select();
 	bool bChanged = false;
@@ -371,6 +373,10 @@ bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, st
 				bChanged = true;
 			}
 			ImGui::PopID();
+			if (InObserve)
+			{
+				InObserve(Index, LastItemBounds());
+			}
 		}
 		ImGui::EndCombo();
 	}
@@ -525,6 +531,22 @@ void FGui::OverlayLine(FVec2 InNormalizedA, FVec2 InNormalizedB, std::uint32_t I
 	const auto Size = ImGui::GetIO().DisplaySize;
 	ImGui::GetBackgroundDrawList()->AddLine({InNormalizedA.X * Size.x, InNormalizedA.Y * Size.y},
 	                                        {InNormalizedB.X * Size.x, InNormalizedB.Y * Size.y}, InColor, 1.5f);
+}
+
+FVec2 FGui::FramebufferScale() const
+{
+	Impl->Select();
+	const auto Scale = ImGui::GetIO().DisplayFramebufferScale;
+	return {Scale.x, Scale.y};
+}
+
+void FGui::ResetInput()
+{
+	Impl->Select();
+	auto& Io = ImGui::GetIO();
+	Io.ClearEventsQueue();
+	Io.ClearInputKeys();
+	Io.ClearInputMouse();
 }
 
 FGuiDrawData FGui::Render()

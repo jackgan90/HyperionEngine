@@ -90,18 +90,42 @@ FRenderSession::FRenderSession(FTaskSystem& InTasks, IRHIDevice& InDevice, FShad
 FRenderSession::FRenderSession(FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler,
                                ERHIDepthFormat InDepthFormat,
                                std::shared_ptr<const FMaterialSemanticRegistry> InSemantics)
-    : Tasks(InTasks), Resources(InTasks, InDevice, InCompiler), Scene(
-                                                                    InTasks,
-                                                                    [this]
-                                                                    {
-	                                                                    return Resources.CreateScopeLifetime();
-                                                                    },
-                                                                    [this]
-                                                                    {
-	                                                                    InvalidatePreparedViews();
-                                                                    }),
+    : Tasks(InTasks), OwnedResources(std::make_unique<FRenderResourceService>(InTasks, InDevice, InCompiler)),
+      Resources(*OwnedResources), Scene(
+                                      InTasks,
+                                      [this]
+                                      {
+	                                      return Resources.CreateScopeLifetime();
+                                      },
+                                      [this]
+                                      {
+	                                      InvalidatePreparedViews();
+                                      }),
       Batches(InTasks, InDevice.GetCapabilities()),
       MaterialState(std::make_unique<FMaterialState>(InDepthFormat, std::move(InSemantics)))
+{
+	InitializeMaterialScopes();
+}
+
+FRenderSession::FRenderSession(FTaskSystem& InTasks, FRenderResourceService& InResources,
+                               FRHICapabilities InCapabilities)
+    : Tasks(InTasks), Resources(InResources), Scene(
+                                                  InTasks,
+                                                  [this]
+                                                  {
+	                                                  return Resources.CreateScopeLifetime();
+                                                  },
+                                                  [this]
+                                                  {
+	                                                  InvalidatePreparedViews();
+                                                  }),
+      Batches(InTasks, InCapabilities),
+      MaterialState(std::make_unique<FMaterialState>(ERHIDepthFormat::D32, GetStandardMaterialSemantics()))
+{
+	InitializeMaterialScopes();
+}
+
+void FRenderSession::InitializeMaterialScopes()
 {
 	for (auto& Scope : MaterialState->Inputs.Scopes)
 	{
@@ -361,7 +385,10 @@ void FRenderSession::Close()
 	Tasks.Wait(Clear);
 	Scene.Close();
 	MaterialState.reset();
-	Resources.Close();
+	if (OwnedResources)
+	{
+		Resources.Close();
+	}
 	bClosed = true;
 }
 
@@ -381,6 +408,9 @@ void FRenderSession::ResetContent()
 		                          LastStatistics = {};
 		                          LastViews.clear();
 	                          }));
-	Resources.ResetContent();
+	if (OwnedResources)
+	{
+		Resources.ResetContent();
+	}
 }
 } // namespace Hyperion

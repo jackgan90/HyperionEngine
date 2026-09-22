@@ -1,6 +1,21 @@
 add_library(hyperion_editor_plugin STATIC
   Private/EditorAcceptance.cpp
+  Private/EditorAssetAcceptance.cpp
+  Private/EditorAssetPropertyAcceptance.cpp
+  Private/EditorAssetWorkspaceAcceptance.cpp
   Private/EditorApplication.cpp
+  Private/AssetDocument.cpp
+  Private/AssetEditorWindow.cpp
+  Private/AssetEditorWindowGui.cpp
+  Private/EditorAssetWindow.cpp
+  Private/EditorAssetWindowAcceptance.cpp
+  Private/EditorAssetAuditAcceptance.cpp
+  Private/EditorAssetPreviewAcceptance.cpp
+  Private/AssetWorkspace.cpp
+  Private/AssetPreview.cpp
+  Private/AssetProperties.cpp
+  Private/AssetTextureEditor.cpp
+  Private/AssetMaterialEditor.cpp
   Private/ContentBrowser.cpp
   Private/EditorContent.cpp
   Private/EditorContentTransition.cpp
@@ -43,13 +58,28 @@ hyp_module(hyperion_editor_plugin)
 target_link_libraries(hyperion_editor_plugin PUBLIC hyperion_application_services
   PRIVATE hyperion_application hyperion_plugins hyperion_gui hyperion_gui_renderer hyperion_render hyperion_assets
   hyperion_asset_types hyperion_scene hyperion_materials hyperion_platform hyperion_io hyperion_core hyperion_tasks
-  hyperion_shaders hyperion_rhi hyperion_math hyperion_config)
+  hyperion_shaders hyperion_rhi hyperion_math hyperion_config hyperion_textures hyperion_environment)
 target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_ENABLE_RENDERDOC=$<BOOL:${HYP_ENABLE_RENDERDOC}>)
 if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
+  add_executable(editor_asset_document_tests Private/AssetDocumentTests.cpp Private/AssetDocument.cpp)
+  hyp_executable(editor_asset_document_tests)
+  target_sources(editor_asset_document_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests/Assets/EditorAssetFixture.cpp")
+  target_link_libraries(editor_asset_document_tests PRIVATE hyperion_assets hyperion_textures hyperion_scene hyperion_environment hyperion_materials)
+  target_include_directories(editor_asset_document_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
+  target_compile_definitions(editor_asset_document_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+  set_target_properties(editor_asset_document_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_asset_documents COMMAND editor_asset_document_tests)
+  set_tests_properties(editor_asset_documents PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}" FIXTURES_SETUP editor_asset_fixture)
+  add_test(NAME editor_asset_editors COMMAND hyperion_editor
+    --exercise-assets "${PROJECT_BINARY_DIR}/editor-asset-tests"
+    --editor-preferences "${PROJECT_BINARY_DIR}/editor-asset-tests/EditorPreferences.ini"
+    --layout "${PROJECT_BINARY_DIR}/editor-asset-tests/Layout.ini" --hidden)
+  set_tests_properties(editor_asset_editors PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    FIXTURES_REQUIRED editor_asset_fixture TIMEOUT 150 RUN_SERIAL TRUE LABELS "gpu;desktop")
   add_executable(editor_content_tests Private/ContentBrowserTests.cpp Private/ContentBrowser.cpp Private/EditorPreferences.cpp)
   hyp_executable(editor_content_tests)
   target_compile_definitions(editor_content_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

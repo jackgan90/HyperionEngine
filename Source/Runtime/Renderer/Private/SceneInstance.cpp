@@ -77,6 +77,7 @@ void FSceneInstance::Tick()
 		P.PollModels();
 		P.PollMaterials();
 		P.PublishModels();
+		P.PollAssetRefresh();
 		P.PollSkies();
 		P.Scene.Update();
 		P.Bridge->Flush();
@@ -101,6 +102,33 @@ void FSceneInstance::Close()
 	++P.LoadEpoch;
 	P.ManifestRequest.Cancel();
 	P.MaterialCancellation.Cancel();
+	P.RefreshCancellation.Cancel();
+	if (P.AssetRefresh)
+	{
+		try
+		{
+			P.Tasks.Wait(P.AssetRefresh->Task());
+		}
+		catch (...)
+		{
+		}
+		P.AssetRefresh.reset();
+	}
+	P.bRefreshRequested = false;
+	P.bRefreshAllAssets = false;
+	P.ChangedAssetIds.clear();
+	P.ChangedAssetPaths.clear();
+	if (P.RefreshResources)
+	{
+		try
+		{
+			P.Tasks.Wait(P.RefreshResources->Upload.Task());
+		}
+		catch (...)
+		{
+		}
+		P.RefreshResources.reset();
+	}
 	P.CloseSkies();
 	try
 	{

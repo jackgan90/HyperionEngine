@@ -32,6 +32,11 @@ def main():
                                  "--capture", str(work / (name + "-unavailable.png"))],
                                 cwd=work, capture_output=True, text=True, timeout=45)
         assert result.returncode != 0 and "output is unavailable" in result.stderr, result.stdout + result.stderr
+    for disabled in ("gui", "editor"):
+        result = subprocess.run([str(editor), "--frames", "8", "--hidden", "--disable-plugin", disabled,
+                                 "--exercise-assets", str(work / "unavailable-assets")],
+                                cwd=work, capture_output=True, text=True, timeout=45)
+        assert result.returncode != 0 and "output is unavailable" in result.stderr, result.stdout + result.stderr
     output = run("stale", viewer, "--config", path, "--capture", work / "stale.png", "--verify-clear")
     assert "Scene:" not in output and "Plugin scene-viewer" not in output, output
     config["properties"].update(plugins=["missing-extension", "scene-viewer"], disabled_plugins=["scene-viewer"])

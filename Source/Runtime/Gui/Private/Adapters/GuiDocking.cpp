@@ -3,6 +3,33 @@
 
 namespace Hyperion
 {
+bool FGui::BeginTabBar(const char* InId)
+{
+	Impl->Select();
+	return ImGui::BeginTabBar(InId, ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_AutoSelectNewTabs);
+}
+
+void FGui::EndTabBar()
+{
+	Impl->Select();
+	ImGui::EndTabBar();
+}
+
+bool FGui::BeginTabItem(const char* InLabel, bool* bInOpen, bool bInActivate)
+{
+	Impl->Select();
+	// The owner decides whether a close request is accepted, for example after an unsaved-document prompt.
+	const auto Flags =
+	    ImGuiTabItemFlags_NoAssumedClosure | (bInActivate ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None);
+	return ImGui::BeginTabItem(InLabel, bInOpen, Flags);
+}
+
+void FGui::EndTabItem()
+{
+	Impl->Select();
+	ImGui::EndTabItem();
+}
+
 void FGui::UseEditorStyle()
 {
 	Impl->Select();
@@ -96,13 +123,23 @@ void FGui::DockSpace(const FGuiDockLayout& InLayout, bool bInReset)
 			const auto Left = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Left, .20f, nullptr, &Center);
 			ImGui::DockBuilderDockWindow(InLayout.Left.c_str(), Left);
 		}
-		auto Right = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Right, .25f, nullptr, &Center);
-		const auto Bottom = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Down, .30f, nullptr, &Center);
-		const auto Top = ImGui::DockBuilderSplitNode(Right, ImGuiDir_Up, .43f, nullptr, &Right);
+		if (!InLayout.RightTop.empty() || !InLayout.RightBottom.empty())
+		{
+			auto Right = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Right, InLayout.RightFraction, nullptr, &Center);
+			if (!InLayout.RightTop.empty() && !InLayout.RightBottom.empty())
+			{
+				const auto Top = ImGui::DockBuilderSplitNode(Right, ImGuiDir_Up, .43f, nullptr, &Right);
+				ImGui::DockBuilderDockWindow(InLayout.RightTop.c_str(), Top);
+			}
+			const auto& RightName = InLayout.RightBottom.empty() ? InLayout.RightTop : InLayout.RightBottom;
+			ImGui::DockBuilderDockWindow(RightName.c_str(), Right);
+		}
+		if (!InLayout.Bottom.empty())
+		{
+			const auto Bottom = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Down, .30f, nullptr, &Center);
+			ImGui::DockBuilderDockWindow(InLayout.Bottom.c_str(), Bottom);
+		}
 		ImGui::DockBuilderDockWindow(InLayout.Center.c_str(), Center);
-		ImGui::DockBuilderDockWindow(InLayout.RightTop.c_str(), Top);
-		ImGui::DockBuilderDockWindow(InLayout.RightBottom.c_str(), Right);
-		ImGui::DockBuilderDockWindow(InLayout.Bottom.c_str(), Bottom);
 		ImGui::DockBuilderFinish(Id);
 	}
 	ImGui::DockSpaceOverViewport(Id, Viewport);

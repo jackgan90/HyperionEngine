@@ -15,6 +15,7 @@ struct FContentDirectory
 struct FContentScenes
 {
 	std::vector<std::string> Paths;
+	std::vector<FAssetRef> Assets;
 	std::string Error;
 };
 

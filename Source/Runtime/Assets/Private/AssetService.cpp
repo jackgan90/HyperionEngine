@@ -141,7 +141,7 @@ FAssetRequest FAssetService::Load(const std::filesystem::path& InPath, bool bInG
 	{
 		Tail = It->second;
 	}
-	std::optional<TAsyncResult<bool>> Barrier;
+	std::optional<TAsyncResult<FAssetSaveResult>> Barrier;
 	if (const auto It = P.Writes.find(Path); It != P.Writes.end())
 	{
 		Barrier = It->second;
@@ -178,6 +178,41 @@ FAssetRequest FAssetService::Load(const std::filesystem::path& InPath, bool bInG
 TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FRecordDescriptor& InType,
                                        std::shared_ptr<const void> InSnapshot)
 {
+	auto Request = SaveNative(std::move(InPath), InType,
+	                          [Type = InType, Snapshot = std::move(InSnapshot)]
+	                          {
+		                          return WriteRecord(Type, Snapshot.get());
+	                          });
+	return DispatchAsync<bool>(Impl->IO.TaskSystem(), {EDomain::Worker},
+	                           [Request, Tasks = &Impl->IO.TaskSystem()]
+	                           {
+		                           (void)Request.Get(*Tasks);
+		                           return true;
+	                           });
+}
+
+TAsyncResult<FAssetSaveResult> FAssetService::SaveDocumentAsync(std::filesystem::path InPath,
+                                                                const FRecordDescriptor& InType, FArchiveNode InObject,
+                                                                FAssetRef InExpected)
+{
+	ValidateAssetRef(InExpected);
+	if (InExpected.Id.empty() || InExpected.Revision.empty() || InExpected.TypeId != InType.Id)
+	{
+		throw std::invalid_argument("Document save requires its loaded identity, type and revision");
+	}
+	return SaveNative(
+	    std::move(InPath), InType,
+	    [Object = std::move(InObject)]
+	    {
+		    return Object;
+	    },
+	    std::move(InExpected));
+}
+
+TAsyncResult<FAssetSaveResult> FAssetService::SaveNative(std::filesystem::path InPath, const FRecordDescriptor& InType,
+                                                         std::function<FArchiveNode()> InSnapshot,
+                                                         std::optional<FAssetRef> InExpected)
+{
 	auto& P = *Impl;
 	const auto Path = NormalizePath(InPath);
 	std::lock_guard Lock(P.Mutex);
@@ -188,7 +223,7 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
 	{
 		Tail = It->second;
 	}
-	std::optional<TAsyncResult<bool>> Previous;
+	std::optional<TAsyncResult<FAssetSaveResult>> Previous;
 	if (const auto It = P.Writes.find(Path); It != P.Writes.end())
 	{
 		Previous = It->second;
@@ -199,9 +234,10 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
 		throw std::runtime_error("Asset in-flight request limit exceeded");
 	}
 	P.Pending.reserve(P.Pending.size() + 2);
-	auto Request = DispatchAsync<bool>(
+	auto Request = DispatchAsync<FAssetSaveResult>(
 	    P.IO.TaskSystem(), {EDomain::Worker},
-	    [State = Impl.get(), Path, Type = InType, Snapshot = std::move(InSnapshot), Previous, Tail]
+	    [State = Impl.get(), Path, Type = InType, Snapshot = std::move(InSnapshot), Previous, Tail,
+	     Expected = std::move(InExpected)]
 	    {
 		    if (Tail)
 		    {
@@ -225,22 +261,7 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
 			    {
 			    }
 		    }
-		    FAssetHeader Header;
-		    const auto Existing = State->IO.TryReadAsync(Path, State->Cancellation).Get(State->IO.TaskSystem());
-		    if (*Existing)
-		    {
-			    const auto Old = DecodeAsset(std::make_shared<const FBytes>(**Existing));
-			    if (Old.Header.TypeId != Type.Id)
-			    {
-				    throw std::runtime_error("Cannot overwrite an asset with a different type");
-			    }
-			    Header.Id = Old.Header.Id;
-		    }
-		    auto Current = ReadRecord(Type, WriteRecord(Type, Snapshot.get()));
-		    PrepareAssetReferences(Type, Current.get(), *State->IO.FileSystem(), Path);
-		    auto Encoded = EncodeAsset(Type, Current.get(), std::move(Header));
-		    return *State->IO.WriteAsync(Path, std::move(Encoded.Bytes), State->Cancellation)
-		                .Get(State->IO.TaskSystem());
+		    return State->WriteNative(Path, Type, Snapshot(), Expected);
 	    },
 	    P.Cancellation);
 	P.Pending.push_back(Request.Task());
@@ -248,6 +269,44 @@ TAsyncResult<bool> FAssetService::Save(std::filesystem::path InPath, const FReco
 	P.Operations[Path] = Request.Task();
 	P.ScheduleTrim(Request.Task());
 	return Request;
+}
+
+FAssetSaveResult FAssetService::FImpl::WriteNative(const std::filesystem::path& InPath, const FRecordDescriptor& InType,
+                                                   FArchiveNode InObject, const std::optional<FAssetRef>& InExpected)
+{
+	const auto Lease = IO.AcquireWriteLeaseAsync(InPath, Cancellation).Get(IO.TaskSystem());
+	FAssetHeader Header;
+	const auto Existing = IO.TryReadAsync(InPath, Cancellation).Get(IO.TaskSystem());
+	if (*Existing)
+	{
+		const auto Old = DecodeAsset(std::make_shared<const FBytes>(**Existing));
+		if (Old.Header.TypeId != InType.Id)
+		{
+			throw std::runtime_error("Cannot overwrite an asset with a different type");
+		}
+		Header.Id = Old.Header.Id;
+		if (InExpected && (InExpected->Id != Old.Header.Id || InExpected->Revision != Old.Header.Revision))
+		{
+			throw std::runtime_error("Asset changed on disk since it was opened; reload before saving");
+		}
+	}
+	else if (InExpected)
+	{
+		throw std::runtime_error("Asset was removed from disk; reload before saving");
+	}
+	auto Current = ReadRecord(InType, InObject);
+	PrepareAssetReferences(InType, Current.get(), *IO.FileSystem(), InPath);
+	auto Encoded = EncodeAsset(InType, Current.get(), std::move(Header));
+	if (!*IO.WriteAsync(InPath, std::move(Encoded.Bytes), Cancellation).Get(IO.TaskSystem()))
+	{
+		throw std::runtime_error("Native asset write did not complete");
+	}
+	if (InExpected)
+	{
+		std::lock_guard IndexLock(Mutex);
+		Index[Encoded.Header.Id] = {{Encoded.Header.Id, PathToUtf8(InPath), Encoded.Header.TypeId, {}}, InPath};
+	}
+	return FAssetSaveResult{InPath, std::move(Encoded.Header)};
 }
 
 void FAssetService::Drain()
@@ -300,16 +359,16 @@ void FAssetRequest::Validate(const FLoadedAsset& InAsset) const
 	}
 }
 
-void FAssetService::ResetContent(FAssetService& InPreparedCatalog)
+void FAssetService::ResetContent(FAssetService& InPreparedIndex)
 {
 	Impl->IO.TaskSystem().Require({EDomain::Main});
-	if (this == &InPreparedCatalog)
+	if (this == &InPreparedIndex)
 	{
-		throw std::invalid_argument("Content reset requires an independent prepared catalog");
+		throw std::invalid_argument("Content reset requires an independent prepared index");
 	}
 	Drain();
-	std::scoped_lock Lock(Impl->Mutex, InPreparedCatalog.Impl->Mutex);
-	Impl->Catalog.swap(InPreparedCatalog.Impl->Catalog);
+	std::scoped_lock Lock(Impl->Mutex, InPreparedIndex.Impl->Mutex);
+	Impl->Index.swap(InPreparedIndex.Impl->Index);
 	Impl->bClosing = false;
 }
 

@@ -60,22 +60,22 @@ bool FPublication::PreserveExternal(FAssetRef& InReference)
 	}
 	for (const auto& [AssetPath, Asset] : Graph->Assets)
 	{
-		const auto Bytes = IO.ReadAsync(AssetPath, Cancellation).Get(IO.TaskSystem());
-		const auto Header = DecodeAsset(Bytes).Header;
+		const auto AssetBytes = IO.ReadAsync(AssetPath, Cancellation).Get(IO.TaskSystem());
+		const auto Header = DecodeAsset(AssetBytes).Header;
 		if (Header.Id != Asset->Header.Id || Header.TypeId != Asset->Header.TypeId ||
 		    Header.Revision != Asset->Header.Revision)
 		{
 			throw std::runtime_error("External asset changed during dependency validation: " + PathToUtf8(AssetPath));
 		}
-		const auto Fingerprint = ContentHash(*Bytes);
+		const auto Fingerprint = ContentHash(*AssetBytes);
 		const auto [It, bInserted] = Sources.emplace(AssetPath, Fingerprint);
 		if (!bInserted && It->second != Fingerprint)
 		{
 			throw std::runtime_error("External asset changed during publication: " + PathToUtf8(AssetPath));
 		}
 	}
-	const auto& Root = *Graph->Root;
-	InReference = {Root.Header.Id, PathToUtf8(Root.Path), Root.Header.TypeId, Root.Header.Revision};
+	const auto& RootAsset = *Graph->Root;
+	InReference = {RootAsset.Header.Id, PathToUtf8(RootAsset.Path), RootAsset.Header.TypeId, RootAsset.Header.Revision};
 	ExternalAssets.emplace(Normalized, InReference);
 	InReference.Revision.clear();
 	return true;

@@ -113,6 +113,12 @@ void FEditorPlugin::DrawMenus()
 		FileMenuBounds = Gui->LastItemBounds();
 		if (bFileOpen)
 		{
+			Gui->BeginDisabled(AssetWorkspace->HasPendingEdits());
+			if (Gui->MenuItem("Save All Assets"))
+			{
+				AssetWorkspace->SaveAll();
+			}
+			Gui->EndDisabled();
 			DrawRootMenu();
 			Gui->Separator();
 			if (Gui->MenuItem("Open Scene..."))
@@ -121,7 +127,7 @@ void FEditorPlugin::DrawMenus()
 			}
 			OpenMenuBounds = Gui->LastItemBounds();
 			Gui->BeginDisabled(CurrentPath.empty() || !Scene->GetStatus().bReady || PendingSave.has_value());
-			if (Gui->MenuItem("Save Scene"))
+			if (Gui->MenuItem("Save Scene", "Ctrl+S"))
 			{
 				Attempt(
 				    [&]
@@ -218,6 +224,18 @@ void FEditorPlugin::DrawWindowMenu()
 		return;
 	}
 	DrawApplicationScale();
+	if (Gui->MenuItem("Asset Editor"))
+	{
+		try
+		{
+			EnsureAssetWindow();
+			AssetWindow->Activate();
+		}
+		catch (const std::exception& Failure)
+		{
+			Error = Failure.what();
+		}
+	}
 	if (Gui->MenuItem("Place Object", nullptr, bShowPlacement))
 	{
 		bShowPlacement = true;
@@ -540,6 +558,10 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 
 std::string FEditorPlugin::StatusText() const
 {
+	if (!Scene->GetStatus().AssetRefreshError.empty())
+	{
+		return "Asset refresh failed: " + Scene->GetStatus().AssetRefreshError;
+	}
 	if (!Error.empty())
 	{
 		return Error;

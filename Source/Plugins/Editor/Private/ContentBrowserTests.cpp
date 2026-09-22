@@ -94,9 +94,9 @@ void CheckRoots(FTaskSystem& InTasks, const std::filesystem::path& InRoot)
 	CheckBrowser(IO);
 	const auto Original = Assets.LoadAsync<FTextureAsset>("/Game/Texture.hasset").Get(InTasks);
 	Check(Original->Name == "A");
-	FAssetCatalog Catalog;
-	Catalog.Assets.push_back({"00000000000000000000000000000042", "/Game/Texture.hasset", "hyperion.textureasset", {}});
-	Assets.AddCatalog(Catalog, "/Game");
+	std::vector<FAssetRef> Entries;
+	Entries.push_back({"00000000000000000000000000000042", "/Game/Texture.hasset", "hyperion.textureasset", {}});
+	Assets.AddAssetIndex(Entries, "/Game");
 	auto OldSave = Assets.SaveAsync("/Game/Saved.hasset", Original);
 	Roots.Commit(Roots.Prepare(InRoot / "B"));
 	Check(*OldSave.Get(InTasks));
@@ -105,7 +105,7 @@ void CheckRoots(FTaskSystem& InTasks, const std::filesystem::path& InRoot)
 	bool bRejected{};
 	try
 	{
-		(void)Assets.Resolve({Catalog.Assets.front().Id, {}, "hyperion.textureasset", {}}, {});
+		(void)Assets.Resolve({Entries.front().Id, {}, "hyperion.textureasset", {}}, {});
 	}
 	catch (const std::exception&)
 	{

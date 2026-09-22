@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Renderer/NativeModel.h"
+#include "Hyperion/Renderer/RenderResources.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneMaterialAssets.h"
 #include <set>
@@ -94,5 +95,48 @@ struct FSceneInstance::FImpl
 	void UpdateStatus();
 	void RefreshModelStatus();
 	void RequireOpen() const;
+
+	struct FRefreshSelection
+	{
+		FSceneHandle Handle;
+		FSceneMaterialAsset Surface;
+		std::map<std::uint32_t, FSceneMaterialAsset> Sections;
+		FSceneMaterialSelection PreparedSurface;
+		std::map<std::uint32_t, FSceneMaterialSelection> PreparedSections;
+	};
+
+	struct FAssetRefresh
+	{
+		std::map<std::string, std::shared_ptr<const FSceneModelData>> Models;
+		std::vector<FRefreshSelection> Selections;
+	};
+
+	std::optional<TAsyncResult<FAssetRefresh>> AssetRefresh;
+
+	struct FRefreshResources
+	{
+		std::shared_ptr<const FAssetRefresh> Data;
+		std::vector<std::shared_ptr<const FRenderResource>> Geometry;
+		std::vector<std::shared_ptr<const FRenderMaterial>> Materials;
+		std::vector<std::shared_ptr<const FMaterialTextureSource>> Textures;
+		TAsyncResult<bool> Upload;
+	};
+
+	std::optional<FRefreshResources> RefreshResources;
+	void PrepareRefreshResources(std::shared_ptr<const FAssetRefresh> InData);
+	void UploadRefreshTextures();
+	bool AreRefreshResourcesReady();
+	FCancellationToken RefreshCancellation;
+	bool bRefreshRequested{};
+	bool bRefreshAllAssets{};
+	std::set<std::string> ChangedAssetIds;
+	std::set<std::filesystem::path> ChangedAssetPaths;
+	bool IsChangedReference(const FAssetRef& InReference, const std::filesystem::path& InContaining) const;
+	bool UsesChangedAssets(const FLoad& InLoad) const;
+	bool UsesChangedAssets(const FSceneMaterialSelection& InSelection) const;
+	void PollAssetRefresh();
+	void BeginAssetRefresh();
+	bool HasUncapturedRefreshConsumers(const FAssetRefresh& InRefresh) const;
+	void PublishAssetRefresh(const FAssetRefresh& InRefresh);
 };
 } // namespace Hyperion

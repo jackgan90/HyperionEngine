@@ -51,7 +51,7 @@ public:
 					                                                      return DiscoverAssets(*Storage, Root);
 				                                                      })
 				                           .Get(InContext.Require<FTaskSystem>());
-				Assets->AddCatalog(BuildAssetCatalog(Discovery->Entries), Mount.Root);
+				Assets->AddAssetIndex(BuildAssetIndex(Discovery->Entries), Mount.Root);
 				for (const auto& [Path, Error] : Discovery->Errors)
 				{
 					Log(ELogLevel::Warning, "Asset unavailable: " + Path.string() + ": " + Error);

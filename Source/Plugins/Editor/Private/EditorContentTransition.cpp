@@ -34,6 +34,7 @@ void FEditorPlugin::QueueContentRoot(const std::filesystem::path& InDirectory)
 void FEditorPlugin::CloseContentDocument()
 {
 	CancelContentRequests();
+	CloseAssetWindow();
 	FinishGizmo();
 	FinishInspectorEdit();
 	CancelPlacement();
@@ -84,7 +85,7 @@ void FEditorPlugin::PrepareContentRoot()
 	PendingRoot.emplace(Content.Prepare(Canonical));
 	FinishGizmo();
 	FinishInspectorEdit();
-	if (IsDirty() || PendingSave)
+	if (IsDirty() || PendingSave || AssetWorkspace->IsDirty() || AssetWorkspace->IsSaving())
 	{
 		bDiscardDialog = bRequestDiscard = true;
 	}
@@ -151,7 +152,17 @@ void FEditorPlugin::ProcessContentRoot()
 		{
 			PrepareContentRoot();
 		}
-		if (!bCommitRoot || !PendingRoot || PendingSave)
+		if (bSaveThenSwitch && !bSaveDialog && !PendingSave && !AssetWorkspace->IsSaving())
+		{
+			bSaveThenSwitch = false;
+			bCommitRoot = !IsDirty() && !AssetWorkspace->IsDirty();
+			bDiscardDialog = bRequestDiscard = !bCommitRoot;
+			if (bCommitRoot)
+			{
+				Gui->ClosePopups();
+			}
+		}
+		if (!bCommitRoot || !PendingRoot || PendingSave || AssetWorkspace->IsSaving())
 		{
 			if (PendingRoot && !bDiscardDialog && !bSaveDialog && !bSaveThenSwitch && !bCommitRoot)
 			{

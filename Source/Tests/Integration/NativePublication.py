@@ -178,6 +178,8 @@ def main():
     fixtures = pathlib.Path(sys.argv[2]).resolve()
     with tempfile.TemporaryDirectory(prefix='native-publication-', dir=pathlib.Path.cwd()) as directory:
         checks = PublicationChecks(tool, fixtures, pathlib.Path(directory))
+        checks.run('catalog', directory, pathlib.Path(directory) / 'Catalog.hasset', error='Unknown command')
+        assert not (pathlib.Path(directory) / 'Catalog.hasset').exists()
         checks.check_divergence()
         checks.check_stale_candidate()
         checks.check_reuse_before_update()

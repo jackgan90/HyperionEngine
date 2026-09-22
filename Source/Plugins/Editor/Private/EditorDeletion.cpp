@@ -77,7 +77,7 @@ void FEditorPlugin::RestoreDeletedSubtree(std::size_t InIndex)
 	for (const auto& [Handle, Node] : Entry.DeletedSubtree)
 	{
 		Original.push_back(Handle);
-		Nodes.push_back(Node);
+		Nodes.push_back(bAssetRefreshHistory ? Scene->RebindAssetResources(Node) : Node);
 		Mapping.emplace(Handle, FSceneHandle{});
 	}
 	const auto Restored = Scene->AddNodes(std::move(Nodes));

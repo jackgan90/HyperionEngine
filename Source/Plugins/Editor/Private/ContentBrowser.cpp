@@ -116,7 +116,10 @@ FContentScenes DiscoverContentScenes(FIOService& InIO, FCancellationToken InCanc
 			}
 			try
 			{
-				if (ReadContentHeader(InIO, Entry.Path, InCancellation).TypeId == "hyperion.scene")
+				const auto Header = ReadContentHeader(InIO, Entry.Path, InCancellation);
+				Result.Assets.push_back(
+				    {Header.Id, PathToUtf8(InIO.FileSystem()->Normalize(Entry.Path)), Header.TypeId, {}});
+				if (Header.TypeId == "hyperion.scene")
 				{
 					Result.Paths.push_back(PathToUtf8(Entry.Path));
 				}

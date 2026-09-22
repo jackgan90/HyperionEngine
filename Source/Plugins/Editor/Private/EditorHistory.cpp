@@ -51,6 +51,29 @@ void FEditorPlugin::FinishInspectorEdit()
 
 void FEditorPlugin::RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents)
 {
+	const bool bAllowSave = !Placement.IsActive() && !Gui->DragPayload() && !IsAssetWindowBlocked() &&
+	                        Scene->GetStatus().bReady && !CurrentPath.empty() && !PendingSave;
+	std::erase_if(InEvents,
+	              [&](const FInputEvent& InEvent)
+	              {
+		              if (InEvent.Type != EEventType::Key || !InEvent.bDown || InEvent.bRepeat ||
+		                  !(InEvent.Modifiers & 1) || InEvent.Key != EKey::S)
+		              {
+			              return false;
+		              }
+		              if (bAllowSave)
+		              {
+			              try
+			              {
+				              SaveScene(CurrentPath);
+			              }
+			              catch (const std::exception& Failure)
+			              {
+				              Error = Failure.what();
+			              }
+		              }
+		              return true;
+	              });
 	const bool bAllowHistory = !Placement.IsActive() && !Gui->DragPayload() && !bOpenDialog && !bSaveDialog &&
 	                           !bDiscardDialog && !bAssetMessage && !PendingRoot && !bPreferencesDialog &&
 	                           (!Gui->IsEditingText() || InspectorInteraction != 0);
@@ -113,13 +136,22 @@ void FEditorPlugin::RemapHistoryHandles(const FEditorHandleMap& InMapping)
 void FEditorPlugin::RestoreHistory(std::size_t InIndex, bool bInAfter)
 {
 	auto& Entry = History.at(InIndex);
-	const auto& Node = bInAfter ? Entry.After : Entry.Before;
+	auto Node = bInAfter ? Entry.After : Entry.Before;
+	if (bAssetRefreshHistory && Node)
+	{
+		Node = Scene->RebindAssetResources(std::move(*Node));
+	}
 	if (!Entry.Edits.empty())
 	{
 		std::vector<FSceneNodeEdit> Edits;
 		for (const auto& Edit : Entry.Edits)
 		{
-			Edits.push_back({Edit.Handle, bInAfter ? Edit.After : Edit.Before});
+			auto Candidate = bInAfter ? Edit.After : Edit.Before;
+			if (bAssetRefreshHistory)
+			{
+				Candidate = Scene->RebindAssetResources(std::move(Candidate));
+			}
+			Edits.push_back({Edit.Handle, std::move(Candidate)});
 		}
 		if (!Scene->EditNodes(std::move(Edits), Scene->GetRevision()))
 		{

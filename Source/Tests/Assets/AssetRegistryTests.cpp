@@ -104,7 +104,7 @@ void CheckRelocation()
 	Files->Remove(OldPath);
 	const auto Discovery = DiscoverAssets(*Files, Root);
 	HYP_CHECK(Discovery.Errors.empty() && Discovery.Entries.size() == 2);
-	Assets.SetCatalog(BuildAssetCatalog(Discovery.Entries), Root);
+	Assets.SetAssetIndex(BuildAssetIndex(Discovery.Entries), Root);
 	Assets.ClearCache();
 	const auto Graph = Assets.LoadGraphAsync(Root / "Parent.hasset").Get(Tasks);
 	HYP_CHECK(Graph->Failures.empty() && Graph->Assets.contains(NewPath));

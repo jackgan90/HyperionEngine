@@ -15,18 +15,6 @@ bool IsHex(std::string_view InValue, std::size_t InLength)
 	                                                 });
 }
 
-void ValidateCatalog(const FAssetCatalog& InCatalog)
-{
-	std::set<std::string> Ids;
-	for (const auto& Reference : InCatalog.Assets)
-	{
-		ValidateAssetRef(Reference);
-		if (Reference.Id.empty() || Reference.Path.empty() || !Ids.insert(Reference.Id).second)
-		{
-			throw std::runtime_error("Duplicate or incomplete catalog asset identity");
-		}
-	}
-}
 } // namespace
 
 bool IsAssetIdentifier(std::string_view InValue)
@@ -133,10 +121,4 @@ template<> const FRecordDescriptor& RecordType<FAssetHeader>()
 	return Type;
 }
 
-template<> const FRecordDescriptor& RecordType<FAssetCatalog>()
-{
-	static const auto Type = MakeRecord<FAssetCatalog>(
-	    "hyperion.assetcatalog", {Member("assets", &FAssetCatalog::Assets, {true})}, 1, ValidateCatalog);
-	return Type;
-}
 } // namespace Hyperion

@@ -19,7 +19,7 @@ Source/
     Plugins/       # 静态规划、类型化服务、作用域事件和生命周期
     Application/   # 仅 Tasks、Main 消息泵、帧时钟及退出控制
     Platform/      # 窗口、输入与 SDL wrapper
-    AssetTypes/    # 轻量引用、头部、来源记录和 catalog
+    AssetTypes/    # 轻量引用、头部和来源记录
     Assets/        # 原生异步加载/保存、依赖解析、缓存和图片 wrapper
     Textures/      # CPU 纹理反射记录、颜色编码和离线 mip
     Materials/     # CPU 材质定义、实例、semantic、反射资产和纹理引用
@@ -46,7 +46,7 @@ Source/
   Applications/
     Editor/        # 选择原生后端，启动 Editor 插件宿主
     Viewer/        # 选择原生后端，启动 Viewer 插件宿主
-    AssetTool/     # 独立 import / inspect / validate / catalog / upgrade CLI
+    AssetTool/     # 独立 import / inspect / validate / upgrade CLI
   Tests/           # 对应模块的单元测试及 Integration 验收
 ```
 

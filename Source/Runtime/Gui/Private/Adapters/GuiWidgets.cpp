@@ -195,7 +195,16 @@ FGuiImageRegion FGui::Image(std::uint64_t InTextureId)
 		ImGui::KeepAliveID(CaptureId);
 	}
 	const auto Available = ImGui::GetContentRegionAvail();
-	ImGui::Image(ImTextureID(InTextureId), {std::max(1.f, Available.x), std::max(1.f, Available.y)});
+	if (InTextureId)
+	{
+		ImGui::Image(ImTextureID(InTextureId), {std::max(1.f, Available.x), std::max(1.f, Available.y)});
+	}
+	else
+	{
+		ImGui::Dummy({std::max(1.f, Available.x), std::max(1.f, Available.y)});
+		ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+		                                          IM_COL32(22, 22, 22, 255));
+	}
 	const auto Minimum = ImGui::GetItemRectMin();
 	const auto Maximum = ImGui::GetItemRectMax();
 	// Images have no input ID by default: a held click becomes a window-background drag.

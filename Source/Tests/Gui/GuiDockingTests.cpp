@@ -5,6 +5,42 @@
 
 namespace
 {
+void CheckIndependentWorkspaces()
+{
+	using namespace Hyperion;
+	FGui Main;
+	Main.UseEditorStyle();
+	const auto Draw = [](FGui& InGui, FSize InPixels)
+	{
+		InGui.BeginFrame({800, 600}, InPixels, 1.f / 60, {});
+		InGui.DockSpace({"Preview", {}, "Properties", {}, {}});
+		bool bOpen = true;
+		InGui.BeginWindow("Preview", bOpen);
+		const auto Region = InGui.Image(42);
+		InGui.EndWindow();
+		InGui.BeginWindow("Properties", bOpen);
+		InGui.Text("Properties");
+		InGui.EndWindow();
+		InGui.Render();
+		return Region.Bounds;
+	};
+	Draw(Main, {800, 600});
+	const auto Before = Draw(Main, {800, 600});
+	{
+		FGui Asset;
+		Asset.UseEditorStyle();
+		Asset.SetApplicationScale(1.5f);
+		Draw(Asset, {1600, 1200});
+		Draw(Asset, {1600, 1200});
+		HYP_CHECK(Asset.FramebufferScale().X == 2 && Main.FramebufferScale().X == 1);
+		HYP_CHECK(Asset.ApplicationScale() == 1.5f && Main.ApplicationScale() == 1);
+		const auto After = Draw(Main, {800, 600});
+		HYP_CHECK(Before.X == After.X && Before.Y == After.Y && Before.Z == After.Z && Before.W == After.W);
+	}
+	const auto Surviving = Draw(Main, {800, 600});
+	HYP_CHECK(Before.X == Surviving.X && Before.Y == Surviving.Y && Before.Z == Surviving.Z);
+}
+
 void CheckImagePointerOwnership()
 {
 	using namespace Hyperion;
@@ -106,6 +142,7 @@ int main()
 	using namespace Hyperion;
 	try
 	{
+		CheckIndependentWorkspaces();
 		CheckImagePointerOwnership();
 		CheckWorkspaceScaleTransition();
 		FGui Gui;

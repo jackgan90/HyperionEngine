@@ -1,6 +1,7 @@
 #include "EditorApplication.h"
 #include "Hyperion/Core/Core.h"
 #include <algorithm>
+#include <tuple>
 
 namespace Hyperion
 {
@@ -36,8 +37,7 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 		case 2:
 			if (!PendingAssetOpen)
 			{
-				CheckContent(bAssetMessage && AssetMessage.find("not supported") != std::string::npos,
-				             "Unsupported asset dialog missing");
+				CheckContent(AssetWorkspace->HasActive(), "Texture asset editor did not open");
 				Gui->ClosePopups();
 				bAssetMessage = bRequestAssetMessage = false;
 				RequestOpenAsset("/Game/Scene.hasset");
@@ -271,7 +271,7 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 			Tasks.Dispatch({EDomain::Io},
 			               [Gate = ContentSaveGate]
 			               {
-				               Gate->try_acquire_for(std::chrono::seconds(30));
+				               std::ignore = Gate->try_acquire_for(std::chrono::seconds(30));
 			               });
 			++ExerciseStep;
 			break;

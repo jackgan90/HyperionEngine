@@ -133,38 +133,6 @@ void ExportJson(std::span<const std::string_view> InArguments, FAssetService& In
 	InIO.WriteAsync(Output, FBytes(Bytes.begin(), Bytes.end())).Get(InIO.TaskSystem());
 }
 
-void Catalog(std::span<const std::string_view> InArguments, FAssetService& InAssets, FTaskSystem& InTasks,
-             std::ostream& InOutput)
-{
-	if (InArguments.size() < 3)
-	{
-		throw std::invalid_argument("catalog OUTPUT.hasset ROOT.hasset [ROOT.hasset ...]");
-	}
-	const auto Output = InAssets.NormalizePath(PathFromUtf8(InArguments[1]));
-	FAssetCatalog CatalogValue;
-	std::map<std::string, FAssetRef> Unique;
-	for (std::size_t Index = 2; Index < InArguments.size(); ++Index)
-	{
-		IndexDiscoveredAssets(InAssets, InAssets.NormalizePath(PathFromUtf8(InArguments[Index])).parent_path());
-		const auto Graph = Validate(InAssets, InTasks, PathFromUtf8(InArguments[Index]));
-		for (const auto& [AssetPath, Asset] : Graph->Assets)
-		{
-			FAssetRef Reference{Asset->Header.Id, PathRelativeToUtf8(AssetPath, Output.parent_path()),
-			                    Asset->Header.TypeId, Asset->Header.Revision};
-			const auto [It, bInserted] = Unique.emplace(Reference.Id, Reference);
-			if (!bInserted && It->second != Reference)
-			{
-				throw std::runtime_error("Conflicting catalog identity: " + Reference.Id);
-			}
-		}
-	}
-	for (const auto& [Id, Reference] : Unique)
-	{
-		CatalogValue.Assets.push_back(Reference);
-	}
-	InAssets.SaveAsync(Output, std::make_shared<const FAssetCatalog>(std::move(CatalogValue))).Get(InTasks);
-	InOutput << "Catalog: " << PathToUtf8(Output) << " assets=" << Unique.size() << '\n';
-}
 } // namespace
 
 void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& InIO, std::ostream& InOutput)
@@ -182,8 +150,7 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		         << "hyperion_asset_tool --mounts CONFIG.json migrate-library /Game EMPTY_STAGING_DIRECTORY\n"
 		         << "hyperion_asset_tool export-json INPUT.hasset OUTPUT.json\n"
 		         << "hyperion_asset_tool export-envelope INPUT.hasset OUTPUT.json\n"
-		         << "hyperion_asset_tool measure-source SOURCE.gltf|SOURCE.glb\n"
-		         << "hyperion_asset_tool catalog OUTPUT.hasset ROOT.hasset [ROOT.hasset ...]\n";
+		         << "hyperion_asset_tool measure-source SOURCE.gltf|SOURCE.glb\n";
 		return;
 	}
 	const auto Command = InArguments[0];
@@ -230,7 +197,6 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	}
 	FAssetService Assets(InIO);
 	RegisterSceneAssetTypes(Assets.Types());
-	Assets.Types().Register<FAssetCatalog>();
 	if (Command == "build-brdf" && InArguments.size() == 2)
 	{
 		const auto Brdf = BuildEnvironmentBrdf();
@@ -242,10 +208,6 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	else if (Command == "export-json")
 	{
 		ExportJson(InArguments, Assets, InIO);
-	}
-	else if (Command == "catalog")
-	{
-		Catalog(InArguments, Assets, InIO.TaskSystem(), InOutput);
 	}
 	else if ((Command == "inspect" || Command == "validate") && InArguments.size() == 2)
 	{

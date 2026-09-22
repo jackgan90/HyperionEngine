@@ -5,6 +5,7 @@
 namespace Hyperion
 {
 class FAssetService;
+struct FAssetSaveResult;
 
 struct FSceneInstanceModel
 {
@@ -38,6 +39,7 @@ struct FSceneInstanceStatus
 	bool bClosed{};
 	std::string Error;
 	std::string PublicationError;
+	std::string AssetRefreshError;
 	bool bHasActiveCamera{};
 };
 
@@ -53,6 +55,10 @@ public:
 	FSceneInstance& operator=(const FSceneInstance&) = delete;
 	void Load(const std::filesystem::path& InPath);
 	void Tick();
+	// Main: asynchronously rebind native dependencies while retaining scene nodes and authored overrides.
+	void RefreshAssets(std::span<const FAssetSaveResult> InSaved = {});
+	// Rebind a historical authored node before admitting it through normal edit validation.
+	FSceneNode RebindAssetResources(FSceneNode InNode);
 	FScenePublicationToken GetToken() const;
 	std::vector<FRenderPrimitiveHandle> ResolveRenderPrimitives(FSceneHandle InHandle) const;
 	FTaskHandle GetReceipt() const;

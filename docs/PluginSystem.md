@@ -34,6 +34,8 @@ Viewer、Editor 的可执行入口位于 `Applications`，只选择 D3D12 provid
 
 启动先规划，再构造实例。重复 ID、同一服务的多个已选 provider、冲突或依赖环是配置错误。`FPluginSelection` 默认使用 Continue：缺失、禁用或启动失败的分支会记录诊断，硬依赖消费者跳过，不相关分支继续。Strict 模式保留遇错回滚整个集合的行为；旧的 `Activate(span<id>)` 仍为 Strict。应用主体因真实启动错误无法运行时，可执行程序报告失败；显式禁用 graphics 等分支可以作为无图形配置正常退出。插件不是进程故障隔离边界，不承诺恢复任意 C++ 内存错误。
 
+Editor 的独立资产窗口由 `editor` 插件中的私有窗口宿主管理，复用已声明的 Tasks、Device、ShaderCompiler、RenderSession 和资产服务；其原生窗口、GUI context/renderer 与 Swapchain 在插件停止前清理。通过 Platform 的非模态 owner 关系保持资产窗口位于主窗口上方；主窗口最小化时暂停两者绘制，轮询、加载和保存继续。销毁顺序保证资产窗口先于原生 owner 释放。主窗口服务不变，Runtime/Application 不参与子窗口编排。两个窗口分别轮询输入和提交渲染，资产窗口关闭只影响资产文档；GPU 对象按既有 RHI 线程及 fence 约束释放，最终设备校验仍归 `graphics`。
+
 ## 生命周期和线程
 
 启动按拓扑顺序执行 `Start(FPluginContext&)`。宿主在 Main 泵消息后调用 `Update(FPluginUpdate)`，提供 frame、elapsed、delta；更新不以窗口可绘制为前提。Editor 最小化时仍推进场景加载和保存；Viewer 的场景接口接收 delta，相机推进在场景插件内部完成。

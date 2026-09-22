@@ -20,6 +20,22 @@ void FEditorPlugin::PollContent()
 	{
 		ScenePaths = std::move(Result->Paths);
 		CatalogError = std::move(Result->Error);
+		try
+		{
+			auto Index = Assets.GetAssetIndex();
+			std::erase_if(Index,
+			              [](const auto& InReference)
+			              {
+				              return InReference.Path.starts_with("/Game/");
+			              });
+			Index.insert(Index.end(), Result->Assets.begin(), Result->Assets.end());
+			Assets.SetAssetIndex(Index, {});
+			AssetWorkspace->RefreshIndex();
+		}
+		catch (const std::exception& Failure)
+		{
+			CatalogError += Failure.what();
+		}
 		if (OpenPath.empty() && !ScenePaths.empty())
 		{
 			OpenPath = ScenePaths.front();
@@ -36,9 +52,9 @@ void FEditorPlugin::PollContent()
 			}
 			else
 			{
-				AssetMessage =
-				    "Opening this asset type is not supported yet.\nType: " + Header->TypeId + "\n" + AssetOpenPath;
-				bAssetMessage = bRequestAssetMessage = true;
+				EnsureAssetWindow();
+				AssetWorkspace->Open(AssetOpenPath, Header->Id);
+				AssetWindow->Activate();
 			}
 		}
 		catch (const std::exception& Failure)
@@ -157,9 +173,14 @@ void FEditorPlugin::DrawContentGrid()
 				RequestOpenAsset(Path);
 			}
 		}
-		if (!Options.ExerciseContent.empty())
+		if (!Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty())
 		{
 			ContentTileBounds[Path] = Gui->LastItemBounds();
+		}
+		if (ContentRevealPath == Path)
+		{
+			Gui->RevealLastItem();
+			ContentRevealPath.clear();
 		}
 	}
 	Gui->EndTable();

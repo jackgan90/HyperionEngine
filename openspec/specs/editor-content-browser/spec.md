@@ -15,15 +15,15 @@ Editor SHALL provide File > Open... native directory selection and File > Recent
 - **THEN** the current root and document remain unchanged and no failed root is added
 
 ### Requirement: Protected root transition
-Editor SHALL offer save-and-continue, discard-and-continue and cancel for dirty documents, finish existing saves on the old root, and abort on save failure. Before changing `/Game` it SHALL close old documents, clear history/selection/previews, join old work and safely retire retained render resources. Successful transitions SHALL leave an empty document and preserve `/Engine`. Selecting the same canonical directory SHALL not close the document.
+Editor SHALL offer save-and-continue, discard-and-continue and cancel for all dirty scene and asset documents, finish existing saves on the old root, and abort on save failure. Before changing `/Game` it SHALL close old documents, clear history/selection/previews, join old work and safely retire retained render resources. Successful transitions SHALL leave an empty document and preserve `/Engine`. Selecting the same canonical directory SHALL not close any document.
 
 #### Scenario: Same package path in two roots
 - **WHEN** A and B contain different assets at the same `/Game` path and the user switches A to B to A
 - **THEN** each load resolves exclusively to its current root and no old completion or cache supplies another root's assets
 
 #### Scenario: Save before switching
-- **WHEN** the user saves and continues
-- **THEN** the old document is saved under the old mapping before transition, and save failure preserves the old workspace
+- **WHEN** the user saves and continues with multiple dirty documents
+- **THEN** all old documents are saved under the old mapping before transition, and any save failure preserves the old workspace
 
 ### Requirement: Directory tree and file grid
 Content Browser SHALL show a left directory tree rooted at `/Game` and a resizable right grid of the selected directory's immediate subdirectories and `.hasset` files. Empty directories SHALL remain visible. Folder double-click SHALL navigate and synchronize the tree. Refresh and successful saves SHALL refresh listings without per-frame recursive scanning.
@@ -53,8 +53,8 @@ All editor asset-path presentation, including status/loading/saved messages, err
 - **THEN** Game paths appear without the virtual root prefix, and committed relative path edits still reference the corresponding `/Game` asset
 
 ### Requirement: Typed asset opening
-Double-click SHALL classify a native asset by its stored TypeId. Scenes SHALL use the existing protected document-opening path; other valid types SHALL show an unsupported-type dialog, while unreadable or corrupt assets SHALL show a distinct error. Unsupported assets SHALL not close the current scene.
+Double-click SHALL classify a native asset by its stored TypeId. Scenes SHALL use the existing protected document-opening path; Model, Texture, Material and Sky SHALL open their asset editor documents without closing the current scene. Unreadable/corrupt, unknown and retired assets SHALL show distinct diagnostic information without modifying current documents. Shader text files SHALL remain excluded.
 
-#### Scenario: Unsupported and corrupt files
-- **WHEN** the user double-clicks a texture or malformed hasset
-- **THEN** the appropriate unsupported-type or read/format message is shown and the existing document is retained
+#### Scenario: Supported and corrupt files
+- **WHEN** the user double-clicks each supported native type or a malformed hasset
+- **THEN** the supported type opens its editor and the malformed file shows an error while the existing scene is retained

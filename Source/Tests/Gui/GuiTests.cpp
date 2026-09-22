@@ -11,6 +11,7 @@ void CheckApplicationScale();
 void CheckObjectDrag();
 void CheckMixedControls();
 void CheckPathDisplay();
+void CheckContentTiles();
 
 namespace
 {
@@ -92,6 +93,7 @@ int main()
 		CheckObjectDrag();
 		CheckMixedControls();
 		CheckPathDisplay();
+		CheckContentTiles();
 		CheckApplicationScale();
 		Check(MemoryStats(EMemoryTag::Gui).LiveBytes == 0, "GUI allocations released");
 		std::cout << "GUI input, reflection, owned draw data and cleanup passed\n";
