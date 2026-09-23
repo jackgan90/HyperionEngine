@@ -83,6 +83,7 @@ void FEditorPlugin::FinishGizmo(bool bInCancel)
 		return;
 	}
 	const auto Edit = std::exchange(GizmoEdit, {});
+	SceneDocument.SetInteractionState(false, false);
 	try
 	{
 		std::vector<FSceneNodeEdit> Before;

@@ -1,4 +1,5 @@
 add_library(hyperion_editor_plugin STATIC
+  Private/EditorSceneDocument.cpp
   Private/EditorAcceptance.cpp
   Private/EditorAssetAcceptance.cpp
   Private/EditorAssetPropertyAcceptance.cpp
@@ -114,7 +115,7 @@ if(BUILD_TESTING)
   set_tests_properties(editor_content_startup PROPERTIES FIXTURES_REQUIRED editor_content_fixture TIMEOUT 150 RUN_SERIAL TRUE LABELS "gpu;desktop")
   add_executable(editor_state_tests Private/EditorStateTests.cpp)
   hyp_executable(editor_state_tests)
-  target_link_libraries(editor_state_tests PRIVATE hyperion_scene)
+  target_link_libraries(editor_state_tests PRIVATE hyperion_scene_editing)
   set_target_properties(editor_state_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_state COMMAND editor_state_tests)
   add_executable(editor_preferences_tests Private/EditorPreferencesTests.cpp Private/EditorPreferences.cpp)
@@ -124,3 +125,5 @@ if(BUILD_TESTING)
   add_test(NAME editor_preferences COMMAND editor_preferences_tests)
   set_tests_properties(editor_preferences PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 endif()
+
+target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_automation_plugin hyperion_scene_editing)

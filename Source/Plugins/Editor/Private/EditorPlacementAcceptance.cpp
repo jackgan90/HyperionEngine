@@ -195,7 +195,7 @@ void FEditorPlugin::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 			}
 			else
 			{
-				++DocumentEpoch;
+				SceneDocument.Invalidate();
 			}
 			break;
 		}

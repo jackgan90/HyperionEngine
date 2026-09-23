@@ -45,23 +45,7 @@ void FEditorPlugin::PruneSelection()
 
 std::vector<FSceneHandle> FEditorPlugin::SelectedRoots() const
 {
-	std::vector<FSceneHandle> Roots;
-	for (const auto Handle : Selection.All())
-	{
-		const auto* Node = Scene->FindNode(Handle);
-		bool bCovered = !Node;
-		while (Node && !Node->Parent().empty())
-		{
-			const auto Parent = Scene->FindHandle(Node->Parent());
-			bCovered |= Selection.Contains(Parent);
-			Node = Scene->FindNode(Parent);
-		}
-		if (!bCovered)
-		{
-			Roots.push_back(Handle);
-		}
-	}
-	return Roots;
+	return SceneDocument.SelectedRoots();
 }
 
 void FEditorPlugin::DrawSelectionMarkers()

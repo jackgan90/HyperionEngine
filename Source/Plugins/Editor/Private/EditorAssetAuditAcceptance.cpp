@@ -100,11 +100,11 @@ void FEditorPlugin::CheckPendingAssetEdit()
 		RequireAudit(!Host.ShouldClose(), "Pending texture edit bypassed the native window close prompt");
 	}
 	const auto PreviousSavedState = SavedState;
-	SavedState = DocumentState;
+	SceneDocument.MarkSaved(DocumentEpoch, DocumentState);
 	RequireAudit(!IsDirty(), "Pending edit exit fixture must have a clean scene");
 	Window->RequestClose();
 	RequireAudit(!PollClose() && bDiscardDialog, "Pending texture edit bypassed application exit protection");
-	SavedState = PreviousSavedState;
+	SceneDocument.MarkSaved(DocumentEpoch, PreviousSavedState);
 	CancelDiscardAction();
 	bRequestDiscard = false;
 	bPendingAssetEditChecked = true;

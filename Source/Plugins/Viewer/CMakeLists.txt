@@ -40,3 +40,5 @@ endif()
 if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_viewer_plugin PRIVATE hyperion_capture)
 endif()
+
+target_link_libraries(hyperion_viewer_plugin PRIVATE hyperion_automation_plugin hyperion_scene_editing)

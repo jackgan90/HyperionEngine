@@ -190,5 +190,6 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		}
 	}
 	InGui.EndPanel();
+	P.bGuiInteraction = InGui.IsEditingText();
 }
 } // namespace Hyperion

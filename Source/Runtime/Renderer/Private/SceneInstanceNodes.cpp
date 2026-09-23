@@ -3,6 +3,12 @@
 
 namespace Hyperion
 {
+std::uint64_t FSceneInstance::GetIdentity() const
+{
+	Impl->Tasks.Require({EDomain::Main});
+	return Impl->Scene.GetIdentity();
+}
+
 std::uint64_t FSceneInstance::GetRevision() const
 {
 	Impl->RequireOpen();

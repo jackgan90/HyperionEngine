@@ -222,6 +222,12 @@ def main():
         assert completed(json.loads(unmounted.stdout))["directory"] == ""
         legacy = run(executable, "engine.info", "--mounts", root / "Unused.json")
         assert legacy.returncode == 1 and not legacy.stdout
+        # Explicit attachment never falls back to a standalone session, including empty variables.
+        for mode in ("engine.info", "--stdio", "--mcp"):
+            empty = run(executable, "--attach", "", mode, input="")
+            assert empty.returncode == 1 and not empty.stdout and "non-empty" in empty.stderr
+        duplicate = run(executable, "--attach", "first", "--attach", "second", "engine.info")
+        assert duplicate.returncode == 1 and not duplicate.stdout and "once" in duplicate.stderr
         # One-shot IDs expire with the process; no accidental cross-session addressing.
         foreign = run(executable, "api.call", "--asset-root", asset_root, "--json",
                       json.dumps({"operation": "asset.info", "arguments": {"document": document}}))

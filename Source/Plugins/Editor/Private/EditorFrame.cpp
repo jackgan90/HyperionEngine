@@ -94,11 +94,26 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	{
 		Request.CameraOverride = ViewCamera;
 	}
-	const auto Seed =
-	    Session->FreezeSceneFrame(Scene->GetToken(), static_cast<float>(double(ClockNanoseconds()) / 1e9));
+	const auto& Status = Scene->GetStatus();
+	const bool bRenderScene = bViewportVisible && Status.Error.empty() && Status.PublicationError.empty();
+	if (!bRenderScene)
+	{
+		// Scene IO can fail after GUI construction. Keep the window chrome, without sampling an unavailable target.
+		std::erase_if(InGui.Commands,
+		              [](const FGuiCommand& InCommand)
+		              {
+			              return InCommand.TextureId == 2;
+		              });
+	}
+	const auto Seed = bRenderScene ? Session->FreezeSceneFrame(Scene->GetToken(),
+	                                                           static_cast<float>(double(ClockNanoseconds()) / 1e9))
+	                               : nullptr;
 	const auto Target = ViewportTarget;
 	auto Outline = std::make_shared<FSelectionOutlineRequest>();
-	Outline->Publication = Seed->GetToken();
+	if (Seed)
+	{
+		Outline->Publication = Seed->GetToken();
+	}
 	Outline->Settings = OutlineSettings;
 	if (!OutlineExerciseObjects.empty())
 	{
@@ -114,7 +129,6 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Handle));
 		}
 	}
-	const bool bRenderScene = bViewportVisible;
 	const auto Preview = FreezePlacementPreview();
 	std::vector<FGuiTextureBinding> IconTextures;
 	for (const auto& [Id, Icon] : PlacementIcons)

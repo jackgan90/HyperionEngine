@@ -57,7 +57,7 @@ for path in SOURCE.rglob('*'):
             if owner.is_relative_to(SOURCE / 'Runtime') and dependency.is_relative_to(SOURCE / 'Plugins'):
                 bad.append(f'{prefix}: Runtime must not depend on experiment plugins')
             if (owner.is_relative_to(SOURCE / 'Runtime') and
-                    owner.name in ('Core', 'Math', 'Reflection', 'Tasks', 'Plugins', 'Config', 'Platform', 'Assets', 'AssetEditing', 'Automation', 'Content', 'Materials', 'Textures', 'Scene', 'Animation') and
+                    owner.name in ('Core', 'Math', 'Reflection', 'Tasks', 'Plugins', 'Config', 'Platform', 'Assets', 'AssetEditing', 'Automation', 'Transport', 'Content', 'Materials', 'Textures', 'Scene', 'SceneEditing', 'Animation') and
                     dependency.name in ('RHI', 'Renderer')):
                 bad.append(f'{prefix}: data/foundation module must not depend on rendering')
         elif '"' in text:

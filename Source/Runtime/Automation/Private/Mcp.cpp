@@ -62,7 +62,7 @@ std::string RpcResponse(const FArchiveNode& InId, FArchiveNode InResult)
 }
 } // namespace
 
-FMcpConnection::FMcpConnection(FAutomationEndpoint& InEndpoint) : Endpoint(InEndpoint)
+FMcpConnection::FMcpConnection(IAutomationEndpoint& InEndpoint) : Endpoint(InEndpoint)
 {
 }
 
@@ -82,7 +82,7 @@ FArchiveNode FMcpConnection::Dispatch(std::string_view InMethod, const FArchiveN
 		(void)ReadValue<std::string>(Client.at("version"));
 		bInitialized = true;
 		return ParseJson(
-		    R"({"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"hyperion","version":"1.0.0"},"instructions":"Use api.search then api.describe; api.call invokes registered operations. Poll jobs.get for running calls. IDs are session scoped. No automatic retry of mutations. Read effects and completion before invoking an operation."})");
+		    R"({"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"hyperion","version":"1.0.0"},"instructions":"Use targets.list/connect to attach to a running application, then pass the returned connection to every routed call. Otherwise calls use the configured default or standalone session. Use api.search then api.describe before api.call. Poll jobs.get on the same connection for running calls. Jobs are session scoped; live documents belong to the application. No automatic retry or fallback on disconnect. Read effects and completion before invoking an operation."})");
 	}
 	if (InMethod == "ping")
 	{
@@ -100,25 +100,66 @@ FArchiveNode FMcpConnection::Dispatch(std::string_view InMethod, const FArchiveN
 		}
 		return Endpoint.Tools();
 	}
-	if (InMethod == "tools/call")
-	{
-		const auto Name = ReadValue<std::string>(Params.at("name"));
-		const auto Catalog = Endpoint.Tools();
-		const auto& Tools =
-		    std::get<FArchiveNode::FArray>(std::get<FArchiveNode::FObject>(Catalog.Value).at("tools").Value);
-		if (std::none_of(Tools.begin(), Tools.end(),
-		                 [&](const FArchiveNode& InTool)
-		                 {
-			                 return ReadValue<std::string>(std::get<FArchiveNode::FObject>(InTool.Value).at("name")) ==
-			                        Name;
-		                 }))
-		{
-			throw FRpcError(-32602, "Unknown bootstrap tool: " + Name);
-		}
-		return ToolResult(Endpoint.Execute(Name, Params.contains("arguments") ? Params.at("arguments")
-		                                                                      : FArchiveNode(FArchiveNode::FObject{})));
-	}
 	throw FRpcError(-32601, "Unsupported MCP method: " + std::string(InMethod));
+}
+
+FEndpointRequest FMcpConnection::BeginTool(const FArchiveNode& InParameters)
+{
+	if (!bReady)
+	{
+		throw FRpcError(-32600, "Initialize and send notifications/initialized first");
+	}
+	if (Pending.size() >= 32)
+	{
+		throw FRpcError(-32000, "Too many pending requests");
+	}
+	const auto& Params = std::get<FArchiveNode::FObject>(InParameters.Value);
+	const auto Name = ReadValue<std::string>(Params.at("name"));
+	const auto Catalog = Endpoint.Tools();
+	const auto& Tools =
+	    std::get<FArchiveNode::FArray>(std::get<FArchiveNode::FObject>(Catalog.Value).at("tools").Value);
+	if (std::none_of(Tools.begin(), Tools.end(),
+	                 [&](const FArchiveNode& InTool)
+	                 {
+		                 return ReadValue<std::string>(std::get<FArchiveNode::FObject>(InTool.Value).at("name")) ==
+		                        Name;
+	                 }))
+	{
+		throw FRpcError(-32602, "Unknown bootstrap tool: " + Name);
+	}
+	return Endpoint.Begin(Name, Params.contains("arguments") ? Params.at("arguments")
+	                                                         : FArchiveNode(FArchiveNode::FObject{}));
+}
+
+std::vector<std::string> FMcpConnection::Poll()
+{
+	std::vector<std::string> Responses;
+	for (auto It = Pending.begin(); It != Pending.end();)
+	{
+		try
+		{
+			if (auto Result = It->Request.Poll())
+			{
+				Responses.push_back(RpcResponse(It->Id, ToolResult(std::move(*Result))));
+				It = Pending.erase(It);
+			}
+			else
+			{
+				++It;
+			}
+		}
+		catch (const std::exception& Error)
+		{
+			Responses.push_back(WriteAutomationResponse(RpcFailure(It->Id, -32603, Error.what())));
+			It = Pending.erase(It);
+		}
+	}
+	return Responses;
+}
+
+bool FMcpConnection::HasPending() const
+{
+	return !Pending.empty();
 }
 
 std::optional<std::string> FMcpConnection::Receive(std::string_view InMessage)
@@ -170,6 +211,16 @@ std::optional<std::string> FMcpConnection::Receive(std::string_view InMessage)
 		}
 		const auto Parameters =
 		    Fields->contains("params") ? Fields->at("params") : FArchiveNode(FArchiveNode::FObject{});
+		if (Method == "tools/call")
+		{
+			auto RequestState = BeginTool(Parameters);
+			if (auto Result = RequestState.Poll())
+			{
+				return RpcResponse(Id, ToolResult(std::move(*Result)));
+			}
+			Pending.push_back({std::move(Id), std::move(RequestState)});
+			return {};
+		}
 		return RpcResponse(Id, Dispatch(Method, Parameters));
 	}
 	catch (const FRpcError& Error)

@@ -59,7 +59,7 @@ void FEditorPlugin::Initialize()
 	Features.push_back(MakeSelectionOutlineFeature(Device->GetCapabilities()));
 	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
 	                                                  std::move(Features));
-	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
+	InitializeSceneDocument();
 	AssetWorkspace = std::make_unique<FAssetWorkspace>(Assets, Tasks, *Session, Device->GetCapabilities());
 	Error = Context.Require<FContentRootService>().StartupError;
 	InitializePlacement();
@@ -101,7 +101,7 @@ void FEditorPlugin::OpenScene(const std::string& InPath)
 		PlacementPublication.reset();
 		PlacementPublicationPreview.reset();
 		ResetDocument();
-		CurrentPath = InPath;
+		SceneDocument.SetPath(InPath);
 		++OpenCount;
 		Log(ELogLevel::Info, "Editor opening scene: " + CurrentPath);
 	}
@@ -143,6 +143,8 @@ void FEditorPlugin::Shutdown()
 		CloseAssetWindow();
 	}
 	AssetWorkspace.reset();
+	SceneDocument.Detach(Tasks);
+	SceneTarget.reset();
 	Scene.reset();
 	Assets.Drain();
 	PlacementModels.clear();
@@ -331,6 +333,7 @@ void FEditorPlugin::Start(FPluginContext&)
 {
 	BenchmarkStarted = ClockNanoseconds();
 	Initialize();
+	Context.Provide(SceneDocument);
 }
 
 void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
@@ -343,7 +346,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	const auto SavedAssets = AssetWorkspace->Poll();
 	if (!SavedAssets.empty())
 	{
-		bAssetRefreshHistory = true;
+		SceneDocument.AssetsRefreshed();
 		Scene->RefreshAssets(SavedAssets);
 		RefreshContent();
 	}
@@ -380,6 +383,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	{
 		Finish();
 	}
+	UpdateDocumentInteraction();
 }
 
 void FEditorPlugin::Finish()

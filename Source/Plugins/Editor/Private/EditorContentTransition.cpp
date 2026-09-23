@@ -16,7 +16,7 @@ void FEditorPlugin::ReleaseContentRoot()
 
 void FEditorPlugin::ContentRootChanged()
 {
-	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
+	InitializeSceneDocument();
 	auto Features = Context.Require<FRenderFeatureRegistry>().Create();
 	Features.push_back(MakeTransientGeometryFeature());
 	Features.push_back(MakeSelectionOutlineFeature(Device->GetCapabilities()));
@@ -86,7 +86,7 @@ void FEditorPlugin::CloseContentDocument()
 	Camera.Reset();
 	bCameraDragging = bViewportCameraInitialized = bSelectionInitialized = false;
 	ViewportClick.reset();
-	CurrentPath.clear();
+	SceneDocument.SetPath({});
 	OpenPath.clear();
 	PendingOpen.clear();
 	SavePath.clear();

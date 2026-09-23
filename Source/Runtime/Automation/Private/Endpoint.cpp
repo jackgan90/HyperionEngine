@@ -1,4 +1,5 @@
 #include "Hyperion/Automation/Endpoint.h"
+#include <utility>
 
 namespace Hyperion
 {
@@ -145,7 +146,7 @@ FArchiveNode FAutomationEndpoint::Execute(std::string_view InMethod, const FArch
 	}
 }
 
-FArchiveNode FAutomationEndpoint::Tools() const
+FArchiveNode AutomationTools()
 {
 	FArchiveNode::FArray Result;
 	for (const auto& Tool : Bootstrap)
@@ -158,5 +159,23 @@ FArchiveNode FAutomationEndpoint::Tools() const
 		                                                       {"openWorldHint", WriteValue(false)}})}});
 	}
 	return FArchiveNode(FArchiveNode::FObject{{"tools", FArchiveNode(std::move(Result))}});
+}
+
+FArchiveNode FAutomationEndpoint::Tools() const
+{
+	return AutomationTools();
+}
+
+FEndpointRequest ReadyAutomationRequest(FArchiveNode InValue)
+{
+	return {[Value = std::optional(std::move(InValue))]() mutable
+	        {
+		        return std::exchange(Value, {});
+	        }};
+}
+
+FEndpointRequest FAutomationEndpoint::Begin(std::string_view InMethod, const FArchiveNode& InParameters)
+{
+	return ReadyAutomationRequest(Execute(InMethod, InParameters));
 }
 } // namespace Hyperion

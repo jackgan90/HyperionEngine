@@ -45,7 +45,9 @@ void FSceneViewerPlugin::FImpl::DrawLightProperties(FGui& InGui, const FSceneNod
 		bChanged |= InGui.InputFloat("Point range (world units)", Light.Range);
 		if (bChanged)
 		{
-			Scene.SetPointLight(Selected, Light);
+			auto Node = InNode;
+			Node.PointLight() = Light;
+			Document.CommitEdits({{Selected, std::move(Node)}}, Scene.GetRevision());
 		}
 	}
 	if (InNode.SpotLight())
@@ -58,7 +60,9 @@ void FSceneViewerPlugin::FImpl::DrawLightProperties(FGui& InGui, const FSceneNod
 		bChanged |= InGui.InputFloat("Outer half angle (radians)", Light.OuterRadians);
 		if (bChanged)
 		{
-			Scene.SetSpotLight(Selected, Light);
+			auto Node = InNode;
+			Node.SpotLight() = Light;
+			Document.CommitEdits({{Selected, std::move(Node)}}, Scene.GetRevision());
 		}
 	}
 }

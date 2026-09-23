@@ -1,8 +1,10 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
+#include "Hyperion/IO/Path.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
+#include "Hyperion/SceneEditing/SceneDocument.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/NativeAssetSupport.h"
@@ -63,6 +65,8 @@ struct FViewerFixture
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;
+	FPluginServices Services;
+	std::unique_ptr<FPluginContext> Context;
 	std::unique_ptr<FSceneViewerPlugin> Plugin;
 	FRenderFrame Frame{{640, 480}, {}};
 	FSceneVisibilityStats Statistics;
@@ -93,7 +97,16 @@ struct FViewerFixture
 		Plugin = std::make_unique<FSceneViewerPlugin>(*Session, Tasks, Assets, "SceneControls.hasset");
 		Frame.View.Width = 640;
 		Frame.View.Height = 480;
-		Plugin->Start();
+		StartPlugin();
+	}
+
+	void StartPlugin()
+	{
+		Context = std::make_unique<FPluginContext>(
+		    Services, "scene-viewer",
+		    std::vector<std::type_index>{typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument)},
+		    std::vector<std::type_index>{}, std::vector<std::type_index>{});
+		Plugin->Start(*Context);
 	}
 
 	~FViewerFixture()
@@ -200,6 +213,66 @@ void CheckControls(FViewerFixture& InFixture)
 	Plugin.AddModel();
 	InFixture.Tick();
 	HYP_CHECK(Plugin.ModelCount() == 1);
+}
+
+void CheckInteractionLifetime(FViewerFixture& InFixture)
+{
+	auto& Plugin = *InFixture.Plugin;
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	while (!Plugin.Ready() && std::chrono::steady_clock::now() < Deadline)
+	{
+		InFixture.Tick();
+	}
+	HYP_CHECK(Plugin.Ready());
+	auto& Document = InFixture.Services.Require<FSceneEditDocument>();
+	FGui Gui;
+	Gui.FontImage();
+	std::string Text = "Focused field";
+	FVec4 Bounds;
+	const auto Draw = [&](std::span<const FInputEvent> InEvents)
+	{
+		Gui.BeginFrame({1200, 900}, {1200, 900}, 1.f / 60, InEvents);
+		Gui.BeginPanel("Interaction test", {0, 0}, {400, 200});
+		Gui.InputText("Text", Text);
+		Bounds = Gui.LastItemBounds();
+		Gui.EndPanel();
+		Plugin.DrawGui(Gui, {});
+		Gui.Render();
+		Plugin.Update(InFixture.Frame);
+	};
+	Draw({});
+	Draw({});
+	FInputEvent Move;
+	Move.Type = EEventType::MouseMove;
+	Move.X = Bounds.X + 10;
+	Move.Y = (Bounds.Y + Bounds.W) * .5f;
+	FInputEvent Button;
+	Button.Type = EEventType::MouseButton;
+	Button.bDown = true;
+	Draw(std::array{Move, Button});
+	Button.bDown = false;
+	Draw(std::array{Button});
+	HYP_CHECK(Gui.IsEditingText() && Document.IsBusy());
+	bool bRejected{};
+	try
+	{
+		Document.RequireIdle(Document.Id(), Plugin.GetSceneInstance().GetRevision());
+	}
+	catch (const FSceneEditError& Error)
+	{
+		bRejected = Error.Code == "busy";
+	}
+	HYP_CHECK(bRejected);
+	// Hidden/minimized frames update the scene without participating in GUI rendering.
+	Gui.FinishEditing();
+	Gui.ResetInput();
+	Plugin.Update(InFixture.Frame);
+	HYP_CHECK(!Document.IsBusy());
+	Document.RequireIdle(Document.Id(), Plugin.GetSceneInstance().GetRevision());
+	Text = "External edit while hidden";
+	Draw({});
+	HYP_CHECK(Text == "External edit while hidden" && !Document.IsBusy());
+	std::cout << "GUI text interaction rejects writes, then expires when GUI drawing is skipped\n";
 }
 
 FInputEvent CameraKey(EKey InKey, bool bInDown = true, bool bInRepeat = false)
@@ -768,7 +841,7 @@ void CheckSaveReload(FViewerFixture& InFixture)
 	InFixture.Tick();
 	HYP_CHECK(InFixture.Statistics.VisibleItems > 0);
 	const auto Before = InFixture.Image.Rgba;
-	const auto Output = std::filesystem::absolute("scene-save/subdirectory/edited.hasset");
+	const auto Output = std::filesystem::absolute(PathFromUtf8("scene-save/测试目录/编辑场景.hasset"));
 	Plugin.SaveAsync(Output).Get(InFixture.Tasks);
 	InFixture.Tick();
 	HYP_CHECK(Plugin.SaveStatus().find("Saved scene:") == 0);
@@ -784,7 +857,8 @@ void CheckSaveReload(FViewerFixture& InFixture)
 	Plugin.Stop();
 	InFixture.Plugin =
 	    std::make_unique<FSceneViewerPlugin>(*InFixture.Session, InFixture.Tasks, InFixture.Assets, Output);
-	InFixture.Plugin->Start();
+	InFixture.StartPlugin();
+	HYP_CHECK(InFixture.Services.Require<FSceneEditDocument>().GetState().Path == PathToUtf8(Output));
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 	while (!InFixture.Plugin->Ready() && std::chrono::steady_clock::now() < Deadline)
 	{
@@ -916,6 +990,7 @@ int main()
 	{
 		FViewerFixture Fixture;
 		CheckControls(Fixture);
+		CheckInteractionLifetime(Fixture);
 		CheckContinuousCamera(Fixture);
 		CheckCameraInterruptions(Fixture);
 		CheckFlyCamera(Fixture);

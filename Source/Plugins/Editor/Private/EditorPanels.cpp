@@ -620,7 +620,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawDetails();
 	if (InspectorTransaction && InspectorTransaction->Interaction != InspectorInteraction)
 	{
-		InspectorTransaction.reset();
+		SceneDocument.FinishInteraction();
 	}
 	DrawSceneBrowser();
 	Gui->EndDisabled();

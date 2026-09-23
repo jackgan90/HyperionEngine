@@ -4,7 +4,7 @@ Hyperion 提供共享的操作目录、严格 JSON 数据契约和会话任务�
 
 ## 使用
 
-在仓库根目录构建，无需启动窗口或创建设备：
+独立模式无需启动窗口或创建设备。附着到正在运行的 Editor / Scene Viewer 见 [连接与 live scene 操作](AutomationConnections.md)。在仓库根目录构建：
 
 ```powershell
 .\tools\Build.ps1 -Preset debug -Target hyperion_automation_cli
@@ -68,7 +68,8 @@ MCP 只声明固定的少量入口。搜索不会改写 `tools/list`，新领域
 
 | 入口 | 用途 |
 |---|---|
-| `engine.info` | 会话和执行契约 |
+| `targets.list/connect/disconnect` | 发现候选应用、建立和关闭显式连接 |
+| `engine.info` | 会话和执行契约；附着时包含实际 target/build |
 | `api.search` | ID、摘要、可用状态；query 按词匹配 ID、摘要、owner 和关键词；offset/limit 分页 |
 | `api.describe` | 完整 input/output JSON Schema、版本、例子、副作用、完成语义、执行域 |
 | `types.describe` | 按稳定类型 ID 查询已注册类型，无需加载资产 |
@@ -92,10 +93,12 @@ flowchart TD
 ```
 
 - `Runtime/Reflection`：保留原持久化契约，增加自然 JSON 投影与 JSON Schema。`Description` 是消费方无关的字段说明，已有 Inspector tooltip 可作回退。Inspector 只读/范围提示不等价于业务校验或自动化授权。
-- `Runtime/Automation`：操作目录、类型化绑定、错误、任务、固定入口及 MCP 协议适配。不依赖 GUI、资产领域、Renderer 或 RHI。
+- `Runtime/Transport`：平台无关字节连接、listener/provider 基类和注册表；Windows Named Pipe 位于私有 adapter。
+- `Runtime/Automation`：操作目录、类型化绑定、错误、任务、固定入口、连接管理、发现、帧协议及 MCP 协议适配。不依赖 GUI、资产领域、Renderer 或 RHI。
 - `Runtime/Content`：共享 root 状态、反射请求/结果、候选索引和内容消费者切换契约；不依赖图形或插件。
 - `Runtime/AssetEditing`：`FAssetEditDocument` 的草稿、历史、generation、保存状态和纹理重建。Editor 与自动化适配器共享这一实现。它与 `Assets/NativeAsset.h` 中保存文件解码结果的 `FAssetDocument` 是不同概念。
-- `Plugins/Automation`：注册资产适配器，持有会话文档和后台任务；stdio 适配器持有输入缓冲。原生管道 API 限于 `Private/Adapters`。
+- `Runtime/SceneEditing`：共享 live scene 文档、事务、历史、选择、save point 与反射请求/结果；通过 `ISceneEditTarget` 连接 Renderer，CPU 模块不反向依赖图形。
+- `Plugins/Automation`：注册资产/场景适配器，管理 session、stdio 和应用监听生命周期；附着适配器使用应用发布的文档实例。stdio 原生 API 限于 `Private/Adapters`。
 - `Applications/Automation`：解析启动参数、选择插件和资产提供方。通用 Application 宿主仍只负责 Tasks、Main pump、时间和退出。
 
 `automation-catalog` 提供目录；适配器依赖该插件并声明 `Before={"automation-session"}`。`automation-session` 封闭目录、提供会话和 endpoint；`automation-stdio` 依赖会话。**服务 Requires 描述服务需求，Dependencies 才负责选择必需插件**。可选资产服务只影响资产分支。
@@ -152,7 +155,7 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 
 默认边界：输入 JSON 消息和未包装的领域结果各自最多 1 MiB、65,536 节点、48 层；反射类型投影最多 32 层；搜索默认 12 项，最多 50 项，query 最多 256 字节；会话最多 32 个运行任务，保留最多 128 个任务（满时淘汰最早的已结束任务）；资产适配器最多 64 个打开文档。传输响应另有 **4 MiB + 64 KiB、65,792 节点、56 层**的上限，为 MCP text/structuredContent 双份结果、JSON 转义、原样回传请求 ID 及任务/状态封装留出空间；领域应继续分页、摘要化或返回资源引用。响应编码失败使用结果不可用或内部错误，不作为非法参数；JSONL 会保留请求 ID 并继续接收后续请求。
 
-job/document ID 属于当前进程会话，关闭或重启后无效；它们不是稳定资产 ID，也不是安全认证凭据。当前连接仅为本地 stdio，无网络监听。EOF 等待已接收任务完成，不隐式保存脏草稿。取消只用于声明支持取消的操作，不表示撤销；首批资产异步操作在接收后不支持取消。强杀进程不属于正常排空路径。
+独立资产 document 与 job ID 属于会话；附着的场景 document 属于应用，多个连接共享，同一连接的 job 不能跨 session 查询。关闭文档/重启使旧 ID 失效；它们不是稳定资产 ID 或安全认证凭据。前端使用 stdio，附着使用当前用户的 Windows Named Pipe，无 TCP 监听。独立会话 EOF 等待已接收任务完成；附着断连由目标继续排空已接收任务，不隐式保存脏草稿。取消不表示撤销，当前保存操作不支持接收后取消。强杀进程不属于正常排空路径。
 
 ## 能力覆盖与后续适配
 
@@ -164,16 +167,19 @@ job/document ID 属于当前进程会话，关闭或重启后无效；它们不�
 | 非场景原生资产文档 | 模型/材质/纹理/天空的打开、元信息、改名、undo/redo、save/close；稳定 identity 与磁盘冲突检测 | 更多属性应复用领域 setter，不能绕过校验直接 patch 所有字段 |
 | 纹理 | 2D RGBA8 的编码变更和 mip 重建，与 GUI 共用算法/历史 | 浮点、cube、导入重建等操作按语义定义 |
 | 模型/材质/天空 | 可查询类型 schema；上述文档操作 | 引用编辑、材质参数、模型节点、天空重建需要逐项共享领域服务 |
-| 场景编辑 | 尚未注册 | 抽取场景文档/选择/事务服务，保留 Main 权威与稳定对象身份 |
+| 场景编辑 | 附着时查询、分页节点、批量 local 变换、显式保存；Editor undo/redo；GUI 与 agent 共用同一文档实例 | 场景新建/打开、对象增删、选择、组件属性、重父级、材质覆盖、放置及视口/相机需补充共享领域操作 |
 | 渲染、截图、抓帧 | 尚未注册 | 显式 view、GPU ready/fence、artifact、取消与生命周期契约 |
-| 内容根切换 | 查询、设置、清空 Game root，与 GUI 共享 generation、dirty/busy 校验及参与者退休 | 大目录异步扫描、活跃 Editor 附着按需扩展 |
+| 内容根切换 | 独立 CLI 可查询、设置、清空，与 GUI 共享 generation、dirty/busy 校验及参与者退休；附着可查询目标 root | live 修改适配器暂缓：需注册目标完整参与者并统一偏好保存，不能用客户端 root 代替目标 root；大目录扫描待异步化 |
 | 导入、发布 | 现有 AssetTool 能力保留，尚未接入目录 | 共享导入任务/发布事务，不调用测试入口 |
-| 活跃 Editor 附着 | 尚未实现；当前自动化进程拥有独立草稿 | 加传输并连接同一服务实例，解决多客户端 revision/事件和冲突 |
+| 应用附着 | 默认本机发现、显式连接、多连接隔离、同用户准入；Editor/Viewer 启动可禁用 | macOS/Linux provider、远端设备认证/发现与传输按接口扩展；事件订阅和会话恢复未实现 |
+| 附着资产页签 | 暂未注册 asset/texture 操作，避免创建与 GUI 分离的草稿 | 独立资产适配器需消费应用共享 workspace、文档定位和活动编辑状态后再开放 |
 | 底层 Public C++ API | 不自动导出指针、回调、RHI 对象或测试辅助接口 | 以可序列化的领域操作、句柄和资源协议表达等价能力 |
 
-目标是持续扩大人类任务的等价能力，不是一比一 RPC 每个 C++ 方法。自动化与 GUI 当前共享逻辑，但独立进程不共享内存草稿；同一资产文件通过保存时的 digest/identity 检查防止覆盖外部修改。
+目标是持续扩大人类任务的等价能力，不是一比一 RPC 每个 C++ 方法。独立资产模式拥有自己的草稿，通过保存时的 digest/identity 检查防止覆盖外部修改；附着模式直接操作目标应用的同一场景服务实例。
 
 ## 验证入口
+
+`transport_contracts` 验证 memory/Windows provider 的分片、背压和关闭；`automation_connections` 验证 framing、握手、stale target 和无回退；`automation_scene` 验证共享历史、跨会话 job 隔离、save point 和 absence；`automation_attachment` 启动测试专用 Editor/Viewer，通过真实 CLI/MCP 验证变换、撤销/重做、保存重开、目标隔离与禁用。
 
 `automation_contracts` 覆盖 wire/schema、注册扩展、校验、任务和 MCP 生命周期；`automation_assets` 覆盖共享文档等价行为、保存期间编辑、冲突和插件排空；`automation_transport` 启动真实 CLI/MCP 进程并创建隔离的原生资产验证持久化、只读挂载、缺失/失败/禁用提供方和 EOF。`editor_asset_documents`、`editor_asset_workspace` 及 Editor 资产验收保护 GUI 消费方。
 

@@ -1,12 +1,13 @@
-#include "AssetOperations.h"
+#include "ContentRootOperations.h"
 
 namespace Hyperion
 {
 namespace
 {
 template<class TRequest, class TFunction>
-void RegisterRoot(FOperationCatalog& InCatalog, FContentRootService* InRoots, std::string InId, std::string InSummary,
-                  const TRequest& InExample, bool bInReadOnly, TFunction InFunction)
+void RegisterRoot(FOperationCatalog& InCatalog, FContentRootService* InRoots, const std::string& InOwner,
+                  std::string InId, std::string InSummary, const TRequest& InExample, bool bInReadOnly,
+                  TFunction InFunction)
 {
 	FOperationInfo Info;
 	Info.Id = std::move(InId);
@@ -16,7 +17,7 @@ void RegisterRoot(FOperationCatalog& InCatalog, FContentRootService* InRoots, st
 	                   "existing content. Setting the same canonical directory and permissions preserves documents. "
 	                   "Pending edits/saves must finish first; save dirty documents or explicitly discard them. "
 	                   "Root state is process-local and does not update Editor preferences in another process.";
-	Info.Owner = "automation-assets";
+	Info.Owner = InOwner;
 	Info.Effects =
 	    bInReadOnly
 	        ? "No mutation."
@@ -48,21 +49,27 @@ void RegisterRoot(FOperationCatalog& InCatalog, FContentRootService* InRoots, st
 }
 } // namespace
 
-void RegisterContentRootOperations(FOperationCatalog& InCatalog, FContentRootService* InRoots)
+void RegisterContentRootOperations(FOperationCatalog& InCatalog, FContentRootService* InRoots, std::string InOwner,
+                                   bool bInMutable)
 {
-	RegisterRoot(InCatalog, InRoots, "content.root.get", "Query the current asset root", FContentRootQuery{}, true,
+	RegisterRoot(InCatalog, InRoots, InOwner, "content.root.get", "Query the current asset root", FContentRootQuery{},
+	             true,
 	             [](FContentRootService& InService, const FContentRootQuery&)
 	             {
 		             return InService.Info();
 	             });
-	RegisterRoot(InCatalog, InRoots, "content.root.set", "Select an asset root directory",
+	if (!bInMutable)
+	{
+		return;
+	}
+	RegisterRoot(InCatalog, InRoots, InOwner, "content.root.set", "Select an asset root directory",
 	             FContentRootRequest{"Assets", 0}, false,
 	             [](FContentRootService& InService, const FContentRootRequest& InRequest)
 	             {
 		             return InService.Set(InRequest);
 	             });
-	RegisterRoot(InCatalog, InRoots, "content.root.clear", "Clear the current asset root", FContentRootClearRequest{0},
-	             false,
+	RegisterRoot(InCatalog, InRoots, InOwner, "content.root.clear", "Clear the current asset root",
+	             FContentRootClearRequest{0}, false,
 	             [](FContentRootService& InService, const FContentRootClearRequest& InRequest)
 	             {
 		             return InService.Clear(InRequest);

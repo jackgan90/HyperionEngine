@@ -72,7 +72,7 @@ Contact-shadow feature 自行管理 HZB 请求、visibility mask、debug preview
 
 ## 配置与构建
 
-`plugins` 决定实验插件；`disabled_plugins` 具有最终优先级，可阻止被依赖拉起的插件。Viewer profile 默认加入 viewer 和 contact-shadows，Editor profile 默认加入 editor 和 contact-shadows。保存的 `scene_source`、`model_source` 只是数据，不再修改插件选择；`--scene`、`--model` 作为显式便捷命令仍选择对应插件，但不能覆盖 disable。诊断 UI 中修改列表在重启后生效。
+`plugins` 决定实验插件；`disabled_plugins` 具有最终优先级，可阻止被依赖拉起的插件。Viewer profile 默认加入 viewer 和 contact-shadows，Editor profile 默认加入 editor 和 contact-shadows；两个普通 profile 同时请求 automation-scene 和 automation-local，kernel-only 不请求它们。保存的 `scene_source`、`model_source` 只是数据，不再修改插件选择；`--scene`、`--model` 作为显式便捷命令仍选择对应插件，但不能覆盖 disable。诊断 UI 中修改列表在重启后生效。
 
 Editor 的 **Edit > Editor preference > Enable RenderDoc capture** 是独立保存的显式启动选择，默认关闭。启用时在设备创建前请求 `renderdoc`，通过可选 `FFrameCapture` 服务供 viewport 使用；`--disable-plugin renderdoc` 仍具有最终优先级。运行中关闭偏好只隐藏操作入口，不卸载插件；首次启用需要重启。详见 [Editor](Editor.md#editor-preference-与抓帧)。
 
@@ -90,3 +90,7 @@ cmake -S . -B out/build/vs2022 -DHYP_ENABLE_TRIANGLE=OFF -DHYP_ENABLE_MODEL_VIEW
 ```
 
 上述四个开关默认 ON，RenderDoc 仍由默认 OFF 的 HYP_ENABLE_RENDERDOC 控制。被排除的库不进入 Viewer 链接；配置请求未编译插件会给出缺失诊断。关闭任一实验库时 CTest 使用 PluginProfiles.cmake 中不依赖这些库的宿主/运行时验收集；完整图形、场景和 GUI 回归使用默认全部启用的构建。`plugin_runtime` 覆盖生命周期和服务作用域，`plugin_applications` 覆盖两个应用的空宿主、缺失、禁用和残留数据配置，Deferred 回归覆盖阶段顺序及无 contact feature 的光照路径。
+
+## 运行应用自动化
+
+`automation-local` 持有 listener、发现记录和 target sessions，支持 `--disable-plugin automation-local`。`automation-scene` 可选依赖 `FSceneEditDocument` 并在 automation-session 封闭目录前注册；Editor/Scene Viewer 发布与 GUI 共用的实例。网络请求只在插件 Main Update 边界执行，不能成为被 GUI 内部 Wait 重入执行的任意 Main task；关闭监听后先排空 session，再销毁领域服务。不得在 Runtime/Application 添加第二套监听/功能生命周期。缺失 scene provider 只使相关操作 unavailable。平台通信与跨设备扩展见 [AutomationConnections](AutomationConnections.md)。

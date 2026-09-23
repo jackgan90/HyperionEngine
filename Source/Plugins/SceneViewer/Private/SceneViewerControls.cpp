@@ -68,7 +68,7 @@ void FSceneViewerPlugin::DuplicateSelected()
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (const auto Copy = P.Scene.DuplicateNode(P.Selected); Copy.Scene)
+	if (const auto Copy = P.Document.CommitDuplicate(P.Selected); Copy.Scene)
 	{
 		P.Selected = Copy;
 	}
@@ -82,10 +82,12 @@ void FSceneViewerPlugin::AddModel()
 	{
 		if (Asset.Data && Asset.Error.empty())
 		{
-			FSceneModel Model{"Added model", Asset.Data};
+			FSceneNode Node;
+			Node.Name = "Added model";
+			Node.Model() = FSceneModelComponent{Asset.Id, Asset.Data};
 			const auto Pose = ExtractScenePose(P.ViewCamera.World);
-			Model.World = Translation(Add(Pose.Eye, ScaleVector(Pose.Forward, P.ViewCamera.Lens.FocusDistance)));
-			P.Selected = P.Scene.Add(std::move(Model), Asset.Id);
+			Node.Local() = Translation(Add(Pose.Eye, ScaleVector(Pose.Forward, P.ViewCamera.Lens.FocusDistance)));
+			P.Selected = P.Document.CommitCreate(std::move(Node), false);
 			return;
 		}
 	}
@@ -93,26 +95,29 @@ void FSceneViewerPlugin::AddModel()
 
 void FSceneViewerPlugin::RemoveSelected()
 {
-	Impl->Scene.RemoveSubtree(Impl->Selected);
+	Impl->Document.Selection() = Impl->Selected;
+	Impl->Document.CommitDelete();
 	const auto Models = Impl->Scene.GetNodes(ESceneNodeKind::Model);
 	Impl->Selected = Models.empty() ? FSceneHandle{} : Models.front();
 }
 
 void FSceneViewerPlugin::ToggleSelected()
 {
-	const auto Node = Impl->Scene.FindNode(Impl->Selected);
-	if (!Node)
+	const auto Source = Impl->Scene.FindNode(Impl->Selected);
+	if (!Source)
 	{
 		return;
 	}
-	if (Node->Model())
+	auto Node = *Source;
+	if (Node.Model())
 	{
-		Impl->Scene.SetModelVisible(Impl->Selected, !Node->Model()->bVisible);
+		Node.Model()->bVisible = !Node.Model()->bVisible;
 	}
 	else
 	{
-		Impl->Scene.SetEnabled(Impl->Selected, !Node->bEnabled);
+		Node.bEnabled = !Node.bEnabled;
 	}
+	Impl->Document.CommitEdits({{Impl->Selected, std::move(Node)}}, Impl->Scene.GetRevision());
 }
 
 void FSceneViewerPlugin::MoveSelected(float InOffset)
@@ -120,7 +125,12 @@ void FSceneViewerPlugin::MoveSelected(float InOffset)
 	FSceneNodeView View;
 	if (Impl->Scene.GetNodeView(Impl->Selected, View))
 	{
-		Impl->Scene.SetWorldTransform(Impl->Selected, Multiply(Translation({InOffset, 0, 0}), View.World));
+		auto Node = *View.Node;
+		FSceneNodeView Parent;
+		const auto ParentHandle = Impl->Scene.FindHandle(Node.Parent());
+		const auto ParentWorld = Impl->Scene.GetNodeView(ParentHandle, Parent) ? Parent.World : Identity();
+		Node.Local() = Multiply(Inverse(ParentWorld), Multiply(Translation({InOffset, 0, 0}), View.World));
+		Impl->Document.CommitEdits({{Impl->Selected, std::move(Node)}}, Impl->Scene.GetRevision());
 	}
 }
 

@@ -36,7 +36,9 @@ void FSceneViewerPlugin::FImpl::DrawSkyControls(FGui& InGui)
 		}
 		if (DrawSkyAssetControls(InGui, Light, SkyPath, SkyChoices).bChanged)
 		{
-			Scene.SetEnvironmentLight(*Handle, std::move(Light));
+			auto Candidate = *Node;
+			Candidate.EnvironmentLight() = std::move(Light);
+			Document.CommitEdits({{*Handle, std::move(Candidate)}}, Scene.GetRevision());
 		}
 		InGui.TextWrapped(Scene.GetSkyStatus(*Handle));
 		if (const auto* Current = Scene.FindNode(*Handle); Current->EnvironmentLight()->Sky)

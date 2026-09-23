@@ -114,5 +114,4 @@ private:
 };
 
 void RegisterAssetOperations(FOperationCatalog& InCatalog, FAssetAutomation* InProvider);
-void RegisterContentRootOperations(FOperationCatalog& InCatalog, FContentRootService* InRoots);
 } // namespace Hyperion

@@ -1,3 +1,4 @@
+#include "Hyperion/AutomationHost/AutomationPlugin.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Viewer/ViewerPlugin.h"
 #include "ViewerApplication.h"
@@ -98,6 +99,9 @@ void RunViewerApplication(int InCount, char** InValues, FRegisterBackends InBack
 	ApplyOptions(Options, Settings);
 	FApplicationHost Host(static_cast<unsigned>(Settings.Workers), static_cast<unsigned>(Settings.RhiThreads));
 	FPluginRegistry Registry;
+	RegisterAutomationServices(Registry);
+	RegisterSceneAutomation(Registry);
+	RegisterAutomationLocal(Registry, "Viewer");
 	RegisterViewerServices(Registry, Options, Settings, std::move(InBackends));
 	RegisterViewerCatalog(Registry, Settings);
 	RegisterViewer(Registry, Options, Settings);
@@ -122,6 +126,8 @@ void RunViewerApplication(int InCount, char** InValues, FRegisterBackends InBack
 		}
 		Selection.Requested.push_back("contact-shadows");
 		Selection.Requested.push_back("viewer");
+		Selection.Requested.push_back("automation-scene");
+		Selection.Requested.push_back("automation-local");
 	}
 	Host.Start(Registry, Selection);
 	if (!Host.GetPlugins().IsActive("viewer"))

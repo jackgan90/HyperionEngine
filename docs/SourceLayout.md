@@ -14,7 +14,8 @@ Source/
     IO/            # 专用 IO 队列、字节读写、存储后端
     Math/          # 引擎数学类型与 GLM wrapper
     Reflection/    # 类型描述及 JSON 序列化 wrapper
-    Automation/    # 类型化操作目录、schema 查询、Main 会话任务与协议 endpoint
+    Transport/     # 有界双向字节流、provider 基类和私有平台通信实现
+    Automation/    # 类型化目录、schema、Main 会话任务、目标发现/连接与协议 endpoint
     Serialization/ # 反射记录的原生二进制内存 Archive
     Config/        # 应用/实验配置，依赖 Reflection
     Plugins/       # 静态规划、类型化服务、作用域事件和生命周期
@@ -28,6 +29,7 @@ Source/
     Materials/     # CPU 材质定义、实例、semantic、反射资产和纹理引用
     Environment/   # CPU 天空资产、全景转 cubemap、SH 与 GGX 预过滤
     Scene/         # 独立 CPU 模型、Main 逻辑场景、清单与反射注册
+    SceneEditing/  # CPU 场景文档、事务、历史、保存点、选择及反射请求/结果
     AssetImport/   # 离线 glTF/JSON 转换、增量导入和完整依赖发布
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
     RHI/           # 公共图形契约、能力查询、后端注册表
@@ -39,9 +41,9 @@ Source/
     D3D12/         # 独立的 D3D12 RHI provider
   Plugins/
     ApplicationServices/ # assets/window/graphics/gui/contact-shadows 逻辑插件
-    Automation/    # 操作 provider、会话和 stdio 生命周期插件
+    Automation/    # 操作适配器、会话、stdio 和应用监听生命周期插件
     Viewer/        # Viewer 输入、帧提交、输出与启动组合
-    Editor/        # 文档、历史、停靠面板与 viewport
+    Editor/        # 共享文档的 GUI 消费方、停靠面板与 viewport
     Triangle/      # 三角形实验
     DebugUI/       # 调试 UI 插件，委托通用 GuiRenderer 绘制
     ModelViewer/   # 异步静态模型显示与相机
@@ -85,3 +87,5 @@ Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Con
 场景相机与光源以 `Scene` 节点为唯一业务权威。`Renderer/SceneBridge` 发布几何及不可变 metadata，`SceneFrame` 将带精确 publication token 的 seed 解析为最终材质帧和 View；Forward/Deferred/CSM 共用该入口。`SceneNavigation` 通过 `FSceneInstance` 编辑节点，Gui wrappers 的 ImGui 调用仍只位于 Gui 私有 adapter。
 
 `Gui` 只组织控件和生成引擎自有绘制数据；`GuiRenderer` 通过 Renderer/RHI 创建纹理、buffer、管线及绑定。Editor 将场景输出纹理交给 GuiRenderer 合成，公共接口不暴露 ImGui 或原生 D3D12 类型。具体帧顺序和扩展位置见 [Editor.md](Editor.md)。
+
+附着到运行应用的模块关系和扩展规则见 [AutomationConnections](AutomationConnections.md)。`ISceneEditTarget` 属于 CPU SceneEditing，Renderer 实现 `FSceneInstanceEditTarget`；GUI 与 agent 消费同一个 `FSceneEditDocument`。连接管理不依赖本机 PID、Named Pipe 或具体应用类型。

@@ -1,4 +1,5 @@
 #include "Hyperion/Application/ApplicationHost.h"
+#include "Hyperion/Automation/Connections.h"
 #include "Hyperion/AutomationHost/AutomationPlugin.h"
 #include "StdioReader.h"
 #include <chrono>
@@ -28,13 +29,21 @@ public:
 		Session = &InContext.Require<FAutomationSession>();
 		Endpoint = &InContext.Require<FAutomationEndpoint>();
 		Control = &InContext.Require<FApplicationControl>();
+		RegisterLocalTransport(Transports);
+		Connections = std::make_unique<FConnectionManager>(Transports, Discovery, Access);
+		Router = std::make_unique<FAutomationRouter>(*Endpoint, *Connections);
+		if (!Options.Attach.empty())
+		{
+			AttachRequest = Router->Begin(
+			    "targets.connect", FArchiveNode(FArchiveNode::FObject{{"instance", WriteValue(Options.Attach)}}));
+		}
 		if (Options.Transport != EAutomationTransport::Once)
 		{
 			Reader = std::make_unique<FStdioReader>();
 		}
 		if (Options.Transport == EAutomationTransport::Mcp)
 		{
-			Mcp = std::make_unique<FMcpConnection>(*Endpoint);
+			Mcp = std::make_unique<FMcpConnection>(*Router);
 		}
 		InContext.Provide(Status);
 	}
@@ -43,6 +52,10 @@ public:
 
 	void Quiesce() noexcept override
 	{
+		if (Connections)
+		{
+			Connections->Close();
+		}
 		if (Session)
 		{
 			Session->StopAdmission();
@@ -53,6 +66,9 @@ private:
 	void Write(std::string_view InMessage);
 	void Receive(std::string_view InMessage);
 	void ReceiveJsonLine(std::string_view InMessage);
+	void WriteJsonResult(const FArchiveNode& InId, FArchiveNode InResult);
+	void PollReplies();
+	bool AttachReady();
 	void Once();
 	std::size_t Consume();
 	FAutomationStreamOptions Options;
@@ -64,6 +80,14 @@ private:
 	std::unique_ptr<FMcpConnection> Mcp;
 	std::string Buffer;
 	std::string WaitingJob;
+	FTransportRegistry Transports;
+	FLocalTargetDiscovery Discovery;
+	FCurrentUserAccessPolicy Access;
+	std::unique_ptr<FConnectionManager> Connections;
+	std::unique_ptr<FAutomationRouter> Router;
+	std::optional<FEndpointRequest> AttachRequest;
+	std::optional<FEndpointRequest> OnceRequest;
+	std::vector<std::pair<FArchiveNode, FEndpointRequest>> Replies;
 };
 
 void FAutomationStdioPlugin::Write(std::string_view InMessage)
@@ -104,14 +128,34 @@ void FAutomationStdioPlugin::ReceiveJsonLine(std::string_view InMessage)
 			}
 			Id = It->second;
 		}
-		Result = Endpoint->Execute(ReadValue<std::string>(Fields->at("method")),
-		                           Fields->contains("params") ? Fields->at("params")
-		                                                      : FArchiveNode(FArchiveNode::FObject{}));
+		if (Replies.size() >= 32)
+		{
+			throw FAutomationError("busy", "Too many pending stream requests");
+		}
+		auto RequestState =
+		    Router->Begin(ReadValue<std::string>(Fields->at("method")),
+		                  Fields->contains("params") ? Fields->at("params") : FArchiveNode(FArchiveNode::FObject{}));
+		if (auto Completed = RequestState.Poll())
+		{
+			Result = std::move(*Completed);
+		}
+		else
+		{
+			Replies.emplace_back(std::move(Id), std::move(RequestState));
+			return;
+		}
 	}
 	catch (...)
 	{
 		Result = CurrentAutomationFailure();
 	}
+	WriteJsonResult(Id, std::move(Result));
+}
+
+void FAutomationStdioPlugin::WriteJsonResult(const FArchiveNode& InId, FArchiveNode InResult)
+{
+	const auto& Id = InId;
+	auto Result = std::move(InResult);
 	Status.bFailed |= IsFailed(Result);
 	std::string Response;
 	try
@@ -171,35 +215,93 @@ std::size_t FAutomationStdioPlugin::Consume()
 
 void FAutomationStdioPlugin::Once()
 {
-	FArchiveNode Result;
-	if (WaitingJob.empty())
+	if (!OnceRequest)
 	{
-		Result = Endpoint->Execute(Options.Method, Options.Parameters);
-		const auto& Fields = std::get<FArchiveNode::FObject>(Result.Value);
-		if (const auto It = Fields.find("job");
-		    It != Fields.end() && ReadValue<std::string>(Fields.at("status")) == "running")
-		{
-			WaitingJob = ReadValue<std::string>(It->second);
-			return;
-		}
+		OnceRequest =
+		    WaitingJob.empty()
+		        ? Router->Begin(Options.Method, Options.Parameters)
+		        : Router->Begin("jobs.get", FArchiveNode(FArchiveNode::FObject{{"job", WriteValue(WaitingJob)}}));
 	}
-	else
+	auto Completed = OnceRequest->Poll();
+	if (!Completed)
 	{
-		const auto Job = Session->GetJob(WaitingJob);
-		const auto& Fields = std::get<FArchiveNode::FObject>(Job.Value);
-		if (ReadValue<std::string>(Fields.at("status")) == "running")
+		return;
+	}
+	OnceRequest.reset();
+	auto Result = std::move(*Completed);
+	const auto& Fields = std::get<FArchiveNode::FObject>(Result.Value);
+	if (Fields.contains("status") && ReadValue<std::string>(Fields.at("status")) == "running")
+	{
+		if (WaitingJob.empty())
 		{
-			return;
+			WaitingJob = ReadValue<std::string>(Fields.at("job"));
 		}
-		Result = Fields.at("outcome");
+		return;
+	}
+	if (!WaitingJob.empty() && Fields.contains("outcome"))
+	{
+		auto Outcome = Fields.at("outcome");
+		Result = std::move(Outcome);
 	}
 	Status.bFailed |= IsFailed(Result);
 	Write(WriteAutomationResponse(Result));
 	Control->RequestExit();
 }
 
+bool FAutomationStdioPlugin::AttachReady()
+{
+	if (!AttachRequest)
+	{
+		return true;
+	}
+	const auto Result = AttachRequest->Poll();
+	if (!Result)
+	{
+		return false;
+	}
+	AttachRequest.reset();
+	if (IsFailed(*Result))
+	{
+		throw std::runtime_error("Attach failed: " + WriteAutomationResponse(*Result));
+	}
+	const auto& Fields =
+	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Result->Value).at("result").Value);
+	Router->SetDefaultConnection(ReadValue<std::string>(Fields.at("connection")));
+	return true;
+}
+
+void FAutomationStdioPlugin::PollReplies()
+{
+	if (Mcp)
+	{
+		for (const auto& Response : Mcp->Poll())
+		{
+			Write(Response);
+		}
+	}
+	for (auto It = Replies.begin(); It != Replies.end();)
+	{
+		if (auto Result = It->second.Poll())
+		{
+			WriteJsonResult(It->first, std::move(*Result));
+			It = Replies.erase(It);
+		}
+		else
+		{
+			++It;
+		}
+	}
+}
+
 void FAutomationStdioPlugin::Update(const FPluginUpdate&)
 {
+	Connections->Poll();
+	if (!AttachReady())
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		return;
+	}
+	PollReplies();
 	if (Options.Transport == EAutomationTransport::Once)
 	{
 		Once();
@@ -218,8 +320,11 @@ void FAutomationStdioPlugin::Update(const FPluginUpdate&)
 				Receive(Buffer);
 				Buffer.clear();
 			}
-			Session->StopAdmission();
-			Control->RequestExit();
+			if (Replies.empty() && (!Mcp || !Mcp->HasPending()))
+			{
+				Session->StopAdmission();
+				Control->RequestExit();
+			}
 		}
 	}
 	std::this_thread::sleep_for(std::chrono::milliseconds(1));

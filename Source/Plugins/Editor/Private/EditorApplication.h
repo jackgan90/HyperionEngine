@@ -15,6 +15,7 @@
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
+#include "Hyperion/Renderer/SceneEditTarget.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Hyperion/Renderer/SelectionOutline.h"
@@ -22,6 +23,7 @@
 #include "Hyperion/Renderer/TransientGeometry.h"
 #include "Hyperion/Renderer/ViewportPlacement.h"
 #include "Hyperion/Scene/ObjectPlacement.h"
+#include "Hyperion/SceneEditing/SceneDocument.h"
 #include <semaphore>
 
 namespace Hyperion
@@ -86,6 +88,8 @@ private:
 	};
 
 	void Initialize();
+	void InitializeSceneDocument();
+	void UpdateDocumentInteraction();
 	void EnsureAssetWindow();
 	void CloseAssetWindow();
 	bool IsAssetWindowBlocked() const;
@@ -272,9 +276,6 @@ private:
 	void ApplyEditorView(FSceneHandle InHandle);
 	void CreateCameraFromView();
 	void CommitSettings(FSceneSettings InSettings);
-	void RestoreHistory(std::size_t InIndex, bool bInAfter);
-	void RemapHistoryHandle(FSceneHandle InBefore, FSceneHandle InAfter);
-	void RemapHistoryHandles(const FEditorHandleMap& InMapping);
 	void DrawComponentInspector(const FSceneNodeView& InView);
 	void DrawSelectionInspector();
 	void DrawSharedComponent(std::span<const FSceneHandle> InTargets, const FSceneComponentDescriptor& InType,
@@ -286,7 +287,6 @@ private:
 	void RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents);
 	void RouteDeleteShortcut(std::span<const FInputEvent> InEvents);
 	void CommitDelete();
-	void RestoreDeletedSubtree(std::size_t InIndex);
 	bool ExerciseDeletionInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseDeletionHistory();
 	void Undo();
@@ -340,9 +340,10 @@ private:
 	FGui* Gui{};
 	FGuiRenderer* GuiRenderer{};
 	std::unique_ptr<FSceneInstance> Scene;
+	std::unique_ptr<FSceneInstanceEditTarget> SceneTarget;
+	FSceneEditDocument SceneDocument;
 	std::unique_ptr<FAssetWorkspace> AssetWorkspace;
 	std::unique_ptr<FAssetEditorWindow> AssetWindow;
-	bool bAssetRefreshHistory{};
 	FSceneCameraController Camera{ESceneCameraNavigationMode::Fly};
 	FSceneCameraView ViewCamera;
 	std::optional<FSceneHandle> PreviewCamera;
@@ -435,7 +436,7 @@ private:
 	FForwardPipelineStatistics RenderStats;
 	FDeviceStats DeviceStats;
 	std::vector<std::string> ScenePaths;
-	FEditorSelection Selection;
+	FEditorSelection& Selection = SceneDocument.Selection();
 	FSelectionOutlineSettings OutlineSettings;
 	std::vector<FSceneHandle> OutlineExerciseObjects;
 	FSceneHandle OutlineExerciseWall;
@@ -493,7 +494,7 @@ private:
 	std::shared_ptr<std::binary_semaphore> ContentSaveGate;
 	std::map<std::string, FVec4> ContentTileBounds;
 	FVec4 ContentClickBounds;
-	std::string CurrentPath;
+	const std::string& CurrentPath = SceneDocument.GetState().Path;
 	std::string Error;
 	std::string Filter;
 	std::string SceneFilter;
@@ -559,23 +560,13 @@ private:
 	FSceneHandle DeletionExerciseHandle;
 	std::string DeletionExerciseId;
 
-	std::vector<FHistoryEntry> History;
-	std::size_t HistoryCursor{};
-	std::uint64_t NextDocumentState{};
-	std::uint64_t DocumentState{};
-	std::uint64_t SavedState{};
-	std::uint64_t DocumentEpoch{};
+	const std::vector<FHistoryEntry>& History = SceneDocument.GetState().History;
+	const std::size_t& HistoryCursor = SceneDocument.GetState().HistoryCursor;
+	const std::uint64_t& DocumentState = SceneDocument.GetState().State;
+	const std::uint64_t& SavedState = SceneDocument.GetState().SavedState;
+	const std::uint64_t& DocumentEpoch = SceneDocument.GetState().Epoch;
 
-	struct FInspectorTransaction
-	{
-		std::uint64_t Interaction{};
-		FSceneHandle Handle;
-		std::size_t HistoryIndex{};
-		std::uint64_t Revision{};
-		std::vector<FSceneHandle> Targets;
-	};
-
-	std::optional<FInspectorTransaction> InspectorTransaction;
+	const std::optional<FSceneInspectorTransaction>& InspectorTransaction = SceneDocument.GetState().Interaction;
 	std::uint64_t InspectorInteraction{};
 
 	struct FPendingInspectorEdit
@@ -590,16 +581,7 @@ private:
 	std::optional<FPendingInspectorEdit> PendingInspectorEdit;
 	FEditorInspectionCache InspectorDrafts;
 
-	struct FPendingSave
-	{
-		TAsyncResult<bool> Result;
-		std::string Destination;
-		std::uint64_t Epoch{};
-		std::uint64_t State{};
-		std::uint64_t Started{};
-	};
-
-	std::optional<FPendingSave> PendingSave;
+	const std::optional<FScenePendingSave>& PendingSave = SceneDocument.GetState().Save;
 	std::string SavePath;
 	std::string SaveStatus;
 	double LastSaveMilliseconds{};

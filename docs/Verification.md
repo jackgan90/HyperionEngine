@@ -55,3 +55,9 @@ CTest 不代替构建。Visual Studio 使用 `ctest --test-dir out/build/vs2022 
 CTest 日志保存在构建目录的 `Testing/Temporary/LastTest.log`，生成夹具、截图和测量日志位于 `out`，不提交。记录验证时应写明源码版本、配置、启用选项、实际测试命令和结果；GPU 性能数据同时记录硬件、场景就绪、视图/draw 数、预热、VSync 和验证层状态。
 
 [文档索引](README.md) 列出历史审计和性能数据。它们说明对应日期与版本的结果，不证明当前工作区已重新执行同一套测试；原始 OpenSpec 归档保留历史设计与验收证据。
+
+## 应用附着回归
+
+构建 `hyperion_editor`、`hyperion_viewer`、`hyperion_automation_cli`、`automation_scene_tests`、`automation_connection_tests` 和 `transport_tests` 后，运行 `ctest --test-dir out/build/debug -R "^(transport_contracts|automation_scene|automation_connections|automation_attachment)$" --output-on-failure`。真实应用验收使用显式 HyperionAssets 目录和隔离输出文件，不修改输入资产或用户已运行的应用。
+
+涉及 SceneEditing 的变更还须运行 `editor_state`、`editor_acceptance`、`editor_multiselect`、`editor_placement`、`editor_content_transition`、`scene_viewer_controls` 和 `plugin_applications`，保护 GUI 历史、手势、选择、保存、换根及 provider 缺失路径。通信故障应验证无目标回退、无变更重放、断连后的任务排空和未知 scheme。

@@ -171,6 +171,12 @@ void FViewerPlugin::Tick(int InFrame, float InDelta)
 	ExerciseWindow(InFrame);
 	const auto Size = Window->PixelSize();
 	const auto Logical = Window->LogicalSize();
+	if (Gui && (!Settings.bShowGui || Window->Minimized() || !Size.Width || !Size.Height))
+	{
+		// Discard inactive widget buffers before agent edits can replace their authored values.
+		Gui->FinishEditing();
+		Gui->ResetInput();
+	}
 	if (Window->Minimized() || !Size.Width || !Size.Height)
 	{
 		if (ScenePlugin)

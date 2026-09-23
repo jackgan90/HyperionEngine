@@ -3,6 +3,7 @@
 #include "SceneViewerInternal.h"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace Hyperion
 {
@@ -22,6 +23,12 @@ FSceneInstance& FSceneViewerPlugin::GetSceneInstance()
 	return Impl->Scene;
 }
 
+void FSceneViewerPlugin::Start(FPluginContext& InContext)
+{
+	ISceneEditor::Start(InContext);
+	InContext.Provide(Impl->Document);
+}
+
 void FSceneViewerPlugin::Start()
 {
 	auto& P = *Impl;
@@ -31,6 +38,7 @@ void FSceneViewerPlugin::Start()
 
 void FSceneViewerPlugin::FImpl::BeginManifest()
 {
+	Document.Reset();
 	Manifest = Scene.GetManifest();
 	const auto Models = Scene.GetNodes(ESceneNodeKind::Model);
 	Selected = Models.empty() ? FSceneHandle{} : Models.front();
@@ -40,6 +48,9 @@ void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
+	// GUI participation expires each tick, including hidden and non-drawable frames.
+	const bool bInteracting = std::exchange(P.bGuiInteraction, false) || P.bAnimate;
+	P.Document.SetInteractionState(bInteracting, false);
 	P.PollSave();
 	AdvanceCamera(InFrame.DeltaSeconds);
 	P.UpdateCamera(InFrame);
@@ -61,13 +72,9 @@ void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
 				return;
 			}
 			P.BeginManifest();
+			P.Document.SetInteractionState(bInteracting, false);
 		}
-		if (P.bAnimate)
-		{
-			const float Previous = std::sin(P.AnimationTime);
-			P.AnimationTime += std::clamp(InFrame.DeltaSeconds, 0.f, .1f) * 1.2f;
-			MoveSelected((std::sin(P.AnimationTime) - Previous) * 30);
-		}
+		P.AdvanceAnimation(InFrame.DeltaSeconds);
 		P.Scene.Tick();
 		const auto& State = P.Scene.GetStatus();
 		if (!State.Error.empty())
@@ -85,6 +92,26 @@ void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
 	}
 }
 
+void FSceneViewerPlugin::FImpl::AdvanceAnimation(float InDeltaSeconds)
+{
+	if (!bAnimate)
+	{
+		return;
+	}
+	try
+	{
+		const float Previous = std::sin(AnimationTime);
+		const float Next = AnimationTime + std::clamp(InDeltaSeconds, 0.f, .1f) * 1.2f;
+		Owner->MoveSelected((std::sin(Next) - Previous) * 30);
+		AnimationTime = Next;
+	}
+	catch (const std::exception& Failure)
+	{
+		// A rejected authored edit must not prevent resource preparation from progressing.
+		EditError = Failure.what();
+	}
+}
+
 void FSceneViewerPlugin::Stop() noexcept
 {
 	auto& P = *Impl;
@@ -93,11 +120,11 @@ void FSceneViewerPlugin::Stop() noexcept
 	{
 		return;
 	}
-	if (P.Save)
+	if (P.Document.GetState().Save)
 	{
 		try
 		{
-			P.Save->Get(P.Tasks);
+			P.Document.GetState().Save->Result.Get(P.Tasks);
 		}
 		catch (...)
 		{
@@ -106,6 +133,7 @@ void FSceneViewerPlugin::Stop() noexcept
 	}
 	P.bStopped = true;
 	P.CameraController.Reset();
+	P.Document.Detach(P.Tasks);
 	P.Scene.Close();
 }
 
@@ -142,7 +170,7 @@ void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSe
 	                             {
 		                             return std::make_unique<FSceneViewerPlugin>(InSession, InTasks, InAssets, Path);
 	                             }};
-	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor)};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument)};
 	InRegistry.Add(std::move(Descriptor));
 }
 
@@ -151,7 +179,7 @@ void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, const std::filesyste
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "scene-viewer";
 	Descriptor.Dependencies = {"graphics", "assets"};
-	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor)};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument)};
 	Descriptor.Requires = {typeid(FRenderSession), typeid(FTaskSystem), typeid(FAssetService)};
 	Descriptor.CreateWithContext = [Path = InPath](FPluginContext& InContext)
 	{

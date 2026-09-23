@@ -16,6 +16,7 @@ public:
 	                   std::filesystem::path InPath);
 	~FSceneViewerPlugin() override;
 	void Start() override;
+	void Start(FPluginContext& InContext) override;
 
 	bool HasScene() const override
 	{

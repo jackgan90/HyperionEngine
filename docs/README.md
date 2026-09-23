@@ -7,6 +7,7 @@
 - [Visual Studio 与构建](VisualStudio.md)、[验证指南](Verification.md)
 - [编辑器工作区与场景视口](Editor.md)
 - [Agent 自动化：CLI、MCP、schema 与新功能接入](Automation.md)
+- [运行应用附着：连接、live scene、平台与设备扩展](AutomationConnections.md)
 - [静态插件、生命周期与扩展](PluginSystem.md)（应用组合、插件与功能接入的必读契约）
 - [代码规范](CodingStyle.md)、[源码组织](SourceLayout.md)、[架构契约](Architecture.md)
 - [锁定依赖](Dependencies.md)、[功能范围与扩展边界](Roadmap.md)

@@ -1,20 +1,11 @@
 #include "Hyperion/Automation/Operation.h"
-#include <iomanip>
-#include <random>
-#include <sstream>
+#include "Hyperion/Core/Identity.h"
 
 namespace Hyperion
 {
 std::string CreateAutomationIdentity()
 {
-	std::random_device Random;
-	std::ostringstream Text;
-	Text << std::hex << std::setfill('0');
-	for (unsigned Index = 0; Index < 4; ++Index)
-	{
-		Text << std::setw(8) << static_cast<std::uint32_t>(Random());
-	}
-	return Text.str();
+	return CreateEphemeralIdentity();
 }
 
 FAutomationError::FAutomationError(std::string InCode, std::string InMessage, std::string InPath,

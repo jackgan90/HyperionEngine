@@ -213,3 +213,7 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 `transform_gizmo` 是无 GPU 的几何与变换回归，覆盖自由/轴向平移、带剪切父变换、局部旋转、剪切对象整体比例缩放、镜像、零缩放与恢复、视线退化及非有限输入。`--exercise-gizmo` 通过真实 GUI 事件验证三个工具栏按钮、实时拖拽、零轴恢复、历史合并、Esc 取消与重做分支保留，以及失焦后提交最后有效预览和撤销重做，同样纳入 `editor_acceptance`。
 
 `tools/ComponentEditorBenchmark.py` 可重复运行 Debug/Release、Editor/Viewer、静止/移动相机组合，保留逐帧 CSV、日志、程序哈希和进程内存采样。Viewer 的流水线吞吐耗时与 Editor 的逐帧等待耗时应分别比较。本次组件化的测量条件、回退修正与结果见 [性能对比报告](ComponentEditorPerformance.md)。
+
+## Agent 附着
+
+Editor 默认允许同一 Windows 用户通过 CLI/MCP 附着；`--disable-plugin automation-local` 可关闭。首批接口支持当前场景查询、节点变换、共享 Undo/Redo 和显式保存。自动化与 GUI 共同使用 Runtime/SceneEditing 的同一个文档实例；agent 变换进入 GUI 历史，保存更新同一 dirty/save point。用法见 [应用附着](AutomationConnections.md)。资产页签及内容根修改的 live adapter 尚未开放；内容根查询已开放。

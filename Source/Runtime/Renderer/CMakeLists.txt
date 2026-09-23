@@ -20,6 +20,8 @@ add_library(hyperion_render STATIC Private/SceneCameraController.cpp Private/Sce
   Private/RenderResourceService.cpp Private/SceneVisibility.cpp Private/SceneDraws.cpp Private/SceneBatchDraws.cpp Private/MaterialDraw.cpp
   Private/Model.cpp Private/RenderSession.cpp Private/SceneBvh.cpp Private/SceneCollection.cpp Private/ScenePreparedCollection.cpp Private/SceneCollectionReuse.cpp Private/SceneRemoval.cpp Private/SceneBridge.cpp Private/SceneMaterialPublication.cpp)
 hyp_module(hyperion_render)
+target_sources(hyperion_render PRIVATE Private/SceneEditTarget.cpp)
+target_link_libraries(hyperion_render PUBLIC hyperion_scene_editing)
 target_sources(hyperion_render PRIVATE Private/ViewportRay.cpp)
 target_sources(hyperion_render PRIVATE Private/TransientGeometry.cpp)
 target_sources(hyperion_render PRIVATE Private/SelectionOutline.cpp Private/OutlineMaterials.cpp Private/OutlinePasses.cpp Private/ScenePrimitiveSubset.cpp)

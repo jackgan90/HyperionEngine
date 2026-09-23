@@ -68,6 +68,7 @@ public:
 	std::string RegisterModelAsset(FAssetRef InReference, const std::filesystem::path& InContainingAsset = {});
 	FSceneHandle AddNode(FSceneNode InNode);
 	std::uint64_t GetRevision() const;
+	std::uint64_t GetIdentity() const;
 	bool EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision);
 	bool EditNodes(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision);
 	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes);

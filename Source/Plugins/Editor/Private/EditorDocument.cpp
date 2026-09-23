@@ -182,18 +182,14 @@ bool FEditorPlugin::IsDirty() const
 			}
 		}
 	}
-	return DocumentState != SavedState;
+	return SceneDocument.IsDirty();
 }
 
 void FEditorPlugin::ResetDocument()
 {
 	SetPreviewCamera({});
-	History.clear();
-	HistoryCursor = 0;
-	DocumentState = SavedState = ++NextDocumentState;
-	++DocumentEpoch;
-	bAssetRefreshHistory = false;
 	FinishInspectorEdit();
+	SceneDocument.Reset();
 	SaveStatus.clear();
 }
 
@@ -207,96 +203,49 @@ void FEditorPlugin::Undo()
 {
 	FinishInspectorEdit();
 	Error.clear();
-	if (!HistoryCursor)
-	{
-		return;
-	}
-	RestoreHistory(HistoryCursor - 1, false);
-	--HistoryCursor;
-	DocumentState = History[HistoryCursor].BeforeState;
-	if (bAssetRefreshHistory)
-	{
-		Scene->RefreshAssets();
-	}
+	SceneDocument.Undo();
 }
 
 void FEditorPlugin::Redo()
 {
 	FinishInspectorEdit();
 	Error.clear();
-	if (HistoryCursor == History.size())
-	{
-		return;
-	}
-	RestoreHistory(HistoryCursor, true);
-	DocumentState = History[HistoryCursor].AfterState;
-	if (bAssetRefreshHistory)
-	{
-		Scene->RefreshAssets();
-	}
-	++HistoryCursor;
+	SceneDocument.Redo();
 }
 
 void FEditorPlugin::SaveScene(const std::string& InDestination)
 {
 	FinishInspectorEdit();
-	if (PendingSave)
-	{
-		throw std::runtime_error("A scene save is already in progress");
-	}
-	if (InDestination.empty() || std::filesystem::path(InDestination).extension() != ".hasset")
-	{
-		throw std::invalid_argument("Choose a .hasset scene destination");
-	}
-	const auto Started = ClockNanoseconds();
-	auto Snapshot = std::make_shared<const FSceneManifest>(Scene->Snapshot(InDestination));
-	// Reject unsupported component state before admitting IO.
-	WriteRecord(RecordType<FSceneManifest>(), Snapshot.get());
-	auto Result = Assets.SaveAsync(InDestination, std::move(Snapshot));
-	PendingSave = FPendingSave{std::move(Result), InDestination, DocumentEpoch, DocumentState, Started};
+	SceneDocument.Save(InDestination);
 	SaveStatus = "Saving scene...";
 }
 
 void FEditorPlugin::PollSave()
 {
-	if (!PendingSave || !PendingSave->Result.Ready())
+	SceneDocument.PollSave();
+	const auto Outcome = SceneDocument.TakeSaveOutcome();
+	if (!Outcome || !Outcome->bCurrentDocument)
 	{
 		return;
 	}
-	const bool bCurrentDocument = PendingSave->Epoch == DocumentEpoch;
-	try
+	if (Outcome->bSucceeded)
 	{
-		if (!*PendingSave->Result.GetReady())
-		{
-			throw std::runtime_error("Asset service did not commit the scene");
-		}
-		if (bCurrentDocument)
-		{
-			SavedState = PendingSave->State;
-			CurrentPath = PendingSave->Destination;
-			LastSaveMilliseconds = double(ClockNanoseconds() - PendingSave->Started) / 1e6;
-			SaveStatus = "Saved: " + CurrentPath;
-			RefreshContent();
-		}
+		LastSaveMilliseconds = Outcome->Milliseconds;
+		SaveStatus = "Saved: " + CurrentPath;
+		RefreshContent();
+		return;
 	}
-	catch (const std::exception& Failure)
+	Error = "Save failed: " + Outcome->Error;
+	SaveStatus = Error;
+	if (bSaveThenSwitch || PendingRoot || !RequestedRoot.empty())
 	{
-		if (bCurrentDocument)
-		{
-			Error = "Save failed: " + std::string(Failure.what());
-			SaveStatus = Error;
-			if (bSaveThenSwitch || PendingRoot || !RequestedRoot.empty())
-			{
-				RequestedRoot.clear();
-				PendingRoot.reset();
-				bSaveThenSwitch = bCommitRoot = bDiscardDialog = false;
-				Gui->ClosePopups();
-				AssetMessage = Error;
-				bAssetMessage = bRequestAssetMessage = true;
-			}
-		}
+		RequestedRoot.clear();
+		PendingRoot.reset();
+		bSaveThenSwitch = bCommitRoot = bDiscardDialog = false;
+		Gui->ClosePopups();
+		AssetMessage = Error;
+		bAssetMessage = bRequestAssetMessage = true;
 	}
-	PendingSave.reset();
 }
 
 void FEditorPlugin::DrawSaveDialog()

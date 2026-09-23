@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/AutomationHost/AutomationPlugin.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Editor/EditorPlugin.h"
 #if HYP_ENABLE_RENDERDOC
@@ -21,6 +22,9 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	}
 	FApplicationHost Host(4, 1);
 	FPluginRegistry Registry;
+	RegisterAutomationServices(Registry);
+	RegisterSceneAutomation(Registry);
+	RegisterAutomationLocal(Registry, "Editor");
 #if HYP_ENABLE_RENDERDOC
 	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
 #endif
@@ -50,6 +54,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterContactShadowServices(Registry);
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "editor";
+	Descriptor.Provides = {typeid(FSceneEditDocument)};
 	Descriptor.Dependencies = {"gui"};
 	Descriptor.After = {"contact-shadows"};
 #if HYP_ENABLE_RENDERDOC
@@ -78,7 +83,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	Selection.Disabled = Options.DisabledPlugins;
 	if (!Options.bKernelOnly)
 	{
-		Selection.Requested = {"contact-shadows", "editor"};
+		Selection.Requested = {"contact-shadows", "editor", "automation-scene", "automation-local"};
 		if (Options.Preferences.bRenderDocCapture)
 		{
 			Selection.Requested.push_back("renderdoc");

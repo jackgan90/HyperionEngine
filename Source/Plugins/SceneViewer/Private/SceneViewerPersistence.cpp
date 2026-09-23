@@ -7,19 +7,10 @@ TAsyncResult<bool> FSceneViewerPlugin::SaveAsync(const std::filesystem::path& In
 {
 	auto& P = *Impl;
 	P.Tasks.Require({EDomain::Main});
-	if (P.Save && !P.Save->Ready())
-	{
-		throw std::logic_error("Scene save is already in progress");
-	}
-	if (!P.Manifest)
-	{
-		throw std::runtime_error("Scene has not loaded");
-	}
-	auto Snapshot = P.Scene.Snapshot(InPath);
-	P.Save = P.Assets.SaveAsync(InPath, std::make_shared<const FSceneManifest>(std::move(Snapshot)));
-	P.SavePath = InPath;
+	P.Document.PollSave();
+	auto Result = P.Document.Save(PathToUtf8(InPath));
 	P.SaveStatus = "Saving scene...";
-	return *P.Save;
+	return Result;
 }
 
 const std::string& FSceneViewerPlugin::SaveStatus() const
@@ -30,27 +21,19 @@ const std::string& FSceneViewerPlugin::SaveStatus() const
 
 void FSceneViewerPlugin::FImpl::PollSave()
 {
-	if (!Save || !Save->Ready())
+	Document.PollSave();
+	if (const auto Outcome = Document.TakeSaveOutcome())
 	{
-		return;
+		SaveStatus = Outcome->bSucceeded ? "Saved scene: " + Outcome->Path : "Scene save failed: " + Outcome->Error;
 	}
-	try
-	{
-		(void)Save->GetReady();
-		SaveStatus = "Saved scene: " + SavePath.generic_string();
-	}
-	catch (const std::exception& Failure)
-	{
-		SaveStatus = "Scene save failed: " + std::string(Failure.what());
-	}
-	Save.reset();
 }
 
 void FSceneViewerPlugin::FImpl::DrawSave(FGui& InGui)
 {
 	if (InGui.Button("Save edited scene"))
 	{
-		auto Destination = Path.parent_path() / (Path.stem().string() + ".edited.hasset");
+		auto Destination = Path;
+		Destination.replace_extension(".edited.hasset");
 		try
 		{
 			Owner->SaveAsync(Destination);

@@ -1,4 +1,5 @@
 #include "AssetOperations.h"
+#include "ContentRootOperations.h"
 #include "Hyperion/AutomationHost/AutomationPlugin.h"
 
 namespace Hyperion

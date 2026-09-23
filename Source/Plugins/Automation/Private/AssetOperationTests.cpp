@@ -1,4 +1,5 @@
 #include "AssetOperations.h"
+#include "ContentRootOperations.h"
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/AutomationHost/AutomationPlugin.h"
 #include "Hyperion/IO/Path.h"
