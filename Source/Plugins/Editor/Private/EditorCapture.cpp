@@ -7,6 +7,45 @@
 
 namespace Hyperion
 {
+std::shared_ptr<FPendingImageOutput> FEditorPlugin::RequestImage(const FImageOutputRequest& InRequest)
+{
+	if (PendingImage || bFinished || Window->Minimized())
+	{
+		throw FSceneEditError("busy", "Wait for the pending screenshot and a drawable application");
+	}
+	if (InRequest.Window != "main" && InRequest.Window != "assets")
+	{
+		throw std::invalid_argument("Window must be main or assets");
+	}
+	if (InRequest.Window == "assets" && (!AssetWindow || !AssetWindow->IsDrawable()))
+	{
+		throw FSceneEditError("busy", "Open a drawable asset window");
+	}
+	PendingImage = PrepareImageOutput(InRequest);
+	if (InRequest.Window == "assets")
+	{
+		AssetWindow->RequestImage(PendingImage);
+	}
+	return PendingImage;
+}
+
+std::optional<FImageArtifact> FEditorPlugin::PollImage(const std::shared_ptr<FPendingImageOutput>& InPending)
+{
+	if (!InPending->Error.empty())
+	{
+		throw FSceneEditError("capture_failed", InPending->Error);
+	}
+	if (!InPending->Result && InPending->Request.Window == "assets" && !AssetWindow)
+	{
+		throw FSceneEditError("unavailable", "Asset window closed before capture");
+	}
+	if (!InPending->Result && (bFinished || bStopped))
+	{
+		throw FSceneEditError("unavailable", "Application stopped before capture");
+	}
+	return InPending->Result;
+}
+
 bool FEditorPlugin::CanCapture() const
 {
 #if HYP_ENABLE_RENDERDOC
@@ -67,10 +106,16 @@ void FEditorPlugin::DrawPreferences()
 	{
 		return;
 	}
-	if (Gui->Checkbox("Enable RenderDoc capture", Options.Preferences.bRenderDocCapture))
+	bool bEnabled = Options.Preferences.bRenderDocCapture;
+	if (Gui->Checkbox("Enable RenderDoc capture", bEnabled))
 	{
-		bCaptureRequested = false;
-		SavePreferences();
+		try
+		{
+			SetRenderCapturePreference(bEnabled);
+		}
+		catch (const std::exception&)
+		{ /* SavePreferences retains the message displayed below. */
+		}
 	}
 	CapturePreferenceBounds = Gui->LastItemBounds();
 	Gui->TextWrapped(CaptureStatus());
@@ -103,7 +148,7 @@ void FEditorPlugin::DrawCaptureButton()
 	const auto Tip = "Capture frame and open in RenderDoc\n" + CaptureStatus();
 	if (Gui->IconButton("##RenderDocCapture", EGuiIcon::Capture, Tip.c_str()))
 	{
-		bCaptureRequested = true;
+		RequestRenderCapture();
 	}
 	CaptureButtonBounds = Gui->LastItemBounds();
 	Gui->EndDisabled();

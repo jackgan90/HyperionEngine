@@ -6,7 +6,8 @@ namespace Hyperion
 FContentRootParticipantState FEditorPlugin::ContentRootState() const
 {
 	return {IsDirty() || AssetWorkspace->IsDirty(),
-	        PendingSave.has_value() || AssetWorkspace->IsSaving() || AssetWorkspace->HasPendingEdits()};
+	        PendingSave.has_value() || AssetWorkspace->IsSaving() || AssetWorkspace->HasPendingEdits() ||
+	            AssetWorkspace->HasActiveInteraction() || IsDocumentInteractionBusy()};
 }
 
 void FEditorPlugin::ReleaseContentRoot()
@@ -140,12 +141,10 @@ void FEditorPlugin::CompleteContentRoot()
 	auto& Content = Context.Require<FContentRootService>();
 	auto Prepared = Content.Prepare(PendingRoot->GetDirectory());
 	PendingRoot.reset();
-	PendingRoot.emplace(std::move(Prepared));
 	bCommitRoot = false;
 	try
 	{
-		Content.Commit(std::move(*PendingRoot), bDiscardRoot);
-		PendingRoot.reset();
+		Content.Commit(std::move(Prepared), bDiscardRoot);
 	}
 	catch (const FContentRootError& Failure)
 	{

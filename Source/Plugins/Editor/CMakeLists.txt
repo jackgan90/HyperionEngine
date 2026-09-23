@@ -1,4 +1,8 @@
 add_library(hyperion_editor_plugin STATIC
+  Private/EditorCloseService.cpp
+  Private/EditorViewportService.cpp
+  Private/EditorCaptureService.cpp
+  Private/AssetPreviewService.cpp
   Private/EditorSceneDocument.cpp
   Private/EditorAcceptance.cpp
   Private/EditorAssetAcceptance.cpp
@@ -12,6 +16,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorAssetAuditAcceptance.cpp
   Private/EditorAssetPreviewAcceptance.cpp
   Private/AssetWorkspace.cpp
+  Private/AssetWorkspaceService.cpp
   Private/AssetPreview.cpp
   Private/AssetProperties.cpp
   Private/AssetReferenceEditor.cpp

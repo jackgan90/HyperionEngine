@@ -50,11 +50,11 @@ hyperion_viewer.exe --disable-plugin automation-local
 | `scene.undo` / `scene.redo` | Editor 共用 GUI 历史与选择恢复；Scene Viewer 声明 unavailable |
 | `scene.save` | 明确目标进程可访问的 `.hasset` 路径；异步保存接收时的快照；之后的编辑继续保持 dirty |
 
-查询 `scene.info`，等待 `ready:true` 且 `busy:false`，再获取节点和修改。`loaded` 只表示逻辑场景可查询；资源准备尚未结束时不代表可编辑。矩阵使用 `{"values":[16 个数]}`，列主序，平移为第 12–14 项；局部矩阵受父变换影响，world 是派生结果。所有 64 位整数（包含 revision 和 handle 内的 scene/generation）使用十进制字符串。
+查询 `scene.info`，等待 `ready:true` 且 `busy:false`，再获取节点和修改。`loaded` 只表示逻辑场景可查询；资源准备尚未结束时不代表可编辑；终止性资源失败可查询错误并修正引用。矩阵使用 `{"values":[16 个数]}`，列主序，平移为第 12–14 项；局部矩阵受父变换影响，world 是派生结果。所有 64 位整数（包含 revision 和 handle 内的 scene/generation）使用十进制字符串。
 
 文档 ID 含随机命名空间，区分应用、文档替换和新启动。handle 必须与当前 document 一起使用，不应由节点索引猜测。编辑期间过期 revision 返回 `stale_revision`；旧文档返回 `stale_document`；已替换节点返回 `stale_handle`；准备、Inspector/gizmo 手势、拖放或模态操作期间返回 `busy`。成功变换成为 Editor 的一条撤销记录，保留选择；不会隐式写盘。返回成功表示 Main 已提交，Renderer 在后续帧发布，不表示屏幕/GPU 已完成。
 
-资产路径、`/Game` 和保存目的地都在**目标进程**解释。`content.root.get` 可读取目标的 root；附着不会设置客户端自己的 root 来替换应用 root。`--attach` 不启动独立资产服务，不能混用 `--asset-root`、`--engine-content` 或 `--read-only`。当前 live catalog 不注册独立资产草稿或换根操作；对应适配器必须接入应用已有 workspace 和内容参与者后再开放，详见 [覆盖清单](Automation.md#能力覆盖与后续适配)。
+资产路径、`/Game` 和保存目的地都在**目标进程**解释。`content.root.get` 可读取目标的 root；附着不会设置客户端自己的 root 来替换应用 root。`--attach` 不启动独立资产服务，不能混用 `--asset-root`、`--engine-content` 或 `--read-only`。Editor live catalog 的 asset 操作使用实际共享 workspace，root set/clear 使用共享内容参与者并保存目标偏好。Viewer 保留 CPU 资产文档和 root 查询。具体操作族见 [能力清单](AutomationCapabilities.md)。
 
 断开前端不会关闭应用、丢弃场景或取消已经接收的保存。每个连接拥有独立 Session/Job 命名空间，共享应用文档。重连建立新 session，不能恢复旧 job ID；先重新查询共享状态。超时/断线可能发生在修改提交之后，禁止自动重放变更请求。
 

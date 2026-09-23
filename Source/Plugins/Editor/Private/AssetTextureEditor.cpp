@@ -79,39 +79,54 @@ void FAssetWorkspace::DrawTextureControls(FGui& InGui, FEntry& InEntry, const FT
 		               std::to_string(Texture->Mips[I].Height) + ")");
 	}
 	View.Mip = std::min(View.Mip, Mips.size() - 1);
-	bool bChanged = AssetCombo(InGui, "Mip", Mips, View.Mip);
+	auto Mip = View.Mip;
+	auto Channel = View.Channel;
+	auto Face = View.Face;
+	auto Exposure = View.Exposure;
+	bool bChecker = View.bChecker;
+	bool bChanged = AssetCombo(InGui, "Mip", Mips, Mip);
 	const std::array<std::string, 5> Channels{"RGBA", "R", "G", "B", "A"};
-	bChanged |= AssetCombo(InGui, "Channel", Channels, View.Channel);
+	bChanged |= AssetCombo(InGui, "Channel", Channels, Channel);
 	if (Texture->Dimension == ETextureDimension::Cube)
 	{
 		const std::array<std::string, 6> Faces{"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
-		bChanged |= AssetCombo(InGui, "Face", Faces, View.Face);
+		bChanged |= AssetCombo(InGui, "Face", Faces, Face);
 	}
 	else
 	{
-		View.Face = 0;
+		Face = 0;
 	}
-	bChanged |= AssetCheckbox(InGui, "Checkerboard", View.bChecker);
+	bChanged |= AssetCheckbox(InGui, "Checkerboard", bChecker);
 	InGui.SameLine();
 	if (InGui.Button("Fit"))
 	{
-		View.bFit = true;
-		View.Pan = {};
+		FramePreview(InEntry);
 	}
 	InGui.SameLine();
 	if (InGui.Button("1:1"))
 	{
-		View.bFit = false;
-		View.Zoom = 1;
-		View.Pan = {};
+		FAssetPreviewSettings Settings;
+		Settings.Fit = false;
+		Settings.Zoom = 1.f;
+		Settings.Pan = FVec2{};
+		SetPreviewSettings(InEntry, Settings);
 	}
 	if (Texture->Encoding == EMaterialTextureEncoding::Linear)
 	{
-		bChanged |= InGui.Slider("Exposure EV (preview)", View.Exposure, -12, 12);
+		bChanged |= InGui.Slider("Exposure EV (preview)", Exposure, -12, 12);
 	}
 	if (bChanged)
 	{
-		++View.Revision;
+		FAssetPreviewSettings Settings;
+		Settings.Mip = static_cast<std::uint32_t>(Mip);
+		Settings.Face = static_cast<std::uint32_t>(Face);
+		Settings.Channel = static_cast<std::uint32_t>(Channel);
+		Settings.Checker = bChecker;
+		if (Texture->Encoding == EMaterialTextureEncoding::Linear)
+		{
+			Settings.ExposureEv = Exposure;
+		}
+		SetPreviewSettings(InEntry, Settings);
 	}
 }
 

@@ -140,7 +140,8 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	}
 	FImage Capture;
 	const auto ExerciseCapture = OutlineCapture.empty() ? PlacementCapture : OutlineCapture;
-	const bool bCaptureFrame = bInCapture || !ExerciseCapture.empty();
+	const bool bAgentCapture = PendingImage && PendingImage->Request.Window == "main";
+	const bool bCaptureFrame = bInCapture || !ExerciseCapture.empty() || bAgentCapture;
 	const auto Surface = Window->Surface();
 	const bool bCaptureRdc = std::exchange(bCaptureRequested, false);
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
@@ -175,6 +176,11 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 			std::filesystem::create_directories(Options.Capture.parent_path());
 		}
 		SaveImage(Options.Capture, Capture);
+	}
+	if (bAgentCapture)
+	{
+		CompleteImageOutput(*PendingImage, Capture, FrameCount);
+		PendingImage.reset();
 	}
 	if (!ExerciseCapture.empty())
 	{

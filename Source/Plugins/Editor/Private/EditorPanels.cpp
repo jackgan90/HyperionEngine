@@ -272,8 +272,7 @@ void FEditorPlugin::DrawToolbar()
 		Gui->SameLine();
 		if (Gui->Button("Frame Scene", Scene->GetStatus().bReady && !PreviewCamera))
 		{
-			FitSceneCamera(ViewCamera, *Scene,
-			               ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
+			FrameScene();
 		}
 		Gui->SameLine();
 		Gui->Text("  |  Scene Editor");

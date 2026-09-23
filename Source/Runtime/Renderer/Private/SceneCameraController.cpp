@@ -138,6 +138,16 @@ void FSceneCameraController::HandleEvent(FSceneCameraView& InCamera, const FInpu
 	}
 }
 
+void FSceneCameraController::SetMovementSpeed(float InSpeed)
+{
+	if (Mode != ESceneCameraNavigationMode::Fly || !std::isfinite(InSpeed) || InSpeed < MinimumFlySpeed ||
+	    InSpeed > MaximumFlySpeed)
+	{
+		throw std::invalid_argument("Fly camera speed must be between 0.01 and 100000 scene units per second");
+	}
+	FlyMovementSpeed = InSpeed;
+}
+
 void FSceneCameraController::HandleWheel(FSceneCameraView& InCamera, float InDelta)
 {
 	if (!std::isfinite(InDelta))
@@ -149,7 +159,7 @@ void FSceneCameraController::HandleWheel(FSceneCameraView& InCamera, float InDel
 		if (FlyMovementSpeed)
 		{
 			const double Speed = *FlyMovementSpeed * std::pow(1.2, double(InDelta));
-			FlyMovementSpeed = float(std::clamp(Speed, double(MinimumFlySpeed), double(MaximumFlySpeed)));
+			SetMovementSpeed(float(std::clamp(Speed, double(MinimumFlySpeed), double(MaximumFlySpeed))));
 		}
 		return;
 	}

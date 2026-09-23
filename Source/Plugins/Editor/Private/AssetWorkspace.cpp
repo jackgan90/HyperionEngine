@@ -1,4 +1,5 @@
 #include "AssetWorkspace.h"
+#include "Hyperion/Core/Identity.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Renderer/RenderSession.h"
@@ -11,6 +12,7 @@ FAssetWorkspace::FAssetWorkspace(FAssetService& InAssets, FTaskSystem& InTasks, 
                                  FRHICapabilities InCapabilities)
     : Assets(InAssets), Tasks(InTasks), Session(InSession), Capabilities(InCapabilities)
 {
+	WorkspaceIdentity = CreateEphemeralIdentity();
 }
 
 FAssetWorkspace::~FAssetWorkspace()
@@ -32,6 +34,7 @@ void FAssetWorkspace::Open(const std::filesystem::path& InPath, std::string_view
 	}
 	RefreshIndex();
 	auto Entry = std::make_unique<FEntry>();
+	Entry->DocumentId = WorkspaceIdentity + "/document/" + std::to_string(++NextDocument);
 	Entry->Path = Path;
 	Entry->Identity = InIdentity;
 	Entry->TextureId = NextTexture++;
@@ -309,7 +312,7 @@ std::vector<FAssetSaveResult> FAssetWorkspace::Poll()
 			Close(Entry);
 		}
 	}
-	std::vector<FAssetSaveResult> Saved;
+	auto Saved = std::exchange(ExternalSaved, {});
 	for (const auto& Entry : Entries)
 	{
 		PollEntry(*Entry);

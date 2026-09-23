@@ -2,6 +2,7 @@
 #include "AssetWorkspace.h"
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/RHI/RHISwapchain.h"
+#include "Hyperion/Renderer/RenderOutput.h"
 
 namespace Hyperion
 {
@@ -24,8 +25,10 @@ public:
 	FGui& GuiContext();
 	FVec4 ObservedBounds(std::string_view InId) const;
 	std::uint64_t RenderedFrames() const;
+	void RequestImage(std::shared_ptr<FPendingImageOutput> InPending);
 
 private:
+	std::shared_ptr<FPendingImageOutput> PendingImage;
 	void Stop();
 	void SaveLayout();
 	void RouteShortcuts(std::vector<FInputEvent>& InEvents);

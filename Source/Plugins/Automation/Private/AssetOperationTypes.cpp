@@ -2,6 +2,23 @@
 
 namespace Hyperion
 {
+template<> const FRecordDescriptor& RecordType<FAssetDocumentList>()
+{
+	static const auto Type = MakeRecord<FAssetDocumentList>("automation.asset.documents",
+	                                                        {Member("documents", &FAssetDocumentList::Documents),
+	                                                         Member("total", &FAssetDocumentList::Total),
+	                                                         Member("nextOffset", &FAssetDocumentList::Next)});
+	return Type;
+}
+
+template<> const FRecordDescriptor& RecordType<FAssetWorkspaceQuery>()
+{
+	static const auto Type = MakeRecord<FAssetWorkspaceQuery>(
+	    "automation.asset.workspace.query",
+	    {Member("offset", &FAssetWorkspaceQuery::Offset), Member("limit", &FAssetWorkspaceQuery::Limit)});
+	return Type;
+}
+
 namespace
 {
 FRecordMemberOptions Required(std::string InDescription)
@@ -81,7 +98,11 @@ template<> const FRecordDescriptor& RecordType<FAssetDocumentInfo>()
 	     Member("dirty", &FAssetDocumentInfo::bDirty), Member("canUndo", &FAssetDocumentInfo::bCanUndo),
 	     Member("canRedo", &FAssetDocumentInfo::bCanRedo), Member("readOnly", &FAssetDocumentInfo::bReadOnly),
 	     Member("saving", &FAssetDocumentInfo::bSaving), Member("editing", &FAssetDocumentInfo::bEditing),
-	     Member("diskRevision", &FAssetDocumentInfo::DiskRevision), Member("fields", &FAssetDocumentInfo::Fields)});
+	     Member("diskRevision", &FAssetDocumentInfo::DiskRevision), Member("fields", &FAssetDocumentInfo::Fields),
+	     Member("state", &FAssetDocumentInfo::State,
+	            {.Description =
+	                 "ready, loading or failed. Non-ready entries have generation 0; close then reopen to retry."}),
+	     Member("error", &FAssetDocumentInfo::Error), Member("active", &FAssetDocumentInfo::bActive)});
 	return Type;
 }
 

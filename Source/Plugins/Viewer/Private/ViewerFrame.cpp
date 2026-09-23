@@ -37,6 +37,7 @@ void FViewerPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	const auto Frame = static_cast<int>(InUpdate.Frame);
+	PollApplicationClose();
 	if (Window->ShouldClose() || (Options.Frames && Frame >= Options.Frames))
 	{
 		Finish();
@@ -71,6 +72,7 @@ void FViewerPlugin::PollInput()
 			if (Event.Type == EEventType::Key && Event.Key == EKey::Tab && Event.bDown)
 			{
 				Settings.bShowGui = !Settings.bShowGui;
+				++SettingsRevision;
 			}
 		}
 	}
@@ -134,7 +136,12 @@ FDebugActions FViewerPlugin::BuildGui(int InFrame, float InDelta, FSize InLogica
 		                     UiEvents);
 		ExerciseContactInput(UiEvents);
 		Gui->BeginFrame(InLogical, InPixels, InDelta, UiEvents);
-		Context->Publish(FDebugPanelEvent{*Gui, Settings, Metrics, InLogical, Actions});
+		auto Candidate = Settings;
+		Context->Publish(FDebugPanelEvent{*Gui, Candidate, Metrics, InLogical, Actions});
+		if (!EqualAppSettings(Candidate, Settings))
+		{
+			EditApplicationSettings(SettingsRevision, Candidate);
+		}
 		RdcButtonBounds = Actions.CaptureRdcBounds;
 		ContactShadowBounds = Actions.ContactShadowBounds;
 		if (ScenePlugin)

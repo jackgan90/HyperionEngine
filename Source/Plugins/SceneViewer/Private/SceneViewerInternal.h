@@ -15,7 +15,12 @@ struct FSceneViewerPlugin::FImpl
 	    : Tasks(InTasks), Assets(InAssets), Path(std::move(InPath)), Scene(InSession, InTasks, InAssets),
 	      SceneTarget(Scene, InAssets)
 	{
-		Document.Attach(SceneTarget, false);
+		Document.Attach(SceneTarget, false, ESceneDeleteSelection::FirstRemainingModel);
+		Document.SetSelectionObserver(
+		    [this]
+		    {
+			    Selected = Document.Selection().Primary().value_or(FSceneHandle{});
+		    });
 		Document.SetPath(PathToUtf8(Path));
 	}
 
@@ -56,6 +61,7 @@ struct FSceneViewerPlugin::FImpl
 	bool bGuiInteraction{};
 	void AdvanceAnimation(float InDeltaSeconds);
 	bool bInstanceBatching = true;
+	bool bForceOrdinary{};
 	float AnimationTime{};
 	FRenderView LastView;
 	FMat4 FrozenView = Identity();

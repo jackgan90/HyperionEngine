@@ -1,5 +1,7 @@
 #pragma once
 #include "Hyperion/AssetEditing/AssetDocument.h"
+#include "Hyperion/AssetEditing/AssetPreview.h"
+#include "Hyperion/AssetEditing/AssetWorkspace.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
@@ -7,9 +9,21 @@
 
 namespace Hyperion
 {
-class FAssetWorkspace
+class FAssetWorkspace : public IAssetWorkspace, public IAssetPreviewWorkspace
 {
 public:
+	FAssetPreviewState PreviewState(std::string_view InDocument) const override;
+	FAssetPreviewState EditPreview(std::string_view InDocument, std::uint64_t InGeneration,
+	                               const FAssetPreviewSettings& InSettings, bool bInFrame) override;
+	std::string OpenDocument(const std::filesystem::path& InPath) override;
+	bool IsBlocked() const override;
+	void PumpDocument(std::string_view InId) override;
+	std::optional<FAssetWorkspaceEntry> FindDocument(std::string_view InId) const override;
+	std::vector<FAssetWorkspaceEntry> Documents() const override;
+	void ActivateDocument(std::string_view InId) override;
+	void CloseDocument(std::string_view InId) override;
+	void SetExternalEditing(std::string_view InId, bool bInEditing) override;
+	void SetHostBlocked(bool bInBlocked);
 	FAssetWorkspace(FAssetService& InAssets, FTaskSystem& InTasks, FRenderSession& InSession,
 	                FRHICapabilities InCapabilities);
 	~FAssetWorkspace();
@@ -47,6 +61,10 @@ public:
 
 private:
 	struct FEntry;
+	FAssetPreviewSettings GetPreviewSettings(const FEntry& InEntry) const;
+	void SetPreviewSettings(FEntry& InEntry, const FAssetPreviewSettings& InSettings);
+	void SetTexturePreview(FEntry& InEntry, const FAssetPreviewSettings& InSettings);
+	void FramePreview(FEntry& InEntry);
 
 	struct FReferenceSelection
 	{
@@ -91,6 +109,8 @@ private:
 
 	struct FEntry
 	{
+		std::string DocumentId;
+		bool bExternalEditing{};
 		std::filesystem::path Path;
 		std::string Identity;
 		FAssetRequest Load;
@@ -133,7 +153,7 @@ private:
 
 		bool HasPendingEdit() const
 		{
-			return EncodingEdit.has_value() || ReferenceEdit.has_value();
+			return bExternalEditing || EncodingEdit.has_value() || ReferenceEdit.has_value();
 		}
 
 		float Exposure = 1;
@@ -172,6 +192,10 @@ private:
 	FRenderSession& Session;
 	FRHICapabilities Capabilities;
 	std::vector<std::unique_ptr<FEntry>> Entries;
+	std::vector<FAssetSaveResult> ExternalSaved;
+	std::string WorkspaceIdentity;
+	std::uint64_t NextDocument{};
+	bool bHostBlocked{};
 	std::vector<FAssetRef> AssetIndex;
 
 	struct FReferenceChoices

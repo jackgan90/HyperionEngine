@@ -1,19 +1,25 @@
 #pragma once
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Renderer/RenderPlugin.h"
+#include "Hyperion/Renderer/SceneViewport.h"
 
 namespace Hyperion
 {
 class FRenderSession;
 class FSceneInstance;
 
-class FModelViewerPlugin final : public IScenePlugin
+class FModelViewerPlugin final : public IScenePlugin, public ISceneViewport
 {
 public:
 	FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
 	                   std::filesystem::path InPath);
 	~FModelViewerPlugin() override;
 	void Start() override;
+	void Start(FPluginContext& InContext) override;
+	FSceneViewportState ViewportState() const override;
+	void SetViewportCamera(const FSceneCameraView& InCamera) override;
+	void FrameScene() override;
+	void SetViewportOptions(const FSceneViewportOptions& InOptions) override;
 
 	bool HasScene() const override
 	{

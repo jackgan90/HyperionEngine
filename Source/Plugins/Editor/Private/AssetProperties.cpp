@@ -1,5 +1,7 @@
+#include "Hyperion/AssetEditing/AssetProperties.h"
 #include "AssetPropertyWidgets.h"
 #include "AssetWorkspace.h"
+#include "Hyperion/AssetEditing/ModelProperties.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Math/AffineTransform.h"
 #include <algorithm>
@@ -64,7 +66,14 @@ void FAssetWorkspace::EditField(FGui& InGui, FEntry& InEntry, const char* InFiel
 	}
 	if (bChanged)
 	{
-		InEntry.Document->Set(InField, InValue(), Interaction.ChangedInteraction, bInAffectsPreview);
+		if (std::string_view(InField) == "primitives")
+		{
+			CommitModelPrimitiveFields(*InEntry.Document, InValue(), Interaction.ChangedInteraction);
+		}
+		else
+		{
+			CommitAssetField(*InEntry.Document, InField, InValue(), Interaction.ChangedInteraction, bInAffectsPreview);
+		}
 	}
 }
 
@@ -326,7 +335,7 @@ void FAssetWorkspace::DrawModelPrimitives(FGui& InGui, FEntry& InEntry, const FM
 		if (AssetCombo(InGui, "Material slot", Choices, Slot))
 		{
 			Primitive["material"] = WriteValue(static_cast<std::int32_t>(Slot));
-			Document.Set("primitives", std::move(Primitives));
+			CommitModelPrimitiveFields(Document, Primitives);
 		}
 	}
 }

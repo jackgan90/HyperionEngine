@@ -24,6 +24,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	FPluginRegistry Registry;
 	RegisterAutomationServices(Registry);
 	RegisterSceneAutomation(Registry);
+	RegisterAssetAutomation(Registry);
 	RegisterAutomationLocal(Registry, "Editor");
 #if HYP_ENABLE_RENDERDOC
 	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
@@ -54,7 +55,10 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterContactShadowServices(Registry);
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "editor";
-	Descriptor.Provides = {typeid(FSceneEditDocument)};
+	Descriptor.Provides = {typeid(FSceneEditDocument),     typeid(ISceneDocumentHost),    typeid(IAssetWorkspace),
+	                       typeid(IAssetPreviewWorkspace), typeid(ISceneViewport),        typeid(IScenePlacement),
+	                       typeid(IRenderOutput),          typeid(IRenderCaptureControl), typeid(IRenderDiagnostics),
+	                       typeid(IApplicationClose)};
 	Descriptor.Dependencies = {"gui"};
 	Descriptor.After = {"contact-shadows"};
 #if HYP_ENABLE_RENDERDOC
@@ -83,7 +87,8 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	Selection.Disabled = Options.DisabledPlugins;
 	if (!Options.bKernelOnly)
 	{
-		Selection.Requested = {"contact-shadows", "editor", "automation-scene", "automation-local"};
+		Selection.Requested = {"contact-shadows", "editor", "automation-scene", "automation-assets",
+		                       "automation-local"};
 		if (Options.Preferences.bRenderDocCapture)
 		{
 			Selection.Requested.push_back("renderdoc");

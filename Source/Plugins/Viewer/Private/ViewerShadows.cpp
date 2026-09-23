@@ -113,6 +113,7 @@ void FViewerPlugin::UpdateShadowLight(int InFrame)
 
 void FViewerPlugin::DrawShadowGui()
 {
+	const auto Before = ShadowSettings;
 	const auto Size = Gui->DisplaySize();
 	const bool bPreview = ShadowSettings.bEnabled && ShadowSettings.DebugMode >= 2;
 	const float PreviewSize = std::min({Gui->Scale(256), Size.X, Size.Y / 3});
@@ -139,50 +140,7 @@ void FViewerPlugin::DrawShadowGui()
 		Gui->Slider("Depth (texels)", ShadowSettings.ReceiverBias, 0, 2);
 		Gui->Slider("Cascade blend", ShadowSettings.BlendFraction, .01f, .25f);
 		Gui->Slider("Distance fade", ShadowSettings.FadeFraction, .01f, .5f);
-		auto* Scene = GetSceneInstance();
-		const auto Handle = Scene ? Scene->GetSettings().MainDirectionalLight : std::optional<FSceneHandle>{};
-		FSceneNodeView LightView;
-		if (Handle && Scene->GetNodeView(*Handle, LightView))
-		{
-			auto Light = *LightView.Node->DirectionalLight();
-			bool bLightChanged = Gui->InputVector("Main light color", Light.Color);
-			bLightChanged |= Gui->InputFloat("Main light intensity", Light.Intensity);
-			bLightChanged |= Gui->Checkbox("Main light casts shadows", Light.bCastShadows);
-			if (bLightChanged)
-			{
-				try
-				{
-					Scene->SetDirectionalLight(*Handle, Light);
-				}
-				catch (const std::exception& Failure)
-				{
-					Gui->TextWrapped(Failure.what());
-				}
-			}
-			const auto Direction = ScaleVector(ExtractScenePose(LightView.World).Forward, -1);
-			float AzimuthDegrees = std::atan2(Direction.X, Direction.Z) * 180 / 3.14159265f;
-			float ElevationDegrees = std::asin(std::clamp(Direction.Y, -1.f, 1.f)) * 180 / 3.14159265f;
-			bool bChanged = Gui->Slider("Light azimuth", AzimuthDegrees, -180, 180);
-			bChanged |= Gui->Slider("Light elevation", ElevationDegrees, -90, 90);
-			if (bChanged)
-			{
-				const float Azimuth = AzimuthDegrees * 3.14159265f / 180;
-				const float Elevation = ElevationDegrees * 3.14159265f / 180;
-				try
-				{
-					SetSceneLightDirection({std::sin(Azimuth) * std::cos(Elevation), std::sin(Elevation),
-					                        std::cos(Azimuth) * std::cos(Elevation)});
-				}
-				catch (const std::exception& Failure)
-				{
-					Gui->TextWrapped(Failure.what());
-				}
-			}
-		}
-		else
-		{
-			Gui->Text("No main directional light selected");
-		}
+		DrawMainLightGui();
 		const std::array Names{"Shaded", "Cascade tint", "Depth 0", "Depth 1", "Depth 2", "Depth 3"};
 		Gui->Text(std::string("Display: ") + Names[ShadowSettings.DebugMode]);
 		if (Gui->Button("Cycle shadow display"))
@@ -204,5 +162,19 @@ void FViewerPlugin::DrawShadowGui()
 		}
 	}
 	Gui->EndPanel();
+	const auto Edited = ShadowSettings;
+	ShadowSettings = Before;
+	SetShadowControls(Edited);
+}
+
+FCascadedShadowSettings FViewerPlugin::ShadowControls() const
+{
+	return ShadowSettings;
+}
+
+void FViewerPlugin::SetShadowControls(const FCascadedShadowSettings& InSettings)
+{
+	ValidateShadowSettings(InSettings);
+	ShadowSettings = InSettings;
 }
 } // namespace Hyperion

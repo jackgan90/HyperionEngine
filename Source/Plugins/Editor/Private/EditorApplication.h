@@ -6,6 +6,7 @@
 #include "EditorInspectionCache.h"
 #include "EditorPreferences.h"
 #include "EditorSelection.h"
+#include "Hyperion/Config/ApplicationClose.h"
 #include "Hyperion/Content/ContentRootService.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
@@ -14,16 +15,22 @@
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/IO/MountedFileSystem.h"
+#include "Hyperion/Renderer/RenderCaptureControl.h"
+#include "Hyperion/Renderer/RenderDiagnostics.h"
+#include "Hyperion/Renderer/RenderOutput.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneEditTarget.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
+#include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/Renderer/SelectionOutline.h"
 #include "Hyperion/Renderer/TransformGizmo.h"
 #include "Hyperion/Renderer/TransientGeometry.h"
 #include "Hyperion/Renderer/ViewportPlacement.h"
 #include "Hyperion/Scene/ObjectPlacement.h"
 #include "Hyperion/SceneEditing/SceneDocument.h"
+#include "Hyperion/SceneEditing/SceneDocumentHost.h"
+#include "Hyperion/SceneEditing/ScenePlacement.h"
 #include <semaphore>
 
 namespace Hyperion
@@ -66,7 +73,15 @@ struct FEditorOptions
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
 
-class FEditorPlugin final : public FPlugin, public IContentRootParticipant
+class FEditorPlugin final : public FPlugin,
+                            public IContentRootParticipant,
+                            public ISceneDocumentHost,
+                            public ISceneViewport,
+                            public IScenePlacement,
+                            public IRenderOutput,
+                            public IRenderCaptureControl,
+                            public IRenderDiagnostics,
+                            public IApplicationClose
 {
 public:
 	FEditorPlugin(FEditorOptions InOptions, FPluginContext& InContext);
@@ -78,8 +93,39 @@ public:
 	void Update(const FPluginUpdate& InUpdate) override;
 	void Stop() noexcept override;
 	void Finish();
+	void OpenDocument(const FSceneOpenRequest& InRequest) override;
+	FSceneHostStatus DocumentStatus() const override;
+	FSceneHostStatus PollDocument() override;
+	bool SupportsContentTransitions() const override;
+	FSceneViewportState ViewportState() const override;
+	void SetViewportCamera(const FSceneCameraView& InCamera) override;
+	void FrameScene() override;
+	void SetViewportOptions(const FSceneViewportOptions& InOptions) override;
+	void SetViewportSpeed(float InSpeed) override;
+	void PreviewSceneCamera(std::optional<FSceneHandle> InHandle) override;
+	void SaveInitialView() override;
+	void CreateViewCamera() override;
+	void ApplyViewToCamera(FSceneHandle InHandle) override;
+	FPlacementCatalog PlacementCatalog() const override;
+	std::optional<FSceneNodeInfo> PlaceObject(const FScenePlacementRequest& InRequest) override;
+	std::shared_ptr<FPendingImageOutput> RequestImage(const FImageOutputRequest& InRequest) override;
+	std::optional<FImageArtifact> PollImage(const std::shared_ptr<FPendingImageOutput>& InPending) override;
+	FRenderCaptureInfo RenderCaptureInfo() const override;
+	void RequestRenderCapture() override;
+	void OpenRenderCapture() override;
+	void SetRenderCapturePreference(bool bInEnabled) override;
+	FRenderDiagnostics RenderDiagnostics() override;
+	FApplicationCloseState ApplicationCloseState() const override;
+	FApplicationCloseState RequestApplicationClose(const FApplicationCloseRequest& InRequest) override;
+	FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) override;
 
 private:
+	std::string CloseState = "idle";
+	std::string CloseError;
+	void StartSaveBeforeClose(const std::string& InPath);
+	void DiscardBeforeClose();
+	std::shared_ptr<FPendingImageOutput> PendingImage;
+
 	struct FProjectedLightMarker
 	{
 		FSceneNodeView View;
@@ -88,6 +134,8 @@ private:
 	};
 
 	void Initialize();
+	void LoadSceneDocument(const std::string& InPath, bool bInDiscard);
+	bool IsDocumentInteractionBusy() const;
 	void InitializeSceneDocument();
 	void UpdateDocumentInteraction();
 	void EnsureAssetWindow();

@@ -158,9 +158,14 @@ void FAssetEditorWindow::Render(FGuiDrawData InData, const std::filesystem::path
 		                          Workspace.Build(Graph, Textures);
 		                          Renderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
 		                          Capture = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size, bInVsync,
-		                                                 !InCapture.empty());
+		                                                 !InCapture.empty() || PendingImage != nullptr);
 	                          }));
 	++FrameCount;
+	if (PendingImage)
+	{
+		CompleteImageOutput(*PendingImage, Capture, FrameCount);
+		PendingImage.reset();
+	}
 	if (!InCapture.empty())
 	{
 		if (InCapture.has_parent_path())
@@ -169,5 +174,10 @@ void FAssetEditorWindow::Render(FGuiDrawData InData, const std::filesystem::path
 		}
 		SaveImage(InCapture, Capture);
 	}
+}
+
+void FAssetEditorWindow::RequestImage(std::shared_ptr<FPendingImageOutput> InPending)
+{
+	PendingImage = std::move(InPending);
 }
 } // namespace Hyperion

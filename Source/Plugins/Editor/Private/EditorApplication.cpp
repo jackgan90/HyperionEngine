@@ -84,6 +84,27 @@ void FEditorPlugin::OpenScene(const std::string& InPath)
 		bDiscardDialog = bRequestDiscard = true;
 		return;
 	}
+	try
+	{
+		LoadSceneDocument(InPath, false);
+	}
+	catch (const std::exception& Failure)
+	{
+		Error = Failure.what();
+	}
+}
+
+void FEditorPlugin::LoadSceneDocument(const std::string& InPath, bool bInDiscard)
+{
+	if (PendingSave)
+	{
+		throw FSceneEditError("busy", "Wait for the scene save to complete");
+	}
+	if (IsDirty() && !bInDiscard)
+	{
+		throw FSceneEditError("dirty_document",
+		                      "Save the scene or explicitly discard changes before opening another scene");
+	}
 	Camera.Reset();
 	bViewportCameraInitialized = false;
 	bCameraDragging = false;
@@ -93,22 +114,23 @@ void FEditorPlugin::OpenScene(const std::string& InPath)
 	Error.clear();
 	bReadyLogged = false;
 	ReadyFrames = 0;
-	try
+	if (InPath.empty())
+	{
+		Scene->Close();
+		InitializeSceneDocument();
+	}
+	else
 	{
 		Scene->Load(InPath);
-		CancelPlacement();
-		PlacementModels.clear();
-		PlacementPublication.reset();
-		PlacementPublicationPreview.reset();
-		ResetDocument();
-		SceneDocument.SetPath(InPath);
-		++OpenCount;
-		Log(ELogLevel::Info, "Editor opening scene: " + CurrentPath);
 	}
-	catch (const std::exception& Failure)
-	{
-		Error = Failure.what();
-	}
+	CancelPlacement();
+	PlacementModels.clear();
+	PlacementPublication.reset();
+	PlacementPublicationPreview.reset();
+	ResetDocument();
+	SceneDocument.SetPath(InPath);
+	++OpenCount;
+	Log(ELogLevel::Info, "Editor opening scene: " + CurrentPath);
 }
 
 void FEditorPlugin::SaveLayout()
@@ -334,6 +356,15 @@ void FEditorPlugin::Start(FPluginContext&)
 	BenchmarkStarted = ClockNanoseconds();
 	Initialize();
 	Context.Provide(SceneDocument);
+	Context.Provide<ISceneDocumentHost>(*this);
+	Context.Provide<ISceneViewport>(*this);
+	Context.Provide<IScenePlacement>(*this);
+	Context.Provide<IRenderOutput>(*this);
+	Context.Provide<IRenderCaptureControl>(*this);
+	Context.Provide<IRenderDiagnostics>(*this);
+	Context.Provide<IApplicationClose>(*this);
+	Context.Provide<IAssetWorkspace>(*AssetWorkspace);
+	Context.Provide<IAssetPreviewWorkspace>(*AssetWorkspace);
 }
 
 void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
@@ -384,6 +415,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		Finish();
 	}
 	UpdateDocumentInteraction();
+	AssetWorkspace->SetHostBlocked(IsAssetWindowBlocked() || bFinished);
 }
 
 void FEditorPlugin::Finish()

@@ -35,7 +35,8 @@ void RegisterDocumentAccess(FOperationCatalog& InCatalog, FAssetAutomation* InPr
 	InCatalog.Register(MakeAsyncOperation<FAssetOpenRequest, FAssetDocumentInfo>(
 	    AssetInfo("asset.open", "Open an asset document",
 	              "Open a native model, material, texture or sky. Reopening the same normalized path returns its "
-	              "existing draft. Maximum 64 documents per session.",
+	              "existing draft. Standalone limits ownership to 64 documents; attached Editor uses its actual shared "
+	              "workspace.",
 	              "Loads CPU data and creates a session document; does not write files.",
 	              "CPU draft ready; no GPU preview is implied.",
 	              Example(FAssetOpenRequest{"/Game/Materials/Example.hasset"}), false, InProvider),
@@ -115,6 +116,7 @@ void RegisterDocumentEditing(FOperationCatalog& InCatalog, FAssetAutomation* InP
 	InCatalog.Register(MakeOperation<FAssetCloseRequest, FAssetCloseResult>(
 	    AssetInfo("asset.close", "Close an idle asset document",
 	              "Requires current generation and no pending save/edit. Dirty drafts require explicit discard=true. "
+	              "Loading/failed workspace entries use generation 0 and can be closed then reopened to retry. "
 	              "Closed IDs cannot be reused.",
 	              "Releases the session draft; discard=true loses unsaved edits.", "Document removed.",
 	              Example(FAssetCloseRequest{Mutation.Document, 1, false}), false, InProvider),
@@ -127,6 +129,25 @@ void RegisterDocumentEditing(FOperationCatalog& InCatalog, FAssetAutomation* InP
 
 void RegisterAssetOperations(FOperationCatalog& InCatalog, FAssetAutomation* InProvider)
 {
+	InCatalog.Register(MakeOperation<FAssetWorkspaceQuery, FAssetDocumentList>(
+	    AssetInfo("asset.documents.list", "List ready, loading and failed workspace entries",
+	              "Lists workspace entries including GUI-opened, loading and failed tabs when attached. Non-ready "
+	              "entries expose state/error and generation 0; close then reopen to retry. Closed IDs are invalid.",
+	              "Reads shared workspace.", "Main snapshot.", Example(FAssetWorkspaceQuery{}), true, InProvider),
+	    [InProvider](const auto& InRequest)
+	    {
+		    return InProvider->List(InRequest);
+	    }));
+	InCatalog.Register(MakeOperation<FAssetDocumentRequest, FAssetDocumentInfo>(
+	    AssetInfo(
+	        "asset.activate", "Activate an asset document",
+	        "Activates an existing Editor asset tab. Standalone mode validates the document without a visual tab.",
+	        "Changes active tab only.", "Main selection updated.", Example(FAssetDocumentRequest{"document-from-open"}),
+	        false, InProvider),
+	    [InProvider](const auto& InRequest)
+	    {
+		    return InProvider->Activate(InRequest);
+	    }));
 	for (const auto* Type : {&RecordType<FModelAsset>(), &RecordType<FMaterialAsset>(), &RecordType<FTextureAsset>(),
 	                         &RecordType<FSkyAsset>()})
 	{
@@ -134,5 +155,6 @@ void RegisterAssetOperations(FOperationCatalog& InCatalog, FAssetAutomation* InP
 	}
 	RegisterDocumentAccess(InCatalog, InProvider);
 	RegisterDocumentEditing(InCatalog, InProvider);
+	RegisterAssetProperties(InCatalog, InProvider);
 }
 } // namespace Hyperion

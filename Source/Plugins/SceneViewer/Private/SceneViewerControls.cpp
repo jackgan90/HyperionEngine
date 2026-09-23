@@ -5,6 +5,53 @@
 
 namespace Hyperion
 {
+FSceneViewportState FSceneViewerPlugin::ViewportState() const
+{
+	const auto& P = *Impl;
+	FSceneViewportOptions Options;
+	Options.Culling = static_cast<std::uint32_t>(P.Mode);
+	Options.Frozen = P.bFrozen;
+	if (!P.bForceOrdinary)
+	{
+		Options.InstanceBatching = P.bInstanceBatching;
+	}
+	Options.ModelBounds = P.bBounds;
+	Options.LightBounds = P.bLightBounds;
+	Options.Animate = P.bAnimate;
+	return {P.ViewCamera, {}, Options, P.CameraController.GetMovementSpeed(P.ViewCamera), P.bViewInitialized, false};
+}
+
+void FSceneViewerPlugin::SetViewportCamera(const FSceneCameraView& InCamera)
+{
+	ValidateSceneCameraView(InCamera);
+	Impl->ViewCamera = InCamera;
+	Impl->bViewInitialized = true;
+	Impl->CameraController.Reset();
+}
+
+void FSceneViewerPlugin::FrameScene()
+{
+	Fit();
+}
+
+void FSceneViewerPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
+{
+	ValidateViewportOptions(InOptions, ViewportState().Options);
+	auto& P = *Impl;
+	if (InOptions.Culling)
+	{
+		SetCullingMode(static_cast<ESceneCullingMode>(*InOptions.Culling));
+	}
+	if (InOptions.Frozen)
+	{
+		SetFrozen(*InOptions.Frozen);
+	}
+	P.bInstanceBatching = InOptions.InstanceBatching.value_or(P.bInstanceBatching);
+	P.bBounds = InOptions.ModelBounds.value_or(P.bBounds);
+	P.bLightBounds = InOptions.LightBounds.value_or(P.bLightBounds);
+	P.bAnimate = InOptions.Animate.value_or(P.bAnimate);
+}
+
 void FSceneViewerPlugin::FImpl::UpdateCamera(FRenderFrame& InFrame)
 {
 	const auto CurrentManifest = Scene.GetManifest();
@@ -82,23 +129,62 @@ void FSceneViewerPlugin::AddModel()
 	{
 		if (Asset.Data && Asset.Error.empty())
 		{
-			FSceneNode Node;
-			Node.Name = "Added model";
-			Node.Model() = FSceneModelComponent{Asset.Id, Asset.Data};
 			const auto Pose = ExtractScenePose(P.ViewCamera.World);
-			Node.Local() = Translation(Add(Pose.Eye, ScaleVector(Pose.Forward, P.ViewCamera.Lens.FocusDistance)));
-			P.Selected = P.Document.CommitCreate(std::move(Node), false);
+			PlaceObject({P.Document.Id(), P.Scene.GetRevision(), Asset.Id,
+			             Add(Pose.Eye, ScaleVector(Pose.Forward, P.ViewCamera.Lens.FocusDistance))});
 			return;
 		}
 	}
 }
 
+FPlacementCatalog FSceneViewerPlugin::PlacementCatalog() const
+{
+	FPlacementCatalog Result;
+	for (const auto& Asset : Impl->Scene.GetAssets())
+	{
+		Result.Items.push_back({Asset.Id,
+		                        Asset.Id,
+		                        {"Loaded models"},
+		                        Asset.Error.empty() && !Asset.Data ? "Preparing model" : Asset.Error});
+	}
+	return Result;
+}
+
+std::optional<FSceneNodeInfo> FSceneViewerPlugin::PlaceObject(const FScenePlacementRequest& InRequest)
+{
+	auto& P = *Impl;
+	P.Document.RequireIdle(InRequest.Document, InRequest.Revision);
+	if (!IsFinite(InRequest.Position))
+	{
+		throw std::invalid_argument("Position must be finite");
+	}
+	for (const auto& Asset : P.Scene.GetAssets())
+	{
+		if (Asset.Id != InRequest.Object)
+		{
+			continue;
+		}
+		if (!Asset.Error.empty())
+		{
+			throw FSceneEditError("load_failed", Asset.Error);
+		}
+		if (!Asset.Data)
+		{
+			return {};
+		}
+		FSceneNode Node;
+		Node.Name = "Added model";
+		Node.Model() = FSceneModelComponent{Asset.Id, Asset.Data};
+		Node.Local() = Translation(InRequest.Position);
+		const auto Handle = P.Document.CommitCreate(std::move(Node), false);
+		return DescribeSceneNode(P.Document, {P.Document.Id(), Handle});
+	}
+	throw FSceneEditError("not_found", "Query the current scene placement catalog");
+}
+
 void FSceneViewerPlugin::RemoveSelected()
 {
-	Impl->Document.Selection() = Impl->Selected;
 	Impl->Document.CommitDelete();
-	const auto Models = Impl->Scene.GetNodes(ESceneNodeKind::Model);
-	Impl->Selected = Models.empty() ? FSceneHandle{} : Models.front();
 }
 
 void FSceneViewerPlugin::ToggleSelected()

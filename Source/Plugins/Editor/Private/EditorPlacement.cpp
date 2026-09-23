@@ -2,6 +2,44 @@
 
 namespace Hyperion
 {
+FPlacementCatalog FEditorPlugin::PlacementCatalog() const
+{
+	FPlacementCatalog Result;
+	for (const auto* Object : PlacementRegistry.Search("All", {}))
+	{
+		Result.Items.push_back({Object->Id, Object->Label, Object->Categories, PlacementUnavailableReason(*Object)});
+	}
+	return Result;
+}
+
+std::optional<FSceneNodeInfo> FEditorPlugin::PlaceObject(const FScenePlacementRequest& InRequest)
+{
+	UpdateDocumentInteraction();
+	SceneDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+	const auto* Object = PlacementRegistry.Find(InRequest.Object);
+	if (!Object || !IsFinite(InRequest.Position))
+	{
+		throw std::invalid_argument("A registered placeable ID and finite position are required");
+	}
+	if (Object->Model && !PlacementModels.contains(Object->Id))
+	{
+		PlacementModels[Object->Id].Asset = Scene->RegisterModelAsset(*Object->Model);
+	}
+	Scene->Tick();
+	PollPlacementResources();
+	const auto Unavailable = PlacementUnavailableReason(*Object);
+	if (!Unavailable.empty())
+	{
+		if (Unavailable.starts_with("Preparing"))
+		{
+			return {};
+		}
+		throw FSceneEditError("load_failed", Unavailable);
+	}
+	CommitPlacement(*Object, InRequest.Position);
+	return DescribeSceneNode(SceneDocument, {SceneDocument.Id(), *SceneDocument.Selection().Primary()});
+}
+
 namespace
 {
 constexpr const char* PlacementPayload = "Hyperion.PlaceableObject.v1";
@@ -176,6 +214,10 @@ void FEditorPlugin::UpdatePlacementPreview(const FPlaceableObject& InObject, con
 
 void FEditorPlugin::CommitPlacement(const FPlaceableObject& InObject, FVec3 InPosition)
 {
+	if (!IsFinite(InPosition) || !PlacementUnavailableReason(InObject).empty())
+	{
+		throw std::invalid_argument("Placement requires finite coordinates and prepared resources");
+	}
 	auto Node = InObject.Create();
 	Node.Name = InObject.Label;
 	Node.Local().Values[12] = InPosition.X;

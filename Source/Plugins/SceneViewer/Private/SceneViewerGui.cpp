@@ -152,9 +152,20 @@ void FSceneViewerPlugin::DrawGui(FGui& InGui, const FSceneVisibilityStats& InSta
 		{
 			SetFrozen(bFrozen);
 		}
-		DrawBatchControl(InGui, P.bInstanceBatching, bInForceOrdinary);
-		InGui.Checkbox("Show model bounds", P.bBounds);
-		InGui.Checkbox("Show light influence", P.bLightBounds);
+		bool bBatching = P.bInstanceBatching;
+		bool bBounds = P.bBounds;
+		bool bLights = P.bLightBounds;
+		DrawBatchControl(InGui, bBatching, bInForceOrdinary);
+		InGui.Checkbox("Show model bounds", bBounds);
+		InGui.Checkbox("Show light influence", bLights);
+		FSceneViewportOptions Options;
+		if (!P.bForceOrdinary)
+		{
+			Options.InstanceBatching = bBatching;
+		}
+		Options.ModelBounds = bBounds;
+		Options.LightBounds = bLights;
+		SetViewportOptions(Options);
 		if (InGui.Button("Fit all [Home]"))
 		{
 			Fit();

@@ -4,6 +4,12 @@
 
 namespace Hyperion
 {
+enum class ESceneDeleteSelection
+{
+	Clear,
+	FirstRemainingModel
+};
+
 class FSceneEditError : public std::runtime_error
 {
 public:
@@ -58,7 +64,8 @@ public:
 	FSceneEditDocument();
 	FSceneEditDocument(const FSceneEditDocument&) = delete;
 	FSceneEditDocument& operator=(const FSceneEditDocument&) = delete;
-	void Attach(ISceneEditTarget& InTarget, bool bInHistory = true);
+	void Attach(ISceneEditTarget& InTarget, bool bInHistory = true,
+	            ESceneDeleteSelection InDeleteSelection = ESceneDeleteSelection::Clear);
 	void Detach(FTaskSystem& InTasks);
 	ISceneEditTarget& Target() const;
 	const FSceneDocumentState& GetState() const;
@@ -93,6 +100,8 @@ public:
 	std::optional<FSceneSaveOutcome> TakeSaveOutcome();
 	// View-only observer; scoped by the owning plugin and cleared on Detach. Called after history application.
 	void SetHistoryObserver(std::function<void(const FSceneHandleMap&)> InObserver);
+	void SetSelectionObserver(std::function<void()> InObserver);
+	void ReplaceSelection(FSceneSelection InSelection);
 
 private:
 	void RestoreHistory(std::size_t InIndex, bool bInAfter);
@@ -105,10 +114,12 @@ private:
 	FSceneDocumentState State;
 	FSceneSelection Selected;
 	bool bHistory = true;
+	ESceneDeleteSelection DeleteSelection = ESceneDeleteSelection::Clear;
 	bool bBusy{};
 	bool bPreviewDirty{};
 	bool bAssetRefreshHistory{};
 	std::function<void(const FSceneHandleMap&)> Observer;
+	std::function<void()> SelectionObserver;
 	FSceneHandleMap Remapped;
 	std::optional<FSceneSaveOutcome> SaveOutcome;
 };

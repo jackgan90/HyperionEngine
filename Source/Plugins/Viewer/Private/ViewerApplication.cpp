@@ -132,6 +132,13 @@ void FViewerPlugin::Start(FPluginContext& InContext)
 	                       static_cast<std::uint32_t>(Settings.RenderRhiLead)};
 	FramePipeline = std::make_unique<FFramePipeline>(Services->Tasks, Metrics.FrameLimits);
 	ValidateRun();
+	InContext.Provide<IRenderOutput>(*this);
+	InContext.Provide<IRenderCaptureControl>(*this);
+	InContext.Provide<IApplicationSettings>(*this);
+	InContext.Provide<IRenderDiagnostics>(*this);
+	InContext.Provide<IShadowControls>(*this);
+	InContext.Provide<ISceneLightControls>(*this);
+	InContext.Provide<IApplicationClose>(*this);
 	Log(ELogLevel::Info, "Windows rendering application started");
 }
 

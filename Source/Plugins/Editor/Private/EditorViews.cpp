@@ -12,7 +12,7 @@ void FEditorPlugin::SetPreviewCamera(std::optional<FSceneHandle> InHandle)
 	if (InHandle)
 	{
 		FinishInspectorEdit();
-		Selection = InHandle;
+		SceneDocument.ReplaceSelection(FSceneSelection(InHandle));
 	}
 	PreviewCamera = InHandle;
 	Camera.Reset();
@@ -153,18 +153,20 @@ void FEditorPlugin::DrawViewOptions()
 	Gui->Text(Speed.str());
 	Gui->Tooltip("Hold right mouse and scroll to adjust movement speed");
 	Gui->SetNextItemWidth(180);
-	Gui->Slider("Exposure", Exposure, .1f, 8);
-	Gui->Checkbox("Show light icons", bShowLightMarkers);
+	auto ViewOptions = ViewportState().Options;
+	Gui->Slider("Exposure", *ViewOptions.Exposure, .1f, 8);
+	Gui->Checkbox("Show light icons", *ViewOptions.LightMarkers);
 	const std::array<std::string, 2> OutlineModes{"Union", "Per object"};
 	std::size_t OutlineMode = static_cast<std::size_t>(OutlineSettings.Overlap);
 	Gui->SetNextItemWidth(180);
 	if (Gui->Combo("Selection outline", OutlineModes, OutlineMode))
 	{
-		OutlineSettings.Overlap = static_cast<EOutlineOverlapMode>(OutlineMode);
+		ViewOptions.OutlineMode = static_cast<std::uint32_t>(OutlineMode);
 	}
 	InspectionBounds["outline/mode"] = Gui->LastItemBounds();
 	Gui->Tooltip("Union outlines the selected group. Per object preserves every object's outline through overlaps.");
-	Gui->Checkbox("Smooth outlines (2x)", OutlineSettings.bSupersample);
+	Gui->Checkbox("Smooth outlines (2x)", *ViewOptions.SmoothOutlines);
+	SetViewportOptions(ViewOptions);
 	InspectionBounds["outline/quality"] = Gui->LastItemBounds();
 	Gui->Separator();
 	try

@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/SceneEditing/SceneAuthoring.h"
 #include <algorithm>
 
 namespace Hyperion
@@ -134,12 +135,11 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 			                                 {
 				                                 return InComponent.Type == Type && InComponent.Get();
 			                                 });
-			if (!bPresent && !Type->bRequired && Type->CppType != typeid(FSceneModelComponent) &&
-			    Type->CppType != typeid(FSceneModelSource) && Gui->MenuItem(Type->Label.c_str()))
+			if (!bPresent && CanAddDefaultSceneComponent(*Type) && Gui->MenuItem(Type->Label.c_str()))
 			{
 				Gui->EndMenu();
 				auto Candidate = Node;
-				Candidate.Components.Add(Type->Id + "-" + std::to_string(Revision + 1), Type->Id);
+				AddDefaultSceneComponent(Candidate, Type->Id + "-" + std::to_string(Revision + 1), Type->Id);
 				CommitEdit(InView.Handle, std::move(Candidate), Revision);
 				return;
 			}

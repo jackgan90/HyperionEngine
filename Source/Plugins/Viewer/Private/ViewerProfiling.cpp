@@ -143,14 +143,23 @@ void FViewerPlugin::UpdateProfiling(int InFrame)
 
 void FViewerPlugin::HandleProfilingActions(const FDebugActions& InActions)
 {
-	if (InActions.ProfilingMask)
+	ChangeProfiling(InActions.ProfilingMask, InActions.Sampling);
+}
+
+void FViewerPlugin::ChangeProfiling(std::optional<std::uint32_t> InMask, std::optional<bool> InSampling)
+{
+	if (InMask && (*InMask & ~ProfileAllMask))
+	{
+		throw std::invalid_argument("Profiling mask must be 0-255");
+	}
+	if (InMask)
 	{
 		DrainFrames();
-		SetProfilingMask(*InActions.ProfilingMask);
+		SetProfilingMask(*InMask);
 	}
-	if (InActions.Sampling)
+	if (InSampling)
 	{
-		SetProfilingSampling(*InActions.Sampling);
+		SetProfilingSampling(*InSampling);
 	}
 }
 } // namespace Hyperion

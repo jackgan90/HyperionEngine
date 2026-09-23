@@ -25,6 +25,7 @@ struct FAutomationServer::FImpl
 	const IAutomationAccessPolicy& Access;
 	std::vector<std::unique_ptr<FPeer>> Peers;
 	bool bStopped{};
+	FConnectionClock::time_point DrainDeadline{};
 
 	void Accept();
 	void PollPeer(FPeer& InPeer);
@@ -151,7 +152,7 @@ void FAutomationServer::FImpl::PollPeer(FPeer& InPeer)
 			}
 			Message(InPeer, *Request);
 		}
-		if (InPeer.bClosing && InPeer.Channel.IsDrained())
+		if (InPeer.bClosing && (InPeer.Channel.IsDrained() || (bStopped && FConnectionClock::now() >= DrainDeadline)))
 		{
 			InPeer.Channel.Close();
 		}
@@ -186,12 +187,17 @@ void FAutomationServer::Poll()
 
 void FAutomationServer::StopAdmission()
 {
+	if (Impl->bStopped)
+	{
+		return;
+	}
 	Impl->bStopped = true;
+	// Flush already queued replies before normal shutdown. A stalled peer must not prevent exit.
+	Impl->DrainDeadline = FConnectionClock::now() + std::chrono::seconds(2);
 	Impl->Listener->Close();
 	for (auto& Peer : Impl->Peers)
 	{
 		Peer->Session.StopAdmission();
-		Peer->Channel.Close();
 		Peer->bClosing = true;
 	}
 }
@@ -202,6 +208,11 @@ std::size_t FAutomationServer::PendingCount() const
 	for (const auto& Peer : Impl->Peers)
 	{
 		Count += Peer->Session.PendingCount();
+		if (Impl->bStopped && Peer->Channel.State() != ETransportState::Closed &&
+		    Peer->Channel.State() != ETransportState::Failed)
+		{
+			++Count;
+		}
 	}
 	return Count;
 }

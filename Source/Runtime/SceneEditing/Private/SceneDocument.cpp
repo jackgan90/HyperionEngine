@@ -13,7 +13,7 @@ FSceneEditError::FSceneEditError(std::string InCode, std::string InMessage)
 {
 }
 
-void FSceneEditDocument::Attach(ISceneEditTarget& InTarget, bool bInHistory)
+void FSceneEditDocument::Attach(ISceneEditTarget& InTarget, bool bInHistory, ESceneDeleteSelection InDeleteSelection)
 {
 	if (EditTarget)
 	{
@@ -21,12 +21,14 @@ void FSceneEditDocument::Attach(ISceneEditTarget& InTarget, bool bInHistory)
 	}
 	EditTarget = &InTarget;
 	bHistory = bInHistory;
+	DeleteSelection = InDeleteSelection;
 	Reset();
 }
 
 void FSceneEditDocument::Detach(FTaskSystem& InTasks)
 {
 	Observer = {};
+	SelectionObserver = {};
 	if (State.Save)
 	{
 		try
@@ -103,7 +105,7 @@ void FSceneEditDocument::RequireIdle(const std::string& InDocument, std::uint64_
 	{
 		throw FSceneEditError("unavailable", "The scene has not loaded");
 	}
-	if (IsBusy() || !Target().IsReady())
+	if (IsBusy() || Target().IsPreparing())
 	{
 		throw FSceneEditError("busy", "Scene preparation, an interaction or a modal operation is active");
 	}
@@ -251,7 +253,7 @@ FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignM
 		Scene.RemoveSubtrees(Roots);
 		throw;
 	}
-	Selected = Entry.Handle;
+	ReplaceSelection(FSceneSelection(Entry.Handle));
 	const auto Handle = Entry.Handle;
 	Append(std::move(Entry));
 	return Handle;
@@ -318,6 +320,17 @@ void FSceneEditDocument::CommitDelete()
 	}
 	Entry.AfterSettings = Scene.Settings();
 	Selected.Clear();
+	if (DeleteSelection == ESceneDeleteSelection::FirstRemainingModel)
+	{
+		for (const auto Handle : Scene.Nodes())
+		{
+			if (Scene.FindNode(Handle)->Model())
+			{
+				Selected = Handle;
+				break;
+			}
+		}
+	}
 	Append(std::move(Entry));
 	NotifyHistory();
 }

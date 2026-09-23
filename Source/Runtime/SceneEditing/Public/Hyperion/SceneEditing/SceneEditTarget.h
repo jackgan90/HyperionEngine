@@ -12,6 +12,13 @@ public:
 	virtual ~ISceneEditTarget() = default;
 	virtual bool IsLoaded() const = 0;
 	virtual bool IsReady() const = 0;
+
+	// Terminal resource failures must remain editable so callers can repair references.
+	virtual bool IsPreparing() const
+	{
+		return !IsReady();
+	}
+
 	virtual std::uint64_t Identity() const = 0;
 	virtual std::uint64_t Revision() const = 0;
 	virtual const FSceneNode* FindNode(FSceneHandle InHandle) const = 0;

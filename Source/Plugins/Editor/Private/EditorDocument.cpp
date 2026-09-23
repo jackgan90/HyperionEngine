@@ -14,7 +14,7 @@ void FEditorPlugin::SetSelection(FEditorSelection InSelection)
 	{
 		FinishInspectorEdit();
 	}
-	Selection = std::move(InSelection);
+	SceneDocument.ReplaceSelection(std::move(InSelection));
 	bSelectionInitialized = true;
 }
 
@@ -55,6 +55,8 @@ bool FEditorPlugin::PollClose()
 
 void FEditorPlugin::CancelDiscardAction()
 {
+	CloseState = "idle";
+	CloseError.clear();
 	bDiscardDialog = bPendingClose = bSaveThenClose = false;
 	PendingOpen.clear();
 	PendingRoot.reset();
@@ -134,7 +136,7 @@ void FEditorPlugin::DrawDiscardDialog()
 	}
 	if (Gui->Button("Discard changes", !PendingSave && !AssetWorkspace->IsSaving()))
 	{
-		if (!PendingRoot || bPendingClose)
+		if (!PendingRoot && !bPendingClose)
 		{
 			ResetDocument();
 		}
@@ -142,8 +144,7 @@ void FEditorPlugin::DrawDiscardDialog()
 		Gui->ClosePopup();
 		if (bPendingClose)
 		{
-			AssetWorkspace->CloseAll();
-			Window->RequestClose();
+			DiscardBeforeClose();
 		}
 		else if (PendingRoot)
 		{
@@ -236,6 +237,10 @@ void FEditorPlugin::PollSave()
 		return;
 	}
 	Error = "Save failed: " + Outcome->Error;
+	if (bSaveThenClose)
+	{
+		CloseError = Error;
+	}
 	SaveStatus = Error;
 	if (bSaveThenSwitch || PendingRoot || !RequestedRoot.empty())
 	{
@@ -264,7 +269,14 @@ void FEditorPlugin::DrawSaveDialog()
 		{
 			try
 			{
-				SaveScene(SavePath);
+				if (bSaveThenClose)
+				{
+					StartSaveBeforeClose(SavePath);
+				}
+				else
+				{
+					SaveScene(SavePath);
+				}
 				bSaveDialog = false;
 				Gui->ClosePopup();
 			}
@@ -303,22 +315,16 @@ void FEditorPlugin::SaveBeforeClose()
 {
 	try
 	{
-		bSaveThenClose = true;
-		AssetWorkspace->SaveAll();
-		if (IsDirty())
+		if (IsDirty() && CurrentPath.empty())
 		{
-			if (CurrentPath.empty())
-			{
-				SavePath = "/Game/Scenes/Untitled.hasset";
-				bSaveDialog = bRequestSaveDialog = true;
-			}
-			else
-			{
-				SaveScene(CurrentPath);
-			}
+			bSaveThenClose = true;
+			SavePath = "/Game/Scenes/Untitled.hasset";
+			bSaveDialog = bRequestSaveDialog = true;
+			bDiscardDialog = false;
+			Gui->ClosePopup();
+			return;
 		}
-		bDiscardDialog = false;
-		Gui->ClosePopup();
+		StartSaveBeforeClose(CurrentPath);
 	}
 	catch (const std::exception& Failure)
 	{
@@ -338,10 +344,16 @@ void FEditorPlugin::PollSavedClose()
 	if (!IsDirty() && !AssetWorkspace->IsDirty())
 	{
 		bPendingClose = false;
+		CloseState = "closing";
 		Window->RequestClose();
 	}
 	else
 	{
+		CloseState = "failed";
+		if (CloseError.empty())
+		{
+			CloseError = "Documents remain dirty after save; inspect asset.info or scene.status before retrying";
+		}
 		bDiscardDialog = bRequestDiscard = true;
 	}
 }

@@ -39,6 +39,30 @@ struct FWireResult
 	std::string Name;
 };
 
+struct FRecursiveWire
+{
+	std::vector<FRecursiveWire> Children;
+};
+
+struct FRecursiveEnvelope
+{
+	FRecursiveWire Value;
+};
+
+template<> const FRecordDescriptor& RecordType<FRecursiveWire>()
+{
+	static const auto Type =
+	    MakeRecord<FRecursiveWire>("test.wire.recursive", {Member("children", &FRecursiveWire::Children)});
+	return Type;
+}
+
+template<> const FRecordDescriptor& RecordType<FRecursiveEnvelope>()
+{
+	static const auto Type =
+	    MakeRecord<FRecursiveEnvelope>("test.wire.recursive-envelope", {Member("value/~", &FRecursiveEnvelope::Value)});
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FWireChild>()
 {
 	static const auto Type = MakeRecord<FWireChild>("test.wire.child", {Member("count", &FWireChild::Count)});
@@ -101,6 +125,31 @@ FOperationInfo Info(std::string InId)
 	        "No document writes.",
 	        "Completes with the accepted name.",
 	        ParseJson(R"({"name":"example"})")};
+}
+
+void CheckRecursiveSchema()
+{
+	const auto Schema = RecordWireSchema(RecordType<FRecursiveEnvelope>());
+	const auto& Recursive = Field(Field(Schema, "properties"), "value/~");
+	const auto& Children = Field(Field(Recursive, "properties"), "children");
+	HYP_CHECK(Text(Field(Children, "items"), "$ref") == "#/properties/value~1~0");
+	FRecursiveEnvelope Value;
+	Value.Value.Children.resize(1);
+	const auto Wire = WriteRecordWire(RecordType<FRecursiveEnvelope>(), &Value);
+	const auto Decoded =
+	    std::static_pointer_cast<FRecursiveEnvelope>(ReadRecordWire(RecordType<FRecursiveEnvelope>(), Wire));
+	HYP_CHECK(Decoded->Value.Children.size() == 1);
+	auto* Tail = &Value.Value;
+	for (unsigned Depth = 0; Depth < 40; ++Depth)
+	{
+		Tail->Children.resize(1);
+		Tail = &Tail->Children.front();
+	}
+	Reject(
+	    [&]
+	    {
+		    WriteRecordWire(RecordType<FRecursiveEnvelope>(), &Value);
+	    });
 }
 
 void CheckWire()
@@ -300,6 +349,7 @@ int main()
 	try
 	{
 		CheckWire();
+		CheckRecursiveSchema();
 		CheckCatalogAndJobs();
 		CheckResultLimits();
 		CheckMcp();

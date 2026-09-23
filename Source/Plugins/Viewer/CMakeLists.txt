@@ -10,6 +10,8 @@ add_library(hyperion_viewer_plugin STATIC
   Private/ViewerOutput.cpp
   Private/ViewerProfiling.cpp
   Private/ViewerShadows.cpp
+  Private/ViewerLightControls.cpp
+  Private/ViewerCloseService.cpp
 )
 hyp_module(hyperion_viewer_plugin)
 target_link_libraries(hyperion_viewer_plugin PUBLIC hyperion_application_services

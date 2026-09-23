@@ -8,11 +8,13 @@
 namespace Hyperion
 {
 FSceneViewerPlugin::FSceneViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
-                                       std::filesystem::path InPath)
+                                       std::filesystem::path InPath, bool bInForceOrdinary)
     : Impl(std::make_unique<FImpl>(InSession, InTasks, InAssets, std::move(InPath)))
 {
 	InTasks.Require({EDomain::Main});
 	Impl->Owner = this;
+	Impl->bForceOrdinary = bInForceOrdinary;
+	Impl->bInstanceBatching = !bInForceOrdinary;
 }
 
 FSceneViewerPlugin::~FSceneViewerPlugin() = default;
@@ -27,6 +29,8 @@ void FSceneViewerPlugin::Start(FPluginContext& InContext)
 {
 	ISceneEditor::Start(InContext);
 	InContext.Provide(Impl->Document);
+	InContext.Provide<ISceneViewport>(*this);
+	InContext.Provide<IScenePlacement>(*this);
 }
 
 void FSceneViewerPlugin::Start()
@@ -41,7 +45,7 @@ void FSceneViewerPlugin::FImpl::BeginManifest()
 	Document.Reset();
 	Manifest = Scene.GetManifest();
 	const auto Models = Scene.GetNodes(ESceneNodeKind::Model);
-	Selected = Models.empty() ? FSceneHandle{} : Models.front();
+	Document.ReplaceSelection(FSceneSelection(Models.empty() ? std::nullopt : std::optional{Models.front()}));
 }
 
 void FSceneViewerPlugin::Update(FRenderFrame& InFrame)
@@ -170,22 +174,24 @@ void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSe
 	                             {
 		                             return std::make_unique<FSceneViewerPlugin>(InSession, InTasks, InAssets, Path);
 	                             }};
-	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument)};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument),
+	                       typeid(ISceneViewport), typeid(IScenePlacement)};
 	InRegistry.Add(std::move(Descriptor));
 }
 
-void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, const std::filesystem::path& InPath)
+void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, const std::filesystem::path& InPath, bool bInForceOrdinary)
 {
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "scene-viewer";
 	Descriptor.Dependencies = {"graphics", "assets"};
-	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument)};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument),
+	                       typeid(ISceneViewport), typeid(IScenePlacement)};
 	Descriptor.Requires = {typeid(FRenderSession), typeid(FTaskSystem), typeid(FAssetService)};
-	Descriptor.CreateWithContext = [Path = InPath](FPluginContext& InContext)
+	Descriptor.CreateWithContext = [Path = InPath, bInForceOrdinary](FPluginContext& InContext)
 	{
 		return std::make_unique<FSceneViewerPlugin>(InContext.Require<FRenderSession>(),
 		                                            InContext.Require<FTaskSystem>(),
-		                                            InContext.Require<FAssetService>(), Path);
+		                                            InContext.Require<FAssetService>(), Path, bInForceOrdinary);
 	};
 	InRegistry.Add(std::move(Descriptor));
 }

@@ -330,20 +330,49 @@ void FEditorPlugin::ExerciseContentClose(std::vector<FInputEvent>& InEvents)
 	{
 		case 33:
 			CheckContent(PendingRoot.has_value() && bDiscardDialog, "Close overlap lacked a root prompt");
-			Window->RequestClose();
+			CancelDiscardAction();
+			Gui->ClosePopups();
+			std::filesystem::permissions(Options.ExerciseContent / "A/Scene.hasset",
+			                             std::filesystem::perms::owner_read);
+			RequestApplicationClose({EApplicationCloseAction::Save, CurrentPath});
 			++ExerciseStep;
 			break;
 		case 34:
-			CheckContent(bPendingClose && PendingRoot && IsDirty(), "Close overlap was not exercised");
-			ExerciseClick(InEvents, DiscardChangesBounds);
-			if (ExerciseStep == 35)
+			if (CloseState == "failed" && !PendingSave)
 			{
-				bContentVerified = true;
-				Log(ELogLevel::Info, "Editor content A/B/A, save/cancel/discard, double-click, internal filter, "
-				                     "save failure, loading transition and title-bar dismissal during save verified");
+				std::filesystem::permissions(Options.ExerciseContent / "A/Scene.hasset",
+				                             std::filesystem::perms::owner_all);
+				CheckContent(bPendingClose && bDiscardDialog && IsDirty() && !Window->ShouldClose(),
+				             "Failed API save-close lost GUI exit intent or dirty work");
+				++ExerciseStep;
 			}
 			break;
 		case 35:
+			ExerciseClick(InEvents, CancelChangesBounds);
+			break;
+		case 36:
+			CheckContent(CloseState == "idle" && !bPendingClose && !bDiscardDialog && IsDirty(),
+			             "GUI cancel after API save-close failure lost work or retained exit intent");
+			QueueContentRoot(Options.ExerciseContent / "B");
+			++ExerciseStep;
+			break;
+		case 37:
+			CheckContent(PendingRoot.has_value() && bDiscardDialog, "Close overlap lacked a root prompt");
+			Window->RequestClose();
+			++ExerciseStep;
+			break;
+		case 38:
+			CheckContent(bPendingClose && PendingRoot && IsDirty(), "Close overlap was not exercised");
+			ExerciseClick(InEvents, DiscardChangesBounds);
+			if (ExerciseStep == 39)
+			{
+				bContentVerified = true;
+				Log(ELogLevel::Info,
+				    "Editor content A/B/A, save/cancel/discard, double-click, internal filter, "
+				    "save failure, loading transition, title-bar dismissal and API close failure GUI cancel verified");
+			}
+			break;
+		case 39:
 			throw std::runtime_error("Discard during root prompt failed to close the application");
 	}
 }

@@ -1,5 +1,6 @@
 #include "AssetPropertyWidgets.h"
 #include "AssetWorkspace.h"
+#include "Hyperion/AssetEditing/AssetProperties.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -172,11 +173,7 @@ bool EditWord(FGui& InGui, const char* InLabel, EMaterialScalar InScalar, std::u
 
 bool CanEdit(const FMaterialAssetParameter& InParameter)
 {
-	return InParameter.bActive && InParameter.Source == EMaterialParameterSource::Manual &&
-	       InParameter.OverridePolicy == EMaterialOverridePolicy::AllowOverride &&
-	       (InParameter.OverrideScopes & MaterialScopeBit(EMaterialScope::Material)) &&
-	       InParameter.Semantic != "Pbr.AlphaMode" && InParameter.Semantic != "Pbr.DoubleSided" &&
-	       InParameter.Semantic != "Pbr.Unlit";
+	return CanEditMaterialParameter(InParameter);
 }
 
 std::string MaterialTypeLabel(const FMaterialParameterType& InType)
@@ -193,20 +190,7 @@ std::string MaterialTypeLabel(const FMaterialParameterType& InType)
 
 void ClampMaterialParameter(std::string_view InSemantic, FMaterialAssetValue& InValue)
 {
-	if (InValue.Type.Kind != EMaterialValueKind::Numeric || InValue.Type.Scalar != EMaterialScalar::Float)
-	{
-		return;
-	}
-	const bool bNormalized = InSemantic == "Pbr.MetallicFactor" || InSemantic == "Pbr.RoughnessFactor" ||
-	                         InSemantic == "Pbr.OcclusionStrength" || InSemantic == "Pbr.AlphaCutoff" ||
-	                         InSemantic == "Pbr.BaseColorFactor";
-	if (bNormalized)
-	{
-		for (auto& Word : InValue.Words)
-		{
-			Word = std::bit_cast<std::uint32_t>(std::clamp(std::bit_cast<float>(Word), 0.f, 1.f));
-		}
-	}
+	ClampEditableMaterialParameter(InSemantic, InValue);
 }
 } // namespace
 
@@ -386,7 +370,8 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 		}
 		else
 		{
-			InEntry.Document->Set("values", WriteValue(InMaterial.Values), Interaction.ChangedInteraction);
+			CommitAssetField(*InEntry.Document, "values", WriteValue(InMaterial.Values),
+			                 Interaction.ChangedInteraction);
 		}
 	}
 }

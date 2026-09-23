@@ -1,5 +1,6 @@
 #include "AssetPropertyWidgets.h"
 #include "AssetWorkspace.h"
+#include "Hyperion/AssetEditing/AssetProperties.h"
 
 namespace Hyperion
 {
@@ -74,19 +75,8 @@ void FAssetWorkspace::PollReferenceEdit(FEntry& InEntry)
 			throw std::runtime_error("Reference edit was superseded; select the asset again");
 		}
 		const auto Graph = Edit.Request.GetReady();
-		if (!Graph->Root || !Graph->Failures.empty())
-		{
-			throw std::runtime_error("Selected asset has invalid dependencies");
-		}
-		if (Graph->Root->Header.TypeId != Edit.Type)
-		{
-			throw std::runtime_error("Selected asset has a different type");
-		}
-		if (Edit.Dimension && Graph->Root->As<FTextureAsset>()->Dimension != *Edit.Dimension)
-		{
-			throw std::runtime_error("Texture dimension does not match the material parameter");
-		}
-		InEntry.Document->Set(std::move(Edit.Field), std::move(Edit.Candidate));
+		ValidateAssetReferenceGraph(*Graph, Edit.Type, Edit.Dimension);
+		CommitAssetField(*InEntry.Document, std::move(Edit.Field), std::move(Edit.Candidate));
 	}
 	catch (const std::exception& Failure)
 	{

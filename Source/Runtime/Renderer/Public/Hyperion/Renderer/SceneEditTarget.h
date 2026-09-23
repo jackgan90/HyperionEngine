@@ -4,12 +4,15 @@
 
 namespace Hyperion
 {
+std::string ScenePreparationError(const FSceneInstance& InScene);
+
 class FSceneInstanceEditTarget final : public ISceneEditTarget
 {
 public:
 	FSceneInstanceEditTarget(FSceneInstance& InScene, FAssetService& InAssets);
 	bool IsLoaded() const override;
 	bool IsReady() const override;
+	bool IsPreparing() const override;
 	std::uint64_t Identity() const override;
 	std::uint64_t Revision() const override;
 	const FSceneNode* FindNode(FSceneHandle InHandle) const override;

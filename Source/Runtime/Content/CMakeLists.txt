@@ -1,3 +1,3 @@
-add_library(hyperion_content STATIC Private/ContentRootService.cpp Private/ContentRootTypes.cpp)
+add_library(hyperion_content STATIC Private/ContentRootService.cpp Private/ContentRootTypes.cpp Private/ContentQueries.cpp)
 hyp_module(hyperion_content)
 target_link_libraries(hyperion_content PUBLIC hyperion_assets hyperion_io hyperion_reflection PRIVATE hyperion_core hyperion_tasks)

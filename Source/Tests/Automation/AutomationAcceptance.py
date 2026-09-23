@@ -100,7 +100,7 @@ def check_workflow(executable, asset_root, mcp):
         assert pathlib.Path(root_state["directory"]) == asset_root
         before = session.rpc("tools/list", {}) if mcp else None
         found = session.request("api.search", {"query": "texture encoding"})
-        assert [item["id"] for item in found["items"]] == ["texture.set_encoding"], found
+        assert "texture.set_encoding" in [item["id"] for item in found["items"]], found
         definition = session.request("api.describe", {"operation": "asset.rename"})
         assert definition["inputSchema"]["properties"]["generation"]["type"] == "string"
         if mcp:

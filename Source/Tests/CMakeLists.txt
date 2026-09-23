@@ -193,6 +193,14 @@ add_test(NAME editor_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT
 add_test(NAME automation_attachment COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AttachmentAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> $<TARGET_FILE:hyperion_viewer> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(automation_attachment PROPERTIES TIMEOUT 300 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+add_test(NAME automation_capability_parity COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/CapabilityAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> $<TARGET_FILE:hyperion_viewer>
+  $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParity")
+set_tests_properties(automation_capability_parity PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+add_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ParityRegressionAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> $<TARGET_FILE:hyperion_viewer>
+  $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParityRegressions")
+set_tests_properties(automation_parity_regressions PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_capture_ui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorCaptureAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
 set_tests_properties(editor_capture_ui PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_outlines COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OutlineAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")

@@ -2,6 +2,20 @@
 
 namespace Hyperion
 {
+void FSceneEditDocument::SetSelectionObserver(std::function<void()> InObserver)
+{
+	SelectionObserver = std::move(InObserver);
+}
+
+void FSceneEditDocument::ReplaceSelection(FSceneSelection InSelection)
+{
+	Selected = std::move(InSelection);
+	if (SelectionObserver)
+	{
+		SelectionObserver();
+	}
+}
+
 void FSceneEditDocument::SetHistoryObserver(std::function<void(const FSceneHandleMap&)> InObserver)
 {
 	Observer = std::move(InObserver);
@@ -9,6 +23,10 @@ void FSceneEditDocument::SetHistoryObserver(std::function<void(const FSceneHandl
 
 void FSceneEditDocument::NotifyHistory()
 {
+	if (SelectionObserver)
+	{
+		SelectionObserver();
+	}
 	if (Observer)
 	{
 		Observer(Remapped);

@@ -1,5 +1,7 @@
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/Renderer/SceneEditTarget.h"
 #include "Hyperion/Renderer/SceneInstance.h"
+#include "Hyperion/SceneEditing/SceneDocument.h"
 #include "ViewerApplication.h"
 
 namespace Hyperion
@@ -28,9 +30,72 @@ void VerifySceneDraws(ISceneEditor& InPlugin, std::size_t InDraws)
 
 void FViewerPlugin::SaveSettingsAsync(const std::filesystem::path& InPath)
 {
+	(void)SaveApplicationSettings(InPath);
+}
+
+FApplicationSettingsState FViewerPlugin::ApplicationSettings() const
+{
+	return {Settings, SettingsRevision, bActiveReversedZ};
+}
+
+FRenderDiagnostics FViewerPlugin::RenderDiagnostics()
+{
+	FRenderDiagnostics Result;
+	Result.Frame = Metrics.ResultFrame;
+	Result.bReady = SceneProducer && SceneProducer->Ready();
+	if (auto* Scene = GetSceneInstance())
+	{
+		Result.SceneError = ScenePreparationError(*Scene);
+	}
+	if (SceneProducer && !SceneProducer->Error().empty())
+	{
+		Result.SceneError = SceneProducer->Error();
+	}
+	Result.Pipeline = PipelineStatistics;
+	SetDeviceDiagnostics(Result, Metrics.Device);
+	return Result;
+}
+
+FSceneComponentDiagnostics FViewerPlugin::ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent)
+{
+	auto* Scene = GetSceneInstance();
+	if (!Scene || !Scene->FindNode(InHandle))
+	{
+		throw FSceneEditError("stale_handle", "Object is no longer in this scene");
+	}
+	const auto Value = Scene->GetComponentDiagnostics(InHandle, InComponent);
+	if (!Value)
+	{
+		throw FSceneEditError("not_found", "Component has no published rendering diagnostics");
+	}
+	return *Value;
+}
+
+void FViewerPlugin::EditApplicationSettings(std::uint64_t InRevision, const FAppSettings& InSettings)
+{
+	if (bFinished || bStopped)
+	{
+		throw FSceneEditError("unavailable", "Application is stopping");
+	}
+	if (InRevision != SettingsRevision)
+	{
+		throw FSceneEditError("stale_revision", "Application settings changed");
+	}
+	if (!EqualAppSettings(Settings, InSettings))
+	{
+		ApplyAppSettings(Settings, InSettings);
+		++SettingsRevision;
+	}
+}
+
+TAsyncResult<bool> FViewerPlugin::SaveApplicationSettings(const std::filesystem::path& InPath)
+{
 	const auto Text = EncodeReflected(SettingsType(), &Settings);
 	const auto Bytes = std::as_bytes(std::span(Text));
-	Services->FileWrites.push_back(Services->IO.WriteAsync(InPath, {Bytes.begin(), Bytes.end()}).Task());
+	Services->FileWrites.reserve(Services->FileWrites.size() + 1);
+	auto Write = Services->IO.WriteAsync(InPath.empty() ? Options.Config : InPath, {Bytes.begin(), Bytes.end()});
+	Services->FileWrites.push_back(Write.Task());
+	return Write;
 }
 
 void FViewerPlugin::SaveScreenshot(FImage InImage, const FAppSettings& InSettings, const std::string& InSceneError)

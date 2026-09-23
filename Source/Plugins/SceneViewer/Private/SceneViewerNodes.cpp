@@ -142,7 +142,13 @@ void FSceneViewerPlugin::FImpl::DrawNodeProperties(FGui& InGui)
 	{
 		Owner->MoveSelected(2);
 	}
-	InGui.Checkbox("Animate selected across view", bAnimate);
+	bool bAnimateSelection = bAnimate;
+	if (InGui.Checkbox("Animate selected across view", bAnimateSelection))
+	{
+		FSceneViewportOptions Options;
+		Options.Animate = bAnimateSelection;
+		Owner->SetViewportOptions(Options);
+	}
 }
 
 void FSceneViewerPlugin::FImpl::DrawNodes(FGui& InGui)
@@ -168,6 +174,7 @@ void FSceneViewerPlugin::FImpl::DrawNodes(FGui& InGui)
 				if (InGui.Selectable(Label.c_str(), Selected == Handle, Depth))
 				{
 					Selected = Handle;
+					Document.ReplaceSelection(FSceneSelection(Handle));
 				}
 				const auto Children = Scene.GetChildren(Handle);
 				for (auto It = Children.rbegin(); It != Children.rend(); ++It)

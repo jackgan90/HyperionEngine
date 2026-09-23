@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Reflection/RecordValue.h"
 #include "Hyperion/Reflection/Reflection.h"
 
 namespace Hyperion
@@ -44,4 +45,7 @@ struct FAppSettings
 const FTypeDescriptor& SettingsType();
 void SaveSettings(const std::filesystem::path& InPath, const FAppSettings& InSettings);
 FAppSettings LoadSettings(const std::filesystem::path& InPath);
+void ApplyAppSettings(FAppSettings& InTarget, const FAppSettings& InCandidate);
+bool EqualAppSettings(const FAppSettings& InFirst, const FAppSettings& InSecond);
+template<> const FRecordDescriptor& RecordType<FAppSettings>();
 } // namespace Hyperion

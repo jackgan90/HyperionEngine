@@ -1,13 +1,20 @@
 #pragma once
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/Assets/AssetService.h"
+#include "Hyperion/Config/ApplicationClose.h"
+#include "Hyperion/Config/ApplicationSettings.h"
 #include "Hyperion/GuiRenderer/Diagnostics.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Renderer/FramePipeline.h"
+#include "Hyperion/Renderer/RenderCaptureControl.h"
+#include "Hyperion/Renderer/RenderDiagnostics.h"
+#include "Hyperion/Renderer/RenderOutput.h"
 #include "Hyperion/Renderer/RenderPlugin.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneInstance.h"
+#include "Hyperion/Renderer/SceneLightControls.h"
+#include "Hyperion/Renderer/ShadowControls.h"
 #include "ViewerOptions.h"
 #include <deque>
 #if HYP_ENABLE_RENDERDOC
@@ -28,7 +35,14 @@ struct FViewerServices
 };
 
 // Main owns UI/input and consumes frame results. Graphics services outlive the drained CPU pipeline.
-class FViewerPlugin final : public FPlugin
+class FViewerPlugin final : public FPlugin,
+                            public IRenderOutput,
+                            public IRenderCaptureControl,
+                            public IApplicationSettings,
+                            public IRenderDiagnostics,
+                            public IShadowControls,
+                            public ISceneLightControls,
+                            public IApplicationClose
 {
 public:
 	FViewerPlugin(FOptions InOptions, FAppSettings InSettings);
@@ -37,8 +51,32 @@ public:
 	void Update(const FPluginUpdate& InUpdate) override;
 	void Quiesce() noexcept override;
 	void Stop() noexcept override;
+	std::shared_ptr<FPendingImageOutput> RequestImage(const FImageOutputRequest& InRequest) override;
+	std::optional<FImageArtifact> PollImage(const std::shared_ptr<FPendingImageOutput>& InPending) override;
+	FRenderCaptureInfo RenderCaptureInfo() const override;
+	void RequestRenderCapture() override;
+	void OpenRenderCapture() override;
+	FApplicationSettingsState ApplicationSettings() const override;
+	void EditApplicationSettings(std::uint64_t InRevision, const FAppSettings& InSettings) override;
+	TAsyncResult<bool> SaveApplicationSettings(const std::filesystem::path& InPath) override;
+	void ChangeProfiling(std::optional<std::uint32_t> InMask, std::optional<bool> InSampling) override;
+	FRenderDiagnostics RenderDiagnostics() override;
+	FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) override;
+	FCascadedShadowSettings ShadowControls() const override;
+	void SetShadowControls(const FCascadedShadowSettings& InSettings) override;
+	FSceneMainLight MainLight() override;
+	void SetMainLight(const FSceneMainLight& InLight) override;
+	FApplicationCloseState ApplicationCloseState() const override;
+	FApplicationCloseState RequestApplicationClose(const FApplicationCloseRequest& InRequest) override;
 
 private:
+	std::string CloseState = "idle";
+	std::string CloseError;
+	std::optional<TAsyncResult<bool>> CloseSave;
+	bool bCloseAfterSave{};
+	void PollApplicationClose();
+	std::shared_ptr<FPendingImageOutput> PendingImage;
+	bool bAutomationRenderCapture{};
 	void InitializeProfiling();
 	void UpdateProfiling(int InFrame);
 	void HandleProfilingActions(const FDebugActions& InActions);
@@ -55,6 +93,7 @@ private:
 	void InitializeShadowSettings();
 	void UpdateShadowLight(int InFrame);
 	void DrawShadowGui();
+	void DrawMainLightGui();
 	FSceneInstance* GetSceneInstance();
 	void SetSceneLightDirection(FVec3 InDirection);
 	FDebugActions BuildGui(int InFrame, float InDelta, FSize InLogical, FSize InPixels, FGuiDrawData& OutData);
@@ -85,6 +124,7 @@ private:
 
 	FOptions Options;
 	FAppSettings Settings;
+	std::uint64_t SettingsRevision = 1;
 	const bool bActiveReversedZ;
 	FDebugMetrics Metrics;
 #if HYP_ENABLE_RENDERDOC
@@ -138,6 +178,7 @@ private:
 
 	struct FPendingViewerFrame
 	{
+		std::shared_ptr<FPendingImageOutput> ImageOutput;
 		FFrameTicket Ticket;
 		std::shared_ptr<FViewerFrameResult> Result;
 		FAppSettings Settings;

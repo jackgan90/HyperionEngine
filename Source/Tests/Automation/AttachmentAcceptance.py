@@ -26,13 +26,13 @@ class AttachedSession(Session):
 
 
 class Application:
-    def __init__(self, executable, output, name, scene, asset_root, disabled=False, frames=2400):
+    def __init__(self, executable, output, name, scene, asset_root, disabled=False, frames=2400, model=False):
         self.path = output / (name + ".log")
         self.log = self.path.open("w", encoding="utf-8")
         self.instance = None
         self.process = None
         args = [str(executable), "--hidden", "--frames", str(frames),
-                "--asset-root", str(asset_root), "--scene", str(scene)]
+                "--asset-root", str(asset_root), "--model" if model else "--scene", str(scene)]
         if "editor" in executable.stem:
             args += ["--layout", str(output / (name + "-layout.ini")),
                      "--ui-preferences", str(output / (name + "-scale.ini")),
@@ -114,7 +114,8 @@ def workflow(cli, editor, viewer, root, output):
         info = ready(agent)
         target_root = completed(agent.call("content.root.get"))
         assert pathlib.Path(target_root["directory"]) == assets
-        assert agent.call("content.root.clear", generation=target_root["generation"])["error"]["code"] == "not_found"
+        unchanged = completed(agent.call("content.root.set", directory=str(assets), generation=target_root["generation"]))
+        assert unchanged == target_root and ready(agent)["document"] == info["document"]
         viewer_info = ready(peer)
         assert info["history"] and not viewer_info["history"]
 

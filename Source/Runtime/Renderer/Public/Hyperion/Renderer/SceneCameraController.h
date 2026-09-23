@@ -30,6 +30,7 @@ public:
 	           bool bInKeyboardCaptured);
 	void Advance(FSceneCameraView& InCamera, float InDeltaSeconds);
 	float GetMovementSpeed(const FSceneCameraView& InCamera) const;
+	void SetMovementSpeed(float InSpeed);
 	// Clear input on viewport deactivation/minimization, scene replacement and shutdown; retain fly speed.
 	void Reset();
 	// Track window focus while navigation is unavailable, without choosing speed from a placeholder view.

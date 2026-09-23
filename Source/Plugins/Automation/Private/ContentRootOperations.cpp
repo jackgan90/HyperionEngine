@@ -1,7 +1,40 @@
 #include "ContentRootOperations.h"
+#include "Hyperion/Content/ContentQueries.h"
 
 namespace Hyperion
 {
+void RegisterContentQueries(FOperationCatalog& InCatalog, FAssetService* InAssets, FContentRootService* InRoots,
+                            std::string InOwner)
+{
+	FOperationInfo Info;
+	Info.Id = "content.assets.list";
+	Info.Summary = "Search the target native asset index";
+	Info.Description = "Bounded path/identity search with optional type filter. Includes Engine and selected Game "
+	                   "assets; returns reusable typed asset references. Ordering is by path and identity. Restart "
+	                   "pagination after content writes or root changes.";
+	Info.Owner = std::move(InOwner);
+	Info.bReadOnly = true;
+	Info.Effects = "Reads the current asset index; does not load asset data.";
+	Info.Completion = "Main snapshot page.";
+	Info.Keywords = {"content", "browse", "search", "asset", "scene", "material", "texture"};
+	Info.Unavailable = InAssets && InRoots ? "" : "Asset/content provider unavailable.";
+	const FContentAssetQuery Example{};
+	Info.Example = WriteRecordWire(RecordType<FContentAssetQuery>(), &Example);
+	InCatalog.Register(MakeOperation<FContentAssetQuery, FContentAssetPage>(
+	    std::move(Info),
+	    [InAssets, InRoots](const FContentAssetQuery& InRequest)
+	    {
+		    try
+		    {
+			    return QueryContentAssets(*InAssets, *InRoots, InRequest);
+		    }
+		    catch (const FContentRootError& Error)
+		    {
+			    throw FAutomationError(Error.Code, Error.what());
+		    }
+	    }));
+}
+
 namespace
 {
 template<class TRequest, class TFunction>
@@ -16,7 +49,8 @@ void RegisterRoot(FOperationCatalog& InCatalog, FContentRootService* InRoots, co
 	                   "Query the generation before changing roots. Invalid, dirty, busy or stale requests preserve "
 	                   "existing content. Setting the same canonical directory and permissions preserves documents. "
 	                   "Pending edits/saves must finish first; save dirty documents or explicitly discard them. "
-	                   "Root state is process-local and does not update Editor preferences in another process.";
+	                   "Paths and state belong to the executing target. An attached host persists its own root "
+	                   "preferences through its registered content participant.";
 	Info.Owner = InOwner;
 	Info.Effects =
 	    bInReadOnly

@@ -3,10 +3,27 @@ add_library(hyperion_automation_plugin STATIC
   Private/LocalPlugin.cpp
   Private/ScenePlugin.cpp
   Private/SceneOperations.cpp
+  Private/SceneLightOperations.cpp
+  Private/ApplicationCloseOperations.cpp
+  Private/SceneAuthoringOperations.cpp
+  Private/SceneComponentOperations.cpp
+  Private/SceneHostOperations.cpp
+  Private/ViewportOperations.cpp
+  Private/PlacementOperations.cpp
+  Private/RenderOutputOperations.cpp
+  Private/RenderCaptureOperations.cpp
+  Private/ApplicationSettingsOperations.cpp
+  Private/ProfilingOperations.cpp
   Private/AssetPlugin.cpp
   Private/AssetOperations.cpp
   Private/AssetOperationTypes.cpp
   Private/AssetRegistration.cpp
+  Private/AssetProperties.cpp
+  Private/AssetPropertyRegistration.cpp
+  Private/ModelPropertyRegistration.cpp
+  Private/TextureSampleOperations.cpp
+  Private/ImportOperations.cpp
+  Private/AssetPreviewOperations.cpp
   Private/ContentRootOperations.cpp
   Private/StdioPlugin.cpp
   Private/Adapters/StdioReader.cpp)
@@ -16,7 +33,7 @@ string(TIMESTAMP AUTOMATION_BUILD_UTC "%Y%m%dT%H%M%SZ" UTC)
 target_compile_definitions(hyperion_automation_plugin PRIVATE HYP_AUTOMATION_BUILD="${PROJECT_VERSION}/${CMAKE_BUILD_TYPE}/${AUTOMATION_BUILD_UTC}")
 target_link_libraries(hyperion_automation_plugin PUBLIC hyperion_automation hyperion_plugins
   PRIVATE hyperion_application hyperion_content hyperion_asset_editing hyperion_assets hyperion_tasks hyperion_io
-  hyperion_scene hyperion_scene_editing hyperion_materials hyperion_textures hyperion_environment)
+  hyperion_scene hyperion_scene_editing hyperion_materials hyperion_textures hyperion_environment hyperion_render hyperion_asset_import hyperion_gui hyperion_config)
 if(BUILD_TESTING)
   add_executable(automation_local_tests Private/LocalPluginTests.cpp)
   hyp_executable(automation_local_tests)

@@ -1,4 +1,5 @@
 #include "AssetOperations.h"
+#include "Hyperion/AssetEditing/AssetProperties.h"
 #include "Hyperion/Environment/SkyAsset.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Materials/MaterialAsset.h"
@@ -9,8 +10,9 @@
 
 namespace Hyperion
 {
-FAssetAutomation::FAssetAutomation(FAssetService& InAssets, FTaskSystem& InTasks, FContentRootService* InRoots)
-    : Assets(InAssets), Tasks(InTasks), Roots(InRoots)
+FAssetAutomation::FAssetAutomation(FAssetService& InAssets, FTaskSystem& InTasks, FContentRootService* InRoots,
+                                   IAssetWorkspace* InWorkspace)
+    : Assets(InAssets), Tasks(InTasks), Roots(InRoots), Workspace(InWorkspace)
 {
 	Identity = CreateAutomationIdentity();
 }
@@ -71,6 +73,23 @@ std::shared_ptr<FAssetAutomation::FEntry> FAssetAutomation::Find(std::string_vie
 	{
 		(void)Roots->Info();
 	}
+	if (Workspace)
+	{
+		const auto Found = Workspace->FindDocument(InId);
+		if (!Found)
+		{
+			throw FAutomationError("not_found", "Unknown or closed workspace document");
+		}
+		if (!Found->Error.empty())
+		{
+			throw FAutomationError("load_failed", Found->Error);
+		}
+		if (!Found->Document)
+		{
+			throw FAutomationError("busy", "Workspace document is still opening");
+		}
+		return std::make_shared<FEntry>(Found->Id, Found->Path, Found->Document, Found->bEditing);
+	}
 	const auto It = Documents.find(InId);
 	if (It == Documents.end())
 	{
@@ -128,6 +147,10 @@ FAssetDocumentInfo FAssetAutomation::Describe(const FEntry& InEntry) const
 
 TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenRequest& InRequest)
 {
+	if (Workspace)
+	{
+		return OpenWorkspace(InRequest);
+	}
 	if (Roots && Roots->Info().Directory.empty() && (InRequest.Path == "/Game" || InRequest.Path.starts_with("/Game/")))
 	{
 		throw FAutomationError("root_unset",
@@ -203,13 +226,90 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 
 FAssetDocumentInfo FAssetAutomation::Info(const FAssetDocumentRequest& InRequest)
 {
+	if (Workspace)
+	{
+		const auto Entry = Workspace->FindDocument(InRequest.Document);
+		if (!Entry)
+		{
+			throw FAutomationError("not_found", "Unknown or closed workspace entry");
+		}
+		return DescribeWorkspace(*Entry);
+	}
 	return Describe(*Find(InRequest.Document));
+}
+
+FAssetDocumentInfo FAssetAutomation::DescribeWorkspace(const FAssetWorkspaceEntry& InEntry) const
+{
+	FAssetDocumentInfo Result;
+	if (InEntry.Document)
+	{
+		Result = Describe({InEntry.Id, InEntry.Path, InEntry.Document, InEntry.bEditing});
+	}
+	else
+	{
+		Result.Document = InEntry.Id;
+		Result.Path = PathToUtf8(InEntry.Path);
+		Result.State = InEntry.Error.empty() ? "loading" : "failed";
+		Result.Error = InEntry.Error;
+		Result.bEditing = InEntry.bEditing;
+	}
+	Result.bActive = InEntry.bActive;
+	return Result;
+}
+
+FAssetDocumentList FAssetAutomation::List(const FAssetWorkspaceQuery& InRequest) const
+{
+	if (!InRequest.Limit || InRequest.Limit > 100)
+	{
+		throw std::invalid_argument("Limit must be 1-100");
+	}
+	FAssetDocumentList Result;
+	if (Workspace)
+	{
+		for (const auto& Entry : Workspace->Documents())
+		{
+			Result.Documents.push_back(DescribeWorkspace(Entry));
+		}
+	}
+	else
+	{
+		for (const auto& [Id, Entry] : Documents)
+		{
+			if (Entry->Document)
+			{
+				Result.Documents.push_back(Describe(*Entry));
+			}
+		}
+	}
+	Result.Total = Result.Documents.size();
+	const auto Begin = std::min(std::size_t(InRequest.Offset), Result.Documents.size());
+	const auto End = std::min(Begin + InRequest.Limit, Result.Documents.size());
+	if (End < Result.Total)
+	{
+		Result.Next = static_cast<std::uint32_t>(End);
+	}
+	Result.Documents = {Result.Documents.begin() + Begin, Result.Documents.begin() + End};
+	return Result;
+}
+
+FAssetDocumentInfo FAssetAutomation::Activate(const FAssetDocumentRequest& InRequest)
+{
+	(void)Info(InRequest);
+	if (Workspace)
+	{
+		if (Workspace->IsBlocked())
+		{
+			throw FAutomationError("busy", "Finish the current workspace modal operation");
+		}
+		Workspace->ActivateDocument(InRequest.Document);
+	}
+	return Info(InRequest);
 }
 
 FAssetDocumentInfo FAssetAutomation::Rename(const FAssetRenameRequest& InRequest)
 {
 	auto Entry = Edit(InRequest.Document, InRequest.Generation);
-	Entry->Document->Set("name", WriteValue(InRequest.Name));
+	CommitAssetField(*Entry->Document, "name", WriteValue(InRequest.Name));
 	return Describe(*Entry);
 }
 
@@ -237,7 +337,14 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Save(const FAssetMutatio
 	Entry->Document->Save(Assets);
 	return {[this, Entry]() -> std::optional<FAssetDocumentInfo>
 	        {
-		        Entry->Document->PollSave();
+		        if (Workspace)
+		        {
+			        Workspace->PumpDocument(Entry->Id);
+		        }
+		        else
+		        {
+			        Entry->Document->PollSave();
+		        }
 		        if (Entry->Document->IsSaving())
 		        {
 			        return {};
@@ -274,6 +381,10 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetEncoding(const FAsset
 	                                           });
 	Work.push_back(Rebuild.Task());
 	Entry->bEditing = true;
+	if (Workspace)
+	{
+		Workspace->SetExternalEditing(Entry->Id, true);
+	}
 	return {[this, Entry, Rebuild]() -> std::optional<FAssetDocumentInfo>
 	        {
 		        if (!Rebuild.Ready())
@@ -281,6 +392,15 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetEncoding(const FAsset
 			        return {};
 		        }
 		        Entry->bEditing = false;
+		        if (Workspace)
+		        {
+			        Workspace->SetExternalEditing(Entry->Id, false);
+			        const auto Current = Workspace->FindDocument(Entry->Id);
+			        if (!Current || Current->Document != Entry->Document)
+			        {
+				        throw FAutomationError("stale_document", "The edited workspace document was closed");
+			        }
+		        }
 		        Entry->Document->Set("", *Rebuild.GetReady());
 		        return Describe(*Entry);
 	        }};
@@ -288,6 +408,27 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetEncoding(const FAsset
 
 FAssetCloseResult FAssetAutomation::Close(const FAssetCloseRequest& InRequest)
 {
+	if (Workspace)
+	{
+		const auto Entry = Workspace->FindDocument(InRequest.Document);
+		if (!Entry)
+		{
+			throw FAutomationError("not_found", "Unknown or closed workspace entry");
+		}
+		if (!Entry->Document)
+		{
+			if (InRequest.Generation != 0)
+			{
+				throw FAutomationError("stale_revision", "Non-ready workspace entries have generation 0");
+			}
+			if (Workspace->IsBlocked() || Entry->bEditing)
+			{
+				throw FAutomationError("busy", "Finish pending workspace operations before closing");
+			}
+			Workspace->CloseDocument(Entry->Id);
+			return {true};
+		}
+	}
 	auto Entry = Find(InRequest.Document);
 	if (Entry->Document->Generation() != InRequest.Generation)
 	{
@@ -302,6 +443,33 @@ FAssetCloseResult FAssetAutomation::Close(const FAssetCloseRequest& InRequest)
 		throw FAutomationError("dirty_document", "Save first or explicitly set discard=true");
 	}
 	Documents.erase(Entry->Id);
+	if (Workspace)
+	{
+		Workspace->CloseDocument(Entry->Id);
+	}
 	return {true};
+}
+
+TPendingOperation<FAssetDocumentInfo> FAssetAutomation::OpenWorkspace(const FAssetOpenRequest& InRequest)
+{
+	if (Workspace->IsBlocked())
+	{
+		throw FAutomationError("busy", "Finish the current workspace modal operation");
+	}
+	const auto Id = Workspace->OpenDocument(PathFromUtf8(InRequest.Path));
+	return {[this, Id]() -> std::optional<FAssetDocumentInfo>
+	        {
+		        Workspace->PumpDocument(Id);
+		        const auto Entry = Workspace->FindDocument(Id);
+		        if (!Entry)
+		        {
+			        throw FAutomationError("stale_document", "Workspace document closed while opening");
+		        }
+		        if (!Entry->Error.empty())
+		        {
+			        throw FAutomationError("load_failed", Entry->Error);
+		        }
+		        return Entry->Document ? std::optional(Info({Id})) : std::nullopt;
+	        }};
 }
 } // namespace Hyperion

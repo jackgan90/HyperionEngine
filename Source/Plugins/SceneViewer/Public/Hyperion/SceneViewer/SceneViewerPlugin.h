@@ -3,17 +3,19 @@
 #include "Hyperion/Gui/Gui.h"
 #include "Hyperion/Renderer/LocalLights.h"
 #include "Hyperion/Renderer/RenderPlugin.h"
+#include "Hyperion/Renderer/SceneViewport.h"
+#include "Hyperion/SceneEditing/ScenePlacement.h"
 
 namespace Hyperion
 {
 class FRenderSession;
 class FSceneInstance;
 
-class FSceneViewerPlugin final : public ISceneEditor
+class FSceneViewerPlugin final : public ISceneEditor, public ISceneViewport, public IScenePlacement
 {
 public:
 	FSceneViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
-	                   std::filesystem::path InPath);
+	                   std::filesystem::path InPath, bool bInForceOrdinary = false);
 	~FSceneViewerPlugin() override;
 	void Start() override;
 	void Start(FPluginContext& InContext) override;
@@ -38,9 +40,15 @@ public:
 	void SetCullingMode(ESceneCullingMode InMode) override;
 	void SetFrozen(bool bInFrozen);
 	void Fit();
+	FSceneViewportState ViewportState() const override;
+	void SetViewportCamera(const FSceneCameraView& InCamera) override;
+	void FrameScene() override;
+	void SetViewportOptions(const FSceneViewportOptions& InOptions) override;
 	void SetRenderedView(const std::optional<FRenderView>& InView) override;
 	void DuplicateSelected();
 	void AddModel();
+	FPlacementCatalog PlacementCatalog() const override;
+	std::optional<FSceneNodeInfo> PlaceObject(const FScenePlacementRequest& InRequest) override;
 	void RemoveSelected();
 	void ToggleSelected();
 	void MoveSelected(float InOffset);
@@ -54,5 +62,6 @@ private:
 
 void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSession, FTaskSystem& InTasks,
                                FAssetService& InAssets, const std::filesystem::path& InPath);
-void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, const std::filesystem::path& InPath);
+void RegisterSceneViewerPlugin(FPluginRegistry& InRegistry, const std::filesystem::path& InPath,
+                               bool bInForceOrdinary = false);
 } // namespace Hyperion

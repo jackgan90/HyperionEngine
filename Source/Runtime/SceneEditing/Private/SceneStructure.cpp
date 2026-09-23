@@ -12,6 +12,7 @@ FSceneHandle FSceneEditDocument::CommitDuplicate(FSceneHandle InHandle)
 	if (Handle.Scene)
 	{
 		State.State = ++State.NextState;
+		ReplaceSelection(FSceneSelection(std::optional{Handle}));
 	}
 	return Handle;
 }
@@ -27,7 +28,9 @@ void FSceneEditDocument::CommitRemoveKeepChildren(FSceneHandle InHandle)
 		State.State = ++State.NextState;
 		if (Selected.Contains(InHandle))
 		{
-			Selected.Toggle(InHandle);
+			auto Updated = Selected;
+			Updated.Toggle(InHandle);
+			ReplaceSelection(std::move(Updated));
 		}
 	}
 }

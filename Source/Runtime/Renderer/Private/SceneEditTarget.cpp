@@ -3,6 +3,37 @@
 
 namespace Hyperion
 {
+std::string ScenePreparationError(const FSceneInstance& InScene)
+{
+	const auto& Status = InScene.GetStatus();
+	if (!Status.Error.empty())
+	{
+		return Status.Error;
+	}
+	if (!Status.PublicationError.empty())
+	{
+		return Status.PublicationError;
+	}
+	if (Status.FailedModels || Status.FailedSkies)
+	{
+		for (const auto Handle : InScene.GetNodes())
+		{
+			const auto Error = InScene.GetError(Handle);
+			if (!Error.empty())
+			{
+				return Error;
+			}
+		}
+		return "Scene resource preparation failed; inspect component diagnostics or repair the resource references";
+	}
+	return {};
+}
+
+bool FSceneInstanceEditTarget::IsPreparing() const
+{
+	return !IsReady() && ScenePreparationError(Scene).empty();
+}
+
 FSceneInstanceEditTarget::FSceneInstanceEditTarget(FSceneInstance& InScene, FAssetService& InAssets)
     : Scene(InScene), Assets(InAssets)
 {

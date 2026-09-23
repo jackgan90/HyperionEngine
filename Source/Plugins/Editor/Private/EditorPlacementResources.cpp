@@ -121,13 +121,13 @@ void FEditorPlugin::PollPlacementResources()
 		}
 	}
 	PollPlacementIcons();
-	if (!bShowPlacement || !Scene->GetStatus().bLoaded || !Scene->GetStatus().Error.empty())
+	if (!Scene->GetStatus().bLoaded || !Scene->GetStatus().Error.empty())
 	{
 		return;
 	}
 	for (const auto* Object : PlacementRegistry.Search("All", {}))
 	{
-		if (Object->Model && !PlacementModels.contains(Object->Id))
+		if (bShowPlacement && Object->Model && !PlacementModels.contains(Object->Id))
 		{
 			auto& Model = PlacementModels[Object->Id];
 			try

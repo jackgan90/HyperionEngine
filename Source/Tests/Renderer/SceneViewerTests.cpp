@@ -4,7 +4,9 @@
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
+#include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/SceneEditing/SceneDocument.h"
+#include "Hyperion/SceneEditing/ScenePlacement.h"
 #include "Hyperion/SceneViewer/SceneViewerPlugin.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/NativeAssetSupport.h"
@@ -104,7 +106,8 @@ struct FViewerFixture
 	{
 		Context = std::make_unique<FPluginContext>(
 		    Services, "scene-viewer",
-		    std::vector<std::type_index>{typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument)},
+		    std::vector<std::type_index>{typeid(IScenePlugin), typeid(ISceneEditor), typeid(FSceneEditDocument),
+		                                 typeid(ISceneViewport), typeid(IScenePlacement)},
 		    std::vector<std::type_index>{}, std::vector<std::type_index>{});
 		Plugin->Start(*Context);
 	}
@@ -187,6 +190,8 @@ void CheckControls(FViewerFixture& InFixture)
 	Plugin.RemoveSelected();
 	InFixture.Tick();
 	HYP_CHECK(Plugin.ModelCount() == 1 && InFixture.Image.Rgba == Original);
+	auto& Document = InFixture.Services.Require<FSceneEditDocument>();
+	HYP_CHECK(Document.Selection().Primary() == Plugin.GetSceneInstance().GetNodes(ESceneNodeKind::Model).front());
 	Plugin.SetFrozen(true);
 	FInputEvent Right;
 	Right.Type = EEventType::Key;
@@ -207,6 +212,7 @@ void CheckControls(FViewerFixture& InFixture)
 	Plugin.Fit();
 	InFixture.Tick();
 	HYP_CHECK(InFixture.Statistics.VisibleItems == Count);
+	HYP_CHECK(Document.Selection().Primary() == Plugin.GetSceneInstance().GetNodes(ESceneNodeKind::Model).front());
 	Plugin.RemoveSelected();
 	InFixture.Tick();
 	HYP_CHECK(Plugin.ModelCount() == 0 && InFixture.Statistics.Groups == 0);

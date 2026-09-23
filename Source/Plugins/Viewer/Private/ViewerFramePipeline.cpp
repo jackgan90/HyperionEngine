@@ -1,5 +1,6 @@
 #include "Hyperion/Core/Core.h"
 #include "ViewerApplication.h"
+#include <utility>
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCaptureScope.h"
 #endif
@@ -64,9 +65,10 @@ void FViewerPlugin::RenderFrame(int InFrame, FSize InSize, FGuiDrawData InGuiDat
 	}
 	Input.Shadows = ShadowSettings;
 	Input.Surface = Window->Surface();
-	Input.bTakeCapture = bInTakeCapture;
+	Input.bTakeCapture = bInTakeCapture || PendingImage != nullptr;
 	Input.bCaptureRdc = bInCaptureRdc;
 	FPendingViewerFrame Pending;
+	Pending.ImageOutput = std::exchange(PendingImage, {});
 	Pending.Result = std::make_shared<FViewerFrameResult>();
 	Pending.Settings = Input.Frame.Settings;
 	Pending.Frame = InFrame;
@@ -142,7 +144,15 @@ void FViewerPlugin::CollectFrames()
 		}
 		if (Pending.bTakeCapture)
 		{
+			if (Pending.ImageOutput)
+			{
+				CompleteImageOutput(*Pending.ImageOutput, Result.Screenshot, Pending.Ticket.Frame());
+			}
 			SaveScreenshot(std::move(Result.Screenshot), Pending.Settings, Pending.SceneError);
+		}
+		else if (Pending.ImageOutput)
+		{
+			CompleteImageOutput(*Pending.ImageOutput, Result.Screenshot, Pending.Ticket.Frame());
 		}
 		if (Pending.bBenchmark)
 		{

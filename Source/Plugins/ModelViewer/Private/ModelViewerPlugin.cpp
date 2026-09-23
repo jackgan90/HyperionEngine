@@ -31,6 +31,7 @@ struct FModelViewerPlugin::FImpl
 	bool bFitRequested = true;
 	FVec3 Center;
 	float Radius = 1;
+	float Aspect = 1;
 };
 
 FModelViewerPlugin::FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
@@ -41,6 +42,48 @@ FModelViewerPlugin::FModelViewerPlugin(FRenderSession& InSession, FTaskSystem& I
 }
 
 FModelViewerPlugin::~FModelViewerPlugin() = default;
+
+void FModelViewerPlugin::Start(FPluginContext& InContext)
+{
+	IScenePlugin::Start(InContext);
+	InContext.Provide<ISceneViewport>(*this);
+}
+
+FSceneViewportState FModelViewerPlugin::ViewportState() const
+{
+	FSceneViewportState Result;
+	Result.bReady = GetSceneCameraView(Impl->Scene, Result.Camera) && Impl->bIsReady;
+	return Result;
+}
+
+void FModelViewerPlugin::SetViewportCamera(const FSceneCameraView& InCamera)
+{
+	ValidateSceneCameraView(InCamera);
+	const auto Handle = GetSceneNavigationCamera(Impl->Scene);
+	if (!Handle)
+	{
+		throw FSceneEditError("unavailable", "Model viewport has no navigation camera");
+	}
+	Impl->Scene.SetCameraView(*Handle, InCamera.World, InCamera.Lens);
+	Impl->CameraController.Reset();
+	Impl->bFitRequested = false;
+}
+
+void FModelViewerPlugin::FrameScene()
+{
+	if (!Impl->Model.Generation)
+	{
+		Impl->bFitRequested = true;
+		return;
+	}
+	FitSceneCamera(Impl->Scene, Impl->Aspect, true);
+	Impl->bFitRequested = false;
+}
+
+void FModelViewerPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
+{
+	ValidateViewportOptions(InOptions, {});
+}
 
 FSceneInstance& FModelViewerPlugin::GetSceneInstance()
 {
@@ -94,11 +137,10 @@ void FModelViewerPlugin::Update(FRenderFrame& InFrame)
 			P.Preparation = {};
 			P.Status = "Uploading model to GPU...";
 		}
-		const float Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
+		P.Aspect = float(std::max(1u, InFrame.Size.Width)) / std::max(1u, InFrame.Size.Height);
 		if (P.bFitRequested)
 		{
-			FitSceneCamera(P.Scene, Aspect, true);
-			P.bFitRequested = false;
+			FrameScene();
 		}
 		P.Scene.Tick();
 		if (auto Error = P.Scene.GetError(P.Model); !Error.empty())
@@ -151,7 +193,7 @@ void FModelViewerPlugin::Input(std::span<const FInputEvent> InEvents, bool bInMo
 		{
 			if (Event.Key == EKey::Home)
 			{
-				P.bFitRequested = true;
+				FrameScene();
 			}
 			if (Event.Key == EKey::Left)
 			{
@@ -220,7 +262,7 @@ void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, FRenderSession& InSe
 	                             {
 		                             return std::make_unique<FModelViewerPlugin>(InSession, InTasks, InAssets, Path);
 	                             }};
-	Descriptor.Provides = {typeid(IScenePlugin)};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneViewport)};
 	InRegistry.Add(std::move(Descriptor));
 }
 
@@ -229,7 +271,7 @@ void RegisterModelViewerPlugin(FPluginRegistry& InRegistry, const std::filesyste
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "model-viewer";
 	Descriptor.Dependencies = {"graphics", "assets"};
-	Descriptor.Provides = {typeid(IScenePlugin)};
+	Descriptor.Provides = {typeid(IScenePlugin), typeid(ISceneViewport)};
 	Descriptor.Requires = {typeid(FRenderSession), typeid(FTaskSystem), typeid(FAssetService)};
 	Descriptor.CreateWithContext = [Path = InPath](FPluginContext& InContext)
 	{

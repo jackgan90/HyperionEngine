@@ -23,7 +23,7 @@ namespace Hyperion
 {
 namespace
 {
-void RegisterViewerCatalog(FPluginRegistry& InRegistry, const FAppSettings& InSettings)
+void RegisterViewerCatalog(FPluginRegistry& InRegistry, const FAppSettings& InSettings, const FOptions& InOptions)
 {
 #if HYP_ENABLE_TRIANGLE
 	RegisterTrianglePlugin(InRegistry);
@@ -32,7 +32,7 @@ void RegisterViewerCatalog(FPluginRegistry& InRegistry, const FAppSettings& InSe
 	RegisterModelViewerPlugin(InRegistry, InSettings.ModelSource);
 #endif
 #if HYP_ENABLE_SCENE_VIEWER
-	RegisterSceneViewerPlugin(InRegistry, InSettings.SceneSource);
+	RegisterSceneViewerPlugin(InRegistry, InSettings.SceneSource, InOptions.bNoInstanceBatching);
 #endif
 #if HYP_ENABLE_DEBUG_UI
 	RegisterDebugUiPlugin(InRegistry);
@@ -51,12 +51,16 @@ void RegisterViewer(FPluginRegistry& InRegistry, const FOptions& InOptions, cons
 {
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "viewer";
+	Descriptor.Provides = {typeid(IRenderOutput),      typeid(IRenderCaptureControl), typeid(IApplicationSettings),
+	                       typeid(IRenderDiagnostics), typeid(IShadowControls),       typeid(ISceneLightControls),
+	                       typeid(IApplicationClose)};
 	Descriptor.Dependencies = {"graphics"};
 	Descriptor.Requires = {typeid(FApplicationControl),   typeid(FTaskSystem),     typeid(FIOService),
 	                       typeid(FAssetService),         typeid(FWindow),         typeid(IRHIDevice),
 	                       typeid(IRHISwapchain),         typeid(FShaderCompiler), typeid(FRenderSession),
 	                       typeid(FRenderFeatureRegistry)};
-	Descriptor.Optional = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FGui), typeid(FGuiRenderer)};
+	Descriptor.Optional = {typeid(IScenePlugin), typeid(ISceneEditor), typeid(FGui), typeid(FGuiRenderer),
+	                       typeid(FSceneEditDocument)};
 #if HYP_ENABLE_RENDERDOC
 	Descriptor.Optional.push_back(typeid(FFrameCapture));
 #endif
@@ -103,7 +107,7 @@ void RunViewerApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterSceneAutomation(Registry);
 	RegisterAutomationLocal(Registry, "Viewer");
 	RegisterViewerServices(Registry, Options, Settings, std::move(InBackends));
-	RegisterViewerCatalog(Registry, Settings);
+	RegisterViewerCatalog(Registry, Settings, Options);
 	RegisterViewer(Registry, Options, Settings);
 	FPluginSelection Selection;
 	Selection.Disabled = Settings.DisabledPlugins;

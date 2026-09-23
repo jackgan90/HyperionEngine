@@ -5,10 +5,30 @@ namespace Hyperion::WirePrivate
 {
 namespace
 {
-FArchiveNode RecordSchema(const FRecordDescriptor& InType, unsigned InDepth)
+using FSchemaStack = std::map<std::string, std::string>;
+FArchiveNode ValueSchema(const FRecordValueShape& InShape, unsigned InDepth, const std::string& InPath,
+                         FSchemaStack& InStack);
+
+std::string PointerToken(std::string_view InValue)
 {
+	std::string Result;
+	for (const char Character : InValue)
+	{
+		Result += Character == '~' ? "~0" : Character == '/' ? "~1" : std::string(1, Character);
+	}
+	return Result;
+}
+
+FArchiveNode RecordSchema(const FRecordDescriptor& InType, unsigned InDepth, const std::string& InPath,
+                          FSchemaStack& InStack)
+{
+	if (const auto Existing = InStack.find(InType.Id); Existing != InStack.end())
+	{
+		return FArchiveNode(FArchiveNode::FObject{{"$ref", WriteValue(Existing->second)}});
+	}
 	CheckDepth(InDepth);
 	ValidateRecordDescriptor(InType);
+	InStack.emplace(InType.Id, InPath);
 	FArchiveNode::FObject Properties;
 	FArchiveNode::FArray Required;
 	const auto Defaults = InType.Create();
@@ -22,7 +42,8 @@ FArchiveNode RecordSchema(const FRecordDescriptor& InType, unsigned InDepth)
 		{
 			throw std::invalid_argument("Missing wire shape: " + InType.Id + "." + Member.Id);
 		}
-		auto Property = Schema(Member.Shape(), InDepth + 1);
+		auto Property =
+		    ValueSchema(Member.Shape(), InDepth + 1, InPath + "/properties/" + PointerToken(Member.Id), InStack);
 		auto& Values = std::get<FArchiveNode::FObject>(Property.Value);
 		const auto& Presentation = Member.Options.Inspector;
 		const auto Description = !Member.Options.Description.empty() ? Member.Options.Description
@@ -60,6 +81,7 @@ FArchiveNode RecordSchema(const FRecordDescriptor& InType, unsigned InDepth)
 		}
 		Properties.emplace(Member.Id, std::move(Property));
 	}
+	InStack.erase(InType.Id);
 	return FArchiveNode(FArchiveNode::FObject{{"type", WriteValue(std::string("object"))},
 	                                          {"additionalProperties", WriteValue(false)},
 	                                          {"properties", FArchiveNode(std::move(Properties))},
@@ -105,9 +127,9 @@ FArchiveNode ScalarSchema(const FRecordValueShape& InShape)
 	}
 	return FArchiveNode(std::move(Values));
 }
-} // namespace
 
-FArchiveNode Schema(const FRecordValueShape& InShape, unsigned InDepth)
+FArchiveNode ValueSchema(const FRecordValueShape& InShape, unsigned InDepth, const std::string& InPath,
+                         FSchemaStack& InStack)
 {
 	CheckDepth(InDepth);
 	if (InShape.bOptional)
@@ -116,7 +138,7 @@ FArchiveNode Schema(const FRecordValueShape& InShape, unsigned InDepth)
 		Required.bOptional = false;
 		return FArchiveNode(FArchiveNode::FObject{
 		    {"anyOf", FArchiveNode(FArchiveNode::FArray{
-		                  Schema(Required, InDepth + 1),
+		                  ValueSchema(Required, InDepth + 1, InPath + "/anyOf/0", InStack),
 		                  FArchiveNode(FArchiveNode::FObject{{"type", WriteValue(std::string("null"))}})})}});
 	}
 	if (InShape.Kind == ERecordValueKind::Record)
@@ -125,7 +147,7 @@ FArchiveNode Schema(const FRecordValueShape& InShape, unsigned InDepth)
 		{
 			throw std::invalid_argument("Missing record shape");
 		}
-		return RecordSchema(InShape.Record(), InDepth + 1);
+		return RecordSchema(InShape.Record(), InDepth + 1, InPath, InStack);
 	}
 	if (InShape.Kind == ERecordValueKind::Sequence || InShape.Kind == ERecordValueKind::Map)
 	{
@@ -134,9 +156,10 @@ FArchiveNode Schema(const FRecordValueShape& InShape, unsigned InDepth)
 			throw std::invalid_argument("Missing element shape");
 		}
 		const bool bSequence = InShape.Kind == ERecordValueKind::Sequence;
-		FArchiveNode::FObject Result{
-		    {"type", WriteValue(std::string(bSequence ? "array" : "object"))},
-		    {bSequence ? "items" : "additionalProperties", Schema(*InShape.Element, InDepth + 1)}};
+		FArchiveNode::FObject Result{{"type", WriteValue(std::string(bSequence ? "array" : "object"))},
+		                             {bSequence ? "items" : "additionalProperties",
+		                              ValueSchema(*InShape.Element, InDepth + 1,
+		                                          InPath + (bSequence ? "/items" : "/additionalProperties"), InStack)}};
 		if (InShape.FixedSize)
 		{
 			Result.emplace("minItems", WriteValue(*InShape.FixedSize));
@@ -146,13 +169,21 @@ FArchiveNode Schema(const FRecordValueShape& InShape, unsigned InDepth)
 	}
 	return ScalarSchema(InShape);
 }
+} // namespace
+
+FArchiveNode Schema(const FRecordValueShape& InShape, unsigned InDepth)
+{
+	FSchemaStack Stack;
+	return ValueSchema(InShape, InDepth, "#", Stack);
+}
 } // namespace Hyperion::WirePrivate
 
 namespace Hyperion
 {
 FArchiveNode RecordWireSchema(const FRecordDescriptor& InType)
 {
-	auto Result = WirePrivate::RecordSchema(InType, 0);
+	WirePrivate::FSchemaStack Stack;
+	auto Result = WirePrivate::RecordSchema(InType, 0, "#", Stack);
 	std::get<FArchiveNode::FObject>(Result.Value)
 	    .emplace("$schema", WriteValue(std::string("https://json-schema.org/draft/2020-12/schema")));
 	return Result;

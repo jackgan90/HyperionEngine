@@ -1,5 +1,6 @@
 #include "Hyperion/Automation/Endpoint.h"
 #include "Hyperion/Automation/Session.h"
+#include "Hyperion/SceneEditing/SceneComponentEditing.h"
 #include "SceneOperations.h"
 #include <iostream>
 #include <source_location>
@@ -253,6 +254,125 @@ void NoHistory()
 	FAutomationSession Absent(Missing);
 	Error(Call(Absent, "scene.info", FSceneInfoRequest{}), "unavailable");
 }
+
+void ComponentAdmissionAndBatch()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, &Document);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	const auto First = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "First"}).Handle;
+	const auto Second = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Second"}).Handle;
+	const auto Revision = Target.Revision();
+	const auto History = Document.GetState().HistoryCursor;
+	for (const auto& Type : {RecordType<FSceneModelComponent>().Id, RecordType<FSceneModelSource>().Id})
+	{
+		Error(Call(Agent, "scene.node.create",
+		           FSceneCreateRequest{Document.Id(), Revision, "Invalid", {}, Identity(), {Type}}),
+		      "invalid_arguments");
+		Error(Call(Agent, "scene.components.edit_structure",
+		           FSceneComponentStructureRequest{Document.Id(), Revision, {First}, Type, Type, false}),
+		      "invalid_arguments");
+		Check(Target.Revision() == Revision && Document.GetState().HistoryCursor == History);
+	}
+	EditSceneComponentStructure(Document,
+	                            {Document.Id(), Target.Revision(), {First}, "camera-a", RecordType<FSceneCamera>().Id});
+	EditSceneComponentStructure(
+	    Document, {Document.Id(), Target.Revision(), {Second}, "camera-b", RecordType<FSceneCamera>().Id});
+	FSceneCamera CameraA;
+	FSceneCamera CameraB;
+	CameraA.Far = 2000;
+	CameraB.Far = 3000;
+	SetSceneComponentBatch(
+	    Document, TSceneComponentBatchRequest<FSceneCamera>{
+	                  Document.Id(), Target.Revision(), {First, Second}, {"camera-a", "camera-b"}, {CameraA, CameraB}});
+	CameraA.Near = CameraB.Near = .5f;
+	TSceneComponentBatchRequest<FSceneCamera> Batch{
+	    Document.Id(), Target.Revision(), {First, Second}, {"camera-a", "camera-b"}, {CameraA, CameraB}};
+	const auto Operation = "scene.component." + RecordType<FSceneCamera>().Id + ".set_batch";
+	const auto BeforeBatch = Document.GetState().HistoryCursor;
+	Check(ReadValue<std::string>(
+	          Field(Agent.Call(Operation, WriteRecordWire(SceneComponentBatchRequestType<FSceneCamera>(), &Batch)),
+	                "status")) == "completed");
+	Check(Target.FindNode(First)->Camera()->Near == .5f && Target.FindNode(Second)->Camera()->Near == .5f);
+	Check(Target.FindNode(First)->Camera()->Far == 2000 && Target.FindNode(Second)->Camera()->Far == 3000);
+	Check(Document.GetState().HistoryCursor == BeforeBatch + 1);
+	Document.Undo();
+	Check(Target.FindNode(First)->Camera()->Near == FSceneCamera{}.Near &&
+	      Target.FindNode(Second)->Camera()->Near == FSceneCamera{}.Near);
+	Batch.Revision = Target.Revision();
+	Batch.Components[1] = "missing";
+	Error(Agent.Call(Operation, WriteRecordWire(SceneComponentBatchRequestType<FSceneCamera>(), &Batch)), "not_found");
+	Check(Target.Revision() == Batch.Revision && Document.GetState().HistoryCursor == BeforeBatch);
+	Batch.Components[1] = "camera-b";
+	Batch.Values.pop_back();
+	Error(Agent.Call(Operation, WriteRecordWire(SceneComponentBatchRequestType<FSceneCamera>(), &Batch)),
+	      "invalid_arguments");
+	Check(Target.Revision() == Batch.Revision);
+	Document.Detach(Tasks);
+}
+
+void Authoring()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, &Document);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	const auto Created =
+	    Call(Agent, "scene.node.create",
+	         FSceneCreateRequest{
+	             Document.Id(), Target.Revision(), "Camera", {}, Identity(), {RecordType<FSceneCamera>().Id}});
+	Check(ReadValue<std::string>(Field(Created, "status")) == "completed");
+	const auto Handle = Document.Selection().Primary().value();
+	Check(Target.FindNode(Handle)->Camera().has_value());
+	const auto Parent = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Parent"}).Handle;
+	Call(Agent, "scene.selection.set", FSceneSelectionRequest{Document.Id(), Target.Revision(), {Parent, Handle}});
+	Check(Document.Selection().Primary() == Handle && Document.Selection().All().size() == 2);
+	const auto History = Document.GetState().HistoryCursor;
+	Error(
+	    Call(Agent, "scene.selection.set", FSceneSelectionRequest{Document.Id(), Target.Revision(), {Parent, Parent}}),
+	    "invalid_arguments");
+	Check(Document.Selection().Primary() == Handle && Document.GetState().HistoryCursor == History);
+	Call(
+	    Agent, "scene.nodes.set_metadata",
+	    FSceneMetadataRequest{Document.Id(), Target.Revision(), {{Parent, "Parent renamed", {}}, {Handle, {}, false}}});
+	Check(Target.FindNode(Parent)->Name == "Parent renamed" && !Target.FindNode(Handle)->bEnabled);
+	Document.Undo();
+	Check(Target.FindNode(Parent)->Name == "Parent" && Target.FindNode(Handle)->bEnabled);
+	Call(Agent, "scene.node.reparent", FSceneReparentRequest{Document.Id(), Target.Revision(), Handle, Parent, true});
+	Check(Target.FindNode(Handle)->Parent() == Target.FindNode(Parent)->Id);
+	const auto Revision = Target.Revision();
+	Error(Call(Agent, "scene.node.reparent", FSceneReparentRequest{Document.Id(), Revision, Parent, Handle, true}),
+	      "invalid_arguments");
+	Check(Target.Revision() == Revision);
+	TSceneComponentRequest<FSceneCamera> Lens{
+	    Document.Id(), Target.Revision(), {Handle}, RecordType<FSceneCamera>().Id, {}};
+	Lens.Value.Far = 2000;
+	const auto Operation = "scene.component." + RecordType<FSceneCamera>().Id + ".set";
+	Check(ReadValue<std::string>(Field(
+	          Agent.Call(Operation, WriteRecordWire(SceneComponentRequestType<FSceneCamera>(), &Lens)), "status")) ==
+	      "completed");
+	Check(Target.FindNode(Handle)->Camera()->Far == 2000);
+	Document.Undo();
+	Check(Target.FindNode(Handle)->Camera()->Far == 1000);
+	Lens.Revision = Target.Revision();
+	Lens.Handles.push_back(Parent);
+	Error(Agent.Call(Operation, WriteRecordWire(SceneComponentRequestType<FSceneCamera>(), &Lens)), "not_found");
+	Check(Target.FindNode(Handle)->Camera()->Far == 1000);
+	Call(Agent, "scene.selection.delete", FSceneMutationRequest{Document.Id(), Target.Revision()});
+	Check(Target.Nodes().empty() && !Document.Selection());
+	Document.Undo();
+	Check(Target.Nodes().size() == 2 && Document.Selection().All().size() == 2);
+	Document.Detach(Tasks);
+}
 } // namespace
 
 int main()
@@ -261,6 +381,8 @@ int main()
 	{
 		Editing();
 		NoHistory();
+		Authoring();
+		ComponentAdmissionAndBatch();
 		std::cout << "Shared scene, identity, transactions, history, save and absence contracts passed\n";
 		return 0;
 	}

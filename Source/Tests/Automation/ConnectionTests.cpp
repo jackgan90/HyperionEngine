@@ -148,6 +148,56 @@ void Admission()
 	HYP_CHECK(Closed.PendingCount() == 0);
 }
 
+void DrainShutdownReply()
+{
+	FTransportRegistry Transports;
+	Transports.Register(MakeMemoryTransport(128, 3));
+	FCurrentUserAccessPolicy Access;
+	FDiscovery Discovery;
+	FAutomationTarget Target{CreateAutomationIdentity(), "Test", "test", {"memory", "shutdown-reply"}};
+	FOperationCatalog Catalog;
+	bool bHandled{};
+	FOperationInfo Info{"test.close",
+	                    "Close",
+	                    "Shutdown reply drain",
+	                    "test",
+	                    "Requests exit",
+	                    "Accepted",
+	                    WriteRecordWire(RecordType<FAutomationTarget>(), &Target)};
+	Catalog.Register(MakeOperation<FAutomationTarget, FAutomationTarget>(std::move(Info),
+	                                                                     [&](const auto& InRequest)
+	                                                                     {
+		                                                                     bHandled = true;
+		                                                                     return InRequest;
+	                                                                     }));
+	Catalog.Seal();
+	FAutomationServer Server(Catalog, Target, Transports.Listen(Target.Address), Access);
+	FConnectionManager Client(Transports, Discovery, Access);
+	const auto Hello = Await(Client.Connect(ParseJson(R"({"address":{"scheme":"memory","address":"shutdown-reply"}})")),
+	                         Client, Server);
+	const auto Connection = ReadValue<std::string>(Fields(Fields(Hello).at("result")).at("connection"));
+	auto Reply = Client.Request(
+	    Connection, "api.call",
+	    FArchiveNode(FArchiveNode::FObject{{"operation", WriteValue(std::string("test.close"))},
+	                                       {"arguments", WriteRecordWire(RecordType<FAutomationTarget>(), &Target)}}));
+	for (unsigned Step = 0; !bHandled && Step < 20000; ++Step)
+	{
+		Client.Poll();
+		Server.Poll();
+	}
+	HYP_CHECK(bHandled);
+	Server.StopAdmission();
+	HYP_CHECK(Server.PendingCount() > 0);
+	const auto Result = Await(std::move(Reply), Client, Server);
+	HYP_CHECK(ReadValue<std::string>(Fields(Result).at("status")) == "completed");
+	for (unsigned Step = 0; Server.PendingCount() && Step < 100; ++Step)
+	{
+		Server.Poll();
+		Client.Poll();
+	}
+	HYP_CHECK(Server.PendingCount() == 0);
+}
+
 void DrainDisconnectedWork()
 {
 	FTransportRegistry Transports;
@@ -212,6 +262,7 @@ int main()
 		Hyperion::Framing();
 		Hyperion::Admission();
 		Hyperion::DrainDisconnectedWork();
+		Hyperion::DrainShutdownReply();
 		std::cout << "Automation connection contracts passed\n";
 		return 0;
 	}

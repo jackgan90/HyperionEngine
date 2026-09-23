@@ -258,11 +258,12 @@ void FAssetWorkspace::DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, s
 	if (InEntry.Document->Loaded().Header.TypeId == RecordType<FMaterialAsset>().Id)
 	{
 		const std::array<std::string, 3> Shapes{"Sphere", "Plane", "Cube"};
-		if (InGui.Combo("Preview mesh", Shapes, InEntry.Shape))
+		auto Shape = InEntry.Shape;
+		if (InGui.Combo("Preview mesh", Shapes, Shape))
 		{
-			InEntry.PreparedGeneration = InEntry.RequestedGeneration = 0;
-			InEntry.bCameraInitialized = false;
-			InEntry.PreviewModel.reset();
+			FAssetPreviewSettings Settings;
+			Settings.Shape = static_cast<std::uint32_t>(Shape);
+			SetPreviewSettings(InEntry, Settings);
 		}
 	}
 	if (!InEntry.Scene)
@@ -270,21 +271,27 @@ void FAssetWorkspace::DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, s
 		InGui.Text("Preparing preview...");
 		return;
 	}
+	auto Yaw = InEntry.YawDegrees;
 	if (InEntry.Document->Loaded().Header.TypeId == RecordType<FSkyAsset>().Id &&
-	    InGui.Slider("Orientation (preview)", InEntry.YawDegrees, -180, 180))
+	    InGui.Slider("Orientation (preview)", Yaw, -180, 180))
 	{
-		const auto Handle = InEntry.Scene->FindHandle("preview-environment");
-		auto Light = *InEntry.Scene->FindNode(Handle)->EnvironmentLight();
-		Light.YawRadians = InEntry.YawDegrees / 57.2957795f;
-		InEntry.Scene->SetEnvironmentLight(Handle, std::move(Light));
+		FAssetPreviewSettings Settings;
+		Settings.Yaw = Yaw;
+		SetPreviewSettings(InEntry, Settings);
 	}
 	if (InGui.Button("Frame"))
 	{
-		FitSceneCamera(InEntry.Camera, *InEntry.Scene, 1.5f, true);
+		FramePreview(InEntry);
 	}
 	InGui.SameLine();
 	InGui.SetNextItemWidth(140);
-	InGui.Slider("Exposure (preview)", InEntry.Exposure, .05f, 8);
+	auto Exposure = InEntry.Exposure;
+	if (InGui.Slider("Exposure (preview)", Exposure, .05f, 8))
+	{
+		FAssetPreviewSettings Settings;
+		Settings.Exposure = Exposure;
+		SetPreviewSettings(InEntry, Settings);
+	}
 	InEntry.Region = InGui.Image(InEntry.TextureId);
 	Bounds["canvas"] = InEntry.Region.Bounds;
 	const auto& B = InEntry.Region.Bounds;

@@ -132,8 +132,10 @@ void CheckInvalidTransform(FWorkspaceFixture& InFixture, FRenderSession& InSessi
 	InFixture.Frame();
 	const auto Statistics = InSession.GetResources().Statistics();
 	InFixture.Type(InFixture.Workspace.ObservedBounds("node/name"), "Renamed after invalid transform");
+	Check(InFixture.Workspace.IsBlocked());
 	InFixture.Gui.FinishEditing();
 	InFixture.Frame();
+	Check(!InFixture.Workspace.IsBlocked());
 	Check(InFixture.Workspace.ActiveDocument()->Error.empty());
 	Check(ReadValue<std::vector<FModelNode>>(InFixture.Workspace.ActiveDocument()->Get("nodes")).front().Name ==
 	      "Renamed after invalid transform");
