@@ -39,13 +39,13 @@ def capture(experiment, frame_count, capture_frames):
     settings['properties']['height'] = 1080
     config = work / f'{experiment}.json'
     config.write_text(json.dumps(settings), encoding='utf-8')
-    arguments = [viewer, '--config', config,
+    arguments = [viewer, '--asset-root', root.parent / 'HyperionAssets', '--config', config,
                  '--frames', frame_count, '--hidden', '--renderdoc-library', library,
                  '--rdc-output', output, '--exercise-rdc-ui']
     if experiment == 'Shadows':
         # Keep all four cascades covered by the authored fixture camera.
         scene = set_initial_view_from_camera(viewer, '/Game/Scenes/Shadows.hasset', work / 'Shadows.hasset',
-                                             mounts=root / 'ContentMounts.json')
+                                             asset_root=root.parent / 'HyperionAssets')
         arguments += ['--scene', scene]
     for frame in capture_frames:
         arguments += ['--capture-rdc', frame]

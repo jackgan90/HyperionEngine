@@ -1,6 +1,6 @@
 #include "ContentBrowser.h"
 #include "EditorPreferences.h"
-#include "Hyperion/ApplicationServices/ContentRootService.h"
+#include "Hyperion/Content/ContentRootService.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Hyperion/Textures/TextureAsset.h"

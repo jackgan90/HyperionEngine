@@ -19,7 +19,11 @@ Viewer、Editor 的可执行入口位于 `Applications`，只选择 D3D12 provid
 
 | ID | 所有权 / 服务 | 依赖 |
 |---|---|---|
-| `assets` | 挂载文件系统、IO、资产服务、目录注册及内容根目录准备/提交服务 | 宿主 Tasks |
+| `assets` | 挂载文件系统、IO、资产服务、目录注册及 Runtime/Content 根切换服务 | 宿主 Tasks |
+| `automation-catalog` | 操作和类型目录 | 无 |
+| `automation-assets` | 共享资产文档的操作适配与任务 | automation-catalog；可选 assets |
+| `automation-session` | 封闭目录、Main 会话任务、endpoint | automation-catalog；在操作适配器之后启动 |
+| `automation-stdio` | CLI / JSONL / MCP 管道和输入缓冲 | automation-session |
 | `window` | FWindow、Main 事件轮询 | 无 |
 | `graphics` | Device、Swapchain、ShaderCompiler、RenderSession、渲染扩展注册表 | assets、window |
 | `gui` | FGui、通用 FGuiRenderer | graphics |
@@ -38,6 +42,8 @@ Editor 的独立资产窗口由 `editor` 插件中的私有窗口宿主管理，
 
 ## 生命周期和线程
 
+自动化功能接入还须遵守 [Automation.md](Automation.md)：GUI 与 agent 使用共享领域服务；适配器在 `automation-session` 前注册、在它之后释放。会话停止接收并排空已提交任务后才能销毁 provider。`Requires` 不会自动选择提供方插件，必需的启动选择由 `Dependencies` 声明。不得让一个适配器关闭其他插件拥有的共享服务。
+
 启动按拓扑顺序执行 `Start(FPluginContext&)`。宿主在 Main 泵消息后调用 `Update(FPluginUpdate)`，提供 frame、elapsed、delta；更新不以窗口可绘制为前提。Editor 最小化时仍推进场景加载和保存；Viewer 的场景接口接收 delta，相机推进在场景插件内部完成。
 
 停止先断开所有事件，再逆序 `Quiesce()`，阻止生产新帧并汇合已提交帧；随后逐个逆序执行作用域 cleanup、`Stop()`、移除服务、析构实例。消费者清理期间其 provider 仍然存活。失败的 Start 也执行对应清理。`Defer()` 注册按逆序调用的 cleanup，某个 cleanup 抛错不会阻止其余清理，宿主最终报告第一个清理错误。`TrackPluginTask()` 可将任务 join 纳入该作用域；任务必须在捕获的插件状态销毁前完成。
@@ -45,6 +51,8 @@ Editor 的独立资产窗口由 `editor` 插件中的私有窗口宿主管理，
 生命周期、服务查找和事件分发属于创建宿主的 Main 线程。服务的具体方法仍须遵守自身线程契约。不得把 Context 或服务注册表作为 Render/RHI 的共享可变状态：Main 注入长寿命服务引用，跨域工作传递 owned snapshot。Viewer 仍通过 FFramePipeline 控制 Main/Render/RHI lead；GPU native handle 的保活仍由资源协调器和 fence 负责。Quiesce 或 CPU task 完成不等于 GPU 完成。
 
 最终 GPU validation 检查归拥有 Device 的 `graphics` 插件：消费者和 RenderSession 关闭后，在 RHI 0 等待 GPU、释放 Swapchain、读取最终统计并销毁 Device，再回 Main 向 FApplicationControl 报告错误。等待 GPU 或读取统计失败时，也须在 RHI 0 按 Swapchain、Device 的顺序释放资源。Viewer/Editor 较早的统计仅覆盖各自停止时刻，不能替代这项最终检查。
+
+资源插件先建立独立的 `/Engine`，没有 Game 根仍提供完整服务。消费内容状态的插件须通过 `IContentRootParticipant` 参与换根，并用 `Context.Defer` 在销毁前撤销注册。Main 上统一检查 dirty/busy，全部通过后才释放旧文档、任务和渲染引用。GUI 弹窗与 automation 参数只表达策略，共用 `FContentRootService`；Runtime/Application 不承载换根逻辑。详见 [ContentFileSystem.md](ContentFileSystem.md)。
 
 ## 服务与事件
 
@@ -74,8 +82,8 @@ hyperion_viewer --kernel-only --frames 8
 hyperion_editor --kernel-only --frames 8
 
 # 运行时静态选择（重启生效）
-hyperion_viewer --disable-plugin contact-shadows
-hyperion_viewer --disable-plugin scene-viewer
+hyperion_viewer --asset-root ../HyperionAssets --disable-plugin contact-shadows
+hyperion_viewer --asset-root ../HyperionAssets --disable-plugin scene-viewer
 
 # 不编译以下可选实验插件；应用仍可运行清屏和 Editor
 cmake -S . -B out/build/vs2022 -DHYP_ENABLE_TRIANGLE=OFF -DHYP_ENABLE_MODEL_VIEWER=OFF -DHYP_ENABLE_SCENE_VIEWER=OFF -DHYP_ENABLE_DEBUG_UI=OFF

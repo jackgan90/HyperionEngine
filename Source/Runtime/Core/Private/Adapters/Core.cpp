@@ -50,6 +50,14 @@ void InitializeLog(const std::filesystem::path& InFile)
 	spdlog::set_default_logger(std::move(Logger));
 }
 
+void InitializeStderrLog()
+{
+	auto Logger = std::make_shared<spdlog::logger>("Hyperion", std::make_shared<spdlog::sinks::stderr_color_sink_mt>());
+	Logger->set_pattern("[%H:%M:%S.%e] [%l] %v");
+	Logger->flush_on(spdlog::level::info);
+	spdlog::set_default_logger(std::move(Logger));
+}
+
 void Log(ELogLevel InLevel, std::string_view InMessage)
 {
 	const auto Severity = InLevel == ELogLevel::Error     ? spdlog::level::err

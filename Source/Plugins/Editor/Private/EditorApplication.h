@@ -6,7 +6,7 @@
 #include "EditorInspectionCache.h"
 #include "EditorPreferences.h"
 #include "EditorSelection.h"
-#include "Hyperion/ApplicationServices/ContentRootService.h"
+#include "Hyperion/Content/ContentRootService.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
 #endif
@@ -28,7 +28,9 @@ namespace Hyperion
 {
 struct FEditorOptions
 {
-	std::filesystem::path Mounts;
+	std::filesystem::path EngineContent;
+	std::optional<std::filesystem::path> AssetRoot;
+	bool bReadOnly{};
 	std::filesystem::path Layout;
 	std::filesystem::path UiPreferences;
 	std::filesystem::path PreferencesPath;
@@ -53,7 +55,6 @@ struct FEditorOptions
 	bool bBenchmarkCollapsed{};
 	bool bHidden{};
 	bool bKernelOnly{};
-	bool bExplicitMounts{};
 	std::vector<std::string> DisabledPlugins;
 	bool bExercise{};
 	bool bExerciseGizmo{};
@@ -63,11 +64,14 @@ struct FEditorOptions
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
 
-class FEditorPlugin final : public FPlugin
+class FEditorPlugin final : public FPlugin, public IContentRootParticipant
 {
 public:
 	FEditorPlugin(FEditorOptions InOptions, FPluginContext& InContext);
 	~FEditorPlugin();
+	FContentRootParticipantState ContentRootState() const override;
+	void ReleaseContentRoot() override;
+	void ContentRootChanged() override;
 	void Start(FPluginContext& InContext) override;
 	void Update(const FPluginUpdate& InUpdate) override;
 	void Stop() noexcept override;
@@ -478,6 +482,7 @@ private:
 	bool bRequestRootDialog{};
 	std::filesystem::path RequestedRoot;
 	std::optional<FContentRootCandidate> PendingRoot;
+	bool bDiscardRoot{};
 	bool bSaveThenSwitch{};
 	bool bCommitRoot{};
 	bool bContentVerified{};

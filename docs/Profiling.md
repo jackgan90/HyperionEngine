@@ -17,7 +17,7 @@ python tools/Profile.py --out out/Profiling/MovingDetailGpu --mode detail-gpu --
 python tools/Profile.py --out out/Profiling/RuntimeOff --mode off --no-build
 
 # 交互控制；先用匹配版本的 Tracy Profiler 连接本机，再在 GUI 中开关采集
-out/build/profile/bin/hyperion_viewer.exe --config experiments/Scene.json --no-vsync
+out/build/profile/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json --no-vsync
 ```
 
 省略 `--no-build` 时，helper 先构建 Viewer 和所需采集工具。`--mode` 支持 `off/basic/detail/gpu/detail-gpu/sampling`；默认小幅连续相机运动，`--static` 改为静止，`--visible` 显示窗口，`--warmup`、`--frames`、`--timeout` 控制运行边界。`--viewer <exe> --no-build` 可对照普通 Release 构建。输出目录必须不存在，避免覆盖旧证据。场景未在预热结束前加载完成时明确失败；应增加预热，不能把空场景帧用于比较。

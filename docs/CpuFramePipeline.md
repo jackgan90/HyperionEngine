@@ -17,7 +17,7 @@ Main、Render 和 RHI 可以处理不同的 engine tick，同时分别限制 Mai
 也可以通过 Viewer 命令行覆盖：
 
 ```powershell
-.\out\build\debug\bin\hyperion_viewer.exe --main-render-lead 2 --render-rhi-lead 1
+.\out\build\debug\bin\hyperion_viewer.exe --asset-root ../HyperionAssets --main-render-lead 2 --render-rhi-lead 1
 ```
 
 两项领先配置均为启动配置，范围为整数 **0～16**，默认均为 **1**；负数、小数、无效字符串和越界值会在启动时拒绝。修改持久化配置需要重新启动才能生效。本次仍要求至少一条 RHI 线程。

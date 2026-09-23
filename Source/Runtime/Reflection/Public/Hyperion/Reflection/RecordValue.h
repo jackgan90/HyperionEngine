@@ -352,6 +352,10 @@ template<class T> const FRecordValueShape& RecordValueShape()
 		else if constexpr (std::is_enum_v<T>)
 		{
 			Result = RecordValueShape<std::underlying_type_t<T>>();
+			for (const auto Value : RecordEnumValues<T>())
+			{
+				Result.EnumValues.push_back(WriteValue(static_cast<std::underlying_type_t<T>>(Value)));
+			}
 		}
 		else if constexpr (std::is_integral_v<T> || std::is_same_v<T, std::byte>)
 		{
@@ -372,6 +376,13 @@ template<class T> const FRecordValueShape& RecordValueShape()
 		{
 			Result.Kind = ERecordValueKind::Sequence;
 			Result.Element = std::make_shared<const FRecordValueShape>(RecordValueShape<typename T::value_type>());
+			using FElement = typename T::value_type;
+			Result.bBulkSequence = (std::is_arithmetic_v<FElement> && !std::is_same_v<FElement, bool>) ||
+			                       std::is_same_v<FElement, std::byte>;
+			if constexpr (requires { std::tuple_size<T>::value; })
+			{
+				Result.FixedSize = std::tuple_size<T>::value;
+			}
 		}
 		else
 		{

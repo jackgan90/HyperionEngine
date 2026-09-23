@@ -38,7 +38,7 @@ python tools/Bootstrap.py
 
 Content Browser 的根节点和顶部路径显示为 **All**，子目录路径显示为 `All/Scenes` 等；`/Game` 仅作为内部挂载标识。状态栏、保存提示、错误信息、Open Scene、Save Scene As 和 Details 中的资产路径统一省略 `/Game/` 前缀。资产路径输入按当前根目录解析，内部引用和保存数据仍保留完整虚拟路径；本地绝对路径与其他虚拟挂载路径不受影响。
 
-**File > Recent** 显示最近最多五个成功选择的根目录，按最近使用排序并去重。下次启动自动恢复最后成功选择的目录，保持空场景；显式 `--scene` 仍可指定启动场景。显式 `--mounts` 优先于保存的根目录。保存目录已经失效时显示错误并保持 `/Game` 未挂载，可重新选择目录；不会悄悄使用另一个 Game 目录。根目录和历史与 RenderDoc 偏好一起保存在 `Preferences.ini`。
+**File > Recent** 显示最近最多五个成功选择的根目录，按最近使用排序并去重。下次启动自动恢复最后成功选择的目录，保持空场景；显式 `--scene` 仍可指定启动场景。显式 `--asset-root <directory>` 优先于保存的根目录。首次启动没有保存的目录时保持 `/Game` 未挂载，Content Browser 显示选择目录提示。保存目录已经失效时显示错误并保持 `/Game` 未挂载，可重新选择目录；不会悄悄使用另一个 Game 目录。根目录和历史与 RenderDoc 偏好一起保存在 `Preferences.ini`。
 
 Content Browser 左侧显示 `/Game` 目录树，右侧显示所选目录的直接子目录和 `.hasset` 文件，文件夹排在文件前面。中间分隔条可拖动；双击文件夹进入，双击场景打开场景文档，双击 Model、Texture、Material、Sky 打开各自资产页签，损坏文件和未知类型显示读取错误。采用文件夹/文件图标，暂不生成资产内容缩略图。默认布局中浏览器位于 Viewport 下方，右侧 Outliner / Details 保留完整高度；已有布局保持不变，**Window > Reset Layout** 可应用新默认布局。**Refresh**、进入目录和保存资产后更新目录；尚未监听系统文件变化。Open Scene 对话框每次打开和点击 Refresh 都重新扫描。
 
@@ -52,7 +52,9 @@ Content Browser 左侧显示 `/Game` 目录树，右侧显示所选目录的直�
 
 | 参数 | 用途 |
 |---|---|
-| `--mounts ContentMounts.json` | 指定挂载文件；默认优先使用 `ContentMounts.local.json` |
+| `--asset-root <directory>` | 显式选择 Game 资源目录，优先于保存的根目录 |
+| `--engine-content <directory>` | 指定引擎资源目录；开发构建默认使用仓库 Content |
+| `--read-only` | 本次启动将 Game 根设为只读 |
 | `--scene /Game/Scenes/Sponza.hasset` | 启动后直接打开指定原生场景 |
 | `--layout out/editor/Layout.ini` | 布局文件；此路径也是默认值 |
 | `--frames 1200 --capture out/editor/Sponza.png` | 运行指定帧数并保存最后一帧 |

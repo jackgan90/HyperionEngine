@@ -70,7 +70,7 @@ void RegisterViewer(FPluginRegistry& InRegistry, const FOptions& InOptions, cons
 void RegisterViewerServices(FPluginRegistry& InRegistry, const FOptions& InOptions, const FAppSettings& InSettings,
                             FRegisterBackends InBackends)
 {
-	RegisterAssetServices(InRegistry, {InOptions.Mounts, true});
+	RegisterAssetServices(InRegistry, {InOptions.EngineContent, InOptions.AssetRoot, InOptions.bReadOnly});
 	RegisterWindowServices(InRegistry,
 	                       {InSettings.Title,
 	                        {static_cast<unsigned>(InSettings.Width), static_cast<unsigned>(InSettings.Height)},
@@ -96,12 +96,6 @@ void RunViewerApplication(int InCount, char** InValues, FRegisterBackends InBack
 	auto Options = ParseOptions(InCount, InValues);
 	auto Settings = LoadSettings(Options.Config);
 	ApplyOptions(Options, Settings);
-	const auto Root = std::filesystem::path(HYP_SOURCE_DIR);
-	if (Options.Mounts.empty())
-	{
-		Options.Mounts = Root / (std::filesystem::exists(Root / "ContentMounts.local.json") ? "ContentMounts.local.json"
-		                                                                                    : "ContentMounts.json");
-	}
 	FApplicationHost Host(static_cast<unsigned>(Settings.Workers), static_cast<unsigned>(Settings.RhiThreads));
 	FPluginRegistry Registry;
 	RegisterViewerServices(Registry, Options, Settings, std::move(InBackends));

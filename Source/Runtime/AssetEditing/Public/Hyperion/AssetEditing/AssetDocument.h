@@ -5,10 +5,10 @@
 namespace Hyperion
 {
 // Only the edited fields enter history; bulk payloads are immutable and shared.
-class FAssetEditorDocument
+class FAssetEditDocument
 {
 public:
-	explicit FAssetEditorDocument(std::shared_ptr<const FLoadedAsset> InAsset);
+	explicit FAssetEditDocument(std::shared_ptr<const FLoadedAsset> InAsset);
 	const FArchiveNode& Get(std::string_view InField) const;
 	void Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction = 0, bool bInAffectsPreview = true);
 	void FinishInteraction();
@@ -54,5 +54,7 @@ private:
 };
 
 void ShareAssetBulk(FArchiveNode& InNode);
+bool IsAssetPathReadOnly(const FAssetService& InAssets, const std::filesystem::path& InPath);
+bool CanEditTextureEncoding(const FTextureAsset& InTexture);
 FArchiveNode RebuildTextureEncodingDraft(const FArchiveNode& InDraft, EMaterialTextureEncoding InEncoding);
 } // namespace Hyperion

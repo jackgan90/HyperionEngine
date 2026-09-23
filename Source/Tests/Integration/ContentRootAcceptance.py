@@ -1,4 +1,4 @@
-"""Verify last-root restoration, explicit mount precedence and invalid-root startup."""
+"""Verify empty startup, last-root restoration, explicit directories and invalid-root startup."""
 import json
 import pathlib
 import subprocess
@@ -29,18 +29,17 @@ def main():
     restored = run('restored')
     assert pathlib.Path(restored['asset_root']) == output / 'A', restored
     assert not restored['root_restore_failed'], restored
-    mounts = output / 'ExplicitMounts.json'
-    mounts.write_text(json.dumps({'version': 1, 'mounts': [
-        {'root': '/Engine', 'directory': str(engine / 'Content'), 'read_only': True},
-        {'root': '/Game', 'directory': str(output / 'B'), 'read_only': False}]}), encoding='utf-8')
-    explicit = run('explicit', '--mounts', str(mounts))
+    explicit = run('explicit', '--asset-root', str(output / 'B'))
     assert pathlib.Path(explicit['asset_root']) == output / 'B', explicit
     preferences.write_text(
         f'version=1\nrenderdoc_capture=false\nasset_root={(output / "Missing").as_posix()}\n',
         encoding='utf-8')
     invalid = run('invalid')
     assert not invalid['asset_root'] and invalid['root_restore_failed'], invalid
-    print('PASS: root restoration, explicit mount precedence and invalid-root recovery')
+    preferences.unlink()
+    empty = run('empty')
+    assert not empty['asset_root'] and not empty['root_restore_failed'], empty
+    print('PASS: empty startup, root restoration, explicit directory and invalid-root recovery')
 
 
 if __name__ == '__main__':

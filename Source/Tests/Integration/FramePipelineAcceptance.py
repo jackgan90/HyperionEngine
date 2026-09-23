@@ -18,7 +18,8 @@ work.mkdir(exist_ok=True)
 def run(name, frames, a, b, *arguments, configured=False):
     limits = [] if configured else ["--main-render-lead", str(a), "--render-rhi-lead", str(b)]
     result = subprocess.run(
-        [str(viewer), "--frames", str(frames), *limits, "--no-vsync", "--hidden", *map(str, arguments)],
+        [str(viewer), "--asset-root", str(root.parent / "HyperionAssets"),
+         "--frames", str(frames), *limits, "--no-vsync", "--hidden", *map(str, arguments)],
         cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90)
     log = result.stdout + result.stderr
     (work / f"{name}.log").write_text(log, encoding="utf-8")

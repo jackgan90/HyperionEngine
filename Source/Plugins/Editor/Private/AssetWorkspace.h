@@ -1,5 +1,5 @@
 #pragma once
-#include "AssetDocument.h"
+#include "Hyperion/AssetEditing/AssetDocument.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
@@ -39,7 +39,7 @@ public:
 	void DrawCloseDialog(FGui& InGui);
 	void PrepareFrame();
 	void Build(FRenderGraph& InGraph, std::vector<FGuiTextureBinding>& OutTextures);
-	const FAssetEditorDocument* ActiveDocument() const;
+	const FAssetEditDocument* ActiveDocument() const;
 	bool IsPreviewReady() const;
 	std::string ActiveStatus() const;
 	FVec4 ObservedBounds(std::string_view InId) const;
@@ -94,8 +94,8 @@ private:
 		std::filesystem::path Path;
 		std::string Identity;
 		FAssetRequest Load;
-		std::shared_ptr<FAssetEditorDocument> Document;
-		std::optional<TAsyncResult<std::shared_ptr<FAssetEditorDocument>>> Initialization;
+		std::shared_ptr<FAssetEditDocument> Document;
+		std::optional<TAsyncResult<std::shared_ptr<FAssetEditDocument>>> Initialization;
 		std::optional<TAsyncResult<FArchiveNode>> EncodingEdit;
 		std::optional<FReferenceSelection> ReferenceEdit;
 		bool bSaveRequested{};

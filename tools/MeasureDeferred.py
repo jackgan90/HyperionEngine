@@ -24,7 +24,7 @@ COUNTERS = ("visible_items", "scene_draws", "instanced_items", "instanced_draws"
 
 
 def run_case(viewer, root, output, scene, size, moving, shadows, pipeline, layout,
-             repeat, samples, warmup, main_lead=1, render_lead=1):
+             repeat, samples, warmup, main_lead=1, render_lead=1, asset_root=None):
     width, height = size
     name = f"{scene}-{width}x{height}-{'moving' if moving else 'static'}-csm{int(shadows)}-{pipeline}-{layout}-{repeat}"
     config = json.loads((benchmark_config_path(root, scene)).read_text(encoding="utf-8"))
@@ -32,7 +32,8 @@ def run_case(viewer, root, output, scene, size, moving, shadows, pipeline, layou
     config_path = output / f"{name}.json"
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     csv_path = output / f"{name}.csv"
-    args = [str(viewer), "--config", str(config_path), "--hidden", "--no-ui", "--no-vsync",
+    args = [str(viewer), "--asset-root", str((asset_root or root.parent / "HyperionAssets").resolve()),
+            "--config", str(config_path), "--hidden", "--no-ui", "--no-vsync",
             "--frames", str(samples + warmup), "--benchmark-warmup", str(warmup),
             "--benchmark", str(csv_path), "--pipeline", pipeline, "--gbuffer", layout,
             "--shadow-resolution", "2048", "--main-render-lead", str(main_lead),
@@ -93,6 +94,7 @@ def main():
     root = pathlib.Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--viewer", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_viewer.exe")
+    parser.add_argument("--asset-root", type=pathlib.Path, default=root.parent / "HyperionAssets")
     parser.add_argument("--output", type=pathlib.Path, default=root / "out/deferred-performance")
     parser.add_argument("--samples", type=int, default=500)
     parser.add_argument("--warmup", type=int, default=300)
@@ -125,7 +127,8 @@ def main():
                         for pipeline, layout in modes:
                             name, summary = run_case(viewer, root, output, scene, size, moving, shadows,
                                                      pipeline, layout, repeat, options.samples, options.warmup,
-                                                     options.main_render_lead, options.render_rhi_lead)
+                                                     options.main_render_lead, options.render_rhi_lead,
+                                                     options.asset_root)
                             report["runs"][name] = summary
                             group[pipeline, layout] = summary
                             (output / "Summary.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

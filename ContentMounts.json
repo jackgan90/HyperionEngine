@@ -1,7 +1,0 @@
-{
-  "version": 1,
-  "mounts": [
-    {"root": "/Engine", "directory": "Content", "read_only": true},
-    {"root": "/Game", "directory": "../HyperionAssets", "read_only": false}
-  ]
-}

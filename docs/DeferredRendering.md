@@ -92,9 +92,9 @@ RHI has ordered color lists, per-slot formats, independent load/store and sample
 ## Viewer and measurement
 
 ```powershell
-out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
-out/build/debug/bin/hyperion_viewer.exe --config experiments/Model.json --pipeline forward
-out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json --gbuffer high --gbuffer-debug 2
+out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
+out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Model.json --pipeline forward
+out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json --gbuffer high --gbuffer-debug 2
 python tools/MeasureDeferred.py --samples 500 --warmup 300 --repeats 2
 ```
 

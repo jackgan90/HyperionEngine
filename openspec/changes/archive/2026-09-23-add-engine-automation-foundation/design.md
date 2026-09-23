@@ -1,0 +1,36 @@
+## Context
+
+The owner prioritizes long-term maintainability, then identical GUI/agent logic, then incremental coverage. Reflection already describes values and editable projections, while asset history/save behavior lives in Editor Private. Public C++ pointers, callbacks, execution domains and lifetimes are not a remote API contract.
+
+## Goals / Non-Goals
+
+**Goals:** One reflected data contract and one typed registration per operation; lazy discovery; stable structured results/errors; explicit Main ownership; asynchronous admission and shutdown; a usable CLI and MCP; a first shared asset-document workflow with real persistence and regression validation.
+
+**Non-Goals:** Full Public-header coverage, live attachment to an existing Editor, runtime plugin loading, remote HTTP deployment, arbitrary C++ execution, cross-resource atomic transactions, and GPU resource bindings in this change. These remain visible in a coverage inventory.
+
+## Decisions
+
+1. **Separate values, domain services, operations, and transports.** Runtime/Reflection owns strict natural-JSON codecs and schemas. Runtime/AssetEditing owns the existing GUI-independent document implementation. Runtime/Automation owns catalog, typed bindings, jobs and endpoint. A CPU automation plugin owns service instances and registers operations; the application only selects plugins and a stream transport. GUI calls the same AssetEditing functions. No Runtime module imports a concrete plugin or native/vendor type.
+2. **Add an API projection rather than change persistence.** Natural JSON converts nested records and numeric arrays using reflected shapes, with strict unknown-field, missing-required, enum, fixed-size and numeric validation. Integers wider than 32 bits use decimal strings to avoid client precision loss. Existing archive envelopes, bulk storage and migrations stay unchanged. API field descriptions are independent metadata; Inspector descriptions can supply an existing fallback. JSON parser limits and duplicate-key rejection apply before invocation.
+3. **Typed operation registration is authoritative.** A stable ID/version, reflected request/result, concise description, usage example, declared side effects, owner and completion description feed discovery and invocation. Template bindings infer types and supply codecs. Search returns bounded summaries in stable order; describe expands schemas on demand. A sealed catalog rejects duplicate or late registrations and can describe unavailable operations with a reason. Each provider installs scoped owner cleanup before registering operations, so partial startup failure cannot retain callable closures capturing destroyed state; pure type metadata may remain. This withdrawal is limited to startup rollback/teardown, not hot unloading. Shutdown closes admission before draining work and releasing captured services.
+4. **Own deferred work explicitly.** Handlers return a completed typed value or a typed pending result with Poll and optional Cancel. The session owns jobs, bounded retention, monotonic opaque IDs and completed/error states. Cancel is only offered when supported, and never claims to undo committed work. Readiness, persistence and cancellation semantics belong to operation declarations. Request validation happens before side effects. Non-idempotent requests are not automatically retried.
+5. **Start with a shared asset document.** Move the current asset draft/history/save implementation into AssetEditing, keeping existing GUI behavior. Register open/info/rename/undo/redo/save/close and texture-encoding operations. Encoding uses the same CPU mip rebuilding function as GUI; it is not a raw field assignment. Every automated mutation requires the current document generation. Busy edits and concurrent saves are rejected explicitly. Closing a dirty document requires an explicit discard policy. Registered types are queryable without loading an asset. Bulk payloads are not dumped into tool results.
+6. **Use a persistent local host.** The existing plugin lifecycle owns Tasks, IO/assets, documents, catalog and transport pumping. Catalog queries also work when the asset provider is disabled. The application offers one-shot discovery/call, JSON-lines sessions, and MCP stdio. Long-lived workflows use a session. EOF stops admission and drains admitted work. stdout contains protocol output only; diagnostics use stderr. There is no network listener. MCP is explicitly pinned to the documented 2025-11-25 stdio lifecycle/tools subset; engine jobs are ordinary tools, so optional MCP Tasks support is not required.
+7. **Keep discovery independent from model-specific features.** Fixed bootstrap tools expose info, search, describe, call and job control. Type schemas are fetched through describe. No per-search mutation of tools/list. CLI and MCP invoke the same endpoint, and output JSON is bounded. Requests and unwrapped domain results keep the 1 MiB / 65,536-node / 48-depth budget. Transport responses reserve a separate 4 MiB + 64 KiB / 65,792-node / 56-depth envelope budget for MCP duplication/escaping, request IDs and job/status metadata. Encoding a handler's result after execution must report `result_unavailable` rather than invalid input, without claiming rollback; JSONL response failures preserve correlation and do not terminate a usable stream. Detailed schemas and usage examples are generated from registrations, not hand-maintained parallel tool lists.
+8. **Make future coverage reviewable.** Documentation requires new user-facing features to own a UI-independent domain operation, reflect request/results and register automation or explicitly record a deferred adapter. CI tests prove a newly registered test operation/field is discoverable and callable without transport edits. Coverage tracks capabilities rather than claiming one-to-one remote invocation of C++ implementation details.
+
+## Risks / Trade-offs
+
+- Generic call tools cannot constrain a model to a dynamically selected schema → describe supplies the exact schema and the server validates it before invocation.
+- Extraction can change editor behavior → move the implementation with minimal semantic changes, preserve tests and exercise GUI regression paths.
+- Asset operations are only a first slice → publish the remaining scene/render/IPC coverage explicitly and keep core independent of those domains.
+- Long-running calls outlive the input connection → close admission, join/drain all admitted asset work, then destroy documents/providers in dependency order.
+- A bounded stdio server is not a remotely authenticated service → support local process stdio only; future IPC/authentication is a separate transport addition.
+
+## Migration Plan
+
+Existing executables and asset formats remain compatible. Editor links AssetEditing instead of compiling its private document source. Automation is a new optional startup composition. Add reflected schema support and contract tests first, then domain extraction, operations, transport, end-to-end checks and developer documentation. Do not commit or archive during this implementation request.
+
+## Open Questions
+
+None blocking the foundation. Scene document ownership and live Editor IPC require separate adaptation designs against this contract.

@@ -8,31 +8,31 @@
 
 ```powershell
 ./tools/Build.ps1 -Preset release
-./out/build/release/bin/hyperion_viewer.exe --config experiments/Scene.json
-./out/build/release/bin/hyperion_viewer.exe --scene /Game/Scenes/SharedAssets.hasset
+./out/build/release/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
+./out/build/release/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/SharedAssets.hasset
 ```
 
-`ContentMounts.json` 的默认映射是 `/Engine -> Content`、`/Game -> ../HyperionAssets`。可复制为被忽略的 `ContentMounts.local.json` 修改本机位置，或用 `--mounts path/to/Mounts.json` 显式指定配置。相对目录以挂载配置文件所在目录为基准；相对 CLI 配置文件参数以当前工作目录为基准。
+引擎资源目录由应用组合层提供，开发构建默认将仓库 `Content` 映射为只读 `/Engine`。可通过 `--engine-content <directory>` 指定测试或部署中的资源目录。**`/Game` 默认未挂载**；Editor 从 `Preferences.ini` 恢复上次选择，CLI/MCP 可调用 `content.root.set`，Viewer、AssetTool 和单次 CLI 可使用 `--asset-root <directory>`。所有入口调用同一个内容根服务；相对目录以进程工作目录为基准。`--read-only` 将所选 Game 目录设为只读。
 
-```json
-{
-  "version": 1,
-  "mounts": [
-    {"root": "/Engine", "directory": "D:/Engine/Content", "read_only": true},
-    {"root": "/Game", "directory": "E:/MyContent", "read_only": false}
-  ]
-}
+Triangle、Model 和 Scene 示例都使用 Game 内容，包括三角形演示的 Shader，因此运行示例需显式提供资产根目录。性能工具的 `--asset-root` 默认指向同级 HyperionAssets，并将该选择传给 Viewer；这属于示例工具配置，不是引擎启动回退规则。
+
+```powershell
+./out/build/release/bin/hyperion_viewer.exe --engine-content D:/Engine/Content --asset-root E:/MyContent --scene /Game/Scenes/Example.hasset
 ```
 
-挂载配置在应用组合层加载，请求运行期间保持冻结。编辑器通过 assets 插件提供的 `FContentRootService` 验证候选挂载和资产索引；调用者停止旧内容生产、释放场景及渲染引用并等待工作结束后，才可在 Main 独占提交新 `/Game`。提交清空旧资产缓存和资产索引，并替换已验证的挂载集合，文件系统与服务对象地址保持稳定。其他调用者不得在存在请求或旧内容引用时直接替换挂载。
+`Runtime/Content` 的 `FContentRootService` 管理 Main 上的目录状态、generation、候选索引及切换参与者。`Set`/`Clear` 使用当前 generation；`Prepare`/`Commit` 供需要分阶段显示 UI 的调用方使用。先验证候选，再统一检查参与者的 dirty/busy 状态，随后释放旧内容、重置索引与缓存、替换映射并通知参与者恢复。未保存修改必须先保存或显式丢弃；未完成的编辑和保存返回 busy。相同规范目录和权限保持文档不变。文件系统与服务对象地址保持稳定，请求期间挂载保持冻结。
 
-包路径使用 UTF-8 和 `/`，名称大小写必须与磁盘一致；拒绝越过挂载根的 `..`、重复/重叠映射及挂载根之下的符号链接/junction。Engine 默认只读；工具显式 `--authoring` 才可覆盖挂载的只读设置。路径查找失败不会退回旧目录。编辑器的目录选择、最近目录和启动恢复规则见 [Editor.md](Editor.md)。
+内容消费者实现 `IContentRootParticipant`，以作用域 cleanup 撤销注册。`ContentRootState` 只查询状态；`ReleaseContentRoot` 停止请求并汇合任务、释放文档和渲染引用；`ContentRootChanged` 重建当前内容的消费状态。参与者不得在回调中发起另一次切换或修改注册集合。退休或重建阶段的意外失败会使服务拒绝继续操作，需要重启宿主。禁止绕过服务直接替换仍有消费者的挂载。
+
+挂载 JSON 文件、local override 和 `--mounts` 已移除；原来的 `/Game` 目录改为 `--asset-root` 或运行时设根，原来的 `/Engine` 目录改为 `--engine-content`。没有目录时不会回退到同级资产仓库。既有资产格式、包路径与身份保持不变。
+
+包路径使用 UTF-8 和 `/`，名称大小写必须与磁盘一致；拒绝越过挂载根的 `..`、重复/重叠映射及挂载根之下的符号链接/junction。Engine 默认只读；AssetTool 显式 `--authoring` 才允许生成引擎资源，不会覆盖 Game 的 `--read-only` 设置。路径查找失败不会退回旧目录。编辑器的目录选择、最近目录和启动恢复规则见 [Editor.md](Editor.md)。
 
 ## API 与模块
 
 `Runtime/IO` 的 `FMountedFileSystem` 实现 `IFileSystem`，提供 Normalize、Resolve、Read、ReadRange、ReadTree、WriteAtomic、Remove、Exists、Enumerate、ListDirectory 和 AcquireWriteLease。ListDirectory 返回直接子文件、目录及逐项诊断，保留空目录并阻止跟随挂载内链接。ReadTree 将递归枚举、扩展名筛选和读取合并，返回文件路径与字节；每个文件独立受读取大小上限约束。目录和链接检查在本次操作内完成，不跨请求缓存文件内容或校验结果，不承诺多个文件的原子快照。`FIOService` 保留 IO 域调度、统计、取消和原子发布能力。实际文件访问在本地后端完成，内存文件系统仍用于独立测试。
 
-`FAssetService` 在缓存、写入顺序、失效和依赖图处理中使用同一规范路径；启动和换根从文件头重建 Engine/Game 索引，重复 ID 报错，不需要持久化 Catalog。引用检查 ID 和类型；作者保存/导入的引用不固定 Revision。旧相对引用可读；新挂载资产的发布和场景保存使用包路径，搬迁只需修改挂载配置。
+`FAssetService` 在缓存、写入顺序、失效和依赖图处理中使用同一规范路径；启动和换根从文件头重建已挂载根的索引，重复 ID 报错，不需要持久化 Catalog。引用检查 ID 和类型；作者保存/导入的引用不固定 Revision。旧相对引用可读；新资产的发布和场景保存使用包路径，搬迁后重新选择目录即可。
 
 源导入、截图、缓存和隔离测试仍可显式使用本地路径。业务资源入口使用 `/Engine/...` 或 `/Game/...`。Scene、Environment 等 CPU 数据模块不依赖 Renderer/RHI。
 
@@ -50,8 +50,8 @@ python tools/PrepareContent.py --assets-root ../HyperionAssets --offline
 # 只恢复源缓存，用于导入开发和测试。
 python tools/PrepareContent.py --restore-only
 
-./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json import D:/Sources/Model.glb /Game/Models/Custom.hasset --library /Game --source-root D:/Sources --source-id custom
-./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json validate-library /Game
+./out/build/release/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets import D:/Sources/Model.glb /Game/Models/Custom.hasset --library /Game --source-root D:/Sources --source-id custom
+./out/build/release/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets validate-library /Game
 ```
 
 默认源缓存是 `HyperionAssets/.cache/Sources`，可通过 `--cache` 改到其他未跟踪目录。`Metadata/Sources.json` 记录固定来源/哈希、生成器、完整自创配方和发布根。`--source-root` 与 `--source-id` 必须一起提供；逻辑来源 ID 在不同机器上保持不变。来源记录是可选的，运行时只需要原生资产及文本 Shader。导入映射从现存 hasset 的可选 Import.OutputIds 重建；依赖存放在可见类型目录中，每个 ID 只有一个当前文件，历史由 Git/LFS 管理。
@@ -61,7 +61,7 @@ python tools/PrepareContent.py --restore-only
 已有虚拟原生引用在导入时经过依赖图和身份校验后保留，并清除作者引用的 revision 约束。天空的通用 GGX Smith BRDF LUT 位于 `/Engine/Textures/EnvironmentBrdf.hasset`，不会随每个天空重复发布。引擎 LUT 可显式重建：
 
 ```powershell
-./out/build/release/bin/hyperion_asset_tool.exe --mounts ContentMounts.json --authoring build-brdf /Engine/Textures/EnvironmentBrdf.hasset
+./out/build/release/bin/hyperion_asset_tool.exe --authoring build-brdf /Engine/Textures/EnvironmentBrdf.hasset
 ```
 
 HyperionAssets 的 hasset 使用 LFS，文本 Shader 和元数据使用普通 Git。第三方许可及固定来源在 `Metadata` 中按资产保留，根 LICENSE 不替代它们。发布兼容性应记录资产仓库与引擎的配套版本；未提交验收阶段以 OpenSpec change 和验证记录标识。

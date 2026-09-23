@@ -63,6 +63,13 @@ void FEditorPlugin::Initialize()
 	AssetWorkspace = std::make_unique<FAssetWorkspace>(Assets, Tasks, *Session, Device->GetCapabilities());
 	Error = Context.Require<FContentRootService>().StartupError;
 	InitializePlacement();
+	auto& Content = Context.Require<FContentRootService>();
+	Context.Defer(
+	    [this, &Content]
+	    {
+		    Content.UnregisterParticipant(*this);
+	    });
+	Content.RegisterParticipant(*this);
 	if (!Options.Scene.empty())
 	{
 		OpenScene(Options.Scene);

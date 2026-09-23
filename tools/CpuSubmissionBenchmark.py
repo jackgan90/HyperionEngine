@@ -85,7 +85,7 @@ def run(args, label, viewer, trial, count, moving, shadows):
     name += f"-{'csm' if shadows else 'forward'}-R{trial}"
     csv_path = args.output / f"{name}.csv"
     config = args.output / "Clear.json" if count == 0 else ROOT / "experiments/Scene.json"
-    command = [str(viewer), "--config", str(config), "--no-vsync", "--frames",
+    command = [str(viewer), "--asset-root", str(args.asset_root.resolve()), "--config", str(config), "--no-vsync", "--frames",
                str(args.warmup + args.samples), "--benchmark-warmup", str(args.warmup),
                "--benchmark", str(csv_path)]
     if not args.visible:
@@ -144,6 +144,7 @@ def main():
     parser.add_argument("--scene-shadows", choices=["both", "on", "off"], default="both")
     parser.add_argument("--visible", action="store_true")
     parser.add_argument("--ui", action="store_true")
+    parser.add_argument("--asset-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
     args = parser.parse_args()
     if min(args.warmup, args.samples, args.trials) < 1 or any(count < 0 for count in args.counts):
         parser.error("Positive warmup/samples/trials and nonnegative counts are required")

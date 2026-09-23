@@ -10,9 +10,10 @@ import subprocess
 from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
 
 
-def measure(viewer, root, work, name, motion, enabled, samples, warmup, resolution):
+def measure(viewer, root, work, name, motion, enabled, samples, warmup, resolution, asset_root=None):
     output = work / f"{name}.csv"
-    args = [str(viewer), "--config", str(benchmark_config_path(root)),
+    args = [str(viewer), "--asset-root", str((asset_root or root.parent / "HyperionAssets").resolve()),
+            "--config", str(benchmark_config_path(root)),
             "--hidden", "--no-ui", "--no-vsync", "--frames", str(samples + warmup),
             "--benchmark-warmup", str(warmup), "--benchmark", str(output),
             "--shadow-resolution", str(resolution)]
@@ -64,6 +65,7 @@ def main():
     root = pathlib.Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--viewer", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_viewer.exe")
+    parser.add_argument("--asset-root", type=pathlib.Path, default=root.parent / "HyperionAssets")
     parser.add_argument("--output", type=pathlib.Path, default=root / "out/shadow-performance")
     parser.add_argument("--samples", type=int, default=800)
     parser.add_argument("--warmup", type=int, default=200)
@@ -85,14 +87,14 @@ def main():
             for enabled in ([False, True] if repeat % 2 == 0 else [True, False]):
                 name = f"{mode}{'On' if enabled else 'Off'}{repeat}"
                 pair[enabled] = measure(options.viewer.resolve(), root, options.output, name, motion, enabled,
-                                        options.samples, options.warmup, options.resolution)
+                                        options.samples, options.warmup, options.resolution, options.asset_root)
                 report["runs"][name] = pair[enabled]
             report["comparisons"][f"{mode}{repeat}"] = {
                 "added_cpu_ms": pair[True]["pipeline_prepare_ms"]["mean"] - pair[False]["pipeline_prepare_ms"]["mean"],
                 "added_forward_gpu_ms": pair[True]["forward_gpu_ms"]["mean"] - pair[False]["forward_gpu_ms"]["mean"]}
     report["runs"]["Sustained"] = measure(options.viewer.resolve(), root, options.output, "Sustained",
                                             motions["CameraLight"], True, options.sustained,
-                                            options.warmup, options.resolution)
+                                            options.warmup, options.resolution, options.asset_root)
     report_path = options.output / "Summary.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"PASS: warmed nonempty scenes, validation, stable PSOs/descriptors and bounded GPU memory. {report_path}")

@@ -41,7 +41,8 @@ def planner(args, executable, name):
 def viewer(args, executable, name, motion):
     output = args.output / f"{name}.csv"
     capture = args.output / f"{name}.png"
-    command = [str(executable), "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-ui",
+    command = [str(executable), "--asset-root", str(args.asset_root.resolve()),
+               "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-ui",
                "--no-vsync", "--frames", str(args.warmup + args.samples), "--benchmark-warmup", str(args.warmup),
                "--benchmark", str(output), "--capture", str(capture)]
     if motion != "stable":
@@ -92,6 +93,7 @@ def main():
     parser.add_argument("--candidate", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--kind", choices=("planner", "viewer"), default="planner")
+    parser.add_argument("--asset-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
     parser.add_argument("--warmup", type=int, default=200, help="Viewer warmup; planner uses its fixed 80 frames")
     parser.add_argument("--samples", type=int, default=200)
     parser.add_argument("--trials", type=int, default=2)

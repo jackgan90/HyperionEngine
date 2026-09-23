@@ -254,6 +254,7 @@ void FRecordRegistry::Register(const FRecordDescriptor& InType)
 			                      InLeft.Options.Aliases == InRight.Options.Aliases && InLeft.Write == InRight.Write &&
 			                      InLeft.Read == InRight.Read && InLeft.Visit == InRight.Visit &&
 			                      InLeft.Options.Inspector == InRight.Options.Inspector &&
+			                      InLeft.Options.Description == InRight.Options.Description &&
 			                      InLeft.Shape == InRight.Shape;
 		               });
 		if (Existing.CppType != InType.CppType || Existing.Version != InType.Version ||

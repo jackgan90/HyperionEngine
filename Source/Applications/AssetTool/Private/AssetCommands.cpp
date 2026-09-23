@@ -141,13 +141,13 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	{
 		InOutput << "hyperion_asset_tool import SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] "
 		            "[--library DIRECTORY] [--source-root DIRECTORY --source-id ID]\n"
-		         << "Global options: --mounts CONFIG.json [--authoring]\n"
+		         << "Global options: --asset-root DIRECTORY --engine-content DIRECTORY [--read-only] [--authoring]\n"
 		         << "hyperion_asset_tool build-brdf OUTPUT.hasset\n"
 		         << "hyperion_asset_tool --authoring build-placement\n"
 		         << "hyperion_asset_tool upgrade LEGACY.hasset OUTPUT.hasset\n"
 		         << "hyperion_asset_tool inspect|validate ROOT.hasset\n"
 		         << "hyperion_asset_tool validate-library ROOT\n"
-		         << "hyperion_asset_tool --mounts CONFIG.json migrate-library /Game EMPTY_STAGING_DIRECTORY\n"
+		         << "hyperion_asset_tool --asset-root DIRECTORY migrate-library /Game EMPTY_STAGING_DIRECTORY\n"
 		         << "hyperion_asset_tool export-json INPUT.hasset OUTPUT.json\n"
 		         << "hyperion_asset_tool export-envelope INPUT.hasset OUTPUT.json\n"
 		         << "hyperion_asset_tool measure-source SOURCE.gltf|SOURCE.glb\n";

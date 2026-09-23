@@ -41,6 +41,9 @@ struct FRecordValueShape
 	std::shared_ptr<const FRecordValueShape> Element;
 	const FRecordDescriptor& (*Record)(){};
 	FArchiveNode (*DefaultValue)(){};
+	std::optional<std::size_t> FixedSize;
+	std::vector<FArchiveNode> EnumValues;
+	bool bBulkSequence{};
 };
 
 enum class EPropertyWidget : std::uint8_t
@@ -78,6 +81,8 @@ struct FRecordMemberOptions
 	bool bPersistent = true;
 	std::vector<std::string> Aliases;
 	std::optional<FPropertyPresentation> Inspector;
+	// Consumer-independent documentation; does not affect the persistent representation.
+	std::string Description;
 };
 
 inline FRecordMemberOptions Inspect(std::string InLabel, std::optional<double> InMinimum = {},

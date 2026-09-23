@@ -6,8 +6,8 @@ From the repository root:
 
 ```powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
-./out/build/debug/bin/hyperion_viewer.exe --scene /Game/Scenes/Showcase.hasset --scene-culling bvh
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Showcase.hasset --scene-culling bvh
 ```
 
 `experiments/Scene.json` opens the Khronos Sponza atrium at a fixed initial browsing view, with panels initially visible (Tab toggles them). The Scene panel selects native sky assets and edits sky intensity, yaw and background visibility; see [SkyLighting.md](SkyLighting.md) for importing custom HDR/EXR environments and the three shipped options. Published sample content comes from HyperionAssets; mount setup and explicit source recovery are described in [ContentFileSystem.md](ContentFileSystem.md). See [Sponza migration](SponzaMigration.md) for source provenance and view calibration. The initial browsing view has a vertical field of view of approximately 41.78 degrees. Projection and CSM use the current viewport lens; no authored camera object is needed. ModelViewer explicitly creates its own camera with a 1-radian vertical field of view.

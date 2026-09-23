@@ -1,6 +1,6 @@
 # 独立材质与纹理资产
 
-当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+当前 Content 归属、目录选择及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 原生模型 schema 3 保存几何、带稳定 ID 的源节点/primitive 和 `MaterialSlots` 引用；旧 schema 2 可兼容读取。材质 `hyperion.materialasset` 与纹理 `hyperion.textureasset` 是可单独加载、编辑、保存的反射记录，可由不同模型共享。运行时不读取 glTF、源图片或资产 JSON；HLSL 仍由现有 ShaderCompiler 编译，编译后的 shader 资产不在本轮范围。
 
@@ -8,8 +8,8 @@
 
 ~~~powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --scene /Game/Scenes/SharedAssets.hasset
-./out/build/debug/bin/hyperion_asset_tool.exe validate /Game/Scenes/SharedAssets.hasset
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/SharedAssets.hasset
+./out/build/debug/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets validate /Game/Scenes/SharedAssets.hasset
 ~~~
 
 `SharedAssets.json`（见 HyperionAssets 的 Metadata 与本地源缓存） 引用 `SharedQuad.json`（见 HyperionAssets 的 Metadata 与本地源缓存） 和 `SharedPanel.json`（见 HyperionAssets 的 Metadata 与本地源缓存）。两个模型引用同一个 `SharedColor.json`（见 HyperionAssets 的 Metadata 与本地源缓存），后者引用 `White.json`（见 HyperionAssets 的 Metadata 与本地源缓存）。左侧实例保存局部绿色 Tint，右侧保持资产默认红色。

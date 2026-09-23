@@ -3,6 +3,45 @@
 
 namespace Hyperion
 {
+FContentRootParticipantState FEditorPlugin::ContentRootState() const
+{
+	return {IsDirty() || AssetWorkspace->IsDirty(),
+	        PendingSave.has_value() || AssetWorkspace->IsSaving() || AssetWorkspace->HasPendingEdits()};
+}
+
+void FEditorPlugin::ReleaseContentRoot()
+{
+	CloseContentDocument();
+}
+
+void FEditorPlugin::ContentRootChanged()
+{
+	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
+	auto Features = Context.Require<FRenderFeatureRegistry>().Create();
+	Features.push_back(MakeTransientGeometryFeature());
+	Features.push_back(MakeSelectionOutlineFeature(Device->GetCapabilities()));
+	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
+	                                                  std::move(Features));
+	InitializePlacement();
+	Browser->SelectedDirectory = "/Game";
+	Browser->SelectedFile.clear();
+	bOpenDialog = bSaveDialog = bDiscardDialog = bRequestOpen = bRequestSaveDialog = bRequestDiscard = false;
+	bSaveThenSwitch = false;
+	bAssetMessage = bRequestAssetMessage = false;
+	Error.clear();
+	RefreshContent();
+	const auto Root = Context.Require<FContentRootService>().Directory();
+	if (Root.empty())
+	{
+		Options.Preferences.AssetRoot.clear();
+	}
+	else
+	{
+		RememberAssetRoot(Options.Preferences, Root);
+	}
+	SavePreferences();
+}
+
 void FEditorPlugin::CancelContentRequests()
 {
 	if (Browser)
@@ -83,6 +122,7 @@ void FEditorPlugin::PrepareContentRoot()
 		return;
 	}
 	PendingRoot.emplace(Content.Prepare(Canonical));
+	bDiscardRoot = false;
 	FinishGizmo();
 	FinishInspectorEdit();
 	if (IsDirty() || PendingSave || AssetWorkspace->IsDirty() || AssetWorkspace->IsSaving())
@@ -98,38 +138,23 @@ void FEditorPlugin::PrepareContentRoot()
 void FEditorPlugin::CompleteContentRoot()
 {
 	auto& Content = Context.Require<FContentRootService>();
-	auto Prepared = Content.Prepare(PendingRoot->Directory);
+	auto Prepared = Content.Prepare(PendingRoot->GetDirectory());
 	PendingRoot.reset();
 	PendingRoot.emplace(std::move(Prepared));
 	bCommitRoot = false;
 	try
 	{
-		CloseContentDocument();
-		const auto Root = PendingRoot->Directory;
-		Content.Commit(std::move(*PendingRoot));
+		Content.Commit(std::move(*PendingRoot), bDiscardRoot);
 		PendingRoot.reset();
-		Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
-		auto Features = Context.Require<FRenderFeatureRegistry>().Create();
-		Features.push_back(MakeTransientGeometryFeature());
-		Features.push_back(MakeSelectionOutlineFeature(Device->GetCapabilities()));
-		Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
-		                                                  std::move(Features));
-		InitializePlacement();
-		Browser->SelectedDirectory = "/Game";
-		Browser->SelectedFile.clear();
-		bOpenDialog = bSaveDialog = bDiscardDialog = bRequestOpen = bRequestSaveDialog = bRequestDiscard = false;
-		bSaveThenSwitch = false;
-		bAssetMessage = bRequestAssetMessage = false;
-		Error.clear();
-		RefreshContent();
-		RememberAssetRoot(Options.Preferences, Root);
-		SavePreferences();
 	}
-	catch (...)
+	catch (const FContentRootError& Failure)
 	{
-		Control.ReportFailure(std::current_exception());
-		Control.RequestExit();
-		bFinished = true;
+		if (Failure.Code == "content_failed")
+		{
+			Control.ReportFailure(std::current_exception());
+			Control.RequestExit();
+			bFinished = true;
+		}
 		throw;
 	}
 }
@@ -162,7 +187,8 @@ void FEditorPlugin::ProcessContentRoot()
 				Gui->ClosePopups();
 			}
 		}
-		if (!bCommitRoot || !PendingRoot || PendingSave || AssetWorkspace->IsSaving())
+		if (!bCommitRoot || !PendingRoot || PendingSave || AssetWorkspace->IsSaving() ||
+		    AssetWorkspace->HasPendingEdits())
 		{
 			if (PendingRoot && !bDiscardDialog && !bSaveDialog && !bSaveThenSwitch && !bCommitRoot)
 			{

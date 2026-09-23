@@ -1,4 +1,5 @@
-#include "AssetDocument.h"
+#include "Hyperion/AssetEditing/AssetDocument.h"
+#include "Hyperion/IO/MountedFileSystem.h"
 
 namespace Hyperion
 {
@@ -13,10 +14,38 @@ FArchiveNode& DocumentField(FArchiveNode& InDraft, std::string_view InField)
 }
 } // namespace
 
+bool IsAssetPathReadOnly(const FAssetService& InAssets, const std::filesystem::path& InPath)
+{
+	if (const auto* Mounted = dynamic_cast<const FMountedFileSystem*>(InAssets.FileSystem().get()))
+	{
+		try
+		{
+			(void)Mounted->Resolve(InPath, true);
+		}
+		catch (const std::exception&)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool CanEditTextureEncoding(const FTextureAsset& InTexture)
+{
+	return InTexture.Dimension == ETextureDimension::Texture2D && InTexture.Format == ETextureFormat::Rgba8Unorm;
+}
+
 FArchiveNode RebuildTextureEncodingDraft(const FArchiveNode& InDraft, EMaterialTextureEncoding InEncoding)
 {
 	const auto& Fields =
 	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InDraft.Value).at("fields").Value);
+	FTextureAsset Kind;
+	Kind.Dimension = ReadValue<ETextureDimension>(Fields.at("dimension"));
+	Kind.Format = ReadValue<ETextureFormat>(Fields.at("format"));
+	if (!CanEditTextureEncoding(Kind))
+	{
+		throw std::invalid_argument("Encoding is fixed for floating-point textures and cube maps");
+	}
 	const auto& Base = std::get<FArchiveNode::FArray>(Fields.at("mips").Value).front();
 	auto Result = WriteValue(
 	    BuildTextureAsset(ReadValue<std::string>(Fields.at("name")), InEncoding, ReadValue<FMaterialTextureMip>(Base)));
@@ -50,20 +79,20 @@ void ShareAssetBulk(FArchiveNode& InNode)
 	}
 }
 
-FAssetEditorDocument::FAssetEditorDocument(std::shared_ptr<const FLoadedAsset> InAsset) : Asset(std::move(InAsset))
+FAssetEditDocument::FAssetEditDocument(std::shared_ptr<const FLoadedAsset> InAsset) : Asset(std::move(InAsset))
 {
 	Draft = WriteRecord(*Asset->Type, Asset->Object.get());
 	ShareAssetBulk(Draft);
 }
 
-const FArchiveNode& FAssetEditorDocument::Get(std::string_view InField) const
+const FArchiveNode& FAssetEditDocument::Get(std::string_view InField) const
 {
 	return std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Draft.Value).at("fields").Value)
 	    .at(std::string(InField));
 }
 
-void FAssetEditorDocument::Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction,
-                               bool bInAffectsPreview)
+void FAssetEditDocument::Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction,
+                             bool bInAffectsPreview)
 {
 	bInAffectsPreview &= InField != "name";
 	ShareAssetBulk(InValue);
@@ -91,12 +120,12 @@ void FAssetEditorDocument::Set(std::string InField, FArchiveNode InValue, std::u
 	Error.clear();
 }
 
-void FAssetEditorDocument::FinishInteraction()
+void FAssetEditDocument::FinishInteraction()
 {
 	ActiveInteraction = 0;
 }
 
-void FAssetEditorDocument::CancelInteraction(std::uint64_t InInteraction)
+void FAssetEditDocument::CancelInteraction(std::uint64_t InInteraction)
 {
 	if (InInteraction && InInteraction != ActiveInteraction)
 	{
@@ -110,7 +139,7 @@ void FAssetEditorDocument::CancelInteraction(std::uint64_t InInteraction)
 	FinishInteraction();
 }
 
-bool FAssetEditorDocument::Undo()
+bool FAssetEditDocument::Undo()
 {
 	FinishInteraction();
 	if (!CanUndo())
@@ -128,7 +157,7 @@ bool FAssetEditorDocument::Undo()
 	return true;
 }
 
-bool FAssetEditorDocument::Redo()
+bool FAssetEditDocument::Redo()
 {
 	FinishInteraction();
 	if (!CanRedo())
@@ -146,47 +175,47 @@ bool FAssetEditorDocument::Redo()
 	return true;
 }
 
-bool FAssetEditorDocument::CanUndo() const
+bool FAssetEditDocument::CanUndo() const
 {
 	return Cursor != 0;
 }
 
-bool FAssetEditorDocument::CanRedo() const
+bool FAssetEditDocument::CanRedo() const
 {
 	return Cursor < History.size();
 }
 
-bool FAssetEditorDocument::IsDirty() const
+bool FAssetEditDocument::IsDirty() const
 {
 	return State != SavedState;
 }
 
-std::uint64_t FAssetEditorDocument::Generation() const
+std::uint64_t FAssetEditDocument::Generation() const
 {
 	return Revision;
 }
 
-std::uint64_t FAssetEditorDocument::PreviewGeneration() const
+std::uint64_t FAssetEditDocument::PreviewGeneration() const
 {
 	return PreviewRevision;
 }
 
-const FArchiveNode& FAssetEditorDocument::Snapshot() const
+const FArchiveNode& FAssetEditDocument::Snapshot() const
 {
 	return Draft;
 }
 
-const FLoadedAsset& FAssetEditorDocument::Loaded() const
+const FLoadedAsset& FAssetEditDocument::Loaded() const
 {
 	return *Asset;
 }
 
-bool FAssetEditorDocument::IsSaving() const
+bool FAssetEditDocument::IsSaving() const
 {
 	return PendingSave.has_value();
 }
 
-void FAssetEditorDocument::Save(FAssetService& InAssets)
+void FAssetEditDocument::Save(FAssetService& InAssets)
 {
 	if (PendingSave)
 	{
@@ -200,7 +229,7 @@ void FAssetEditorDocument::Save(FAssetService& InAssets)
 	Error.clear();
 }
 
-std::optional<FAssetSaveResult> FAssetEditorDocument::PollSave()
+std::optional<FAssetSaveResult> FAssetEditDocument::PollSave()
 {
 	if (!PendingSave || !PendingSave->Ready())
 	{

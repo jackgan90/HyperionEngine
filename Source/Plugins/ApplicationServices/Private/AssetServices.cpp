@@ -1,6 +1,5 @@
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
-#include "Hyperion/ApplicationServices/ContentRootService.h"
-#include "Hyperion/Assets/AssetRegistry.h"
+#include "Hyperion/Content/ContentRootService.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Scene/SceneManifest.h"
 
@@ -17,53 +16,28 @@ public:
 
 	void Start(FPluginContext& InContext) override
 	{
-		Files = LoadContentMounts(Options.Mounts);
+		Files = CreateContentFileSystem(Options.EngineContent);
 		IO = std::make_unique<FIOService>(InContext.Require<FTaskSystem>(), Files);
 		Assets = std::make_unique<FAssetService>(*IO);
 		RegisterSceneAssetTypes(Assets->Types());
 		Content = std::make_unique<FContentRootService>(InContext.Require<FTaskSystem>(), *Files, *Assets);
-		if (Options.RestoredGameRoot)
+		if (Options.AssetRoot)
 		{
 			try
 			{
-				Content->Commit(Content->Prepare(*Options.RestoredGameRoot));
-			}
-			catch (const std::exception& Failure)
-			{
-				Content->StartupError = "Could not restore asset root: " + std::string(Failure.what());
-				auto Mounts = Files->GetMounts();
-				std::erase_if(Mounts,
-				              [](const auto& InMount)
-				              {
-					              return InMount.Root == "/Game";
-				              });
-				FMountedFileSystem Unmounted(std::move(Mounts));
-				Files->ReplaceExclusive(Unmounted);
-			}
-		}
-		for (const auto& Mount : Files->GetMounts())
-		{
-			try
-			{
-				const auto Discovery = DispatchAsync<FAssetDiscovery>(InContext.Require<FTaskSystem>(), {EDomain::Io},
-				                                                      [Storage = Files, Root = Mount.Root]
-				                                                      {
-					                                                      return DiscoverAssets(*Storage, Root);
-				                                                      })
-				                           .Get(InContext.Require<FTaskSystem>());
-				Assets->AddAssetIndex(BuildAssetIndex(Discovery->Entries), Mount.Root);
-				for (const auto& [Path, Error] : Discovery->Errors)
+				if (Options.AssetRoot->empty())
 				{
-					Log(ELogLevel::Warning, "Asset unavailable: " + Path.string() + ": " + Error);
+					throw std::invalid_argument("Asset root must be a non-empty directory");
 				}
+				Content->Change(*Options.AssetRoot, Options.bReadOnly);
 			}
 			catch (const std::exception& Failure)
 			{
-				if (Options.bRequireDiscovery)
+				if (!Options.bRecoverInvalidRoot)
 				{
 					throw;
 				}
-				Log(ELogLevel::Warning, "Asset discovery failed: " + Mount.Root.string() + ": " + Failure.what());
+				Content->StartupError = "Could not restore asset root: " + std::string(Failure.what());
 			}
 		}
 		InContext.Provide(*Files);

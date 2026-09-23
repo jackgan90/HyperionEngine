@@ -68,6 +68,8 @@ private:
 
 ## 检查与格式化
 
+新增或修改用户可操作功能时，同时遵守 [自动化接入契约](Automation.md#新功能接入契约)。请求/结果复用反射，GUI 与 agent 共享领域逻辑；尚未注册的能力记录在覆盖表，避免以后另建一套实现。
+
 需要 Python 3.10+ 和 与仓库格式配置兼容的 LLVM（格式基线为 22.1.1）的 `clang-format` / `clang-tidy` / `clang-query`。脚本先检查 PATH，也会查找 Windows 默认 LLVM 安装目录。普通构建不强制安装 LLVM。
 
 ```powershell
@@ -88,4 +90,4 @@ python tools/CheckStyle.py --naming --build-dir out/build/debug
 
 CTest 的 `code_style_paths` 检查自有文件名和 include 路径的准确大小写，不需要 LLVM；完整格式/命名检查由上述命令显式运行。
 
-clang-tidy 尚无独立的类模板前缀配置，`.clang-tidy` 对 `TAsyncState`、`TAsyncResult`、`TAssetRequest`、`TImportRequest`、`TRecordCallback`、`TTrackedResource`、`TMaterialGpuEntry`、`TMaterialParameterTable` 设置了精确命名例外，以保留仓库要求的 T 前缀。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。
+clang-tidy 尚无独立的类模板前缀配置，`.clang-tidy` 对 `TAsyncState`、`TAsyncResult`、`TAssetRequest`、`TImportRequest`、`TRecordCallback`、`TPendingOperation`、`TTrackedResource`、`TMaterialGpuEntry`、`TMaterialParameterTable` 设置了精确命名例外，以保留仓库要求的 T 前缀。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。

@@ -1,3 +1,3 @@
-add_library(hyperion_io STATIC Private/IOService.cpp Private/Path.cpp Private/MountedFileSystem.cpp Private/FileLease.cpp Private/Adapters/LocalPath.cpp Private/Adapters/ContentMounts.cpp Private/Adapters/FileLease.cpp Private/Adapters/FileSystem.cpp)
+add_library(hyperion_io STATIC Private/IOService.cpp Private/Path.cpp Private/MountedFileSystem.cpp Private/FileLease.cpp Private/Adapters/LocalPath.cpp Private/Adapters/FileLease.cpp Private/Adapters/FileSystem.cpp)
 hyp_module(hyperion_io)
-target_link_libraries(hyperion_io PUBLIC hyperion_tasks PRIVATE hyperion_core nlohmann_json::nlohmann_json)
+target_link_libraries(hyperion_io PUBLIC hyperion_tasks PRIVATE hyperion_core)

@@ -130,6 +130,7 @@ class PublicationChecks:
         material.rename(material.with_name('ReadableMaterial.hasset'))
         before = self.snapshot(case)
         self.run('validate', case / 'native/Model.hasset')
+        self.run('validate-library', case / 'native')
         self.run('inspect', case / 'native/Model.hasset')
         assert 'written_assets=0' in self.publish(case)
         assert self.snapshot(case) == before
@@ -141,22 +142,21 @@ class PublicationChecks:
             ref['fields']['path'] = '/Game/' + ref['fields']['path']
         source = case / 'External.json'
         source.write_text(json.dumps({'type': 'hyperion.modelasset', 'version': 3, 'fields': original}))
-        mounts = case / 'Mounts.json'
-        mounts.write_text(json.dumps({'version': 1, 'mounts': [
-            {'root': '/Game', 'directory': str(case / 'native'), 'read_only': False}]}))
-        self.run('--mounts', mounts, 'validate', '/Game/Model.hasset')
-        self.run('--mounts', mounts, 'import', source, '/Game/External.hasset', '--library', '/Game')
-        self.run('--mounts', mounts, 'validate', '/Game/External.hasset')
-        assert 'written_assets=0' in self.run('--mounts', mounts, 'import', source,
+        asset_root = case / 'native'
+        self.run('--asset-root', asset_root, 'validate', '/Game/Model.hasset')
+        self.run('--asset-root', asset_root, 'import', source, '/Game/External.hasset', '--library', '/Game')
+        self.run('--asset-root', asset_root, 'validate', '/Game/External.hasset')
+        assert 'written_assets=0' in self.run('--asset-root', asset_root, 'import', source,
                                              '/Game/External.hasset', '--library', '/Game')
+
         renamed = material.with_name('ReadableMaterial.hasset')
         for name in ('RenamedAgain.hasset', 'RenamedTwice.hasset'):
             destination = renamed.with_name(name)
             renamed.rename(destination)
             renamed = destination
             before = self.snapshot(case)
-            self.run('--mounts', mounts, 'validate', '/Game/External.hasset')
-            assert 'written_assets=0' in self.run('--mounts', mounts, 'import', source,
+            self.run('--asset-root', asset_root, 'validate', '/Game/External.hasset')
+            assert 'written_assets=0' in self.run('--asset-root', asset_root, 'import', source,
                                                  '/Game/External.hasset', '--library', '/Game')
             assert self.snapshot(case) == before
         texture = next((case / 'native/Textures').glob('A_png-*.hasset'))
@@ -165,12 +165,52 @@ class PublicationChecks:
         edited = json.loads(texture_source.read_text())
         edited['fields']['mips'][0]['fields']['bytes']['data'] = [0, 255, 0, 255]
         texture_source.write_text(json.dumps(edited))
-        self.run('--mounts', mounts, 'import', texture_source,
+        self.run('--asset-root', asset_root, 'import', texture_source,
                  '/Game/Textures/' + texture.name, '--library', '/Game')
-        assert 'written_assets=1' in self.run('--mounts', mounts, 'import', source,
+        assert 'written_assets=1' in self.run('--asset-root', asset_root, 'import', source,
                                              '/Game/External.hasset', '--library', '/Game')
-        assert 'written_assets=0' in self.run('--mounts', mounts, 'import', source,
+        assert 'written_assets=0' in self.run('--asset-root', asset_root, 'import', source,
                                              '/Game/External.hasset', '--library', '/Game')
+
+    def check_root_permissions(self):
+        engine = self.root / 'Engine'
+        game = self.root / 'Game'
+        engine.mkdir()
+        game.mkdir()
+        texture = next((self.root / 'rename/native/Textures').glob('A_png-*.hasset'))
+        self.run('--engine-content', engine, 'export-envelope', texture, '/Engine/Envelope.json',
+                 error='Read-only content mount')
+        assert not (engine / 'Envelope.json').exists()
+        self.run('--engine-content', engine, '--authoring', 'export-envelope', texture, '/Engine/Envelope.json')
+        assert (engine / 'Envelope.json').is_file()
+        self.run('--engine-content', engine, '--asset-root', game, '--read-only', '--authoring',
+                 'export-envelope', texture, '/Game/Envelope.json', error='Read-only content mount')
+        assert not (game / 'Envelope.json').exists()
+        self.run('--engine-content', engine, '--asset-root', game,
+                 'export-envelope', texture, '/Game/Envelope.json')
+        assert (game / 'Envelope.json').read_bytes() == (engine / 'Envelope.json').read_bytes()
+
+    def check_library_subtrees(self):
+        engine = self.root / 'Engine'
+        game = self.root / 'Game'
+        texture = next((self.root / 'rename/native/Textures').glob('A_png-*.hasset'))
+        for mount, directory in (('/Engine', engine), ('/Game', game)):
+            subtree = directory / 'Sub'
+            subtree.mkdir()
+            asset = subtree / 'Texture.hasset'
+            asset.write_bytes(texture.read_bytes())
+            args = ('--engine-content', engine, '--asset-root', game, 'validate-library')
+            for target in (subtree, mount + '/Sub'):
+                assert 'Validated 1 current native assets' in self.run(*args, target)
+            # Discovery can still read the header; graph validation must inspect the damaged payload.
+            damaged = bytearray(asset.read_bytes())
+            damaged[-1] ^= 1
+            asset.write_bytes(damaged)
+            for target in (subtree, mount + '/Sub'):
+                self.run(*args, target, error='integrity check failed')
+            asset.write_bytes(texture.read_bytes())
+            self.run(*args, mount + '/Missing', error='')
+            asset.unlink()
 
 
 def main():
@@ -184,6 +224,8 @@ def main():
         checks.check_stale_candidate()
         checks.check_reuse_before_update()
         checks.check_rename()
+        checks.check_root_permissions()
+        checks.check_library_subtrees()
     print('Native publication conflicts, staged texture reuse and renamed dependency tools passed')
 
 

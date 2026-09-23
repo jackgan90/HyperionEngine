@@ -36,7 +36,7 @@ python tools/CpuSubmissionBenchmark.py --viewer out/build/debug/bin/hyperion_vie
 out/build/release/bin/submission_benchmark.exe out/NativeRecord.csv 200 400
 
 # 大幅相机运动：10 像素步长，对比默认 0.1；该运行包含可见集合和 CSM 重新规划。
-out/build/release/bin/hyperion_viewer.exe --config experiments/Scene.json --hidden --no-ui `
+out/build/release/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json --hidden --no-ui `
   --no-vsync --frames 4200 --benchmark-warmup 200 --benchmark out/CameraStress.csv --benchmark-camera-step 10
 ```
 

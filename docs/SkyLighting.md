@@ -1,6 +1,6 @@
 # Skybox and skylighting
 
-当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+当前 Content 归属、目录选择及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 The scene environment can use a native sky asset for an infinitely distant background and diffuse/specular image-based lighting. One linear HDR panorama produces the visual cube, nine irradiance SH coefficients and a separate GGX reflection cube. Rotation and intensity apply to all three together. `ConstantColor` and `SkyAsset` are exclusive environment sources; directional, point and spot lights remain independent.
 
@@ -10,7 +10,7 @@ From the repository root:
 
 ```powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
 ```
 
 The Scene panel is visible initially; Tab toggles panels. Its sky controls offer `Cloudy.hasset`, `Dusk.hasset` and `Clear.hasset` from `/Game/Skies`. Selecting an entry applies it immediately. Alternatively type an arbitrary native sky path and press **Apply sky asset**. Use virtual package paths for content selection; explicit local tool paths remain supported. **Refresh sky assets** uses the mounted filesystem to rescan the sibling `Skies` directory of the scene's containing directory. An empty custom path cannot be applied.

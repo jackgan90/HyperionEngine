@@ -20,7 +20,7 @@ def main():
 
     def run(name, mode, *arguments):
         result = subprocess.run(
-            [str(editor), '--hidden',
+            [str(editor), '--asset-root', str(root.parent / 'HyperionAssets'), '--hidden',
              '--editor-preferences', str(preferences), '--layout', str(work / 'Layout.ini'),
              '--capture', str(work / f'{name}.png'),
              '--ui-preferences', str(work / 'Scale.ini'), '--exercise-capture', mode, *arguments],

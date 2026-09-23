@@ -51,8 +51,8 @@ def restore(manifest, cache, offline=False):
         path.write_bytes(data)
 
 
-def run_tool(tool, mounts, *arguments):
-    subprocess.run([str(tool), "--mounts", str(mounts), *map(str, arguments)], check=True)
+def run_tool(tool, assets, *arguments):
+    subprocess.run([str(tool), "--asset-root", str(assets), *map(str, arguments)], check=True)
 
 
 def main():
@@ -72,21 +72,16 @@ def main():
     restore(manifest, cache, args.offline)
     if args.restore_only:
         return
-    mounts = ROOT / "out/content-tools/Mounts.json"
-    mounts.parent.mkdir(parents=True, exist_ok=True)
-    mounts.write_text(json.dumps({"version": 1, "mounts": [
-        {"root": "/Engine", "directory": str(ROOT / "Content"), "read_only": True},
-        {"root": "/Game", "directory": str(assets), "read_only": False}]}), encoding="utf-8")
     tool = args.tool.resolve()
     if not (ROOT / "Content/Textures/EnvironmentBrdf.hasset").is_file():
-        run_tool(tool, mounts, "--authoring", "build-brdf", "/Engine/Textures/EnvironmentBrdf.hasset")
+        run_tool(tool, assets, "--authoring", "build-brdf", "/Engine/Textures/EnvironmentBrdf.hasset")
     for entry in manifest["outputs"]:
         output = "/Game/" + entry["path"]
         options = ["--library", "/Game", "--source-root", str(cache), "--source-id", manifest["source_id"]]
         if args.force:
             options.append("--force")
-        run_tool(tool, mounts, "import", contained(cache, entry["source"]), output, *options)
-    run_tool(tool, mounts, "validate-library", "/Game")
+        run_tool(tool, assets, "import", contained(cache, entry["source"]), output, *options)
+    run_tool(tool, assets, "validate-library", "/Game")
 
 
 if __name__ == "__main__":

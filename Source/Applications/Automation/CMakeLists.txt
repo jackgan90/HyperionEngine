@@ -1,0 +1,6 @@
+add_executable(hyperion_automation_cli Private/Main.cpp)
+hyp_executable(hyperion_automation_cli)
+target_link_libraries(hyperion_automation_cli PRIVATE hyperion_automation_plugin hyperion_application_services
+  hyperion_application hyperion_core hyperion_io)
+target_compile_definitions(hyperion_automation_cli PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+set_target_properties(hyperion_automation_cli PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")

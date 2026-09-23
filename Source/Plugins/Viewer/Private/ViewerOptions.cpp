@@ -1,4 +1,5 @@
 #include "ViewerOptions.h"
+#include "Hyperion/IO/Path.h"
 #include "Hyperion/Renderer/FramePipeline.h"
 #include <algorithm>
 #include <charconv>
@@ -114,9 +115,17 @@ bool ParseApplicationOption(FOptions& InOptions, const std::string& InArg, int I
 	{
 		InOptions.Frames = std::stoi(InArgv[++InIndex]);
 	}
-	else if (InArg == "--mounts" && InIndex + 1 < InArgc)
+	else if (InArg == "--asset-root" && InIndex + 1 < InArgc)
 	{
-		InOptions.Mounts = InArgv[++InIndex];
+		InOptions.AssetRoot = PathFromUtf8(InArgv[++InIndex]);
+	}
+	else if (InArg == "--engine-content" && InIndex + 1 < InArgc)
+	{
+		InOptions.EngineContent = PathFromUtf8(InArgv[++InIndex]);
+	}
+	else if (InArg == "--read-only")
+	{
+		InOptions.bReadOnly = true;
 	}
 	else if (InArg == "--config" && InIndex + 1 < InArgc)
 	{

@@ -16,6 +16,8 @@ enum class ELogLevel
 	Error
 };
 void InitializeLog(const std::filesystem::path& InFile);
+// Process entrypoints using stdout as a protocol channel select this before starting services.
+void InitializeStderrLog();
 void Log(ELogLevel InLevel, std::string_view InMessage);
 void ShutdownLog();
 enum class EMemoryTag : std::uint8_t

@@ -24,7 +24,7 @@ RelWithDebInfo 使用 `/O2` 优化、Release CRT（`/MD`）和 `NDEBUG`；自有
 3. `Hyperion/Applications` 放 Editor、Viewer 和独立 AssetTool，`Hyperion/Runtime` 放运行时模块，`Hyperion/Backends` 放图形后端，`Hyperion/Plugins` 放实验插件，`Hyperion/Tests` 放测试，`ThirdParty` 放依赖。模块源码显示在各自的 `Public` / `Private` 筛选器中；Viewer 项目也列出 shader、实验配置和文档。将 `hyperion_editor` 设为启动项目即可运行编辑器。
 4. HLSL 在工程里用于查看/编辑，实际由引擎 DXC wrapper 编译，不走 Visual Studio 的默认 FXC 规则。
 
-Viewer 的调试工作目录为仓库根目录，可以在项目属性的“调试 → 命令参数”中填写 `--config experiments/Triangle.json` 等选项。生成的可执行文件在 `out/build/vs2022/bin/Debug`、`bin/Release` 或 `bin/RelWithDebInfo`，所需 DLL 会自动复制到旁边。
+Viewer 的调试工作目录为仓库根目录，在项目属性的“调试 → 命令参数”中填写 `--asset-root ../HyperionAssets --config experiments/Triangle.json` 即可运行示例。Game 目录不会自动选择；三角形演示的 Shader 也来自该资产目录。Editor 通过目录选择或保存的偏好设置自己的根目录。生成的可执行文件在 `out/build/vs2022/bin/Debug`、`bin/Release` 或 `bin/RelWithDebInfo`，所需 DLL 会自动复制到旁边。
 
 Viewer 构建不再转换样例来源；示例从挂载的 HyperionAssets 加载。`native_sample_content` 保留为兼容目标，显式重建使用 `tools/PrepareContent.py`。源导入集成测试需要预先恢复来源缓存。参见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 

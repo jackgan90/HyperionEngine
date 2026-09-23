@@ -15,10 +15,10 @@
 
 ```powershell
 # 正常交互，解除 VSync 限制
-out/build/vs2022/bin/Release/hyperion_viewer.exe --config experiments/Scene.json --renderdoc --open-rdc --no-vsync
+out/build/vs2022/bin/Release/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json --renderdoc --open-rdc --no-vsync
 
 # 小幅连续相机运动；120 帧预热，记录随后 1000 帧
-out/build/vs2022/bin/Release/hyperion_viewer.exe --config experiments/Scene.json --renderdoc --open-rdc --no-vsync --frames 1120 --benchmark-warmup 120 --benchmark-camera --benchmark out/ScenePerformance/Moving.csv
+out/build/vs2022/bin/Release/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json --renderdoc --open-rdc --no-vsync --frames 1120 --benchmark-warmup 120 --benchmark-camera --benchmark out/ScenePerformance/Moving.csv
 ```
 
 去掉 `--benchmark-camera` 测静止；去掉 `--renderdoc --open-rdc` 比较未加载 RenderDoc 的开销。基准模式输出每帧 CPU 墙钟耗时及实际场景 draw 数，包含输入、GUI、材质准备、命令录制、提交与 Present 等待，不是 GPU timestamp。CSV 在结束后写入；必须使用大于 warmup 的有限 `--frames`；若第一条样本时 Scene 尚未就绪则明确报错，应增加预热帧数，避免把未加载场景的空帧算作性能提升。相机运动模式暂时接管 SceneViewer 相机输入，保持可见负载近似相同。

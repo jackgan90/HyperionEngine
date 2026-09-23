@@ -141,6 +141,7 @@ def main():
     parser.add_argument("--no-instance-batching", action="store_true")
     parser.add_argument("--visible", action="store_true")
     parser.add_argument("--no-build", action="store_true")
+    parser.add_argument("--asset-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
     args = parser.parse_args()
     if args.warmup < 0 or args.frames <= 0 or args.timeout <= 0:
         parser.error("warmup must be nonnegative; frames and timeout must be positive")
@@ -157,7 +158,7 @@ def main():
             run(["powershell", "-NoProfile", "-File", ROOT / "tools/BuildProfilingTools.ps1"],
                 output / "ToolsBuild.log", timeout=900)
     viewer = (args.viewer or ROOT / "out/build/profile/bin/hyperion_viewer.exe").resolve()
-    command = [str(viewer), "--config", str(args.config.resolve()), "--frames", str(args.warmup + args.frames),
+    command = [str(viewer), "--asset-root", str(args.asset_root.resolve()), "--config", str(args.config.resolve()), "--frames", str(args.warmup + args.frames),
                "--benchmark-warmup", str(args.warmup), "--benchmark", str(output / "Frames.csv"), "--no-vsync"]
     if not args.static:
         command += ["--benchmark-camera", "--benchmark-camera-step", str(args.camera_step)]

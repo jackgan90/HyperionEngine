@@ -4,6 +4,8 @@ Read [docs/CodingStyle.md](docs/CodingStyle.md) before editing owned code. Unrea
 
 Before changing application composition, plugin behavior or feature integration, read and follow [docs/PluginSystem.md](docs/PluginSystem.md). Its development constraints are mandatory architecture rules.
 
+Before adding or changing user-facing engine/editor capabilities, read [docs/Automation.md](docs/Automation.md). Keep GUI and agent operations on the same UI-independent domain service, including validation, transactions, history and persistence. Reflect request/result values and register typed automation operations without adding domain branches to transports; document an explicit deferred adapter in the capability coverage inventory when a feature is not yet exposed. Preserve operation IDs, schemas, revisions and lifecycle contracts, and validate discovery/invocation as well as GUI equivalence.
+
 - Use `Hyperion` namespaces and PascalCase functions, variables, members and parameters. Use `F` for concrete/value types, `E` for enums, `I` for abstract interfaces and `T` for class templates. Do not add UObject/Actor/Slate prefixes to unrelated types.
 - Boolean variables use `b` followed by PascalCase (for example `bIsReady`), including atomic boolean flags. Boolean parameters use `bIn` / `bOut`; query functions remain PascalCase (`IsReady()`). Prefer descriptive names; no member `_` suffix or `m_` prefix. Other input parameters use `In`, output parameters use `Out`.
 - Owned source and tool filenames use PascalCase, without type prefixes: `Core.h`, `TaskSystem.cpp`, `GenerateSolution.ps1`. Keep framework-required filenames and OpenSpec artifact names intact.
@@ -16,6 +18,8 @@ Before changing application composition, plugin behavior or feature integration,
 - Keep CMake build targets and executable names stable. Python helper internals follow PEP 8; PowerShell uses PascalCase identifiers. Fixed tool/config filenames are documented exceptions.
 - Validate changes with the appropriate style checks and builds described in `docs/CodingStyle.md` and `docs/VisualStudio.md`. Complete authorized OpenSpec work without requesting redundant permission for reversible implementation steps.
 - Keep README focused on the project, supported features and portable build/run instructions. Keep documentation consistent with code and shipped configuration; do not present historical test counts, local machine state or completed task instructions as current requirements. See `docs/README.md` for the documentation index.
+
+Content environments use `Runtime/Content`: initialize Engine independently, leave Game unset until explicitly selected, and route changes through `FContentRootService`. Content consumers register `IContentRootParticipant` with scoped cleanup so dirty/busy checks, old-work retirement and handle invalidation remain shared by GUI and agents. Do not reintroduce mount configuration files or implicit sibling-directory fallback. See [docs/ContentFileSystem.md](docs/ContentFileSystem.md).
 
 ## Plugin architecture
 

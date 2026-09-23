@@ -26,7 +26,8 @@ set_initial_view_from_camera(viewer, manifest)
 
 def run(name, config, application, pipeline, *extra):
     capture = work / f"{name}.png"
-    args = [str(viewer), "--config", str(config), "--pipeline", pipeline,
+    args = [str(viewer), "--asset-root", str(root.parent / "HyperionAssets"),
+            "--config", str(config), "--pipeline", pipeline,
             "--frames", "900",
             "--hidden", "--no-ui", "--no-vsync", "--capture", str(capture)]
     if application == "Model":

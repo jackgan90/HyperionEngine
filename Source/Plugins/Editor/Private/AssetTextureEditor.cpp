@@ -254,8 +254,7 @@ void FAssetWorkspace::DrawTextureProperties(FGui& InGui, FEntry& InEntry)
 	std::size_t Encoding =
 	    static_cast<std::size_t>(ReadValue<EMaterialTextureEncoding>(InEntry.Document->Get("encoding")));
 	const std::array<std::string, 2> Encodings{"Linear", "sRGB"};
-	const bool bEditable =
-	    Texture->Dimension == ETextureDimension::Texture2D && Texture->Format == ETextureFormat::Rgba8Unorm;
+	const bool bEditable = CanEditTextureEncoding(*Texture);
 	InGui.BeginDisabled(!bEditable || InEntry.Pending.has_value());
 	if (AssetCombo(InGui, "Encoding", Encodings, Encoding,
 	               [&](std::size_t InIndex, FVec4)

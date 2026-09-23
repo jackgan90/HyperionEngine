@@ -248,7 +248,7 @@ void ValidateNativeLibrary(FIOService& InIO, const std::filesystem::path& InRoot
 {
 	FAssetService Assets(InIO);
 	RegisterSceneAssetTypes(Assets.Types());
-	std::vector<FAssetRegistryEntry> Entries;
+	const auto Root = InIO.FileSystem()->Normalize(InRoot);
 	if (const auto* Mounted = dynamic_cast<FMountedFileSystem*>(InIO.FileSystem().get()))
 	{
 		for (const auto& Mount : Mounted->GetMounts())
@@ -259,21 +259,17 @@ void ValidateNativeLibrary(FIOService& InIO, const std::filesystem::path& InRoot
 				throw std::runtime_error(Found.Errors.begin()->second);
 			}
 			Assets.AddAssetIndex(BuildAssetIndex(Found.Entries), Mount.Root);
-			if (Mount.Root == InRoot)
-			{
-				Entries = Found.Entries;
-			}
 		}
 	}
-	else
+	const auto Found = DiscoverAssets(*InIO.FileSystem(), Root);
+	if (!Found.Errors.empty())
 	{
-		const auto Found = DiscoverAssets(*InIO.FileSystem(), InRoot);
-		if (!Found.Errors.empty())
-		{
-			throw std::runtime_error(Found.Errors.begin()->second);
-		}
-		Entries = Found.Entries;
-		Assets.SetAssetIndex(BuildAssetIndex(Entries), InRoot);
+		throw std::runtime_error(Found.Errors.begin()->second);
+	}
+	const auto& Entries = Found.Entries;
+	if (!IsPackagePath(Root))
+	{
+		Assets.AddAssetIndex(BuildAssetIndex(Entries), Root);
 	}
 	for (const auto& Entry : Entries)
 	{

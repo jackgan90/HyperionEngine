@@ -1,6 +1,7 @@
 #include "Adapters/ProcessStatistics.h"
 #include "AssetCommands.h"
-#include "Hyperion/IO/MountedFileSystem.h"
+#include "Hyperion/Content/ContentRootService.h"
+#include "Hyperion/Scene/SceneManifest.h"
 #include <chrono>
 #include <iostream>
 
@@ -10,13 +11,33 @@ int main(int InCount, char** InArguments)
 	try
 	{
 		std::vector<std::string_view> Arguments;
-		std::filesystem::path MountConfiguration;
+		std::filesystem::path EngineContent = std::filesystem::path(HYP_SOURCE_DIR) / "Content";
+		std::optional<std::filesystem::path> AssetRoot;
 		bool bAuthoring = false;
+		bool bReadOnly = false;
 		for (int Index = 1; Index < InCount; ++Index)
 		{
-			if (std::string_view(InArguments[Index]) == "--mounts" && Index + 1 < InCount)
+			const std::string_view Argument = InArguments[Index];
+			if (Argument == "--asset-root" || Argument == "--engine-content")
 			{
-				MountConfiguration = PathFromUtf8(InArguments[++Index]);
+				if (++Index >= InCount || std::string_view(InArguments[Index]).empty())
+				{
+					throw std::invalid_argument("Missing directory for " + std::string(Argument));
+				}
+				const auto Directory = PathFromUtf8(InArguments[Index]);
+				if (Argument == "--asset-root")
+				{
+					AssetRoot = Directory;
+				}
+				else
+				{
+					EngineContent = Directory;
+				}
+				continue;
+			}
+			if (Argument == "--read-only")
+			{
+				bReadOnly = true;
 				continue;
 			}
 			if (std::string_view(InArguments[Index]) == "--authoring")
@@ -27,10 +48,15 @@ int main(int InCount, char** InArguments)
 			Arguments.emplace_back(InArguments[Index]);
 		}
 		FTaskSystem Tasks(2, 1);
-		std::shared_ptr<IFileSystem> Files =
-		    MountConfiguration.empty() ? std::static_pointer_cast<IFileSystem>(std::make_shared<FLocalFileSystem>())
-		                               : LoadContentMounts(MountConfiguration, bAuthoring);
+		auto Files = CreateContentFileSystem(EngineContent, bAuthoring);
 		FIOService IO(Tasks, Files);
+		FAssetService Assets(IO);
+		RegisterSceneAssetTypes(Assets.Types());
+		FContentRootService Content(Tasks, *Files, Assets);
+		if (AssetRoot)
+		{
+			Content.Change(*AssetRoot, bReadOnly);
+		}
 		const auto Started = std::chrono::steady_clock::now();
 		RunAssetCommand(Arguments, IO, std::cout);
 		const auto Milliseconds =

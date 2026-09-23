@@ -29,10 +29,11 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	    !Options.bExerciseGizmo && !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
 	    Options.Benchmark.empty() && Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
 	    Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
-	const auto RestoredRoot = !Options.bExplicitMounts && bInteractive && !Options.Preferences.AssetRoot.empty()
+	const auto RestoredRoot = !Options.AssetRoot && bInteractive && !Options.Preferences.AssetRoot.empty()
 	                              ? std::optional(Options.Preferences.AssetRoot)
 	                              : std::nullopt;
-	RegisterAssetServices(Registry, {Options.Mounts, false, RestoredRoot});
+	RegisterAssetServices(Registry, {Options.EngineContent, Options.AssetRoot ? Options.AssetRoot : RestoredRoot,
+	                                 Options.bReadOnly, RestoredRoot.has_value()});
 	RegisterWindowServices(Registry, {"Hyperion Editor", {1600, 960}, Options.bHidden, true});
 	RegisterGraphicsServices(
 	    Registry, {std::move(InBackends), "d3d12", std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache", true});

@@ -4,7 +4,6 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorAssetPropertyAcceptance.cpp
   Private/EditorAssetWorkspaceAcceptance.cpp
   Private/EditorApplication.cpp
-  Private/AssetDocument.cpp
   Private/AssetEditorWindow.cpp
   Private/AssetEditorWindowGui.cpp
   Private/EditorAssetWindow.cpp
@@ -56,8 +55,9 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorPickingAcceptance.cpp
 )
 hyp_module(hyperion_editor_plugin)
+target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_content)
 target_link_libraries(hyperion_editor_plugin PUBLIC hyperion_application_services
-  PRIVATE hyperion_application hyperion_plugins hyperion_gui hyperion_gui_renderer hyperion_render hyperion_assets
+  PRIVATE hyperion_application hyperion_plugins hyperion_gui hyperion_gui_renderer hyperion_render hyperion_assets hyperion_asset_editing
   hyperion_asset_types hyperion_scene hyperion_materials hyperion_platform hyperion_io hyperion_core hyperion_tasks
   hyperion_shaders hyperion_rhi hyperion_math hyperion_config hyperion_textures hyperion_environment)
 target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
@@ -71,7 +71,7 @@ if(BUILD_TESTING)
   target_sources(editor_asset_workspace_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/Source/Tests/Renderer/AssetWorkspaceTests.cpp"
     "${PROJECT_SOURCE_DIR}/Source/Tests/Assets/EditorAssetFixture.cpp")
-  target_link_libraries(editor_asset_workspace_tests PRIVATE hyperion_editor_plugin hyperion_render
+  target_link_libraries(editor_asset_workspace_tests PRIVATE hyperion_editor_plugin hyperion_render hyperion_asset_editing
     hyperion_gui hyperion_gui_renderer hyperion_assets hyperion_scene hyperion_environment hyperion_materials hyperion_rhi_d3d12)
   target_include_directories(editor_asset_workspace_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
   target_compile_definitions(editor_asset_workspace_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
@@ -79,10 +79,10 @@ if(BUILD_TESTING)
   add_test(NAME editor_asset_workspace COMMAND editor_asset_workspace_tests)
   set_tests_properties(editor_asset_workspace PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
     TIMEOUT 120 RUN_SERIAL TRUE LABELS "gpu")
-  add_executable(editor_asset_document_tests Private/AssetDocumentTests.cpp Private/AssetDocument.cpp)
+  add_executable(editor_asset_document_tests Private/AssetDocumentTests.cpp)
   hyp_executable(editor_asset_document_tests)
   target_sources(editor_asset_document_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests/Assets/EditorAssetFixture.cpp")
-  target_link_libraries(editor_asset_document_tests PRIVATE hyperion_assets hyperion_textures hyperion_scene hyperion_environment hyperion_materials)
+  target_link_libraries(editor_asset_document_tests PRIVATE hyperion_asset_editing hyperion_assets hyperion_textures hyperion_scene hyperion_environment hyperion_materials)
   target_include_directories(editor_asset_document_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
   target_compile_definitions(editor_asset_document_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   set_target_properties(editor_asset_document_tests PROPERTIES FOLDER "Hyperion/Tests")

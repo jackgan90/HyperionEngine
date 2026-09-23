@@ -1,4 +1,4 @@
-#include "AssetDocument.h"
+#include "Hyperion/AssetEditing/AssetDocument.h"
 #include "Hyperion/Math/AffineTransform.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Hyperion/Textures/TextureAsset.h"
@@ -24,7 +24,7 @@ void Check(bool bInCondition, std::source_location InLocation = std::source_loca
 	}
 }
 
-void WaitForSave(FAssetEditorDocument& InDocument, FTaskSystem& InTasks)
+void WaitForSave(FAssetEditDocument& InDocument, FTaskSystem& InTasks)
 {
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 	while (InDocument.IsSaving())
@@ -44,8 +44,8 @@ void CheckDocuments(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSy
 	const auto Encoded = EncodeAsset(RecordType<FTextureAsset>(), &Texture);
 	InFiles.WriteAtomic(Path, Encoded.Bytes);
 	InAssets.Types().Register<FTextureAsset>();
-	FAssetEditorDocument A(InAssets.LoadAsync(Path).Get(InTasks));
-	FAssetEditorDocument B(InAssets.LoadAsync(Path).Get(InTasks));
+	FAssetEditDocument A(InAssets.LoadAsync(Path).Get(InTasks));
+	FAssetEditDocument B(InAssets.LoadAsync(Path).Get(InTasks));
 	const auto InitialPreview = A.PreviewGeneration();
 	A.Set("name", WriteValue(std::string("First")), 41);
 	A.Set("name", WriteValue(std::string("Second")), 41);
@@ -109,7 +109,7 @@ void CheckModelEdits(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileS
 	AssignModelSubresourceIds(Model);
 	const auto Path = InAssets.NormalizePath("model-document.hasset");
 	InFiles.WriteAtomic(Path, EncodeAsset(RecordType<FModelAsset>(), &Model).Bytes);
-	FAssetEditorDocument Document(InAssets.LoadAsync(Path).Get(InTasks));
+	FAssetEditDocument Document(InAssets.LoadAsync(Path).Get(InTasks));
 	auto Nodes = ReadValue<std::vector<FModelNode>>(Document.Get("nodes"));
 	auto Edited = DecomposeAffine(Nodes.front().Local);
 	Edited.Position = {3, 4, 5};
@@ -146,7 +146,7 @@ void CheckTextureHistorySharing(FAssetService& InAssets, FTaskSystem& InTasks, F
 	FMaterialTextureMip Base{128, 128, std::vector<std::uint8_t>(128 * 128 * 4, 127)};
 	const auto Texture = BuildTextureAsset("Shared history", EMaterialTextureEncoding::Linear, Base);
 	InFiles.WriteAtomic(Path, EncodeAsset(RecordType<FTextureAsset>(), &Texture).Bytes);
-	FAssetEditorDocument Document(InAssets.LoadAsync(Path).Get(InTasks));
+	FAssetEditDocument Document(InAssets.LoadAsync(Path).Get(InTasks));
 	const auto BaseStorage = [&]()
 	{
 		const auto& Mip = std::get<FArchiveNode::FArray>(Document.Get("mips").Value).front();

@@ -4,15 +4,15 @@
 Define persistent asset-root selection, safe content-session transitions, directory browsing and typed asset opening in the editor.
 ## Requirements
 ### Requirement: Select and restore asset roots
-Editor SHALL provide File > Open... native directory selection and File > Recent with at most five unique successful roots. The selected directory itself SHALL map to `/Game`. Startup SHALL restore the last successful root unless explicit mount configuration overrides it; invalid restoration SHALL be reported without silently choosing another Game root. The menu bar SHALL begin with File rather than fixed HYPERION text.
+Editor SHALL provide File > Open... native directory selection and File > Recent with at most five unique successful roots. The selected directory itself SHALL map to `/Game`. Startup SHALL restore the last successful root unless an explicit asset directory overrides it; absent preferences SHALL leave Game unmounted and the browser empty. Invalid restoration SHALL be reported without silently choosing another Game root. Root changes SHALL use the shared content root service. The menu bar SHALL begin with File rather than fixed HYPERION text.
 
-#### Scenario: Select and restart
-- **WHEN** a user selects a valid directory and restarts Editor
+#### Scenario: Restart after root selection
+- **WHEN** the user successfully chooses a directory and restarts Editor
 - **THEN** that directory is restored as `/Game`, with no previously opened scene automatically loaded
 
-#### Scenario: Cancel or invalid recent
-- **WHEN** the folder dialog is cancelled or a Recent path is unavailable
-- **THEN** the current root and document remain unchanged and no failed root is added
+#### Scenario: First launch
+- **WHEN** no saved or explicit asset root exists
+- **THEN** the Content Browser asks the user to select a directory and performs no Game asset discovery
 
 ### Requirement: Protected root transition
 Editor SHALL offer save-and-continue, discard-and-continue and cancel for all dirty scene and asset documents, finish existing saves on the old root, and abort on save failure. Before changing `/Game` it SHALL close old documents, clear history/selection/previews, join old work and safely retire retained render resources. Successful transitions SHALL leave an empty document and preserve `/Engine`. Selecting the same canonical directory SHALL not close any document.

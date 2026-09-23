@@ -27,16 +27,16 @@ Editor 可通过 **Edit > Editor preference > Enable RenderDoc capture** 保存�
 
 ```powershell
 # 三角形：显示共用抓帧面板
-.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --renderdoc
+.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --asset-root ../HyperionAssets --renderdoc
 
 # 模型：使用同一面板
-.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --config experiments/Model.json --renderdoc
+.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Model.json --renderdoc
 
 # 捕获成功后自动启动 RenderDoc 打开文件
-.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --renderdoc --open-rdc
+.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --asset-root ../HyperionAssets --renderdoc --open-rdc
 
 # 自定义安装目录和输出目录（路径可含空格及 Unicode）
-.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --renderdoc-library 'D:/Tools/RenderDoc/renderdoc.dll' --rdc-output 'out/我的 RDC'
+.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --asset-root ../HyperionAssets --renderdoc-library 'D:/Tools/RenderDoc/renderdoc.dll' --rdc-output 'out/我的 RDC'
 ```
 
 面板操作：
@@ -83,10 +83,10 @@ RenderDoc 保存文件可能阻塞当前帧，模型越大耗时和文件越大�
 
 ```powershell
 # 第 8 和 16 帧抓取；帧号从 1 开始
-.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --frames 24 --hidden --capture-rdc 8 --capture-rdc 16
+.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --asset-root ../HyperionAssets --frames 24 --hidden --capture-rdc 8 --capture-rdc 16
 
 # 在真实 Viewer 中向 RDC 控件输入按下/释放事件，释放帧触发抓取
-.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --frames 24 --hidden --capture-rdc 8 --exercise-rdc-ui
+.\out\build\vs2022\bin\Debug\hyperion_viewer.exe --asset-root ../HyperionAssets --frames 24 --hidden --capture-rdc 8 --exercise-rdc-ui
 
 .\tools\GenerateSolution.ps1 -RenderDoc -Test -Configuration Debug
 .\tools\GenerateSolution.ps1 -RenderDoc -Test -Configuration Release

@@ -11,7 +11,9 @@ struct FOptions
 {
 	std::filesystem::path Config = std::filesystem::path(HYP_SOURCE_DIR) / "experiments/Triangle.json";
 	std::filesystem::path Capture;
-	std::filesystem::path Mounts;
+	std::filesystem::path EngineContent = std::filesystem::path(HYP_SOURCE_DIR) / "Content";
+	std::optional<std::filesystem::path> AssetRoot;
+	bool bReadOnly{};
 	std::filesystem::path SaveConfig;
 	std::filesystem::path SaveScene;
 	std::filesystem::path Model;

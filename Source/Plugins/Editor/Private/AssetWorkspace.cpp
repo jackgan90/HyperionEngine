@@ -35,17 +35,7 @@ void FAssetWorkspace::Open(const std::filesystem::path& InPath, std::string_view
 	Entry->Path = Path;
 	Entry->Identity = InIdentity;
 	Entry->TextureId = NextTexture++;
-	if (const auto* Mounted = dynamic_cast<const FMountedFileSystem*>(Assets.FileSystem().get()))
-	{
-		try
-		{
-			(void)Mounted->Resolve(Path, true);
-		}
-		catch (const std::exception&)
-		{
-			Entry->bReadOnly = true;
-		}
-	}
+	Entry->bReadOnly = IsAssetPathReadOnly(Assets, Path);
 	Assets.Invalidate(Path);
 	Entry->Load = Assets.LoadAsync(Path);
 	Active = Entry.get();
@@ -136,7 +126,7 @@ bool FAssetWorkspace::HasActive() const
 	return Active != nullptr;
 }
 
-const FAssetEditorDocument* FAssetWorkspace::ActiveDocument() const
+const FAssetEditDocument* FAssetWorkspace::ActiveDocument() const
 {
 	return Active ? Active->Document.get() : nullptr;
 }
@@ -403,11 +393,11 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 			{
 				throw std::runtime_error("Unsupported asset type: " + Type);
 			}
-			InEntry.Initialization = DispatchAsync<std::shared_ptr<FAssetEditorDocument>>(
+			InEntry.Initialization = DispatchAsync<std::shared_ptr<FAssetEditDocument>>(
 			    Tasks, {EDomain::Worker},
 			    [Loaded]
 			    {
-				    return std::make_shared<FAssetEditorDocument>(Loaded);
+				    return std::make_shared<FAssetEditDocument>(Loaded);
 			    },
 			    InEntry.Cancellation);
 		}

@@ -29,15 +29,23 @@ ctest --preset debug -N
 
 # 运行相关子集，CTest 自动加入必需的 fixture
 ctest --preset debug --output-on-failure -R "scene_management|scene_viewer_controls"
+
+# 自动化基础与真实 CLI/MCP 进程；只使用隔离夹具
+ctest --preset debug --output-on-failure -R '^automation_'
+
+# 内容根目录：共享切换契约、Editor 空启动/偏好恢复、原生资产工具
+ctest --preset debug --output-on-failure -R 'automation_|editor_content|native_publication_cli'
 ```
+
+内容根回归应覆盖未设置 `/Game` 时的可用状态、运行时设置/清空、dirty/busy/stale 拒绝、只读权限、旧文档失效和参与者停机撤销。准备或校验失败必须保留当前内容；Editor 与 CLI/MCP 使用同一个领域服务。测试夹具通过显式目录或内存挂载提供资源，不生成挂载配置文件。
 
 CTest 不代替构建。Visual Studio 使用 `ctest --test-dir out/build/vs2022 -C Debug`；实际目录随生成器选择变化。GPU、窗口和截图验收需要可用的 D3D12 设备与桌面会话。RenderDoc 回放需要编入支持并安装兼容运行库；Tracy trace 验收需要对应构建与工具，见 [RenderDoc.md](RenderDoc.md)、[Profiling.md](Profiling.md)。
 
 ## 有限帧截图
 
 ```powershell
-./out/build/debug/bin/hyperion_viewer.exe --frames 120 --capture out/captures/triangle.png --verify-triangle --verify-ui
-./out/build/debug/bin/hyperion_viewer.exe --config experiments/Model.json --frames 180 --hidden --no-ui --capture out/captures/model.png --verify-model
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --frames 120 --capture out/captures/triangle.png --verify-triangle --verify-ui
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Model.json --frames 180 --hidden --no-ui --capture out/captures/model.png --verify-model
 ```
 
 像素验收必须同时提供有限 `--frames` 和 `--capture`。`--hidden` 使用隐藏窗口，仍执行真实 GPU 工作；模型验证检查资源和绘制就绪。较慢设备或较大资产需要足够加载帧数。`--exercise-window` 验证缩放、最小化和恢复；`--verify-clear` 使用空插件集合检查清屏。

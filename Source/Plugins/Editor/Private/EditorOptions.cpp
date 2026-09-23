@@ -7,14 +7,18 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 {
 	FEditorOptions Result;
 	const auto Root = std::filesystem::path(HYP_SOURCE_DIR);
-	Result.Mounts = Root / (std::filesystem::exists(Root / "ContentMounts.local.json") ? "ContentMounts.local.json"
-	                                                                                   : "ContentMounts.json");
+	Result.EngineContent = Root / "Content";
 	Result.Layout = Root / "out/editor/Layout.ini";
 	Result.UiPreferences = Root / "out/editor/UiScale.ini";
 	Result.PreferencesPath = Root / "out/editor/Preferences.ini";
 	for (int Index = 1; Index < InCount; ++Index)
 	{
 		const std::string Argument = InValues[Index];
+		if (Argument == "--read-only")
+		{
+			Result.bReadOnly = true;
+			continue;
+		}
 		if (Argument == "--kernel-only")
 		{
 			Result.bKernelOnly = true;
@@ -64,10 +68,13 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		{
 			Result.DisabledPlugins.push_back(Value);
 		}
-		else if (Argument == "--mounts")
+		else if (Argument == "--asset-root")
 		{
-			Result.bExplicitMounts = true;
-			Result.Mounts = Value;
+			Result.AssetRoot = PathFromUtf8(Value);
+		}
+		else if (Argument == "--engine-content")
+		{
+			Result.EngineContent = PathFromUtf8(Value);
 		}
 		else if (Argument == "--layout")
 		{

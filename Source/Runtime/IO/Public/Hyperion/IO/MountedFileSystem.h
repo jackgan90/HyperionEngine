@@ -41,6 +41,4 @@ private:
 	FLocalFileSystem Local;
 };
 
-std::shared_ptr<FMountedFileSystem> LoadContentMounts(const std::filesystem::path& InConfiguration,
-                                                      bool bInAuthoring = false);
 } // namespace Hyperion

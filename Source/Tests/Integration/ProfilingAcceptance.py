@@ -140,7 +140,7 @@ def check_asset_load(profile, viewer, output):
     for category in ("assets", "frame"):
         folder = output / ("AssetLoad-" + category)
         folder.mkdir()
-        profile.capture([str(viewer), "--config", str(profile.ROOT / "experiments/Scene.json"),
+        profile.capture([str(viewer), "--asset-root", str(profile.ROOT.parent / "HyperionAssets"), "--config", str(profile.ROOT / "experiments/Scene.json"),
                          "--frames", "240", "--hidden", "--no-vsync", "--profile-wait",
                          "--profile-categories", category, "--benchmark-warmup", "120",
                          "--benchmark", str(folder / "Frames.csv")], folder, 60)

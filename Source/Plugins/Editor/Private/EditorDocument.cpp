@@ -147,6 +147,7 @@ void FEditorPlugin::DrawDiscardDialog()
 		}
 		else if (PendingRoot)
 		{
+			bDiscardRoot = true;
 			bCommitRoot = true;
 		}
 		else if (!PendingOpen.empty())

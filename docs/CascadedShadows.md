@@ -6,8 +6,8 @@ SceneViewer 默认使用单方向光、四级 2048×2048 D32 shadow map，四级
 
 ```powershell
 .\tools\Build.ps1 -Preset release
-.\out\build\release\bin\hyperion_viewer.exe --config experiments/Scene.json
-.\out\build\release\bin\hyperion_viewer.exe --config experiments/Shadows.json
+.\out\build\release\bin\hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
+.\out\build\release\bin\hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Shadows.json
 ```
 
 `Directional shadows` 面板提供启用、1024/2048 分辨率、距离、split lambda、receiver bias、normal offset、cascade overlap、距离淡出及光源方向控制。`Cycle shadow display` 在正常着色、cascade 着色、四张真实深度纹理预览之间切换；深度预览在阴影面板下方，隐藏 UI 时在右下角；白色为 depth=1。面板同时显示各 view 的可见物体、draw 数、CPU 准备和最近已完成 GPU 帧的各 pass 耗时。分辨率、距离和偏移等阴影管线设置仅作用于当前会话，不写回实验配置；面板中的光源颜色、强度、方向和 castShadows 编辑的是场景节点，会随场景保存。

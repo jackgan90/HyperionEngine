@@ -32,7 +32,8 @@ def summarize(rows):
 def run(args, motion, trial, enabled):
     name = f"{motion}-{trial}-{'on' if enabled else 'off'}"
     path = args.output / f"{name}.csv"
-    command = [str(args.viewer), "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-vsync",
+    command = [str(args.viewer), "--asset-root", str(args.asset_root.resolve()),
+               "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-vsync",
                "--frames", str(args.warmup + args.frames), "--benchmark-warmup", str(args.warmup),
                "--benchmark", str(path)]
     if motion == "moving":
@@ -60,6 +61,7 @@ def run(args, motion, trial, enabled):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--viewer", type=pathlib.Path, required=True)
+    parser.add_argument("--asset-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--warmup", type=int, default=240)
     parser.add_argument("--frames", type=int, default=600)

@@ -24,7 +24,7 @@ def main():
         assert result.returncode == 0, (name, result.stdout, result.stderr)
         return json.loads(report.read_text())
 
-    report = run('placement', '--mounts', str(root / 'ContentMounts.json'),
+    report = run('placement',
                  '--exercise-placement', str(output / 'Placed.hasset'),
                  '--capture', str(output / 'Placed.png'))
     assert report['placement_verified'] and not report['document_dirty'], report
@@ -37,13 +37,9 @@ def main():
     engine = output / 'MissingResources'
     shutil.copytree(root / 'Content', engine,
                     ignore=shutil.ignore_patterns('Cube.hasset', 'PointLight.hasset'))
-    mounts = output / 'MissingMounts.json'
     game = output / 'Game'
     game.mkdir()
-    mounts.write_text(json.dumps({'version': 1, 'mounts': [
-        {'root': '/Engine', 'directory': str(engine), 'read_only': True},
-        {'root': '/Game', 'directory': str(game), 'read_only': False}]}))
-    failed = run('missing-resources', '--mounts', str(mounts), '--frames', '120')
+    failed = run('missing-resources', '--engine-content', str(engine), '--asset-root', str(game), '--frames', '120')
     assert failed['placement_unavailable'] == 2, failed
     assert failed['nodes'] == 0 and not failed['document_dirty'] and not failed['scene_error'], failed
     assert failed['validation_errors'] == 0, failed

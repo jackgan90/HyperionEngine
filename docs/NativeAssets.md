@@ -16,9 +16,9 @@ Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、
 
 ~~~powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --config experiments/Model.json
-./out/build/debug/bin/hyperion_viewer.exe --config experiments/Scene.json
-./out/build/debug/bin/hyperion_viewer.exe --config experiments/Shadows.json
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Model.json
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Shadows.json
 
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.gltf out/my-content/model.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.glb out/my-content/scene.hasset --scene
@@ -54,9 +54,12 @@ Main 仅发起请求、轮询、编辑及捕获快照；Worker 执行反射、�
 
 ~~~cpp
 FTaskSystem Tasks(3, 2);
-FIOService IO(Tasks, LoadContentMounts("ContentMounts.json"));
+auto Files = CreateContentFileSystem("Content"); // Hyperion/Content/ContentRootService.h
+FIOService IO(Tasks, Files);
 FAssetService Assets(IO);
 RegisterSceneAssetTypes(Assets.Types());
+FContentRootService Content(Tasks, *Files, Assets);
+Content.Change("../HyperionAssets"); // 在发起 Game 请求前显式选择目录。
 
 // 无类型入口根据资产头查找注册描述符。
 auto Request = Assets.LoadAsync("/Game/Scenes/Showcase.hasset");
@@ -107,7 +110,7 @@ Tasks.Shutdown();
 
 一次发布中，如果多个来源要求同一个现存 AssetId 保存不同内容，导入会在写入前报告冲突，保留原生文件。当前不会自动拆分共享身份；需要统一这些来源的内容，或显式导入到独立库建立独立资源。纹理复用必须匹配实际暂存内容，不能复用已被本次导入更新的旧指纹。
 
-增量检查、跨挂载原生引用以及 AssetTool 的 inspect/validate/export-json 都使用发现索引。文件只改名且 ID 不变时，有效依赖继续解析，来源未变的重导入保持零写入。通过 `--mounts` 提供完整内容根；未配置挂载的单文件工具默认扫描输入文件所在目录，引用该目录之外已改名的资源时应配置包含它们的内容挂载。
+增量检查、跨挂载原生引用以及 AssetTool 的 inspect/validate/export-json 都使用发现索引。文件只改名且 ID 不变时，有效依赖继续解析，来源未变的重导入保持零写入。通过 `--asset-root <directory>` 选择完整 Game 根；单文件工具同时扫描输入文件所在的本地目录，引用该目录之外已改名的资源时应选择包含它们的资产根。Engine 目录独立配置。
 
 同一导入服务内，同一共享库按顺序发布；本地文件系统在 IO 域取得独占 Windows 文件 lease，其他活跃发布者会失败并返回明确错误。lease 文件关闭或进程退出时由系统删除。替代文件系统可覆盖 AcquireWriteLease；其默认实现仅提供当前进程、同一存储实例内的互斥。
 
@@ -158,7 +161,7 @@ HYPA v2 以 little endian 写入 24 字节前缀：magic、u32 版本、u64 meta
 Scene 面板的 Save edited scene 异步写出当前目录下 <原名>.edited.hasset，并显示保存中、成功或失败状态。重复保存同一文件保留身份。CLI 可指定路径：
 
 ~~~powershell
-./out/build/debug/bin/hyperion_viewer.exe --scene /Game/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
+./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
 ~~~
 
 FSceneInstance::Snapshot(destination) 保存 scene schema 7 的组件封装，保留对象/组件实例 ID、名称、完整仿射矩阵、可见性、几何选择和材质覆盖；新增实例获得独立 ID。自定义组件通过注册反射保存，未知组件阻止保存。它只保存仍在使用的模型引用，并按另存目标重新定位路径。相机、方向光、环境光、点光和聚光的节点 payload、层级及选择一起由 Scene 快照保存；相机镜头包含 FOV、near/far 和 focus distance。可选 initialView 保存显式初始浏览视图，导航不会修改它；插件不再补写独立 eye/target。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
@@ -171,7 +174,7 @@ AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、writt
 
 ~~~powershell
 ./out/build/release/bin/hyperion_asset_tool.exe measure-source ../HyperionAssets/.cache/Sources/Models/Showcase.gltf
-./out/build/release/bin/hyperion_asset_tool.exe validate /Game/Models/Showcase.hasset
+./out/build/release/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets validate /Game/Models/Showcase.hasset
 ~~~
 
 可运行 tools/MeasureAssets.py --tool <工具路径> --source <源模型路径> --output <结果目录> 自动进行每模式 2 次预热、7 次独立进程测量，保存原始日志和 Summary.json。

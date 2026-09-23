@@ -10,7 +10,7 @@ import tempfile
 def run_editor(executable, root, output, name, *arguments):
     report = output / f'{name}.json'
     capture = output / f'{name}.png'
-    command = [str(executable), '--hidden', '--layout', str(output / f'{name}.ini'),
+    command = [str(executable), '--asset-root', str(root.parent / 'HyperionAssets'), '--hidden', '--layout', str(output / f'{name}.ini'),
                '--ui-preferences', str(output / f'{name}-scale.ini'),
                '--report', str(report), '--capture', str(capture), *arguments]
     result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=100)

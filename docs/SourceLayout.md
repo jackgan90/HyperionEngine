@@ -1,6 +1,6 @@
 # 源码模块与依赖方向
 
-当前 Content 归属、挂载配置及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+当前 Content 归属、目录选择及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 源码以概念模块聚合，每个模块有自己的 `CMakeLists.txt`。公共头文件只从该模块的 `Public` 导出，实现和第三方 wrapper 留在 `Private`，没有全仓库共享的头文件搜索路径。
 
@@ -14,6 +14,7 @@ Source/
     IO/            # 专用 IO 队列、字节读写、存储后端
     Math/          # 引擎数学类型与 GLM wrapper
     Reflection/    # 类型描述及 JSON 序列化 wrapper
+    Automation/    # 类型化操作目录、schema 查询、Main 会话任务与协议 endpoint
     Serialization/ # 反射记录的原生二进制内存 Archive
     Config/        # 应用/实验配置，依赖 Reflection
     Plugins/       # 静态规划、类型化服务、作用域事件和生命周期
@@ -21,6 +22,8 @@ Source/
     Platform/      # 窗口、输入与 SDL wrapper
     AssetTypes/    # 轻量引用、头部和来源记录
     Assets/        # 原生异步加载/保存、依赖解析、缓存和图片 wrapper
+    AssetEditing/  # GUI/agent 共用 CPU 资产草稿、历史、保存和编辑算法
+    Content/       # Engine 资源定位、Game 根状态、索引候选和切换参与者
     Textures/      # CPU 纹理反射记录、颜色编码和离线 mip
     Materials/     # CPU 材质定义、实例、semantic、反射资产和纹理引用
     Environment/   # CPU 天空资产、全景转 cubemap、SH 与 GGX 预过滤
@@ -36,6 +39,7 @@ Source/
     D3D12/         # 独立的 D3D12 RHI provider
   Plugins/
     ApplicationServices/ # assets/window/graphics/gui/contact-shadows 逻辑插件
+    Automation/    # 操作 provider、会话和 stdio 生命周期插件
     Viewer/        # Viewer 输入、帧提交、输出与启动组合
     Editor/        # 文档、历史、停靠面板与 viewport
     Triangle/      # 三角形实验
@@ -47,6 +51,7 @@ Source/
     Editor/        # 选择原生后端，启动 Editor 插件宿主
     Viewer/        # 选择原生后端，启动 Viewer 插件宿主
     AssetTool/     # 独立 import / inspect / validate / upgrade CLI
+    Automation/    # CLI / JSONL / MCP 的启动组合
   Tests/           # 对应模块的单元测试及 Integration 验收
 ```
 

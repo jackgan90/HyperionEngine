@@ -15,7 +15,8 @@ initial, saved = work / "initial.json", work / "saved.json"
 initial.write_text(json.dumps(base), encoding="utf-8")
 
 def run(*args, fail=False):
-    result = subprocess.run([str(viewer), "--frames", "16", "--hidden", *map(str, args)],
+    result = subprocess.run([str(viewer), "--asset-root", str(root.parent / "HyperionAssets"),
+                             "--frames", "16", "--hidden", *map(str, args)],
                             cwd=work, capture_output=True, text=True, timeout=45)
     (work / f"run-{run.count}.log").write_text(result.stdout + result.stderr, encoding="utf-8")
     run.count += 1
