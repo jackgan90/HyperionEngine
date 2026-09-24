@@ -1,5 +1,6 @@
 #include "Hyperion/Automation/Catalog.h"
 #include <cctype>
+#include <set>
 #include <sstream>
 
 namespace Hyperion
@@ -71,7 +72,32 @@ void FOperationCatalog::RegisterType(const FRecordDescriptor& InType)
 	{
 		throw std::logic_error("Catalog is sealed");
 	}
-	Types.Register(InType);
+	std::set<std::string> Visited;
+	const auto RegisterRecord = [&](const auto& InSelf, const FRecordDescriptor& InRecord) -> void
+	{
+		Types.Register(InRecord);
+		if (!Visited.insert(InRecord.Id).second)
+		{
+			return;
+		}
+		for (const auto& Member : InRecord.Members)
+		{
+			if (!Member.Options.bPersistent || !Member.Shape)
+			{
+				continue;
+			}
+			const auto* Shape = &Member.Shape();
+			while (Shape->Element)
+			{
+				Shape = Shape->Element.get();
+			}
+			if (Shape->Record)
+			{
+				InSelf(InSelf, Shape->Record());
+			}
+		}
+	};
+	RegisterRecord(RegisterRecord, InType);
 }
 
 void FOperationCatalog::Seal()
@@ -112,7 +138,8 @@ FArchiveNode FOperationCatalog::Search(std::string_view InQuery, std::size_t InO
 	std::size_t Matched{};
 	for (const auto& [Id, Operation] : Operations)
 	{
-		std::string Haystack = Id + " " + Operation.Info.Summary + " " + Operation.Info.Owner;
+		std::string Haystack =
+		    Id + " " + Operation.Info.Summary + " " + Operation.Info.Owner + " " + Operation.Info.Description;
 		for (const auto& Keyword : Operation.Info.Keywords)
 		{
 			Haystack += " " + Keyword;

@@ -2,6 +2,7 @@
 #include "ContentRootOperations.h"
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/AutomationHost/AutomationPlugin.h"
+#include "Hyperion/Content/ContentQueries.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include <chrono>
@@ -9,6 +10,11 @@
 #include <iostream>
 #include <source_location>
 #include <thread>
+
+namespace Hyperion
+{
+void CheckMaterialNumericAutomation(FTaskSystem& InTasks, FAssetService& InAssets, FMemoryFileSystem& InFiles);
+}
 
 namespace
 {
@@ -199,6 +205,9 @@ void WriteFixture(const std::filesystem::path& InRoot)
 	FLocalFileSystem Files;
 	const auto Texture = Fixture();
 	Files.WriteAtomic(InRoot / "Game/Texture.hasset", EncodeAsset(RecordType<FTextureAsset>(), &Texture).Bytes);
+	auto Secondary = Texture;
+	Secondary.Name = "Secondary";
+	Files.WriteAtomic(InRoot / "Game/Secondary.hasset", EncodeAsset(RecordType<FTextureAsset>(), &Secondary).Bytes);
 	Files.WriteAtomic(InRoot / "ReadOnly/Texture.hasset", EncodeAsset(RecordType<FTextureAsset>(), &Texture).Bytes);
 }
 
@@ -270,11 +279,30 @@ void CheckRootOperations(FTaskSystem& InTasks)
 		FOperationCatalog Catalog;
 		RegisterAssetOperations(Catalog, &Provider);
 		RegisterContentRootOperations(Catalog, &Roots);
+		RegisterContentQueries(Catalog, &Assets, &Roots, "automation-assets");
 		Catalog.Seal();
 		FAutomationSession Session(Catalog);
 		Check(Roots.Info().Directory.empty() && Roots.Info().Generation == 0);
 		Failure(Call(Session, "asset.open", FAssetOpenRequest{"/Game/Texture.hasset"}), "root_unset");
 		Roots.Set({PathToUtf8(Root / "Game"), 0});
+		std::ofstream(Root / "Game/Broken.hasset") << "invalid header";
+		std::filesystem::create_directories(Root / "Game/Empty");
+		const auto PageResult = Call(Session, "content.directory.list", FContentDirectoryQuery{1, "/Game", 0, 1});
+		Check(Text(PageResult, "status") == "completed");
+		const auto Page = std::static_pointer_cast<FContentDirectoryPage>(
+		    ReadRecordWire(RecordType<FContentDirectoryPage>(), Field(PageResult, "result")));
+		Check(Page->Total == 4 && Page->Entries.size() == 1 && Page->Next == 1u);
+		Check(Page->Entries[0].Path == "/Game/Broken.hasset" && Page->Entries[0].State == "native_unindexed");
+		Failure(Call(Session, "content.directory.list", FContentDirectoryQuery{0}), "stale_revision");
+		Failure(Call(Session, "content.directory.list", FContentDirectoryQuery{1, "/Game/../Engine"}),
+		        "invalid_arguments");
+		Failure(Call(Session, "content.directory.list", FContentDirectoryQuery{1, PathToUtf8(Root)}),
+		        "invalid_arguments");
+		Failure(Call(Session, "content.directory.list", FContentDirectoryQuery{1, "/Game", 0, 101}),
+		        "invalid_arguments");
+		Check(!ReadValue<bool>(
+		    Field(Field(Call(Session, "asset.workspace.policy", FContentRootQuery{}), "result"), "retainsFailed")));
+
 		const auto Opening = Call(Session, "asset.open", FAssetOpenRequest{"/Game/Texture.hasset"});
 		Failure(Call(Session, "content.root.clear", FContentRootClearRequest{1, true}), "busy");
 		auto Document = Info(Wait(Session, InTasks, Opening));
@@ -344,6 +372,7 @@ int main(int InCount, char** InValues)
 		FIOService IO(Tasks, Files);
 		FAssetService Assets(IO);
 		CheckEditing(Assets, Tasks, *Files);
+		CheckMaterialNumericAutomation(Tasks, Assets, *Files);
 		CheckPluginLifetime();
 		CheckRegistrationFailure();
 		CheckRootOperations(Tasks);

@@ -61,6 +61,7 @@ public:
 	TAsyncResult<bool> SaveApplicationSettings(const std::filesystem::path& InPath) override;
 	void ChangeProfiling(std::optional<std::uint32_t> InMask, std::optional<bool> InSampling) override;
 	FRenderDiagnostics RenderDiagnostics() override;
+	FRenderHealth RenderHealth() override;
 	FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) override;
 	FCascadedShadowSettings ShadowControls() const override;
 	void SetShadowControls(const FCascadedShadowSettings& InSettings) override;

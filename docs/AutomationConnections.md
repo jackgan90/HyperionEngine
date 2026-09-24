@@ -2,6 +2,16 @@
 
 Editor 与 Viewer 的普通启动组合默认启用 `automation-local`。同一个 Windows 用户的 CLI/MCP 可以发现并附着；`--disable-plugin automation-local` 禁止该应用的发现和监听，`--kernel-only` 不创建监听器。目前实际提供 Windows 本机 Named Pipe，不开放 TCP 端口。CLI 的 `--mcp` 启动参数保持不变。
 
+## 候选识别与探测
+
+候选及 handshake target 包含可选 mode、label，旧宿主可能为空。它们是启动配置说明，label 可含初始场景/模型路径，不随当前文档切换更新，也不是可信身份。
+
+新前端可读取缺少这些字段的旧宿主。旧版 CLI/MCP 使用严格的 target 解码，无法发现或连接带新字段的宿主；更新宿主时须同步更新并重启 CLI/MCP。通信协议编号 1 不表示不同版本二进制可以双向混用。
+
+`targets.probe` 接受与 connect 相同的 instance/address，以及 timeoutMs（50–5000，默认 1000）。它复用现有 transport provider 和身份校验，只进行临时握手；成功返回 reachable=true 与 target，不返回 connection，不改变默认目标或执行领域操作。探测占用有界临时连接槽，完成后释放；连接池满返回 busy。失败沿用 not_found、stale_target、timeout、access_denied 等错误码。
+
+探测超时可能是宿主 Main 忙，不能据此判定进程已经退出。随后 connect 仍再次校验身份。列表不会自动轮询全部候选或删除历史记录。其他平台和远端继续实现原有 transport/discovery 抽象，不向连接管理层加入平台进程检查。
+
 ## 发现、连接与选择目标
 
 ```powershell

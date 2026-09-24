@@ -356,6 +356,16 @@ template<class T> const FRecordValueShape& RecordValueShape()
 			{
 				Result.EnumValues.push_back(WriteValue(static_cast<std::underlying_type_t<T>>(Value)));
 			}
+			for (const auto& Entry : RecordEnumEntries<T>())
+			{
+				if (Entry.Name.empty() || std::find(RecordEnumValues<T>().begin(), RecordEnumValues<T>().end(),
+				                                    Entry.Value) == RecordEnumValues<T>().end())
+				{
+					throw std::invalid_argument("Enum metadata must name an allowed value");
+				}
+				Result.EnumLabels.push_back({WriteValue(static_cast<std::underlying_type_t<T>>(Entry.Value)),
+				                             std::string(Entry.Name), std::string(Entry.Description)});
+			}
 		}
 		else if constexpr (std::is_integral_v<T> || std::is_same_v<T, std::byte>)
 		{

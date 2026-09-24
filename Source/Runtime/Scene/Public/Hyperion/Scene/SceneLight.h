@@ -69,5 +69,5 @@ void ValidateSceneDirectionalLight(const FSceneDirectionalLight& InLight);
 void ValidateSceneEnvironmentLight(const FSceneEnvironmentLight& InLight);
 template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>();
 template<> const FRecordDescriptor& RecordType<FSceneEnvironmentLight>();
-template<> std::span<const ESceneEnvironmentSource> RecordEnumValues<ESceneEnvironmentSource>();
+template<> std::span<const TRecordEnumEntry<ESceneEnvironmentSource>> RecordEnumEntries<ESceneEnvironmentSource>();
 } // namespace Hyperion

@@ -21,6 +21,7 @@ add_library(hyperion_automation_plugin STATIC
   Private/AssetProperties.cpp
   Private/AssetPropertyRegistration.cpp
   Private/ModelPropertyRegistration.cpp
+  Private/MaterialNumericOperations.cpp
   Private/TextureSampleOperations.cpp
   Private/ImportOperations.cpp
   Private/AssetPreviewOperations.cpp
@@ -44,7 +45,7 @@ if(BUILD_TESTING)
   hyp_executable(automation_scene_tests)
   target_link_libraries(automation_scene_tests PRIVATE hyperion_automation_plugin hyperion_scene_editing)
   add_test(NAME automation_scene COMMAND automation_scene_tests)
-  add_executable(automation_asset_tests Private/AssetOperationTests.cpp)
+  add_executable(automation_asset_tests Private/AssetOperationTests.cpp Private/MaterialNumericTests.cpp)
   hyp_executable(automation_asset_tests)
   target_link_libraries(automation_asset_tests PRIVATE hyperion_automation_plugin hyperion_asset_editing hyperion_application
     hyperion_assets hyperion_content hyperion_scene hyperion_io hyperion_textures)

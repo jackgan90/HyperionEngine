@@ -26,6 +26,10 @@ FEndpointRequest FAutomationRouter::Begin(std::string_view InMethod, const FArch
 		{
 			return Connections.Connect(InParameters);
 		}
+		if (InMethod == "targets.probe")
+		{
+			return Connections.Probe(InParameters);
+		}
 		if (InMethod == "targets.disconnect")
 		{
 			CheckConnectionKeys(Fields, {"connection"});
@@ -81,6 +85,16 @@ FArchiveNode FAutomationRouter::Tools() const
 	    R"({"type":"object","properties":{"instance":{"type":"string","description":"Boot-specific target identity; pins the handshake when supplied."}},"additionalProperties":false,"anyOf":[{"required":["instance"]},{"required":["address"]}]})");
 	std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(ConnectSchema.Value).at("properties").Value)
 	    .emplace("address", RecordWireSchema(RecordType<FTransportAddress>()));
+	auto ProbeSchema = ConnectSchema;
+	std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(ProbeSchema.Value).at("properties").Value)
+	    .emplace(
+	        "timeoutMs",
+	        ParseJson(
+	            R"({"type":"integer","minimum":50,"maximum":5000,"default":1000,"description":"Handshake wait budget 50-5000 milliseconds; timeout is advisory, not proof of process death."})"));
+	Add("targets.probe",
+	    "Check one discovered instance or explicit address with an identity-checked handshake. timeoutMs 50-5000, "
+	    "default 1000. No lasting connection or domain mutation; failure is advisory. Use targets.connect to attach.",
+	    std::move(ProbeSchema), true);
 	Add("targets.connect",
 	    "Connect by discovered instance or explicit transport address. Returns a connection ID; does not change the "
 	    "default target.",

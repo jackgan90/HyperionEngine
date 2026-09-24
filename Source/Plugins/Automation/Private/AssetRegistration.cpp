@@ -129,10 +129,22 @@ void RegisterDocumentEditing(FOperationCatalog& InCatalog, FAssetAutomation* InP
 
 void RegisterAssetOperations(FOperationCatalog& InCatalog, FAssetAutomation* InProvider)
 {
+	InCatalog.Register(MakeOperation<FContentRootQuery, FAssetWorkspacePolicy>(
+	    AssetInfo("asset.workspace.policy", "Query document ownership and failure retention",
+	              "Shared Editor workspace retains GUI-opened loading and failed tabs; generation 0 can close and "
+	              "reopen non-ready entries. Standalone and hosts without workspace list ready CPU drafts only; failed "
+	              "opens are reported by job outcomes, then removed. Activation is a no-op without a shared workspace.",
+	              "Reads host policy.", "Main snapshot.", Example(FContentRootQuery{}), true, InProvider),
+	    [InProvider](const auto&)
+	    {
+		    return InProvider->WorkspacePolicy();
+	    }));
 	InCatalog.Register(MakeOperation<FAssetWorkspaceQuery, FAssetDocumentList>(
 	    AssetInfo("asset.documents.list", "List ready, loading and failed workspace entries",
 	              "Lists workspace entries including GUI-opened, loading and failed tabs when attached. Non-ready "
-	              "entries expose state/error and generation 0; close then reopen to retry. Closed IDs are invalid.",
+	              "entries expose state/error and generation 0; close then reopen to retry. Without a workspace only "
+	              "ready CPU drafts are listed, and failed opens are removed after reporting job errors. Query "
+	              "asset.workspace.policy. Closed IDs are invalid.",
 	              "Reads shared workspace.", "Main snapshot.", Example(FAssetWorkspaceQuery{}), true, InProvider),
 	    [InProvider](const auto& InRequest)
 	    {

@@ -2,111 +2,145 @@
 
 namespace Hyperion
 {
-template<> std::span<const EMaterialValueKind> RecordEnumValues<EMaterialValueKind>()
+template<> std::span<const TRecordEnumEntry<EMaterialValueKind>> RecordEnumEntries<EMaterialValueKind>()
 {
-	static constexpr std::array Values{EMaterialValueKind::Numeric,    EMaterialValueKind::Structure,
-	                                   EMaterialValueKind::Array,      EMaterialValueKind::Texture2D,
-	                                   EMaterialValueKind::ReadBuffer, EMaterialValueKind::Sampler,
-	                                   EMaterialValueKind::TextureCube};
+	static constexpr TRecordEnumEntry<EMaterialValueKind> Values[] = {
+	    {EMaterialValueKind::Numeric, "Numeric", ""},
+	    {EMaterialValueKind::Structure, "Structure", ""},
+	    {EMaterialValueKind::Array, "Array", ""},
+	    {EMaterialValueKind::Texture2D, "Texture2D", ""},
+	    {EMaterialValueKind::ReadBuffer, "ReadBuffer", ""},
+	    {EMaterialValueKind::Sampler, "Sampler", ""},
+	    {EMaterialValueKind::TextureCube, "TextureCube", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialScalar> RecordEnumValues<EMaterialScalar>()
+template<> std::span<const TRecordEnumEntry<EMaterialScalar>> RecordEnumEntries<EMaterialScalar>()
 {
-	static constexpr std::array Values{EMaterialScalar::Bool, EMaterialScalar::Int, EMaterialScalar::Uint,
-	                                   EMaterialScalar::Float};
+	static constexpr TRecordEnumEntry<EMaterialScalar> Values[] = {{EMaterialScalar::Bool, "Bool", ""},
+	                                                               {EMaterialScalar::Int, "Int", ""},
+	                                                               {EMaterialScalar::Uint, "Uint", ""},
+	                                                               {EMaterialScalar::Float, "Float", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialParameterSource> RecordEnumValues<EMaterialParameterSource>()
+template<> std::span<const TRecordEnumEntry<EMaterialParameterSource>> RecordEnumEntries<EMaterialParameterSource>()
 {
-	static constexpr std::array Values{EMaterialParameterSource::Manual, EMaterialParameterSource::Semantic};
+	static constexpr TRecordEnumEntry<EMaterialParameterSource> Values[] = {
+	    {EMaterialParameterSource::Manual, "Manual", ""}, {EMaterialParameterSource::Semantic, "Semantic", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialOverridePolicy> RecordEnumValues<EMaterialOverridePolicy>()
+template<> std::span<const TRecordEnumEntry<EMaterialOverridePolicy>> RecordEnumEntries<EMaterialOverridePolicy>()
 {
-	static constexpr std::array Values{EMaterialOverridePolicy::Locked, EMaterialOverridePolicy::AllowOverride};
+	static constexpr TRecordEnumEntry<EMaterialOverridePolicy> Values[] = {
+	    {EMaterialOverridePolicy::Locked, "Locked", ""}, {EMaterialOverridePolicy::AllowOverride, "AllowOverride", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialAddressMode> RecordEnumValues<EMaterialAddressMode>()
+template<> std::span<const TRecordEnumEntry<EMaterialAddressMode>> RecordEnumEntries<EMaterialAddressMode>()
 {
-	static constexpr std::array Values{EMaterialAddressMode::Repeat, EMaterialAddressMode::Clamp,
-	                                   EMaterialAddressMode::Mirror, EMaterialAddressMode::Border,
-	                                   EMaterialAddressMode::MirrorOnce};
+	static constexpr TRecordEnumEntry<EMaterialAddressMode> Values[] = {
+	    {EMaterialAddressMode::Repeat, "Repeat", ""},
+	    {EMaterialAddressMode::Clamp, "Clamp", ""},
+	    {EMaterialAddressMode::Mirror, "Mirror", ""},
+	    {EMaterialAddressMode::Border, "Border", ""},
+	    {EMaterialAddressMode::MirrorOnce, "MirrorOnce", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialSamplerCompare> RecordEnumValues<EMaterialSamplerCompare>()
+template<> std::span<const TRecordEnumEntry<EMaterialSamplerCompare>> RecordEnumEntries<EMaterialSamplerCompare>()
 {
-	static constexpr std::array Values{EMaterialSamplerCompare::Never,        EMaterialSamplerCompare::Less,
-	                                   EMaterialSamplerCompare::Equal,        EMaterialSamplerCompare::LessEqual,
-	                                   EMaterialSamplerCompare::Greater,      EMaterialSamplerCompare::NotEqual,
-	                                   EMaterialSamplerCompare::GreaterEqual, EMaterialSamplerCompare::Always};
+	static constexpr TRecordEnumEntry<EMaterialSamplerCompare> Values[] = {
+	    {EMaterialSamplerCompare::Never, "Never", ""},
+	    {EMaterialSamplerCompare::Less, "Less", ""},
+	    {EMaterialSamplerCompare::Equal, "Equal", ""},
+	    {EMaterialSamplerCompare::LessEqual, "LessEqual", ""},
+	    {EMaterialSamplerCompare::Greater, "Greater", ""},
+	    {EMaterialSamplerCompare::NotEqual, "NotEqual", ""},
+	    {EMaterialSamplerCompare::GreaterEqual, "GreaterEqual", ""},
+	    {EMaterialSamplerCompare::Always, "Always", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialFill> RecordEnumValues<EMaterialFill>()
+template<> std::span<const TRecordEnumEntry<EMaterialFill>> RecordEnumEntries<EMaterialFill>()
 {
-	static constexpr std::array Values{EMaterialFill::Solid, EMaterialFill::Wireframe};
+	static constexpr TRecordEnumEntry<EMaterialFill> Values[] = {{EMaterialFill::Solid, "Solid", ""},
+	                                                             {EMaterialFill::Wireframe, "Wireframe", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialCull> RecordEnumValues<EMaterialCull>()
+template<> std::span<const TRecordEnumEntry<EMaterialCull>> RecordEnumEntries<EMaterialCull>()
 {
-	static constexpr std::array Values{EMaterialCull::None, EMaterialCull::Front, EMaterialCull::Back};
+	static constexpr TRecordEnumEntry<EMaterialCull> Values[] = {
+	    {EMaterialCull::None, "None", ""}, {EMaterialCull::Front, "Front", ""}, {EMaterialCull::Back, "Back", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialCompare> RecordEnumValues<EMaterialCompare>()
+template<> std::span<const TRecordEnumEntry<EMaterialCompare>> RecordEnumEntries<EMaterialCompare>()
 {
-	static constexpr std::array Values{EMaterialCompare::Never,        EMaterialCompare::Less,
-	                                   EMaterialCompare::Equal,        EMaterialCompare::LessEqual,
-	                                   EMaterialCompare::Greater,      EMaterialCompare::NotEqual,
-	                                   EMaterialCompare::GreaterEqual, EMaterialCompare::Always};
+	static constexpr TRecordEnumEntry<EMaterialCompare> Values[] = {
+	    {EMaterialCompare::Never, "Never", ""},
+	    {EMaterialCompare::Less, "Less", ""},
+	    {EMaterialCompare::Equal, "Equal", ""},
+	    {EMaterialCompare::LessEqual, "LessEqual", ""},
+	    {EMaterialCompare::Greater, "Greater", ""},
+	    {EMaterialCompare::NotEqual, "NotEqual", ""},
+	    {EMaterialCompare::GreaterEqual, "GreaterEqual", ""},
+	    {EMaterialCompare::Always, "Always", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialStencilOp> RecordEnumValues<EMaterialStencilOp>()
+template<> std::span<const TRecordEnumEntry<EMaterialStencilOp>> RecordEnumEntries<EMaterialStencilOp>()
 {
-	static constexpr std::array Values{EMaterialStencilOp::Keep,           EMaterialStencilOp::Zero,
-	                                   EMaterialStencilOp::Replace,        EMaterialStencilOp::IncrementClamp,
-	                                   EMaterialStencilOp::DecrementClamp, EMaterialStencilOp::Invert,
-	                                   EMaterialStencilOp::IncrementWrap,  EMaterialStencilOp::DecrementWrap};
+	static constexpr TRecordEnumEntry<EMaterialStencilOp> Values[] = {
+	    {EMaterialStencilOp::Keep, "Keep", ""},
+	    {EMaterialStencilOp::Zero, "Zero", ""},
+	    {EMaterialStencilOp::Replace, "Replace", ""},
+	    {EMaterialStencilOp::IncrementClamp, "IncrementClamp", ""},
+	    {EMaterialStencilOp::DecrementClamp, "DecrementClamp", ""},
+	    {EMaterialStencilOp::Invert, "Invert", ""},
+	    {EMaterialStencilOp::IncrementWrap, "IncrementWrap", ""},
+	    {EMaterialStencilOp::DecrementWrap, "DecrementWrap", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialBlendFactor> RecordEnumValues<EMaterialBlendFactor>()
+template<> std::span<const TRecordEnumEntry<EMaterialBlendFactor>> RecordEnumEntries<EMaterialBlendFactor>()
 {
-	static constexpr std::array Values{EMaterialBlendFactor::Zero,
-	                                   EMaterialBlendFactor::One,
-	                                   EMaterialBlendFactor::SourceColor,
-	                                   EMaterialBlendFactor::InverseSourceColor,
-	                                   EMaterialBlendFactor::SourceAlpha,
-	                                   EMaterialBlendFactor::InverseSourceAlpha,
-	                                   EMaterialBlendFactor::DestinationAlpha,
-	                                   EMaterialBlendFactor::InverseDestinationAlpha,
-	                                   EMaterialBlendFactor::DestinationColor,
-	                                   EMaterialBlendFactor::InverseDestinationColor,
-	                                   EMaterialBlendFactor::SourceAlphaSaturate,
-	                                   EMaterialBlendFactor::Constant,
-	                                   EMaterialBlendFactor::InverseConstant};
+	static constexpr TRecordEnumEntry<EMaterialBlendFactor> Values[] = {
+	    {EMaterialBlendFactor::Zero, "Zero", ""},
+	    {EMaterialBlendFactor::One, "One", ""},
+	    {EMaterialBlendFactor::SourceColor, "SourceColor", ""},
+	    {EMaterialBlendFactor::InverseSourceColor, "InverseSourceColor", ""},
+	    {EMaterialBlendFactor::SourceAlpha, "SourceAlpha", ""},
+	    {EMaterialBlendFactor::InverseSourceAlpha, "InverseSourceAlpha", ""},
+	    {EMaterialBlendFactor::DestinationAlpha, "DestinationAlpha", ""},
+	    {EMaterialBlendFactor::InverseDestinationAlpha, "InverseDestinationAlpha", ""},
+	    {EMaterialBlendFactor::DestinationColor, "DestinationColor", ""},
+	    {EMaterialBlendFactor::InverseDestinationColor, "InverseDestinationColor", ""},
+	    {EMaterialBlendFactor::SourceAlphaSaturate, "SourceAlphaSaturate", ""},
+	    {EMaterialBlendFactor::Constant, "Constant", ""},
+	    {EMaterialBlendFactor::InverseConstant, "InverseConstant", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialBlendOp> RecordEnumValues<EMaterialBlendOp>()
+template<> std::span<const TRecordEnumEntry<EMaterialBlendOp>> RecordEnumEntries<EMaterialBlendOp>()
 {
-	static constexpr std::array Values{EMaterialBlendOp::Add, EMaterialBlendOp::Subtract,
-	                                   EMaterialBlendOp::ReverseSubtract, EMaterialBlendOp::Minimum,
-	                                   EMaterialBlendOp::Maximum};
+	static constexpr TRecordEnumEntry<EMaterialBlendOp> Values[] = {
+	    {EMaterialBlendOp::Add, "Add", ""},
+	    {EMaterialBlendOp::Subtract, "Subtract", ""},
+	    {EMaterialBlendOp::ReverseSubtract, "ReverseSubtract", ""},
+	    {EMaterialBlendOp::Minimum, "Minimum", ""},
+	    {EMaterialBlendOp::Maximum, "Maximum", ""}};
 	return Values;
 }
 
-template<> std::span<const EMaterialQueue> RecordEnumValues<EMaterialQueue>()
+template<> std::span<const TRecordEnumEntry<EMaterialQueue>> RecordEnumEntries<EMaterialQueue>()
 {
-	static constexpr std::array Values{EMaterialQueue::Opaque, EMaterialQueue::Masked, EMaterialQueue::Transparent,
-	                                   EMaterialQueue::Overlay};
+	static constexpr TRecordEnumEntry<EMaterialQueue> Values[] = {{EMaterialQueue::Opaque, "Opaque", ""},
+	                                                              {EMaterialQueue::Masked, "Masked", ""},
+	                                                              {EMaterialQueue::Transparent, "Transparent", ""},
+	                                                              {EMaterialQueue::Overlay, "Overlay", ""}};
 	return Values;
 }
 } // namespace Hyperion

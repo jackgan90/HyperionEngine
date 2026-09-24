@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/AssetEditing/AssetDocument.h"
 #include "Hyperion/AssetEditing/AssetWorkspace.h"
+#include "Hyperion/AssetEditing/MaterialNumeric.h"
 #include "Hyperion/AssetEditing/ModelProperties.h"
 #include "Hyperion/Automation/Catalog.h"
 #include "Hyperion/Content/ContentRootService.h"
@@ -86,6 +87,16 @@ struct FAssetWorkspaceQuery
 	std::uint32_t Limit = 50;
 };
 
+struct FAssetWorkspacePolicy
+{
+	bool bShared{};
+	bool bRetainsFailed{};
+	bool bRetainsLoading{};
+	bool bActivation{};
+};
+
+template<> const FRecordDescriptor& RecordType<FAssetWorkspacePolicy>();
+
 struct FTextureSampleRequest
 {
 	std::string Document;
@@ -132,12 +143,21 @@ public:
 	TPendingOperation<FAssetDocumentInfo> SetEncoding(const FAssetEncodingRequest& InRequest);
 	FAssetCloseResult Close(const FAssetCloseRequest& InRequest);
 	FAssetDocumentList List(const FAssetWorkspaceQuery& InRequest) const;
+
+	FAssetWorkspacePolicy WorkspacePolicy() const
+	{
+		return {Workspace != nullptr, Workspace != nullptr, Workspace != nullptr, Workspace != nullptr};
+	}
+
 	FAssetDocumentInfo Activate(const FAssetDocumentRequest& InRequest);
 	FTextureSample TextureSample(const FTextureSampleRequest& InRequest);
 	FArchiveNode ReadField(const std::string& InDocument, std::string_view InType, std::string_view InField);
 	TPendingOperation<FAssetDocumentInfo> SetField(const std::string& InDocument, std::uint64_t InGeneration,
 	                                               std::string_view InType, std::string InField, FArchiveNode InValue);
 	void Drain();
+	FMaterialNumericInfo MaterialNumeric(const FAssetMutationRequest& InRequest, const std::string& InName);
+	FAssetDocumentInfo SetMaterialNumeric(const FAssetMutationRequest& InRequest,
+	                                      const std::vector<FMaterialNumericEdit>& InEdits);
 	std::vector<FModelPrimitiveInfo> ModelPrimitives(const FAssetMutationRequest& InRequest);
 	FAssetDocumentInfo SetPrimitives(const FAssetMutationRequest& InRequest, std::uint32_t InOffset,
 	                                 const std::vector<FModelPrimitiveInfo>& InValues);
@@ -170,6 +190,7 @@ private:
 };
 
 void RegisterAssetOperations(FOperationCatalog& InCatalog, FAssetAutomation* InProvider);
+void RegisterMaterialNumeric(FOperationCatalog& InCatalog, FAssetAutomation* InProvider);
 void RegisterAssetProperties(FOperationCatalog& InCatalog, FAssetAutomation* InProvider);
 void RegisterModelProperties(FOperationCatalog& InCatalog, FAssetAutomation* InProvider);
 void RegisterTextureSamples(FOperationCatalog& InCatalog, FAssetAutomation* InProvider);

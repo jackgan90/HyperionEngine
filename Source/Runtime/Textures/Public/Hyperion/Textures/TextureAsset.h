@@ -46,12 +46,12 @@ std::uint32_t TexturePixelBytes(ETextureFormat InFormat);
 std::array<float, 4> ReadTexturePixel(const FMaterialTextureMip& InMip, ETextureFormat InFormat, std::size_t InPixel);
 void WriteTexturePixel(FMaterialTextureMip& InMip, ETextureFormat InFormat, std::size_t InPixel,
                        std::array<float, 4> InValue);
-template<> std::span<const ETextureDimension> RecordEnumValues<ETextureDimension>();
-template<> std::span<const ETextureFormat> RecordEnumValues<ETextureFormat>();
+template<> std::span<const TRecordEnumEntry<ETextureDimension>> RecordEnumEntries<ETextureDimension>();
+template<> std::span<const TRecordEnumEntry<ETextureFormat>> RecordEnumEntries<ETextureFormat>();
 
 void ValidateTextureAsset(const FTextureAsset& InAsset);
 FTextureAsset BuildTextureAsset(std::string InName, EMaterialTextureEncoding InEncoding, FMaterialTextureMip InBase);
-template<> std::span<const EMaterialTextureEncoding> RecordEnumValues<EMaterialTextureEncoding>();
+template<> std::span<const TRecordEnumEntry<EMaterialTextureEncoding>> RecordEnumEntries<EMaterialTextureEncoding>();
 template<> const FRecordDescriptor& RecordType<FMaterialTextureMip>();
 template<> const FRecordDescriptor& RecordType<FTextureAsset>();
 } // namespace Hyperion

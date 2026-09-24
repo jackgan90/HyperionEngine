@@ -214,6 +214,25 @@ FArchiveNode FConnectionManager::List()
 
 FEndpointRequest FConnectionManager::Connect(const FArchiveNode& InParameters)
 {
+	return BeginConnection(InParameters, false, 10000);
+}
+
+FEndpointRequest FConnectionManager::Probe(const FArchiveNode& InParameters)
+{
+	auto Fields = ConnectionFields(InParameters);
+	CheckConnectionKeys(Fields, {"instance", "address", "timeoutMs"});
+	const auto Timeout = Fields.contains("timeoutMs") ? ReadValue<std::uint32_t>(Fields.at("timeoutMs")) : 1000;
+	if (Timeout < 50 || Timeout > 5000)
+	{
+		throw FAutomationError("invalid_arguments", "Probe timeoutMs must be 50-5000");
+	}
+	Fields.erase("timeoutMs");
+	return BeginConnection(FArchiveNode(std::move(Fields)), true, Timeout);
+}
+
+FEndpointRequest FConnectionManager::BeginConnection(const FArchiveNode& InParameters, bool bInProbe,
+                                                     std::uint32_t InTimeoutMs)
+{
 	const auto& Fields = ConnectionFields(InParameters);
 	CheckConnectionKeys(Fields, {"instance", "address"});
 	if (Impl->Clients.size() >= 16)
@@ -230,13 +249,39 @@ FEndpointRequest FConnectionManager::Connect(const FArchiveNode& InParameters)
 	                 {"instance", WriteValue(Client->ExpectedInstance)},
 	                 {"maxFrame", WriteValue(static_cast<std::uint32_t>(AutomationResponseLimits.MaxBytes))}}));
 	Impl->Clients.emplace(Client->Id, Client);
-	return {[Client, Hello = std::move(Hello)]() mutable -> std::optional<FArchiveNode>
+	for (auto& [Id, Request] : Client->Requests)
+	{
+		Request->Deadline = FConnectionClock::now() + std::chrono::milliseconds(InTimeoutMs);
+	}
+	return {[Client, bInProbe, Hello = std::move(Hello)]() mutable -> std::optional<FArchiveNode>
 	        {
 		        if (const auto Result = Hello.Poll())
 		        {
 			        try
 			        {
-				        return FinishConnect(*Client, *Result);
+				        auto Response = FinishConnect(*Client, *Result);
+				        if (bInProbe)
+				        {
+					        auto& Fields = std::get<FArchiveNode::FObject>(Response.Value);
+					        if (Fields.contains("result"))
+					        {
+						        auto& Info = std::get<FArchiveNode::FObject>(Fields.at("result").Value);
+						        const auto Target = Info.at("target");
+						        Info = {{"target", Target}};
+						        const auto CheckedAt = std::chrono::duration_cast<std::chrono::milliseconds>(
+						                                   std::chrono::system_clock::now().time_since_epoch())
+						                                   .count();
+						        Info.emplace("checkedAtUnixMs", WriteValue(std::to_string(CheckedAt)));
+						        Info.emplace("reachable", WriteValue(true));
+						        Info.emplace("contract",
+						                     WriteValue(std::string(
+						                         "Advisory handshake snapshot only. Connect validates identity again; "
+						                         "timeout/failure is not proof that the process is dead.")));
+					        }
+					        Client->bReady = false;
+					        Client->Close(AutomationFailure("disconnected", "Probe completed"));
+				        }
+				        return Response;
 			        }
 			        catch (...)
 			        {

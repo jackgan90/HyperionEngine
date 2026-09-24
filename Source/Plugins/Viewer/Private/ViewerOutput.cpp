@@ -38,19 +38,29 @@ FApplicationSettingsState FViewerPlugin::ApplicationSettings() const
 	return {Settings, SettingsRevision, bActiveReversedZ};
 }
 
-FRenderDiagnostics FViewerPlugin::RenderDiagnostics()
+FRenderHealth FViewerPlugin::RenderHealth()
 {
-	FRenderDiagnostics Result;
+	FRenderHealth Result;
 	Result.Frame = Metrics.ResultFrame;
 	Result.bReady = SceneProducer && SceneProducer->Ready();
 	if (auto* Scene = GetSceneInstance())
 	{
-		Result.SceneError = ScenePreparationError(*Scene);
+		Result.Error = ScenePreparationError(*Scene);
 	}
 	if (SceneProducer && !SceneProducer->Error().empty())
 	{
-		Result.SceneError = SceneProducer->Error();
+		Result.Error = SceneProducer->Error();
 	}
+	return Result;
+}
+
+FRenderDiagnostics FViewerPlugin::RenderDiagnostics()
+{
+	const auto Health = RenderHealth();
+	FRenderDiagnostics Result;
+	Result.Frame = Health.Frame;
+	Result.bReady = Health.bReady;
+	Result.SceneError = Health.Error;
 	Result.Pipeline = PipelineStatistics;
 	SetDeviceDiagnostics(Result, Metrics.Device);
 	return Result;

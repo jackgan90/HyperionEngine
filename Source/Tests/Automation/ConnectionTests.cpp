@@ -1,7 +1,9 @@
 #include "Hyperion/Automation/Connections.h"
 #include "Hyperion/Transport/MemoryTransport.h"
 #include "Support/TestSupport.h"
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 namespace Hyperion
 {
@@ -52,6 +54,29 @@ void Connections()
 	FAutomationSession LocalSession(Catalog);
 	FAutomationEndpoint LocalEndpoint(LocalSession);
 	FAutomationRouter Router(LocalEndpoint, Manager);
+	for (unsigned Index = 0; Index < 20; ++Index)
+	{
+		const auto Probed = Await(
+		    Router.Begin("targets.probe", ParseJson("{\"instance\":\"" + Target.Instance + "\"}")), Manager, Server);
+		const auto& Probe = Fields(Fields(Probed).at("result"));
+		HYP_CHECK(ReadValue<bool>(Probe.at("reachable")) && !Probe.contains("connection") &&
+		          !Probe.contains("session") && Probe.contains("checkedAtUnixMs"));
+		HYP_CHECK(ReadValue<std::string>(Fields(Probe.at("target")).at("instance")) == Target.Instance);
+	}
+	const auto InvalidProbe = Router.Begin("targets.probe", ParseJson(R"({"instance":"old","timeoutMs":0})")).Poll();
+	HYP_CHECK(InvalidProbe &&
+	          ReadValue<std::string>(Fields(Fields(*InvalidProbe).at("error")).at("code")) == "invalid_arguments");
+	const auto StaleProbe =
+	    Await(Router.Begin("targets.probe",
+	                       ParseJson(R"({"instance":"old","address":{"scheme":"memory","address":"target"}})")),
+	          Manager, Server);
+	HYP_CHECK(ReadValue<std::string>(Fields(Fields(StaleProbe).at("error")).at("code")) == "stale_target");
+	auto Waiting =
+	    Router.Begin("targets.probe", ParseJson("{\"instance\":\"" + Target.Instance + "\",\"timeoutMs\":50}"));
+	std::this_thread::sleep_for(std::chrono::milliseconds(60));
+	Manager.Poll();
+	const auto Timeout = Waiting.Poll();
+	HYP_CHECK(Timeout && ReadValue<std::string>(Fields(Fields(*Timeout).at("error")).at("code")) == "timeout");
 	const auto Connected = Await(
 	    Router.Begin("targets.connect", ParseJson("{\"instance\":\"" + Target.Instance + "\"}")), Manager, Server);
 	HYP_CHECK(ReadValue<std::string>(Fields(Connected).at("status")) == "completed");

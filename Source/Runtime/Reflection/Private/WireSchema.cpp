@@ -1,5 +1,6 @@
 #include "WireInternal.h"
 #include <cmath>
+#include <set>
 
 namespace Hyperion::WirePrivate
 {
@@ -51,7 +52,10 @@ FArchiveNode RecordSchema(const FRecordDescriptor& InType, unsigned InDepth, con
 		                                                             : std::string{};
 		if (!Description.empty())
 		{
-			Values.emplace("description", WriteValue(Description));
+			const auto Existing = Values.find("description");
+			const auto Suffix =
+			    Existing == Values.end() ? std::string{} : " " + ReadValue<std::string>(Existing->second);
+			Values.insert_or_assign("description", WriteValue(Description + Suffix));
 		}
 		if (Presentation)
 		{
@@ -90,6 +94,55 @@ FArchiveNode RecordSchema(const FRecordDescriptor& InType, unsigned InDepth, con
 	                                          {"x-hyperion-version", WriteValue(InType.Version)}});
 }
 
+void AddEnumSchema(const FRecordValueShape& InShape, FArchiveNode::FObject& OutSchema)
+{
+	FArchiveNode::FArray Allowed;
+	FArchiveNode::FArray Labels;
+	std::set<std::string> Seen;
+	std::string Description = "Allowed values: ";
+	for (const auto& RawValue : InShape.EnumValues)
+	{
+		const auto Value = Encode(InShape, RawValue);
+		const auto Key = WriteJson(Value);
+		if (!Seen.insert(Key).second)
+		{
+			continue;
+		}
+		Allowed.push_back(Value);
+		if (InShape.EnumLabels.empty())
+		{
+			continue;
+		}
+		std::string Names;
+		std::string Details;
+		for (const auto& Label : InShape.EnumLabels)
+		{
+			if (WriteJson(Encode(InShape, Label.Value)) == Key)
+			{
+				Names += (Names.empty() ? "" : " / ") + Label.Name;
+				if (!Label.Description.empty())
+				{
+					Details += (Details.empty() ? "" : "; ") + Label.Description;
+				}
+			}
+		}
+		FArchiveNode::FObject Alternative{{"const", Value}};
+		if (!Names.empty())
+		{
+			Alternative.emplace("title", WriteValue(Names));
+			Alternative.emplace("description", WriteValue(Details));
+		}
+		Labels.emplace_back(std::move(Alternative));
+		Description += Key + (Names.empty() ? "" : "=" + Names) + (Details.empty() ? "" : " (" + Details + ")") + "; ";
+	}
+	OutSchema.emplace("enum", FArchiveNode(std::move(Allowed)));
+	if (!Labels.empty())
+	{
+		OutSchema.emplace("oneOf", FArchiveNode(std::move(Labels)));
+		OutSchema.emplace("description", WriteValue(Description));
+	}
+}
+
 FArchiveNode ScalarSchema(const FRecordValueShape& InShape)
 {
 	FArchiveNode::FObject Values;
@@ -118,12 +171,7 @@ FArchiveNode ScalarSchema(const FRecordValueShape& InShape)
 	}
 	if (!InShape.EnumValues.empty())
 	{
-		FArchiveNode::FArray Allowed;
-		for (const auto& Value : InShape.EnumValues)
-		{
-			Allowed.push_back(Encode(InShape, Value));
-		}
-		Values.emplace("enum", FArchiveNode(std::move(Allowed)));
+		AddEnumSchema(InShape, Values);
 	}
 	return FArchiveNode(std::move(Values));
 }

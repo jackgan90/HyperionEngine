@@ -1,4 +1,4 @@
 add_library(hyperion_asset_editing STATIC Private/AssetDocument.cpp Private/AssetProperties.cpp Private/ModelProperties.cpp)
 hyp_module(hyperion_asset_editing)
-target_sources(hyperion_asset_editing PRIVATE Private/AssetPreview.cpp)
+target_sources(hyperion_asset_editing PRIVATE Private/AssetPreview.cpp Private/MaterialNumeric.cpp)
 target_link_libraries(hyperion_asset_editing PUBLIC hyperion_assets hyperion_textures hyperion_reflection hyperion_materials hyperion_scene PRIVATE hyperion_io)

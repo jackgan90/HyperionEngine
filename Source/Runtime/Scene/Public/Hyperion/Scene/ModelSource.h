@@ -26,9 +26,9 @@ enum class ESamplerFilter
 	LinearMipLinear = 5
 };
 
-template<> std::span<const EAlphaMode> RecordEnumValues<EAlphaMode>();
-template<> std::span<const EWrapMode> RecordEnumValues<EWrapMode>();
-template<> std::span<const ESamplerFilter> RecordEnumValues<ESamplerFilter>();
+template<> std::span<const TRecordEnumEntry<EAlphaMode>> RecordEnumEntries<EAlphaMode>();
+template<> std::span<const TRecordEnumEntry<EWrapMode>> RecordEnumEntries<EWrapMode>();
+template<> std::span<const TRecordEnumEntry<ESamplerFilter>> RecordEnumEntries<ESamplerFilter>();
 
 struct FModelSampler
 {

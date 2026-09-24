@@ -10,6 +10,8 @@ struct FAutomationTarget
 	std::string Application;
 	std::string Build;
 	FTransportAddress Address;
+	std::string Mode;
+	std::string Label;
 };
 
 template<> const FRecordDescriptor& RecordType<FTransportAddress>();

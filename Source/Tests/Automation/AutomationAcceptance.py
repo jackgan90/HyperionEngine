@@ -209,6 +209,23 @@ def main():
         root = pathlib.Path(temporary)
         assert run(fixture, root).returncode == 0
         asset_root = root / "Game"
+        (asset_root / "Broken.hasset").write_bytes(b"invalid header")
+        with_session = Session(executable, asset_root, True)
+        try:
+            generation = completed(with_session.call("content.root.get"))["generation"]
+            entries = completed(with_session.call("content.directory.list", generation=generation))["entries"]
+            broken = next(item for item in entries if item["path"].endswith("Broken.hasset"))
+            assert broken["state"] == "native_unindexed" and broken["asset"] is None, broken
+            rejected = with_session.wait(with_session.call("asset.open", path=broken["path"]))
+            assert rejected["status"] == "failed", rejected
+            assert not completed(with_session.call("asset.workspace.policy"))["retainsFailed"]
+            assert not completed(with_session.call("asset.documents.list"))["documents"]
+            nested = with_session.request("types.describe", {"type": "hyperion.materialparametertype"})
+            assert "Float" in json.dumps(nested), nested
+            found = with_session.request("api.search", {"query": "broken file"})
+            assert "content.directory.list" in [item["id"] for item in found["items"]], found
+        finally:
+            with_session.close()
         document = check_workflow(executable, asset_root, False)
         check_workflow(executable, asset_root, True)
         for mcp in (False, True):

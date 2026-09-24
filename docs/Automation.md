@@ -68,9 +68,9 @@ MCP 只声明固定的少量入口。搜索不会改写 `tools/list`，新领域
 
 | 入口 | 用途 |
 |---|---|
-| `targets.list/connect/disconnect` | 发现候选应用、建立和关闭显式连接 |
+| `targets.list/probe/connect/disconnect` | 发现候选应用、限时探测、建立和关闭显式连接 |
 | `engine.info` | 会话和执行契约；附着时包含实际 target/build |
-| `api.search` | ID、摘要、可用状态；query 按词匹配 ID、摘要、owner 和关键词；offset/limit 分页 |
+| `api.search` | ID、摘要、可用状态；query 按词匹配 ID、摘要、description、owner 和关键词；offset/limit 分页 |
 | `api.describe` | 完整 input/output JSON Schema、版本、例子、副作用、完成语义、执行域 |
 | `types.describe` | 按稳定类型 ID 查询已注册类型，无需加载资产 |
 | `api.call` | 按 operation ID 和 arguments 调用；服务端始终执行完整验证 |
@@ -140,6 +140,24 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 请求引用不能被 pending lambda 借用；应捕获复制的数据或由 provider 拥有的对象。例子会在注册时验证。请求/结果描述符须具有静态或覆盖目录的生命周期。目录拒绝重复 ID、运行期间注册和非所属线程访问。反射并不自动推断方法副作用、执行域、资源寿命和完成语义，这些由操作注册显式表达。
 
 类型 ID、operation ID、字段键及错误 code 是对外契约。兼容扩展可以添加带默认值的可选输入字段；新增必填字段、改类型或改变语义需明确版本策略，通常注册新 ID 并保留旧适配器。`Version` 是可查询的契约标识，不是自动迁移器。不要用资产持久化迁移偷偷改变操作输入语义。
+
+## 自描述契约与发现
+
+目录注册自动沿 persistent 字段登记嵌套记录，包括 optional、容器和递归记录。schema 的 `x-hyperion-type` 可直接传给 `types.describe`，无需手工维护嵌套类型清单；描述符生命周期与同 ID 定义一致性约束保持不变。
+
+新枚举优先提供 `RecordEnumEntries<T>()`，每项含枚举值、名称和语义说明；默认 `RecordEnumValues<T>()` 从该表派生合法值。wire 保持数字，schema 生成 enum、带 title/description 的 oneOf 和可读映射。已有 RecordEnumValues 特化仍兼容，但不会自动拥有名称。字段单位、编码和条件约束写在领域反射 Description；Inspector 单位也会投影，但 GUI slider 范围不自动成为业务拒绝规则。
+
+标签只补充展示信息：保留既有 `RecordEnumValues<T>()` 时，可以逐步为部分合法值添加标签，未命名的值仍出现在 schema 中。同一数值的枚举别名合并为一个 `oneOf` 分支，名称和说明合并展示；schema 的合法值集合始终与 wire 校验一致。
+
+`api.search` 按全部 query 单词匹配 ID、summary、description、owner 和 keywords；query 最多 256 字节，limit 为 1–50，默认 12。关键约束同时写在 bootstrap 描述中，供省略完整 JSON Schema 的客户端读取。例子须符合 schema，并说明运行时对象 name/ID/generation 的获取方式。
+
+`content.directory.list` 使用与 Content Browser 相同的 mounted ListDirectory，分页列出 /Game 或 /Engine 的直接子项，包括空目录、普通文件、索引引用、native_unindexed 候选及访问错误。limit 为 1–100，使用当前 root generation，不接受物理路径或父级跳转。native_unindexed 不等于损坏，获得路径后用 asset.open 读取加载诊断；indexed 也不证明完整 payload 有效。修改内容后重新分页，不承诺文件系统快照。
+
+`asset.workspace.policy` 返回 shared、retainsFailed、retainsLoading、activation。Editor 保留失败/加载中页签；standalone 及无 workspace 的 Viewer 只列出 ready CPU 草稿，失败打开经 job outcome 报错后移除。修改响应与随后 asset.info 的 workspace active、dirty、generation 应一致；不同模式不必拥有相同页签生命周期。
+
+`application.health` 返回简洁的 frame、ready、error。ready=false 且 error 为空可能正在加载；ready 不保证所有资源已绘制。详情再用 scene.status、render.component_diagnostics 或 render.statistics。Editor/Viewer 的概要与完整诊断共用状态来源，概要不读取 GPU 统计；无诊断服务时明确 unavailable。
+
+新增能力应验证类型引用可解析、枚举语义可读、示例有效、非法参数无副作用、修改响应与查询一致，以及 GUI 共用事务的历史和保存行为；不向 CLI/MCP 添加领域分支。
 
 ## 值、结果与限制
 

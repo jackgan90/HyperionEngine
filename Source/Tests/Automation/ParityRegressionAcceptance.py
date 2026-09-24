@@ -92,7 +92,11 @@ def model_regressions(cli, viewer, assets, output, failed=False):
         agent = AttachedSession(cli, app.target(), True)
         deadline = time.monotonic() + 30
         while True:
+            health = completed(agent.call("application.health"))
+            assert set(health) == {"frame", "ready", "error"}, health
             stats = completed(agent.call("render.statistics"))
+            if failed and stats["sceneError"]:
+                assert health["error"] == stats["sceneError"] and not health["ready"], health
             if (stats["sceneError"] if failed else stats["ready"]):
                 break
             assert time.monotonic() < deadline, stats

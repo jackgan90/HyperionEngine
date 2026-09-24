@@ -5,6 +5,15 @@
 
 namespace Hyperion
 {
+struct FRenderHealth
+{
+	std::uint64_t Frame{};
+	bool bReady{};
+	std::string Error;
+};
+
+template<> const FRecordDescriptor& RecordType<FRenderHealth>();
+
 struct FRenderDiagnostics
 {
 	std::uint64_t Frame{};
@@ -22,11 +31,18 @@ class IRenderDiagnostics
 public:
 	virtual ~IRenderDiagnostics() = default;
 	virtual FRenderDiagnostics RenderDiagnostics() = 0;
+
+	virtual FRenderHealth RenderHealth()
+	{
+		const auto State = RenderDiagnostics();
+		return {State.Frame, State.bReady, State.SceneError};
+	}
+
 	virtual FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) = 0;
 };
 
 void SetDeviceDiagnostics(FRenderDiagnostics& InResult, const FDeviceStats& InDevice);
-template<> std::span<const ESceneCameraStatus> RecordEnumValues<ESceneCameraStatus>();
+template<> std::span<const TRecordEnumEntry<ESceneCameraStatus>> RecordEnumEntries<ESceneCameraStatus>();
 template<> const FRecordDescriptor& RecordType<FRenderBatchStats>();
 template<> const FRecordDescriptor& RecordType<FSceneVisibilityStats>();
 template<> const FRecordDescriptor& RecordType<FLocalLightStatistics>();

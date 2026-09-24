@@ -11,7 +11,8 @@ namespace
 class FLocalAutomationPlugin final : public FPlugin
 {
 public:
-	explicit FLocalAutomationPlugin(std::string InApplication) : Application(std::move(InApplication))
+	FLocalAutomationPlugin(std::string InApplication, std::string InMode, std::string InLabel)
+	    : Application(std::move(InApplication)), Mode(std::move(InMode)), Label(std::move(InLabel))
 	{
 	}
 
@@ -21,6 +22,8 @@ public:
 		Control = &InContext.Require<FApplicationControl>();
 		RegisterLocalTransport(Transports);
 		Info = {CreateAutomationIdentity(), Application, HYP_AUTOMATION_BUILD, {}};
+		Info.Mode = Mode.empty() ? Application : Mode;
+		Info.Label = Label.empty() ? Application : Label;
 		Info.Address = LocalTransportAddress(Info.Instance);
 		InContext.Defer(
 		    [this]
@@ -83,6 +86,8 @@ public:
 
 private:
 	std::string Application;
+	std::string Mode;
+	std::string Label;
 	FAutomationTarget Info;
 	FTaskSystem* Tasks{};
 	FApplicationControl* Control{};
@@ -93,15 +98,16 @@ private:
 };
 } // namespace
 
-void RegisterAutomationLocal(FPluginRegistry& InRegistry, std::string InApplication)
+void RegisterAutomationLocal(FPluginRegistry& InRegistry, std::string InApplication, std::string InMode,
+                             std::string InLabel)
 {
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "automation-local";
 	Descriptor.Dependencies = {"automation-session"};
 	Descriptor.Requires = {typeid(FOperationCatalog), typeid(FTaskSystem), typeid(FApplicationControl)};
-	Descriptor.Create = [Application = std::move(InApplication)]
+	Descriptor.Create = [Application = std::move(InApplication), Mode = std::move(InMode), Label = std::move(InLabel)]
 	{
-		return std::make_unique<FLocalAutomationPlugin>(Application);
+		return std::make_unique<FLocalAutomationPlugin>(Application, Mode, Label);
 	};
 	InRegistry.Add(std::move(Descriptor));
 }

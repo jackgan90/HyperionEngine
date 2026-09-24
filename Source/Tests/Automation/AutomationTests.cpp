@@ -12,15 +12,41 @@ enum class ETestMode : std::uint8_t
 	Second = 3
 };
 
-template<> std::span<const ETestMode> RecordEnumValues<ETestMode>()
+template<> std::span<const TRecordEnumEntry<ETestMode>> RecordEnumEntries<ETestMode>()
 {
-	static constexpr std::array Values{ETestMode::First, ETestMode::Second};
+	static constexpr TRecordEnumEntry<ETestMode> Values[] = {{ETestMode::First, "First", "First mode"},
+	                                                         {ETestMode::Second, "Second", "Second mode"}};
 	return Values;
 }
 
 struct FWireChild
 {
 	std::int32_t Count{};
+};
+
+enum class EPartialMode : std::uint64_t
+{
+	First = 1,
+	Alias = First,
+	Unlabelled = UINT64_MAX
+};
+
+template<> std::span<const EPartialMode> RecordEnumValues<EPartialMode>()
+{
+	static constexpr EPartialMode Values[] = {EPartialMode::First, EPartialMode::Alias, EPartialMode::Unlabelled};
+	return Values;
+}
+
+template<> std::span<const TRecordEnumEntry<EPartialMode>> RecordEnumEntries<EPartialMode>()
+{
+	static constexpr TRecordEnumEntry<EPartialMode> Entries[] = {{EPartialMode::First, "First", "Primary name"},
+	                                                             {EPartialMode::Alias, "Alias", "Alternate name"}};
+	return Entries;
+}
+
+struct FPartialEnum
+{
+	EPartialMode Mode = EPartialMode::Unlabelled;
 };
 
 struct FWireRequest
@@ -129,6 +155,9 @@ FOperationInfo Info(std::string InId)
 
 void CheckRecursiveSchema()
 {
+	FOperationCatalog Catalog;
+	Catalog.RegisterType(RecordType<FRecursiveEnvelope>());
+	HYP_CHECK(Text(Catalog.DescribeType("test.wire.recursive"), "x-hyperion-type") == "test.wire.recursive");
 	const auto Schema = RecordWireSchema(RecordType<FRecursiveEnvelope>());
 	const auto& Recursive = Field(Field(Schema, "properties"), "value/~");
 	const auto& Children = Field(Field(Recursive, "properties"), "children");
@@ -162,6 +191,9 @@ void CheckWire()
 	const auto Restored = ReadRecordWire(RecordType<FWireRequest>(), Encoded);
 	HYP_CHECK(WriteJson(WriteRecordWire(RecordType<FWireRequest>(), Restored.get())) == WriteJson(Encoded));
 	const auto Schema = RecordWireSchema(RecordType<FWireRequest>());
+	const auto& ModeSchema = Field(Field(Field(Schema, "properties"), "modes"), "items");
+	HYP_CHECK(Text(ModeSchema, "description").find("3=Second") != std::string::npos);
+	HYP_CHECK(std::get<FArchiveNode::FArray>(Field(ModeSchema, "oneOf").Value).size() == 2);
 	HYP_CHECK(Text(Field(Field(Schema, "properties"), "revision"), "type") == "string");
 	HYP_CHECK(ReadInteger<int>(Field(Field(Field(Schema, "properties"), "position"), "minItems")) == 3);
 	HYP_CHECK(Text(Field(Field(Schema, "properties"), "enabled"), "description").find("without transport") !=
@@ -202,6 +234,38 @@ void CheckWire()
 	HYP_CHECK(std::static_pointer_cast<FWireRequest>(Integral)->Child->Count == 1);
 }
 
+void CheckPartialEnumMetadata()
+{
+	const auto Type = MakeRecord<FPartialEnum>(
+	    "test.partial.enum", {Member("mode", &FPartialEnum::Mode, {.Description = "Partial enum metadata."})});
+	const auto Schema = RecordWireSchema(Type);
+	const auto& Property = Field(Field(Schema, "properties"), "mode");
+	const auto& Allowed = std::get<FArchiveNode::FArray>(Field(Property, "enum").Value);
+	const auto& Branches = std::get<FArchiveNode::FArray>(Field(Property, "oneOf").Value);
+	HYP_CHECK(Allowed.size() == 2 && Branches.size() == 2);
+	HYP_CHECK(Text(Branches.front(), "title") == "First / Alias");
+	HYP_CHECK(Text(Property, "description").find("Partial enum metadata.") == 0);
+	HYP_CHECK(Text(Property, "description").find("Alternate name") != std::string::npos);
+	for (const auto& Value : Allowed)
+	{
+		std::size_t Matches{};
+		for (const auto& Branch : Branches)
+		{
+			Matches += WriteJson(Field(Branch, "const")) == WriteJson(Value) ? 1u : 0u;
+		}
+		HYP_CHECK(Matches == 1);
+		const auto Decoded = ReadRecordWire(Type, FArchiveNode(FArchiveNode::FObject{{"mode", Value}}));
+		HYP_CHECK(WriteJson(Field(WriteRecordWire(Type, Decoded.get()), "mode")) == WriteJson(Value));
+	}
+	HYP_CHECK(Text(Property, "default") == "18446744073709551615");
+	HYP_CHECK(Text(Branches.back(), "const") == Text(Property, "default"));
+	Reject(
+	    [&]
+	    {
+		    ReadRecordWire(Type, ParseJson(R"({"mode":"2"})"));
+	    });
+}
+
 void CheckCatalogAndJobs()
 {
 	FOperationCatalog Catalog;
@@ -213,6 +277,8 @@ void CheckCatalogAndJobs()
 		                                                          return FWireResult{InRequest.Name};
 	                                                          }));
 	bool bReady{};
+	HYP_CHECK(Text(Catalog.DescribeType("test.wire.child"), "x-hyperion-type") == "test.wire.child");
+	HYP_CHECK(ReadInteger<unsigned>(Field(Catalog.Search("typed registration", 0, 50), "total")) == 1);
 	bool bCancelled{};
 	Catalog.Register(MakeAsyncOperation<FWireRequest, FWireResult>(
 	    Info("test.deferred"),
@@ -349,6 +415,7 @@ int main()
 	try
 	{
 		CheckWire();
+		CheckPartialEnumMetadata();
 		CheckRecursiveSchema();
 		CheckCatalogAndJobs();
 		CheckResultLimits();

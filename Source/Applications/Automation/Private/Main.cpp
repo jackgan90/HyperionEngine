@@ -165,7 +165,8 @@ int main(int InCount, char** InValues)
 		       "  hyperion_automation_cli --stdio | --mcp\n"
 		       "Options: --attach <instance-id>, --asset-root <directory>, --engine-content <directory>, --read-only, "
 		       "--disable-plugin <id>\n"
-		       "Methods: targets.list, targets.connect, targets.disconnect, engine.info, api.search, api.describe, "
+		       "Methods: targets.list, targets.probe, targets.connect, targets.disconnect, engine.info, api.search, "
+		       "api.describe, "
 		       "types.describe, api.call, jobs.get, jobs.cancel\n"
 		       "JSONL: {\"id\":\"1\",\"method\":\"api.search\",\"params\":{\"query\":\"texture\"}}\n"
 		       "Use a persistent session for document workflows; one-shot calls wait for their job before exiting.\n";

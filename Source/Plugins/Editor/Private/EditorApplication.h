@@ -115,6 +115,7 @@ public:
 	void OpenRenderCapture() override;
 	void SetRenderCapturePreference(bool bInEnabled) override;
 	FRenderDiagnostics RenderDiagnostics() override;
+	FRenderHealth RenderHealth() override;
 	FApplicationCloseState ApplicationCloseState() const override;
 	FApplicationCloseState RequestApplicationClose(const FApplicationCloseRequest& InRequest) override;
 	FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) override;

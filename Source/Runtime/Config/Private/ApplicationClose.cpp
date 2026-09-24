@@ -2,11 +2,13 @@
 
 namespace Hyperion
 {
-template<> std::span<const EApplicationCloseAction> RecordEnumValues<EApplicationCloseAction>()
+template<> std::span<const TRecordEnumEntry<EApplicationCloseAction>> RecordEnumEntries<EApplicationCloseAction>()
 {
-	static constexpr EApplicationCloseAction Values[]{EApplicationCloseAction::RejectDirty,
-	                                                  EApplicationCloseAction::Save, EApplicationCloseAction::Discard,
-	                                                  EApplicationCloseAction::Cancel};
+	static constexpr TRecordEnumEntry<EApplicationCloseAction> Values[] = {
+	    {EApplicationCloseAction::RejectDirty, "RejectDirty", "Refuse exit while documents are dirty."},
+	    {EApplicationCloseAction::Save, "Save", "Save dirty documents, then exit."},
+	    {EApplicationCloseAction::Discard, "Discard", "Explicitly discard unsaved changes and exit."},
+	    {EApplicationCloseAction::Cancel, "Cancel", "Cancel pending exit; admitted saves continue."}};
 	return Values;
 }
 

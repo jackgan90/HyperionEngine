@@ -15,6 +15,9 @@ class AttachedSession(Session):
     def __init__(self, executable, instance, mcp):
         self.connection = None
         super().__init__(executable, mcp=mcp)
+        probe = completed(self.request("targets.probe", {"instance": instance, "timeoutMs": 5000}))
+        assert probe["reachable"] and "connection" not in probe, probe
+        assert probe["target"]["instance"] == instance and probe["target"]["label"], probe
         self.hello = completed(self.request("targets.connect", {"instance": instance}))
         self.connection = self.hello["connection"]
 
@@ -110,7 +113,10 @@ def workflow(cli, editor, viewer, root, output):
         candidates = completed(agent.request("targets.list", {}))["targets"]
         assert {first.instance, second.instance} <= {item["instance"] for item in candidates}
         tools = agent.rpc("tools/list", {})["tools"]
-        assert len(tools) == 10 and "connection" in tools[0]["inputSchema"]["properties"]
+        expected_tools = {"engine.info", "api.search", "api.describe", "types.describe", "api.call",
+                          "jobs.get", "jobs.cancel", "targets.list", "targets.probe", "targets.connect", "targets.disconnect"}
+        assert {tool["name"] for tool in tools} == expected_tools, tools
+        assert "connection" in next(tool for tool in tools if tool["name"] == "api.call")["inputSchema"]["properties"]
         info = ready(agent)
         target_root = completed(agent.call("content.root.get"))
         assert pathlib.Path(target_root["directory"]) == assets

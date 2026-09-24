@@ -67,9 +67,11 @@ template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
 	return Type;
 }
 
-template<> std::span<const ESceneEnvironmentSource> RecordEnumValues<ESceneEnvironmentSource>()
+template<> std::span<const TRecordEnumEntry<ESceneEnvironmentSource>> RecordEnumEntries<ESceneEnvironmentSource>()
 {
-	static constexpr std::array Values{ESceneEnvironmentSource::ConstantColor, ESceneEnvironmentSource::SkyAsset};
+	static constexpr TRecordEnumEntry<ESceneEnvironmentSource> Values[] = {
+	    {ESceneEnvironmentSource::ConstantColor, "ConstantColor", "Use the component constant ambient color."},
+	    {ESceneEnvironmentSource::SkyAsset, "SkyAsset", "Use the referenced sky asset for environment lighting."}};
 	return Values;
 }
 

@@ -105,7 +105,15 @@ void RunViewerApplication(int InCount, char** InValues, FRegisterBackends InBack
 	FPluginRegistry Registry;
 	RegisterAutomationServices(Registry);
 	RegisterSceneAutomation(Registry);
-	RegisterAutomationLocal(Registry, "Viewer");
+	const auto HasMode = [&](const std::string& InMode)
+	{
+		return std::find(Settings.Plugins.begin(), Settings.Plugins.end(), InMode) != Settings.Plugins.end();
+	};
+	const std::string Mode = HasMode("scene-viewer")   ? "scene-viewer"
+	                         : HasMode("model-viewer") ? "model-viewer"
+	                                                   : "Viewer";
+	const std::string Source = Mode == "scene-viewer" ? Settings.SceneSource : Settings.ModelSource;
+	RegisterAutomationLocal(Registry, "Viewer", Mode, Mode + (Source.empty() ? "" : " - " + Source));
 	RegisterViewerServices(Registry, Options, Settings, std::move(InBackends));
 	RegisterViewerCatalog(Registry, Settings, Options);
 	RegisterViewer(Registry, Options, Settings);

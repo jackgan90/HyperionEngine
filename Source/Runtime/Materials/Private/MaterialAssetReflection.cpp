@@ -41,7 +41,11 @@ template<> const FRecordDescriptor& RecordType<FMaterialAssetValue>()
 {
 	static const auto Type = MakeRecord<FMaterialAssetValue>(
 	    "hyperion.materialassetvalue",
-	    {Member("type", &FMaterialAssetValue::Type), Member("words", &FMaterialAssetValue::Words),
+	    {Member("type", &FMaterialAssetValue::Type),
+	     Member("words", &FMaterialAssetValue::Words,
+	            {.Description = "Raw 32-bit storage in row-major logical order: IEEE-754 float bits, two's-complement "
+	                            "int bits, uint values, or boolean 0/1 according to type.scalar. Prefer "
+	                            "material.numeric.get/set for ordinary numbers."}),
 	     Member("elements", &FMaterialAssetValue::Elements), Member("texture", &FMaterialAssetValue::Texture),
 	     Member("sampler", &FMaterialAssetValue::Sampler)},
 	    1, ValidateMaterialAssetValue);

@@ -27,7 +27,8 @@ struct FAutomationStreamStatus
 // Adapters require FOperationCatalog and declare Before={"automation-session"}.
 // Their state must outlive session Quiesce, which drains every admitted job.
 void RegisterAutomationServices(FPluginRegistry& InRegistry);
-void RegisterAutomationLocal(FPluginRegistry& InRegistry, std::string InApplication);
+void RegisterAutomationLocal(FPluginRegistry& InRegistry, std::string InApplication, std::string InMode = {},
+                             std::string InLabel = {});
 void RegisterAssetAutomation(FPluginRegistry& InRegistry);
 void RegisterSceneAutomation(FPluginRegistry& InRegistry);
 void RegisterAutomationStdio(FPluginRegistry& InRegistry, FAutomationStreamOptions InOptions);

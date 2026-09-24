@@ -33,6 +33,20 @@ enum class ERecordValueKind : std::uint8_t
 	Map
 };
 
+struct FRecordEnumLabel
+{
+	FArchiveNode Value;
+	std::string Name;
+	std::string Description;
+};
+
+template<class T> struct TRecordEnumEntry
+{
+	T Value;
+	std::string_view Name;
+	std::string_view Description;
+};
+
 struct FRecordValueShape
 {
 	ERecordValueKind Kind = ERecordValueKind::Record;
@@ -43,6 +57,7 @@ struct FRecordValueShape
 	FArchiveNode (*DefaultValue)(){};
 	std::optional<std::size_t> FixedSize;
 	std::vector<FArchiveNode> EnumValues;
+	std::vector<FRecordEnumLabel> EnumLabels;
 	bool bBulkSequence{};
 };
 
@@ -150,9 +165,23 @@ std::shared_ptr<const FRecordDisplayLayout> MakeRecordDisplayLayout(TProject InP
 	                         }});
 }
 
-template<class T> std::span<const T> RecordEnumValues()
+template<class T> std::span<const TRecordEnumEntry<T>> RecordEnumEntries()
 {
 	return {};
+}
+
+template<class T> std::span<const T> RecordEnumValues()
+{
+	static const std::vector<T> Values = []
+	{
+		std::vector<T> Result;
+		for (const auto& Entry : RecordEnumEntries<T>())
+		{
+			Result.push_back(Entry.Value);
+		}
+		return Result;
+	}();
+	return Values;
 }
 
 void ValidateRecordDescriptor(const FRecordDescriptor& InType);

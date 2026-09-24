@@ -188,6 +188,7 @@ void RegisterField(FOperationCatalog& InCatalog, FAssetAutomation* InProvider, s
 void RegisterAssetProperties(FOperationCatalog& InCatalog, FAssetAutomation* InProvider)
 {
 	RegisterModelProperties(InCatalog, InProvider);
+	RegisterMaterialNumeric(InCatalog, InProvider);
 	RegisterTextureSamples(InCatalog, InProvider);
 	RegisterField<&FModelAsset::Nodes>(InCatalog, InProvider, "model.nodes", "nodes");
 	RegisterField<&FModelAsset::MaterialSlots>(InCatalog, InProvider, "model.material_slots", "materialSlots");

@@ -56,9 +56,10 @@ void ValidateTextureAsset(const FTextureAsset& InAsset)
 	}
 }
 
-template<> std::span<const EMaterialTextureEncoding> RecordEnumValues<EMaterialTextureEncoding>()
+template<> std::span<const TRecordEnumEntry<EMaterialTextureEncoding>> RecordEnumEntries<EMaterialTextureEncoding>()
 {
-	static constexpr std::array Values{EMaterialTextureEncoding::Linear, EMaterialTextureEncoding::Srgb};
+	static constexpr TRecordEnumEntry<EMaterialTextureEncoding> Values[] = {
+	    {EMaterialTextureEncoding::Linear, "Linear", ""}, {EMaterialTextureEncoding::Srgb, "Srgb", ""}};
 	return Values;
 }
 
@@ -71,16 +72,18 @@ template<> const FRecordDescriptor& RecordType<FMaterialTextureMip>()
 	return Type;
 }
 
-template<> std::span<const ETextureDimension> RecordEnumValues<ETextureDimension>()
+template<> std::span<const TRecordEnumEntry<ETextureDimension>> RecordEnumEntries<ETextureDimension>()
 {
-	static constexpr std::array Values{ETextureDimension::Texture2D, ETextureDimension::Cube};
+	static constexpr TRecordEnumEntry<ETextureDimension> Values[] = {{ETextureDimension::Texture2D, "Texture2D", ""},
+	                                                                 {ETextureDimension::Cube, "Cube", ""}};
 	return Values;
 }
 
-template<> std::span<const ETextureFormat> RecordEnumValues<ETextureFormat>()
+template<> std::span<const TRecordEnumEntry<ETextureFormat>> RecordEnumEntries<ETextureFormat>()
 {
-	static constexpr std::array Values{ETextureFormat::Rgba8Unorm, ETextureFormat::Rgba16Float,
-	                                   ETextureFormat::Rgba32Float};
+	static constexpr TRecordEnumEntry<ETextureFormat> Values[] = {{ETextureFormat::Rgba8Unorm, "Rgba8Unorm", ""},
+	                                                              {ETextureFormat::Rgba16Float, "Rgba16Float", ""},
+	                                                              {ETextureFormat::Rgba32Float, "Rgba32Float", ""}};
 	return Values;
 }
 

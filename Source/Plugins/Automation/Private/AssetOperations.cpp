@@ -138,6 +138,11 @@ FAssetDocumentInfo FAssetAutomation::Describe(const FEntry& InEntry) const
 	                          Document.IsSaving(),
 	                          InEntry.bEditing,
 	                          Loaded.Header.Revision};
+	if (Workspace)
+	{
+		const auto Current = Workspace->FindDocument(InEntry.Id);
+		Result.bActive = Current && Current->bActive;
+	}
 	for (const auto& Member : Loaded.Type->Members)
 	{
 		Result.Fields.push_back(Member.Id);

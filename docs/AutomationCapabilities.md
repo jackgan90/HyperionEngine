@@ -39,6 +39,16 @@
 | GUI scale / Profiling | `gui.scale.get/set`、`profiling.get/set` | 共用 GUI scale 和 Viewer profiling 控制。scale 下一 GUI frame 生效并沿正常偏好路径保存；profiling 取决于构建和 collector |
 | 导入与发布 | `asset.import` | `FAssetImportService`、现有 importer 和 publication lease；完成后刷新索引，不静默覆盖已打开草稿 |
 
+## 数值与内容发现
+
+`material.numeric.get` 根据参数 name 返回有效数值（override 或 default）、type、semantic、editable 和 overridden。`material.numeric.set` 接收当前 document/generation 和 1–100 个 `{name, values}`，支持顶层 Numeric 标量、向量和矩阵，每项长度为 rows×columns，按逻辑行优先排列。名称从 material.parameters.get 取得；Float 转 float32，Int/Uint 检查 32 位范围及整数性，Bool 使用 0/1。非有限值、重复 name、维度错误或只读参数使整批拒绝。
+
+转换后仍经过 GUI 共用的 AssetEditing 校验、PBR clamp 和一次文档事务。numeric.get 读回实际存储值，一次 undo 恢复整批，asset.save 才持久化。聚合与资源参数继续使用原有 typed material.values；raw words 保留兼容。
+
+`content.directory.list` 回答“目录有哪些候选项”，content.assets.list 回答“索引有哪些已识别资产”。前者包括未索引 native 文件、空目录和访问诊断，可逐级分页发现未知坏文件的路径，再加载诊断；不把未索引直接判断为损坏。两者使用当前 root generation，不提供跨内容修改的分页快照。
+
+`asset.workspace.policy` 明确失败条目策略：下文 loading/failed 页签指附着 Editor workspace；standalone/无 workspace 宿主只保留 ready 草稿，打开失败由 job 返回。常规轮询优先用 application.health 查询场景就绪和错误，完整渲染计数仍由 render.statistics 提供。
+
 ## 值与完成语义
 
 资产序列字段 get 支持 offset/limit（1–100），返回 total/next；set 可使用 offset 替换现有范围，不隐式 resize。每页带当前 generation，修改后从第一页重新查询。字段类型来自成员指针和现有反射，不另写 JSON schema。

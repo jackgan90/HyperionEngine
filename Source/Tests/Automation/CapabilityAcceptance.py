@@ -12,6 +12,17 @@ from AutomationAcceptance import completed
 from AttachmentAcceptance import Application, AttachedSession, ready
 
 
+def referenced_types(value):
+    if isinstance(value, dict):
+        if "x-hyperion-type" in value:
+            yield value["x-hyperion-type"]
+        for child in value.values():
+            yield from referenced_types(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from referenced_types(child)
+
+
 def authoring(cli, editor, assets, output):
     app = Application(editor, output, "capabilities", "", assets, frames=3600)
     sessions = []
@@ -23,11 +34,17 @@ def authoring(cli, editor, assets, output):
         schema = agent.request("api.describe", {"operation": "material.values.set"})
         assert not schema["unavailable"], schema
         offset = 0
+        described_types = set()
         while True:
             page = agent.request("api.search", {"offset": offset, "limit": 50})
             for item in page["items"]:
                 definition = agent.request("api.describe", {"operation": item["id"]})
                 assert "inputSchema" in definition and "outputSchema" in definition, definition
+                for type_id in referenced_types(definition):
+                    if type_id not in described_types:
+                        described_types.add(type_id)
+                        nested = agent.request("types.describe", {"type": type_id})
+                        assert nested.get("x-hyperion-type") == type_id, nested
             if page["nextOffset"] is None:
                 break
             offset = page["nextOffset"]
@@ -110,10 +127,19 @@ def authoring(cli, editor, assets, output):
         assert pathlib.Path(artifact["path"]).is_file() and int(artifact["bytes"]) > 0
         changed = completed(agent.call("asset.rename", document=opened["document"],
                                        generation=opened["generation"], name="Shared workspace"))
-        assert completed(peer.call("asset.info", document=opened["document"]))["name"] == changed["name"]
+        snapshot = completed(peer.call("asset.info", document=opened["document"]))
+        assert changed["active"] and all(changed[key] == snapshot[key] for key in ("name", "active", "generation", "dirty")), (changed, snapshot)
         root = completed(agent.call("content.root.get"))
         assert peer.call("content.root.clear", generation=root["generation"])["error"]["code"] == "dirty_document"
         changed = completed(peer.call("asset.undo", document=changed["document"], generation=changed["generation"]))
+        assert changed["active"] and not changed["dirty"]
+        assert completed(agent.call("asset.workspace.policy"))["retainsFailed"]
+        other = completed(agent.wait(agent.call("asset.open", path="/Game/Secondary.hasset")))
+        inactive = completed(agent.call("asset.rename", document=changed["document"], generation=changed["generation"], name="Inactive edit"))
+        assert not inactive["active"]
+        assert inactive["active"] == completed(peer.call("asset.info", document=inactive["document"]))["active"]
+        changed = completed(agent.call("asset.undo", document=inactive["document"], generation=inactive["generation"]))
+        completed(agent.call("asset.close", document=other["document"], generation=other["generation"]))
         completed(agent.call("asset.close", document=changed["document"], generation=changed["generation"]))
         assert peer.call("asset.info", document=changed["document"])["error"]["code"] == "not_found"
         import_model(agent, output)
@@ -192,6 +218,16 @@ def import_model(agent, output):
     query = dict(document=material["document"], generation=material["generation"])
     parameters = completed(agent.call("material.parameters.get", **query))["value"]
     roughness = next(item["name"] for item in parameters if item["semantic"] == "Pbr.RoughnessFactor")
+    numeric_before = completed(agent.call("material.numeric.get", **query, name=roughness))
+    material = completed(agent.call("material.numeric.set", **query, edits=[{"name": roughness, "values": [0.375]}]))
+    query["generation"] = material["generation"]
+    assert completed(agent.call("material.numeric.get", **query, name=roughness))["values"] == [0.375]
+    rejected = agent.call("material.numeric.set", **query, edits=[{"name": roughness, "values": [0.5]}, {"name": "Missing", "values": [1]}])
+    assert rejected["status"] == "failed", rejected
+    assert completed(agent.call("asset.info", document=material["document"]))["generation"] == material["generation"]
+    material = completed(agent.call("asset.undo", **query))
+    query["generation"] = material["generation"]
+    assert completed(agent.call("material.numeric.get", **query, name=roughness))["values"] == numeric_before["values"]
     values = completed(agent.call("material.values.get", **query))["value"]
     next(item for item in values if item["name"] == roughness)["value"]["words"] = [struct.unpack("<I", struct.pack("<f", 2.0))[0]]
     material = completed(agent.wait(agent.call("material.values.set", **query, value=values)))

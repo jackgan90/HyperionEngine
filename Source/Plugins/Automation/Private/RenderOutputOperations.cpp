@@ -86,16 +86,27 @@ void RegisterShadowControls(FOperationCatalog& InCatalog, IShadowControls* InSha
 void RegisterRenderDiagnostics(FOperationCatalog& InCatalog, IRenderDiagnostics* InDiagnostics)
 {
 	FOperationInfo Info;
-	Info.Id = "render.statistics";
 	Info.Owner = "automation-scene";
-	Info.Summary = "Read completed rendering and device statistics";
-	Info.Description =
-	    "Uses the same completed pipeline snapshots as host diagnostics: views, culling, batches, local lighting, "
-	    "depth, outlines, allocations and GPU pass timing. GPU timing may lag; gpuTimingFrame identifies its sample.";
 	Info.bReadOnly = true;
 	Info.Effects = "Reads counters without modifying the scene.";
 	Info.Completion = "Current completed-frame snapshot.";
 	Info.Unavailable = InDiagnostics ? "" : "Renderer diagnostics provider unavailable.";
+	Info.Id = "application.health";
+	Info.Summary = "Read compact scene readiness and load errors";
+	Info.Description = "Small host health snapshot for Editor and Viewer, including ModelViewer failures. No GPU "
+	                   "statistics or component arrays. ready=false with an empty error can mean loading; inspect "
+	                   "error before polling. Use render.statistics only for detailed rendering counters.";
+	Info.Keywords = {"status", "health", "error", "failure", "ready", "loading"};
+	InCatalog.Register(MakeOperation<FSceneInfoRequest, FRenderHealth>(Info,
+	                                                                   [InDiagnostics](const auto&)
+	                                                                   {
+		                                                                   return InDiagnostics->RenderHealth();
+	                                                                   }));
+	Info.Id = "render.statistics";
+	Info.Summary = "Read completed rendering and device statistics";
+	Info.Description =
+	    "Detailed completed pipeline snapshots: views, culling, batches, lighting, allocations and GPU timing. Prefer "
+	    "application.health for readiness/errors. GPU timing may lag; gpuTimingFrame identifies its sample.";
 	InCatalog.Register(
 	    MakeOperation<FSceneInfoRequest, FRenderDiagnostics>(Info,
 	                                                         [InDiagnostics](const auto&)

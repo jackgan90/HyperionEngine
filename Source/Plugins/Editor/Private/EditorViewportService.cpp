@@ -17,12 +17,18 @@ FSceneComponentDiagnostics FEditorPlugin::ComponentDiagnostics(FSceneHandle InHa
 	return *Value;
 }
 
+FRenderHealth FEditorPlugin::RenderHealth()
+{
+	return {FrameCount, Scene->GetStatus().bReady, ScenePreparationError(*Scene)};
+}
+
 FRenderDiagnostics FEditorPlugin::RenderDiagnostics()
 {
+	const auto Health = RenderHealth();
 	FRenderDiagnostics Result;
-	Result.Frame = FrameCount;
-	Result.bReady = Scene->GetStatus().bReady;
-	Result.SceneError = ScenePreparationError(*Scene);
+	Result.Frame = Health.Frame;
+	Result.bReady = Health.bReady;
+	Result.SceneError = Health.Error;
 	Result.Pipeline = RenderStats;
 	FDeviceStats Snapshot;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},

@@ -38,6 +38,8 @@ Triangle、Model 和 Scene 示例都使用 Game 内容，包括三角形演示�
 
 Shader 编译器通过同一文件系统读取主文件和 include。Game Shader 可 include `/Engine/Shaders/...`；相对 include 按编译器源目录搜索。DXIL、SPIR-V、MSL 继续使用原有编译/反射流程。缓存包含逻辑文件位置、源目录内所有扩展名的文件内容、选项和工具链版本，保存在 `out/shader-cache`；物理目录搬迁不改变包路径 Shader 的缓存身份。缓存必须位于 Shader 源目录之外，指向挂载内目录时也遵守挂载的权限、大小写和链接检查。
 
+Automation 的 `content.directory.list` 将 ListDirectory 投影为分页逻辑路径候选，保留空目录、未知文件和访问错误，与 Content Browser 使用同一存储边界。它不把未索引直接判断为损坏；content.assets.list 仍只返回成功识别的资产引用。
+
 ## 导入与重建
 
 正常运行只需要发布后的 hasset 和文本 Shader。原始下载文件不会进入资产仓库的提交。

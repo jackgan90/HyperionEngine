@@ -21,7 +21,12 @@ template<> const FRecordDescriptor& RecordType<FAutomationTarget>()
 	            {.bRequired = true, .Description = "Boot-specific instance identity, verified during handshake."}),
 	     Member("application", &FAutomationTarget::Application, {.bRequired = true}),
 	     Member("build", &FAutomationTarget::Build, {.bRequired = true}),
-	     Member("address", &FAutomationTarget::Address, {.bRequired = true})});
+	     Member("address", &FAutomationTarget::Address, {.bRequired = true}),
+	     Member("mode", &FAutomationTarget::Mode,
+	            {.Description = "Startup host mode, e.g. Editor, scene-viewer or model-viewer. Empty on older hosts."}),
+	     Member("label", &FAutomationTarget::Label,
+	            {.Description =
+	                 "Human-readable startup label; advisory and not an identity or current document snapshot."})});
 	return Type;
 }
 } // namespace Hyperion

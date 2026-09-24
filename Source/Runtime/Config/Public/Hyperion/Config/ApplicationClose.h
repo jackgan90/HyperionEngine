@@ -36,7 +36,7 @@ public:
 	virtual FApplicationCloseState RequestApplicationClose(const FApplicationCloseRequest& InRequest) = 0;
 };
 
-template<> std::span<const EApplicationCloseAction> RecordEnumValues<EApplicationCloseAction>();
+template<> std::span<const TRecordEnumEntry<EApplicationCloseAction>> RecordEnumEntries<EApplicationCloseAction>();
 template<> const FRecordDescriptor& RecordType<FApplicationCloseRequest>();
 template<> const FRecordDescriptor& RecordType<FApplicationCloseState>();
 } // namespace Hyperion

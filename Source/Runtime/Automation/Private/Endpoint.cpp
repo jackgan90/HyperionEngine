@@ -16,7 +16,9 @@ struct FBootstrap
 const FBootstrap Bootstrap[] = {
     {"engine.info", "Inspect this session and its execution/retention contract.",
      R"({"type":"object","additionalProperties":false})", true},
-    {"api.search", "Search bounded operation summaries; use api.describe before calling an unfamiliar operation.",
+    {"api.search",
+     "Search IDs, summaries, descriptions and keywords (all query words must match). Query at most 256 bytes; offset "
+     ">= 0; limit 1-50, default 12. Use api.describe before calling an unfamiliar operation.",
      R"({"type":"object","properties":{"query":{"type":"string","default":""},"offset":{"type":"integer","minimum":0,"default":0},"limit":{"type":"integer","minimum":1,"maximum":50,"default":12}},"additionalProperties":false})",
      true},
     {"api.describe", "Get full input/output schemas, example, effects and completion semantics for an operation.",

@@ -12,7 +12,7 @@ void RegisterContentQueries(FOperationCatalog& InCatalog, FAssetService* InAsset
 	Info.Description = "Bounded path/identity search with optional type filter. Includes Engine and selected Game "
 	                   "assets; returns reusable typed asset references. Ordering is by path and identity. Restart "
 	                   "pagination after content writes or root changes.";
-	Info.Owner = std::move(InOwner);
+	Info.Owner = InOwner;
 	Info.bReadOnly = true;
 	Info.Effects = "Reads the current asset index; does not load asset data.";
 	Info.Completion = "Main snapshot page.";
@@ -21,12 +21,35 @@ void RegisterContentQueries(FOperationCatalog& InCatalog, FAssetService* InAsset
 	const FContentAssetQuery Example{};
 	Info.Example = WriteRecordWire(RecordType<FContentAssetQuery>(), &Example);
 	InCatalog.Register(MakeOperation<FContentAssetQuery, FContentAssetPage>(
-	    std::move(Info),
+	    Info,
 	    [InAssets, InRoots](const FContentAssetQuery& InRequest)
 	    {
 		    try
 		    {
 			    return QueryContentAssets(*InAssets, *InRoots, InRequest);
+		    }
+		    catch (const FContentRootError& Error)
+		    {
+			    throw FAutomationError(Error.Code, Error.what());
+		    }
+	    }));
+	Info.Id = "content.directory.list";
+	Info.Summary = "Discover mounted directories and files, including unindexed native assets";
+	Info.Description = "List direct children of /Game or /Engine using the same mounted filesystem as Content Browser. "
+	                   "Includes empty directories, non-asset files, native_unindexed candidates and access errors. "
+	                   "Unindexed does not imply corrupt; asset.open diagnoses known native paths. Limit 1-100, stable "
+	                   "path ordering; not a snapshot, restart after content/root changes.";
+	Info.Effects = "Enumerates one mounted directory; no writes or full asset loads.";
+	Info.Keywords = {"content", "discover", "directory", "file", "broken", "invalid", "error", "browse"};
+	const FContentDirectoryQuery DirectoryExample{};
+	Info.Example = WriteRecordWire(RecordType<FContentDirectoryQuery>(), &DirectoryExample);
+	InCatalog.Register(MakeOperation<FContentDirectoryQuery, FContentDirectoryPage>(
+	    Info,
+	    [InAssets, InRoots](const auto& InRequest)
+	    {
+		    try
+		    {
+			    return QueryContentDirectory(*InAssets, *InRoots, InRequest);
 		    }
 		    catch (const FContentRootError& Error)
 		    {

@@ -2,23 +2,29 @@
 
 namespace Hyperion
 {
-template<> std::span<const EAlphaMode> RecordEnumValues<EAlphaMode>()
+template<> std::span<const TRecordEnumEntry<EAlphaMode>> RecordEnumEntries<EAlphaMode>()
 {
-	static constexpr std::array Values{EAlphaMode::Opaque, EAlphaMode::Mask, EAlphaMode::Blend};
+	static constexpr TRecordEnumEntry<EAlphaMode> Values[] = {
+	    {EAlphaMode::Opaque, "Opaque", ""}, {EAlphaMode::Mask, "Mask", ""}, {EAlphaMode::Blend, "Blend", ""}};
 	return Values;
 }
 
-template<> std::span<const EWrapMode> RecordEnumValues<EWrapMode>()
+template<> std::span<const TRecordEnumEntry<EWrapMode>> RecordEnumEntries<EWrapMode>()
 {
-	static constexpr std::array Values{EWrapMode::Repeat, EWrapMode::Clamp, EWrapMode::Mirror};
+	static constexpr TRecordEnumEntry<EWrapMode> Values[] = {
+	    {EWrapMode::Repeat, "Repeat", ""}, {EWrapMode::Clamp, "Clamp", ""}, {EWrapMode::Mirror, "Mirror", ""}};
 	return Values;
 }
 
-template<> std::span<const ESamplerFilter> RecordEnumValues<ESamplerFilter>()
+template<> std::span<const TRecordEnumEntry<ESamplerFilter>> RecordEnumEntries<ESamplerFilter>()
 {
-	static constexpr std::array Values{ESamplerFilter::Nearest,           ESamplerFilter::Linear,
-	                                   ESamplerFilter::NearestMipNearest, ESamplerFilter::LinearMipNearest,
-	                                   ESamplerFilter::NearestMipLinear,  ESamplerFilter::LinearMipLinear};
+	static constexpr TRecordEnumEntry<ESamplerFilter> Values[] = {
+	    {ESamplerFilter::Nearest, "Nearest", ""},
+	    {ESamplerFilter::Linear, "Linear", ""},
+	    {ESamplerFilter::NearestMipNearest, "NearestMipNearest", ""},
+	    {ESamplerFilter::LinearMipNearest, "LinearMipNearest", ""},
+	    {ESamplerFilter::NearestMipLinear, "NearestMipLinear", ""},
+	    {ESamplerFilter::LinearMipLinear, "LinearMipLinear", ""}};
 	return Values;
 }
 

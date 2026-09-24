@@ -2,10 +2,26 @@
 
 namespace Hyperion
 {
-template<> std::span<const ESceneCameraStatus> RecordEnumValues<ESceneCameraStatus>()
+template<> const FRecordDescriptor& RecordType<FRenderHealth>()
 {
-	static constexpr std::array Values{ESceneCameraStatus::Active, ESceneCameraStatus::DefaultFallback,
-	                                   ESceneCameraStatus::NoActiveCamera, ESceneCameraStatus::EmptyViewport};
+	static const auto Type = MakeRecord<FRenderHealth>(
+	    "hyperion.render.health",
+	    {Member("frame", &FRenderHealth::Frame),
+	     Member("ready", &FRenderHealth::bReady,
+	            {.Description = "Scene producer readiness, not proof that every resource has been drawn."}),
+	     Member("error", &FRenderHealth::Error,
+	            {.Description = "Current scene load/preparation error; empty does not imply ready. Details via "
+	                            "scene.status or render.component_diagnostics when available."})});
+	return Type;
+}
+
+template<> std::span<const TRecordEnumEntry<ESceneCameraStatus>> RecordEnumEntries<ESceneCameraStatus>()
+{
+	static constexpr TRecordEnumEntry<ESceneCameraStatus> Values[] = {
+	    {ESceneCameraStatus::Active, "Active", ""},
+	    {ESceneCameraStatus::DefaultFallback, "DefaultFallback", ""},
+	    {ESceneCameraStatus::NoActiveCamera, "NoActiveCamera", ""},
+	    {ESceneCameraStatus::EmptyViewport, "EmptyViewport", ""}};
 	return Values;
 }
 

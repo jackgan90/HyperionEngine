@@ -2,6 +2,16 @@
 
 namespace Hyperion
 {
+template<> const FRecordDescriptor& RecordType<FAssetWorkspacePolicy>()
+{
+	static const auto Type = MakeRecord<FAssetWorkspacePolicy>(
+	    "automation.asset.workspace.policy", {Member("shared", &FAssetWorkspacePolicy::bShared),
+	                                          Member("retainsFailed", &FAssetWorkspacePolicy::bRetainsFailed),
+	                                          Member("retainsLoading", &FAssetWorkspacePolicy::bRetainsLoading),
+	                                          Member("activation", &FAssetWorkspacePolicy::bActivation)});
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FAssetDocumentList>()
 {
 	static const auto Type = MakeRecord<FAssetDocumentList>("automation.asset.documents",

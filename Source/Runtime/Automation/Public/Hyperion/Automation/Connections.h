@@ -31,6 +31,7 @@ public:
 	~FConnectionManager();
 	FArchiveNode List();
 	FEndpointRequest Connect(const FArchiveNode& InParameters);
+	FEndpointRequest Probe(const FArchiveNode& InParameters);
 	FArchiveNode Disconnect(const std::string& InConnection);
 	FEndpointRequest Request(const std::string& InConnection, std::string_view InMethod,
 	                         const FArchiveNode& InParameters);
@@ -38,6 +39,7 @@ public:
 	void Close();
 
 private:
+	FEndpointRequest BeginConnection(const FArchiveNode& InParameters, bool bInProbe, std::uint32_t InTimeoutMs);
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;
 };
