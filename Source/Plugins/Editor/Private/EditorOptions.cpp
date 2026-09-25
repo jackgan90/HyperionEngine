@@ -73,6 +73,7 @@ bool ParsePath(FEditorOptions& InOptions, std::string_view InArgument, const std
 {
 	const std::pair<std::string_view, std::filesystem::path FEditorOptions::*> Paths[] = {
 	    {"--engine-content", &FEditorOptions::EngineContent},
+	    {"--exercise-import", &FEditorOptions::ExerciseImport},
 	    {"--layout", &FEditorOptions::Layout},
 	    {"--render-settings", &FEditorOptions::RenderSettingsPath},
 	    {"--editor-preferences", &FEditorOptions::PreferencesPath},

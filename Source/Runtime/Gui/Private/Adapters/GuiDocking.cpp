@@ -145,12 +145,21 @@ void FGui::DockSpace(const FGuiDockLayout& InLayout, bool bInReset)
 	ImGui::DockSpaceOverViewport(Id, Viewport);
 }
 
-bool FGui::BeginWindow(const char* InTitle, bool& bInOpen, FVec2 InInitialSize)
+bool FGui::BeginWindow(const char* InTitle, bool& bInOpen, FVec2 InInitialSize, FVec2 InInitialPosition)
 {
 	Impl->Select();
 	if (InInitialSize.X > 0 && InInitialSize.Y > 0)
 	{
 		ImGui::SetNextWindowSize({Scale(InInitialSize.X), Scale(InInitialSize.Y)}, ImGuiCond_FirstUseEver);
+	}
+	if (InInitialPosition.X >= 0 && InInitialPosition.Y >= 0)
+	{
+		const auto* Viewport = ImGui::GetMainViewport();
+		const float X =
+		    std::clamp(Scale(InInitialPosition.X), 0.f, std::max(0.f, Viewport->WorkSize.x - Scale(InInitialSize.X)));
+		const float Y =
+		    std::clamp(Scale(InInitialPosition.Y), 0.f, std::max(0.f, Viewport->WorkSize.y - Scale(InInitialSize.Y)));
+		ImGui::SetNextWindowPos({Viewport->WorkPos.x + X, Viewport->WorkPos.y + Y}, ImGuiCond_FirstUseEver);
 	}
 	return ImGui::Begin(InTitle, &bInOpen, ImGuiWindowFlags_NoCollapse);
 }

@@ -1,6 +1,7 @@
 #include "Hyperion/Platform/FileDialog.h"
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <thread>
 #include <windows.h>
@@ -11,6 +12,7 @@ struct FDialogResponse
 {
 	int Command{};
 	std::atomic<bool> bFound{};
+	bool bFile{};
 };
 
 BOOL CALLBACK Respond(HWND InWindow, LPARAM InParameter)
@@ -20,7 +22,8 @@ BOOL CALLBACK Respond(HWND InWindow, LPARAM InParameter)
 	GetWindowThreadProcessId(InWindow, &Process);
 	wchar_t Title[128]{};
 	GetWindowTextW(InWindow, Title, 128);
-	if (Process == GetCurrentProcessId() && std::wstring_view(Title) == L"Open asset root")
+	if (Process == GetCurrentProcessId() &&
+	    std::wstring_view(Title) == (Response.bFile ? L"Import Asset" : L"Open asset root"))
 	{
 		PostMessageW(InWindow, WM_COMMAND, static_cast<WPARAM>(Response.Command), 0);
 		Response.bFound = true;
@@ -29,9 +32,10 @@ BOOL CALLBACK Respond(HWND InWindow, LPARAM InParameter)
 	return TRUE;
 }
 
-void CheckDialog(Hyperion::FWindow& InWindow, const std::filesystem::path& InRoot, bool bInAccept)
+void CheckDialog(Hyperion::FWindow& InWindow, const std::filesystem::path& InRoot, bool bInAccept, bool bInFile = false)
 {
 	FDialogResponse Response{bInAccept ? IDOK : IDCANCEL};
+	Response.bFile = bInFile;
 	std::jthread Answer(
 	    [&](std::stop_token InStop)
 	    {
@@ -41,7 +45,9 @@ void CheckDialog(Hyperion::FWindow& InWindow, const std::filesystem::path& InRoo
 			    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		    }
 	    });
-	const auto Result = Hyperion::SelectFolder(InWindow.Surface(), InRoot);
+	const Hyperion::FFileDialogFilter Filter{"Models", "*.gltf;*.glb"};
+	const auto Result = bInFile ? Hyperion::SelectFile(InWindow.Surface(), InRoot, std::span(&Filter, 1))
+	                            : Hyperion::SelectFolder(InWindow.Surface(), InRoot);
 	Answer.request_stop();
 	if (!Response.bFound || Result.has_value() != bInAccept ||
 	    (Result && std::filesystem::canonical(*Result) != InRoot))
@@ -61,7 +67,11 @@ int main()
 		const auto Root = std::filesystem::canonical(Directory);
 		CheckDialog(Window, Root, false);
 		CheckDialog(Window, Root, true);
-		std::cout << "Native folder dialog cancellation and selection passed\n";
+		const auto Source = Root / L"Asset \u6d4b\u8bd5.gltf";
+		std::ofstream(Source) << "{}";
+		CheckDialog(Window, Source, false, true);
+		CheckDialog(Window, Source, true, true);
+		std::cout << "Native folder/file dialog cancellation and Unicode selection passed\n";
 		return 0;
 	}
 	catch (const std::exception& Failure)

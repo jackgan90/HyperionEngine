@@ -1,145 +1,129 @@
 #include "ImportOperations.h"
-#include "Hyperion/AssetImport/GltfImport.h"
-#include "Hyperion/AssetImport/SceneImport.h"
-#include "Hyperion/Assets/AssetRegistry.h"
-#include "Hyperion/IO/Path.h"
 
 namespace Hyperion
 {
 namespace
 {
-struct FImportRequest
+template<class TFunction> auto ImportCall(TFunction InFunction)
 {
-	std::uint64_t Generation{};
-	std::string Source;
-	std::string Output;
-	std::string Library;
-	std::string Name;
-	std::string Type;
-	std::string SourceRoot;
-	std::string SourceId;
-	bool bScene{};
-	bool bForce{};
-	std::string RootId;
-};
+	try
+	{
+		return InFunction();
+	}
+	catch (const FAssetImportError& Failure)
+	{
+		throw FAutomationError(Failure.Code, Failure.what());
+	}
+}
 
-struct FImportResult
+FOperationInfo ImportInfo(std::string InId, std::string InSummary, std::string InDescription, FArchiveNode InExample,
+                          bool bInReadOnly, const FAssetImportWorkspace* InProvider)
 {
-	FAssetRef Asset;
-	std::uint64_t WrittenAssets{};
-	bool bUpToDate{};
-};
+	return {std::move(InId),
+	        std::move(InSummary),
+	        std::move(InDescription),
+	        "automation-assets",
+	        bInReadOnly
+	            ? "Reads import state; no publication."
+	            : "Publishes native assets; refreshes the index without replacing open drafts. No scene history.",
+	        bInReadOnly
+	            ? "Main snapshot returned."
+	            : "Publication committed; warning identifies any subsequent index refresh failure. Not cancellable.",
+	        std::move(InExample),
+	        1,
+	        bInReadOnly,
+	        {"asset", "import", "texture", "sky", "gltf"},
+	        InProvider ? "" : "Import workspace is unavailable; enable assets with a valid Engine content directory"};
+}
+
+template<class T> FArchiveNode Example(const T& InValue)
+{
+	return WriteRecordWire(RecordType<T>(), &InValue);
+}
 } // namespace
 
-template<> const FRecordDescriptor& RecordType<FImportRequest>()
+void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspace* InProvider)
 {
-	static const auto Type = MakeRecord<FImportRequest>(
-	    "automation.asset.import",
-	    {Member("generation", &FImportRequest::Generation,
-	            {.bRequired = true, .Description = "Current content.root.get generation."}),
-	     Member("source", &FImportRequest::Source,
-	            {.bRequired = true, .Description = "Source path accessible to the target process."}),
-	     Member(
-	         "output", &FImportRequest::Output,
-	         {.bRequired = true, .Description = "Separate native .hasset destination. Mount write permissions apply."}),
-	     Member("library", &FImportRequest::Library,
-	            {.Description = "Shared dependency publication directory; defaults to output parent."}),
-	     Member("name", &FImportRequest::Name), Member("type", &FImportRequest::Type),
-	     Member("sourceRoot", &FImportRequest::SourceRoot), Member("sourceId", &FImportRequest::SourceId),
-	     Member("scene", &FImportRequest::bScene), Member("force", &FImportRequest::bForce),
-	     Member("rootId", &FImportRequest::RootId,
-	            {.Description =
-	                 "Optional 32 lowercase hexadecimal canonical root ID for reconstruction. Must match an "
-	                 "existing output identity and not belong to another asset in the publication library."})});
-	return Type;
-}
-
-template<> const FRecordDescriptor& RecordType<FImportResult>()
-{
-	static const auto Type = MakeRecord<FImportResult>("automation.asset.import.result",
-	                                                   {Member("asset", &FImportResult::Asset),
-	                                                    Member("writtenAssets", &FImportResult::WrittenAssets),
-	                                                    Member("upToDate", &FImportResult::bUpToDate)});
-	return Type;
-}
-
-FImportAutomation::FImportAutomation(FIOService& InIO, FAssetService& InAssets, FContentRootService& InRoots)
-    : Imports(InIO), Assets(InAssets), Roots(InRoots)
-{
-	RegisterGltfImporter(Imports);
-	RegisterSceneImporter(Imports);
-}
-
-void FImportAutomation::Register(FOperationCatalog& InCatalog)
-{
-	FOperationInfo Info;
-	Info.Id = "asset.import";
-	Info.Owner = "automation-assets";
-	Info.Summary = "Import source assets and publish native dependency products";
-	Info.Description = "Uses AssetTool's production import/publication service: glTF/GLB (including referenced "
-	                   "images), HDR/EXR sky environments, typed JSON, sky recipes and native upgrades. Standalone "
-	                   "PNG/JPEG import is not registered. Optional type disambiguates JSON. scene wraps a model as a "
-	                   "scene. sourceRoot/sourceId must be supplied together. force bypasses up-to-date detection, not "
-	                   "write permission or identity checks. Existing open drafts are not silently reloaded.";
-	Info.Effects = "Writes the destination and shared dependency library with native publication leases; refreshes the "
-	               "target asset index. No scene history.";
-	Info.Completion = "All native publications committed and index refreshed. Accepted publication is not cancellable.";
-	const FImportRequest Example{1, "source.gltf", "/Game/Imported.hasset"};
-	Info.Example = WriteRecordWire(RecordType<FImportRequest>(), &Example);
+	RegisterImportDraftOperations(InCatalog, InProvider);
+	const FImportRequest Request{1, "source.gltf", "/Game/Imported.hasset"};
 	InCatalog.Register(MakeAsyncOperation<FImportRequest, FImportResult>(
-	    Info,
-	    [this](const FImportRequest& InRequest)
+	    ImportInfo(
+	        "asset.import", "Import source assets and publish native dependency products",
+	        "Shared Editor/AssetTool pipeline: glTF/GLB, standalone PNG/JPEG, HDR/EXR skies, typed JSON/sky recipes "
+	        "and native upgrades. "
+	        "sourceRoot/sourceId must be supplied together. force bypasses freshness, not identity or permissions. "
+	        "Optional textureEncoding applies to standalone images; sky replaces recipe/default bake settings. Use "
+	        "asset.import.tasks for application task IDs.",
+	        Example(Request), false, InProvider),
+	    [InProvider](const FImportRequest& InRequest)
 	    {
-		    if (InRequest.Generation != Roots.Info().Generation)
-		    {
-			    throw FAutomationError("stale_revision", "Content root changed before import");
-		    }
-		    FAssetImportOptions Options;
-		    Options.bScene = InRequest.bScene;
-		    Options.bForce = InRequest.bForce;
-		    Options.Name = InRequest.Name;
-		    Options.TypeId = InRequest.Type;
-		    Options.Library = PathFromUtf8(InRequest.Library);
-		    Options.SourceRoot = PathFromUtf8(InRequest.SourceRoot);
-		    Options.SourceId = InRequest.SourceId;
-		    Options.RootId = InRequest.RootId;
-		    auto Pending = Imports.ImportAsync(PathFromUtf8(InRequest.Source), PathFromUtf8(InRequest.Output), Options);
-		    ++ActiveJobs;
-		    return TPendingOperation<FImportResult>{
-		        [this, Pending]() -> std::optional<FImportResult>
+		    const auto Task = ImportCall(
+		        [&]
 		        {
-			        if (!Pending.Ready())
-			        {
-				        return {};
-			        }
-			        --ActiveJobs;
-			        const auto Result = Pending.GetReady();
-			        Assets.ClearCache();
-			        IndexDiscoveredAssets(Assets, Result->Output.parent_path());
-			        return FImportResult{
-			            {Result->Header.Id, PathToUtf8(Result->Output), Result->Header.TypeId, Result->Header.Revision},
-			            Result->WrittenAssets,
-			            Result->bUpToDate};
-		        }};
+			        return InProvider->Start(InRequest);
+		        });
+		    return TPendingOperation<FImportResult>{[InProvider, Task]() -> std::optional<FImportResult>
+		                                            {
+			                                            InProvider->Update();
+			                                            if (Task->Info.Status == "running")
+			                                            {
+				                                            return {};
+			                                            }
+			                                            if (Task->Info.Status == "failed")
+			                                            {
+				                                            throw FAutomationError("operation_failed",
+				                                                                   Task->Info.Error);
+			                                            }
+			                                            return Task->Info.Result;
+		                                            }};
 	    }));
-}
-
-void FImportAutomation::Drain()
-{
-	Imports.Drain();
-}
-
-FContentRootParticipantState FImportAutomation::ContentRootState() const
-{
-	return {false, ActiveJobs != 0};
-}
-
-void FImportAutomation::ReleaseContentRoot()
-{
-	Imports.ClearCache();
-}
-
-void FImportAutomation::ContentRootChanged()
-{
+	InCatalog.Register(MakeOperation<FContentRootQuery, FImportCapabilities>(
+	    ImportInfo("asset.import.capabilities", "Describe supported import formats",
+	               "Supported native types and source extensions. Inspect asset.import for typed settings. No accepted "
+	               "task cancellation.",
+	               Example(FContentRootQuery{}), true, InProvider),
+	    [](const FContentRootQuery&)
+	    {
+		    return FAssetImportWorkspace::Capabilities();
+	    }));
+	InCatalog.Register(MakeOperation<FImportRequest, FImportValidation>(
+	    ImportInfo("asset.import.validate", "Validate an import request without publication",
+	               "Checks generation, paths, supported options and mount permissions. Conversion and "
+	               "dependency/identity checks still run on import; successful validation is not a reservation.",
+	               Example(Request), true, InProvider),
+	    [InProvider](const FImportRequest& InRequest)
+	    {
+		    return ImportCall(
+		        [&]
+		        {
+			        return InProvider->Validate(InRequest);
+		        });
+	    }));
+	InCatalog.Register(MakeOperation<FImportTaskListRequest, FImportTaskList>(
+	    ImportInfo("asset.import.tasks", "List GUI and agent import tasks",
+	               "Newest first, limit 1-32. Up to 128 retained application tasks; root changes clear history. IDs "
+	               "are distinct from session jobs.",
+	               Example(FImportTaskListRequest{}), true, InProvider),
+	    [InProvider](const FImportTaskListRequest& InRequest)
+	    {
+		    return ImportCall(
+		        [&]
+		        {
+			        return InProvider->List(InRequest);
+		        });
+	    }));
+	InCatalog.Register(MakeOperation<FImportTaskQuery, FImportTaskInfo>(
+	    ImportInfo("asset.import.task", "Inspect a shared import task",
+	               "Query an application import task ID returned by asset.import.tasks, including tasks submitted in "
+	               "the GUI or another connection.",
+	               Example(FImportTaskQuery{"task-from-asset.import.tasks"}), true, InProvider),
+	    [InProvider](const FImportTaskQuery& InRequest)
+	    {
+		    return ImportCall(
+		        [&]
+		        {
+			        return InProvider->Get(InRequest);
+		        });
+	    }));
 }
 } // namespace Hyperion

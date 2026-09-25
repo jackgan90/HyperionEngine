@@ -54,6 +54,8 @@ void FEditorPlugin::Initialize()
 	Gui = &Context.Require<FGui>();
 	Gui->SetPathDisplayRoot("/Game");
 	GuiRenderer = &Context.Require<FGuiRenderer>();
+	ImportPanel = std::make_unique<FAssetImportPanel>(Context.Find<FAssetImportWorkspace>(),
+	                                                  Context.Require<FContentRootService>());
 	bInitialCapturePreference = Options.Preferences.bRenderDocCapture;
 #if HYP_ENABLE_RENDERDOC
 	FrameCapture = Context.Find<FFrameCapture>();
@@ -202,6 +204,10 @@ void FEditorPlugin::Shutdown()
 
 void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::vector<FInputEvent>& InAssetEvents)
 {
+	if (!Options.ExerciseImport.empty())
+	{
+		ExerciseImportInput(InEvents);
+	}
 	if (Options.bExercise)
 	{
 		ExerciseInput(InEvents);
@@ -422,6 +428,12 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		RefreshContent();
 	}
 	PollContent();
+	if (auto* Imports = Context.Find<FAssetImportWorkspace>(); Imports && Imports->Revision() != ImportRevision)
+	{
+		ImportRevision = Imports->Revision();
+		RefreshContent();
+	}
+	ImportPanel->Process(Window->Surface());
 	if (AssetWindow)
 	{
 		AssetWindow->Poll(IsAssetWindowBlocked());
@@ -444,7 +456,8 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
 	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
-	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty()) &&
+	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty() ||
+	     !Options.ExerciseImport.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out at step " + std::to_string(ExerciseStep) +
@@ -460,6 +473,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExerciseImport.empty() && !bImportVerified)
+	{
+		throw std::runtime_error("Import GUI acceptance incomplete at step " + std::to_string(ExerciseStep));
+	}
 	if (!Options.ExerciseRenderControls.empty() && !bRenderControlsVerified)
 	{
 		throw std::runtime_error("Editor render controls acceptance did not complete");

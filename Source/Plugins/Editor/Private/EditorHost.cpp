@@ -34,12 +34,12 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 #if HYP_ENABLE_RENDERDOC
 	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
 #endif
-	const bool bInteractive = Options.ExerciseAssets.empty() && Options.ExerciseContent.empty() && !Options.bExercise &&
-	                          !Options.bExerciseGizmo && !Options.bExercisePicking &&
-	                          !Options.bExerciseMultiSelection && Options.Benchmark.empty() &&
-	                          Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
-	                          Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
-	                          Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty();
+	const bool bInteractive =
+	    Options.ExerciseAssets.empty() && Options.ExerciseContent.empty() && !Options.bExercise &&
+	    !Options.bExerciseGizmo && !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
+	    Options.Benchmark.empty() && Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
+	    Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty() &&
+	    Options.ExerciseRenderControls.empty() && Options.ExerciseImport.empty();
 	const auto RestoredRoot = !Options.AssetRoot && bInteractive && !Options.Preferences.AssetRoot.empty()
 	                              ? std::optional(Options.Preferences.AssetRoot)
 	                              : std::nullopt;
@@ -59,7 +59,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	    !Options.bExerciseMultiSelection && Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
 	    Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
 	    Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty();
-	const bool bPersistContentLayout = bPersistGui && Options.ExerciseContent.empty();
+	const bool bPersistContentLayout = bPersistGui && Options.ExerciseContent.empty() && Options.ExerciseImport.empty();
 	RegisterGuiServices(Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
 	                               bPersistContentLayout ? Options.Layout : std::filesystem::path{},
 	                               bPersistContentLayout ? Options.UiPreferences : std::filesystem::path{},
@@ -74,8 +74,9 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	                       typeid(IRenderDiagnostics), typeid(IApplicationClose)};
 	Descriptor.Dependencies = {"gui"};
 	Descriptor.After = {"contact-shadows"};
+	Descriptor.Optional = {typeid(FAssetImportWorkspace)};
 #if HYP_ENABLE_RENDERDOC
-	Descriptor.Optional = {typeid(FFrameCapture)};
+	Descriptor.Optional.push_back(typeid(FFrameCapture));
 #endif
 	Descriptor.Requires = {typeid(FApplicationControl),
 	                       typeid(FContentRootService),

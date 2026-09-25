@@ -24,10 +24,13 @@ struct FAssetImportService::FImpl
 	std::map<std::filesystem::path, FTaskHandle> Publications;
 	std::vector<FTaskHandle> Pending;
 
-	FConvertedAsset Convert(const std::filesystem::path& InPath, std::string_view InType);
+	FConvertedAsset Convert(const std::filesystem::path& InPath, std::string_view InType,
+	                        const FAssetConversionSettings& InSettings = {});
 	FAssetImportResult Publish(const std::filesystem::path& InSource, const std::filesystem::path& InOutput,
 	                           const FAssetImportOptions& InOptions);
 	void Trim();
+	FPreparedImport Prepare(const std::filesystem::path& InSource, const std::filesystem::path& InOutput,
+	                        const FAssetImportOptions& InOptions);
 	void ScheduleTrim(FTaskHandle InTask);
 };
 } // namespace Hyperion

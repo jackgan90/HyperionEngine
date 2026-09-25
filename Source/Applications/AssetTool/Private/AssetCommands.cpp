@@ -6,12 +6,24 @@
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/Path.h"
 #include "NativeMigration.h"
+#include <charconv>
 #include <set>
 
 namespace Hyperion
 {
 namespace
 {
+std::uint32_t ImportInteger(std::string_view InValue)
+{
+	std::uint32_t Result{};
+	const auto Parsed = std::from_chars(InValue.data(), InValue.data() + InValue.size(), Result);
+	if (Parsed.ec != std::errc{} || Parsed.ptr != InValue.data() + InValue.size())
+	{
+		throw std::invalid_argument("Expected an unsigned import setting");
+	}
+	return Result;
+}
+
 void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std::ostream& InOutput)
 {
 	if (InArguments.size() < 3)
@@ -46,6 +58,29 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 		else if (Argument == "--root-id" && Index + 1 < InArguments.size())
 		{
 			Options.RootId = InArguments[++Index];
+		}
+		else if (Argument == "--texture-encoding" && Index + 1 < InArguments.size())
+		{
+			const auto Value = InArguments[++Index];
+			if (Value != "srgb" && Value != "linear")
+			{
+				throw std::invalid_argument("Texture encoding must be srgb or linear");
+			}
+			Options.Conversion.TextureEncoding =
+			    Value == "srgb" ? EMaterialTextureEncoding::Srgb : EMaterialTextureEncoding::Linear;
+		}
+		else if ((Argument == "--radiance-size" || Argument == "--specular-size" || Argument == "--samples") &&
+		         Index + 1 < InArguments.size())
+		{
+			if (!Options.Conversion.Sky)
+			{
+				Options.Conversion.Sky.emplace();
+			}
+			auto& Settings = *Options.Conversion.Sky;
+			auto& Value = Argument == "--radiance-size"   ? Settings.RadianceSize
+			              : Argument == "--specular-size" ? Settings.SpecularSize
+			                                              : Settings.Samples;
+			Value = ImportInteger(InArguments[++Index]);
 		}
 		else if ((Argument == "--name" || Argument == "--type") && Index + 1 < InArguments.size())
 		{
@@ -146,6 +181,8 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		InOutput << "hyperion_asset_tool import SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] "
 		            "[--library DIRECTORY] [--source-root DIRECTORY --source-id ID] [--root-id ID]\n"
 		         << "Global options: --asset-root DIRECTORY --engine-content DIRECTORY [--read-only] [--authoring]\n"
+		         << "Import settings: --texture-encoding srgb|linear; --radiance-size N --specular-size N --samples N "
+		            "(explicit sky settings replace recipe settings)\n"
 		         << "hyperion_asset_tool build-brdf OUTPUT.hasset\n"
 		         << "hyperion_asset_tool --authoring build-placement\n"
 		         << "hyperion_asset_tool upgrade LEGACY.hasset OUTPUT.hasset\n"

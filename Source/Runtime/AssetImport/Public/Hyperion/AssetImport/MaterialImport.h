@@ -4,6 +4,7 @@
 namespace Hyperion
 {
 void RegisterMaterialImporters(FAssetImportService& InImports);
+void RegisterImageImporter(FAssetImportService& InImports);
 // Editable, tagged JSON representation of the same generic reflected record tree.
 FArchiveNode DecodeAssetSourceJson(std::string_view InText);
 std::string EncodeAssetSourceJson(const FArchiveNode& InNode);

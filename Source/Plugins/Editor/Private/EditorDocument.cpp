@@ -38,7 +38,7 @@ bool FEditorPlugin::PollClose()
 	{
 		return false;
 	}
-	if (!IsDirty() && !PendingSave && !AssetWorkspace->IsDirty() && !AssetWorkspace->IsSaving())
+	if (!ApplicationCloseState().bDirty && !PendingSave && !AssetWorkspace->IsSaving())
 	{
 		return true;
 	}
@@ -83,6 +83,13 @@ void FEditorPlugin::DrawDiscardDialog()
 		return;
 	}
 	DiscardTitleBounds = Gui->LastItemBounds();
+	const auto* Imports = Context.Find<FAssetImportWorkspace>();
+	const bool bImportDirty = Imports && Imports->ContentRootState().bDirty;
+	if (bImportDirty)
+	{
+		Gui->TextWrapped("Import drafts have unpublished edits. Cancel to publish them, or explicitly discard changes. "
+		                 "Save does not import assets.");
+	}
 	if (AssetWorkspace->HasPendingEdits())
 	{
 		Gui->TextWrapped("Wait for pending texture edits to finish before saving, or discard them explicitly.");
@@ -92,15 +99,15 @@ void FEditorPlugin::DrawDiscardDialog()
 	                               : "Open documents have unsaved changes. Save, discard, or cancel to keep editing.");
 	if (bPendingClose)
 	{
-		if (Gui->Button("Save all and exit",
-		                !PendingSave && !AssetWorkspace->IsSaving() && !AssetWorkspace->HasPendingEdits()))
+		if (Gui->Button("Save all and exit", !bImportDirty && !PendingSave && !AssetWorkspace->IsSaving() &&
+		                                         !AssetWorkspace->HasPendingEdits()))
 		{
 			SaveBeforeClose();
 		}
 		Gui->SameLine();
 	}
-	if (PendingRoot &&
-	    Gui->Button("Save and switch", !PendingSave && !bSaveThenSwitch && !AssetWorkspace->HasPendingEdits()))
+	if (PendingRoot && Gui->Button("Save and switch", !bImportDirty && !PendingSave && !bSaveThenSwitch &&
+	                                                      !AssetWorkspace->HasPendingEdits()))
 	{
 		try
 		{

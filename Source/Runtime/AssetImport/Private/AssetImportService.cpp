@@ -103,7 +103,8 @@ void FAssetImportService::Register(FAssetImporter InImporter)
 	Impl->Importers.push_back(std::move(InImporter));
 }
 
-FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path& InPath, std::string_view InType)
+FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path& InPath, std::string_view InType,
+                                                    const FAssetConversionSettings& InSettings)
 {
 	const auto Extension = ImportExtension(InPath);
 	const auto Importer = std::find_if(Importers.begin(), Importers.end(),
@@ -118,6 +119,7 @@ FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path&
 		throw std::runtime_error("No source importer for " + Extension + " and " + std::string(InType));
 	}
 	FAssetImportContext Context{IO, InPath, {}, Cancellation};
+	Context.Settings = InSettings;
 	Context.Bytes = Context.Read(InPath);
 	try
 	{
@@ -136,14 +138,19 @@ FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path&
 			}
 		}
 		std::sort(Context.Sources.begin(), Context.Sources.end());
-		return {std::make_shared<const FRecordDescriptor>(*Importer->Type),
-		        std::move(Object),
-		        std::move(Context.Sources),
-		        Importer->Id,
-		        Importer->Version,
-		        Weight,
-		        Extension == ".hasset" ? std::optional<FAssetHeader>(DecodeAsset(Context.Bytes).Header) : std::nullopt,
-		        std::move(Context.Products)};
+		FConvertedAsset Result{std::make_shared<const FRecordDescriptor>(*Importer->Type),
+		                       std::move(Object),
+		                       std::move(Context.Sources),
+		                       Importer->Id,
+		                       Importer->Version,
+		                       Weight,
+		                       Extension == ".hasset" ? std::optional<FAssetHeader>(DecodeAsset(Context.Bytes).Header)
+		                                              : std::nullopt,
+		                       std::move(Context.Products)};
+		Result.SourceWidth = Context.SourceWidth;
+		Result.SourceHeight = Context.SourceHeight;
+		Result.EffectiveSky = Context.EffectiveSky;
+		return Result;
 	}
 	catch (const std::exception& Error)
 	{

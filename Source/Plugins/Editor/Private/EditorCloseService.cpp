@@ -4,15 +4,21 @@ namespace Hyperion
 {
 FApplicationCloseState FEditorPlugin::ApplicationCloseState() const
 {
-	return {CloseState, CloseError, IsDirty() || AssetWorkspace->IsDirty(),
+	const auto* Imports = Context.Find<FAssetImportWorkspace>();
+	const auto ImportState = Imports ? Imports->ContentRootState() : FContentRootParticipantState{};
+	return {CloseState, CloseError, IsDirty() || AssetWorkspace->IsDirty() || ImportState.bDirty,
 	        bool(PendingSave) || AssetWorkspace->IsSaving() || AssetWorkspace->HasPendingEdits() ||
 	            GizmoEdit.has_value() || InspectorInteraction || PendingInspectorEdit.has_value() ||
-	            Placement.IsActive(),
+	            Placement.IsActive() || ImportState.bBusy,
 	        CurrentPath};
 }
 
 void FEditorPlugin::StartSaveBeforeClose(const std::string& InPath)
 {
+	if (const auto* Imports = Context.Find<FAssetImportWorkspace>(); Imports && Imports->ContentRootState().bDirty)
+	{
+		throw FSceneEditError("dirty_document", "Publish or explicitly discard import drafts before Save and Close");
+	}
 	if (IsDirty() && InPath.empty())
 	{
 		throw std::invalid_argument("Supply scenePath to save an untitled scene before closing");
@@ -42,6 +48,17 @@ void FEditorPlugin::StartSaveBeforeClose(const std::string& InPath)
 
 void FEditorPlugin::DiscardBeforeClose()
 {
+	if (auto* Imports = Context.Find<FAssetImportWorkspace>())
+	{
+		for (const auto& Id : Imports->DraftList().Drafts)
+		{
+			const auto Draft = Imports->Draft({Id});
+			if (Draft.Status != "preparing" && Draft.Status != "publishing")
+			{
+				Imports->DiscardDraft({Id, Draft.Generation, true});
+			}
+		}
+	}
 	ResetDocument();
 	AssetWorkspace->CloseAll();
 	bDiscardDialog = bRequestDiscard = bPendingClose = bSaveThenClose = false;

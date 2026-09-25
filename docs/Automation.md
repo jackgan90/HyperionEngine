@@ -189,7 +189,8 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 文档与内容 | Editor 场景打开/清空、加载状态；内容分页搜索；root 设置/清空与偏好保存 | dirty/discard/busy、generation 和旧 handle 失效由共享服务处理 |
 | 视图与预览 | 浏览相机、frame、速度、曝光、场景相机预览/创建/应用；资产预览相机/形状/纹理显示 | 临时状态不写场景历史；保存 initial view 或创建相机是明确的文档操作 |
 | 渲染与工具 | 共享渲染配置、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |
-| 导入、发布 | 复用 AssetTool 的 glTF/GLB、HDR/EXR 天空、JSON 和 native upgrade 发布服务 | 不扩充源格式；一般 PNG/JPEG 由模型依赖导入，不新增独立 image importer |
+| 导入、发布 | GUI/agent 共用 AssetImport workspace，支持 glTF/GLB、独立 PNG/JPEG、HDR/EXR 天空、JSON 和 native upgrade | 提供能力/校验/共享任务查询；textureEncoding 与 sky 为可选参数；发布接收后不可取消 |
+| 导入属性预览 | `asset.import.draft.*` 与 `asset.import.drafts` 共用未发布快照、分页查询、受限编辑及 Undo/Redo/Reset | mutation 使用草稿 generation；submit 保留 provenance 与来源校验；脏草稿参与换根/关闭保护 |
 | 应用附着 | 默认本机发现、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |
 | 底层与维护工具 | 现有 AssetTool 离线维护 CLI 保留 | 不逐个 RPC Public C++ 方法；库迁移、Engine 内容生成、性能测量及导出 envelope 不作为 Editor 交互任务扩展 |
 

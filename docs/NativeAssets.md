@@ -99,6 +99,12 @@ Tasks.Shutdown();
 
 ## 增量导入与发布
 
+导入属性预览由 `FAssetImportService::PrepareAsync` 复用实际转换和依赖遍历，准备不可变根/产品、转换依赖及全部来源指纹，不调用发布 Commit。`FAssetImportWorkspace` 保存有界草稿和仅含属性覆盖的历史，复用 AssetEditing 的模型/材质校验。提交使用准备的快照，沿用现有身份分配、去重、lease 和事务发布，不重新转换用户尚未确认的数据。源文件或依赖指纹变化会在增量判断前和最终提交时被拒绝。
+
+非空覆盖集以规范化 `property_overrides_v1` 设置参与导入 provenance 与重复检测；不修改 hasset schema，也不改变原有单步导入。预览提交不走会清除 Import 的原生 Save 路径。新预览从源重新准备，不自动合并上次输出编辑；准备时的依赖快照只读，属性修改仅作用于根资产。GUI 与 typed automation 共用这个 workspace。
+
+Editor 的 File > Import Asset 与 automation 使用 `FAssetImportWorkspace` 共用请求、任务和校验。独立 PNG/JPG/JPEG 可直接生成纹理：`import SOURCE.png /Game/Textures/Image.hasset --texture-encoding srgb`（或 `linear`）。天空可使用 `--radiance-size N --specular-size N --samples N`，显式设置会以默认值补全后覆盖源配方。参数参与增量设置记录；当前 hasset 类型和格式不变。原始图片读取、解码与 mip 构建均复用现有引擎接口。
+
 每个 importer 有稳定 ID 和版本。FAssetImportContext::Read 跟踪根文件、外部 buffer、图片等实际读取内容的 SHA-256。发布头保存 importer/version、选项、相对来源路径与指纹，以及来源到输出身份的映射。增量检查重新读取所有来源，验证原生依赖图完整性、当前记录版本和导入设置；内容、设置、importer 版本或模式变化都会重建。相同结果不重写该原生文件。
 
 一个 AssetId 对应一个当前文件。生成依赖位于 Models、Materials、Textures、Skies 等可见目录，文件名由可读名称与稳定 ID 组成；已存在的 ID 优先沿用发现的路径。挂载发布使用包路径，隔离本地输出使用相对引用。已有原生包引用经完整图和身份校验后保留，并清除 revision 约束。

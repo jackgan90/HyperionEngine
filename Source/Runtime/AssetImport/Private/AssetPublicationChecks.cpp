@@ -70,6 +70,23 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 		throw std::invalid_argument("--scene requires a model or scene source");
 	}
 	Provenance.Importer = Importer->Id;
+	if (!InOptions.PropertyOverrides.empty())
+	{
+		Provenance.Settings["property_overrides_v1"] = InOptions.PropertyOverrides;
+	}
+	ValidateImportSettings(InOptions.Conversion, Extension, SourceType);
+	if (InOptions.Conversion.TextureEncoding)
+	{
+		Provenance.Settings["texture_encoding"] =
+		    std::to_string(static_cast<unsigned>(*InOptions.Conversion.TextureEncoding));
+	}
+	if (InOptions.Conversion.Sky)
+	{
+		const auto& Settings = *InOptions.Conversion.Sky;
+		Provenance.Settings["sky_radiance_size"] = std::to_string(Settings.RadianceSize);
+		Provenance.Settings["sky_specular_size"] = std::to_string(Settings.SpecularSize);
+		Provenance.Settings["sky_samples"] = std::to_string(Settings.Samples);
+	}
 	Provenance.ImporterVersion = Importer->Version;
 	Provenance.Settings["type"] = SourceType;
 	Provenance.Settings["source"] = ImportPathString(Source.filename());

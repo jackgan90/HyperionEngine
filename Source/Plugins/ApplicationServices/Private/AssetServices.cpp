@@ -1,4 +1,5 @@
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
+#include "Hyperion/AssetImport/ImportWorkspace.h"
 #include "Hyperion/Content/ContentRootService.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -44,10 +45,32 @@ public:
 		InContext.Provide(*IO);
 		InContext.Provide(*Assets);
 		InContext.Provide(*Content);
+		Imports = std::make_unique<FAssetImportWorkspace>(*IO, *Assets, *Content);
+		InContext.Defer(
+		    [this]
+		    {
+			    Content->UnregisterParticipant(*Imports);
+		    });
+		Content->RegisterParticipant(*Imports);
+		InContext.Provide(*Imports);
+	}
+
+	void Update(const FPluginUpdate&) override
+	{
+		Imports->Update();
+	}
+
+	void Quiesce() noexcept override
+	{
+		if (Imports)
+		{
+			Imports->Drain();
+		}
 	}
 
 	void Stop() noexcept override
 	{
+		Imports.reset();
 		if (Assets)
 		{
 			Assets->Drain();
@@ -64,6 +87,7 @@ private:
 	std::unique_ptr<FIOService> IO;
 	std::unique_ptr<FAssetService> Assets;
 	std::unique_ptr<FContentRootService> Content;
+	std::unique_ptr<FAssetImportWorkspace> Imports;
 };
 } // namespace
 
@@ -73,7 +97,7 @@ void RegisterAssetServices(FPluginRegistry& InRegistry, FAssetServiceOptions InO
 	Descriptor.Id = "assets";
 	Descriptor.Requires = {typeid(FTaskSystem)};
 	Descriptor.Provides = {typeid(FMountedFileSystem), typeid(FIOService), typeid(FAssetService),
-	                       typeid(FContentRootService)};
+	                       typeid(FContentRootService), typeid(FAssetImportWorkspace)};
 	Descriptor.Create = [Options = std::move(InOptions)]
 	{
 		return std::make_unique<FAssetServicesPlugin>(Options);

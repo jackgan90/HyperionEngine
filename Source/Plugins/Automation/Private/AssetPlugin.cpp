@@ -38,18 +38,7 @@ public:
 		}
 		RegisterAssetOperations(Catalog, Provider.get());
 		RegisterAssetPreviews(Catalog, InContext.Find<IAssetPreviewWorkspace>());
-		if (auto* IO = InContext.Find<FIOService>(); IO && Provider && InContext.Find<FContentRootService>())
-		{
-			auto& Roots = *InContext.Find<FContentRootService>();
-			Imports = std::make_unique<FImportAutomation>(*IO, *InContext.Find<FAssetService>(), Roots);
-			InContext.Defer(
-			    [this, &Roots]
-			    {
-				    Roots.UnregisterParticipant(*Imports);
-			    });
-			Roots.RegisterParticipant(*Imports);
-			Imports->Register(Catalog);
-		}
+		RegisterImportOperations(Catalog, InContext.Find<FAssetImportWorkspace>());
 		const auto* Host = InContext.Find<ISceneDocumentHost>();
 		const bool bMutableRoot = Host ? Host->SupportsContentTransitions() : !InContext.Find<FSceneEditDocument>();
 		RegisterContentRootOperations(Catalog, InContext.Find<FContentRootService>(), "automation-assets",
@@ -60,10 +49,6 @@ public:
 
 	void Quiesce() noexcept override
 	{
-		if (Imports)
-		{
-			Imports->Drain();
-		}
 		if (Provider)
 		{
 			Provider->Drain();
@@ -72,13 +57,11 @@ public:
 
 	void Stop() noexcept override
 	{
-		Imports.reset();
 		Provider.reset();
 	}
 
 private:
 	std::unique_ptr<FAssetAutomation> Provider;
-	std::unique_ptr<FImportAutomation> Imports;
 };
 } // namespace
 
@@ -89,9 +72,9 @@ void RegisterAssetAutomation(FPluginRegistry& InRegistry)
 	Descriptor.Dependencies = {"automation-catalog"};
 	Descriptor.Before = {"automation-session"};
 	Descriptor.Requires = {typeid(FOperationCatalog), typeid(FTaskSystem)};
-	Descriptor.Optional = {typeid(FAssetService),     typeid(FContentRootService),    typeid(IAssetWorkspace),
-	                       typeid(FIOService),        typeid(IAssetPreviewWorkspace), typeid(FSceneEditDocument),
-	                       typeid(ISceneDocumentHost)};
+	Descriptor.Optional = {typeid(FAssetService),      typeid(FContentRootService),    typeid(IAssetWorkspace),
+	                       typeid(FIOService),         typeid(IAssetPreviewWorkspace), typeid(FSceneEditDocument),
+	                       typeid(ISceneDocumentHost), typeid(FAssetImportWorkspace)};
 	Descriptor.Create = []
 	{
 		return std::make_unique<FAssetAutomationPlugin>();

@@ -171,7 +171,7 @@ public:
 	std::string SaveLayout();
 	// Call after menu/tool/status bars so docking consumes their current-frame reservations.
 	void DockSpace(const FGuiDockLayout& InLayout, bool bInReset = false);
-	bool BeginWindow(const char* InTitle, bool& bInOpen, FVec2 InInitialSize = {});
+	bool BeginWindow(const char* InTitle, bool& bInOpen, FVec2 InInitialSize = {}, FVec2 InInitialPosition = {-1, -1});
 	void EndWindow();
 	bool BeginTabBar(const char* InId);
 	void EndTabBar();

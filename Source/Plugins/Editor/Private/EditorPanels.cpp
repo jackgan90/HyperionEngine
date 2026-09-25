@@ -121,6 +121,11 @@ void FEditorPlugin::DrawMenus()
 			}
 			Gui->EndDisabled();
 			DrawRootMenu();
+			if (Gui->MenuItem("Import Asset..."))
+			{
+				ImportPanel->Show();
+			}
+			ImportMenuBounds = Gui->LastItemBounds();
 			Gui->Separator();
 			if (Gui->MenuItem("Open Scene..."))
 			{
@@ -646,6 +651,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 		SceneDocument.FinishInteraction();
 	}
 	DrawSceneBrowser();
+	ImportPanel->Draw(*Gui);
 	Gui->EndDisabled();
 	DrawOpenDialog();
 	DrawSaveDialog();

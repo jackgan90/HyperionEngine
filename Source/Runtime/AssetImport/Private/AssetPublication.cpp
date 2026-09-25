@@ -10,6 +10,7 @@ TAsyncResult<FAssetImportResult> FAssetImportService::ImportAsync(std::filesyste
                                                                   FAssetImportOptions InOptions)
 {
 	const auto Source = ImportPath(InSource);
+	ValidateImportSettings(InOptions.Conversion, ImportExtension(Source), InOptions.TypeId);
 	const auto Output = Impl->IO.FileSystem()->Normalize(InOutput);
 	if (Impl->IO.FileSystem()->Normalize(Source) == Output || ImportExtension(Output) != ".hasset")
 	{
@@ -66,8 +67,12 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	FPublication Publication{IO,
 	                         Cancellation,
 	                         Importers,
-	                         [this](const auto& InPath, auto InType)
+	                         [this, &InOptions](const auto& InPath, auto InType)
 	                         {
+		                         if (InOptions.Prepared)
+		                         {
+			                         return InOptions.Prepared->Dependencies.at({InPath, std::string(InType)});
+		                         }
 		                         return Convert(InPath, InType);
 	                         },
 	                         InSource,
@@ -87,12 +92,18 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	const auto LibraryLease =
 	    IO.AcquireWriteLeaseAsync(Publication.Library / ".publish-library", Cancellation).Get(IO.TaskSystem());
 	Publication.Prepare(InOptions);
+	if (InOptions.Prepared)
+	{
+		Publication.Sources = InOptions.Prepared->Sources;
+		Publication.CheckSources();
+	}
 	Publication.LoadLibrary();
 	if (!InOptions.bForce && Publication.IsCurrent())
 	{
 		return {Publication.Previous->Header, InOutput, 0, true};
 	}
-	auto Converted = Convert(InSource, Publication.SourceType);
+	auto Converted =
+	    InOptions.Prepared ? InOptions.Prepared->Root : Convert(InSource, Publication.SourceType, InOptions.Conversion);
 	if (InOptions.bScene && Converted.Type->CppType == typeid(FModelAsset))
 	{
 		Publication.Converted.emplace(std::make_pair(InSource, Converted.Type->Id), Converted);
@@ -112,11 +123,18 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 		Converted.Object = std::make_shared<const FSceneManifest>(std::move(Scene));
 		Converted.NativeHeader.reset();
 	}
-	if (!InOptions.Name.empty() && Converted.Type->CppType == typeid(FModelAsset))
+	if (!InOptions.Prepared && !InOptions.Name.empty() && Converted.Type->CppType == typeid(FModelAsset))
 	{
 		auto Model = std::make_shared<FModelAsset>(*std::static_pointer_cast<const FModelAsset>(Converted.Object));
 		Model->Name = InOptions.Name;
 		Converted.Object = std::move(Model);
+	}
+	if (!InOptions.Prepared && !InOptions.Name.empty() && Converted.Importer == "hyperion.image")
+	{
+		auto Texture =
+		    std::make_shared<FTextureAsset>(*std::static_pointer_cast<const FTextureAsset>(Converted.Object));
+		Texture->Name = InOptions.Name;
+		Converted.Object = std::move(Texture);
 	}
 	Publication.Build(InSource, Converted, true);
 	Publication.Commit();

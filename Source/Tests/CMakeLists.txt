@@ -95,6 +95,13 @@ hyp_test(asset_registry_tests native_asset_registry hyperion_assets Assets/Asset
 target_link_libraries(asset_registry_tests PRIVATE hyperion_core)
 target_link_libraries(native_asset_tests PRIVATE hyperion_core)
 hyp_test(import_tests async_gltf_import hyperion_asset_import Assets/ImportTests.cpp)
+hyp_test(import_workspace_tests asset_import_workspace hyperion_asset_import Assets/ImportWorkspaceTests.cpp)
+add_test(NAME editor_asset_import COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_asset_tool> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}/out/acceptance/Import")
+set_tests_properties(editor_asset_import PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+add_test(NAME import_draft_automation COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportDraftAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_asset_tool> "${PROJECT_SOURCE_DIR}/out/acceptance/Import")
+set_tests_properties(import_draft_automation PROPERTIES TIMEOUT 180)
 target_compile_definitions(import_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 add_test(NAME model_fixtures COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/GenerateModelFixtures.py" --output "${PROJECT_SOURCE_DIR}/out/fixtures")
 set_tests_properties(model_fixtures PROPERTIES FIXTURES_SETUP model_data)

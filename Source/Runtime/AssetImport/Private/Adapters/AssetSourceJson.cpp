@@ -268,6 +268,7 @@ std::string EncodeAssetSourceJson(const FArchiveNode& InNode)
 
 void RegisterMaterialImporters(FAssetImportService& InImports)
 {
+	RegisterImageImporter(InImports);
 	for (const auto* Type : {&RecordType<FMaterialAsset>(), &RecordType<FTextureAsset>()})
 	{
 		InImports.Register({"hyperion.native-" + Type->Id,

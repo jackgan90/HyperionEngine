@@ -1,5 +1,6 @@
 #pragma once
 #include "AssetEditorWindow.h"
+#include "AssetImportPanel.h"
 #include "AssetWorkspace.h"
 #include "ContentBrowser.h"
 #include "EditorHistoryState.h"
@@ -63,6 +64,7 @@ struct FEditorOptions
 	std::filesystem::path ExercisePlacement;
 	std::filesystem::path ExerciseOutlines;
 	std::filesystem::path ExerciseContent;
+	std::filesystem::path ExerciseImport;
 	std::filesystem::path ExerciseAssets;
 	std::string Scene;
 	std::uint32_t Frames{};
@@ -352,6 +354,7 @@ private:
 	std::optional<FSceneCameraView> PickingCamera() const;
 	void SaveLayout();
 	void ExerciseInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseImportInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseDocumentInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseViewInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseViewHistory();
@@ -607,6 +610,10 @@ private:
 	bool bShowOutliner = true;
 	bool bOutlinerToggle{};
 	bool bShowDetails = true;
+	std::unique_ptr<FAssetImportPanel> ImportPanel;
+	std::uint64_t ImportRevision{};
+	FVec4 ImportMenuBounds{};
+	bool bImportVerified{};
 	bool bShowBrowser = true;
 	bool bOpenDialog{};
 	bool bRequestOpen{};

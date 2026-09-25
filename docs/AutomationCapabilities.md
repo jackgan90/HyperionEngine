@@ -39,7 +39,8 @@
 | 渲染结果和诊断 | `render.statistics`、`render.component_diagnostics`、`render.screenshot` | 完成帧统计、分页 primitive 诊断和现有 readback。PNG 成功返回时文件已写入，返回目标本地路径、尺寸、frame 和 bytes |
 | RenderDoc | `renderdoc.status/capture/open/set_preference` | 复用 host capture/replay；Editor preference 与 GUI 同样持久化；未编译/缺 DLL/不可绘制等情况返回 unavailable |
 | GUI scale / Profiling | `gui.scale.get/set`、`profiling.get/set` | 共用 GUI scale 和 Core profiling 控制。scale 下一 GUI frame 生效并沿正常偏好路径保存；profiling 取决于构建和 collector |
-| 导入与发布 | `asset.import` | `FAssetImportService`、现有 importer 和 publication lease；完成后刷新索引，不静默覆盖已打开草稿 |
+| 导入与发布 | `asset.import`、`asset.import.capabilities/validate/tasks/task` | `FAssetImportWorkspace` 共用 GUI 请求、校验和任务；底层复用 importer/publication lease；不静默覆盖已打开草稿 |
+| 导入属性草稿 | `asset.import.draft.prepare/get/edit/history/submit/discard`、`asset.import.drafts` | 同一 workspace 的未发布快照、版本、属性限制与历史；GUI/agent 共享 ID；无 GPU 预览 |
 
 ## 数值与内容发现
 
@@ -61,9 +62,19 @@
 
 `render.screenshot` 支持 main，Editor 另支持 assets。必须显式指定 PNG 路径；覆盖需要 overwrite。窗口需要可绘制，不要求场景或 preview ready，因此可捕获加载及失败界面。捕获输出写在目标机器，不代表自动传输文件到客户端。RenderDoc 的 capture 等到完成的 capture 计数前进，open 才启动目标侧 replay。
 
-导入支持 glTF/GLB 及其图像依赖、HDR/EXR 天空、已注册的 typed JSON/sky recipe/native upgrade；不新增独立 PNG/JPEG importer。sourceRoot/sourceId 成对使用，输出与源分离，force 仅跳过增量判断，不绕过写权限和身份检查。导入、发布、保存和截图接收后不支持取消；jobs 返回真实 cancellable 状态。保存后的草稿若继续编辑仍 dirty，导入不偷偷重载已有草稿。
+导入支持 glTF/GLB 及其图像依赖、独立 PNG/JPG/JPEG、HDR/EXR 天空、已注册的 typed JSON/sky recipe/native upgrade。sourceRoot/sourceId 成对使用，输出与源分离，force 仅跳过增量判断，不绕过写权限和身份检查。导入、发布、保存和截图接收后不支持取消；jobs 返回真实 cancellable 状态。保存后的草稿若继续编辑仍 dirty，导入不偷偷重载已有草稿。
+
+`textureEncoding` 仅用于独立图片，0 为 Linear、1 为 sRGB，省略默认 sRGB。可选 `sky` 对象含 radianceSize/specularSize/samples，完整覆盖天空配方或默认烘焙设置，不适用于已经序列化的天空记录。`name` 用于模型、模型场景节点或独立图片；其他类型名称来自源记录。旧字段与 `asset.import` 异步调用方式保持兼容。
+
+`asset.import.validate` 不写文件，校验 generation、路径、格式、参数及挂载权限；最终转换、身份与依赖检查仍在导入时执行。结果不代表文件预留。`asset.import.tasks` 按最新优先分页，limit 为 1–32，最多保留 128 条应用任务，换根清空；`asset.import.task` 接收其 task ID，可查询 GUI 或其他连接发起的任务。它们不是 session job ID，不改变 jobs.get 的会话隔离。结果保留 asset/writtenAssets/upToDate，并增加 task/warning；warning 表示发布已经提交、后续索引刷新失败，不应盲目重试。
 
 `asset.import` 的可选 `rootId` 与 AssetTool `--root-id` 共用导入校验，支持以固定的 32 位小写十六进制 ID 重建缺失或损坏的根资产。已有有效目标必须匹配该 ID，同一发布库中其他资产已占用该 ID 时拒绝发布；该选项不修改既有资产身份。
+
+`asset.import.draft.prepare` 接收相同导入请求，返回独立的 draft ID 和 preparing 状态；轮询 `draft.get` 到 ready 或 failed。准备和属性编辑不发布文件。应用最多保留四份草稿；`asset.import.drafts` 列出跨连接和 GUI 的草稿。`draft.get` 的 offset/limit 分页节点、primitive、材质参数、材质槽、依赖、产品与诊断，limit 为 1–64，默认 32；返回各列表总数及完整属性覆盖集，不返回几何或像素 bulk。
+
+`draft.edit` 必须带最新 generation，properties **替换完整覆盖集**，请从 get 保留其他已修改字段。name 修改模型/贴图/天空/材质根名称；nodes 按稳定 id 修改 name/local，primitives 按 id 修改 name/material，material 按参数 name 修改 values。只接受已有模型元素与材质允许的 numeric 值；场景结构和生成依赖只读。`draft.history` 的 action 为 undo/redo/reset，最多 64 步，reset 可撤销。无效修改不会改变版本。所有 mutation 的 generation 是草稿版本，不是内容根 generation；后者只用于 prepare 请求。
+
+`draft.submit` 发布当前快照并返回应用 import task ID，通过 `asset.import.task` 查询实际完成结果，draft 同时进入 publishing；结束后重新查询 draft 获取新 generation。发布前和提交时重新检查所有捕获来源指纹，force 或 up-to-date 不能绕过。成功后 dirty 清除，后续编辑可继续提交。属性覆盖写入导入 provenance，相同请求和覆盖保持重复导入零写入。源或转换参数变化需显式 discard 旧草稿并 prepare，不自动迁移编辑；新草稿从源重建。`draft.discard` 对 dirty 草稿要求 discard=true，准备/发布期间返回 busy；隐藏窗口不会 discard。draft ID、import task ID 与 session job ID 不可混用。
 
 可选 provider 缺失、未编译 RenderDoc/Profiling、关闭 GUI 等配置会返回明确 unavailable，并保留其他分支。`--no-instance-batching` 是初始值，GUI/agent 可通过相同视口服务调整。
 
@@ -76,6 +87,7 @@
 - `light.main.get/set` 使用当前主灯 handle/revision，经 SceneEditing 修改 authored 节点；支持 undo/redo 和场景保存。相机浏览、剔除和渲染诊断设置为临时状态。
 - `render.statistics.sceneError` 优先报告当前 scene producer 的终止错误，否则报告场景准备错误。
 - `application.close.status/request` 由 Editor 发布正常关闭服务。action 为 0（默认：拒绝未保存内容）、1（保存后退出）、2（明确丢弃后退出）、3（取消退出，不取消已接收保存）。Editor 未命名脏场景保存退出须提供 scenePath。
+- 未发布导入属性修改参与 close 的 dirty 与内容根保护；action=1 拒绝 dirty 导入草稿，须先 submit 或显式 discard，action=2 明确丢弃。准备/发布中的草稿参与 busy；正常退出按插件生命周期排空工作。
 - close.request 返回的是接受状态，不是进程已经退出；保存期间状态为 saving，失败为 failed 并保留应用。成功后目标正常排空、撤回发现记录并断开连接。关闭时最多排空应答 2 秒；断连/强杀不保证远端收到应答，不应自动重试破坏性请求。
 - `render.statistics` 同时返回帧间隔、CPU hooked bytes 和按执行域累计任务数，GUI 使用同一快照；这些是诊断计数，不代表操作耗时或进程全部内存。
 

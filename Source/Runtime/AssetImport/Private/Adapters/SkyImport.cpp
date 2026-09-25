@@ -22,6 +22,11 @@ std::shared_ptr<void> ImportSky(FAssetImportContext& InContext)
 		const auto Json = nlohmann::json::parse(Text);
 		if (Json.contains("fields"))
 		{
+			if (InContext.Settings.Sky)
+			{
+				throw std::invalid_argument(
+				    "Bake settings require a sky recipe or HDR/EXR, not a serialized sky record");
+			}
 			return ReadRecord(RecordType<FSkyAsset>(), Archive);
 		}
 		const std::set<std::string> Allowed{"type",          "schema_version", "name",   "source",
@@ -44,7 +49,11 @@ std::shared_ptr<void> ImportSky(FAssetImportContext& InContext)
 		Bytes = InContext.Read(InContext.Path.parent_path() / PathFromUtf8(Json.at("source").get<std::string>()));
 	}
 	InContext.Cancellation.Check();
+	Settings = InContext.Settings.Sky.value_or(Settings);
 	const auto Image = DecodeHdrImage(*Bytes);
+	InContext.SourceWidth = Image.Width;
+	InContext.SourceHeight = Image.Height;
+	InContext.EffectiveSky = Settings;
 	auto Baked = BakeEnvironment(Image.Rgba, Image.Width, Image.Height, Settings);
 	InContext.Cancellation.Check();
 	auto Result = std::make_shared<FSkyAsset>();

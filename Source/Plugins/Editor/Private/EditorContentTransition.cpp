@@ -126,7 +126,7 @@ void FEditorPlugin::PrepareContentRoot()
 	bDiscardRoot = false;
 	FinishGizmo();
 	FinishInspectorEdit();
-	if (IsDirty() || PendingSave || AssetWorkspace->IsDirty() || AssetWorkspace->IsSaving())
+	if (ApplicationCloseState().bDirty || PendingSave || AssetWorkspace->IsSaving())
 	{
 		bDiscardDialog = bRequestDiscard = true;
 	}

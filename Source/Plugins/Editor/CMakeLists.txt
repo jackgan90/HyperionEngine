@@ -1,4 +1,7 @@
 add_library(hyperion_editor_plugin STATIC
+  Private/AssetImportPanel.cpp
+  Private/ImportPreviewPanel.cpp Private/ImportPreviewProperties.cpp
+  Private/EditorImportAcceptance.cpp
   Private/EditorStructure.cpp
   Private/EditorRenderSettings.cpp
   Private/EditorLightControls.cpp
@@ -69,6 +72,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorPickingAcceptance.cpp
 )
 hyp_module(hyperion_editor_plugin)
+target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_asset_import)
 target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_content)
 target_link_libraries(hyperion_editor_plugin PUBLIC hyperion_application_services
   PRIVATE hyperion_application hyperion_plugins hyperion_gui hyperion_gui_renderer hyperion_render hyperion_assets hyperion_asset_editing
@@ -139,4 +143,4 @@ if(BUILD_TESTING)
   set_tests_properties(editor_preferences PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 endif()
 
-target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_automation_plugin hyperion_scene_editing)
+target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_automation_plugin hyperion_scene_editing hyperion_reflection)

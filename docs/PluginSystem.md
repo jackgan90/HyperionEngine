@@ -19,7 +19,7 @@ Editor 的可执行入口位于 `Applications`，只选择 D3D12 provider 并调
 
 | ID | 所有权 / 服务 | 依赖 |
 |---|---|---|
-| `assets` | 挂载文件系统、IO、资产服务、目录注册及 Runtime/Content 根切换服务 | 宿主 Tasks |
+| `assets` | 挂载文件系统、IO、资产服务、目录注册、Runtime/Content 根切换及共享 AssetImport workspace | 宿主 Tasks |
 | `automation-catalog` | 操作和类型目录 | 无 |
 | `automation-assets` | 共享资产文档的操作适配与任务 | automation-catalog；可选 assets |
 | `automation-session` | 封闭目录、Main 会话任务、endpoint | automation-catalog；在操作适配器之后启动 |
@@ -40,6 +40,8 @@ Editor 的可执行入口位于 `Applications`，只选择 D3D12 provider 并调
 Editor 的独立资产窗口由 `editor` 插件中的私有窗口宿主管理，复用已声明的 Tasks、Device、ShaderCompiler、RenderSession 和资产服务；其原生窗口、GUI context/renderer 与 Swapchain 在插件停止前清理。通过 Platform 的非模态 owner 关系保持资产窗口位于主窗口上方；主窗口最小化时暂停两者绘制，轮询、加载和保存继续。销毁顺序保证资产窗口先于原生 owner 释放。主窗口服务不变，Runtime/Application 不参与子窗口编排。两个窗口分别轮询输入和提交渲染，资产窗口关闭只影响资产文档；GPU 对象按既有 RHI 线程及 fence 约束释放，最终设备校验仍归 `graphics`。
 
 ## 生命周期和线程
+
+`assets` 发布 Main-only `FAssetImportWorkspace`，GUI 与 automation 适配器消费同一实例。工作区作为作用域内容根参与者注册；运行任务阻止换根，成功发布更新索引和 revision，Editor 据此刷新 Content Browser。任务在 assets Update 中推进，Quiesce 排空，在 IO/Assets 释放前销毁。禁用 automation 不影响 GUI 导入；Runtime/Assets 不依赖源转换模块。
 
 自动化功能接入还须遵守 [Automation.md](Automation.md)：GUI 与 agent 使用共享领域服务；适配器在 `automation-session` 前注册、在它之后释放。会话停止接收并排空已提交任务后才能销毁 provider。`Requires` 不会自动选择提供方插件，必需的启动选择由 `Dependencies` 声明。不得让一个适配器关闭其他插件拥有的共享服务。
 

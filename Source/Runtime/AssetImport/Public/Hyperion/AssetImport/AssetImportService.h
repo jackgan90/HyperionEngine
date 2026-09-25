@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/AssetImport/ImportSettings.h"
 #include "Hyperion/Assets/AssetService.h"
 
 namespace Hyperion
@@ -20,6 +21,10 @@ struct FAssetImportContext
 	FCancellationToken Cancellation;
 	std::vector<FAssetSource> Sources;
 	std::vector<FAssetImportProduct> Products;
+	FAssetConversionSettings Settings;
+	std::uint32_t SourceWidth{};
+	std::uint32_t SourceHeight{};
+	std::optional<FEnvironmentBakeSettings> EffectiveSky;
 
 	std::shared_ptr<const FBytes> Read(const std::filesystem::path& InPath);
 	FAssetRef Emit(FAssetImportProduct InProduct);
@@ -52,6 +57,9 @@ struct FConvertedAsset
 	std::vector<FAssetImportProduct> Products;
 	std::filesystem::path ProductRoot;
 	std::string StableKey;
+	std::uint32_t SourceWidth{};
+	std::uint32_t SourceHeight{};
+	std::optional<FEnvironmentBakeSettings> EffectiveSky;
 };
 
 template<class T> class TImportRequest
@@ -96,6 +104,13 @@ private:
 	FCancellationToken Cancellation;
 };
 
+struct FPreparedImport
+{
+	FConvertedAsset Root;
+	std::map<std::pair<std::filesystem::path, std::string>, FConvertedAsset> Dependencies;
+	std::map<std::filesystem::path, std::string> Sources;
+};
+
 struct FAssetImportOptions
 {
 	bool bScene{};
@@ -107,6 +122,10 @@ struct FAssetImportOptions
 	std::string SourceId;
 	// Optional canonical root identity for reconstruction; never replaces another existing identity.
 	std::string RootId;
+	FAssetConversionSettings Conversion;
+	// Internal immutable draft snapshot; ordinary one-step imports leave these empty.
+	std::shared_ptr<const FPreparedImport> Prepared;
+	std::string PropertyOverrides;
 };
 
 struct FAssetImportResult
@@ -132,6 +151,8 @@ public:
 
 	TAsyncResult<FAssetImportResult> ImportAsync(std::filesystem::path InSource, std::filesystem::path InOutput,
 	                                             FAssetImportOptions InOptions = {});
+	TAsyncResult<FPreparedImport> PrepareAsync(std::filesystem::path InSource, std::filesystem::path InOutput,
+	                                           FAssetImportOptions InOptions = {});
 	void ClearCache();
 	void Drain();
 

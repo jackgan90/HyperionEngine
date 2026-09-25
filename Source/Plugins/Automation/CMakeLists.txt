@@ -24,6 +24,7 @@ add_library(hyperion_automation_plugin STATIC
   Private/MaterialNumericOperations.cpp
   Private/TextureSampleOperations.cpp
   Private/ImportOperations.cpp
+  Private/ImportDraftOperations.cpp
   Private/AssetPreviewOperations.cpp
   Private/ContentRootOperations.cpp
   Private/StdioPlugin.cpp
