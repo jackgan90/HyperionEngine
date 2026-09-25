@@ -1,4 +1,4 @@
-"""Build, capture and export a bounded Viewer workload using the locked Tracy source."""
+"""Build, capture and export a bounded Editor workload using the locked Tracy source."""
 import argparse
 import csv
 import json
@@ -66,7 +66,7 @@ def capture(command, output, timeout, seconds=None, cwd=ROOT):
     if seconds is not None:
         collector_args += ["-s", str(seconds)]
     with (output / "Collector.log").open("w", encoding="utf-8") as collector_log, \
-            (output / "Viewer.log").open("w", encoding="utf-8") as client_log:
+            (output / "Editor.log").open("w", encoding="utf-8") as client_log:
         try:
             collector = subprocess.Popen(collector_args, cwd=ROOT, stdout=collector_log,
                                          stderr=subprocess.STDOUT, **hidden_process_options())
@@ -80,10 +80,10 @@ def capture(command, output, timeout, seconds=None, cwd=ROOT):
                 if collector.poll() not in (None, 0):
                     raise RuntimeError(f"Collector failed ({collector.returncode})")
                 if time.monotonic() > deadline:
-                    raise TimeoutError("Viewer capture exceeded its time limit")
+                    raise TimeoutError("Editor capture exceeded its time limit")
                 time.sleep(0.05)
             if client.returncode:
-                raise RuntimeError(f"Viewer failed ({client.returncode}); see Viewer.log")
+                raise RuntimeError(f"Editor failed ({client.returncode}); see Editor.log")
             if collector.wait(timeout=max(1, deadline - time.monotonic())):
                 raise RuntimeError("Tracy capture failed; see Collector.log")
         finally:
@@ -121,7 +121,7 @@ def frame_statistics(path):
 def check_frame_window(output, warmup, count):
     with (output / "Events.csv").open(newline="", encoding="utf-8") as stream:
         frames = [int(row["value"].split()[0]) for row in csv.DictReader(stream)
-                  if row["name"] == "ApplicationFrame" and row["src_file"].endswith("ViewerFrame.cpp")]
+                  if row["name"] == "EditorApplicationFrame" and row["src_file"].endswith("EditorApplication.cpp")]
     if sorted(frames) != list(range(warmup, warmup + count)):
         raise RuntimeError("Trace does not contain the complete requested frame window")
 
@@ -131,8 +131,8 @@ def main():
     parser.add_argument("--mode", choices=("off", "basic", "detail", "gpu", "detail-gpu", "sampling"),
                         default="basic")
     parser.add_argument("--out", type=pathlib.Path, required=True)
-    parser.add_argument("--viewer", type=pathlib.Path)
-    parser.add_argument("--config", type=pathlib.Path, default=ROOT / "experiments/Scene.json")
+    parser.add_argument("--editor", type=pathlib.Path)
+    parser.add_argument("--scene", default="/Game/Scenes/Showcase.hasset")
     parser.add_argument("--warmup", type=int, default=120)
     parser.add_argument("--frames", type=int, default=600)
     parser.add_argument("--timeout", type=int, default=180)
@@ -150,16 +150,17 @@ def main():
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
     if not args.no_build:
-        if args.viewer:
-            parser.error("--viewer requires --no-build to preserve the chosen build")
+        if args.editor:
+            parser.error("--editor requires --no-build to preserve the chosen build")
         run(["powershell", "-NoProfile", "-File", ROOT / "tools/Build.ps1", "-Preset", "profile",
-             "-Target", "hyperion_viewer"], output / "Build.log", timeout=900)
+             "-Target", "hyperion_editor"], output / "Build.log", timeout=900)
         if args.mode != "off":
             run(["powershell", "-NoProfile", "-File", ROOT / "tools/BuildProfilingTools.ps1"],
                 output / "ToolsBuild.log", timeout=900)
-    viewer = (args.viewer or ROOT / "out/build/profile/bin/hyperion_viewer.exe").resolve()
-    command = [str(viewer), "--asset-root", str(args.asset_root.resolve()), "--config", str(args.config.resolve()), "--frames", str(args.warmup + args.frames),
-               "--benchmark-warmup", str(args.warmup), "--benchmark", str(output / "Frames.csv"), "--no-vsync"]
+    editor = (args.editor or ROOT / "out/build/profile/bin/hyperion_editor.exe").resolve()
+    command = [str(editor), "--asset-root", str(args.asset_root.resolve()), "--scene", args.scene,
+               "--benchmark-warmup", str(args.warmup), "--benchmark-samples", str(args.frames),
+               "--benchmark", str(output / "Frames.csv"), "--benchmark-viewport", "1440x900"]
     if not args.static:
         command += ["--benchmark-camera", "--benchmark-camera-step", str(args.camera_step)]
     if args.no_instance_batching:
@@ -179,7 +180,7 @@ def main():
                 "tracy": json.loads((ROOT / "dependencies.lock.json").read_text())["tracy"],
                 "status": "running"}
     run(["git", "-c", f"safe.directory={ROOT.as_posix()}", "status", "--short"], output / "Workspace.log")
-    build_dir = viewer.parent.parent
+    build_dir = editor.parent.parent
     if not (build_dir / "CMakeCache.txt").is_file():
         build_dir = build_dir.parent
     for source in [build_dir / "CMakeCache.txt", *build_dir.glob("CMakeFiles/*/CMakeCXXCompiler.cmake")]:
@@ -187,14 +188,14 @@ def main():
             (output / source.name).write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     try:
         if args.mode == "off":
-            run(command, output / "Viewer.log", args.timeout)
+            run(command, output / "Editor.log", args.timeout)
         else:
             metadata["collector_port"] = capture(command, output, args.timeout)
             export(output)
             check_frame_window(output, args.warmup, args.frames)
         metadata["summary"] = frame_statistics(output / "Frames.csv")
         if metadata["summary"]["samples"] != args.frames:
-            raise RuntimeError("Viewer produced an unexpected number of samples")
+            raise RuntimeError("Editor produced an unexpected number of samples")
         metadata["status"] = "passed"
         print(json.dumps(metadata["summary"], indent=2))
     except Exception as error:

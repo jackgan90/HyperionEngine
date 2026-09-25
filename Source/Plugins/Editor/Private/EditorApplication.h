@@ -8,6 +8,11 @@
 #include "EditorSelection.h"
 #include "Hyperion/Config/ApplicationClose.h"
 #include "Hyperion/Content/ContentRootService.h"
+#include "Hyperion/Core/ProfilingControl.h"
+#include "Hyperion/Core/ProfilingSession.h"
+#include "Hyperion/Renderer/RenderBenchmark.h"
+#include "Hyperion/Renderer/RenderSettings.h"
+#include "Hyperion/Renderer/SceneLightControls.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
 #endif
@@ -43,6 +48,8 @@ struct FEditorOptions
 	std::filesystem::path Layout;
 	std::filesystem::path UiPreferences;
 	std::filesystem::path PreferencesPath;
+	std::filesystem::path RenderSettingsPath;
+	FRenderSettings Rendering;
 	FEditorPreferences Preferences;
 	std::string PreferenceError;
 	std::string ExerciseCapture;
@@ -52,6 +59,7 @@ struct FEditorOptions
 	std::filesystem::path Benchmark;
 	std::filesystem::path ExerciseDocument;
 	std::filesystem::path ExerciseViews;
+	std::filesystem::path ExerciseRenderControls;
 	std::filesystem::path ExercisePlacement;
 	std::filesystem::path ExerciseOutlines;
 	std::filesystem::path ExerciseContent;
@@ -61,6 +69,12 @@ struct FEditorOptions
 	std::uint32_t BenchmarkWarmup = 120;
 	std::uint32_t BenchmarkSamples = 300;
 	bool bBenchmarkCamera{};
+	float BenchmarkCameraStep = .1f;
+	FProfilingOptions Profiling;
+	FSize BenchmarkViewport;
+	bool bBenchmarkLight{};
+	ESceneCullingMode CullingMode = ESceneCullingMode::Bvh;
+	bool bInstanceBatching = true;
 	bool bBenchmarkCollapsed{};
 	bool bHidden{};
 	bool bKernelOnly{};
@@ -81,6 +95,10 @@ class FEditorPlugin final : public FPlugin,
                             public IRenderOutput,
                             public IRenderCaptureControl,
                             public IRenderDiagnostics,
+                            public IRenderSettings,
+                            public IShadowControls,
+                            public ISceneLightControls,
+                            public IProfilingControl,
                             public IApplicationClose
 {
 public:
@@ -116,11 +134,47 @@ public:
 	void SetRenderCapturePreference(bool bInEnabled) override;
 	FRenderDiagnostics RenderDiagnostics() override;
 	FRenderHealth RenderHealth() override;
+	FSceneMainLight MainLight() override;
+	void SetMainLight(const FSceneMainLight& InLight) override;
+	FRenderSettingsState RenderSettings() const override;
+	void SetRenderSettings(std::uint64_t InRevision, const FRenderSettings& InSettings) override;
+	void SaveRenderSettings(const std::filesystem::path& InPath) override;
+	FCascadedShadowSettings ShadowControls() const override;
+	void SetShadowControls(const FCascadedShadowSettings& InSettings) override;
+	void ChangeProfiling(std::optional<std::uint32_t> InMask, std::optional<bool> InSampling) override;
 	FApplicationCloseState ApplicationCloseState() const override;
 	FApplicationCloseState RequestApplicationClose(const FApplicationCloseRequest& InRequest) override;
 	FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) override;
 
 private:
+	FRenderSettings Rendering;
+	std::uint64_t RenderSettingsRevision = 1;
+	bool bShowRenderSettings{};
+	bool bShowStatusHud{};
+	bool bShowProfilingHud{};
+	std::uint32_t ProfilingCategories = 1;
+	FRenderDiagnostics HudDiagnostics;
+	std::uint64_t HudUpdated{};
+	bool bRenderControlsVerified{};
+	void ExerciseRenderControlsInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEvents);
+	void CheckRenderControlsHud() const;
+	ESceneCullingMode CullingMode = ESceneCullingMode::Bvh;
+	std::optional<FMat4> FrozenCullingView;
+	bool bInstanceBatching = true;
+	bool bModelBounds{};
+	bool bLightBounds{};
+	void DrawRenderSettings();
+	void DrawProfilingOptions();
+	void DrawProfilingCollection();
+	void DrawViewportHud();
+	void DrawHudButtons();
+	void DrawVisualizationControls();
+	std::string RenderSettingsError;
+	std::string ProfilingError;
+	double FrameIntervalMilliseconds{};
+	void DrawDebugBounds();
 	std::string CloseState = "idle";
 	std::string CloseError;
 	void StartSaveBeforeClose(const std::string& InPath);
@@ -222,6 +276,7 @@ private:
 	void ShowOpenScene();
 	void DrawMenus();
 	void DrawEditMenu();
+	void DrawHierarchy(const FSceneNodeView& InView);
 	void DrawPreferences();
 	void DrawCaptureButton();
 	std::string CaptureStatus() const;
@@ -587,18 +642,10 @@ private:
 	bool bLoadErrorObserved{};
 	FSceneCameraPose ExercisePose;
 
-	struct FBenchmarkSample
-	{
-		double FrameMilliseconds{};
-		double SceneMilliseconds{};
-		double GuiMilliseconds{};
-		double RenderMilliseconds{};
-		FForwardPipelineStatistics Pipeline;
-		std::size_t Nodes{};
-	};
-
-	FBenchmarkSample BenchmarkFrame;
-	std::vector<FBenchmarkSample> BenchmarkSamples;
+	FRenderBenchmarkSample BenchmarkFrame;
+	std::vector<FRenderBenchmarkSample> BenchmarkSamples;
+	bool bBenchmarkTiming{};
+	bool bBenchmarkLightEdit{};
 	std::uint64_t BenchmarkStarted{};
 	double LoadMilliseconds{};
 

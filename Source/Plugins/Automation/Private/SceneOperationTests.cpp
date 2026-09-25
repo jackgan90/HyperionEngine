@@ -104,9 +104,10 @@ public:
 		return Scene.RemoveNodeKeepChildren(InHandle);
 	}
 
-	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes) override
+	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes,
+	                                   std::vector<FSceneNodeEdit> InRestoredChildren = {}) override
 	{
-		return Scene.AddNodes(std::move(InNodes));
+		return Scene.AddNodes(std::move(InNodes), std::move(InRestoredChildren));
 	}
 
 	bool RemoveSubtrees(std::span<const FSceneHandle> InRoots) override
@@ -316,6 +317,61 @@ void ComponentAdmissionAndBatch()
 	Document.Detach(Tasks);
 }
 
+void StructuralHistory()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneNode Parent;
+	Parent.Id = "parent";
+	Parent.Camera() = FSceneCamera{};
+	Parent.Local() = Translation({4, 1, 0});
+	const auto Root = Target.AddNode(Parent);
+	FSceneNode Child;
+	Child.Id = "child";
+	Child.Parent() = Parent.Id;
+	Child.Local() = Translation({2, 3, 0});
+	const auto Leaf = Target.AddNode(Child);
+	Target.Scene.SetSettings({Root, {}, {}});
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	Document.ReplaceSelection(FSceneSelection(Root));
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, &Document);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	const auto Result =
+	    Call(Agent, "scene.selection.duplicate", FSceneMutationRequest{Document.Id(), Target.Revision()});
+	Check(ReadValue<std::string>(Field(Result, "status")) == "completed");
+	const auto Copy = *Document.Selection().Primary();
+	Check(Copy != Root && Target.Children(Copy).empty());
+	Document.Undo();
+	Check(!Target.FindNode(Copy) && Document.Selection().Primary() == Root);
+	Document.Redo();
+	Check(Document.Selection().Primary() != Copy && Target.Nodes().size() == 3);
+	Document.Undo();
+	FSceneNodeView Before;
+	Target.NodeView(Leaf, Before);
+	const auto World = Before.World;
+	const auto Removed =
+	    Call(Agent, "scene.selection.remove_keep_children", FSceneMutationRequest{Document.Id(), Target.Revision()});
+	Check(ReadValue<std::string>(Field(Removed, "status")) == "completed");
+	Check(!Target.FindNode(Root) && !Target.Settings().DefaultCamera && !Document.Selection());
+	FSceneNodeView After;
+	Target.NodeView(Leaf, After);
+	Check(After.World.Values == World.Values && After.Node->Parent().empty());
+	for (unsigned Index = 0; Index < 3; ++Index)
+	{
+		Document.Undo();
+		const auto Restored = Target.FindHandle("parent");
+		Check(Target.FindNode(Leaf)->Parent() == "parent" &&
+		      Target.FindNode(Leaf)->Local().Values == Child.Local().Values);
+		Check(Document.Selection().Primary() == Restored && Target.Settings().DefaultCamera == Restored);
+		Document.Redo();
+		Check(Target.Nodes().size() == 1 && !Target.Settings().DefaultCamera);
+	}
+	Document.Detach(Tasks);
+}
+
 void Authoring()
 {
 	FTaskSystem Tasks(1, 1);
@@ -382,6 +438,7 @@ int main()
 		Editing();
 		NoHistory();
 		Authoring();
+		StructuralHistory();
 		ComponentAdmissionAndBatch();
 		std::cout << "Shared scene, identity, transactions, history, save and absence contracts passed\n";
 		return 0;

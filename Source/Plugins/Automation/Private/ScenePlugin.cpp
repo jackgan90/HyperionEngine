@@ -1,10 +1,11 @@
 #include "Hyperion/AutomationHost/AutomationPlugin.h"
 #include "Hyperion/Config/ApplicationClose.h"
-#include "Hyperion/Config/ApplicationSettings.h"
+#include "Hyperion/Core/ProfilingControl.h"
 #include "Hyperion/Gui/Gui.h"
 #include "Hyperion/Renderer/RenderCaptureControl.h"
 #include "Hyperion/Renderer/RenderDiagnostics.h"
 #include "Hyperion/Renderer/RenderOutput.h"
+#include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneLightControls.h"
 #include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/Renderer/ShadowControls.h"
@@ -35,9 +36,9 @@ public:
 		RegisterShadowControls(Catalog, InContext.Find<IShadowControls>());
 		RegisterSceneLightControls(Catalog, InContext.Find<ISceneLightControls>());
 		RegisterRenderCapture(Catalog, InContext.Find<IRenderCaptureControl>(), InContext.Find<FGui>());
-		RegisterApplicationSettings(Catalog, InContext.Find<IApplicationSettings>());
 		RegisterApplicationClose(Catalog, InContext.Find<IApplicationClose>());
-		RegisterProfilingOperations(Catalog, InContext.Find<IApplicationSettings>());
+		RegisterProfilingOperations(Catalog, InContext.Find<IProfilingControl>());
+		RegisterRenderSettings(Catalog, InContext.Find<IRenderSettings>());
 		auto* Host = InContext.Find<ISceneDocumentHost>();
 		RegisterSceneHostOperations(Catalog, Host);
 	}
@@ -51,17 +52,10 @@ void RegisterSceneAutomation(FPluginRegistry& InRegistry)
 	Descriptor.Dependencies = {"automation-catalog"};
 	Descriptor.Before = {"automation-session"};
 	Descriptor.Requires = {typeid(FOperationCatalog)};
-	Descriptor.Optional = {typeid(FSceneEditDocument),
-	                       typeid(ISceneDocumentHost),
-	                       typeid(ISceneViewport),
-	                       typeid(IScenePlacement),
-	                       typeid(IRenderOutput),
-	                       typeid(IRenderCaptureControl),
-	                       typeid(FGui),
-	                       typeid(IApplicationSettings),
-	                       typeid(IRenderDiagnostics),
-	                       typeid(IShadowControls),
-	                       typeid(ISceneLightControls),
+	Descriptor.Optional = {typeid(FSceneEditDocument), typeid(IRenderSettings),       typeid(IProfilingControl),
+	                       typeid(ISceneDocumentHost), typeid(ISceneViewport),        typeid(IScenePlacement),
+	                       typeid(IRenderOutput),      typeid(IRenderCaptureControl), typeid(FGui),
+	                       typeid(IRenderDiagnostics), typeid(IShadowControls),       typeid(ISceneLightControls),
 	                       typeid(IApplicationClose)};
 	Descriptor.Create = []
 	{

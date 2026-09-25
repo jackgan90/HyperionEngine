@@ -79,23 +79,16 @@ void FEditorPlugin::CreateCameraFromView()
 
 void FEditorPlugin::DrawViewControls()
 {
-	if (Gui->IconButton("##ViewOptions", EGuiIcon::Options, "Viewport options - camera, exposure and view actions",
+	if (Gui->IconButton("##ViewOptions", EGuiIcon::Options, "Viewport options - camera and view actions",
 	                    bViewOptionsOpen))
 	{
 		Gui->OpenPopup("ViewportOptions");
 	}
 	InspectionBounds["view/options"] = Gui->LastItemBounds();
 	DrawCaptureButton();
-	Gui->SameLine();
-	const float Width = Gui->AvailableWidth();
-	if (Width >= 60)
-	{
-		DrawViewSelector(std::min(180.f, Width));
-	}
-	else
-	{
-		Gui->Text("");
-	}
+	DrawHudButtons();
+	DrawVisualizationControls();
+	DrawProfilingOptions();
 	DrawViewOptions();
 }
 
@@ -145,17 +138,25 @@ void FEditorPlugin::DrawViewOptions()
 	{
 		return;
 	}
-	Gui->Text("Perspective / Lit");
+	Gui->Text("Perspective");
 	Gui->Text("View source");
 	DrawViewSelector(240);
 	std::ostringstream Speed;
 	Speed << "Camera speed: " << std::fixed << std::setprecision(3) << Camera.GetMovementSpeed(ViewCamera) << " u/s";
 	Gui->Text(Speed.str());
 	Gui->Tooltip("Hold right mouse and scroll to adjust movement speed");
-	Gui->SetNextItemWidth(180);
 	auto ViewOptions = ViewportState().Options;
-	Gui->Slider("Exposure", *ViewOptions.Exposure, .1f, 8);
 	Gui->Checkbox("Show light icons", *ViewOptions.LightMarkers);
+	const std::array<std::string, 3> CullingNames{"None", "Linear frustum", "BVH frustum"};
+	std::size_t Culling = *ViewOptions.Culling;
+	if (Gui->Combo("Culling", CullingNames, Culling))
+	{
+		ViewOptions.Culling = static_cast<std::uint32_t>(Culling);
+	}
+	Gui->Checkbox("Freeze culling view", *ViewOptions.Frozen);
+	Gui->Checkbox("Instance batching", *ViewOptions.InstanceBatching);
+	Gui->Checkbox("Model bounds", *ViewOptions.ModelBounds);
+	Gui->Checkbox("Light influence", *ViewOptions.LightBounds);
 	const std::array<std::string, 2> OutlineModes{"Union", "Per object"};
 	std::size_t OutlineMode = static_cast<std::size_t>(OutlineSettings.Overlap);
 	Gui->SetNextItemWidth(180);
@@ -166,7 +167,14 @@ void FEditorPlugin::DrawViewOptions()
 	InspectionBounds["outline/mode"] = Gui->LastItemBounds();
 	Gui->Tooltip("Union outlines the selected group. Per object preserves every object's outline through overlaps.");
 	Gui->Checkbox("Smooth outlines (2x)", *ViewOptions.SmoothOutlines);
-	SetViewportOptions(ViewOptions);
+	try
+	{
+		SetViewportOptions(ViewOptions);
+	}
+	catch (const std::exception& Failure)
+	{
+		Error = Failure.what();
+	}
 	InspectionBounds["outline/quality"] = Gui->LastItemBounds();
 	Gui->Separator();
 	try

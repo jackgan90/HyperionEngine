@@ -1,9 +1,10 @@
 # editor-frame-capture Specification
 
 ## Purpose
-Provide a viewport action that captures and opens the exact completed editor frame through capture orchestration shared with Viewer, with clear availability and narrow-toolbar behavior.
+Provide a viewport action that captures and opens the exact completed Editor frame through shared engine capture orchestration, with clear availability and narrow-toolbar behavior.
 
 ## Requirements
+
 ### Requirement: Viewport capture and exact replay
 The viewport toolbar SHALL show a capture icon only when capture is enabled in Editor preference. Clicking an available action SHALL capture one complete editor frame including viewport rendering and GUI, and open the newly saved result in RenderDoc. Unavailable or busy actions SHALL be disabled with explanatory status.
 
@@ -24,12 +25,12 @@ The viewport toolbar SHALL show a capture icon only when capture is enabled in E
 - **THEN** the failure is visible without crashing the editor, and capture failure does not open a stale capture
 
 ### Requirement: Shared capture orchestration
-Viewer and Editor SHALL reuse engine-owned full-frame capture scope and replay logic, preserving RHI 0 execution, cancellation on exceptions, optional service lifetime and RenderDoc-disabled build isolation.
+Editor and independent runtime consumers SHALL reuse engine-owned full-frame capture scope and replay logic, preserving RHI 0 execution, cancellation on exceptions, optional service lifetime and RenderDoc-disabled build isolation.
 
-#### Scenario: Viewer compatibility
-- **WHEN** Scene Viewer requests a capture with automatic opening enabled
+#### Scenario: Independent capture consumer
+- **WHEN** a runtime consumer requests a capture with automatic opening enabled
 - **THEN** it uses the same begin/end/cancel/replay implementation as Editor and retains its existing capture behavior
 
 #### Scenario: Build without RenderDoc
 - **WHEN** RenderDoc support is compiled out
-- **THEN** Editor and Viewer compile and run without RenderDoc headers, library or DLL requirements
+- **THEN** Editor and independent runtime consumers compile and run without RenderDoc headers, library or DLL requirements

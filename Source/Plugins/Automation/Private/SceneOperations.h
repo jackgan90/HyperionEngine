@@ -14,11 +14,12 @@ void RegisterShadowControls(FOperationCatalog& InCatalog, IShadowControls* InSha
 void RegisterRenderDiagnostics(FOperationCatalog& InCatalog, IRenderDiagnostics* InDiagnostics);
 class IRenderCaptureControl;
 class FGui;
-class IApplicationSettings;
+class IRenderSettings;
+class IProfilingControl;
+void RegisterRenderSettings(FOperationCatalog& InCatalog, IRenderSettings* InSettings);
 class IApplicationClose;
 void RegisterApplicationClose(FOperationCatalog& InCatalog, IApplicationClose* InHost);
-void RegisterApplicationSettings(FOperationCatalog& InCatalog, IApplicationSettings* InSettings);
-void RegisterProfilingOperations(FOperationCatalog& InCatalog, IApplicationSettings* InSettings);
+void RegisterProfilingOperations(FOperationCatalog& InCatalog, IProfilingControl* InSettings);
 void RegisterRenderCapture(FOperationCatalog& InCatalog, IRenderCaptureControl* InCapture, FGui* InGui);
 void RegisterRenderOutput(FOperationCatalog& InCatalog, IRenderOutput* InOutput);
 class IScenePlacement;

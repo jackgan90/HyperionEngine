@@ -32,21 +32,10 @@
 - [Compute pipelines](ComputePipelines.md)、[HZB 与 Contact shadows](ContactShadows.md)
 - [级联阴影](CascadedShadows.md)、[局部光](LocalLights.md)、[聚簇光照](ClusteredLighting.md)、[天空与 IBL](SkyLighting.md)
 
-## 优化设计与历史测量
+## 优化设计和测量
 
-这些文档保留基线、测量方法、回退数据和当时的设计取舍。功能边界以以上契约文档为准；表中的旧配置、模型数、测试数和耗时不是当前默认值或性能保证。
+- [渲染诊断、共享配置和 Editor 测量工具](RenderDiagnostics.md)
+- [CPU 提交设计](RendererCpuPerformance.md)、[保留渲染准备](RetainedRenderFrames.md)
+- [增量更新](IncrementalRenderUpdates.md)、[合批规划](BatchPlanningData.md)、[相机运动准备](CameraMotionPreparation.md)
 
-- [SceneViewer 性能定位](ScenePerformance.md)
-- [Component 与编辑器迭代性能对比](ComponentEditorPerformance.md)
-- [材质性能](MaterialPerformance.md)、[实例批处理性能](InstanceBatchPerformance.md)
-- [Renderer CPU 提交](RendererCpuPerformance.md)、[保留渲染帧](RetainedRenderFrames.md)
-- [增量渲染更新](IncrementalRenderUpdates.md)、[合批规划数据](BatchPlanningData.md)
-- [运动相机准备](CameraMotionPreparation.md)、[Deferred 性能](DeferredPerformance.md)
-
-## 历史审计
-
-- [ModelViewer](ModelViewerReview.md)、[RenderDoc](RenderDocReview.md)
-- [材质](MaterialAudit.md)、[实例批处理](InstanceBatchAudit.md)、[级联阴影](CascadedShadowAudit.md)
-- [Renderer CPU](RendererCpuAudit.md)、[合批规划](BatchPlanningAudit.md)、[Deferred](DeferredAudit.md)
-
-功能规范位于 [openspec/specs](../openspec/specs)，历史提案、任务与交付证据位于 [openspec/changes/archive](../openspec/changes/archive)。
+功能规范位于 [openspec/specs](../openspec/specs)，变更记录位于 [openspec/changes/archive](../openspec/changes/archive)。归档描述对应历史版本，不是当前运行指令。

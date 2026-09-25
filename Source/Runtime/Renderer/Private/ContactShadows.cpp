@@ -13,16 +13,6 @@ bool IsMatchingColor(const FRenderTargetSource& InSource, const FRenderView& InV
 }
 } // namespace
 
-void FContactShadowSettings::Validate() const
-{
-	if (!std::isfinite(Length) || Length <= 0 || Length > 100 || !std::isfinite(Thickness) || Thickness <= 0 ||
-	    Thickness > 10 || !std::isfinite(Bias) || Bias < 0 || Bias > Length || Steps < 8 || Steps > 512 ||
-	    DebugMode > 2 || PreviewMip > 16)
-	{
-		throw std::invalid_argument("Invalid contact shadow length, thickness, bias, steps or preview");
-	}
-}
-
 FFullscreenPassDesc MakeContactShadowPass(const FRenderGraph& InGraph, const FContactShadowInputs& InInputs)
 {
 	InInputs.Settings.Validate();

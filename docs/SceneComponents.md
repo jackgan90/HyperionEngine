@@ -54,12 +54,18 @@ Main: component → draft → detached candidate → validated scene transaction
                                                   ↓
 Main: Save snapshot                         render publication
                                                   ↓
-Render: primitives → copied diagnostics → Main read-only Inspector
+Render: primitives → copied diagnostics → Main read-only diagnostics service
 ```
 
 输入缓冲允许暂时无效。Inspector 每帧从当前组件投影显示值，在控件报告变化时把 `FRecordDraft` 解码到对象副本，检查只读字段、范围和组件验证，再经 `FScene::EditNode` 检查完整对象、父子关系和派生变换。句柄或预期 revision 过期时拒绝写入，失败不改变权威状态。调用方必须先操作副本再提交；组件验证负责所有运行期约束，呈现范围不能代替完整验证。
 
 Renderer bridge 把组件发布为派生状态。Main UI 不读取 `IRenderPrimitive` 或 GPU 对象。`GetComponentDiagnostics()` 返回只读副本，包含对象/组件身份、发布 token、预期 primitive revision、已应用矩阵/可见性及最近 draw 的 frame/view/pass。状态可能落后；`bApplied` 表示版本是否追上，最近 draw 不能解释为本帧一定会绘制。诊断不持久化。Scene 继续独立于 Renderer / RHI。
+
+## 灯光阴影属性
+
+Directional Light 记录版本 2 增加可选 `shadowSettings`，包含独立的 `directional` 和 `contact` CPU 参数组。Details 的 **Override Shadow settings** 创建或清除该值，组内编辑沿用组件验证、事务、撤销/重做和原生场景保存。版本 1 读取后保持无覆盖值，不在加载时修改资产；渲染继续采用兼容的会话默认设置。切换主方向光会使用对应灯光的参数，不会把上一盏灯的值写入默认配置。`castsShadows` 同时约束两类阴影。
+
+这些类型位于 Scene，不依赖 Renderer 或 RHI；Renderer 从不可变场景发布中解析主光设置。当前 Point / Spot Light 不暴露阴影字段，未来可扩展相应方法组。Details 不再附加渲染诊断伪组件，运行时 primitive 诊断只通过只读服务查询。
 
 ## 模型层级与共享
 
@@ -67,7 +73,7 @@ Renderer bridge 把组件发布为派生状态。Main UI 不读取 `IRenderPrimi
 
 默认 Model 组件引用完整模型；导入模型为场景、导入场景源、升级原生场景和运行期加载均不自动展开模型节点或 primitive。场景只持有实例摆放和实例属性，模型内部层级与变换留在资产中。渲染使用 `对象世界变换 × 模型内部节点变换`。组件保留整体和 section 材质 override，不增加场景拓扑，也不改写共享模型或材质。
 
-模型实例共享 `FSceneModelData` 和模型 GPU 资源，一个 `FModel` 可以对应多个 render primitives；draw 数仍随合批、视图和 pass 改变。内部 primitive 可通过组件的只读渲染诊断查看，不要求与 Outliner 对象一一对应。render handle 或 draw 序号不属于保存身份。
+模型实例共享 `FSceneModelData` 和模型 GPU 资源，一个 `FModel` 可以对应多个 render primitives；draw 数仍随合批、视图和 pass 改变。内部 primitive 可通过 `render.component_diagnostics` 查询，不要求与 Outliner 对象一一对应。render handle 或 draw 序号不属于保存身份。
 
 已有展开场景的 `SourceNode` / `SourcePrimitive` 选择和子对象编辑继续兼容，升级不会自动合并或丢弃这些状态。`ExpandSceneModels` 仅作为显式 CPU 编辑操作保留，当前没有 Editor 拆分按钮；后续独立部件功能必须由用户主动触发。Sponza 的整体引用迁移须核对旧子树与源模型，存在无法表达的子对象修改时拒绝合并。
 

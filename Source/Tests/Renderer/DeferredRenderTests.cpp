@@ -384,7 +384,7 @@ void CheckViewDepthCacheIsolation(FFixture& InFixture)
 	const auto Surface = InFixture.Window.Surface();
 
 	// Reuse the session/material/batch caches across explicitly different views. A new
-	// swapchain keeps optimized clear metadata consistent; Viewer does not expose this switch.
+	// swapchain keeps optimized clear metadata consistent; startup depth is immutable in production hosts.
 	for (const auto Convention : {Other, Initial, Other, Initial})
 	{
 		InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(

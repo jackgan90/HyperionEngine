@@ -1,0 +1,53 @@
+## MODIFIED Requirements
+
+### Requirement: Early runtime activation and safe lifetime
+The plugin SHALL initialize before any DXGI/D3D12 device creation through the shared static plugin lifecycle graph, reuse an injected runtime where present, negotiate a supported API, and retain graphics hooks for the process lifetime. Graphics SHALL NOT require capture when capture is unselected or unavailable.
+
+#### Scenario: Direct Editor startup
+- **WHEN** the plugin is enabled with a compatible installed runtime
+- **THEN** the ordinary Editor process can capture without being launched from the RenderDoc UI
+
+#### Scenario: Unavailable runtime
+- **WHEN** the configured runtime cannot load or negotiate the required API
+- **THEN** rendering continues and the capture controls report why capture is unavailable
+
+#### Scenario: Compiled provider absent
+- **WHEN** ordinary Editor configuration requests renderdoc in a build without that provider
+- **THEN** plugin diagnostics report unavailability and unrelated rendering continues
+
+### Requirement: Complete frame capture with exclusive ownership
+The engine SHALL accept at most one pending capture request and bracket all frame GPU preparation, concurrent recording, submission and presentation with explicit capture control on the RHI coordinator.
+
+#### Scenario: Capture an Editor frame
+- **WHEN** a capture is requested in a drawable Editor frame
+- **THEN** one RDC contains the scene and GUI and can be replayed
+
+#### Scenario: Overlap or external capture
+- **WHEN** another request is pending or RenderDoc is already capturing externally
+- **THEN** the request is refused or reported busy without overlapping, ending or discarding the external capture
+
+#### Scenario: Failed or skipped frame
+- **WHEN** rendering fails during an owned capture or the application closes while a request is pending
+- **THEN** the request is cancelled or failed and any owned capture is cleaned up without reporting success
+
+### Requirement: Shared interactive capture controls
+Editor SHALL expose its persisted capture preference and viewport capture/open action with visible status. Automation SHALL share capture, explicit replay and screenshot services.
+
+#### Scenario: Button interaction
+- **WHEN** a user presses and releases an enabled RDC capture button
+- **THEN** exactly one capture request is emitted and the resulting status and path appear in the panel
+
+#### Scenario: Unavailable or busy controls
+- **WHEN** capture is unavailable or already pending
+- **THEN** its button cannot issue another request and the status explains the condition
+
+### Requirement: Optional replay UI opening
+The plugin SHALL open the exact latest successful RDC with the matching RenderDoc UI on request or after a successful capture when automatic opening is enabled; capture enablement SHALL default to disabled.
+
+#### Scenario: Automatic opening
+- **WHEN** capture succeeds with automatic opening enabled
+- **THEN** the engine launches RenderDoc with that capture file, preserving spaces and Unicode in the path
+
+#### Scenario: UI launch or file failure
+- **WHEN** launching the UI fails or the last file has been removed
+- **THEN** the UI operation reports a distinct error and does not overwrite a successful capture result

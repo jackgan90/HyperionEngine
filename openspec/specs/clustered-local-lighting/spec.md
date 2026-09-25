@@ -3,6 +3,7 @@
 ## Purpose
 Define conservative per-view cluster lists, immutable GPU resources and shared point/spot shading across Deferred and HDR Forward. Specify default enablement, legacy fallback and measurable visual and resource acceptance.
 ## Requirements
+
 ### Requirement: Conservative per-view cluster lists
 Renderer SHALL build regular XY and logarithmic positive-view-depth clusters on CPU from immutable scene publications and existing light visibility queries. Each shading point SHALL compute its cluster index and read offset/count, light indices and attributes from separate structured buffers. Lists SHALL contain every potentially contributing light without duplicates or silent capacity truncation and SHALL support transparent receiver depths without a depth prepass.
 
@@ -29,7 +30,7 @@ Cluster descriptions SHALL match their scene publication and actual rendering vi
 - **THEN** old frames retain their complete inputs, new frames use current inputs and resource allocations remain bounded
 
 ### Requirement: Default enablement and measurable acceptance
-Cluster lighting SHALL default enabled, expose persisted settings/CLI/GUI control and report its actual algorithm and list statistics. Disabling SHALL stop cluster construction and restore previous Deferred volumes and Forward local-light exclusion. Delivery SHALL compare the unchanged current SceneViewer Sponza scene against the old rendering path and record real D3D12 validation, numerical image differences and stationary/moving workload measurements.
+Cluster lighting SHALL default enabled, expose persisted settings/CLI/GUI control and report its actual algorithm and list statistics. Disabling SHALL stop cluster construction and restore previous Deferred volumes and Forward local-light exclusion. Delivery SHALL compare the unchanged current Editor Sponza scene against the old rendering path and record real D3D12 validation, numerical image differences and stationary/moving workload measurements.
 
 #### Scenario: Existing Sponza appearance
 - **WHEN** loading the existing Sponza scene with default settings

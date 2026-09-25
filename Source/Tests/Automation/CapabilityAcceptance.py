@@ -24,7 +24,7 @@ def referenced_types(value):
 
 
 def authoring(cli, editor, assets, output):
-    app = Application(editor, output, "capabilities", "", assets, frames=3600)
+    app = Application(editor, output, "capabilities", "", assets, frames=0)
     sessions = []
     try:
         agent = AttachedSession(cli, app.target(), True)
@@ -100,7 +100,7 @@ def authoring(cli, editor, assets, output):
         assert stats["ready"] and not stats["sceneError"], stats
         diagnostics = completed(agent.call("render.component_diagnostics", handle=placed["handle"], component="hyperion.staticmesh", limit=1))
         assert len(diagnostics["primitives"]) == 1, diagnostics
-        completed(agent.wait(agent.call("scene.save", document=info["document"], revision=info["revision"], path=str(output / "Viewer.hasset"))))
+        completed(agent.wait(agent.call("scene.save", document=info["document"], revision=info["revision"], path=str(output / "AuthoringRender.hasset"))))
         info = ready(agent)
         completed(agent.call("scene.undo", document=info["document"], revision=info["revision"]))
         artifact = completed(agent.wait(agent.call("render.screenshot", path=str(output / "Main.png"), overwrite=True)))
@@ -237,21 +237,21 @@ def import_model(agent, output):
     completed(agent.call("asset.close", **query, discard=True))
 
 
-def viewer_controls(cli, viewer, assets, output):
-    app = Application(viewer, output, "viewer-controls", output / "Viewer.hasset", assets, frames=2400)
+def render_controls(cli, editor, assets, output):
+    app = Application(editor, output, "render-controls", output / "AuthoringRender.hasset", assets, frames=0)
     agent = None
     try:
         agent = AttachedSession(cli, app.target(), True)
         info = ready(agent)
-        settings = completed(agent.call("application.settings.get"))
+        settings = completed(agent.call("render.settings.get"))
         values = dict(settings["values"])
         exposure_key = next(key for key in values if key.lower() == "exposure")
         values[exposure_key] = 1.3
-        changed = completed(agent.call("application.settings.set", revision=settings["revision"], values=values))
-        assert changed["values"][exposure_key] == 1.3
-        assert agent.call("application.settings.set", revision=settings["revision"], values=values)["error"]["code"] == "stale_revision"
-        path = output / "ViewerSettings.json"
-        completed(agent.wait(agent.call("application.settings.save", revision=changed["revision"], path=str(path))))
+        changed = completed(agent.call("render.settings.set", revision=settings["revision"], values=values))
+        assert abs(changed["values"][exposure_key] - 1.3) < 1e-6
+        assert agent.call("render.settings.set", revision=settings["revision"], values=values)["error"]["code"] == "stale_revision"
+        path = output / "RenderSettings.json"
+        completed(agent.wait(agent.call("render.settings.save", revision=changed["revision"], path=str(path))))
         assert path.is_file()
         shadows = completed(agent.call("render.shadows.get"))
         shadows["distance"] = 80
@@ -267,10 +267,29 @@ def viewer_controls(cli, viewer, assets, output):
         completed(agent.call("scene.selection.duplicate", document=info["document"], revision=info["revision"]))
         info = ready(agent)
         completed(agent.call("scene.selection.remove_keep_children", document=info["document"], revision=info["revision"]))
+        info = ready(agent)
+        assert info["canUndo"]
+        completed(agent.call("scene.undo", document=info["document"], revision=info["revision"]))
+        info = ready(agent)
+        selected = completed(agent.call("scene.selection.get", document=info["document"], revision=info["revision"]))
+        assert selected["primary"] is not None
+        completed(agent.call("scene.node.create", document=info["document"], revision=info["revision"], name="Sun", components=["hyperion.scenedirectionallight"]))
+        light = completed(agent.call("light.main.get"))
+        original_light = dict(light["light"])
+        light["light"]["intensity"] = 2.25
+        light["direction"] = {"x": 1, "y": 2, "z": 3}
+        updated = completed(agent.call("light.main.set", **light))
+        assert updated["light"]["intensity"] == 2.25
+        assert agent.call("light.main.set", **light)["error"]["code"] == "stale_revision"
+        updated["direction"] = {"x": 0, "y": 0, "z": 0}
+        assert agent.call("light.main.set", **updated)["error"]["code"] == "invalid_arguments"
+        info = ready(agent)
+        completed(agent.call("scene.undo", document=info["document"], revision=info["revision"]))
+        assert completed(agent.call("light.main.get"))["light"] == original_light
         assert completed(agent.call("render.statistics"))["ready"]
-        screenshot = completed(agent.wait(agent.call("render.screenshot", path=str(output / "Viewer.png"), overwrite=True)))
+        screenshot = completed(agent.wait(agent.call("render.screenshot", path=str(output / "Render.png"), overwrite=True)))
         assert pathlib.Path(screenshot["path"]).is_file()
-        print("Viewer settings, model authoring and render output passed")
+        print("Editor render settings, model authoring and render output passed")
     finally:
         if agent:
             agent.close()
@@ -278,14 +297,9 @@ def viewer_controls(cli, viewer, assets, output):
 
 
 if __name__ == "__main__":
-    paths = [pathlib.Path(argument).resolve() for argument in sys.argv[1:]]
-    if len(paths) == 5:
-        cli, editor, viewer, fixture, output = paths
-        output.mkdir(parents=True, exist_ok=True)
-        assets = output / "Assets"
-        subprocess.run([str(fixture), str(assets)], check=True)
-        authoring(cli, editor, assets / "Game", output)
-        viewer_controls(cli, viewer, assets / "Game", output)
-    else:
-        paths[3].mkdir(parents=True, exist_ok=True)
-        authoring(*paths)
+    cli, editor, fixture, output = [pathlib.Path(argument).resolve() for argument in sys.argv[1:]]
+    output.mkdir(parents=True, exist_ok=True)
+    assets = output / "Assets"
+    subprocess.run([str(fixture), str(assets)], check=True)
+    authoring(cli, editor, assets / "Game", output)
+    render_controls(cli, editor, assets / "Game", output)

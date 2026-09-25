@@ -1,8 +1,10 @@
 # scene-local-lights Specification
 
 ## Purpose
-Define scene-owned point and spot lights with persistent typed data, extensible visibility queries and shared attenuated direct lighting. Specify default clustered shading across Deferred and HDR Forward, the optional Deferred light-volume fallback, SceneViewer authoring and Sponza visual acceptance.
+Define scene-owned point and spot lights with persistent typed data, extensible visibility queries, clustered shading, the Deferred volume fallback, Editor authoring and Sponza visual acceptance.
+
 ## Requirements
+
 ### Requirement: Distinct persistent local light nodes
 Scene SHALL own distinct point and spot light payloads with stable node identity, hierarchy, effective enablement, linear color, intensity and positive world-unit range. Spot lights SHALL additionally own validated inner/outer half angles and derive emission from world minus-Z. Node scale SHALL NOT rescale authored range. Source/native serialization and runtime save SHALL preserve both types and migrate old scenes without adding lights.
 
@@ -44,10 +46,10 @@ Local lighting SHALL default to clustered evaluation in Deferred and HDR Forward
 - **THEN** clustered lighting illuminates lit models by default, while disabling clustering retains editable lights and disables local contribution
 
 ### Requirement: Editable diagnostic and Sponza acceptance
-SceneViewer SHALL expose creation/editing of both local light types, influence visualization, per-type visibility/draw statistics and algorithm availability. The default Sponza scene SHALL retain its authored point lights approximating the floor pools and nearby architectural lighting of the Khronos README Screenshot while preserving its calibrated camera and model/material assets. Default clustered rendering SHALL preserve the existing point-light appearance within documented numerical tolerance. Delivery SHALL include real D3D12 clustered/volume comparisons, documented visual limitations and validation/resource evidence.
+Editor SHALL expose creation/editing of both local light types, influence visualization, per-type visibility/draw statistics and algorithm availability. The default Sponza scene SHALL retain its authored point lights approximating the floor pools and nearby architectural lighting of the Khronos README Screenshot while preserving its calibrated camera and model/material assets. Default clustered rendering SHALL preserve the existing point-light appearance within documented numerical tolerance. Delivery SHALL include real D3D12 clustered/volume comparisons, documented visual limitations and validation/resource evidence.
 
 #### Scenario: Default Sponza run
-- **WHEN** the default SceneViewer Sponza scene is rendered with Deferred
+- **WHEN** the default Editor Sponza scene is rendered with Deferred
 - **THEN** clustering is enabled, existing local illumination is preserved, lights survive save/reload, and GPU validation reports no errors
 
 #### Scenario: Stable and moving workloads

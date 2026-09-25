@@ -20,8 +20,7 @@ template<> const FRecordDescriptor& RecordType<FApplicationCloseRequest>()
 	            {.Description = "0: reject dirty (default); 1: save all then exit; 2: explicitly discard and exit; 3: "
 	                            "cancel pending exit (does not cancel admitted saves)."}),
 	     Member("scenePath", &FApplicationCloseRequest::ScenePath,
-	            {.Description = "Save destination for a dirty untitled scene; otherwise the current path is used. "
-	                            "Viewer Save uses its current scene path if omitted."})});
+	            {.Description = "Save destination for a dirty untitled scene; otherwise the current path is used."})});
 	return Type;
 }
 

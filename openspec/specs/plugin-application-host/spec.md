@@ -3,6 +3,7 @@
 ## Purpose
 Define a minimal Main-owned application host with startup-selected plugins, scoped typed services and contributions, dependency-ordered lifecycle, and safe observable shutdown.
 ## Requirements
+
 ### Requirement: Main-owned application host
 The application host SHALL own time, TaskSystem Main pumping and static plugin updates without requiring graphics, GUI or assets. Start, Update, Quiesce and Stop SHALL execute on the owner thread with finite nonnegative delta time and stable frame sequence.
 
@@ -30,9 +31,9 @@ Plugins SHALL declare provided, required and optional service types. Required pr
 - **THEN** the same callable retains its state, removed subscriptions are skipped, and new subscriptions first observe the next publication
 
 ### Requirement: Plugin-owned application features
-Viewer and Editor SHALL run as application feature plugins using reusable plugin-owned asset, window, graphics and GUI services. Application entrypoints SHALL supply configuration and compiled catalogs. Native backend selection SHALL remain in application composition.
+Editor SHALL run as an application feature plugin using reusable plugin-owned asset, window, graphics and GUI services. Application entrypoints SHALL supply configuration and compiled catalogs. Native backend selection SHALL remain in application composition.
 
-#### Scenario: Viewer and Editor startup
+#### Scenario: Editor startup
 - **WHEN** either application starts with its normal profile
 - **THEN** provider dependencies govern startup and reverse teardown while existing CLI and rendering behavior remain available
 

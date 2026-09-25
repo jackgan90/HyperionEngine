@@ -83,42 +83,33 @@ def editor_regressions(cli, editor, assets, output):
         app.close()
 
 
-def model_regressions(cli, viewer, assets, output, failed=False):
+def model_regressions(cli, editor, assets, output, failed=False):
     name = "model-error" if failed else "model-controls"
     path = "/Engine/Models/Primitives/Missing.hasset" if failed else "/Engine/Models/Primitives/Cube.hasset"
-    app = Application(viewer, output, name, path, assets, frames=15000, model=True)
+    app = Application(editor, output, name, "", assets, frames=15000)
     agent = None
     try:
         agent = AttachedSession(cli, app.target(), True)
-        deadline = time.monotonic() + 30
-        while True:
-            health = completed(agent.call("application.health"))
-            assert set(health) == {"frame", "ready", "error"}, health
-            stats = completed(agent.call("render.statistics"))
-            if failed and stats["sceneError"]:
-                assert health["error"] == stats["sceneError"] and not health["ready"], health
-            if (stats["sceneError"] if failed else stats["ready"]):
-                break
-            assert time.monotonic() < deadline, stats
-            time.sleep(0.02)
-        if not failed:
-            view = completed(agent.call("view.get"))
-            assert view["ready"] and not view["cameraAuthoring"], view
-            camera = view["camera"]
+        ready(agent)
+        opened = agent.wait(agent.call("asset.open", path=path))
+        if failed:
+            assert opened["error"]["code"] == "load_failed", opened
+        else:
+            document = completed(opened)
+            deadline = time.monotonic() + 30
+            while True:
+                preview = completed(agent.call("asset.preview.get", document=document["document"]))
+                if preview["ready"]:
+                    break
+                assert time.monotonic() < deadline, preview
+                time.sleep(0.02)
+            camera = preview["settings"]["camera"]
             camera["world"]["values"][12] += 1.0
-            changed = completed(agent.call("view.set", document="", revision="0", camera=camera))
-            assert changed["camera"] == camera, changed
-            completed(agent.call("view.frame_scene", document="", revision="0"))
-            light = completed(agent.call("light.main.get"))
-            light["light"]["intensity"] = 2.25
-            light["direction"] = {"x": 1, "y": 2, "z": 3}
-            updated = completed(agent.call("light.main.set", **light))
-            assert updated["light"]["intensity"] == 2.25, updated
-            assert agent.call("light.main.set", **light)["error"]["code"] == "stale_revision"
-            updated["direction"] = {"x": 0, "y": 0, "z": 0}
-            assert agent.call("light.main.set", **updated)["error"]["code"] == "invalid_arguments"
-            assert completed(agent.call("light.main.get"))["revision"] == updated["revision"]
-        screenshot(agent, output / (name + ".png"))
+            changed = completed(agent.call("asset.preview.set", document=document["document"], generation=document["generation"], settings={"camera": camera}))
+            assert changed["settings"]["camera"] == camera
+            completed(agent.call("asset.preview.set", document=document["document"], generation=document["generation"], frame=True))
+            assert not completed(agent.call("asset.info", document=document["document"]))["dirty"]
+        screenshot(agent, output / (name + ".png"), "assets")
         accepted = completed(agent.call("application.close.request"))
         assert accepted["state"] == "closing", accepted
         app.process.wait(timeout=30)
@@ -151,7 +142,7 @@ def reopen_and_discard(cli, editor, assets, output):
 
 
 if __name__ == "__main__":
-    cli, editor, viewer, fixture, output = [pathlib.Path(value).resolve() for value in sys.argv[1:]]
+    cli, editor, fixture, output = [pathlib.Path(value).resolve() for value in sys.argv[1:]]
     output.mkdir(parents=True, exist_ok=True)
     # Each invocation gets independent assets; re-running must also exercise the failed-open path.
     import tempfile
@@ -160,5 +151,5 @@ if __name__ == "__main__":
         subprocess.run([str(fixture), str(assets)], check=True)
         editor_regressions(cli, editor, assets / "Game", output)
         reopen_and_discard(cli, editor, assets / "Game", output)
-        model_regressions(cli, viewer, assets / "Game", output)
-        model_regressions(cli, viewer, assets / "Game", output, failed=True)
+        model_regressions(cli, editor, assets / "Game", output)
+        model_regressions(cli, editor, assets / "Game", output, failed=True)

@@ -82,6 +82,7 @@ void FSceneRenderPipeline::Configure(FScenePipelineSettings InSettings)
 		Width = 0;
 		Height = 0;
 	}
+	DefaultContactShadows = InSettings.ContactShadows;
 	Settings = std::move(InSettings);
 }
 

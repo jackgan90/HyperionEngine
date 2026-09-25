@@ -23,6 +23,8 @@ struct FSceneHistoryEntry
 	std::vector<FSceneNodeHistory> Edits;
 	std::vector<FSceneHandle> DeletedRoots;
 	FSceneSelection BeforeSelection;
+	bool bKeepChildren{};
+	bool bRestoreSelection{};
 };
 
 inline void RemapSceneHandle(FSceneHandle& InHandle, const FSceneHandleMap& InMapping)

@@ -8,7 +8,7 @@ import pathlib
 import statistics
 import subprocess
 
-from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+from BenchmarkWorkload import render_settings, validate_workload
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -32,16 +32,14 @@ def summarize(rows):
 def run(args, motion, trial, enabled):
     name = f"{motion}-{trial}-{'on' if enabled else 'off'}"
     path = args.output / f"{name}.csv"
-    command = [str(args.viewer), "--asset-root", str(args.asset_root.resolve()),
-               "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-vsync",
-               "--frames", str(args.warmup + args.frames), "--benchmark-warmup", str(args.warmup),
+    command = [str(args.editor), "--asset-root", str(args.asset_root.resolve()),
+               "--scene", "/Game/Scenes/Showcase.hasset", "--render-settings", str(render_settings(args.output / "Settings.json")), "--hidden",
+               "--benchmark-samples", str(args.frames), "--benchmark-warmup", str(args.warmup),
                "--benchmark", str(path)]
     if motion == "moving":
         command.append("--benchmark-camera")
     if not enabled:
         command.append("--no-instance-batching")
-    if args.no_ui:
-        command.append("--no-ui")
     completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
     log = completed.stdout + completed.stderr
     (args.output / f"{name}.log").write_text(log, encoding="utf-8")
@@ -60,24 +58,23 @@ def run(args, motion, trial, enabled):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--viewer", type=pathlib.Path, required=True)
+    parser.add_argument("--editor", type=pathlib.Path, required=True)
     parser.add_argument("--asset-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--warmup", type=int, default=240)
     parser.add_argument("--frames", type=int, default=600)
     parser.add_argument("--trials", type=int, default=3)
-    parser.add_argument("--no-ui", action="store_true")
     args = parser.parse_args()
     if min(args.warmup, args.frames, args.trials) < 1:
         parser.error("warmup, frames and trials must be positive")
-    args.viewer = args.viewer.resolve()
+    args.editor = args.editor.resolve()
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     results = []
-    metadata = {"viewer": str(args.viewer), "sha256": hashlib.sha256(args.viewer.read_bytes()).hexdigest(),
-                "warmup": args.warmup, "frames": args.frames, "trials": args.trials, "ui": not args.no_ui,
-                "config": json.loads((benchmark_config_path(ROOT)).read_text()), "runs": results}
-    cache = args.viewer.parent.parent / "CMakeCache.txt"
+    metadata = {"editor": str(args.editor), "sha256": hashlib.sha256(args.editor.read_bytes()).hexdigest(),
+                "warmup": args.warmup, "frames": args.frames, "trials": args.trials, "ui": True,
+                "scene": "/Game/Scenes/Showcase.hasset", "runs": results}
+    cache = args.editor.parent.parent / "CMakeCache.txt"
     if cache.is_file():
         (args.output / "CMakeCache.txt").write_text(cache.read_text(), encoding="utf-8")
     try:

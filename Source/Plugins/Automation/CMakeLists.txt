@@ -11,8 +11,8 @@ add_library(hyperion_automation_plugin STATIC
   Private/ViewportOperations.cpp
   Private/PlacementOperations.cpp
   Private/RenderOutputOperations.cpp
+  Private/RenderSettingsOperations.cpp
   Private/RenderCaptureOperations.cpp
-  Private/ApplicationSettingsOperations.cpp
   Private/ProfilingOperations.cpp
   Private/AssetPlugin.cpp
   Private/AssetOperations.cpp

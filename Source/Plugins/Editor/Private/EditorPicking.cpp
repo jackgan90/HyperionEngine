@@ -85,13 +85,14 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	const FVec2 Position{(Pointer.Position.X - Bounds.X) / (Bounds.Z - Bounds.X),
 	                     (Pointer.Position.Y - Bounds.Y) / (Bounds.W - Bounds.Y)};
 	const auto Ray =
-	    MakeViewportRay(*ActiveCamera, Position, ViewportSize.Width, ViewportSize.Height, EDepthConvention::Reversed);
+	    MakeViewportRay(*ActiveCamera, Position, ViewportSize.Width, ViewportSize.Height,
+	                    (Options.Rendering.bReversedZ ? EDepthConvention::Reversed : EDepthConvention::Standard));
 	if (!Ray)
 	{
 		return;
 	}
 	HYP_PERF_SCOPE_C(Frame, PickViewportModel);
-	const auto QueryOptions = MakeSceneRayOptions(ESceneRenderPipeline::Deferred);
+	const auto QueryOptions = MakeSceneRayOptions(MakePipelineSettings(Rendering).Pipeline);
 	const auto Hit = Scene->Raycast(*Ray, QueryOptions);
 	if (Hit.Status == ESceneRayStatus::Hit)
 	{

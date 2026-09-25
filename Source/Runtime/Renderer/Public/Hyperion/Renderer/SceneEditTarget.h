@@ -25,7 +25,8 @@ public:
 	FSceneHandle AddNode(FSceneNode InNode) override;
 	FSceneHandle DuplicateNode(FSceneHandle InHandle) override;
 	bool RemoveNodeKeepChildren(FSceneHandle InHandle) override;
-	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes) override;
+	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes,
+	                                   std::vector<FSceneNodeEdit> InRestoredChildren = {}) override;
 	bool RemoveSubtrees(std::span<const FSceneHandle> InRoots) override;
 	void SetSettings(FSceneSettings InSettings) override;
 	FSceneNode Rebind(FSceneNode InNode) override;

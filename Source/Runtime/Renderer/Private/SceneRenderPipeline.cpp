@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Renderer/ShadowControls.h"
 #include "PipelineShadows.h"
 #include <algorithm>
 #include <bit>
@@ -104,14 +105,13 @@ void FSceneRenderPipeline::PrepareShadows(const FRenderView& InMain, const FMate
 	                             ShadowBytes, ShadowDepthConvention);
 }
 
-void FSceneRenderPipeline::ValidateView(const FRenderView& InView, const FCascadedShadowSettings& InShadows) const
+void FSceneRenderPipeline::ValidateView(const FRenderView& InView) const
 {
 	if (const auto* Output = OutputTarget.Texture ? OutputTarget.Texture->GetColorTarget() : nullptr)
 	{
-		if (Output->Width != InView.Width || Output->Height != InView.Height || InShadows.DebugMode ||
-		    Settings.ContactShadows.DebugMode)
+		if (Output->Width != InView.Width || Output->Height != InView.Height)
 		{
-			throw std::invalid_argument("Offscreen scene output requires matching dimensions and no depth overlays");
+			throw std::invalid_argument("Offscreen scene output requires matching dimensions");
 		}
 	}
 	if (Settings.Pipeline == ESceneRenderPipeline::Deferred && InView.Viewport)
@@ -168,7 +168,7 @@ FRenderFeatureContext FSceneRenderPipeline::BeginFeatures(FRenderGraph& InGraph,
 
 void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMain,
                                          std::shared_ptr<const FMaterialFrameContext> InFrame,
-                                         const FCascadedShadowSettings& InShadows, FVec4 InClear,
+                                         const FCascadedShadowSettings& InDefaultShadows, FVec4 InClear,
                                          const std::function<void(FRenderGraph&)>& InExtensions,
                                          bool bInDeferPreparation)
 {
@@ -178,8 +178,11 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	{
 		throw std::invalid_argument("Scene pipeline requires a frozen material frame");
 	}
+	Settings.ContactShadows = DefaultContactShadows;
+	auto InShadows = InDefaultShadows;
+	ResolveSceneLightShadows(InFrame->GetSceneMetadata().get(), InShadows, Settings.ContactShadows);
 	Session.ValidateSceneFrame(*InFrame);
-	ValidateView(InMain, InShadows);
+	ValidateView(InMain);
 	Resize(InMain.Width, InMain.Height, InMain.DepthConvention);
 	LastStatistics = {};
 	FullscreenStatistics = std::make_shared<FFullscreenPreparationStatistics>();
@@ -241,7 +244,7 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		    InGraph, Family.Targets[Family.TransparentIndex].Reads.at(InShadows.DebugMode - 2).Texture, ShadowLifetime,
 		    InShadows.PreviewViewport.value_or(
 		        FViewport{float(InMain.Width) - Size, float(InMain.Height) - Size, Size, Size}),
-		    bInDeferPreparation);
+		    bInDeferPreparation, OutputTarget);
 	}
 	BuildFeatures(ERenderFeatureStage::AfterTonemap, FeatureContext);
 	for (const auto& Feature : Features)

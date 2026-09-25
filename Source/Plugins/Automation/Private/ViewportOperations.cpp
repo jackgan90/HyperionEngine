@@ -60,7 +60,7 @@ void AddView(FOperationCatalog& InCatalog, ISceneViewport* InView, FSceneEditDoc
 	const TRequest Example{"document-from-scene.info", 1};
 	Info.Example = WriteRecordWire(RecordType<TRequest>(), &Example);
 	Info.Unavailable = InView && (!bInAuthoring || InDocument) ? "" : "Viewport provider unavailable.";
-	Info.Description += " Hosts without a scene document (ModelViewer) use document=\"\" and revision=\"0\" for "
+	Info.Description += " Providers without a scene document use document=\"\" and revision=\"0\" for "
 	                    "temporary view operations.";
 	if ((bInAuthoring || bInCameraControls) && InView && !InView->ViewportState().bCameraAuthoring)
 	{

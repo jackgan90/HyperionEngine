@@ -144,12 +144,12 @@ void PanSceneCamera(FSceneInstance& InScene, FVec3 InSteps)
 	         });
 }
 
-void FitSceneCamera(FSceneInstance& InScene, float InAspect, bool bInModelViewerLens)
+void FitSceneCamera(FSceneInstance& InScene, float InAspect, bool bInFitClipPlanes)
 {
 	Navigate(InScene,
 	         [&](FSceneCameraView& InView)
 	         {
-		         FitSceneCamera(InView, InScene, InAspect, bInModelViewerLens);
+		         FitSceneCamera(InView, InScene, InAspect, bInFitClipPlanes);
 	         });
 }
 
@@ -208,7 +208,7 @@ void PanSceneCamera(FSceneCameraView& InCamera, FVec3 InSteps)
 	InCamera.World = SceneCameraTransform(Moved);
 }
 
-void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, float InAspect, bool bInModelViewerLens)
+void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, float InAspect, bool bInFitClipPlanes)
 {
 	FBounds Bounds;
 	for (const auto& ModelHandle : InScene.GetNodes(ESceneNodeKind::Model))
@@ -238,7 +238,7 @@ void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, f
 	const float Half = Camera.VerticalRadians * .5f;
 	Camera.FocusDistance =
 	    Radius / std::sin(std::min(Half, std::atan(std::tan(Half) * std::max(.001f, InAspect)))) * 1.12f;
-	if (bInModelViewerLens)
+	if (bInFitClipPlanes)
 	{
 		Camera.Near = std::max(.0001f, Radius * .001f);
 		Camera.Far = Camera.FocusDistance + Radius * 10;

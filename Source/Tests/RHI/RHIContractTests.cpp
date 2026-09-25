@@ -1,6 +1,6 @@
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
-#include "Hyperion/DebugUI/DebugUIPlugin.h"
+#include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/RHI/RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderSession.h"
@@ -400,7 +400,7 @@ void CheckDeferredGuiOwner(bool bInDestroy)
 	FTestDevice Device;
 	FTestSwapchain Swapchain(Device.GetCapabilities());
 	FShaderCompiler Compiler(TestShaderRoot(), "deferred-gui-shader-cache");
-	auto Plugin = std::make_unique<FDebugUiPlugin>(Device, Compiler, Tasks, FImage{});
+	auto Plugin = std::make_unique<FGuiRenderer>(Device, Compiler, Tasks, FImage{});
 	FRenderGraph Graph;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 	                          [&]

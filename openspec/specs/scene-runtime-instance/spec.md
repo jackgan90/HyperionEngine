@@ -1,21 +1,23 @@
 # scene-runtime-instance Specification
 
 ## Purpose
-Define a reusable Main-owned scene runtime that coordinates asynchronous loading, generation-safe model operations, render synchronization, structured failures and dependency-safe shutdown independently of viewer plugins.
+Define a reusable Main-owned scene runtime that coordinates asynchronous loading, generation-safe model operations, render synchronization, structured failures and dependency-safe shutdown independently of application plugins.
+
 ## Requirements
+
 ### Requirement: Independent scene runtime lifecycle
 Renderer SHALL expose a Main-owned scene entity that maintains the logical node collection, asynchronous reflected native scene/model loading, per-frame lifecycle updates, render synchronization and structured status without constructing a plugin, GUI or window. Validated group, model-placeholder, camera and light nodes and their relationships SHALL be installed before waiting for model resources. Source-format parsing SHALL remain outside Renderer. References SHALL resolve through Assets. CPU Scene SHALL remain independent of Renderer/RHI. Existing FModel attachments SHALL have one owner through the scene bridge.
 
-#### Scenario: Scene without a viewer plugin
+#### Scenario: Scene without an application plugin
 - **WHEN** a client constructs a runtime scene, loads a native manifest and ticks it
-- **THEN** its camera/light nodes become queryable and valid models become render-ready with shared resources and independently queryable failures without SceneViewer involvement
+- **THEN** its camera/light nodes become queryable and valid models become render-ready with shared resources and independently queryable failures without Editor involvement
 
 #### Scenario: Loading-time removal
 - **WHEN** a node or subtree is removed before its model preparation completes
 - **THEN** completion cannot recreate any removed node or publish to a reused generation
 
 ### Requirement: Scene operations and shutdown
-The entity SHALL expose typed node enumeration, generation-safe editing, hierarchy operations and idempotent Close. Close SHALL cancel requests and join admitted preparation tasks before releasing render attachments and clearing Render camera/light/selection metadata; it SHALL finish before session destruction. A subsequent Load SHALL use a new attachment epoch. Viewer-specific selection of an inspected node, input gestures and demo animation policy SHALL remain outside the entity, while camera/light authored state and persistent default selections SHALL belong to Scene.
+The entity SHALL expose typed node enumeration, generation-safe editing, hierarchy operations and idempotent Close. Close SHALL cancel requests and join admitted preparation tasks before releasing render attachments and clearing Render camera/light/selection metadata; it SHALL finish before session destruction. A subsequent Load SHALL use a new attachment epoch. Editor-specific selection of an inspected node, input gestures and demo animation policy SHALL remain outside the entity, while camera/light authored state and persistent default selections SHALL belong to Scene.
 
 #### Scenario: Edit a ready scene
 - **WHEN** a client adds, disables, moves or removes model, camera or light nodes and ticks the scene
@@ -53,7 +55,7 @@ The native hyperion.scene record SHALL advance to version 4 with unified node re
 
 #### Scenario: Legacy camera and lighting
 - **WHEN** an old scene containing Eye/Target/Near/Far and no light records is imported or upgraded
-- **THEN** its new camera preserves the old view with the established SceneViewer FOV and focus distance, and real default light nodes preserve prior lighting
+- **THEN** its new camera preserves the old view with the established legacy FOV and focus distance, and real default light nodes preserve prior lighting
 
 #### Scenario: Legacy ID collision
 - **WHEN** an old model uses an ID proposed for a migration-generated camera or light

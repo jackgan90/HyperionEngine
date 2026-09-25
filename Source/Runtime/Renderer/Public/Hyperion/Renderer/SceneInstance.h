@@ -71,7 +71,8 @@ public:
 	std::uint64_t GetIdentity() const;
 	bool EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision);
 	bool EditNodes(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision);
-	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes);
+	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes,
+	                                   std::vector<FSceneNodeEdit> InRestoredChildren = {});
 	bool RemoveSubtrees(std::span<const FSceneHandle> InHandles);
 	// Copy one node, including pending material selections; descendants remain with the source.
 	FSceneHandle DuplicateNode(FSceneHandle InHandle);

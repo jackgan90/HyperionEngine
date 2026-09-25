@@ -2,31 +2,13 @@
 
 Main、Render 和 RHI 可以处理不同的 engine tick，同时分别限制 Main 对 Render、Render 对 RHI 的最大领先帧数。RHI 0 仍等待所有同帧录制线程，再按帧顺序提交。GPU fence、交换链缓冲数量和资源退休规则保持独立。
 
-## 配置
+## Runtime 配置
 
-实验配置 `properties` 支持：
-
-```json
-{
-  "main_render_lead": 2,
-  "render_rhi_lead": 1,
-  "rhi_threads": 2
-}
-```
-
-也可以通过 Viewer 命令行覆盖：
-
-```powershell
-.\out\build\debug\bin\hyperion_viewer.exe --asset-root ../HyperionAssets --main-render-lead 2 --render-rhi-lead 1
-```
-
-两项领先配置均为启动配置，范围为整数 **0～16**，默认均为 **1**；负数、小数、无效字符串和越界值会在启动时拒绝。修改持久化配置需要重新启动才能生效。本次仍要求至少一条 RHI 线程。
-
-限额是上限，不要求线程保持固定距离。GPU 帧槽复用、资源准备、同帧并行录制汇合、Present、截图和排空仍可能发生等待。
+`FFramePipeline` 是独立 Renderer 能力；构造时通过 `FFramePipelineLimits` 设置 Main/Render 和 Render/RHI 的领先上限（0–16）。Editor 当前逐帧汇合，不暴露领先量启动选项。GPU fence、交换链槽与 CPU lead 是不同约束。
 
 ## 帧推进语义
 
-帧 ID 从 1 开始，与每次 engine tick 对应。Viewer 的既有 benchmark `frame` 列从 0 开始，因此正常绘制时该列加 1 等于 CPU 帧 ID。
+帧 ID 从 1 开始，与每次 engine tick 对应。Editor benchmark 单独按 ready frame 编号；通过实际 GPU submission ID 关联计时。
 
 设当前提交帧为 N：
 
@@ -56,7 +38,7 @@ RHI 线程的任务数不是帧进度。管线观察 RHI 0 的整帧完成，因
 
 `FFrameTicket::Ready()` 表示两段工作已终止。即使 Ready 返回 true，读取结果前仍应在 Main 调用 `Wait()` 观察潜在异常。等待要求 TaskSystem 仍然存活。`Drain()` 汇合全部已接收工作后报告异常；成功 Drain 后可以继续提交下一帧，用于 profiling 边界等用途。
 
-生产者的局部变量不可被异步任务引用捕获。按值捕获的裸指针仅用于稳定的服务对象，并要求这些对象存活到 Drain 完成。当前 Viewer 在帧包中复制 Settings、View、阴影设置、GUI 数据和原生 Surface 值，材质与场景数据通过不可变快照持有。
+生产者的局部变量不可被异步任务引用捕获。按值捕获的裸指针仅用于稳定的服务对象，并要求这些对象存活到 Drain 完成。异步调用者须在帧包中复制 Settings、View、阴影设置、GUI 数据和原生 Surface 值，材质与场景数据通过不可变快照持有。
 
 `ExecuteGraphOnRhi` 在 RHI 0 执行一个拥有数据的图。原有 `ExecuteGraph` 同步包装仍保留。图中的延迟 Prepare/Resolve 回调同样需要拥有其输入，单纯复制一个引用捕获的 callable 不会延长被引用对象的生命周期。
 
@@ -66,7 +48,7 @@ RHI 线程的任务数不是帧进度。管线观察 RHI 0 的整帧完成，因
 
 | 状态 | 所有权／同步 |
 | --- | --- |
-| 输入、GUI、Viewer 设置、显示统计、文件输出请求 | Main |
+| 输入、GUI、宿主设置、显示统计、文件输出请求 | Main |
 | 场景收集、材质求值、batch planning、阴影布置 | Render |
 | 原生资源准备、图执行、提交与 Device 统计采样 | RHI 0 |
 | 帧请求与输出 | 请求冻结后移交；输出完成后由 Main 消费 |
@@ -108,8 +90,6 @@ ctest --test-dir out/build/debug -R 'cpu_frame_' --output-on-failure
 
 - `cpu_frame_pipeline`：闸门控制的零／混合／最大窗口、慢 RHI 3、无工作线程、有序完成、失败、Main 泵送、重入拒绝和尾帧排空。
 - `cpu_frame_ownership`：两个图都已构建而第一帧尚未准备，在场景移除后仍能执行第一帧的 8 draws，第二帧为 0；检查对应统计、不同清屏像素与原生验证。
-- `cpu_frame_viewer`：同步／异步像素一致、配置与 CLI、最小化恢复和 Resize、尾帧截图、跳帧后 benchmark 身份、移动相机 CSM 图像和 draw 覆盖。CSM 测试副本将地面下移 0.01，避免原场景共面接触处的绘制顺序影响逐像素比较。
-- `cpu_frame_capture`：启用 RenderDoc 的构建中，连续指定帧的异步请求各产生一个正确标记的 RDC；没有运行库时按既有约定跳过。
 
 - `profiling_trace_acceptance`：Tracy 构建中以 2/3 限额采集真实 trace，检查 Main 与 Render/RHI 的对应帧 ID、采样窗口和完整／增量准备计数。
 

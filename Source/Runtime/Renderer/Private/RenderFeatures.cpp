@@ -26,6 +26,15 @@ void FRenderFeatureRegistry::Remove(const std::string& InId) noexcept
 	              });
 }
 
+bool FRenderFeatureRegistry::Contains(std::string_view InId) const
+{
+	return std::ranges::any_of(Factories,
+	                           [&](const auto& InEntry)
+	                           {
+		                           return InEntry.first == InId;
+	                           });
+}
+
 FRenderFeatureList FRenderFeatureRegistry::Create()
 {
 	bSealed = true;

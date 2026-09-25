@@ -2,9 +2,9 @@
 
 ## Frame ownership and selection
 
-Viewer defaults to `FSceneRenderPipeline` with `ESceneRenderPipeline::Deferred`. Main freezes application/material settings; Render declares the complete graph; RHI 0 resolves sources and prepares native resources; the existing frame pipeline records and submits work. Queued graphs retain the resource descriptions/settings they were built with.
+Editor defaults to `FSceneRenderPipeline` with `ESceneRenderPipeline::Deferred`. Main freezes application/material settings; Render declares the complete graph; RHI 0 resolves sources and prepares native resources; the existing frame pipeline records and submits work. Queued graphs retain the resource descriptions/settings they were built with.
 
-`FForwardRenderPipeline` remains the legacy direct-backbuffer API. Viewer `--pipeline forward` instead uses the common linear HDR scene pipeline, making it the reference for Deferred comparisons.
+`FForwardRenderPipeline` remains the legacy direct-backbuffer API. Editor render setting `pipeline=forward` instead uses the common linear HDR scene pipeline, making it the reference for Deferred comparisons.
 
 ```text
 CSM shadow views
@@ -26,7 +26,7 @@ HDR Forward replaces BasePass and Lighting with `Forward/HDR`. Both paths share 
 
 Scene-owned point and spot lights default to [clustered lighting](ClusteredLighting.md). HDR Forward and shared lit transparency query the same per-view lists. `--no-clustered-lighting` restores separate Deferred Lighting followed by sphere/cone volumes, and excludes local lights from Forward/transparency. See [LocalLights.md](LocalLights.md) for attenuation, volume coverage, culling and persistence.
 
-ModelViewer supplies the same perspective-camera metadata used by its projection, so CSM works there as well as in SceneViewer. Both viewers expose the shadow controls.
+The Editor viewport supplies the perspective metadata used by its projection; CSM and debug preview share that exact view.
 
 Stable main view IDs are 1 (primary), 2 (compatibility), 3 (transparent) and 4 (legacy display). CSM uses separate reserved IDs and independent BVH queries. `FForwardPipelineStatistics::MainView()` aggregates routed main geometry; per-view rows remain available.
 
@@ -89,17 +89,6 @@ The session caches one indexed oversized triangle: `(-1,-1), (3,-1), (-1,3)`. Li
 
 RHI has ordered color lists, per-slot formats, independent load/store and sampled render-color textures. Full signatures include each attachment effective sRGB format and participate in PSO and retained draw validation. Recording validates dimensions, ownership, formats/count, aliasing and simultaneous sampling/writing. Graph validation tracks every attachment and rejects undefined reads. Texture initialization is queued through existing graphics/fence ownership without a new CPU idle.
 
-## Viewer and measurement
+## Editor and measurement
 
-```powershell
-out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
-out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Model.json --pipeline forward
-out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json --gbuffer high --gbuffer-debug 2
-python tools/MeasureDeferred.py --samples 500 --warmup 300 --repeats 2
-```
-
-Saved settings: `render_pipeline` (`deferred`/`forward`), `gbuffer_layout` (`compact`/`high`), `exposure`, `gbuffer_debug` (0..6). CLI overrides: `--pipeline`, `--gbuffer`, `--exposure`, `--gbuffer-debug`. Diagnostics supports live pipeline/layout switching and exposure/debug editing.
-
-GPU timing uses completed submission-aligned timestamps. The serialized runner alternates order, verifies ready/nonempty workloads and exact CPU/GPU correspondence, and rejects failed items, validation errors, descriptor/PSO growth or unbounded allocations. Per-pass total sums recorded GPU intervals; it is not presentation latency. `frame_ms` measures Main tick, `cpu_latency_ms` includes queued work. Pipeline preparation includes Render orchestration, RHI geometry and fullscreen binding preparation. Readback acceptance is separate from timing runs.
-
-See [DeferredPerformance.md](DeferredPerformance.md) for measurements and [OpenSpec tasks](../openspec/changes/archive/2026-09-11-add-deferred-render-pipeline/tasks.md) for delivery evidence.
+See [RenderDiagnostics](RenderDiagnostics.md) for GUI, typed Automation settings and reproducible performance tools. Editor supports live pipeline/layout/exposure/debug changes and retained offscreen output. CPU and GPU samples are joined by actual submission identity; viewport extent and work counters must match when comparing pipelines. Readback acceptance is separate from timing.

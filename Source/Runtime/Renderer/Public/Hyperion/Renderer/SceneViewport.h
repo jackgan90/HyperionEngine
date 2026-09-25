@@ -16,6 +16,10 @@ struct FSceneViewportOptions
 	std::optional<bool> ModelBounds;
 	std::optional<bool> LightBounds;
 	std::optional<bool> Animate;
+	std::optional<bool> StatusHud;
+	std::optional<bool> ProfilingHud;
+	std::optional<std::uint32_t> ProfilingCategories;
+	std::optional<std::uint32_t> Visualizer;
 };
 
 struct FSceneViewportState

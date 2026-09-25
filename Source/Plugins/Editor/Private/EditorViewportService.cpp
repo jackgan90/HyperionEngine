@@ -1,5 +1,6 @@
 #include "EditorApplication.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
+#include "Hyperion/Renderer/ViewportRay.h"
 
 namespace Hyperion
 {
@@ -37,6 +38,7 @@ FRenderDiagnostics FEditorPlugin::RenderDiagnostics()
 		                          Snapshot = Device->Statistics();
 	                          }));
 	SetDeviceDiagnostics(Result, Snapshot);
+	SetExecutionDiagnostics(Result, Tasks, FrameIntervalMilliseconds);
 	return Result;
 }
 
@@ -47,6 +49,15 @@ FSceneViewportState FEditorPlugin::ViewportState() const
 	ViewOptions.LightMarkers = bShowLightMarkers;
 	ViewOptions.OutlineMode = static_cast<std::uint32_t>(OutlineSettings.Overlap);
 	ViewOptions.SmoothOutlines = OutlineSettings.bSupersample;
+	ViewOptions.Culling = static_cast<std::uint32_t>(CullingMode);
+	ViewOptions.Frozen = FrozenCullingView.has_value();
+	ViewOptions.InstanceBatching = bInstanceBatching;
+	ViewOptions.ModelBounds = bModelBounds;
+	ViewOptions.LightBounds = bLightBounds;
+	ViewOptions.StatusHud = bShowStatusHud;
+	ViewOptions.ProfilingHud = bShowProfilingHud;
+	ViewOptions.ProfilingCategories = ProfilingCategories;
+	ViewOptions.Visualizer = Rendering.DebugMode;
 	return {ViewCamera, PreviewCamera, ViewOptions, Camera.GetMovementSpeed(ViewCamera), bViewportCameraInitialized,
 	        true};
 }
@@ -72,7 +83,41 @@ void FEditorPlugin::FrameScene()
 void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 {
 	ValidateViewportOptions(InOptions, ViewportState().Options);
+	if (InOptions.Visualizer.value_or(0) && InOptions.Visualizer != Rendering.DebugMode &&
+	    Rendering.Pipeline != "deferred")
+	{
+		throw FSceneEditError("unavailable", "GBuffer visualizers require the Deferred pipeline");
+	}
+	if (InOptions.Frozen.value_or(false) && !FrozenCullingView)
+	{
+		const auto CameraView = PickingCamera();
+		if (!CameraView || !bViewportCameraInitialized || !ViewportSize.Height)
+		{
+			throw FSceneEditError("unavailable", "A ready viewport camera is required before freezing culling");
+		}
+		FrozenCullingView = SceneCameraViewProjection(
+		    ExtractScenePose(CameraView->World), CameraView->Lens, float(ViewportSize.Width) / ViewportSize.Height,
+		    Options.Rendering.bReversedZ ? EDepthConvention::Reversed : EDepthConvention::Standard);
+	}
+	if (InOptions.Frozen && !*InOptions.Frozen)
+	{
+		FrozenCullingView.reset();
+	}
+	CullingMode = static_cast<ESceneCullingMode>(InOptions.Culling.value_or(static_cast<std::uint32_t>(CullingMode)));
+	bInstanceBatching = InOptions.InstanceBatching.value_or(bInstanceBatching);
+	bModelBounds = InOptions.ModelBounds.value_or(bModelBounds);
+	bLightBounds = InOptions.LightBounds.value_or(bLightBounds);
+	bShowStatusHud = InOptions.StatusHud.value_or(bShowStatusHud);
+	bShowProfilingHud = InOptions.ProfilingHud.value_or(bShowProfilingHud);
+	ProfilingCategories = InOptions.ProfilingCategories.value_or(ProfilingCategories);
+	if ((InOptions.Exposure && *InOptions.Exposure != Exposure) ||
+	    (InOptions.Visualizer && *InOptions.Visualizer != Rendering.DebugMode))
+	{
+		++RenderSettingsRevision;
+	}
 	Exposure = InOptions.Exposure.value_or(Exposure);
+	Rendering.Exposure = Exposure;
+	Rendering.DebugMode = InOptions.Visualizer.value_or(Rendering.DebugMode);
 	bShowLightMarkers = InOptions.LightMarkers.value_or(bShowLightMarkers);
 	OutlineSettings.Overlap = static_cast<EOutlineOverlapMode>(
 	    InOptions.OutlineMode.value_or(static_cast<std::uint32_t>(OutlineSettings.Overlap)));

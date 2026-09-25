@@ -15,7 +15,7 @@
 
 ## 组合与可选性
 
-Viewer、Editor 的可执行入口位于 `Applications`，只选择 D3D12 provider 并调用各自的启动组合。业务位于 `Plugins/Viewer`、`Plugins/Editor`，不直接包含 native backend。`Plugins/ApplicationServices` 提供以下逻辑插件，不要求每个逻辑插件对应一个二进制文件。
+Editor 的可执行入口位于 `Applications`，只选择 D3D12 provider 并调用启动组合。业务位于 `Plugins/Editor`，不直接包含 native backend。`Plugins/ApplicationServices` 提供以下逻辑插件，不要求每个逻辑插件对应一个二进制文件。
 
 | ID | 所有权 / 服务 | 依赖 |
 |---|---|---|
@@ -28,9 +28,8 @@ Viewer、Editor 的可执行入口位于 `Applications`，只选择 D3D12 provid
 | `graphics` | Device、Swapchain、ShaderCompiler、RenderSession、渲染扩展注册表 | assets、window |
 | `gui` | FGui、通用 FGuiRenderer | graphics |
 | `contact-shadows` | 向图形服务注册 contact-shadow 工厂 | graphics |
-| `triangle` / `model-viewer` / `scene-viewer` | IScenePlugin；后者另有 ISceneEditor | graphics，按需 assets |
+| `triangle` | 独立实验 IScenePlugin | graphics |
 | `debug-ui` | 诊断面板事件订阅 | gui |
-| `viewer` | 输入、帧提交、截图、实验设置 | graphics；可选 scene、GUI、capture |
 | `editor` | 文档、历史、浏览相机、面板、viewport | gui |
 | `renderdoc` | 可选 FFrameCapture | 先于 window、graphics |
 
@@ -44,13 +43,13 @@ Editor 的独立资产窗口由 `editor` 插件中的私有窗口宿主管理，
 
 自动化功能接入还须遵守 [Automation.md](Automation.md)：GUI 与 agent 使用共享领域服务；适配器在 `automation-session` 前注册、在它之后释放。会话停止接收并排空已提交任务后才能销毁 provider。`Requires` 不会自动选择提供方插件，必需的启动选择由 `Dependencies` 声明。不得让一个适配器关闭其他插件拥有的共享服务。
 
-启动按拓扑顺序执行 `Start(FPluginContext&)`。宿主在 Main 泵消息后调用 `Update(FPluginUpdate)`，提供 frame、elapsed、delta；更新不以窗口可绘制为前提。Editor 最小化时仍推进场景加载和保存；Viewer 的场景接口接收 delta，相机推进在场景插件内部完成。
+启动按拓扑顺序执行 `Start(FPluginContext&)`。宿主在 Main 泵消息后调用 `Update(FPluginUpdate)`，提供 frame、elapsed、delta；更新不以窗口可绘制为前提。Editor 最小化时仍推进场景加载和保存。
 
 停止先断开所有事件，再逆序 `Quiesce()`，阻止生产新帧并汇合已提交帧；随后逐个逆序执行作用域 cleanup、`Stop()`、移除服务、析构实例。消费者清理期间其 provider 仍然存活。失败的 Start 也执行对应清理。`Defer()` 注册按逆序调用的 cleanup，某个 cleanup 抛错不会阻止其余清理，宿主最终报告第一个清理错误。`TrackPluginTask()` 可将任务 join 纳入该作用域；任务必须在捕获的插件状态销毁前完成。
 
-生命周期、服务查找和事件分发属于创建宿主的 Main 线程。服务的具体方法仍须遵守自身线程契约。不得把 Context 或服务注册表作为 Render/RHI 的共享可变状态：Main 注入长寿命服务引用，跨域工作传递 owned snapshot。Viewer 仍通过 FFramePipeline 控制 Main/Render/RHI lead；GPU native handle 的保活仍由资源协调器和 fence 负责。Quiesce 或 CPU task 完成不等于 GPU 完成。
+生命周期、服务查找和事件分发属于创建宿主的 Main 线程。服务的具体方法仍须遵守自身线程契约。不得把 Context 或服务注册表作为 Render/RHI 的共享可变状态：Main 注入长寿命服务引用，跨域工作传递 owned snapshot。FFramePipeline 可供宿主控制 Main/Render/RHI lead；Editor 当前采用逐帧汇合；GPU native handle 的保活仍由资源协调器和 fence 负责。Quiesce 或 CPU task 完成不等于 GPU 完成。
 
-最终 GPU validation 检查归拥有 Device 的 `graphics` 插件：消费者和 RenderSession 关闭后，在 RHI 0 等待 GPU、释放 Swapchain、读取最终统计并销毁 Device，再回 Main 向 FApplicationControl 报告错误。等待 GPU 或读取统计失败时，也须在 RHI 0 按 Swapchain、Device 的顺序释放资源。Viewer/Editor 较早的统计仅覆盖各自停止时刻，不能替代这项最终检查。
+最终 GPU validation 检查归拥有 Device 的 `graphics` 插件：消费者和 RenderSession 关闭后，在 RHI 0 等待 GPU、释放 Swapchain、读取最终统计并销毁 Device，再回 Main 向 FApplicationControl 报告错误。等待 GPU 或读取统计失败时，也须在 RHI 0 按 Swapchain、Device 的顺序释放资源。Editor 较早的统计仅覆盖各自停止时刻，不能替代这项最终检查。
 
 资源插件先建立独立的 `/Engine`，没有 Game 根仍提供完整服务。消费内容状态的插件须通过 `IContentRootParticipant` 参与换根，并用 `Context.Defer` 在销毁前撤销注册。Main 上统一检查 dirty/busy，全部通过后才释放旧文档、任务和渲染引用。GUI 弹窗与 automation 参数只表达策略，共用 `FContentRootService`；Runtime/Application 不承载换根逻辑。详见 [ContentFileSystem.md](ContentFileSystem.md)。
 
@@ -60,7 +59,7 @@ Editor 的独立资产窗口由 `editor` 插件中的私有窗口宿主管理，
 
 `Context.Subscribe<T>()` / `Publish<T>()` 是 Main 上的同步类型化事件；回调只在本次调用期间借用事件对象，不能跨线程保存引用。订阅随作用域断开；停止后不能重新订阅或发送事件。工作线程的完成通知先通过 Tasks 投递到 Main，再发布事件。
 
-需要返回结果或表达必需能力时使用接口调用，例如 IScenePlugin 的 Input、Update、Ready、Status、Error，以及 ISceneEditor 的编辑和保存能力。通知或多个独立贡献者使用事件。`FDebugPanelEvent` 将诊断数据和操作结果连接到可选 DebugUI；`FGuiPanelEvent` 在 BeginFrame/Render 之间允许 Viewer、Editor 的扩展绘制额外面板。Editor 内置文档面板目前仍是同一个内聚插件，没有拆成每面板独立 DLL。
+需要返回结果或表达必需能力时使用接口调用，例如 IScenePlugin 的 Input、Update、Ready、Status、Error，以及 ISceneEditor 的编辑和保存能力。通知或多个独立贡献者使用事件。`FDebugPanelEvent` 将诊断数据和操作结果连接到可选 DebugUI；`FGuiPanelEvent` 在 BeginFrame/Render 之间允许 Editor 的扩展绘制额外面板。Editor 内置文档面板目前仍是同一个内聚插件，没有拆成每面板独立 DLL。
 
 ## 渲染扩展
 
@@ -72,25 +71,18 @@ Contact-shadow feature 自行管理 HZB 请求、visibility mask、debug preview
 
 ## 配置与构建
 
-`plugins` 决定实验插件；`disabled_plugins` 具有最终优先级，可阻止被依赖拉起的插件。Viewer profile 默认加入 viewer 和 contact-shadows，Editor profile 默认加入 editor 和 contact-shadows；两个普通 profile 同时请求 automation-scene 和 automation-local，kernel-only 不请求它们。保存的 `scene_source`、`model_source` 只是数据，不再修改插件选择；`--scene`、`--model` 作为显式便捷命令仍选择对应插件，但不能覆盖 disable。诊断 UI 中修改列表在重启后生效。
+Editor 默认选择 editor、contact-shadows、automation-scene 和 automation-local。`--disable-plugin` 具有最终优先级，`--kernel-only` 仅运行最小宿主；插件选择只发生在启动时。
 
 Editor 的 **Edit > Editor preference > Enable RenderDoc capture** 是独立保存的显式启动选择，默认关闭。启用时在设备创建前请求 `renderdoc`，通过可选 `FFrameCapture` 服务供 viewport 使用；`--disable-plugin renderdoc` 仍具有最终优先级。运行中关闭偏好只隐藏操作入口，不卸载插件；首次启用需要重启。详见 [Editor](Editor.md#editor-preference-与抓帧)。
 
 ```powershell
-# 无窗口、无资产挂载、无 GPU；可用于验证宿主
-hyperion_viewer --kernel-only --frames 8
 hyperion_editor --kernel-only --frames 8
-
-# 运行时静态选择（重启生效）
-hyperion_viewer --asset-root ../HyperionAssets --disable-plugin contact-shadows
-hyperion_viewer --asset-root ../HyperionAssets --disable-plugin scene-viewer
-
-# 不编译以下可选实验插件；应用仍可运行清屏和 Editor
-cmake -S . -B out/build/vs2022 -DHYP_ENABLE_TRIANGLE=OFF -DHYP_ENABLE_MODEL_VIEWER=OFF -DHYP_ENABLE_SCENE_VIEWER=OFF -DHYP_ENABLE_DEBUG_UI=OFF
+hyperion_editor --disable-plugin contact-shadows
+cmake -S . -B out/build/vs2022 -DHYP_ENABLE_TRIANGLE=OFF -DHYP_ENABLE_DEBUG_UI=OFF
 ```
 
-上述四个开关默认 ON，RenderDoc 仍由默认 OFF 的 HYP_ENABLE_RENDERDOC 控制。被排除的库不进入 Viewer 链接；配置请求未编译插件会给出缺失诊断。关闭任一实验库时 CTest 使用 PluginProfiles.cmake 中不依赖这些库的宿主/运行时验收集；完整图形、场景和 GUI 回归使用默认全部启用的构建。`plugin_runtime` 覆盖生命周期和服务作用域，`plugin_applications` 覆盖两个应用的空宿主、缺失、禁用和残留数据配置，Deferred 回归覆盖阶段顺序及无 contact feature 的光照路径。
+Triangle 和 DebugUI 是可选独立实验库；RenderDoc 与 Tracy 默认关闭。CTest 只对实际依赖可选库的测试作条件注册，不因关闭一个插件而隐藏其他模块测试。`plugin_runtime` 覆盖依赖与生命周期，`plugin_applications` 覆盖 Editor 的空宿主、显式禁用和缺失输出失败。
 
 ## 运行应用自动化
 
-`automation-local` 持有 listener、发现记录和 target sessions，支持 `--disable-plugin automation-local`。`automation-scene` 可选依赖 `FSceneEditDocument` 并在 automation-session 封闭目录前注册；Editor/Scene Viewer 发布与 GUI 共用的实例。网络请求只在插件 Main Update 边界执行，不能成为被 GUI 内部 Wait 重入执行的任意 Main task；关闭监听后先排空 session，再销毁领域服务。不得在 Runtime/Application 添加第二套监听/功能生命周期。缺失 scene provider 只使相关操作 unavailable。平台通信与跨设备扩展见 [AutomationConnections](AutomationConnections.md)。
+`automation-local` 持有 listener、发现记录和 target sessions，支持 `--disable-plugin automation-local`。`automation-scene` 可选依赖 `FSceneEditDocument` 并在 automation-session 封闭目录前注册；Editor 发布与 GUI 共用的实例。网络请求只在插件 Main Update 边界执行，不能成为被 GUI 内部 Wait 重入执行的任意 Main task；关闭监听后先排空 session，再销毁领域服务。不得在 Runtime/Application 添加第二套监听/功能生命周期。缺失 scene provider 只使相关操作 unavailable。平台通信与跨设备扩展见 [AutomationConnections](AutomationConnections.md)。

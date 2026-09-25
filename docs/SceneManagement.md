@@ -1,34 +1,6 @@
-# Scene management and Scene Viewer
+# Scene management
 
-## Run
-
-From the repository root:
-
-```powershell
-./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Showcase.hasset --scene-culling bvh
-```
-
-`experiments/Scene.json` opens the Khronos Sponza atrium at a fixed initial browsing view, with panels initially visible (Tab toggles them). The Scene panel selects native sky assets and edits sky intensity, yaw and background visibility; see [SkyLighting.md](SkyLighting.md) for importing custom HDR/EXR environments and the three shipped options. Published sample content comes from HyperionAssets; mount setup and explicit source recovery are described in [ContentFileSystem.md](ContentFileSystem.md). See [Sponza migration](SponzaMigration.md) for source provenance and view calibration. The initial browsing view has a vertical field of view of approximately 41.78 degrees. Projection and CSM use the current viewport lens; no authored camera object is needed. ModelViewer explicitly creates its own camera with a 1-radian vertical field of view.
-
-The separately selectable Showcase example contains 78 model instances plus one shared ground slab (79 instances total). `../HyperionAssets/.cache/Sources/Models/Ground.gltf` reuses the repository-generated Showcase cube geometry with a matte gray material and embeds its buffer, so no external download or texture is required. The slab spans X=[-35,35], Z=[-40,5], with its top at Y=0 and thickness 0.4. Showcase instances are raised to Y=0.192 to place their scaled pedestal bottoms on the slab; Interleaved instances already start at Y=0. All 78 model instances sit on the top surface and fit within its edges. `--scene-culling` accepts `none`, `linear` and `bvh`. Existing ModelViewer configuration, `--model`, capture and executable names remain supported. A configuration cannot select both model_source and scene_source.
-
-| Control | Action |
-| --- | --- |
-| Right-button drag / wheel | Orbit around target / dolly |
-| W/S, A/D | Hold to move forward/back along the view direction or strafe left/right |
-| Q/E | Hold to move down/up along world Y |
-| Arrows / Page Up, Page Down | Continuous aliases for WASD / E,Q |
-| Home / C / Tab | Fit all loaded visible models / cycle culling / toggle panels |
-| Insert / Delete / Space | Duplicate one selected node / remove its subtree / toggle selected model visibility |
-| Scene panel | Hierarchical node selection, typed properties, creation, reparenting, two removal modes and model animation |
-| Freeze culling camera | Retain rejection view while display camera moves |
-| Show model bounds | Overlay bounds; diagnostic projection does not determine visibility |
-
-Add reuses a loaded asset and works after deleting every instance. The Save edited scene button writes the edited snapshot asynchronously to <name>.edited.hasset; --save-scene PATH selects a CLI output. Stable IDs, parent links, local matrices, enabled/visibility flags, material overrides, every camera/light payload, the three scene selections and optional initial view persist. Ordinary navigation never updates this preset or authored camera objects. Fit adjusts the independent browsing lens to the model bounds.
-
-`FSceneInstance::RegisterModelAsset` prepares additional native model references on Main without creating a node or changing the document revision. Identical resolved references share preparation, visible through `GetAssets`; `AddNode` consumes the returned asset ID. This also works in a new empty instance. Snapshots emit only references used by live nodes, independent of the originally loaded manifest. Unused failed or cached registrations do not block unrelated scene models. Load/Close cancel and join all registrations. The Editor uses this path for [Place Object](Editor.md#放置对象).
+Editor opens native scenes through `--scene` or File > Open Scene. Model assets open in the asset workspace; import source data with AssetTool. Content roots and examples are described in [ContentFileSystem](ContentFileSystem.md). Render quality and viewport diagnostics are described in [RenderDiagnostics](RenderDiagnostics.md).
 
 ## Source manifest (offline import)
 
@@ -79,7 +51,7 @@ Renderer's `MakeViewportRay` uses normalized image coordinates (top-left origin)
 
 The transitional model `Find` projects effective visibility. A roundtrip `Update` preserves authored model visibility when that projected bit is unchanged; use `SetModelVisible` to set the local flag explicitly while the node or an ancestor is disabled. Name, material and world-transform edits do not persist inherited hiding.
 
-Both SceneViewer and ModelViewer own this entity. SceneViewer owns an independent `FSceneCameraView`, initialized from InitialView or deterministic bounds framing, with a stable empty-scene fallback. Its navigation never edits scene objects. ModelViewer retains its selected scene-camera workflow. Plugins keep transient gesture state, selection and diagnostics. CPU Scene remains independent of Renderer/RHI.
+Editor owns this entity and an independent `FSceneCameraView`, initialized from InitialView or deterministic bounds framing, with a stable empty-scene fallback. Navigation never edits authored scene objects. Plugins keep transient gesture state, selection and diagnostics. CPU Scene remains independent of Renderer/RHI.
 
 ## Ownership and synchronization
 
@@ -97,11 +69,11 @@ Apply all Main edits and completed loads, call `Tick()`/bridge `Flush()`, then `
 
 `FSceneViewRequest` supplies dimensions, viewport, depth convention, view identity and an optional camera handle. An unavailable explicit camera falls back to the selected default only when `bAllowCameraFallback` is true (the runtime default); Editor preview sets it false. A foreign-scene handle is an error. `CameraOverride` carries an independent view value. With no usable view, pipelines clear the current output and continue GUI/completion. A camera uses local -Z forward and +Y up; pose extraction orthonormalizes inherited scale. `FocusDistance` controls interaction, not projection.
 
-Global lighting uses the selected `MainDirectionalLight` and `EnvironmentLight`. Unselected global lights remain editable candidates. Disabled/deleted/unselected global lights contribute zero; no defaults reappear. Every enabled point/spot light independently participates in deferred local lighting after visibility rejection; these lights do not require a main-light selection. Surface-to-light is the negative world forward of the selected directional light. Color times intensity supplies radiance. CSM additionally requires nonzero radiance, node `castShadows` and the pipeline shadow switch. Shadow resolution, bias, distance and preview remain pipeline quality settings. `--shadow-light` applies one scene edit after loading; benchmark light motion edits the same node.
+Global lighting uses the selected `MainDirectionalLight` and `EnvironmentLight`. Unselected global lights remain editable candidates. Disabled/deleted/unselected global lights contribute zero; no defaults reappear. Every enabled point/spot light independently participates in deferred local lighting after visibility rejection; these lights do not require a main-light selection. Surface-to-light is the negative world forward of the selected directional light. Color times intensity supplies radiance. CSM additionally requires nonzero radiance, node `castShadows` and the pipeline shadow switch. Shadow resolution, bias, distance and preview remain pipeline quality settings. `light.main.set` and light benchmark motion edit the same scene node through the document service.
 
 Bound sessions protect `Engine.Scene.MainDirectionalLightDirection`, `Engine.Scene.MainDirectionalLightColor`, `Engine.Scene.AmbientColor`, `Engine.View.ViewProjection` and `Engine.View.CameraPosition` from custom provider/Global/Frame/Scene/View/pass injection. Custom unrelated material inputs remain supported. Unbound explicit primitive/view fixtures retain `FreezeFrame()`.
 
-The scene tree offers Group/Camera/DirectionalLight/EnvironmentLight/PointLight/SpotLight creation, single-node duplication, typed properties and explicit default/main selection. Reparent requires KeepLocal or KeepWorld; removing one node while keeping children preserves their world transforms. Invalid cycles/inverses are visible errors. Empty model collections can still edit and save cameras/lights and add a loaded model again.
+The scene tree offers Group/Camera/DirectionalLight/EnvironmentLight/PointLight/SpotLight creation, single-node duplication, typed properties and explicit default/main selection. Reparent requires KeepLocal or KeepWorld; removing one node while keeping children preserves their world transforms. Invalid cycles/inverses are visible errors. Empty model collections can still edit and save cameras/lights and place native models through the shared placement service.
 
 ## Visibility flow
 
@@ -133,10 +105,9 @@ None disables spatial rejection but retains hidden/resource validation. Linear/B
 - `scene_spatial_visibility`: 4097 groups, randomized updates/removal, BVH/linear equivalence and multi-item early collection.
 - `scene_rendering`: real GPU bridge sharing, initial transform, reattachment and no-frame removal.
 - `render_resources`: pending bounds becoming indexed and clip-space fallback.
-- `scene_viewer_controls`: real readbacks for hide/move/duplicate/remove, frozen view, fit and empty-scene recovery.
-- `scene_viewer_acceptance`: identical PNGs across modes for 514 instances, GUI, malformed manifests and isolated asset failure.
-
-Build-local screenshots/logs live in `out/build/<preset>/scene-acceptance`. Measured Debug fixture: 514 groups / 2053 registered primitives. None collected/submitted 2053 items; Linear tested 514 groups and collected 5 primitives; BVH visited 19 nodes, tested 2 leaves and collected the same 5. Images were byte-identical. These are fixture counts, not a general frame-rate guarantee. Final evidence is recorded in the archived [verification](../openspec/changes/archive/2026-09-07-add-scene-management/verification.md) and [independent review](../openspec/changes/archive/2026-09-07-add-scene-management/independent-review.md).
+- `scene_navigation`: shared controller navigation, resource-sharing structural history, save/reload and save failure isolation.
+- `editor_render_acceptance`: live pipeline, depth, optional feature, culling and benchmark validation.
+- `automation_scene`: shared structural transactions, rejection, history and selection restoration.
 
 ## Scene frame ownership
 
@@ -146,6 +117,6 @@ A resolved scene frame is immutable and authorized only as its original shared i
 
 ### Reusable camera navigation
 
-`FSceneCameraController` in `Hyperion/Renderer/SceneCameraController.h` provides WASDQE, right-button orbit and wheel dolly without a SceneViewer or GUI dependency. Create one per viewport. On Main, call `Input(ViewCamera, Events, bMouseCaptured, bKeyboardCaptured)` then `Advance(ViewCamera, DeltaSeconds)` before freezing the view request. Scene overloads remain available for callers intentionally controlling an authored camera. Call `Reset()` when deactivating or minimizing a viewport, changing its scene or shutting down. Input also clears movement on focus loss or keyboard capture. A fresh press resumes after interruption.
+`FSceneCameraController` in `Hyperion/Renderer/SceneCameraController.h` provides WASDQE, right-button orbit and wheel dolly without an application or GUI dependency. Create one per viewport. On Main, call `Input(ViewCamera, Events, bMouseCaptured, bKeyboardCaptured)` then `Advance(ViewCamera, DeltaSeconds)` before freezing the view request. Scene overloads remain available for callers intentionally controlling an authored camera. Call `Reset()` when deactivating or minimizing a viewport, changing its scene or shutting down. Input also clears movement on focus loss or keyboard capture. A fresh press resumes after interruption.
 
 Movement needs no mouse button. Speed is `max(1, FocusDistance)` world units/second; combined directions are normalized. Frame time is capped at 0.1 seconds to limit jumps after stalls. Release stops immediately without inertia. RMB continues to orbit the focus pivot; wheel changes focus distance.

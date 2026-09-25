@@ -3,6 +3,7 @@
 ## Purpose
 Define optional directional contact visibility from hierarchical screen-space depth, Deferred composition with CSM, runtime controls and scene validation.
 ## Requirements
+
 ### Requirement: Directional hierarchical screen tracing
 Renderer SHALL generate a full-resolution contact visibility mask for valid Deferred opaque/masked points by tracing finite rays toward the selected main directional light using HZB traversal and full-resolution depth confirmation. Reconstruction, thickness and bias SHALL respect camera/viewport and both depth conventions. Offscreen, invalid and unresolved samples SHALL yield neutral visibility with bounded execution.
 
@@ -29,7 +30,7 @@ DebugUI SHALL dynamically control contact enablement and tracing parameters thro
 - **THEN** new frames follow the new settings, old frames retain their published inputs, and inactive frames perform no contact-driven HZB generation
 
 ### Requirement: Sponza acceptance and measured costs
-Delivery SHALL demonstrate the effect on the current ready SceneViewer Sponza scene with GUI switching, both depth conventions, static/moving cameras and Debug/Release validation. Evidence SHALL distinguish contact-mask behavior from CSM artifacts that minimum visibility cannot correct and report measured per-pass GPU costs and resource stability.
+Delivery SHALL demonstrate the effect on the current ready Editor Sponza scene with GUI switching, both depth conventions, static/moving cameras and Debug/Release validation. Evidence SHALL distinguish contact-mask behavior from CSM artifacts that minimum visibility cannot correct and report measured per-pass GPU costs and resource stability.
 
 #### Scenario: Accepted scene run
 - **WHEN** Sponza assets and material bindings are ready and contact is toggled under a fixed camera/light

@@ -3,6 +3,7 @@
 ## Purpose
 Provide low-overhead engine-owned CPU and GPU profiling, selective runtime controls, targeted permanent instrumentation and reproducible captures for locating performance bottlenecks.
 ## Requirements
+
 ### Requirement: Engine-owned scoped instrumentation
 The engine SHALL provide one-statement CPU scope/function macros and optional categories, values and plots without public vendor includes. Scopes SHALL retain caller file, function and line and end on lexical exit, including exceptions. Repeated sites SHALL use stable static identity.
 
@@ -28,13 +29,6 @@ The engine SHALL provide one-statement CPU scope/function macros and optional ca
 #### Scenario: Sampling and offline baseline
 - **WHEN** runtime profiling is disabled
 - **THEN** system sampling is stopped or remains unstarted, and documentation distinguishes idle compiled-in services from the compiled-out no-listener baseline
-
-### Requirement: Viewer profiling controls
-Viewer SHALL expose session-local CLI and GUI controls for profiling with visible compiled/active/connected state. Unsupported profiling requests SHALL fail clearly. Capture windows SHALL support warmup and a bounded number of frames without changing experiment persistence or workload behavior.
-
-#### Scenario: Toggle during interaction
-- **WHEN** the user changes the profiling controls
-- **THEN** the displayed state and subsequent eligible events reflect that change without restarting the rendering application
 
 ### Requirement: Targeted permanent coverage and counters
 Owned code SHALL contain permanent scopes at selected likely hotspots across frame work, scene/material preparation, RHI validation/recording and waits. Instrumentation SHALL include draw validation before recording and distinguish Present/fence waits from CPU preparation. Material evaluation paths and existing provider/constant/resource cache metrics SHALL be published as frame-correlated values or plots.
@@ -76,7 +70,7 @@ Validation SHALL compare compiled-out, runtime-off and active capture costs usin
 - **THEN** evidence includes scope overhead and frame mean/tail timings with workload/draw counts, and does not claim unmeasured zero-cost runtime behavior
 
 ### Requirement: Material optimization evidence
-The engine SHALL expose low-overhead material work and cache statistics sufficient to distinguish shared reuse, actual evaluation, expensive constant lookup, packing/upload and bounded cache retention. Optimization verification SHALL record reproducible before/after frame timing and comparable workload/build metadata and SHALL include engine-level frequency and cache-pressure tests independent of the Viewer application.
+The engine SHALL expose low-overhead material work and cache statistics sufficient to distinguish shared reuse, actual evaluation, expensive constant lookup, packing/upload and bounded cache retention. Optimization verification SHALL record reproducible before/after frame timing and comparable workload/build metadata and SHALL include engine-level frequency and cache-pressure tests independent of the Editor application.
 
 #### Scenario: Before and after comparison
 - **WHEN** material performance improvements are reported
@@ -89,3 +83,10 @@ The engine SHALL expose low-overhead material work and cache statistics sufficie
 #### Scenario: Closed cache statistics
 - **WHEN** resource service closure has destroyed the material constant cache and its pages
 - **THEN** live page count and page capacity statistics are zero while cumulative work counters remain available
+
+### Requirement: Editor profiling controls
+Editor SHALL expose session-local CLI and GUI controls for profiling with visible compiled/active/connected state. Unsupported profiling requests SHALL fail clearly. Capture windows SHALL support warmup and a bounded number of frames without changing scene or asset persistence or workload behavior.
+
+#### Scenario: Toggle during interaction
+- **WHEN** the user changes the profiling controls
+- **THEN** the displayed state and subsequent eligible events reflect that change without restarting the rendering application

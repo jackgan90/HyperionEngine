@@ -20,19 +20,19 @@ RelWithDebInfo 使用 `/O2` 优化、Release CRT（`/MD`）和 `NDEBUG`；自有
 ## 在解决方案里工作
 
 1. 打开 `Hyperion.sln`，选择 `Debug | x64`、`Release | x64` 或 `RelWithDebInfo | x64`。
-2. 默认启动项目为 `hyperion_viewer`，按 F5 编译并调试渲染器；Ctrl+F5 不附加调试器运行。已有 `.suo` 的启动偏好可能优先，此时手动设一次启动项目。
-3. `Hyperion/Applications` 放 Editor、Viewer 和独立 AssetTool，`Hyperion/Runtime` 放运行时模块，`Hyperion/Backends` 放图形后端，`Hyperion/Plugins` 放实验插件，`Hyperion/Tests` 放测试，`ThirdParty` 放依赖。模块源码显示在各自的 `Public` / `Private` 筛选器中；Viewer 项目也列出 shader、实验配置和文档。将 `hyperion_editor` 设为启动项目即可运行编辑器。
+2. 默认启动项目为 `hyperion_editor`，按 F5 编译并调试渲染器；Ctrl+F5 不附加调试器运行。已有 `.suo` 的启动偏好可能优先，此时手动设一次启动项目。
+3. `Hyperion/Applications` 放 Editor、AssetTool 与 Automation，`Hyperion/Runtime` 放运行时模块，`Hyperion/Backends` 放图形后端，`Hyperion/Plugins` 放实验插件，`Hyperion/Tests` 放测试，`ThirdParty` 放依赖。模块源码显示在各自的 `Public` / `Private` 筛选器中。
 4. HLSL 在工程里用于查看/编辑，实际由引擎 DXC wrapper 编译，不走 Visual Studio 的默认 FXC 规则。
 
-Viewer 的调试工作目录为仓库根目录，在项目属性的“调试 → 命令参数”中填写 `--asset-root ../HyperionAssets --config experiments/Triangle.json` 即可运行示例。Game 目录不会自动选择；三角形演示的 Shader 也来自该资产目录。Editor 通过目录选择或保存的偏好设置自己的根目录。生成的可执行文件在 `out/build/vs2022/bin/Debug`、`bin/Release` 或 `bin/RelWithDebInfo`，所需 DLL 会自动复制到旁边。
+Editor 的调试工作目录为仓库根目录，在项目属性的“调试 → 命令参数”中填写 `--asset-root ../HyperionAssets --scene /Game/Scenes/Sponza.hasset` 即可运行示例。Game 目录不会自动选择；Editor 通过目录选择或保存的偏好设置自己的根目录。生成的可执行文件在 `out/build/vs2022/bin/Debug`、`bin/Release` 或 `bin/RelWithDebInfo`，所需 DLL 会自动复制到旁边。
 
-Viewer 构建不再转换样例来源；示例从挂载的 HyperionAssets 加载。`native_sample_content` 保留为兼容目标，显式重建使用 `tools/PrepareContent.py`。源导入集成测试需要预先恢复来源缓存。参见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+Editor 构建不再转换样例来源；示例从挂载的 HyperionAssets 加载。`native_sample_content` 保留为兼容目标，显式重建使用 `tools/PrepareContent.py`。源导入集成测试需要预先恢复来源缓存。参见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 ## 在 VS 中跑测试
 
-展开 `Hyperion/Tests`，**右键 `hyperion_check` → 生成（Build）**。它会先构建测试和 Viewer，再按当前配置运行完整 CTest 套件；失败会让该项目构建失败。输出窗口显示各项测试结果，日志位于构建目录的 `Testing/Temporary/LastTest.log`。
+展开 `Hyperion/Tests`，**右键 `hyperion_check` → 生成（Build）**。它会先构建测试和 Editor，再按当前配置运行完整 CTest 套件；失败会让该项目构建失败。输出窗口显示各项测试结果，日志位于构建目录的 `Testing/Temporary/LastTest.log`。
 
-需要调试单个 C++ 测试时，将 `core_tests`、`task_tests`、`config_tests`、`asset_tests`、`shader_tests`、`graph_tests` 、`gui_tests`、`rhi_contract_tests` 或 `d3d12_device_tests` 设为启动项目并按 F5。测试调试工作目录与 CTest 保持一致，避免把临时文件写入源码目录。调试结束后切回 `hyperion_viewer`。
+需要调试单个 C++ 测试时，将 `core_tests`、`task_tests`、`config_tests`、`asset_tests`、`shader_tests`、`graph_tests` 、`gui_tests`、`rhi_contract_tests` 或 `d3d12_device_tests` 设为启动项目并按 F5。测试调试工作目录与 CTest 保持一致，避免把临时文件写入源码目录。调试结束后切回 `hyperion_editor`。
 
 当前测试是由 CTest 驱动的独立可执行程序和 Python 验收脚本，没有接入 VS Test Explorer 适配器，所以完整套件通过 `hyperion_check` 运行。GPU 测试需要可用的 DX12 硬件和桌面会话。右键执行即可，不需要先手动生成整个解决方案。
 
@@ -68,7 +68,7 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 
 ## Tracy 与网络监听
 
-`HYP_ENABLE_TRACY` 默认 `OFF`。普通 Viewer 和测试 exe 保留应用时钟、内存统计和 GUI 帧间隔曲线；scope 宏被编译移除，不再执行本地 scope 累计计时，也不启动 Tracy 的 TCP 监听和 UDP 发现广播。以前强制启用的 `TRACY_ENABLE=ON` 缓存会在重新配置时按此选项更新；需要重新编译已有 exe 才生效。
+`HYP_ENABLE_TRACY` 默认 `OFF`。普通 Editor 和测试 exe 保留应用时钟、内存统计和 GUI 帧间隔曲线；scope 宏被编译移除，不再执行本地 scope 累计计时，也不启动 Tracy 的 TCP 监听和 UDP 发现广播。以前强制启用的 `TRACY_ENABLE=ON` 缓存会在重新配置时按此选项更新；需要重新编译已有 exe 才生效。
 
 需要连接 Tracy Profiler 时显式开启，结束后恢复关闭：
 
@@ -85,8 +85,8 @@ ctest --test-dir out/build/vs2022 -C Debug --output-on-failure
 
 Tracy 的 `TRACY_ON_DEMAND` 只延迟采集，仍会监听连接，因此启用 Tracy 的 exe 可能触发 Windows 防火墙授权。Windows 的此类提示主要针对入站监听，是否再次提示取决于 exe 路径、网络配置文件、已有防火墙规则和系统策略，并非所有出站联网都弹窗，详见 [微软防火墙规则说明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules)。此构建选项只控制 Tracy；显式加载 RenderDoc 或以后引入其他网络功能时，应由对应功能按需启用。构建脚本不修改防火墙规则或通知设置。
 
-默认关闭 Tracy 时，CTest 的 `offline_startup` 会启动真实 Viewer，在启动及开始渲染后检查该进程的 TCP/UDP 端点，防止默认监听再次引入。
+默认关闭 Tracy 时，CTest 的 `offline_startup` 会启动真实 Editor，在启动及开始渲染后检查该进程的 TCP/UDP 端点，防止默认监听再次引入。
 
 性能测量推荐独立的 `profile` preset：`.\tools\Build.ps1 -Preset profile` 使用 Release 优化并给自有模块生成 `/Zi`、可执行文件链接 `/DEBUG:FULL /INCREMENTAL:NO`。编入支持后仍需 `--profile` 或 GUI 开关启用 scope；细节、GPU 和系统采样分别选择。新配置的 Tracy 默认仅监听 loopback，并关闭发现广播；已有显式缓存选择保持不变。完整采集、导出命令与开销证据见 [性能分析](Profiling.md)。
 
-可选 RenderDoc 支持通过 `-RenderDoc` 编入、`-NoRenderDoc` 关闭；不指定时保留 CMake 缓存。运行时仍需 `--renderdoc` 加载插件，详见 [RenderDoc 抓帧](RenderDoc.md)。测试入口与结果记录约定见 [验证指南](Verification.md)。
+可选 RenderDoc 支持通过 `-RenderDoc` 编入、`-NoRenderDoc` 关闭；不指定时保留 CMake 缓存。在 Editor 的 **Edit > Editor preference > Enable RenderDoc capture** 中启用并重启后加载插件，详见 [RenderDoc 抓帧](RenderDoc.md)。测试入口与结果记录约定见 [验证指南](Verification.md)。

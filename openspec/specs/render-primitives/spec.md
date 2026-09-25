@@ -4,6 +4,7 @@
 Define persistent Render-owned scene primitives, Main bindings, owned state synchronization, frame collection and failure-safe lifecycle contracts.
 
 ## Requirements
+
 ### Requirement: Persistent render primitives
 The Renderer SHALL represent scene-renderable instances as persistent render primitives, separate from CPU assets, Main-thread logical objects and frame draw packets. Primitive collection SHALL support zero or multiple render items without requiring a fixed correspondence between primitive count and GPU draw count.
 
@@ -24,7 +25,7 @@ The Render domain SHALL exclusively construct, register, mutate and destroy full
 
 #### Scenario: Independent primitive implementation
 - **WHEN** a test supplies a different primitive implementation through the generic creation and collection interface
-- **THEN** it renders or collects without a ModelViewer dependency or a matching Main-side inheritance hierarchy
+- **THEN** it renders or collects without a concrete application dependency or a matching Main-side inheritance hierarchy
 
 #### Scenario: Wrong-domain access
 - **WHEN** a guarded primitive mutation or scene registration is invoked outside Render

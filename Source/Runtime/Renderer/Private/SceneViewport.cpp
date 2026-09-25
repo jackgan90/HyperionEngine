@@ -56,10 +56,18 @@ void ValidateViewportOptions(const FSceneViewportOptions& InPatch, const FSceneV
 	RequireSupported(InPatch.ModelBounds, InSupported.ModelBounds);
 	RequireSupported(InPatch.LightBounds, InSupported.LightBounds);
 	RequireSupported(InPatch.Animate, InSupported.Animate);
-	if ((InPatch.Exposure && (!std::isfinite(*InPatch.Exposure) || *InPatch.Exposure < .1f || *InPatch.Exposure > 8)) ||
-	    (InPatch.OutlineMode && *InPatch.OutlineMode > 1) || (InPatch.Culling && *InPatch.Culling > 2))
+	RequireSupported(InPatch.StatusHud, InSupported.StatusHud);
+	RequireSupported(InPatch.ProfilingHud, InSupported.ProfilingHud);
+	RequireSupported(InPatch.ProfilingCategories, InSupported.ProfilingCategories);
+	RequireSupported(InPatch.Visualizer, InSupported.Visualizer);
+	if ((InPatch.Exposure &&
+	     (!std::isfinite(*InPatch.Exposure) || *InPatch.Exposure < .05f || *InPatch.Exposure > 8)) ||
+	    (InPatch.OutlineMode && *InPatch.OutlineMode > 1) || (InPatch.Culling && *InPatch.Culling > 2) ||
+	    (InPatch.Visualizer && *InPatch.Visualizer > 6) ||
+	    (InPatch.ProfilingCategories && (*InPatch.ProfilingCategories & ~255u)))
 	{
-		throw std::invalid_argument("Exposure must be 0.1-8; outlineMode 0-1; culling 0-2");
+		throw std::invalid_argument(
+		    "Exposure must be 0.05-8; outlineMode 0-1; culling 0-2; visualizer 0-6; profiling mask 0-255");
 	}
 }
 
@@ -76,8 +84,15 @@ template<> const FRecordDescriptor& RecordType<FSceneViewportOptions>()
 	     Member("frozen", &FSceneViewportOptions::Frozen),
 	     Member("instanceBatching", &FSceneViewportOptions::InstanceBatching),
 	     Member("modelBounds", &FSceneViewportOptions::ModelBounds),
-	     Member("lightBounds", &FSceneViewportOptions::LightBounds),
-	     Member("animate", &FSceneViewportOptions::Animate)});
+	     Member("lightBounds", &FSceneViewportOptions::LightBounds), Member("animate", &FSceneViewportOptions::Animate),
+	     Member("statusHud", &FSceneViewportOptions::StatusHud),
+	     Member("profilingHud", &FSceneViewportOptions::ProfilingHud),
+	     Member("profilingCategories", &FSceneViewportOptions::ProfilingCategories,
+	            {.Description = "Bit mask: 1 overview, 2 tasks, 4 GPU passes, 8 device, 16 views, 32 lighting, "
+	                            "64 visibility, 128 batching."}),
+	     Member("visualizer", &FSceneViewportOptions::Visualizer,
+	            {.Description = "0 Lit, 1 base color, 2 shading normal, 3 metallic/roughness/AO, 4 emissive, 5 depth, "
+	                            "6 geometry normal. GBuffer modes require Deferred."})});
 	return Type;
 }
 

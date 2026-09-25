@@ -8,7 +8,7 @@
 
 通过 **Edit > Editor preference** 打开偏好弹窗。首个选项 **Enable RenderDoc capture** 默认关闭，修改后立即保存到 `out/editor/Preferences.ini`，下次启动保留；`--editor-preferences <path>` 可指定独立的本地偏好文件。该文件与场景、布局及界面缩放配置分开，保存失败会在弹窗中显示错误并提供重试。
 
-需要通过 `tools/Build.ps1 -RenderDoc` 或 `tools/GenerateSolution.ps1 -RenderDoc` 编入 RenderDoc 支持，并安装 RenderDoc。首次启用后重启编辑器，使 hooks 在图形设备创建之前加载。开启偏好后，Viewport 工具栏右侧显示相机形抓帧按钮；点击会捕获包含场景、GUI 和 Present 的完整帧，保存到 `out/captures`，并启动 RenderDoc 打开本次生成的 RDC。与 Scene Viewer 共用抓帧和自动打开逻辑。
+需要通过 `tools/Build.ps1 -RenderDoc` 或 `tools/GenerateSolution.ps1 -RenderDoc` 编入 RenderDoc 支持，并安装 RenderDoc。首次启用后重启编辑器，使 hooks 在图形设备创建之前加载。开启偏好后，Viewport 工具栏右侧显示相机形抓帧按钮；点击会捕获包含场景、GUI 和 Present 的完整帧，保存到 `out/captures`，并启动 RenderDoc 打开本次生成的 RDC。抓帧和自动打开由公共 Capture 服务管理。
 
 关闭偏好立即隐藏按钮；插件 hooks 在退出前保留，不会运行中卸载。未编入支持、运行库不可用、尚未重启或显式传入 `--disable-plugin renderdoc` 时，按钮禁用，悬停提示及偏好弹窗显示原因，其他编辑功能仍可用。抓帧或打开失败也可在这些位置查看状态。
 
@@ -16,13 +16,13 @@
 
 **Window > Application Scale** 统一调整文字、控件、间距、工具栏和状态栏，下一帧生效。默认 125%，支持 100% / 125% / 150% / 175% / 200% 预设、自定义数值及恢复默认。左右拖动 Custom 数值可实时调整，Ctrl+单击可直接输入倍率；鼠标停下后倍率保持不变。字体按目标字号重新生成，停靠分区比例、场景数据和相机状态保持不变。放大后面板可显示的内容减少，可使用滚动或调整停靠分区。
 
-正常退出时偏好保存到 `out/editor/UiScale.ini`，独立于场景和 `Layout.ini`。`--ui-scale 1.5` 覆盖启动倍率，`--ui-preferences <path>` 指定偏好文件；有效范围为 1–2。缺失或损坏的偏好回退到 125%。验收和 benchmark 运行不读写用户偏好。Viewer 诊断面板也提供 Application Scale，其交互运行偏好保存在 `out/viewer/UiScale.ini`。
+正常退出时偏好保存到 `out/editor/UiScale.ini`，独立于场景和 `Layout.ini`。`--ui-scale 1.5` 覆盖启动倍率，`--ui-preferences <path>` 指定偏好文件；有效范围为 1–2。缺失或损坏的偏好回退到 125%。验收和 benchmark 运行不读写用户偏好。
 
 Application Scale 不调整原生标题栏、场景镜头或渲染分辨率；framebuffer 像素密度仍独立处理。这不是自动的跨显示器 DPI 布局策略。
 
 ## 构建与打开 Sponza
 
-与 Viewer 使用同一套依赖和内容挂载。检出同级 HyperionAssets 并执行 `git lfs pull`；挂载与内容准备见 [ContentFileSystem.md](ContentFileSystem.md)。从引擎仓库根目录运行：
+使用统一的依赖和内容挂载。检出同级 HyperionAssets 并执行 `git lfs pull`；挂载与内容准备见 [ContentFileSystem.md](ContentFileSystem.md)。从引擎仓库根目录运行：
 
 ```powershell
 python tools/Bootstrap.py
@@ -114,16 +114,15 @@ Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构�
 - **按住右键滚动滚轮**调整 WASDQE 移动速度：向上加速、向下减速，每格乘以或除以 1.2。仅调速不会改变镜头位置、朝向或镜头参数；移动中调速立即影响后续平移。
 - **不按右键滚动滚轮**沿当前镜头前后方向推拉，保持原有步幅与对焦距离调整，不改变选定的 WASDQE 速度。
 - 视口工具栏的 **Viewport options**（滑杆图标）菜单显示 **Camera speed**，单位 **u/s**（场景单位/秒）。初始速度使用编辑器视角的 `max(1, FocusDistance)`，范围为 `0.01–100000 u/s`；失焦、打开对话框或重开场景保留选定速度，退出应用后不保存该设置。
-- 复用 Runtime 的 `FSceneCameraController` 飞行模式。SceneViewer 使用默认环绕模式，其他视口宿主也可以显式选择飞行模式。
+- 复用 Runtime 的 `FSceneCameraController` 飞行模式。共享控制器也支持环绕模式。
 - **Home** 或工具栏 **Frame Scene** 将镜头对准场景范围。
-- **Viewport options > Exposure** 调整视口曝光，不写回资产。
+- 视口工具栏的 **Exposure** 调整曝光，**Visualizer** 下拉菜单提供 Lit 和已有六种 GBuffer 模式；GBuffer 模式仅支持 Deferred，不写回场景资产。
 - Outliner 支持搜索和层级选择，一个完整模型实例对应一个模型对象，内部 primitive 不自动成为场景子对象。Details 展示反射属性，合法输入实时更新场景，无需 Apply/Revert；无效中间输入不写入场景。模型整体及 section 材质 override 仍属于实例，不改变共享资产；已有显式展开的场景继续兼容。
 - 多选时 Details 只显示所有对象共有的组件。同一属性完全相等时显示数值，否则显示 **Multiple Values**；向量和展开的颜色通道独立判断。显式输入只修改该字段，输入主对象已有的数值也会应用到所有对象。Optional override 单独展示混合存在状态，启用时保留已有 override，并仅为缺失项创建默认值。模型 section 只有在模型资产和 primitive 身份对应时可批量编辑，不对应的集合只读。多选支持 Enabled；名称、增删组件和单对象相机/主光操作仅在单选时提供。
 - **Ctrl+Z** 或 **Edit > Undo** 撤销，**Ctrl+Y / Ctrl+Shift+Z** 或 **Edit > Redo** 重做。一次连续输入、拖动或颜色选择器会话合并为一条历史，切换属性、结束输入或关闭选择器后开始新的记录。即使值改回原值，本次操作仍标记为修改，直到撤销回到保存点。连续撤销按操作逐项恢复；撤销后进行新编辑会清除重做分支。Inspector 文本输入也使用文档级撤销，其他文本框保留自身编辑行为。保存、切换对象或场景操作会结束当前编辑；**File > Save Scene / Save Scene As** 保存文档。标题 `*` 表示未保存修改，保存期间的新修改仍保持为脏。
 - **Transform (Local)** 分为 Position、Rotation、Scale 三行，分别提供 X/Y/Z 输入。Rotation 使用度数（不显示 deg 后缀），绕固定 X、Y、Z 轴依次旋转；悬停查看具体约定。数值框支持单击输入和按住左键左右拖拽调节；悬停显示左右箭头，拖拽期间隐藏指针，松开恢复。一次拖拽作为一条撤销记录。输入数值即时生效，Enter 或失焦结束本次编辑，Ctrl+Z 恢复本次编辑前的值。原有剪切信息保留，Parent ID 不在属性面板中显示，已有父子关系保持不变。组件菜单支持添加注册的 CPU 组件和移除非必需组件，提交前验证完整场景。
 - 多选 **Transform (Local)** 始终绝对赋值，包括在 Details 中拖动数值：例如 Position X 输入 3，会将各对象的局部 X 都设为 3，保留其余分量。父子同时选中时，各自局部值都按输入修改；这与 gizmo 的成组变换语义不同。批量修改先验证全部对象再一次发布，任一目标无效时整次拒绝；一次属性交互对应一条历史，Undo/Redo 恢复各对象各自的值，并保留当前选择。
 - 灯光 **Color** 显示颜色预览块，点击打开色轮选择器，选色过程中实时更新场景，Close 或点击外部关闭，Ctrl+Z 撤销整次选色。展开 Color 可输入 0～255 的 R/G/B 分量（sRGB），实时生效。引擎保留线性 RGB 存储，亮度通过 Intensity 调整。
-- **Rendering diagnostics (read only)** 显示对应 primitive 的已应用状态和最近 draw。属性来自 Main，诊断来自 Render 发布的只读副本。组件与扩展契约见 [SceneComponents.md](SceneComponents.md)。
 - 拖动标签可调整停靠位置；**Window** 菜单可重新显示关闭的面板，**Reset Layout** 恢复默认布局。
 
 键盘与鼠标导航受视口焦点、悬停和拖动状态约束。文本输入、菜单和模态对话框阻止相机操作；失焦、隐藏视口、最小化或切换场景会重置持续输入。退出时保存停靠位置和面板尺寸。面板显示开关在每次启动时恢复默认开启。
@@ -183,7 +182,7 @@ Editor panels / scene selection / viewport input
 
 ImGui Docking 仅负责控件、停靠、布局和三角形绘制数据。GuiRenderer 统一负责字体、顶点/索引 buffer、资源绑定和绘制，DebugUI 也复用该模块。增加常用控件时扩展 Gui 的引擎接口；增加编辑器面板时在 Editor 中组装，无需直接依赖 ImGui。DockBuilder 等内部接口集中在 Gui 私有 adapter，依赖版本固定于 lock 文件。
 
-Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 将场景绘制到与视口物理尺寸一致的保留纹理，再构建 GUI 合成 pass。GUI 的采样读取显式声明在 RenderGraph 中，纹理源及生命周期随帧保留。此版本逐帧等待 Render/RHI 完成，再处理下一次 UI/场景变更，优先简化所有权；没有改变 Viewer 的 CPU 帧管线。
+Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 将场景绘制到与视口物理尺寸一致的保留纹理，再构建 GUI 合成 pass。GUI 的采样读取显式声明在 RenderGraph 中，纹理源及生命周期随帧保留。此版本逐帧等待 Render/RHI 完成，再处理下一次 UI/场景变更，优先简化所有权；公共 FFramePipeline 仍供独立使用者使用。
 
 场景色调映射写入 RGBA8 纹理的 sRGB RTV，GUI 通过 UNORM SRV 读取显示编码值，现有 GUI shader 解码后再写入 sRGB backbuffer。D3D12 为 RGBA8 颜色纹理提供 linear / sRGB 两个 RTV；其他颜色格式仍只允许 linear 视图。
 
@@ -202,7 +201,7 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 `object_placement` 覆盖分类、基本形状几何与放置计算；`gui_input_and_data` 覆盖复制载荷、跨面板预览/交付和取消；`scene_runtime_instance` 覆盖空场景动态注册、去重、保存重载和加载失败隔离。`editor_placement` 使用真实 GUI 输入依次放置八种对象，检查连续预览、八种取消路径、撤销重做、主方向光、图标拾取/隐藏、空文档 Save As 与重载，并验证缺失资源只禁用对应条目。可单独运行 `--exercise-placement OUTPUT.hasset`，截图随输出场景保存在同一目录。
 
-`gui_docking` 验证布局保存恢复和纹理 ID；`gui_texture_rendering` 验证真实 RHI 离屏 sRGB 输出、GUI 采样和无效绑定拒绝。`scene_viewer_controls` 覆盖共享控制器的默认环绕模式、飞行模式的按键门槛、固定位置旋转、滚轮调速/推拉分流、速度与位移一致性、速度边界及输入中断恢复。`editor_acceptance` 使用真实控件位置产生 Platform 格式的输入事件，覆盖菜单打开 Sponza、右键移动门槛、松开右键停止、原地旋转、右键滚轮调速、普通滚轮推拉、模态输入隔离、视口隐藏与恢复、窗口缩放、场景重开、加载错误恢复和加载中退出。GPU 验收需要 D3D12 环境及挂载的 Sponza 资产。
+`gui_docking` 验证布局保存恢复和纹理 ID；`gui_texture_rendering` 验证真实 RHI 离屏 sRGB 输出、GUI 采样和无效绑定拒绝。`scene_navigation` 覆盖共享控制器的默认环绕模式、飞行模式的按键门槛、固定位置旋转、滚轮调速/推拉分流、速度与位移一致性、速度边界及输入中断恢复。`editor_acceptance` 使用真实控件位置产生 Platform 格式的输入事件，覆盖菜单打开 Sponza、右键移动门槛、松开右键停止、原地旋转、右键滚轮调速、普通滚轮推拉、模态输入隔离、视口隐藏与恢复、窗口缩放、场景重开、加载错误恢复和加载中退出。GPU 验收需要 D3D12 环境及挂载的 Sponza 资产。
 
 文档验收通过 `--exercise-document OUTPUT.hasset` 编辑反射属性，验证 Enter 前实时生效、按属性合并历史、连续 Ctrl+Z/Redo、改回原值仍保留修改记录、重做分支截断、Render 已应用状态、异步保存期间的新修改、重载、无效/过期提交拒绝、只读挂载保存失败和独立视口相机。`--report` 输出验收结果及保存耗时；输出场景写到指定测试目录。
 
@@ -212,8 +211,14 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 `transform_gizmo` 是无 GPU 的几何与变换回归，覆盖自由/轴向平移、带剪切父变换、局部旋转、剪切对象整体比例缩放、镜像、零缩放与恢复、视线退化及非有限输入。`--exercise-gizmo` 通过真实 GUI 事件验证三个工具栏按钮、实时拖拽、零轴恢复、历史合并、Esc 取消与重做分支保留，以及失焦后提交最后有效预览和撤销重做，同样纳入 `editor_acceptance`。
 
-`tools/ComponentEditorBenchmark.py` 可重复运行 Debug/Release、Editor/Viewer、静止/移动相机组合，保留逐帧 CSV、日志、程序哈希和进程内存采样。Viewer 的流水线吞吐耗时与 Editor 的逐帧等待耗时应分别比较。本次组件化的测量条件、回退修正与结果见 [性能对比报告](ComponentEditorPerformance.md)。
+`tools/ComponentEditorBenchmark.py` 比较 Debug/Release 与静止/移动 Editor 工作负载，保留 CSV、日志、程序哈希和进程内存采样。共享 CSV 和其他对照工具见 [渲染诊断](RenderDiagnostics.md)。
 
 ## Agent 附着
 
 Editor 默认允许同一 Windows 用户通过 CLI/MCP 附着；`--disable-plugin automation-local` 可关闭。首批接口支持当前场景查询、节点变换、共享 Undo/Redo 和显式保存。自动化与 GUI 共同使用 Runtime/SceneEditing 的同一个文档实例；agent 变换进入 GUI 历史，保存更新同一 dirty/save point。用法见 [应用附着](AutomationConnections.md)。资产页签及内容根修改的 live adapter 尚未开放；内容根查询已开放。
+
+## 结构编辑和渲染诊断
+
+场景相机、主方向光和环境光沿用对象的现有设置入口。Details 的 Hierarchy 提供 keep-world/keep-local 重父级，非法循环或不可逆父变换被拒绝。复制与保留子节点删除保留 SceneEditing 和 Automation 能力，GUI 入口待后续 Outliner 或 viewport 交互设计时提供。
+
+Edit > Render settings 打开渲染设置窗口。视口工具栏的信息与统计按钮分别显示左上角只读状态和右上角 profiling HUD；Stats... 选择统计分类及采集选项。方向光 Details 的 Override Shadow settings 启用该灯光自己的 Directional / Contact shadows 参数，随场景保存并支持撤销/重做。视口选项继续提供剔除、冻结、合批、包围盒与光影响范围。字段、持久化、启动深度和 Automation 接口见 [渲染诊断](RenderDiagnostics.md)。

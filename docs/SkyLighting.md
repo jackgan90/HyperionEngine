@@ -10,7 +10,7 @@ From the repository root:
 
 ```powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
+./out/build/debug/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Sponza.hasset
 ```
 
 The Scene panel is visible initially; Tab toggles panels. Its sky controls offer `Cloudy.hasset`, `Dusk.hasset` and `Clear.hasset` from `/Game/Skies`. Selecting an entry applies it immediately. Alternatively type an arbitrary native sky path and press **Apply sky asset**. Use virtual package paths for content selection; explicit local tool paths remain supported. **Refresh sky assets** uses the mounted filesystem to rescan the sibling `Skies` directory of the scene's containing directory. An empty custom path cannot be applied.
@@ -41,7 +41,7 @@ HDR/EXR can be imported directly with default settings, or through a tracked sou
 }
 ```
 
-`source` resolves relative to the descriptor. Source bytes, settings and importer revision participate in incremental import. Runtime Viewer loads only `.hasset` files and their current shared dependencies; it does not link AssetImport or read HDR/EXR sources. Asset discovery rebuilds the registry from native metadata. Copy the sky and its referenced native textures together; catalog and import-library files are not required.
+`source` resolves relative to the descriptor. Source bytes, settings and importer revision participate in incremental import. Runtime scene loading consumes only `.hasset` files and their current shared dependencies; source HDR/EXR conversion is handled by AssetImport. Asset discovery rebuilds the registry from native metadata. Copy the sky and its referenced native textures together; catalog and import-library files are not required.
 
 Input is a 2:1 equirectangular Radiance `.hdr` or ordinary RGB OpenEXR image (optional alpha). Decoding uses the existing private stb_image/TinyEXR adapters. RGB values are scene-linear, assumed to use linear sRGB/Rec.709 primaries; EXR chromaticities, arbitrary layered channels, multipart/deep images, camera exposure metadata and other panorama projections are not color-managed or converted. Alpha does not control sky coverage. Negative, non-finite or RGB values above `1e20` are rejected, rather than tone-mapped into the bake. Encoded input is bounded to 256 MiB and decoded RGBA to 512 MiB.
 
@@ -67,7 +67,7 @@ The D3D12 backend uploads each face/mip through the existing asynchronous upload
 
 The common PBR indirect-light function is used by Forward, Deferred, clustered lighting and transparent materials. Metallic F0, roughness, normal maps and material occlusion feed the IBL evaluation. The legacy constant-color formula is retained in constant mode. No GBuffer attachment was added. Environment shader bindings occupy the separate versioned `EnvironmentV1` block in space 2; existing material/light blocks remain unchanged. Material providers supply disabled neutral defaults to sessions without a sky.
 
-The sky uses the shared fullscreen triangle and reconstructs world directions from projection and camera rotation. Translation is excluded before matrix inversion, so large camera positions cannot introduce cancellation errors in sky sampling. It writes into linear HDR color after opaque/compatibility rendering and before transparency, with far-depth testing and depth writes disabled. Standard and reversed-Z, sub-viewports and viewport depth ranges are supported. Sky and surfaces pass through the existing exposure/tonemap once. The render graph exposes `Scene/Sky`; Viewer benchmark CSV includes `sky_gpu_ms` from existing GPU timestamps.
+The sky uses the shared fullscreen triangle and reconstructs world directions from projection and camera rotation. Translation is excluded before matrix inversion, so large camera positions cannot introduce cancellation errors in sky sampling. It writes into linear HDR color after opaque/compatibility rendering and before transparency, with far-depth testing and depth writes disabled. Standard and reversed-Z, sub-viewports and viewport depth ranges are supported. Sky and surfaces pass through the existing exposure/tonemap once. The render graph exposes `Scene/Sky`; Editor benchmark CSV includes `sky_gpu_ms` from existing GPU timestamps.
 
 Fullscreen sampled resources follow asynchronous readiness, including neutral textures on first use in old scenes. A pass with an unfinished upload keeps its attachment load/clear behavior but submits no draw that frame; later frames retry using the same resource. This does not introduce a GPU wait or repeated upload. Actual sky generations are prepared before scene publication.
 

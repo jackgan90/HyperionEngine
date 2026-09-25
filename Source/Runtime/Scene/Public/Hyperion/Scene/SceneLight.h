@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Environment/SkyAsset.h"
 #include "Hyperion/Materials/MaterialResources.h"
+#include "Hyperion/Scene/LightShadows.h"
 #include "Hyperion/Scene/Model.h"
 
 namespace Hyperion
@@ -10,6 +11,7 @@ struct FSceneDirectionalLight
 	FVec3 Color{1, 1, 1};
 	float Intensity = 1;
 	bool bCastShadows = true;
+	std::optional<FSceneLightShadowSettings> ShadowSettings;
 	bool operator==(const FSceneDirectionalLight& InOther) const;
 };
 

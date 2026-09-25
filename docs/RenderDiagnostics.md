@@ -1,0 +1,37 @@
+# Editor rendering and diagnostics
+
+Editor hosts the shared `FSceneRenderPipeline`. Rendering controls have separate homes:
+
+| Surface | Contents |
+| --- | --- |
+| **Edit > Render settings** | Forward/Deferred, compact/high GBuffer, clustered lighting, VSync and startup depth convention; Save render settings |
+| Viewport toolbar | Exposure and a named Visualizer menu: Lit, Base color, Shading normal, Metallic/Roughness/AO, Emissive, Scene depth and Geometry normal |
+| Viewport information button | Read-only status at the top left: pipeline, GBuffer, active depth, visualizer, exposure, viewport extent and adapter |
+| Viewport statistics button and **Stats...** | Top-right profiling HUD; independently select Overview, Tasks, GPU passes, Device counters, Render views, Lighting/HZB, Visibility and Batching; separate Tracy collection controls |
+| Directional Light Details | **Override Shadow settings** enables authored Directional shadows and Contact shadows parameters, including their previews |
+
+GBuffer visualization requires Deferred; Forward displays Lit. HUDs are clipped to the viewport, use compact text in narrow regions, wrap long lines, share available width when both are visible and truncate overflow with an ellipsis. Select fewer profiling categories when space is limited. In a narrow toolbar, camera selection remains in Viewport options. Their snapshots refresh at most ten times per second. HUD display does not enable profiling collection. There is no separate Render diagnostics window or synthetic diagnostics component in Details. Primitive readback remains available through `render.component_diagnostics`.
+
+The viewport options popup controls None/Linear/BVH culling, frozen culling, instance batching, model bounds and light influence. Frozen culling retains the rejection matrix while the display camera continues to move. Diagnostic geometry is built and clipped by Runtime/Renderer. These options, HUD selection, exposure, visualizer and render quality settings do not dirty the scene or enter scene history.
+
+`FRenderSettings` owns the reflected session configuration and validation. Editor implements `IRenderSettings`; GUI and `render.settings.get/set/save` share revision checks and atomic persistence. For compatibility, these operations and `render.shadows.get/set` retain session shadow defaults. A main directional light with authored `shadowSettings` overrides those defaults for rendering. `light.main.get/set` and `scene.component.hyperion.scenedirectionallight.get/set` edit the actual component through SceneEditing, including undo/redo and scene saving. Switching the main light resolves that light's values; an old light without the optional override uses the session defaults again. Point and spot lights do not expose shadows yet. CPU method-specific shadow types live in Scene without Renderer/RHI dependencies.
+
+Interactive startup restores `out/editor/RenderSettings.json`; **Save render settings** persists the current session values. Isolated runs can use `--render-settings <path>`. A missing file uses defaults; malformed or invalid input fails startup. The serialized envelope is `hyperion.render.settings`, version 1, with a `fields` object. Query the reflected type or save a valid file instead of maintaining a second schema. `reversedZ` is a startup choice: get returns both the requested value and `activeReversedZ`; save and restart to apply it. VSync is live; benchmarks force it off. Authored light shadows are saved with the scene, not this settings file.
+
+`view.get/set` exposes `statusHud`, `profilingHud`, `profilingCategories` and `visualizer` alongside exposure. The category mask uses 1 Overview, 2 Tasks, 4 GPU passes, 8 Device, 16 Render views, 32 Lighting/HZB, 64 Visibility and 128 Batching; zero displays a category-selection hint. Values outside mask 0–255 or visualizer 0–6 are rejected before mutation. Existing operation IDs and null/unsupported option semantics remain unchanged. Visibility and Batching show main-view counters, BVH update/query and batch planning/preparation time, membership/cache reuse, upload bytes and nonzero fallback reasons; shadow views remain in Render views.
+
+The profiling HUD and `render.statistics` expose GPU pass timings, per-view visibility/batching and device counters. `profiling.get/set` and the Stats popup share Core profiling controls. Optional Tracy must be compiled for collection edits; connection and system sampling availability remain explicit. Contact shadows require Deferred and the contact-shadows feature; disabled features leave authored component data intact and skip the unavailable effect. RenderDoc uses the existing Editor preference, capture and exact replay path described in [RenderDoc](RenderDoc.md).
+
+## Repeatable measurements
+
+```powershell
+./out/build/release/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Showcase.hasset --hidden --benchmark out/bench/Frames.csv --benchmark-warmup 120 --benchmark-samples 300 --benchmark-camera
+python tools/MeasureDeferred.py --editor out/build/release/bin/hyperion_editor.exe --samples 300 --warmup 120
+python tools/MeasureShadows.py --editor out/build/release/bin/hyperion_editor.exe --samples 300 --warmup 120
+```
+
+Warmup and samples count ready rendered frames; loading time is reported separately. Samples retain the actual viewport extent, visibility, batch work, CPU stages and completed GPU submission identity. CPU sample indices need not equal GPU submission numbers because startup can submit frames. `--benchmark-viewport WIDTHxHEIGHT` fixes the render target extent, `--benchmark-camera-step` controls deterministic orbit input, `--benchmark-light` animates the selected light through one isolated document transaction, and `--no-instance-batching` supplies an ordinary-draw reference. `--scene-culling none|linear|bvh` selects initial culling.
+
+`frame_ms` includes Editor Main work and joined Render/RHI work; summed GPU pass intervals are not presentation latency. Editor does not expose CPU frame lead controls. `FFramePipeline` remains a reusable independently tested Renderer facility. Compare matching scene, viewport, settings, visibility and draw work; do not compare unrelated application workloads as an optimization result.
+
+`render_controls`, `editor_render_acceptance`, `editor_render_controls`, `automation_capability_parity`, `scene_navigation`, `model_rendering` and the shared renderer tests validate these contracts. Optional capture and profiling builds add their own tests without hiding unrelated coverage.

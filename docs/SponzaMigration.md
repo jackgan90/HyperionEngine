@@ -2,20 +2,19 @@
 
 当前 Content 归属、目录选择及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
-SceneViewer 的 `experiments/Scene.json` 打开 HyperionAssets 中的 Khronos Sponza 示例。场景包含 6 个对象：一个引用完整模型的 Sponza 实例、主方向光、三盏点光和 Cloudy 天空环境。103 个 primitive 及其内部坐标留在共享模型资产中，不自动生成独立场景节点。模型实例可整体变换并保存材质 override；初始浏览视图属于场景设置，不占用相机对象。
+Editor 可通过 `--scene /Game/Scenes/Sponza.hasset` 打开 HyperionAssets 中的 Khronos Sponza 示例。场景包含 6 个对象：一个引用完整模型的 Sponza 实例、主方向光、三盏点光和 Cloudy 天空环境。103 个 primitive 及其内部坐标留在共享模型资产中，不自动生成独立场景节点。模型实例可整体变换并保存材质 override；初始浏览视图属于场景设置，不占用相机对象。
 
 ## 运行与操作
 
 ```powershell
-./tools/Build.ps1 -Preset debug -Target hyperion_viewer
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
+./tools/Build.ps1 -Preset debug -Target hyperion_editor
+./out/build/debug/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Sponza.hasset
 ```
 
-默认窗口为 1440×728，曝光为 2.5，调试面板显示；Tab 切换面板。WASDQE 连续移动、右键环绕、滚轮推拉、Home 取景。普通导航不写入场景，保存后重开仍使用初始浏览视图。其他场景可通过 `--scene /Game/Scenes/Showcase.hasset` 选择。Viewer 不带参数时仍打开 Triangle 实验。
+视口使用右键 WASDQE 平移、右键拖动调整朝向、滚轮推拉和 Home 取景；普通导航不修改场景。质量与曝光通过渲染诊断设置。
 
 | 文件 | 作用 |
 | --- | --- |
-| [Scene.json](../experiments/Scene.json) | 窗口、曝光、面板与场景入口 |
 | `Sponza.json`（见 HyperionAssets 的 Metadata 与本地源缓存） | 模型、初始视图、层级与光源节点 |
 | `Sponza.gltf`（见 HyperionAssets 的 Metadata 与本地源缓存） | 上游模型，关联 bin 和全部源图片 |
 | `HyperionAssets/Metadata/Sources.json` | 固定上游版本、下载 SHA-256 和场景配方 |

@@ -3,6 +3,7 @@
 ## Purpose
 Keep runtime features, native backends, experiment plugins and applications in cohesive modules with explicit public interfaces and private dependency boundaries.
 ## Requirements
+
 ### Requirement: Cohesive module ownership
 Each runtime, backend and algorithm module SHALL group its public API and private implementation beneath its own concept directory and own its build definition. Public include roots SHALL not expose other modules' private headers.
 
@@ -29,11 +30,11 @@ Vendor APIs SHALL remain in module-private adapters or native backend private im
 - **THEN** boundary validation fails and identifies the offending source
 
 ### Requirement: Application-independent rendering contracts
-Primitive interfaces, Main rendering bindings, scene collection and shared-resource coordination SHALL be owned by Runtime modules, independent of ModelViewer, Triangle and concrete graphics backends. Project documentation SHALL define thread ownership, message data lifetime, frame boundaries, registration identity, failure cleanup and the distinction between scene primitives and non-scene passes.
+Primitive interfaces, Main rendering bindings, scene collection and shared-resource coordination SHALL be owned by Runtime modules, independent of application plugins, Triangle and concrete graphics backends. Project documentation SHALL define thread ownership, message data lifetime, frame boundaries, registration identity, failure cleanup and the distinction between scene primitives and non-scene passes.
 
 #### Scenario: Runtime-only primitive test
 - **WHEN** a test registers and collects a primitive using generic Renderer interfaces
-- **THEN** no ModelViewer or Triangle module is required
+- **THEN** no application or Triangle module is required
 
 #### Scenario: Contributor follows the rendering contract
 - **WHEN** a contributor reads the render primitive and module architecture documentation

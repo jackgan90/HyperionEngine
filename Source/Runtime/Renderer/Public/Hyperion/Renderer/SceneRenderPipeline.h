@@ -61,7 +61,7 @@ public:
 	std::uint64_t TargetBytes() const;
 
 private:
-	void ValidateView(const FRenderView& InView, const FCascadedShadowSettings& InShadows) const;
+	void ValidateView(const FRenderView& InView) const;
 	FRenderFeatureContext BeginFeatures(FRenderGraph& InGraph, const FRenderView& InView,
 	                                    std::shared_ptr<const FMaterialFrameContext> InFrame, bool bInDeferPreparation);
 	std::shared_ptr<const FTransientGeometry> TransientGeometry;
@@ -86,6 +86,7 @@ private:
 	FRenderSession& Session;
 	FRHICapabilities Capabilities;
 	FScenePipelineSettings Settings;
+	FContactShadowSettings DefaultContactShadows;
 	FCascadedShadowMap ShadowMaps;
 	FLocalLightIndex LocalLightIndex;
 	FClusteredLights Clusters;

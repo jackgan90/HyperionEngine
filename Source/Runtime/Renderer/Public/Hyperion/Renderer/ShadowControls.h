@@ -13,5 +13,8 @@ public:
 };
 
 void ValidateShadowSettings(const FCascadedShadowSettings& InSettings);
+// Applies only authored values; otherwise leaves caller-owned legacy defaults intact.
+void ResolveSceneLightShadows(const FSceneMetadata* InMetadata, FCascadedShadowSettings& InOutDirectional,
+                              FContactShadowSettings& InOutContact);
 template<> const FRecordDescriptor& RecordType<FCascadedShadowSettings>();
 } // namespace Hyperion

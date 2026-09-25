@@ -22,11 +22,6 @@ void AddAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument, 
 	Info.Keywords = {"scene", "authoring", "selection", "hierarchy", "settings"};
 	Info.Example = WriteRecordWire(RecordType<TRequest>(), &InExample);
 	Info.Unavailable = InDocument ? "" : "This target has no scene document provider.";
-	if (InDocument && InDocument->HasHistory() &&
-	    (Info.Id == "scene.selection.duplicate" || Info.Id == "scene.selection.remove_keep_children"))
-	{
-		Info.Unavailable = "These Viewer structural actions are not supported by the Editor history contract.";
-	}
 	InCatalog.Register(MakeOperation<TRequest, TResult>(std::move(Info),
 	                                                    [InDocument, InFunction](const TRequest& InRequest)
 	                                                    {
@@ -46,10 +41,9 @@ void RegisterSceneAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* In
 {
 	const std::string Document = "document-from-scene.info";
 	AddAuthoring<FSceneMutationRequest, FSceneNodeInfo>(
-	    InCatalog, InDocument, "scene.selection.duplicate", "Duplicate the primary selected Viewer node",
-	    "Uses the Viewer resource-preserving duplication action; selects the created node. Editor has no corresponding "
-	    "history-enabled action.",
-	    false, {Document, 1},
+	    InCatalog, InDocument, "scene.selection.duplicate", "Duplicate the primary selected node",
+	    "Shares model resources and selects the created node. Commits one undoable document transaction.", false,
+	    {Document, 1},
 	    [](auto& InDocument, const auto& InRequest)
 	    {
 		    InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
@@ -63,10 +57,9 @@ void RegisterSceneAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* In
 	    });
 	AddAuthoring<FSceneMutationRequest, FSceneDocumentInfo>(
 	    InCatalog, InDocument, "scene.selection.remove_keep_children",
-	    "Remove the primary Viewer node and preserve its children",
-	    "Preserves child world transforms using the shared Viewer structural action. Editor does not offer this "
-	    "action.",
-	    false, {Document, 1},
+	    "Remove the primary node and preserve its children",
+	    "Preserves child world transforms. Undo restores hierarchy, local transforms and scene selections.", false,
+	    {Document, 1},
 	    [](auto& InDocument, const auto& InRequest)
 	    {
 		    InDocument.RequireIdle(InRequest.Document, InRequest.Revision);

@@ -24,6 +24,9 @@ struct FRenderDiagnostics
 	std::map<std::string, std::uint64_t> Device;
 	std::map<std::string, double> GpuPassMilliseconds;
 	std::uint64_t GpuTimingFrame{};
+	double FrameIntervalMilliseconds{};
+	std::uint64_t TrackedCpuBytes{};
+	std::map<std::string, std::uint64_t> ExecutedTasks;
 };
 
 class IRenderDiagnostics
@@ -41,6 +44,7 @@ public:
 	virtual FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) = 0;
 };
 
+void SetExecutionDiagnostics(FRenderDiagnostics& InResult, const FTaskSystem& InTasks, double InFrameMilliseconds);
 void SetDeviceDiagnostics(FRenderDiagnostics& InResult, const FDeviceStats& InDevice);
 template<> std::span<const TRecordEnumEntry<ESceneCameraStatus>> RecordEnumEntries<ESceneCameraStatus>();
 template<> const FRecordDescriptor& RecordType<FRenderBatchStats>();

@@ -3,11 +3,12 @@
 ## Purpose
 Define Scene-owned perspective camera state, validated hierarchical poses, view selection and controller edits, with consistent renderer camera data and persistent scene snapshots.
 ## Requirements
+
 ### Requirement: Scene-owned perspective camera state
 The CPU Scene module SHALL own camera nodes with hierarchical transforms, perspective vertical field of view, near/far planes and navigation focus distance. Camera position and orientation SHALL derive from the node world transform rather than a second mutable View or Application camera. Lens and pose validation SHALL reject nonfinite values, degenerate direction bases, nonpositive near/focus distance, far not greater than near, and vertical radians outside the open interval (0.01, 3.0), without partially changing scene state.
 
 #### Scenario: Edit a camera through Scene
-- **WHEN** a client changes a camera transform and lens without constructing a viewer plugin
+- **WHEN** a client changes a camera transform and lens without constructing an application plugin
 - **THEN** the next scene publication exposes those values and a scene snapshot persists them
 
 #### Scenario: Parent transform affects the camera
@@ -31,7 +32,7 @@ Renderer SHALL resolve a scene View request from a camera Handle and view-specif
 
 #### Scenario: No camera available
 - **WHEN** the scene contains no enabled usable default or selected camera
-- **THEN** the viewer continues input, GUI and clear output, skips scene and shadow draws, and displays the missing-camera state without presenting stale scene pixels
+- **THEN** the application continues input, GUI and clear output, skips scene and shadow draws, and displays the missing-camera state without presenting stale scene pixels
 
 ### Requirement: Renderer derives consistent camera data
 Renderer SHALL compute Eye, ViewProjection and shadow camera information from the same resolved camera pose and lens. Effective viewport aspect and the View depth convention SHALL determine projection. The CPU pose convention SHALL use local minus Z forward and plus Y up, transforming and orthonormalizing these axes as specified in design D3. Nonuniform and mirrored transforms SHALL NOT introduce scale or shear into the view basis. Zero-sized targets SHALL follow the skipped-frame path.

@@ -81,8 +81,14 @@ void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 		}
 		else if (Mode == 1)
 		{
-			RequireMulti(std::abs(A.Values[12]) < .0001f && std::abs(B.Values[12]) < .0001f &&
-			                 std::abs(B.Values[13] - 2) < .0001f && std::abs(B.Values[1] - 1) < .0001f,
+			// The toolbar can place the pivot between logical pixels. ImGui floors mouse positions, so the
+			// submitted gesture need not be exactly 90 degrees even though the unfloored endpoints are.
+			const float From = std::atan2(Center.Y - std::floor(Start.Y), std::floor(Start.X) - Center.X);
+			const float To = std::atan2(Center.Y - std::floor(End.Y), std::floor(End.X) - Center.X);
+			const float Angle = To - From;
+			RequireMulti(std::abs(A.Values[12]) < .0001f && std::abs(B.Values[12] - 2 * std::cos(Angle)) < .0001f &&
+			                 std::abs(B.Values[13] - 2 * std::sin(Angle)) < .0001f &&
+			                 std::abs(B.Values[1] - std::sin(Angle)) < .0001f,
 			             "rotation must orbit and rotate the secondary");
 		}
 		else

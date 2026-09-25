@@ -1,6 +1,6 @@
 # Instance 批次渲染
 
-`FRenderSession` 默认在 Render 线程将兼容的可见 render item 合成 instance 批次；RHI 0 创建实际 draw packet 和常量数据切片。Scene 模块不依赖这条渲染路径。Scene Viewer 的 **Instance batching** 复选框可实时切换，`--no-instance-batching` 强制使用普通绘制，适用于同一个可执行文件的 A/B 对照。CLI 强制关闭时，界面显示关闭状态及对应选项，替代无法生效的复选框。
+`FRenderSession` 默认在 Render 线程将兼容的可见 render item 合成 instance 批次；RHI 0 创建实际 draw packet 和常量数据切片。Scene 模块不依赖这条渲染路径。Editor 视口选项 的 **Instance batching** 复选框可实时切换，`--no-instance-batching` 强制使用普通绘制，适用于同一个可执行文件的 A/B 对照。CLI 指定初始关闭值；后续 GUI 和 agent 可经同一服务切换。
 
 ## Shader 宏契约
 
@@ -75,8 +75,8 @@ Render 在剔除和材质求值后创建计划。RHI 预检所有源 item，再�
 
 ## 验证和性能
 
-`instance_batching` 覆盖 DXIL/SPIR-V/MSL 反射、类型打包、真实 GPU 图像、容量/短切片拒绝、策略独占、资源/状态拆批、缓存预算、成员变化、多视图、整组失败修复与旧帧保留。`scene_moving_camera` 用同一 Viewer 分别开启/关闭合批，检查图像和可见数量一致、draw 显著减少、上传量有界。
+`instance_batching` 覆盖 DXIL/SPIR-V/MSL 反射、类型打包、真实 GPU 图像、容量/短切片拒绝、策略独占、资源/状态拆批、缓存预算、成员变化、多视图、整组失败修复与旧帧保留。`editor_render_acceptance` 用同一 Editor 分别开启/关闭合批，检查运动场景可见数量一致、draw 减少及样本帧连续；像素与上传边界由上述底层回归覆盖。
 
-Viewer CSV 保留 `frame/frame_ms/scene_draws`，新增可见 item、实例/普通 draw、失败数量、chunk 复用/重建、打包/上传字节、GPU slice 复用以及规划/准备耗时。末尾的 `fallback_disabled/shader/device/ordering/singleton/preparation` 六列分别记录对应原因；界面显示非零原因及数量。回退计数反映规划和准备阶段事件，应使用 `single_draws` 判断最终普通 draw 数。多 view family 的批次事件与耗时累计，缓存存量取最后一次观察值。性能结果及复现命令见 [InstanceBatchPerformance.md](InstanceBatchPerformance.md)。
+Editor CSV 保留 `frame/frame_ms/scene_draws`，新增可见 item、实例/普通 draw、失败数量、chunk 复用/重建、打包/上传字节、GPU slice 复用以及规划/准备耗时。`fallback_disabled/shader/device/ordering/singleton/preparation` 六列分别记录对应原因；Stats 的 Batching 分类显示非零原因及数量。回退计数反映规划和准备阶段事件，应使用 `single_draws` 判断最终普通 draw 数。多 view family 的批次事件与耗时累计，缓存存量取最后一次观察值。性能结果及复现命令见 [当前测量工具](RenderDiagnostics.md)。
 
-新增 Viewer CSV 列按整个 view family 汇总：`shared_material_updates`、`item_preparation_reuses`、`item_storage_reuses`、`collection_reuses`、`view_preparation_reuses`，以及 `packed_records`、`reused_records`、`assembled_blocks`、`reused_blocks`、`assembled_bytes`。记录/块计数反映实际进入实例打包缓存的工作；完整计划或 view packet 命中会跳过打包，所以这些计数为零并不代表没有复用。`packed_bytes` 记录新打包记录字节（失败修复路径仍计整次重新打包），`assembled_bytes` 记录拼装连续块复制的字节，GPU 上传另看原有 upload 列。最新增量更新实现与测量见 [IncrementalRenderUpdates.md](IncrementalRenderUpdates.md)。
+新增 Editor CSV 列按整个 view family 汇总：`shared_material_updates`、`item_preparation_reuses`、`item_storage_reuses`、`collection_reuses`、`view_preparation_reuses`，以及 `packed_records`、`reused_records`、`assembled_blocks`、`reused_blocks`、`assembled_bytes`。记录/块计数反映实际进入实例打包缓存的工作；完整计划或 view packet 命中会跳过打包，所以这些计数为零并不代表没有复用。`packed_bytes` 记录新打包记录字节（失败修复路径仍计整次重新打包），`assembled_bytes` 记录拼装连续块复制的字节，GPU 上传另看原有 upload 列。最新增量更新实现与测量见 [IncrementalRenderUpdates.md](IncrementalRenderUpdates.md)。

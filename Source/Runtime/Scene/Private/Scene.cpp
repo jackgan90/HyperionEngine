@@ -27,10 +27,11 @@ bool FScene::EditNodes(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpe
 	return Storage->Revision == InExpectedRevision && Storage->EditNodes(std::move(InEdits));
 }
 
-std::vector<FSceneHandle> FScene::AddNodes(std::vector<FSceneNode> InNodes)
+std::vector<FSceneHandle> FScene::AddNodes(std::vector<FSceneNode> InNodes,
+                                           std::vector<FSceneNodeEdit> InRestoredChildren)
 {
 	RequireMain();
-	return Storage->AddNodes(std::move(InNodes));
+	return Storage->AddNodes(std::move(InNodes), std::move(InRestoredChildren));
 }
 
 bool FScene::RemoveSubtrees(std::span<const FSceneHandle> InHandles)

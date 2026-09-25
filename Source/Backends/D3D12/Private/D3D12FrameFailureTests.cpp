@@ -262,62 +262,70 @@ void CheckRecordingStorage(FFrameFixture& InFixture, const FRenderGraph& InGraph
 }
 
 #if HYP_ENABLE_PROFILING
+std::shared_ptr<FD3D12RecordedList> ProfilePass(const FRecordedList& InList)
+{
+	const auto Native = std::dynamic_pointer_cast<FD3D12RecordedList>(InList.Payload);
+	CheckCondition(Native && Native->Passes.size() == 1);
+	return Native->Passes.front();
+}
+
 void CheckProfileQueryLifetime(FFrameFixture& InFixture, const FRenderGraph& InGraph)
 {
 	if (!GetProfilingConnection())
 	{
 		return;
 	}
-	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
-	    {EDomain::Rhi, 0},
-	    [&]
-	    {
-		    auto& Swapchain = *InFixture.Swapchain;
-		    const auto Commands = InGraph.Compile();
-		    Swapchain.WaitIdle();
-		    Swapchain.BeginFrame({64, 64});
-		    auto Cancelled = Swapchain.Record(0, Commands[0]);
-		    auto Native = std::dynamic_pointer_cast<FD3D12RecordedList>(Cancelled.Payload);
-		    CheckCondition(Native->ProfileQueries != nullptr);
-		    std::set<const FD3D12ProfileQueries*> Pools{Native->ProfileQueries.get()};
-		    Swapchain.CancelFrame();
-		    // A retained cancelled list occupies its fixed slot; repeated frames skip it, without waiting or growing.
-		    std::size_t Skipped{};
-		    for (unsigned Frame = 0; Frame < FrameCount * 3; ++Frame)
-		    {
-			    Swapchain.BeginFrame({64, 64});
-			    std::vector<FRecordedList> Lists;
-			    for (unsigned Index = 0; Index < Commands.size(); ++Index)
-			    {
-				    Lists.push_back(Swapchain.Record(Index, Commands[Index]));
-				    auto Recorded = std::dynamic_pointer_cast<FD3D12RecordedList>(Lists.back().Payload);
-				    if (Recorded->ProfileQueries)
-				    {
-					    Pools.insert(Recorded->ProfileQueries.get());
-				    }
-				    else
-				    {
-					    ++Skipped;
-				    }
-			    }
-			    Swapchain.EndFrame(Lists, false, false);
-			    Swapchain.WaitIdle();
-			    for (const auto& List : Lists)
-			    {
-				    CheckCondition(!std::dynamic_pointer_cast<FD3D12RecordedList>(List.Payload)->ProfileQueries);
-			    }
-		    }
-		    CheckCondition(Skipped > 0 && Pools.size() <= FrameCount);
-		    // No completion event was emitted for the abandoned recording.
-		    CheckCondition(Native->ProfileQueries != nullptr);
-		    Native.reset();
-		    Cancelled = {};
-		    Swapchain.BeginFrame({64, 64});
-		    const auto Recovered = Swapchain.Record(0, Commands[0]);
-		    CheckCondition(std::dynamic_pointer_cast<FD3D12RecordedList>(Recovered.Payload)->ProfileQueries != nullptr);
-		    Swapchain.CancelFrame();
-		    CheckCondition(InFixture.Device->Statistics().ValidationErrors == 0);
-	    }));
+	InFixture.Tasks.Wait(
+	    InFixture.Tasks.Dispatch({EDomain::Rhi, 0},
+	                             [&]
+	                             {
+		                             auto& Swapchain = *InFixture.Swapchain;
+		                             const auto Commands = InGraph.Compile();
+		                             Swapchain.WaitIdle();
+		                             Swapchain.BeginFrame({64, 64});
+		                             auto Cancelled = Swapchain.Record(0, Commands[0]);
+		                             auto Native = ProfilePass(Cancelled);
+		                             CheckCondition(Native->ProfileQueries != nullptr);
+		                             std::set<const FD3D12ProfileQueries*> Pools{Native->ProfileQueries.get()};
+		                             Swapchain.CancelFrame();
+		                             // A retained cancelled list occupies its fixed slot; repeated frames skip it,
+		                             // without waiting or growing.
+		                             std::size_t Skipped{};
+		                             for (unsigned Frame = 0; Frame < FrameCount * 3; ++Frame)
+		                             {
+			                             Swapchain.BeginFrame({64, 64});
+			                             std::vector<FRecordedList> Lists;
+			                             for (unsigned Index = 0; Index < Commands.size(); ++Index)
+			                             {
+				                             Lists.push_back(Swapchain.Record(Index, Commands[Index]));
+				                             auto Recorded = ProfilePass(Lists.back());
+				                             if (Recorded->ProfileQueries)
+				                             {
+					                             Pools.insert(Recorded->ProfileQueries.get());
+				                             }
+				                             else
+				                             {
+					                             ++Skipped;
+				                             }
+			                             }
+			                             Swapchain.EndFrame(Lists, false, false);
+			                             Swapchain.WaitIdle();
+			                             for (const auto& List : Lists)
+			                             {
+				                             CheckCondition(!ProfilePass(List)->ProfileQueries);
+			                             }
+		                             }
+		                             CheckCondition(Skipped > 0 && Pools.size() <= FrameCount);
+		                             // No completion event was emitted for the abandoned recording.
+		                             CheckCondition(Native->ProfileQueries != nullptr);
+		                             Native.reset();
+		                             Cancelled = {};
+		                             Swapchain.BeginFrame({64, 64});
+		                             const auto Recovered = Swapchain.Record(0, Commands[0]);
+		                             CheckCondition(ProfilePass(Recovered)->ProfileQueries != nullptr);
+		                             Swapchain.CancelFrame();
+		                             CheckCondition(InFixture.Device->Statistics().ValidationErrors == 0);
+	                             }));
 }
 #endif
 

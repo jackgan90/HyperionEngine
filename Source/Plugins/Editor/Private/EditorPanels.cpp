@@ -71,7 +71,7 @@ void FEditorPlugin::DrawApplicationScale()
 
 void FEditorPlugin::DrawRootMenu()
 {
-	Gui->BeginDisabled(PendingRoot.has_value());
+	Gui->BeginDisabled(PendingRoot.has_value() || !Options.Benchmark.empty());
 	if (Gui->MenuItem("Open..."))
 	{
 		bRequestRootDialog = true;
@@ -211,6 +211,11 @@ void FEditorPlugin::DrawEditMenu()
 			bPreferencesDialog = bRequestPreferences = true;
 		}
 		PreferencesMenuBounds = Gui->LastItemBounds();
+		if (Gui->MenuItem("Render settings", nullptr, bShowRenderSettings))
+		{
+			bShowRenderSettings = true;
+		}
+		InspectionBounds["render/settings-menu"] = Gui->LastItemBounds();
 		Gui->EndMenu();
 	}
 }
@@ -224,6 +229,7 @@ void FEditorPlugin::DrawWindowMenu()
 		return;
 	}
 	DrawApplicationScale();
+
 	if (Gui->MenuItem("Asset Editor"))
 	{
 		try
@@ -550,7 +556,9 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 		RouteViewportPicking(InEvents);
 		DrawLightMarkers();
 		DrawSelectionMarkers();
+		DrawDebugBounds();
 		DrawGizmoOverlay();
+		DrawViewportHud();
 	}
 	Gui->EndWindow();
 }
@@ -597,10 +605,11 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	Gui->BeginFrame(Window->LogicalSize(), Window->PixelSize(), std::clamp(InDelta, .001f, .1f), InEvents);
 	bGizmoUsedMouse = false;
 	bPlacementUsedMouse = false;
-	Gui->BeginDisabled(PendingRoot.has_value());
+	Gui->BeginDisabled(PendingRoot.has_value() || !Options.Benchmark.empty());
 	DrawMenus();
 	CaptureButtonBounds = {};
 	DrawToolbar();
+	DrawRenderSettings();
 	Gui->StatusBar(StatusText());
 	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser", "Place Object"}, bResetLayout);
 	bResetLayout = false;
@@ -617,7 +626,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	InspectorInteraction = 0;
 	PendingInspectorEdit.reset();
 	DrawDetails();
-	if (InspectorTransaction && InspectorTransaction->Interaction != InspectorInteraction)
+	if (Options.Benchmark.empty() && InspectorTransaction && InspectorTransaction->Interaction != InspectorInteraction)
 	{
 		SceneDocument.FinishInteraction();
 	}

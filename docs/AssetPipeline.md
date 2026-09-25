@@ -2,13 +2,11 @@
 
 当前 Content 归属、目录选择及外部资产重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
-原生资产工作流、工具、API、模式迁移、缓存和场景保存见 [NativeAssets.md](NativeAssets.md)。运行时 Assets 和 Viewer 只读取 .hasset；glTF/GLB 与场景 JSON 通过离线 FAssetImportService 转换。Showcase 等生成示例沿用项目 MIT 许可证；Sponza 来自 Khronos 示例资产，许可见 ../HyperionAssets/.cache/Sources/Models/Sponza/License.txt。天空资产来源与许可见 [SkyLighting.md](SkyLighting.md)。
+原生资产工作流、工具、API、模式迁移、缓存和场景保存见 [NativeAssets.md](NativeAssets.md)。运行时 Assets 只读取 .hasset；glTF/GLB 与场景 JSON 通过离线 FAssetImportService 转换。Showcase 等生成示例沿用项目 MIT 许可证；Sponza 来自 Khronos 示例资产，许可见 ../HyperionAssets/.cache/Sources/Models/Sponza/License.txt。天空资产来源与许可见 [SkyLighting.md](SkyLighting.md)。
 
 ~~~powershell
 ./tools/Build.ps1
 ./out/build/debug/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets import "D:/Models/Scene.glb" /Game/custom.hasset
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --model /Game/custom.hasset
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Model.json --frames 180 --hidden --no-ui --capture out/captures/model.png --verify-model
 ~~~
 
 Visual Studio 对应程序位于 out/build/vs2022/bin/<Configuration>。右键拖动旋转、滚轮缩放、方向键调整相机，Home 取景，Tab 切换面板。--verify-model 仍要求有限帧和截图，检查 GPU 已就绪及非背景覆盖。
@@ -43,6 +41,4 @@ GPU 上传、材质准备与共享资源继续走 [RenderPrimitives.md](RenderPr
 
 ## 验证
 
-async_gltf_import 保留源格式语义和取消/共享回归；native_asset_management、native_asset_publication 覆盖通用原生读写及发布。model_rendering 在拒绝源文件读取的后端上验证像素、上传和门控 IO；scene_viewer_controls 覆盖编辑/保存/重载。model_viewer_acceptance 使用 C++ 工具生成的原生 glTF/GLB fixtures，检查 UI、缺失资产和保存失败退出。
-
-原始 2026-09-06 交付和独立审计的历史证据保留在 [ModelViewerReview.md](ModelViewerReview.md) 和 OpenSpec archive 中，不代表当前套件数量。当前变更证据见 [原生资产验证](../openspec/changes/archive/2026-09-12-add-shared-material-texture-assets/verification.md)。
+async_gltf_import 保留源格式语义和取消/共享回归；native_asset_management、native_asset_publication 覆盖通用原生读写及发布。model_rendering 在拒绝源文件读取的后端上验证像素、上传和门控 IO；scene_navigation 覆盖编辑/保存/重载。automation_parity_regressions 检查模型资产预览、缺失资产和关闭失败路径。

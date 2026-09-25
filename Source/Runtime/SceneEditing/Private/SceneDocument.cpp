@@ -13,7 +13,7 @@ FSceneEditError::FSceneEditError(std::string InCode, std::string InMessage)
 {
 }
 
-void FSceneEditDocument::Attach(ISceneEditTarget& InTarget, bool bInHistory, ESceneDeleteSelection InDeleteSelection)
+void FSceneEditDocument::Attach(ISceneEditTarget& InTarget, bool bInHistory)
 {
 	if (EditTarget)
 	{
@@ -21,7 +21,6 @@ void FSceneEditDocument::Attach(ISceneEditTarget& InTarget, bool bInHistory, ESc
 	}
 	EditTarget = &InTarget;
 	bHistory = bInHistory;
-	DeleteSelection = InDeleteSelection;
 	Reset();
 }
 
@@ -320,17 +319,6 @@ void FSceneEditDocument::CommitDelete()
 	}
 	Entry.AfterSettings = Scene.Settings();
 	Selected.Clear();
-	if (DeleteSelection == ESceneDeleteSelection::FirstRemainingModel)
-	{
-		for (const auto Handle : Scene.Nodes())
-		{
-			if (Scene.FindNode(Handle)->Model())
-			{
-				Selected = Handle;
-				break;
-			}
-		}
-	}
 	Append(std::move(Entry));
 	NotifyHistory();
 }

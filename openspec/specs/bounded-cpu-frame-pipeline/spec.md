@@ -3,6 +3,7 @@
 ## Purpose
 Define bounded, ordered CPU frame overlap between Main, Render and RHI, with owned frame handoffs, coordinated same-frame recording, safe draining and frame-correlated diagnostics while preserving existing GPU fence semantics.
 ## Requirements
+
 ### Requirement: Independent ordered CPU frame limits
 The engine SHALL provide startup Main-to-Render and Render-to-RHI lead limits a and b with nonnegative integer validation, a documented finite maximum and defaults of one. Before advancing from frame N to N+1, Main SHALL wait for Render through max(0,N-a), and Render SHALL wait for RHI through max(0,N-b). Frame IDs SHALL follow engine ticks in submission order.
 
@@ -48,7 +49,7 @@ The pipeline SHALL retain bounded in-flight frame state, observe failures, stop 
 - **THEN** all admitted frames are drained before final output verification, plugin/session teardown and native resource release
 
 ### Requirement: Frame-correlated diagnostics and capture
-Viewer SHALL consume completed results on Main, expose CPU stage progress, and correlate benchmark/capture outputs to originating frame IDs. Explicit RenderDoc requests SHALL target their intended frame despite prior queued work. Existing synchronous execution entry points SHALL remain available.
+Asynchronous Runtime consumers SHALL consume completed results on Main, expose CPU stage progress, and correlate benchmark/capture outputs to originating frame IDs. Explicit RenderDoc requests SHALL target their intended frame despite prior queued work. Existing synchronous execution entry points SHALL remain available; Editor SHALL continue using synchronous submission while preserving frame-correlated benchmark and capture results.
 
 #### Scenario: Async screenshot and benchmark tail
 - **WHEN** the final tick requests a screenshot during an asynchronous benchmark

@@ -41,8 +41,11 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildDepthPreview(std::shared_ptr
 }
 
 void FRenderSession::AppendDepthPreview(FRenderGraph& InGraph, std::shared_ptr<const FMaterialTextureSource> InSource,
-                                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred)
+                                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred,
+                                        FRenderTargetSource InOutput)
 {
-	AddFullscreenPass(*this, InGraph, PreviewPass(std::move(InSource), std::move(InLifetime), InViewport), bInDeferred);
+	auto Pass = PreviewPass(std::move(InSource), std::move(InLifetime), InViewport);
+	Pass.Targets.Color->Source = std::move(InOutput);
+	AddFullscreenPass(*this, InGraph, std::move(Pass), bInDeferred);
 }
 } // namespace Hyperion

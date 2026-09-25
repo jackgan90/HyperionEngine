@@ -1,5 +1,5 @@
 add_library(hyperion_config STATIC Private/AppSettings.cpp)
 hyp_module(hyperion_config)
-target_sources(hyperion_config PRIVATE Private/AppSettingsRecord.cpp Private/ApplicationSettings.cpp)
+target_sources(hyperion_config PRIVATE Private/AppSettingsRecord.cpp)
 target_sources(hyperion_config PRIVATE Private/ApplicationClose.cpp)
 target_link_libraries(hyperion_config PUBLIC hyperion_reflection hyperion_tasks)

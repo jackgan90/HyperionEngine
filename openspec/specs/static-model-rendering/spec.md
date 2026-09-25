@@ -3,6 +3,7 @@
 ## Purpose
 Present asynchronously loaded static models with validated GPU resource lifetimes, supported materials, depth testing and interactive camera controls.
 ## Requirements
+
 ### Requirement: Static model presentation
 The engine SHALL render loaded static glTF geometry with node transforms, a usable camera and default depth testing through generic Runtime render primitives. A Main model instance SHALL be a logical group rather than a GPU submission unit. Initial primitive mapping SHALL distinguish each selected-scene node occurrence and referenced glTF primitive/section while allowing geometry resources to be shared. Depth testing SHALL come from the default PBR material pass; an explicitly selected compatible material SHALL control its own depth and resource state independently of Model.
 
@@ -19,7 +20,7 @@ The engine SHALL render loaded static glTF geometry with node transforms, a usab
 - **THEN** the generic renderer honors the compatible selected material without reintroducing PBR layout or mandatory depth behavior
 
 ### Requirement: Material interpretation
-The engine SHALL render supported metallic-roughness material maps and alpha/double-sided modes using role-appropriate color spaces. Offline import SHALL convert embedded glTF material data into general reflected material assets, preserving supported UV/mip/sampler behavior. Native model rendering SHALL resolve material and texture references and honor their authored pass descriptions. Camera, object and PBR values SHALL use the generic parameter system. In logical-scene rendering, builtin lighting constants SHALL derive from the selected scene light nodes; ModelViewer initialization SHALL create actual default nodes matching the established initial values rather than depending on persistent session-owned lighting.
+The engine SHALL render supported metallic-roughness material maps and alpha/double-sided modes using role-appropriate color spaces. Offline import SHALL convert embedded glTF material data into general reflected material assets, preserving supported UV/mip/sampler behavior. Native model rendering SHALL resolve material and texture references and honor their authored pass descriptions. Camera, object and PBR values SHALL use the generic parameter system. In logical-scene rendering, builtin lighting constants SHALL derive from the selected scene light nodes rather than depending on persistent session-owned lighting.
 
 #### Scenario: Material interpretation acceptance
 - **WHEN** a fixture combines textured opaque, masked and blended primitives
@@ -29,9 +30,9 @@ The engine SHALL render supported metallic-roughness material maps and alpha/dou
 - **WHEN** existing fixtures exercise unlit, normal maps, UV1, role color spaces, mip generation, mirrored transforms and double-sided surfaces
 - **THEN** the independent asset path preserves the established pixel results and validation behavior
 
-#### Scenario: Default ModelViewer lighting
-- **WHEN** ModelViewer initializes its temporary logical scene
-- **THEN** actual scene camera/light nodes reproduce its established initial camera and lighting behavior and subsequent controls edit those nodes
+#### Scenario: Scene-owned default lighting
+- **WHEN** legacy content is converted into a logical scene
+- **THEN** actual light nodes preserve authored lighting and subsequent controls edit those nodes
 
 ### Requirement: Nonblocking upload publication
 The engine SHALL retain staging and destination resources through necessary GPU completion and publish only ready model resource groups without per-texture idle waits. Readiness SHALL be published to Render without borrowing the Main model. Removing a loading model SHALL prevent its late preparation or upload result from registering visible primitives.
@@ -44,13 +45,6 @@ The engine SHALL retain staging and destination resources through necessary GPU 
 - **WHEN** a model is removed before its upload completes
 - **THEN** frame/input processing continues, no late result makes the removed model visible, and its resource request is completed or retired safely
 
-### Requirement: Viewer interaction
-The engine SHALL keep frame/input processing active during asynchronous loading and display terminal failures.
-
-#### Scenario: Viewer interaction acceptance
-- **WHEN** a model load is delayed or a dependency fails
-- **THEN** the window remains responsive and reports loading or the failure
-
 ### Requirement: Cross-model rendering correctness
 Multiple model instances SHALL participate in scene-wide depth and transparency organization. Opaque and masked draws SHALL retain the existing depth/material semantics. Blended primitives SHALL be sorted across model boundaries by the documented stable projected-center depth policy, preserving its existing limitation for intersecting transparent geometry.
 
@@ -62,18 +56,11 @@ Multiple model instances SHALL participate in scene-wide depth and transparency 
 - **WHEN** one instance sharing an asset is moved, hidden or given a material override
 - **THEN** the other instance retains its previous transform, visibility and material behavior
 
-### Requirement: Preserved viewer and asset interfaces
-The migration SHALL preserve supported glTF material behavior, interactive orbit/zoom/fit, asynchronous loading/error display, existing CLI and serialized configuration fields, plugin IDs, executable names and existing build target names. CPU model assets SHALL remain usable independently of render registration.
-
-#### Scenario: Existing model viewer workflow
-- **WHEN** existing model-viewer configuration, CLI and acceptance fixtures run after migration
-- **THEN** loading, camera controls, material/capture validation and terminal error reporting continue to behave as documented
-
 ### Requirement: All current scene plugins use generic materials
-Triangle, ModelViewer and SceneViewer SHALL render through the new material system. Triangle SHALL use a zero-texture material, and the two viewers SHALL share the Runtime model-to-material adapter. DebugUI SHALL use the new RHI binding/packet contracts while keeping its overlay behavior. Generic Renderer and D3D12 draw paths SHALL no longer contain the old fixed model layout branch.
+Triangle and Editor SHALL render through the new material system. Triangle SHALL use a zero-texture material, and scene and asset rendering SHALL share the Runtime model-to-material adapter. DebugUI SHALL use the new RHI binding/packet contracts while keeping its overlay behavior. Generic Renderer and D3D12 draw paths SHALL no longer contain the old fixed model layout branch.
 
 #### Scenario: Existing plugin acceptance
-- **WHEN** existing triangle, model-viewer, scene-viewer and GUI acceptance workflows run
+- **WHEN** shared primitive, model rendering and Editor acceptance workflows run
 - **THEN** configuration, loading, camera/scene controls, clipping, capture and expected pixels remain valid through the new binding path
 
 ### Requirement: Shared native model resources
@@ -86,3 +73,17 @@ Renderer SHALL reuse CPU texture sources, GPU textures and material definitions 
 #### Scenario: Missing material dependency
 - **WHEN** a model's pinned material or texture dependency is missing or mismatched
 - **THEN** loading reports the dependency failure without publishing an incomplete model
+
+### Requirement: Editor interaction
+The engine SHALL keep frame/input processing active during asynchronous loading and display terminal failures.
+
+#### Scenario: Editor interaction acceptance
+- **WHEN** a model load is delayed or a dependency fails
+- **THEN** the window remains responsive and reports loading or the failure
+
+### Requirement: Preserved model asset capabilities
+The migration SHALL preserve supported glTF material behavior, interactive orbit/zoom/fit, asynchronous loading/error display, and native asset identity, material semantics and resource lifetime contracts. CPU model assets SHALL remain usable independently of render registration.
+
+#### Scenario: Editor model asset workflow
+- **WHEN** a native model is opened in the Editor asset workspace
+- **THEN** loading, camera controls, material/capture validation and terminal error reporting continue to behave as documented

@@ -3,6 +3,7 @@
 ## Purpose
 Define Scene-owned directional and environment light state, explicit main-light selection, persistent defaults and one published lighting source for forward, deferred and shadow rendering.
 ## Requirements
+
 ### Requirement: Scene-owned directional and environment lights
 Scene SHALL own directional-light and environment-light nodes with stable identity, hierarchy, enabled state, linear RGB color and intensity. Directional lights SHALL also own a cast-shadows flag. Colors, intensity and their radiance product SHALL be finite and nonnegative. Directional emission forward SHALL derive from the node world minus-Z pose; the existing surface-to-light semantic SHALL receive its opposite. Environment radiance SHALL be independent of node position and orientation.
 
@@ -52,7 +53,7 @@ Absent, disabled or zero-radiance directional lights SHALL disable their CSM con
 - **THEN** it stays unlit by directional and environment sources across load, render, save and reload without automatic default-light resurrection
 
 ### Requirement: Default lighting is explicit scene content
-Legacy scene migration and ModelViewer scene initialization SHALL create actual default light nodes matching established radiance and direction. An empty FScene SHALL remain empty. An explicit CLI light override SHALL mutate or explicitly create and select a scene light once after scene initialization, rather than continuously injecting session parameters.
+Legacy scene migration SHALL create actual default light nodes matching established radiance and direction. An empty FScene SHALL remain empty. An explicit authored light edit SHALL mutate or explicitly create and select a scene light once after scene initialization, rather than continuously injecting session parameters.
 
 #### Scenario: Load a legacy scene
 - **WHEN** a legacy scene without stored lights is migrated

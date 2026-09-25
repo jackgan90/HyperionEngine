@@ -20,7 +20,10 @@ void FSceneStorage::FMutation::StageNode(std::uint32_t InSlot, FSceneNode InNode
 	}
 	ESceneChangeMask Mask = ESceneChangeMask::Metadata;
 	const bool bParentChanged = Before.Parent() != InNode.Parent();
-	const auto Parent = InNode.Parent().empty() ? InvalidSlot : Storage.FindId(InNode.Parent());
+	const auto AddedParent = AddedIds.find(InNode.Parent());
+	const auto Parent = InNode.Parent().empty()         ? InvalidSlot
+	                    : AddedParent != AddedIds.end() ? AddedParent->second
+	                                                    : Storage.FindId(InNode.Parent());
 	if (!InNode.Parent().empty() && Parent == InvalidSlot)
 	{
 		throw std::invalid_argument("Missing scene parent: " + InNode.Parent());
@@ -173,7 +176,8 @@ bool FSceneStorage::EditNodes(std::vector<FSceneNodeEdit> InEdits)
 	return true;
 }
 
-std::vector<FSceneHandle> FSceneStorage::AddNodes(std::vector<FSceneNode> InNodes)
+std::vector<FSceneHandle> FSceneStorage::AddNodes(std::vector<FSceneNode> InNodes,
+                                                  std::vector<FSceneNodeEdit> InRestoredChildren)
 {
 	FMutation Mutation(*this);
 	std::vector<std::string> Parents;
@@ -196,6 +200,24 @@ std::vector<FSceneHandle> FSceneStorage::AddNodes(std::vector<FSceneNode> InNode
 		Mutation.Unlink(Added[Index]);
 		Mutation.Link(Added[Index], Parent);
 		Result.push_back({Identity, Added[Index], Mutation.Read(Added[Index]).Generation});
+	}
+	std::set<std::uint32_t> Seen;
+	for (auto& Child : InRestoredChildren)
+	{
+		const auto Slot = Live(Child.Handle);
+		if (Slot == InvalidSlot || !Seen.insert(Slot).second)
+		{
+			throw std::invalid_argument("Invalid restored child handle");
+		}
+		auto Candidate = *Slots[Slot]->Node;
+		Candidate.Parent() = Child.Node.Parent();
+		Candidate.Local() = Child.Node.Local();
+		if (Candidate != Child.Node)
+		{
+			throw std::invalid_argument("Child restoration only changes hierarchy and transform");
+		}
+		Mutation.StageNode(Slot, std::move(Candidate));
+		Added.push_back(Slot);
 	}
 	Mutation.ValidateHierarchy(Added);
 	Mutation.DeriveRoots(Added);

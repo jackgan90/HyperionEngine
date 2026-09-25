@@ -76,7 +76,8 @@ public:
 	std::vector<FSceneHandle> LoadNodes(std::vector<FSceneNode> InNodes);
 	bool EditNode(FSceneHandle InHandle, FSceneNode InNode);
 	bool EditNodes(std::vector<FSceneNodeEdit> InEdits);
-	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes);
+	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes,
+	                                   std::vector<FSceneNodeEdit> InRestoredChildren = {});
 	bool RemoveSubtrees(std::span<const FSceneHandle> InHandles);
 	bool Reparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);
 	bool RemoveNodes(FSceneHandle InHandle, bool bInKeepChildren);

@@ -114,15 +114,6 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		InGui.Text("Result frame " + std::to_string(InMetrics.ResultFrame) + " | lead limits " +
 		           std::to_string(InMetrics.FrameLimits.MainLead) + " / " +
 		           std::to_string(InMetrics.FrameLimits.RenderLead));
-		if (!InMetrics.AssetStatus.empty())
-		{
-			InGui.Separator();
-			InGui.Text(InMetrics.bSceneViewer ? "SCENE" : "MODEL");
-			InGui.TextWrapped(InMetrics.AssetStatus);
-			InGui.Text(InMetrics.bSceneViewer ? "Arrows: move | Drag: orbit | Wheel: dolly"
-			                                  : "Drag: orbit | Wheel: zoom");
-			InGui.Text("Home: fit | Tab: toggle panel");
-		}
 		InGui.Separator();
 		InGui.Text(InMetrics.Device.Adapter);
 		InGui.Text(std::string("Validation: ") + (InMetrics.Device.bDebugLayer ? "enabled" : "unavailable") +
@@ -134,11 +125,10 @@ FDebugActions DrawDebugPanel(FGui& InGui, FAppSettings& InSettings, const FDebug
 		InGui.Text("EXPERIMENT");
 		constexpr std::array<std::string_view, 5> Ids{"triangle_scale", "clear_red", "clear_green", "clear_blue",
 		                                              "vsync"};
-		InGui.EditProperties(SettingsType(), &InSettings,
-		                     InSettings.ModelSource.empty() ? std::span(Ids) : std::span(Ids).subspan(1));
+		InGui.EditProperties(SettingsType(), &InSettings, std::span(Ids));
 		bool bTriangle =
 		    std::find(InSettings.Plugins.begin(), InSettings.Plugins.end(), "triangle") != InSettings.Plugins.end();
-		if (InSettings.ModelSource.empty() && InGui.Checkbox("Triangle plugin (restart)", bTriangle))
+		if (InGui.Checkbox("Triangle plugin (restart)", bTriangle))
 		{
 			if (bTriangle)
 			{

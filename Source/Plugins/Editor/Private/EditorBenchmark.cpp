@@ -8,24 +8,36 @@ namespace Hyperion
 {
 void FEditorPlugin::BenchmarkCamera()
 {
-	if (!Options.bBenchmarkCamera || ReadyFrames < Options.BenchmarkWarmup)
+	if (ReadyFrames < Options.BenchmarkWarmup)
 	{
 		return;
 	}
-	const auto Frame = ReadyFrames - Options.BenchmarkWarmup;
-	const auto Phase = Frame % 40;
-	const auto Previous = (Frame + 39) % 40;
-	std::array<FInputEvent, 3> Events;
-	Events[0].Type = EEventType::MouseButton;
-	Events[0].Button = 1;
-	Events[0].bDown = true;
-	Events[0].X = Frame == 0 ? 0.f : float(Previous < 20 ? Previous : 40 - Previous) * .1f;
-	Events[1].Type = EEventType::MouseMove;
-	Events[1].X = float(Phase < 20 ? Phase : 40 - Phase) * .1f;
-	Events[2].Type = EEventType::MouseButton;
-	Events[2].Button = 1;
-	Events[2].X = Events[1].X;
-	Camera.Input(ViewCamera, Events, false, false);
+	if (Options.bBenchmarkCamera)
+	{
+		const auto Events = BenchmarkCameraInput(ReadyFrames - Options.BenchmarkWarmup, Options.BenchmarkCameraStep);
+		FSceneCameraController BenchmarkNavigation(ESceneCameraNavigationMode::Orbit);
+		BenchmarkNavigation.Input(ViewCamera, Events, false, false);
+	}
+	if (Options.bBenchmarkLight)
+	{
+		const auto Light = Scene->GetSettings().MainDirectionalLight;
+		FSceneNodeView View;
+		if (!Light || !Scene->GetNodeView(*Light, View))
+		{
+			throw std::runtime_error("Light benchmark requires a main light");
+		}
+		auto Node = *View.Node;
+		const auto Pose = ExtractScenePose(View.World);
+		const auto Forward = ScaleVector(BenchmarkLightDirection(ReadyFrames - Options.BenchmarkWarmup), -1);
+		const auto World = SceneCameraTransform(Pose.Eye, Add(Pose.Eye, Forward));
+		FSceneNodeView Parent;
+		const auto ParentWorld =
+		    Scene->GetNodeView(Scene->FindHandle(Node.Parent()), Parent) ? Parent.World : Identity();
+		Node.Local() = Multiply(Inverse(ParentWorld), World);
+		// One shared-domain transaction for the isolated workload, restored before completion.
+		SceneDocument.CommitEdits({{*Light, std::move(Node)}}, Scene->GetRevision(), 1);
+		bBenchmarkLightEdit = true;
+	}
 }
 
 void FEditorPlugin::RecordBenchmark()
@@ -47,7 +59,7 @@ void FEditorPlugin::RecordBenchmark()
 	{
 		LoadMilliseconds = double(ClockNanoseconds() - BenchmarkStarted) / 1e6;
 	}
-	if (ReadyFrames < Options.BenchmarkWarmup)
+	if (!bBenchmarkTiming)
 	{
 		return;
 	}
@@ -56,8 +68,27 @@ void FEditorPlugin::RecordBenchmark()
 	{
 		throw std::runtime_error("Editor benchmark requires a visible nonempty successfully rendered scene");
 	}
+	HYP_PERF_PLOT(Frame, SceneDraws, Main.Draws);
 	BenchmarkFrame.Pipeline = RenderStats;
 	BenchmarkFrame.Nodes = Scene->GetNodes().size();
+	BenchmarkFrame.Frame = ReadyFrames;
+	BenchmarkFrame.Draws = Main.Draws;
+	BenchmarkFrame.VisibleItems = Main.VisibleItems;
+	BenchmarkFrame.Batches = Main.Batches;
+	BenchmarkFrame.CpuLatencyMilliseconds = BenchmarkFrame.Milliseconds;
+	BenchmarkFrame.Viewport = ViewportSize;
+	const auto Logical = Window->LogicalSize();
+	const auto Pixels = Window->PixelSize();
+	const auto Bounds = ViewportRegion.Bounds;
+	BenchmarkFrame.CaptureViewport = {
+	    Bounds.X * Pixels.Width / Logical.Width, Bounds.Y * Pixels.Height / Logical.Height,
+	    (Bounds.Z - Bounds.X) * Pixels.Width / Logical.Width, (Bounds.W - Bounds.Y) * Pixels.Height / Logical.Height};
+	BenchmarkFrame.LoadMilliseconds = LoadMilliseconds;
+	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+	                          [&]
+	                          {
+		                          BenchmarkFrame.Device = Device->Statistics();
+	                          }));
 	BenchmarkSamples.push_back(BenchmarkFrame);
 }
 
@@ -75,25 +106,29 @@ void FEditorPlugin::SaveBenchmark()
 	{
 		std::filesystem::create_directories(Options.Benchmark.parent_path());
 	}
-	std::ofstream Stream(Options.Benchmark);
-	Stream << std::setprecision(10);
-	Stream << "frame,frame_ms,scene_ms,gui_ms,render_wait_ms,preparation_ms,material_ms,nodes,visible_items,"
-	          "scene_draws,failed_items,scene_target_bytes,shadow_bytes,viewport_width,viewport_height,load_ms\n";
-	for (std::size_t Index = 0; Index < BenchmarkSamples.size(); ++Index)
+	if (bBenchmarkLightEdit)
 	{
-		const auto& Sample = BenchmarkSamples[Index];
-		const auto Main = Sample.Pipeline.MainView();
-		Stream << Index << ',' << Sample.FrameMilliseconds << ',' << Sample.SceneMilliseconds << ','
-		       << Sample.GuiMilliseconds << ',' << Sample.RenderMilliseconds << ','
-		       << Sample.Pipeline.PreparationMilliseconds << ',' << Main.MaterialMilliseconds << ',' << Sample.Nodes
-		       << ',' << Main.VisibleItems << ',' << Main.Draws << ',' << Main.Batches.FailedItems << ','
-		       << Sample.Pipeline.SceneTargetBytes << ',' << Sample.Pipeline.ShadowTextureBytes << ','
-		       << ViewportSize.Width << ',' << ViewportSize.Height << ',' << LoadMilliseconds << '\n';
+		if (SceneDocument.GetState().HistoryCursor != 1)
+		{
+			throw std::runtime_error("Light benchmark must be one history transaction");
+		}
+		SceneDocument.FinishInteraction();
+		SceneDocument.Undo();
+		if (SceneDocument.IsDirty())
+		{
+			throw std::runtime_error("Light benchmark failed to restore authored state");
+		}
+		bBenchmarkLightEdit = false;
 	}
-	if (!Stream)
-	{
-		throw std::runtime_error("Could not write editor benchmark");
-	}
+	FGpuTimingCapture Capture;
+	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+	                          [&]
+	                          {
+		                          Device->WaitIdle();
+		                          Capture = Device->EndGpuTimingCapture();
+	                          }));
+	MatchBenchmarkTimings(BenchmarkSamples, std::move(Capture));
+	WriteRenderBenchmark(Options.Benchmark, BenchmarkSamples);
 	Log(ELogLevel::Info, "Editor benchmark: " + std::to_string(BenchmarkSamples.size()) + " ready frames; vsync=off");
 }
 } // namespace Hyperion

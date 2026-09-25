@@ -127,13 +127,13 @@ Main 冻结一份 frame，Render 在一个 task 中调用 `BuildViews(Graph, Vie
 
 桥接器每次 `Flush` 为共享 instance 冻结一次，检测材质 revision 的变化，即使没有 `Scene.Update` 也会同步所有关联模型。所有待更新模型先准备和验证，再通过一次 `PublishGroups` admission 发布，成功后确认 Main 状态、版本与 receipts。Main 可确定的非法 section/schema/type 不产生部分更新；资源接口尚未准备时的验证会延迟到就绪阶段。异步失败有回执和组错误，可用合法的新 revision 恢复。
 
-`IsInterfaceReady` 表示编译 schema 可用；`FRenderMaterial` 的 Ready 和 `FModel/Bridge.IsReady` 表示静态资源就绪，无需先有 View 或提交第一帧。动态 provider 缺失只使当前 draw preparation 失败。同一 model group 暂存全部 packets，全成或全败；独立 group 继续绘制。`FRenderBinding.GetLastDrawResult` 以及 `FModel/Bridge.GetDrawResults` 返回带 frame/family/view/usage/revision 的诊断，过时的 revision/frame 结果被丢弃。Viewer 显示 draw 错误但保留静态 readiness，使下一有效上下文能够恢复。
+`IsInterfaceReady` 表示编译 schema 可用；`FRenderMaterial` 的 Ready 和 `FModel/Bridge.IsReady` 表示静态资源就绪，无需先有 View 或提交第一帧。动态 provider 缺失只使当前 draw preparation 失败。同一 model group 暂存全部 packets，全成或全败；独立 group 继续绘制。`FRenderBinding.GetLastDrawResult` 以及 `FModel/Bridge.GetDrawResults` 返回带 frame/family/view/usage/revision 的诊断，过时的 revision/frame 结果被丢弃。Editor 显示 draw 错误但保留静态 readiness，使下一有效上下文能够恢复。
 
 coordinator 权威持有布局、PSO、set、sampler、texture/read-buffer 和常量页；弱 scope tokens 控制缓存退休，draw/recorded list/fence 保留实际 GPU 引用。释放 CPU 租约只触发 RHI 0 采集。上传后失败、最后实例移除、停止出帧、失败 Present 均遵守同一 fence 协议。已经提交但尚未取得 fence 的上传保留到后续成功 drain；不能凭时间推测 GPU 完成。Close 前释放 CPU frame packets，再关闭 Scene/session，最后销毁 device/Tasks。
 
 GPU cache 的 owner groups 按完整 shared ownership identity 建立有序索引，重复命中为 O(log U)，U 为活跃 owner group 数；过期 group 清理集中在 Collect，不在每个 draw 命中时扫描所有其他用户。没有固定数量上限的 native/cache 记录依赖活跃租约与 fence 完成退休，不能将“没有硬上限”直接等同于无限历史保留。批量发布已移除的旧 binding 再次清理时，Main admission 也校验 generation，不能释放新一代对象复用的槽位。
 
-Triangle、ModelViewer、SceneViewer 已走同一通用材质路径；DebugUI 使用通用 RHI layout/set/CBV adapter 保留 overlay 顺序。glTF 的五种纹理角色、UV、mip、sRGB、mask/blend、镜像和双面行为保留，序列化字段、CLI、plugin ID 与 build target 未改。
+Triangle 与 Editor 场景渲染使用同一通用材质路径；DebugUI 使用通用 RHI layout/set/CBV adapter 保留 overlay 顺序。glTF 的五种纹理角色、UV、mip、sRGB、mask/blend、镜像和双面行为保留，序列化字段、CLI、plugin ID 与 build target 未改。
 
 ## 验证入口
 

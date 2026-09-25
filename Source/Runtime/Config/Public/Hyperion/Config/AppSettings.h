@@ -26,8 +26,6 @@ struct FAppSettings
 	std::string GBufferLayout = "compact";
 	double Exposure = 1;
 	int GBufferDebug = 0;
-	std::string ModelSource;
-	std::string SceneSource;
 	bool bVsync = true;
 	bool bReversedZ = true;
 	bool bShowGui = true;

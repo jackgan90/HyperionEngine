@@ -4,7 +4,7 @@ Hyperion 提供共享的操作目录、严格 JSON 数据契约和会话任务�
 
 ## 使用
 
-独立模式无需启动窗口或创建设备。附着到正在运行的 Editor / Scene Viewer 见 [连接与 live scene 操作](AutomationConnections.md)。在仓库根目录构建：
+独立模式无需启动窗口或创建设备。附着到正在运行的 Editor 见 [连接与 live scene 操作](AutomationConnections.md)。在仓库根目录构建：
 
 ```powershell
 .\tools\Build.ps1 -Preset debug -Target hyperion_automation_cli
@@ -60,7 +60,7 @@ JSONL 示例，`id` 可省略，也可以是字符串或整数：
 
 MCP 客户端配置的 `command` 指向构建出的 `hyperion_automation_cli.exe`，`args` 使用 `["--mcp"]` 即可。当前明确实现 **2025-11-25** 协议的 initialize、initialized 通知、ping、tools/list 和 tools/call stdio 子集；不声明 Resources、Prompts、MCP Tasks 或 HTTP 能力。初始化返回版本供客户端协商。引擎异步任务通过普通工具查询，不要求客户端支持 MCP Tasks。参考官方 [生命周期](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle)、[工具](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)和 [stdio 传输](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)。
 
-`content.root.get/set/clear` 返回 directory、generation 和 readOnly。设根和清空需要当前 root generation，区别于资产 document generation。切换会关闭旧文档并使旧句柄失效；同一目录与权限不会关闭文档。未保存文档需先调用 save 或显式传 `discard:true`；busy 时先等待编辑/保存结束。不存在的目录及 stale/dirty/busy 请求保留当前内容。清空后 `/Engine` 仍可用。Root 属于请求实际路由的进程，不会自动传到下一次独立 CLI 调用。附着 Editor 的 root 操作更新目标偏好，与 GUI 相同；Viewer 没有运行时切根入口，仅提供查询。大目录设根目前同步完成扫描后返回。
+`content.root.get/set/clear` 返回 directory、generation 和 readOnly。设根和清空需要当前 root generation，区别于资产 document generation。切换会关闭旧文档并使旧句柄失效；同一目录与权限不会关闭文档。未保存文档需先调用 save 或显式传 `discard:true`；busy 时先等待编辑/保存结束。不存在的目录及 stale/dirty/busy 请求保留当前内容。清空后 `/Engine` 仍可用。Root 属于请求实际路由的进程，不会自动传到下一次独立 CLI 调用。附着 Editor 的 root 操作更新目标偏好，与 GUI 相同。大目录设根目前同步完成扫描后返回。
 
 ## 按需发现
 
@@ -153,9 +153,9 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 
 `content.directory.list` 使用与 Content Browser 相同的 mounted ListDirectory，分页列出 /Game 或 /Engine 的直接子项，包括空目录、普通文件、索引引用、native_unindexed 候选及访问错误。limit 为 1–100，使用当前 root generation，不接受物理路径或父级跳转。native_unindexed 不等于损坏，获得路径后用 asset.open 读取加载诊断；indexed 也不证明完整 payload 有效。修改内容后重新分页，不承诺文件系统快照。
 
-`asset.workspace.policy` 返回 shared、retainsFailed、retainsLoading、activation。Editor 保留失败/加载中页签；standalone 及无 workspace 的 Viewer 只列出 ready CPU 草稿，失败打开经 job outcome 报错后移除。修改响应与随后 asset.info 的 workspace active、dirty、generation 应一致；不同模式不必拥有相同页签生命周期。
+`asset.workspace.policy` 返回 shared、retainsFailed、retainsLoading、activation。Editor 保留失败/加载中页签；standalone 只列出 ready CPU 草稿，失败打开经 job outcome 报错后移除。修改响应与随后 asset.info 的 workspace active、dirty、generation 应一致；不同模式不必拥有相同页签生命周期。
 
-`application.health` 返回简洁的 frame、ready、error。ready=false 且 error 为空可能正在加载；ready 不保证所有资源已绘制。详情再用 scene.status、render.component_diagnostics 或 render.statistics。Editor/Viewer 的概要与完整诊断共用状态来源，概要不读取 GPU 统计；无诊断服务时明确 unavailable。
+`application.health` 返回简洁的 frame、ready、error。ready=false 且 error 为空可能正在加载；ready 不保证所有资源已绘制。详情再用 scene.status、render.component_diagnostics 或 render.statistics。Editor 的概要与完整诊断共用状态来源，概要不读取 GPU 统计；无诊断服务时明确 unavailable。
 
 新增能力应验证类型引用可解析、枚举语义可读、示例有效、非法参数无副作用、修改响应与查询一致，以及 GUI 共用事务的历史和保存行为；不向 CLI/MCP 添加领域分支。
 
@@ -182,16 +182,16 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 领域 | 当前支持 | 边界 |
 |---|---|---|
 | 发现与执行 | 搜索、描述、严格调用、任务与错误；CLI/JSONL/MCP 共用 | 仍使用固定 bootstrap tools，按需查询具体 schema |
-| 非场景资产文档 | 模型/材质/纹理/天空的打开、列表、激活、改名、history、save/close | Editor 附着使用实际页签文档；独立模式和无 workspace 的 Viewer 使用 CPU 草稿 |
+| 非场景资产文档 | 模型/材质/纹理/天空的打开、列表、激活、改名、history、save/close | Editor 附着使用实际页签文档；独立模式 使用 CPU 草稿 |
 | 模型与材质 | 模型节点变换/名称、primitive 名称/材质槽、材质参数与纹理引用 | 固定拓扑和资源身份保持不变；引用完成校验后提交一个事务 |
 | 纹理与天空 | 编码/mip 重建、元信息与单像素查询；天空产品/SH/convention 查询 | 天空烘焙走导入；浮点/cube 编码不可改，与 GUI 一致 |
-| 场景编辑 | ordered selection、节点创建/删除/重父级、metadata、组件增删读写、设置、放置、保存 | Editor 共享历史；Viewer 另有复制和保留子节点删除，未承诺 Editor 不存在的历史操作 |
+| 场景编辑 | ordered selection、节点创建/删除/重父级、metadata、组件增删读写、设置、放置、保存 | Editor 共享历史；复制与保留子节点删除同样支持历史 |
 | 文档与内容 | Editor 场景打开/清空、加载状态；内容分页搜索；root 设置/清空与偏好保存 | dirty/discard/busy、generation 和旧 handle 失效由共享服务处理 |
 | 视图与预览 | 浏览相机、frame、速度、曝光、场景相机预览/创建/应用；资产预览相机/形状/纹理显示 | 临时状态不写场景历史；保存 initial view 或创建相机是明确的文档操作 |
-| 渲染与工具 | Viewer 配置、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |
+| 渲染与工具 | 共享渲染配置、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |
 | 导入、发布 | 复用 AssetTool 的 glTF/GLB、HDR/EXR 天空、JSON 和 native upgrade 发布服务 | 不扩充源格式；一般 PNG/JPEG 由模型依赖导入，不新增独立 image importer |
 | 应用附着 | 默认本机发现、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |
-| 底层与维护工具 | 现有 AssetTool 离线维护 CLI 保留 | 不逐个 RPC Public C++ 方法；库迁移、Engine 内容生成、性能测量及导出 envelope 不作为 Editor/Viewer 交互任务扩展 |
+| 底层与维护工具 | 现有 AssetTool 离线维护 CLI 保留 | 不逐个 RPC Public C++ 方法；库迁移、Engine 内容生成、性能测量及导出 envelope 不作为 Editor 交互任务扩展 |
 
 领域操作族、共享服务及工作流见 [AutomationCapabilities.md](AutomationCapabilities.md)。新增功能必须同步更新该覆盖表，并给出 discovery、实际调用和相应 GUI/保存/失效验证。
 
@@ -199,11 +199,11 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 
 ## 验证入口
 
-`transport_contracts` 验证 memory/Windows provider 的分片、背压和关闭；`automation_connections` 验证 framing、握手、stale target 和无回退；`automation_scene` 验证共享历史、跨会话 job 隔离、save point 和 absence；`automation_attachment` 启动测试专用 Editor/Viewer，通过真实 CLI/MCP 验证变换、撤销/重做、保存重开、目标隔离与禁用。
+`transport_contracts` 验证 memory/Windows provider 的分片、背压和关闭；`automation_connections` 验证 framing、握手、stale target 和无回退；`automation_scene` 验证共享历史、跨会话 job 隔离、save point 和 absence；`automation_attachment` 启动测试专用 Editor，通过真实 CLI/MCP 验证变换、撤销/重做、保存重开、目标隔离与禁用。
 
-`automation_parity_regressions` 验证失败页签恢复、ModelViewer 控制与错误传播、错误画面截图、正常关闭决策和保存后重开；`automation_connections` 另覆盖关闭时分片应答排空。
+`automation_parity_regressions` 验证失败页签恢复、模型资产预览控制与错误传播、错误画面截图、正常关闭决策和保存后重开；`automation_connections` 另覆盖关闭时分片应答排空。
 
-`automation_capability_parity` 用隔离内容和真实 Editor/Viewer 验证场景/组件编辑、共享资产页签、模型/材质引用、glTF 发布、root 切换、配置持久化和完成的 PNG 输出。
+`automation_capability_parity` 用隔离内容和真实 Editor 验证场景/组件编辑、共享资产页签、模型/材质引用、glTF 发布、root 切换、配置持久化和完成的 PNG 输出。
 
 `automation_contracts` 覆盖 wire/schema、注册扩展、校验、任务和 MCP 生命周期；`automation_assets` 覆盖共享文档等价行为、保存期间编辑、冲突和插件排空；`automation_transport` 启动真实 CLI/MCP 进程并创建隔离的原生资产验证持久化、只读挂载、缺失/失败/禁用提供方和 EOF。`editor_asset_documents`、`editor_asset_workspace` 及 Editor 资产验收保护 GUI 消费方。
 

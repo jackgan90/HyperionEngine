@@ -11,6 +11,9 @@ import statistics
 import subprocess
 
 
+from BenchmarkWorkload import render_settings
+
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
@@ -29,15 +32,12 @@ def validate(rows, log, warmup, samples, count, shadows):
         raise ValueError("Missing clean native validation result")
     if [int(row["frame"]) for row in rows] != list(range(warmup, warmup + samples)):
         raise ValueError("Incomplete CPU frame coverage")
-    if count != 0:
-        ready = re.findall(r"(\d+)/(\d+) models ready \| (\d+) failed", log)
-        if not ready or any(int(a) != int(b) or int(c) for a, b, c in ready[-1:]):
-            raise ValueError("Scene is not ready")
-        if count is not None and int(ready[-1][0]) != count:
-            raise ValueError("Incorrect model count")
+    if "Editor scene ready:" not in log:
+        raise ValueError("Scene is not ready")
+    frames = [int(row["gpu_sample_frame"]) for row in rows]
+    if any(b != a + 1 for a, b in zip(frames, frames[1:])):
+        raise ValueError("GPU submission coverage mismatch")
     for row in rows:
-        if int(row["gpu_sample_frame"]) != int(row["frame"]) + 1:
-            raise ValueError("GPU submission coverage mismatch")
         if int(row["failed_items"]) or int(row["shadow_failed"]):
             raise ValueError("Failed source items")
         visible = int(row["visible_items"])
@@ -59,11 +59,7 @@ def validate(rows, log, warmup, samples, count, shadows):
     return {key: distribution([float(row[key]) for row in rows]) for key in rows[0]}
 
 
-def generate(output, counts, viewer):
-    config = json.loads((ROOT / "experiments/Scene.json").read_text(encoding="utf-8"))
-    config["properties"]["plugins"] = []
-    config["properties"].pop("scene_source", None)
-    (output / "Clear.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+def generate(output, counts, editor):
     for count in counts:
         if count == 0:
             continue
@@ -75,32 +71,28 @@ def generate(output, counts, viewer):
                  "camera": {"eye": [0, 0, 10], "target": [0, 0, 0], "near": .05, "far": 100}}
         source = output / f"Triangles-{count}.json"
         source.write_text(json.dumps(scene), encoding="utf-8")
-        tool = viewer.resolve().with_name("hyperion_asset_tool" + viewer.suffix)
+        tool = editor.resolve().with_name("hyperion_asset_tool" + editor.suffix)
         subprocess.run([str(tool), "import", str(source), str(source.with_suffix(".hasset"))],
                        check=True, timeout=60)
 
 
-def run(args, label, viewer, trial, count, moving, shadows):
+def run(args, label, editor, trial, count, moving, shadows):
     name = f"{label}-{'scene' if count is None else count}-{'moving' if moving else 'static'}"
     name += f"-{'csm' if shadows else 'forward'}-R{trial}"
     csv_path = args.output / f"{name}.csv"
-    config = args.output / "Clear.json" if count == 0 else ROOT / "experiments/Scene.json"
-    command = [str(viewer), "--asset-root", str(args.asset_root.resolve()), "--config", str(config), "--no-vsync", "--frames",
-               str(args.warmup + args.samples), "--benchmark-warmup", str(args.warmup),
-               "--benchmark", str(csv_path)]
+    settings = render_settings(args.output / f"{name}-Settings.json", pipeline="forward", shadows=shadows)
+    scene = str(args.output / f"Triangles-{count}.hasset") if count else "/Game/Scenes/Showcase.hasset"
+    command = [str(editor), "--asset-root", str(args.asset_root.resolve()), "--scene", scene,
+               "--render-settings", str(settings), "--benchmark-samples", str(args.samples),
+               "--benchmark-warmup", str(args.warmup), "--benchmark", str(csv_path)]
     if not args.visible:
         command.append("--hidden")
-    if not args.ui:
-        command.append("--no-ui")
     if count:
-        command += ["--scene", str(args.output / f"Triangles-{count}.hasset"),
-                    "--scene-culling", "none", "--no-instance-batching"]
+        command += ["--scene-culling", "none", "--no-instance-batching"]
     if moving:
         command += ["--benchmark-camera", "--benchmark-camera-step", str(getattr(args, "camera_step", .1))]
     if getattr(args, "fixed_visibility", False):
         command += ["--scene-culling", "none"]
-    if not shadows:
-        command.append("--no-shadows")
     startup = None
     if os.name == "nt" and not args.visible:
         startup = subprocess.STARTUPINFO()
@@ -129,10 +121,10 @@ def run(args, label, viewer, trial, count, moving, shadows):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--viewer", type=pathlib.Path, required=True)
+    parser.add_argument("--editor", type=pathlib.Path, required=True)
     parser.add_argument("--baseline", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path, required=True)
-    parser.add_argument("--counts", type=int, nargs="*", default=[0, 1, 100, 300, 600, 1200])
+    parser.add_argument("--counts", type=int, nargs="*", default=[1, 100, 300, 600, 1200])
     parser.add_argument("--motion", choices=["static", "moving", "both"], default="both")
     parser.add_argument("--scene", action="store_true", help="Also measure default scene with and without CSM")
     parser.add_argument("--warmup", type=int, default=200)
@@ -143,17 +135,16 @@ def main():
     parser.add_argument("--fixed-visibility", action="store_true", help="Disable culling for scene workloads")
     parser.add_argument("--scene-shadows", choices=["both", "on", "off"], default="both")
     parser.add_argument("--visible", action="store_true")
-    parser.add_argument("--ui", action="store_true")
     parser.add_argument("--asset-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
     args = parser.parse_args()
-    if min(args.warmup, args.samples, args.trials) < 1 or any(count < 0 for count in args.counts):
-        parser.error("Positive warmup/samples/trials and nonnegative counts are required")
+    if min(args.warmup, args.samples, args.trials) < 1 or any(count <= 0 for count in args.counts):
+        parser.error("Positive warmup/samples/trials and positive counts (use submission_benchmark for empty RHI workloads) are required")
     if not math.isfinite(args.camera_step) or args.camera_step <= 0:
         parser.error("camera-step must be finite and positive")
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
-    generate(args.output, args.counts, args.viewer)
-    binaries = [("candidate", args.viewer.resolve())]
+    generate(args.output, args.counts, args.editor)
+    binaries = [("candidate", args.editor.resolve())]
     if args.baseline:
         binaries.insert(0, ("baseline", args.baseline.resolve()))
     metadata = {"settings": {key: str(value) if isinstance(value, pathlib.Path) else value
@@ -174,8 +165,8 @@ def main():
                 if count == 0 and moving:
                     continue
                 for trial in range(args.trials):
-                    for label, viewer in (binaries if trial % 2 == 0 else list(reversed(binaries))):
-                        metadata["runs"].append(run(args, label, viewer, trial, count, moving, shadows))
+                    for label, editor in (binaries if trial % 2 == 0 else list(reversed(binaries))):
+                        metadata["runs"].append(run(args, label, editor, trial, count, moving, shadows))
     finally:
         (args.output / "Summary.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 

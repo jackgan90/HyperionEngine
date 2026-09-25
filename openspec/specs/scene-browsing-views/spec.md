@@ -4,6 +4,7 @@
 Separate temporary viewport navigation and optional initial browsing presets from authored scene cameras, with explicit preview and undoable camera authoring.
 
 ## Requirements
+
 ### Requirement: Initial browsing view is separate scene metadata
 The scene SHALL support an optional validated pose/lens browsing preset independent of scene objects and runtime default-camera selection. Old scene files SHALL load without changing topology or implicitly copying an authored camera into the preset.
 
@@ -16,11 +17,11 @@ The scene SHALL support an optional validated pose/lens browsing preset independ
 - **THEN** that camera remains unchanged, the preset is absent, and browsing uses deterministic framing
 
 ### Requirement: Navigation is temporary
-Editor and SceneViewer SHALL navigate independent viewport values initialized from the preset or deterministic framing. Ordinary navigation and scene saving SHALL NOT modify the preset, authored camera transforms, or scene revision.
+Editor SHALL navigate independent viewport values initialized from the preset or deterministic framing. Ordinary navigation and scene saving SHALL NOT modify the preset, authored camera transforms, or scene revision.
 
 #### Scenario: Camera-free browsing
 - **WHEN** a scene without camera objects is loaded and the user navigates
-- **THEN** both hosts render normally without adding objects and the authored snapshot remains unchanged
+- **THEN** Editor renders normally without adding objects and the authored snapshot remains unchanged
 
 #### Scenario: Explicit initial-view update
 - **WHEN** the user sets the editor view as the initial view and saves
@@ -56,5 +57,5 @@ Shipped Sponza SHALL migrate its verified browsing-only default camera into Init
 - **THEN** migration refuses to discard that state
 
 #### Scenario: Published camera-free scene
-- **WHEN** the migrated Sponza is opened in Editor and SceneViewer
+- **WHEN** the migrated Sponza is opened in Editor
 - **THEN** it starts at the previous saved camera framing, renders its model/lights, and contains no placeholder camera object

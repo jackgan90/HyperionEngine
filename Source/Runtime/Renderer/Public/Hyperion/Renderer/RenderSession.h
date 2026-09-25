@@ -81,7 +81,8 @@ public:
 	const std::vector<FRenderViewStatistics>& ViewStatistics() const;
 	FMaterialProviderStats ProviderStatistics() const; // Render only.
 	void AppendDepthPreview(FRenderGraph& InGraph, std::shared_ptr<const FMaterialTextureSource> InSource,
-	                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred = false);
+	                        std::shared_ptr<const void> InLifetime, FViewport InViewport, bool bInDeferred = false,
+	                        FRenderTargetSource InOutput = {ERenderTargetKind::Backbuffer});
 	void AppendLightVolumes(FRenderGraph& InGraph, FLightVolumePassDesc InPass, bool bInDeferPreparation = true);
 	void AppendFullscreen(FRenderGraph& InGraph, FFullscreenPassDesc InPass, bool bInDeferPreparation = true);
 	void AppendCompute(FRenderGraph& InGraph, FComputePassDesc InPass, bool bInDeferPreparation = true);

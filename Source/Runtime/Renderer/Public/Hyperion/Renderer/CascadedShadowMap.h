@@ -3,17 +3,8 @@
 
 namespace Hyperion
 {
-struct FCascadedShadowSettings
+struct FCascadedShadowSettings : FDirectionalShadowSettings
 {
-	bool bEnabled = true;
-	std::uint32_t Resolution = 2048;
-	float Distance = 100;
-	float SplitLambda = .6f;
-	float NormalOffset = .6f;  // World texels, clamped to [0, 2].
-	float ReceiverBias = .15f; // World texels, clamped to [0, 2].
-	float BlendFraction = .1f;
-	float FadeFraction = .1f;
-	std::uint32_t DebugMode{};                // 0 shaded, 1 cascade color, 2..5 depth previews.
 	std::optional<FViewport> PreviewViewport; // Host may reserve space beside its UI; pixel coordinates.
 };
 

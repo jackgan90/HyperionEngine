@@ -1,5 +1,5 @@
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT hyperion_viewer)
+set_property(DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT hyperion_editor)
 
 function(hyp_vs_vendor_folders directory)
   get_property(targets DIRECTORY "${directory}" PROPERTY BUILDSYSTEM_TARGETS)

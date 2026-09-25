@@ -1,22 +1,12 @@
 # Cascaded Shadow Maps
 
-## 使用
+Editor uses four directional cascades. Select a Directional Light and enable **Override Shadow settings** in Details to edit resolution, distance, split distribution, bias, normal offset, blend/fade and preview. These are authored component properties with undo/redo and native scene persistence. Open `/Game/Scenes/Shadows.hasset` for the dedicated example. The selected main light supplies its settings; old lights without overrides use the session defaults retained by `IRenderSettings` and `render.shadows.get/set`. Light direction/color/intensity/castsShadows remain authored node properties.
 
-SceneViewer 默认使用单方向光、四级 2048×2048 D32 shadow map，四级每帧更新。`experiments/Scene.json` 展示 Sponza，方向光由选中的场景节点提供；`experiments/Shadows.json` 是接触、斜面、薄片、镂空及镜像投影的专用场景。
-
-```powershell
-.\tools\Build.ps1 -Preset release
-.\out\build\release\bin\hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
-.\out\build\release\bin\hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Shadows.json
-```
-
-`Directional shadows` 面板提供启用、1024/2048 分辨率、距离、split lambda、receiver bias、normal offset、cascade overlap、距离淡出及光源方向控制。`Cycle shadow display` 在正常着色、cascade 着色、四张真实深度纹理预览之间切换；深度预览在阴影面板下方，隐藏 UI 时在右下角；白色为 depth=1。面板同时显示各 view 的可见物体、draw 数、CPU 准备和最近已完成 GPU 帧的各 pass 耗时。分辨率、距离和偏移等阴影管线设置仅作用于当前会话，不写回实验配置；面板中的光源颜色、强度、方向和 castShadows 编辑的是场景节点，会随场景保存。
-
-CLI 对应参数：`--no-shadows`、`--shadow-resolution 1024|2048`、`--shadow-distance 100`、`--shadow-debug 0..5`、`--shadow-light x y z`。光方向表示表面指向光源的单位方向，输入会验证并归一化。场景的实际方向来自主方向光节点；Sponza 的初始方向为 `normalize(-0.45, 0.8, 0.65)`。默认 lambda=0.6、normal offset=0.6 texel、receiver bias=0.15 texel、overlap/fade=0.1。按实际场景比例调节距离和偏移；增大偏移会增加接触分离，降低距离可提高单位世界空间的纹理密度。
+Debug mode 1 shows cascade colors; modes 2–5 preview the four depth textures inside the Editor scene output. Defaults are 2048 resolution, distance 100, lambda 0.6, normal offset 0.6 texel, receiver bias 0.15 texel, blend/fade 0.1. See [RenderDiagnostics](RenderDiagnostics.md) for settings and measurement commands.
 
 ## 管线与资源
 
-Viewer 使用 `FSceneRenderPipeline`，在共享 CSM 后运行 HDR Forward 或 Deferred，详见 [DeferredRendering.md](DeferredRendering.md)。保留的 legacy `FForwardRenderPipeline` 在 Renderer 内组织：共享场景空间索引维护 → 四个 `ShadowDepth` view → `Forward` 主 view → 可选深度预览 → 扩展/plugin passes。所有 view 使用同一个冻结材质 frame，一次 Render 准备完成后再交给 RHI 0；空间索引每个 family 更新一次。`FRenderSession::ViewStatistics()` 分别报告各 view；原 `Statistics()` 保留“最后 view 的可见性、family 总 draw/batch 数”的兼容语义。
+Editor 使用 `FSceneRenderPipeline`，在共享 CSM 后运行 HDR Forward 或 Deferred，详见 [DeferredRendering.md](DeferredRendering.md)。保留的 legacy `FForwardRenderPipeline` 在 Renderer 内组织：共享场景空间索引维护 → 四个 `ShadowDepth` view → `Forward` 主 view → 可选深度预览 → 扩展/plugin passes。所有 view 使用同一个冻结材质 frame，一次 Render 准备完成后再交给 RHI 0；空间索引每个 family 更新一次。`FRenderSession::ViewStatistics()` 分别报告各 view；原 `Statistics()` 保留“最后 view 的可见性、family 总 draw/batch 数”的兼容语义。
 
 `FCascadedShadowMap` 持有稳定 view identity 和纹理 source。`Views()` 提供相机/剔除输入，`Targets(lifetime)` 单独提供各级深度附件，`Bind(main, targets, lifetime)` 声明 Forward 的 sampled reads 和材质参数。主相机的 forward、up、FOV、near/far 显式放入 `FRenderView::Camera`。当前 pipeline 接受单个透视主相机和单个方向光；普通 `BuildViews` 仍可单独使用。
 
@@ -77,7 +67,6 @@ python tools/MeasureShadows.py --resolution 1024 --output out/shadow-performance
 - `material_rendering` 内深度测试：真实 32×32 depth-only raster、64×64 receiver comparison、反向 compare、mask clip、初始及空 pass clear、图初始化/读写冲突、取消未提交帧和 clear-only 引用保留、错误布局/目标拒绝。
 - `cascaded_shadow_rendering`：生产 Model shader 的主相机外投影、UV1/vertex/factor alpha、镜像、透明不投影、移除后消影、ordinary/instance 像素完全一致、20 帧相机/光源运动无 descriptor/PSO 增长、1024/2048 三次切换回收、实际深度预览及运动停止后的后台任务静止。审计增加混合 D32S8/D32、light provider 覆盖/缺失/全部局部依赖、隐藏预览后换分辨率、亚 texel 规划复用和真实变化失效、完整 GPU 捕获及溢出回归。
 - Debug RenderDoc 验收实际 capture/replay Triangle、Model 和 Shadows，并分别检查 Forward、四级 ShadowDepth 与 UI 的已提交绘制。
-- 审计修复集通过 Debug 全量 CTest 48/48（含 RenderDoc）、Release 全量 CTest 43/43（未编入 RenderDoc）；最后补齐 Pass 白名单后，两配置全量构建及相关 8/8 回归通过，独立 reviewer 另行运行最终 GPU 回归通过。286 个自有源码的路径/格式检查、177 个翻译单元的语义命名、277 个源码/25 模块的边界检查以及 OpenSpec strict validation 通过。审计日志位于 `out/audit-csm`；此前图像证据仍位于 `out/captures/Shadow*`，均不纳入源码提交。
 
 OpenSpec 已同步主规范并归档至 [2026-09-09-add-cascaded-shadow-maps](../openspec/changes/archive/2026-09-09-add-cascaded-shadow-maps/proposal.md)。
 

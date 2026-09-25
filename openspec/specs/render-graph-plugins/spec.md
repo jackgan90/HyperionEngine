@@ -3,6 +3,7 @@
 ## Purpose
 Define validated graph execution, explicit plugin execution domains and scene-wide pass organization independent of concrete geometry producers.
 ## Requirements
+
 ### Requirement: Validated color graph
 
 The engine SHALL validate pass identity, graph-owned resource handles, attachment formats/aspects/dimensions, dependencies, attachment-content initialization and command-context capacity before recording GPU work. Graphics passes SHALL explicitly declare color/depth/stencil attachments, independent Load/Clear/Discard and Store/Discard operations, clear values, render regions and sampled reads. Missing attachments SHALL NOT select implicit swapchain targets.
@@ -31,15 +32,15 @@ The engine SHALL apply scene updates and collect owned frame descriptions on Ren
 - **THEN** Render and RHI finish that frame using owned snapshot data and resource references
 
 ### Requirement: Configurable rendering plugins
-The engine SHALL activate rendering plugins using configuration IDs and use engine wrappers for their math, shaders and graphics work. Scene objects supplied by ModelViewer and Triangle SHALL enter through the generic render primitive registration and collection path. Plugin Main, Render and RHI responsibilities SHALL have explicit execution domains. GUI and non-scene work SHALL retain the standard pass extension path. Scene input, update and status routing SHALL use shared domain interfaces rather than concrete application casts.
+The engine SHALL activate rendering plugins using configuration IDs and use engine wrappers for their math, shaders and graphics work. Scene objects supplied by Editor and Triangle SHALL enter through the generic render primitive registration and collection path. Plugin Main, Render and RHI responsibilities SHALL have explicit execution domains. GUI and non-scene work SHALL retain the standard pass extension path. Scene input, update and status routing SHALL use shared domain interfaces rather than concrete application casts.
 
 #### Scenario: Plugin disabled
-- **WHEN** no scene or overlay plugins are requested in the Viewer graphics profile
-- **THEN** the Viewer presents only the configured clear color
+- **WHEN** an independent graphics consumer submits no scene or overlay passes
+- **THEN** the graph presents its configured clear color
 
 #### Scenario: Two geometry producers
-- **WHEN** ModelViewer or Triangle supplies scene geometry
-- **THEN** the same Runtime primitive protocol handles registration, collection and removal without a viewer-specific submission dependency
+- **WHEN** Editor or Triangle supplies scene geometry
+- **THEN** the same Runtime primitive protocol handles registration, collection and removal without an application-specific submission dependency
 
 #### Scenario: GUI overlay
 - **WHEN** GUI is enabled over scene geometry
@@ -119,10 +120,10 @@ The graph SHALL derive RAW/WAR/WAW dependencies from explicit attachment and sam
 - **THEN** the graph accepts an acyclic ordering without an artificial previous-pass dependency
 
 ### Requirement: Centralized RHI frame coordination
-The ordinary Viewer frame path SHALL send one owned frame job from Render to the RHI coordinator for deferred packet/GUI preparation, graph validation, frame acquisition, recording and submission. RHI 0 SHALL execute its own recording work inline and join every other admitted executor before submission or cancellation. The Render caller SHALL wait at one frame execution boundary.
+The ordinary Editor frame path SHALL send one owned frame job from Render to the RHI coordinator for deferred packet/GUI preparation, graph validation, frame acquisition, recording and submission. RHI 0 SHALL execute its own recording work inline and join every other admitted executor before submission or cancellation. The Render caller SHALL wait at one frame execution boundary.
 
 #### Scenario: Multi-view scene with GUI
-- **WHEN** the Viewer renders shadow views, forward geometry and GUI
+- **WHEN** the Editor renders shadow views, forward geometry and GUI
 - **THEN** preparation and submission use one Render-to-RHI boundary, command lists preserve graph order, and GUI clipping/visibility remain correct
 
 #### Scenario: Single RHI executor

@@ -36,6 +36,49 @@ struct FFrameResults
 	std::array<FImage, 2> Images;
 };
 
+void CheckLimitPixels(InstanceTests::FFixture& InFixture)
+{
+	FImage Reference;
+	for (const auto Limits : {FFramePipelineLimits{0, 0}, {1, 0}, {0, 1}, {1, 1}, {2, 3}})
+	{
+		FForwardRenderPipeline Forward(*InFixture.Session);
+		FFramePipeline Pipeline(InFixture.Tasks, Limits);
+		std::array<FImage, 8> Images;
+		for (std::size_t Index = 0; Index < Images.size(); ++Index)
+		{
+			if (Index == 4)
+			{
+				Pipeline.Skip();
+			}
+			const auto Frame = InFixture.Session->FreezeFrame(0);
+			const auto View = InFixture.View;
+			Pipeline.Submit(
+			    [Fixture = &InFixture, Forward = &Forward, Frame, View, Index, Images = &Images]
+			    {
+				    FRenderGraph Graph;
+				    FCascadedShadowSettings Shadows;
+				    Shadows.bEnabled = false;
+				    Forward->Build(Graph, View, Frame, Shadows, {.1f, .1f, .1f, 1}, {}, true);
+				    return [Fixture, Index, Images, Graph = std::move(Graph)]() mutable
+				    {
+					    (*Images)[Index] = ExecuteGraphOnRhi(std::move(Graph), Fixture->Tasks, *Fixture->Swapchain,
+					                                         {128, 96}, false, true);
+				    };
+			    });
+		}
+		Pipeline.Drain();
+		if (Reference.Rgba.empty())
+		{
+			Reference = Images.front();
+		}
+		for (const auto& Image : Images)
+		{
+			HYP_CHECK(Image.Rgba == Reference.Rgba && Image.Width == 128);
+		}
+		HYP_CHECK(Pipeline.Progress().Submitted == 9);
+	}
+}
+
 void CheckQueuedRemoval(InstanceTests::FFixture& InFixture)
 {
 	FForwardRenderPipeline Forward(*InFixture.Session);
@@ -118,6 +161,7 @@ int main()
 	try
 	{
 		InstanceTests::FFixture Fixture;
+		CheckLimitPixels(Fixture);
 		CheckQueuedRemoval(Fixture);
 		std::cout << "Queued frame ownership and removal passed\n";
 	}

@@ -1,10 +1,10 @@
 # 原生资产：导入、加载、编辑与保存
 
-运行时只读取原生 .hasset。源 glTF/GLB 和场景 JSON 由独立 AssetImport 模块转换；Viewer 不链接 AssetImport，也不注册源格式 codec。现有实验配置仍是 JSON，model_source、scene_source、--model、--scene 保持原名，值改为原生资产路径。
+运行时只读取原生 `.hasset`。源 glTF/GLB 和场景 JSON 由 AssetImport 转换；Editor 通过共享导入服务提供导入入口，场景渲染仍只消费发布后的原生资产。
 
 模型 schema 3 引用独立材质并保存源节点/primitive ID，材质引用独立纹理。schema 2 可只读迁移，加载不写回。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 必须先经 AssetTool 拆分升级。
 
-天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为引用当前共享依赖的 `.hasset`；Viewer 不读取源 HDR/EXR。
+天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为引用当前共享依赖的 `.hasset`；场景加载不读取源 HDR/EXR。
 
 Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、简单属性编辑、保存和每文档 Undo/Redo；字段范围和交互见 [Editor.md](Editor.md#独立资产编辑)。Shader 继续使用文本格式。过时的 `hyperion.assetcatalog` 持久化类型及 AssetTool `catalog` 命令已删除；资产发现结果通过 `BuildAssetIndex` / `SetAssetIndex` / `AddAssetIndex` 进入内存索引，保留 UUID 查询和移动后引用解析。
 
@@ -16,9 +16,6 @@ Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、
 
 ~~~powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Model.json
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Shadows.json
 
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.gltf out/my-content/model.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.glb out/my-content/scene.hasset --scene
@@ -29,9 +26,9 @@ Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、
 ./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
-源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor/SceneViewer 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空和场景类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
+源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空和场景类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
 
-普通 Viewer 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+普通 Editor 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 ## 模块与线程
 
@@ -161,7 +158,6 @@ HYPA v2 以 little endian 写入 24 字节前缀：magic、u32 版本、u64 meta
 Scene 面板的 Save edited scene 异步写出当前目录下 <原名>.edited.hasset，并显示保存中、成功或失败状态。重复保存同一文件保留身份。CLI 可指定路径：
 
 ~~~powershell
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Showcase.hasset --frames 180 --hidden --save-scene out/edited/scene.hasset
 ~~~
 
 FSceneInstance::Snapshot(destination) 保存 scene schema 7 的组件封装，保留对象/组件实例 ID、名称、完整仿射矩阵、可见性、几何选择和材质覆盖；新增实例获得独立 ID。自定义组件通过注册反射保存，未知组件阻止保存。它只保存仍在使用的模型引用，并按另存目标重新定位路径。相机、方向光、环境光、点光和聚光的节点 payload、层级及选择一起由 Scene 快照保存；相机镜头包含 FOV、near/far 和 focus distance。可选 initialView 保存显式初始浏览视图，导航不会修改它；插件不再补写独立 eye/target。运行时 Handle、GPU 资源、准备缓存、消息队列不进入文件。有资产关联的 FMaterialInstance/FMaterialSnapshot 和 section selection 会保存材质/纹理引用与类型化局部值；无原生关联的模型、材质或资源明确拒绝保存。详见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。

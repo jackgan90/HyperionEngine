@@ -78,6 +78,7 @@ public:
 	void Add(std::string InId, FRenderFeatureFactory InFactory);
 	void Remove(const std::string& InId) noexcept;
 	FRenderFeatureList Create();
+	bool Contains(std::string_view InId) const;
 
 private:
 	std::vector<std::pair<std::string, FRenderFeatureFactory>> Factories;

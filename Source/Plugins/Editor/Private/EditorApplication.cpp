@@ -41,6 +41,10 @@ void FEditorPlugin::InitializeContentBrowser()
 
 void FEditorPlugin::Initialize()
 {
+	Rendering = Options.Rendering;
+	Exposure = Rendering.Exposure;
+	bInstanceBatching = Options.bInstanceBatching;
+	CullingMode = Options.CullingMode;
 	InitializeContentBrowser();
 	Window = &Context.Require<FWindow>();
 	Device = &Context.Require<IRHIDevice>();
@@ -54,6 +58,7 @@ void FEditorPlugin::Initialize()
 #if HYP_ENABLE_RENDERDOC
 	FrameCapture = Context.Find<FFrameCapture>();
 #endif
+	SetRenderSettings(RenderSettingsRevision, Rendering);
 	auto Features = Context.Require<FRenderFeatureRegistry>().Create();
 	Features.push_back(MakeTransientGeometryFeature());
 	Features.push_back(MakeSelectionOutlineFeature(Device->GetCapabilities()));
@@ -107,6 +112,7 @@ void FEditorPlugin::LoadSceneDocument(const std::string& InPath, bool bInDiscard
 	}
 	Camera.Reset();
 	bViewportCameraInitialized = false;
+	FrozenCullingView.reset();
 	bCameraDragging = false;
 	Selection.Clear();
 	bSelectionInitialized = false;
@@ -208,6 +214,10 @@ void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::
 	{
 		ExerciseViewInput(InEvents);
 	}
+	if (!Options.ExerciseRenderControls.empty())
+	{
+		ExerciseRenderControlsInput(InEvents);
+	}
 	if (!Options.ExerciseCapture.empty())
 	{
 		ExerciseCaptureInput(InEvents);
@@ -281,9 +291,28 @@ FGuiDrawData FEditorPlugin::DrawMainWindow(float InDelta, std::span<const FInput
 
 bool FEditorPlugin::AdvanceFrame(float InDelta)
 {
+	FrameIntervalMilliseconds = InDelta * 1000.0;
 	const bool bMainDrawable = !Window->Minimized() && Window->PixelSize().Width && Window->PixelSize().Height;
+	const bool bSceneReady = Scene->GetStatus().bReady;
+	const auto ProfileFrameIndex = Options.Benchmark.empty() ? FrameCount : ReadyFrames;
+	if (Options.Benchmark.empty() || bSceneReady)
+	{
+		UpdateProfilingSession(Options.Profiling, ProfileFrameIndex);
+	}
+	HYP_PERF_SCOPE_NAMED(EProfileCategory::Frame, "EditorApplicationFrame", EditorFrameScope);
+	HYP_PERF_VALUE(EditorFrameScope, ProfileFrameIndex);
 	BenchmarkFrame = {};
 	const auto FrameStarted = Options.Benchmark.empty() ? 0 : ClockNanoseconds();
+	if (!Options.Benchmark.empty() && !bBenchmarkTiming && ReadyFrames >= Options.BenchmarkWarmup &&
+	    Scene->GetStatus().bReady)
+	{
+		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+		                          [&]
+		                          {
+			                          Device->BeginGpuTimingCapture(Options.BenchmarkSamples + 4);
+		                          }));
+		bBenchmarkTiming = true;
+	}
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorSceneUpdate);
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
@@ -312,10 +341,12 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	// Async scene readiness is independent of render frame rate.
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
-	                               bOutlinesVerified || bMultiSelectionVerified || bContentVerified;
+	                               bOutlinesVerified || bMultiSelectionVerified || bContentVerified ||
+	                               bRenderControlsVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
+	     (!Options.Benchmark.empty() && bBenchmarkTiming && BenchmarkSamples.size() + 1 == Options.BenchmarkSamples) ||
 	     (Options.ExerciseCapture == "toggle" && bPreferencesDialog && ExerciseStep == 2 && ExerciseWait == 2) ||
 	     (Options.ExerciseCapture == "capture" && ExerciseStep == 1));
 	const auto AssetCapture =
@@ -335,13 +366,18 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	}
 	if (!Options.Benchmark.empty())
 	{
-		BenchmarkFrame.FrameMilliseconds = double(ClockNanoseconds() - FrameStarted) / 1e6;
+		BenchmarkFrame.Milliseconds = double(ClockNanoseconds() - FrameStarted) / 1e6;
 		RecordBenchmark();
 	}
+	ProfileFrame();
 	++FrameCount;
 	if (Scene->GetStatus().bReady && !CurrentPath.empty())
 	{
-		++ReadyFrames;
+		// Admit a benchmark frame only if it began ready, matching timing capture and profiling.
+		if (Options.Benchmark.empty() || bSceneReady)
+		{
+			++ReadyFrames;
+		}
 		if (!bReadyLogged)
 		{
 			Log(ELogLevel::Info, "Editor scene ready: " + CurrentPath);
@@ -362,6 +398,10 @@ void FEditorPlugin::Start(FPluginContext&)
 	Context.Provide<IRenderOutput>(*this);
 	Context.Provide<IRenderCaptureControl>(*this);
 	Context.Provide<IRenderDiagnostics>(*this);
+	Context.Provide<IRenderSettings>(*this);
+	Context.Provide<IShadowControls>(*this);
+	Context.Provide<ISceneLightControls>(*this);
+	Context.Provide<IProfilingControl>(*this);
 	Context.Provide<IApplicationClose>(*this);
 	Context.Provide<IAssetWorkspace>(*AssetWorkspace);
 	Context.Provide<IAssetPreviewWorkspace>(*AssetWorkspace);
@@ -404,7 +444,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
 	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
-	     !Options.ExerciseAssets.empty()) &&
+	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out at step " + std::to_string(ExerciseStep) +
@@ -420,6 +460,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExerciseRenderControls.empty() && !bRenderControlsVerified)
+	{
+		throw std::runtime_error("Editor render controls acceptance did not complete");
+	}
 	if (!Options.ExerciseAssets.empty() && !bAssetsVerified)
 	{
 		throw std::runtime_error("Asset editor acceptance incomplete");

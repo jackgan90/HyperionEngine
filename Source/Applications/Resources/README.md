@@ -2,7 +2,7 @@
 
 `Hyperion.png` is the original transparent artwork. `Hyperion.ico` contains
 16, 20, 24, 32, 40, 48, 64, 96, 128 and 256 pixel versions for Windows DPI scales.
-Both Viewer and Editor compile `Hyperion.rc` into their executable. SDL's Windows
+Editor compiles `Hyperion.rc` into their executable. SDL's Windows
 window class selects the first embedded icon; Explorer and the taskbar also use
 that resource. No runtime image file or content mount is required.
 

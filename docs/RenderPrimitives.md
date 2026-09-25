@@ -29,7 +29,7 @@ Main 和 Render 类型树不要求对应，也不共享可变对象。新的 pro
 
 每次更新是完整 `FRenderPrimitiveState`，带严格递增 revision；资源请求使用不可变 identity/version/configuration。旧 revision、旧 generation、其他 scene 的句柄不会覆盖当前对象。一个更新 batch 先校验所有成员再应用，非法字段会在返回的 task 上报告异常；调用者应观察返回 task，移除任务仍会执行。 已就绪资源的 section 索引在发布前校验；资源仍在准备/上传时无法确定的索引，在描述就绪后通过 binding 状态报告 Failed，无效 item 不进入绘制，也不阻断其他对象。延迟失败不会回滚已经接收的 revision，后续合法更新或 Remove 仍可处理。
 
-`FRenderSession::BuildViews`（单 view 的 `Build` 委托它）的 Render 任务是帧边界：之前入队的控制任务已经完成，后续控制任务在该任务结束后才执行。收集结果按值持有矩阵、可见性、材质覆盖和资源租约。多次或多视图收集不得推进动画/逻辑状态，也不得直接创建 native GPU 资源。Viewer 通过有界 CPU 帧管线限制领先量，默认允许 Main/Render/RHI 重叠处理不同帧；数据隔离依靠自有快照，见 [CpuFramePipeline.md](CpuFramePipeline.md)。
+`FRenderSession::BuildViews`（单 view 的 `Build` 委托它）的 Render 任务是帧边界：之前入队的控制任务已经完成，后续控制任务在该任务结束后才执行。收集结果按值持有矩阵、可见性、材质覆盖和资源租约。多次或多视图收集不得推进动画/逻辑状态，也不得直接创建 native GPU 资源。公共 FFramePipeline 可限制异步消费者的领先量；Editor 逐帧汇合，跨域数据隔离依靠自有快照，见 [CpuFramePipeline.md](CpuFramePipeline.md)。
 
 创建、更新和移除无需出帧即可推进。最小化、没有 Present 时仍由专用 Render 队列处理。`Remove()` 立即使 binding 停止接受更新，返回的回执表示 Render 已移除/析构对象；它不表示 GPU 完成。重复 Remove 返回同一回执。关闭后存活的 binding 只释放已经失效的 mailbox/result，不访问 executor。
 
@@ -63,7 +63,7 @@ Render 先冻结资源组就绪状态，过滤隐藏和未就绪 item，以局�
 
 兼容的 item 聚合到场景 pass，每个 view 的输出由独立的 `FRenderPassTargets` 声明，depth/stencil 的初始化来自显式 load action。depth 开关由各 draw 的 pipeline 控制；pass 只因 view/viewport、linear/sRGB 目标或显式用途边界分开，不能按 Model/primitive 数量创建。RHI 0 按真实反射布局打包并共享各 scope 的不可变常量 slice，沿用 RenderGraph 验证、并行录制、提交和错误取消。队列排序仅移动索引，保持 opaque/mask 等深次序与全场景透明顺序。
 
-场景插件实现 `IScenePlugin`：`Start/Update/Stop` 在 Main 执行，注册资源和 binding；`Update` 可生成 owned view/settings snapshot。ModelViewer 管理加载、相机与 `FModel`；Triangle 使用通用 geometry/material 描述和自己的 shader。Renderer 不识别它们的类型或 ID。非场景插件通过 IRenderFeature 注册 Render 阶段贡献，GUI 在 Main 通过作用域事件贡献控件，再由共享 GuiRenderer 提交 owned draw data；原 IRenderPlugin::Build 保留供直接调用的兼容接口。参见 [插件系统](PluginSystem.md)。
+场景插件实现 `IScenePlugin`：`Start/Update/Stop` 在 Main 执行，注册资源和 binding；`Update` 可生成 owned view/settings snapshot。Editor 通过 FSceneInstance 管理加载与场景；Triangle 使用通用 geometry/material 描述和自己的 shader。Renderer 不识别它们的类型或 ID。非场景插件通过 IRenderFeature 注册 Render 阶段贡献，GUI 在 Main 通过作用域事件贡献控件，再由共享 GuiRenderer 提交 owned draw data；原 IRenderPlugin::Build 保留供直接调用的兼容接口。参见 [插件系统](PluginSystem.md)。
 
 未来 GPU instancing 需要在此基础上实现兼容性键、可见实例压缩、instance buffer 生命周期及 shader/RHI 支持。共享 VB/IB 目前仍提交普通 indexed draws，不宣称已经合批。骨骼、动画、LOD、粒子和通用离屏图需要独立扩展。
 
@@ -85,4 +85,4 @@ Render 先冻结资源组就绪状态，过滤隐藏和未就绪 item，以局�
 
 `FRenderView` 只保留相机、剔除、材质 usage/参数及视图标识。`FRenderPassTargets` 单独描述颜色、深度/模板附件和 sampled reads；`Session.FrameTargets(clear)` 生成当前 session 格式的显式帧附件。`Build`/`BuildViews` 同时接收 view 和 targets。直接构造 `FRenderSceneSnapshot` 的调用方也必须填写 `Targets`。
 
-Render 阶段先声明完整的图资源与 graphics pass，再冻结 draw preparation 回调。回调仅返回 `FGraphicsDrawBatch`。材质 pipeline/batch signature 由附件的 ColorCount/DepthFormat 推导；linear/sRGB 分段保持原有顺序及共享 draw 数据。图编译在 RHI 0 解析资源并准备 draw，正常 Viewer 保留单次帧协调边界。规则见 [RenderGraph](RenderGraph.md)。
+Render 阶段先声明完整的图资源与 graphics pass，再冻结 draw preparation 回调。回调仅返回 `FGraphicsDrawBatch`。材质 pipeline/batch signature 由附件的 ColorCount/DepthFormat 推导；linear/sRGB 分段保持原有顺序及共享 draw 数据。图编译在 RHI 0 解析资源并准备 draw，Editor 保留单次帧协调边界。规则见 [RenderGraph](RenderGraph.md)。

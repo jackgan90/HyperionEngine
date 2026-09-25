@@ -83,7 +83,9 @@ enum class EGuiIcon
 	Rotate,
 	Scale,
 	Options,
-	Capture
+	Capture,
+	Information,
+	Statistics
 };
 
 // All GUI context and widget operations belong to the creating Main thread.
@@ -169,7 +171,7 @@ public:
 	std::string SaveLayout();
 	// Call after menu/tool/status bars so docking consumes their current-frame reservations.
 	void DockSpace(const FGuiDockLayout& InLayout, bool bInReset = false);
-	bool BeginWindow(const char* InTitle, bool& bInOpen);
+	bool BeginWindow(const char* InTitle, bool& bInOpen, FVec2 InInitialSize = {});
 	void EndWindow();
 	bool BeginTabBar(const char* InId);
 	void EndTabBar();
@@ -212,6 +214,8 @@ public:
 	// Current window draw list, clipped to a logical image rectangle; never draws over other windows.
 	void DrawImageOverlay(FVec4 InClip, std::span<const FVec2> InPoints, FVec4 InColor, float InThickness,
 	                      bool bInFilled = false);
+	// Noninteractive, clipped HUD in the current image window. Returns the occupied rectangle.
+	FVec4 DrawImageText(FVec4 InClip, std::span<const std::string> InLines, bool bInRightAligned = false);
 	void OpenPopup(const char* InTitle);
 	bool BeginPopup(const char* InId);
 	void EndPopup();

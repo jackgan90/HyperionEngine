@@ -42,16 +42,12 @@ Source/
   Plugins/
     ApplicationServices/ # assets/window/graphics/gui/contact-shadows 逻辑插件
     Automation/    # 操作适配器、会话、stdio 和应用监听生命周期插件
-    Viewer/        # Viewer 输入、帧提交、输出与启动组合
     Editor/        # 共享文档的 GUI 消费方、停靠面板与 viewport
     Triangle/      # 三角形实验
     DebugUI/       # 调试 UI 插件，委托通用 GuiRenderer 绘制
-    ModelViewer/   # 异步静态模型显示与相机
-    SceneViewer/   # 场景节点编辑、相机手势及空间剔除诊断
     RenderDoc/     # 可选抓帧服务的设备创建前生命周期
   Applications/
     Editor/        # 选择原生后端，启动 Editor 插件宿主
-    Viewer/        # 选择原生后端，启动 Viewer 插件宿主
     AssetTool/     # 独立 import / inspect / validate / upgrade CLI
     Automation/    # CLI / JSONL / MCP 的启动组合
   Tests/           # 对应模块的单元测试及 Integration 验收
@@ -78,7 +74,7 @@ Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Con
 
 `Runtime/RHI` 定义 `IRHIBackend`、`IRHIDevice`、`IRHISwapchain` 和资源契约，不链接 D3D12。`Backends/D3D12/Private` 实现 `FD3D12RHIDevice`、`FD3D12RHISwapchain` 以及原生资源；它的唯一公共入口负责向注册表注册 provider，不暴露 Windows/D3D12 头文件。
 
-加入 Vulkan 时新增 `Source/Backends/Vulkan`，实现同一组接口，在 Viewer 中注册 provider 并链接该 target。Renderer 和算法插件保持使用公共 RHI。后端实现按自身语义实现队列、同步、descriptor 与 shader 接口映射，不应在公共 RHI 中添加 API 分支。当前 Vulkan/Metal 只有后端标识，尚未实现；选择它们会明确报错。
+加入 Vulkan 时新增 `Source/Backends/Vulkan`，实现同一组接口，在应用组合层中注册 provider 并链接该 target。Renderer 和算法插件保持使用公共 RHI。后端实现按自身语义实现队列、同步、descriptor 与 shader 接口映射，不应在公共 RHI 中添加 API 分支。当前 Vulkan/Metal 只有后端标识，尚未实现；选择它们会明确报错。
 
 在 Visual Studio 中，解决方案按 `Hyperion/Runtime`、`Hyperion/Backends`、`Hyperion/Plugins`、`Hyperion/Applications`、`Hyperion/Tests` 分组，每个模块内部显示 Public/Private 筛选器。生成和测试命令仍见 [VisualStudio.md](VisualStudio.md)。
 

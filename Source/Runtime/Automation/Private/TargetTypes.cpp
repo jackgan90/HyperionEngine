@@ -23,7 +23,7 @@ template<> const FRecordDescriptor& RecordType<FAutomationTarget>()
 	     Member("build", &FAutomationTarget::Build, {.bRequired = true}),
 	     Member("address", &FAutomationTarget::Address, {.bRequired = true}),
 	     Member("mode", &FAutomationTarget::Mode,
-	            {.Description = "Startup host mode, e.g. Editor, scene-viewer or model-viewer. Empty on older hosts."}),
+	            {.Description = "Startup host mode, e.g. Editor. Empty on older hosts."}),
 	     Member("label", &FAutomationTarget::Label,
 	            {.Description =
 	                 "Human-readable startup label; advisory and not an identity or current document snapshot."})});

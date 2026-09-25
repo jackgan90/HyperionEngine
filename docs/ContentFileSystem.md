@@ -4,20 +4,20 @@
 
 ## 新环境运行
 
-准备引擎的构建依赖，将 HyperionAssets 检出到引擎的同级目录，并在资产仓库执行 `git lfs pull`。普通 Viewer 构建不下载、不导入示例原始资产。
+准备引擎的构建依赖，将 HyperionAssets 检出到引擎的同级目录，并在资产仓库执行 `git lfs pull`。普通 Editor 构建不下载、不导入示例原始资产。
 
 ```powershell
 ./tools/Build.ps1 -Preset release
-./out/build/release/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json
-./out/build/release/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/SharedAssets.hasset
+./out/build/release/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Sponza.hasset
+./out/build/release/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/SharedAssets.hasset
 ```
 
-引擎资源目录由应用组合层提供，开发构建默认将仓库 `Content` 映射为只读 `/Engine`。可通过 `--engine-content <directory>` 指定测试或部署中的资源目录。**`/Game` 默认未挂载**；Editor 从 `Preferences.ini` 恢复上次选择，CLI/MCP 可调用 `content.root.set`，Viewer、AssetTool 和单次 CLI 可使用 `--asset-root <directory>`。所有入口调用同一个内容根服务；相对目录以进程工作目录为基准。`--read-only` 将所选 Game 目录设为只读。
+引擎资源目录由应用组合层提供，开发构建默认将仓库 `Content` 映射为只读 `/Engine`。可通过 `--engine-content <directory>` 指定测试或部署中的资源目录。**`/Game` 默认未挂载**；Editor 从 `Preferences.ini` 恢复上次选择，CLI/MCP 可调用 `content.root.set`，Editor、AssetTool 和单次 CLI 可使用 `--asset-root <directory>`。所有入口调用同一个内容根服务；相对目录以进程工作目录为基准。`--read-only` 将所选 Game 目录设为只读。
 
-Triangle、Model 和 Scene 示例都使用 Game 内容，包括三角形演示的 Shader，因此运行示例需显式提供资产根目录。性能工具的 `--asset-root` 默认指向同级 HyperionAssets，并将该选择传给 Viewer；这属于示例工具配置，不是引擎启动回退规则。
+Triangle、Model 和 Scene 示例都使用 Game 内容，包括三角形演示的 Shader，因此运行示例需显式提供资产根目录。性能工具的 `--asset-root` 默认指向同级 HyperionAssets，并将该选择传给 Editor；这属于示例工具配置，不是引擎启动回退规则。
 
 ```powershell
-./out/build/release/bin/hyperion_viewer.exe --engine-content D:/Engine/Content --asset-root E:/MyContent --scene /Game/Scenes/Example.hasset
+./out/build/release/bin/hyperion_editor.exe --engine-content D:/Engine/Content --asset-root E:/MyContent --scene /Game/Scenes/Example.hasset
 ```
 
 `Runtime/Content` 的 `FContentRootService` 管理 Main 上的目录状态、generation、候选索引及切换参与者。`Set`/`Clear` 使用当前 generation；`Prepare`/`Commit` 供需要分阶段显示 UI 的调用方使用。先验证候选，再统一检查参与者的 dirty/busy 状态，随后释放旧内容、重置索引与缓存、替换映射并通知参与者恢复。未保存修改必须先保存或显式丢弃；未完成的编辑和保存返回 busy。相同规范目录和权限保持文档不变。文件系统与服务对象地址保持稳定，请求期间挂载保持冻结。
@@ -70,6 +70,6 @@ HyperionAssets 的 hasset 使用 LFS，文本 Shader 和元数据使用普通 Gi
 
 ## 验证与测试
 
-独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与自创场景的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，再通过 `PrepareTestSources.py` 生成 `out/fixtures/Sources`。Viewer 示例和桌面集成测试需要挂载已发布 Game 内容。
+独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与自创场景的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，再通过 `PrepareTestSources.py` 生成 `out/fixtures/Sources`。Editor 示例和桌面集成测试需要挂载已发布 Game 内容。
 
 迁移验收检查：完整 native 依赖图、无旧目录读取、固定输入截图、天空切换与场景保存重载、不同挂载位置、Shader include/cache、LFS 指针诊断和无变化重导入。历史性能/审计文档保留当时路径作为证据；当前资源布局以本页为准。

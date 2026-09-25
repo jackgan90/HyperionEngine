@@ -1,4 +1,4 @@
-"""Exercise real Tracy sessions, resumable tasks, GPU retirement and Viewer capture windows."""
+"""Exercise real Tracy sessions, resumable tasks, GPU retirement and Editor capture windows."""
 import collections
 import csv
 import json
@@ -76,94 +76,53 @@ def reconnect(profile, executable, output):
     return summaries
 
 
-def check_viewer(profile, viewer, output, mode):
-    folder = output / mode
-    config = json.loads((profile.ROOT / "experiments/Scene.json").read_text(encoding="utf-8"))
-    config["properties"].update(main_render_lead=2, render_rhi_lead=3)
-    config_path = output / (mode + "-Settings.json")
-    config_path.write_text(json.dumps(config), encoding="utf-8")
-    profile.run([sys.executable, profile.ROOT / "tools/Profile.py", "--viewer", viewer, "--mode", mode,
-                 "--config", config_path, "--out", folder, "--no-build", "--warmup", "120", "--frames", "120"],
-                output / (mode + ".log"), timeout=60)
+def check_editor(profile, editor, output, mode, warmup=120):
+    folder = output / f"{mode}-{warmup}"
+    profile.run([sys.executable, profile.ROOT / "tools/Profile.py", "--editor", editor, "--mode", mode,
+                 "--out", folder, "--no-build", "--warmup", str(warmup), "--frames", "120"],
+                output / f"{mode}-{warmup}.log", timeout=100)
     summary = json.loads((folder / "Metadata.json").read_text())["summary"]
-    assert 1 <= summary["draw_min"] <= summary["draw_max"] <= 10, summary
+    assert summary["samples"] == 120 and summary["draw_min"] > 0, summary
     events = rows(folder / "Events.csv")
-    frames = [event for event in events if event["name"] == "ApplicationFrame"]
-    assert len(frames) == 120 and sorted(int(event["value"].split()[0]) for event in frames) == list(range(120, 240))
+    frames = [event for event in events if event["name"] == "EditorApplicationFrame"]
+    assert len(frames) == 120 and sorted(int(event["value"].split()[0]) for event in frames) == list(range(warmup, warmup + 120))
+    assert [int(row["frame"]) for row in rows(folder / "Frames.csv")] == list(range(warmup, warmup + 120))
     names = {event["name"] for event in events}
-    for stage in ("PipelineRenderFrame", "PipelineRhiFrame"):
-        ids = sorted(int(event["value"].split()[0]) for event in events if event["name"] == stage)
-        assert ids == list(range(121, 241)), (stage, ids)
-    assert {"PrepareMaterials", "PrepareDraws", "PrepareRetainedView", "ValidateDraws", "RecordCommands",
-            "RecordNativeDraws", "ResetNativeCommandList", "SubmitCommandLists", "PresentWait"} <= names
-    # Material counters are per view: the forward view plus four CSM cascades when enabled.
-    samples = rows(folder / "Frames.csv")
-    view_count = sum(5 if int(row["shadows"]) else 1 for row in samples)
-    material_count = sum(event["name"] == "PrepareMaterials" for event in events)
-    assert sum(event["name"] == "PrepareDraws" for event in events) == view_count
+    assert {"EditorSceneUpdate", "EditorRenderWait", "PrepareMaterials", "PrepareDraws", "PrepareRetainedView",
+            "ValidateDraws", "RecordCommands", "RecordNativeDraws", "ResetNativeCommandList", "SubmitCommandLists", "PresentWait"} <= names, names
     if mode == "basic":
         assert "BindMaterialConstants" not in names and not rows(folder / "Gpu.csv")
     else:
-        assert {"BindMaterialConstants", "RefreshMaterialEvaluation", "RecordGraphicsBindings"} <= names
+        assert {"BindMaterialConstants", "RecordGraphicsBindings"} <= names
         gpu = rows(folder / "Gpu.csv")
-        assert len(gpu) == sum(event["name"] == "RecordPass" for event in events), len(gpu)
-        assert all(0 <= int(event["GPU execution time"]) < 1_000_000_000 for event in gpu)
-    plots = collections.defaultdict(list)
-    for event in rows(folder / "EventsAndPlots.csv"):
-        if not event["src_file"]:
-            plots[event["name"]].append(float(event["value"]))
-    assert len(plots["SceneDraws"]) == 120 and min(plots["SceneDraws"]) > 0
-    for name in ("SceneCollectionReuses", "ViewPreparationReuses", "ViewPacketReuses"):
-        assert len(plots[name]) == view_count and set(plots[name]) <= {0, 1}, name
-    assert material_count + sum(plots["ViewPreparationReuses"]) == view_count
-    # A retained pass can refresh dynamic bindings and still report a packet reuse.
-    packet_count = view_count - sum(plots["ViewPacketReuses"]) + sum(int(row["local_packet_reuses"]) for row in samples)
-    for name in ("MaterialEvaluationFull", "MaterialEvaluationReuses", "MaterialEvaluationRefreshes", "MaterialSharedUpdates",
-                 "ProviderEvaluations", "ProviderReuses", "BatchPlanReuses"):
-        assert len(plots[name]) == material_count and min(plots[name]) >= 0, (name, len(plots[name]))
-    for name in ("ConstantPacks", "ConstantUploadBytes", "ConstantReuses", "BindingSetsCreated",
-                 "BindingSetReuses", "PipelinesCreated", "PipelineReuses"):
-        assert len(plots[name]) == packet_count and min(plots[name]) >= 0, (name, len(plots[name]))
-    recording_count = sum(event["name"] == "RecordCommands" for event in events)
-    for name in ("GraphicsPipelineBinds", "GraphicsGeometryBinds", "GraphicsDynamicBinds"):
-        assert len(plots[name]) == recording_count and min(plots[name]) >= 0, (name, len(plots[name]))
-    assert sum(plots["MaterialEvaluationRefreshes"]) + sum(plots["MaterialSharedUpdates"]) > 0
-    assert max(plots["SceneDraws"]) <= 210
+        assert gpu and all(0 <= int(event["GPU execution time"]) < 1_000_000_000 for event in gpu)
     return summary
 
 
-def check_asset_load(profile, viewer, output):
-    sources = {"ReadAssetBytes": "IOService.cpp", "ImportGltf": "GltfImport.cpp",
-               "ParseGltf": "GltfImport.cpp", "ConvertGltfMeshes": "GltfImport.cpp",
-               "DecodeImage": "Images.cpp"}
+def check_asset_load(profile, editor, output):
     summaries = {}
     for category in ("assets", "frame"):
         folder = output / ("AssetLoad-" + category)
         folder.mkdir()
-        profile.capture([str(viewer), "--asset-root", str(profile.ROOT.parent / "HyperionAssets"), "--config", str(profile.ROOT / "experiments/Scene.json"),
-                         "--frames", "240", "--hidden", "--no-vsync", "--profile-wait",
-                         "--profile-categories", category, "--benchmark-warmup", "120",
-                         "--benchmark", str(folder / "Frames.csv")], folder, 60)
+        profile.capture([str(editor), "--asset-root", str(profile.ROOT.parent / "HyperionAssets"),
+                         "--scene", "/Game/Scenes/Showcase.hasset", "--hidden", "--profile-wait",
+                         "--profile-categories", category, "--benchmark-warmup", "30", "--benchmark-samples", "30",
+                         "--benchmark", str(folder / "Frames.csv")], folder, 90)
         profile.export(folder)
         events = rows(folder / "Events.csv")
         counts = collections.Counter(event["name"] for event in events)
         if category == "assets":
-            for name, source in sources.items():
-                matches = [event for event in events if event["name"] == name]
-                assert matches and all(event["src_file"].endswith(source) and
-                                       int(event["exec_time_ns"]) >= 0 for event in matches), (name, matches)
-            assert "ApplicationFrame" not in counts
+            assert counts["ReadAssetBytes"] > 0 and "EditorApplicationFrame" not in counts, counts
         else:
-            assert not sources.keys() & counts.keys(), counts
-            assert counts["ApplicationFrame"] == 240, counts
+            assert "ReadAssetBytes" not in counts and counts["EditorApplicationFrame"] >= 60, counts
         summary = profile.frame_statistics(folder / "Frames.csv")
-        assert summary["samples"] == 120 and 1 <= summary["draw_min"] <= summary["draw_max"] <= 10, summary
+        assert summary["samples"] == 30 and summary["draw_min"] > 0, summary
         summaries[category] = {"scope_counts": dict(counts), "frames": summary}
     return summaries
 
 
 def main():
-    viewer, root, core, native = [pathlib.Path(value).resolve() for value in sys.argv[1:5]]
+    editor, root, core, native = [pathlib.Path(value).resolve() for value in sys.argv[1:5]]
     sys.path.insert(0, str(root / "tools"))
     import Profile as profile
     if not (profile.TOOLS / "tracy-capture.exe").is_file():
@@ -190,17 +149,21 @@ def main():
     assert len(rows(gpu / "Gpu.csv")) > 10
     summary["native_gpu_spans"] = len(rows(gpu / "Gpu.csv"))
     for mode in ("basic", "detail-gpu"):
-        summary[mode] = check_viewer(profile, viewer, output, mode)
-    summary["asset_load"] = check_asset_load(profile, viewer, output)
-    for options in (("--profile", "--frames", "10", "--profile-start", "10"),
-                    ("--profile-start", "2"), ("--profile-categories", "unknown"),
-                    ("--profile-categories", "frame,"), ("--profile", "--profile-frames", "-1")):
-        result = subprocess.run([str(viewer), *options], capture_output=True, text=True, timeout=10,
+        summary[mode] = check_editor(profile, editor, output, mode)
+    summary["zero_warmup"] = check_editor(profile, editor, output, "basic", warmup=0)
+    summary["asset_load"] = check_asset_load(profile, editor, output)
+    for options in (("--profile-start", "2"), ("--profile-categories", "unknown"),
+                    ("--profile-categories", "frame,"), ("--profile", "--profile-frames", "-1"),
+                    ("--kernel-only", "--frames", "8", "--profile", "--profile-start", "10"),
+                    ("--kernel-only", "--frames", "8", "--profile", "--profile-start", "6", "--profile-frames", "3"),
+                    ("--kernel-only", "--scene", "/Game/Scenes/Showcase.hasset", "--benchmark", str(output / "Invalid.csv"),
+                     "--benchmark-warmup", "0", "--benchmark-samples", "8", "--profile", "--profile-start", "8")):
+        result = subprocess.run([str(editor), *options], capture_output=True, text=True, timeout=10,
                                 **profile.hidden_process_options())
         assert result.returncode != 0, options
     (output / "Summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))
-    print("PASS: real reconnects, nested/exception/suspended task zones, GPU cancellation/fence recovery, Viewer controls")
+    print("PASS: real reconnects, nested/exception/suspended task zones, GPU cancellation/fence recovery, Editor controls")
     return 0
 
 

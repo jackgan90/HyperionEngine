@@ -17,7 +17,7 @@ Outliner、视口模型和灯光图标支持 Ctrl+左键增减选择，所有已
 
 Editor 在 Main 冻结 `FSelectionOutlineRequest`：`SceneInstance::ResolveRenderPrimitives` 经 SceneBridge 得到每个场景对象的 primitive 句柄分组，并携带与 frame seed 相同的 publication token。Render 拒绝不匹配的 publication，直接收集有效 generation 的 primitives，并保留变换、可见性、材质和对象参数。独立于绑定场景使用 Renderer 时，frame 和 request 都不带 publication。
 
-通用代码位于 Runtime/Renderer，Editor 在启动时显式加入 `MakeSelectionOutlineFeature`。Viewer 和默认 pipeline 不激活此功能。`AddSilhouetteOutlinePass` 与 `AddOutlineCompositePass` 可独立复用；同一 graph 中调用多次时需提供唯一 pass 名称。Scene 和 RHI 不依赖 Editor。
+通用代码位于 Runtime/Renderer，Editor 在启动时显式加入 `MakeSelectionOutlineFeature`。默认独立 pipeline 不激活此功能。`AddSilhouetteOutlinePass` 与 `AddOutlineCompositePass` 可独立复用；同一 graph 中调用多次时需提供唯一 pass 名称。Scene 和 RHI 不依赖 Editor。
 
 ```text
 owned primitive groups -> coverage mask(s), without depth

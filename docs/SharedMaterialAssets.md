@@ -8,7 +8,7 @@
 
 ~~~powershell
 ./tools/Build.ps1
-./out/build/debug/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --scene /Game/Scenes/SharedAssets.hasset
+./out/build/debug/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/SharedAssets.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets validate /Game/Scenes/SharedAssets.hasset
 ~~~
 

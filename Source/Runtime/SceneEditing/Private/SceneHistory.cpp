@@ -54,7 +54,23 @@ void FSceneEditDocument::RestoreDeletedSubtree(std::size_t InIndex)
 		Nodes.push_back(bAssetRefreshHistory ? Target().Rebind(Node) : Node);
 		Mapping.emplace(Handle, FSceneHandle{});
 	}
-	const auto Restored = Target().AddNodes(std::move(Nodes));
+	std::vector<FSceneNodeEdit> Children;
+	if (Entry.bKeepChildren)
+	{
+		for (const auto& Edit : Entry.Edits)
+		{
+			const auto* Current = Target().FindNode(Edit.Handle);
+			if (!Current)
+			{
+				throw FSceneEditError("stale_handle", "Child no longer exists");
+			}
+			auto Child = *Current;
+			Child.Parent() = Edit.Before.Parent();
+			Child.Local() = Edit.Before.Local();
+			Children.push_back({Edit.Handle, std::move(Child)});
+		}
+	}
+	const auto Restored = Target().AddNodes(std::move(Nodes), std::move(Children));
 	for (std::size_t Index = 0; Index < Restored.size(); ++Index)
 	{
 		Mapping.at(Original[Index]) = Restored[Index];
@@ -72,7 +88,22 @@ void FSceneEditDocument::RestoreHistory(std::size_t InIndex, bool bInAfter)
 	{
 		Node = Scene.Rebind(std::move(*Node));
 	}
-	if (!Entry.Edits.empty())
+	if (Entry.bKeepChildren)
+	{
+		if (!bInAfter)
+		{
+			RestoreDeletedSubtree(InIndex);
+		}
+		else if (!Scene.RemoveNodeKeepChildren(Entry.Handle))
+		{
+			throw FSceneEditError("stale_handle", "Delete target no longer exists");
+		}
+		else if (Selected.Contains(Entry.Handle))
+		{
+			Selected.Toggle(Entry.Handle);
+		}
+	}
+	else if (!Entry.Edits.empty())
 	{
 		std::vector<FSceneNodeEdit> Edits;
 		for (const auto& Edit : Entry.Edits)
@@ -131,6 +162,10 @@ void FSceneEditDocument::RestoreHistory(std::size_t InIndex, bool bInAfter)
 		}
 	}
 	Scene.SetSettings(bInAfter ? Entry.AfterSettings : Entry.BeforeSettings);
+	if (Entry.bRestoreSelection && !bInAfter)
+	{
+		Selected = Entry.BeforeSelection;
+	}
 }
 
 void FSceneEditDocument::Undo()

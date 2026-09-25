@@ -1,10 +1,12 @@
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
-#include "Hyperion/ModelViewer/ModelViewerPlugin.h"
 #include "Hyperion/Renderer/Model.h"
 #include "Hyperion/Renderer/ModelPreparation.h"
+#include "Hyperion/Renderer/NativeModel.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneInstance.h"
+#include "Hyperion/Renderer/SceneNavigation.h"
 #include "Support/GraphTestSupport.h"
 #include "Support/ModelAssetSupport.h"
 #include "Support/NativeAssetSupport.h"
@@ -237,16 +239,69 @@ void CheckMaterialPixels(const RenderOperation& InRender, const std::filesystem:
 	Pixel(InRender(Backface), 160, 120, {.5371f, 0, 0});
 }
 
-FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain& InSwapchain,
-                         const FAppSettings& InSettings, FModelViewerPlugin& InPlugin, FRenderSession& InSession,
-                         FSize InSize)
+struct FAsyncModelFixture
+{
+	FSceneInstance Scene;
+	TAsyncResult<FSceneModelData> Load;
+	FCancellationToken Cancellation;
+	FSceneCameraController Camera;
+	FSceneHandle Model;
+	std::string Failure;
+
+	FAsyncModelFixture(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
+	                   const std::filesystem::path& InPath)
+	    : Scene(InSession, InTasks, InAssets)
+	{
+		const auto View = Scene.AddNode(MakeSceneCameraNode("camera", {2, 2, 7}, {}));
+		const auto Light = Scene.AddNode(MakeSceneDirectionalLightNode("light"));
+		const auto Sky = Scene.AddNode(MakeSceneEnvironmentLightNode("sky"));
+		Scene.SetSettings({View, Light, Sky});
+		Load = LoadNativeModel(InAssets, InTasks, InPath, Cancellation, &InSession.GetResources());
+	}
+
+	void Tick(FSize InSize)
+	{
+		try
+		{
+			if (!Model.Generation && Load.Ready() && Failure.empty())
+			{
+				Model = Scene.Add(FSceneModel{"Test model", Load.GetReady()});
+				FitSceneCamera(Scene, float(InSize.Width) / InSize.Height, true);
+			}
+			Scene.Tick();
+		}
+		catch (const std::exception& Error)
+		{
+			Failure = Error.what();
+		}
+	}
+
+	bool Ready() const
+	{
+		return Model.Generation && Scene.GetStatus().bReady;
+	}
+
+	const std::string& Error() const
+	{
+		return Failure;
+	}
+
+	void Stop()
+	{
+		Cancellation.Cancel();
+		Scene.Close();
+	}
+};
+
+FImage RenderAsyncModelFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain& InSwapchain,
+                             FAsyncModelFixture& InModel, FRenderSession& InSession, FSize InSize)
 {
 	InWindow.Poll();
-	FRenderFrame Frame{InSize, InSettings};
-	Frame.View.Width = InSize.Width;
-	Frame.View.Height = InSize.Height;
-	InPlugin.Update(Frame);
-	const auto Seed = InSession.FreezeSceneFrame(InPlugin.GetSceneInstance().GetToken());
+	FSceneViewRequest Request;
+	Request.Width = InSize.Width;
+	Request.Height = InSize.Height;
+	InModel.Tick(InSize);
+	const auto Seed = InSession.FreezeSceneFrame(InModel.Scene.GetToken());
 	FImage Image;
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
 	                              [&]
@@ -256,7 +311,7 @@ FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain&
 		                              Clear.Color->Actions.Load = EAttachmentLoad::Clear;
 		                              Clear.Name = "Background";
 		                              Graph.Add(std::move(Clear));
-		                              const auto Resolved = InSession.ResolveSceneFrame(*Seed, *Frame.SceneView);
+		                              const auto Resolved = InSession.ResolveSceneFrame(*Seed, Request);
 		                              if (Resolved.HasCamera())
 		                              {
 			                              InSession.BuildViews(Graph, std::span(&Resolved.View, 1),
@@ -272,22 +327,18 @@ FImage RenderViewerFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapchain&
 }
 
 template<class FrameOperation>
-void CheckCameraInput(FModelViewerPlugin& InPlugin, const FrameOperation& InFrame, const FImage& InReadyImage,
+void CheckCameraInput(FAsyncModelFixture& InModel, const FrameOperation& InFrame, const FImage& InReadyImage,
                       const std::filesystem::path& InRoot)
 {
 	FInputEvent Wheel;
 	Wheel.Type = EEventType::MouseWheel;
 	Wheel.Y = 2;
-	InPlugin.Input(std::span(&Wheel, 1), true, false);
-	HYP_CHECK(Difference(InReadyImage, InFrame(InPlugin)) < .0001f);
-	InPlugin.Input(std::span(&Wheel, 1), false, false);
-	HYP_CHECK(Difference(InReadyImage, InFrame(InPlugin)) > .003f);
-	FInputEvent Home;
-	Home.Type = EEventType::Key;
-	Home.Key = EKey::Home;
-	Home.bDown = true;
-	InPlugin.Input(std::span(&Home, 1), false, false);
-	HYP_CHECK(Difference(InReadyImage, InFrame(InPlugin)) < .0001f);
+	InModel.Camera.Input(InModel.Scene, std::span(&Wheel, 1), true, false);
+	HYP_CHECK(Difference(InReadyImage, InFrame(InModel)) < .0001f);
+	InModel.Camera.Input(InModel.Scene, std::span(&Wheel, 1), false, false);
+	HYP_CHECK(Difference(InReadyImage, InFrame(InModel)) > .003f);
+	FitSceneCamera(InModel.Scene, 320.f / 240, true);
+	HYP_CHECK(Difference(InReadyImage, InFrame(InModel)) < .0001f);
 	std::array<FInputEvent, 4> Drag;
 	Drag[0].Type = EEventType::MouseMove;
 	Drag[0].X = 100;
@@ -302,28 +353,28 @@ void CheckCameraInput(FModelViewerPlugin& InPlugin, const FrameOperation& InFram
 	Drag[3] = Drag[1];
 	Drag[3].bDown = false;
 	// A button event supplies the initial pointer position; no preceding move is required.
-	InPlugin.Input(std::span(Drag).subspan(1), false, false);
-	const auto Orbited = InFrame(InPlugin);
+	InModel.Camera.Input(InModel.Scene, std::span(Drag).subspan(1), false, false);
+	const auto Orbited = InFrame(InModel);
 	HYP_CHECK(Difference(InReadyImage, Orbited) > .003f);
-	InPlugin.Input(std::span(&Drag[1], 1), false, false);
-	InPlugin.Input(std::span(&Drag[2], 1), true, false);
-	HYP_CHECK(Difference(Orbited, InFrame(InPlugin)) < .0001f);
+	InModel.Camera.Input(InModel.Scene, std::span(&Drag[1], 1), false, false);
+	InModel.Camera.Input(InModel.Scene, std::span(&Drag[2], 1), true, false);
+	HYP_CHECK(Difference(Orbited, InFrame(InModel)) < .0001f);
 	SaveImage(InRoot / "out/captures/model-orbit.png", Orbited);
-	HYP_CHECK(InFrame(InPlugin, {480, 200}).Width == 480);
-	auto& Scene = InPlugin.GetSceneInstance();
+	HYP_CHECK(InFrame(InModel, {480, 200}).Width == 480);
+	auto& Scene = InModel.Scene;
 	const auto Camera = *Scene.GetSettings().DefaultCamera;
 	auto Lens = *Scene.FindNode(Camera)->Camera();
 	Lens.Far += 100;
 	Scene.SetCamera(Camera, Lens);
-	InPlugin.Input({}, false, false);
-	InFrame(InPlugin);
+	InModel.Camera.Input(InModel.Scene, {}, false, false);
+	InFrame(InModel);
 	HYP_CHECK(Scene.FindNode(Camera)->Camera()->Far == Lens.Far);
-	InPlugin.Input(std::span(&Wheel, 1), true, false);
+	InModel.Camera.Input(InModel.Scene, std::span(&Wheel, 1), true, false);
 	HYP_CHECK(Scene.FindNode(Camera)->Camera()->Far == Lens.Far);
 }
 
 template<class FrameOperation>
-void CheckGatedFrames(FGatedFileSystem& InStorage, FModelViewerPlugin& InPlugin, const FrameOperation& InFrame)
+void CheckGatedFrames(FGatedFileSystem& InStorage, FAsyncModelFixture& InModel, const FrameOperation& InFrame)
 {
 	// The physical read remains gated while Main, Render and RHI finish two frames.
 	bool bResponsive{};
@@ -332,16 +383,16 @@ void CheckGatedFrames(FGatedFileSystem& InStorage, FModelViewerPlugin& InPlugin,
 		const auto LoadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 		while (!InStorage.bStarted && std::chrono::steady_clock::now() < LoadDeadline)
 		{
-			InFrame(InPlugin);
+			InFrame(InModel);
 		}
-		InFrame(InPlugin);
-		InFrame(InPlugin, {480, 200});
-		bResponsive = InStorage.bStarted && !InPlugin.Ready() && InPlugin.Error().empty();
+		InFrame(InModel);
+		InFrame(InModel, {480, 200});
+		bResponsive = InStorage.bStarted && !InModel.Ready() && InModel.Error().empty();
 	}
 	catch (...)
 	{
 		InStorage.Release();
-		InPlugin.Stop();
+		InModel.Stop();
 		throw;
 	}
 	InStorage.Release();
@@ -382,25 +433,22 @@ int main()
 		FIOService IO(Tasks, Storage);
 		FAssetService Assets(IO);
 
-		FAppSettings Settings;
-		FModelViewerPlugin Plugin(Session, Tasks, Assets, Root / "out/fixtures/native/Showcase-gltf.hasset");
-		Plugin.Start();
-		const auto Frame = [&](FModelViewerPlugin& InPlugin, FSize InSize = {320, 240})
+		FAsyncModelFixture ModelFixture(Session, Tasks, Assets, Root / "out/fixtures/native/Showcase-gltf.hasset");
+		const auto Frame = [&](FAsyncModelFixture& InModel, FSize InSize = {320, 240})
 		{
-			return RenderViewerFrame(Tasks, Window, *Swapchain, Settings, InPlugin, Session, InSize);
+			return RenderAsyncModelFrame(Tasks, Window, *Swapchain, InModel, Session, InSize);
 		};
-		CheckGatedFrames(*Storage, Plugin, Frame);
+		CheckGatedFrames(*Storage, ModelFixture, Frame);
 		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 		FImage ReadyImage;
-		while (!Plugin.Ready() && Plugin.Error().empty() && std::chrono::steady_clock::now() < Deadline)
+		while (!ModelFixture.Ready() && ModelFixture.Error().empty() && std::chrono::steady_clock::now() < Deadline)
 		{
-			ReadyImage = Frame(Plugin);
+			ReadyImage = Frame(ModelFixture);
 		}
-		HYP_CHECK(Plugin.Ready() && Storage->bStarted);
-		CheckCameraInput(Plugin, Frame, ReadyImage, Root);
-		Plugin.Stop();
-		FModelViewerPlugin Broken(Session, Tasks, Assets, Root / "out/fixtures/native/Missing.hasset");
-		Broken.Start();
+		HYP_CHECK(ModelFixture.Ready() && Storage->bStarted);
+		CheckCameraInput(ModelFixture, Frame, ReadyImage, Root);
+		ModelFixture.Stop();
+		FAsyncModelFixture Broken(Session, Tasks, Assets, Root / "out/fixtures/native/Missing.hasset");
 		while (Broken.Error().empty() && std::chrono::steady_clock::now() < Deadline)
 		{
 			Frame(Broken);

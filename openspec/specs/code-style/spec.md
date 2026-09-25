@@ -3,6 +3,7 @@
 ## Purpose
 Define the repository's default Unreal-inspired source conventions, interoperability exceptions, repeatable style checks, and behavior-preserving migration requirements.
 ## Requirements
+
 ### Requirement: Default engine coding conventions
 Owned C++ and HLSL SHALL use the documented Unreal-inspired conventions: PascalCase identifiers, UE type prefixes, PascalCase source filenames, Allman braces and four-column tabs. Repository guidance SHALL record interoperability exceptions and the owner's uppercase-first boolean rule.
 
@@ -31,6 +32,6 @@ Repository guidance SHALL state that a single function normally does not exceed 
 - **WHEN** a new or materially changed function exceeds 100 lines including its complete definition
 - **THEN** it is split by responsibility or carries a concrete tightly coupled logic justification
 
-#### Scenario: Refactor Viewer and importer
+#### Scenario: Refactor application and importer
 - **WHEN** this bounded refactor is complete
-- **THEN** the decomposed Viewer and importer functions satisfy the principle while existing external behavior remains unchanged
+- **THEN** the decomposed application and importer functions satisfy the principle while existing external behavior remains unchanged

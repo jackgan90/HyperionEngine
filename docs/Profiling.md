@@ -17,10 +17,10 @@ python tools/Profile.py --out out/Profiling/MovingDetailGpu --mode detail-gpu --
 python tools/Profile.py --out out/Profiling/RuntimeOff --mode off --no-build
 
 # 交互控制；先用匹配版本的 Tracy Profiler 连接本机，再在 GUI 中开关采集
-out/build/profile/bin/hyperion_viewer.exe --asset-root ../HyperionAssets --config experiments/Scene.json --no-vsync
+out/build/profile/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Showcase.hasset
 ```
 
-省略 `--no-build` 时，helper 先构建 Viewer 和所需采集工具。`--mode` 支持 `off/basic/detail/gpu/detail-gpu/sampling`；默认小幅连续相机运动，`--static` 改为静止，`--visible` 显示窗口，`--warmup`、`--frames`、`--timeout` 控制运行边界。`--viewer <exe> --no-build` 可对照普通 Release 构建。输出目录必须不存在，避免覆盖旧证据。场景未在预热结束前加载完成时明确失败；应增加预热，不能把空场景帧用于比较。
+省略 `--no-build` 时，helper 先构建 Editor 和所需采集工具。`--mode` 支持 `off/basic/detail/gpu/detail-gpu/sampling`；默认小幅连续相机运动，`--static` 改为静止，`--visible` 显示窗口，`--warmup`、`--frames`、`--timeout` 控制运行边界。`--editor <exe> --no-build` 可对照普通 Release 构建。输出目录必须不存在，避免覆盖旧证据。预热与样本按就绪帧计数，未加载和空场景不计入性能样本。
 
 工具使用 `dependencies.lock.json` 锁定的 Tracy v0.14.1 源码，同时构建 `tracy-capture` 与 `tracy-csvexport`，不需要构建 GUI。仅工具构建通过 Tracy 自带 CPM 下载其指定的 Capstone、zstd、PPQSort、JSON 等依赖到 `out/profiling-deps`；普通引擎构建不需要它们。首次构建需要网络和 Git。交互查看应使用同版本 Tracy GUI。
 
@@ -28,7 +28,7 @@ Profiling 的 Release 链接在 `/DEBUG:FULL` 后显式保留 `/OPT:REF /OPT:ICF
 
 helper 为其子进程选择独立 loopback 端口，通过子进程环境变量 `TRACY_PORT` 配对客户端和 collector；不修改系统环境或防火墙。失败和超时会终止并等待自己启动的进程。Tracy 官方 capture 在部分错误时仍返回零，因此 helper 也检查 instrumentation failure、完成消息和 trace 文件。
 
-输出包括 `Capture.tracy`、`Frames.csv`、`Zones.csv`、`Events.csv`、`EventsAndPlots.csv`、`Gpu.csv`、`Metadata.json` 与日志。`EventsAndPlots.csv` 使用官方 exporter 的格式：`src_file` 为空的行是 plot，`value` 为数值；zone 的 value 可能形如 `123 [0x7b]`。CPU、GPU 时间单位为纳秒，Viewer 帧 CSV 为毫秒。Metadata 和复制的 CMake 配置记录实际二进制路径、编译配置、源码 revision、工作区状态、采集模式及负载统计。
+输出包括 `Capture.tracy`、`Frames.csv`、`Zones.csv`、`Events.csv`、`EventsAndPlots.csv`、`Gpu.csv`、`Metadata.json` 与日志。`EventsAndPlots.csv` 使用官方 exporter 的格式：`src_file` 为空的行是 plot，`value` 为数值；zone 的 value 可能形如 `123 [0x7b]`。CPU、GPU 时间单位为纳秒，Editor 帧 CSV 为毫秒。Metadata 和复制的 CMake 配置记录实际二进制路径、编译配置、源码 revision、工作区状态、采集模式及负载统计。
 
 ## 使用 API
 
@@ -50,7 +50,7 @@ void UpdateMaterial()
 
 编译关闭时所有宏参数均不求值。运行时关闭的 scope 只走内联状态检查，不读取时钟、注册站点或增加全局计数；禁用 category 的 plot/value 表达式不求值。已开始的 scope 即使中途关闭 mask 仍会按原连接结束。`FProfileScope` 和 `ProfileStats` 的旧无条件累计计时接口已移除，迁移时将构造改为 scope 宏；如需业务计时，使用独立应用时钟。
 
-类别为 `frame,render,material,rhi,tasks,assets,detail,gpu`。`ProfileBasicMask` 包含前六项。CLI `--profile` 开启基本 CPU scope，`--profile-detail`、`--profile-gpu`、`--profile-sampling` 增加相应能力并开启基本类别；`--profile-categories material,rhi` 可仅选类别，多个开关取并集。`--profile-start N --profile-frames M` 使用零起始帧编号，窗口必须位于有限 `--frames` 内；M=0 表示不设采集帧数上限。`--profile-wait` 最多等 collector 15 秒。未编入支持时，显式请求会报错。
+类别为 `frame,render,material,rhi,tasks,assets,detail,gpu`。`ProfileBasicMask` 包含前六项。CLI `--profile` 开启基本 CPU scope，`--profile-detail`、`--profile-gpu`、`--profile-sampling` 增加相应能力并开启基本类别；`--profile-categories material,rhi` 可仅选类别，多个开关取并集。`--profile-start N --profile-frames M` 使用零起始帧编号，窗口必须位于有限 `--frames` 内；benchmark 模式还检查就绪帧总数（预热加样本），有限采集窗口从已就绪的帧边界开始，支持零预热。M=0 表示不设采集帧数上限，保留加载阶段的观测。`--profile-wait` 最多等 collector 15 秒。未编入支持时，显式请求会报错。
 
 ## 常驻观测点与语义
 
@@ -61,9 +61,9 @@ void UpdateMaterial()
 - Tasks：静态线程名、TaskDispatch/TaskExecute/TaskWait 的数值 task ID，以及仅在启用时计时的 TaskQueueMilliseconds。队列延迟从依赖已满足、进入执行器队列时开始。
 - Assets：IO 任务内的 ReadAssetBytes、ImportGltf、ParseGltf、ConvertGltfMeshes、DecodeImage，以及 ShaderCompilation。标记覆盖完整操作，不进入顶点或像素循环；导入等待外部 IO 时同样按 Worker 执行段拆分。查看加载热点应从启动时开启 Assets，预热结束后的采集通常已经错过初次加载。
 
-材质 reuse/refresh/full 的计数在一次 view 准备中使用局部变量累计；provider 与常量/绑定/PSO 缓存使用已有累计计数的差值。`SceneDraws` 表示该 Viewer 帧实际场景 draw。Viewer 可在一帧构建 CSM、主视图、兼容与透明等多个 view；这些 plot 应按 view 准备 scope 解读，不能把一个样本直接当作整帧汇总。Full 计数包含进入完整求值后失败的尝试，Refresh scope 包含未能使用快速刷新路径的尝试。
+材质 reuse/refresh/full 的计数在一次 view 准备中使用局部变量累计；provider 与常量/绑定/PSO 缓存使用已有累计计数的差值。`SceneDraws` 表示该 Editor 帧实际场景 draw。Editor 可在一帧构建 CSM、主视图、兼容与透明等多个 view；这些 plot 应按 view 准备 scope 解读，不能把一个样本直接当作整帧汇总。Full 计数包含进入完整求值后失败的尝试，Refresh scope 包含未能使用快速刷新路径的尝试。
 
-材质优化新增 `ConstantFullLookups/ConstantPreparedReuses/ConstantEvictions` 和 `ProviderEvictions` 增量计数，以及 `ConstantCachedBlocks/ConstantCachedBytes/ConstantPreparedBlocks/ConstantPageBytes`、`ProviderCachedEntries/ProviderCachedValueBytes` 存量。候选常量字节为对齐后的 slice extent；provider 字节为 owned value-tree 估算，均不能代替进程 Private Bytes。`ConstantPageBytes` 包括外部旧帧与活跃 draw 保留的完整页面。原生 `GraphicsRootBinds/GraphicsHeapBinds/GraphicsConstantBinds/GraphicsTableBinds` 每次 list 录制发布实际命令数；同一帧有多个 pass/list 时需要汇总，不能拿单个 plot 样本当作每帧数量。详细对照见 [材质性能优化](MaterialPerformance.md)。
+材质优化新增 `ConstantFullLookups/ConstantPreparedReuses/ConstantEvictions` 和 `ProviderEvictions` 增量计数，以及 `ConstantCachedBlocks/ConstantCachedBytes/ConstantPreparedBlocks/ConstantPageBytes`、`ProviderCachedEntries/ProviderCachedValueBytes` 存量。候选常量字节为对齐后的 slice extent；provider 字节为 owned value-tree 估算，均不能代替进程 Private Bytes。`ConstantPageBytes` 包括外部旧帧与活跃 draw 保留的完整页面。原生 `GraphicsRootBinds/GraphicsHeapBinds/GraphicsConstantBinds/GraphicsTableBinds` 每次 list 录制发布实际命令数；同一帧有多个 pass/list 时需要汇总，不能拿单个 plot 样本当作每帧数量。详细对照见 [当前测量工具](RenderDiagnostics.md)。
 
 CPU scope 是包含子 scope 的墙钟区间；不同线程的总时间不能直接相加当作帧耗时。Worker 在 oneTBB 主动挂起前关闭所有引擎 scope，恢复后重新打开 execution segment 并保留注释；6 秒挂起会显示为前后两个短段。段内仍可能发生 OS 抢占或阻塞，不是纯 on-CPU 时间。Render/RHI 专属线程的同步等待保留为墙钟等待区间。frame CSV 和 GUI 曲线包含 Present 等待，也不等同于 GPU 时间。
 
@@ -84,7 +84,7 @@ Tracy 系统采样采用手动 start/stop，与 GPU/Detail 分开。GUI 的 `Req
 .\tools\Build.ps1 -Preset profile -Target hyperion_check
 
 # 独立验收：断线重连、单 Worker 嵌套/异常/挂起、GPU 生命周期、CLI、运动场景与计数
-python Source/Tests/Integration/ProfilingAcceptance.py out/build/profile/bin/hyperion_viewer.exe . out/build/profile/bin/profiling_tests.exe out/build/profile/bin/d3d12_frame_failure_tests.exe
+python Source/Tests/Integration/ProfilingAcceptance.py out/build/profile/bin/hyperion_editor.exe . out/build/profile/bin/profiling_tests.exe out/build/profile/bin/d3d12_frame_failure_tests.exe
 
 # scope 微基准；有 collector 时测 connected，没有时测 disconnected
 out/build/profile/bin/profiling_tests.exe --microbenchmark

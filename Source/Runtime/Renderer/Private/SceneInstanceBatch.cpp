@@ -79,7 +79,8 @@ bool FSceneInstance::EditNodes(std::vector<FSceneNodeEdit> InEdits, std::uint64_
 	return true;
 }
 
-std::vector<FSceneHandle> FSceneInstance::AddNodes(std::vector<FSceneNode> InNodes)
+std::vector<FSceneHandle> FSceneInstance::AddNodes(std::vector<FSceneNode> InNodes,
+                                                   std::vector<FSceneNodeEdit> InRestoredChildren)
 {
 	auto& P = *Impl;
 	P.RequireOpen();
@@ -102,7 +103,7 @@ std::vector<FSceneHandle> FSceneInstance::AddNodes(std::vector<FSceneNode> InNod
 		}
 	}
 	P.Models.reserve(P.Models.size() + Models.size());
-	const auto Handles = P.Scene.AddNodes(std::move(InNodes));
+	const auto Handles = P.Scene.AddNodes(std::move(InNodes), std::move(InRestoredChildren));
 	for (auto& [Index, Model] : Models)
 	{
 		Model.Handle = Handles[Index];

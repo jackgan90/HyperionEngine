@@ -118,7 +118,7 @@ void RegisterCapturePreference(FOperationCatalog& InCatalog, IRenderCaptureContr
 	auto Info =
 	    ControlInfo("renderdoc.set_preference",
 	                "Persist the Editor's RenderDoc capture preference. Enabling a provider absent at startup requires "
-	                "restart; status reports actual availability. Viewer uses application settings instead.",
+	                "restart; status reports actual availability.",
 	                false, InCapture && InCapture->RenderCaptureInfo().Preference.has_value());
 	const FCapturePreference Preference{true};
 	Info.Example = WriteRecordWire(RecordType<FCapturePreference>(), &Preference);

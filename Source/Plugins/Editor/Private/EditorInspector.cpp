@@ -10,7 +10,7 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	const auto& Node = *InView.Node;
 	const auto Identity = Node.Id + "/" + InComponent.Id;
 	const bool bOpen = Gui->Section((InComponent.Type->Label + "##" + Identity).c_str());
-	if (!Options.ExerciseDocument.empty())
+	if (!Options.ExerciseDocument.empty() || !Options.ExerciseRenderControls.empty())
 	{
 		InspectionBounds[InComponent.Type->Id + "/header"] = Gui->LastItemBounds();
 	}
@@ -20,7 +20,7 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	}
 	auto& Record = InspectorDrafts.Single(InComponent);
 	Gui->BeginLiveEdit();
-	const bool bChanged = Gui->EditRecord(Record, Identity, Options.ExerciseDocument.empty() ?
+	const bool bChanged = Gui->EditRecord(Record, Identity, (Options.ExerciseDocument.empty() && Options.ExerciseRenderControls.empty()) ?
 	    std::function<void(std::string_view, FVec4)>{} : [&](std::string_view InField, FVec4 InBounds)
 	    { InspectionBounds[InComponent.Type->Id + "/" + std::string(InField)] = InBounds; });
 	const auto Edit = Gui->EndLiveEdit();
@@ -54,16 +54,6 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 			return true;
 		}
 	}
-	if (InComponent.Type->CppType == typeid(FSceneModelComponent) &&
-	    Gui->Section(("Rendering diagnostics (read only)##" + Identity).c_str(), false))
-	{
-		const auto Diagnostics = Scene->GetComponentDiagnostics(InView.Handle, InComponent.Id);
-		if (Diagnostics && Diagnostics->Object == InView.Handle && Diagnostics->Component == InComponent.Id)
-		{
-			FRecordDraft Readback(RecordType<FSceneComponentDiagnostics>(), Diagnostics.get());
-			Gui->EditRecord(Readback, Identity + "/render");
-		}
-	}
 	return false;
 }
 
@@ -94,9 +84,22 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 		    FPendingInspectorEdit{InView.Handle, std::move(Candidate), Revision, Edit.ChangedInteraction};
 	}
 	Gui->TextWrapped("Object ID: " + Node.Id);
+	DrawHierarchy(InView);
+	if (Scene->GetRevision() != Revision)
+	{
+		return;
+	}
 	if (Node.DirectionalLight())
 	{
 		DrawMainLightAction(InView.Handle);
+		if (!Context.Require<FRenderFeatureRegistry>().Contains("contact-shadows"))
+		{
+			Gui->TextWrapped("Contact shadows are unavailable in this session. Light properties can still be saved.");
+		}
+		else if (Rendering.Pipeline != "deferred")
+		{
+			Gui->TextWrapped("Contact shadows require the Deferred pipeline.");
+		}
 		if (Scene->GetRevision() != Revision)
 		{
 			return;

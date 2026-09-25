@@ -3,6 +3,7 @@
 ## Purpose
 Define stable reflected configuration and startup-selected static plugins with explicit activation authority, validated dependency planning, scoped rollback, and controlled optional-feature failure.
 ## Requirements
+
 ### Requirement: Reflected configuration round trip
 The engine SHALL save and restore registered fields with stable type identity and schema version through its serialization interface.
 #### Scenario: Save then load
@@ -46,8 +47,8 @@ Plugin activation SHALL stop a partially started instance and undo its scoped re
 - **THEN** unrelated plugins remain active and no failed service or callback remains registered
 
 ### Requirement: Explicit activation authority
-Persisted feature parameters SHALL NOT implicitly enable plugins. Explicit CLI feature selection SHALL update requested selection while honoring disabled-plugin configuration. Stable plugin IDs and existing serialized property keys SHALL remain supported.
+Persisted feature parameters SHALL NOT implicitly enable plugins. Explicit CLI feature selection SHALL update requested selection while honoring disabled-plugin configuration. Supported plugin IDs and serialized property keys SHALL remain stable; retired application-specific configuration is removed explicitly.
 
-#### Scenario: Stale scene source
-- **WHEN** scene_source remains configured but scene-viewer is not selected
-- **THEN** the scene-viewer plugin is not activated
+#### Scenario: Disabled optional feature
+- **WHEN** a saved setting requests an explicitly disabled optional feature
+- **THEN** the feature is not activated and an attempted dependent operation reports unavailability

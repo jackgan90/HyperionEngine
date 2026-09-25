@@ -4,6 +4,7 @@
 Define engine-owned GUI rendering and immutable texture bindings, including correct color-view selection and sampling for offscreen scene images.
 
 ## Requirements
+
 ### Requirement: Preserve legacy material output views
 RGBA8 offscreen scene output SHALL preserve each legacy Forward material's linear or sRGB view selection, including mixed batches in one scene.
 
@@ -14,7 +15,7 @@ RGBA8 offscreen scene output SHALL preserve each legacy Forward material's linea
 ### Requirement: Engine-owned GUI rendering
 GUI rendering SHALL use a reusable Runtime renderer with buffers, textures, binding sets and pipelines created by Hyperion RHI. Public GUI contracts SHALL contain no ImGui or native graphics API types.
 
-#### Scenario: Viewer and editor share the renderer
+#### Scenario: Editor and editor share the renderer
 - **WHEN** DebugUI or the Editor submits a GUI snapshot
 - **THEN** both use the common engine renderer while preserving independent application UI behavior
 

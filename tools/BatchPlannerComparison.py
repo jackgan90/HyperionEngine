@@ -1,4 +1,4 @@
-"""Interleave frozen baseline/candidate planner or Viewer runs and validate equivalent work."""
+"""Interleave frozen baseline/candidate planner or Editor runs and validate equivalent work."""
 import argparse
 import csv
 import hashlib
@@ -9,7 +9,7 @@ import pathlib
 import statistics
 import subprocess
 
-from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+from BenchmarkWorkload import render_settings, validate_workload
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -17,6 +17,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def viewport_digest(path, sample):
+    from PIL import Image
+    x, y, width, height = [int(float(sample["capture_" + key])) for key in ("x", "y", "width", "height")]
+    with Image.open(path) as image:
+        # Compare only the scene image; surrounding Editor diagnostics can contain changing timings.
+        pixels = image.crop((x + 2, y + 2, x + width - 2, y + height - 2))
+        return hashlib.sha256(pixels.tobytes()).hexdigest()
 
 
 def planner(args, executable, name):
@@ -38,12 +47,11 @@ def planner(args, executable, name):
     return {"name": name, "command": command, "rows": rows}
 
 
-def viewer(args, executable, name, motion):
+def editor(args, executable, name, motion):
     output = args.output / f"{name}.csv"
     capture = args.output / f"{name}.png"
     command = [str(executable), "--asset-root", str(args.asset_root.resolve()),
-               "--config", str(benchmark_config_path(ROOT)), "--hidden", "--no-ui",
-               "--no-vsync", "--frames", str(args.warmup + args.samples), "--benchmark-warmup", str(args.warmup),
+               "--scene", "/Game/Scenes/Showcase.hasset", "--render-settings", str(render_settings(args.output / "Settings.json")), "--hidden", "--benchmark-samples", str(args.samples), "--benchmark-warmup", str(args.warmup),
                "--benchmark", str(output), "--capture", str(capture)]
     if motion != "stable":
         command += ["--benchmark-camera", "--benchmark-camera-step", "0.1" if motion == "small" else "10"]
@@ -51,7 +59,7 @@ def viewer(args, executable, name, motion):
     log = result.stdout + result.stderr
     (args.output / f"{name}.log").write_text(log, encoding="utf-8")
     if result.returncode or "validation errors: 0" not in log:
-        raise RuntimeError(f"Viewer readiness or validation failed: {name}")
+        raise RuntimeError(f"Editor readiness or validation failed: {name}")
     assert "vsync=off" in log
     rows = list(csv.DictReader(io.StringIO(output.read_text(encoding="utf-8"))))
     assert [int(row["frame"]) for row in rows] == list(range(args.warmup, args.warmup + args.samples))
@@ -66,7 +74,7 @@ def viewer(args, executable, name, motion):
         metrics[key] = {"mean": statistics.mean(values), "median": statistics.median(values),
                         "p95": values[(len(values) - 1) * 95 // 100]}
     return {"name": name, "motion": motion, "command": command, "metrics": metrics,
-            "image_sha256": digest(capture), "rows": rows}
+            "image_sha256": viewport_digest(capture, rows[-1]), "rows": rows}
 
 
 def compare(args, before, after):
@@ -92,9 +100,9 @@ def main():
     parser.add_argument("--baseline", type=pathlib.Path, required=True)
     parser.add_argument("--candidate", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
-    parser.add_argument("--kind", choices=("planner", "viewer"), default="planner")
+    parser.add_argument("--kind", choices=("planner", "editor"), default="planner")
     parser.add_argument("--asset-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
-    parser.add_argument("--warmup", type=int, default=200, help="Viewer warmup; planner uses its fixed 80 frames")
+    parser.add_argument("--warmup", type=int, default=200, help="Editor warmup; planner uses its fixed 80 frames")
     parser.add_argument("--samples", type=int, default=200)
     parser.add_argument("--trials", type=int, default=2)
     args = parser.parse_args()
@@ -115,7 +123,7 @@ def main():
                 for version in order:
                     name = f"{motion}-{version}-{trial}"
                     executable = getattr(args, version)
-                    run = planner(args, executable, name) if args.kind == "planner" else viewer(args, executable, name, motion)
+                    run = planner(args, executable, name) if args.kind == "planner" else editor(args, executable, name, motion)
                     runs[version] = run
                     metadata["runs"].append({key: value for key, value in run.items() if key != "rows" or args.kind == "planner"})
                     print(f"Completed {name}", flush=True)

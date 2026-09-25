@@ -3,6 +3,7 @@
 ## Purpose
 Define stable directional cascades, independent caster visibility, shared model shader permutations, bounded shadow reception and reproducible CPU/GPU cost validation.
 ## Requirements
+
 ### Requirement: Stable directional cascaded shadows
 Renderer SHALL support one shadowed directional light with up to four finite depth cascades, configurable resolution/distance, stable projections, bounded filtering/bias, overlap blending and far-distance fading. Every active cascade SHALL update every frame.
 
@@ -35,7 +36,7 @@ Builtin lit model pixels SHALL choose cascades using linear camera depth and app
 Delivery SHALL include reproducible warmed off/on CPU/GPU measurements, individual cascade timings, forward sampling increment, resource counts and sustained-motion checks. Stable frames SHALL reuse textures, shaders, PSOs and descriptors; normal rendering SHALL NOT introduce shadow-specific idle waits or synchronous image readback.
 
 #### Scenario: Sustained shadow rendering
-- **WHEN** the viewer renders thousands of frames with camera/light motion after warmup
+- **WHEN** the application renders thousands of frames with camera/light motion after warmup
 - **THEN** resource counts remain bounded, every active cascade updates and timing results identify any regressions against documented configuration and targets
 
 ### Requirement: Scene camera and light jointly determine cascades

@@ -118,6 +118,7 @@ void FContactShadowFeature::AddDebug(FRenderFeatureContext& InContext)
 	    InContext.View.Viewport.value_or(FViewport{0, 0, float(InContext.View.Width), float(InContext.View.Height)});
 	auto Pass = MakeScreenTexturePreview(Input, Viewport, Mip,
 	                                     bDepth && InContext.View.DepthConvention == EDepthConvention::Standard);
+	Pass.Targets.Color->Source = InContext.Resources.Output;
 	Pass.Statistics = InContext.FullscreenStatistics;
 	AddFullscreenPass(InContext.Session, InContext.Graph, std::move(Pass), InContext.bDeferPreparation);
 }

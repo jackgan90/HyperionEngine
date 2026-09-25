@@ -1,5 +1,5 @@
-#include "Hyperion/Config/ApplicationSettings.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Core/ProfilingControl.h"
 #include "SceneOperations.h"
 
 namespace Hyperion
@@ -49,13 +49,13 @@ template<> const FRecordDescriptor& RecordType<FProfilingEdit>()
 	return Type;
 }
 
-void RegisterProfilingOperations(FOperationCatalog& InCatalog, IApplicationSettings* InSettings)
+void RegisterProfilingOperations(FOperationCatalog& InCatalog, IProfilingControl* InSettings)
 {
 	FOperationInfo Info;
 	Info.Id = "profiling.get";
 	Info.Owner = "automation-scene";
 	Info.Summary = "Read target profiler build, connection and capture mask";
-	Info.Description = "Uses the same Core profiler as Viewer diagnostics. Collector connection and sampling "
+	Info.Description = "Uses the same Core profiler as Editor diagnostics. Collector connection and sampling "
 	                   "availability remain platform/build dependent.";
 	Info.Effects = "Reads profiler status.";
 	Info.Completion = "Current target process snapshot.";
@@ -66,8 +66,8 @@ void RegisterProfilingOperations(FOperationCatalog& InCatalog, IApplicationSetti
 		                                                                     return State();
 	                                                                     }));
 	Info.Id = "profiling.set";
-	Info.Summary = "Change Viewer profiling categories and sampling request";
-	Info.Description = "Shares the Viewer GUI control path, including draining submitted frames before changing the "
+	Info.Summary = "Change Editor profiling categories and sampling request";
+	Info.Description = "Shares the Editor GUI control path, including draining submitted frames before changing the "
 	                   "category mask. Omitted fields retain their value. Does not launch an external collector.";
 	Info.Effects = "Changes target profiling only; no scene or asset mutation.";
 	Info.bReadOnly = false;

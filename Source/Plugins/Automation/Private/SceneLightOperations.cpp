@@ -8,9 +8,8 @@ void RegisterSceneLightControls(FOperationCatalog& InCatalog, ISceneLightControl
 	FOperationInfo Info;
 	Info.Id = "light.main.get";
 	Info.Owner = "automation-scene";
-	Info.Summary = "Read Viewer main directional light";
-	Info.Description =
-	    "Same light as the Viewer Directional shadows panel, including ModelViewer mode. Read before setting.";
+	Info.Summary = "Read scene main directional light";
+	Info.Description = "Edits the scene main directional light through the shared document. Read before setting.";
 	Info.Effects = "Reads scene light state.";
 	Info.Completion = "Main snapshot.";
 	Info.bReadOnly = true;
@@ -30,9 +29,8 @@ void RegisterSceneLightControls(FOperationCatalog& InCatalog, ISceneLightControl
 		                                                                     }
 	                                                                     }));
 	Info.Id = "light.main.set";
-	Info.Summary = "Edit Viewer main directional light";
-	Info.Effects =
-	    "Updates the live light through the same validation as the Viewer panel. No automatic save or history.";
+	Info.Summary = "Edit scene main directional light";
+	Info.Effects = "Commits one undoable scene edit using shared validation. Save the document explicitly.";
 	Info.bReadOnly = false;
 	const FSceneMainLight Example{1, {1, 0, 1}, {}, {0, 1, 0}};
 	Info.Example = WriteRecordWire(RecordType<FSceneMainLight>(), &Example);

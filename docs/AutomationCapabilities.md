@@ -1,31 +1,31 @@
 # Automation 能力与领域接入
 
-本页按 Editor / Scene Viewer / ModelViewer 的现有人类任务组织能力。精确参数、可用性、示例和完成语义以目标的 `api.search` / `api.describe` / `types.describe` 为准，不要求启动时枚举所有声明。连接方式见 [AutomationConnections.md](AutomationConnections.md)，通用契约见 [Automation.md](Automation.md)。
+本页按 Editor 的现有人类任务组织能力。精确参数、可用性、示例和完成语义以目标的 `api.search` / `api.describe` / `types.describe` 为准，不要求启动时枚举所有声明。连接方式见 [AutomationConnections.md](AutomationConnections.md)，通用契约见 [Automation.md](Automation.md)。
 
 ## 推荐调用顺序
 
-1. 连接明确的应用实例，搜索当前任务需要的操作；有场景文档的宿主查询 `scene.info`，ModelViewer 查询 `view.get`。
+1. 连接明确的应用实例，搜索当前任务需要的操作；查询场景文档 `scene.info` 或资产页签 `asset.info`。
 2. 场景使用返回的 document/revision；资产打开后使用 document/generation。64 位数值按十进制字符串传递。
 3. 先查询目标和当前值，再提交修改；批量修改保持一个请求中的全部目标合法。不要自动重试 stale revision 的修改。
 4. 异步返回 job 时在同一连接轮询 `jobs.get`。编辑完成、资源准备、GPU 展示和磁盘保存是不同完成点。
 5. 调用 `scene.save` / `asset.save` 才持久化草稿。关闭/切换脏内容需要先保存或明确 discard。
 
-“保存全部资产”由分页查询 `asset.documents.list`、逐个调用 `asset.save` 并等待完成组成；“关闭全部”同样逐个使用 `asset.close`。保留每份文档的冲突和失败结果，不承诺跨文件原子事务。Editor 删除后清空选择；Viewer 保留原有的删除后选择第一个剩余模型策略。两个宿主各自的 GUI/agent 使用同一策略。
+“保存全部资产”由分页查询 `asset.documents.list`、逐个调用 `asset.save` 并等待完成组成；“关闭全部”同样逐个使用 `asset.close`。保留每份文档的冲突和失败结果，不承诺跨文件原子事务。Editor 删除后清空对应选择，不自动选择替代物；GUI/agent 使用同一策略。
 
 ## 任务映射
 
 | 人类任务 | 操作族 | 共享服务与范围 |
 |---|---|---|
 | 查找资产、场景 | `content.assets.list` | Content/Assets 原生索引；query/type、offset/limit、root generation。写入内容后重新开始分页 |
-| 选择、清空资产目录 | `content.root.get/set/clear` | `FContentRootService`；Editor 与 GUI 同样检查 busy/dirty、关闭旧内容并保存 Preferences。Viewer 仅 get |
+| 选择、清空资产目录 | `content.root.get/set/clear` | `FContentRootService`；Editor 与 GUI 同样检查 busy/dirty、关闭旧内容并保存 Preferences |
 | 打开、新建、关闭场景 | `scene.open`、`scene.status` | `ISceneDocumentHost`；Editor 空 path 表示空文档，旧场景 ID 失效。失败不声称恢复旧场景 |
 | 查询与编辑层级 | `scene.nodes.list`、`scene.node.get/create/reparent`、`scene.nodes.set_metadata/set_transform` | `FSceneEditDocument`；metadata/transform 最多 128 个目标，事务先全量校验 |
-| 多选、删除、历史 | `scene.selection.get/set/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary；Editor 删除后不自动选择替代物；Viewer 选择剩余模型。Editor undo 恢复并重新选择新 handle |
-| Viewer 结构操作 | `scene.selection.duplicate/remove_keep_children` | 复用 Viewer 原有文档操作；Editor 没有对应的 history 实现，目录标为 unavailable |
-| 放置 primitive/light 或 Viewer 已加载模型 | `scene.placement.list/place` | `IScenePlacement`；Editor 原有 registry 和准备/提交路径，Viewer 原有 Add Model 资源集。显式 position 是世界坐标 |
+| 多选、删除、历史 | `scene.selection.get/set/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary；Editor 删除后不自动选择替代物。Editor undo 恢复并重新选择新 handle |
+| 复制与保留子节点删除 | `scene.selection.duplicate/remove_keep_children` | SceneEditing 共享事务；操作 primary，复制共享资源，删除保留子节点世界变换，支持 undo/redo 和选择恢复；GUI 入口待后续 Outliner/viewport 交互设计 |
+| 放置 primitive/light/native model | `scene.placement.list/place` | `IScenePlacement` 与 Editor registry 的准备/提交路径；显式 position 为世界坐标 |
 | Inspector 组件 | `scene.components.list`、`scene.component_types.list`、`scene.components.edit_structure`、`scene.component.<type>.get/set/set_batch` | `SceneEditing` 与组件反射；组件实例 ID 来自 list，不必等于类型 ID。保留资源绑定，完整候选经文档/场景校验；资源模型组件必须通过 prepared placement 创建 |
 | 主相机、主灯、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换 |
-| 浏览相机和临时视口选项 | `view.get/set/frame_scene/preview_camera` | `ISceneViewport` / SceneCameraController；null option 表示此 host 不支持。patch 中 null 保留原值 |
+| 浏览相机和临时视口选项 | `view.get/set/frame_scene/preview_camera` | `ISceneViewport` / SceneCameraController；null option 表示此 host 不支持。patch 中 null 保留原值；曝光、Visualizer 0–6、独立状态/profiling HUD 和 0–255 分类掩码均为临时视口状态 |
 | 用浏览视角编写相机 | `view.save_initial/create_camera/apply_to_camera` | Editor 与 GUI 同一文档操作；与临时相机移动区分 |
 | 非场景资产页签 | `asset.open/info/documents.list/activate/close/save/undo/redo/rename` | Editor 发布 `IAssetWorkspace`，GUI 和多个 agent 使用同一草稿、历史与 busy 状态；其他宿主可使用独立 CPU 文档 |
 | 模型属性 | `model.nodes.get/set`、`model.material_slots.get/set`、`model.primitives.get/set`、`model.roots.get` | AssetEditing 共享校验；节点/primitive 身份、几何和拓扑固定；引用先加载校验再提交 |
@@ -33,10 +33,11 @@
 | 纹理 | `texture.dimension.get/format.get/encoding.get/sample`、`texture.set_encoding` | 编码修改与 GUI 同一重建算法。sample 返回 mip/face 信息与源像素 RGBA，不返回 bulk |
 | 天空属性 | `sky.radiance.get/specular.get/brdf.get/irradiance.get/convention.get` | GUI 中这些产品为只读；天空重新生成使用 import；名称使用 asset.rename |
 | 资产预览 | `asset.preview.get/set` | `IAssetPreviewWorkspace`；模型/材质/天空 camera、曝光、形状、yaw；纹理 mip/face/channel/EV/zoom/pan/fit/checker。临时预览不增加资产 generation/history |
-| Viewer 渲染与配置 | `application.settings.get/set/save`、`render.shadows.get/set` | 同一设置 inventory、校验和配置保存；标注 restart 的选项不热加载。阴影控制是临时状态 |
+| 渲染与配置 | `render.settings.get/set/save`、`render.shadows.get/set` | `IRenderSettings`；完整候选校验、revision 和原子保存；activeReversedZ 与待重启值分离；不修改场景 history；shadow 参数为旧场景的会话默认值，已配置的主方向光组件参数优先 |
+| 灯光阴影属性 | `scene.component.hyperion.scenedirectionallight.get/set`、`light.main.get/set` | `shadowSettings` 可选嵌套组件字段；SceneEditing 验证、历史和原生保存；point/spot 尚不支持阴影 |
 | 渲染结果和诊断 | `render.statistics`、`render.component_diagnostics`、`render.screenshot` | 完成帧统计、分页 primitive 诊断和现有 readback。PNG 成功返回时文件已写入，返回目标本地路径、尺寸、frame 和 bytes |
 | RenderDoc | `renderdoc.status/capture/open/set_preference` | 复用 host capture/replay；Editor preference 与 GUI 同样持久化；未编译/缺 DLL/不可绘制等情况返回 unavailable |
-| GUI scale / Profiling | `gui.scale.get/set`、`profiling.get/set` | 共用 GUI scale 和 Viewer profiling 控制。scale 下一 GUI frame 生效并沿正常偏好路径保存；profiling 取决于构建和 collector |
+| GUI scale / Profiling | `gui.scale.get/set`、`profiling.get/set` | 共用 GUI scale 和 Core profiling 控制。scale 下一 GUI frame 生效并沿正常偏好路径保存；profiling 取决于构建和 collector |
 | 导入与发布 | `asset.import` | `FAssetImportService`、现有 importer 和 publication lease；完成后刷新索引，不静默覆盖已打开草稿 |
 
 ## 数值与内容发现
@@ -61,17 +62,19 @@
 
 导入支持 glTF/GLB 及其图像依赖、HDR/EXR 天空、已注册的 typed JSON/sky recipe/native upgrade；不新增独立 PNG/JPEG importer。sourceRoot/sourceId 成对使用，输出与源分离，force 仅跳过增量判断，不绕过写权限和身份检查。导入、发布、保存和截图接收后不支持取消；jobs 返回真实 cancellable 状态。保存后的草稿若继续编辑仍 dirty，导入不偷偷重载已有草稿。
 
-Viewer 没有 GUI 场景切换/root 编辑或 Editor 相机编写/资产预览窗口时，对应操作不存在或明确 unavailable。启动 `--no-instance-batching` 时不能从 agent 重新启用 batching。未加载 scene provider、未编译 RenderDoc/Profiling、关闭 GUI 等可选配置不会让其他分支假成功。
+可选 provider 缺失、未编译 RenderDoc/Profiling、关闭 GUI 等配置会返回明确 unavailable，并保留其他分支。`--no-instance-batching` 是初始值，GUI/agent 可通过相同视口服务调整。
+
+`view` 的既有 `animate` 可空字段保留 wire schema 兼容性。Editor 返回 null，对非空修改返回 unavailable；通用动画播放服务及其 GUI/Automation 适配尚未实现，固定演示动画不再作为支持能力。
 
 ## 失败状态、批量修改与退出
 
 - `asset.documents.list` / `asset.info` 包含 loading/failed 页签的稳定 ID、state/error；未构造草稿的 generation 为 `"0"`。可 activate 或 close 后重新 open，不必清空整个 workspace。
 - `scene.component.<type>.set_batch` 的 handles/components/values 三个数组一一对应，长度为 1–128。读取各对象后分别保留未修改字段，完整批次验证后一次提交和 Undo；旧 set 的广播语义保持不变。
-- ModelViewer 的 `view.set/frame_scene` 使用 `document=""`、`revision="0"`；不支持 scene-camera authoring。`light.main.get/set` 与 Viewer 主光源面板共用校验和原子提交，使用返回的 handle/revision；该模式的相机和灯光为临时状态。
+- `light.main.get/set` 使用当前主灯 handle/revision，经 SceneEditing 修改 authored 节点；支持 undo/redo 和场景保存。相机浏览、剔除和渲染诊断设置为临时状态。
 - `render.statistics.sceneError` 优先报告当前 scene producer 的终止错误，否则报告场景准备错误。
-- `application.close.status/request` 由 Editor/Viewer 发布正常关闭服务。action 为 0（默认：拒绝未保存内容）、1（保存后退出）、2（明确丢弃后退出）、3（取消退出，不取消已接收保存）。Editor 未命名脏场景保存退出须提供 scenePath。
+- `application.close.status/request` 由 Editor 发布正常关闭服务。action 为 0（默认：拒绝未保存内容）、1（保存后退出）、2（明确丢弃后退出）、3（取消退出，不取消已接收保存）。Editor 未命名脏场景保存退出须提供 scenePath。
 - close.request 返回的是接受状态，不是进程已经退出；保存期间状态为 saving，失败为 failed 并保留应用。成功后目标正常排空、撤回发现记录并断开连接。关闭时最多排空应答 2 秒；断连/强杀不保证远端收到应答，不应自动重试破坏性请求。
-- 实际帧间隔/FPS、CPU hooked allocation、线程任务计数等 GUI 性能指标尚未全部进入结构化 diagnostics，记录为后续只读指标适配范围。
+- `render.statistics` 同时返回帧间隔、CPU hooked bytes 和按执行域累计任务数，GUI 使用同一快照；这些是诊断计数，不代表操作耗时或进程全部内存。
 
 ## 新功能维护方式
 

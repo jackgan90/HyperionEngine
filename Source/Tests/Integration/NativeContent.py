@@ -4,8 +4,8 @@ import pathlib
 import subprocess
 
 
-def import_asset(viewer, source, output=None, *, asset_root=None):
-    tool = viewer.with_name("hyperion_asset_tool" + viewer.suffix)
+def import_asset(executable, source, output=None, *, asset_root=None):
+    tool = executable.with_name("hyperion_asset_tool" + executable.suffix)
     source = pathlib.Path(source)
     output = pathlib.Path(output) if output else source.with_suffix(".hasset")
     arguments = [str(tool)] + (["--asset-root", str(asset_root)] if asset_root else [])
@@ -16,9 +16,9 @@ def import_asset(viewer, source, output=None, *, asset_root=None):
     return output
 
 
-def set_initial_view_from_camera(viewer, scene, output=None, *, asset_root=None):
+def set_initial_view_from_camera(executable, scene, output=None, *, asset_root=None):
     """Explicitly retain a fixture's authored root-camera framing for browser-view tests."""
-    tool = viewer.with_name("hyperion_asset_tool" + viewer.suffix)
+    tool = executable.with_name("hyperion_asset_tool" + executable.suffix)
     output = pathlib.Path(output if output else scene)
     source = output.with_name(output.stem + "InitialView.json")
     arguments = [str(tool)] + (["--asset-root", str(asset_root)] if asset_root else [])
@@ -36,4 +36,4 @@ def set_initial_view_from_camera(viewer, scene, output=None, *, asset_root=None)
         "fields": {"world": transform["local"], "lens": components["hyperion.scenecamera"]},
     }
     source.write_text(json.dumps(document), encoding="utf-8")
-    return import_asset(viewer, source, output, asset_root=asset_root)
+    return import_asset(executable, source, output, asset_root=asset_root)

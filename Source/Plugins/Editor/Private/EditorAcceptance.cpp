@@ -329,6 +329,7 @@ void FEditorPlugin::WriteReport()
 	       << "\"open_count\": " << OpenCount << ",\n"
 	       << "\"document_verified\": " << bDocumentVerified << ",\n"
 	       << "\"views_verified\": " << bViewsVerified << ",\n"
+	       << "\"render_controls_verified\": " << bRenderControlsVerified << ",\n"
 	       << "\"gizmo_verified\": " << bGizmoVerified << ",\n"
 	       << "\"multiselect_verified\": " << bMultiSelectionVerified << ",\n"
 	       << "\"picking_verified\": " << bPickingVerified << ",\n"

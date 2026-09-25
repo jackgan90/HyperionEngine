@@ -157,7 +157,7 @@ void FEditorPlugin::DrawCaptureButton()
 FImage FEditorPlugin::ExecuteEditorGraph(FRenderGraph InGraph, FSize InSize, bool bInScreenshot,
                                          FNativeSurface InSurface, bool bInCaptureRdc)
 {
-	const bool bVsync = !Options.bExercise && Options.Benchmark.empty();
+	const bool bVsync = Rendering.bVsync && !Options.bExercise && Options.Benchmark.empty();
 #if HYP_ENABLE_RENDERDOC
 	FImage Result;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},

@@ -7,19 +7,16 @@ import pathlib
 import statistics
 import subprocess
 
-from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+from BenchmarkWorkload import render_settings, validate_workload
 
 
-def measure(viewer, root, work, name, motion, enabled, samples, warmup, resolution, asset_root=None):
+def measure(editor, root, work, name, motion, enabled, samples, warmup, resolution, asset_root=None):
     output = work / f"{name}.csv"
-    args = [str(viewer), "--asset-root", str((asset_root or root.parent / "HyperionAssets").resolve()),
-            "--config", str(benchmark_config_path(root)),
-            "--hidden", "--no-ui", "--no-vsync", "--frames", str(samples + warmup),
-            "--benchmark-warmup", str(warmup), "--benchmark", str(output),
-            "--shadow-resolution", str(resolution)]
-    args.extend(motion)
-    if not enabled:
-        args.append("--no-shadows")
+    settings = render_settings(work / f"{name}.json", pipeline="forward", shadows=enabled, resolution=resolution)
+    args = [str(editor), "--asset-root", str((asset_root or root.parent / "HyperionAssets").resolve()),
+            "--scene", "/Game/Scenes/Showcase.hasset", "--render-settings", str(settings),
+            "--hidden", "--benchmark-viewport", "1440x900", "--benchmark-samples", str(samples),
+            "--benchmark-warmup", str(warmup), "--benchmark", str(output), *motion]
     result = subprocess.run(args, cwd=root, capture_output=True, text=True, timeout=180)
     log = result.stdout + result.stderr
     (work / f"{name}.log").write_text(log, encoding="utf-8")
@@ -30,7 +27,7 @@ def measure(viewer, root, work, name, motion, enabled, samples, warmup, resoluti
     cpu_ids = [int(row["frame"]) for row in rows]
     gpu_ids = [int(row["gpu_sample_frame"]) for row in rows]
     assert cpu_ids == list(range(warmup, warmup + samples))
-    assert gpu_ids == [frame + 1 for frame in cpu_ids], "GPU submissions must cover the exact interval once"
+    assert all(b == a + 1 for a, b in zip(gpu_ids, gpu_ids[1:])), "GPU submissions must cover the exact interval once"
     validate_workload(log, rows)
     assert all(int(row["failed_items"]) == int(row["shadow_failed"]) == 0 for row in rows)
     assert all(int(row["shadows"]) == enabled for row in rows)
@@ -64,7 +61,7 @@ def measure(viewer, root, work, name, motion, enabled, samples, warmup, resoluti
 def main():
     root = pathlib.Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--viewer", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_viewer.exe")
+    parser.add_argument("--editor", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_editor.exe")
     parser.add_argument("--asset-root", type=pathlib.Path, default=root.parent / "HyperionAssets")
     parser.add_argument("--output", type=pathlib.Path, default=root / "out/shadow-performance")
     parser.add_argument("--samples", type=int, default=800)
@@ -86,13 +83,13 @@ def main():
             # Reverse A/B order on alternate repetitions to reduce clock/warmup bias.
             for enabled in ([False, True] if repeat % 2 == 0 else [True, False]):
                 name = f"{mode}{'On' if enabled else 'Off'}{repeat}"
-                pair[enabled] = measure(options.viewer.resolve(), root, options.output, name, motion, enabled,
+                pair[enabled] = measure(options.editor.resolve(), root, options.output, name, motion, enabled,
                                         options.samples, options.warmup, options.resolution, options.asset_root)
                 report["runs"][name] = pair[enabled]
             report["comparisons"][f"{mode}{repeat}"] = {
                 "added_cpu_ms": pair[True]["pipeline_prepare_ms"]["mean"] - pair[False]["pipeline_prepare_ms"]["mean"],
                 "added_forward_gpu_ms": pair[True]["forward_gpu_ms"]["mean"] - pair[False]["forward_gpu_ms"]["mean"]}
-    report["runs"]["Sustained"] = measure(options.viewer.resolve(), root, options.output, "Sustained",
+    report["runs"]["Sustained"] = measure(options.editor.resolve(), root, options.output, "Sustained",
                                             motions["CameraLight"], True, options.sustained,
                                             options.warmup, options.resolution, options.asset_root)
     report_path = options.output / "Summary.json"

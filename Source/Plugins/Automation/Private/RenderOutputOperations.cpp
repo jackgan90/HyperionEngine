@@ -54,7 +54,7 @@ void RegisterShadowControls(FOperationCatalog& InCatalog, IShadowControls* InSha
 	FOperationInfo Info;
 	Info.Id = "render.shadows.get";
 	Info.Owner = "automation-scene";
-	Info.Summary = "Read Viewer cascaded shadow controls";
+	Info.Summary = "Read scene cascaded shadow controls";
 	Info.Description = "Temporary render settings shared with the directional-shadow GUI. Scene light properties use "
 	                   "scene component operations.";
 	Info.bReadOnly = true;
@@ -67,7 +67,7 @@ void RegisterShadowControls(FOperationCatalog& InCatalog, IShadowControls* InSha
 		                                                                             return InShadows->ShadowControls();
 	                                                                             }));
 	Info.Id = "render.shadows.set";
-	Info.Summary = "Replace Viewer cascaded shadow controls";
+	Info.Summary = "Replace scene cascaded shadow controls";
 	Info.Description += " Read first. Resolution 1024/2048, positive distance (GUI slider 5-200), splitLambda 0-1, "
 	                    "normalOffset/receiverBias 0-2, blendFraction .01-.25, fadeFraction .01-.5, debugMode 0-5.";
 	Info.bReadOnly = false;
@@ -93,7 +93,7 @@ void RegisterRenderDiagnostics(FOperationCatalog& InCatalog, IRenderDiagnostics*
 	Info.Unavailable = InDiagnostics ? "" : "Renderer diagnostics provider unavailable.";
 	Info.Id = "application.health";
 	Info.Summary = "Read compact scene readiness and load errors";
-	Info.Description = "Small host health snapshot for Editor and Viewer, including ModelViewer failures. No GPU "
+	Info.Description = "Small host health snapshot for the current render host, including resource failures. No GPU "
 	                   "statistics or component arrays. ready=false with an empty error can mean loading; inspect "
 	                   "error before polling. Use render.statistics only for detailed rendering counters.";
 	Info.Keywords = {"status", "health", "error", "failure", "ready", "loading"};

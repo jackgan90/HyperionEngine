@@ -1,12 +1,6 @@
 # 深度约定与 reversed-Z
 
-Viewer 默认启用 reversed-Z；ModelViewer、SceneViewer 和 Triangle 的示例配置均显式启用。配置字段位于实验 JSON 的 `properties` 中：
-
-```json
-"reversed_z": true
-```
-
-设为 `false` 并重启可恢复标准 Z。未提供此字段的旧实验配置默认采用 reversed-Z。此设置仅在启动时读取；诊断面板显示 `Reversed Z (restart)`、本次有效模式，以及修改后需要保存并重启的提示。保存配置保留下次启动值，已排队和随后提交的帧仍使用本次启动值。不会自动监视配置文件。
+Editor 默认启用 reversed-Z。`FRenderSettings.reversedZ` 是待启动值；`render.settings.get` 同时返回 `activeReversedZ`。通过 Edit > Render settings 或 typed operation 修改、保存，再重启生效。运行中的投影、CSM、Picking 和 debug preview 始终使用本次有效约定，不监视配置文件。见 [渲染诊断](RenderDiagnostics.md)。
 
 ## 渲染行为
 
@@ -32,7 +26,7 @@ Triangle 仍以标准深度的裁剪空间描述屏幕形状，已开启深度�
 - `Perspective(..., Convention)` 直接生成对应投影系数。省略第五个参数时保留标准 Z，兼容显式构造投影的现有低层调用方。
 - 自定义 fullscreen pass 通过 `FFullscreenPassDesc::DepthConvention` 指定其深度约定；使用原始 SV_Depth 输出时由 shader 保证一致。
 - `FRenderPrimitiveState::bClipSpace = true` 时，顶点经 World 变换后的深度使用标准 Z（near=0、far=1）。Renderer 在 WVP、裁剪和透明排序时统一映射到视图约定；不要预先把 `ClipDepthTransform` 乘进 World。几何镜像、法线和 OrientationSign 仍由 World 决定。
-- `FRenderView::DepthConvention` 必须与 ViewProjection 一致。低层默认仍是 Standard；Viewer 显式设置启动时选定的约定。
+- `FRenderView::DepthConvention` 必须与 ViewProjection 一致。低层默认仍是 Standard；Editor 显式设置启动时选定的约定。
 - `FRenderPassTargets::Frame(DepthFormat, ClearColor, Convention)` 与 `FRenderSession::FrameTargets(ClearColor, Convention)` 生成对应的附件清除值。自定义附件的 ClearDepth 是原始数值，由调用方明确设置。
 - `FRHISwapchainDesc::DepthClearValue` 是资源创建时的 optimized clear 值，须与该 swapchain 的 FrameDepth 清除约定一致；RHI 不隐式改写比较或采样器。
 
@@ -53,6 +47,6 @@ Pass.State.bViewRelativeDepth = true;
 
 `depth_conventions` 检查投影端点、单调性、裁剪、重建、清除和原始/相对材质状态。`cascaded_shadow_maps` 检查双约定的级联覆盖、缓存和中性纹理。`deferred_rendering` 与 `cascaded_shadow_rendering` 在两种约定下执行像素、透明混合、普通/实例绘制和资源生命周期回归。裁剪空间回归还覆盖 Front/Back/None 剔除、SV_IsFrontFace、真实镜像、OrientationSign、近远裁剪及只变更深度约定的参数缓存失效。
 
-`depth_viewer_acceptance` 启动三个应用的 Standard/Reversed × Forward/Deferred 组合，并测试配置编辑、保存和重启。内部验收选项 `--exercise-depth-config` 在第三帧翻转待保存设置，至少需要四帧；它不提供运行时深度切换。运行日志报告 `Depth convention: active=...; configured=...`，用于区分有效值与保存值。
+`editor_render_acceptance` 验证 Standard/Reversed 重启、Forward/Deferred 切换和离屏深度预览；底层 depth_conventions、deferred_rendering 与 cascaded_shadow_rendering 保留投影和像素回归。
 
 本次开发证据记录在 [implementation.md](../openspec/changes/archive/2026-09-11-add-reversed-z/implementation.md)。

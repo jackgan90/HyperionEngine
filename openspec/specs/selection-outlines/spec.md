@@ -3,6 +3,7 @@
 ## Purpose
 Define reusable silhouette outlines for selected geometry, with editor activation, depth-independent coverage, configurable union or per-object overlap, and safe frame and material ownership.
 ## Requirements
+
 ### Requirement: Exterior outlines independent of scene occlusion
 The renderer SHALL derive an orange exterior outline from selected geometry coverage without testing against scene depth. Internal mesh edges, surface normals and material boundaries MUST NOT create outlines. All sections belonging to one requested object SHALL share its silhouette.
 
@@ -44,7 +45,7 @@ Standard PBR masked geometry SHALL reuse its effective alpha texture, UV and cut
 - **THEN** orange display color and pixel width remain stable, targets match the viewport, and no stale outline is retained
 
 ### Requirement: Editor activation and comparison
-Editor SHALL activate the reusable Renderer feature for existing Outliner and viewport selection and expose an immediate Union / PerObject viewport option. Selection and mode changes MUST NOT dirty the document. Viewer SHALL not activate outlines by default. A multi-target comparison exercise SHALL demonstrate both modes without requiring multi-selection UI.
+Editor SHALL activate the reusable Renderer feature for existing Outliner and viewport selection and expose an immediate Union / PerObject viewport option. Selection and mode changes MUST NOT dirty the document. Independent default pipelines SHALL not activate outlines automatically. A multi-target comparison exercise SHALL demonstrate both modes without requiring multi-selection UI.
 
 #### Scenario: Switching modes
 - **WHEN** the user changes the viewport outline mode

@@ -3,6 +3,7 @@
 ## Purpose
 Verify the supported asset pipeline using offline fixtures, lifecycle regressions, GPU readback and documented usage and limits.
 ## Requirements
+
 ### Requirement: Reproducible asset validation
 The engine SHALL provide offline fixtures verifying source import, native persistence, schema compatibility, dependency/cache behavior and asynchronous lifecycle. Importer tests SHALL retain external format coverage and runtime tests SHALL consume generated native assets.
 
@@ -21,7 +22,7 @@ The engine SHALL verify model output by GPU readback and retained screenshots in
 The engine SHALL document supported features, exclusions, usage and concrete verification commands.
 
 #### Scenario: Documented support boundary acceptance
-- **WHEN** a developer follows the model-viewer instructions
+- **WHEN** a developer follows the Editor model asset instructions
 - **THEN** they can load a supported asset and identify why an unsupported asset is rejected
 
 ### Requirement: Native runtime independence

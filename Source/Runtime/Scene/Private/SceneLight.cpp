@@ -7,7 +7,8 @@ namespace Hyperion
 bool FSceneDirectionalLight::operator==(const FSceneDirectionalLight& InOther) const
 {
 	return Color.X == InOther.Color.X && Color.Y == InOther.Color.Y && Color.Z == InOther.Color.Z &&
-	       Intensity == InOther.Intensity && bCastShadows == InOther.bCastShadows;
+	       Intensity == InOther.Intensity && bCastShadows == InOther.bCastShadows &&
+	       ShadowSettings == InOther.ShadowSettings;
 }
 
 bool FSceneEnvironmentLight::operator==(const FSceneEnvironmentLight& InOther) const
@@ -31,6 +32,10 @@ FVec3 SceneLightRadiance(FVec3 InColor, float InIntensity)
 void ValidateSceneDirectionalLight(const FSceneDirectionalLight& InLight)
 {
 	SceneLightRadiance(InLight.Color, InLight.Intensity);
+	if (InLight.ShadowSettings)
+	{
+		ValidateLightShadowSettings(*InLight.ShadowSettings);
+	}
 }
 
 void ValidateSceneEnvironmentLight(const FSceneEnvironmentLight& InLight)
@@ -57,13 +62,25 @@ void ValidateSceneEnvironmentLight(const FSceneEnvironmentLight& InLight)
 
 template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
 {
-	static const auto Type = MakeRecord<FSceneDirectionalLight>(
-	    "hyperion.scenedirectionallight",
-	    {Member("color", &FSceneDirectionalLight::Color,
-	            {.Inspector = FPropertyPresentation{.Label = "Color", .Widget = EPropertyWidget::Color3}}),
-	     Member("intensity", &FSceneDirectionalLight::Intensity, Inspect("Intensity", 0, {})),
-	     Member("castShadows", &FSceneDirectionalLight::bCastShadows, Inspect("Cast shadows"))},
-	    1, ValidateSceneDirectionalLight);
+	static const auto Type = []
+	{
+		auto Result = MakeRecord<FSceneDirectionalLight>(
+		    "hyperion.scenedirectionallight",
+		    {Member("color", &FSceneDirectionalLight::Color,
+		            {.Inspector = FPropertyPresentation{.Label = "Color", .Widget = EPropertyWidget::Color3}}),
+		     Member("intensity", &FSceneDirectionalLight::Intensity, Inspect("Intensity", 0, {})),
+		     Member("castShadows", &FSceneDirectionalLight::bCastShadows, Inspect("Cast shadows")),
+		     Member("shadowSettings", &FSceneDirectionalLight::ShadowSettings,
+		            {.Inspector = FPropertyPresentation{.Label = "Shadow settings",
+		                                                .Tooltip = "Store shadow parameters on this light. Without an "
+		                                                           "override, legacy session defaults apply."}})},
+		    2, ValidateSceneDirectionalLight);
+		Result.Migrations.emplace(1,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
+		return Result;
+	}();
 	return Type;
 }
 

@@ -36,11 +36,11 @@ Both inside and outside cameras use `CullFront`: an intersecting view ray has on
 
 Render declares owned immutable pass descriptions; RHI 0 prepares materials and draws using the existing reflection, binding, constant, PSO and graph lifetime machinery. Older queued passes keep their textures, parameters and GPU owners when lights or target generations change. Numeric constants use a tracked pass lifetime separate from the target/PSO lifetime: retiring even a stationary pass schedules the existing constant-cache collection. Recorded buffer slices retain pages until normal GPU retirement. Geometry and PSOs are reused, and GPU retirement uses existing frame fences.
 
-## Viewer and measurement
+## Editor and measurement
 
-The SceneViewer panel creates/edits both light types, shows point/spot visible and total counts, candidate and draw counts, and reports when the algorithm is inactive. `Show light influence` displays point range circles and spot inner/outer boundaries. All edits persist through the existing Save button or `--save-scene`.
+Editor placement and Details create/edit both light types through scene document transactions. Viewport options show point range circles and spot inner/outer cones using shared Renderer debug geometry. Save the scene to persist authored changes. `render.statistics` exposes algorithm, light counts, candidates and draws.
 
-Viewer benchmark CSV appends `local_lights_active`, `point_lights`, `spot_lights`, `local_visible`, `local_draws`, `local_query_ms`, `local_rebuilds`, `local_refits` and `local_gpu_ms`. Existing columns and model counts retain their meaning. The existing completed-submission GPU timing supplies the local pass time; existing category-gated profiling scopes cover index updates, culling and RHI preparation.
+Editor benchmark CSV appends `local_lights_active`, `point_lights`, `spot_lights`, `local_visible`, `local_draws`, `local_query_ms`, `local_rebuilds`, `local_refits` and `local_gpu_ms`. Existing columns and model counts retain their meaning. The existing completed-submission GPU timing supplies the local pass time; existing category-gated profiling scopes cover index updates, culling and RHI preparation.
 
 ## Sponza reference
 

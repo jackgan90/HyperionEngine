@@ -3,6 +3,7 @@
 ## Purpose
 Define discoverable automation equivalents of existing scene, asset, content, view and tool workflows through shared domain services, preserving GUI validation, history, persistence and lifecycle behavior.
 ## Requirements
+
 ### Requirement: Task based capability coverage
 The engine SHALL expose existing human content-authoring, asset, view and tool tasks through discoverable automation operations, with a maintained inventory mapping tasks to shared services, operation IDs, host availability and validation evidence. Presentation-only window arrangement and raw C++ methods SHALL NOT define task parity.
 
@@ -28,7 +29,7 @@ Automation SHALL support the existing scene node, selection, hierarchy, componen
 
 #### Scenario: Host deletion selection
 - **WHEN** a selected object is deleted through GUI or automation
-- **THEN** Editor clears selection and Viewer selects its first remaining model according to their existing host policies
+- **THEN** Editor clears deleted selection without choosing a replacement, and undo restores the recreated root selection
 
 ### Requirement: Shared document and content transitions
 Automation SHALL discover content and open, close or replace documents and content roots through shared host transition services, preserving explicit dirty decisions, busy checks, retirement, preference persistence and handle invalidation.
@@ -63,9 +64,9 @@ Automation SHALL expose existing camera/view, render/preview setting and capture
 - **WHEN** a supported capture operation completes successfully
 - **THEN** its result identifies the completed artifact and does not merely report that a request was queued
 
-#### Scenario: ModelViewer and failed content
-- **WHEN** an agent attaches to ModelViewer
-- **THEN** it can control the browsing camera and main directional light and read terminal producer errors
+#### Scenario: Model preview and failed content
+- **WHEN** an agent opens a native model in Editor
+- **THEN** it can control the asset preview camera and read terminal producer errors
 - **AND** screenshot admission depends on drawable output rather than content readiness, so failure/loading screens remain capturable
 
 #### Scenario: Optional capture provider absent
@@ -73,7 +74,7 @@ Automation SHALL expose existing camera/view, render/preview setting and capture
 - **THEN** discovery or invocation provides an actionable unavailable reason while unrelated scene and asset operations remain usable
 
 ### Requirement: Normal application close
-Editor and Viewer SHALL expose host-owned close decisions with explicit save/discard/cancel semantics. Request results SHALL state acceptance rather than claim process termination. Already queued replies SHALL receive bounded shutdown draining without allowing stalled clients to block exit indefinitely.
+Editor SHALL expose host-owned close decisions with explicit save/discard/cancel semantics. Request results SHALL state acceptance rather than claim process termination. Already queued replies SHALL receive bounded shutdown draining without allowing stalled clients to block exit indefinitely.
 
 #### Scenario: Save before exit fails
 - **WHEN** saving a dirty document for a requested exit fails

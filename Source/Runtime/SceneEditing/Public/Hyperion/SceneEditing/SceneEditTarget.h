@@ -31,7 +31,8 @@ public:
 	virtual FSceneHandle AddNode(FSceneNode InNode) = 0;
 	virtual FSceneHandle DuplicateNode(FSceneHandle InHandle) = 0;
 	virtual bool RemoveNodeKeepChildren(FSceneHandle InHandle) = 0;
-	virtual std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes) = 0;
+	virtual std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes,
+	                                           std::vector<FSceneNodeEdit> InRestoredChildren = {}) = 0;
 	virtual bool RemoveSubtrees(std::span<const FSceneHandle> InRoots) = 0;
 	virtual void SetSettings(FSceneSettings InSettings) = 0;
 	virtual FSceneNode Rebind(FSceneNode InNode) = 0;

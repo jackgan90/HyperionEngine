@@ -31,7 +31,8 @@ public:
 	bool EditNode(FSceneHandle InHandle, FSceneNode InNode, std::uint64_t InExpectedRevision);
 	bool EditNodes(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision);
 	// Atomic insertion into an existing scene; parents can be existing or part of this batch.
-	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes);
+	std::vector<FSceneHandle> AddNodes(std::vector<FSceneNode> InNodes,
+	                                   std::vector<FSceneNodeEdit> InRestoredChildren = {});
 	bool RemoveSubtrees(std::span<const FSceneHandle> InHandles);
 	// Batch installation requires an empty scene; returned handles follow input order.
 	// Full validation precedes installation, including cycles and inherited poses.

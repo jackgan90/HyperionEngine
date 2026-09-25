@@ -87,8 +87,6 @@ const FTypeDescriptor& SettingsType()
 	     Field("gbuffer_layout", "GBuffer layout", &FAppSettings::GBufferLayout),
 	     Field("exposure", "Exposure", &FAppSettings::Exposure, .01, 16),
 	     Field("gbuffer_debug", "GBuffer debug", &FAppSettings::GBufferDebug, 0, 6),
-	     Field("model_source", "Model source (restart)", &FAppSettings::ModelSource),
-	     Field("scene_source", "Scene source (restart)", &FAppSettings::SceneSource),
 	     Field("vsync", "Vertical sync", &FAppSettings::bVsync),
 	     Field("show_gui", "Show debug UI", &FAppSettings::bShowGui),
 	     Field("renderdoc_library", "RenderDoc DLL path (restart)", &FAppSettings::RenderDocLibrary),

@@ -11,6 +11,10 @@ namespace Hyperion
 void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBackends)
 {
 	auto Options = ParseEditorOptions(InCount, InValues);
+	if (!Options.RenderSettingsPath.empty())
+	{
+		Options.Rendering = LoadRenderSettings(Options.RenderSettingsPath);
+	}
 	try
 	{
 		Options.Preferences = LoadEditorPreferences(Options.PreferencesPath);
@@ -20,6 +24,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 		Options.PreferenceError = "Could not load editor preferences: " + std::string(Failure.what());
 		Log(ELogLevel::Warning, Options.PreferenceError);
 	}
+	InitializeProfilingSession(Options.Profiling, !Options.Benchmark.empty() && Options.Profiling.Frames != 0);
 	FApplicationHost Host(4, 1);
 	FPluginRegistry Registry;
 	RegisterAutomationServices(Registry);
@@ -29,24 +34,31 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 #if HYP_ENABLE_RENDERDOC
 	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
 #endif
-	const bool bInteractive =
-	    Options.ExerciseAssets.empty() && Options.ExerciseContent.empty() && !Options.bExercise &&
-	    !Options.bExerciseGizmo && !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
-	    Options.Benchmark.empty() && Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
-	    Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
+	const bool bInteractive = Options.ExerciseAssets.empty() && Options.ExerciseContent.empty() && !Options.bExercise &&
+	                          !Options.bExerciseGizmo && !Options.bExercisePicking &&
+	                          !Options.bExerciseMultiSelection && Options.Benchmark.empty() &&
+	                          Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
+	                          Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
+	                          Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty();
 	const auto RestoredRoot = !Options.AssetRoot && bInteractive && !Options.Preferences.AssetRoot.empty()
 	                              ? std::optional(Options.Preferences.AssetRoot)
 	                              : std::nullopt;
+	if (Options.RenderSettingsPath.empty() && bInteractive && !Options.bHidden && !Options.Frames)
+	{
+		Options.RenderSettingsPath = std::filesystem::path(HYP_SOURCE_DIR) / "out/editor/RenderSettings.json";
+		Options.Rendering = LoadRenderSettings(Options.RenderSettingsPath);
+	}
 	RegisterAssetServices(Registry, {Options.EngineContent, Options.AssetRoot ? Options.AssetRoot : RestoredRoot,
 	                                 Options.bReadOnly, RestoredRoot.has_value()});
 	RegisterWindowServices(Registry, {"Hyperion Editor", {1600, 960}, Options.bHidden, true});
-	RegisterGraphicsServices(
-	    Registry, {std::move(InBackends), "d3d12", std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache", true});
-	const bool bPersistGui = Options.ExerciseAssets.empty() && !Options.bExercise && !Options.bExerciseGizmo &&
-	                         !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
-	                         Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
-	                         Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() &&
-	                         Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty();
+	RegisterGraphicsServices(Registry, {std::move(InBackends), "d3d12",
+	                                    std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache",
+	                                    Options.Rendering.bReversedZ});
+	const bool bPersistGui =
+	    Options.ExerciseAssets.empty() && !Options.bExercise && !Options.bExerciseGizmo && !Options.bExercisePicking &&
+	    !Options.bExerciseMultiSelection && Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
+	    Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
+	    Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty();
 	const bool bPersistContentLayout = bPersistGui && Options.ExerciseContent.empty();
 	RegisterGuiServices(Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
 	                               bPersistContentLayout ? Options.Layout : std::filesystem::path{},
@@ -55,10 +67,11 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterContactShadowServices(Registry);
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "editor";
-	Descriptor.Provides = {typeid(FSceneEditDocument),     typeid(ISceneDocumentHost),    typeid(IAssetWorkspace),
-	                       typeid(IAssetPreviewWorkspace), typeid(ISceneViewport),        typeid(IScenePlacement),
-	                       typeid(IRenderOutput),          typeid(IRenderCaptureControl), typeid(IRenderDiagnostics),
-	                       typeid(IApplicationClose)};
+	Descriptor.Provides = {typeid(FSceneEditDocument), typeid(ISceneDocumentHost),     typeid(IAssetWorkspace),
+	                       typeid(IRenderSettings),    typeid(IShadowControls),        typeid(ISceneLightControls),
+	                       typeid(IProfilingControl),  typeid(IAssetPreviewWorkspace), typeid(ISceneViewport),
+	                       typeid(IScenePlacement),    typeid(IRenderOutput),          typeid(IRenderCaptureControl),
+	                       typeid(IRenderDiagnostics), typeid(IApplicationClose)};
 	Descriptor.Dependencies = {"gui"};
 	Descriptor.After = {"contact-shadows"};
 #if HYP_ENABLE_RENDERDOC
@@ -108,7 +121,8 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 		    !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || Options.bExercise ||
 		    Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 		    !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
-		    !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty())
+		    !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
+		    !Options.ExerciseRenderControls.empty())
 		{
 			throw std::runtime_error("Requested Editor output is unavailable: editor plugin did not start");
 		}

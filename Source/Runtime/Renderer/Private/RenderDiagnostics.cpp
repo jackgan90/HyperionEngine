@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/RenderDiagnostics.h"
+#include "Hyperion/Core/Core.h"
 
 namespace Hyperion
 {
@@ -193,8 +194,26 @@ template<> const FRecordDescriptor& RecordType<FRenderDiagnostics>()
 	     Member("sceneError", &FRenderDiagnostics::SceneError), Member("pipeline", &FRenderDiagnostics::Pipeline),
 	     Member("adapter", &FRenderDiagnostics::Adapter), Member("device", &FRenderDiagnostics::Device),
 	     Member("gpuPassMilliseconds", &FRenderDiagnostics::GpuPassMilliseconds),
-	     Member("gpuTimingFrame", &FRenderDiagnostics::GpuTimingFrame)});
+	     Member("gpuTimingFrame", &FRenderDiagnostics::GpuTimingFrame),
+	     Member("frameIntervalMilliseconds", &FRenderDiagnostics::FrameIntervalMilliseconds),
+	     Member("trackedCpuBytes", &FRenderDiagnostics::TrackedCpuBytes),
+	     Member("executedTasks", &FRenderDiagnostics::ExecutedTasks)});
 	return Type;
+}
+
+void SetExecutionDiagnostics(FRenderDiagnostics& InResult, const FTaskSystem& InTasks, double InFrameMilliseconds)
+{
+	InResult.FrameIntervalMilliseconds = InFrameMilliseconds;
+	InResult.TrackedCpuBytes = 0;
+	for (int Index = 0; Index < static_cast<int>(EMemoryTag::Count); ++Index)
+	{
+		InResult.TrackedCpuBytes += MemoryStats(static_cast<EMemoryTag>(Index)).LiveBytes;
+	}
+	InResult.ExecutedTasks.clear();
+	for (const auto& Thread : InTasks.Statistics())
+	{
+		InResult.ExecutedTasks[Thread.Name] = Thread.Executed;
+	}
 }
 
 void SetDeviceDiagnostics(FRenderDiagnostics& InResult, const FDeviceStats& InDevice)

@@ -1,4 +1,4 @@
-"""Repeat ready Sponza Editor/Viewer workloads and retain samples and process memory evidence."""
+"""Repeat ready Sponza Editor workloads and retain samples and process memory evidence."""
 import argparse
 import csv
 import ctypes
@@ -63,16 +63,9 @@ def run_case(args, build, host, moving, repetition):
     executable = binary_dir / f"hyperion_{host}.exe"
     csv_path = args.output / f"{name}.csv"
     command = [str(executable), "--asset-root", str(args.asset_root), "--scene", args.scene, "--benchmark", str(csv_path), "--hidden"]
-    if host == "editor":
-        command += ["--benchmark-warmup", "120",
-                    "--benchmark-samples", str(args.samples)]
-
-        if args.editor_outliner == "collapsed":
-            command.append("--benchmark-collapsed")
-    else:
-        command += ["--config", str(args.root / "experiments/Scene.json"), "--pipeline", "deferred",
-                    "--no-vsync", "--benchmark-warmup", str(args.viewer_warmup),
-                    "--frames", str(args.viewer_warmup + args.samples)]
+    command += ["--benchmark-warmup", str(args.warmup), "--benchmark-samples", str(args.samples)]
+    if args.editor_outliner == "collapsed":
+        command.append("--benchmark-collapsed")
     if moving:
         command.append("--benchmark-camera")
     started = time.monotonic()
@@ -105,9 +98,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--samples", type=int, default=300)
-    parser.add_argument("--viewer-warmup", type=int, default=6000)
+    parser.add_argument("--warmup", type=int, default=120)
     parser.add_argument("--timeout", type=int, default=240)
-    parser.add_argument("--hosts", nargs="+", choices=("editor", "viewer"), default=["editor", "viewer"])
     parser.add_argument("--editor-outliner", choices=("expanded", "collapsed"), default="expanded")
     parser.add_argument("--asset-root", type=Path)
     args = parser.parse_args()
@@ -120,7 +112,7 @@ def main():
               "memory_scope": "process lifetime; peak working set and sampled private bytes, not allocation totals",
               "runs": []}
     for build in ("release", "debug"):
-        for host in args.hosts:
+        for host in ("editor",):
             for moving in (False, True):
                 for repetition in range(1, args.repetitions + 1):
                     result = run_case(args, build, host, moving, repetition)

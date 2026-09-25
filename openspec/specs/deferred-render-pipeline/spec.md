@@ -3,11 +3,12 @@
 ## Purpose
 Define the default raster Deferred pipeline, configurable GBuffer, compatible material and shadow routes, and reproducible correctness and performance evidence.
 ## Requirements
+
 ### Requirement: Traditional default Deferred pipeline
 Renderer SHALL provide a default raster Deferred pipeline with opaque/masked GBuffer BasePass followed by a vertex/pixel fullscreen LightingPass producing HDR scene color. It SHALL share CSM visibility, material evaluation and lighting formulas with selectable Forward. Compute lighting and mobile single-pass deferred SHALL NOT be required.
 
 #### Scenario: Default scene frame
-- **WHEN** SceneViewer or ModelViewer runs without an explicit pipeline override
+- **WHEN** Editor runs without an explicit pipeline override
 - **THEN** BasePass writes GBuffer/depth, Lighting reads them and CSM, and shared output presents the scene with zero validation errors
 
 #### Scenario: Empty or masked scene

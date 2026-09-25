@@ -100,9 +100,10 @@ FSceneHandle FSceneInstanceEditTarget::AddNode(FSceneNode InNode)
 	return Scene.AddNode(std::move(InNode));
 }
 
-std::vector<FSceneHandle> FSceneInstanceEditTarget::AddNodes(std::vector<FSceneNode> InNodes)
+std::vector<FSceneHandle> FSceneInstanceEditTarget::AddNodes(std::vector<FSceneNode> InNodes,
+                                                             std::vector<FSceneNodeEdit> InRestoredChildren)
 {
-	return Scene.AddNodes(std::move(InNodes));
+	return Scene.AddNodes(std::move(InNodes), std::move(InRestoredChildren));
 }
 
 FSceneHandle FSceneInstanceEditTarget::DuplicateNode(FSceneHandle InHandle)

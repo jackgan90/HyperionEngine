@@ -1,8 +1,10 @@
 # renderdoc-frame-capture Specification
 
 ## Purpose
-Provide optional RenderDoc frame capture through engine-owned APIs, shared Triangle and Model Viewer controls, verified RDC output, and optional replay UI launch while preserving builds and rendering without RenderDoc.
+Provide optional RenderDoc capture through engine-owned APIs and Editor controls, verified RDC output and explicit replay UI launch while preserving rendering without RenderDoc.
+
 ## Requirements
+
 ### Requirement: Optional engine-owned RenderDoc integration
 The engine SHALL provide a build-optional RenderDoc capture wrapper with vendor APIs confined to Runtime/Capture private adapters and a startup plugin selected by the stable ID renderdoc.
 
@@ -17,24 +19,24 @@ The engine SHALL provide a build-optional RenderDoc capture wrapper with vendor 
 ### Requirement: Early runtime activation and safe lifetime
 The plugin SHALL initialize before any DXGI/D3D12 device creation through the shared static plugin lifecycle graph, reuse an injected runtime where present, negotiate a supported API, and retain graphics hooks for the process lifetime. Graphics SHALL NOT require capture when capture is unselected or unavailable.
 
-#### Scenario: Direct Viewer startup
+#### Scenario: Direct Editor startup
 - **WHEN** the plugin is enabled with a compatible installed runtime
-- **THEN** the ordinary Viewer process can capture without being launched from the RenderDoc UI
+- **THEN** the ordinary Editor process can capture without being launched from the RenderDoc UI
 
 #### Scenario: Unavailable runtime
 - **WHEN** the configured runtime cannot load or negotiate the required API
 - **THEN** rendering continues and the capture controls report why capture is unavailable
 
 #### Scenario: Compiled provider absent
-- **WHEN** ordinary Viewer configuration requests renderdoc in a build without that provider
+- **WHEN** ordinary Editor configuration requests renderdoc in a build without that provider
 - **THEN** plugin diagnostics report unavailability and unrelated rendering continues
 
 ### Requirement: Complete frame capture with exclusive ownership
 The engine SHALL accept at most one pending capture request and bracket all frame GPU preparation, concurrent recording, submission and presentation with explicit capture control on the RHI coordinator.
 
-#### Scenario: Capture an experiment frame
-- **WHEN** a capture is requested in a drawable Triangle or Model Viewer frame
-- **THEN** one RDC contains that experiment's rendering and enabled debug UI and can be replayed
+#### Scenario: Capture an Editor frame
+- **WHEN** a capture is requested in a drawable Editor frame
+- **THEN** one RDC contains the scene and GUI and can be replayed
 
 #### Scenario: Overlap or external capture
 - **WHEN** another request is pending or RenderDoc is already capturing externally
@@ -56,7 +58,7 @@ The engine SHALL discover newly produced capture records, verify a nonempty file
 - **THEN** failure is visible and the engine does not report or automatically open an older capture as the new result
 
 ### Requirement: Shared interactive capture controls
-The diagnostics panel SHALL expose Capture RDC, Open last capture, an opt-in automatic-open checkbox and status for both Viewer experiments, while retaining the existing screenshot action.
+Editor SHALL expose its persisted capture preference and viewport capture/open action with visible status. Automation SHALL share capture, explicit replay and screenshot services.
 
 #### Scenario: Button interaction
 - **WHEN** a user presses and releases an enabled RDC capture button
@@ -67,7 +69,7 @@ The diagnostics panel SHALL expose Capture RDC, Open last capture, an opt-in aut
 - **THEN** its button cannot issue another request and the status explains the condition
 
 ### Requirement: Optional replay UI opening
-The plugin SHALL open the exact latest successful RDC with the matching RenderDoc UI on request or after a successful capture when automatic opening is enabled; automatic opening SHALL default to disabled.
+The plugin SHALL open the exact latest successful RDC with the matching RenderDoc UI on request or after a successful capture when automatic opening is enabled; capture enablement SHALL default to disabled.
 
 #### Scenario: Automatic opening
 - **WHEN** capture succeeds with automatic opening enabled

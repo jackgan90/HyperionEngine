@@ -1,6 +1,6 @@
 # Hierarchical depth and contact shadows
 
-Deferred contact shadows add short-range screen-space directional visibility to CSM. Enable **Contact shadows** at the top of the diagnostics panel. The switch and parameters are Main-owned settings frozen into each frame. CSM and contact enable switches are independent; the selected scene light's **casts shadows** flag applies to both.
+Deferred contact shadows add short-range screen-space directional visibility to CSM. Select a Directional Light, enable **Override Shadow settings**, and edit its **Contact shadows** group in Details. The switch and parameters belong to that light, persist with the scene and participate in undo/redo. Renderer consumes the main light settings from its immutable frame publication. Lights without overrides retain session defaults. CSM and contact enable switches are independent; the selected scene light's **casts shadows** flag applies to both.
 
 ```text
 CSM views -> Deferred BasePass (GBuffer + depth)
@@ -32,15 +32,15 @@ The full-resolution R8 visibility pass reconstructs world positions from normali
 
 | Setting key | Default | Meaning |
 | --- | --- | --- |
-| `contact_shadows` | false | Request contact visibility in Deferred |
-| `contact_shadow_length` | 0.35 | Maximum world-space ray length |
-| `contact_shadow_thickness` | 0.05 | Accepted depth thickness in world units |
-| `contact_shadow_bias` | 0.003 | Geometric start bias in world units |
-| `contact_shadow_steps` | 96 | Maximum hierarchy traversal iterations |
-| `contact_shadow_debug` | 0 | 0 lighting, 1 mask, 2 HZB mip preview |
-| `hierarchical_depth_mip` | 4 | Preview level, clamped to the actual chain |
+| `enabled` | false | Request contact visibility in Deferred |
+| `length` | 0.35 | Maximum world-space ray length |
+| `thickness` | 0.05 | Accepted depth thickness in world units |
+| `bias` | 0.003 | Geometric start bias in world units |
+| `steps` | 96 | Maximum hierarchy traversal iterations |
+| `debugMode` | 0 | 0 lighting, 1 mask, 2 HZB mip preview |
+| `previewMip` | 4 | Preview level, clamped to the actual chain |
 
-The diagnostics panel reports consumers, dispatches and active HZB bytes. HZB preview displays near depth bright in either convention. The existing benchmark CSV includes `contact_active`, `hzb_consumers`, `hzb_dispatches`, `hzb_bytes`, `hzb_gpu_ms` and `contact_gpu_ms`; timings come from the ordinary fenced GPU timestamp capture. Use a ready scene, sufficient warmup and a capture with `--verify-model` when comparing Sponza runs. `--exercise-contact-shadows` drives the actual diagnostics checkbox through off/on/off/on after the scene becomes ready, and rejects incomplete activation/deactivation observations. Combining it with `--exercise-window` delays resize/minimize/restore until contact is active, then checks the resized HZB allocation.
+The viewport profiling HUD's **Lighting / HZB** category reports consumers, dispatches and active HZB bytes. HZB preview displays near depth bright in either convention. The benchmark CSV includes `contact_active`, `hzb_consumers`, `hzb_dispatches`, `hzb_bytes`, `hzb_gpu_ms` and `contact_gpu_ms`; timings come from ordinary fenced GPU timestamp capture. Use a ready scene, sufficient warmup and matching camera/viewport/settings when comparing runs. `editor_render_controls` verifies authored contact activation, undo/redo, main-light switching, save/reopen and feature disablement; `editor_render_acceptance` covers legacy session defaults and both depth conventions.
 
 ## Pipeline references and trade-offs
 

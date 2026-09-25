@@ -3,8 +3,9 @@
 ## Purpose
 Define explicit attachment to running applications, authoritative live-scene operations, truthful host capabilities and connection lifetimes that preserve application-owned state.
 ## Requirements
+
 ### Requirement: Default local application attachment
-Editor and Viewer SHALL provide plugin-owned current-user local discovery and attachment by default, with explicit startup disablement. Requests SHALL execute against services in the selected running application at Main update boundaries, including while non-drawable. Listener failure SHALL not destroy unrelated GUI/rendering features.
+Editor SHALL provide plugin-owned current-user local discovery and attachment by default, with explicit startup disablement. Requests SHALL execute against services in the selected running application at Main update boundaries, including while non-drawable. Listener failure SHALL not destroy unrelated GUI/rendering features.
 
 #### Scenario: Attach to an open scene
 - **WHEN** an agent selects a running Editor instance and queries its scene
@@ -28,8 +29,8 @@ Attached scene operations SHALL query bounded object data and edit transforms th
 ### Requirement: Truthful host capabilities
 Discovery SHALL describe host-specific history/save support and unavailable providers. Attached operations SHALL not create independent asset drafts while claiming to edit GUI documents. Domain paths SHALL resolve on the target application.
 
-#### Scenario: Viewer history unavailable
-- **WHEN** an agent queries or invokes undo in a Scene Viewer host without history
+#### Scenario: History provider unavailable
+- **WHEN** an agent queries or invokes undo without a scene history provider
 - **THEN** the capability is reported unavailable without a fabricated undo stack
 
 ### Requirement: Connection lifetime is independent of application lifetime

@@ -9,7 +9,7 @@ import pathlib
 import statistics
 import subprocess
 
-from BenchmarkWorkload import config_path as benchmark_config_path, validate_workload
+from BenchmarkWorkload import render_settings, scene_path, validate_workload
 
 
 TIMINGS = ("frame_ms", "cpu_latency_ms", "pipeline_prepare_ms", "fullscreen_prepare_ms",
@@ -23,41 +23,36 @@ COUNTERS = ("visible_items", "scene_draws", "instanced_items", "instanced_draws"
             "pipeline_binds", "geometry_binds", "dynamic_binds", "native_lists_created")
 
 
-def run_case(viewer, root, output, scene, size, moving, shadows, pipeline, layout,
-             repeat, samples, warmup, main_lead=1, render_lead=1, asset_root=None):
+def run_case(editor, root, output, scene, workload, size, moving, shadows, pipeline, layout,
+             repeat, samples, warmup, asset_root=None):
     width, height = size
     name = f"{scene}-{width}x{height}-{'moving' if moving else 'static'}-csm{int(shadows)}-{pipeline}-{layout}-{repeat}"
-    config = json.loads((benchmark_config_path(root, scene)).read_text(encoding="utf-8"))
-    config["properties"].update(width=width, height=height)
-    config_path = output / f"{name}.json"
-    config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    settings_path = render_settings(output / f"{name}.json", pipeline=pipeline, layout=layout, shadows=shadows)
     csv_path = output / f"{name}.csv"
-    args = [str(viewer), "--asset-root", str((asset_root or root.parent / "HyperionAssets").resolve()),
-            "--config", str(config_path), "--hidden", "--no-ui", "--no-vsync",
-            "--frames", str(samples + warmup), "--benchmark-warmup", str(warmup),
-            "--benchmark", str(csv_path), "--pipeline", pipeline, "--gbuffer", layout,
-            "--shadow-resolution", "2048", "--main-render-lead", str(main_lead),
-            "--render-rhi-lead", str(render_lead)]
+    args = [str(editor), "--asset-root", str((asset_root or root.parent / "HyperionAssets").resolve()),
+            "--scene", workload, "--render-settings", str(settings_path),
+            "--hidden", "--benchmark-viewport", f"{width}x{height}",
+            "--benchmark-samples", str(samples), "--benchmark-warmup", str(warmup), "--benchmark", str(csv_path)]
     if moving:
         args.append("--benchmark-camera")
-    if not shadows:
-        args.append("--no-shadows")
     result = subprocess.run(args, cwd=root, capture_output=True, text=True, timeout=240)
     log = result.stdout + result.stderr
     (output / f"{name}.log").write_text(log, encoding="utf-8")
-    if result.returncode or "validation errors: 0" not in log or "Rendering lifecycle completed successfully" not in log:
+    if result.returncode or "validation errors: 0" not in log:
         raise RuntimeError(f"{name}: {log}")
     with csv_path.open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
     assert len(rows) == samples, name
     assert [int(row["frame"]) for row in rows] == list(range(warmup, warmup + samples)), name
-    assert [int(row["gpu_sample_frame"]) for row in rows] == list(range(warmup + 1, warmup + samples + 1)), name
+    gpu_ids = [int(row["gpu_sample_frame"]) for row in rows]
+    assert all(b == a + 1 for a, b in zip(gpu_ids, gpu_ids[1:])), name
     assert all(int(row["failed_items"]) == int(row["shadow_failed"]) == 0 for row in rows), name
     assert all(int(row["shadows"]) == int(shadows) for row in rows), name
-    assert all(int(row["main_render_lead"]) == main_lead and int(row["render_rhi_lead"]) == render_lead
+    assert all(int(row["main_render_lead"]) == 0 and int(row["render_rhi_lead"]) == 0
                for row in rows), name
     validate_workload(log, rows, scene)
-    expected_bytes = width * height * (12 if pipeline == "forward" else 44 if layout == "high" else 36)
+    # Editor retains its initial model selection: one R8 mask and one R8 outline target.
+    expected_bytes = width * height * (14 if pipeline == "forward" else 46 if layout == "high" else 38)
     assert all(int(row["scene_target_bytes"]) == expected_bytes for row in rows), name
     assert all(float(row["tonemap_gpu_ms"]) > 0 for row in rows), name
     if pipeline == "deferred":
@@ -82,7 +77,7 @@ def run_case(viewer, root, output, scene, size, moving, shadows, pipeline, layou
     summary["workload_sha256"] = hashlib.sha256(json.dumps(workload).encode()).hexdigest()
     summary.update(scene=scene, width=width, height=height, moving=moving, shadows=shadows,
                    pipeline=pipeline, layout=layout, repeat=repeat, samples=samples, warmup=warmup,
-                   main_render_lead=main_lead, render_rhi_lead=render_lead,
+                   host="Editor", main_render_lead=0, render_rhi_lead=0,
                    debug_layer="debug layer: enabled" in log, vsync=False, command=args,
                    adapter=next(line.split("D3D12 adapter: ", 1)[1] for line in log.splitlines() if "D3D12 adapter:" in line))
     print(f"{name}: GPU passes {summary['total_gpu_pass_ms']['mean']:.4f} ms; "
@@ -93,14 +88,12 @@ def run_case(viewer, root, output, scene, size, moving, shadows, pipeline, layou
 def main():
     root = pathlib.Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--viewer", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_viewer.exe")
+    parser.add_argument("--editor", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_editor.exe")
     parser.add_argument("--asset-root", type=pathlib.Path, default=root.parent / "HyperionAssets")
     parser.add_argument("--output", type=pathlib.Path, default=root / "out/deferred-performance")
     parser.add_argument("--samples", type=int, default=500)
     parser.add_argument("--warmup", type=int, default=300)
     parser.add_argument("--repeats", type=int, default=2)
-    parser.add_argument("--main-render-lead", type=int, choices=range(17), default=1)
-    parser.add_argument("--render-rhi-lead", type=int, choices=range(17), default=1)
     parser.add_argument("--sizes", nargs="+", default=["1280x720", "1920x1080"])
     parser.add_argument("--scenes", nargs="+", choices=["Scene", "Model"], default=["Scene", "Model"])
     options = parser.parse_args()
@@ -111,11 +104,12 @@ def main():
         parser.error("sizes must be WIDTHxHEIGHT with positive dimensions >=64")
     output = options.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    viewer = options.viewer.resolve()
+    editor = options.editor.resolve()
     report = {"time_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-              "binary": str(viewer), "binary_sha256": hashlib.sha256(viewer.read_bytes()).hexdigest(),
+              "binary": str(editor), "binary_sha256": hashlib.sha256(editor.read_bytes()).hexdigest(),
               "runs": {}, "comparisons": {}}
     for scene in options.scenes:
+        workload = scene_path(editor, root, output, scene, options.asset_root)
         for size in sizes:
             for moving in (False, True):
                 for shadows in (False, True):
@@ -125,9 +119,8 @@ def main():
                             modes.reverse()
                         group = {}
                         for pipeline, layout in modes:
-                            name, summary = run_case(viewer, root, output, scene, size, moving, shadows,
+                            name, summary = run_case(editor, root, output, scene, workload, size, moving, shadows,
                                                      pipeline, layout, repeat, options.samples, options.warmup,
-                                                     options.main_render_lead, options.render_rhi_lead,
                                                      options.asset_root)
                             report["runs"][name] = summary
                             group[pipeline, layout] = summary

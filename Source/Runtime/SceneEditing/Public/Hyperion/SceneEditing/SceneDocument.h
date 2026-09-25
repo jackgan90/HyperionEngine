@@ -4,12 +4,6 @@
 
 namespace Hyperion
 {
-enum class ESceneDeleteSelection
-{
-	Clear,
-	FirstRemainingModel
-};
-
 class FSceneEditError : public std::runtime_error
 {
 public:
@@ -64,8 +58,7 @@ public:
 	FSceneEditDocument();
 	FSceneEditDocument(const FSceneEditDocument&) = delete;
 	FSceneEditDocument& operator=(const FSceneEditDocument&) = delete;
-	void Attach(ISceneEditTarget& InTarget, bool bInHistory = true,
-	            ESceneDeleteSelection InDeleteSelection = ESceneDeleteSelection::Clear);
+	void Attach(ISceneEditTarget& InTarget, bool bInHistory = true);
 	void Detach(FTaskSystem& InTasks);
 	ISceneEditTarget& Target() const;
 	const FSceneDocumentState& GetState() const;
@@ -86,7 +79,7 @@ public:
 	void CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision,
 	                 std::uint64_t InInteraction = 0);
 	FSceneHandle CommitCreate(FSceneNode InNode, bool bInAssignMainLight = true);
-	// Structural operations used by hosts without history; history-enabled hosts reject them before mutation.
+	// Structural operations share document history and resource-preserving target operations.
 	FSceneHandle CommitDuplicate(FSceneHandle InHandle);
 	void CommitRemoveKeepChildren(FSceneHandle InHandle);
 	void CommitReparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);
@@ -114,7 +107,6 @@ private:
 	FSceneDocumentState State;
 	FSceneSelection Selected;
 	bool bHistory = true;
-	ESceneDeleteSelection DeleteSelection = ESceneDeleteSelection::Clear;
 	bool bBusy{};
 	bool bPreviewDirty{};
 	bool bAssetRefreshHistory{};

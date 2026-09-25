@@ -28,12 +28,20 @@ void FEditorPlugin::ResizeViewport()
 	const auto Pixels = Window->PixelSize();
 	const auto& Bounds = ViewportRegion.Bounds;
 	const auto Limit = Device->GetCapabilities().MaxTextureDimension;
-	const FSize Size{std::clamp(static_cast<std::uint32_t>(
-	                                std::max(1.f, std::round((Bounds.Z - Bounds.X) * Pixels.Width / Logical.Width))),
-	                            1u, Limit),
-	                 std::clamp(static_cast<std::uint32_t>(
-	                                std::max(1.f, std::round((Bounds.W - Bounds.Y) * Pixels.Height / Logical.Height))),
-	                            1u, Limit)};
+	FSize Size{std::clamp(static_cast<std::uint32_t>(
+	                          std::max(1.f, std::round((Bounds.Z - Bounds.X) * Pixels.Width / Logical.Width))),
+	                      1u, Limit),
+	           std::clamp(static_cast<std::uint32_t>(
+	                          std::max(1.f, std::round((Bounds.W - Bounds.Y) * Pixels.Height / Logical.Height))),
+	                      1u, Limit)};
+	if (Options.BenchmarkViewport.Width)
+	{
+		Size = Options.BenchmarkViewport;
+		if (Size.Width > Limit || Size.Height > Limit)
+		{
+			throw std::invalid_argument("Benchmark viewport exceeds device limits");
+		}
+	}
 	if (Size.Width == ViewportSize.Width && Size.Height == ViewportSize.Height)
 	{
 		return;
@@ -84,7 +92,10 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	FSceneViewRequest Request;
 	Request.Width = ViewportSize.Width;
 	Request.Height = ViewportSize.Height;
-	Request.DepthConvention = EDepthConvention::Reversed;
+	Request.DepthConvention = Options.Rendering.bReversedZ ? EDepthConvention::Reversed : EDepthConvention::Standard;
+	Request.CullingMode = CullingMode;
+	Request.CullingViewProjection = FrozenCullingView;
+	Request.bInstanceBatching = bInstanceBatching;
 	if (PreviewCamera)
 	{
 		Request.Camera = PreviewCamera;
@@ -152,13 +163,16 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 		                          auto Textures = std::move(IconTextures);
 		                          if (bRenderScene)
 		                          {
-			                          FScenePipelineSettings Settings;
+			                          auto Settings = MakePipelineSettings(Rendering);
 			                          Settings.Exposure = Exposure;
 			                          Pipeline->Configure(Settings);
 			                          Pipeline->SetOutputTarget(Target);
 			                          Pipeline->SetTransientGeometry(Preview);
 			                          Pipeline->SetSelectionOutline(Outline);
-			                          Pipeline->Build(Graph, Request, Seed, {}, {.13f, .13f, .13f, 1}, {}, true);
+			                          auto Shadows = Rendering.Shadows;
+			                          const float PreviewSize = float(std::min({256u, Request.Width, Request.Height}));
+			                          Shadows.PreviewViewport = {0, 0, PreviewSize, PreviewSize};
+			                          Pipeline->Build(Graph, Request, Seed, Shadows, {.13f, .13f, .13f, 1}, {}, true);
 			                          Textures.push_back({2, Target});
 		                          }
 		                          GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
