@@ -189,17 +189,26 @@ def import_model(agent, output):
         "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "TEXCOORD_0": 2}, "indices": 1, "material": 0}]}],
         "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "scene": 0}), encoding="utf-8")
     root = completed(agent.call("content.root.get"))
-    request = dict(generation=root["generation"], source=str(source), output="/Game/Imported.hasset", force=True)
+    canonical_id = "6a35c489e052453e86a052b44a0b6df4"
+    schema = agent.request("api.describe", {"operation": "asset.import"})
+    assert "rootId" in schema["inputSchema"]["properties"], schema
+    request = dict(generation=root["generation"], source=str(source), output="/Game/CanonicalImported.hasset", force=True,
+                   rootId=canonical_id)
     pending = agent.call("asset.import", **request)
     if pending["status"] == "running":
         assert not agent.request("jobs.get", {"job": pending["job"]})["cancellable"]
     result = completed(agent.wait(pending))
     assert int(result["writtenAssets"]) > 0, result
+    assert result["asset"]["id"] == canonical_id, result
+    rejected = agent.wait(agent.call("asset.import", **dict(request, rootId="invalid")))
+    assert rejected["status"] == "failed", rejected
+    rejected = agent.wait(agent.call("asset.import", **dict(request, rootId="11111111111111111111111111111111")))
+    assert rejected["status"] == "failed", rejected
     page = completed(agent.call("content.assets.list", generation=root["generation"],
-                                query="Imported.hasset", limit=1))
+                                query="CanonicalImported.hasset", limit=1))
     assert int(page["total"]) >= 1 and len(page["assets"]) == 1, page
     assert agent.call("content.assets.list", generation="0")["error"]["code"] == "stale_revision"
-    imported = completed(agent.wait(agent.call("asset.open", path="/Game/Imported.hasset")))
+    imported = completed(agent.wait(agent.call("asset.open", path="/Game/CanonicalImported.hasset")))
     query = dict(document=imported["document"], generation=imported["generation"])
     primitives = completed(agent.call("model.primitives.get", **query))["values"]
     primitives[0]["name"] = "Agent primitive"

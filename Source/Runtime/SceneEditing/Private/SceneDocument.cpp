@@ -227,7 +227,7 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 	}
 }
 
-FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignMainLight)
+FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignMainLight, bool bInAssignEnvironment)
 {
 	FinishInteraction();
 	auto& Scene = Target();
@@ -243,6 +243,13 @@ FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignM
 		if (bInAssignMainLight && Entry.After->DirectionalLight() && !Entry.BeforeSettings.MainDirectionalLight)
 		{
 			Entry.AfterSettings.MainDirectionalLight = Entry.Handle;
+		}
+		if (bInAssignEnvironment && Entry.After->EnvironmentLight())
+		{
+			Entry.AfterSettings.EnvironmentLight = Entry.Handle;
+		}
+		if (Entry.AfterSettings != Entry.BeforeSettings)
+		{
 			Scene.SetSettings(Entry.AfterSettings);
 		}
 	}

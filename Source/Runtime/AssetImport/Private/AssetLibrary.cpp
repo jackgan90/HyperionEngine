@@ -72,6 +72,10 @@ void FPublication::LoadLibrary()
 	}
 	for (const auto& Entry : Discovery->Entries)
 	{
+		if (Entry.Header.Id == RootId && Entry.Path != Output)
+		{
+			throw std::invalid_argument("Root ID already belongs to another asset in the publication library");
+		}
 		ExistingAssets.emplace(Entry.Header.Id, FPublishedAsset{{Entry.Header.Id, ImportPathString(Entry.Path),
 		                                                         Entry.Header.TypeId, Entry.Header.Revision},
 		                                                        Entry.Path});

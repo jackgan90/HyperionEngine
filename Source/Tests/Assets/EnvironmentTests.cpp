@@ -127,6 +127,48 @@ void CheckTextureStorage()
 	    });
 }
 
+void CheckCanonicalImport(FAssetImportService& InImports, FIOService& InIO, const std::filesystem::path& InSource,
+                          const std::filesystem::path& InOutput)
+{
+	auto& Tasks = InIO.TaskSystem();
+	FAssetImportOptions Options;
+	Options.RootId = DefaultSkyReference().Id;
+	Options.Library = InOutput.parent_path();
+	const auto First = InImports.ImportAsync(InSource, InOutput, Options).Get(Tasks);
+	HYP_CHECK(First->Header.Id == Options.RootId);
+	FAssetService Assets(InIO);
+	RegisterSceneAssetTypes(Assets.Types());
+	auto Reference = DefaultSkyReference();
+	Reference.Path = PathToUtf8(InOutput);
+	HYP_CHECK(Assets.LoadReferenceAsync(Reference, InOutput).Get(Tasks)->Header.Id == Options.RootId);
+	HYP_CHECK(InImports.ImportAsync(InSource, InOutput, Options).Get(Tasks)->bUpToDate);
+	const auto Before = InIO.ReadAsync(InOutput).Get(Tasks);
+	Rejects(
+	    [&]
+	    {
+		    InImports.ImportAsync(InSource, InOutput.parent_path() / "Duplicate.hasset", Options).Get(Tasks);
+	    });
+	HYP_CHECK(!InIO.FileSystem()->Exists(InOutput.parent_path() / "Duplicate.hasset"));
+	const auto CanonicalId = Options.RootId;
+	for (const auto& InvalidId : {std::string("invalid"), CreateIdentifier()})
+	{
+		Options.RootId = InvalidId;
+		Rejects(
+		    [&]
+		    {
+			    InImports.ImportAsync(InSource, InOutput, Options).Get(Tasks);
+		    });
+		HYP_CHECK(*InIO.ReadAsync(InOutput).Get(Tasks) == *Before);
+	}
+	Options.RootId = CanonicalId;
+	InIO.WriteAsync(InOutput, {std::byte{0}}).Get(Tasks);
+	const auto Rebuilt = InImports.ImportAsync(InSource, InOutput, Options).Get(Tasks);
+	HYP_CHECK(Rebuilt->Header.Id == CanonicalId);
+	Assets.ClearCache();
+	HYP_CHECK(Assets.LoadReferenceAsync(Reference, InOutput).Get(Tasks)->Header.Id == CanonicalId);
+	HYP_CHECK(Assets.LoadGraphAsync(InOutput).Get(Tasks)->Failures.empty());
+}
+
 void CheckImports()
 {
 	FTaskSystem Tasks{2, 1};
@@ -157,6 +199,7 @@ void CheckImports()
 	HYP_CHECK(Graph->Failures.empty() && Graph->Root->As<FSkyAsset>()->Convention == 1);
 	HYP_CHECK(Graph->Assets.size() == 4);
 	HYP_CHECK(Imports.ImportAsync(Work / "Cloudy.json", Output).Get(Tasks)->bUpToDate);
+	CheckCanonicalImport(Imports, IO, Work / "Cloudy.json", Work / "Canonical" / "Cloudy.hasset");
 	std::cout << "HDR/EXR decode, native dependency graph and incremental import passed\n";
 }
 } // namespace

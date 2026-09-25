@@ -372,6 +372,53 @@ void StructuralHistory()
 	Document.Detach(Tasks);
 }
 
+void DefaultSky()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, &Document);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	const FSceneMutationRequest Request{Document.Id(), Target.Revision()};
+	Check(ReadValue<std::string>(Field(Call(Agent, "scene.sky.use_default", Request), "status")) == "completed");
+	Check(Target.Nodes().size() == 1 && Document.GetState().HistoryCursor == 1 && Document.IsDirty());
+	const auto First = *Target.Settings().EnvironmentLight;
+	Check(Target.FindNode(First)->EnvironmentLight()->Sky == DefaultSkyReference());
+	Error(Call(Agent, "scene.sky.use_default", Request), "stale_revision");
+	Check(Target.Nodes().size() == 1 && Document.GetState().HistoryCursor == 1);
+	Document.Undo();
+	Check(Target.Nodes().empty() && !Target.Settings().EnvironmentLight && !Document.IsDirty());
+	Document.Redo();
+	const auto Active = *Target.Settings().EnvironmentLight;
+	Check(Target.FindNode(Active)->EnvironmentLight()->Sky == DefaultSkyReference());
+	auto Node = *Target.FindNode(Active);
+	Node.bEnabled = false;
+	Node.EnvironmentLight()->Source = ESceneEnvironmentSource::ConstantColor;
+	Node.EnvironmentLight()->Sky.reset();
+	Node.EnvironmentLight()->bVisible = false;
+	Node.EnvironmentLight()->Intensity = .7f;
+	Node.EnvironmentLight()->YawRadians = .4f;
+	Document.CommitEdits({{Active, Node}}, Target.Revision());
+	const auto History = Document.GetState().HistoryCursor;
+	UseDefaultSceneSky(Document, {Document.Id(), Target.Revision()});
+	const auto& Light = *Target.FindNode(Active)->EnvironmentLight();
+	Check(Target.Nodes().size() == 1 && Document.GetState().HistoryCursor == History + 1);
+	Check(Light.Sky == DefaultSkyReference() && Light.bVisible && Light.Intensity == .7f && Light.YawRadians == .4f);
+	Check(Target.FindNode(Active)->bEnabled);
+	Document.Undo();
+	Check(*Target.FindNode(Active)->EnvironmentLight() == *Node.EnvironmentLight());
+	Check(!Target.FindNode(Active)->bEnabled);
+	Document.Redo();
+	Document.SetInteractionState(true, false);
+	Error(Call(Agent, "scene.sky.use_default", FSceneMutationRequest{Document.Id(), Target.Revision()}), "busy");
+	Check(Document.GetState().HistoryCursor == History + 1);
+	Document.SetInteractionState(false, false);
+	Document.Detach(Tasks);
+}
+
 void Authoring()
 {
 	FTaskSystem Tasks(1, 1);
@@ -438,6 +485,7 @@ int main()
 		Editing();
 		NoHistory();
 		Authoring();
+		DefaultSky();
 		StructuralHistory();
 		ComponentAdmissionAndBatch();
 		std::cout << "Shared scene, identity, transactions, history, save and absence contracts passed\n";

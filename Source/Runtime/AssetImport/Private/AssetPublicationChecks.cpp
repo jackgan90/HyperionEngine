@@ -6,6 +6,22 @@
 
 namespace Hyperion
 {
+namespace
+{
+std::string SelectRootIdentity(const FAssetImportOptions& InOptions, const std::optional<FAssetDocument>& InPrevious)
+{
+	if (!InOptions.RootId.empty() && !IsAssetIdentifier(InOptions.RootId))
+	{
+		throw std::invalid_argument("Root ID must be 32 lowercase hexadecimal characters");
+	}
+	if (InPrevious && !InOptions.RootId.empty() && InPrevious->Header.Id != InOptions.RootId)
+	{
+		throw std::invalid_argument("Requested root ID does not match the existing native asset");
+	}
+	return InPrevious ? InPrevious->Header.Id : InOptions.RootId.empty() ? CreateIdentifier() : InOptions.RootId;
+}
+} // namespace
+
 void FPublication::Prepare(const FAssetImportOptions& InOptions)
 {
 	const auto Extension = ImportExtension(Source);
@@ -78,7 +94,7 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 		{
 		}
 	}
-	RootId = Previous ? Previous->Header.Id : CreateIdentifier();
+	RootId = SelectRootIdentity(InOptions, Previous);
 	const auto OutputType = InOptions.bScene ? RecordType<FSceneManifest>().Id : SourceType;
 	if (Previous && Previous->Header.TypeId != OutputType)
 	{

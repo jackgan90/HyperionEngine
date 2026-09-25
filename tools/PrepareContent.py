@@ -26,13 +26,14 @@ def restore(manifest, cache, offline=False):
         if hashlib.sha256(generator.read_text(encoding="utf-8").encode("utf-8")).hexdigest() != expected:
             raise RuntimeError(f"Generator version mismatch: {name}; use the matching engine checkout")
     cache.mkdir(parents=True, exist_ok=True)
-    generate(cache / "Models")
-    generate_shadows(cache)
-    _, geometry = build_showcase()
+    if manifest.get("generator_sha256"):
+        generate(cache / "Models")
+        generate_shadows(cache)
     for name, recipe in manifest["recipes"].items():
         path = contained(cache, name)
         value = json.loads(json.dumps(recipe))
         if name == "Models/Ground.gltf":
+            _, geometry = build_showcase()
             value["buffers"][0]["uri"] = "data:application/octet-stream;base64," + base64.b64encode(geometry[:912]).decode()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
@@ -52,7 +53,8 @@ def restore(manifest, cache, offline=False):
 
 
 def run_tool(tool, assets, *arguments):
-    subprocess.run([str(tool), "--asset-root", str(assets), *map(str, arguments)], check=True)
+    root_options = ["--asset-root", str(assets)] if assets is not None else []
+    subprocess.run([str(tool), *root_options, *map(str, arguments)], check=True)
 
 
 def main():
@@ -63,25 +65,35 @@ def main():
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--restore-only", action="store_true")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--engine-sky", action="store_true",
+                        help="Restore and rebuild only the built-in default sky; --cache selects its source cache")
     args = parser.parse_args()
     assets = args.assets_root.resolve()
-    cache = (args.cache or assets / ".cache/Sources").resolve()
-    manifest = json.loads((assets / "Metadata/Sources.json").read_text(encoding="utf-8"))
+    default_cache = ROOT / "out/DefaultSkySources" if args.engine_sky else assets / ".cache/Sources"
+    cache = (args.cache or default_cache).resolve()
+    manifest_path = (ROOT / "Content/Metadata/DefaultSkySources.json" if args.engine_sky
+                     else assets / "Metadata/Sources.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest["version"] != 1:
         raise ValueError("Unsupported source manifest version")
     restore(manifest, cache, args.offline)
     if args.restore_only:
         return
     tool = args.tool.resolve()
+    tool_assets = None if args.engine_sky else assets
     if not (ROOT / "Content/Textures/EnvironmentBrdf.hasset").is_file():
-        run_tool(tool, assets, "--authoring", "build-brdf", "/Engine/Textures/EnvironmentBrdf.hasset")
+        run_tool(tool, tool_assets, "--authoring", "build-brdf", "/Engine/Textures/EnvironmentBrdf.hasset")
     for entry in manifest["outputs"]:
-        output = "/Game/" + entry["path"]
-        options = ["--library", "/Game", "--source-root", str(cache), "--source-id", manifest["source_id"]]
+        mount = "/Engine" if args.engine_sky else "/Game"
+        output = mount + "/" + entry["path"]
+        options = ["--library", mount, "--source-root", str(cache), "--source-id", manifest["source_id"]]
+        if entry.get("id"):
+            options.extend(["--root-id", entry["id"]])
         if args.force:
             options.append("--force")
-        run_tool(tool, assets, "import", contained(cache, entry["source"]), output, *options)
-    run_tool(tool, assets, "validate-library", "/Game")
+        authoring = ["--authoring"] if args.engine_sky else []
+        run_tool(tool, tool_assets, *authoring, "import", contained(cache, entry["source"]), output, *options)
+    run_tool(tool, tool_assets, "validate-library", "/Engine" if args.engine_sky else "/Game")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@
 | 放置 primitive/light/native model | `scene.placement.list/place` | `IScenePlacement` 与 Editor registry 的准备/提交路径；显式 position 为世界坐标 |
 | Inspector 组件 | `scene.components.list`、`scene.component_types.list`、`scene.components.edit_structure`、`scene.component.<type>.get/set/set_batch` | `SceneEditing` 与组件反射；组件实例 ID 来自 list，不必等于类型 ID。保留资源绑定，完整候选经文档/场景校验；资源模型组件必须通过 prepared placement 创建 |
 | 主相机、主灯、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换 |
+| 使用引擎默认天空 | `scene.sky.use_default` | `UseDefaultSceneSky` 与工具栏 Use Default Sky 共用；传 document/revision，更新活动环境或创建并激活一个，单次 undo/redo，保留已有强度/方向；资源就绪查询 scene.status，保存调用 scene.save |
 | 浏览相机和临时视口选项 | `view.get/set/frame_scene/preview_camera` | `ISceneViewport` / SceneCameraController；null option 表示此 host 不支持。patch 中 null 保留原值；曝光、Visualizer 0–6、独立状态/profiling HUD 和 0–255 分类掩码均为临时视口状态 |
 | 用浏览视角编写相机 | `view.save_initial/create_camera/apply_to_camera` | Editor 与 GUI 同一文档操作；与临时相机移动区分 |
 | 非场景资产页签 | `asset.open/info/documents.list/activate/close/save/undo/redo/rename` | Editor 发布 `IAssetWorkspace`，GUI 和多个 agent 使用同一草稿、历史与 busy 状态；其他宿主可使用独立 CPU 文档 |
@@ -61,6 +62,8 @@
 `render.screenshot` 支持 main，Editor 另支持 assets。必须显式指定 PNG 路径；覆盖需要 overwrite。窗口需要可绘制，不要求场景或 preview ready，因此可捕获加载及失败界面。捕获输出写在目标机器，不代表自动传输文件到客户端。RenderDoc 的 capture 等到完成的 capture 计数前进，open 才启动目标侧 replay。
 
 导入支持 glTF/GLB 及其图像依赖、HDR/EXR 天空、已注册的 typed JSON/sky recipe/native upgrade；不新增独立 PNG/JPEG importer。sourceRoot/sourceId 成对使用，输出与源分离，force 仅跳过增量判断，不绕过写权限和身份检查。导入、发布、保存和截图接收后不支持取消；jobs 返回真实 cancellable 状态。保存后的草稿若继续编辑仍 dirty，导入不偷偷重载已有草稿。
+
+`asset.import` 的可选 `rootId` 与 AssetTool `--root-id` 共用导入校验，支持以固定的 32 位小写十六进制 ID 重建缺失或损坏的根资产。已有有效目标必须匹配该 ID，同一发布库中其他资产已占用该 ID 时拒绝发布；该选项不修改既有资产身份。
 
 可选 provider 缺失、未编译 RenderDoc/Profiling、关闭 GUI 等配置会返回明确 unavailable，并保留其他分支。`--no-instance-batching` 是初始值，GUI/agent 可通过相同视口服务调整。
 

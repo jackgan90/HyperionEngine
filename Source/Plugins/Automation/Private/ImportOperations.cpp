@@ -20,6 +20,7 @@ struct FImportRequest
 	std::string SourceId;
 	bool bScene{};
 	bool bForce{};
+	std::string RootId;
 };
 
 struct FImportResult
@@ -45,7 +46,11 @@ template<> const FRecordDescriptor& RecordType<FImportRequest>()
 	            {.Description = "Shared dependency publication directory; defaults to output parent."}),
 	     Member("name", &FImportRequest::Name), Member("type", &FImportRequest::Type),
 	     Member("sourceRoot", &FImportRequest::SourceRoot), Member("sourceId", &FImportRequest::SourceId),
-	     Member("scene", &FImportRequest::bScene), Member("force", &FImportRequest::bForce)});
+	     Member("scene", &FImportRequest::bScene), Member("force", &FImportRequest::bForce),
+	     Member("rootId", &FImportRequest::RootId,
+	            {.Description =
+	                 "Optional 32 lowercase hexadecimal canonical root ID for reconstruction. Must match an "
+	                 "existing output identity and not belong to another asset in the publication library."})});
 	return Type;
 }
 
@@ -97,6 +102,7 @@ void FImportAutomation::Register(FOperationCatalog& InCatalog)
 		    Options.Library = PathFromUtf8(InRequest.Library);
 		    Options.SourceRoot = PathFromUtf8(InRequest.SourceRoot);
 		    Options.SourceId = InRequest.SourceId;
+		    Options.RootId = InRequest.RootId;
 		    auto Pending = Imports.ImportAsync(PathFromUtf8(InRequest.Source), PathFromUtf8(InRequest.Output), Options);
 		    ++ActiveJobs;
 		    return TPendingOperation<FImportResult>{

@@ -43,6 +43,10 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 		{
 			Options.SourceId = InArguments[++Index];
 		}
+		else if (Argument == "--root-id" && Index + 1 < InArguments.size())
+		{
+			Options.RootId = InArguments[++Index];
+		}
 		else if ((Argument == "--name" || Argument == "--type") && Index + 1 < InArguments.size())
 		{
 			auto& Value = Argument == "--name" ? Options.Name : Options.TypeId;
@@ -140,7 +144,7 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	if (InArguments.empty() || InArguments[0] == "--help")
 	{
 		InOutput << "hyperion_asset_tool import SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] "
-		            "[--library DIRECTORY] [--source-root DIRECTORY --source-id ID]\n"
+		            "[--library DIRECTORY] [--source-root DIRECTORY --source-id ID] [--root-id ID]\n"
 		         << "Global options: --asset-root DIRECTORY --engine-content DIRECTORY [--read-only] [--authoring]\n"
 		         << "hyperion_asset_tool build-brdf OUTPUT.hasset\n"
 		         << "hyperion_asset_tool --authoring build-placement\n"

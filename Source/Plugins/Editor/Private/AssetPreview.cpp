@@ -101,6 +101,18 @@ FAssetWorkspace::FPrepared FAssetWorkspace::Prepare(const FLoadedAsset& InLoaded
 			return Result;
 		}
 		auto& Resources = Session.GetResources();
+		if (Type == RecordType<FModelAsset>().Id || Type == RecordType<FMaterialAsset>().Id)
+		{
+			const auto SkyGraph = Assets.LoadGraphAsync(DefaultSkyReference().Path).Get(Tasks);
+			if (!SkyGraph->Failures.empty())
+			{
+				throw std::runtime_error("Default sky: " + SkyGraph->Failures.front().Error);
+			}
+			for (const auto& [Path, Asset] : SkyGraph->Assets)
+			{
+				Result.Dependencies.insert(Asset->Header.Id);
+			}
+		}
 		if (Type == RecordType<FModelAsset>().Id)
 		{
 			const auto Graph = DraftGraph(Assets, Tasks, Root, InCancellation);
@@ -199,7 +211,8 @@ void FAssetWorkspace::Publish(FEntry& InEntry, const FPrepared& InPrepared)
 	}
 	else
 	{
-		Environment.EnvironmentLight()->Intensity = .25f;
+		Environment.EnvironmentLight()->Source = ESceneEnvironmentSource::SkyAsset;
+		Environment.EnvironmentLight()->Sky = DefaultSkyReference();
 		auto Light = MakeSceneDirectionalLightNode("preview-key");
 		Light.Local() = SceneCameraTransform({0, 0, 0}, {-.5f, -1, -.7f});
 		Light.DirectionalLight()->Intensity = 3;

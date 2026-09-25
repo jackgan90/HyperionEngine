@@ -32,6 +32,7 @@ struct FBakedEnvironment
 	FEnvironmentSh Irradiance{};
 };
 
+FAssetRef DefaultSkyReference();
 void ValidateSkyAsset(const FSkyAsset& InAsset);
 template<> const FRecordDescriptor& RecordType<FSkyAsset>();
 FVec3 CubeDirection(unsigned InFace, float InU, float InV);

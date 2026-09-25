@@ -1,6 +1,7 @@
 #include "EditorApplication.h"
 #include "Hyperion/Gui/GuiContributions.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
+#include "Hyperion/SceneEditing/SceneAuthoring.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -280,6 +281,20 @@ void FEditorPlugin::DrawToolbar()
 		{
 			FrameScene();
 		}
+		Gui->SameLine();
+		if (Gui->Button("Use Default Sky", Scene->GetStatus().bLoaded && !SceneDocument.IsBusy()))
+		{
+			try
+			{
+				FinishInspectorEdit();
+				UseDefaultSceneSky(SceneDocument, {SceneDocument.Id(), Scene->GetRevision()});
+			}
+			catch (const std::exception& Failure)
+			{
+				Error = Failure.what();
+			}
+		}
+		InspectionBounds["scene/default-sky"] = Gui->LastItemBounds();
 		Gui->SameLine();
 		Gui->Text("  |  Scene Editor");
 	}

@@ -21,6 +21,29 @@ const FSceneNode& RequireNode(const FSceneEditDocument& InDocument, FSceneHandle
 }
 } // namespace
 
+FSceneDocumentInfo UseDefaultSceneSky(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest)
+{
+	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+	const auto Active = InDocument.Target().Settings().EnvironmentLight;
+	auto Node = Active ? RequireNode(InDocument, *Active) : MakeSceneEnvironmentLightNode({});
+	Node.bEnabled = true;
+	auto& Light = *Node.EnvironmentLight();
+	Light.Source = ESceneEnvironmentSource::SkyAsset;
+	Light.Sky = DefaultSkyReference();
+	Light.bVisible = true;
+	Light.Data.reset();
+	if (Active)
+	{
+		InDocument.CommitEdits({{*Active, std::move(Node)}}, InRequest.Revision);
+	}
+	else
+	{
+		Node.Name = "Default Sky";
+		InDocument.CommitCreate(std::move(Node), false, true);
+	}
+	return DescribeSceneDocument(InDocument);
+}
+
 bool CanAddDefaultSceneComponent(const FSceneComponentDescriptor& InType)
 {
 	return !InType.bRequired && InType.CppType != typeid(FSceneModelComponent) &&

@@ -105,6 +105,8 @@ struct FAssetImportOptions
 	std::filesystem::path Library;
 	std::filesystem::path SourceRoot;
 	std::string SourceId;
+	// Optional canonical root identity for reconstruction; never replaces another existing identity.
+	std::string RootId;
 };
 
 struct FAssetImportResult

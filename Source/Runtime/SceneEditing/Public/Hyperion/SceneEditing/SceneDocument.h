@@ -78,7 +78,7 @@ public:
 	void FinishInteraction();
 	void CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision,
 	                 std::uint64_t InInteraction = 0);
-	FSceneHandle CommitCreate(FSceneNode InNode, bool bInAssignMainLight = true);
+	FSceneHandle CommitCreate(FSceneNode InNode, bool bInAssignMainLight = true, bool bInAssignEnvironment = false);
 	// Structural operations share document history and resource-preserving target operations.
 	FSceneHandle CommitDuplicate(FSceneHandle InHandle);
 	void CommitRemoveKeepChildren(FSceneHandle InHandle);

@@ -200,6 +200,9 @@ add_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTABLE}" "${C
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParityRegressions")
 set_tests_properties(automation_parity_regressions PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+add_test(NAME engine_default_sky COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/DefaultSkyAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_BINARY_DIR}/DefaultSkyAcceptance")
+set_tests_properties(engine_default_sky PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_capture_ui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorCaptureAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
 set_tests_properties(editor_capture_ui PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_outlines COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OutlineAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
@@ -358,6 +361,7 @@ set_tests_properties(shared_asset_rendering PROPERTIES TIMEOUT 90 LABELS "gpu;de
 add_dependencies(hyperion_check shared_asset_gpu_tests)
 
 add_test(NAME sample_source_fixtures COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/PrepareTestSources.py")
+add_test(NAME source_fixture_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Assets/SourceFixtureTests.py")
 set_tests_properties(sample_source_fixtures PROPERTIES FIXTURES_SETUP sample_source_data TIMEOUT 60 LABELS "external-content;source-import")
 set_property(TEST environment_preprocessing APPEND PROPERTY FIXTURES_REQUIRED sample_source_data)
 set_property(TEST scene_navigation APPEND PROPERTY FIXTURES_REQUIRED native_model_data)

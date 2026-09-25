@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "source_id": "hyperion-samples",
+  "downloads": [
+    {
+      "path": "Skies/Cloudy.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr",
+      "sha256": "fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798"
+    }
+  ],
+  "recipes": {
+    "Skies/Cloudy.json": {
+      "type": "hyperion.skyasset",
+      "schema_version": 1,
+      "name": "Cloudy daylight",
+      "source": "Cloudy.hdr",
+      "radiance_size": 256,
+      "specular_size": 64,
+      "samples": 256
+    }
+  },
+  "outputs": [
+    {
+      "source": "Skies/Cloudy.json",
+      "path": "Skies/Cloudy.hasset",
+      "id": "e0322173addca5129a20f3ca7aa47713"
+    }
+  ]
+}

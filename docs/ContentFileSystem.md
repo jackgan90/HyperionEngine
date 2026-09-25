@@ -70,6 +70,10 @@ HyperionAssets 的 hasset 使用 LFS，文本 Shader 和元数据使用普通 Gi
 
 ## 验证与测试
 
-独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与自创场景的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，再通过 `PrepareTestSources.py` 生成 `out/fixtures/Sources`。Editor 示例和桌面集成测试需要挂载已发布 Game 内容。
+引擎默认天空为 `/Engine/Skies/Cloudy.hasset`，其 radiance/specular 纹理与共享 BRDF LUT 都在 Engine 中，无 Game 根也可加载。Cloudy 不再由 HyperionAssets 发布；原有场景使用该 Engine 引用。来源、固定哈希、烘焙配方及许可位于 `Content/Metadata/DefaultSkySources.json` 和 `DefaultSkyLicense.md`。显式重建：`python tools/PrepareContent.py --engine-sky --cache out/DefaultSkySources`（缓存齐全可加 `--offline`）。普通 Game 重建继续使用其自身 Sources.json。
+
+默认天空配方通过 AssetTool `--root-id` 指定固定 ID；缺失或损坏的原生天空可重建为相同身份。已有有效目标必须匹配该 ID，发布库中其他资产已占用该 ID 时拒绝写入。普通导入不传该参数时保留原有身份选择规则。
+
+独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与自创场景的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，并执行 `python tools/PrepareContent.py --engine-sky --restore-only` 准备 Engine 天空来源，再通过 `PrepareTestSources.py` 合并生成 `out/fixtures/Sources`。可用 `--engine-sky-cache` 指定已准备的 Engine 来源缓存，用 `--output` 指定隔离夹具目录；缺失缓存会明确失败。Editor 示例和桌面集成测试需要挂载已发布 Game 内容。
 
 迁移验收检查：完整 native 依赖图、无旧目录读取、固定输入截图、天空切换与场景保存重载、不同挂载位置、Shader include/cache、LFS 指针诊断和无变化重导入。历史性能/审计文档保留当时路径作为证据；当前资源布局以本页为准。

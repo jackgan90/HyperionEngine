@@ -3,6 +3,11 @@
 
 namespace Hyperion
 {
+FAssetRef DefaultSkyReference()
+{
+	return {"e0322173addca5129a20f3ca7aa47713", "/Engine/Skies/Cloudy.hasset", RecordType<FSkyAsset>().Id, {}};
+}
+
 void ValidateSkyAsset(const FSkyAsset& InAsset)
 {
 	if (InAsset.Convention != 1)

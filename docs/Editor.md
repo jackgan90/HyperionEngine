@@ -4,6 +4,12 @@
 
 原生标题栏默认使用黑色背景和浅色文字，由 Platform 封装 Windows DWM 设置。精确标题栏颜色需要 Windows 11；不支持时保留系统可用的外观，不影响编辑器启动。
 
+## 默认天空
+
+工具栏 **Use Default Sky** 将 Cloudy 指定为场景天空：已有活动环境光时更新它，否则创建并激活 Default Sky 节点。该操作启用节点和天空可见性，保留已有强度与方向，支持一次 Undo/Redo；使用 Save Scene 持久化。它与 Automation `scene.sky.use_default` 共用领域操作。
+
+Model 和 Material 的 Asset Editor 临时预览默认显示内置 Cloudy 天空并使用其环境照明，无需选择 Game 目录；这不会修改资产或主场景。天空及纹理位于 Engine Content，Sky 类型资产仍预览它自身的天空。
+
 ## Editor preference 与抓帧
 
 通过 **Edit > Editor preference** 打开偏好弹窗。首个选项 **Enable RenderDoc capture** 默认关闭，修改后立即保存到 `out/editor/Preferences.ini`，下次启动保留；`--editor-preferences <path>` 可指定独立的本地偏好文件。该文件与场景、布局及界面缩放配置分开，保存失败会在弹窗中显示错误并提供重试。
