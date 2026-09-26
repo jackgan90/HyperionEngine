@@ -1,6 +1,6 @@
 #define CGLTF_IMPLEMENTATION
 #include "GltfImportInternal.h"
-#include "Hyperion/AssetImport/MaterialImport.h"
+#include "Hyperion/AssetImport/ImageImport.h"
 #include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/Core/Core.h"
 
@@ -261,18 +261,7 @@ FModelPrimitive Private::ConvertGltfPrimitive(FAssetImportContext& InContext, st
 
 void RegisterGltfImporter(FAssetImportService& InImports)
 {
-	RegisterMaterialImporters(InImports);
-	InImports.Register({"hyperion.json-model",
-	                    1,
-	                    &RecordType<FModelAsset>(),
-	                    {".json"},
-	                    [](FAssetImportContext& InContext)
-	                    {
-		                    return ReadRecord(
-		                        RecordType<FModelAsset>(),
-		                        DecodeAssetSourceJson(
-		                            {reinterpret_cast<const char*>(InContext.Bytes->data()), InContext.Bytes->size()}));
-	                    }});
+	RegisterImageImporter(InImports);
 	InImports.Register({"hyperion.gltf", 5, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
 	InImports.Register({"hyperion.gltf-source",
 	                    1,
@@ -281,19 +270,6 @@ void RegisterGltfImporter(FAssetImportService& InImports)
 	                    [](FAssetImportContext& InContext) -> std::shared_ptr<void>
 	                    {
 		                    return FGltfImport(InContext).Run();
-	                    }});
-	InImports.Register({"hyperion.native-model-upgrade",
-	                    3,
-	                    &RecordType<FModelAsset>(),
-	                    {".hasset"},
-	                    [](FAssetImportContext& InContext) -> std::shared_ptr<void>
-	                    {
-		                    const auto Document = DecodeAsset(InContext.Bytes);
-		                    if (Document.Header.SchemaVersion == 1)
-		                    {
-			                    return EmitModelSource(InContext, ReadEmbeddedModelSource(Document));
-		                    }
-		                    return ReadRecord(RecordType<FModelAsset>(), Document.Object);
 	                    }});
 }
 } // namespace Hyperion

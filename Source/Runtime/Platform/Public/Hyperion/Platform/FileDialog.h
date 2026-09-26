@@ -7,7 +7,8 @@
 namespace Hyperion
 {
 // Main-only native modal dialog. Cancel returns no value; errors throw.
-std::optional<std::filesystem::path> SelectFolder(FNativeSurface InOwner, const std::filesystem::path& InInitial);
+std::optional<std::filesystem::path> SelectFolder(FNativeSurface InOwner, const std::filesystem::path& InInitial,
+                                                  const std::string& InTitle = "Open asset root");
 
 struct FFileDialogFilter
 {

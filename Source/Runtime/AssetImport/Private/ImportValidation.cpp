@@ -18,7 +18,7 @@ std::string ImportType(const FImportRequest& InRequest, const std::string& InExt
 		if ((InRequest.Type.empty() || Format.Type == InRequest.Type) &&
 		    std::find(Format.Extensions.begin(), Format.Extensions.end(), InExtension) != Format.Extensions.end())
 		{
-			return InRequest.Type.empty() && (InExtension == ".json" || InExtension == ".hasset") ? "" : Format.Type;
+			return Format.Type;
 		}
 	}
 	// Retain the existing explicit tooling-only glTF source record path.
@@ -32,36 +32,80 @@ std::string ImportType(const FImportRequest& InRequest, const std::string& InExt
 void CheckWritePath(FMountedFileSystem& InFiles, const std::filesystem::path& InPath, const FContentRootInfo& InRoot)
 {
 	const auto Text = PathToUtf8(InPath);
-	if (Text == "/Game" || Text.starts_with("/Game/"))
+	if (Text != "/Game" && !Text.starts_with("/Game/"))
 	{
-		if (InRoot.Directory.empty())
-		{
-			throw FAssetImportError("root_unset", "Select a Game asset root before import");
-		}
-		if (InRoot.bReadOnly)
-		{
-			throw FAssetImportError("read_only", "Game content is read-only");
-		}
+		throw FAssetImportError("invalid_arguments",
+		                        "Save the asset and its dependencies inside the current /Game root");
 	}
-	for (const auto& Mount : InFiles.GetMounts())
+	const auto Physical = std::filesystem::weakly_canonical(InFiles.Resolve(InPath, true));
+	const auto Relative = std::filesystem::relative(Physical, PathFromUtf8(InRoot.Directory));
+	if (Relative.empty() || Relative.is_absolute() ||
+	    std::find(Relative.begin(), Relative.end(), std::filesystem::path("..")) != Relative.end())
 	{
-		const auto Root = PathToUtf8(Mount.Root);
-		if (Mount.bReadOnly && (Text == Root || Text.starts_with(Root + "/")))
-		{
-			throw FAssetImportError("read_only", "Import destination is on a read-only content mount");
-		}
+		throw FAssetImportError("invalid_arguments", "Output directory resolves outside the current /Game root");
 	}
-	(void)InFiles.Resolve(InPath, true);
 }
 } // namespace
 
-FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InRequest) const
+void FAssetImportWorkspace::ValidateOutput(const FImportRequest& InRequest) const
 {
 	RequireMain();
 	const auto Root = Roots.Info();
 	if (InRequest.Generation != Root.Generation)
 	{
 		throw FAssetImportError("stale_revision", "Content root changed before import");
+	}
+	if (Root.Directory.empty())
+	{
+		throw FAssetImportError("root_unset", "Select a Game asset root through File > Open before choosing an output");
+	}
+	if (Root.bReadOnly)
+	{
+		throw FAssetImportError("read_only", "Game content is read-only");
+	}
+	for (const auto* Text : {&InRequest.Output, &InRequest.Library})
+	{
+		if (Text->size() > 4096 || Text->find('\0') != std::string::npos)
+		{
+			throw FAssetImportError("invalid_arguments", "Output paths must be at most 4096 bytes without NUL");
+		}
+	}
+	if (InRequest.Output.empty())
+	{
+		throw FAssetImportError("invalid_arguments", "Enter an output .hasset path under /Game");
+	}
+	try
+	{
+		auto& Files = *IO.FileSystem();
+		const auto Output = Files.Normalize(PathFromUtf8(InRequest.Output));
+		const auto Library =
+		    Files.Normalize(InRequest.Library.empty() ? Output.parent_path() : PathFromUtf8(InRequest.Library));
+		if (ImportExtension(Output) != ".hasset")
+		{
+			throw FAssetImportError("invalid_arguments", "Output filename must end with .hasset");
+		}
+		if (auto* Mounted = dynamic_cast<FMountedFileSystem*>(&Files))
+		{
+			CheckWritePath(*Mounted, Output, Root);
+			CheckWritePath(*Mounted, Library, Root);
+		}
+	}
+	catch (const FAssetImportError&)
+	{
+		throw;
+	}
+	catch (const std::exception& Failure)
+	{
+		throw FAssetImportError("invalid_arguments", Failure.what());
+	}
+}
+
+FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InRequest) const
+{
+	ValidateOutput(InRequest);
+	if (InRequest.bCreateFolder && !InRequest.Library.empty())
+	{
+		throw FAssetImportError("invalid_arguments", "Grouped imports cannot specify a dependency library");
 	}
 	for (const auto* Text : {&InRequest.Source, &InRequest.Output, &InRequest.Library, &InRequest.Name, &InRequest.Type,
 	                         &InRequest.SourceRoot, &InRequest.SourceId, &InRequest.RootId})
@@ -74,10 +118,6 @@ FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InReques
 	if (InRequest.Source.empty() || InRequest.Output.empty())
 	{
 		throw FAssetImportError("invalid_arguments", "Source and output are required");
-	}
-	if (Root.Directory.empty() && (InRequest.Output.starts_with("/Game/") || InRequest.Library.starts_with("/Game")))
-	{
-		throw FAssetImportError("root_unset", "Select a Game asset root before import");
 	}
 	auto& Files = *IO.FileSystem();
 	const auto Source = ImportPath(PathFromUtf8(InRequest.Source));
@@ -106,15 +146,11 @@ FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InReques
 	{
 		throw FAssetImportError("invalid_arguments", "Root ID must be 32 lowercase hexadecimal characters");
 	}
-	if (auto* Mounted = dynamic_cast<FMountedFileSystem*>(&Files))
-	{
-		CheckWritePath(*Mounted, Output, Root);
-		CheckWritePath(*Mounted, Library, Root);
-	}
 	if (!Files.Exists(Source))
 	{
 		throw FAssetImportError("not_found", "Import source does not exist");
 	}
-	return {PathToUtf8(Source), PathToUtf8(Output), PathToUtf8(Library), Type};
+	const auto Destination = InRequest.bCreateFolder ? SelectImportFolderOutput(IO, Source, Output) : Output;
+	return {PathToUtf8(Source), PathToUtf8(Output), PathToUtf8(Library), Type, PathToUtf8(Destination.parent_path())};
 }
 } // namespace Hyperion

@@ -1,6 +1,6 @@
 #include "Hyperion/AssetImport/ImportWorkspace.h"
 #include "Hyperion/AssetImport/GltfImport.h"
-#include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
@@ -12,7 +12,7 @@ FAssetImportWorkspace::FAssetImportWorkspace(FIOService& InIO, FAssetService& In
     : IO(InIO), Assets(InAssets), Roots(InRoots), Imports(InIO)
 {
 	RegisterGltfImporter(Imports);
-	RegisterSceneImporter(Imports);
+	RegisterSkyImporter(Imports);
 }
 
 FAssetImportWorkspace::~FAssetImportWorkspace()
@@ -30,19 +30,14 @@ void FAssetImportWorkspace::RequireMain() const
 
 FImportCapabilities FAssetImportWorkspace::Capabilities()
 {
-	return {
-	    {{RecordType<FModelAsset>().Id,
-	      {".gltf", ".glb", ".json", ".hasset"},
-	      "Static model and native material/texture dependencies; optional scene wrapper."},
-	     {RecordType<FTextureAsset>().Id,
-	      {".png", ".jpg", ".jpeg", ".json", ".hasset"},
-	      "Standalone PNG/JPEG to RGBA8 with full mips; optional textureEncoding."},
-	     {RecordType<FSkyAsset>().Id,
-	      {".hdr", ".exr", ".json", ".hasset"},
-	      "2:1 HDR/EXR panorama or sky recipe; optional sky bake settings. Native/record imports preserve baked data."},
-	     {RecordType<FMaterialAsset>().Id, {".json", ".hasset"}, "Existing typed material JSON or native upgrade."},
-	     {RecordType<FSceneManifest>().Id, {".json", ".hasset"}, "Existing scene JSON or native upgrade."}},
-	    false};
+	return {{{RecordType<FModelAsset>().Id,
+	          {".gltf", ".glb"},
+	          "Static model with generated material/texture assets; optional scene wrapper."},
+	         {RecordType<FTextureAsset>().Id,
+	          {".png", ".jpg", ".jpeg"},
+	          "Standalone PNG/JPEG to RGBA8 with full mips; optional textureEncoding."},
+	         {RecordType<FSkyAsset>().Id, {".hdr", ".exr"}, "2:1 HDR/EXR panorama with sky bake settings."}},
+	        false};
 }
 
 std::shared_ptr<const FImportTask> FAssetImportWorkspace::Start(const FImportRequest& InRequest)
@@ -62,6 +57,7 @@ FAssetImportOptions FAssetImportWorkspace::Options(const FImportRequest& InReque
 	Result.RootId = InRequest.RootId;
 	Result.bScene = InRequest.bScene;
 	Result.bForce = InRequest.bForce;
+	Result.bCreateFolder = InRequest.bCreateFolder;
 	Result.Conversion = {InRequest.TextureEncoding, InRequest.Sky};
 	return Result;
 }
@@ -129,6 +125,7 @@ void FAssetImportWorkspace::Complete(FImportTask& InTask)
 			Outcome.Warning.resize(std::min<std::size_t>(Outcome.Warning.size(), 8192));
 		}
 		InTask.Info.Result = std::move(Outcome);
+		InTask.Info.Output = PathToUtf8(Result->Output);
 		InTask.Info.Status = "completed";
 		++ContentRevision;
 	}

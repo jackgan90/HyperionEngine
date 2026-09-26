@@ -21,6 +21,7 @@ struct FImportRequest
 	std::string RootId;
 	std::optional<EMaterialTextureEncoding> TextureEncoding;
 	std::optional<FEnvironmentBakeSettings> Sky;
+	bool bCreateFolder{};
 };
 
 struct FImportResult
@@ -38,6 +39,7 @@ struct FImportValidation
 	std::string Output;
 	std::string Library;
 	std::string Type;
+	std::string Folder;
 };
 
 struct FImportCapability
@@ -124,6 +126,7 @@ public:
 	~FAssetImportWorkspace();
 	static FImportCapabilities Capabilities();
 	FImportValidation Validate(const FImportRequest& InRequest) const;
+	void ValidateOutput(const FImportRequest& InRequest) const;
 	std::shared_ptr<const FImportTask> Start(const FImportRequest& InRequest);
 	FImportTaskInfo Get(const FImportTaskQuery& InRequest) const;
 	FImportTaskList List(const FImportTaskListRequest& InRequest = {}) const;

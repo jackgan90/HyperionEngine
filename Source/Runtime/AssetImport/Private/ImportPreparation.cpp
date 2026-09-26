@@ -39,6 +39,14 @@ FPreparedImport FAssetImportService::FImpl::Prepare(const std::filesystem::path&
                                                     const std::filesystem::path& InOutput,
                                                     const FAssetImportOptions& InOptions)
 {
+	if (InOptions.bCreateFolder)
+	{
+		const auto Output = SelectImportFolderOutput(IO, InSource, InOutput);
+		auto Options = InOptions;
+		Options.bCreateFolder = false;
+		Options.Library = Output.parent_path();
+		return Prepare(InSource, Output, Options);
+	}
 	FPreparedImport Result;
 	FPublication Publication{IO,
 	                         Cancellation,

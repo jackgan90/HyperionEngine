@@ -154,8 +154,8 @@ struct FGraphLoader
 				const auto Path = Service.Resolve(Dependency.Reference, InAsset->Path);
 				if (Active.contains(Path))
 				{
-					throw std::runtime_error("Asset dependency cycle: " + InAsset->Path.generic_string() + " -> " +
-					                         Path.generic_string());
+					throw std::runtime_error("Asset dependency cycle: " + PathToUtf8(InAsset->Path) + " -> " +
+					                         PathToUtf8(Path));
 				}
 				auto Loaded = Load(Dependency.Reference, InAsset->Path);
 				if (!Graph.Assets.contains(Path))

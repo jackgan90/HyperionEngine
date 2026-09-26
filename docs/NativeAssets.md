@@ -1,8 +1,8 @@
 # 原生资产：导入、加载、编辑与保存
 
-运行时只读取原生 `.hasset`。源 glTF/GLB 和场景 JSON 由 AssetImport 转换；Editor 通过共享导入服务提供导入入口，场景渲染仍只消费发布后的原生资产。
+运行时只读取原生 `.hasset`。源 glTF/GLB、PNG/JPEG 和 HDR/EXR 由 AssetImport 转换；不支持自有资产 JSON 或原生 `.hasset` 导入；Editor 通过共享导入服务提供导入入口，场景渲染仍只消费发布后的原生资产。
 
-模型 schema 3 引用独立材质并保存源节点/primitive ID，材质引用独立纹理。schema 2 可只读迁移，加载不写回。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 必须先经 AssetTool 拆分升级。
+模型 schema 3 引用独立材质并保存源节点/primitive ID，材质引用独立纹理。schema 2 可只读迁移，加载不写回。共享库、离线 mip、自定义 shader、通用参数和场景覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。旧内嵌 model schema 1 不由当前 importer 拆分；需从原始 glTF/GLB 重新导入；当前未提供独立升级工具。
 
 天空资产、HDR/EXR 导入、浮点 cubemap 和场景天光引用见 [SkyLighting.md](SkyLighting.md)。天空同样通过 AssetTool 转为引用当前共享依赖的 `.hasset`；场景加载不读取源 HDR/EXR。
 
@@ -19,14 +19,13 @@ Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、
 
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.gltf out/my-content/model.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.glb out/my-content/scene.hasset --scene
-./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Scenes/Showcase.json out/my-content/showcase.hasset
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.gltf out/my-content/showcase.hasset --scene
 ./out/build/debug/bin/hyperion_asset_tool.exe inspect out/my-content/showcase.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe validate out/my-content/showcase.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe validate-library out/my-content
-./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy.hasset out/upgraded.hasset
 ~~~
 
-源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具内置模型、材质、纹理、天空和场景类型；新增工具支持的资产类型需在工具中注册该类型及其源格式 importer。
+源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具可检查模型、材质、纹理、天空和场景原生资产。导入仅接受 glTF/GLB、PNG/JPG/JPEG、HDR/EXR 外部格式，不接受 `.hasset`；材质由模型导入生成，场景可通过 `--scene` 创建。原生资产升级不属于 importer，旧 `upgrade` 别名已移除。
 
 普通 Editor 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
@@ -38,7 +37,7 @@ Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、
 | Serialization | 与 C++ 布局无关的二进制编码、读取预算和 bulk 数据块 |
 | AssetTypes | FAssetRef、头部、来源记录等轻量反射数据，仅依赖 Reflection |
 | Assets | 原生 envelope、CPU 对象缓存、引用解析、依赖图、异步保存 |
-| AssetImport | importer 注册、源读取跟踪、glTF/场景 JSON 转换、增量发布 |
+| AssetImport | importer 注册、源读取跟踪、glTF/图像转换、增量发布 |
 | Textures / Materials | 独立 CPU 纹理/材质反射记录与类型化参数 |
 | Environment | 天空资产记录、全景转换、SH 投影和 GGX 预过滤；不依赖 RHI/Renderer |
 | Scene | FModelAsset、FSceneManifest 和逻辑场景数据；不依赖 RHI/Renderer |
@@ -103,11 +102,15 @@ Tasks.Shutdown();
 
 非空覆盖集以规范化 `property_overrides_v1` 设置参与导入 provenance 与重复检测；不修改 hasset schema，也不改变原有单步导入。预览提交不走会清除 Import 的原生 Save 路径。新预览从源重新准备，不自动合并上次输出编辑；准备时的依赖快照只读，属性修改仅作用于根资产。GUI 与 typed automation 共用这个 workspace。
 
-Editor 的 File > Import Asset 与 automation 使用 `FAssetImportWorkspace` 共用请求、任务和校验。独立 PNG/JPG/JPEG 可直接生成纹理：`import SOURCE.png /Game/Textures/Image.hasset --texture-encoding srgb`（或 `linear`）。天空可使用 `--radiance-size N --specular-size N --samples N`，显式设置会以默认值补全后覆盖源配方。参数参与增量设置记录；当前 hasset 类型和格式不变。原始图片读取、解码与 mip 构建均复用现有引擎接口。
+Editor 的 File > Import Asset 与 automation 使用 `FAssetImportWorkspace` 共用请求、任务和校验。独立 PNG/JPG/JPEG 可直接生成纹理：`import SOURCE.png /Game/Textures/Image.hasset --texture-encoding srgb`（或 `linear`）。天空可使用 `--radiance-size N --specular-size N --samples N`，显式设置会以默认值补全后用于 HDR/EXR 烘焙。参数参与增量设置记录；当前 hasset 类型和格式不变。原始图片读取、解码与 mip 构建均复用现有引擎接口。
+
+Editor 导入默认按来源文件名创建文件夹：例如 `Clear.hdr` 在 Browse 中选择 `/Game/Skies` 对应的本地目录后，Save as 显示 `/Game/Skies/Clear`，实际主资产为 `/Game/Skies/Clear/Clear.hasset`，生成的附属资产也位于该文件夹。Save as 为自动计算的只读路径，包含重名时的数字后缀；Browse 选择父目录后同步更新。相同来源、相同目标父目录与输出文件名复用原文件夹；其他来源或无关内容占用名称时追加 `_1`、`_2` 等后缀。已有资产不自动迁移。
+
+共享请求的可选 `createFolder: true`（AssetTool 为 `--create-folder`）启用相同策略，不另指定 `library`；省略时保留工具原有的精确输出路径契约。目录中的 `.import-source` 保存来源路径与请求输出文件名的摘要，用于跨会话重新定位目录；它不参与资产身份或内容新鲜度判断。目录归属标记与资产发布共同提交、失败时共同回滚，不计入 writtenAssets。相同输入与设置仍零写入；来源、依赖或设置变化更新原目录。已有外部原生依赖引用继续保留。
 
 每个 importer 有稳定 ID 和版本。FAssetImportContext::Read 跟踪根文件、外部 buffer、图片等实际读取内容的 SHA-256。发布头保存 importer/version、选项、相对来源路径与指纹，以及来源到输出身份的映射。增量检查重新读取所有来源，验证原生依赖图完整性、当前记录版本和导入设置；内容、设置、importer 版本或模式变化都会重建。相同结果不重写该原生文件。
 
-一个 AssetId 对应一个当前文件。生成依赖位于 Models、Materials、Textures、Skies 等可见目录，文件名由可读名称与稳定 ID 组成；已存在的 ID 优先沿用发现的路径。挂载发布使用包路径，隔离本地输出使用相对引用。已有原生包引用经完整图和身份校验后保留，并清除 revision 约束。
+一个 AssetId 对应一个当前文件。生成依赖直接位于本次导入的资产目录，新文件名使用 `名称_数字序号.hasset`，例如 `Builtin_PBR_1.hasset`；数字仅用于避开同目录中的名称冲突，真正的 Asset ID 仍存储在文件内部。命名同时避开主资产、已有文件及本次导入尚未写出的依赖，并考虑名称大小写冲突。已存在的 ID 优先沿用发现的路径，重导入不重新编号，也不重命名旧的带 ID 文件。挂载发布使用包路径，隔离本地输出使用相对引用。已有原生包引用经完整图和身份校验后保留，并清除 revision 约束。
 
 导入身份从现存文件及其可选 Import.OutputIds 重建，不需要 `.asset-library.hasset`。未找到目标的历史映射不使用。同一输出重导入保留根及存活产品 ID；显式新输出有独立根 ID。默认逻辑来源空间基于根 ID，源位置以相对路径记录；可用 `--source-root`/`--source-id` 指定跨根共享的逻辑来源空间。物理路径只用于本次读取，不能作为持久化来源 ID。相同原生纹理数据及颜色/格式/mip 解释可复用；不同可编辑材质来源保持独立身份。
 
@@ -189,4 +192,4 @@ AssetTool 的每次运行输出 elapsed_ms、reads、read_bytes、writes、writt
 
 ## 场景节点记录
 
-当前 `hyperion.scene` 为 native schema v7，节点记录为 v3，使用带稳定实例 ID 的组件封装；plain JSON source v3 继续兼容，也可使用反射记录 JSON 表达初始视图和自定义组件。旧 native v1–v6 的模型、材质、矩阵、镜头和灯光状态通过显式迁移保留，新空场景不自动补节点。scene-json 和 native-scene-upgrade importer revision 7 保留整模型引用，不自动展开内部节点或 primitive；旧的显式展开文档保持其子节点和编辑状态。模型导入为场景不创建占位相机；发布策略进入缓存设置，避免复用旧展开或强制相机输出。旧版本读取不自动删除相机。运行时兼容读取不会修改磁盘文件。Snapshot 从当前组件及设置生成独立快照，包含 Transform、enabled、camera/light 状态、选择和 initialView，异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneComponents.md](SceneComponents.md)、[SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。
+当前 `hyperion.scene` 为 native schema v7，节点记录为 v3，使用带稳定实例 ID 的组件封装；场景 JSON 导入已移除；新场景可由 glTF/GLB 模型导入创建，初始视图和自定义组件通过 Editor 或共享自动化场景服务编辑并保存为 `.hasset`。旧 native v1–v6 的模型、材质、矩阵、镜头和灯光状态通过显式迁移保留，新空场景不自动补节点。原生 `.hasset` 不作为 Asset Import 的输入；兼容读取保留整模型引用及旧文档的显式展开节点和编辑状态。模型导入为场景不创建占位相机；发布策略进入缓存设置，避免复用旧展开或强制相机输出。旧版本读取不自动删除相机。运行时兼容读取不会修改磁盘文件。Snapshot 从当前组件及设置生成独立快照，包含 Transform、enabled、camera/light 状态、选择和 initialView，异步保存后续不会读取 live 节点。空 assets 的 camera/light/group 场景可保存。格式和示例见 [SceneComponents.md](SceneComponents.md)、[SceneManagement.md](SceneManagement.md) 与 [LocalLights.md](LocalLights.md)。

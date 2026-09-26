@@ -1,7 +1,8 @@
-"""Exercise native import identity, texture reuse and renamed dependency CLI paths."""
+"""Exercise external import identity, texture reuse and renamed dependency CLI paths."""
 import hashlib
 import json
 import pathlib
+import re
 import shutil
 import struct
 import subprocess
@@ -86,6 +87,48 @@ class PublicationChecks:
         texture = self.read(material_path.parent / ref['path'])
         return ref['id'], texture['mips'][0]['fields']['bytes']['data']
 
+    def check_numbered_names(self):
+        case = self.root / 'numbered'
+        case.mkdir()
+        doc = json.loads((self.fixtures / 'Showcase.gltf').read_text())
+        for index, material in enumerate(doc['materials']):
+            material['name'] = 'White' if index < 3 else 'white'
+        for name in ('Showcase.bin', 'Checker.png'):
+            shutil.copyfile(self.fixtures / name, case / name)
+        source = case / 'Model.gltf'
+        source.write_text(json.dumps(doc))
+        output = case / 'native/White_1.hasset'
+        occupied = case / 'native/White_2.hasset'
+        self.run('import', case / 'Checker.png', occupied)
+        occupied_bytes = occupied.read_bytes()
+        self.run('import', source, output)
+        self.run('validate-library', output.parent)
+        model = self.read(output)
+        slots = [item['fields'] for item in model['materialSlots']]
+        names = [path.name for path in output.parent.glob('*.hasset')]
+        assert len(names) == len(set(name.lower() for name in names))
+        assert all(re.fullmatch(r'.+_[1-9][0-9]*\.hasset', name) for name in names), names
+        assert all(slot['id'] not in slot['path'] for slot in slots)
+        assert occupied.read_bytes() == occupied_bytes
+        before = self.snapshot(case)
+        assert 'written_assets=0' in self.run('import', source, output)
+        self.run('import', source, output, '--force')
+        assert self.snapshot(case) == before
+        # Simulate an existing legacy filename; reimport must retain it and its ID.
+        first = output.parent / slots[0]['path']
+        legacy = first.with_name('Builtin_PBR-' + slots[0]['id'] + '.hasset')
+        first.rename(legacy)
+        doc['materials'].append({'name': 'White', 'pbrMetallicRoughness': {'roughnessFactor': 0.3}})
+        source.write_text(json.dumps(doc))
+        self.run('import', source, output)
+        updated = [item['fields'] for item in self.read(output)['materialSlots']]
+        assert [item['id'] for item in updated[:len(slots)]] == [item['id'] for item in slots]
+        assert pathlib.Path(updated[0]['path']).name == legacy.name
+        assert [item['path'] for item in updated[1:len(slots)]] == [item['path'] for item in slots[1:]]
+        assert occupied.read_bytes() == occupied_bytes
+        self.run('validate-library', output.parent)
+        assert 'written_assets=0' in self.run('import', source, output)
+
     def check_divergence(self):
         case, _ = self.prepare('divergence', both=True)
         first = self.texture(case, 0)
@@ -137,47 +180,38 @@ class PublicationChecks:
         exported = case / 'native/Model.json'
         self.run('export-json', case / 'native/Model.hasset', exported)
         refs = json.loads(exported.read_text())['fields']['materialSlots']
-        assert refs[0]['fields']['path'] == 'Materials/ReadableMaterial.hasset'
-        for ref in original['materialSlots']:
-            ref['fields']['path'] = '/Game/' + ref['fields']['path']
-        source = case / 'External.json'
-        source.write_text(json.dumps({'type': 'hyperion.modelasset', 'version': 3, 'fields': original}))
+        assert refs[0]['fields']['path'] == 'ReadableMaterial.hasset'
         asset_root = case / 'native'
         self.run('--asset-root', asset_root, 'validate', '/Game/Model.hasset')
-        self.run('--asset-root', asset_root, 'import', source, '/Game/External.hasset', '--library', '/Game')
-        self.run('--asset-root', asset_root, 'validate', '/Game/External.hasset')
-        assert 'written_assets=0' in self.run('--asset-root', asset_root, 'import', source,
-                                             '/Game/External.hasset', '--library', '/Game')
-
+        self.run('--asset-root', asset_root, 'import', '/Game/Model.hasset', '/Game/Rejected.hasset',
+                 error='Unsupported import source format')
+        assert not (asset_root / 'Rejected.hasset').exists()
+        self.run('upgrade', asset_root / 'Model.hasset', asset_root / 'Rejected.hasset',
+                 error='Unknown command')
+        assert not (asset_root / 'Rejected.hasset').exists()
         renamed = material.with_name('ReadableMaterial.hasset')
         for name in ('RenamedAgain.hasset', 'RenamedTwice.hasset'):
             destination = renamed.with_name(name)
             renamed.rename(destination)
             renamed = destination
             before = self.snapshot(case)
-            self.run('--asset-root', asset_root, 'validate', '/Game/External.hasset')
-            assert 'written_assets=0' in self.run('--asset-root', asset_root, 'import', source,
-                                                 '/Game/External.hasset', '--library', '/Game')
+            self.run('--asset-root', asset_root, 'validate', '/Game/Model.hasset')
+            assert 'written_assets=0' in self.publish(case)
             assert self.snapshot(case) == before
-        texture = next((case / 'native/Textures').glob('A_png-*.hasset'))
-        texture_source = case / 'EditedTexture.json'
-        self.run('export-json', texture, texture_source)
-        edited = json.loads(texture_source.read_text())
-        edited['fields']['mips'][0]['fields']['bytes']['data'] = [0, 255, 0, 255]
-        texture_source.write_text(json.dumps(edited))
-        self.run('--asset-root', asset_root, 'import', texture_source,
-                 '/Game/Textures/' + texture.name, '--library', '/Game')
-        assert 'written_assets=1' in self.run('--asset-root', asset_root, 'import', source,
-                                             '/Game/External.hasset', '--library', '/Game')
-        assert 'written_assets=0' in self.run('--asset-root', asset_root, 'import', source,
-                                             '/Game/External.hasset', '--library', '/Game')
+
+    def texture_path(self):
+        case = self.root / 'rename/native'
+        material = self.read(case / 'RenamedTwice.hasset')
+        value = next(value['fields']['value']['fields'] for value in material['values']
+                     if value['fields']['name'] == 'BaseColorTexture')
+        return case / value['texture']['fields']['path']
 
     def check_root_permissions(self):
         engine = self.root / 'Engine'
         game = self.root / 'Game'
         engine.mkdir()
         game.mkdir()
-        texture = next((self.root / 'rename/native/Textures').glob('A_png-*.hasset'))
+        texture = self.texture_path()
         self.run('--engine-content', engine, 'export-envelope', texture, '/Engine/Envelope.json',
                  error='Read-only content mount')
         assert not (engine / 'Envelope.json').exists()
@@ -193,7 +227,7 @@ class PublicationChecks:
     def check_library_subtrees(self):
         engine = self.root / 'Engine'
         game = self.root / 'Game'
-        texture = next((self.root / 'rename/native/Textures').glob('A_png-*.hasset'))
+        texture = self.texture_path()
         for mount, directory in (('/Engine', engine), ('/Game', game)):
             subtree = directory / 'Sub'
             subtree.mkdir()
@@ -220,6 +254,7 @@ def main():
         checks = PublicationChecks(tool, fixtures, pathlib.Path(directory))
         checks.run('catalog', directory, pathlib.Path(directory) / 'Catalog.hasset', error='Unknown command')
         assert not (pathlib.Path(directory) / 'Catalog.hasset').exists()
+        checks.check_numbered_names()
         checks.check_divergence()
         checks.check_stale_candidate()
         checks.check_reuse_before_update()

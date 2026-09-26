@@ -39,8 +39,9 @@
 | 渲染结果和诊断 | `render.statistics`、`render.component_diagnostics`、`render.screenshot` | 完成帧统计、分页 primitive 诊断和现有 readback。PNG 成功返回时文件已写入，返回目标本地路径、尺寸、frame 和 bytes |
 | RenderDoc | `renderdoc.status/capture/open/set_preference` | 复用 host capture/replay；Editor preference 与 GUI 同样持久化；未编译/缺 DLL/不可绘制等情况返回 unavailable |
 | GUI scale / Profiling | `gui.scale.get/set`、`profiling.get/set` | 共用 GUI scale 和 Core profiling 控制。scale 下一 GUI frame 生效并沿正常偏好路径保存；profiling 取决于构建和 collector |
-| 导入与发布 | `asset.import`、`asset.import.capabilities/validate/tasks/task` | `FAssetImportWorkspace` 共用 GUI 请求、校验和任务；底层复用 importer/publication lease；不静默覆盖已打开草稿 |
-| 导入属性草稿 | `asset.import.draft.prepare/get/edit/history/submit/discard`、`asset.import.drafts` | 同一 workspace 的未发布快照、版本、属性限制与历史；GUI/agent 共享 ID；无 GPU 预览 |
+| 导入与发布 | `asset.import`、`asset.import.capabilities/validate/tasks/task` | `FAssetImportWorkspace` 共用 GUI 请求、校验和任务；GUI 自动校验，提交时再次校验，完成后以模态框显示成功或失败原因，不提供独立 Validate 按钮；底层复用 importer/publication lease；不静默覆盖已打开草稿 |
+| 导入输出目录选择 | GUI Save as / Browse；agent 使用导入请求的 `output` | 原生目录选择器与上次目录偏好仅为 GUI 适配，暂不提供自动化偏好接口；选择后转换为 `/Game` 路径，仍使用共享导入校验与发布 |
+| 导入属性草稿 | `asset.import.draft.prepare/get/edit/history/submit/discard`、`asset.import.drafts` | 同一 workspace 的未发布快照、版本、属性限制与历史；GUI/agent 共享 ID；GUI 在 Import Asset 的 Asset properties 折叠区按资产类型编辑，保留 Undo/Redo/Reset；无 GPU 预览 |
 
 ## 数值与内容发现
 
@@ -62,13 +63,15 @@
 
 `render.screenshot` 支持 main，Editor 另支持 assets。必须显式指定 PNG 路径；覆盖需要 overwrite。窗口需要可绘制，不要求场景或 preview ready，因此可捕获加载及失败界面。捕获输出写在目标机器，不代表自动传输文件到客户端。RenderDoc 的 capture 等到完成的 capture 计数前进，open 才启动目标侧 replay。
 
-导入支持 glTF/GLB 及其图像依赖、独立 PNG/JPG/JPEG、HDR/EXR 天空、已注册的 typed JSON/sky recipe/native upgrade。sourceRoot/sourceId 成对使用，输出与源分离，force 仅跳过增量判断，不绕过写权限和身份检查。导入、发布、保存和截图接收后不支持取消；jobs 返回真实 cancellable 状态。保存后的草稿若继续编辑仍 dirty，导入不偷偷重载已有草稿。
+导入支持 glTF/GLB 及其图像依赖、独立 PNG/JPG/JPEG、HDR/EXR 天空；不支持 `.hasset` 原生资产或任何自有资产 JSON 导入，sky 设置仅用于 HDR/EXR 烘焙。sourceRoot/sourceId 成对使用，输出与源分离，force 仅跳过增量判断，不绕过写权限和身份检查。导入、发布、保存和截图接收后不支持取消；jobs 返回真实 cancellable 状态。保存后的草稿若继续编辑仍 dirty，导入不偷偷重载已有草稿。
 
-`textureEncoding` 仅用于独立图片，0 为 Linear、1 为 sRGB，省略默认 sRGB。可选 `sky` 对象含 radianceSize/specularSize/samples，完整覆盖天空配方或默认烘焙设置，不适用于已经序列化的天空记录。`name` 用于模型、模型场景节点或独立图片；其他类型名称来自源记录。旧字段与 `asset.import` 异步调用方式保持兼容。
+`textureEncoding` 仅用于独立图片，0 为 Linear、1 为 sRGB，省略默认 sRGB。可选 `sky` 对象含 radianceSize/specularSize/samples，指定 HDR/EXR 全景图的烘焙设置，省略时使用默认值。`name` 用于模型、模型场景节点或独立图片；天空名称默认来自源文件名，也可通过导入草稿修改。旧字段与 `asset.import` 异步调用方式保持兼容。
 
-`asset.import.validate` 不写文件，校验 generation、路径、格式、参数及挂载权限；最终转换、身份与依赖检查仍在导入时执行。结果不代表文件预留。`asset.import.tasks` 按最新优先分页，limit 为 1–32，最多保留 128 条应用任务，换根清空；`asset.import.task` 接收其 task ID，可查询 GUI 或其他连接发起的任务。它们不是 session job ID，不改变 jobs.get 的会话隔离。结果保留 asset/writtenAssets/upToDate，并增加 task/warning；warning 表示发布已经提交、后续索引刷新失败，不应盲目重试。
+`createFolder: true` 使用与 Editor 默认导入相同的分组策略：在 output 父目录下按来源文件名创建目录，主资产保留 output 文件名，附属资产与其同目录。相同来源与请求输出位置跨会话复用；不同来源或无关内容占用名称时追加数字后缀。省略该选项保留原有精确路径行为；启用时不另指定 library。准备草稿不会创建目录，结果 asset.path 与 task.output 返回实际发布路径。已有资产不自动移动。
 
-`asset.import` 的可选 `rootId` 与 AssetTool `--root-id` 共用导入校验，支持以固定的 32 位小写十六进制 ID 重建缺失或损坏的根资产。已有有效目标必须匹配该 ID，同一发布库中其他资产已占用该 ID 时拒绝发布；该选项不修改既有资产身份。
+`asset.import.validate` 不写文件，校验 generation、路径、格式、参数及挂载权限；最终转换、身份与依赖检查仍在导入时执行。结果 folder 为实际目标文件夹候选（含重名后缀），与 GUI Save as 共用；output 保留请求路径语义，结果不代表文件预留。`asset.import.tasks` 按最新优先分页，limit 为 1–32，最多保留 128 条应用任务，换根清空；`asset.import.task` 接收其 task ID，可查询 GUI 或其他连接发起的任务。它们不是 session job ID，不改变 jobs.get 的会话隔离。结果保留 asset/writtenAssets/upToDate，并增加 task/warning；warning 表示发布已经提交、后续索引刷新失败，不应盲目重试。
+
+`asset.import` 的可选 `rootId` 与 AssetTool `--root-id` 共用导入校验，支持以固定的 32 位小写十六进制 ID 重建缺失或损坏的根资产。已有有效目标必须匹配该 ID，同一发布库中其他资产已占用该 ID 时拒绝发布；该选项不修改既有资产身份。`sourceRoot`、`sourceId` 和 `rootId` 仅供自动化及资产工具使用，导入 GUI 不暴露这些字段，使用共享服务的默认来源标识和身份处理。
 
 `asset.import.draft.prepare` 接收相同导入请求，返回独立的 draft ID 和 preparing 状态；轮询 `draft.get` 到 ready 或 failed。准备和属性编辑不发布文件。应用最多保留四份草稿；`asset.import.drafts` 列出跨连接和 GUI 的草稿。`draft.get` 的 offset/limit 分页节点、primitive、材质参数、材质槽、依赖、产品与诊断，limit 为 1–64，默认 32；返回各列表总数及完整属性覆盖集，不返回几何或像素 bulk。
 
@@ -101,3 +104,9 @@
 - 验证 discovery/describe/call、正常和非法输入、跨连接可见性、history/save/reopen、失效/缺 provider/退出。`automation_capability_parity` 是真实 CLI/MCP 验收，GUI 回归独立覆盖鼠标路径。
 
 保留现有 transport、catalog、session、平台通信及插件架构；连接关闭时新增最多 2 秒的已排队应答排空，避免正常退出丢失接受结果。窗口停靠/大小/按键属于呈现，不通过模拟输入暴露；已有 AssetTool 的库迁移、Engine 内容生成、测量和 envelope 导出仍是独立维护 CLI。未来 Public C++ 的新能力仍按领域任务接入，不能将本页理解为所有 C++ 方法的自动 RPC。
+
+未启用 `createFolder` 时，导入省略 `library` 即将新增附属资产直接保存到 `output` 的父目录；已有共享资产继续复用原位置。兼容工具调用仍可显式指定 `library`，该目录同样不自动追加类型子目录。
+
+导入 workspace 的输出与可选 library 必须解析到当前可写 `/Game` 内，未设根、越界及目录链接指向根外均拒绝；根内本地绝对路径会规范化为 `/Game` 路径。GUI Browse 更改父目录后复用同一校验更新只读 Save as 并显示错误；完整导入仍检查来源、转换与发布条件。
+
+Import Asset 在来源、输出或转换设置编辑结束后自动更新属性；已有属性修改时先确认重置，取消保留原设置和修改。纹理尺寸、格式、色彩编码和 mip 层数使用对齐的只读属性行，关闭使用窗口标题栏按钮。

@@ -10,7 +10,6 @@ struct FPublishedAsset
 {
 	FAssetRef Reference;
 	std::filesystem::path Path;
-	std::optional<FAssetRef> SourceIdentity;
 };
 
 struct FPublication
@@ -38,10 +37,13 @@ struct FPublication
 	std::map<std::string, FPublishedAsset> ExistingAssets;
 	std::map<std::string, FPublishedAsset> TextureProducts;
 	std::map<std::filesystem::path, FEncodedAsset> Staged;
+	std::map<std::string, std::filesystem::path> ProductPaths;
+	std::set<std::string> ReservedPaths;
 	std::map<std::string, std::string> ProductRevisions;
 	std::map<std::string, std::pair<std::string, std::string>> ProductContents;
 	std::unique_ptr<FAssetService> NativeAssets;
 	std::string RootId;
+	std::string FolderKey;
 	std::filesystem::path SourceRoot;
 	std::string SourceId;
 	std::string StableSourceKey(const std::filesystem::path& InPath) const;
@@ -52,8 +54,8 @@ struct FPublication
 	FAssetService& IndexedAssets();
 	void ClaimProduct(const std::string& InId, const std::string& InKey, const std::string& InContent);
 	void Commit();
-	std::string SelectId(const std::string& InKey, const FConvertedAsset& InAsset, bool bInRoot) const;
-	std::filesystem::path ProductDestination(std::string_view InId, const FConvertedAsset& InAsset) const;
+	std::string SelectId(const std::string& InKey, bool bInRoot) const;
+	std::filesystem::path ProductDestination(std::string_view InId, const FConvertedAsset& InAsset);
 	std::optional<FPublishedAsset> ReuseTexture(const std::string& InContent);
 	FAssetHeader MakeHeader(const std::string& InId, const std::string& InKey, const std::string& InTextureContent,
 	                        bool bInRoot);

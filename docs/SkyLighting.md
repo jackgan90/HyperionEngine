@@ -22,26 +22,14 @@ Initial loading contributes zero environment light until all products are ready.
 ## Import a sky
 
 ```powershell
-./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Skies/Cloudy.json out/my-content/Skies/Cloudy.hasset --library out/my-content
+./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Skies/Cloudy.hdr out/my-content/Skies/Cloudy.hasset --library out/my-content
 ./out/build/debug/bin/hyperion_asset_tool.exe import path/to/environment.exr out/my-content/Skies/Custom.hasset --library out/my-content
 ./out/build/debug/bin/hyperion_asset_tool.exe validate out/my-content/Skies/Custom.hasset
 ```
 
-HDR/EXR can be imported directly with default settings, or through a tracked source descriptor:
+Import a 2:1 HDR/EXR panorama directly. The Import Asset panel exposes Radiance size, Specular size and Sample count and generates diffuse SH and the prefiltered specular cube. Sky JSON recipes and serialized sky JSON are not supported. Existing native sky assets remain loadable and editable; they are not import sources.
 
-```json
-{
-  "type": "hyperion.skyasset",
-  "schema_version": 1,
-  "name": "My environment",
-  "source": "environment.hdr",
-  "radiance_size": 256,
-  "specular_size": 64,
-  "samples": 256
-}
-```
-
-`source` resolves relative to the descriptor. Source bytes, settings and importer revision participate in incremental import. Runtime scene loading consumes only `.hasset` files and their current shared dependencies; source HDR/EXR conversion is handled by AssetImport. Asset discovery rebuilds the registry from native metadata. Copy the sky and its referenced native textures together; catalog and import-library files are not required.
+AssetTool accepts `--radiance-size 256 --specular-size 64 --samples 256`; automation uses the reflected `sky` settings object. Source bytes and settings participate in incremental import. Runtime scene loading consumes only `.hasset` files and their shared dependencies. Copy the sky and its referenced native textures together; catalog and import-library files are not required.
 
 Input is a 2:1 equirectangular Radiance `.hdr` or ordinary RGB OpenEXR image (optional alpha). Decoding uses the existing private stb_image/TinyEXR adapters. RGB values are scene-linear, assumed to use linear sRGB/Rec.709 primaries; EXR chromaticities, arbitrary layered channels, multipart/deep images, camera exposure metadata and other panorama projections are not color-managed or converted. Alpha does not control sky coverage. Negative, non-finite or RGB values above `1e20` are rejected, rather than tone-mapped into the bake. Encoded input is bounded to 256 MiB and decoded RGBA to 512 MiB.
 

@@ -1,7 +1,7 @@
+#include "Hyperion/AssetImport/AssetSourceJson.h"
 #include "Hyperion/AssetImport/GltfImport.h"
-#include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/AssetImport/ModelImport.h"
-#include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -39,7 +39,7 @@ struct FFixture
 	FFixture()
 	{
 		RegisterGltfImporter(Imports);
-		RegisterSceneImporter(Imports);
+		RegisterSkyImporter(Imports);
 		RegisterSceneAssetTypes(Assets.Types());
 		Options.Library = Directory / "library";
 		const auto Root = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
@@ -245,13 +245,12 @@ void CheckLegacyAndVariants(FFixture& InFixture)
 	    });
 	const auto Output = F.Directory / "Upgraded.hasset";
 	F.IO.WriteAsync(Output, Legacy.Bytes).Get(F.Tasks);
-	const auto Upgraded = F.Imports.ImportAsync(Path, Output, F.Options).Get(F.Tasks);
-	HYP_CHECK(Upgraded->Header.Id == Legacy.Header.Id && Upgraded->Header.SchemaVersion == 3);
-	F.Assets.ClearCache();
-	const auto Graph = F.Assets.LoadGraphAsync(Output).Get(F.Tasks);
-	HYP_CHECK(Graph->Failures.empty());
-	HYP_CHECK(Graph->Root->As<FModelAsset>()->Primitives[0].Positions == Source->Primitives[0].Positions);
-	HYP_CHECK(TextureReferences(*Graph).size() >= 2);
+	Rejects(
+	    [&]
+	    {
+		    F.Imports.ImportAsync(Path, Output, F.Options).Get(F.Tasks);
+	    });
+	HYP_CHECK(*F.IO.ReadAsync(Output).Get(F.Tasks) == Legacy.Bytes);
 }
 
 void CheckJson(FFixture& InFixture)
@@ -260,25 +259,28 @@ void CheckJson(FFixture& InFixture)
 	    BuildTextureAsset("Authored", EMaterialTextureEncoding::Srgb, {2, 1, {0, 0, 0, 255, 255, 255, 255, 255}});
 	const auto Node = WriteRecord(RecordType<FTextureAsset>(), &Texture);
 	const auto Json = EncodeAssetSourceJson(Node);
-	const auto Restored =
-	    std::static_pointer_cast<FTextureAsset>(ReadRecord(RecordType<FTextureAsset>(), DecodeAssetSourceJson(Json)));
-	HYP_CHECK(Serialize(*Restored) == Serialize(Texture));
+	const auto Native = EncodeAsset(RecordType<FTextureAsset>(), &Texture);
+	const auto Restored = ReadValue<FTextureAsset>(DecodeAsset(Native.Bytes).Object);
+	HYP_CHECK(Serialize(Restored) == Serialize(Texture));
 	const auto Path = InFixture.Directory / "Texture.json";
 	const auto Bytes = std::as_bytes(std::span(Json.data(), Json.size()));
 	InFixture.IO.WriteAsync(Path, FBytes(Bytes.begin(), Bytes.end())).Get(InFixture.Tasks);
-	const auto Published =
-	    InFixture.Imports.ImportAsync(Path, InFixture.Directory / "Texture.hasset", InFixture.Options)
-	        .Get(InFixture.Tasks);
-	HYP_CHECK(Published->Header.TypeId == RecordType<FTextureAsset>().Id);
-	for (const auto* Invalid :
-	     {R"({"$bulk":"u8","data":[256]})", R"({"$bulk":"u32","data":[-1]})", R"({"type":1,"type":2})"})
-	{
-		Rejects(
-		    [&]
-		    {
-			    DecodeAssetSourceJson(Invalid);
-		    });
-	}
+	Rejects(
+	    [&]
+	    {
+		    InFixture.Imports.ImportAsync(Path, InFixture.Directory / "RejectedTexture.hasset", InFixture.Options)
+		        .Get(InFixture.Tasks);
+	    });
+	HYP_CHECK(!InFixture.IO.FileSystem()->Exists(InFixture.Directory / "RejectedTexture.hasset"));
+	const auto Source = InFixture.Directory / "TextureSource.hasset";
+	InFixture.IO.WriteAsync(Source, Native.Bytes).Get(InFixture.Tasks);
+	Rejects(
+	    [&]
+	    {
+		    InFixture.Imports.ImportAsync(Source, InFixture.Directory / "Texture.hasset", InFixture.Options)
+		        .Get(InFixture.Tasks);
+	    });
+	HYP_CHECK(!InFixture.IO.FileSystem()->Exists(InFixture.Directory / "Texture.hasset"));
 }
 
 std::set<std::string> AssetIdentities(const FAssetGraph& InGraph)

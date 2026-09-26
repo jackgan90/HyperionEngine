@@ -12,7 +12,7 @@
 ./out/build/debug/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets validate /Game/Scenes/SharedAssets.hasset
 ~~~
 
-`SharedAssets.json`（见 HyperionAssets 的 Metadata 与本地源缓存） 引用 `SharedQuad.json`（见 HyperionAssets 的 Metadata 与本地源缓存） 和 `SharedPanel.json`（见 HyperionAssets 的 Metadata 与本地源缓存）。两个模型引用同一个 `SharedColor.json`（见 HyperionAssets 的 Metadata 与本地源缓存），后者引用 `White.json`（见 HyperionAssets 的 Metadata 与本地源缓存）。左侧实例保存局部绿色 Tint，右侧保持资产默认红色。
+`Scenes/SharedAssets.hasset` 引用 `Models/SharedQuad.hasset` 和 `Models/SharedPanel.hasset`；两个模型共享 `Materials/IndependentAuthoredShader.hasset`，后者引用 `Textures/SharedWhite.hasset`。这些自创资产直接由原生文件保存，旧 JSON 配方不再参与导入和来源重建。左侧实例保存局部绿色 Tint，右侧保持资产默认红色。
 
 该材质的 shader 路径、入口 `AssetVertex/AssetPixel` 和 `ASSET_GAIN=1` 均来自资产。增加这类材质只需编写 HLSL 和资产数据；Renderer 不按该材质名称或固定 PBR 字段分派。`/Game/Shaders/SharedAsset.hlsl` 使用标准 View/Object block 与自定义 Surface.Tint。
 
@@ -56,43 +56,18 @@ Assets.SaveAsync(Destination, Saved);
 
 ~~~powershell
 ./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Models/Showcase.gltf out/library/models/A.hasset --library out/library
-./out/build/debug/bin/hyperion_asset_tool.exe import ../HyperionAssets/.cache/Sources/Scenes/SharedAssets.json out/library/scenes/Shared.hasset --library out/library
+./out/build/debug/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets validate /Game/Scenes/SharedAssets.hasset
 ./out/build/debug/bin/hyperion_asset_tool.exe export-json out/library/models/A.hasset out/edit/Model.json
-./out/build/debug/bin/hyperion_asset_tool.exe import out/edit/Model.json out/library/models/Edited.hasset --library out/library
-./out/build/debug/bin/hyperion_asset_tool.exe upgrade out/legacy-model.hasset out/library/models/Upgraded.hasset --library out/library
 ~~~
 
-`--library` 默认为输出父目录。不同根使用同一库可共享资源；现存文件的可选导入映射用于恢复身份，不需要管理 hasset。依赖位于可见类型目录，每个 ID 保留一个当前文件。发布以库为单位排队，取得库与根的 IO lease，完成全部转换后再更新当前文件；同步写入失败时恢复旧文件并移除新文件。历史由 Git/LFS 保存。
+`--library` 默认为输出父目录。不同根使用同一库可共享资源；现存文件的可选导入映射用于恢复身份，不需要管理 hasset。新生成依赖直接写入该目录，不再创建 Models/Materials/Textures 等类型子目录；已有共享资产保持其路径，每个 ID 保留一个当前文件。发布以库为单位排队，取得库与根的 IO lease，完成全部转换后再更新当前文件；同步写入失败时恢复旧文件并移除新文件。历史由 Git/LFS 保存。
 
 glTF 材质按来源模型和 material index 保持独立可编辑身份，不因数值相等合并。外部图片按逻辑来源身份加颜色/mip 设置共享；嵌入图片按来源模型和 image index 保持身份。新生成纹理还可按不含显示名称的原生数据指纹复用，颜色、维度、格式和完整 mip 都参与判断。BaseColor/Emissive 的 sRGB 与 Normal/MetallicRoughness/Occlusion 的线性解释生成不同纹理资产；不同 sampler 使用同一纹理数据。当前路径规范化不折叠符号链接或 Windows 大小写别名。
 
-glTF 和旧内嵌模型仅在 AssetImport 中拆分。mip 在离线生成，sRGB 的 RGB 分量在线性空间平均，alpha 普通平均；奇数尺寸边缘参与过滤。运行时 TextureSource 直接持有已加载纹理的 mip，不重新生成或复制像素。旧 model schema 1 的运行时加载会要求显式 upgrade；升级保留根 ID，并将内嵌字段转换为材质/纹理依赖。
+glTF 在 AssetImport 中拆分为模型、材质和纹理。mip 在离线生成，sRGB 的 RGB 分量在线性空间平均，alpha 普通平均；奇数尺寸边缘参与过滤。运行时 TextureSource 直接持有已加载纹理的 mip，不重新生成或复制像素。旧内嵌 model schema 1 不受运行时支持，应从原始 glTF/GLB 重新导入。Asset Import 不处理原生资产升级。
 
-## JSON 来源格式
+## JSON 诊断导出
 
-`export-json` 输出与二进制记录相同的通用反射树，格式为 `{type, version, fields}`，引用路径相对输出 JSON 重定位。import 支持当前模型、材质、纹理和场景 JSON；原有 scene schema_version=1 简写也保留。
+`export-json` 输出与二进制记录相同的通用反射树 `{type, version, fields}`，用于检查字段和依赖；数值 bulk 带有 `f32`、`u32` 等类型标签。该导出不是可重新导入的源格式。模型、材质、纹理、天空和场景的旧 JSON 导入均已移除。
 
-数值 bulk 使用 `{"$bulk":"f32","data":[...]}` 等标签。材质数值的 `words` 是 u32 位模式，建议使用 C++ 类型化 API 生成；例如 float 1 的 word 为 1065353216。sampler/状态枚举取已注册的数值，未知枚举、重复 key、越界整数、错误类型和超预算数据会拒绝。源码 JSON 引用其他源码时，应清空旧原生 ID/revision 并使用源码路径，导入器负责生成跟随当前内容的原生引用。
-
-## 缓存与验证
-
-每个渲染服务共享材质准备缓存，使用不可变材质对象及解析后的纹理对象作为身份。材质/编译程序元数据最多 1024 项，纹理元数据最多 4096 项，均为弱引用；活动快照和帧持有所需数据。失效或淘汰只影响复用，不改变活动资源寿命。GPU 继续使用现有 source、definition、descriptor、pipeline 缓存和 fence 退休。
-
-`FRenderResourceStats::AssetMaterials` 提供 Requests、MaterialPreparations、TextureSources、MaterialCacheHits、TextureCacheHits 和条目数；配合 GeometryUploads、Materials.TextureUploads/PipelinesCreated 可区分 CPU 准备与 GPU 创建。数值编辑与几何身份分离；新依赖版本可以复用同一几何资源，旧快照继续显示旧材质。模型就绪要求 Render 已接收当前版本，避免把旧材质的就绪状态用于新版本。
-
-`shared_asset_rendering` 在一个 Worker、拒绝源资产读取的文件系统及真实 D3D12 下验证：
-
-- 两个模型资产：2 次几何上传，1 次材质准备，1 个纹理源，1 次纹理上传。
-- 单实例数值修改：几何/纹理/管线创建增量均为 0，另一实例不变。
-- Save As 后清除 CPU 缓存重载：像素完全一致。
-- 分段材质：sampler 变体复用纹理；相同 128 灰度字节的 sRGB/线性版本读回约 0.502/0.737；类型化纹理/sampler 覆盖保存重载一致。
-- 材质依赖更新：旧红色和新蓝色版本同时显示，几何只上传一次；缺失依赖和错误 revision 报错。
-
-`material_asset_contracts` 与 `shared_asset_publication` 覆盖通用记录、非法数据、mip、外部/嵌入图片、角色变体、并发根、共享库 lease、跨机器重导入、当前内容共享和旧模型升级。完整构建和回归结果见 [本轮验证](../openspec/changes/archive/2026-09-12-add-shared-material-texture-assets/verification.md)。上述计数来自小型确定性夹具，不代表大型场景帧率提升。
-
-## 审核后补充的边界
-
-- 包含尚未发布或加载失败的材质选择时，SceneInstance 的 Snapshot 明确报错，避免保存时丢失源文件中的材质引用和覆盖值。移除该实例后可保存其余场景。
-- 模型等待初次加载时，已经接受的整模型/分段材质编辑和清空操作优先于稍后到达的初始加载结果；未编辑的分段继续采用来源中的选择。
-- LoadNativeModel 不传 RenderResourceService 时仍可用于渲染。FModel 从当前已解析的材质数据取得声明快照，沿用通用材质的 Worker shader 编译流程；不同依赖版本的实例仍共享未变几何。
-- 作者引用跟随 ID 的当前文件，不再发布多代际。低层显式 revision 请求仍支持校验；活动快照可继续持有旧对象。同一来源转换中互相矛盾的命名产品仍报错。
+现有原生材质完整保存 Pass、Shader 引用、参数定义、默认值和实际值。通过 Editor 或共享资产编辑服务修改已有资产；当前参数编辑入口不提供从零定义任意 Shader Pass 和参数结构的完整材质创作流程。

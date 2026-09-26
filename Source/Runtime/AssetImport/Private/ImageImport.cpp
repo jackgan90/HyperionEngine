@@ -1,4 +1,4 @@
-#include "Hyperion/AssetImport/MaterialImport.h"
+#include "Hyperion/AssetImport/ImageImport.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/IO/Path.h"
 

@@ -141,29 +141,13 @@ def workflow(cli, tool, directory, mcp):
         state, result = submit(session, state)
         assert result["asset"]["type"] == "hyperion.scene"
         discard(session, state)
-        state = wait_draft(session, completed(session.call("asset.import.draft.prepare", **(request | {
-            "source": "/Game/Wrapped.hasset", "output": "/Game/SceneCopy.hasset"}))))
-        assert state["type"] == "hyperion.scene" and not state["nameEditable"] and state["nodes"]
-        assert session.call("asset.import.draft.edit", draft=state["draft"], generation=state["generation"],
-                            properties={"name": "Unsupported"})["status"] == "failed"
-        state, result = submit(session, state)
-        discard(session, state)
+        for source in ("/Game/Wrapped.hasset", "/Engine/Materials/DefaultPrimitive.hasset"):
+            assert session.call("asset.import.draft.prepare", **(request | {
+                "source": source, "output": "/Game/RejectedNative.hasset"}))["status"] == "failed"
+        assert not (directory / "Game/RejectedNative.hasset").exists()
 
-        material = directory / "Material.json"
-        subprocess.run([str(tool), "export-json", "/Engine/Materials/DefaultPrimitive.hasset", str(material)],
-                       check=True, capture_output=True)
-        material_request = request | {"source": str(material), "output": "/Game/Material.hasset"}
-        state = wait_draft(session, completed(session.call("asset.import.draft.prepare", **material_request)))
-        parameter = next(p for p in state["material"] if p["semantic"] == "Pbr.RoughnessFactor")
-        read_only = next(p for p in state["material"] if not p["editable"])
-        assert session.call("asset.import.draft.edit", draft=state["draft"], generation=state["generation"],
-                            properties={"material": [{"name": read_only["name"], "values": [0]}]})["status"] == "failed"
-        state = edit(session, state, {"name": "Draft material", "material": [{"name": parameter["name"], "values": [0.31]}]})
-        assert abs(next(p for p in state["material"] if p["name"] == parameter["name"])["values"][0] - 0.31) < 1e-6
-        state, result = submit(session, state)
-        discard(session, state)
-
-        sky_request = request | {"source": str(directory / "Sky.json"), "output": "/Game/Sky.hasset"}
+        sky_request = request | {"source": str(directory / "Sky.hdr"), "output": "/Game/Sky.hasset",
+                                 "sky": {"radianceSize": 8, "specularSize": 4, "samples": 8}}
         state = wait_draft(session, completed(session.call("asset.import.draft.prepare", **sky_request)))
         assert state["products"][0]["width"] > 0
         assert state["sourceWidth"] == 2 and state["sky"]["radianceSize"] == 8

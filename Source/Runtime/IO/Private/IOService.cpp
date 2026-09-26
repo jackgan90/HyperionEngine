@@ -20,6 +20,11 @@ void IFileSystem::Remove(const std::filesystem::path&)
 	throw std::logic_error("Storage backend does not support file removal");
 }
 
+bool IFileSystem::RemoveEmptyDirectory(const std::filesystem::path&)
+{
+	return false;
+}
+
 void FMemoryFileSystem::Remove(const std::filesystem::path& InPath)
 {
 	std::lock_guard Lock(Mutex);
@@ -174,7 +179,7 @@ FBytes FMemoryFileSystem::Read(const std::filesystem::path& InPath, std::size_t 
 	auto It = Files.find(InPath.lexically_normal());
 	if (It == Files.end())
 	{
-		throw FFileNotFound("File not found: " + InPath.generic_string());
+		throw FFileNotFound("File not found: " + PathToUtf8(InPath));
 	}
 	if (It->second.size() > InLimit)
 	{

@@ -1,6 +1,7 @@
+#include "Hyperion/AssetImport/AssetSourceJson.h"
 #include "Hyperion/AssetImport/GltfImport.h"
-#include "Hyperion/AssetImport/MaterialImport.h"
-#include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/AssetImport/SkyImport.h"
+#include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
 
 namespace
@@ -58,9 +59,6 @@ void CheckPublicationPolicy(FReferenceFixture& InFixture)
 void CheckReferencesAndLegacyEdits(FReferenceFixture& InFixture)
 {
 	auto& F = InFixture;
-	FAssetImportService Imports(F.IO);
-	RegisterGltfImporter(Imports);
-	RegisterSceneImporter(Imports);
 	const auto ModelBefore = Serialize(*F.Model);
 	auto Scene = F.Scene;
 	auto Found = std::find_if(Scene.Nodes.begin(), Scene.Nodes.end(),
@@ -78,14 +76,9 @@ void CheckReferencesAndLegacyEdits(FReferenceFixture& InFixture)
 	Other.Transform = Translation({-4, 0, 0});
 	Other.Model->Material.Roughness = .2f;
 	Scene.Nodes.push_back(Other);
-	const auto Source = F.Directory / "instances.json";
-	const auto Text = EncodeAssetSourceJson(WriteValue(Scene));
-	const auto Bytes = std::as_bytes(std::span(Text));
-	F.IO.WriteAsync(Source, FBytes(Bytes.begin(), Bytes.end())).Get(F.Tasks);
-	const auto Output = F.Directory / "instances.hasset";
-	FAssetImportOptions Force;
-	Force.bForce = true;
-	Imports.ImportAsync(Source, Output, Force).Get(F.Tasks);
+	const auto Source = F.Directory / "source-instances.hasset";
+	F.IO.WriteAsync(Source, EncodeAsset(RecordType<FSceneManifest>(), &Scene).Bytes).Get(F.Tasks);
+	const auto Output = Source;
 	const auto Restored = F.Assets.LoadAsync<FSceneManifest>(Output).Get(F.Tasks);
 	HYP_CHECK(Restored->Nodes.size() == Scene.Nodes.size() && SceneModelCount(*Restored) == 2);
 	for (std::size_t Index = 0; Index < Scene.Nodes.size(); ++Index)
@@ -106,8 +99,7 @@ void CheckReferencesAndLegacyEdits(FReferenceFixture& InFixture)
 	Part->Name = "Authored child";
 	const auto LegacySource = F.Directory / "expanded.hasset";
 	F.IO.WriteAsync(LegacySource, EncodeAsset(RecordType<FSceneManifest>(), &Scene).Bytes).Get(F.Tasks);
-	const auto LegacyOutput = F.Directory / "preserved.hasset";
-	Imports.ImportAsync(LegacySource, LegacyOutput, Force).Get(F.Tasks);
+	const auto LegacyOutput = LegacySource;
 	const auto Preserved = F.Assets.LoadAsync<FSceneManifest>(LegacyOutput).Get(F.Tasks);
 	HYP_CHECK(Preserved->Nodes.size() == Scene.Nodes.size());
 	for (std::size_t Index = 0; Index < Scene.Nodes.size(); ++Index)

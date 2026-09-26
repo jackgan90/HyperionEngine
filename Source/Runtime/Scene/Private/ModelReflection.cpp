@@ -129,7 +129,7 @@ template<> const FRecordDescriptor& RecordType<FModelAsset>()
 		    [](FArchiveNode::FObject&)
 		    {
 			    throw std::runtime_error(
-			        "Embedded model schema 1 requires AssetTool upgrade to independent material/texture assets");
+			        "Embedded model schema 1 is unsupported; reimport the original glTF/GLB source");
 		    });
 		return Result;
 	}();

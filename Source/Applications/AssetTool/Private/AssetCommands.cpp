@@ -1,10 +1,11 @@
 #include "AssetCommands.h"
 #include "EngineContent.h"
+#include "Hyperion/AssetImport/AssetSourceJson.h"
 #include "Hyperion/AssetImport/GltfImport.h"
-#include "Hyperion/AssetImport/MaterialImport.h"
-#include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/Path.h"
+#include "Hyperion/Scene/SceneManifest.h"
 #include "NativeMigration.h"
 #include <charconv>
 #include <set>
@@ -29,7 +30,7 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 	if (InArguments.size() < 3)
 	{
 		throw std::invalid_argument(
-		    "import/upgrade SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] [--library DIRECTORY]");
+		    "import SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] [--library DIRECTORY]");
 	}
 	FAssetImportOptions Options;
 	for (std::size_t Index = 3; Index < InArguments.size(); ++Index)
@@ -42,6 +43,10 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 		else if (Argument == "--force")
 		{
 			Options.bForce = true;
+		}
+		else if (Argument == "--create-folder")
+		{
+			Options.bCreateFolder = true;
 		}
 		else if (Argument == "--library" && Index + 1 < InArguments.size())
 		{
@@ -94,7 +99,7 @@ void Import(std::span<const std::string_view> InArguments, FIOService& InIO, std
 	}
 	FAssetImportService Imports(InIO);
 	RegisterGltfImporter(Imports);
-	RegisterSceneImporter(Imports);
+	RegisterSkyImporter(Imports);
 	const auto Result =
 	    Imports.ImportAsync(PathFromUtf8(InArguments[1]), PathFromUtf8(InArguments[2]), Options).Get(InIO.TaskSystem());
 	InOutput << (Result->bUpToDate ? "Up to date: " : "Published: ") << PathToUtf8(Result->Output)
@@ -179,13 +184,12 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 	if (InArguments.empty() || InArguments[0] == "--help")
 	{
 		InOutput << "hyperion_asset_tool import SOURCE OUTPUT.hasset [--scene] [--force] [--name NAME] [--type ID] "
-		            "[--library DIRECTORY] [--source-root DIRECTORY --source-id ID] [--root-id ID]\n"
+		            "[--library DIRECTORY] [--source-root DIRECTORY --source-id ID] [--root-id ID] [--create-folder]\n"
 		         << "Global options: --asset-root DIRECTORY --engine-content DIRECTORY [--read-only] [--authoring]\n"
 		         << "Import settings: --texture-encoding srgb|linear; --radiance-size N --specular-size N --samples N "
-		            "(explicit sky settings replace recipe settings)\n"
+		            "(HDR/EXR panorama bake settings)\n"
 		         << "hyperion_asset_tool build-brdf OUTPUT.hasset\n"
 		         << "hyperion_asset_tool --authoring build-placement\n"
-		         << "hyperion_asset_tool upgrade LEGACY.hasset OUTPUT.hasset\n"
 		         << "hyperion_asset_tool inspect|validate ROOT.hasset\n"
 		         << "hyperion_asset_tool validate-library ROOT\n"
 		         << "hyperion_asset_tool --asset-root DIRECTORY migrate-library /Game EMPTY_STAGING_DIRECTORY\n"
@@ -231,7 +235,7 @@ void RunAssetCommand(std::span<const std::string_view> InArguments, FIOService& 
 		         << " instances=" << ModelInstances(*Model).size() << '\n';
 		return;
 	}
-	if (Command == "import" || Command == "upgrade")
+	if (Command == "import")
 	{
 		Import(InArguments, InIO, InOutput);
 		return;

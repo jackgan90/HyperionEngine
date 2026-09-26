@@ -1,9 +1,9 @@
 #include "Hyperion/AssetImport/GltfImport.h"
-#include "Hyperion/AssetImport/SceneImport.h"
 #include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
+#include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 #include <cmath>
@@ -133,6 +133,7 @@ void CheckCanonicalImport(FAssetImportService& InImports, FIOService& InIO, cons
 	auto& Tasks = InIO.TaskSystem();
 	FAssetImportOptions Options;
 	Options.RootId = DefaultSkyReference().Id;
+	Options.Conversion.Sky = FEnvironmentBakeSettings{8, 4, 16};
 	Options.Library = InOutput.parent_path();
 	const auto First = InImports.ImportAsync(InSource, InOutput, Options).Get(Tasks);
 	HYP_CHECK(First->Header.Id == Options.RootId);
@@ -175,7 +176,7 @@ void CheckImports()
 	FIOService IO(Tasks);
 	FAssetImportService Imports(IO);
 	RegisterGltfImporter(Imports);
-	RegisterSceneImporter(Imports);
+	RegisterSkyImporter(Imports);
 	const auto Root = std::filesystem::path(HYP_SOURCE_DIR);
 	for (const auto* Name : {"Cloudy.hdr", "Dusk.exr", "Clear.hdr"})
 	{
@@ -186,20 +187,18 @@ void CheckImports()
 	}
 	const auto Work = std::filesystem::absolute("environment-test") / CreateIdentifier();
 	const auto Output = Work / "Cloudy.hasset";
-	const std::string Descriptor = "{\"type\":\"hyperion.skyasset\",\"schema_version\":1,\"source\":\"" +
-	                               PathToUtf8(Root / "out/fixtures/Sources/Skies/Cloudy.hdr") +
-	                               "\",\"radiance_size\":8,\"specular_size\":4,\"samples\":16}";
-	const auto Bytes = std::as_bytes(std::span(Descriptor));
-	IO.WriteAsync(Work / "Cloudy.json", FBytes(Bytes.begin(), Bytes.end())).Get(Tasks);
-	const auto Imported = Imports.ImportAsync(Work / "Cloudy.json", Output).Get(Tasks);
+	const auto Source = Root / "out/fixtures/Sources/Skies/Cloudy.hdr";
+	FAssetImportOptions Options;
+	Options.Conversion.Sky = FEnvironmentBakeSettings{8, 4, 16};
+	const auto Imported = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
 	HYP_CHECK(Imported->WrittenAssets >= 4 || Imported->bUpToDate);
 	FAssetService Assets(IO);
 	RegisterSceneAssetTypes(Assets.Types());
 	const auto Graph = Assets.LoadGraphAsync(Output).Get(Tasks);
 	HYP_CHECK(Graph->Failures.empty() && Graph->Root->As<FSkyAsset>()->Convention == 1);
 	HYP_CHECK(Graph->Assets.size() == 4);
-	HYP_CHECK(Imports.ImportAsync(Work / "Cloudy.json", Output).Get(Tasks)->bUpToDate);
-	CheckCanonicalImport(Imports, IO, Work / "Cloudy.json", Work / "Canonical" / "Cloudy.hasset");
+	HYP_CHECK(Imports.ImportAsync(Source, Output, Options).Get(Tasks)->bUpToDate);
+	CheckCanonicalImport(Imports, IO, Source, Work / "Canonical" / "Cloudy.hasset");
 	std::cout << "HDR/EXR decode, native dependency graph and incremental import passed\n";
 }
 } // namespace

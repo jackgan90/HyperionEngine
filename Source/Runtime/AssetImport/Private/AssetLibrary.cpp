@@ -4,7 +4,6 @@
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
-#include <cctype>
 
 namespace Hyperion
 {
@@ -55,14 +54,39 @@ std::filesystem::path ImportProductPath(const std::filesystem::path& InSource, s
 
 void FPublication::LoadLibrary()
 {
-	const auto Discovery = DispatchAsync<FAssetDiscovery>(
-	                           IO.TaskSystem(), {EDomain::Io},
-	                           [Storage = IO.FileSystem(), Directory = Library]
-	                           {
-		                           return DiscoverAssets(*Storage, Directory);
-	                           },
-	                           Cancellation)
-	                           .Get(IO.TaskSystem());
+	std::map<std::string, std::string> TextureContents;
+	const auto Entries = DispatchAsync<std::vector<FDirectoryEntry>>(
+	                         IO.TaskSystem(), {EDomain::Io},
+	                         [Files = IO.FileSystem(), Directory = Library]
+	                         {
+		                         return ImportDirectoryEntries(*Files, Directory);
+	                         },
+	                         Cancellation)
+	                         .Get(IO.TaskSystem());
+	for (const auto& Entry : *Entries)
+	{
+		ReservedPaths.insert(PathCaseKey(Entry.Path));
+	}
+	const auto Discovery =
+	    DispatchAsync<FAssetDiscovery>(
+	        IO.TaskSystem(), {EDomain::Io},
+	        [Storage = IO.FileSystem(), Directory = Library]
+	        {
+		        try
+		        {
+			        return DiscoverAssets(*Storage, Directory);
+		        }
+		        catch (const std::filesystem::filesystem_error& Failure)
+		        {
+			        if (Failure.code() == std::errc::no_such_file_or_directory && !Storage->Exists(Directory))
+			        {
+				        return FAssetDiscovery{};
+			        }
+			        throw;
+		        }
+	        },
+	        Cancellation)
+	        .Get(IO.TaskSystem());
 	for (const auto& [Path, Error] : Discovery->Errors)
 	{
 		if (Path != Output)
@@ -79,6 +103,14 @@ void FPublication::LoadLibrary()
 		ExistingAssets.emplace(Entry.Header.Id, FPublishedAsset{{Entry.Header.Id, ImportPathString(Entry.Path),
 		                                                         Entry.Header.TypeId, Entry.Header.Revision},
 		                                                        Entry.Path});
+		if (Entry.Header.Import && Entry.Header.TypeId == "hyperion.textureasset")
+		{
+			if (const auto It = Entry.Header.Import->Settings.find("texture_content");
+			    It != Entry.Header.Import->Settings.end() && !It->second.empty())
+			{
+				TextureContents.emplace(Entry.Header.Id, It->second);
+			}
+		}
 	}
 	for (const auto& Entry : Discovery->Entries)
 	{
@@ -101,6 +133,13 @@ void FPublication::LoadLibrary()
 			const auto [It, bInserted] = LibraryProducts.emplace(Key, Target->second.Reference);
 			if (!bInserted && It->second.Id != Id)
 			{
+				const auto Existing = TextureContents.find(It->second.Id);
+				const auto Candidate = TextureContents.find(Id);
+				if (Existing != TextureContents.end() && Candidate != TextureContents.end() &&
+				    Existing->second == Candidate->second)
+				{
+					continue;
+				}
 				throw std::runtime_error("Conflicting import product identity: " + Key);
 			}
 		}
@@ -116,7 +155,7 @@ FAssetService& FPublication::IndexedAssets()
 		{
 			Assets->Types().Register(*Importer.Type);
 		}
-		Assets->Types().Register<FSceneManifest>();
+		RegisterSceneAssetTypes(Assets->Types());
 		DispatchAsync<bool>(
 		    IO.TaskSystem(), {EDomain::Io},
 		    [&]
@@ -131,7 +170,7 @@ FAssetService& FPublication::IndexedAssets()
 	return *NativeAssets;
 }
 
-std::string FPublication::SelectId(const std::string& InKey, const FConvertedAsset& InAsset, bool bInRoot) const
+std::string FPublication::SelectId(const std::string& InKey, bool bInRoot) const
 {
 	if (bInRoot)
 	{
@@ -145,10 +184,10 @@ std::string FPublication::SelectId(const std::string& InKey, const FConvertedAss
 	{
 		return It->second.Id;
 	}
-	return InAsset.NativeHeader ? InAsset.NativeHeader->Id : CreateIdentifier();
+	return CreateIdentifier();
 }
 
-std::filesystem::path FPublication::ProductDestination(std::string_view InId, const FConvertedAsset& InAsset) const
+std::filesystem::path FPublication::ProductDestination(std::string_view InId, const FConvertedAsset& InAsset)
 {
 	if (const auto It = ExistingAssets.find(std::string(InId)); It != ExistingAssets.end())
 	{
@@ -158,7 +197,39 @@ std::filesystem::path FPublication::ProductDestination(std::string_view InId, co
 		}
 		return It->second.Path;
 	}
-	return AssetProductPath(*InAsset.Type, InAsset.Object.get(), Library, InId);
+	const auto Id = std::string(InId);
+	if (const auto It = ProductPaths.find(Id); It != ProductPaths.end())
+	{
+		return It->second;
+	}
+	auto Name = AssetProductName(*InAsset.Type, InAsset.Object.get());
+	if (Name.empty())
+	{
+		Name = "Asset";
+	}
+	const auto Destination =
+	    DispatchAsync<std::filesystem::path>(
+	        IO.TaskSystem(), {EDomain::Io},
+	        [this, Name]
+	        {
+		        const auto RootKey = PathCaseKey(Output);
+		        for (std::uint32_t Index = 1; Index <= 1000000; ++Index)
+		        {
+			        const auto Candidate = Library / PathFromUtf8(Name + "_" + std::to_string(Index) + ".hasset");
+			        const auto Key = PathCaseKey(Candidate);
+			        if (Key != RootKey && !ReservedPaths.contains(Key) && !IO.FileSystem()->Exists(Candidate))
+			        {
+				        return Candidate;
+			        }
+		        }
+		        throw std::runtime_error("No available filename for imported asset: " + Name);
+	        },
+	        Cancellation)
+	        .Get(IO.TaskSystem());
+	// Reserve before recursive dependency traversal, including products not yet staged for writing.
+	ProductPaths.emplace(Id, *Destination);
+	ReservedPaths.insert(PathCaseKey(*Destination));
+	return *Destination;
 }
 
 void FPublication::AddProducts(const std::filesystem::path& InSource, const FConvertedAsset& InAsset)

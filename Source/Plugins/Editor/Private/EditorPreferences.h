@@ -9,6 +9,7 @@ struct FEditorPreferences
 	bool bRenderDocCapture{};
 	std::filesystem::path AssetRoot;
 	std::vector<std::filesystem::path> RecentRoots;
+	std::filesystem::path ImportOutputDirectory;
 };
 
 bool SameAssetRoot(const std::filesystem::path& InFirst, const std::filesystem::path& InSecond);

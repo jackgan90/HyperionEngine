@@ -7,6 +7,9 @@ void FPublication::Commit()
 	CheckSources();
 	std::map<std::filesystem::path, std::optional<FBytes>> PreviousBytes;
 	std::vector<std::filesystem::path> Changed;
+	const auto Marker = Output.parent_path() / ".import-source";
+	const auto KeyBytes = std::as_bytes(std::span(FolderKey));
+	const FBytes MarkerBytes(KeyBytes.begin(), KeyBytes.end());
 	for (const auto& [Path, Asset] : Staged)
 	{
 		const auto Existing = IO.TryReadAsync(Path, Cancellation).Get(IO.TaskSystem());
@@ -20,6 +23,19 @@ void FPublication::Commit()
 			Changed.push_back(Path);
 		}
 	}
+	if (!FolderKey.empty())
+	{
+		const auto Existing = IO.TryReadAsync(Marker, Cancellation).Get(IO.TaskSystem());
+		if (*Existing && **Existing != MarkerBytes)
+		{
+			throw std::runtime_error("Import folder ownership changed before publication");
+		}
+		if (!*Existing)
+		{
+			PreviousBytes.emplace(Marker, *Existing);
+			Changed.push_back(Marker);
+		}
+	}
 	if (PreviousBytes.contains(Output))
 	{
 		Changed.push_back(Output);
@@ -31,8 +47,12 @@ void FPublication::Commit()
 		{
 			Cancellation.Check();
 			Attempted.push_back(Path);
-			IO.WriteAsync(Path, Staged.at(Path).Bytes, Cancellation).Get(IO.TaskSystem());
-			++Written;
+			IO.WriteAsync(Path, Path == Marker ? MarkerBytes : Staged.at(Path).Bytes, Cancellation)
+			    .Get(IO.TaskSystem());
+			if (Path != Marker)
+			{
+				++Written;
+			}
 		}
 	}
 	catch (const std::exception& Failure)

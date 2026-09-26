@@ -38,6 +38,8 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			break;
 		}
 		case 4:
+			// Exercise the same selection handler used by the native Browse dialog.
+			ImportPanel->SetOutputDirectory(Options.ExerciseImport.parent_path() / "Game/Destination");
 			ExerciseClick(InEvents, ImportPanel->OutputBounds);
 			break;
 		case 5:
@@ -50,6 +52,10 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 				}
 				if (Draft.Status == "ready")
 				{
+					if (ImportPanel->OutputFolder != "/Game/Destination/Color")
+					{
+						throw std::runtime_error("Browse selection did not update the displayed import folder");
+					}
 					++ExerciseStep;
 				}
 			}
@@ -107,7 +113,15 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, ImportPanel->ImportBounds);
 			break;
 		case 13:
-			ExerciseClick(InEvents, ImportPanel->CloseBounds);
+			if (ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
+			{
+				break;
+			}
+			if (!ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			{
+				PlacementCapture = Options.ExerciseImport.parent_path() / "ImportSuccess.png";
+			}
+			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
 			break;
 		case 14:
 		{
@@ -116,7 +130,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				break;
 			}
-			if (ImportPanel->bOpen || State.Tasks.front().Status != "completed" ||
+			if (!ImportPanel->bOpen || State.Tasks.front().Status != "completed" ||
 			    State.Tasks.front().Result->WrittenAssets != 1)
 			{
 				throw std::runtime_error("GUI import failed: " + State.Tasks.front().Error);
@@ -146,6 +160,136 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 				throw std::runtime_error("GUI reimport did not preserve zero-write freshness: " +
 				                         State.Tasks.front().Error);
 			}
+			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
+			break;
+		}
+		case 19:
+		{
+			if (ImportPanel->Request.Output != "/Game/Automatic.hasset")
+			{
+				ImportPanel->Request.Output = "/Game/Automatic.hasset";
+				break;
+			}
+			const auto Draft = Imports->Draft({ImportPanel->DraftId});
+			if (Draft.Status != "ready" || Draft.Name != "Color")
+			{
+				break;
+			}
+			FImportPropertyEdits Edits;
+			Edits.Name = "Keep these edits";
+			Imports->EditDraft({Draft.Draft, Draft.Generation, Edits});
+			ImportPanel->Request.Output = "/Game/Changed.hasset";
+			++ExerciseStep;
+			break;
+		}
+		case 20:
+			if (ImportPanel->RefreshCancelBounds.Z > ImportPanel->RefreshCancelBounds.X)
+			{
+				ExerciseClick(InEvents, ImportPanel->RefreshCancelBounds);
+			}
+			break;
+		case 21:
+			if (ImportPanel->Request.Output != "/Game/Automatic.hasset" ||
+			    Imports->Draft({ImportPanel->DraftId}).Name != "Keep these edits")
+			{
+				throw std::runtime_error("Cancelling automatic refresh lost settings or property edits");
+			}
+			ImportPanel->Request.Output = "/Game/Changed.hasset";
+			++ExerciseStep;
+			break;
+		case 22:
+			if (ImportPanel->RefreshApplyBounds.Z > ImportPanel->RefreshApplyBounds.X)
+			{
+				ExerciseClick(InEvents, ImportPanel->RefreshApplyBounds);
+			}
+			break;
+		case 23:
+		{
+			const auto Draft = Imports->Draft({ImportPanel->DraftId});
+			if (Draft.Status != "ready" || Draft.Name != "Color")
+			{
+				break;
+			}
+			if (Draft.bDirty || ImportPanel->Request.Output != "/Game/Changed.hasset")
+			{
+				throw std::runtime_error("Confirmed automatic refresh did not apply the new settings");
+			}
+			auto Bytes = *IO.ReadAsync(Options.ExerciseImport).Get(IO.TaskSystem());
+			Bytes.push_back(std::byte{});
+			IO.WriteAsync(Options.ExerciseImport, std::move(Bytes)).Get(IO.TaskSystem());
+			++ExerciseStep;
+			break;
+		}
+		case 24:
+			ExerciseClick(InEvents, ImportPanel->ImportBounds);
+			break;
+		case 25:
+		{
+			const auto State = Imports->List();
+			if (State.Tasks.size() < 3 || State.Tasks.front().Status == "running")
+			{
+				break;
+			}
+			if (State.Tasks.front().Status != "failed" || State.Tasks.front().Error.empty() ||
+			    IO.FileSystem()->Exists("/Game/Changed.hasset"))
+			{
+				throw std::runtime_error("Changed source was not rejected before publication");
+			}
+			if (ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
+			{
+				break;
+			}
+			if (!ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			{
+				PlacementCapture = Options.ExerciseImport.parent_path() / "ImportFailure.png";
+			}
+			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
+			break;
+		}
+		case 26:
+		{
+			const auto Draft = Imports->Draft({ImportPanel->DraftId});
+			if (Draft.Status == "failed")
+			{
+				throw std::runtime_error("Source refresh after failed import failed: " + Draft.Error);
+			}
+			if (Draft.Status == "ready" && Draft.Error.empty() &&
+			    ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
+			{
+				++ExerciseStep;
+			}
+			break;
+		}
+		case 27:
+			ExerciseClick(InEvents, ImportPanel->ImportBounds);
+			break;
+		case 28:
+		{
+			const auto State = Imports->List();
+			if (State.Tasks.size() < 4 || State.Tasks.front().Status == "running")
+			{
+				break;
+			}
+			if (State.Tasks.front().Status != "completed")
+			{
+				throw std::runtime_error("Retry did not use the refreshed source: " + State.Tasks.front().Error);
+			}
+			if (ImportPanel->OutputFolder != PathToUtf8(PathFromUtf8(State.Tasks.front().Output).parent_path()))
+			{
+				throw std::runtime_error("Save as does not match the current completed request");
+			}
+			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
+			break;
+		}
+		case 29:
+		{
+			if (ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			{
+				break;
+			}
+			auto Bytes = *IO.ReadAsync(Options.ExerciseImport).Get(IO.TaskSystem());
+			Bytes.pop_back();
+			IO.WriteAsync(Options.ExerciseImport, std::move(Bytes)).Get(IO.TaskSystem());
 			PlacementCapture = Options.ExerciseImport.parent_path() / "ImportPanel.png";
 			bImportVerified = true;
 			Log(ELogLevel::Info, "Import GUI acceptance passed");

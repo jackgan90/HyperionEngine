@@ -82,20 +82,19 @@ FLoadedAsset FAssetService::FImpl::Read(const std::filesystem::path& InPath)
 		Result.Type = Registry.Find(Document.Header.TypeId);
 		Result.Path = InPath;
 		Result.Header = std::move(Document.Header);
-		Result.Object = ReadRecord(*Result.Type, Document.Object, {InPath.generic_string(), &Result.Diagnostics});
+		Result.Object = ReadRecord(*Result.Type, Document.Object, {PathToUtf8(InPath), &Result.Diagnostics});
 		Result.Header.Dependencies = CollectAssetDependencies(*Result.Type, Result.Object.get());
 		Result.RetainedBytes = Document.StoredBytes * 2;
 		if (Document.bLegacy)
 		{
-			Result.Diagnostics.push_back(
-			    "Legacy archive loaded; use hyperion_asset_tool upgrade to publish a native asset");
+			Result.Diagnostics.push_back("Legacy archive loaded using compatibility support");
 		}
 		Cancellation.Check();
 		return Result;
 	}
 	catch (const std::exception& Error)
 	{
-		throw std::runtime_error(InPath.generic_string() + ": " + Error.what());
+		throw std::runtime_error(PathToUtf8(InPath) + ": " + Error.what());
 	}
 }
 
@@ -355,7 +354,7 @@ void FAssetRequest::Validate(const FLoadedAsset& InAsset) const
 	    (Expected->TypeId != InAsset.Header.TypeId || (!Expected->Id.empty() && Expected->Id != InAsset.Header.Id) ||
 	     (!Expected->Revision.empty() && Expected->Revision != InAsset.Header.Revision)))
 	{
-		throw std::runtime_error("Asset reference identity/type/revision mismatch: " + InAsset.Path.generic_string());
+		throw std::runtime_error("Asset reference identity/type/revision mismatch: " + PathToUtf8(InAsset.Path));
 	}
 }
 

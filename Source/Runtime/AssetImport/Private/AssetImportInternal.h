@@ -3,6 +3,11 @@
 
 namespace Hyperion
 {
+std::vector<FDirectoryEntry> ImportDirectoryEntries(IFileSystem& InFiles, const std::filesystem::path& InDirectory);
+std::string ImportFolderKey(FIOService& InIO, const std::filesystem::path& InSource,
+                            const std::filesystem::path& InOutput);
+std::filesystem::path SelectImportFolderOutput(FIOService& InIO, const std::filesystem::path& InSource,
+                                               const std::filesystem::path& InOutput);
 std::string ImportPathString(const std::filesystem::path& InPath);
 std::string ImportRelativePath(const std::filesystem::path& InPath, const std::filesystem::path& InBase);
 std::filesystem::path ImportPath(const std::filesystem::path& InPath);
@@ -28,6 +33,8 @@ struct FAssetImportService::FImpl
 	                        const FAssetConversionSettings& InSettings = {});
 	FAssetImportResult Publish(const std::filesystem::path& InSource, const std::filesystem::path& InOutput,
 	                           const FAssetImportOptions& InOptions);
+	FAssetImportResult PublishGrouped(const std::filesystem::path& InSource, const std::filesystem::path& InOutput,
+	                                  const FAssetImportOptions& InOptions);
 	void Trim();
 	FPreparedImport Prepare(const std::filesystem::path& InSource, const std::filesystem::path& InOutput,
 	                        const FAssetImportOptions& InOptions);

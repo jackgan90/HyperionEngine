@@ -1,5 +1,5 @@
+#include "Hyperion/AssetImport/AssetSourceJson.h"
 #include "Hyperion/AssetImport/ImportWorkspace.h"
-#include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -140,7 +140,8 @@ void CheckImage(FFixture& InFixture)
 
 void CheckSky(FFixture& InFixture)
 {
-	auto Request = InFixture.Request("Sky.hdr", "Sky.hasset");
+	auto Request = InFixture.Request("Sky.hdr", "Nested/Sky.hasset");
+	Request.Library.clear();
 	Request.Sky = FEnvironmentBakeSettings{8, 4, 8};
 	const auto First = InFixture.Wait(InFixture.Imports->Start(Request));
 	const auto Again = InFixture.Wait(InFixture.Imports->Start(Request));
@@ -148,7 +149,9 @@ void CheckSky(FFixture& InFixture)
 	Request.Sky->RadianceSize = 16;
 	const auto Changed = InFixture.Wait(InFixture.Imports->Start(Request));
 	HYP_CHECK(Changed.Asset.Id == First.Asset.Id && !Changed.bUpToDate);
-	const auto Sky = InFixture.Assets->LoadAsync<FSkyAsset>("/Game/Sky.hasset").Get(InFixture.Tasks);
+	const auto Sky = InFixture.Assets->LoadAsync<FSkyAsset>("/Game/Nested/Sky.hasset").Get(InFixture.Tasks);
+	HYP_CHECK(PathFromUtf8(Sky->Radiance.Path).parent_path() == "/Game/Nested");
+	HYP_CHECK(PathFromUtf8(Sky->Specular.Path).parent_path() == "/Game/Nested");
 	const auto Radiance =
 	    InFixture.Assets->LoadAsync<FTextureAsset>(PathFromUtf8(Sky->Radiance.Path)).Get(InFixture.Tasks);
 	HYP_CHECK(Radiance->Dimension == ETextureDimension::Cube && Radiance->Mips.front().Width == 16);
@@ -198,6 +201,181 @@ FImportDraftInfo WaitDraft(FFixture& InFixture, const std::string& InId)
 		}
 		HYP_CHECK(std::chrono::steady_clock::now() < End);
 		std::this_thread::yield();
+	}
+}
+
+void CheckGroupedImports(FFixture& InFixture)
+{
+	auto Request = InFixture.Request("Color.png", "Grouped/Custom.hasset");
+	Request.Library.clear();
+	Request.bCreateFolder = true;
+	const auto BeforePreview = InFixture.IO->Statistics().Writes.load();
+	HYP_CHECK(InFixture.Imports->Validate(Request).Folder == "/Game/Grouped/Color");
+	const auto Preview = WaitDraft(InFixture, InFixture.Imports->PrepareDraft(Request).Draft);
+	HYP_CHECK(Preview.Status == "ready");
+	HYP_CHECK(InFixture.IO->Statistics().Writes.load() == BeforePreview);
+	HYP_CHECK(!InFixture.Files->Exists("/Game/Grouped"));
+	InFixture.Imports->DiscardDraft({Preview.Draft, Preview.Generation, true});
+	const auto First = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(First.Asset.Path == "/Game/Grouped/Color/Custom.hasset");
+	HYP_CHECK(First.WrittenAssets == 1);
+	const auto Writes = InFixture.IO->Statistics().Writes.load();
+	const auto Again = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(Again.Asset == First.Asset && Again.bUpToDate && Again.WrittenAssets == 0);
+	HYP_CHECK(InFixture.IO->Statistics().Writes.load() == Writes);
+	InFixture.Content->UnregisterParticipant(*InFixture.Imports);
+	InFixture.Imports->Drain();
+	InFixture.Imports = std::make_unique<FAssetImportWorkspace>(*InFixture.IO, *InFixture.Assets, *InFixture.Content);
+	InFixture.Content->RegisterParticipant(*InFixture.Imports);
+	HYP_CHECK(InFixture.Wait(InFixture.Imports->Start(Request)).bUpToDate);
+	Request.TextureEncoding = EMaterialTextureEncoding::Linear;
+	const auto Changed = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(Changed.Asset.Id == First.Asset.Id && Changed.Asset.Path == First.Asset.Path &&
+	          Changed.WrittenAssets == 1);
+	const auto Bytes = InFixture.IO->ReadAsync(InFixture.Root / "Color.png").Get(InFixture.Tasks);
+	InFixture.IO->WriteAsync(InFixture.Root / "Other/Color.png", *Bytes).Get(InFixture.Tasks);
+	auto Other = Request;
+	Other.Source = PathToUtf8(InFixture.Root / "Other/Color.png");
+	HYP_CHECK(InFixture.Imports->Validate(Other).Folder == "/Game/Grouped/Color_1");
+	const auto Collision = InFixture.Wait(InFixture.Imports->Start(Other));
+	HYP_CHECK(Collision.Asset.Path == "/Game/Grouped/Color_1/Custom.hasset");
+	HYP_CHECK(Collision.Asset.Id != First.Asset.Id);
+	// An unrelated folder occupies the basename in a new destination.
+	std::filesystem::create_directories(InFixture.Root / "Game/Elsewhere/Color");
+	Request.Output = "/Game/Elsewhere/Custom.hasset";
+	const auto Elsewhere = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(Elsewhere.Asset.Path == "/Game/Elsewhere/Color_1/Custom.hasset");
+	std::filesystem::remove(InFixture.Root / "Game/Elsewhere/Color");
+	HYP_CHECK(InFixture.Wait(InFixture.Imports->Start(Request)).Asset == Elsewhere.Asset);
+	InFixture.IO->WriteAsync(InFixture.Root / "Color.png", EncodePng(FImage{1, 1, EColorSpace::Srgb, {1, 0, 0, 1}}))
+	    .Get(InFixture.Tasks);
+	const auto SourceChanged = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(SourceChanged.Asset.Id == Elsewhere.Asset.Id && SourceChanged.Asset.Path == Elsewhere.Asset.Path &&
+	          SourceChanged.WrittenAssets == 1);
+	InFixture.IO->WriteAsync(InFixture.Root / "Color.png", *Bytes).Get(InFixture.Tasks);
+	// Multiple sky products stay together, and setting changes retain the folder.
+	auto SkyRequest = InFixture.Request("Sky.hdr", "Grouped/Evening.hasset");
+	SkyRequest.Library.clear();
+	SkyRequest.bCreateFolder = true;
+	SkyRequest.Sky = FEnvironmentBakeSettings{8, 4, 8};
+	const auto SkyResult = InFixture.Wait(InFixture.Imports->Start(SkyRequest));
+	HYP_CHECK(SkyResult.Asset.Path == "/Game/Grouped/Sky/Evening.hasset");
+	const auto Sky = InFixture.Assets->LoadAsync<FSkyAsset>(PathFromUtf8(SkyResult.Asset.Path)).Get(InFixture.Tasks);
+	HYP_CHECK(PathFromUtf8(Sky->Radiance.Path).parent_path() == "/Game/Grouped/Sky");
+	HYP_CHECK(PathFromUtf8(Sky->Specular.Path).parent_path() == "/Game/Grouped/Sky");
+	SkyRequest.Sky->RadianceSize = 16;
+	HYP_CHECK(InFixture.Wait(InFixture.Imports->Start(SkyRequest)).Asset.Id == SkyResult.Asset.Id);
+	HYP_CHECK(InFixture.Wait(InFixture.Imports->Start(SkyRequest)).bUpToDate);
+}
+
+void CheckGroupedDestinationEdges(FFixture& InFixture)
+{
+	auto Request = InFixture.Request("Color.png", "CaseCollision/Color.hasset");
+	Request.Library.clear();
+	Request.bCreateFolder = true;
+	std::filesystem::create_directories(InFixture.Root / "Game/CaseCollision/color");
+	HYP_CHECK(InFixture.Imports->Validate(Request).Folder == "/Game/CaseCollision/Color_1");
+	HYP_CHECK(InFixture.Wait(InFixture.Imports->Start(Request)).Asset.Path ==
+	          "/Game/CaseCollision/Color_1/Color.hasset");
+	InFixture.IO->WriteAsync("/Game/CorruptMarker/Unrelated/.import-source", FBytes(129)).Get(InFixture.Tasks);
+	Request.Output = "/Game/CorruptMarker/Color.hasset";
+	HYP_CHECK(InFixture.Wait(InFixture.Imports->Start(Request)).Asset.Path == "/Game/CorruptMarker/Color/Color.hasset");
+	HYP_CHECK(InFixture.IO->ReadAsync("/Game/CorruptMarker/Unrelated/.import-source").Get(InFixture.Tasks)->size() ==
+	          129);
+	const auto Bytes = InFixture.IO->ReadAsync(InFixture.Root / "Color.png").Get(InFixture.Tasks);
+	InFixture.IO->WriteAsync(InFixture.Root / PathFromUtf8("Ä.png"), *Bytes).Get(InFixture.Tasks);
+	std::filesystem::create_directories(InFixture.Root / PathFromUtf8("Game/Unicode/ä"));
+	Request.Source = PathToUtf8(InFixture.Root / PathFromUtf8("Ä.png"));
+	Request.Output = "/Game/Unicode/Result.hasset";
+	HYP_CHECK(InFixture.Imports->Validate(Request).Folder == "/Game/Unicode/Ä_1");
+	const auto Unicode = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(Unicode.Asset.Path == "/Game/Unicode/Ä_1/Result.hasset");
+	HYP_CHECK(InFixture.Assets->LoadAsync<FTextureAsset>(PathFromUtf8(Unicode.Asset.Path)).Get(InFixture.Tasks)->Name ==
+	          "Ä");
+	const auto UnicodeRepeat = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(UnicodeRepeat.bUpToDate && UnicodeRepeat.WrittenAssets == 0 && UnicodeRepeat.Asset == Unicode.Asset);
+	for (const auto* Name : {"Trailing..png", "Trailing .png"})
+	{
+		InFixture.IO->WriteAsync(InFixture.Root / Name, *Bytes).Get(InFixture.Tasks);
+		Request.Source = PathToUtf8(InFixture.Root / Name);
+		Request.Output = "/Game/SafeNames/Result.hasset";
+		const auto Result = InFixture.Wait(InFixture.Imports->Start(Request));
+		HYP_CHECK(Result.Asset.Path == (std::string(Name) == "Trailing..png"
+		                                    ? "/Game/SafeNames/Trailing/Result.hasset"
+		                                    : "/Game/SafeNames/Trailing_1/Result.hasset"));
+	}
+	Request = InFixture.Request("Color.png", "ProductCase/sky_radiance_1.hasset");
+	Request.Library.clear();
+	const auto Existing = InFixture.Wait(InFixture.Imports->Start(Request));
+	Request.Source = PathToUtf8(InFixture.Root / "Sky.hdr");
+	Request.Output = "/Game/ProductCase/Sky.hasset";
+	Request.Sky = FEnvironmentBakeSettings{8, 4, 8};
+	InFixture.Wait(InFixture.Imports->Start(Request));
+	const auto Sky = InFixture.Assets->LoadAsync<FSkyAsset>("/Game/ProductCase/Sky.hasset").Get(InFixture.Tasks);
+	HYP_CHECK(Sky->Radiance.Path == "/Game/ProductCase/Sky_radiance_2.hasset");
+	HYP_CHECK(InFixture.Assets->LoadAsync("/Game/ProductCase/sky_radiance_1.hasset").Get(InFixture.Tasks)->Header.Id ==
+	          Existing.Asset.Id);
+}
+
+void CheckFailedGroupCleanup(FFixture& InFixture)
+{
+	auto Request = InFixture.Request("BrokenGroup.png", "FailedGroup/BrokenGroup.hasset");
+	Request.Library.clear();
+	Request.bCreateFolder = true;
+	InFixture.IO->WriteAsync(InFixture.Root / "BrokenGroup.png", FBytes{std::byte{0}}).Get(InFixture.Tasks);
+	for (unsigned Attempt = 0; Attempt < 2; ++Attempt)
+	{
+		Reject(
+		    [&]
+		    {
+			    InFixture.Wait(InFixture.Imports->Start(Request));
+		    });
+		HYP_CHECK(!InFixture.Files->Exists("/Game/FailedGroup/BrokenGroup"));
+	}
+	const auto Bytes = InFixture.IO->ReadAsync(InFixture.Root / "Color.png").Get(InFixture.Tasks);
+	InFixture.IO->WriteAsync(InFixture.Root / "BrokenGroup.png", *Bytes).Get(InFixture.Tasks);
+	const auto Result = InFixture.Wait(InFixture.Imports->Start(Request));
+	HYP_CHECK(Result.Asset.Path == "/Game/FailedGroup/BrokenGroup/BrokenGroup.hasset");
+	InFixture.IO->WriteAsync(InFixture.Root / "BrokenGroup.png", FBytes{std::byte{0}}).Get(InFixture.Tasks);
+	Reject(
+	    [&]
+	    {
+		    InFixture.Wait(InFixture.Imports->Start(Request));
+	    });
+	HYP_CHECK(InFixture.Files->Exists(PathFromUtf8(Result.Asset.Path)));
+	HYP_CHECK(!InFixture.Files->RemoveEmptyDirectory("/Game/FailedGroup/BrokenGroup"));
+	HYP_CHECK(!InFixture.Files->RemoveEmptyDirectory(PathFromUtf8(Result.Asset.Path)));
+	HYP_CHECK(InFixture.Files->Exists(PathFromUtf8(Result.Asset.Path)));
+}
+
+void CheckPanoramaDimensions(FFixture& InFixture)
+{
+	for (const std::string Extension : {".hdr", ".exr"})
+	{
+		const auto Source = "Square" + Extension;
+		if (Extension == ".hdr")
+		{
+			const std::string Header = "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 2\n";
+			const auto Bytes = std::as_bytes(std::span(Header));
+			FBytes Image(Bytes.begin(), Bytes.end());
+			for (int Pixel = 0; Pixel < 4; ++Pixel)
+			{
+				Image.insert(Image.end(), {std::byte{128}, std::byte{128}, std::byte{128}, std::byte{129}});
+			}
+			InFixture.IO->WriteAsync(InFixture.Root / Source, std::move(Image)).Get(InFixture.Tasks);
+		}
+		else
+		{
+			SaveImage(InFixture.Root / Source, FImage{2, 2, EColorSpace::Linear, std::vector<float>(16, 1.f)});
+		}
+		const auto Request = InFixture.Request(Source, "RejectedSky.hasset");
+		const auto Before = InFixture.IO->Statistics().Writes.load();
+		const auto State = WaitDraft(InFixture, InFixture.Imports->PrepareDraft(Request).Draft);
+		HYP_CHECK(State.Status == "failed");
+		HYP_CHECK(State.Error.find("2 x 2") != std::string::npos && State.Error.find("2:1") != std::string::npos);
+		HYP_CHECK(InFixture.IO->Statistics().Writes.load() == Before);
+		HYP_CHECK(!InFixture.Files->Exists("/Game/RejectedSky.hasset"));
+		InFixture.Imports->DiscardDraft({State.Draft, State.Generation, true});
 	}
 }
 
@@ -284,6 +462,26 @@ void CheckDraftFreshness(FFixture& InFixture)
 	InFixture.Content->Change(InFixture.Root / "Game");
 }
 
+void CheckOutputValidation(FFixture& InFixture)
+{
+	auto Request = InFixture.Request("Color.png", "Check.hasset");
+	Request.Output = PathToUtf8(InFixture.Root / "Game/Nested/Check.hasset");
+	HYP_CHECK(InFixture.Imports->Validate(Request).Output == "/Game/Nested/Check.hasset");
+	InFixture.Content->Clear({Request.Generation, false});
+	Request.Generation = InFixture.Content->Info().Generation;
+	Request.Output = PathToUtf8(InFixture.Root / "Outside.hasset");
+	try
+	{
+		InFixture.Imports->ValidateOutput(Request);
+		HYP_CHECK(false);
+	}
+	catch (const FAssetImportError& Failure)
+	{
+		HYP_CHECK(Failure.Code == "root_unset");
+	}
+	InFixture.Content->Change(InFixture.Root / "Game");
+}
+
 void CheckLifecycle(FFixture& InFixture)
 {
 	auto Request = InFixture.Request("Color.png", "Final.hasset");
@@ -336,8 +534,13 @@ int main()
 		CheckImage(Fixture);
 		CheckSky(Fixture);
 		CheckFailedImport(Fixture);
+		CheckPanoramaDimensions(Fixture);
 		CheckDraftEditing(Fixture);
 		CheckDraftFreshness(Fixture);
+		CheckOutputValidation(Fixture);
+		CheckGroupedImports(Fixture);
+		CheckGroupedDestinationEdges(Fixture);
+		CheckFailedGroupCleanup(Fixture);
 		CheckLifecycle(Fixture);
 		std::cout << "Import workspace formats, freshness, identity and lifecycle passed\n";
 		return 0;

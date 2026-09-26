@@ -1,7 +1,8 @@
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/AssetImport/ModelImport.h"
-#include "Hyperion/AssetImport/SceneImport.h"
+#include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 #include <map>
@@ -90,7 +91,7 @@ public:
 		{
 			throw std::runtime_error("Injected transaction write failure");
 		}
-		if (bFailDependencyWrites && InPath.parent_path().filename() == "Assets")
+		if (bFailDependencyWrites && InPath.filename().string().starts_with("child_"))
 		{
 			bFailDependencyWrites = false;
 			throw std::runtime_error("Injected dependency publication failure");
@@ -312,65 +313,6 @@ void CheckExternalPublicationCache()
 	                              {Changed.Id, "/Game/CachedExternal.hasset", Type, Changed.Revision});
 }
 
-void CheckPinnedNativeImport()
-{
-	FTaskSystem Tasks(1, 1);
-	FIOService IO(Tasks, std::make_shared<FMemoryFileSystem>());
-	FAssetImportService Imports(IO);
-	Imports.Register({"test.native",
-	                  1,
-	                  &RecordType<FImportFixture>(),
-	                  {".hasset"},
-	                  [](FAssetImportContext& InContext)
-	                  {
-		                  return ReadRecord(RecordType<FImportFixture>(), DecodeAsset(InContext.Bytes).Object);
-	                  }});
-	const auto Directory = std::filesystem::absolute("pinned-import");
-	const auto Source = Directory / "root.hasset";
-	const auto Output = Directory / "native/root.hasset";
-	const auto Type = RecordType<FImportFixture>().Id;
-	const auto Leaf = StoreNative(IO, Directory / "leaf.hasset", {"leaf"});
-	const auto Child =
-	    StoreNative(IO, Directory / "child.hasset", {"child", "", {{Leaf.Id, "leaf.hasset", Type, Leaf.Revision}}});
-	const FAssetRef Valid{Child.Id, "child.hasset", Type, Child.Revision};
-	StoreNative(IO, Source, {"root", "", {Valid, Valid}});
-	const auto Initial = Imports.ImportAsync(Source, Output).Get(Tasks);
-	// Rebasing the child's own reference changes its published revision, while its source pin remains valid.
-	HYP_CHECK(Initial->Header.Dependencies[0].Reference.Revision != Child.Revision);
-	const auto Previous = IO.ReadAsync(Output).Get(Tasks);
-	for (unsigned Case = 0; Case < 4; ++Case)
-	{
-		auto Invalid = Valid;
-		if (Case < 2)
-		{
-			Invalid.Revision = std::string(64, '0');
-		}
-		else
-		{
-			Invalid.Id = std::string(32, '0');
-		}
-		const auto Index = Case % 2;
-		FImportFixture Root{"root", "", {Valid, Valid}};
-		Root.Children[Index] = Invalid;
-		StoreNative(IO, Source, Root);
-		std::string Error;
-		try
-		{
-			Imports.ImportAsync(Source, Output).Get(Tasks);
-		}
-		catch (const std::exception& Failure)
-		{
-			Error = Failure.what();
-		}
-		HYP_CHECK(Error.find("children[" + std::to_string(Index) + "]") != std::string::npos);
-		HYP_CHECK(Error.find("identity/type/revision mismatch") != std::string::npos);
-		HYP_CHECK(*IO.ReadAsync(Output).Get(Tasks) == *Previous);
-	}
-	FAssetService Assets(IO);
-	Assets.Types().Register<FImportFixture>();
-	HYP_CHECK(Assets.LoadGraphAsync(Output).Get(Tasks)->Failures.empty());
-}
-
 void CheckCrossVolumeImport()
 {
 	FTaskSystem Tasks(1, 1);
@@ -430,7 +372,7 @@ void CheckModelToScene()
 	FIOService IO(Tasks);
 	FAssetImportService Imports(IO);
 	RegisterGltfImporter(Imports);
-	RegisterSceneImporter(Imports);
+	RegisterSkyImporter(Imports);
 	const auto Source = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/Showcase.gltf";
 	const auto Output = std::filesystem::absolute("publication-model-scene/scene.hasset");
 	FAssetImportOptions Options;
@@ -457,49 +399,33 @@ void CheckModelToScene()
 	HYP_CHECK(Found->Model->SourceNode.empty() && Found->Model->SourcePrimitive.empty());
 }
 
-void CheckSceneImporterCache()
+void CheckNativeSourcesRejected()
 {
 	FTaskSystem Tasks(1, 1);
-	FIOService IO(Tasks);
+	auto Files = std::make_shared<FMemoryFileSystem>();
+	FIOService IO(Tasks, Files);
 	FAssetImportService Imports(IO);
-	RegisterSceneImporter(Imports);
-	const auto Directory = std::filesystem::absolute("scene-import-cache");
-	const auto Source = Directory / "scene.json";
-	const auto Output = Directory / "scene.hasset";
-	const std::string Text =
-	    R"({"type":"hyperion.scene","schema_version":2,"assets":[],"nodes":[{"id":"camera","camera":{}}],"defaultCamera":"camera"})";
-	IO.WriteAsync(Source, FBytes(reinterpret_cast<const std::byte*>(Text.data()),
-	                             reinterpret_cast<const std::byte*>(Text.data() + Text.size())))
-	    .Get(Tasks);
-	FAssetImportOptions Force;
-	Force.bForce = true;
-	const auto First = Imports.ImportAsync(Source, Output, Force).Get(Tasks);
-	HYP_CHECK(First->Header.SchemaVersion == 7 && First->Header.Import->ImporterVersion == 7);
-	HYP_CHECK(First->Header.Import->Importer == "hyperion.scene-json");
-	const auto Same = Imports.ImportAsync(Source, Output).Get(Tasks);
-	HYP_CHECK(Same->bUpToDate && Same->WrittenAssets == 0);
-	const auto Position = Text.find("\"camera\":{}");
-	auto Edited = Text;
-	Edited.replace(Position, std::string("\"camera\":{}").size(), "\"camera\":{\"focusDistance\":2}");
-	IO.WriteAsync(Source, FBytes(reinterpret_cast<const std::byte*>(Edited.data()),
-	                             reinterpret_cast<const std::byte*>(Edited.data() + Edited.size())))
-	    .Get(Tasks);
-	const auto Changed = Imports.ImportAsync(Source, Output).Get(Tasks);
-	HYP_CHECK(!Changed->bUpToDate && Changed->Header.Id == First->Header.Id &&
-	          Changed->Header.Revision != First->Header.Revision);
-	FLegacySceneManifest Legacy;
-	Legacy.Eye = {1, 2, 8};
-	Legacy.Target = {1, 2, 0};
-	const auto LegacyPath = Directory / "legacy.hasset";
-	IO.WriteAsync(LegacyPath, EncodeAsset(RecordType<FLegacySceneManifest>(), &Legacy).Bytes).Get(Tasks);
-	const auto Upgraded = Imports.ImportAsync(LegacyPath, Directory / "upgraded.hasset", Force).Get(Tasks);
-	HYP_CHECK(Upgraded->Header.SchemaVersion == 7 && Upgraded->Header.Import->ImporterVersion == 7);
-	HYP_CHECK(Upgraded->Header.Import->Importer == "hyperion.native-scene-upgrade");
-	FAssetService Assets(IO);
-	RegisterSceneAssetTypes(Assets.Types());
-	const auto Loaded = Assets.LoadAsync<FSceneManifest>(Directory / "upgraded.hasset").Get(Tasks);
-	HYP_CHECK(Loaded->Nodes.size() == 3 && Loaded->Nodes[0].Camera->FocusDistance == 8);
-	std::cout << "Scene component source/native migration, unchanged cache and changed camera fingerprint passed\n";
+	RegisterGltfImporter(Imports);
+	RegisterSkyImporter(Imports);
+	const auto Source = std::filesystem::absolute("Native.hasset");
+	const auto Output = std::filesystem::absolute("Rejected.hasset");
+	const FSceneManifest Scene;
+	const auto Bytes = EncodeAsset(RecordType<FSceneManifest>(), &Scene).Bytes;
+	IO.WriteAsync(Source, Bytes).Get(Tasks);
+	for (const auto& Type :
+	     {std::string{}, RecordType<FModelAsset>().Id, RecordType<FTextureAsset>().Id, RecordType<FSkyAsset>().Id,
+	      RecordType<FMaterialAsset>().Id, RecordType<FSceneManifest>().Id})
+	{
+		FAssetImportOptions Options;
+		Options.TypeId = Type;
+		Rejects(
+		    [&]
+		    {
+			    Imports.ImportAsync(Source, Output, Options).Get(Tasks);
+		    });
+		HYP_CHECK(!Files->Exists(Output));
+		HYP_CHECK(*IO.ReadAsync(Source).Get(Tasks) == Bytes);
+	}
 }
 
 void CheckExternalImageReimport()
@@ -528,15 +454,6 @@ void CheckExternalImageReimport()
 	const auto After = Assets.LoadAsync<FModelAsset>(Output).Get(Tasks);
 	HYP_CHECK(After->MaterialSlots == Before->MaterialSlots);
 	HYP_CHECK(After->Primitives[0].Positions == Before->Primitives[0].Positions);
-	IO.WriteAsync(Output.parent_path() / "copy.hasset", Serialize(*Before)).Get(Tasks);
-	FAssetImportOptions UpgradeOptions;
-	UpgradeOptions.Library = Directory / "upgraded-library";
-	const auto Upgraded =
-	    Imports.ImportAsync(Output.parent_path() / "copy.hasset", Directory / "upgraded.hasset", UpgradeOptions)
-	        .Get(Tasks);
-	const auto Native = Assets.LoadAsync<FModelAsset>(Directory / "upgraded.hasset").GetAsset(Tasks);
-	HYP_CHECK(Native->Diagnostics.empty() && Native->Header.Id == Upgraded->Header.Id);
-	HYP_CHECK(Native->As<FModelAsset>()->Primitives[0].Positions == Before->Primitives[0].Positions);
 }
 
 void CheckRollback()
@@ -588,6 +505,41 @@ void CheckRollback()
 	HYP_CHECK(Assets.LoadGraphAsync(Output).Get(Tasks)->Assets.size() == 4);
 }
 
+void CheckGroupedRollback()
+{
+	FTaskSystem Tasks(1, 1);
+	auto Files = std::make_shared<FImportStorage>();
+	FIOService IO(Tasks, Files);
+	FAssetImportService Imports(IO);
+	Imports.Register(FixtureImporter());
+	const auto Directory = std::filesystem::absolute("grouped-rollback");
+	const auto Source = Directory / "Root.source";
+	const auto Output = Directory / "native/Root.hasset";
+	const auto Type = RecordType<FImportFixture>().Id;
+	IO.WriteAsync(Source, Serialize(FImportFixture{"root", "", {{"", "Child.source", Type, ""}}})).Get(Tasks);
+	IO.WriteAsync(Directory / "Child.source", Serialize(FImportFixture{"child"})).Get(Tasks);
+	FAssetImportOptions Options;
+	Options.bCreateFolder = true;
+	// Child, ownership marker, root: failure at or after the marker must roll everything back.
+	for (const unsigned Failure : {2u, 3u})
+	{
+		Files->WriteCalls = 0;
+		Files->FailOnWrite = Failure;
+		Rejects(
+		    [&]
+		    {
+			    Imports.ImportAsync(Source, Output, Options).Get(Tasks);
+		    });
+		HYP_CHECK(Files->Memory.Enumerate(Output.parent_path(), true).empty());
+	}
+	Files->FailOnWrite = 0;
+	const auto Result = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
+	HYP_CHECK(Result->Output == Output.parent_path() / "Root/Root.hasset");
+	HYP_CHECK(Result->WrittenAssets == 2);
+	HYP_CHECK(Files->Memory.Read(Output.parent_path() / "Root/.import-source", 64).size() == 64);
+	HYP_CHECK(Imports.ImportAsync(Source, Output, Options).Get(Tasks)->bUpToDate);
+}
+
 void CheckLocalLease()
 {
 	FTaskSystem Tasks(1, 1);
@@ -618,14 +570,14 @@ int main()
 		CheckPublication();
 		CheckExternalPublicationChanges();
 		CheckExternalPublicationCache();
-		CheckPinnedNativeImport();
 		CheckCrossVolumeImport();
 		CheckCyclesAndOrdering();
 		CheckModelToScene();
 		CheckModelReferences();
-		CheckSceneImporterCache();
+		CheckNativeSourcesRejected();
 		CheckLocalLease();
 		CheckRollback();
+		CheckGroupedRollback();
 		CheckExternalImageReimport();
 		std::cout
 		    << "Generic incremental publication, source changes, current shared contents, failure and leases passed\n";

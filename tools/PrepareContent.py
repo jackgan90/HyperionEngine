@@ -89,6 +89,10 @@ def main():
         options = ["--library", mount, "--source-root", str(cache), "--source-id", manifest["source_id"]]
         if entry.get("id"):
             options.extend(["--root-id", entry["id"]])
+        if entry.get("sky"):
+            settings = entry["sky"]
+            options.extend(["--radiance-size", str(settings["radianceSize"]),
+                            "--specular-size", str(settings["specularSize"]), "--samples", str(settings["samples"])])
         if args.force:
             options.append("--force")
         authoring = ["--authoring"] if args.engine_sky else []

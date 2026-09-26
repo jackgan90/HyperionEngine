@@ -148,6 +148,11 @@ void FMountedFileSystem::Remove(const std::filesystem::path& InPath)
 	Local.Remove(Resolve(InPath, true));
 }
 
+bool FMountedFileSystem::RemoveEmptyDirectory(const std::filesystem::path& InPath)
+{
+	return Local.RemoveEmptyDirectory(Resolve(InPath, true));
+}
+
 std::vector<FFileContents> FMountedFileSystem::ReadTree(const std::filesystem::path& InDirectory,
                                                         std::span<const std::string_view> InExtensions,
                                                         std::size_t InLimit)

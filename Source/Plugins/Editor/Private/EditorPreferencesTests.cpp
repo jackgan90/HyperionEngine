@@ -24,6 +24,12 @@ int main()
 		const auto Path = Root / "Preferences.ini";
 		std::filesystem::remove(Path);
 		Check(!LoadEditorPreferences(Path).bRenderDocCapture);
+		FEditorPreferences Preferences;
+		Preferences.ImportOutputDirectory = Root / "Output directory";
+		SaveEditorPreferences(Path, Preferences);
+		Check(LoadEditorPreferences(Path).ImportOutputDirectory == Preferences.ImportOutputDirectory);
+		std::ofstream(Path) << "version=1\nrenderdoc_capture=false\n";
+		Check(LoadEditorPreferences(Path).ImportOutputDirectory.empty());
 		SaveEditorPreferences(Path, {true});
 		Check(LoadEditorPreferences(Path).bRenderDocCapture);
 		SaveEditorPreferences(Path, {false});

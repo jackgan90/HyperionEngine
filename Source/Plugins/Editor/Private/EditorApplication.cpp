@@ -55,7 +55,11 @@ void FEditorPlugin::Initialize()
 	Gui->SetPathDisplayRoot("/Game");
 	GuiRenderer = &Context.Require<FGuiRenderer>();
 	ImportPanel = std::make_unique<FAssetImportPanel>(Context.Find<FAssetImportWorkspace>(),
-	                                                  Context.Require<FContentRootService>());
+	                                                  Context.Require<FContentRootService>(), Options.Preferences,
+	                                                  [this]()
+	                                                  {
+		                                                  SavePreferences();
+	                                                  });
 	bInitialCapturePreference = Options.Preferences.bRenderDocCapture;
 #if HYP_ENABLE_RENDERDOC
 	FrameCapture = Context.Find<FFrameCapture>();

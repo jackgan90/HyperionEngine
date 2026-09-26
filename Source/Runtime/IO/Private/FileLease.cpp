@@ -1,4 +1,5 @@
 #include "Hyperion/IO/IOService.h"
+#include "Hyperion/IO/Path.h"
 
 namespace Hyperion
 {
@@ -23,7 +24,7 @@ std::shared_ptr<IFileWriteLease> IFileSystem::AcquireWriteLease(const std::files
 	const auto Key = std::make_pair(this, std::filesystem::absolute(InPath).lexically_normal());
 	if (const auto It = Leases.find(Key); It != Leases.end() && !It->second.expired())
 	{
-		throw std::runtime_error("Conflicting asset publication: " + InPath.generic_string());
+		throw std::runtime_error("Conflicting asset publication: " + PathToUtf8(InPath));
 	}
 	auto Lease = std::make_shared<FMemoryWriteLease>();
 	Leases[Key] = Lease;

@@ -45,7 +45,8 @@ std::wstring DialogText(const std::string& InText)
 }
 } // namespace
 
-std::optional<std::filesystem::path> SelectFolder(FNativeSurface InOwner, const std::filesystem::path& InInitial)
+std::optional<std::filesystem::path> SelectFolder(FNativeSurface InOwner, const std::filesystem::path& InInitial,
+                                                  const std::string& InTitle)
 {
 	FDialogApartment Apartment;
 	CheckDialog(Apartment.Result);
@@ -55,7 +56,7 @@ std::optional<std::filesystem::path> SelectFolder(FNativeSurface InOwner, const 
 	CheckDialog(Dialog->GetOptions(&Options));
 	CheckDialog(
 	    Dialog->SetOptions(Options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR));
-	CheckDialog(Dialog->SetTitle(L"Open asset root"));
+	CheckDialog(Dialog->SetTitle(DialogText(InTitle).c_str()));
 	if (!InInitial.empty())
 	{
 		Microsoft::WRL::ComPtr<IShellItem> Initial;

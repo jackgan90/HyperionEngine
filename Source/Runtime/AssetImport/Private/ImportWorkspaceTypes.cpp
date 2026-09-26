@@ -13,12 +13,14 @@ template<> const FRecordDescriptor& RecordType<FImportRequest>()
 	     Member("output", &FImportRequest::Output,
 	            {.bRequired = true, .Description = "Separate .hasset destination; mount permissions apply."}),
 	     Member("library", &FImportRequest::Library,
-	            {.Description = "Shared dependency directory; omitted defaults to output parent."}),
+	            {.Description =
+	                 "Generated assets directory; omitted uses the output parent. New products are "
+	                 "saved directly there without type subdirectories; existing assets retain their paths."}),
 	     Member("name", &FImportRequest::Name,
 	            {.Description = "Model or standalone image display name; with scene, model node name. Other sources "
 	                            "retain their names."}),
 	     Member("type", &FImportRequest::Type,
-	            {.Description = "Optional source type ID; omitted infers from extension or JSON/native header."}),
+	            {.Description = "Optional source type ID; omitted infers from extension."}),
 	     Member("sourceRoot", &FImportRequest::SourceRoot,
 	            {.Description = "Optional source namespace root; supply with sourceId."}),
 	     Member("sourceId", &FImportRequest::SourceId,
@@ -33,8 +35,13 @@ template<> const FRecordDescriptor& RecordType<FImportRequest>()
 	     Member("textureEncoding", &FImportRequest::TextureEncoding,
 	            {.Description = "Standalone PNG/JPEG only: 0 linear, 1 sRGB. Omitted defaults to sRGB."}),
 	     Member("sky", &FImportRequest::Sky,
-	            {.Description = "Optional complete bake settings overriding HDR defaults or a sky recipe. Not "
-	                            "applicable to serialized sky records."})});
+	            {.Description = "HDR/EXR panorama bake settings. Omitted uses radiance 256, specular 64 and 256 "
+	                            "samples."}),
+	     Member("createFolder", &FImportRequest::bCreateFolder,
+	            {.Description = "Use a source-named folder under the output parent, reuse it for the same source and "
+	                            "output filename; add _1, _2 for other sources. "
+	                            "All generated assets stay in that folder. Output keeps its filename. "
+	                            "Do not supply library. Editor imports enable this; omitted defaults to false."})});
 	return Type;
 }
 
@@ -55,7 +62,9 @@ template<> const FRecordDescriptor& RecordType<FImportValidation>()
 	static const auto Type = MakeRecord<FImportValidation>(
 	    "asset.import.validation",
 	    {Member("source", &FImportValidation::Source), Member("output", &FImportValidation::Output),
-	     Member("library", &FImportValidation::Library), Member("type", &FImportValidation::Type)});
+	     Member("library", &FImportValidation::Library), Member("type", &FImportValidation::Type),
+	     Member("folder", &FImportValidation::Folder,
+	            {.Description = "Resolved destination folder, including any collision suffix. Not a reservation."})});
 	return Type;
 }
 

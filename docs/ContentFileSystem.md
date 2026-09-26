@@ -45,7 +45,7 @@ Automation 的 `content.directory.list` 将 ListDirectory 投影为分页逻辑�
 正常运行只需要发布后的 hasset 和文本 Shader。原始下载文件不会进入资产仓库的提交。
 
 ```powershell
-# 从固定清单下载缺失来源、恢复自创场景配方并发布；已有来源先校验 SHA-256。
+# 从固定清单下载缺失来源、生成 glTF 测试来源并发布；已有来源先校验 SHA-256。
 python tools/PrepareContent.py --assets-root ../HyperionAssets
 # 缓存齐全时进行完全离线重建。
 python tools/PrepareContent.py --assets-root ../HyperionAssets --offline
@@ -56,7 +56,7 @@ python tools/PrepareContent.py --restore-only
 ./out/build/release/bin/hyperion_asset_tool.exe --asset-root ../HyperionAssets validate-library /Game
 ```
 
-默认源缓存是 `HyperionAssets/.cache/Sources`，可通过 `--cache` 改到其他未跟踪目录。`Metadata/Sources.json` 记录固定来源/哈希、生成器、完整自创配方和发布根。`--source-root` 与 `--source-id` 必须一起提供；逻辑来源 ID 在不同机器上保持不变。来源记录是可选的，运行时只需要原生资产及文本 Shader。导入映射从现存 hasset 的可选 Import.OutputIds 重建；依赖存放在可见类型目录中，每个 ID 只有一个当前文件，历史由 Git/LFS 管理。
+默认源缓存是 `HyperionAssets/.cache/Sources`，可通过 `--cache` 改到其他未跟踪目录。`Metadata/Sources.json` 记录固定来源/哈希、生成器、glTF 夹具配方和发布根；场景与手工创作的模型/材质/纹理为原生 `.hasset`，不由旧资产 JSON 重建。`--source-root` 与 `--source-id` 必须一起提供；逻辑来源 ID 在不同机器上保持不变。来源记录是可选的，运行时只需要原生资产及文本 Shader。导入映射从现存 hasset 的可选 Import.OutputIds 重建；新生成依赖直接保存在发布目录中，不再自动创建类型子目录；Editor 在所选父目录下生成来源命名的文件夹，Save as 显示该文件夹，已有共享资产保留其路径，每个 ID 只有一个当前文件，历史由 Git/LFS 管理。
 
 `--source-id` 是位置无关的逻辑名称，例如 `custom`，不能包含盘符、反斜杠或绝对目录。两项都省略时，导入器使用目标资产 ID 作为逻辑来源空间；同一目标可从另一机器重新选择源文件而保持身份。源文件与资产仓库的本地位置不写入 hasset。跨卷位置提示无法表达为相对路径时，应配置内容挂载或共同的源目录布局。
 
@@ -74,6 +74,6 @@ HyperionAssets 的 hasset 使用 LFS，文本 Shader 和元数据使用普通 Gi
 
 默认天空配方通过 AssetTool `--root-id` 指定固定 ID；缺失或损坏的原生天空可重建为相同身份。已有有效目标必须匹配该 ID，发布库中其他资产已占用该 ID 时拒绝写入。普通导入不传该参数时保留原有身份选择规则。
 
-独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与自创场景的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，并执行 `python tools/PrepareContent.py --engine-sky --restore-only` 准备 Engine 天空来源，再通过 `PrepareTestSources.py` 合并生成 `out/fixtures/Sources`。可用 `--engine-sky-cache` 指定已准备的 Engine 来源缓存，用 `--output` 指定隔离夹具目录；缺失缓存会明确失败。Editor 示例和桌面集成测试需要挂载已发布 Game 内容。
+独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与模型的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，并执行 `python tools/PrepareContent.py --engine-sky --restore-only` 准备 Engine 天空来源，再通过 `PrepareTestSources.py` 合并生成 `out/fixtures/Sources`。可用 `--engine-sky-cache` 指定已准备的 Engine 来源缓存，用 `--output` 指定隔离夹具目录；缺失缓存会明确失败。Editor 示例和桌面集成测试需要挂载已发布 Game 内容。
 
 迁移验收检查：完整 native 依赖图、无旧目录读取、固定输入截图、天空切换与场景保存重载、不同挂载位置、Shader include/cache、LFS 指针诊断和无变化重导入。历史性能/审计文档保留当时路径作为证据；当前资源布局以本页为准。

@@ -7,6 +7,13 @@ namespace Hyperion
 {
 namespace
 {
+void ReadOnlyProperty(FGui& InGui, const char* InLabel, std::string InValue)
+{
+	InGui.BeginDisabled(true);
+	AssetText(InGui, InLabel, InValue);
+	InGui.EndDisabled();
+}
+
 template<class T> void ReplaceById(std::vector<T>& OutValues, T InValue)
 {
 	const auto Found = std::find_if(OutValues.begin(), OutValues.end(),
@@ -75,21 +82,10 @@ void DrawNodePage(FGui& InGui, const FImportDraftInfo& InInfo, std::uint32_t InO
 
 void FAssetImportPanel::DrawDraftProperties(FGui& InGui, FImportDraftInfo& InInfo)
 {
-	InGui.TextWrapped("Type: " + InInfo.Type);
-	for (const auto& Detail : InInfo.Details)
-	{
-		InGui.TextWrapped(Detail);
-	}
 	if (InInfo.SourceWidth)
 	{
-		InGui.Text("Source panorama: " + std::to_string(InInfo.SourceWidth) + " x " +
-		           std::to_string(InInfo.SourceHeight));
-	}
-	if (InInfo.Sky)
-	{
-		InGui.TextWrapped("Bake: radiance " + std::to_string(InInfo.Sky->RadianceSize) + " | specular " +
-		                  std::to_string(InInfo.Sky->SpecularSize) + " | samples " +
-		                  std::to_string(InInfo.Sky->Samples));
+		ReadOnlyProperty(InGui, "Source width", std::to_string(InInfo.SourceWidth));
+		ReadOnlyProperty(InGui, "Source height", std::to_string(InInfo.SourceHeight));
 	}
 	if (InInfo.bNameEditable)
 	{
@@ -104,37 +100,35 @@ void FAssetImportPanel::DrawDraftProperties(FGui& InGui, FImportDraftInfo& InInf
 	}
 	if (InInfo.Width)
 	{
-		InGui.TextWrapped(std::to_string(InInfo.Width) + " x " + std::to_string(InInfo.Height) + " | " + InInfo.Format +
-		                  " | " + InInfo.Encoding + " | mips: " + std::to_string(InInfo.Mips));
-		InGui.TextWrapped(
-		    "Dimensions/format are read-only. Image encoding is changed in Import Asset, then Update preview.");
+		for (const auto& Detail : InInfo.Details)
+		{
+			const auto Separator = Detail.find(" | pixel bytes: ");
+			if (Separator != std::string::npos)
+			{
+				ReadOnlyProperty(InGui, "Texture type", Detail.substr(0, Separator));
+				ReadOnlyProperty(InGui, "Pixel bytes", Detail.substr(Separator + 16));
+			}
+		}
+		ReadOnlyProperty(InGui, "Width", std::to_string(InInfo.Width));
+		ReadOnlyProperty(InGui, "Height", std::to_string(InInfo.Height));
+		ReadOnlyProperty(InGui, "Format", InInfo.Format);
+		ReadOnlyProperty(InGui, "Color encoding", InInfo.Encoding);
+		ReadOnlyProperty(InGui, "Mip levels", std::to_string(InInfo.Mips));
 	}
 	if (InInfo.TotalNodes || InInfo.TotalPrimitives)
 	{
-		InGui.TextWrapped(
-		    "Nodes: " + std::to_string(InInfo.TotalNodes) + " | Primitives: " + std::to_string(InInfo.TotalPrimitives) +
-		    " | Vertices: " + std::to_string(InInfo.Vertices) + " | Triangles: " + std::to_string(InInfo.Triangles));
+		ReadOnlyProperty(InGui, "Nodes", std::to_string(InInfo.TotalNodes));
+		ReadOnlyProperty(InGui, "Mesh sections", std::to_string(InInfo.TotalPrimitives));
+		ReadOnlyProperty(InGui, "Vertices", std::to_string(InInfo.Vertices));
+		ReadOnlyProperty(InGui, "Triangles", std::to_string(InInfo.Triangles));
 	}
 	DrawDraftModel(InGui, InInfo);
-	DrawDraftMaterial(InGui, InInfo);
-	for (const auto& Dependency : InInfo.Dependencies)
-	{
-		InGui.TextWrapped(Dependency.Field + ": " + Dependency.Reference.Path);
-	}
-	for (const auto& Product : InInfo.Products)
-	{
-		InGui.TextWrapped("Dependency: " + Product.Name + " | " + Product.Type +
-		                  (Product.Width
-		                       ? " | " + std::to_string(Product.Width) + " x " + std::to_string(Product.Height) +
-		                             " | " + Product.Format + " | mips: " + std::to_string(Product.Mips)
-		                       : ""));
-	}
 	for (const auto& Diagnostic : InInfo.Diagnostics)
 	{
 		InGui.TextWrapped(Diagnostic);
 	}
-	const auto Total = std::max({InInfo.TotalNodes, InInfo.TotalPrimitives, InInfo.TotalProducts, InInfo.TotalMaterial,
-	                             InInfo.TotalDependencies, InInfo.TotalMaterialSlots, InInfo.TotalDiagnostics});
+	const auto Total =
+	    std::max({InInfo.TotalNodes, InInfo.TotalPrimitives, InInfo.TotalMaterialSlots, InInfo.TotalDiagnostics});
 	if (Total > 32)
 	{
 		if (InGui.Button("Previous properties", PreviewOffset > 0))
@@ -160,16 +154,16 @@ void FAssetImportPanel::DrawDraftModel(FGui& InGui, FImportDraftInfo& InInfo)
 		{
 			return std::to_string(InValue.X) + ", " + std::to_string(InValue.Y) + ", " + std::to_string(InValue.Z);
 		};
-		InGui.TextWrapped("Bounds: [" + Vector(InInfo.BoundsMin) + "] to [" + Vector(InInfo.BoundsMax) + "]");
+		ReadOnlyProperty(InGui, "Bounds min", Vector(InInfo.BoundsMin));
+		ReadOnlyProperty(InGui, "Bounds max", Vector(InInfo.BoundsMax));
 	}
 	if (!InInfo.Nodes.empty())
 	{
 		SelectedNode = std::min(SelectedNode, InInfo.Nodes.size() - 1);
 		DrawNodePage(InGui, InInfo, PreviewOffset, SelectedNode);
 		auto Node = InInfo.Nodes[SelectedNode];
-		InGui.TextWrapped("Node ID: " + Node.Id);
 		InGui.Text("Children: " + std::to_string(Node.Children.size()) +
-		           " | Primitives: " + std::to_string(Node.Primitives.size()));
+		           " | Mesh sections: " + std::to_string(Node.Primitives.size()));
 		InGui.BeginDisabled(InInfo.Type != RecordType<FModelAsset>().Id);
 		auto Transform = DecomposeAffine(Node.Local);
 		bool bChanged = AssetText(InGui, "Node name", Node.Name);
@@ -196,14 +190,15 @@ void FAssetImportPanel::DrawDraftModel(FGui& InGui, FImportDraftInfo& InInfo)
 		std::vector<std::string> Names;
 		for (const auto& Primitive : InInfo.Primitives)
 		{
-			Names.push_back(Primitive.Name + " [" + Primitive.Id + "]");
+			Names.push_back(Primitive.Name.empty() ? "Mesh section " + std::to_string(Names.size() + 1)
+			                                       : Primitive.Name);
 		}
 		SelectedPrimitive = std::min(SelectedPrimitive, Names.size() - 1);
-		InGui.Combo("Primitive", Names, SelectedPrimitive);
+		InGui.Combo("Mesh section", Names, SelectedPrimitive);
 		auto Primitive = InInfo.Primitives[SelectedPrimitive];
-		bool bChanged = AssetText(InGui, "Primitive name", Primitive.Name);
+		bool bChanged = AssetText(InGui, "Section name", Primitive.Name);
 		std::int64_t Slot = Primitive.Material;
-		bChanged |= InGui.InputInteger("Existing material slot", Slot);
+		bChanged |= InGui.InputInteger("Material slot", Slot);
 		if (bChanged)
 		{
 			if (Slot < 0 || Slot > INT32_MAX)
@@ -222,37 +217,4 @@ void FAssetImportPanel::DrawDraftModel(FGui& InGui, FImportDraftInfo& InInfo)
 	}
 }
 
-void FAssetImportPanel::DrawDraftMaterial(FGui& InGui, FImportDraftInfo& InInfo)
-{
-	// Copy the page: applying an edit replaces PreviewInfo and its member vectors.
-	const auto Parameters = InInfo.Material;
-	for (const auto& Parameter : Parameters)
-	{
-		InGui.TextWrapped(Parameter.Name);
-		if (!Parameter.bEditable)
-		{
-			InGui.Text(Parameter.Values.empty() ? "Runtime-provided value (read-only)" : "Read-only parameter");
-		}
-		InGui.BeginDisabled(!Parameter.bEditable);
-		auto Values = Parameter.Values;
-		bool bChanged{};
-		for (std::size_t Index = 0; Index < Values.size(); ++Index)
-		{
-			bChanged |=
-			    InGui.InputNumber(("Value " + std::to_string(Index) + "##" + Parameter.Name).c_str(), Values[Index]);
-		}
-		InGui.EndDisabled();
-		if (bChanged)
-		{
-			auto Edits = InInfo.Properties;
-			std::erase_if(Edits.Material,
-			              [&](const auto& InEdit)
-			              {
-				              return InEdit.Name == Parameter.Name;
-			              });
-			Edits.Material.push_back({Parameter.Name, std::move(Values)});
-			ApplyDraftEdit(InInfo, std::move(Edits));
-		}
-	}
-}
 } // namespace Hyperion

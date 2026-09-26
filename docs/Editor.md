@@ -6,32 +6,32 @@
 
 ## 外部资产导入
 
-使用 **File > Import Asset...** 打开非模态导入面板。选择源文件后自动准备草稿并打开 **Import Property Preview**；手工输入路径时，在离开 Source 输入框后准备。设置转换参数、目标 `/Game/...hasset` 和共享依赖库，检查预览后点击 Import 发布。默认依赖库为 `/Game`；必须先通过 File > Open... 选择可写 Game 根。文件名与预览中的资产显示名分别设置，其他已打开资产草稿不会被导入静默替换。Validate 只校验请求，不替代准备和发布时的完整检查。
+使用 **File > Import Asset...** 打开非模态导入面板。Source、Conversion settings、Output、Asset properties 和 Import options and actions 各自可展开或折叠。选择源文件后自动准备属性；手工输入路径时，在离开 Source 输入框后准备。必须先通过 File > Open... 选择可写 Game 根。
 
-- 模型：glTF/GLB，自动发布材质和图片依赖；可指定模型显示名或创建包含模型的场景。
+- 模型：glTF/GLB，自动发布材质和图片依赖；可创建包含模型的场景。
 - 贴图：PNG/JPG/JPEG，默认 sRGB，可选 Linear；生成 RGBA8 Texture2D 和完整 mip 链。
-- 天空：2:1 HDR/EXR 全景图，或选择 Sky 类型导入 JSON 配方。可覆盖 radiance 面尺寸、specular 面尺寸和采样数；未覆盖时使用配方或 256/64/256 默认值。
-- JSON/native：支持已有模型、材质、贴图、天空和场景格式；不增加外部格式。序列化的天空记录保留烘焙产品，不能套用全景图烘焙参数。
+- 天空：2:1 HDR/EXR 全景图，可调整 radiance 面尺寸、specular 面尺寸和采样数，默认 256/64/256。尺寸不符合要求时显示错误。
 
-Advanced options 提供 force、成对的 source root/source ID 及可选固定根 ID。普通导入保持根 ID 为空。force 仅跳过增量检测；输出身份、依赖冲突和只读校验继续生效。相同输入、设置和有效输出保持零写入。
+不接受自有资产 JSON 或原生 `.hasset` 导入。已有原生资产通过对应资产编辑器打开、编辑和保存。
 
-面板底部显示 GUI 与 agent 共用的近期任务、写入数量、无需更新状态和错误。关闭面板不会取消已接受导入；导入期间换根返回 busy，正常退出会排空工作。导入写入磁盘，不进入场景撤销历史。若文件已发布而索引刷新失败，结果明确显示 warning，勿将其视为未写入并自动重试。
+Output 的 **Save as** 显示自动计算的目标文件夹。Browse 选择 `/Game` 内的父目录，并记住上次选择；问号提示显示 `/Game` 对应的本地目录。所有本次生成的资产放入以来源文件名命名的文件夹，其他内容占用名称时使用数字后缀；相同来源和输出位置重复导入复用原文件夹。已有资产不自动移动。附属文件使用可读名称和数字序号，资产内部 ID 及引用仍由共享发布服务维护。
 
-属性预览在独立的非模态面板中显示转换结果；此版本没有 GPU 图像或三维渲染预览。
+Advanced options 只提供 Force reimport，跳过增量检测；输出身份、依赖冲突和只读校验继续生效。相同输入、设置和有效输出保持零写入。Import 执行共享校验、准备快照检查与发布，结束后弹出成功或失败原因；索引刷新失败会提示文件已导入及相应警告。关闭面板不会取消已接受导入；导入期间换根返回 busy，正常退出排空后台工作。
+
+**Asset properties** 在导入面板内显示转换结果；此版本没有 GPU 图像或三维渲染预览。不可修改的属性使用只读控件。
 
 | 类型 | 可检查 | 可修改 |
 | --- | --- | --- |
-| 模型 | 分页节点层级、primitive、材质槽、顶点/三角形数量、包围盒、依赖与诊断 | 根名称、节点名称及局部位置/旋转/缩放、primitive 名称及已有材质槽 |
-| 贴图 | 尺寸、格式、编码、mip 数、像素字节数 | 名称；颜色编码在父面板调整后重新准备 |
-| 天空 | 全景图尺寸、有效烘焙设置、生成纹理及依赖 | 名称；已有烘焙参数在父面板调整后重新准备 |
-| 独立材质 | shader/pass、数值参数与引用 | 名称、已有编辑策略允许的数值参数 |
-| 场景 | 节点与相机/灯光设置摘要、依赖 | 场景结构只读 |
+| 模型 | 节点层级、mesh section、材质槽、顶点/三角形数量、Bounds min/max | 根名称、节点名称及局部位置/旋转/缩放、section 名称及已有材质槽 |
+| 贴图 | 尺寸、格式、编码、mip 数、像素字节数 | 名称；颜色编码在 Conversion settings 调整 |
+| 天空 | 全景图宽度和高度 | 名称；烘焙参数在 Conversion settings 调整 |
+| 模型生成的场景 | 节点与相机/灯光摘要、依赖 | 场景结构只读 |
 
-节点变换保留原矩阵剪切；稳定 ID、几何/层级和生成的材质、贴图等依赖保持只读。Undo / Redo / Reset to source 只修改草稿，不写磁盘，也不进入场景历史。关闭预览只隐藏窗口；Discard draft and changes 才释放草稿。修改源文件、输出或转换设置后，旧预览标为过期，须 Update preview；已有属性修改须通过明确的丢弃并刷新按钮确认。重新准备读取源默认值，不自动继承旧输出的修改。
+节点变换保留原矩阵剪切；稳定 ID、几何/层级和生成的依赖保持只读。Undo / Redo / Reset to source 只修改属性草稿，不写磁盘，也不进入场景历史。源文件、输出或转换设置变化时自动重新准备；有未发布的属性修改时先确认是否重置。明确重选同一路径可重读外部更新或已修复的源文件；发布失败后重新准备一次，不会自动再次导入。
 
 编辑过的未发布草稿参与换根和关闭保护。须先 Import，或明确丢弃；Save and Exit 不会暗中发布导入。准备/发布期间不可换根或修改同一草稿；正常退出排空后台工作。最多保留四份草稿，每份最多 64 步历史。
 
-automation 使用 `asset.import.draft.prepare/get/edit/history/submit/discard` 与 `asset.import.drafts` 映射全部草稿操作；原有 `asset.import` 单步入口及校验/任务查询保持兼容。输入表单对应同一反射请求，文件选择对应传入目标进程可访问的路径。窗口布局/显隐属于呈现操作。契约见 [Automation 能力清单](AutomationCapabilities.md)。
+automation 使用 `asset.import.draft.prepare/get/edit/history/submit/discard` 与 `asset.import.drafts` 映射草稿操作；`asset.import` 单步入口及校验/任务查询保持兼容。GUI 和 automation 共享领域校验、属性编辑、历史与发布。原生文件选择器、目录偏好及窗口显隐属于呈现适配，见 [Automation 能力清单](AutomationCapabilities.md)。
 
 ## 默认天空
 

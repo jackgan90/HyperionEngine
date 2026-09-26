@@ -21,6 +21,7 @@ FEditorPreferences LoadEditorPreferences(const std::filesystem::path& InPath)
 	bool bVersion{};
 	bool bCapture{};
 	bool bRoot{};
+	bool bImportOutput{};
 	while (std::getline(Stream, Line))
 	{
 		if (!Line.empty() && Line.back() == '\r')
@@ -48,6 +49,11 @@ FEditorPreferences LoadEditorPreferences(const std::filesystem::path& InPath)
 			bRoot = true;
 			Result.AssetRoot = PathFromUtf8(Value);
 		}
+		else if (Key == "import_output_directory" && !bImportOutput)
+		{
+			bImportOutput = true;
+			Result.ImportOutputDirectory = PathFromUtf8(Value);
+		}
 		else if (Key == "recent_root" && !Value.empty() && Result.RecentRoots.size() < 5)
 		{
 			Result.RecentRoots.push_back(PathFromUtf8(Value));
@@ -69,6 +75,7 @@ void SaveEditorPreferences(const std::filesystem::path& InPath, const FEditorPre
 	std::string Text =
 	    std::string("version=1\nrenderdoc_capture=") + (InPreferences.bRenderDocCapture ? "true\n" : "false\n");
 	Text += "asset_root=" + PathToUtf8(InPreferences.AssetRoot) + "\n";
+	Text += "import_output_directory=" + PathToUtf8(InPreferences.ImportOutputDirectory) + "\n";
 	for (std::size_t Index = 0; Index < std::min<std::size_t>(5, InPreferences.RecentRoots.size()); ++Index)
 	{
 		Text += "recent_root=" + PathToUtf8(InPreferences.RecentRoots[Index]) + "\n";

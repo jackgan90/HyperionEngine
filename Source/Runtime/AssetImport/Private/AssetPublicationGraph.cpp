@@ -5,32 +5,6 @@
 
 namespace Hyperion
 {
-namespace
-{
-std::optional<FAssetRef> SourceIdentity(const FConvertedAsset& InAsset)
-{
-	if (!InAsset.NativeHeader)
-	{
-		return {};
-	}
-	const auto& Header = *InAsset.NativeHeader;
-	return FAssetRef{Header.Id, {}, Header.TypeId, Header.Revision};
-}
-
-void ValidateSourceReference(const FAssetRef& InReference, const std::optional<FAssetRef>& InSourceIdentity,
-                             std::string_view InField, const std::filesystem::path& InSource)
-{
-	if ((!InReference.Id.empty() || !InReference.Revision.empty()) &&
-	    (!InSourceIdentity || InSourceIdentity->TypeId != InReference.TypeId ||
-	     (!InReference.Id.empty() && InSourceIdentity->Id != InReference.Id) ||
-	     (!InReference.Revision.empty() && InSourceIdentity->Revision != InReference.Revision)))
-	{
-		throw std::runtime_error(ImportPathString(InSource) + ":" + std::string(InField) +
-		                         ": source asset reference identity/type/revision mismatch");
-	}
-}
-} // namespace
-
 bool FPublication::PreserveExternal(FAssetRef& InReference)
 {
 	const auto Path = PathFromUtf8(InReference.Path);
@@ -109,6 +83,11 @@ void FPublication::Rewrite(void* InObject, const FRecordDescriptor& InType, cons
 		            {
 			            throw std::runtime_error(std::string(InField) + ": import requires a source path");
 		            }
+		            if (!Reference.Id.empty() || !Reference.Revision.empty())
+		            {
+			            throw std::runtime_error(std::string(InField) +
+			                                     ": external source references cannot carry native identity");
+		            }
 		            const auto Path = Reference.Path.starts_with("@")
 		                                  ? ImportProductPath(InSource, Reference.Path.substr(1))
 		                                  : ImportPath(InSource.parent_path() / PathFromUtf8(Reference.Path));
@@ -118,13 +97,8 @@ void FPublication::Rewrite(void* InObject, const FRecordDescriptor& InType, cons
 		            {
 			            auto Cached = Converted.find(Key);
 			            auto Child = Cached != Converted.end() ? Cached->second : Convert(Path, Reference.TypeId);
-			            ValidateSourceReference(Reference, SourceIdentity(Child), InField, InSource);
 			            Build(Path, Child, false);
 			            Existing = Published.find(Key);
-		            }
-		            else
-		            {
-			            ValidateSourceReference(Reference, Existing->second.SourceIdentity, InField, InSource);
 		            }
 		            Reference = Existing->second.Reference;
 		            Reference.Path = ImportRelativePath(Existing->second.Path, InDestination.parent_path());
@@ -146,15 +120,15 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 		throw std::runtime_error("Import graph exceeds 1 GiB retained data budget");
 	}
 	auto Object = ReadRecord(*InAsset.Type, WriteRecord(*InAsset.Type, InAsset.Object.get()));
-	const auto IdentityKey = bInRoot                      ? "$root"
-	                         : !InAsset.StableKey.empty() ? InAsset.StableKey
-	                         : InAsset.NativeHeader ? "native/" + InAsset.NativeHeader->Id + "|" + InAsset.Type->Id
-	                                                : "source/" + StableSourceKey(InSource) + "|" + InAsset.Type->Id;
-	auto Id = SelectId(IdentityKey, InAsset, bInRoot);
+	const auto IdentityKey = bInRoot ? "$root"
+	                         : !InAsset.StableKey.empty()
+	                             ? InAsset.StableKey
+	                             : "source/" + StableSourceKey(InSource) + "|" + InAsset.Type->Id;
+	auto Id = SelectId(IdentityKey, bInRoot);
 	auto Destination = bInRoot ? Output : ProductDestination(Id, InAsset);
 	Rewrite(Object.get(), *InAsset.Type, InAsset.ProductRoot.empty() ? InSource : InAsset.ProductRoot, Destination);
 	std::string TextureContent;
-	if (!bInRoot && !InAsset.NativeHeader && InAsset.Type->Id == "hyperion.textureasset")
+	if (!bInRoot && InAsset.Type->Id == "hyperion.textureasset")
 	{
 		auto Record = WriteRecord(*InAsset.Type, Object.get());
 		std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value)["name"] =
@@ -187,8 +161,7 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 		LibraryProducts[IdentityKey] = {Id, ImportRelativePath(Path, Library), Encoded.Header.TypeId, {}};
 	}
 	Write(Path, Encoded);
-	FPublishedAsset Result{
-	    {Id, ImportPathString(Path.filename()), Encoded.Header.TypeId, {}}, Path, SourceIdentity(InAsset)};
+	FPublishedAsset Result{{Id, ImportPathString(Path.filename()), Encoded.Header.TypeId, {}}, Path};
 	Published.emplace(Key, Result);
 	if (!TextureContent.empty())
 	{

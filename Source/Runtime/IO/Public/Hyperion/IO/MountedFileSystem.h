@@ -29,6 +29,7 @@ public:
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override;
 	FBytes ReadRange(const std::filesystem::path& InPath, std::size_t InOffset, std::size_t InSize) override;
 	void Remove(const std::filesystem::path& InPath) override;
+	bool RemoveEmptyDirectory(const std::filesystem::path& InPath) override;
 	std::vector<FFileContents> ReadTree(const std::filesystem::path& InDirectory,
 	                                    std::span<const std::string_view> InExtensions, std::size_t InLimit) override;
 	void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) override;

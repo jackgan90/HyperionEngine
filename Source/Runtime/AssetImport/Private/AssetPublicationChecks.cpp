@@ -1,5 +1,4 @@
 #include "AssetPublicationInternal.h"
-#include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -26,21 +25,6 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 {
 	const auto Extension = ImportExtension(Source);
 	SourceType = InOptions.TypeId;
-	if (SourceType.empty() && Extension == ".hasset")
-	{
-		SourceType = DecodeAsset(IO.ReadAsync(Source, Cancellation).Get(IO.TaskSystem())).Header.TypeId;
-	}
-	if (SourceType.empty() && Extension == ".json")
-	{
-		const auto SourceBytes = IO.ReadAsync(Source, Cancellation).Get(IO.TaskSystem());
-		const auto Node =
-		    DecodeAssetSourceJson({reinterpret_cast<const char*>(SourceBytes->data()), SourceBytes->size()});
-		const auto& Object = std::get<FArchiveNode::FObject>(Node.Value);
-		if (const auto It = Object.find("type"); It != Object.end())
-		{
-			SourceType = ReadValue<std::string>(It->second);
-		}
-	}
 	for (const auto& Importer : Importers)
 	{
 		Provenance.Settings["importer:" + Importer.Id] = std::to_string(Importer.Version);
@@ -52,7 +36,7 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	}
 	if (SourceType.empty())
 	{
-		throw std::invalid_argument("Cannot infer source type; specify --type");
+		throw std::invalid_argument("Unsupported import source format: " + Extension);
 	}
 	const auto Importer = std::find_if(Importers.begin(), Importers.end(),
 	                                   [&](const FAssetImporter& InImporter)

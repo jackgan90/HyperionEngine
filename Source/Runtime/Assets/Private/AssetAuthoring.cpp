@@ -4,15 +4,8 @@
 
 namespace Hyperion
 {
-std::filesystem::path AssetProductPath(const FRecordDescriptor& InType, const void* InObject,
-                                       const std::filesystem::path& InRoot, std::string_view InId)
+std::string AssetProductName(const FRecordDescriptor& InType, const void* InObject)
 {
-	const std::map<std::string, std::string> Folders{{"hyperion.modelasset", "Models"},
-	                                                 {"hyperion.materialasset", "Materials"},
-	                                                 {"hyperion.textureasset", "Textures"},
-	                                                 {"hyperion.skyasset", "Skies"},
-	                                                 {"hyperion.scene", "Scenes"}};
-	const auto Folder = Folders.find(InType.Id);
 	const auto Record = WriteRecord(InType, InObject);
 	const auto& Fields =
 	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value);
@@ -30,8 +23,20 @@ std::filesystem::path AssetProductPath(const FRecordDescriptor& InType, const vo
 		}
 	}
 	Name = Name.substr(0, 64);
+	return Name;
+}
+
+std::filesystem::path AssetProductPath(const FRecordDescriptor& InType, const void* InObject,
+                                       const std::filesystem::path& InRoot, std::string_view InId)
+{
+	const std::map<std::string, std::string> Folders{{"hyperion.modelasset", "Models"},
+	                                                 {"hyperion.materialasset", "Materials"},
+	                                                 {"hyperion.textureasset", "Textures"},
+	                                                 {"hyperion.skyasset", "Skies"},
+	                                                 {"hyperion.scene", "Scenes"}};
+	const auto Folder = Folders.find(InType.Id);
 	return InRoot / (Folder == Folders.end() ? "Assets" : Folder->second) /
-	       (Name + "-" + std::string(InId) + ".hasset");
+	       (AssetProductName(InType, InObject) + "-" + std::string(InId) + ".hasset");
 }
 
 void PrepareAssetReferences(const FRecordDescriptor& InType, void* InObject, IFileSystem& InFiles,

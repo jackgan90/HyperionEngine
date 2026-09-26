@@ -18,10 +18,10 @@ void ValidateImportSettings(const FAssetConversionSettings& InSettings, std::str
 	if (InSettings.Sky)
 	{
 		const auto& Settings = *InSettings.Sky;
-		if ((InExtension != ".hdr" && InExtension != ".exr" && InExtension != ".json") ||
+		if ((InExtension != ".hdr" && InExtension != ".exr") ||
 		    (!InType.empty() && InType != RecordType<FSkyAsset>().Id))
 		{
-			throw std::invalid_argument("Sky bake settings apply only to HDR/EXR or sky recipes");
+			throw std::invalid_argument("Sky bake settings apply only to HDR/EXR panoramas");
 		}
 		if (!std::has_single_bit(Settings.RadianceSize) || Settings.RadianceSize > 1024 ||
 		    !std::has_single_bit(Settings.SpecularSize) || Settings.SpecularSize > 256 ||

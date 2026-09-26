@@ -22,7 +22,7 @@ bool FGui::InputInteger(const char* InLabel, std::uint64_t& InValue)
 	return Impl->DragNumber(InLabel, ImGuiDataType_U64, &InValue, 1);
 }
 
-void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded)
+void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded, const char* InTooltip)
 {
 	Impl->Select();
 	ImGui::PushID(InLabel);
@@ -31,8 +31,10 @@ void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded)
 	const std::string_view Label(InLabel);
 	const auto Marker = Label.find("##");
 	const char* End = InLabel + (Marker == std::string_view::npos ? Label.size() : Marker);
-	const float LabelWidth = std::max(ImGui::CalcTextSize(InLabel, End).x + ImGui::GetStyle().ItemInnerSpacing.x,
-	                                  std::clamp(Available * .38f, Scale(76), Scale(160)));
+	const float HelpWidth = InTooltip ? ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemInnerSpacing.x : 0;
+	const float LabelWidth =
+	    std::max(ImGui::CalcTextSize(InLabel, End).x + HelpWidth + ImGui::GetStyle().ItemInnerSpacing.x,
+	             std::clamp(Available * .38f, Scale(76), Scale(160)));
 	ImGui::AlignTextToFramePadding();
 	if (bOutExpanded)
 	{
@@ -42,6 +44,12 @@ void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded)
 	else
 	{
 		ImGui::TextUnformatted(InLabel, End);
+	}
+	if (InTooltip)
+	{
+		ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+		ImGui::TextDisabled("(?)");
+		Tooltip(InTooltip);
 	}
 	ImGui::SameLine(Start + LabelWidth);
 	ImGui::SetNextItemWidth(std::max(1.f, ImGui::GetContentRegionAvail().x));
@@ -126,6 +134,18 @@ bool FGui::Section(const char* InLabel, bool bInDefaultOpen)
 	const bool bOpen = ImGui::CollapsingHeader(InLabel, bInDefaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0);
 	ImGui::PopStyleColor();
 	return bOpen;
+}
+
+void FGui::Indent()
+{
+	Impl->Select();
+	ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+}
+
+void FGui::Unindent()
+{
+	Impl->Select();
+	ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
 }
 
 bool FGui::BeginTable(const char* InId, const char* InFirst, const char* InSecond)
@@ -296,6 +316,14 @@ void FGui::OpenPopup(const char* InTitle)
 	ImGui::OpenPopup(InTitle);
 }
 
+bool FGui::CenteredButton(const char* InLabel, bool bInEnabled)
+{
+	Impl->Select();
+	const float Width = ImGui::CalcTextSize(InLabel, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2;
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, (ImGui::GetContentRegionAvail().x - Width) * .5f));
+	return Button(InLabel, bInEnabled);
+}
+
 bool FGui::BeginModal(const char* InTitle, bool& bInOpen)
 {
 	Impl->Select();
@@ -303,6 +331,28 @@ bool FGui::BeginModal(const char* InTitle, bool& bInOpen)
 	const auto* Viewport = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(Viewport->GetCenter(), ImGuiCond_Appearing, {.5f, .5f});
 	return ImGui::BeginPopupModal(InTitle, &bInOpen, ImGuiWindowFlags_NoCollapse);
+}
+
+bool FGui::BeginMessageModal(const char* InTitle, bool& bInOpen, const std::string& InMessage)
+{
+	Impl->Select();
+	const auto* Viewport = ImGui::GetMainViewport();
+	const auto& Style = ImGui::GetStyle();
+	const float MaxWidth = std::min(Scale(560), Viewport->Size.x * .8f);
+	const float TextWidth = ImGui::CalcTextSize(InMessage.c_str()).x + Style.WindowPadding.x * 2;
+	const float TitleWidth = ImGui::CalcTextSize(InTitle).x + ImGui::GetFrameHeight() * 2;
+	const float Width = std::clamp(std::max(TextWidth, TitleWidth), std::min(Scale(240), MaxWidth), MaxWidth);
+	ImGui::SetNextWindowSize({Width, 0}, ImGuiCond_Always);
+	ImGui::SetNextWindowSizeConstraints({Width, 0}, {Width, Viewport->Size.y * .8f});
+	ImGui::SetNextWindowPos(Viewport->GetCenter(), ImGuiCond_Always, {.5f, .5f});
+	if (!ImGui::BeginPopupModal(InTitle, &bInOpen,
+	                            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
+	                                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings))
+	{
+		return false;
+	}
+	ImGui::TextWrapped("%s", InMessage.c_str());
+	return true;
 }
 
 void FGui::EndModal()

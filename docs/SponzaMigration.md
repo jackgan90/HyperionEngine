@@ -15,12 +15,12 @@ Editor 可通过 `--scene /Game/Scenes/Sponza.hasset` 打开 HyperionAssets 中�
 
 | 文件 | 作用 |
 | --- | --- |
-| `Sponza.json`（见 HyperionAssets 的 Metadata 与本地源缓存） | 模型、初始视图、层级与光源节点 |
+| `/Game/Scenes/Sponza.hasset` | 原生编辑场景，保存模型引用、初始视图与光源节点 |
 | `Sponza.gltf`（见 HyperionAssets 的 Metadata 与本地源缓存） | 上游模型，关联 bin 和全部源图片 |
-| `HyperionAssets/Metadata/Sources.json` | 固定上游版本、下载 SHA-256 和场景配方 |
+| `HyperionAssets/Metadata/Sources.json` | 固定上游版本、下载 SHA-256 和模型导入输出 |
 | [PrepareContent.py](../tools/PrepareContent.py) | 显式恢复来源、调用 AssetTool 导入；运行时从原生资产元数据发现索引 |
 
-Sponza 原生资产位于 HyperionAssets，由 `/Game/Scenes/Sponza.hasset` 加载。原始模型和图片仅保存在忽略的源缓存；固定版本、哈希和自创场景配方记录在 `Metadata/Sources.json`。普通构建不下载或转换样例；重建流程见 [ContentFileSystem.md](ContentFileSystem.md)。
+Sponza 原生资产位于 HyperionAssets，由 `/Game/Scenes/Sponza.hasset` 加载。原始模型和图片仅保存在忽略的源缓存；固定版本、哈希和模型导入输出记录在 `Metadata/Sources.json`。场景 JSON 是早期项目自建中间格式，不属于 Khronos Sponza，也不再支持导入。场景编辑内容以版本控制中的 `.hasset` 为准，来源重建只更新模型和纹理，不覆盖场景。普通构建不下载或转换样例；重建流程见 [ContentFileSystem.md](ContentFileSystem.md)。
 
 ## 来源
 
@@ -30,7 +30,7 @@ Sponza 原生资产位于 HyperionAssets，由 `/Game/Scenes/Sponza.hasset` 加�
 
 初始浏览视图的世界变换和镜头保存在场景 `initialView` 中。初始位置约为 `(-10.521811, 1.233887, 0.461733)`，垂直 FOV 为 `0.729224966` 弧度（约 41.78°），near/far 为 `0.05 / 100`，focus distance 约为 13。投影与 CSM 使用当前视口的镜头参数，其他场景不会被强制套用 Sponza 的 FOV。编辑器通过 Set initial view 显式修改初始视图；真实 Camera 对象可另行创建和预览。glTF 相机导入仍未实现。
 
-从占位 Main Camera 迁移时，显式核对它是启用的根节点、仅含 Transform/Camera、没有子对象或额外引用，且场景没有已有初始视图。逐值复制镜头和世界矩阵后移除该节点并清空 `defaultCamera`，其他对象与共享依赖保持原样。同步修改 Metadata 配方、来源缓存、原生场景和 catalog。该转换仅适用于核验过的示例；通用 schema 升级保留旧相机和拓扑，不自动执行删除。
+从占位 Main Camera 迁移时，显式核对它是启用的根节点、仅含 Transform/Camera、没有子对象或额外引用，且场景没有已有初始视图。逐值复制镜头和世界矩阵后移除该节点并清空 `defaultCamera`，其他对象与共享依赖保持原样。该历史迁移已写入原生场景；当前编辑通过共享场景服务保存。该转换仅适用于核验过的示例；通用 schema 升级保留旧相机和拓扑，不自动执行删除。
 
 默认使用 Deferred、compact GBuffer、reversed-Z 和聚簇光照。主方向光使用四级 CSM；三盏暖色点光照亮庭院。Cloudy 天空提供背景、SH 漫反射和 GGX 镜面 IBL；Scene 面板可换为 Dusk、Clear 或自定义原生天空。关闭天空背景仍保留天光。
 

@@ -48,7 +48,7 @@ Source/
     RenderDoc/     # 可选抓帧服务的设备创建前生命周期
   Applications/
     Editor/        # 选择原生后端，启动 Editor 插件宿主
-    AssetTool/     # 独立 import / inspect / validate / upgrade CLI
+    AssetTool/     # 独立 import / inspect / validate CLI
     Automation/    # CLI / JSONL / MCP 的启动组合
   Tests/           # 对应模块的单元测试及 Integration 验收
 ```

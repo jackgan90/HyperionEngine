@@ -4,6 +4,7 @@
 
 namespace Hyperion
 {
+std::string AssetProductName(const FRecordDescriptor& InType, const void* InObject);
 std::filesystem::path AssetProductPath(const FRecordDescriptor& InType, const void* InObject,
                                        const std::filesystem::path& InRoot, std::string_view InId);
 // Mutates only an exclusively owned authoring snapshot.

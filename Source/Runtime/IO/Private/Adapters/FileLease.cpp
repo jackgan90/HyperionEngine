@@ -1,4 +1,5 @@
 #include "Hyperion/IO/IOService.h"
+#include "Hyperion/IO/Path.h"
 #include <windows.h>
 
 namespace Hyperion
@@ -35,7 +36,7 @@ std::shared_ptr<IFileWriteLease> FLocalFileSystem::AcquireWriteLease(const std::
 	                                FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
 	if (Handle == INVALID_HANDLE_VALUE)
 	{
-		throw std::runtime_error("Cannot acquire exclusive asset publication lease: " + InPath.generic_string());
+		throw std::runtime_error("Cannot acquire exclusive asset publication lease: " + PathToUtf8(InPath));
 	}
 	try
 	{

@@ -3,7 +3,7 @@
 
 namespace Hyperion
 {
-// Embedded source representation for offline import and explicit version-1 upgrade.
+// Embedded source representation for offline import and version-1 compatibility decoding.
 enum class EAlphaMode
 {
 	Opaque = 0,

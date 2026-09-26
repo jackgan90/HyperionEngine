@@ -151,14 +151,4 @@ std::shared_ptr<FModelAsset> EmitModelSource(FAssetImportContext& InContext, con
 	return std::make_shared<FModelAsset>(std::move(Split.Model));
 }
 
-FModelSource ReadEmbeddedModelSource(const FAssetDocument& InDocument)
-{
-	if (InDocument.Header.TypeId != RecordType<FModelAsset>().Id || InDocument.Header.SchemaVersion != 1)
-	{
-		throw std::invalid_argument("Expected embedded model schema 1");
-	}
-	auto Node = InDocument.Object;
-	std::get<FArchiveNode::FObject>(Node.Value).at("type") = WriteValue(RecordType<FModelSource>().Id);
-	return *std::static_pointer_cast<FModelSource>(ReadRecord(RecordType<FModelSource>(), Node));
-}
 } // namespace Hyperion

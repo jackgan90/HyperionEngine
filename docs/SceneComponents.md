@@ -69,13 +69,13 @@ Directional Light 记录版本 2 增加可选 `shadowSettings`，包含独立的
 
 ## 模型层级与共享
 
-模型 schema 3 保存源节点和 primitive ID。schema 2 只在读取内存中补出确定 ID，schema 1 内嵌材质仍需工具升级。缺少源 ID 时生成 `node-N` / `primitive-N`，保证同一源排列及兼容重建稳定，不承诺自动合并上游重排或重新拓扑后的编辑。
+模型 schema 3 保存源节点和 primitive ID。schema 2 只在读取内存中补出确定 ID，schema 1 内嵌材质不由当前 importer 拆分，需从原始 glTF/GLB 重新导入。缺少源 ID 时生成 `node-N` / `primitive-N`，保证同一源排列及兼容重建稳定，不承诺自动合并上游重排或重新拓扑后的编辑。
 
-默认 Model 组件引用完整模型；导入模型为场景、导入场景源、升级原生场景和运行期加载均不自动展开模型节点或 primitive。场景只持有实例摆放和实例属性，模型内部层级与变换留在资产中。渲染使用 `对象世界变换 × 模型内部节点变换`。组件保留整体和 section 材质 override，不增加场景拓扑，也不改写共享模型或材质。
+默认 Model 组件引用完整模型；导入模型为场景和原生场景兼容加载均不自动展开模型节点或 primitive。场景只持有实例摆放和实例属性，模型内部层级与变换留在资产中。渲染使用 `对象世界变换 × 模型内部节点变换`。组件保留整体和 section 材质 override，不增加场景拓扑，也不改写共享模型或材质。
 
 模型实例共享 `FSceneModelData` 和模型 GPU 资源，一个 `FModel` 可以对应多个 render primitives；draw 数仍随合批、视图和 pass 改变。内部 primitive 可通过 `render.component_diagnostics` 查询，不要求与 Outliner 对象一一对应。render handle 或 draw 序号不属于保存身份。
 
-已有展开场景的 `SourceNode` / `SourcePrimitive` 选择和子对象编辑继续兼容，升级不会自动合并或丢弃这些状态。`ExpandSceneModels` 仅作为显式 CPU 编辑操作保留，当前没有 Editor 拆分按钮；后续独立部件功能必须由用户主动触发。Sponza 的整体引用迁移须核对旧子树与源模型，存在无法表达的子对象修改时拒绝合并。
+已有展开场景的 `SourceNode` / `SourcePrimitive` 选择和子对象编辑继续兼容，兼容读取不会自动合并或丢弃这些状态。`ExpandSceneModels` 仅作为显式 CPU 编辑操作保留，当前没有 Editor 拆分按钮；后续独立部件功能必须由用户主动触发。Sponza 的整体引用迁移须核对旧子树与源模型，存在无法表达的子对象修改时拒绝合并。
 
 ## 文档与迁移
 
@@ -85,4 +85,4 @@ Editor 在合法输入变化时实时提交，并将同一控件的连续输入�
 
 独立 `FSceneCameraView` 复用导航控制器，经 `FSceneViewRequest::CameraOverride` 冻结给 Render。导航、曝光和 Frame Scene 不修改场景相机或撤销历史；编辑 Camera 组件属于文档修改。
 
-`export-envelope` 的原生记录 JSON 可作为源配方，支持自定义组件及稳定 ID。重建配方应指向原始模型/天空源文件，并沿用导入库和 `--source-root` / `--source-id`。容器、依赖表与发布顺序见 [NativeAssets.md](NativeAssets.md)。
+`export-envelope` 导出原生记录 JSON 供诊断，不作为 importer 输入。自定义组件和稳定 ID 保存在原生 `.hasset` 中，通过场景编辑和保存维护。外部模型/天空可从 glTF/GLB 或 HDR/EXR 来源导入。容器、依赖表与发布顺序见 [NativeAssets.md](NativeAssets.md)。

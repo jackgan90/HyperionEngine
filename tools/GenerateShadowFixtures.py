@@ -3,7 +3,6 @@ import argparse
 import base64
 import copy
 import json
-import math
 import pathlib
 import struct
 import zlib
@@ -62,7 +61,6 @@ def generate(output=None):
     output = pathlib.Path(output) if output is not None else ROOT / "out/fixtures/Sources"
     models = output / "Models"
     models.mkdir(parents=True, exist_ok=True)
-    (output / "Scenes").mkdir(parents=True, exist_ok=True)
     mask = card()
     (models / "ShadowMask.gltf").write_text(json.dumps(mask, indent=2) + "\n", encoding="utf-8")
     thin = copy.deepcopy(mask)
@@ -72,26 +70,7 @@ def generate(output=None):
     thin.pop("textures")
     thin.pop("samplers")
     (models / "ShadowThin.gltf").write_text(json.dumps(thin, indent=2) + "\n", encoding="utf-8")
-    angle = math.radians(16) / 2
-    instances = [
-        {"id": "receiver-ground", "asset": "cube", "translation": [0, -.15, -3], "scale": [22, .3, 24]},
-        {"id": "contact-column", "asset": "cube", "translation": [-5, 1.5, 0], "scale": [1.1, 3, 1.1]},
-        {"id": "slender-contact", "asset": "cube", "translation": [-3, 2, 2], "scale": [.15, 4, .15]},
-        {"id": "uv1-alpha-card", "asset": "mask", "translation": [0, 0, 0]},
-        {"id": "mirrored-alpha-card", "asset": "mask", "translation": [4, 0, -2], "scale": [-1, 1, 1]},
-        {"id": "thin-double-sided", "asset": "thin", "translation": [-5, 0, -5], "scale": [.15, 1.4, 1]},
-        {"id": "sloped-receiver", "asset": "cube", "translation": [0, .9, -7], "scale": [5, .25, 5],
-         "rotation": [0, 0, math.sin(angle), math.cos(angle)]},
-        {"id": "sloped-occluder", "asset": "cube", "translation": [0, 2, -7], "scale": [.6, 2, .6]},
-        {"id": "distant-caster", "asset": "cube", "translation": [0, 2, -35], "scale": [2, 4, 2]},
-        {"id": "distant-receiver", "asset": "cube", "translation": [0, -.15, -32], "scale": [12, .3, 28]}]
-    scene = {"type": "hyperion.scene", "schema_version": 1,
-             "assets": [{"id": "cube", "path": "../Models/Ground.gltf"},
-                        {"id": "mask", "path": "../Models/ShadowMask.gltf"},
-                        {"id": "thin", "path": "../Models/ShadowThin.gltf"}],
-             "instances": instances,
-             "camera": {"eye": [9, 8, 14], "target": [0, 1, -4], "near": .05, "far": 250}}
-    (output / "Scenes/Shadows.json").write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
+
 
 
 if __name__ == "__main__":

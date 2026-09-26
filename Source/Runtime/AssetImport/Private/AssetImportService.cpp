@@ -90,6 +90,10 @@ void FAssetImportService::Register(FAssetImporter InImporter)
 		               {
 			               return static_cast<char>(std::tolower(InCharacter));
 		               });
+		if (Extension == ".hasset")
+		{
+			throw std::invalid_argument("Native assets are not import sources");
+		}
 		for (const auto& Existing : Impl->Importers)
 		{
 			if (Existing.Type->Id == InImporter.Type->Id &&
@@ -144,8 +148,6 @@ FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path&
 		                       Importer->Id,
 		                       Importer->Version,
 		                       Weight,
-		                       Extension == ".hasset" ? std::optional<FAssetHeader>(DecodeAsset(Context.Bytes).Header)
-		                                              : std::nullopt,
 		                       std::move(Context.Products)};
 		Result.SourceWidth = Context.SourceWidth;
 		Result.SourceHeight = Context.SourceHeight;

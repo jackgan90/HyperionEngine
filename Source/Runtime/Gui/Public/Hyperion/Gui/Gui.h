@@ -120,6 +120,7 @@ public:
 	bool WantsKeyboard() const;
 	void Separator();
 	bool Button(const char* InLabel, bool bInEnabled = true);
+	bool CenteredButton(const char* InLabel, bool bInEnabled = true);
 	bool IconButton(const char* InId, EGuiIcon InIcon, const char* InTooltip, bool bInSelected = false);
 	void Tooltip(const char* InText);
 	float AvailableWidth() const;
@@ -141,7 +142,7 @@ public:
 	bool InputInteger(const char* InLabel, std::int64_t& InValue);
 	bool InputInteger(const char* InLabel, std::uint64_t& InValue);
 	// Pair around a value widget with a hidden label to draw a left-aligned property name.
-	void BeginPropertyRow(const char* InLabel, bool* bOutExpanded = nullptr);
+	void BeginPropertyRow(const char* InLabel, bool* bOutExpanded = nullptr, const char* InTooltip = nullptr);
 	void EndPropertyRow();
 	void BeginDisabled(bool bInDisabled);
 	void EndDisabled();
@@ -189,6 +190,8 @@ public:
 	void SameLineIfFits(const char* InButtonLabel);
 	void SetNextItemWidth(float InWidth);
 	bool Section(const char* InLabel, bool bInDefaultOpen = true);
+	void Indent();
+	void Unindent();
 	bool BeginTable(const char* InId, const char* InFirst, const char* InSecond);
 	void NextRow();
 	void NextColumn();
@@ -220,6 +223,7 @@ public:
 	bool BeginPopup(const char* InId);
 	void EndPopup();
 	bool BeginModal(const char* InTitle, bool& bInOpen);
+	bool BeginMessageModal(const char* InTitle, bool& bInOpen, const std::string& InMessage);
 	void EndModal();
 	void ClosePopup();
 	bool IsEditingText() const;

@@ -36,13 +36,22 @@ def workflow(cli, tool, directory, mcp):
         assert {"asset.import", "asset.import.validate", "asset.import.tasks", "asset.import.task",
                 "asset.import.capabilities"} <= {item["id"] for item in found["items"]}
         schema = session.request("api.describe", {"operation": "asset.import"})["inputSchema"]
-        assert {"rootId", "textureEncoding", "sky"} <= schema["properties"].keys()
+        assert {"rootId", "textureEncoding", "sky", "createFolder"} <= schema["properties"].keys()
         formats = completed(session.call("asset.import.capabilities"))["formats"]
-        assert len(formats) == 5
+        assert len(formats) == 3
+        sky_format = next(item for item in formats if item["type"] == "hyperion.skyasset")
+        assert set(sky_format["extensions"]) == {".hdr", ".exr"}
         generation = completed(session.call("content.root.get"))["generation"]
         request = dict(generation=generation, source=str(directory / "Color.png"),
                        output="/Game/Color.hasset", library="/Game")
         completed(session.call("asset.import.validate", **request))
+        local_output = str(directory / "Game/Nested/Local.hasset")
+        assert completed(session.call("asset.import.validate", **dict(request, output=local_output)))["output"] == "/Game/Nested/Local.hasset"
+        for output in (str(directory / "Outside.hasset"), "/Game/../Outside.hasset", "/Engine/Bad.hasset", "/Game/Bad.txt", ""):
+            options = dict(request, output=output)
+            for operation in ("asset.import.validate", "asset.import", "asset.import.draft.prepare"):
+                assert session.wait(session.call(operation, **options))["status"] == "failed"
+        assert session.call("asset.import.validate", **dict(request, library=str(directory / "Outside")))["status"] == "failed"
         assert not list((directory / "Game").rglob("*.hasset"))
         first = completed(session.wait(session.call("asset.import", **request)))
         assert first["writtenAssets"] == "1" and not first["warning"]
@@ -52,32 +61,117 @@ def workflow(cli, tool, directory, mcp):
         assert changed["asset"]["id"] == first["asset"]["id"] and changed["writtenAssets"] == "1"
         task = completed(session.call("asset.import.task", task=changed["task"]))
         assert task["result"] == changed and task["status"] == "completed"
-        for source in ("Color.jpeg", "Models/Showcase.gltf", "Models/Showcase.glb", "Sky.json", "Sky.hdr"):
+        for source in ("Color.jpeg", "Models/Showcase.gltf", "Models/Showcase.glb", "Sky.hdr"):
             options = dict(request, source=str(directory / source), output="/Game/" + source.replace("/", "-") + ".hasset")
             if source.endswith(".hdr"):
                 options["sky"] = {"radianceSize": 8, "specularSize": 4, "samples": 8}
             result = completed(session.wait(session.call("asset.import", **options)))
             assert int(result["writtenAssets"]) > 0 and not result["warning"], result
             assert completed(session.wait(session.call("asset.import", **options)))["upToDate"]
-        recipe = dict(request, source=str(directory / "Sky.json"), output="/Game/Sky.json.hasset",
+        sky = dict(request, source=str(directory / "Sky.hdr"), output="/Game/Sky.hdr.hasset",
                       sky={"radianceSize": 16, "specularSize": 8, "samples": 8})
-        assert not completed(session.wait(session.call("asset.import", **recipe)))["upToDate"]
-        assert completed(session.wait(session.call("asset.import", **recipe)))["upToDate"]
+        assert not completed(session.wait(session.call("asset.import", **sky)))["upToDate"]
+        assert completed(session.wait(session.call("asset.import", **sky)))["upToDate"]
+        # Both recipe JSON and exported sky records must fail without publishing files.
+        exported = directory / "SkyRecord.json"
+        subprocess.run([str(tool), "--asset-root", str(directory / "Game"), "export-json",
+                        "/Game/Sky.hdr.hasset", str(exported)], check=True, capture_output=True)
+        for source in (directory / "Sky.json", exported):
+            rejected_request = dict(request, source=str(source), output="/Game/RejectedSky.hasset")
+            for explicit in (False, True):
+                options = rejected_request | ({"type": "hyperion.skyasset"} if explicit else {})
+                assert session.call("asset.import.validate", **options)["status"] == "failed"
+                assert session.wait(session.call("asset.import", **options))["status"] == "failed"
+            result = subprocess.run([str(tool), "import", str(source), str(directory / "Rejected.hasset")],
+                                    capture_output=True)
+            assert result.returncode != 0
+        assert not (directory / "Rejected.hasset").exists()
+        assert not (directory / "Game/RejectedSky.hasset").exists()
+        native_sky = dict(request, source="/Game/Sky.hdr.hasset", output="/Game/NativeSky.hasset")
+        assert session.wait(session.call("asset.import", **native_sky))["status"] == "failed"
         wrapped = dict(request, source=str(directory / "Models/Showcase.gltf"), output="/Game/Scene.hasset", scene=True)
         assert completed(session.wait(session.call("asset.import", **wrapped)))["asset"]["type"] == "hyperion.scene"
-        # Existing JSON and native paths for every registered authoring type.
-        for filename in ("Color.hasset", "Scene.hasset", "Models-Showcase.gltf.hasset", "Sky.json.hasset"):
-            source = directory / (filename + ".json")
+        sibling_request = dict(request, source=str(directory / "Models/Showcase.gltf"), output="/Game/a/b.hasset")
+        sibling_request.pop("library")
+        validation = completed(session.call("asset.import.validate", **sibling_request))
+        assert validation["library"] == "/Game/a"
+        completed(session.wait(session.call("asset.import", **sibling_request)))
+        products = list((directory / "Game/a").rglob("*.hasset"))
+        assert len(products) > 1 and all(path.parent == directory / "Game/a" for path in products)
+        assert completed(session.wait(session.call("asset.import", **sibling_request)))["upToDate"]
+        grouped = dict(sibling_request, output="/Game/Grouped/Model.hasset", createFolder=True)
+        assert completed(session.call("asset.import.validate", **grouped))["folder"] == "/Game/Grouped/Showcase"
+        grouped_result = completed(session.wait(session.call("asset.import", **grouped)))
+        assert grouped_result["asset"]["path"] == "/Game/Grouped/Showcase/Model.hasset", grouped_result
+        products = list((directory / "Game/Grouped").rglob("*.hasset"))
+        assert len(products) > 1 and all(path.parent == directory / "Game/Grouped/Showcase" for path in products)
+        assert completed(session.wait(session.call("asset.import", **grouped)))["upToDate"]
+        dependency = directory / "Models/Checker.png"
+        original_dependency = dependency.read_bytes()
+        dependency.write_bytes(png(32, 32))
+        rebuilt = completed(session.wait(session.call("asset.import", **grouped)))
+        assert not rebuilt["upToDate"] and rebuilt["asset"]["id"] == grouped_result["asset"]["id"]
+        assert rebuilt["asset"]["path"] == grouped_result["asset"]["path"]
+        dependency.write_bytes(original_dependency)
+        completed(session.wait(session.call("asset.import", **grouped)))
+        assert completed(session.wait(session.call("asset.import", **grouped)))["upToDate"]
+        # Separate tool processes must recover the same folder without an in-memory task.
+        command = [str(tool), "--asset-root", str(directory / "Game"), "import",
+                   str(directory / "Color.png"), "/Game/Tool/Custom.hasset", "--create-folder"]
+        subprocess.run(command, check=True, capture_output=True)
+        saved = directory / "Game/Tool/Color/Custom.hasset"
+        before_repeat = saved.stat().st_mtime_ns
+        subprocess.run(command, check=True, capture_output=True)
+        assert saved.stat().st_mtime_ns == before_repeat
+        assert not (directory / "Game/Tool/Color_1").exists()
+        assert {item["type"] for item in formats} == {"hyperion.modelasset", "hyperion.textureasset", "hyperion.skyasset"}
+        assert all(".hasset" not in item["extensions"] for item in formats)
+        scene_json = directory / "Scene.json"
+        subprocess.run([str(tool), "--asset-root", str(directory / "Game"), "export-json",
+                        "/Game/Scene.hasset", str(scene_json)], check=True, capture_output=True)
+        for explicit in (False, True):
+            options = dict(request, source=str(scene_json), output="/Game/RejectedScene.hasset")
+            if explicit:
+                options["type"] = "hyperion.scene"
+            assert session.call("asset.import.validate", **options)["status"] == "failed"
+            assert session.wait(session.call("asset.import", **options))["status"] == "failed"
+            assert session.call("asset.import.draft.prepare", **options)["status"] == "failed"
+        assert not (directory / "Game/RejectedScene.hasset").exists()
+        # Diagnostic JSON exports are rejected for model, texture and material assets.
+        for source_path, type_id in (("/Game/Color.hasset", "hyperion.textureasset"),
+                                     ("/Game/Models-Showcase.gltf.hasset", "hyperion.modelasset"),
+                                     ("/Engine/Materials/DefaultPrimitive.hasset", "hyperion.materialasset")):
+            source = directory / (type_id + ".json")
             subprocess.run([str(tool), "--asset-root", str(directory / "Game"), "export-json",
-                            "/Game/" + filename, str(source)], check=True, capture_output=True)
-            options = dict(request, source=str(source), output="/Game/Copy-" + filename)
-            completed(session.wait(session.call("asset.import", **options)))
-        material = directory / "Material.json"
-        subprocess.run([str(tool), "export-json", "/Engine/Materials/DefaultPrimitive.hasset", str(material)],
-                       check=True, capture_output=True)
-        completed(session.wait(session.call("asset.import", **dict(request, source=str(material), output="/Game/Material.hasset"))))
-        native = dict(request, source="/Game/Color.hasset", output="/Game/NativeCopy.hasset")
-        completed(session.wait(session.call("asset.import", **native)))
+                            source_path, str(source)], check=True, capture_output=True)
+            for explicit in (False, True):
+                options = dict(request, source=str(source), output="/Game/RejectedJson.hasset")
+                if explicit:
+                    options["type"] = type_id
+                for operation in ("asset.import.validate", "asset.import", "asset.import.draft.prepare"):
+                    assert session.wait(session.call(operation, **options))["status"] == "failed"
+            result = subprocess.run([str(tool), "import", str(source), str(directory / "RejectedJson.hasset")],
+                                    capture_output=True)
+            assert result.returncode != 0
+            assert not (directory / "RejectedJson.hasset").exists()
+            assert not (directory / "Game/RejectedJson.hasset").exists()
+        assert all(".json" not in item["extensions"] for item in formats)
+        for source, type_id in (("/Game/Color.hasset", "hyperion.textureasset"),
+                                ("/Game/Models-Showcase.gltf.hasset", "hyperion.modelasset"),
+                                ("/Game/Sky.hdr.hasset", "hyperion.skyasset"),
+                                ("/Game/Scene.hasset", "hyperion.scene"),
+                                ("/Engine/Materials/DefaultPrimitive.hasset", "hyperion.materialasset")):
+            for explicit in (False, True):
+                native = dict(request, source=source, output="/Game/RejectedNative.hasset")
+                if explicit:
+                    native["type"] = type_id
+                assert session.call("asset.import.validate", **native)["status"] == "failed"
+                assert session.wait(session.call("asset.import", **native))["status"] == "failed"
+                assert session.call("asset.import.draft.prepare", **native)["status"] == "failed"
+            result = subprocess.run([str(tool), "--asset-root", str(directory / "Game"),
+                                     "import", source, "/Game/RejectedNative.hasset"], capture_output=True)
+            assert result.returncode != 0
+        assert not (directory / "Game/RejectedNative.hasset").exists()
         broken = directory / "Broken.png"
         broken.write_bytes(b"invalid image")
         failure = session.wait(session.call("asset.import", **dict(request, source=str(broken), output="/Game/Broken.hasset")))
@@ -101,6 +195,7 @@ def workflow(cli, tool, directory, mcp):
 
 def gui(cli, editor, directory, disabled):
     prepare(directory)
+    (directory / "Game/Destination").mkdir()
     extra = ["--exercise-import", str(directory / "Color.png"), "--ui-scale", "1"]
     if disabled:
         extra += ["--disable-plugin", "automation-assets", "--disable-plugin", "automation-local"]
@@ -118,11 +213,14 @@ def gui(cli, editor, directory, disabled):
             drafts = completed(agent.call("asset.import.drafts"))["drafts"]
             assert len(drafts) == 1
             draft = completed(agent.call("asset.import.draft.get", draft=drafts[0]))
-            assert draft["name"] == "GUI draft texture" and not draft["dirty"], draft
+            assert draft["name"] == "Color" and not draft["dirty"], draft
             tasks = completed(agent.call("asset.import.tasks"))["tasks"]
-            assert len(tasks) == 2 and tasks[0]["result"]["upToDate"]
+            assert len(tasks) == 4 and tasks[0]["status"] == "completed", tasks
+            assert tasks[1]["status"] == "failed" and tasks[1]["error"]
+            assert tasks[2]["result"]["upToDate"]
+            assert tasks[0]["result"]["writtenAssets"] == "1"
             assert completed(agent.call("asset.import.task", task=tasks[0]["task"])) == tasks[0]
-            opened = completed(agent.wait(agent.call("asset.open", path="/Game/Color.hasset")))
+            opened = completed(agent.wait(agent.call("asset.open", path="/Game/Destination/Color/Color.hasset")))
             assert opened["document"]
             draft = completed(agent.call("asset.import.draft.edit", draft=draft["draft"],
                                          generation=draft["generation"], properties={"name": "Unpublished change"}))

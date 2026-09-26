@@ -1,10 +1,7 @@
 #include "Hyperion/AssetImport/SkyImport.h"
-#include "Hyperion/AssetImport/MaterialImport.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/IO/Path.h"
-#include <nlohmann/json.hpp>
-#include <set>
 
 namespace Hyperion
 {
@@ -12,45 +9,17 @@ namespace
 {
 std::shared_ptr<void> ImportSky(FAssetImportContext& InContext)
 {
-	auto Bytes = InContext.Bytes;
-	FEnvironmentBakeSettings Settings;
+	const auto& Bytes = InContext.Bytes;
+	const auto Settings = InContext.Settings.Sky.value_or(FEnvironmentBakeSettings{});
 	std::string Name = PathToUtf8(InContext.Path.stem());
-	if (InContext.Path.extension() == ".json")
-	{
-		const std::string_view Text(reinterpret_cast<const char*>(Bytes->data()), Bytes->size());
-		const auto Archive = DecodeAssetSourceJson(Text);
-		const auto Json = nlohmann::json::parse(Text);
-		if (Json.contains("fields"))
-		{
-			if (InContext.Settings.Sky)
-			{
-				throw std::invalid_argument(
-				    "Bake settings require a sky recipe or HDR/EXR, not a serialized sky record");
-			}
-			return ReadRecord(RecordType<FSkyAsset>(), Archive);
-		}
-		const std::set<std::string> Allowed{"type",          "schema_version", "name",   "source",
-		                                    "radiance_size", "specular_size",  "samples"};
-		for (const auto& [Key, Value] : Json.items())
-		{
-			if (!Allowed.contains(Key))
-			{
-				throw std::invalid_argument("Unsupported sky import field: " + Key);
-			}
-		}
-		if (Json.at("type") != RecordType<FSkyAsset>().Id || Json.at("schema_version") != 1)
-		{
-			throw std::invalid_argument("Unsupported sky import descriptor");
-		}
-		Name = Json.value("name", Name);
-		Settings.RadianceSize = Json.value("radiance_size", Settings.RadianceSize);
-		Settings.SpecularSize = Json.value("specular_size", Settings.SpecularSize);
-		Settings.Samples = Json.value("samples", Settings.Samples);
-		Bytes = InContext.Read(InContext.Path.parent_path() / PathFromUtf8(Json.at("source").get<std::string>()));
-	}
 	InContext.Cancellation.Check();
-	Settings = InContext.Settings.Sky.value_or(Settings);
 	const auto Image = DecodeHdrImage(*Bytes);
+	if (Image.Width != 2ULL * Image.Height)
+	{
+		throw std::invalid_argument("Sky image is " + std::to_string(Image.Width) + " x " +
+		                            std::to_string(Image.Height) +
+		                            ". Choose a 2:1 HDR/EXR panorama (width must be twice the height).");
+	}
 	InContext.SourceWidth = Image.Width;
 	InContext.SourceHeight = Image.Height;
 	InContext.EffectiveSky = Settings;
@@ -79,14 +48,6 @@ std::shared_ptr<void> ImportSky(FAssetImportContext& InContext)
 
 void RegisterSkyImporter(FAssetImportService& InImports)
 {
-	InImports.Register({"hyperion.sky-environment", 1, &RecordType<FSkyAsset>(), {".hdr", ".exr", ".json"}, ImportSky});
-	InImports.Register({"hyperion.native-sky",
-	                    1,
-	                    &RecordType<FSkyAsset>(),
-	                    {".hasset"},
-	                    [](FAssetImportContext& InContext)
-	                    {
-		                    return ReadRecord(RecordType<FSkyAsset>(), DecodeAsset(InContext.Bytes).Object);
-	                    }});
+	InImports.Register({"hyperion.sky-environment", 1, &RecordType<FSkyAsset>(), {".hdr", ".exr"}, ImportSky});
 }
 } // namespace Hyperion

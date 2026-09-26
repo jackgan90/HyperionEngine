@@ -47,6 +47,9 @@ void TestMountedFileSystem()
 	std::filesystem::create_directories(Root / "Engine");
 	std::filesystem::create_directories(Root / "Game");
 	TestVolumeMount(Root);
+	HYP_CHECK(PathCaseKey(PathFromUtf8("/Game/Ä/Texture.hasset")) ==
+	          PathCaseKey(PathFromUtf8("/game/ä/texture.hasset")));
+	HYP_CHECK(PathCaseKey("/Game/A") != PathCaseKey("/Game/B"));
 	FLocalFileSystem Local;
 	const FBytes Bytes{std::byte{4}, std::byte{5}};
 	Local.WriteAtomic(Root / "Engine/Default.bin", Bytes);

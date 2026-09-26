@@ -46,6 +46,8 @@ public:
 	virtual FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) = 0;
 	virtual FBytes ReadRange(const std::filesystem::path& InPath, std::size_t InOffset, std::size_t InSize);
 	virtual void Remove(const std::filesystem::path& InPath);
+	// Removes only an empty directory. Unsupported backends leave it untouched and return false.
+	virtual bool RemoveEmptyDirectory(const std::filesystem::path& InPath);
 	virtual std::vector<FFileContents> ReadTree(const std::filesystem::path& InDirectory,
 	                                            std::span<const std::string_view> InExtensions, std::size_t InLimit);
 	virtual void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) = 0;
@@ -63,6 +65,7 @@ public:
 	FBytes Read(const std::filesystem::path& InPath, std::size_t InLimit) override;
 	FBytes ReadRange(const std::filesystem::path& InPath, std::size_t InOffset, std::size_t InSize) override;
 	void Remove(const std::filesystem::path& InPath) override;
+	bool RemoveEmptyDirectory(const std::filesystem::path& InPath) override;
 	void WriteAtomic(const std::filesystem::path& InPath, std::span<const std::byte> InBytes) override;
 	bool Exists(const std::filesystem::path& InPath) override;
 	std::vector<FDirectoryEntry> ListDirectory(const std::filesystem::path& InDirectory) override;

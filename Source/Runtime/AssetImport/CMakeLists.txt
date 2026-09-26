@@ -3,13 +3,13 @@ add_library(hyperion_asset_import STATIC
   Private/ImportPreparation.cpp Private/ImportDraftProperties.cpp Private/ImportDraftTypes.cpp
   Private/ImportDraftWorkspace.cpp Private/ImportDraftInspection.cpp
   Private/ImportWorkspace.cpp Private/ImportWorkspaceTypes.cpp Private/ImportValidation.cpp
-  Private/AssetImportService.cpp
+  Private/AssetImportService.cpp Private/ImportDestinations.cpp
   Private/AssetImportProducts.cpp
   Private/ModelImport.cpp Private/AssetPublication.cpp
   Private/AssetLibrary.cpp
   Private/AssetPublicationProducts.cpp
   Private/AssetPublicationChecks.cpp Private/AssetPublicationGraph.cpp Private/AssetPublicationCommit.cpp
-  Private/Adapters/AssetSourceJson.cpp Private/Adapters/SceneJson.cpp Private/Adapters/SkyImport.cpp Private/Adapters/GltfPrimitive.cpp
+  Private/Adapters/AssetSourceJson.cpp Private/Adapters/SkyImport.cpp Private/Adapters/GltfPrimitive.cpp
   Private/Adapters/GltfImport.cpp Private/Adapters/GltfImportInternal.h
   Private/Adapters/GltfAccessors.cpp Private/Adapters/GltfMaterials.cpp
   Private/Adapters/GltfPrimitives.cpp)

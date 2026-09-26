@@ -49,10 +49,9 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 	InCatalog.Register(MakeAsyncOperation<FImportRequest, FImportResult>(
 	    ImportInfo(
 	        "asset.import", "Import source assets and publish native dependency products",
-	        "Shared Editor/AssetTool pipeline: glTF/GLB, standalone PNG/JPEG, HDR/EXR skies, typed JSON/sky recipes "
-	        "and native upgrades. "
+	        "Shared Editor/AssetTool pipeline: glTF/GLB, standalone PNG/JPEG, HDR/EXR skies. "
 	        "sourceRoot/sourceId must be supplied together. force bypasses freshness, not identity or permissions. "
-	        "Optional textureEncoding applies to standalone images; sky replaces recipe/default bake settings. Use "
+	        "Optional textureEncoding applies to standalone images; sky specifies HDR/EXR bake settings. Use "
 	        "asset.import.tasks for application task IDs.",
 	        Example(Request), false, InProvider),
 	    [InProvider](const FImportRequest& InRequest)
@@ -79,7 +78,8 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 	    }));
 	InCatalog.Register(MakeOperation<FContentRootQuery, FImportCapabilities>(
 	    ImportInfo("asset.import.capabilities", "Describe supported import formats",
-	               "Supported native types and source extensions. Inspect asset.import for typed settings. No accepted "
+	               "Supported output types and external source extensions. Inspect asset.import for typed settings. No "
+	               "accepted "
 	               "task cancellation.",
 	               Example(FContentRootQuery{}), true, InProvider),
 	    [](const FContentRootQuery&)

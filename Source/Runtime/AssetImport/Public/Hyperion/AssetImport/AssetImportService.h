@@ -53,7 +53,6 @@ struct FConvertedAsset
 	std::string Importer;
 	std::uint32_t ImporterVersion{};
 	std::size_t RetainedBytes{};
-	std::optional<FAssetHeader> NativeHeader;
 	std::vector<FAssetImportProduct> Products;
 	std::filesystem::path ProductRoot;
 	std::string StableKey;
@@ -126,6 +125,9 @@ struct FAssetImportOptions
 	// Internal immutable draft snapshot; ordinary one-step imports leave these empty.
 	std::shared_ptr<const FPreparedImport> Prepared;
 	std::string PropertyOverrides;
+	// Group publication in a source-named folder; reuse it for the same source and output filename.
+	bool bCreateFolder{};
+	std::string FolderKey;
 };
 
 struct FAssetImportResult

@@ -70,9 +70,9 @@ FBytes FLocalFileSystem::Read(const std::filesystem::path& InPath, std::size_t I
 		std::error_code Error;
 		if (!std::filesystem::exists(InPath, Error) && !Error)
 		{
-			throw FFileNotFound("File not found: " + InPath.generic_string());
+			throw FFileNotFound("File not found: " + PathToUtf8(InPath));
 		}
-		throw std::runtime_error("Cannot read file: " + InPath.generic_string());
+		throw std::runtime_error("Cannot read file: " + PathToUtf8(InPath));
 	}
 	const auto Size = File.tellg();
 	if (Size < 0 || static_cast<std::uint64_t>(Size) > InLimit)
@@ -118,6 +118,19 @@ void FLocalFileSystem::Remove(const std::filesystem::path& InPath)
 		throw std::invalid_argument("Cannot remove a directory as a file");
 	}
 	std::filesystem::remove(InPath);
+}
+
+bool FLocalFileSystem::RemoveEmptyDirectory(const std::filesystem::path& InPath)
+{
+	RequireLocalPath(InPath);
+	const auto Attributes = GetFileAttributesW(InPath.c_str());
+	if (Attributes == INVALID_FILE_ATTRIBUTES || (Attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 ||
+	    (Attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+	{
+		return false;
+	}
+	// RemoveDirectory is atomic and cannot delete files or nonempty directories.
+	return RemoveDirectoryW(InPath.c_str()) != 0;
 }
 
 std::vector<FDirectoryEntry> IFileSystem::ListDirectory(const std::filesystem::path& InDirectory)
