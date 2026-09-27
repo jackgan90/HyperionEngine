@@ -107,6 +107,7 @@ FGui::FGui(FWindow* InWindow) : Impl(std::make_unique<FImpl>())
 	Platform.Platform_GetClipboardTextFn = [](ImGuiContext*) -> const char*
 	{
 		auto Self = static_cast<FImpl*>(ImGui::GetPlatformIO().Platform_ClipboardUserData);
+		Self->bClipboardTextUsed = true;
 		if (Self->Window)
 		{
 			Self->Clipboard = Self->Window->Clipboard();
@@ -116,6 +117,7 @@ FGui::FGui(FWindow* InWindow) : Impl(std::make_unique<FImpl>())
 	Platform.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* InText)
 	{
 		auto Self = static_cast<FImpl*>(ImGui::GetPlatformIO().Platform_ClipboardUserData);
+		Self->bClipboardTextUsed = true;
 		Self->Clipboard = InText;
 		if (Self->Window)
 		{
@@ -186,6 +188,8 @@ FImage FGui::FontImage()
 void FGui::BeginFrame(FSize InLogical, FSize InPixels, float InDelta, std::span<const FInputEvent> InEvents)
 {
 	Impl->Select();
+	Impl->bTextInputAtFrameStart = IsEditingText();
+	Impl->bClipboardTextUsed = false;
 	if (!InLogical.Width || !InLogical.Height || !InPixels.Width || !InPixels.Height)
 	{
 		throw std::invalid_argument("GUI frame dimensions");

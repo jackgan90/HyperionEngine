@@ -422,4 +422,34 @@ bool FGui::IsEditingText() const
 	// WantTextInput can retain the previous frame's request after FinishEditing clears the active widget.
 	return ImGui::GetIO().WantTextInput && ImGui::IsAnyItemActive();
 }
+
+bool FGui::IsTextInputOwnedThisFrame() const
+{
+	Impl->Select();
+	return Impl->bTextInputAtFrameStart || Impl->bClipboardTextUsed || IsEditingText();
+}
+
+bool FGui::IsWindowFocused(const char* InTitle) const
+{
+	Impl->Select();
+	const auto* Window = ImGui::FindWindowByName(InTitle);
+	if (!Window || !Window->Active || ImGui::GetIO().AppFocusLost)
+	{
+		return false;
+	}
+	for (auto* Focused = ImGui::GetCurrentContext()->NavWindow; Focused; Focused = Focused->ParentWindow)
+	{
+		if (Focused == Window)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool FGui::HasOpenPopup() const
+{
+	Impl->Select();
+	return ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+}
 } // namespace Hyperion

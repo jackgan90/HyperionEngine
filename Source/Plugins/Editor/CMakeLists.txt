@@ -1,4 +1,6 @@
 add_library(hyperion_editor_plugin STATIC
+  Private/EditorClipboard.cpp
+  Private/EditorClipboardAcceptance.cpp
   Private/AssetImportPanel.cpp
   Private/ImportPreviewPanel.cpp Private/ImportPreviewProperties.cpp
   Private/EditorImportAcceptance.cpp

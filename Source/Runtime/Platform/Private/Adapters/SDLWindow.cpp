@@ -1,3 +1,4 @@
+#include "Clipboard.h"
 #include <Hyperion/Platform/Window.h>
 #include <SDL3/SDL.h>
 #include <map>
@@ -427,6 +428,28 @@ void FWindow::SetClipboard(const std::string& InText)
 {
 	Impl->RequireOwner();
 	Check(SDL_SetClipboardText(InText.c_str()));
+}
+
+bool FWindow::SupportsTypedClipboard() const
+{
+	Impl->RequireOwner();
+#ifdef _WIN32
+	return true;
+#else
+	return false;
+#endif
+}
+
+std::string FWindow::TypedClipboard(const std::string& InFormat) const
+{
+	Impl->RequireOwner();
+	return ReadTypedClipboard(Surface(), InFormat);
+}
+
+void FWindow::SetTypedClipboard(const std::string& InFormat, const std::string& InData, const std::string& InText)
+{
+	Impl->RequireOwner();
+	WriteTypedClipboard(Surface(), InFormat, InData, InText);
 }
 
 bool FWindow::SetDarkTitleBar(bool bInEnabled)

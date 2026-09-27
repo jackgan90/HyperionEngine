@@ -110,6 +110,10 @@ public:
 	void CancelClose();
 	std::string Clipboard() const;
 	void SetClipboard(const std::string& InText);
+	bool SupportsTypedClipboard() const;
+	// Owner-thread only. Empty means absent; access failures throw. Payloads are bounded UTF-8 byte strings.
+	std::string TypedClipboard(const std::string& InFormat) const;
+	void SetTypedClipboard(const std::string& InFormat, const std::string& InData, const std::string& InText);
 	// Requests a black native title bar with light text; returns false when unsupported.
 	bool SetDarkTitleBar(bool bInEnabled);
 

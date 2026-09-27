@@ -22,6 +22,7 @@ struct FSceneInstance::FImpl
 		std::shared_ptr<const FSceneModelData> Data;
 		std::string Error;
 		bool bComplete{};
+		bool bNeedsRebind{};
 	};
 
 	struct FSelectedMaterials

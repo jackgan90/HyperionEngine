@@ -3,6 +3,11 @@
 
 namespace Hyperion
 {
+FSceneNode FSceneInstanceEditTarget::CaptureNode(FSceneHandle InHandle) const
+{
+	return Scene.CaptureEditableNode(InHandle);
+}
+
 std::string ScenePreparationError(const FSceneInstance& InScene)
 {
 	const auto& Status = InScene.GetStatus();

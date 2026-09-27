@@ -1,8 +1,10 @@
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/SceneEditTarget.h"
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
+#include "Hyperion/SceneEditing/SceneDocument.h"
 #include "Support/ModelAssetSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
@@ -1297,6 +1299,133 @@ void CheckRefreshBesideMissingModel()
 	std::cout << "Unrelated missing models, including removed consumers, do not block saved material refresh\n";
 }
 
+void CheckClipboardRefreshFailure(FSceneFixture& InFixture, FSceneInstance& InScene, FSceneEditDocument& InDocument)
+{
+	InDocument.CopySelection(InDocument.Id(), InScene.GetRevision());
+	InDocument.CommitDelete();
+	const auto Loaded = InFixture.Assets.LoadAsync("SceneRuntime.model.hasset").Get(InFixture.Tasks);
+	auto Model = *Loaded->As<FModelAsset>();
+	Model.MaterialSlots.front() = {"", "ClipboardMissingMaterial.hasset", RecordType<FMaterialAsset>().Id, ""};
+	const auto Saved = InFixture.Assets
+	                       .SaveDocumentAsync(Loaded->Path, *Loaded->Type, WriteValue(Model),
+	                                          {Loaded->Header.Id, {}, Loaded->Header.TypeId, Loaded->Header.Revision})
+	                       .Get(InFixture.Tasks);
+	InDocument.AssetsRefreshed();
+	InScene.RefreshAssets(std::array{*Saved});
+	InScene.Tick();
+	Await(InScene,
+	      [&]
+	      {
+		      return InScene.GetStatus().bReady;
+	      });
+	const auto Revision = InScene.GetRevision();
+	const auto Cursor = InDocument.GetState().HistoryCursor;
+	for (int Attempt = 0; Attempt < 2; ++Attempt)
+	{
+		bool bRejected{};
+		try
+		{
+			InDocument.PasteClipboard(InDocument.Id(), Revision);
+		}
+		catch (const std::exception&)
+		{
+			bRejected = true;
+		}
+		HYP_CHECK(bRejected && InScene.GetRevision() == Revision && InDocument.GetState().HistoryCursor == Cursor &&
+		          !InDocument.Selection() && InScene.GetNodes(ESceneNodeKind::Model).empty());
+	}
+}
+
+void CheckClipboardRefreshWithoutConsumers()
+{
+	FSceneFixture Fixture;
+	Fixture.Files->bEnabled = false;
+	FLegacySceneManifest Manifest;
+	Manifest.Assets = {{"good", {"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""}}};
+	Manifest.Instances = {{"original", "good"}};
+	Fixture.IO.WriteAsync("ClipboardRefresh.hasset", EncodeAsset(RecordType<FLegacySceneManifest>(), &Manifest).Bytes)
+	    .Get(Fixture.Tasks);
+	FSceneInstance Scene(*Fixture.Session, Fixture.Tasks, Fixture.Assets, true);
+	Scene.Load("ClipboardRefresh.hasset");
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	FSceneInstanceEditTarget Target(Scene, Fixture.Assets);
+	std::string Token;
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	Document.SetClipboardProvider({[&]
+	                               {
+		                               return Token;
+	                               },
+	                               [&](const std::string& InToken, const std::string&)
+	                               {
+		                               Token = InToken;
+	                               }});
+	for (const bool bModel : {false, true})
+	{
+		const auto Handle = Scene.GetNodes(ESceneNodeKind::Model).front();
+		const auto Before = *Scene.FindNode(Handle);
+		Document.ReplaceSelection(FSceneSelection(Handle));
+		Document.CopySelection(Document.Id(), Scene.GetRevision());
+		Document.CommitDelete();
+		HYP_CHECK(Scene.GetNodes(ESceneNodeKind::Model).empty());
+		const auto Loaded =
+		    Fixture.Assets.LoadAsync(bModel ? "SceneRuntime.model.hasset" : "@material-0.hasset").Get(Fixture.Tasks);
+		FArchiveNode Updated;
+		if (bModel)
+		{
+			auto Model = *Loaded->As<FModelAsset>();
+			Model.Primitives.front().Positions.front() -= 2;
+			Updated = WriteValue(Model);
+		}
+		else
+		{
+			auto Material = *Loaded->As<FMaterialAsset>();
+			Material.Name = "Saved while clipboard is the only consumer";
+			Updated = WriteValue(Material);
+		}
+		const auto Saved =
+		    Fixture.Assets
+		        .SaveDocumentAsync(Loaded->Path, *Loaded->Type, std::move(Updated),
+		                           {Loaded->Header.Id, {}, Loaded->Header.TypeId, Loaded->Header.Revision})
+		        .Get(Fixture.Tasks);
+		Document.AssetsRefreshed();
+		Scene.RefreshAssets(std::array{*Saved});
+		Scene.Tick();
+		Await(Scene,
+		      [&]
+		      {
+			      return Scene.GetStatus().bReady;
+		      });
+		HYP_CHECK(Scene.GetStatus().AssetRefreshError.empty());
+		Document.PasteClipboard(Document.Id(), Scene.GetRevision());
+		const auto* Pasted = Scene.FindNode(*Document.Selection());
+		HYP_CHECK(Pasted->Local().Values == Before.Local().Values && Pasted->bEnabled == Before.bEnabled);
+		const auto Data = Pasted->Model()->Data;
+		if (bModel)
+		{
+			HYP_CHECK(Data->Asset->Primitives.front().Positions.front() ==
+			          Before.Model()->Data->Asset->Primitives.front().Positions.front() - 2);
+		}
+		else
+		{
+			HYP_CHECK(Data->Materials.front()->Asset->Name == "Saved while clipboard is the only consumer");
+		}
+		Scene.Tick();
+		Await(Scene,
+		      [&]
+		      {
+			      return Scene.GetStatus().bReady;
+		      });
+	}
+	CheckClipboardRefreshFailure(Fixture, Scene, Document);
+	Document.Detach(Fixture.Tasks);
+	std::cout << "Clipboard-only models rebind saved default materials and geometry before paste\n";
+}
+
 void CheckFailedDependencyRecovery()
 {
 	FSceneFixture Fixture;
@@ -1429,6 +1558,7 @@ int main()
 		CheckClosedDependencies();
 		CheckPendingHierarchy();
 		CheckConsumersAddedDuringRefresh();
+		CheckClipboardRefreshWithoutConsumers();
 		CheckRefreshBesideMissingModel();
 		CheckFailedDependencyRecovery();
 		std::cout << "Independent scene loading, shared models, generation-safe edits and close passed\n";

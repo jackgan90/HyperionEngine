@@ -178,5 +178,6 @@ void RegisterSceneOperations(FOperationCatalog& InCatalog, FSceneEditDocument* I
 	RegisterSceneSave(InCatalog, InDocument);
 	RegisterSceneAuthoring(InCatalog, InDocument);
 	RegisterSceneComponents(InCatalog, InDocument);
+	RegisterSceneClipboard(InCatalog, InDocument);
 }
 } // namespace Hyperion

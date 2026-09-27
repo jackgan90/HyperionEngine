@@ -26,6 +26,7 @@ void FSceneEditDocument::Attach(ISceneEditTarget& InTarget, bool bInHistory)
 
 void FSceneEditDocument::Detach(FTaskSystem& InTasks)
 {
+	ClipboardProvider = {};
 	Observer = {};
 	SelectionObserver = {};
 	if (State.Save)
@@ -116,6 +117,7 @@ void FSceneEditDocument::RequireIdle(const std::string& InDocument, std::uint64_
 
 void FSceneEditDocument::Reset()
 {
+	ClipboardSnapshot.reset();
 	State.History.clear();
 	State.HistoryCursor = 0;
 	State.State = State.SavedState = ++State.NextState;
@@ -128,6 +130,7 @@ void FSceneEditDocument::Reset()
 
 void FSceneEditDocument::Invalidate()
 {
+	ClipboardSnapshot.reset();
 	++State.Epoch;
 }
 
@@ -146,6 +149,7 @@ void FSceneEditDocument::MarkSaved(std::uint64_t InEpoch, std::uint64_t InState)
 
 void FSceneEditDocument::AssetsRefreshed()
 {
+	++AssetGeneration;
 	bAssetRefreshHistory = true;
 }
 

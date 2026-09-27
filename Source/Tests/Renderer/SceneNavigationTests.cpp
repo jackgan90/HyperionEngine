@@ -607,6 +607,24 @@ void CheckStructuralResources(FSceneFixture& InFixture)
 	Document.Redo();
 	const auto Restored = *Document.Selection().Primary();
 	HYP_CHECK(Restored != Duplicate && Scene.FindNode(Restored)->Model()->Data == Data);
+	std::string Clipboard;
+	Document.SetClipboardProvider({[&]
+	                               {
+		                               return Clipboard;
+	                               },
+	                               [&](const std::string& InToken, const std::string&)
+	                               {
+		                               Clipboard = InToken;
+	                               }});
+	Document.CopySelection(Document.Id(), Scene.GetRevision());
+	Document.PasteClipboard(Document.Id(), Scene.GetRevision());
+	const auto Pasted = *Document.Selection().Primary();
+	HYP_CHECK(Scene.FindNode(Pasted)->Model()->Data == Data);
+	const auto CopiedModel = *Scene.FindNode(Pasted)->Model();
+	Document.Undo();
+	Clipboard.clear();
+	Document.Redo();
+	HYP_CHECK(*Scene.FindNode(*Document.Selection())->Model() == CopiedModel);
 	InFixture.Tick();
 	HYP_CHECK(InFixture.Statistics.VisibleItems > 0);
 	const auto Output = std::filesystem::absolute(PathFromUtf8("scene-save/测试目录/编辑场景.hasset"));
@@ -614,7 +632,7 @@ void CheckStructuralResources(FSceneFixture& InFixture)
 	Document.PollSave();
 	HYP_CHECK(!Document.IsDirty());
 	const auto Saved = InFixture.Assets.LoadAsync<FSceneManifest>(Output).Get(InFixture.Tasks);
-	HYP_CHECK(SceneModelCount(*Saved) == 2);
+	HYP_CHECK(SceneModelCount(*Saved) == 3);
 	const auto Snapshot = Serialize(Scene.Snapshot(Output));
 	Scene.Load(Output);
 	Document.Reset();
@@ -624,6 +642,8 @@ void CheckStructuralResources(FSceneFixture& InFixture)
 		InFixture.Tick();
 	} while (!Scene.GetStatus().bReady && std::chrono::steady_clock::now() < Deadline);
 	HYP_CHECK(Scene.GetStatus().bReady && Serialize(Scene.Snapshot(Output)) == Snapshot);
+	HYP_CHECK(!Document.ClipboardInfo().bCanPaste);
+	Document.SetClipboardProvider({});
 }
 
 void CheckSnapshotIsolationAndFailure(FSceneFixture& InFixture)

@@ -25,6 +25,9 @@ struct FSceneHistoryEntry
 	FSceneSelection BeforeSelection;
 	bool bKeepChildren{};
 	bool bRestoreSelection{};
+	std::vector<std::pair<FSceneHandle, FSceneNode>> CreatedNodes;
+	std::vector<FSceneHandle> CreatedRoots;
+	FSceneSelection AfterSelection;
 };
 
 inline void RemapSceneHandle(FSceneHandle& InHandle, const FSceneHandleMap& InMapping)
@@ -49,6 +52,15 @@ inline void RemapSceneHistory(std::span<FSceneHistoryEntry> InHistory, const FSc
 	for (auto& Entry : InHistory)
 	{
 		Entry.BeforeSelection.Remap(InMapping);
+		Entry.AfterSelection.Remap(InMapping);
+		for (auto& [Handle, Node] : Entry.CreatedNodes)
+		{
+			RemapSceneHandle(Handle, InMapping);
+		}
+		for (auto& Handle : Entry.CreatedRoots)
+		{
+			RemapSceneHandle(Handle, InMapping);
+		}
 		for (auto& Handle : Entry.DeletedRoots)
 		{
 			RemapSceneHandle(Handle, InMapping);

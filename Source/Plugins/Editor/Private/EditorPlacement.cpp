@@ -184,6 +184,8 @@ void FEditorPlugin::RoutePlacement()
 			try
 			{
 				CommitPlacement(*Object, Placement.GetPreview()->Position);
+				// The selected object is now in the viewport; subsequent scene shortcuts belong there.
+				Gui->FocusWindow("Viewport");
 			}
 			catch (const std::exception& Failure)
 			{

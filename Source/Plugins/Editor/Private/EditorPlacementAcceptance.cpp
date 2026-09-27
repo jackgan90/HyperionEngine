@@ -37,6 +37,16 @@ FVec2 Center(FVec4 InBounds)
 {
 	return {(InBounds.X + InBounds.Z) / 2, (InBounds.Y + InBounds.W) / 2};
 }
+
+void ClipboardKey(std::vector<FInputEvent>& InEvents, EKey InKey, bool bInDown)
+{
+	FInputEvent Event;
+	Event.Type = EEventType::Key;
+	Event.Key = InKey;
+	Event.bDown = bInDown;
+	Event.Modifiers = bInDown ? 1 : 0;
+	InEvents.push_back(Event);
+}
 } // namespace
 
 bool FEditorPlugin::ExercisePlacementMenu(std::vector<FInputEvent>& InEvents)
@@ -48,8 +58,14 @@ bool FEditorPlugin::ExercisePlacementMenu(std::vector<FInputEvent>& InEvents)
 	switch (PlacementMenuStep)
 	{
 		case 0:
+		{
+			FInputEvent Focus;
+			Focus.Type = EEventType::Focus;
+			Focus.bDown = true;
+			InEvents.push_back(Focus);
 			bShowPlacement = false;
 			break;
+		}
 		case 1:
 			Move(InEvents, Center(InspectionBounds.at("placement/window-menu")));
 			break;
@@ -74,6 +90,11 @@ bool FEditorPlugin::ExercisePlacementMenu(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 {
+	if (PlacementExerciseStep >= 13)
+	{
+		ExercisePlacedClipboard(InEvents);
+		return;
+	}
 	const std::string Type = PlacementTypes.at(PlacementExerciseType);
 	const auto Source = InspectionBounds.at("placement/" + Type);
 	const auto Bounds = ViewportRegion.Bounds;
@@ -127,6 +148,49 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 				Check(Scene->GetSettings().MainDirectionalLight == Selection.Primary(),
 				      "first directional light did not become main");
 			}
+			break;
+	}
+	++PlacementExerciseStep;
+}
+
+void FEditorPlugin::ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents)
+{
+	const auto Original = Scene->FindHandle(PlacementExerciseIds.back());
+	switch (PlacementExerciseStep)
+	{
+		case 13:
+			// No extra click or FocusWindow: reproduce typing immediately after a real panel-to-viewport drop.
+			ClipboardKey(InEvents, EKey::C, true);
+			break;
+		case 14:
+			Check(Gui->IsWindowFocused("Viewport") && HistoryCursor == PlacementExerciseBaseHistory + 1,
+			      "placed object did not retain scene shortcut focus or copy changed history: " + Error);
+			ClipboardKey(InEvents, EKey::C, false);
+			break;
+		case 15:
+			ClipboardKey(InEvents, EKey::V, true);
+			break;
+		case 16:
+			ClipboardKey(InEvents, EKey::V, false);
+			break;
+		case 17:
+		{
+			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 2 &&
+			          HistoryCursor == PlacementExerciseBaseHistory + 2 && Selection && *Selection != Original,
+			      "Ctrl+V after placement did not create a separate selected object: " + Error);
+			const auto* Source = Scene->FindNode(Original);
+			auto Copy = *Scene->FindNode(*Selection);
+			Check(Copy.Id != Source->Id && Copy.Name == Source->Name + " (1)", "placed copy identity/name mismatch");
+			Copy.Id = Source->Id;
+			Copy.Name = Source->Name;
+			Check(Copy == *Source, "placed copy authored properties changed");
+			if (Source->DirectionalLight())
+			{
+				Check(Scene->GetSettings().MainDirectionalLight == Original, "paste changed main light");
+			}
+			Undo();
+			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1 && Selection == Original,
+			      "placed copy undo failed to restore selection");
 			Undo();
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes, "creation undo failed");
 			Redo();
@@ -134,6 +198,7 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 			PlacementExerciseStep = 0;
 			++PlacementExerciseType;
 			return;
+		}
 	}
 	++PlacementExerciseStep;
 }
@@ -206,7 +271,7 @@ void FEditorPlugin::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 		{
 			Check(!Placement.IsActive() && Scene->GetNodes().size() == PlacementExerciseBaseNodes &&
 			          DocumentState == PlacementExerciseBaseState && HistoryCursor == PlacementExerciseBaseHistory &&
-			          History.size() == HistoryCursor + 1,
+			          History.size() == HistoryCursor + 2,
 			      "cancel changed document or redo branch");
 			FInputEvent Event;
 			Event.Type = EEventType::Key;
@@ -229,8 +294,11 @@ void FEditorPlugin::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExercisePlacementHistory()
 {
+	// Marker checks already restored the last creation; its copied object remains on the redo branch.
 	Redo();
-	Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1, "redo did not survive cancelled gestures");
+	Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 2, "paste redo did not survive cancelled gestures");
+	Undo();
+	Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1, "paste undo after cancelled gestures failed");
 	const auto Main = Scene->GetSettings().MainDirectionalLight;
 	CommitPlacement(*PlacementRegistry.Find("DirectionalLight"), {3, 1, 0});
 	const auto Additional = *Selection;

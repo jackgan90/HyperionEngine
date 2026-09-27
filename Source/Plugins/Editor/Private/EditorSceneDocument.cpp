@@ -44,6 +44,17 @@ void FEditorPlugin::InitializeSceneDocument()
 	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);
 	SceneTarget = std::make_unique<FSceneInstanceEditTarget>(*Scene, Assets);
 	SceneDocument.Attach(*SceneTarget);
+	if (Window->SupportsTypedClipboard())
+	{
+		SceneDocument.SetClipboardProvider({[this]
+		                                    {
+			                                    return Window->TypedClipboard(SceneClipboardFormat);
+		                                    },
+		                                    [this](const std::string& InToken, const std::string& InText)
+		                                    {
+			                                    Window->SetTypedClipboard(SceneClipboardFormat, InToken, InText);
+		                                    }});
+	}
 	SceneDocument.SetSelectionObserver(
 	    [this]
 	    {

@@ -34,8 +34,12 @@ def main():
         assert "output is unavailable" in output and not path.exists(), output
         output = run(name + "-render-controls", *arguments, "--exercise-render-controls", work, failure=True)
         assert "output is unavailable" in output, output
+        output = run(name + "-clipboard", *arguments, "--exercise-clipboard", failure=True)
+        assert "output is unavailable" in output, output
     output = run("render-controls-incomplete", "--exercise-render-controls", work, "--frames", "1", failure=True)
     assert "render controls acceptance did not complete" in output, output
+    output = run("clipboard-incomplete", "--exercise-clipboard", "--frames", "1", failure=True)
+    assert "clipboard acceptance did not complete" in output, output
     output = run("no-contact", "--disable-plugin", "contact-shadows")
     assert "Plugin contact-shadows: Plugin explicitly disabled" in output, output
     assert "validation errors: 0" in output, output

@@ -16,6 +16,7 @@ public:
 	std::uint64_t Identity() const override;
 	std::uint64_t Revision() const override;
 	const FSceneNode* FindNode(FSceneHandle InHandle) const override;
+	FSceneNode CaptureNode(FSceneHandle InHandle) const override;
 	FSceneHandle FindHandle(std::string_view InId) const override;
 	std::vector<FSceneHandle> Nodes() const override;
 	std::vector<FSceneHandle> Children(FSceneHandle InHandle) const override;

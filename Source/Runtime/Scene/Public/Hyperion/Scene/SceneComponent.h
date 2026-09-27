@@ -17,6 +17,10 @@ struct FSceneComponentDescriptor
 	std::function<const void*(const std::any&)> Get;
 	std::function<void*(std::any&)> Edit;
 	std::function<bool(const std::any&, const std::any&)> Equal;
+	// Explicit opt-in: freeze all mutable state and report owned bytes, excluding shared immutable resources.
+	std::function<std::any(const std::any&, std::size_t&)> ClipboardClone;
+	// Visit scene node IDs only; asset/source identities are not scene references.
+	std::function<void(std::any&, const std::function<void(std::string&)>&)> ClipboardReferences;
 };
 
 template<class T> FSceneComponentDescriptor MakeSceneComponent(std::string InLabel, bool bInRequired = false)

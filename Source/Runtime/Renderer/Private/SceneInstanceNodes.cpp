@@ -3,6 +3,22 @@
 
 namespace Hyperion
 {
+FSceneNode FSceneInstance::CaptureEditableNode(FSceneHandle InHandle) const
+{
+	Impl->RequireOpen();
+	const auto* Node = Impl->Scene.FindNode(InHandle);
+	if (!Node)
+	{
+		throw std::invalid_argument("Clipboard source no longer exists");
+	}
+	if (const auto It = Impl->PendingMaterials.find(InHandle);
+	    It != Impl->PendingMaterials.end() && It->second.bHasStoredSelection)
+	{
+		throw std::invalid_argument("Cannot copy pending or failed material selection: " + Node->Id);
+	}
+	return *Node;
+}
+
 std::uint64_t FSceneInstance::GetIdentity() const
 {
 	Impl->Tasks.Require({EDomain::Main});

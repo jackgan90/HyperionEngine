@@ -124,6 +124,20 @@ Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构�
 
 ## 操作
 
+### 复制粘贴对象
+
+场景 Viewport、Outliner 或 Details 获得键盘焦点且未编辑文本时，`Ctrl+C` 复制有序选择及完整子树，`Ctrl+V` 粘贴。父子同时选中只复制一次；副本选择保持原显式选择顺序和主选对象。名称使用场景内不重名的数字后缀，例如 `Light (1)`、`Light (2)`；其他编辑属性、局部矩阵和内部层级保持复制时的值，不添加位置偏移。
+
+从 Place Object 拖放对象到 Viewport 成功后，新对象被选中，键盘焦点转到 Viewport，可直接按 `Ctrl+C`、`Ctrl+V`，无需额外点击。
+
+副本放在复制时的原父级下，继承其当前世界状态；外部父级或引用已删除则整批拒绝。复制后编辑或删除被复制对象不改变快照。模型、纹理、材质和天空资产继续共享，对象材质覆盖独立；复制相机或灯光不更改场景默认相机、主光、环境光或预览相机。
+
+每次粘贴是一个 Undo/Redo 事务。Undo 恢复之前的选择，Redo 从历史恢复而不读取剪贴板。复制不改变 dirty、历史或 redo，保存仍需显式执行。
+
+系统剪贴板决定当前可粘贴内容。在其他应用或 Editor 文本框复制文字、图片、文件后，旧对象不可再粘贴；文本框中的 Ctrl+C/Ctrl+V 始终编辑文字。Content Browser 和资产窗口不触发主场景粘贴；拖拽、gizmo、放置和模态操作期间快捷键暂停。长按不会重复创建对象。
+
+当前类型化剪贴板 provider 支持 Windows，范围为同一 Editor 实例、同一打开的场景文档。关闭、重开、替换场景或切换内容根释放快照；同一文档保存不使其失效。快照最多 16,384 个节点、64 MiB 计入预算的编辑数据（共享不可变资源不计入）。未注册组件、未声明安全复制契约的扩展组件、无法完整读取的材质选择和剪贴板访问失败会明确报错，不会部分粘贴或回退到旧缓存。
+
 ### 放置对象
 
 **Window > Place Object** 打开放置面板。支持名称搜索，以及 All、Basic、Shapes、Lights 分类；同一种对象可属于多个分类，All 只显示一次。首版提供 Cube、Sphere、Cylinder、Cone、Plane、Directional Light、Point Light 和 Spot Light。已有布局保留，**Window > Reset Layout** 恢复包含左侧放置面板的默认布局。
@@ -256,6 +270,6 @@ Editor 默认允许同一 Windows 用户通过 CLI/MCP 附着；`--disable-plugi
 
 场景相机、主方向光和环境光沿用对象的现有设置入口。Details 不再显示 Hierarchy。修改父节点只在 Outliner 内拖拽：将已选节点行拖到目标父节点行，固定保持世界变换；拖拽期间的 **Move to scene root** 落区解除父节点。可先在 Viewport 点选模型或灯光，选择会同步到 Outliner，再从已选行起拖。Viewport 不提供 Re-parent 拖拽，保留点选与 Gizmo 操作。多选时拖动任一已选行会带上完整选择；父子同时选中只移动最外层节点，保留内部层级与主选中对象。一次放下对应一次 Undo/Redo，保存会记录新的 parent/local；局部变换数值可能变化。
 
-普通树和搜索结果都支持落点，悬停折叠节点会展开，靠近列表边缘会滚动。绿色边框表示可放下，红色边框和提示说明非法目标；Esc、失焦、右键或放到其他区域取消操作。自己、后代、失效节点和不可逆父变换被拒绝，整组不会部分修改。保持世界变换不改变 Enabled 的父级继承规则，挂到禁用父节点仍会隐藏。复制与保留子节点删除保留 SceneEditing 和 Automation 能力，GUI 入口待后续 Outliner 或 viewport 交互设计时提供。
+普通树和搜索结果都支持落点，悬停折叠节点会展开，靠近列表边缘会滚动。绿色边框表示可放下，红色边框和提示说明非法目标；Esc、失焦、右键或放到其他区域取消操作。自己、后代、失效节点和不可逆父变换被拒绝，整组不会部分修改。保持世界变换不改变 Enabled 的父级继承规则，挂到禁用父节点仍会隐藏。既有单节点 duplicate 与保留子节点删除仍提供 SceneEditing 和 Automation 能力，尚无专用 GUI 入口；场景对象的 Ctrl+C/Ctrl+V 使用上述完整子树剪贴板流程。
 
 Edit > Render settings 打开渲染设置窗口。视口工具栏的信息与统计按钮分别显示左上角只读状态和右上角 profiling HUD；Stats... 选择统计分类及采集选项。方向光 Details 的 Override Shadow settings 启用该灯光自己的 Directional / Contact shadows 参数，随场景保存并支持撤销/重做。视口选项继续提供剔除、冻结、合批、包围盒与光影响范围。字段、持久化、启动深度和 Automation 接口见 [渲染诊断](RenderDiagnostics.md)。

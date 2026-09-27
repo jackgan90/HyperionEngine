@@ -1,3 +1,4 @@
+#include "Hyperion/Scene/SceneClipboard.h"
 #include "Hyperion/Scene/SceneNode.h"
 
 namespace Hyperion
@@ -7,14 +8,19 @@ FSceneComponentRegistry& SceneComponentRegistry()
 	static FSceneComponentRegistry Registry;
 	static const bool bRegistered = []
 	{
-		Registry.Register(MakeSceneComponent<FSceneTransform>("Transform (Local)", true));
-		Registry.Register(MakeSceneComponent<FSceneModelSource>("Model Source"));
-		Registry.Register(MakeSceneComponent<FSceneModelComponent>("Model"));
-		Registry.Register(MakeSceneComponent<FSceneCamera>("Camera"));
-		Registry.Register(MakeSceneComponent<FSceneDirectionalLight>("Directional Light"));
-		Registry.Register(MakeSceneComponent<FSceneEnvironmentLight>("Environment Light"));
-		Registry.Register(MakeSceneComponent<FScenePointLight>("Point Light"));
-		Registry.Register(MakeSceneComponent<FSceneSpotLight>("Spot Light"));
+		const auto Register = [](FSceneComponentDescriptor InType)
+		{
+			ConfigureSceneClipboardComponent(InType);
+			Registry.Register(std::move(InType));
+		};
+		Register(MakeSceneComponent<FSceneTransform>("Transform (Local)", true));
+		Register(MakeSceneComponent<FSceneModelSource>("Model Source"));
+		Register(MakeSceneComponent<FSceneModelComponent>("Model"));
+		Register(MakeSceneComponent<FSceneCamera>("Camera"));
+		Register(MakeSceneComponent<FSceneDirectionalLight>("Directional Light"));
+		Register(MakeSceneComponent<FSceneEnvironmentLight>("Environment Light"));
+		Register(MakeSceneComponent<FScenePointLight>("Point Light"));
+		Register(MakeSceneComponent<FSceneSpotLight>("Spot Light"));
 		return true;
 	}();
 	(void)bRegistered;

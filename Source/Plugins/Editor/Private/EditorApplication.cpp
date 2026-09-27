@@ -240,6 +240,10 @@ void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::
 		ExerciseAssetInput(bAssetInput ? InAssetEvents : InEvents);
 	}
 	RouteHistoryShortcuts(InEvents);
+	if (Options.bExerciseClipboard)
+	{
+		ExerciseClipboard(InEvents);
+	}
 	if (Options.bExerciseGizmo)
 	{
 		ExerciseGizmoInput(InEvents);
@@ -357,7 +361,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
 	                               bOutlinesVerified || bMultiSelectionVerified || bContentVerified ||
-	                               bRenderControlsVerified || bReparentVerified;
+	                               bRenderControlsVerified || bReparentVerified || bClipboardVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -463,10 +467,11 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
-	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
-	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
-	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty() ||
-	     !Options.ExerciseImport.empty() || !Options.ExerciseReparent.empty()) &&
+	     Options.bExerciseClipboard || !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() ||
+	     !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() ||
+	     !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
+	     !Options.ExerciseRenderControls.empty() || !Options.ExerciseImport.empty() ||
+	     !Options.ExerciseReparent.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out at step " + std::to_string(ExerciseStep) +
@@ -482,6 +487,11 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (Options.bExerciseClipboard && !bClipboardVerified)
+	{
+		throw std::runtime_error("Editor clipboard acceptance did not complete at step " +
+		                         std::to_string(ClipboardExerciseStep));
+	}
 	if (!Options.ExerciseReparent.empty() && !bReparentVerified)
 	{
 		throw std::runtime_error("Reparent acceptance did not complete");

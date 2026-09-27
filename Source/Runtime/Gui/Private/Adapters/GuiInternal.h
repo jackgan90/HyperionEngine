@@ -17,6 +17,8 @@ struct FGui::FImpl
 	std::thread::id Thread = std::this_thread::get_id();
 	FWindow* Window{};
 	std::string Clipboard;
+	bool bTextInputAtFrameStart{};
+	bool bClipboardTextUsed{};
 	FGuiPathDisplay PathDisplay;
 	std::vector<std::byte> FontBytes;
 	ImGuiStyle BaseStyle;

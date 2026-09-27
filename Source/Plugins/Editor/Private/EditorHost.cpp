@@ -37,9 +37,10 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	const bool bInteractive =
 	    Options.ExerciseAssets.empty() && Options.ExerciseContent.empty() && !Options.bExercise &&
 	    !Options.bExerciseGizmo && !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
-	    Options.Benchmark.empty() && Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
-	    Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty() &&
-	    Options.ExerciseRenderControls.empty() && Options.ExerciseImport.empty() && Options.ExerciseReparent.empty();
+	    !Options.bExerciseClipboard && Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
+	    Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
+	    Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty() && Options.ExerciseImport.empty() &&
+	    Options.ExerciseReparent.empty();
 	const auto RestoredRoot = !Options.AssetRoot && bInteractive && !Options.Preferences.AssetRoot.empty()
 	                              ? std::optional(Options.Preferences.AssetRoot)
 	                              : std::nullopt;
@@ -56,9 +57,10 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	                                    Options.Rendering.bReversedZ});
 	const bool bPersistGui =
 	    Options.ExerciseAssets.empty() && !Options.bExercise && !Options.bExerciseGizmo && !Options.bExercisePicking &&
-	    !Options.bExerciseMultiSelection && Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
-	    Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
-	    Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty() && Options.ExerciseReparent.empty();
+	    !Options.bExerciseMultiSelection && !Options.bExerciseClipboard && Options.Benchmark.empty() &&
+	    Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() &&
+	    Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty() &&
+	    Options.ExerciseReparent.empty();
 	const bool bPersistContentLayout = bPersistGui && Options.ExerciseContent.empty() && Options.ExerciseImport.empty();
 	RegisterGuiServices(Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
 	                               bPersistContentLayout ? Options.Layout : std::filesystem::path{},
@@ -121,7 +123,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 		if (!Options.Capture.empty() || !Options.Report.empty() || !Options.Benchmark.empty() ||
 		    !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || Options.bExercise ||
 		    Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
-		    !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
+		    Options.bExerciseClipboard || !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
 		    !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
 		    !Options.ExerciseRenderControls.empty() || !Options.ExerciseReparent.empty())
 		{

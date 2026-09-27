@@ -138,6 +138,23 @@ public:
 		Membership.clear();
 	}
 
+	// Creation/restoration maps point exclusively to fresh live handles, never to another source key.
+	// Reuse allocated hash nodes so publishing a prepared selection cannot fail after scene admission.
+	void RemapFreshHandles(const FSceneHandleMap& InMapping)
+	{
+		for (auto& Handle : Objects)
+		{
+			const auto Found = InMapping.find(Handle);
+			if (Found != InMapping.end() && Handle != Found->second)
+			{
+				auto Member = Membership.extract(Handle);
+				Handle = Found->second;
+				Member.value() = Handle;
+				Membership.insert(std::move(Member));
+			}
+		}
+	}
+
 private:
 	void Swap(FSceneSelection& InOther) noexcept
 	{

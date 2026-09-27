@@ -81,6 +81,20 @@ FSceneNode FSceneInstance::RebindAssetResources(FSceneNode InNode)
 	{
 		if (const auto It = P.Loads.find(Model->Asset); It != P.Loads.end())
 		{
+			auto& Load = It->second;
+			if (Load.bNeedsRebind)
+			{
+				auto Reference = Load.Reference;
+				Reference.Revision.clear();
+				// Unused entries skip live refresh. Resolve their current graph before admitting a restored consumer.
+				const auto Data = LoadNativeModel(P.Assets, P.Tasks, Reference, P.Path, {}, &P.Session.GetResources(),
+				                                  P.bPrepareQueries, Load.Data)
+				                      .Get(P.Tasks);
+				Load.Data = Data;
+				Load.Reference = std::move(Reference);
+				Load.Error.clear();
+				Load.bNeedsRebind = false;
+			}
 			Model->Data = It->second.Data;
 		}
 		const auto Rebind = [&](const FSceneMaterialSelection& InSelection)
@@ -111,9 +125,15 @@ void FSceneInstance::FImpl::BeginAssetRefresh()
 		Consumers.insert(Scene.FindModelComponent(Handle)->Asset);
 	}
 	std::map<std::string, std::pair<FAssetRef, std::shared_ptr<const FSceneModelData>>> References;
-	for (const auto& [Id, Load] : Loads)
+	for (auto& [Id, Load] : Loads)
 	{
-		if (!Consumers.contains(Id) || !UsesChangedAssets(Load))
+		if (!Consumers.contains(Id))
+		{
+			// Do not resolve or reload unused/missing entries; retain invalidation for history and clipboard rebind.
+			Load.bNeedsRebind = true;
+			continue;
+		}
+		if (!UsesChangedAssets(Load))
 		{
 			continue;
 		}
@@ -237,6 +257,7 @@ void FSceneInstance::FImpl::PublishAssetRefresh(const FAssetRefresh& InRefresh)
 			It->second.Data = Data;
 			It->second.Error.clear();
 			It->second.bComplete = true;
+			It->second.bNeedsRebind = false;
 		}
 	}
 	for (const auto& [Id, Error] : InRefresh.ModelErrors)

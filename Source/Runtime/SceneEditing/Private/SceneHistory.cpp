@@ -38,6 +38,13 @@ void FSceneEditDocument::RemapHistory(const FSceneHandleMap& InMapping)
 {
 	RemapSceneHistory(State.History, InMapping);
 	Selected.Remap(InMapping);
+	if (ClipboardSnapshot)
+	{
+		for (auto& [Id, Handle] : ClipboardSnapshot->External)
+		{
+			RemapSceneHandle(Handle, InMapping);
+		}
+	}
 	Remapped.insert(InMapping.begin(), InMapping.end());
 }
 
@@ -88,7 +95,11 @@ void FSceneEditDocument::RestoreHistory(std::size_t InIndex, bool bInAfter)
 	{
 		Node = Scene.Rebind(std::move(*Node));
 	}
-	if (Entry.bKeepChildren)
+	if (!Entry.CreatedNodes.empty())
+	{
+		RestoreCreatedBatch(InIndex, bInAfter);
+	}
+	else if (Entry.bKeepChildren)
 	{
 		if (!bInAfter)
 		{

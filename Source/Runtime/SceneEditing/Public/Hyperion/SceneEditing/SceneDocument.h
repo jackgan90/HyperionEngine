@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/SceneEditing/SceneClipboard.h"
 #include "Hyperion/SceneEditing/SceneEditTarget.h"
 #include "Hyperion/SceneEditing/SceneHistory.h"
 
@@ -88,6 +89,11 @@ public:
 	                                            std::optional<FSceneHandle> InParent) const;
 	void CommitSettings(FSceneSettings InSettings);
 	void CommitDelete();
+	void SetClipboardProvider(FSceneClipboardProvider InProvider);
+	bool HasClipboardProvider() const;
+	FSceneClipboardInfo ClipboardInfo() const;
+	FSceneClipboardInfo CopySelection(const std::string& InDocument, std::uint64_t InRevision);
+	void PasteClipboard(const std::string& InDocument, std::uint64_t InRevision);
 	std::vector<FSceneHandle> SelectedRoots() const;
 	void Undo();
 	void Redo();
@@ -102,6 +108,9 @@ public:
 private:
 	void RestoreHistory(std::size_t InIndex, bool bInAfter);
 	void RestoreDeletedSubtree(std::size_t InIndex);
+	void RestoreCreatedBatch(std::size_t InIndex, bool bInAfter);
+	void CommitClipboardBatch(std::vector<FSceneNode> InNodes);
+	std::vector<FSceneNode> PrepareClipboardPaste();
 	void RemapHistory(const FSceneHandleMap& InMapping);
 	void Append(FSceneHistoryEntry InEntry);
 	void NotifyHistory();
@@ -117,5 +126,8 @@ private:
 	std::function<void()> SelectionObserver;
 	FSceneHandleMap Remapped;
 	std::optional<FSceneSaveOutcome> SaveOutcome;
+	FSceneClipboardProvider ClipboardProvider;
+	std::optional<FSceneClipboardSnapshot> ClipboardSnapshot;
+	std::uint64_t AssetGeneration{};
 };
 } // namespace Hyperion

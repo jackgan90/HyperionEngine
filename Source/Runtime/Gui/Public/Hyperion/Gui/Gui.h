@@ -237,6 +237,9 @@ public:
 	void EndModal();
 	void ClosePopup();
 	bool IsEditingText() const;
+	bool IsTextInputOwnedThisFrame() const;
+	bool IsWindowFocused(const char* InTitle) const;
+	bool HasOpenPopup() const;
 	void BeginLiveEdit();
 	FGuiEditState EndLiveEdit();
 	void FinishEditing();

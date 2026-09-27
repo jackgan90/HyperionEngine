@@ -59,6 +59,7 @@ public:
 	void RefreshAssets(std::span<const FAssetSaveResult> InSaved = {});
 	// Rebind a historical authored node before admitting it through normal edit validation.
 	FSceneNode RebindAssetResources(FSceneNode InNode);
+	FSceneNode CaptureEditableNode(FSceneHandle InHandle) const;
 	FScenePublicationToken GetToken() const;
 	std::vector<FRenderPrimitiveHandle> ResolveRenderPrimitives(FSceneHandle InHandle) const;
 	FTaskHandle GetReceipt() const;

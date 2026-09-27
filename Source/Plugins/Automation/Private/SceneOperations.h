@@ -28,6 +28,7 @@ void RegisterViewportOperations(FOperationCatalog& InCatalog, ISceneViewport* In
 class ISceneDocumentHost;
 void RegisterSceneHostOperations(FOperationCatalog& InCatalog, ISceneDocumentHost* InHost);
 void RegisterSceneAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument);
+void RegisterSceneClipboard(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument);
 void RegisterSceneComponents(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument);
 void RegisterSceneOperations(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument);
 } // namespace Hyperion

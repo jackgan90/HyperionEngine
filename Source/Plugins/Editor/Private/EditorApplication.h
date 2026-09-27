@@ -86,6 +86,7 @@ struct FEditorOptions
 	bool bExerciseGizmo{};
 	bool bExercisePicking{};
 	bool bExerciseMultiSelection{};
+	bool bExerciseClipboard{};
 };
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
@@ -331,6 +332,7 @@ private:
 	void ExercisePlacementInput(std::vector<FInputEvent>& InEvents);
 	bool ExercisePlacementMenu(std::vector<FInputEvent>& InEvents);
 	void ExercisePlacementDrag(std::vector<FInputEvent>& InEvents);
+	void ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents);
 	void ExercisePlacementCancel(std::vector<FInputEvent>& InEvents);
 	void ExercisePlacementHistory();
 	void ExercisePlacementMarkers(std::vector<FInputEvent>& InEvents);
@@ -417,6 +419,15 @@ private:
 	                std::uint64_t InInteraction = 0);
 	void FinishInspectorEdit();
 	void RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents);
+	void RouteClipboardShortcuts(std::span<const FInputEvent> InEvents);
+	void ExerciseClipboard(std::vector<FInputEvent>& InEvents);
+	void PrepareClipboardExercise();
+	void ExerciseClipboardHistory(std::vector<FInputEvent>& InEvents);
+	void ExerciseClipboardText(std::vector<FInputEvent>& InEvents);
+	unsigned ClipboardExerciseStep{};
+	unsigned ClipboardExerciseWait{};
+	std::size_t ClipboardExerciseCount{};
+	bool bClipboardVerified{};
 	void RouteDeleteShortcut(std::span<const FInputEvent> InEvents);
 	void CommitDelete();
 	bool ExerciseDeletionInput(std::vector<FInputEvent>& InEvents);

@@ -22,6 +22,17 @@ public:
 	virtual std::uint64_t Identity() const = 0;
 	virtual std::uint64_t Revision() const = 0;
 	virtual const FSceneNode* FindNode(FSceneHandle InHandle) const = 0;
+
+	virtual FSceneNode CaptureNode(FSceneHandle InHandle) const
+	{
+		const auto* Node = FindNode(InHandle);
+		if (!Node)
+		{
+			throw std::invalid_argument("Clipboard source no longer exists");
+		}
+		return *Node;
+	}
+
 	virtual FSceneHandle FindHandle(std::string_view InId) const = 0;
 	virtual std::vector<FSceneHandle> Nodes() const = 0;
 	virtual std::vector<FSceneHandle> Children(FSceneHandle InHandle) const = 0;

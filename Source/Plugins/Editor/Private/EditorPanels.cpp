@@ -383,6 +383,10 @@ void FEditorPlugin::DrawOutliner()
 		Gui->Text("Search objects");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##SearchObjects", Filter, false);
+		if (Options.bExerciseClipboard)
+		{
+			InspectionBounds["clipboard/search"] = Gui->LastItemBounds();
+		}
 		Gui->Text(std::to_string(Scene->GetStatus().Nodes) + " objects" +
 		          ("  |  " + std::to_string(Selection.All().size()) + " selected"));
 		DrawReparentRoot();
@@ -660,6 +664,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawAssetMessage();
 	Context.Publish(FGuiPanelEvent{*Gui});
 	RouteDeleteShortcut(InEvents);
+	RouteClipboardShortcuts(InEvents);
 	return Gui->Render();
 }
 } // namespace Hyperion
