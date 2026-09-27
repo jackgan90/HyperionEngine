@@ -13,6 +13,8 @@ struct FObjectDragFixture
 	unsigned Deliveries{};
 	bool bPreview{};
 	bool bImageSource{};
+	bool bExternal{};
+	bool bExternalStarted{};
 	std::string Value = "Cube";
 
 	FObjectDragFixture()
@@ -35,7 +37,14 @@ struct FObjectDragFixture
 			Gui.Selectable("Cube", false);
 		}
 		Source = Gui.LastItemBounds();
-		Gui.DragSource("Object", Value, "Cube");
+		if (!bExternal || bExternalStarted)
+		{
+			Gui.DragSource("Object", Value, "Cube", bExternal);
+		}
+		if (bExternal && Gui.PointerState().bReleased)
+		{
+			bExternalStarted = false;
+		}
 		Gui.Image(3, {24, 24});
 		Gui.DragSource("Object", "Other", "Other");
 		Gui.EndPanel();
@@ -73,6 +82,7 @@ struct FObjectDragFixture
 	{
 		Move({(Source.X + Source.Z) / 2, (Source.Y + Source.W) / 2});
 		Button(true);
+		bExternalStarted = bExternal;
 		Move({(Source.X + Source.Z) / 2 + 12, (Source.Y + Source.W) / 2});
 		HYP_CHECK(Gui.DragPayload() && Gui.DragPayload()->Value == "Cube");
 		Value = "Changed source after start";
@@ -81,10 +91,98 @@ struct FObjectDragFixture
 		HYP_CHECK(bPreview && Gui.DragPayload()->Value == "Cube");
 	}
 };
+
+void CheckHierarchyTargets()
+{
+	FGui Gui;
+	Gui.FontImage();
+	FVec4 ParentBounds;
+	FVec4 FirstRow;
+	bool bDragging{};
+	bool bExpanded{};
+	const auto Frame = [&](std::span<const FInputEvent> InEvents = {})
+	{
+		Gui.BeginFrame({800, 600}, {800, 600}, 1.f / 60, InEvents);
+		Gui.BeginPanel("Source", {0, 0}, {220, 400});
+		Gui.Selectable("Source node", true);
+		if (bDragging)
+		{
+			Gui.DragSource("Hierarchy", "1", "Selected nodes", true);
+		}
+		Gui.EndPanel();
+		Gui.BeginPanel("Target", {250, 0}, {500, 500});
+		if (Gui.BeginTable("Tree", "Name", "Type"))
+		{
+			Gui.NextRow();
+			Gui.NextColumn();
+			bool bClicked{};
+			bExpanded = Gui.TreeItem("Parent", "Parent", false, false, bClicked, false);
+			ParentBounds = Gui.LastItemBounds();
+			Gui.DropTarget("Hierarchy");
+			if (bExpanded)
+			{
+				Gui.EndTree();
+			}
+			for (unsigned Index = 0; Index < 80; ++Index)
+			{
+				Gui.NextRow();
+				Gui.NextColumn();
+				Gui.Selectable(("Node " + std::to_string(Index)).c_str(), false);
+				if (!Index)
+				{
+					FirstRow = Gui.LastItemBounds();
+				}
+				Gui.DropTarget("Hierarchy");
+			}
+			Gui.ScrollDragTarget();
+			Gui.EndTable();
+		}
+		Gui.EndPanel();
+		Gui.Render();
+	};
+	Frame();
+	Frame();
+	FInputEvent Move;
+	Move.Type = EEventType::MouseMove;
+	Move.X = 100;
+	Move.Y = 20;
+	FInputEvent Button;
+	Button.Type = EEventType::MouseButton;
+	Button.bDown = true;
+	const std::array Press{Move, Button};
+	Frame(Press);
+	bDragging = true;
+	Move.X = (ParentBounds.X + ParentBounds.Z) / 2;
+	Move.Y = (ParentBounds.Y + ParentBounds.W) / 2;
+	Frame(std::span(&Move, 1));
+	for (unsigned Index = 0; Index < 60; ++Index)
+	{
+		Frame();
+	}
+	HYP_CHECK(bExpanded);
+	const auto Before = FirstRow.Y;
+	Move.Y = 480;
+	Frame(std::span(&Move, 1));
+	for (unsigned Index = 0; Index < 20; ++Index)
+	{
+		Frame();
+	}
+	HYP_CHECK(FirstRow.Y < Before - 20);
+	Gui.CancelDragDrop();
+}
 } // namespace
 
 void CheckObjectDrag()
 {
+	CheckHierarchyTargets();
+	{
+		FObjectDragFixture External;
+		External.bExternal = true;
+		External.Start();
+		External.Button(false);
+		External.Frame();
+		HYP_CHECK(External.Deliveries == 1 && !External.Gui.DragPayload());
+	}
 	FObjectDragFixture Test;
 	Test.Start();
 	Test.Button(false);

@@ -334,17 +334,18 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 		Gui->NextRow();
 		Gui->NextColumn();
 		bool bClicked{};
+		if (ReparentOpenNodes.erase(Node->Id))
+		{
+			Gui->OpenNextTreeItem();
+		}
 		const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(),
 		                                 Selection.Contains(Visit.Handle), bClicked, !Options.bBenchmarkCollapsed);
 		if (Options.bExercisePicking && Node->Id == "light-courtyard-3")
 		{
 			PickingLightBounds = Gui->LastItemBounds();
 		}
-		if (bClicked)
-		{
-			ClickObject(Visit.Handle, bOutlinerToggle);
-		}
-		if (Options.bExerciseMultiSelection)
+		RouteReparentRow(Visit.Handle);
+		if (Options.bExerciseMultiSelection || !Options.ExerciseReparent.empty())
 		{
 			MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 		}
@@ -370,11 +371,6 @@ void FEditorPlugin::DrawOutliner()
 	}
 	if (Gui->BeginWindow("Outliner", bShowOutliner))
 	{
-		const auto Pointer = Gui->PointerState();
-		if (Pointer.bPressed)
-		{
-			bOutlinerToggle = Pointer.bCtrl;
-		}
 		if (!bSelectionInitialized && !Selection && Scene->GetStatus().bReady)
 		{
 			bSelectionInitialized = true;
@@ -389,6 +385,7 @@ void FEditorPlugin::DrawOutliner()
 		Gui->InputText("##SearchObjects", Filter, false);
 		Gui->Text(std::to_string(Scene->GetStatus().Nodes) + " objects" +
 		          ("  |  " + std::to_string(Selection.All().size()) + " selected"));
+		DrawReparentRoot();
 		if (Gui->BeginTable("Objects", "Item Label", "Type"))
 		{
 			if (Filter.empty())
@@ -409,11 +406,10 @@ void FEditorPlugin::DrawOutliner()
 					}
 					Gui->NextRow();
 					Gui->NextColumn();
-					if (Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle)))
-					{
-						ClickObject(Handle, bOutlinerToggle);
-					}
-					if (Options.bExerciseMultiSelection)
+					const bool bActivated =
+					    Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle));
+					RouteReparentRow(Handle, bActivated);
+					if (Options.bExerciseMultiSelection || !Options.ExerciseReparent.empty())
 					{
 						MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 					}
@@ -421,6 +417,7 @@ void FEditorPlugin::DrawOutliner()
 					Gui->Text(KindName(Node->GetKind()));
 				}
 			}
+			Gui->ScrollDragTarget();
 			Gui->EndTable();
 		}
 	}
@@ -634,6 +631,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	Gui->StatusBar(StatusText());
 	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser", "Place Object"}, bResetLayout);
 	bResetLayout = false;
+	UpdateReparentGesture(InEvents);
 	DrawPlacementPanel();
 	DrawViewport(InDelta, InEvents);
 	if (!bViewportVisible)
@@ -644,6 +642,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 		RouteCamera(InDelta, InEvents);
 	}
 	DrawOutliner();
+	FinishReparentGesture();
 	InspectorInteraction = 0;
 	PendingInspectorEdit.reset();
 	DrawDetails();

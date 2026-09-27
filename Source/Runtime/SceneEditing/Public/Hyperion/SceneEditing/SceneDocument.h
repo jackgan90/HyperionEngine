@@ -83,6 +83,9 @@ public:
 	FSceneHandle CommitDuplicate(FSceneHandle InHandle);
 	void CommitRemoveKeepChildren(FSceneHandle InHandle);
 	void CommitReparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);
+	// Read-only candidates shared by drag feedback and atomic KeepWorld batch submission.
+	std::vector<FSceneNodeEdit> PrepareReparent(std::span<const FSceneHandle> InHandles,
+	                                            std::optional<FSceneHandle> InParent) const;
 	void CommitSettings(FSceneSettings InSettings);
 	void CommitDelete();
 	std::vector<FSceneHandle> SelectedRoots() const;

@@ -4,15 +4,16 @@
 
 namespace Hyperion
 {
-bool FGui::DragSource(const char* InType, std::string_view InValue, const char* InLabel)
+bool FGui::DragSource(const char* InType, std::string_view InValue, const char* InLabel, bool bInExternal)
 {
 	Impl->Select();
 	if (!InType || !*InType || std::strlen(InType) > 31 || InValue.empty() || InValue.size() > 4096)
 	{
 		throw std::invalid_argument("Invalid GUI drag payload");
 	}
-	if (Impl->bDragCancelled ||
-	    !ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceAllowNullID))
+	const auto Flags = ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceAllowNullID |
+	                   (bInExternal ? ImGuiDragDropFlags_SourceExtern : 0);
+	if (Impl->bDragCancelled || !ImGui::BeginDragDropSource(Flags))
 	{
 		return false;
 	}
@@ -63,6 +64,34 @@ void FGui::CancelDragDrop()
 		ImGui::ClearActiveID();
 		Impl->bDragCancelled = true;
 	}
+}
+
+void FGui::DrawDropFeedback(bool bInValid, const char* InMessage)
+{
+	Impl->Select();
+	const auto Color = bInValid ? IM_COL32(100, 200, 120, 255) : IM_COL32(240, 90, 80, 255);
+	ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), Color, 0, 0, Scale(2));
+	ImGui::SetTooltip("%s", InMessage);
+}
+
+void FGui::ScrollDragTarget()
+{
+	Impl->Select();
+	if (!ImGui::GetDragDropPayload() || !ImGui::IsMouseDown(0))
+	{
+		return;
+	}
+	auto* Window = ImGui::GetCurrentWindow();
+	const auto Mouse = ImGui::GetMousePos();
+	if (!Window->InnerRect.Contains(Mouse) || !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+	{
+		return;
+	}
+	const auto Margin = Scale(28);
+	const float Direction = Mouse.y < Window->InnerRect.Min.y + Margin   ? -1.f
+	                        : Mouse.y > Window->InnerRect.Max.y - Margin ? 1.f
+	                                                                     : 0.f;
+	ImGui::SetScrollY(ImGui::GetScrollY() + Direction * Scale(480) * ImGui::GetIO().DeltaTime);
 }
 
 void FGui::Image(std::uint64_t InTextureId, FVec2 InSize)

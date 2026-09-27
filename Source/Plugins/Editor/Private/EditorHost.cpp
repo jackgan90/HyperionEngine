@@ -39,7 +39,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	    !Options.bExerciseGizmo && !Options.bExercisePicking && !Options.bExerciseMultiSelection &&
 	    Options.Benchmark.empty() && Options.ExerciseDocument.empty() && Options.ExerciseViews.empty() &&
 	    Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() && Options.ExerciseCapture.empty() &&
-	    Options.ExerciseRenderControls.empty() && Options.ExerciseImport.empty();
+	    Options.ExerciseRenderControls.empty() && Options.ExerciseImport.empty() && Options.ExerciseReparent.empty();
 	const auto RestoredRoot = !Options.AssetRoot && bInteractive && !Options.Preferences.AssetRoot.empty()
 	                              ? std::optional(Options.Preferences.AssetRoot)
 	                              : std::nullopt;
@@ -58,7 +58,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	    Options.ExerciseAssets.empty() && !Options.bExercise && !Options.bExerciseGizmo && !Options.bExercisePicking &&
 	    !Options.bExerciseMultiSelection && Options.Benchmark.empty() && Options.ExerciseDocument.empty() &&
 	    Options.ExerciseViews.empty() && Options.ExercisePlacement.empty() && Options.ExerciseOutlines.empty() &&
-	    Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty();
+	    Options.ExerciseCapture.empty() && Options.ExerciseRenderControls.empty() && Options.ExerciseReparent.empty();
 	const bool bPersistContentLayout = bPersistGui && Options.ExerciseContent.empty() && Options.ExerciseImport.empty();
 	RegisterGuiServices(Registry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
 	                               bPersistContentLayout ? Options.Layout : std::filesystem::path{},
@@ -123,7 +123,7 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 		    Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 		    !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() ||
 		    !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
-		    !Options.ExerciseRenderControls.empty())
+		    !Options.ExerciseRenderControls.empty() || !Options.ExerciseReparent.empty())
 		{
 			throw std::runtime_error("Requested Editor output is unavailable: editor plugin did not start");
 		}

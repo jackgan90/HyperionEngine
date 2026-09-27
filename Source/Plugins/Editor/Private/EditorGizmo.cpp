@@ -28,9 +28,9 @@ void FEditorPlugin::DrawGizmoToolbar()
 void FEditorPlugin::DrawGizmo()
 {
 	FSceneNodeView View;
-	if (Placement.IsActive() || bPlacementUsedMouse || !Selection || !Scene->GetNodeView(*Selection, View) ||
-	    !bViewportCameraInitialized || bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot || bDiscardDialog ||
-	    PreviewCamera)
+	if ((ReparentGesture && ReparentGesture->bDragging) || Placement.IsActive() || bPlacementUsedMouse || !Selection ||
+	    !Scene->GetNodeView(*Selection, View) || !bViewportCameraInitialized || bOpenDialog || bSaveDialog ||
+	    bAssetMessage || PendingRoot || bDiscardDialog || PreviewCamera)
 	{
 		FinishGizmo();
 		return;

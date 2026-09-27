@@ -202,17 +202,22 @@ public:
 	bool TreeItem(const char* InId, const char* InLabel, bool bInLeaf, bool bInSelected, bool& bOutClicked,
 	              bool bInDefaultOpen = true);
 	void EndTree();
+	void OpenNextTreeItem();
+	bool IsItemPressed() const;
 	void Property(const char* InLabel, const std::string& InValue);
 	// Texture zero creates an interactive blank canvas for image overlays.
 	FGuiImageRegion Image(std::uint64_t InTextureId);
 	void Image(std::uint64_t InTextureId, FVec2 InSize);
 	void FocusWindow(const char* InTitle);
 	// Attach to the preceding item. Payload bytes are copied for the entire gesture.
-	bool DragSource(const char* InType, std::string_view InValue, const char* InLabel);
+	// External sources are explicitly owned gestures; call only while that gesture is active.
+	bool DragSource(const char* InType, std::string_view InValue, const char* InLabel, bool bInExternal = false);
 	std::optional<FGuiDragPayload> DragPayload() const;
 	// Delivery consumes the gesture; the returned owned payload remains valid after this call.
 	std::optional<FGuiDragPayload> DropTarget(const char* InType);
 	void CancelDragDrop();
+	void DrawDropFeedback(bool bInValid, const char* InMessage);
+	void ScrollDragTarget();
 	void DrawImageOverlay(std::uint64_t InTextureId, FVec4 InClip, FVec4 InBounds, FVec4 InTint = {1, 1, 1, 1});
 	FGuiPointerState PointerState() const;
 	// Own a left drag started on an image overlay, including motion beyond the image bounds.

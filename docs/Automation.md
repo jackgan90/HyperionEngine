@@ -185,7 +185,7 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 非场景资产文档 | 模型/材质/纹理/天空的打开、列表、激活、改名、history、save/close | Editor 附着使用实际页签文档；独立模式 使用 CPU 草稿 |
 | 模型与材质 | 模型节点变换/名称、primitive 名称/材质槽、材质参数与纹理引用 | 固定拓扑和资源身份保持不变；引用完成校验后提交一个事务 |
 | 纹理与天空 | 编码/mip 重建、元信息与单像素查询；天空产品/SH/convention 查询 | 天空烘焙走导入；浮点/cube 编码不可改，与 GUI 一致 |
-| 场景编辑 | ordered selection、节点创建/删除/重父级、metadata、组件增删读写、设置、放置、保存 | Editor 共享历史；复制与保留子节点删除同样支持历史 |
+| 场景编辑 | ordered selection、节点创建/删除/重父级、metadata、组件增删读写、设置、放置、保存 | Editor 共享历史；scene.nodes.reparent 与拖拽共用固定 KeepWorld 批量事务，保留选中节点内部层级；单节点旧接口兼容；复制与保留子节点删除同样支持历史 |
 | 文档与内容 | Editor 场景打开/清空、加载状态；内容分页搜索；root 设置/清空与偏好保存 | dirty/discard/busy、generation 和旧 handle 失效由共享服务处理 |
 | 视图与预览 | 浏览相机、frame、速度、曝光、场景相机预览/创建/应用；资产预览相机/形状/纹理显示 | 临时状态不写场景历史；保存 initial view 或创建相机是明确的文档操作 |
 | 渲染与工具 | 共享渲染配置、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |

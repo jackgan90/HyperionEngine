@@ -198,6 +198,18 @@ void FGui::EndTree()
 	ImGui::TreePop();
 }
 
+void FGui::OpenNextTreeItem()
+{
+	Impl->Select();
+	ImGui::SetNextItemOpen(true);
+}
+
+bool FGui::IsItemPressed() const
+{
+	Impl->Select();
+	return ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen();
+}
+
 void FGui::Property(const char* InLabel, const std::string& InValue)
 {
 	Impl->Select();

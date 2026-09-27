@@ -254,6 +254,8 @@ Editor 默认允许同一 Windows 用户通过 CLI/MCP 附着；`--disable-plugi
 
 ## 结构编辑和渲染诊断
 
-场景相机、主方向光和环境光沿用对象的现有设置入口。Details 的 Hierarchy 提供 keep-world/keep-local 重父级，非法循环或不可逆父变换被拒绝。复制与保留子节点删除保留 SceneEditing 和 Automation 能力，GUI 入口待后续 Outliner 或 viewport 交互设计时提供。
+场景相机、主方向光和环境光沿用对象的现有设置入口。Details 不再显示 Hierarchy。修改父节点只在 Outliner 内拖拽：将已选节点行拖到目标父节点行，固定保持世界变换；拖拽期间的 **Move to scene root** 落区解除父节点。可先在 Viewport 点选模型或灯光，选择会同步到 Outliner，再从已选行起拖。Viewport 不提供 Re-parent 拖拽，保留点选与 Gizmo 操作。多选时拖动任一已选行会带上完整选择；父子同时选中只移动最外层节点，保留内部层级与主选中对象。一次放下对应一次 Undo/Redo，保存会记录新的 parent/local；局部变换数值可能变化。
+
+普通树和搜索结果都支持落点，悬停折叠节点会展开，靠近列表边缘会滚动。绿色边框表示可放下，红色边框和提示说明非法目标；Esc、失焦、右键或放到其他区域取消操作。自己、后代、失效节点和不可逆父变换被拒绝，整组不会部分修改。保持世界变换不改变 Enabled 的父级继承规则，挂到禁用父节点仍会隐藏。复制与保留子节点删除保留 SceneEditing 和 Automation 能力，GUI 入口待后续 Outliner 或 viewport 交互设计时提供。
 
 Edit > Render settings 打开渲染设置窗口。视口工具栏的信息与统计按钮分别显示左上角只读状态和右上角 profiling HUD；Stats... 选择统计分类及采集选项。方向光 Details 的 Override Shadow settings 启用该灯光自己的 Directional / Contact shadows 参数，随场景保存并支持撤销/重做。视口选项继续提供剔除、冻结、合批、包围盒与光影响范围。字段、持久化、启动深度和 Automation 接口见 [渲染诊断](RenderDiagnostics.md)。

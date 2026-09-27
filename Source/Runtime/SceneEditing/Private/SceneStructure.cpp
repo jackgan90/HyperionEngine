@@ -2,6 +2,24 @@
 
 namespace Hyperion
 {
+namespace
+{
+FMat4 ReparentInverse(const FMat4& InWorld)
+{
+	if (!IsAffine(InWorld))
+	{
+		throw std::invalid_argument("Reparent requires an affine parent transform");
+	}
+	auto Result = Inverse(InWorld);
+	// The general inverse may round 1 in the bottom row; its affine form is known exactly.
+	Result.Values[3] = 0;
+	Result.Values[7] = 0;
+	Result.Values[11] = 0;
+	Result.Values[15] = 1;
+	return Result;
+}
+} // namespace
+
 FSceneHandle FSceneEditDocument::CommitDuplicate(FSceneHandle InHandle)
 {
 	auto& Scene = Target();
@@ -90,13 +108,82 @@ void FSceneEditDocument::CommitReparent(FSceneHandle InHandle, std::optional<FSc
 	Node.Parent() = ParentId;
 	if (InMode == ESceneReparentMode::KeepWorld)
 	{
-		const auto ParentInverse = InParent ? Inverse(Parent.World) : Hyperion::Identity();
-		if (!IsAffine(ParentInverse))
-		{
-			throw std::invalid_argument("Reparent requires an invertible parent");
-		}
+		const auto ParentInverse = InParent ? ReparentInverse(Parent.World) : Hyperion::Identity();
 		Node.Local() = Multiply(ParentInverse, View.World);
 	}
 	CommitEdits({{InHandle, std::move(Node)}}, Scene.Revision());
+}
+
+std::vector<FSceneNodeEdit> FSceneEditDocument::PrepareReparent(std::span<const FSceneHandle> InHandles,
+                                                                std::optional<FSceneHandle> InParent) const
+{
+	auto& Scene = Target();
+	if (InHandles.empty())
+	{
+		throw std::invalid_argument("Select at least one node to reparent");
+	}
+	std::unordered_set<FSceneHandle, FSceneHandleHash> Handles;
+	for (const auto Handle : InHandles)
+	{
+		if (!Scene.FindNode(Handle))
+		{
+			throw FSceneEditError("stale_handle", "A reparent source no longer exists in this scene");
+		}
+		if (!Handles.insert(Handle).second)
+		{
+			throw std::invalid_argument("Duplicate reparent source");
+		}
+	}
+	FSceneNodeView Parent;
+	if (InParent && !Scene.NodeView(*InParent, Parent))
+	{
+		throw FSceneEditError("stale_handle", "The target parent no longer exists in this scene");
+	}
+	for (auto Ancestor = InParent; Ancestor;)
+	{
+		if (Handles.contains(*Ancestor))
+		{
+			throw std::invalid_argument("Cannot parent a node to itself or its descendants");
+		}
+		const auto& Id = Scene.FindNode(*Ancestor)->Parent();
+		Ancestor = Id.empty() ? std::nullopt : std::optional{Scene.FindHandle(Id)};
+	}
+	const auto ParentId = InParent ? Parent.Node->Id : std::string{};
+	std::vector<FSceneNodeEdit> Edits;
+	std::optional<FMat4> ParentInverse;
+	for (const auto Handle : InHandles)
+	{
+		FSceneNodeView View;
+		Scene.NodeView(Handle, View);
+		bool bCovered{};
+		for (auto Node = View.Node; !Node->Parent().empty();)
+		{
+			const auto Ancestor = Scene.FindHandle(Node->Parent());
+			if (Handles.contains(Ancestor))
+			{
+				bCovered = true;
+				break;
+			}
+			Node = Scene.FindNode(Ancestor);
+		}
+		if (bCovered || View.Node->Parent() == ParentId)
+		{
+			continue;
+		}
+		if (!ParentInverse)
+		{
+			ParentInverse = InParent ? ReparentInverse(Parent.World) : Hyperion::Identity();
+		}
+		auto Node = *View.Node;
+		Node.Parent() = ParentId;
+		Node.Local() = Multiply(*ParentInverse, View.World);
+		ValidateSceneNode(Node);
+		if (!IsAffine(InParent ? Multiply(Parent.World, Node.Local()) : Node.Local()))
+		{
+			throw std::invalid_argument("Reparent produces an invalid world transform");
+		}
+		Edits.push_back({Handle, std::move(Node)});
+	}
+	return Edits;
 }
 } // namespace Hyperion

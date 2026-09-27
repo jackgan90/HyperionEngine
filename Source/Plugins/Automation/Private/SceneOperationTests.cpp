@@ -2,6 +2,7 @@
 #include "Hyperion/Automation/Session.h"
 #include "Hyperion/SceneEditing/SceneComponentEditing.h"
 #include "SceneOperations.h"
+#include <cmath>
 #include <iostream>
 #include <source_location>
 
@@ -419,6 +420,179 @@ void DefaultSky()
 	Document.Detach(Tasks);
 }
 
+FMat4 NodeWorld(const FTarget& InTarget, FSceneHandle InHandle)
+{
+	FSceneNodeView View;
+	Check(InTarget.NodeView(InHandle, View));
+	return View.World;
+}
+
+void CheckWorld(const FTarget& InTarget, FSceneHandle InHandle, const FMat4& InExpected)
+{
+	const auto Actual = NodeWorld(InTarget, InHandle);
+	for (std::size_t Index = 0; Index < Actual.Values.size(); ++Index)
+	{
+		Check(std::abs(Actual.Values[Index] - InExpected.Values[Index]) < .0001f);
+	}
+}
+
+void BatchReparent()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, &Document);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	Check(WriteJson(Catalog.Search("scene.nodes.reparent")).find("scene.nodes.reparent") != std::string::npos);
+	Check(WriteJson(Catalog.Describe("scene.nodes.reparent")).find("handles") != std::string::npos);
+	const auto Add = [&](std::string InName, std::optional<FSceneHandle> InParent, FMat4 InLocal)
+	{
+		return CreateSceneNode(Document, {Document.Id(), Target.Revision(), InName, InParent, InLocal}).Handle;
+	};
+	const auto A = Add("A", {}, Translation({2, 1, 0}));
+	const auto B = Add("B", A, Scale({-2, .5f, 3}));
+	const auto C = Add("C", {}, Translation({-1, 3, 4}));
+	auto ParentLocal = ComposeTRS({4, 2, -3}, {0, std::sin(.3f), 0, std::cos(.3f)}, {-2, .5f, 3});
+	ParentLocal.Values[4] += .3f;
+	const auto Parent = Add("Parent", {}, ParentLocal);
+	const std::vector Handles{B, A, C};
+	SetSceneSelection(Document, {Document.Id(), Target.Revision(), Handles});
+	const auto BeforeSelection = Document.Selection();
+	const std::array Worlds{NodeWorld(Target, A), NodeWorld(Target, B), NodeWorld(Target, C)};
+	const auto ChildLocal = Target.FindNode(B)->Local();
+	const auto History = Document.GetState().HistoryCursor;
+	const auto Revision = Target.Revision();
+	const FSceneNodesReparentRequest Request{Document.Id(), Revision, Handles, Parent};
+	Check(ReadValue<std::string>(Field(Call(Agent, "scene.nodes.reparent", Request), "status")) == "completed");
+	Check(Target.Revision() == Revision + 1 && Document.GetState().HistoryCursor == History + 1);
+	Check(Document.Selection() == BeforeSelection && Target.FindNode(B)->Parent() == Target.FindNode(A)->Id);
+	Check(Target.FindNode(B)->Local().Values == ChildLocal.Values);
+	CheckWorld(Target, A, Worlds[0]);
+	CheckWorld(Target, B, Worlds[1]);
+	CheckWorld(Target, C, Worlds[2]);
+	Document.Undo();
+	Check(Target.FindNode(A)->Parent().empty() && Target.FindNode(C)->Parent().empty());
+	Document.Redo();
+	Check(Document.Selection() == BeforeSelection && Target.FindNode(A)->Parent() == Target.FindNode(Parent)->Id);
+	const auto NoopRevision = Target.Revision();
+	ReparentSceneNodes(Document, {Document.Id(), NoopRevision, Handles, Parent});
+	Check(Target.Revision() == NoopRevision && Document.GetState().HistoryCursor == History + 1);
+	Error(Call(Agent, "scene.nodes.reparent", Request), "stale_revision");
+	ReparentSceneNodes(Document, {Document.Id(), Target.Revision(), Handles, {}});
+	Check(Target.FindNode(A)->Parent().empty() && Target.FindNode(C)->Parent().empty());
+	CheckWorld(Target, A, Worlds[0]);
+	CheckWorld(Target, B, Worlds[1]);
+	CheckWorld(Target, C, Worlds[2]);
+	Document.Detach(Tasks);
+}
+
+void AffineReparentRounding()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	const auto World = Translation({2, -3, 4});
+	const auto Source = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Source", {}, World}).Handle;
+	const auto Parent =
+	    CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Parent", {}, Scale({.05f, .7f, 1.3f})}).Handle;
+	const auto History = Document.GetState().HistoryCursor;
+	for (const bool bBatch : {false, true})
+	{
+		if (bBatch)
+		{
+			ReparentSceneNodes(Document, {Document.Id(), Target.Revision(), {Source}, Parent});
+		}
+		else
+		{
+			ReparentSceneNode(Document, {Document.Id(), Target.Revision(), Source, Parent, true});
+		}
+		Check(Target.FindNode(Source)->Parent() == Target.FindNode(Parent)->Id);
+		Check(IsAffine(Target.FindNode(Source)->Local()));
+		CheckWorld(Target, Source, World);
+		Check(Document.GetState().HistoryCursor == History + 1);
+		Document.Undo();
+		Check(Target.FindNode(Source)->Parent().empty());
+		CheckWorld(Target, Source, World);
+	}
+	Document.Detach(Tasks);
+}
+
+void BatchReparentRejection()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, &Document);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	const auto A = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "A"}).Handle;
+	const auto B = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "B", A}).Handle;
+	const auto Singular =
+	    CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Singular", {}, Scale({1, 0, 1})}).Handle;
+	Document.Reset();
+	const auto Revision = Target.Revision();
+	const auto Reject =
+	    [&](std::vector<FSceneHandle> InHandles, std::optional<FSceneHandle> InParent, const char* InCode)
+	{
+		Error(Call(Agent, "scene.nodes.reparent",
+		           FSceneNodesReparentRequest{Document.Id(), Revision, InHandles, InParent}),
+		      InCode);
+		Check(Target.Revision() == Revision && Document.GetState().History.empty() && !Document.IsDirty());
+		Check(Target.FindNode(A)->Parent().empty() && Target.FindNode(B)->Parent() == Target.FindNode(A)->Id);
+	};
+	Reject({A}, A, "invalid_arguments");
+	Reject({A}, B, "invalid_arguments");
+	Reject({A, B}, B, "invalid_arguments");
+	Reject({A, A}, {}, "invalid_arguments");
+	Reject({}, {}, "invalid_arguments");
+	Reject({A, {A.Scene, A.Slot, A.Generation + 1}}, Singular, "stale_handle");
+	Reject({A}, FSceneHandle{}, "stale_handle");
+	Reject({A, B}, Singular, "invalid_arguments");
+	Document.SetInteractionState(true, false);
+	Reject({A}, {}, "busy");
+	Document.SetInteractionState(false, false);
+	Error(Call(Agent, "scene.nodes.reparent", FSceneNodesReparentRequest{"old", Revision, {A}, {}}), "stale_document");
+	Document.Detach(Tasks);
+}
+
+void LargeBatchReparent()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	std::vector<FSceneNode> Nodes;
+	for (unsigned Index = 0; Index < 256; ++Index)
+	{
+		FSceneNode Node;
+		Node.Id = "batch-" + std::to_string(Index);
+		Node.Local() = Translation({float(Index), 2, 3});
+		Nodes.push_back(std::move(Node));
+	}
+	const auto Handles = Target.AddNodes(Nodes);
+	const auto Parent = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Parent"}).Handle;
+	const auto History = Document.GetState().HistoryCursor;
+	ReparentSceneNodes(Document, {Document.Id(), Target.Revision(), Handles, Parent});
+	Check(Document.GetState().HistoryCursor == History + 1);
+	for (std::size_t Index = 0; Index < Handles.size(); ++Index)
+	{
+		Check(Target.FindNode(Handles[Index])->Parent() == Target.FindNode(Parent)->Id);
+		CheckWorld(Target, Handles[Index], Nodes[Index].Local());
+	}
+	Document.Undo();
+	for (const auto Handle : Handles)
+	{
+		Check(Target.FindNode(Handle)->Parent().empty());
+	}
+	Document.Detach(Tasks);
+}
+
 void Authoring()
 {
 	FTaskSystem Tasks(1, 1);
@@ -485,6 +659,10 @@ int main()
 		Editing();
 		NoHistory();
 		Authoring();
+		BatchReparent();
+		AffineReparentRounding();
+		BatchReparentRejection();
+		LargeBatchReparent();
 		DefaultSky();
 		StructuralHistory();
 		ComponentAdmissionAndBatch();

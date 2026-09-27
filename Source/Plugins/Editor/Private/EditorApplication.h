@@ -62,6 +62,7 @@ struct FEditorOptions
 	std::filesystem::path ExerciseViews;
 	std::filesystem::path ExerciseRenderControls;
 	std::filesystem::path ExercisePlacement;
+	std::filesystem::path ExerciseReparent;
 	std::filesystem::path ExerciseOutlines;
 	std::filesystem::path ExerciseContent;
 	std::filesystem::path ExerciseImport;
@@ -279,7 +280,13 @@ private:
 	void ShowOpenScene();
 	void DrawMenus();
 	void DrawEditMenu();
-	void DrawHierarchy(const FSceneNodeView& InView);
+	void BeginReparentGesture(FSceneHandle InHandle, FVec4 InBounds);
+	void UpdateReparentGesture(std::span<const FInputEvent> InEvents);
+	void CancelReparentGesture();
+	void DrawReparentTarget(std::optional<FSceneHandle> InParent);
+	void DrawReparentRoot();
+	void FinishReparentGesture();
+	void RouteReparentRow(FSceneHandle InHandle, bool bInActivated = false);
 	void DrawPreferences();
 	void DrawCaptureButton();
 	std::string CaptureStatus() const;
@@ -333,6 +340,23 @@ private:
 	bool ExercisePickingScene(std::vector<FInputEvent>& InEvents);
 	void ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter, FVec2 InEmpty);
 	void ExerciseMultiSelection(std::vector<FInputEvent>& InEvents);
+	void ExerciseReparent(std::vector<FInputEvent>& InEvents);
+	void PrepareReparentExercise();
+	void ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents);
+	void ExerciseReparentSelection(std::vector<FInputEvent>& InEvents);
+	void ExerciseReparentDrag(std::vector<FInputEvent>& InEvents);
+	void ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents);
+	void VerifyReparentExercise();
+	unsigned ReparentExerciseStep{};
+	unsigned ReparentExerciseCase{};
+	unsigned ReparentSelectionStep{};
+	unsigned ReparentKeyboardStep{};
+	bool bReparentVerified{};
+	std::vector<FSceneHandle> ReparentExerciseNodes;
+	std::vector<std::string> ReparentExerciseIds;
+	std::vector<FMat4> ReparentExerciseWorlds;
+	std::uint64_t ReparentExerciseRevision{};
+	std::size_t ReparentExerciseHistory{};
 	void PrepareMultiSelection();
 	void ExerciseMultiSelectionClicks(std::vector<FInputEvent>& InEvents);
 	void ExerciseMultiDetails(std::vector<FInputEvent>& InEvents);
@@ -579,6 +603,25 @@ private:
 	};
 
 	std::optional<FViewportClick> ViewportClick;
+
+	struct FReparentGesture
+	{
+		std::string Token;
+		std::string Document;
+		std::uint64_t Revision{};
+		std::vector<FSceneHandle> Handles;
+		FSceneHandle Source;
+		FVec2 Start;
+		FVec4 Bounds;
+		bool bToggle{};
+		bool bDragging{};
+		bool bTargetPreview{};
+	};
+
+	std::optional<FReparentGesture> ReparentGesture;
+	std::optional<std::optional<FSceneHandle>> ReparentDrop;
+	std::unordered_set<std::string> ReparentOpenNodes;
+	std::uint64_t ReparentSerial{};
 	std::string OpenPath;
 	std::unique_ptr<FContentBrowser> Browser;
 	std::optional<TAsyncResult<FAssetHeader>> PendingAssetOpen;
@@ -610,7 +653,6 @@ private:
 	std::string CatalogError;
 	bool bShowViewport = true;
 	bool bShowOutliner = true;
-	bool bOutlinerToggle{};
 	bool bShowDetails = true;
 	std::unique_ptr<FAssetImportPanel> ImportPanel;
 	std::uint64_t ImportRevision{};

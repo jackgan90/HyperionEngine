@@ -84,7 +84,6 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 		    FPendingInspectorEdit{InView.Handle, std::move(Candidate), Revision, Edit.ChangedInteraction};
 	}
 	Gui->TextWrapped("Object ID: " + Node.Id);
-	DrawHierarchy(InView);
 	if (Scene->GetRevision() != Revision)
 	{
 		return;

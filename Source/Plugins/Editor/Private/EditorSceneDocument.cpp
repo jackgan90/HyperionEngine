@@ -65,8 +65,9 @@ void FEditorPlugin::InitializeSceneDocument()
 bool FEditorPlugin::IsDocumentInteractionBusy() const
 {
 	return !Options.Benchmark.empty() || GizmoEdit.has_value() || InspectorInteraction || PendingInspectorEdit ||
-	       Placement.IsActive() || Gui->DragPayload() || Gui->IsEditingText() || bOpenDialog || bSaveDialog ||
-	       bDiscardDialog || bAssetMessage || PendingRoot || bPreferencesDialog || bFinished;
+	       ReparentGesture.has_value() || Placement.IsActive() || Gui->DragPayload() || Gui->IsEditingText() ||
+	       bOpenDialog || bSaveDialog || bDiscardDialog || bAssetMessage || PendingRoot || bPreferencesDialog ||
+	       bFinished;
 }
 
 void FEditorPlugin::UpdateDocumentInteraction()

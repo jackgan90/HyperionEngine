@@ -92,6 +92,12 @@ void RegisterSceneAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* In
 	    "Preserves world transform by default. Rejects cycles, stale handles and non-invertible parents before "
 	    "committing. Null parent makes a root.",
 	    false, {Document, 1, {1, 0, 1}, {}, true}, ReparentSceneNode);
+	AddAuthoring<FSceneNodesReparentRequest, FSceneDocumentInfo>(
+	    InCatalog, InDocument, "scene.nodes.reparent", "Reparent scene objects preserving world transforms",
+	    "Atomically reparents selected roots with KeepWorld. Selected ancestors cover descendants, preserving "
+	    "internal hierarchy, ordered selection and primary. One host undo entry; already-parented nodes are no-ops. "
+	    "Rejects empty/duplicate/stale handles, cycles and non-invertible parents. Null parent makes roots.",
+	    false, {Document, 1, {{1, 0, 1}}, {}}, ReparentSceneNodes);
 	AddAuthoring<FSceneMutationRequest, FSceneDocumentInfo>(
 	    InCatalog, InDocument, "scene.selection.delete", "Delete selected subtrees",
 	    "Deletes selected roots and descendants. Clears selection; Editor undo restores and reselects deleted roots "

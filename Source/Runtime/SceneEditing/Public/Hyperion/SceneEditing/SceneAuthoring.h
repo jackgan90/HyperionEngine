@@ -58,6 +58,14 @@ struct FSceneSettingsRequest
 	FSceneSettings Settings;
 };
 
+struct FSceneNodesReparentRequest
+{
+	std::string Document;
+	std::uint64_t Revision{};
+	std::vector<FSceneHandle> Handles;
+	std::optional<FSceneHandle> Parent;
+};
+
 FSceneDocumentInfo UseDefaultSceneSky(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest);
 bool CanAddDefaultSceneComponent(const FSceneComponentDescriptor& InType);
 void AddDefaultSceneComponent(FSceneNode& InNode, std::string InId, std::string_view InType);
@@ -66,6 +74,7 @@ FSceneSelectionInfo SetSceneSelection(FSceneEditDocument& InDocument, const FSce
 FSceneDocumentInfo SetSceneMetadata(FSceneEditDocument& InDocument, const FSceneMetadataRequest& InRequest);
 FSceneNodeInfo CreateSceneNode(FSceneEditDocument& InDocument, const FSceneCreateRequest& InRequest);
 FSceneDocumentInfo ReparentSceneNode(FSceneEditDocument& InDocument, const FSceneReparentRequest& InRequest);
+FSceneDocumentInfo ReparentSceneNodes(FSceneEditDocument& InDocument, const FSceneNodesReparentRequest& InRequest);
 FSceneDocumentInfo DeleteSceneSelection(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest);
 FSceneSettings GetSceneSettings(const FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest);
 FSceneDocumentInfo SetSceneSettings(FSceneEditDocument& InDocument, const FSceneSettingsRequest& InRequest);
@@ -76,6 +85,7 @@ template<> const FRecordDescriptor& RecordType<FSceneMetadataEdit>();
 template<> const FRecordDescriptor& RecordType<FSceneMetadataRequest>();
 template<> const FRecordDescriptor& RecordType<FSceneCreateRequest>();
 template<> const FRecordDescriptor& RecordType<FSceneReparentRequest>();
+template<> const FRecordDescriptor& RecordType<FSceneNodesReparentRequest>();
 template<> const FRecordDescriptor& RecordType<FSceneSettings>();
 template<> const FRecordDescriptor& RecordType<FSceneSettingsRequest>();
 } // namespace Hyperion

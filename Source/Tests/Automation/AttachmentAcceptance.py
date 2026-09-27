@@ -144,6 +144,7 @@ def workflow(cli, editor, root, output):
         undone = completed(agent.call("scene.undo", document=changed["document"], revision=changed["revision"]))
         assert not undone["dirty"] and inspect(agent, undone, selected["handle"])["local"] == original
         redone = completed(agent.call("scene.redo", document=undone["document"], revision=undone["revision"]))
+        redone = check_batch_reparent(agent, redone)
         destination = output / "Edited.hasset"
         saved = completed(agent.wait(agent.call("scene.save", document=redone["document"],
                                                 revision=redone["revision"], path=str(destination))))
@@ -198,6 +199,38 @@ def workflow(cli, editor, root, output):
             session.close()
         for app in apps:
             app.close()
+
+
+def check_batch_reparent(session, info):
+    schema = session.request("api.describe", {"operation": "scene.nodes.reparent"})
+    assert "handles" in schema["inputSchema"]["required"], schema
+    assert "keepWorld" not in schema["inputSchema"]["properties"], schema
+    page = completed(session.call("scene.nodes.list", document=info["document"],
+                                  revision=info["revision"], limit=100))
+    nodes = page["nodes"][:3]
+    assert len(nodes) == 3, page
+    handles = [item["handle"] for item in nodes[:2]]
+    selection = completed(session.call("scene.selection.set", document=info["document"],
+                                       revision=info["revision"], handles=handles))
+    changed = completed(session.call("scene.nodes.reparent", document=info["document"],
+                                     revision=info["revision"], handles=handles, parent=nodes[2]["handle"]))
+    for before in nodes[:2]:
+        after = inspect(session, changed, before["handle"])
+        assert after["parent"] == nodes[2]["id"], after
+        assert all(abs(a - b) < 1e-4 for a, b in zip(after["world"]["values"], before["world"]["values"]))
+    noop = completed(session.call("scene.nodes.reparent", document=changed["document"],
+                                  revision=changed["revision"], handles=handles, parent=nodes[2]["handle"]))
+    assert noop["revision"] == changed["revision"]
+    invalid = session.call("scene.nodes.reparent", document=changed["document"],
+                           revision=changed["revision"], handles=handles, parent=handles[0])
+    assert invalid["error"]["code"] == "invalid_arguments", invalid
+    undone = completed(session.call("scene.undo", document=changed["document"], revision=changed["revision"]))
+    for before in nodes[:2]:
+        restored = inspect(session, undone, before["handle"])
+        assert restored["parent"] == before["parent"] and restored["local"] == before["local"]
+    remaining = completed(session.call("scene.selection.get", document=undone["document"], revision=undone["revision"]))
+    assert remaining["handles"] == selection["handles"] and remaining["primary"] == selection["primary"]
+    return undone
 
 
 def failure_paths(editor, root, output):

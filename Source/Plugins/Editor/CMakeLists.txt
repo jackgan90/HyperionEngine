@@ -3,6 +3,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/ImportPreviewPanel.cpp Private/ImportPreviewProperties.cpp
   Private/EditorImportAcceptance.cpp
   Private/EditorStructure.cpp
+  Private/EditorReparentAcceptance.cpp
   Private/EditorRenderSettings.cpp
   Private/EditorLightControls.cpp
   Private/EditorRenderSettingsGui.cpp

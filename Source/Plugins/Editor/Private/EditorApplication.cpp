@@ -252,6 +252,10 @@ void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::
 	{
 		ExerciseMultiSelection(InEvents);
 	}
+	if (!Options.ExerciseReparent.empty())
+	{
+		ExerciseReparent(InEvents);
+	}
 	if (!Options.ExercisePlacement.empty())
 	{
 		ExercisePlacementInput(InEvents);
@@ -282,6 +286,7 @@ FGuiDrawData FEditorPlugin::DrawMainWindow(float InDelta, std::span<const FInput
 			Gui->ResetInput();
 			ViewportRegion = {};
 			CancelPlacement();
+			CancelReparentGesture();
 			ViewportClick.reset();
 			FinishGizmo();
 			Camera.SuspendInput(InEvents);
@@ -342,7 +347,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	CollectEditorInput(Events, AssetEvents);
 	// Synthetic clicks use a fixed GUI clock: hidden swapchains can run fast enough
 	// to merge separate double-click sequences after the content grid scrolls.
-	const float GuiDelta = Options.ExerciseAssets.empty() ? InDelta : 1.f / 60;
+	const float GuiDelta = Options.ExerciseAssets.empty() && Options.ExerciseReparent.empty() ? InDelta : 1.f / 60;
 	auto Data = DrawMainWindow(GuiDelta, Events, bMainDrawable);
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
@@ -352,7 +357,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
 	                               bOutlinesVerified || bMultiSelectionVerified || bContentVerified ||
-	                               bRenderControlsVerified;
+	                               bRenderControlsVerified || bReparentVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -461,7 +466,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
 	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
 	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty() ||
-	     !Options.ExerciseImport.empty()) &&
+	     !Options.ExerciseImport.empty() || !Options.ExerciseReparent.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out at step " + std::to_string(ExerciseStep) +
@@ -477,6 +482,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExerciseReparent.empty() && !bReparentVerified)
+	{
+		throw std::runtime_error("Reparent acceptance did not complete");
+	}
 	if (!Options.ExerciseImport.empty() && !bImportVerified)
 	{
 		throw std::runtime_error("Import GUI acceptance incomplete at step " + std::to_string(ExerciseStep));

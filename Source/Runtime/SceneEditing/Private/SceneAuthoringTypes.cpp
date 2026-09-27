@@ -97,6 +97,25 @@ template<> const FRecordDescriptor& RecordType<FSceneReparentRequest>()
 	return Type;
 }
 
+template<> const FRecordDescriptor& RecordType<FSceneNodesReparentRequest>()
+{
+	static const auto Type = MakeRecord<FSceneNodesReparentRequest>(
+	    "hyperion.scene.nodes.reparent.request",
+	    {Member("document", &FSceneNodesReparentRequest::Document,
+	            {.bRequired = true, .Description = "Current document from scene.info."}),
+	     Member("revision", &FSceneNodesReparentRequest::Revision,
+	            {.bRequired = true, .Description = "Expected scene revision; stale requests do not mutate."}),
+	     Member("handles", &FSceneNodesReparentRequest::Handles,
+	            {.bRequired = true,
+	             .Description = "Nonempty unique current handles. Selected ancestors cover descendants; internal "
+	                            "hierarchy and selection are preserved."}),
+	     Member("parent", &FSceneNodesReparentRequest::Parent,
+	            {.bRequired = true,
+	             .Description = "New parent or null for scene root. Always preserves world affine transforms in one "
+	                            "atomic history entry."})});
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FSceneSettings>()
 {
 	static const auto Type = MakeRecord<FSceneSettings>(

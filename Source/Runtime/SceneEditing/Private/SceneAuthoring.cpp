@@ -142,6 +142,14 @@ FSceneDocumentInfo ReparentSceneNode(FSceneEditDocument& InDocument, const FScen
 	return DescribeSceneDocument(InDocument);
 }
 
+FSceneDocumentInfo ReparentSceneNodes(FSceneEditDocument& InDocument, const FSceneNodesReparentRequest& InRequest)
+{
+	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+	auto Edits = InDocument.PrepareReparent(InRequest.Handles, InRequest.Parent);
+	InDocument.CommitEdits(std::move(Edits), InRequest.Revision);
+	return DescribeSceneDocument(InDocument);
+}
+
 FSceneDocumentInfo DeleteSceneSelection(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest)
 {
 	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
