@@ -189,10 +189,6 @@ void FAssetImportPanel::DrawImportProperties(FGui& InGui)
 		{
 			InGui.TextWrapped("Updating properties for the selected source and settings...");
 		}
-		if (PreviewInfo.Status == "failed" && !PreviewInfo.Error.empty())
-		{
-			InGui.TextWrapped(PreviewInfo.Error);
-		}
 		InGui.BeginDisabled(PreviewInfo.Status != "ready" || bStale);
 		try
 		{

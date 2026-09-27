@@ -24,6 +24,7 @@ void Check(bool bInValue, std::source_location InLocation = std::source_location
 void WriteFixture(const std::filesystem::path& InRoot, const std::string& InName)
 {
 	FLocalFileSystem Files;
+	std::filesystem::remove(InRoot / "Other/SceneCopy.hasset");
 	for (const auto* Directory : {"Empty", "Other", ".assets", ".cache", ".git"})
 	{
 		std::filesystem::create_directories(InRoot / Directory);

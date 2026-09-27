@@ -244,10 +244,6 @@ void FAssetImportPanel::DrawSource(FGui& InGui)
 
 void FAssetImportPanel::DrawSettings(FGui& InGui)
 {
-	if (!bSourceEditing && PreparedKey == RequestKey() && PreviewInfo.Status == "failed")
-	{
-		InGui.TextWrapped(PreviewInfo.Error);
-	}
 	const auto Ext = Extension(Request.Source);
 	const bool bImage = IsImage(Request.Source);
 	const bool bModel = TypeIndex == 1 || (TypeIndex == 0 && (Ext == ".gltf" || Ext == ".glb"));
@@ -337,10 +333,6 @@ void FAssetImportPanel::DrawOutputPath(FGui& InGui)
 			OutputError = Failure.what();
 		}
 	}
-	if (bExpanded && !OutputError.empty())
-	{
-		InGui.TextWrapped(OutputError);
-	}
 	if (bExpanded)
 	{
 		InGui.Unindent();
@@ -351,40 +343,45 @@ void FAssetImportPanel::DrawOutput(FGui& InGui)
 {
 	DrawOutputPath(InGui);
 	DrawImportProperties(InGui);
-	if (!InGui.Section("Import options and actions"))
+	if (!InGui.Section("Advanced options", false))
 	{
 		return;
 	}
 	InGui.Indent();
-	InGui.Checkbox("Advanced options", bAdvanced);
-	if (bAdvanced)
-	{
-		InGui.BeginLiveEdit();
-		InGui.Checkbox("Force reimport (skip freshness check)", Request.bForce);
-		bSettingsEditing |= InGui.EndLiveEdit().ActiveInteraction != 0;
-	}
-	const bool bWritable = OutputError.empty() && ValidatedOutputKey == RequestKey();
-	InGui.BeginDisabled(!bWritable || !Imports);
-	try
-	{
-		const bool bReady = !DraftId.empty() && PreviewInfo.Status == "ready" && PreparedKey == RequestKey() &&
-		                    ImportTask.empty() && !bImportResultOpen;
-		InGui.BeginDisabled(!bReady);
-		const bool bSubmit = InGui.Button("Import");
-		ImportBounds = InGui.LastItemBounds();
-		InGui.EndDisabled();
-		if (bSubmit)
-		{
-			SubmitImport();
-		}
-	}
-	catch (const std::exception& Failure)
-	{
-		Message = Failure.what();
-	}
-	InGui.EndDisabled();
-	InGui.TextWrapped(Message);
+	InGui.BeginLiveEdit();
+	InGui.Checkbox("Force reimport (skip freshness check)", Request.bForce);
+	bSettingsEditing |= InGui.EndLiveEdit().ActiveInteraction != 0;
 	InGui.Unindent();
+}
+
+std::string FAssetImportPanel::ImportMessage() const
+{
+	if (!Message.empty())
+	{
+		return Message;
+	}
+	if (!Request.Output.empty() && !OutputError.empty())
+	{
+		return OutputError;
+	}
+	if (!bSourceEditing && PreparedKey == RequestKey() && PreviewInfo.Status == "failed")
+	{
+		return PreviewInfo.Error;
+	}
+	return {};
+}
+
+void FAssetImportPanel::DrawImportAction(FGui& InGui, const std::string& InMessage)
+{
+	const bool bWritable = OutputError.empty() && ValidatedOutputKey == RequestKey();
+	const bool bReady = !DraftId.empty() && PreviewInfo.Status == "ready" && PreparedKey == RequestKey() &&
+	                    ImportTask.empty() && !bImportResultOpen;
+	const bool bSubmit = InGui.EndActionLayout("Import", InMessage, bWritable && Imports && bReady);
+	ImportBounds = InGui.LastItemBounds();
+	if (bSubmit)
+	{
+		SubmitImport();
+	}
 }
 
 void FAssetImportPanel::Draw(FGui& InGui)
@@ -402,6 +399,8 @@ void FAssetImportPanel::Draw(FGui& InGui)
 			{
 				InGui.FocusWindow("Import Asset");
 			}
+			const auto FooterMessage = ImportMessage();
+			InGui.BeginActionLayout("ImportLayout", FooterMessage);
 			if (InGui.Section("Source"))
 			{
 				InGui.Indent();
@@ -416,6 +415,7 @@ void FAssetImportPanel::Draw(FGui& InGui)
 			DrawSettings(InGui);
 			bSettingsEditing = InGui.EndLiveEdit().ActiveInteraction != 0;
 			DrawOutput(InGui);
+			DrawImportAction(InGui, FooterMessage);
 			DrawRefreshConfirmation(InGui);
 			InGui.SetPathDisplayRoot("/Game");
 		}

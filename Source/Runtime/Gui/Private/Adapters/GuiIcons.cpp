@@ -1,5 +1,7 @@
 #include "GuiInternal.h"
+#include <algorithm>
 #include <cmath>
+#include <imgui_internal.h>
 #include <numbers>
 
 namespace Hyperion
@@ -118,6 +120,32 @@ bool FGui::BeginPopup(const char* InId)
 {
 	Impl->Select();
 	return ImGui::BeginPopup(InId);
+}
+
+bool FGui::BeginPopup(const char* InId, FVec4 InAnchor)
+{
+	Impl->Select();
+	const auto* Viewport = ImGui::GetMainViewport();
+	const float Padding = ImGui::GetStyle().DisplaySafeAreaPadding.x;
+	const float Left = Viewport->WorkPos.x + Padding;
+	const float Right = Viewport->WorkPos.x + Viewport->WorkSize.x - Padding;
+	const float MaxWidth = std::max(1.f, Right - Left);
+	const float MaxHeight = std::max(ImGui::GetFrameHeight(), Viewport->WorkPos.y + Viewport->WorkSize.y - InAnchor.W -
+	                                                              ImGui::GetStyle().DisplaySafeAreaPadding.y);
+	ImGui::SetNextWindowSizeConstraints({std::min(InAnchor.Z - InAnchor.X, MaxWidth), 0}, {MaxWidth, MaxHeight});
+	float Width = std::min(InAnchor.Z - InAnchor.X, MaxWidth);
+	if (ImGui::IsPopupOpen(InId))
+	{
+		const auto* Popup = Impl->Context->OpenPopupStack.Data + Impl->Context->BeginPopupStack.Size;
+		if (Popup->Window && Popup->Window->WasActive)
+		{
+			Width = ImGui::CalcWindowNextAutoFitSize(Popup->Window).x;
+		}
+	}
+	// Resolve placement before Begin creates the background and clip rectangle, as combo popups do.
+	ImGui::SetNextWindowPos({std::clamp(InAnchor.X, Left, std::max(Left, Right - Width)), InAnchor.W},
+	                        ImGuiCond_Always);
+	return ImGui::BeginPopup(InId, ImGuiWindowFlags_NoMove);
 }
 
 void FGui::EndPopup()

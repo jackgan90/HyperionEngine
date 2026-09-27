@@ -213,8 +213,18 @@ void FEditorPlugin::ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEv
 			return;
 		case 20:
 		case 23:
+		{
+			const auto Anchor = InspectionBounds.at("hud/categories");
+			const auto Title = InspectionBounds.at("hud/menu-title");
+			const float Padding = Gui->Scale(16);
+			if (Title.X < Anchor.X || Title.X > Anchor.X + Padding || Title.Y < Anchor.W ||
+			    Title.Y > Anchor.W + Padding)
+			{
+				throw std::runtime_error("Stats menu did not expand from the button's bottom-left corner");
+			}
 			ExerciseClick(InEvents, InspectionBounds["hud/category/6"]);
 			return;
+		}
 		case 24:
 			ExerciseClick(InEvents, InspectionBounds["hud/category/7"]);
 			return;

@@ -148,6 +148,7 @@ void FEditorPlugin::DrawMenus()
 				SavePath = CurrentPath;
 				bSaveDialog = bRequestSaveDialog = true;
 			}
+			InspectionBounds["document/save-as"] = Gui->LastItemBounds();
 			Gui->EndDisabled();
 			Gui->Separator();
 			if (Gui->MenuItem("Exit"))

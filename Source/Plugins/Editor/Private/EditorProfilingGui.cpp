@@ -65,11 +65,12 @@ void FEditorPlugin::DrawProfilingCollection()
 
 void FEditorPlugin::DrawProfilingOptions()
 {
-	if (!Gui->BeginPopup("ProfilingOptions"))
+	if (!Gui->BeginPopup("ProfilingOptions", InspectionBounds.at("hud/categories")))
 	{
 		return;
 	}
 	Gui->Text("Profiling HUD categories");
+	InspectionBounds["hud/menu-title"] = Gui->LastItemBounds();
 	const std::array<const char*, 8> Labels{"Overview",     "Tasks",          "GPU passes", "Device counters",
 	                                        "Render views", "Lighting / HZB", "Visibility", "Batching"};
 	auto ViewOptions = ViewportState().Options;

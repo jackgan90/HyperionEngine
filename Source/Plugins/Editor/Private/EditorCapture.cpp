@@ -107,7 +107,7 @@ void FEditorPlugin::DrawPreferences()
 		return;
 	}
 	bool bEnabled = Options.Preferences.bRenderDocCapture;
-	if (Gui->Checkbox("Enable RenderDoc capture", bEnabled))
+	if (Gui->Checkbox("Enable RenderDoc capture (requires restart)", bEnabled))
 	{
 		try
 		{
@@ -118,8 +118,6 @@ void FEditorPlugin::DrawPreferences()
 		}
 	}
 	CapturePreferenceBounds = Gui->LastItemBounds();
-	Gui->TextWrapped(CaptureStatus());
-	Gui->TextWrapped("Preferences are saved locally. Enabling RenderDoc for the first time requires a restart.");
 	if (!Options.PreferenceError.empty())
 	{
 		Gui->TextWrapped(Options.PreferenceError);

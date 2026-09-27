@@ -324,6 +324,43 @@ bool FGui::CenteredButton(const char* InLabel, bool bInEnabled)
 	return Button(InLabel, bInEnabled);
 }
 
+void FGui::BeginActionLayout(const char* InId, const std::string& InMessage)
+{
+	Impl->Select();
+	ImGui::PushID(InId);
+	const auto Available = ImGui::GetContentRegionAvail();
+	const float Spacing = ImGui::GetStyle().ItemSpacing.y;
+	float FooterHeight = ImGui::GetFrameHeight() + Spacing;
+	if (!InMessage.empty())
+	{
+		const auto Text = Impl->PathDisplay.Text(InMessage);
+		const float TextHeight = ImGui::CalcTextSize(Text.c_str(), nullptr, false, std::max(1.f, Available.x)).y;
+		FooterHeight += std::min(TextHeight, Available.y * .3f) + Spacing;
+	}
+	ImGui::BeginChild("Body", {0, std::max(1.f, Available.y - FooterHeight)});
+}
+
+bool FGui::EndActionLayout(const char* InLabel, const std::string& InMessage, bool bInEnabled)
+{
+	Impl->Select();
+	ImGui::EndChild();
+	const float FrameHeight = ImGui::GetFrameHeight();
+	if (!InMessage.empty())
+	{
+		const float Height = ImGui::GetContentRegionAvail().y - FrameHeight - ImGui::GetStyle().ItemSpacing.y;
+		ImGui::BeginChild("Message", {0, std::max(1.f, Height)});
+		TextWrapped(InMessage);
+		ImGui::EndChild();
+	}
+	const float Width = ImGui::CalcTextSize(InLabel, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2;
+	const auto Available = ImGui::GetContentRegionAvail();
+	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.f, Available.y - FrameHeight));
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, Available.x - Width));
+	const bool bPressed = Button(InLabel, bInEnabled);
+	ImGui::PopID();
+	return bPressed;
+}
+
 bool FGui::BeginModal(const char* InTitle, bool& bInOpen)
 {
 	Impl->Select();

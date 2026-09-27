@@ -265,6 +265,7 @@ private:
 	void CloseContentDocument();
 	void CancelContentRequests();
 	void ExerciseContentInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents);
 	void ExerciseContentSwitch(std::vector<FInputEvent>& InEvents);
 	void ExerciseContentBrowser(std::vector<FInputEvent>& InEvents);
 	void ExerciseContentFailures(std::vector<FInputEvent>& InEvents);
@@ -599,6 +600,7 @@ private:
 	FVec4 CancelChangesBounds;
 	FVec4 DiscardTitleBounds;
 	std::shared_ptr<std::binary_semaphore> ContentSaveGate;
+	std::vector<std::byte> ContentSaveOriginal;
 	std::map<std::string, FVec4> ContentTileBounds;
 	FVec4 ContentClickBounds;
 	const std::string& CurrentPath = SceneDocument.GetState().Path;

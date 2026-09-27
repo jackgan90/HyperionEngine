@@ -271,7 +271,9 @@ void FEditorPlugin::DrawSaveDialog()
 	if (bSaveDialog && Gui->BeginModal("Save Scene As", bSaveDialog))
 	{
 		Gui->TextWrapped("Save the scene document. Shared model and material assets keep their references.");
-		Gui->InputText("Scene path", SavePath, true, true);
+		// Save consumes the current draft even when the user clicks it without pressing Enter.
+		Gui->InputText("Scene path", SavePath, false, true);
+		InspectionBounds["document/save-path"] = Gui->LastItemBounds();
 		if (Gui->Button("Save", !PendingSave && Scene->GetStatus().bReady))
 		{
 			try
@@ -292,6 +294,7 @@ void FEditorPlugin::DrawSaveDialog()
 				Error = Failure.what();
 			}
 		}
+		InspectionBounds["document/save-confirm"] = Gui->LastItemBounds();
 		Gui->SameLine();
 		if (Gui->Button("Cancel"))
 		{

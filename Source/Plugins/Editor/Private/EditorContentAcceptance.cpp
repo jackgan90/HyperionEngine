@@ -22,6 +22,11 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 	{
 		throw std::runtime_error(Scene->GetStatus().Error);
 	}
+	if (ExerciseStep >= 100)
+	{
+		ExerciseContentSaveAs(InEvents);
+		return;
+	}
 	switch (ExerciseStep)
 	{
 		case 0:
@@ -51,8 +56,9 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 				CheckContent(std::find(ScenePaths.begin(), ScenePaths.end(), "/Game/Other/Scene.hasset") !=
 				                 ScenePaths.end(),
 				             "Uncataloged scene was not discovered");
-				QueueContentRoot(Options.ExerciseContent / "A");
-				++ExerciseStep;
+				CheckContent(!IsDirty(), "Save As regression requires an unmodified loaded scene");
+				ContentSaveOriginal = IO.FileSystem()->Read("/Game/Scene.hasset", 1024 * 1024);
+				ExerciseStep = 100;
 			}
 			break;
 		case 4:
@@ -80,6 +86,76 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 			break;
 		default:
 			ExerciseContentSwitch(InEvents);
+			break;
+	}
+}
+
+void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
+{
+	switch (ExerciseStep)
+	{
+		case 100:
+			ExerciseClick(InEvents, FileMenuBounds);
+			break;
+		case 101:
+			ExerciseClick(InEvents, InspectionBounds.at("document/save-as"));
+			break;
+		case 102:
+			ExerciseClick(InEvents, InspectionBounds.at("document/save-path"));
+			break;
+		case 103:
+		case 104:
+		{
+			FInputEvent Key;
+			Key.Type = EEventType::Key;
+			Key.Key = EKey::A;
+			Key.bDown = ExerciseStep == 103;
+			Key.Modifiers = Key.bDown ? 1 : 0;
+			InEvents.push_back(Key);
+			if (!Key.bDown)
+			{
+				FInputEvent Text;
+				Text.Type = EEventType::Text;
+				Text.Text = "Other/SceneCopy.hasset";
+				InEvents.push_back(std::move(Text));
+			}
+			++ExerciseStep;
+			break;
+		}
+		case 105:
+			// Click Save directly: do not press Enter to commit the path first.
+			ExerciseClick(InEvents, InspectionBounds.at("document/save-confirm"));
+			break;
+		case 106:
+			if (!PendingSave && !bSaveDialog)
+			{
+				const bool bOriginalUnchanged =
+				    IO.FileSystem()->Read("/Game/Scene.hasset", 1024 * 1024) == ContentSaveOriginal;
+				const bool bCopyExists = IO.FileSystem()->Exists("/Game/Other/SceneCopy.hasset");
+				CheckContent(CurrentPath == "/Game/Other/SceneCopy.hasset" && bOriginalUnchanged && bCopyExists,
+				             ("Save As used the wrong destination: current=" + CurrentPath + ", original unchanged=" +
+				              std::to_string(bOriginalUnchanged) + ", copy exists=" + std::to_string(bCopyExists))
+				                 .c_str());
+				CheckContent(!IsDirty(), "Save As left an unmodified scene dirty");
+				OpenScene("/Game/Other/SceneCopy.hasset");
+				++ExerciseStep;
+			}
+			break;
+		case 107:
+			if (Scene->GetStatus().bReady && ReadyFrames > 8)
+			{
+				CheckContent(Scene->FindNode(Scene->FindHandle("model"))->Name == "A" && !IsDirty(),
+				             "Save As copy did not reopen with the original scene contents");
+				OpenScene("/Game/Scene.hasset");
+				++ExerciseStep;
+			}
+			break;
+		case 108:
+			if (Scene->GetStatus().bReady && ReadyFrames > 8)
+			{
+				QueueContentRoot(Options.ExerciseContent / "A");
+				ExerciseStep = 4;
+			}
 			break;
 	}
 }
@@ -208,6 +284,8 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 				             "Save failure did not preserve old document");
 				Gui->ClosePopups();
 				bAssetMessage = bRequestAssetMessage = false;
+				Options.Preferences.RecentRoots.push_back(Options.ExerciseContent / "Missing");
+				SavePreferences();
 				QueueContentRoot(Options.ExerciseContent / "Missing");
 				++ExerciseStep;
 			}
@@ -215,6 +293,17 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 		case 23:
 			CheckContent(IsDirty() && bAssetMessage && CurrentPath == "/Game/Other/Scene.hasset",
 			             "Invalid root destroyed old document");
+			CheckContent(Options.Preferences.RecentRoots.size() == 2 &&
+			                 std::ranges::none_of(Options.Preferences.RecentRoots,
+			                                      [&](const auto& InRoot)
+			                                      {
+				                                      return SameAssetRoot(InRoot, Options.ExerciseContent / "Missing");
+			                                      }),
+			             "Missing root remained in Recent");
+			CheckContent(LoadEditorPreferences(Options.PreferencesPath).RecentRoots ==
+			                     Options.Preferences.RecentRoots &&
+			                 SameAssetRoot(Options.Preferences.AssetRoot, Options.ExerciseContent / "A"),
+			             "Missing root removal was not persisted or changed the active root");
 			Gui->ClosePopups();
 			bAssetMessage = bRequestAssetMessage = false;
 			QueueContentRoot(Options.ExerciseContent / "B");

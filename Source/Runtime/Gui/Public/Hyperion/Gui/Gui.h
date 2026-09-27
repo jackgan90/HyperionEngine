@@ -110,6 +110,9 @@ public:
 	void EndPanel();
 	void BeginScrollRegion(const char* InId, float InHeight);
 	void EndScrollRegion();
+	// Scrollable form body with a reserved footer. End draws the message and a bottom-right action in the parent.
+	void BeginActionLayout(const char* InId, const std::string& InMessage);
+	bool EndActionLayout(const char* InLabel, const std::string& InMessage, bool bInEnabled = true);
 	void Text(const std::string& InValue);
 	void TextWrapped(const std::string& InValue);
 	FVec2 DisplaySize() const;
@@ -221,6 +224,8 @@ public:
 	FVec4 DrawImageText(FVec4 InClip, std::span<const std::string> InLines, bool bInRightAligned = false);
 	void OpenPopup(const char* InTitle);
 	bool BeginPopup(const char* InId);
+	// Anchor the popup below the item's screen-space bounds, with scrolling when height is limited.
+	bool BeginPopup(const char* InId, FVec4 InAnchor);
 	void EndPopup();
 	bool BeginModal(const char* InTitle, bool& bInOpen);
 	bool BeginMessageModal(const char* InTitle, bool& bInOpen, const std::string& InMessage);

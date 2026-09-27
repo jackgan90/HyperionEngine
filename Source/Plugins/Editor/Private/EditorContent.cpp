@@ -90,10 +90,9 @@ void FEditorPlugin::DrawAssetMessage()
 		Gui->OpenPopup("Open Asset");
 		bRequestAssetMessage = false;
 	}
-	if (bAssetMessage && Gui->BeginModal("Open Asset", bAssetMessage))
+	if (bAssetMessage && Gui->BeginMessageModal("Open Asset", bAssetMessage, AssetMessage))
 	{
-		Gui->TextWrapped(AssetMessage);
-		if (Gui->Button("OK"))
+		if (Gui->CenteredButton("OK"))
 		{
 			bAssetMessage = false;
 			Gui->ClosePopup();

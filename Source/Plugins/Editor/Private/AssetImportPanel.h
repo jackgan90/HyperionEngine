@@ -34,6 +34,8 @@ private:
 	void DrawSource(FGui& InGui);
 	void DrawSettings(FGui& InGui);
 	void DrawOutput(FGui& InGui);
+	void DrawImportAction(FGui& InGui, const std::string& InMessage);
+	std::string ImportMessage() const;
 	void DrawOutputPath(FGui& InGui);
 	void UpdateSource();
 	void BrowseOutput(FNativeSurface InOwner);
@@ -78,7 +80,6 @@ private:
 	std::string ValidatedOutputKey;
 	std::size_t TypeIndex{};
 	std::size_t EncodingIndex = 1;
-	bool bAdvanced{};
 	bool bBrowse{};
 	bool bBrowseOutput{};
 	bool bFocus{};

@@ -115,7 +115,24 @@ void FEditorPlugin::PrepareContentRoot()
 {
 	auto& Content = Context.Require<FContentRootService>();
 	const auto Requested = std::exchange(RequestedRoot, {});
-	const auto Canonical = std::filesystem::canonical(Requested);
+	std::error_code PathError;
+	const auto Canonical = std::filesystem::canonical(Requested, PathError);
+	if (PathError)
+	{
+		if (PathError == std::errc::no_such_file_or_directory || PathError == std::errc::not_a_directory)
+		{
+			const auto Removed = std::erase_if(Options.Preferences.RecentRoots,
+			                                   [&](const auto& InRoot)
+			                                   {
+				                                   return SameAssetRoot(InRoot, Requested);
+			                                   });
+			if (Removed > 0)
+			{
+				SavePreferences();
+			}
+		}
+		throw std::filesystem::filesystem_error("canonical", Requested, PathError);
+	}
 	if (SameAssetRoot(Canonical, Content.Directory()))
 	{
 		RememberAssetRoot(Options.Preferences, Canonical);
