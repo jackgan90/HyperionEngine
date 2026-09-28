@@ -9,21 +9,33 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 {
 	const auto& Node = *InView.Node;
 	const auto Identity = Node.Id + "/" + InComponent.Id;
-	const bool bOpen = Gui->Section((InComponent.Type->Label + "##" + Identity).c_str());
+	bool bRemove = false;
+	const auto RemoveTooltip = "Remove " + InComponent.Type->Label + " component";
+	const bool bOpen = Gui->Section((InComponent.Type->Label + "##" + Identity).c_str(), true,
+	                                InComponent.Type->bRequired ? nullptr : &bRemove, RemoveTooltip.c_str());
 	if (!Options.ExerciseDocument.empty() || !Options.ExerciseRenderControls.empty())
 	{
 		InspectionBounds[InComponent.Type->Id + "/header"] = Gui->LastItemBounds();
+	}
+	if (bRemove)
+	{
+		auto Candidate = Node;
+		Candidate.Components.Remove(InComponent.Id);
+		CommitEdit(InView.Handle, std::move(Candidate), InRevision);
+		return true;
 	}
 	if (!bOpen)
 	{
 		return false;
 	}
 	auto& Record = InspectorDrafts.Single(InComponent);
+	Gui->Indent();
 	Gui->BeginLiveEdit();
 	const bool bChanged = Gui->EditRecord(Record, Identity, (Options.ExerciseDocument.empty() && Options.ExerciseRenderControls.empty()) ?
 	    std::function<void(std::string_view, FVec4)>{} : [&](std::string_view InField, FVec4 InBounds)
 	    { InspectionBounds[InComponent.Type->Id + "/" + std::string(InField)] = InBounds; });
 	const auto Edit = Gui->EndLiveEdit();
+	Gui->Unindent();
 	if (Edit.ActiveInteraction)
 	{
 		InspectorInteraction = Edit.ActiveInteraction;
@@ -44,20 +56,10 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 			Error = Failure.what();
 		}
 	}
-	if (!InComponent.Type->bRequired)
-	{
-		if (Gui->Button(("Remove##" + Identity).c_str()))
-		{
-			auto Candidate = Node;
-			Candidate.Components.Remove(InComponent.Id);
-			CommitEdit(InView.Handle, std::move(Candidate), InRevision);
-			return true;
-		}
-	}
 	return false;
 }
 
-void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
+void FEditorPlugin::DrawObjectMetadata(const FSceneNodeView& InView)
 {
 	const auto& Node = *InView.Node;
 	const auto Revision = Scene->GetRevision();
@@ -67,8 +69,9 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 	Gui->BeginPropertyRow("Object name");
 	const bool bNameChanged = Gui->InputText("##value", Name);
 	Gui->EndPropertyRow();
-	Gui->BeginPropertyRow("Enabled");
+	Gui->BeginPropertyRow("Object enabled", nullptr, "Disabling this object also disables its children.");
 	const bool bEnabledChanged = Gui->Checkbox("##value", bEnabled);
+	Gui->Tooltip("Disabling this object also disables its children.");
 	Gui->EndPropertyRow();
 	const auto Edit = Gui->EndLiveEdit();
 	if (Edit.ActiveInteraction)
@@ -83,7 +86,17 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 		PendingInspectorEdit =
 		    FPendingInspectorEdit{InView.Handle, std::move(Candidate), Revision, Edit.ChangedInteraction};
 	}
-	Gui->TextWrapped("Object ID: " + Node.Id);
+	if (Node.bEnabled && !InView.bEffectiveEnabled)
+	{
+		Gui->TextWrapped("Inactive because a parent object is disabled.");
+	}
+}
+
+void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
+{
+	const auto& Node = *InView.Node;
+	const auto Revision = Scene->GetRevision();
+	DrawObjectMetadata(InView);
 	if (Scene->GetRevision() != Revision)
 	{
 		return;

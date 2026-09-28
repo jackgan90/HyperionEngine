@@ -192,7 +192,9 @@ public:
 	// Keep the next button on this line only when its label and padding fit.
 	void SameLineIfFits(const char* InButtonLabel);
 	void SetNextItemWidth(float InWidth);
-	bool Section(const char* InLabel, bool bInDefaultOpen = true);
+	// Supplying bOutClose adds a trailing close button; it reports an action without changing expansion.
+	bool Section(const char* InLabel, bool bInDefaultOpen = true, bool* bOutClose = nullptr,
+	             const char* InCloseTooltip = nullptr);
 	void Indent();
 	void Unindent();
 	bool BeginTable(const char* InId, const char* InFirst, const char* InSecond);

@@ -38,7 +38,8 @@ bool FGui::InputVectorRow(const char* InLabel, FVec3& InValue, std::string_view 
 	{
 		if (!bStacked || Axis == 0)
 		{
-			ImGui::SameLine(Start + (bStacked ? 0 : Axis * (Width + Spacing * 2)));
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(Start + (bStacked ? 0 : Axis * (Width + Spacing * 2)));
 		}
 		else
 		{

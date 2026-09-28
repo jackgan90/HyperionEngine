@@ -12,6 +12,7 @@ void CheckObjectDrag();
 void CheckMixedControls();
 void CheckPathDisplay();
 void CheckContentTiles();
+void CheckSectionControls();
 
 namespace
 {
@@ -220,6 +221,7 @@ int main()
 		CheckMixedControls();
 		CheckPathDisplay();
 		CheckContentTiles();
+		CheckSectionControls();
 		CheckApplicationScale();
 		CheckActionLayout();
 		CheckAnchoredPopup();

@@ -86,6 +86,7 @@ void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
 	{
 		return;
 	}
+	Gui->Indent();
 	Gui->BeginLiveEdit();
 	const bool bChanged = Gui->EditRecord(
 	    *Cached->Draft, Identity,
@@ -95,6 +96,7 @@ void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
 	    },
 	    Cached->Blocked);
 	const auto Edit = Gui->EndLiveEdit();
+	Gui->Unindent();
 	if (Edit.ActiveInteraction)
 	{
 		InspectorInteraction = Edit.ActiveInteraction;
@@ -131,6 +133,7 @@ void FEditorPlugin::DrawSelectionInspector()
 	Gui->TextWrapped(std::to_string(Targets.size()) + " selected | Primary: " + Primary->Name);
 	Gui->TextWrapped("Transform fields assign local values to every object. The gizmo transforms the group.");
 	bool bMixedEnabled{};
+	std::size_t InactiveFromParent = 0;
 	for (const auto Handle : Targets)
 	{
 		const auto* Node = Scene->FindNode(Handle);
@@ -139,11 +142,17 @@ void FEditorPlugin::DrawSelectionInspector()
 			return;
 		}
 		bMixedEnabled |= Primary->bEnabled != Node->bEnabled;
+		FSceneNodeView View;
+		if (Node->bEnabled && Scene->GetNodeView(Handle, View) && !View.bEffectiveEnabled)
+		{
+			++InactiveFromParent;
+		}
 	}
 	auto Enabled = WriteValue(Primary->bEnabled);
 	Gui->BeginLiveEdit();
-	Gui->BeginPropertyRow("Enabled");
+	Gui->BeginPropertyRow("Object enabled", nullptr, "Disabling this object also disables its children.");
 	const bool bEnabledChanged = Gui->EditMixedScalar(Enabled, {.Kind = ERecordValueKind::Boolean}, {}, bMixedEnabled);
+	Gui->Tooltip("Disabling this object also disables its children.");
 	Gui->EndPropertyRow();
 	const auto Edit = Gui->EndLiveEdit();
 	if (Edit.ActiveInteraction)
@@ -162,6 +171,11 @@ void FEditorPlugin::DrawSelectionInspector()
 			Pending.Edits.push_back({Handle, std::move(Candidate)});
 		}
 		PendingInspectorEdit = std::move(Pending);
+	}
+	if (InactiveFromParent)
+	{
+		Gui->TextWrapped(std::to_string(InactiveFromParent) +
+		                 " selected object(s) are enabled but inactive because a parent object is disabled.");
 	}
 	for (const auto& Component : Primary->Components.All())
 	{

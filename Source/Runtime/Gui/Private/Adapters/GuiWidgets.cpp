@@ -51,7 +51,9 @@ void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded, const char*
 		ImGui::TextDisabled("(?)");
 		Tooltip(InTooltip);
 	}
-	ImGui::SameLine(Start + LabelWidth);
+	// SameLine offsets are group-relative; Start is already window-relative, including indentation.
+	ImGui::SameLine();
+	ImGui::SetCursorPosX(Start + LabelWidth);
 	ImGui::SetNextItemWidth(std::max(1.f, ImGui::GetContentRegionAvail().x));
 }
 
@@ -127,12 +129,26 @@ void FGui::SameLineIfFits(const char* InButtonLabel)
 	}
 }
 
-bool FGui::Section(const char* InLabel, bool bInDefaultOpen)
+bool FGui::Section(const char* InLabel, bool bInDefaultOpen, bool* bOutClose, const char* InCloseTooltip)
 {
 	Impl->Select();
+	bool bVisible = true;
 	ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
-	const bool bOpen = ImGui::CollapsingHeader(InLabel, bInDefaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+	const bool bOpen = ImGui::CollapsingHeader(InLabel, bOutClose ? &bVisible : nullptr,
+	                                           bInDefaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0);
 	ImGui::PopStyleColor();
+	if (bOutClose)
+	{
+		*bOutClose = !bVisible;
+		// CollapsingHeader restores the header as LastItem; target its nested close button for help.
+		const auto CloseId = ImGui::GetIDWithSeed("#CLOSE", nullptr, ImGui::GetID(InLabel));
+		if (InCloseTooltip && ImGui::GetHoveredID() == CloseId)
+		{
+			const auto HeaderItem = GImGui->LastItemData;
+			ImGui::SetTooltip("%s", InCloseTooltip);
+			GImGui->LastItemData = HeaderItem;
+		}
+	}
 	return bOpen;
 }
 

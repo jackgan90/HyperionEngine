@@ -410,6 +410,7 @@ private:
 	void ApplyEditorView(FSceneHandle InHandle);
 	void CreateCameraFromView();
 	void CommitSettings(FSceneSettings InSettings);
+	void DrawObjectMetadata(const FSceneNodeView& InView);
 	void DrawComponentInspector(const FSceneNodeView& InView);
 	void DrawSelectionInspector();
 	void DrawSharedComponent(std::span<const FSceneHandle> InTargets, const FSceneComponentDescriptor& InType,
