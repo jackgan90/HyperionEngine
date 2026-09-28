@@ -29,7 +29,7 @@ FSceneNode MakeSceneEnvironmentLightNode(std::string InId)
 	FSceneNode Node;
 	Node.Id = std::move(InId);
 	Node.Name = Node.Id;
-	Node.EnvironmentLight() = FSceneEnvironmentLight{{.22f, .25f, .3f}, 1.f};
+	Node.EnvironmentLight() = FSceneEnvironmentLight{{.22f, .25f, .3f}, 1.f, ESceneEnvironmentSource::ConstantColor};
 	return Node;
 }
 

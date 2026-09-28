@@ -23,10 +23,9 @@
 | 多选、删除、历史 | `scene.selection.get/set/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary；Editor 删除后不自动选择替代物。Editor undo 恢复并重新选择新 handle |
 | 复制与保留子节点删除 | `scene.selection.duplicate/remove_keep_children` | SceneEditing 共享事务；操作 primary，复制共享资源，删除保留子节点世界变换，支持 undo/redo 和选择恢复；GUI 入口待后续 Outliner/viewport 交互设计 |
 | 对象剪贴板 | `scene.selection.copy`、`scene.clipboard.info/paste` | 与 Ctrl+C/Ctrl+V 共用系统剪贴板和不可变子树快照；同一 Editor、同一文档；数字后缀、原父级/local、一次粘贴一个历史事务；普通文本替换使旧对象不可粘贴。返回摘要，新 handle 通过 selection.get 或 nodes.list 查询 |
-| 放置 primitive/light/native model | `scene.placement.list/place` | `IScenePlacement` 与 Editor registry 的准备/提交路径；显式 position 为世界坐标 |
+| 放置 primitive/light/native model | `scene.placement.list/place` | `IScenePlacement` 与 Editor registry 的准备/提交路径；显式 position 为世界坐标。Sky Light 默认使用 SkyAsset 与 Engine Cloudy；放置或新增天空光组件仅在没有活动天空光时自动激活 |
 | Inspector 组件 | `scene.components.list`、`scene.component_types.list`、`scene.components.edit_structure`、`scene.component.<type>.get/set/set_batch` | `SceneEditing` 与组件反射；组件实例 ID 来自 list，不必等于类型 ID。保留资源绑定，完整候选经文档/场景校验；资源模型组件必须通过 prepared placement 创建 |
-| 主相机、主灯、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换 |
-| 使用引擎默认天空 | `scene.sky.use_default` | `UseDefaultSceneSky` 与工具栏 Use Default Sky 共用；传 document/revision，更新活动环境或创建并激活一个，单次 undo/redo，保留已有强度/方向；资源就绪查询 scene.status，保存调用 scene.save |
+| 主相机、主灯、活动天空光、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换。`environmentLight` 与 Details 的 Set as active sky light 共用 |
 | 浏览相机和临时视口选项 | `view.get/set/frame_scene/preview_camera` | `ISceneViewport` / SceneCameraController；null option 表示此 host 不支持。patch 中 null 保留原值；曝光、Visualizer 0–6、独立状态/profiling HUD 和 0–255 分类掩码均为临时视口状态 |
 | 用浏览视角编写相机 | `view.save_initial/create_camera/apply_to_camera` | Editor 与 GUI 同一文档操作；与临时相机移动区分 |
 | 非场景资产页签 | `asset.open/info/documents.list/activate/close/save/undo/redo/rename` | Editor 发布 `IAssetWorkspace`，GUI 和多个 agent 使用同一草稿、历史与 busy 状态；其他宿主可使用独立 CPU 文档 |

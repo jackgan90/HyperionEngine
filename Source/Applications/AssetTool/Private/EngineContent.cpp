@@ -87,7 +87,7 @@ void BuildEnginePlacementContent(FIOService& InIO, std::ostream& InOutput)
 		        "13f964852a4143a0b38d00000000020" + std::to_string(Index));
 		InOutput << "Published " << Model.Name << '\n';
 	}
-	constexpr std::array Names{"PointLight", "DirectionalLight", "SpotLight"};
+	constexpr std::array Names{"PointLight", "DirectionalLight", "SpotLight", "SkyLight"};
 	for (std::size_t Index = 0; Index < Names.size(); ++Index)
 	{
 		const std::string Path = std::string("/Engine/Editor/Icons/") + Names[Index];

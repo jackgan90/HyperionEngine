@@ -71,6 +71,14 @@ enum class EPropertyWidget : std::uint8_t
 	Path
 };
 
+// Show a member only while a sibling inspected member equals one of Values (archive representation).
+struct FPropertyCondition
+{
+	std::string Field;
+	std::vector<FArchiveNode> Values;
+	bool operator==(const FPropertyCondition& InOther) const;
+};
+
 // Presentation is independent of persistence. Absence hides a top-level member from inspection.
 struct FPropertyPresentation
 {
@@ -87,6 +95,8 @@ struct FPropertyPresentation
 	std::string Tooltip;
 	// Stable field in sequence elements; mixed collections without correspondence are read-only.
 	std::string ElementIdentity;
+	// Presentation-only; hidden values remain stored, validated and persisted.
+	std::optional<FPropertyCondition> VisibleWhen;
 	bool operator==(const FPropertyPresentation&) const = default;
 };
 
@@ -242,6 +252,7 @@ private:
 using FInspectionPath = std::vector<std::string>;
 
 bool EqualInspectionValue(const FArchiveNode& InLeft, const FArchiveNode& InRight);
+bool MatchesPropertyCondition(const FPropertyCondition& InCondition, const FArchiveNode& InValue);
 
 // Each target keeps its own display projection. Explicit leaf edits never copy unrelated primary fields.
 class FRecordSelectionDraft

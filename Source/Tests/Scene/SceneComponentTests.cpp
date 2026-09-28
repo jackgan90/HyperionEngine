@@ -1,6 +1,9 @@
 #include "Hyperion/Scene/Scene.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
+#include <cmath>
+#include <limits>
+#include <numbers>
 
 namespace Hyperion
 {
@@ -201,6 +204,65 @@ void CheckRepeatedComponents()
 	HYP_CHECK(Restored == Node);
 	HYP_CHECK(NodeFromSceneEntry(Entry) == Node);
 }
+
+FArchiveNode LegacyEnvironmentLight(std::uint32_t InVersion)
+{
+	FSceneEnvironmentLight Light;
+	auto Node = WriteRecord(RecordType<FSceneEnvironmentLight>(), &Light);
+	auto& Object = std::get<FArchiveNode::FObject>(Node.Value);
+	Object.at("version") = WriteValue(InVersion);
+	auto& Fields = std::get<FArchiveNode::FObject>(Object.at("fields").Value);
+	Fields.erase("tint");
+	Fields.erase("yawDegrees");
+	Fields["yawRadians"] = WriteValue(std::numbers::pi / 2);
+	Fields["sky"] = FArchiveNode(std::monostate{});
+	if (InVersion == 1)
+	{
+		Fields.erase("source");
+	}
+	return Node;
+}
+
+void CheckEnvironmentLightMigration()
+{
+	for (const std::uint32_t Version : {1u, 2u})
+	{
+		const auto Light = ReadValue<FSceneEnvironmentLight>(LegacyEnvironmentLight(Version));
+		HYP_CHECK(Light.Source ==
+		          (Version == 1 ? ESceneEnvironmentSource::ConstantColor : ESceneEnvironmentSource::SkyAsset));
+		HYP_CHECK(std::abs(Light.YawDegrees - 90) < .001f);
+		HYP_CHECK(Light.Sky.Id == DefaultSkyReference().Id && Light.Sky.Path == DefaultSkyReference().Path);
+		HYP_CHECK(Light.Tint.X == 1 && Light.Tint.Y == 1 && Light.Tint.Z == 1);
+		HYP_CHECK(ReadValue<FSceneEnvironmentLight>(WriteValue(Light)) == Light);
+	}
+	auto PinnedArchive = LegacyEnvironmentLight(2);
+	auto& PinnedFields =
+	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(PinnedArchive.Value).at("fields").Value);
+	auto Pinned = DefaultSkyReference();
+	Pinned.Path = "../Skies/Requested.hasset";
+	Pinned.Revision = std::string(64, 'a');
+	PinnedFields["sky"] = WriteValue(Pinned);
+	HYP_CHECK(ReadValue<FSceneEnvironmentLight>(PinnedArchive).Sky == Pinned);
+	FSceneEnvironmentLight Hidden;
+	Hidden.Source = ESceneEnvironmentSource::ConstantColor;
+	Hidden.Tint = {.25f, .5f, 0};
+	Hidden.YawDegrees = -45;
+	Hidden.bVisible = false;
+	// Values hidden by the selected source remain authored and persist.
+	HYP_CHECK(ReadValue<FSceneEnvironmentLight>(WriteValue(Hidden)) == Hidden);
+	for (const float Radians : {1e8f, -1e20f, 1e38f, -std::numeric_limits<float>::max()})
+	{
+		auto Archive = LegacyEnvironmentLight(2);
+		auto& Fields =
+		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Archive.Value).at("fields").Value);
+		Fields["yawRadians"] = WriteValue(Radians);
+		const auto Migrated = ReadValue<FSceneEnvironmentLight>(Archive);
+		const double Restored = double(Migrated.YawDegrees) * std::numbers::pi / 180;
+		HYP_CHECK(std::isfinite(Migrated.YawDegrees));
+		HYP_CHECK(std::abs(std::sin(Restored) - std::sin(double(Radians))) < .00001);
+		HYP_CHECK(std::abs(std::cos(Restored) - std::cos(double(Radians))) < .00001);
+	}
+}
 } // namespace
 
 void CheckSceneComponents()
@@ -213,4 +275,5 @@ void CheckSceneComponents()
 	CheckComponentArchive();
 	CheckComponentIdentityRoundTrip();
 	CheckRepeatedComponents();
+	CheckEnvironmentLightMigration();
 }

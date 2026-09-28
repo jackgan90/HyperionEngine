@@ -19,10 +19,11 @@ bool Contains(FVec4 InBounds, FVec2 InPoint)
 
 std::uint64_t FEditorPlugin::LightTexture(const FSceneNode& InNode) const
 {
-	const char* Id = InNode.DirectionalLight() ? "DirectionalLight"
-	                 : InNode.PointLight()     ? "PointLight"
-	                 : InNode.SpotLight()      ? "SpotLight"
-	                                           : "";
+	const char* Id = InNode.DirectionalLight()   ? "DirectionalLight"
+	                 : InNode.PointLight()       ? "PointLight"
+	                 : InNode.SpotLight()        ? "SpotLight"
+	                 : InNode.EnvironmentLight() ? "SkyLight"
+	                                             : "";
 	const auto It = PlacementIcons.find(Id);
 	return It != PlacementIcons.end() && It->second.Source.Texture ? It->second.Texture : 0;
 }
@@ -148,6 +149,34 @@ void FEditorPlugin::DrawMainLightAction(FSceneHandle InHandle)
 		auto Settings = Scene->GetSettings();
 		Settings.MainDirectionalLight = InHandle;
 		CommitSettings(std::move(Settings));
+	}
+}
+
+void FEditorPlugin::DrawSkyLightAction(const FSceneNodeView& InView)
+{
+	const auto Active = Scene->GetSettings().EnvironmentLight;
+	const bool bActive = Active == InView.Handle;
+	Gui->TextWrapped(bActive  ? "Active sky light"
+	                 : Active ? "Not effective: another sky light is active"
+	                          : "Not effective: no sky light is active");
+	if (bActive && !InView.bEffectiveEnabled)
+	{
+		Gui->TextWrapped("Contributes no lighting or background while this object is disabled.");
+	}
+	if (const auto& Light = InView.Node->EnvironmentLight();
+	    Light && Light->Source == ESceneEnvironmentSource::SkyAsset)
+	{
+		Gui->TextWrapped("Sky asset: " + Scene->GetSkyStatus(InView.Handle));
+	}
+	if (Gui->Button("Set as active sky light", !bActive))
+	{
+		auto Settings = Scene->GetSettings();
+		Settings.EnvironmentLight = InView.Handle;
+		CommitSettings(std::move(Settings));
+	}
+	if (!Options.ExerciseDocument.empty())
+	{
+		InspectionBounds["sky-light/activate"] = Gui->LastItemBounds();
 	}
 }
 } // namespace Hyperion

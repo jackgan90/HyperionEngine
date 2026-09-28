@@ -26,6 +26,12 @@ float3 EnvironmentDirection(float3 InDirection)
 	              EnvironmentRotation.y * InDirection.x + EnvironmentRotation.x * InDirection.z);
 }
 
+// SH coefficients are pre-tinted on the CPU; the w lanes of SH0-SH2 hold the specular tint.
+float3 EnvironmentSpecularTint()
+{
+	return float3(EnvironmentSh0.w, EnvironmentSh1.w, EnvironmentSh2.w);
+}
+
 float3 EnvironmentIrradiance(float3 InNormal)
 {
 	float3 N = EnvironmentDirection(InNormal);
@@ -47,7 +53,8 @@ float3 EvaluateEnvironmentLighting(FMaterialParameters InMaterial, float3 InView
 	                 EnvironmentIrradiance(InMaterial.Normal) / 3.14159265;
 	float3 R = EnvironmentDirection(reflect(-InView, InMaterial.Normal));
 	float3 Prefiltered =
-	    EnvironmentSpecular.SampleLevel(EnvironmentSampler, R, InMaterial.Roughness * EnvironmentControl.z).rgb;
+	    EnvironmentSpecular.SampleLevel(EnvironmentSampler, R, InMaterial.Roughness * EnvironmentControl.z).rgb *
+	    EnvironmentSpecularTint();
 	float2 Brdf = EnvironmentBrdf.SampleLevel(EnvironmentSampler, float2(NoV, InMaterial.Roughness), 0).rg;
 	float3 Specular = Prefiltered * (F0 * Brdf.x + Brdf.y);
 	return (Diffuse + Specular) * EnvironmentControl.y * InMaterial.Occlusion;

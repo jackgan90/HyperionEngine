@@ -122,6 +122,66 @@ void CheckFloatingInspection()
 	CheckInspection(-1.0, {}, {}, false, true);
 	CheckInspection(3.0, {}, {}, false, true);
 }
+
+struct FConditionFixture
+{
+	std::int64_t Mode{};
+	double Value{};
+	double Hidden{};
+};
+
+FRecordMemberOptions WhenMode(std::string InField, std::vector<FArchiveNode> InValues)
+{
+	auto Options = Inspect("Value");
+	Options.Inspector->VisibleWhen = FPropertyCondition{std::move(InField), std::move(InValues)};
+	return Options;
+}
+
+bool RejectsCondition(FRecordMemberOptions InOptions)
+{
+	try
+	{
+		ValidateRecordDescriptor(
+		    MakeRecord<FConditionFixture>("test.condition", {Member("mode", &FConditionFixture::Mode, Inspect("Mode")),
+		                                                     Member("hidden", &FConditionFixture::Hidden),
+		                                                     Member("value", &FConditionFixture::Value, InOptions)}));
+	}
+	catch (const std::logic_error&)
+	{
+		return true;
+	}
+	return false;
+}
+
+void CheckVisibilityConditions()
+{
+	const auto Valid = WhenMode("mode", {WriteValue(std::int64_t{1}), WriteValue(std::int64_t{2})});
+	HYP_CHECK(!RejectsCondition(Valid));
+	HYP_CHECK(RejectsCondition(WhenMode("missing", {WriteValue(std::int64_t{1})})));
+	HYP_CHECK(RejectsCondition(WhenMode("hidden", {WriteValue(0.0)})));
+	HYP_CHECK(RejectsCondition(WhenMode("value", {WriteValue(0.0)})));
+	HYP_CHECK(RejectsCondition(WhenMode("mode", {})));
+	const auto& Condition = *Valid.Inspector->VisibleWhen;
+	HYP_CHECK(MatchesPropertyCondition(Condition, WriteValue(std::int64_t{2})));
+	HYP_CHECK(!MatchesPropertyCondition(Condition, WriteValue(std::int64_t{0})));
+	HYP_CHECK(!MatchesPropertyCondition(Condition, WriteValue(std::string("1"))));
+	HYP_CHECK(Condition ==
+	          *WhenMode("mode", {WriteValue(std::int64_t{1}), WriteValue(std::int64_t{2})}).Inspector->VisibleWhen);
+	HYP_CHECK(!(Condition == *WhenMode("mode", {WriteValue(std::int64_t{1})}).Inspector->VisibleWhen));
+	const auto Type = MakeRecord<FConditionFixture>(
+	    "test.condition",
+	    {Member("mode", &FConditionFixture::Mode, Inspect("Mode")),
+	     Member("value", &FConditionFixture::Value, WhenMode("mode", {WriteValue(std::int64_t{1})}))});
+	const FConditionFixture Source{0, 4.5};
+	// Hidden members still round-trip and remain editable through the reflected draft.
+	const auto Restored = std::static_pointer_cast<FConditionFixture>(ReadRecord(Type, WriteRecord(Type, &Source)));
+	HYP_CHECK(Restored->Mode == 0 && Restored->Value == 4.5);
+	FRecordDraft Draft(Type, &Source);
+	Draft.GetValues().at("value") = WriteValue(6.0);
+	FConditionFixture Candidate;
+	Draft.ApplyToCandidate(&Candidate);
+	HYP_CHECK(Candidate.Value == 6.0);
+}
 } // namespace
 
 void CheckInspectionRanges()
@@ -130,4 +190,5 @@ void CheckInspectionRanges()
 	CheckPositiveIntegerInspection<std::uint64_t>();
 	CheckNegativeIntegerInspection();
 	CheckFloatingInspection();
+	CheckVisibilityConditions();
 }

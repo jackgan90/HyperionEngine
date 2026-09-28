@@ -1,3 +1,4 @@
+#include "EnvironmentParameters.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include <cmath>
 
@@ -57,6 +58,7 @@ void FSceneRenderPipeline::AddSky(FRenderGraph& InGraph, const FRenderView& InVi
 	const auto SkyViewProjection = Multiply(
 	    Perspective(Camera.VerticalRadians, View.Width / View.Height, Camera.Near, Camera.Far, InView.DepthConvention),
 	    LookAt({}, Camera.Forward, Camera.Up));
+	const float Yaw = EnvironmentYawRadians(Light.YawDegrees);
 	FMaterialSampler Sampler;
 	Sampler.U = EMaterialAddressMode::Clamp;
 	Sampler.V = EMaterialAddressMode::Clamp;
@@ -65,7 +67,8 @@ void FSceneRenderPipeline::AddSky(FRenderGraph& InGraph, const FRenderView& InVi
 	    {"Pixel:SkyViewV1.InverseSkyViewProjection", FMaterialValue::Matrix(Inverse(SkyViewProjection))},
 	    {"Pixel:SkyViewV1.SkyViewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height})},
 	    {"Pixel:SkyViewV1.SkyRotationIntensity",
-	     FMaterialValue::Float(FVec4{std::cos(Light.YawRadians), std::sin(Light.YawRadians), Light.Intensity, 0})},
+	     FMaterialValue::Float(FVec4{std::cos(Yaw), std::sin(Yaw), Light.Intensity, 0})},
+	    {"Pixel:SkyViewV1.SkyTint", FMaterialValue::Float(FVec4{Light.Tint.X, Light.Tint.Y, Light.Tint.Z, 1})},
 	    {"Pixel:SkyRadiance", FMaterialValue::FromTexture(Light.Data->Textures[0])},
 	    {"Pixel:SkySampler", FMaterialValue::FromSampler(Sampler)}};
 	AddFullscreenPass(Session, InGraph, std::move(Pass), bInDeferPreparation);

@@ -1,5 +1,7 @@
 #include "EditorApplication.h"
+#include "Hyperion/Environment/SkyAsset.h"
 #include "Hyperion/IO/Path.h"
+#include <algorithm>
 
 namespace Hyperion
 {
@@ -133,6 +135,31 @@ void FEditorPlugin::DrawContentTree(const std::string& InPath)
 	}
 }
 
+std::vector<FAssetRef> FEditorPlugin::AssetReferenceCandidates(std::string_view InTypeId) const
+{
+	std::vector<FAssetRef> Result;
+	for (auto Reference : Assets.GetAssetIndex())
+	{
+		if (Reference.TypeId == InTypeId)
+		{
+			// Selections request the current asset; resolution pins the loaded revision.
+			Reference.Revision.clear();
+			Result.push_back(std::move(Reference));
+		}
+	}
+	if (InTypeId == RecordType<FSkyAsset>().Id && std::ranges::none_of(Result,
+	                                                                   [](const FAssetRef& InReference)
+	                                                                   {
+		                                                                   return InReference.Id ==
+		                                                                          DefaultSkyReference().Id;
+	                                                                   }))
+	{
+		Result.push_back(DefaultSkyReference());
+	}
+	std::ranges::sort(Result, {}, &FAssetRef::Path);
+	return Result;
+}
+
 void FEditorPlugin::DrawContentGrid()
 {
 	const auto* Directory = Browser->Directory(Browser->SelectedDirectory);
@@ -171,6 +198,11 @@ void FEditorPlugin::DrawContentGrid()
 			{
 				RequestOpenAsset(Path);
 			}
+		}
+		if (!Entry.bDirectory)
+		{
+			// Typed reference properties accept this path when the indexed asset type is compatible.
+			Gui->DragSource(AssetPathPayloadType, Path, Name.c_str());
 		}
 		if (!Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty())
 		{

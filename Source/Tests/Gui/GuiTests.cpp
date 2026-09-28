@@ -13,6 +13,8 @@ void CheckMixedControls();
 void CheckPathDisplay();
 void CheckContentTiles();
 void CheckSectionControls();
+void CheckAssetReferenceControls();
+void CheckVisibilityControls();
 
 namespace
 {
@@ -222,6 +224,8 @@ int main()
 		CheckPathDisplay();
 		CheckContentTiles();
 		CheckSectionControls();
+		CheckAssetReferenceControls();
+		CheckVisibilityControls();
 		CheckApplicationScale();
 		CheckActionLayout();
 		CheckAnchoredPopup();

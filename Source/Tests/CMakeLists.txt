@@ -192,6 +192,8 @@ target_sources(gui_tests PRIVATE Gui/GuiMixedTests.cpp)
 target_sources(gui_tests PRIVATE Gui/GuiPathDisplayTests.cpp)
 target_sources(gui_tests PRIVATE Gui/GuiContentTests.cpp)
 target_sources(gui_tests PRIVATE Gui/GuiSectionTests.cpp)
+target_sources(gui_tests PRIVATE Gui/GuiAssetReferenceTests.cpp Gui/GuiVisibilityTests.cpp)
+target_link_libraries(gui_tests PRIVATE hyperion_scene)
 target_sources(gui_tests PRIVATE Gui/GuiScaleTests.cpp)
 hyp_test(gui_docking_tests gui_docking hyperion_gui Gui/GuiDockingTests.cpp)
 hyp_test(gui_rendering_tests gui_texture_rendering hyperion_gui_renderer Gui/GuiRenderingTests.cpp)
@@ -210,9 +212,6 @@ add_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTABLE}" "${C
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParityRegressions")
 set_tests_properties(automation_parity_regressions PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME engine_default_sky COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/DefaultSkyAcceptance.py"
-  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_BINARY_DIR}/DefaultSkyAcceptance")
-set_tests_properties(engine_default_sky PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_capture_ui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorCaptureAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
 set_tests_properties(editor_capture_ui PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_outlines COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OutlineAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")

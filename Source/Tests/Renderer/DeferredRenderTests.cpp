@@ -976,7 +976,7 @@ void CheckOwnedCameraLightRoutes(FFixture& InFixture)
 	SunNode.DirectionalLight() = FSceneDirectionalLight{{1, 1, 1}, 3, true};
 	const auto Sun = Scene.AddNode(SunNode);
 	auto Environment = MakeSceneEnvironmentLightNode("environment");
-	Environment.EnvironmentLight() = FSceneEnvironmentLight{{1, 1, 1}, .2f};
+	Environment.EnvironmentLight() = FSceneEnvironmentLight{{1, 1, 1}, .2f, ESceneEnvironmentSource::ConstantColor};
 	const auto Ambient = Scene.AddNode(Environment);
 	Scene.SetSettings({Camera, Sun, Ambient});
 	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);

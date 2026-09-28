@@ -117,6 +117,14 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 			return;
 		}
 	}
+	if (Node.EnvironmentLight())
+	{
+		DrawSkyLightAction(InView);
+		if (Scene->GetRevision() != Revision)
+		{
+			return;
+		}
+	}
 	if (Node.Camera())
 	{
 		DrawCameraActions(InView.Handle);

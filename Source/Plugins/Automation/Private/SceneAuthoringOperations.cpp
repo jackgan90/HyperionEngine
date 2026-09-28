@@ -103,11 +103,6 @@ void RegisterSceneAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* In
 	    "Deletes selected roots and descendants. Clears selection; Editor undo restores and reselects deleted roots "
 	    "with new handles. Query selection after undo.",
 	    false, {Document, 1}, DeleteSceneSelection);
-	AddAuthoring<FSceneMutationRequest, FSceneDocumentInfo>(
-	    InCatalog, InDocument, "scene.sky.use_default", "Use the built-in Cloudy sky",
-	    "Updates the active environment or creates and activates one. Enables sky visibility, preserves existing "
-	    "intensity and orientation, and commits one undoable edit. Resource readiness is reported by scene.status.",
-	    false, {Document, 1}, UseDefaultSceneSky);
 	AddAuthoring<FSceneMutationRequest, FSceneSettings>(
 	    InCatalog, InDocument, "scene.settings.get", "Read scene settings",
 	    "Reads runtime camera, main lights and saved initial browsing view.", true, {Document, 1}, GetSceneSettings);

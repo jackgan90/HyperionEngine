@@ -2,6 +2,7 @@
 #include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
 #include <iostream>
@@ -369,7 +370,9 @@ void CheckCyclesAndOrdering()
 void CheckModelToScene()
 {
 	FTaskSystem Tasks(1, 1);
-	FIOService IO(Tasks);
+	// Generated sky lights reference the Engine default sky, so scene publication resolves /Engine.
+	FIOService IO(Tasks, std::make_shared<FMountedFileSystem>(std::vector<FContentMount>{
+	                         {"/Engine", std::filesystem::path(HYP_SOURCE_DIR) / "Content"}}));
 	FAssetImportService Imports(IO);
 	RegisterGltfImporter(Imports);
 	RegisterSkyImporter(Imports);
@@ -380,13 +383,23 @@ void CheckModelToScene()
 	Options.bForce = true;
 	Options.Name = "Imported model scene";
 	const auto Result = Imports.ImportAsync(Source, Output, Options).Get(Tasks);
-	HYP_CHECK(Result->Header.TypeId == RecordType<FSceneManifest>().Id && Result->Header.Dependencies.size() == 1);
+	HYP_CHECK(Result->Header.TypeId == RecordType<FSceneManifest>().Id && Result->Header.Dependencies.size() == 2);
+	const auto ModelDependency = std::find_if(Result->Header.Dependencies.begin(), Result->Header.Dependencies.end(),
+	                                          [](const FAssetDependency& InDependency)
+	                                          {
+		                                          return InDependency.Reference.TypeId == RecordType<FModelAsset>().Id;
+	                                          });
+	HYP_CHECK(ModelDependency != Result->Header.Dependencies.end());
+	HYP_CHECK(std::any_of(Result->Header.Dependencies.begin(), Result->Header.Dependencies.end(),
+	                      [](const FAssetDependency& InDependency)
+	                      {
+		                      return InDependency.Reference.Path == DefaultSkyReference().Path;
+	                      }));
 	FAssetService Assets(IO);
 	RegisterSceneAssetTypes(Assets.Types());
 	const auto Graph = Assets.LoadGraphAsync(Output).Get(Tasks);
 	HYP_CHECK(Graph->Failures.empty());
-	const auto Model =
-	    Assets.LoadReferenceAsync<FModelAsset>(Result->Header.Dependencies[0].Reference, Output).Get(Tasks);
+	const auto Model = Assets.LoadReferenceAsync<FModelAsset>(ModelDependency->Reference, Output).Get(Tasks);
 	HYP_CHECK(ModelInstances(*Model).size() == 4 && Model->MaterialSlots.size() == 4);
 	const auto& Scene = *Graph->Root->As<FSceneManifest>();
 	HYP_CHECK(Scene.Nodes.size() == 3 && SceneModelCount(Scene) == 1 && Scene.DefaultCamera.empty());

@@ -33,9 +33,11 @@ Advanced options 只提供 Force reimport，跳过增量检测；输出身份、
 
 automation 使用 `asset.import.draft.prepare/get/edit/history/submit/discard` 与 `asset.import.drafts` 映射草稿操作；`asset.import` 单步入口及校验/任务查询保持兼容。GUI 和 automation 共享领域校验、属性编辑、历史与发布。原生文件选择器、目录偏好及窗口显隐属于呈现适配，见 [Automation 能力清单](AutomationCapabilities.md)。
 
-## 默认天空
+## 天空光
 
-工具栏 **Use Default Sky** 将 Cloudy 指定为场景天空：已有活动环境光时更新它，否则创建并激活 Default Sky 节点。该操作启用节点和天空可见性，保留已有强度与方向，支持一次 Undo/Redo；使用 Save Scene 持久化。它与 Automation `scene.sky.use_default` 共用领域操作。
+天空光是场景组件。从 **Window > Place Object** 拖入 **Sky Light**，创建引用 Engine 默认 Cloudy 天空的 SkyAsset 天空光，一次 Undo/Redo。场景最多一个活动天空光：只有尚未选择活动天空光时，新放置或 automation 创建的天空光才自动激活；粘贴不改变光源选择。其他天空光在 Details 显示为未生效，可用 **Set as active sky light** 显式切换并撤销；禁用活动节点会移除其光照与背景。
+
+Details 只显示当前 **Source** 适用的字段，两种模式共用 **Intensity**。Constant color 显示 **Color**；Sky asset 显示 **Sky asset** 选择器、**Tint**、**Yaw (degrees)** 和 **Show background**。选择器列出已索引的天空资产，也接受从 Content Browser 拖入的天空资产，拒绝其他类型。Tint 按通道乘以背景、漫反射 SH 与镜面 IBL，不影响直接光、局部光和自发光，修改 Tint、Yaw 或 Intensity 不会重新加载天空。隐藏字段保留原值，切回模式后恢复。Details 同时显示天空资产加载状态。详见 [天空与 IBL](SkyLighting.md)。
 
 Model 和 Material 的 Asset Editor 临时预览默认显示内置 Cloudy 天空并使用其环境照明，无需选择 Game 目录；这不会修改资产或主场景。天空及纹理位于 Engine Content，Sky 类型资产仍预览它自身的天空。
 
@@ -140,7 +142,7 @@ Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构�
 
 ### 放置对象
 
-**Window > Place Object** 打开放置面板。支持名称搜索，以及 All、Basic、Shapes、Lights 分类；同一种对象可属于多个分类，All 只显示一次。首版提供 Cube、Sphere、Cylinder、Cone、Plane、Directional Light、Point Light 和 Spot Light。已有布局保留，**Window > Reset Layout** 恢复包含左侧放置面板的默认布局。
+**Window > Place Object** 打开放置面板。支持名称搜索，以及 All、Basic、Shapes、Lights 分类；同一种对象可属于多个分类，All 只显示一次。首版提供 Cube、Sphere、Cylinder、Cone、Plane、Directional Light、Point Light、Spot Light 和 Sky Light。已有布局保留，**Window > Reset Layout** 恢复包含左侧放置面板的默认布局。
 
 将条目或灯光缩略图拖入 Viewport：基本形状持续显示三维网格，光源显示图标。优先放到鼠标射线命中的可见模型表面，并按形状边界避免穿入表面；没有命中时先使用 Y=0 平面，再使用相机对焦平面。不自动旋转或吸附网格。CPU 查询沿用静态三角形限制，不复现材质透明裁剪或顶点变形；查询未就绪时不能提交。
 
@@ -148,7 +150,7 @@ Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构�
 
 基本形状来自 `/Engine/Models/Primitives`，默认材质和依赖也属于 Engine 内容。尺寸为一场景单位，Plane 位于 XZ 平面并朝 +Y。无需先打开场景，可直接在 Untitled 文档放置，然后 **File > Save Scene As...**。空场景没有隐式光照，添加光源前正式网格可能呈黑色；拖拽预览使用独立的明暗着色。
 
-灯光图标始终面向相机，尺寸随界面缩放而保持屏幕大小，叠加显示在场景几何前方。单击图标可选择灯光；gizmo 优先。方向光和聚光灯另画方向箭头。**Viewport options > Show light icons** 控制已有灯光的图标显示，禁用的对象不显示图标。当前只由 MainDirectionalLight 提供方向照明：没有主光时，首个新方向光成为主光；已有主光保持不变，可在 Details 使用 **Set as main directional light** 显式切换并撤销。
+灯光图标始终面向相机，尺寸随界面缩放而保持屏幕大小，叠加显示在场景几何前方。单击图标可选择灯光；gizmo 优先。方向光和聚光灯另画方向箭头。**Viewport options > Show light icons** 控制已有灯光的图标显示，禁用的对象不显示图标。当前只由 MainDirectionalLight 提供方向照明：没有主光时，首个新方向光成为主光；已有主光保持不变，可在 Details 使用 **Set as main directional light** 显式切换并撤销。天空光图标位于节点原点，只用于选择，其位置和朝向不影响光照；活动天空光规则见[天空光](#天空光)。
 
 注册表 `FObjectPlacementRegistry` 位于 Scene，工厂返回未加入场景的 CPU 节点；分类列表与创建逻辑独立。Gui 提供复制载荷的 `DragSource` / `DropTarget`，Renderer 提供 `FViewportPlacementSession`、射线落点计算和 `FTransientGeometry` 渲染贡献。后续资产浏览器可以复用这些契约；Main 冻结预览快照，`IRenderFeature` 在 tone mapping 前声明颜色/深度依赖并绘制。灯光图标通过现有 GuiRenderer 纹理合成路径绘制。
 
@@ -169,7 +171,7 @@ Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构�
 - Outliner 支持搜索和层级选择，一个完整模型实例对应一个模型对象，内部 primitive 不自动成为场景子对象。Details 展示反射属性，合法输入实时更新场景，无需 Apply/Revert；无效中间输入不写入场景。模型整体及 section 材质 override 仍属于实例，不改变共享资产；已有显式展开的场景继续兼容。
 - Details 隐藏内部 Object ID；所有组件展开后的内容统一缩进。单选时，非必需组件标题栏右侧的 **×** 移除该组件，悬停提示组件名称，折叠时也可操作；Transform 等必需组件不显示移除按钮。移除支持 Undo/Redo。
 - **Object enabled** 控制对象及其子树的实际启用状态；悬停帮助说明停用对象也会停用其子对象。自身勾选但因父对象停用而未生效时，Details 显示原因，多选时显示受影响对象数量。修改此开关支持 Undo/Redo 并随场景保存。
-- 多选时 Details 只显示所有对象共有的组件。同一属性完全相等时显示数值，否则显示 **Multiple Values**；向量和展开的颜色通道独立判断。显式输入只修改该字段，输入主对象已有的数值也会应用到所有对象。Optional override 单独展示混合存在状态，启用时保留已有 override，并仅为缺失项创建默认值。模型 section 只有在模型资产和 primitive 身份对应时可批量编辑，不对应的集合只读。多选支持 Object enabled；名称、增删组件和单对象相机/主光操作仅在单选时提供。
+- 多选时 Details 只显示所有对象共有的组件。同一属性完全相等时显示数值，否则显示 **Multiple Values**；向量和展开的颜色通道独立判断。显式输入只修改该字段，输入主对象已有的数值也会应用到所有对象。Optional override 单独展示混合存在状态，启用时保留已有 override，并仅为缺失项创建默认值。模型 section 只有在模型资产和 primitive 身份对应时可批量编辑，不对应的集合只读。多选支持 Object enabled；名称、增删组件和单对象相机/主光/活动天空光操作仅在单选时提供。多选的 Source 混合时，隐藏依赖该字段的属性。
 - **Ctrl+Z** 或 **Edit > Undo** 撤销，**Ctrl+Y / Ctrl+Shift+Z** 或 **Edit > Redo** 重做。一次连续输入、拖动或颜色选择器会话合并为一条历史，切换属性、结束输入或关闭选择器后开始新的记录。即使值改回原值，本次操作仍标记为修改，直到撤销回到保存点。连续撤销按操作逐项恢复；撤销后进行新编辑会清除重做分支。Inspector 文本输入也使用文档级撤销，其他文本框保留自身编辑行为。保存、切换对象或场景操作会结束当前编辑；**File > Save Scene / Save Scene As** 保存文档。标题 `*` 表示未保存修改，保存期间的新修改仍保持为脏。
 - **Transform (Local)** 分为 Position、Rotation、Scale 三行，分别提供 X/Y/Z 输入。Rotation 使用度数（不显示 deg 后缀），绕固定 X、Y、Z 轴依次旋转；悬停查看具体约定。数值框支持单击输入和按住左键左右拖拽调节；悬停显示左右箭头，拖拽期间隐藏指针，松开恢复。一次拖拽作为一条撤销记录。输入数值即时生效，Enter 或失焦结束本次编辑，Ctrl+Z 恢复本次编辑前的值。原有剪切信息保留，Parent ID 不在属性面板中显示，已有父子关系保持不变。Add component 菜单支持添加注册的 CPU 组件，组件标题栏支持移除非必需组件，提交前验证完整场景。
 - 多选 **Transform (Local)** 始终绝对赋值，包括在 Details 中拖动数值：例如 Position X 输入 3，会将各对象的局部 X 都设为 3，保留其余分量。父子同时选中时，各自局部值都按输入修改；这与 gizmo 的成组变换语义不同。批量修改先验证全部对象再一次发布，任一目标无效时整次拒绝；一次属性交互对应一条历史，Undo/Redo 恢复各对象各自的值，并保留当前选择。
@@ -241,7 +243,7 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 - 一个主场景窗口和一个按需创建的原生资产窗口，各自内部可停靠和浮动；未启用跨原生窗口的 ImGui multi-viewport，也不支持将任意面板拖出为新的原生窗口。
 - 一个场景视口，默认 Deferred / reversed-Z；此版本不开放 offscreen 深度调试预览。
-- Details 支持单选/多选反射编辑、保存与撤销重做，并提供从编辑器视角创建相机的入口；可通过 FGuiPanelEvent 订阅绘制扩展面板；内置文档面板仍属于同一个 Editor 插件。PRS 支持成组操纵，Del 支持删除选中子树，Place Object 支持内置形状和三种灯光；尚无 Play、框选、范围选择、自定义轴心或通用资产选择器。任意资产的模型替换和实例创建使用 Runtime 或导入工具。
+- Details 支持单选/多选反射编辑、保存与撤销重做，并提供从编辑器视角创建相机的入口；可通过 FGuiPanelEvent 订阅绘制扩展面板；内置文档面板仍属于同一个 Editor 插件。PRS 支持成组操纵，Del 支持删除选中子树，Place Object 支持内置形状、三种灯光和天空光；反射的类型化资产引用使用按类型筛选的选择器；尚无 Play、框选、范围选择或自定义轴心。任意资产的模型替换和实例创建使用 Runtime 或导入工具。
 - 界面使用内置 Roboto 字体和英文标签。字体 atlas 在启动时生成；中文字符显示与动态字体更新尚未加入。
 
 ## 验证入口
@@ -250,7 +252,7 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 `editor_multiselect` 使用真实编辑器输入验证 Outliner/Viewport Ctrl 增减选择、按下时的 Ctrl 状态、双目标描边、Details 混合值逐轴赋值、输入主对象已有数值、三个 gizmo 模式和整组 Undo/Redo，并检查父子选择、取消预览、无效批量提交、删除恢复及句柄重映射。独立入口为 `--exercise-multiselect`。`scene_management` 验证原子批量编辑/增删、最终层级校验及混合反射值；`transform_gizmo` 补充非均匀父级、剪切、跨零缩放和零缩放旋转的成组运算；`gui_input_and_data` 验证混合颜色逐通道编辑。
 
-`object_placement` 覆盖分类、基本形状几何与放置计算；`gui_input_and_data` 覆盖复制载荷、跨面板预览/交付和取消；`scene_runtime_instance` 覆盖空场景动态注册、去重、保存重载和加载失败隔离。`editor_placement` 使用真实 GUI 输入依次放置八种对象，检查连续预览、八种取消路径、撤销重做、主方向光、图标拾取/隐藏、空文档 Save As 与重载，并验证缺失资源只禁用对应条目。可单独运行 `--exercise-placement OUTPUT.hasset`，截图随输出场景保存在同一目录。
+`object_placement` 覆盖分类、基本形状几何与放置计算；`gui_input_and_data` 覆盖复制载荷、跨面板预览/交付和取消；`scene_runtime_instance` 覆盖空场景动态注册、去重、保存重载和加载失败隔离。`editor_placement` 使用真实 GUI 输入依次放置九种对象，检查连续预览、八种取消路径、撤销重做、主方向光与活动天空光、图标拾取/隐藏、空文档 Save As 与重载，并验证缺失资源只禁用对应条目。可单独运行 `--exercise-placement OUTPUT.hasset`，截图随输出场景保存在同一目录。
 
 `gui_docking` 验证布局保存恢复和纹理 ID；`gui_texture_rendering` 验证真实 RHI 离屏 sRGB 输出、GUI 采样和无效绑定拒绝。`scene_navigation` 覆盖共享控制器的默认环绕模式、飞行模式的按键门槛、固定位置旋转、滚轮调速/推拉分流、速度与位移一致性、速度边界及输入中断恢复。`editor_acceptance` 使用真实控件位置产生 Platform 格式的输入事件，覆盖菜单打开 Sponza、右键移动门槛、松开右键停止、原地旋转、右键滚轮调速、普通滚轮推拉、模态输入隔离、视口隐藏与恢复、窗口缩放、场景重开、加载错误恢复和加载中退出。GPU 验收需要 D3D12 环境及挂载的 Sponza 资产。
 

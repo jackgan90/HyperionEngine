@@ -207,6 +207,7 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 	{
 		throw FSceneEditError("stale_handle", "The edit targets are no longer current");
 	}
+	AssignAddedEnvironment(Entry);
 	Entry.AfterSettings = Scene.Settings();
 	Entry.AfterState = ++State.NextState;
 	State.State = Entry.AfterState;
@@ -231,7 +232,40 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 	}
 }
 
-FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignMainLight, bool bInAssignEnvironment)
+void FSceneEditDocument::AssignAddedEnvironment(const FSceneHistoryEntry& InEntry)
+{
+	if (InEntry.BeforeSettings.EnvironmentLight)
+	{
+		return;
+	}
+	for (const auto& Edit : InEntry.Edits)
+	{
+		if (Edit.After.EnvironmentLight() && !Edit.Before.EnvironmentLight())
+		{
+			auto& Scene = Target();
+			auto Settings = Scene.Settings();
+			Settings.EnvironmentLight = Edit.Handle;
+			try
+			{
+				Scene.SetSettings(std::move(Settings));
+			}
+			catch (...)
+			{
+				// Keep the edit and activation atomic.
+				std::vector<FSceneNodeEdit> Restore;
+				for (const auto& Applied : InEntry.Edits)
+				{
+					Restore.push_back({Applied.Handle, Applied.Before});
+				}
+				Scene.EditNodes(std::move(Restore), Scene.Revision());
+				throw;
+			}
+			return;
+		}
+	}
+}
+
+FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignLights)
 {
 	FinishInteraction();
 	auto& Scene = Target();
@@ -244,11 +278,11 @@ FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignM
 	Entry.Handle = Scene.AddNode(std::move(InNode));
 	try
 	{
-		if (bInAssignMainLight && Entry.After->DirectionalLight() && !Entry.BeforeSettings.MainDirectionalLight)
+		if (bInAssignLights && Entry.After->DirectionalLight() && !Entry.BeforeSettings.MainDirectionalLight)
 		{
 			Entry.AfterSettings.MainDirectionalLight = Entry.Handle;
 		}
-		if (bInAssignEnvironment && Entry.After->EnvironmentLight())
+		if (bInAssignLights && Entry.After->EnvironmentLight() && !Entry.BeforeSettings.EnvironmentLight)
 		{
 			Entry.AfterSettings.EnvironmentLight = Entry.Handle;
 		}

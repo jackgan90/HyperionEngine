@@ -151,7 +151,7 @@ void FAssetWorkspace::SetPreviewSettings(FEntry& InEntry, const FAssetPreviewSet
 	{
 		const auto Handle = InEntry.Scene->FindHandle("preview-environment");
 		auto Light = *InEntry.Scene->FindNode(Handle)->EnvironmentLight();
-		Light.YawRadians = *InSettings.Yaw / 57.2957795f;
+		Light.YawDegrees = *InSettings.Yaw;
 		InEntry.Scene->SetEnvironmentLight(Handle, std::move(Light));
 		InEntry.YawDegrees = *InSettings.Yaw;
 	}

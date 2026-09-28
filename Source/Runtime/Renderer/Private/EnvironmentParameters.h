@@ -4,5 +4,6 @@
 
 namespace Hyperion
 {
+float EnvironmentYawRadians(float InDegrees);
 FMaterialParameterValues EnvironmentParameters(const FSceneEnvironmentLight* InLight = nullptr);
 } // namespace Hyperion

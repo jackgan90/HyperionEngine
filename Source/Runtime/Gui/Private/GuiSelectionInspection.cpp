@@ -7,6 +7,19 @@ namespace
 {
 using FObserver = std::function<void(std::string_view, FVec4)>;
 
+bool IsVisible(const FRecordSelectionDraft& InDraft, const FPropertyPresentation& InPresentation,
+               FInspectionPath InParent = {})
+{
+	if (!InPresentation.VisibleWhen)
+	{
+		return true;
+	}
+	InParent.push_back(InPresentation.VisibleWhen->Field);
+	// Resolve the controller relative to its containing record, including nested records.
+	return !InDraft.IsMixed(InParent) &&
+	       MatchesPropertyCondition(*InPresentation.VisibleWhen, InDraft.GetValue(InParent));
+}
+
 std::string PathId(const FInspectionPath& InPath)
 {
 	std::string Result;
@@ -72,10 +85,15 @@ bool EditSelectionChildren(FGui& InGui, FRecordSelectionDraft& InDraft, const FI
 				continue;
 			}
 			auto Path = InPath;
-			Path.insert(Path.end(), {"fields", Member.Id});
-			bChanged |= EditSelectionValue(InGui, InDraft, Path, Member.Shape(),
-			                               Member.Options.Inspector.value_or(FPropertyPresentation{Member.Id}),
-			                               InIdentity, InObserve, InDepth + 1);
+			Path.push_back("fields");
+			const auto Presentation = Member.Options.Inspector.value_or(FPropertyPresentation{Member.Id});
+			if (!IsVisible(InDraft, Presentation, Path))
+			{
+				continue;
+			}
+			Path.push_back(Member.Id);
+			bChanged |= EditSelectionValue(InGui, InDraft, Path, Member.Shape(), Presentation, InIdentity, InObserve,
+			                               InDepth + 1);
 		}
 		return bChanged;
 	}
@@ -119,6 +137,25 @@ bool EditSelectionPresentValue(FGui& InGui, FRecordSelectionDraft& InDraft, cons
                                const std::string& InIdentity, const FObserver& InObserve, unsigned InDepth)
 {
 	const auto Label = InPresentation.Label + "##" + InIdentity + "/" + PathId(InPath);
+	if (!InPresentation.ReferenceType.empty() && InShape.Kind == ERecordValueKind::Record &&
+	    InShape.Record().Id == RecordType<FAssetRef>().Id)
+	{
+		InGui.BeginPropertyRow(Label.c_str(), nullptr,
+		                       InPresentation.Tooltip.empty() ? nullptr : InPresentation.Tooltip.c_str());
+		auto Reference = ReadValue<FAssetRef>(InDraft.GetValue(InPath));
+		const bool bChanged =
+		    InGui.EditAssetReference(Reference, InPresentation.ReferenceType, InDraft.IsMixed(InPath));
+		if (InObserve)
+		{
+			InObserve(PathId(InPath), InGui.LastItemBounds());
+		}
+		InGui.EndPropertyRow();
+		if (bChanged)
+		{
+			InDraft.SetValue(InPath, WriteValue(Reference));
+		}
+		return bChanged;
+	}
 	if (InPresentation.Widget == EPropertyWidget::Vector3 || InPresentation.Widget == EPropertyWidget::Color3)
 	{
 		return EditSelectionVector(InGui, InDraft, InPath, InPresentation, Label, InObserve);
@@ -178,6 +215,7 @@ bool EditSelectionValue(FGui& InGui, FRecordSelectionDraft& InDraft, const FInsp
 	InGui.EndDisabled();
 	return bChanged && !InPresentation.bReadOnly;
 }
+
 } // namespace
 
 bool FGui::EditRecord(FRecordSelectionDraft& InDraft, std::string_view InIdentity, const FObserver& InObserve,
@@ -186,7 +224,7 @@ bool FGui::EditRecord(FRecordSelectionDraft& InDraft, std::string_view InIdentit
 	bool bChanged{};
 	for (const auto& Member : InDraft.GetType().Members)
 	{
-		if (Member.Options.Inspector)
+		if (Member.Options.Inspector && IsVisible(InDraft, *Member.Options.Inspector))
 		{
 			auto Presentation = *Member.Options.Inspector;
 			const bool bBlocked = std::ranges::find(InReadOnlyFields, Member.Id) != InReadOnlyFields.end();

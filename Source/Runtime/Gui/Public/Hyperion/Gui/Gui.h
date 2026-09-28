@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/AssetTypes/AssetTypes.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Platform/Window.h"
 #include "Hyperion/Reflection/Record.h"
@@ -62,6 +63,12 @@ struct FGuiDockLayout
 	std::string Left;
 	float RightFraction = .25f;
 };
+
+// Drag payload carrying a Content Browser asset path.
+inline constexpr const char* AssetPathPayloadType = "Hyperion.ContentAsset.v1";
+
+// Application-supplied candidates for typed asset-reference properties.
+using FGuiAssetReferenceProvider = std::function<std::vector<FAssetRef>(std::string_view InTypeId)>;
 
 struct FGuiDragPayload
 {
@@ -156,6 +163,9 @@ public:
 	                std::span<const std::string> InReadOnlyFields = {});
 	bool EditMixedScalar(FArchiveNode& InValue, const FRecordValueShape& InShape,
 	                     const FPropertyPresentation& InPresentation, bool bInMixed);
+	void SetAssetReferenceProvider(FGuiAssetReferenceProvider InProvider);
+	// Picker over provider candidates of InTypeId; also accepts a compatible asset path drop.
+	bool EditAssetReference(FAssetRef& InValue, std::string_view InTypeId, bool bInMixed = false);
 	bool InputVector(const char* InLabel, FVec3& InValue);
 	bool InputVectorRow(const char* InLabel, FVec3& InValue, std::string_view InUnit, std::string_view InTooltip,
 	                    std::array<FVec4, 3>& OutBounds, const std::array<bool, 3>& InMixed = {},

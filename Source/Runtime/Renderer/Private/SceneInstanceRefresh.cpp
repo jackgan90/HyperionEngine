@@ -109,9 +109,9 @@ FSceneNode FSceneInstance::RebindAssetResources(FSceneNode InNode)
 			Selection = Rebind(Selection);
 		}
 	}
-	if (auto& Light = InNode.EnvironmentLight(); Light && Light->Sky)
+	if (auto& Light = InNode.EnvironmentLight())
 	{
-		Light->Sky->Revision.clear();
+		Light->Sky.Revision.clear();
 		Light->Data.reset();
 	}
 	return InNode;
@@ -324,10 +324,10 @@ void FSceneInstance::FImpl::PublishAssetRefresh(const FAssetRefresh& InRefresh)
 		}
 		Load->Cancellation.Cancel();
 		RetiredSkyLoads.push_back(Load);
-		if (const auto* Current = Scene.FindEnvironmentLight(Handle); Current && Current->Sky)
+		if (const auto* Current = Scene.FindEnvironmentLight(Handle))
 		{
 			auto Light = *Current;
-			Light.Sky->Revision.clear();
+			Light.Sky.Revision.clear();
 			Scene.SetEnvironmentLight(Handle, std::move(Light));
 		}
 		It = SkyLoads.erase(It);

@@ -3,6 +3,7 @@ cbuffer SkyViewV1 : register(b0)
 	column_major float4x4 InverseSkyViewProjection;
 	float4 SkyViewport;
 	float4 SkyRotationIntensity;
+	float4 SkyTint;
 };
 
 TextureCube<float4> SkyRadiance : register(t0);
@@ -23,5 +24,5 @@ float4 VSMain(float2 InPosition : POSITION) : SV_Position
 	float3 D = normalize(mul(InverseSkyViewProjection, float4(Ndc, .5, 1)).xyz);
 	float3 R = float3(SkyRotationIntensity.x * D.x - SkyRotationIntensity.y * D.z, D.y,
 	                  SkyRotationIntensity.y * D.x + SkyRotationIntensity.x * D.z);
-	return float4(SkyRadiance.Sample(SkySampler, R).rgb * SkyRotationIntensity.z, 1);
+	return float4(SkyRadiance.Sample(SkySampler, R).rgb * SkyRotationIntensity.z * SkyTint.rgb, 1);
 }

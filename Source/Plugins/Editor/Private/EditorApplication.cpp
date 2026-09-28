@@ -53,6 +53,11 @@ void FEditorPlugin::Initialize()
 	Session = &Context.Require<FRenderSession>();
 	Gui = &Context.Require<FGui>();
 	Gui->SetPathDisplayRoot("/Game");
+	Gui->SetAssetReferenceProvider(
+	    [this](std::string_view InTypeId)
+	    {
+		    return AssetReferenceCandidates(InTypeId);
+	    });
 	GuiRenderer = &Context.Require<FGuiRenderer>();
 	ImportPanel = std::make_unique<FAssetImportPanel>(Context.Find<FAssetImportWorkspace>(),
 	                                                  Context.Require<FContentRootService>(), Options.Preferences,
@@ -171,6 +176,10 @@ void FEditorPlugin::Shutdown()
 		return;
 	}
 	CancelContentRequests();
+	if (Gui)
+	{
+		Gui->SetAssetReferenceProvider({});
+	}
 	Camera.Reset();
 	if (AssetWorkspace)
 	{

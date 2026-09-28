@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <thread>
 
 using namespace Hyperion;
@@ -188,9 +189,11 @@ float Pixel(const FImage& InImage, unsigned InX, unsigned InY, unsigned InChanne
 
 void Similar(const FImage& InA, const FImage& InB, float InTolerance = .02f)
 {
+	HYP_CHECK(InA.Rgba.size() == InB.Rgba.size());
 	float Maximum{};
 	for (std::size_t Index = 0; Index < InA.Rgba.size(); ++Index)
 	{
+		HYP_CHECK(std::isfinite(InA.Rgba[Index]) && std::isfinite(InB.Rgba[Index]));
 		Maximum = std::max(Maximum, std::abs(InA.Rgba[Index] - InB.Rgba[Index]));
 	}
 	std::cout << "sky image max delta=" << Maximum << '\n';
@@ -261,7 +264,7 @@ void CheckDirections(FSkyFixture& InFixture)
 	}
 	InFixture.Scene->SetLocalTransform(InFixture.Camera, SceneCameraTransform({}, {0, 0, 1}));
 	auto Light = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
-	Light.YawRadians = 1.570796327f;
+	Light.YawDegrees = 90;
 	auto Edited = *InFixture.Scene->FindNode(InFixture.Environment);
 	Edited.EnvironmentLight() = Light;
 	const auto PreviousData = Light.Data;
@@ -270,9 +273,42 @@ void CheckDirections(FSkyFixture& InFixture)
 	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data == PreviousData);
 	const auto Rotated = InFixture.Frame();
 	HYP_CHECK(Pixel(Rotated, 128, 96, 1) > .6f && Pixel(Rotated, 128, 96, 0) < .03f);
-	Light.YawRadians = 0;
+	Light.YawDegrees = 0;
 	InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Light);
 	InFixture.Scene->SetLocalTransform(InFixture.Camera, Translation({0, 0, 4}));
+}
+
+void CheckLargeYaw(FSkyFixture& InFixture)
+{
+	const auto Original = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
+	for (const float Metallic : {-1.f, 0.f, 1.f})
+	{
+		FSceneHandle Surface;
+		if (Metallic >= 0)
+		{
+			Surface = InFixture.Scene->Add({"Large yaw", Quad(Metallic)});
+			InFixture.Await();
+		}
+		for (const auto Pipeline : {ESceneRenderPipeline::Forward, ESceneRenderPipeline::Deferred})
+		{
+			InFixture.Settings.Pipeline = Pipeline;
+			for (const float Degrees : {3e38f, -std::numeric_limits<float>::max()})
+			{
+				auto Light = Original;
+				Light.YawDegrees = float(std::remainder(double(Degrees), 360.0));
+				InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Light);
+				const auto Expected = InFixture.Frame();
+				Light.YawDegrees = Degrees;
+				InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Light);
+				Similar(Expected, InFixture.Frame());
+			}
+		}
+		if (Metallic >= 0)
+		{
+			InFixture.Scene->Remove(Surface);
+		}
+	}
+	InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Original);
 }
 
 void CheckCameraTranslation(FSkyFixture& InFixture)
@@ -493,6 +529,66 @@ void CheckRoughness(FSkyFixture& InFixture)
 	}
 }
 
+FImage TintedFrame(FSkyFixture& InFixture, const FSceneEnvironmentLight& InOriginal, FVec3 InTint, float InIntensity)
+{
+	auto Light = InOriginal;
+	Light.Tint = InTint;
+	Light.Intensity = InIntensity;
+	auto Candidate = *InFixture.Scene->FindNode(InFixture.Environment);
+	Candidate.EnvironmentLight() = Light;
+	// Use the node edit path shared by GUI and automation, including its resource preservation.
+	HYP_CHECK(InFixture.Scene->EditNode(InFixture.Environment, std::move(Candidate), InFixture.Scene->GetRevision()));
+	auto Image = InFixture.Frame();
+	// Tint and intensity are view parameters; they must not restart the sky load.
+	HYP_CHECK(InFixture.Scene->GetSkyStatus(InFixture.Environment) == "Ready");
+	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data == InOriginal.Data);
+	return Image;
+}
+
+void CheckTintChannels(const FImage& InWhite, const FImage& InBlue, float InMinimum)
+{
+	HYP_CHECK(Pixel(InWhite, 128, 96) > InMinimum && Pixel(InWhite, 128, 96, 1) > InMinimum);
+	HYP_CHECK(Pixel(InBlue, 128, 96) < .01f && Pixel(InBlue, 128, 96, 1) < .01f);
+	HYP_CHECK(std::abs(Pixel(InBlue, 128, 96, 2) - Pixel(InWhite, 128, 96, 2)) < .02f);
+}
+
+void CheckTint(FSkyFixture& InFixture, const FAssetRef& InGray)
+{
+	InFixture.Select(InGray);
+	InFixture.Await();
+	InFixture.Settings.Pipeline = ESceneRenderPipeline::Deferred;
+	const auto Original = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
+	CheckTintChannels(TintedFrame(InFixture, Original, {1, 1, 1}, 1), TintedFrame(InFixture, Original, {0, 0, 1}, 1),
+	                  .4f);
+	for (const auto Metallic : {0.f, 1.f})
+	{
+		const auto Surface = InFixture.Scene->Add({"Tinted surface", Quad(Metallic)});
+		InFixture.Await();
+		const auto White = TintedFrame(InFixture, Original, {1, 1, 1}, 1);
+		const auto Blue = TintedFrame(InFixture, Original, {0, 0, 1}, 1);
+		CheckTintChannels(White, Blue, .1f);
+		InFixture.Settings.Pipeline = ESceneRenderPipeline::Forward;
+		Similar(White, TintedFrame(InFixture, Original, {1, 1, 1}, 1));
+		Similar(Blue, TintedFrame(InFixture, Original, {0, 0, 1}, 1));
+		InFixture.Settings.Pipeline = ESceneRenderPipeline::Deferred;
+		InFixture.Scene->Remove(Surface);
+	}
+	// A black tint removes only sky radiance, leaving direct lighting identical to a zero-intensity sky.
+	const auto Surface = InFixture.Scene->Add({"Direct surface", Quad(0)});
+	auto Point = MakeScenePointLightNode("tint-point");
+	Point.Local() = Translation({0, 1, 2});
+	Point.PointLight()->Intensity = 2;
+	const auto PointHandle = InFixture.Scene->AddNode(Point);
+	InFixture.Await();
+	const auto Black = TintedFrame(InFixture, Original, {0, 0, 0}, 1);
+	HYP_CHECK(Pixel(Black, 128, 96) > .05f);
+	Similar(Black, TintedFrame(InFixture, Original, {1, 1, 1}, 0));
+	InFixture.Scene->RemoveSubtree(PointHandle);
+	InFixture.Scene->Remove(Surface);
+	InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Original);
+	std::cout << "Sky tint filters background, diffuse and specular sky radiance without reloading\n";
+}
+
 void CheckReplacement(FSkyFixture& InFixture, const FAssetRef& InRed, const FAssetRef& InBlue)
 {
 	const auto Previous = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data;
@@ -505,13 +601,17 @@ void CheckReplacement(FSkyFixture& InFixture, const FAssetRef& InRed, const FAss
 	HYP_CHECK(InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data == Previous);
 	const auto Destination = std::filesystem::absolute("sky-test-data/saved/Scene.hasset");
 	const auto FailedSnapshot = InFixture.Scene->Snapshot(Destination);
-	HYP_CHECK(FailedSnapshot.Nodes.back().EnvironmentLight->Sky->Path.find("Missing.hasset") != std::string::npos);
+	HYP_CHECK(FailedSnapshot.Nodes.back().EnvironmentLight->Sky.Path.find("Missing.hasset") != std::string::npos);
 	InFixture.Select(InBlue);
 	InFixture.Scene->Tick();
 	InFixture.Select(InRed);
 	InFixture.Scene->Tick();
 	InFixture.Select(InBlue);
 	InFixture.Await();
+	auto Authored = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
+	Authored.Tint = {.5f, .8f, 1};
+	Authored.YawDegrees = 37;
+	InFixture.Scene->SetEnvironmentLight(InFixture.Environment, Authored);
 	const auto Blue = InFixture.Frame();
 	HYP_CHECK(Pixel(Blue, 128, 96, 2) > Pixel(Blue, 128, 96) + .3f);
 	auto Snapshot = InFixture.Scene->Snapshot(Destination);
@@ -522,6 +622,9 @@ void CheckReplacement(FSkyFixture& InFixture, const FAssetRef& InRed, const FAss
 	InFixture.Await();
 	InFixture.Camera = InFixture.Scene->FindHandle("camera");
 	InFixture.Environment = InFixture.Scene->FindHandle("environment");
+	const auto& Reloaded = *InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight();
+	HYP_CHECK(Reloaded.Tint.X == .5f && Reloaded.Tint.Y == .8f && Reloaded.Tint.Z == 1);
+	HYP_CHECK(Reloaded.YawDegrees == 37 && Reloaded.bVisible == Authored.bVisible);
 	Similar(Blue, InFixture.Frame());
 	const auto Uploads = InFixture.Session->GetResources().Statistics().Materials.TextureUploads;
 	for (unsigned Frame = 0; Frame < 8; ++Frame)
@@ -542,11 +645,14 @@ int main()
 			FSkyFixture Fixture(Convention);
 			const auto Red = Fixture.MakeSky("Red", {2, .15f, .05f});
 			const auto Blue = Fixture.MakeSky("Blue", {.05f, .15f, 2});
+			const auto Gray = Fixture.MakeSky("Gray", {.7f, .7f, .7f});
 			CheckDirections(Fixture);
+			CheckLargeYaw(Fixture);
 			CheckCameraTranslation(Fixture);
 			CheckPixels(Fixture, Red);
 			CheckClustered(Fixture);
 			CheckRoughness(Fixture);
+			CheckTint(Fixture, Gray);
 			CheckReplacement(Fixture, Red, Blue);
 			CheckSourceToggle(Fixture, Red);
 			CheckFailedRetry(Fixture, Blue, false);

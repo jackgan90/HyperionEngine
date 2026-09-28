@@ -59,6 +59,20 @@ bool EqualInspectionValue(const FArchiveNode& InLeft, const FArchiveNode& InRigh
 	    InLeft.Value);
 }
 
+bool FPropertyCondition::operator==(const FPropertyCondition& InOther) const
+{
+	return Field == InOther.Field && std::ranges::equal(Values, InOther.Values, EqualInspectionValue);
+}
+
+bool MatchesPropertyCondition(const FPropertyCondition& InCondition, const FArchiveNode& InValue)
+{
+	return std::ranges::any_of(InCondition.Values,
+	                           [&](const FArchiveNode& InCandidate)
+	                           {
+		                           return EqualInspectionValue(InCandidate, InValue);
+	                           });
+}
+
 FRecordSelectionDraft::FRecordSelectionDraft(const FRecordDescriptor& InType, std::span<const void* const> InValues)
 {
 	if (InValues.empty())

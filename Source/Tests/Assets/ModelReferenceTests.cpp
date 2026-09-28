@@ -1,6 +1,7 @@
 #include "Hyperion/AssetImport/AssetSourceJson.h"
 #include "Hyperion/AssetImport/GltfImport.h"
 #include "Hyperion/AssetImport/SkyImport.h"
+#include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Support/TestSupport.h"
 
@@ -11,7 +12,8 @@ using namespace Hyperion;
 struct FReferenceFixture
 {
 	FTaskSystem Tasks{1, 1};
-	FIOService IO{Tasks};
+	FIOService IO{Tasks, std::make_shared<FMountedFileSystem>(std::vector<FContentMount>{
+	                         {"/Engine", std::filesystem::path(HYP_SOURCE_DIR) / "Content"}})};
 	FAssetImportService Imports{IO};
 	FAssetService Assets{IO};
 	std::filesystem::path Directory = std::filesystem::absolute("model-reference-publication");

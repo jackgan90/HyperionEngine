@@ -89,10 +89,21 @@ void FEditorPlugin::InitializePlacement()
 		                       Node.Local() = SceneCameraTransform({}, {0, -1, -.2f});
 		                       return Node;
 	                       }});
+	PlacementRegistry.Add({"SkyLight",
+	                       "Sky Light",
+	                       {"Basic", "Lights"},
+	                       {},
+	                       "SkyLight",
+	                       []
+	                       {
+		                       FSceneNode Node;
+		                       Node.EnvironmentLight() = FSceneEnvironmentLight{};
+		                       return Node;
+	                       }});
 	PlacementLifetime = Session->GetResources().CreateScopeLifetime();
 	PlacementMaterial = Session->GetResources().RequestMaterial(MakeGeometryPreviewMaterial());
 	std::uint64_t Texture = 10;
-	for (const std::string Name : {"DirectionalLight", "PointLight", "SpotLight"})
+	for (const std::string Name : {"DirectionalLight", "PointLight", "SpotLight", "SkyLight"})
 	{
 		auto& Icon = PlacementIcons[Name];
 		Icon.Texture = Texture++;

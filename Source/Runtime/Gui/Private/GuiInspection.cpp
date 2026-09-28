@@ -13,6 +13,12 @@ std::string Label(const FPropertyPresentation& InPresentation, const std::string
 	return InPresentation.Label + "##" + InId;
 }
 
+bool IsTypedAssetReference(const FRecordValueShape& InShape, const FPropertyPresentation& InPresentation)
+{
+	return !InPresentation.ReferenceType.empty() && InShape.Kind == ERecordValueKind::Record &&
+	       InShape.Record().Id == RecordType<FAssetRef>().Id;
+}
+
 bool EditVectorValue(FGui& InGui, FArchiveNode& InValue, const FPropertyPresentation& InPresentation,
                      const std::string& InId, std::array<FVec4, 3>& OutBounds)
 {
@@ -170,6 +176,11 @@ bool EditRecordValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape
 			if (It != Fields.end() && Member.Shape)
 			{
 				const auto Presentation = Member.Options.Inspector.value_or(FPropertyPresentation{Member.Id});
+				if (Presentation.VisibleWhen &&
+				    !MatchesPropertyCondition(*Presentation.VisibleWhen, Fields.at(Presentation.VisibleWhen->Field)))
+				{
+					continue;
+				}
 				bChanged |=
 				    EditValue(InGui, It->second, Member.Shape(), Presentation, InId + "/" + Member.Id, InDepth + 1);
 			}
@@ -246,7 +257,19 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 	}
 	if (bPresent)
 	{
-		if (InPresentation.Widget == EPropertyWidget::Vector3)
+		if (IsTypedAssetReference(InShape, InPresentation))
+		{
+			auto Reference = ReadValue<FAssetRef>(InValue);
+			InGui.BeginPropertyRow(Label(InPresentation, InId).c_str(), nullptr,
+			                       InPresentation.Tooltip.empty() ? nullptr : InPresentation.Tooltip.c_str());
+			if (InGui.EditAssetReference(Reference, InPresentation.ReferenceType))
+			{
+				InValue = WriteValue(Reference);
+				bChanged = true;
+			}
+			InGui.EndPropertyRow();
+		}
+		else if (InPresentation.Widget == EPropertyWidget::Vector3)
 		{
 			std::array<FVec4, 3> Bounds;
 			bChanged |= EditVectorValue(InGui, InValue, InPresentation, InId, Bounds);
@@ -281,7 +304,9 @@ bool FGui::EditRecord(FRecordDraft& InDraft, std::string_view InIdentity,
 	bool bChanged{};
 	for (const auto& Member : InDraft.GetType().Members)
 	{
-		if (Member.Options.Inspector)
+		const auto& Condition = Member.Options.Inspector ? Member.Options.Inspector->VisibleWhen : std::nullopt;
+		if (Member.Options.Inspector &&
+		    (!Condition || MatchesPropertyCondition(*Condition, InDraft.GetValues().at(Condition->Field))))
 		{
 			const auto& Presentation = *Member.Options.Inspector;
 			if (!Presentation.Group.empty())

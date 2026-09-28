@@ -23,21 +23,6 @@ Engine SHALL provide Cloudy at `/Engine/Skies/Cloudy.hasset` with all runtime de
 - **WHEN** source-import test fixtures are prepared into an empty output directory
 - **THEN** the Engine Cloudy HDR and Game source inputs are both present and hash-validated, or missing source caches produce an explicit failure
 
-### Requirement: Shared default sky scene action
-Editor SHALL expose Use Default Sky and automation SHALL expose `scene.sky.use_default` using the shared document/revision validation and history. The operation SHALL update the active environment or create and activate one when absent, enable sky rendering, preserve existing orientation/intensity, and support undo/redo and save/reload.
-
-#### Scenario: Empty scene
-- **WHEN** the user invokes the action without an active environment
-- **THEN** one environment node and its active setting are created as one undoable transaction
-
-#### Scenario: Existing environment
-- **WHEN** the action is invoked with an active environment
-- **THEN** its sky reference is replaced without adding a duplicate node, and Undo restores the prior component
-
-#### Scenario: Stale request
-- **WHEN** automation submits an outdated revision
-- **THEN** the operation fails without changing the document or history
-
 ### Requirement: Default environment in model and material previews
 Model and Material Asset Editor previews SHALL use the built-in sky for sky rendering and environment lighting, independently of Game selection and the main scene. Preview settings SHALL remain transient, and missing sky resources SHALL report diagnostics through existing readiness contracts.
 

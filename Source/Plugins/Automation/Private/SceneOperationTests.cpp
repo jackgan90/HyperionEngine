@@ -4,6 +4,7 @@
 #include "SceneOperations.h"
 #include "SceneTestTarget.h"
 #include <cmath>
+#include <functional>
 #include <iostream>
 #include <source_location>
 
@@ -18,6 +19,11 @@ void Check(bool bInValue, std::source_location InLocation = std::source_location
 	{
 		throw std::runtime_error("Scene document check failed at " + std::to_string(InLocation.line()));
 	}
+}
+
+bool SameVector(FVec3 InLeft, FVec3 InRight)
+{
+	return InLeft.X == InRight.X && InLeft.Y == InRight.Y && InLeft.Z == InRight.Z;
 }
 
 const FArchiveNode& Field(const FArchiveNode& InValue, const char* InKey)
@@ -253,7 +259,7 @@ void StructuralHistory()
 	Document.Detach(Tasks);
 }
 
-void DefaultSky()
+void SkyLightActivation()
 {
 	FTaskSystem Tasks(1, 1);
 	FTarget Target(Tasks);
@@ -263,40 +269,76 @@ void DefaultSky()
 	RegisterSceneOperations(Catalog, &Document);
 	Catalog.Seal();
 	FAutomationSession Agent(Catalog);
-	const FSceneMutationRequest Request{Document.Id(), Target.Revision()};
-	Check(ReadValue<std::string>(Field(Call(Agent, "scene.sky.use_default", Request), "status")) == "completed");
-	Check(Target.Nodes().size() == 1 && Document.GetState().HistoryCursor == 1 && Document.IsDirty());
-	const auto First = *Target.Settings().EnvironmentLight;
-	Check(Target.FindNode(First)->EnvironmentLight()->Sky == DefaultSkyReference());
-	Error(Call(Agent, "scene.sky.use_default", Request), "stale_revision");
-	Check(Target.Nodes().size() == 1 && Document.GetState().HistoryCursor == 1);
+	Check(WriteJson(Catalog.Search("scene.sky.use_default")).find("scene.sky.use_default") == std::string::npos);
+	const auto Type = RecordType<FSceneEnvironmentLight>().Id;
+	const auto Create = [&](const char* InName)
+	{
+		const auto Created =
+		    Call(Agent, "scene.node.create",
+		         FSceneCreateRequest{Document.Id(), Target.Revision(), InName, {}, Identity(), {Type}});
+		Check(ReadValue<std::string>(Field(Created, "status")) == "completed");
+		return Document.Selection().Primary().value();
+	};
+	const auto First = Create("First");
+	const auto& Created = *Target.FindNode(First)->EnvironmentLight();
+	Check(Target.Settings().EnvironmentLight == First && Created.Source == ESceneEnvironmentSource::SkyAsset);
+	Check(Created.Sky == DefaultSkyReference() && SameVector(Created.Tint, {1, 1, 1}) && Created.bVisible);
+	const auto Second = Create("Second");
+	Check(Target.Settings().EnvironmentLight == First);
+	const auto Holder = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Holder"}).Handle;
+	EditSceneComponentStructure(Document, {Document.Id(), Target.Revision(), {Holder}, "sky", Type});
+	Check(Target.Settings().EnvironmentLight == First && Target.FindNode(Holder)->EnvironmentLight());
+
+	auto Settings = Target.Settings();
+	Settings.EnvironmentLight = Second;
+	Document.CommitSettings(Settings);
+	Check(Target.Settings().EnvironmentLight == Second);
 	Document.Undo();
-	Check(Target.Nodes().empty() && !Target.Settings().EnvironmentLight && !Document.IsDirty());
+	Check(Target.Settings().EnvironmentLight == First);
 	Document.Redo();
-	const auto Active = *Target.Settings().EnvironmentLight;
-	Check(Target.FindNode(Active)->EnvironmentLight()->Sky == DefaultSkyReference());
-	auto Node = *Target.FindNode(Active);
-	Node.bEnabled = false;
-	Node.EnvironmentLight()->Source = ESceneEnvironmentSource::ConstantColor;
-	Node.EnvironmentLight()->Sky.reset();
-	Node.EnvironmentLight()->bVisible = false;
-	Node.EnvironmentLight()->Intensity = .7f;
-	Node.EnvironmentLight()->YawRadians = .4f;
-	Document.CommitEdits({{Active, Node}}, Target.Revision());
+	Check(Target.Settings().EnvironmentLight == Second);
+
+	// Deleting the active light clears the selection; the next added component then becomes active.
+	SetSceneSelection(Document, {Document.Id(), Target.Revision(), {Second}});
+	DeleteSceneSelection(Document, {Document.Id(), Target.Revision()});
+	Check(!Target.Settings().EnvironmentLight);
+	EditSceneComponentStructure(Document, {Document.Id(), Target.Revision(), {Holder}, "sky", Type, true});
 	const auto History = Document.GetState().HistoryCursor;
-	UseDefaultSceneSky(Document, {Document.Id(), Target.Revision()});
-	const auto& Light = *Target.FindNode(Active)->EnvironmentLight();
-	Check(Target.Nodes().size() == 1 && Document.GetState().HistoryCursor == History + 1);
-	Check(Light.Sky == DefaultSkyReference() && Light.bVisible && Light.Intensity == .7f && Light.YawRadians == .4f);
-	Check(Target.FindNode(Active)->bEnabled);
+	EditSceneComponentStructure(Document, {Document.Id(), Target.Revision(), {Holder}, "sky", Type});
+	Check(Target.Settings().EnvironmentLight == Holder && Document.GetState().HistoryCursor == History + 1);
 	Document.Undo();
-	Check(*Target.FindNode(Active)->EnvironmentLight() == *Node.EnvironmentLight());
-	Check(!Target.FindNode(Active)->bEnabled);
+	Check(!Target.Settings().EnvironmentLight && !Target.FindNode(Holder)->EnvironmentLight());
 	Document.Redo();
-	Document.SetInteractionState(true, false);
-	Error(Call(Agent, "scene.sky.use_default", FSceneMutationRequest{Document.Id(), Target.Revision()}), "busy");
-	Check(Document.GetState().HistoryCursor == History + 1);
-	Document.SetInteractionState(false, false);
+	Check(Target.Settings().EnvironmentLight == Holder);
+
+	// Invalid values leave the light and history unchanged. C++ records reject them on write, so forge the wire.
+	const auto Operation = "scene.component." + Type + ".set";
+	const auto Reject = [&](const char* InField, std::initializer_list<std::pair<const char*, FArchiveNode>> InValues)
+	{
+		TSceneComponentRequest<FSceneEnvironmentLight> Request{
+		    Document.Id(), Target.Revision(), {First}, Type, *Target.FindNode(First)->EnvironmentLight()};
+		auto Wire = WriteRecordWire(SceneComponentRequestType<FSceneEnvironmentLight>(), &Request);
+		auto& Value = std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Wire.Value).at("value").Value);
+		for (const auto& [Key, Replacement] : InValues)
+		{
+			std::get<FArchiveNode::FObject>(Value.at(InField).Value).at(Key) = Replacement;
+		}
+		const auto Before = *Target.FindNode(First)->EnvironmentLight();
+		const auto Cursor = Document.GetState().HistoryCursor;
+		Error(Agent.Call(Operation, Wire), "invalid_arguments");
+		Check(*Target.FindNode(First)->EnvironmentLight() == Before && Document.GetState().HistoryCursor == Cursor);
+	};
+	const auto Empty = WriteValue(std::string());
+	Reject("sky", {{"id", Empty}, {"path", Empty}});
+	Reject("sky", {{"type", WriteValue(RecordType<FSceneCamera>().Id)}});
+	Reject("tint", {{"y", WriteValue(-1.0)}});
+	TSceneComponentRequest<FSceneEnvironmentLight> Tinted{
+	    Document.Id(), Target.Revision(), {First}, Type, *Target.FindNode(First)->EnvironmentLight()};
+	Tinted.Value.Tint = {1, 0, 0};
+	Tinted.Value.YawDegrees = 90;
+	Agent.Call(Operation, WriteRecordWire(SceneComponentRequestType<FSceneEnvironmentLight>(), &Tinted));
+	Check(SameVector(Target.FindNode(First)->EnvironmentLight()->Tint, {1, 0, 0}));
+	Check(Target.FindNode(First)->EnvironmentLight()->YawDegrees == 90);
 	Document.Detach(Tasks);
 }
 
@@ -546,7 +588,7 @@ int main()
 		AffineReparentRounding();
 		BatchReparentRejection();
 		LargeBatchReparent();
-		DefaultSky();
+		SkyLightActivation();
 		StructuralHistory();
 		ComponentAdmissionAndBatch();
 		std::cout << "Shared scene, identity, transactions, history, save and absence contracts passed\n";

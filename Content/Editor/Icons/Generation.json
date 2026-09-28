@@ -12,6 +12,11 @@
     {
       "name": "SpotLight",
       "prompt": "Use case: stylized-concept. Asset type: a single game engine editor light-object icon, legible at 48 pixels, square canvas, truly transparent alpha background. Warm ivory and pale yellow lit center, thick dark brown outline, subtle bronze shaded border, clean polished slightly dimensional UI sprite. Centered isolated symbol occupying 80 percent of canvas with generous transparent margins. No text, no letters, no logos, no watermark, no floor, no backdrop, no transform gizmo, no cursor, no cast shadow outside the symbol. Consistent crisp silhouette, simple forms, similar visual language to traditional 3D editor light sprites. Subject: a compact bronze stage spotlight lamp seen in simple side three-quarter view aimed diagonally down to the right, with a short pale yellow triangular cone of light. Clear chunky silhouette, limited detail, match warm bulb/sun editor icon styling."
+    },
+    {
+      "name": "SkyLight",
+      "tool": "tools/GenerateSkyLightIcon.py",
+      "prompt": "Deterministic procedural drawing matching the light icon style: an ivory sky dome with a bronze base and outline, overlapped by a soft cream cloud."
     }
   ]
 }

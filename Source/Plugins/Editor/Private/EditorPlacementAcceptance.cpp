@@ -5,8 +5,8 @@ namespace Hyperion
 {
 namespace
 {
-constexpr std::array PlacementTypes{"Cube",  "Sphere",           "Cylinder",   "Cone",
-                                    "Plane", "DirectionalLight", "PointLight", "SpotLight"};
+constexpr std::array PlacementTypes{"Cube",       "Sphere",    "Cylinder", "Cone", "Plane", "DirectionalLight",
+                                    "PointLight", "SpotLight", "SkyLight"};
 
 void Check(bool bInCondition, const std::string& InMessage)
 {
@@ -99,7 +99,7 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 	const auto Source = InspectionBounds.at("placement/" + Type);
 	const auto Bounds = ViewportRegion.Bounds;
 	const FVec2 Target{Bounds.X + (Bounds.Z - Bounds.X) * (.2f + .18f * (PlacementExerciseType % 4)),
-	                   Bounds.Y + (Bounds.W - Bounds.Y) * (.53f + .22f * (PlacementExerciseType / 4))};
+	                   Bounds.Y + (Bounds.W - Bounds.Y) * (.5f + .2f * (PlacementExerciseType / 4))};
 	switch (PlacementExerciseStep)
 	{
 		case 0:
@@ -148,6 +148,15 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 				Check(Scene->GetSettings().MainDirectionalLight == Selection.Primary(),
 				      "first directional light did not become main");
 			}
+			if (Type == "SkyLight")
+			{
+				const auto& Light = Scene->FindNode(*Selection)->EnvironmentLight();
+				Check(Light && Light->Source == ESceneEnvironmentSource::SkyAsset &&
+				          Light->Sky.Path == DefaultSkyReference().Path,
+				      "placed sky light does not reference the Engine default sky");
+				Check(Scene->GetSettings().EnvironmentLight == Selection.Primary(),
+				      "first sky light did not become active");
+			}
 			break;
 	}
 	++PlacementExerciseStep;
@@ -183,18 +192,31 @@ void FEditorPlugin::ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents)
 			Check(Copy.Id != Source->Id && Copy.Name == Source->Name + " (1)", "placed copy identity/name mismatch");
 			Copy.Id = Source->Id;
 			Copy.Name = Source->Name;
+			if (Copy.EnvironmentLight() && Source->EnvironmentLight())
+			{
+				// Prepared sky data is runtime state; the copy starts its own load.
+				Copy.EnvironmentLight()->Data = Source->EnvironmentLight()->Data;
+			}
 			Check(Copy == *Source, "placed copy authored properties changed");
 			if (Source->DirectionalLight())
 			{
 				Check(Scene->GetSettings().MainDirectionalLight == Original, "paste changed main light");
+			}
+			const bool bSkyLight = Source->EnvironmentLight().has_value();
+			if (bSkyLight)
+			{
+				Check(Scene->GetSettings().EnvironmentLight == Original, "paste changed active sky light");
 			}
 			Undo();
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1 && Selection == Original,
 			      "placed copy undo failed to restore selection");
 			Undo();
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes, "creation undo failed");
+			Check(!bSkyLight || !Scene->GetSettings().EnvironmentLight, "creation undo kept the active sky light");
 			Redo();
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1, "creation redo failed");
+			Check(!bSkyLight || Scene->GetSettings().EnvironmentLight == Scene->FindHandle(PlacementExerciseIds.back()),
+			      "creation redo did not restore the active sky light");
 			PlacementExerciseStep = 0;
 			++PlacementExerciseType;
 			return;
@@ -310,6 +332,7 @@ void FEditorPlugin::ExercisePlacementHistory()
 	Check(Scene->GetSettings().MainDirectionalLight == Main, "main-light action undo failed");
 	Redo();
 	Check(Scene->GetSettings().MainDirectionalLight == Additional, "main-light action redo failed");
+	ExercisePlacedSkyActivation();
 	const auto Point = Scene->FindHandle(PlacementExerciseIds.at(6));
 	FSceneNodeView View;
 	Check(Scene->GetNodeView(Point, View), "placed point light disappeared");
@@ -323,6 +346,24 @@ void FEditorPlugin::ExercisePlacementHistory()
 	Check(!PickLightMarker({Screen->X, Screen->Y}), "disabled light remained pickable");
 	Scene->SetEnabled(Point, true);
 	PlacementExerciseBaseNodes = Scene->GetNodes().size();
+}
+
+void FEditorPlugin::ExercisePlacedSkyActivation()
+{
+	const auto Active = Scene->GetSettings().EnvironmentLight;
+	Check(Active && Scene->FindNode(*Active), "placed sky light is not active");
+	CommitPlacement(*PlacementRegistry.Find("SkyLight"), {-3, 1, 0});
+	const auto Additional = *Selection;
+	Check(Additional != *Active && Scene->FindNode(Additional)->EnvironmentLight(), "second sky light was not placed");
+	Check(Scene->GetSettings().EnvironmentLight == Active, "second sky light replaced the active sky implicitly");
+	auto Settings = Scene->GetSettings();
+	Settings.EnvironmentLight = Additional;
+	CommitSettings(Settings);
+	Check(Scene->GetSettings().EnvironmentLight == Additional, "Set as active sky light failed");
+	Undo();
+	Check(Scene->GetSettings().EnvironmentLight == Active, "active sky action undo failed");
+	Redo();
+	Check(Scene->GetSettings().EnvironmentLight == Additional, "active sky action redo failed");
 }
 
 void FEditorPlugin::ExercisePlacementInput(std::vector<FInputEvent>& InEvents)
@@ -424,6 +465,10 @@ void FEditorPlugin::ExercisePlacementDocument(std::vector<FInputEvent>& InEvents
 			Check(Scene->FindHandle(Id).Scene != 0, "placed object missing after reload: " + Id);
 		}
 		Check(Scene->GetSettings().MainDirectionalLight.has_value(), "main light selection did not persist");
+		const auto Sky = Scene->GetSettings().EnvironmentLight;
+		Check(Sky && Scene->FindNode(*Sky) && Scene->FindNode(*Sky)->EnvironmentLight() &&
+		          *Sky != Scene->FindHandle(PlacementExerciseIds.at(8)),
+		      "explicit active sky light selection did not persist");
 		bPlacementVerified = true;
 	}
 }

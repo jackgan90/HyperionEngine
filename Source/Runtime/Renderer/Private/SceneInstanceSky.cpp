@@ -79,9 +79,9 @@ void FSceneInstance::FImpl::PollSky(FSkyLoad& InLoad)
 			{
 				auto Light = *Scene.FindEnvironmentLight(InLoad.Handle);
 				Light.Data = InLoad.Data;
-				Light.Sky->Id = InLoad.Data->Reference.Id;
-				Light.Sky->Revision = InLoad.Data->Reference.Revision;
-				InLoad.Reference = *Light.Sky;
+				Light.Sky.Id = InLoad.Data->Reference.Id;
+				Light.Sky.Revision = InLoad.Data->Reference.Revision;
+				InLoad.Reference = Light.Sky;
 				Scene.SetEnvironmentLight(InLoad.Handle, std::move(Light));
 				InLoad.bComplete = true;
 				return;
@@ -136,7 +136,7 @@ void FSceneInstance::FImpl::PollSkies()
 		{
 			Load = std::make_shared<FSkyLoad>();
 			Load->Handle = Handle;
-			Load->Reference = *Light.Sky;
+			Load->Reference = Light.Sky;
 			RegisterSceneAssetTypes(Assets.Types());
 			Load->Preparation = DispatchAsync<FSceneSkyData>(
 			    Tasks, {EDomain::Worker},

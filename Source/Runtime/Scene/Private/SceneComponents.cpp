@@ -18,7 +18,7 @@ FSceneComponentRegistry& SceneComponentRegistry()
 		Register(MakeSceneComponent<FSceneModelComponent>("Model"));
 		Register(MakeSceneComponent<FSceneCamera>("Camera"));
 		Register(MakeSceneComponent<FSceneDirectionalLight>("Directional Light"));
-		Register(MakeSceneComponent<FSceneEnvironmentLight>("Environment Light"));
+		Register(MakeSceneComponent<FSceneEnvironmentLight>("Sky Light"));
 		Register(MakeSceneComponent<FScenePointLight>("Point Light"));
 		Register(MakeSceneComponent<FSceneSpotLight>("Spot Light"));
 		return true;

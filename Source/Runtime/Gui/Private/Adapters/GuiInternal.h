@@ -20,6 +20,7 @@ struct FGui::FImpl
 	bool bTextInputAtFrameStart{};
 	bool bClipboardTextUsed{};
 	FGuiPathDisplay PathDisplay;
+	FGuiAssetReferenceProvider AssetReferenceProvider;
 	std::vector<std::byte> FontBytes;
 	ImGuiStyle BaseStyle;
 	ImPlotStyle BasePlotStyle;

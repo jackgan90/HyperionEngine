@@ -201,7 +201,7 @@ void FAssetWorkspace::Publish(FEntry& InEntry, const FPrepared& InPrepared)
 		InEntry.Scene->Add(Model);
 	}
 	auto Environment = MakeSceneEnvironmentLightNode("preview-environment");
-	Environment.EnvironmentLight()->YawRadians = InEntry.YawDegrees / 57.2957795f;
+	Environment.EnvironmentLight()->YawDegrees = InEntry.YawDegrees;
 	FSceneSettings SceneSettings;
 	if (InPrepared.Root->Header.TypeId == RecordType<FSkyAsset>().Id)
 	{

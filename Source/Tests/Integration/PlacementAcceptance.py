@@ -28,10 +28,11 @@ def main():
                  '--exercise-placement', str(output / 'Placed.hasset'),
                  '--capture', str(output / 'Placed.png'))
     assert report['placement_verified'] and not report['document_dirty'], report
-    assert report['nodes'] == 9 and report['draws'] == 5 and report['save_ms'] > 0, report
+    assert report['nodes'] == 11 and report['draws'] == 5 and report['save_ms'] > 0, report
     assert not report['scene_error'] and report['failed_models'] == 0, report
     assert report['validation_errors'] == 0 and report['placement_unavailable'] == 0, report
-    for name in ('Cube', 'Sphere', 'Cylinder', 'Cone', 'Plane', 'DirectionalLight', 'PointLight', 'SpotLight'):
+    for name in ('Cube', 'Sphere', 'Cylinder', 'Cone', 'Plane', 'DirectionalLight', 'PointLight', 'SpotLight',
+                 'SkyLight'):
         assert (output / f'{name}Preview.png').stat().st_size > 30_000, name
 
     engine = output / 'MissingResources'
@@ -43,7 +44,7 @@ def main():
     assert failed['placement_unavailable'] == 2, failed
     assert failed['nodes'] == 0 and not failed['document_dirty'] and not failed['scene_error'], failed
     assert failed['validation_errors'] == 0, failed
-    print(f'PASS: eight placeables, previews, cancellation, history, save/reload and isolated resource failure: {output}')
+    print(f'PASS: nine placeables, previews, cancellation, history, save/reload and isolated resource failure: {output}')
 
 
 if __name__ == '__main__':

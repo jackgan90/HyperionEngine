@@ -260,6 +260,7 @@ private:
 	void PollContent();
 	void DrawContentTree(const std::string& InPath);
 	void DrawContentGrid();
+	std::vector<FAssetRef> AssetReferenceCandidates(std::string_view InTypeId) const;
 	void DrawAssetMessage();
 	void RequestOpenAsset(const std::string& InPath);
 	void QueueContentRoot(const std::filesystem::path& InDirectory);
@@ -318,6 +319,7 @@ private:
 	std::optional<FSceneHandle> PickLightMarker(FVec2 InPoint) const;
 	std::uint64_t LightTexture(const FSceneNode& InNode) const;
 	void DrawMainLightAction(FSceneHandle InHandle);
+	void DrawSkyLightAction(const FSceneNodeView& InView);
 	void DrawOpenDialog();
 	void DrawViewport(float InDelta, std::span<const FInputEvent> InEvents);
 	void DrawGizmoToolbar();
@@ -335,6 +337,7 @@ private:
 	void ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents);
 	void ExercisePlacementCancel(std::vector<FInputEvent>& InEvents);
 	void ExercisePlacementHistory();
+	void ExercisePlacedSkyActivation();
 	void ExercisePlacementMarkers(std::vector<FInputEvent>& InEvents);
 	void CheckPlacementMarkerDraws(const FGuiDrawData& InData) const;
 	void ExercisePlacementDocument(std::vector<FInputEvent>& InEvents);

@@ -31,13 +31,16 @@ struct FSceneSkyData
 	std::vector<FAssetRef> Dependencies;
 };
 
+// Color applies to ConstantColor only. Tint, yaw and background visibility apply to SkyAsset only.
 struct FSceneEnvironmentLight
 {
 	FVec3 Color{1, 1, 1};
 	float Intensity = 1;
-	ESceneEnvironmentSource Source = ESceneEnvironmentSource::ConstantColor;
-	std::optional<FAssetRef> Sky;
-	float YawRadians{};
+	ESceneEnvironmentSource Source = ESceneEnvironmentSource::SkyAsset;
+	FAssetRef Sky = DefaultSkyReference();
+	// Linear per-channel multiplier of sky radiance: background, diffuse SH and specular IBL.
+	FVec3 Tint{1, 1, 1};
+	float YawDegrees{};
 	bool bVisible = true;
 	std::shared_ptr<const FSceneSkyData> Data;
 	bool operator==(const FSceneEnvironmentLight& InOther) const;

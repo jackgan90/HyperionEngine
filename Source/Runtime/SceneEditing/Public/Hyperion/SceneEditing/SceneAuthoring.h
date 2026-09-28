@@ -66,7 +66,6 @@ struct FSceneNodesReparentRequest
 	std::optional<FSceneHandle> Parent;
 };
 
-FSceneDocumentInfo UseDefaultSceneSky(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest);
 bool CanAddDefaultSceneComponent(const FSceneComponentDescriptor& InType);
 void AddDefaultSceneComponent(FSceneNode& InNode, std::string InId, std::string_view InType);
 FSceneSelectionInfo GetSceneSelection(const FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest);

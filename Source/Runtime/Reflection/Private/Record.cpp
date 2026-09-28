@@ -1,4 +1,5 @@
 #include "Hyperion/Reflection/Record.h"
+#include <algorithm>
 #include <set>
 
 namespace Hyperion
@@ -15,6 +16,20 @@ void FRecordReadContext::Warn(std::string InMessage) const
 		Diagnostics->push_back(Path + ": " + std::move(InMessage));
 	}
 }
+
+namespace
+{
+void ValidateVisibilityCondition(const FRecordDescriptor& InType, const FRecordMember& InMember,
+                                 const FPropertyCondition& InCondition)
+{
+	const auto Controller = std::ranges::find(InType.Members, InCondition.Field, &FRecordMember::Id);
+	if (InCondition.Field == InMember.Id || InCondition.Values.empty() || Controller == InType.Members.end() ||
+	    !Controller->Options.Inspector)
+	{
+		throw std::logic_error("Invalid reflected visibility condition: " + InType.Id + "." + InMember.Id);
+	}
+}
+} // namespace
 
 void ValidateRecordDescriptor(const FRecordDescriptor& InType)
 {
@@ -49,6 +64,10 @@ void ValidateRecordDescriptor(const FRecordDescriptor& InType)
 			    (Presentation.Minimum && Presentation.Maximum && *Presentation.Minimum > *Presentation.Maximum))
 			{
 				throw std::logic_error("Invalid reflected inspection contract: " + InType.Id + "." + Field.Id);
+			}
+			if (Presentation.VisibleWhen)
+			{
+				ValidateVisibilityCondition(InType, Field, *Presentation.VisibleWhen);
 			}
 		}
 	}
