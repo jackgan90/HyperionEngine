@@ -27,11 +27,11 @@ void FSceneRenderPipeline::AddSky(FRenderGraph& InGraph, const FRenderView& InVi
                                   const FMaterialFrameContext& InFrame, bool bInDeferPreparation) const
 {
 	const auto Metadata = InFrame.GetSceneMetadata();
-	if (!Metadata || !Metadata->Settings.EnvironmentLight)
+	if (!Metadata || !Metadata->Lighting.Environment.Handle)
 	{
 		return;
 	}
-	const auto It = Metadata->EnvironmentLights.find(*Metadata->Settings.EnvironmentLight);
+	const auto It = Metadata->EnvironmentLights.find(*Metadata->Lighting.Environment.Handle);
 	if (It == Metadata->EnvironmentLights.end() || !It->second.bEnabled)
 	{
 		return;

@@ -1196,16 +1196,17 @@ void CheckSceneMetadataReuse(FSceneFixture& InFixture)
 	AwaitBridge(Bridge, First);
 	AwaitBridge(Bridge, Second);
 	const auto Candidate = Scene.AddNode(MakeSceneDirectionalLightNode("unselected"));
+	Scene.SetEnabled(Candidate, false);
 	const auto Preparations = Bridge.GetModelPreparationCount();
 	const auto Camera = *Scene.GetSettings().DefaultCamera;
-	const auto Sun = *Scene.GetSettings().MainDirectionalLight;
+	const auto Sun = *Scene.GetLightingSelection().Directional.Handle;
 	FOwnedFrameResult Previous;
 	for (unsigned Index = 0; Index < 48; ++Index)
 	{
 		Scene.SetWorldTransform(Camera, Translation({Index * .001f, 0, 3}));
 		if (Index >= 16 && Index < 32)
 		{
-			Scene.SetDirectionalLight(Sun, {{1, 1, 1}, 1 + Index * .01f, false});
+			Scene.SetDirectionalLight(Sun, {{1, 1, 1}, 1 + Index * .01f, true});
 		}
 		if (Index >= 32)
 		{
@@ -1254,7 +1255,7 @@ void CheckGatedScenePublications(FSceneFixture& InFixture)
 	Bridge.Flush();
 	AwaitBridge(Bridge, Handle);
 	const auto Camera = *Scene.GetSettings().DefaultCamera;
-	const auto Sun = *Scene.GetSettings().MainDirectionalLight;
+	const auto Sun = *Scene.GetLightingSelection().Directional.Handle;
 	FOwnedFrameResult First;
 	FOwnedFrameResult Second;
 	FPublicationGate Gate;
@@ -1293,11 +1294,16 @@ void CheckGatedScenePublications(FSceneFixture& InFixture)
 	F.Tasks.Wait(Frame2);
 	HYP_CHECK(First.Statistics.SceneToken == Seed1->GetToken() && Second.Statistics.SceneToken == Seed2->GetToken());
 	HYP_CHECK(First.Resolved.View.Eye.X == 0 && Second.Resolved.View.Eye.X == .2f);
-	const auto Light = "Engine.Scene.MainDirectionalLightColor";
-	HYP_CHECK(*First.Resolved.Frame->Inputs.Find(EMaterialScope::Scene, Light) ==
-	          FMaterialValue::Float(FVec3{2, 0, 0}));
-	HYP_CHECK(*Second.Resolved.Frame->Inputs.Find(EMaterialScope::Scene, Light) ==
-	          FMaterialValue::Float(FVec3{0, 0, 3}));
+	const auto Light = "Engine.Scene.DirectionalLights";
+	const auto& FirstBuffer = First.Resolved.Frame->Inputs.Find(EMaterialScope::Scene, Light)->Buffer;
+	const auto& SecondBuffer = Second.Resolved.Frame->Inputs.Find(EMaterialScope::Scene, Light)->Buffer;
+	HYP_CHECK(FirstBuffer.Source != SecondBuffer.Source);
+	const auto FirstBytes = FirstBuffer.Source->GetBytes();
+	const auto SecondBytes = SecondBuffer.Source->GetBytes();
+	const std::array<float, 4> Red{2, 0, 0, 0};
+	const std::array<float, 4> Blue{0, 0, 3, 0};
+	HYP_CHECK(std::ranges::equal(FirstBytes.subspan(16), std::as_bytes(std::span(Red))));
+	HYP_CHECK(std::ranges::equal(SecondBytes.subspan(16), std::as_bytes(std::span(Blue))));
 	Pixel(First.Image, 160, {1, 0, 0});
 	Pixel(Second.Image, 160, {0, 0, 1});
 	// Geometry positions are independently visible at opposite outer edges.
@@ -1396,7 +1402,7 @@ void CheckFailedMetadataPublication(FSceneFixture& InFixture)
 	AwaitModel(External);
 	FScene Scene;
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("failed-camera", {0, 0, 3}, {}));
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
 	Bridge.Flush();
 	const auto Seed = F.Session->FreezeSceneFrame(Bridge.GetToken());
@@ -1456,7 +1462,7 @@ void CheckResolvedFrameOwnership(FSceneFixture& InFixture)
 	auto& F = InFixture;
 	FScene Scene;
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 8}, {}));
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
 	Bridge.Flush();
 	F.Tasks.Wait(Bridge.GetReceipt());

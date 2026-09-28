@@ -55,7 +55,7 @@ struct FSkyFixture
 		Node.Local() = Translation({0, 0, 4});
 		Camera = Scene->AddNode(Node);
 		Environment = Scene->AddNode(MakeSceneEnvironmentLightNode("environment"));
-		Scene->SetSettings({Camera, {}, Environment});
+		Scene->SetSettings({Camera, {}});
 	}
 
 	~FSkyFixture()
@@ -471,7 +471,6 @@ void CheckClustered(FSkyFixture& InFixture)
 		if (bDirectional)
 		{
 			Sun = InFixture.Scene->AddNode(MakeSceneDirectionalLightNode("sun"));
-			InFixture.Scene->SetSettings({InFixture.Camera, Sun, InFixture.Environment});
 		}
 		InFixture.Settings.Pipeline = ESceneRenderPipeline::Deferred;
 		InFixture.Settings.bClusteredLighting = true;
@@ -485,7 +484,6 @@ void CheckClustered(FSkyFixture& InFixture)
 		if (bDirectional)
 		{
 			InFixture.Scene->RemoveSubtree(Sun);
-			InFixture.Scene->SetSettings({InFixture.Camera, {}, InFixture.Environment});
 		}
 	}
 	InFixture.Settings.bClusteredLighting = true;
@@ -589,6 +587,38 @@ void CheckTint(FSkyFixture& InFixture, const FAssetRef& InGray)
 	std::cout << "Sky tint filters background, diffuse and specular sky radiance without reloading\n";
 }
 
+void CheckPriorityIsolation(FSkyFixture& InFixture, const FAssetRef& InReference)
+{
+	InFixture.Select(InReference);
+	InFixture.Await();
+	const auto Ready = InFixture.Frame();
+	auto Missing = MakeSceneEnvironmentLightNode("priority-missing");
+	Missing.EnvironmentLight()->Source = ESceneEnvironmentSource::SkyAsset;
+	Missing.EnvironmentLight()->Priority = 10;
+	Missing.EnvironmentLight()->Sky = {"", PathToUtf8(std::filesystem::absolute("sky-test-data/Missing.hasset")),
+	                                   RecordType<FSkyAsset>().Id, ""};
+	const auto Handle = InFixture.Scene->AddNode(Missing);
+	InFixture.Await(true);
+	const auto Info = InFixture.Scene->GetLightingInfo();
+	HYP_CHECK(Info.SkyLight == Handle);
+	const auto Error = InFixture.Scene->GetSkyAssetStatus(Handle);
+	HYP_CHECK(Error.State == "failed" && !Error.Error.empty());
+	const auto Diagnostic = std::find_if(Info.Lights.begin(), Info.Lights.end(),
+	                                     [&](const auto& InLight)
+	                                     {
+		                                     return InLight.Handle == Handle;
+	                                     });
+	HYP_CHECK(Diagnostic != Info.Lights.end() && Diagnostic->bSelected && Diagnostic->Asset.Error == Error.Error);
+	// A valid lower priority sky must not appear when the winner has never loaded.
+	const auto Failed = InFixture.Frame();
+	HYP_CHECK(Pixel(Failed, 128, 96) < .001f && Pixel(Failed, 128, 96, 2) < .001f);
+	InFixture.Scene->SetEnabled(Handle, false);
+	Similar(Ready, InFixture.Frame());
+	InFixture.Scene->RemoveSubtree(Handle);
+	InFixture.Await();
+	HYP_CHECK(InFixture.Scene->GetLightingInfo().SkyLight == InFixture.Environment);
+}
+
 void CheckReplacement(FSkyFixture& InFixture, const FAssetRef& InRed, const FAssetRef& InBlue)
 {
 	const auto Previous = InFixture.Scene->FindNode(InFixture.Environment)->EnvironmentLight()->Data;
@@ -654,6 +684,7 @@ int main()
 			CheckRoughness(Fixture);
 			CheckTint(Fixture, Gray);
 			CheckReplacement(Fixture, Red, Blue);
+			CheckPriorityIsolation(Fixture, Red);
 			CheckSourceToggle(Fixture, Red);
 			CheckFailedRetry(Fixture, Blue, false);
 			CheckFailedRetry(Fixture, Blue, true);

@@ -79,6 +79,20 @@ struct FPropertyCondition
 	bool operator==(const FPropertyCondition& InOther) const;
 };
 
+enum class EPropertyTooltipTone : std::uint8_t
+{
+	Default,
+	Positive,
+	Negative
+};
+
+struct FPropertyTooltipLine
+{
+	std::string Text;
+	EPropertyTooltipTone Tone = EPropertyTooltipTone::Default;
+	bool operator==(const FPropertyTooltipLine&) const = default;
+};
+
 // Presentation is independent of persistence. Absence hides a top-level member from inspection.
 struct FPropertyPresentation
 {
@@ -97,6 +111,10 @@ struct FPropertyPresentation
 	std::string ElementIdentity;
 	// Presentation-only; hidden values remain stored, validated and persisted.
 	std::optional<FPropertyCondition> VisibleWhen;
+	// Contextual lines appended after Tooltip; consumers choose how to present semantic tones.
+	std::vector<FPropertyTooltipLine> TooltipLines;
+	// Nonempty text displays a separate warning marker with its own hover explanation.
+	std::string WarningTooltip;
 	bool operator==(const FPropertyPresentation&) const = default;
 };
 

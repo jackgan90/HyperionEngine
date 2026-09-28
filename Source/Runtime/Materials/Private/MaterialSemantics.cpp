@@ -58,6 +58,8 @@ FMaterialSemanticRegistry::FMaterialSemanticRegistry()
 	        "Linear RGB radiance");
 	Numeric("Engine.Scene.AmbientColor", EMaterialScalar::Float, 3, EMaterialScope::Scene,
 	        "Linear ambient RGB radiance");
+	Add({"Engine.Scene.DirectionalLights", FMaterialParameterType::Resource(EMaterialValueKind::ReadBuffer),
+	     EMaterialScope::Scene, "Unshadowed directional lights; excludes the separately evaluated shadow source"});
 	for (const auto* Name :
 	     {"EnvironmentControl", "EnvironmentRotation", "EnvironmentSh0", "EnvironmentSh1", "EnvironmentSh2",
 	      "EnvironmentSh3", "EnvironmentSh4", "EnvironmentSh5", "EnvironmentSh6", "EnvironmentSh7", "EnvironmentSh8"})

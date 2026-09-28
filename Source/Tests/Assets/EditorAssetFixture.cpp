@@ -127,7 +127,6 @@ void WriteAssetEditorFixture(const std::filesystem::path& InRoot)
 	Light.DirectionalLight = FSceneDirectionalLight{};
 	Light.Transform = SceneCameraTransform({}, {-1, -1, -1});
 	Scene.Nodes.push_back(Light);
-	Scene.MainDirectionalLight = "light";
 	StoreFixture(InRoot / "Scene.hasset", Scene);
 	std::ofstream(InRoot / "Broken.hasset") << "invalid asset";
 }

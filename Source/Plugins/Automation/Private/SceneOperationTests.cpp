@@ -218,7 +218,7 @@ void StructuralHistory()
 	Child.Parent() = Parent.Id;
 	Child.Local() = Translation({2, 3, 0});
 	const auto Leaf = Target.AddNode(Child);
-	Target.Scene.SetSettings({Root, {}, {}});
+	Target.Scene.SetSettings({Root, {}});
 	FSceneEditDocument Document;
 	Document.Attach(Target);
 	Document.ReplaceSelection(FSceneSelection(Root));
@@ -281,35 +281,38 @@ void SkyLightActivation()
 	};
 	const auto First = Create("First");
 	const auto& Created = *Target.FindNode(First)->EnvironmentLight();
-	Check(Target.Settings().EnvironmentLight == First && Created.Source == ESceneEnvironmentSource::SkyAsset);
+	Check(Target.Scene.GetLightingSelection().Environment.Handle == First &&
+	      Created.Source == ESceneEnvironmentSource::SkyAsset);
 	Check(Created.Sky == DefaultSkyReference() && SameVector(Created.Tint, {1, 1, 1}) && Created.bVisible);
 	const auto Second = Create("Second");
-	Check(Target.Settings().EnvironmentLight == First);
+	Check(Target.Scene.GetLightingSelection().Environment.bTied);
 	const auto Holder = CreateSceneNode(Document, {Document.Id(), Target.Revision(), "Holder"}).Handle;
 	EditSceneComponentStructure(Document, {Document.Id(), Target.Revision(), {Holder}, "sky", Type});
-	Check(Target.Settings().EnvironmentLight == First && Target.FindNode(Holder)->EnvironmentLight());
+	Check(Target.Scene.GetLightingSelection().Environment.bTied && Target.FindNode(Holder)->EnvironmentLight());
 
-	auto Settings = Target.Settings();
-	Settings.EnvironmentLight = Second;
-	Document.CommitSettings(Settings);
-	Check(Target.Settings().EnvironmentLight == Second);
+	const auto Previous = Target.Scene.GetLightingSelection().Environment.Handle;
+	auto Edited = *Target.FindNode(Second);
+	Edited.EnvironmentLight()->Priority = 10;
+	Document.CommitEdits({{Second, Edited}}, Target.Revision());
+	Check(Target.Scene.GetLightingSelection().Environment.Handle == Second);
 	Document.Undo();
-	Check(Target.Settings().EnvironmentLight == First);
+	Check(Target.Scene.GetLightingSelection().Environment.Handle == Previous);
 	Document.Redo();
-	Check(Target.Settings().EnvironmentLight == Second);
+	Check(Target.Scene.GetLightingSelection().Environment.Handle == Second);
 
-	// Deleting the active light clears the selection; the next added component then becomes active.
+	// Removing the winner automatically selects the remaining highest priority candidate.
 	SetSceneSelection(Document, {Document.Id(), Target.Revision(), {Second}});
 	DeleteSceneSelection(Document, {Document.Id(), Target.Revision()});
-	Check(!Target.Settings().EnvironmentLight);
+	Check(Target.Scene.GetLightingSelection().Environment.Handle != Second);
 	EditSceneComponentStructure(Document, {Document.Id(), Target.Revision(), {Holder}, "sky", Type, true});
 	const auto History = Document.GetState().HistoryCursor;
 	EditSceneComponentStructure(Document, {Document.Id(), Target.Revision(), {Holder}, "sky", Type});
-	Check(Target.Settings().EnvironmentLight == Holder && Document.GetState().HistoryCursor == History + 1);
+	Check(Target.Scene.GetLightingSelection().Environment.bTied && Document.GetState().HistoryCursor == History + 1);
 	Document.Undo();
-	Check(!Target.Settings().EnvironmentLight && !Target.FindNode(Holder)->EnvironmentLight());
+	Check(Target.Scene.GetLightingSelection().Environment.Handle == First &&
+	      !Target.FindNode(Holder)->EnvironmentLight());
 	Document.Redo();
-	Check(Target.Settings().EnvironmentLight == Holder);
+	Check(Target.Scene.GetLightingSelection().Environment.bTied);
 
 	// Invalid values leave the light and history unchanged. C++ records reject them on write, so forge the wire.
 	const auto Operation = "scene.component." + Type + ".set";

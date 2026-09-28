@@ -39,7 +39,7 @@ std::array<FSceneHandle, 3> AddDefaultSceneContent(FScene& InScene, FVec3 InEye,
 	Handles[0] = InScene.AddNode(MakeSceneCameraNode({}, InEye, InTarget, InCamera));
 	Handles[1] = InScene.AddNode(MakeSceneDirectionalLightNode({}));
 	Handles[2] = InScene.AddNode(MakeSceneEnvironmentLightNode({}));
-	InScene.SetSettings({Handles[0], Handles[1], Handles[2]});
+	InScene.SetSettings({Handles[0], {}});
 	return Handles;
 }
 } // namespace Hyperion

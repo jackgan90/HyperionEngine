@@ -27,10 +27,9 @@ void FEditorPlugin::PrepareOutlineExercise()
 	auto Environment = MakeSceneEnvironmentLightNode("outline-fill");
 	Environment.EnvironmentLight()->Intensity = .15f;
 	Environment.EnvironmentLight()->bVisible = false;
-	auto Settings = Scene->GetSettings();
-	Settings.MainDirectionalLight = Scene->AddNode(std::move(Light));
-	Settings.EnvironmentLight = Scene->AddNode(std::move(Environment));
-	Scene->SetSettings(std::move(Settings));
+	Environment.EnvironmentLight()->Priority = 10;
+	Scene->AddNode(std::move(Light));
+	Scene->AddNode(std::move(Environment));
 	ViewCamera.World = SceneCameraTransform({2, 1.5f, 5}, {});
 	PreviewCamera.reset();
 	bViewportCameraInitialized = true;

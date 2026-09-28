@@ -9,7 +9,7 @@ bool FSceneDirectionalLight::operator==(const FSceneDirectionalLight& InOther) c
 {
 	return Color.X == InOther.Color.X && Color.Y == InOther.Color.Y && Color.Z == InOther.Color.Z &&
 	       Intensity == InOther.Intensity && bCastShadows == InOther.bCastShadows &&
-	       ShadowSettings == InOther.ShadowSettings;
+	       ShadowSettings == InOther.ShadowSettings && Priority == InOther.Priority;
 }
 
 bool FSceneEnvironmentLight::operator==(const FSceneEnvironmentLight& InOther) const
@@ -17,7 +17,8 @@ bool FSceneEnvironmentLight::operator==(const FSceneEnvironmentLight& InOther) c
 	return Color.X == InOther.Color.X && Color.Y == InOther.Color.Y && Color.Z == InOther.Color.Z &&
 	       Intensity == InOther.Intensity && Source == InOther.Source && Sky == InOther.Sky &&
 	       Tint.X == InOther.Tint.X && Tint.Y == InOther.Tint.Y && Tint.Z == InOther.Tint.Z &&
-	       YawDegrees == InOther.YawDegrees && bVisible == InOther.bVisible && Data == InOther.Data;
+	       YawDegrees == InOther.YawDegrees && bVisible == InOther.bVisible && Data == InOther.Data &&
+	       Priority == InOther.Priority;
 }
 
 FVec3 SceneLightRadiance(FVec3 InColor, float InIntensity)
@@ -62,7 +63,12 @@ template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
 	{
 		auto Result = MakeRecord<FSceneDirectionalLight>(
 		    "hyperion.scenedirectionallight",
-		    {Member("color", &FSceneDirectionalLight::Color,
+		    {Member("priority", &FSceneDirectionalLight::Priority,
+		            {.Inspector =
+		                 FPropertyPresentation{.Label = "Priority",
+		                                       .Tooltip = "Higher priority wins the directional shadow map and contact "
+		                                                  "shadow source. All enabled lights illuminate."}}),
+		     Member("color", &FSceneDirectionalLight::Color,
 		            {.Inspector = FPropertyPresentation{.Label = "Color", .Widget = EPropertyWidget::Color3}}),
 		     Member("intensity", &FSceneDirectionalLight::Intensity, Inspect("Intensity", 0, {})),
 		     Member("castShadows", &FSceneDirectionalLight::bCastShadows, Inspect("Cast shadows")),
@@ -70,7 +76,11 @@ template<> const FRecordDescriptor& RecordType<FSceneDirectionalLight>()
 		            {.Inspector = FPropertyPresentation{.Label = "Shadow settings",
 		                                                .Tooltip = "Store shadow parameters on this light. Without an "
 		                                                           "override, legacy session defaults apply."}})},
-		    2, ValidateSceneDirectionalLight);
+		    3, ValidateSceneDirectionalLight);
+		Result.Migrations.emplace(2,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
 		Result.Migrations.emplace(1,
 		                          [](FArchiveNode::FObject&)
 		                          {
@@ -122,7 +132,12 @@ std::vector<FRecordMember> EnvironmentLightMembers()
 {
 	const auto Constant = WhenSource(ESceneEnvironmentSource::ConstantColor);
 	const auto Sky = WhenSource(ESceneEnvironmentSource::SkyAsset);
-	return {Member("color", &FSceneEnvironmentLight::Color,
+	return {Member("priority", &FSceneEnvironmentLight::Priority,
+	               {.Inspector =
+	                    FPropertyPresentation{
+	                        .Label = "Priority",
+	                        .Tooltip = "Higher priority wins the single global sky and environment lighting source."}}),
+	        Member("color", &FSceneEnvironmentLight::Color,
 	               {.Inspector = FPropertyPresentation{.Label = "Color",
 	                                                   .Widget = EPropertyWidget::Color3,
 	                                                   .Tooltip = "Constant ambient radiance color.",
@@ -154,7 +169,7 @@ template<> const FRecordDescriptor& RecordType<FSceneEnvironmentLight>()
 {
 	static const auto Type = []
 	{
-		auto Result = MakeRecord<FSceneEnvironmentLight>("hyperion.sceneenvironmentlight", EnvironmentLightMembers(), 3,
+		auto Result = MakeRecord<FSceneEnvironmentLight>("hyperion.sceneenvironmentlight", EnvironmentLightMembers(), 4,
 		                                                 ValidateSceneEnvironmentLight);
 		// Version 1 had no source field; ConstantColor was its only behavior.
 		Result.Migrations.emplace(1,
@@ -164,6 +179,10 @@ template<> const FRecordDescriptor& RecordType<FSceneEnvironmentLight>()
 			                                               WriteValue(ESceneEnvironmentSource::ConstantColor));
 		                          });
 		Result.Migrations.emplace(2, MigrateEnvironmentLightV2);
+		Result.Migrations.emplace(3,
+		                          [](FArchiveNode::FObject&)
+		                          {
+		                          });
 		return Result;
 	}();
 	return Type;

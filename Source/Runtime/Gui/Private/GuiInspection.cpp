@@ -10,7 +10,7 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 
 std::string Label(const FPropertyPresentation& InPresentation, const std::string& InId)
 {
-	return InPresentation.Label + "##" + InId;
+	return InPresentation.Label + "###" + InId;
 }
 
 bool IsTypedAssetReference(const FRecordValueShape& InShape, const FPropertyPresentation& InPresentation)
@@ -260,8 +260,10 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 		if (IsTypedAssetReference(InShape, InPresentation))
 		{
 			auto Reference = ReadValue<FAssetRef>(InValue);
-			InGui.BeginPropertyRow(Label(InPresentation, InId).c_str(), nullptr,
-			                       InPresentation.Tooltip.empty() ? nullptr : InPresentation.Tooltip.c_str());
+			InGui.BeginPropertyRow(
+			    Label(InPresentation, InId).c_str(), nullptr,
+			    InPresentation.Tooltip.empty() ? nullptr : InPresentation.Tooltip.c_str(), InPresentation.TooltipLines,
+			    InPresentation.WarningTooltip.empty() ? nullptr : InPresentation.WarningTooltip.c_str());
 			if (InGui.EditAssetReference(Reference, InPresentation.ReferenceType))
 			{
 				InValue = WriteValue(Reference);
@@ -288,7 +290,10 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 		}
 		else
 		{
-			InGui.BeginPropertyRow(Label(InPresentation, InId).c_str());
+			InGui.BeginPropertyRow(
+			    Label(InPresentation, InId).c_str(), nullptr,
+			    InPresentation.Tooltip.empty() ? nullptr : InPresentation.Tooltip.c_str(), InPresentation.TooltipLines,
+			    InPresentation.WarningTooltip.empty() ? nullptr : InPresentation.WarningTooltip.c_str());
 			bChanged |= EditScalar(InGui, InValue, InShape, InPresentation);
 			InGui.EndPropertyRow();
 		}
@@ -299,7 +304,8 @@ bool EditValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSh
 } // namespace
 
 bool FGui::EditRecord(FRecordDraft& InDraft, std::string_view InIdentity,
-                      const std::function<void(std::string_view, FVec4)>& InObserve)
+                      const std::function<void(std::string_view, FVec4)>& InObserve,
+                      const std::function<void(std::string_view, FPropertyPresentation&)>& InPresent)
 {
 	bool bChanged{};
 	for (const auto& Member : InDraft.GetType().Members)
@@ -308,7 +314,11 @@ bool FGui::EditRecord(FRecordDraft& InDraft, std::string_view InIdentity,
 		if (Member.Options.Inspector &&
 		    (!Condition || MatchesPropertyCondition(*Condition, InDraft.GetValues().at(Condition->Field))))
 		{
-			const auto& Presentation = *Member.Options.Inspector;
+			auto Presentation = *Member.Options.Inspector;
+			if (InPresent)
+			{
+				InPresent(Member.Id, Presentation);
+			}
 			if (!Presentation.Group.empty())
 			{
 				Text(Presentation.Group);

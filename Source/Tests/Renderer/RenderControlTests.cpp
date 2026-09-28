@@ -86,7 +86,7 @@ void LightShadowProperties()
 	HYP_CHECK(*Loaded == Light);
 	const FSceneHandle Handle{1, 0, 1};
 	FSceneMetadata Metadata;
-	Metadata.Settings.MainDirectionalLight = Handle;
+	Metadata.Lighting.Directional.Handle = Handle;
 	Metadata.DirectionalLights[Handle] = {Light, {0, 1, 0}, true};
 	FCascadedShadowSettings Shadows;
 	Shadows.PreviewViewport = {3, 4, 128, 128};

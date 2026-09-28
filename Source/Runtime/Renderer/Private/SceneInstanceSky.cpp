@@ -176,18 +176,29 @@ void FSceneInstance::FImpl::CloseSkies()
 	RetiredSkyLoads.clear();
 }
 
-std::string FSceneInstance::GetSkyStatus(FSceneHandle InHandle) const
+FSceneSkyStatus FSceneInstance::GetSkyAssetStatus(FSceneHandle InHandle) const
 {
 	Impl->Tasks.Require({EDomain::Main});
 	const auto It = Impl->SkyLoads.find(InHandle);
 	if (It == Impl->SkyLoads.end())
 	{
-		return "No sky requested";
+		return {"unrequested", {}};
 	}
 	const auto& Load = *It->second;
-	return !Load.Error.empty() ? "Failed: " + Load.Error
-	       : Load.bComplete    ? "Ready"
-	       : Load.Data         ? "Uploading"
-	                           : "Loading";
+	return {!Load.Error.empty() ? "failed"
+	        : Load.bComplete    ? "ready"
+	        : Load.Data         ? "uploading"
+	                            : "loading",
+	        Load.Error};
+}
+
+std::string FSceneInstance::GetSkyStatus(FSceneHandle InHandle) const
+{
+	const auto Status = GetSkyAssetStatus(InHandle);
+	return Status.State == "failed"      ? "Failed: " + Status.Error
+	       : Status.State == "ready"     ? "Ready"
+	       : Status.State == "uploading" ? "Uploading"
+	       : Status.State == "loading"   ? "Loading"
+	                                     : "No sky requested";
 }
 } // namespace Hyperion

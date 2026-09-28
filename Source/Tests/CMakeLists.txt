@@ -54,6 +54,7 @@ target_sources(scene_tests PRIVATE Scene/SceneNodeTests.cpp Scene/SceneComponent
 target_sources(scene_tests PRIVATE Scene/TransformInspectionTests.cpp)
 target_sources(scene_tests PRIVATE Scene/SceneViewTests.cpp)
 target_sources(scene_tests PRIVATE Scene/SceneBatchTests.cpp)
+target_sources(scene_tests PRIVATE Scene/LightPriorityTests.cpp)
 hyp_test(render_control_tests render_controls hyperion_render Renderer/RenderControlTests.cpp)
 hyp_test(spatial_tests scene_spatial_visibility hyperion_render Renderer/SpatialTests.cpp)
 hyp_test(transform_gizmo_tests transform_gizmo hyperion_render Renderer/TransformGizmoTests.cpp)

@@ -358,6 +358,12 @@ bool FSceneInstance::Reparent(FSceneHandle InHandle, std::optional<FSceneHandle>
 	return bResult;
 }
 
+FSceneLightingSelection FSceneInstance::GetLightingSelection() const
+{
+	Impl->RequireOpen();
+	return Impl->Scene.GetLightingSelection();
+}
+
 bool FSceneInstance::SetSettings(FSceneSettings InSettings)
 {
 	Impl->RequireOpen();

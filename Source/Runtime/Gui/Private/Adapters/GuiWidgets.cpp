@@ -22,7 +22,8 @@ bool FGui::InputInteger(const char* InLabel, std::uint64_t& InValue)
 	return Impl->DragNumber(InLabel, ImGuiDataType_U64, &InValue, 1);
 }
 
-void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded, const char* InTooltip)
+void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded, const char* InTooltip,
+                            std::span<const FPropertyTooltipLine> InTooltipLines, const char* InWarningTooltip)
 {
 	Impl->Select();
 	ImGui::PushID(InLabel);
@@ -31,9 +32,12 @@ void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded, const char*
 	const std::string_view Label(InLabel);
 	const auto Marker = Label.find("##");
 	const char* End = InLabel + (Marker == std::string_view::npos ? Label.size() : Marker);
-	const float HelpWidth = InTooltip ? ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemInnerSpacing.x : 0;
+	const bool bHasTooltip = InTooltip || !InTooltipLines.empty();
+	const float HelpWidth = bHasTooltip ? ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemInnerSpacing.x : 0;
+	const bool bHasWarning = InWarningTooltip && *InWarningTooltip;
+	const float WarningWidth = bHasWarning ? ImGui::CalcTextSize("[!]").x + ImGui::GetStyle().ItemInnerSpacing.x : 0;
 	const float LabelWidth =
-	    std::max(ImGui::CalcTextSize(InLabel, End).x + HelpWidth + ImGui::GetStyle().ItemInnerSpacing.x,
+	    std::max(ImGui::CalcTextSize(InLabel, End).x + WarningWidth + HelpWidth + ImGui::GetStyle().ItemInnerSpacing.x,
 	             std::clamp(Available * .38f, Scale(76), Scale(160)));
 	ImGui::AlignTextToFramePadding();
 	if (bOutExpanded)
@@ -45,11 +49,17 @@ void FGui::BeginPropertyRow(const char* InLabel, bool* bOutExpanded, const char*
 	{
 		ImGui::TextUnformatted(InLabel, End);
 	}
-	if (InTooltip)
+	if (bHasWarning)
+	{
+		ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+		ImGui::TextUnformatted("[!]");
+		Tooltip(InWarningTooltip);
+	}
+	if (bHasTooltip)
 	{
 		ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
 		ImGui::TextDisabled("(?)");
-		Tooltip(InTooltip);
+		Tooltip(InTooltip, InTooltipLines);
 	}
 	// SameLine offsets are group-relative; Start is already window-relative, including indentation.
 	ImGui::SameLine();

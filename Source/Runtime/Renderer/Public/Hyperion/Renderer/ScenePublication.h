@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Scene/LightSelection.h"
 #include "Hyperion/Scene/SceneNode.h"
 
 namespace Hyperion
@@ -52,6 +53,7 @@ struct FSceneMetadata
 	FScenePublicationToken Token;
 	std::uint64_t LocalLightRevision{};
 	FSceneSettings Settings;
+	FSceneLightingSelection Lighting;
 	std::map<FSceneHandle, FPublishedSceneCamera> Cameras;
 	std::map<FSceneHandle, FPublishedDirectionalLight> DirectionalLights;
 	std::map<FSceneHandle, FPublishedEnvironmentLight> EnvironmentLights;

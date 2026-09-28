@@ -221,8 +221,6 @@ struct FSceneNodeView
 struct FSceneSettings
 {
 	std::optional<FSceneHandle> DefaultCamera;
-	std::optional<FSceneHandle> MainDirectionalLight;
-	std::optional<FSceneHandle> EnvironmentLight;
 	// Explicit browsing preset; independent of authored camera objects and runtime selection.
 	std::optional<FSceneCameraView> InitialView;
 	bool operator==(const FSceneSettings&) const = default;

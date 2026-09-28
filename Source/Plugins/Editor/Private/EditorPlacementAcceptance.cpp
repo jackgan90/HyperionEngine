@@ -145,7 +145,7 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 			PlacementExerciseIds.push_back(Scene->FindNode(*Selection)->Id);
 			if (Type == "DirectionalLight")
 			{
-				Check(Scene->GetSettings().MainDirectionalLight == Selection.Primary(),
+				Check(Scene->GetLightingSelection().Directional.Handle == Selection.Primary(),
 				      "first directional light did not become main");
 			}
 			if (Type == "SkyLight")
@@ -154,7 +154,7 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 				Check(Light && Light->Source == ESceneEnvironmentSource::SkyAsset &&
 				          Light->Sky.Path == DefaultSkyReference().Path,
 				      "placed sky light does not reference the Engine default sky");
-				Check(Scene->GetSettings().EnvironmentLight == Selection.Primary(),
+				Check(Scene->GetLightingSelection().Environment.Handle == Selection.Primary(),
 				      "first sky light did not become active");
 			}
 			break;
@@ -200,22 +200,25 @@ void FEditorPlugin::ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents)
 			Check(Copy == *Source, "placed copy authored properties changed");
 			if (Source->DirectionalLight())
 			{
-				Check(Scene->GetSettings().MainDirectionalLight == Original, "paste changed main light");
+				Check(Scene->GetLightingSelection().Directional.bTied,
+				      "copied directional priority tie was not reported");
 			}
 			const bool bSkyLight = Source->EnvironmentLight().has_value();
 			if (bSkyLight)
 			{
-				Check(Scene->GetSettings().EnvironmentLight == Original, "paste changed active sky light");
+				Check(Scene->GetLightingSelection().Environment.bTied, "copied sky priority tie was not reported");
 			}
 			Undo();
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1 && Selection == Original,
 			      "placed copy undo failed to restore selection");
 			Undo();
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes, "creation undo failed");
-			Check(!bSkyLight || !Scene->GetSettings().EnvironmentLight, "creation undo kept the active sky light");
+			Check(!bSkyLight || !Scene->GetLightingSelection().Environment.Handle,
+			      "creation undo kept the active sky light");
 			Redo();
 			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1, "creation redo failed");
-			Check(!bSkyLight || Scene->GetSettings().EnvironmentLight == Scene->FindHandle(PlacementExerciseIds.back()),
+			Check(!bSkyLight || Scene->GetLightingSelection().Environment.Handle ==
+			                        Scene->FindHandle(PlacementExerciseIds.back()),
 			      "creation redo did not restore the active sky light");
 			PlacementExerciseStep = 0;
 			++PlacementExerciseType;
@@ -321,17 +324,16 @@ void FEditorPlugin::ExercisePlacementHistory()
 	Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 2, "paste redo did not survive cancelled gestures");
 	Undo();
 	Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1, "paste undo after cancelled gestures failed");
-	const auto Main = Scene->GetSettings().MainDirectionalLight;
 	CommitPlacement(*PlacementRegistry.Find("DirectionalLight"), {3, 1, 0});
 	const auto Additional = *Selection;
-	Check(Scene->GetSettings().MainDirectionalLight == Main, "second directional light replaced main implicitly");
-	auto Settings = Scene->GetSettings();
-	Settings.MainDirectionalLight = Additional;
-	CommitSettings(Settings);
+	const auto Previous = Scene->GetLightingSelection().Directional.Handle;
+	auto Candidate = *Scene->FindNode(Additional);
+	Candidate.DirectionalLight()->Priority = 10;
+	CommitEdit(Additional, std::move(Candidate), Scene->GetRevision());
 	Undo();
-	Check(Scene->GetSettings().MainDirectionalLight == Main, "main-light action undo failed");
+	Check(Scene->GetLightingSelection().Directional.Handle == Previous, "directional priority undo failed");
 	Redo();
-	Check(Scene->GetSettings().MainDirectionalLight == Additional, "main-light action redo failed");
+	Check(Scene->GetLightingSelection().Directional.Handle == Additional, "directional priority redo failed");
 	ExercisePlacedSkyActivation();
 	const auto Point = Scene->FindHandle(PlacementExerciseIds.at(6));
 	FSceneNodeView View;
@@ -350,20 +352,20 @@ void FEditorPlugin::ExercisePlacementHistory()
 
 void FEditorPlugin::ExercisePlacedSkyActivation()
 {
-	const auto Active = Scene->GetSettings().EnvironmentLight;
+	const auto Active = Scene->GetLightingSelection().Environment.Handle;
 	Check(Active && Scene->FindNode(*Active), "placed sky light is not active");
 	CommitPlacement(*PlacementRegistry.Find("SkyLight"), {-3, 1, 0});
 	const auto Additional = *Selection;
 	Check(Additional != *Active && Scene->FindNode(Additional)->EnvironmentLight(), "second sky light was not placed");
-	Check(Scene->GetSettings().EnvironmentLight == Active, "second sky light replaced the active sky implicitly");
-	auto Settings = Scene->GetSettings();
-	Settings.EnvironmentLight = Additional;
-	CommitSettings(Settings);
-	Check(Scene->GetSettings().EnvironmentLight == Additional, "Set as active sky light failed");
+	const auto Previous = Scene->GetLightingSelection().Environment.Handle;
+	auto Candidate = *Scene->FindNode(Additional);
+	Candidate.EnvironmentLight()->Priority = 10;
+	CommitEdit(Additional, std::move(Candidate), Scene->GetRevision());
+	Check(Scene->GetLightingSelection().Environment.Handle == Additional, "sky priority selection failed");
 	Undo();
-	Check(Scene->GetSettings().EnvironmentLight == Active, "active sky action undo failed");
+	Check(Scene->GetLightingSelection().Environment.Handle == Previous, "sky priority undo failed");
 	Redo();
-	Check(Scene->GetSettings().EnvironmentLight == Additional, "active sky action redo failed");
+	Check(Scene->GetLightingSelection().Environment.Handle == Additional, "sky priority redo failed");
 }
 
 void FEditorPlugin::ExercisePlacementInput(std::vector<FInputEvent>& InEvents)
@@ -464,11 +466,11 @@ void FEditorPlugin::ExercisePlacementDocument(std::vector<FInputEvent>& InEvents
 		{
 			Check(Scene->FindHandle(Id).Scene != 0, "placed object missing after reload: " + Id);
 		}
-		Check(Scene->GetSettings().MainDirectionalLight.has_value(), "main light selection did not persist");
-		const auto Sky = Scene->GetSettings().EnvironmentLight;
+		Check(Scene->GetLightingSelection().Directional.Handle.has_value(), "main light selection did not persist");
+		const auto Sky = Scene->GetLightingSelection().Environment.Handle;
 		Check(Sky && Scene->FindNode(*Sky) && Scene->FindNode(*Sky)->EnvironmentLight() &&
 		          *Sky != Scene->FindHandle(PlacementExerciseIds.at(8)),
-		      "explicit active sky light selection did not persist");
+		      "sky priority did not persist");
 		bPlacementVerified = true;
 	}
 }

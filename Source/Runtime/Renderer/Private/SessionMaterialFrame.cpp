@@ -1,3 +1,4 @@
+#include "DirectionalLighting.h"
 #include "EnvironmentParameters.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
@@ -56,6 +57,10 @@ std::shared_ptr<const FMaterialFrameContext> FRenderSession::FMaterialState::Fra
 	Result->Frame = NextFrame.fetch_add(1);
 	Result->Inputs = Inputs;
 	auto SceneValues = Result->Inputs.Values[ScopeIndex(EMaterialScope::Scene)].Get();
+	if (!Result->Inputs.Find(EMaterialScope::Scene, DirectionalLightsSemantic))
+	{
+		SceneValues.push_back({DirectionalLightsSemantic, DirectionalLightBuffer()});
+	}
 	for (const auto& Value : EnvironmentParameters())
 	{
 		if (!Result->Inputs.Find(EMaterialScope::Scene, Value.Name))

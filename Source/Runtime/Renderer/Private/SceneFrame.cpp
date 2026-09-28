@@ -1,3 +1,4 @@
+#include "DirectionalLighting.h"
 #include "EnvironmentParameters.h"
 #include "Hyperion/Renderer/ViewportRay.h"
 #include "SessionMaterialsInternal.h"
@@ -21,9 +22,9 @@ struct FSceneLighting
 FSceneLighting Lighting(const FSceneMetadata& InMetadata)
 {
 	FSceneLighting Result;
-	if (InMetadata.Settings.MainDirectionalLight)
+	if (InMetadata.Lighting.Directional.Handle)
 	{
-		const auto Entry = InMetadata.DirectionalLights.find(*InMetadata.Settings.MainDirectionalLight);
+		const auto Entry = InMetadata.DirectionalLights.find(*InMetadata.Lighting.Directional.Handle);
 		if (Entry != InMetadata.DirectionalLights.end() && Entry->second.bEnabled)
 		{
 			const auto& Light = Entry->second;
@@ -33,9 +34,9 @@ FSceneLighting Lighting(const FSceneMetadata& InMetadata)
 			    Light.Light.bCastShadows && (Result.Direct.X > 0 || Result.Direct.Y > 0 || Result.Direct.Z > 0);
 		}
 	}
-	if (InMetadata.Settings.EnvironmentLight)
+	if (InMetadata.Lighting.Environment.Handle)
 	{
-		const auto Entry = InMetadata.EnvironmentLights.find(*InMetadata.Settings.EnvironmentLight);
+		const auto Entry = InMetadata.EnvironmentLights.find(*InMetadata.Lighting.Environment.Handle);
 		if (Entry != InMetadata.EnvironmentLights.end() && Entry->second.bEnabled)
 		{
 			Result.Environment = &Entry->second.Light;
@@ -150,6 +151,9 @@ FResolvedSceneFrame FRenderSession::ResolveSceneFrame(const FSceneFrameSeed& InS
 	Values.push_back({"Engine.Scene.MainDirectionalLightDirection", FMaterialValue::Float(Light.Direction)});
 	Values.push_back({"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(Light.Direct)});
 	Values.push_back({"Engine.Scene.AmbientColor", FMaterialValue::Float(Light.Ambient)});
+	Values.push_back({DirectionalLightsSemantic,
+	                  DirectionalLightBuffer(Metadata.get(), MaterialState->EffectiveSceneInputs.Find(
+	                                                             EMaterialScope::Scene, DirectionalLightsSemantic))});
 	const auto Environment = EnvironmentParameters(Light.Environment);
 	Values.insert(Values.end(), Environment.begin(), Environment.end());
 	FMaterialInputValues Published(std::move(Values));

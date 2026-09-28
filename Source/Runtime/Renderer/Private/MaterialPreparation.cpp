@@ -231,6 +231,14 @@ void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, cons
 		}
 		if (!Binding.InstanceStride)
 		{
+			if (Resource.Name == "HyperionDirectionalLightsV1" && !InBuilder.Find(Stage + Resource.Name))
+			{
+				auto Parameter = DeclareMaterialSemantic("Engine.Scene.DirectionalLights",
+				                                         "Engine.Scene.DirectionalLights", *InBuilder.Semantics);
+				Parameter.Targets = {Resource.Name};
+				Parameter.bActive = false;
+				InBuilder.Parameters.push_back(std::move(Parameter));
+			}
 			Binding.Resource = Resource;
 		}
 		Binding.Stages = InArtifact.Stage == EShaderStage::Vertex ? 1U : 2U;

@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Scene/LightSelection.h"
 #include "Hyperion/Scene/SceneNode.h"
 #include "Hyperion/Scene/SceneQuery.h"
 
@@ -73,6 +74,7 @@ public:
 	bool Reparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);
 	bool SetSettings(FSceneSettings InSettings);
 	const FSceneSettings& GetSettings() const;
+	FSceneLightingSelection GetLightingSelection() const;
 	void Update();
 	std::vector<FSceneChange> GetChanges() const;
 	void Acknowledge(std::uint64_t InRevision);

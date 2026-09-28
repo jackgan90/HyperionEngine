@@ -44,15 +44,15 @@ FSceneManifest UpgradeLegacyScene(const FLegacySceneManifest& InManifest)
 		Result.Nodes.push_back(std::move(Node));
 	}
 	Result.DefaultCamera = MigrationId("camera-main", Used);
-	Result.MainDirectionalLight = MigrationId("light-main", Used);
-	Result.EnvironmentLight = MigrationId("light-environment", Used);
+	const auto DirectionalId = MigrationId("light-main", Used);
+	const auto EnvironmentId = MigrationId("light-environment", Used);
 	FSceneCamera Lens;
 	Lens.Near = InManifest.Near;
 	Lens.Far = InManifest.Far;
 	Result.Nodes.push_back(
 	    SceneEntryFromNode(MakeSceneCameraNode(Result.DefaultCamera, InManifest.Eye, InManifest.Target, Lens)));
-	Result.Nodes.push_back(SceneEntryFromNode(MakeSceneDirectionalLightNode(Result.MainDirectionalLight)));
-	Result.Nodes.push_back(SceneEntryFromNode(MakeSceneEnvironmentLightNode(Result.EnvironmentLight)));
+	Result.Nodes.push_back(SceneEntryFromNode(MakeSceneDirectionalLightNode(DirectionalId)));
+	Result.Nodes.push_back(SceneEntryFromNode(MakeSceneEnvironmentLightNode(EnvironmentId)));
 	ValidateSceneManifest(Result);
 	return Result;
 }

@@ -20,7 +20,7 @@ void FEditorPlugin::BenchmarkCamera()
 	}
 	if (Options.bBenchmarkLight)
 	{
-		const auto Light = Scene->GetSettings().MainDirectionalLight;
+		const auto Light = Scene->GetLightingSelection().Directional.Handle;
 		FSceneNodeView View;
 		if (!Light || !Scene->GetNodeView(*Light, View))
 		{

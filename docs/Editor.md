@@ -35,7 +35,9 @@ automation 使用 `asset.import.draft.prepare/get/edit/history/submit/discard` �
 
 ## 天空光
 
-天空光是场景组件。从 **Window > Place Object** 拖入 **Sky Light**，创建引用 Engine 默认 Cloudy 天空的 SkyAsset 天空光，一次 Undo/Redo。场景最多一个活动天空光：只有尚未选择活动天空光时，新放置或 automation 创建的天空光才自动激活；粘贴不改变光源选择。其他天空光在 Details 显示为未生效，可用 **Set as active sky light** 显式切换并撤销；禁用活动节点会移除其光照与背景。
+天空光是场景组件。从 **Window > Place Object** 拖入 **Sky Light**，创建引用 Engine 默认 Cloudy 天空的 SkyAsset 天空光，一次 Undo/Redo。组件中的 **Priority** 为整数，默认 0、可为负数，越大越优先。有效启用的天空光中仅最高优先级生效，统一提供背景与环境照明；同优先级以持久对象 ID 字典序决定，最高候选的 Priority 显示 `[!]` 并可悬停查看原因。禁用、删除、撤销和修改父节点启用状态都会自动重新选择。复制保留 Priority，因此可能产生同优先级候选。
+
+不再显示常驻的 Active/Ready 文本或激活按钮。Priority 的提示可查看当前生效或被覆盖的原因；Sky asset 属性仅在加载、上传或失败时附加状态，错误提示包含依赖或上传失败原因。资产就绪状态不参与优先级选择；高优先级资源失败时不会切换到低优先级天空光。Intensity 为 0 仍占用选择，关闭 Show background 仍保留 IBL。
 
 Details 只显示当前 **Source** 适用的字段，两种模式共用 **Intensity**。Constant color 显示 **Color**；Sky asset 显示 **Sky asset** 选择器、**Tint**、**Yaw (degrees)** 和 **Show background**。选择器列出已索引的天空资产，也接受从 Content Browser 拖入的天空资产，拒绝其他类型。Tint 按通道乘以背景、漫反射 SH 与镜面 IBL，不影响直接光、局部光和自发光，修改 Tint、Yaw 或 Intensity 不会重新加载天空。隐藏字段保留原值，切回模式后恢复。Details 同时显示天空资产加载状态。详见 [天空与 IBL](SkyLighting.md)。
 
@@ -150,7 +152,7 @@ Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构�
 
 基本形状来自 `/Engine/Models/Primitives`，默认材质和依赖也属于 Engine 内容。尺寸为一场景单位，Plane 位于 XZ 平面并朝 +Y。无需先打开场景，可直接在 Untitled 文档放置，然后 **File > Save Scene As...**。空场景没有隐式光照，添加光源前正式网格可能呈黑色；拖拽预览使用独立的明暗着色。
 
-灯光图标始终面向相机，尺寸随界面缩放而保持屏幕大小，叠加显示在场景几何前方。单击图标可选择灯光；gizmo 优先。方向光和聚光灯另画方向箭头。**Viewport options > Show light icons** 控制已有灯光的图标显示，禁用的对象不显示图标。当前只由 MainDirectionalLight 提供方向照明：没有主光时，首个新方向光成为主光；已有主光保持不变，可在 Details 使用 **Set as main directional light** 显式切换并撤销。天空光图标位于节点原点，只用于选择，其位置和朝向不影响光照；活动天空光规则见[天空光](#天空光)。
+灯光图标始终面向相机，尺寸随界面缩放而保持屏幕大小，叠加显示在场景几何前方。单击图标可选择灯光；gizmo 优先。方向光和聚光灯另画方向箭头。**Viewport options > Show light icons** 控制已有灯光的图标显示，禁用的对象不显示图标。所有有效启用的方向光叠加照明；在开启 Cast shadows 且辐射非零的方向光中，以 **Priority** 最高者作为 CSM 和 contact shadows 的共同光源，各阴影方法仍遵守自己的开关。其余方向光不产生阴影。Priority 的同值处理、编辑、撤销和保存与天空光一致。`(?)` 提示以绿色显示当前阴影来源，以红色显示被哪盏方向光覆盖，并说明其他候选仍参与直接照明、可提高 Priority 争取阴影来源；不符合阴影候选条件的灯光显示排除原因。同最高 Priority 的 `[!]` 有独立悬停说明，指出多个符合阴影条件的方向光并列最高优先级，不展示对象 ID 或底层决胜规则。天空光图标位于节点原点，只用于选择，其位置和朝向不影响光照；天空光规则见[天空光](#天空光)。
 
 注册表 `FObjectPlacementRegistry` 位于 Scene，工厂返回未加入场景的 CPU 节点；分类列表与创建逻辑独立。Gui 提供复制载荷的 `DragSource` / `DropTarget`，Renderer 提供 `FViewportPlacementSession`、射线落点计算和 `FTransientGeometry` 渲染贡献。后续资产浏览器可以复用这些契约；Main 冻结预览快照，`IRenderFeature` 在 tone mapping 前声明颜色/深度依赖并绘制。灯光图标通过现有 GuiRenderer 纹理合成路径绘制。
 

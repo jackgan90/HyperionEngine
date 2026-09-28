@@ -216,9 +216,9 @@ void FAssetWorkspace::Publish(FEntry& InEntry, const FPrepared& InPrepared)
 		auto Light = MakeSceneDirectionalLightNode("preview-key");
 		Light.Local() = SceneCameraTransform({0, 0, 0}, {-.5f, -1, -.7f});
 		Light.DirectionalLight()->Intensity = 3;
-		SceneSettings.MainDirectionalLight = InEntry.Scene->AddNode(std::move(Light));
+		InEntry.Scene->AddNode(std::move(Light));
 	}
-	SceneSettings.EnvironmentLight = InEntry.Scene->AddNode(std::move(Environment));
+	InEntry.Scene->AddNode(std::move(Environment));
 	InEntry.Scene->SetSettings(SceneSettings);
 	InEntry.Scene->Tick();
 	if (!InEntry.bCameraInitialized)

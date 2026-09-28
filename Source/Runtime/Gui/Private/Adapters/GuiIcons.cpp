@@ -101,12 +101,34 @@ bool FGui::IconButton(const char* InId, EGuiIcon InIcon, const char* InTooltip, 
 	return Impl->TrackEdit(bPressed);
 }
 
-void FGui::Tooltip(const char* InText)
+void FGui::Tooltip(const char* InText, std::span<const FPropertyTooltipLine> InLines)
 {
 	Impl->Select();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled))
+	if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled))
 	{
-		ImGui::SetTooltip("%s", Impl->PathDisplay.Text(InText).c_str());
+		return;
+	}
+	if (InLines.empty())
+	{
+		ImGui::SetTooltip("%s", Impl->PathDisplay.Text(InText ? InText : "").c_str());
+		return;
+	}
+	if (ImGui::BeginTooltip())
+	{
+		if (InText && *InText)
+		{
+			ImGui::TextUnformatted(Impl->PathDisplay.Text(InText).c_str());
+		}
+		for (const auto& Line : InLines)
+		{
+			const auto Color = Line.Tone == EPropertyTooltipTone::Positive   ? ImVec4{.4f, .85f, .4f, 1}
+			                   : Line.Tone == EPropertyTooltipTone::Negative ? ImVec4{1, .35f, .35f, 1}
+			                                                                 : ImGui::GetStyleColorVec4(ImGuiCol_Text);
+			ImGui::PushStyleColor(ImGuiCol_Text, Color);
+			ImGui::TextUnformatted(Impl->PathDisplay.Text(Line.Text).c_str());
+			ImGui::PopStyleColor();
+		}
+		ImGui::EndTooltip();
 	}
 }
 

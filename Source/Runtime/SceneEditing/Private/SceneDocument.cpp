@@ -207,7 +207,6 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 	{
 		throw FSceneEditError("stale_handle", "The edit targets are no longer current");
 	}
-	AssignAddedEnvironment(Entry);
 	Entry.AfterSettings = Scene.Settings();
 	Entry.AfterState = ++State.NextState;
 	State.State = Entry.AfterState;
@@ -232,40 +231,7 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 	}
 }
 
-void FSceneEditDocument::AssignAddedEnvironment(const FSceneHistoryEntry& InEntry)
-{
-	if (InEntry.BeforeSettings.EnvironmentLight)
-	{
-		return;
-	}
-	for (const auto& Edit : InEntry.Edits)
-	{
-		if (Edit.After.EnvironmentLight() && !Edit.Before.EnvironmentLight())
-		{
-			auto& Scene = Target();
-			auto Settings = Scene.Settings();
-			Settings.EnvironmentLight = Edit.Handle;
-			try
-			{
-				Scene.SetSettings(std::move(Settings));
-			}
-			catch (...)
-			{
-				// Keep the edit and activation atomic.
-				std::vector<FSceneNodeEdit> Restore;
-				for (const auto& Applied : InEntry.Edits)
-				{
-					Restore.push_back({Applied.Handle, Applied.Before});
-				}
-				Scene.EditNodes(std::move(Restore), Scene.Revision());
-				throw;
-			}
-			return;
-		}
-	}
-}
-
-FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignLights)
+FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode)
 {
 	FinishInteraction();
 	auto& Scene = Target();
@@ -276,27 +242,6 @@ FSceneHandle FSceneEditDocument::CommitCreate(FSceneNode InNode, bool bInAssignL
 	FSceneHistoryEntry Entry{{}, {}, InNode, Scene.Settings(), Scene.Settings(), State.State, State.NextState};
 	State.History.reserve(State.HistoryCursor + 1);
 	Entry.Handle = Scene.AddNode(std::move(InNode));
-	try
-	{
-		if (bInAssignLights && Entry.After->DirectionalLight() && !Entry.BeforeSettings.MainDirectionalLight)
-		{
-			Entry.AfterSettings.MainDirectionalLight = Entry.Handle;
-		}
-		if (bInAssignLights && Entry.After->EnvironmentLight() && !Entry.BeforeSettings.EnvironmentLight)
-		{
-			Entry.AfterSettings.EnvironmentLight = Entry.Handle;
-		}
-		if (Entry.AfterSettings != Entry.BeforeSettings)
-		{
-			Scene.SetSettings(Entry.AfterSettings);
-		}
-	}
-	catch (...)
-	{
-		const std::array Roots{Entry.Handle};
-		Scene.RemoveSubtrees(Roots);
-		throw;
-	}
 	ReplaceSelection(FSceneSelection(Entry.Handle));
 	const auto Handle = Entry.Handle;
 	Append(std::move(Entry));

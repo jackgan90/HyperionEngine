@@ -124,10 +124,8 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 		Model.Name = InOptions.Name.empty() ? "Model" : InOptions.Name;
 		Model.Model = FSceneNodeModel{"model"};
 		Scene.Nodes.push_back(std::move(Model));
-		Scene.MainDirectionalLight = "light-main";
-		Scene.EnvironmentLight = "light-environment";
-		Scene.Nodes.push_back(SceneEntryFromNode(MakeSceneDirectionalLightNode(Scene.MainDirectionalLight)));
-		Scene.Nodes.push_back(SceneEntryFromNode(MakeSceneEnvironmentLightNode(Scene.EnvironmentLight)));
+		Scene.Nodes.push_back(SceneEntryFromNode(MakeSceneDirectionalLightNode("light-main")));
+		Scene.Nodes.push_back(SceneEntryFromNode(MakeSceneEnvironmentLightNode("light-environment")));
 		Converted.Products.clear();
 		Converted.Type = std::make_shared<const FRecordDescriptor>(RecordType<FSceneManifest>());
 		Converted.Object = std::make_shared<const FSceneManifest>(std::move(Scene));

@@ -38,8 +38,6 @@ FSceneManifest FSceneInstance::Snapshot(const std::filesystem::path& InDestinati
 	FSceneManifest Result;
 	const auto& Settings = P.Scene.GetSettings();
 	Result.DefaultCamera = SelectionId(P.Scene, Settings.DefaultCamera);
-	Result.MainDirectionalLight = SelectionId(P.Scene, Settings.MainDirectionalLight);
-	Result.EnvironmentLight = SelectionId(P.Scene, Settings.EnvironmentLight);
 	Result.InitialView = Settings.InitialView;
 	std::set<std::string> Used;
 	const auto Destination = P.Assets.NormalizePath(InDestination);

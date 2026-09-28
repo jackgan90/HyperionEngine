@@ -79,10 +79,14 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			return;
 		case 6:
 			bShowRenderSettings = false;
-			SceneDocument.ReplaceSelection(FSceneSelection(Scene->GetSettings().MainDirectionalLight));
+			SceneDocument.ReplaceSelection(FSceneSelection(Scene->GetLightingSelection().Directional.Handle));
 			++ExerciseStep;
 			return;
 		case 7:
+			if (!ExerciseLightPriorityInput(InEvents))
+			{
+				return;
+			}
 			ExerciseClick(InEvents, InspectionBounds[RecordType<FSceneTransform>().Id + "/header"]);
 			return;
 		case 8:
@@ -114,6 +118,87 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			++ExerciseStep;
 			return;
 	}
+}
+
+bool FEditorPlugin::ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents)
+{
+	if (LightPriorityExerciseStep >= 16)
+	{
+		return true;
+	}
+	const bool bSky = LightPriorityExerciseStep >= 8;
+	const unsigned Phase = LightPriorityExerciseStep % 8;
+	const auto Type = bSky ? RecordType<FSceneEnvironmentLight>().Id : RecordType<FSceneDirectionalLight>().Id;
+	if (Phase == 0 && bSky)
+	{
+		auto Node = MakeSceneEnvironmentLightNode("priority-gui-sky");
+		Node.EnvironmentLight()->Source = ESceneEnvironmentSource::ConstantColor;
+		SceneDocument.ReplaceSelection(FSceneSelection(SceneDocument.CommitCreate(std::move(Node))));
+	}
+	if (Phase == 1)
+	{
+		const auto Step = ExerciseStep;
+		ExerciseClick(InEvents, InspectionBounds.at(Type + "/priority"));
+		if (Step == ExerciseStep)
+		{
+			return false;
+		}
+		ExerciseStep = Step;
+	}
+	else if (Phase >= 2 && Phase <= 5)
+	{
+		if (Phase == 4 && ExerciseWait++ == 0)
+		{
+			return false;
+		}
+		ExerciseWait = 0;
+		FInputEvent Key;
+		Key.Type = EEventType::Key;
+		Key.Key = Phase < 4 ? EKey::A : EKey::Enter;
+		Key.bDown = Phase == 2 || Phase == 4;
+		Key.Modifiers = Phase == 2 ? 1 : 0;
+		InEvents.push_back(Key);
+		if (Phase == 3)
+		{
+			FInputEvent Text;
+			Text.Type = EEventType::Text;
+			Text.Text = "-7";
+			InEvents.push_back(Text);
+		}
+	}
+	else if (Phase == 6)
+	{
+		const auto* Node = Scene->FindNode(*Selection);
+		const auto Priority = bSky ? Node->EnvironmentLight()->Priority : Node->DirectionalLight()->Priority;
+		if (Priority != -7 || !IsDirty())
+		{
+			throw std::runtime_error("Priority Inspector did not commit a signed integer: " + Error);
+		}
+		PlacementCapture = Options.ExerciseRenderControls / (bSky ? "SkyPriority.png" : "DirectionalPriority.png");
+	}
+	else if (Phase == 7)
+	{
+		Undo();
+		const auto* Node = Scene->FindNode(*Selection);
+		if ((bSky ? Node->EnvironmentLight()->Priority : Node->DirectionalLight()->Priority) != 0)
+		{
+			throw std::runtime_error("Priority Inspector undo failed");
+		}
+		Redo();
+		Node = Scene->FindNode(*Selection);
+		if ((bSky ? Node->EnvironmentLight()->Priority : Node->DirectionalLight()->Priority) != -7)
+		{
+			throw std::runtime_error("Priority Inspector redo failed");
+		}
+		Undo();
+		if (bSky)
+		{
+			Undo();
+			SceneDocument.ReplaceSelection(FSceneSelection(Scene->GetLightingSelection().Directional.Handle));
+		}
+	}
+	++LightPriorityExerciseStep;
+	return false;
 }
 
 void FEditorPlugin::ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents)

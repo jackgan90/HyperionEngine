@@ -148,8 +148,7 @@ FSceneSettings ResolveSceneSettings(const FSceneManifest& InManifest, const FSce
 		}
 		return Handle;
 	};
-	return {Resolve(InManifest.DefaultCamera), Resolve(InManifest.MainDirectionalLight),
-	        Resolve(InManifest.EnvironmentLight), InManifest.InitialView};
+	return {Resolve(InManifest.DefaultCamera), InManifest.InitialView};
 }
 
 std::size_t SceneModelCount(const FSceneManifest& InManifest)
@@ -241,10 +240,14 @@ template<> const FRecordDescriptor& RecordType<FSceneManifest>()
 		                                         {Member("assets", &FSceneManifest::Assets, {true}),
 		                                          Member("nodes", &FSceneManifest::Nodes, {true}),
 		                                          Member("defaultCamera", &FSceneManifest::DefaultCamera),
-		                                          Member("mainDirectionalLight", &FSceneManifest::MainDirectionalLight),
-		                                          Member("environmentLight", &FSceneManifest::EnvironmentLight),
 		                                          Member("initialView", &FSceneManifest::InitialView)},
-		                                         7, ValidateSceneManifest);
+		                                         8, ValidateSceneManifest);
+		Result.Migrations.emplace(7,
+		                          [](FArchiveNode::FObject& InFields)
+		                          {
+			                          InFields.erase("mainDirectionalLight");
+			                          InFields.erase("environmentLight");
+		                          });
 		Result.Migrations.emplace(6,
 		                          [](FArchiveNode::FObject&)
 		                          {

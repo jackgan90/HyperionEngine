@@ -70,7 +70,7 @@ void CheckComposition()
 	Node.PointLight() = FScenePointLight{};
 	Node.Components.Add("custom", "test.component");
 	const auto Handle = Scene.AddNode(Node);
-	Scene.SetSettings({Handle, {}, {}});
+	Scene.SetSettings({Handle, {}});
 	HYP_CHECK(Scene.CountNodes(ESceneNodeKind::Camera) == 1);
 	HYP_CHECK(Scene.CountNodes(ESceneNodeKind::PointLight) == 1);
 	HYP_CHECK(Scene.GetNodes(ESceneNodeKind::PointLight) == std::vector<FSceneHandle>{Handle});

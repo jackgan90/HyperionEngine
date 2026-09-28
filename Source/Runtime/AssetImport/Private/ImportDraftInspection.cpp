@@ -126,9 +126,7 @@ void DescribeImportRoot(FImportDraftInfo& OutInfo, const FConvertedAsset& InRoot
 	else if (InRoot.Type->CppType == typeid(FSceneManifest))
 	{
 		const auto& Scene = *static_cast<const FSceneManifest*>(InRoot.Object.get());
-		OutInfo.Details.push_back("Scene structure is read-only | default camera: " + Scene.DefaultCamera +
-		                          " | main light: " + Scene.MainDirectionalLight +
-		                          " | environment: " + Scene.EnvironmentLight);
+		OutInfo.Details.push_back("Scene structure is read-only | default camera: " + Scene.DefaultCamera);
 		OutInfo.TotalNodes = static_cast<std::uint32_t>(Scene.Nodes.size());
 		for (const auto& Node : Page(Scene.Nodes, InQuery))
 		{

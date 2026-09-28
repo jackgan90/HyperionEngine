@@ -1,5 +1,6 @@
 #include "../CascadedShadows.hlsli"
 #include "DirectLighting.hlsli"
+#include "DirectionalLighting.hlsli"
 #include "EnvironmentLighting.hlsli"
 
 float3 EvaluateIndirectLighting(FMaterialParameters InMaterial, float3 InAmbient, float3 InView)
@@ -25,6 +26,7 @@ float3 EvaluateLighting(FMaterialParameters InMaterial, float3 InWorld, float3 I
 	float Shadow =
 	    min(InContactVisibility, DirectionalShadow(InWorld, InMaterial.GeometricNormal, InLight, InDx, InDy));
 	float3 Color = EvaluateDirectLighting(InMaterial, InWorld, InCamera, InLight, InLightColor) * Shadow + Ambient;
+	Color += EvaluateAdditionalDirectionalLighting(InMaterial, InWorld, InCamera);
 	return ShadowDebugColor(Color, InWorld);
 }
 

@@ -76,11 +76,7 @@ inline void RemapSceneHistory(std::span<FSceneHistoryEntry> InHistory, const FSc
 		RemapSceneHandle(Entry.Handle, InMapping);
 		for (auto* Settings : {&Entry.BeforeSettings, &Entry.AfterSettings})
 		{
-			for (auto* Reference :
-			     {&Settings->DefaultCamera, &Settings->MainDirectionalLight, &Settings->EnvironmentLight})
-			{
-				RemapSceneHandle(*Reference, InMapping);
-			}
+			RemapSceneHandle(Settings->DefaultCamera, InMapping);
 		}
 	}
 }

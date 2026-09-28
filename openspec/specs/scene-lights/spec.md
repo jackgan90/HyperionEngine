@@ -1,9 +1,8 @@
 # scene-lights Specification
 
 ## Purpose
-Define Scene-owned directional and environment light state, explicit main-light selection, persistent defaults and one published lighting source for forward, deferred and shadow rendering.
+Define Scene-owned directional and environment light state, additive directional lighting, priority-resolved sky and shadow sources, persistent defaults and consistent immutable publication across rendering paths.
 ## Requirements
-
 ### Requirement: Scene-owned directional and environment lights
 Scene SHALL own directional-light and environment-light nodes with stable identity, hierarchy, enabled state, linear RGB color and intensity. Directional lights SHALL also own a cast-shadows flag. Colors, intensity and their radiance product SHALL be finite and nonnegative. Directional emission forward SHALL derive from the node world minus-Z pose; the existing surface-to-light semantic SHALL receive its opposite. Environment radiance SHALL be independent of node position and orientation.
 
@@ -15,61 +14,30 @@ Scene SHALL own directional-light and environment-light nodes with stable identi
 - **WHEN** a light edit supplies a negative, nonfinite or overflowing radiance value
 - **THEN** the edit is rejected without changing the existing light or publication revisions
 
-### Requirement: Explicit main lighting selection
-The scene SHALL persist explicit selections for one main directional light and one environment light. Multiple candidate nodes SHALL remain editable and persistable, but the builtin pipeline SHALL consume only the selected node of each kind. Empty selections and disabled selected nodes SHALL contribute zero corresponding radiance. Removing a selected node SHALL clear the selection without silently selecting a different light. Creating a node with an environment light, or adding an environment light component to an existing node, SHALL select it in the same undoable transaction only when no environment light is selected. Replacing a selected environment light SHALL require an explicit undoable settings change.
-
-#### Scenario: Multiple candidate lights
-- **WHEN** a scene contains two enabled directional-light candidates and selects only the second
-- **THEN** builtin direct lighting and CSM use the second, and editing the first does not change the rendered lighting
-
-#### Scenario: Remove the selected light
-- **WHEN** the selected directional light is removed
-- **THEN** subsequent frames have zero directional radiance and no directional shadows until the scene explicitly selects or creates a light
-
-#### Scenario: Disable a light ancestor
-- **WHEN** the selected light's ancestor is disabled and subsequently reenabled
-- **THEN** that light contribution disappears and returns through normal scene publication without session parameter edits
-
-#### Scenario: First and second sky light
-- **WHEN** a sky light is created in a scene without an active environment and a second sky light is then created or added as a component
-- **THEN** the first becomes active in its creation transaction, the second remains inactive, and Undo of the first creation clears the selection
-
-#### Scenario: Explicit sky light activation
-- **WHEN** the inactive sky light is set as the active sky light and the change is undone
-- **THEN** the builtin pipeline switches to it and Undo restores the prior selection
-
 ### Requirement: One published lighting source for all builtin paths
-Forward materials, deferred lighting and CSM SHALL consume lighting derived from the same resolved scene publication. Application, CLI, GUI and benchmark light controls SHALL edit scene nodes. Scene-owned lighting SHALL NOT be overwritten by session defaults or external providers for the protected builtin semantics. Existing builtin light semantic names and uniform block layouts SHALL remain stable.
+Forward materials, deferred lighting, sky background and shadows SHALL consume lighting derived from the same immutable scene publication. Application, CLI, GUI and automation controls SHALL edit scene components. Scene-owned lighting SHALL NOT be overwritten by session defaults or external providers for protected builtin semantics. Selected shadow inputs and the full directional list SHALL describe distinct roles.
 
-#### Scenario: Same-frame camera and light edit
-- **WHEN** camera, model parent and main-light state change before a frame is admitted
-- **THEN** all builtin rendering paths consume the same publication's effective state and the old retained frame remains unchanged
-
-#### Scenario: Competing input source
-- **WHEN** a scene-bound caller attempts to override protected light inputs through SetSceneParameters or a custom builtin-light provider
-- **THEN** the conflicting operation or scene-frame admission fails explicitly instead of rendering with a second authoritative light state
+#### Scenario: Same-frame edits
+- **WHEN** priority, transforms and enablement change before frame admission
+- **THEN** all builtin rendering uses that publication and retained frames remain unchanged
 
 ### Requirement: Empty and unshadowed light behavior
-Absent, disabled or zero-radiance directional lights SHALL disable their CSM contribution and publish zero direct radiance with a finite neutral direction. A selected light with cast-shadows disabled SHALL retain direct lighting while disabling CSM. Pipeline shadow quality and preview settings SHALL remain separate from persistent light properties. Ambient, emissive and unlit terms SHALL preserve their independent behavior.
+Absent, disabled or zero-radiance directional lights SHALL NOT compete for shadows. Shadow candidates SHALL require cast-shadows; the highest-priority candidate SHALL supply the one CSM/contact source. Other enabled lights SHALL retain direct lighting. No candidate SHALL disable shadow sampling with finite neutral inputs. Pipeline quality remains separate from authored light properties.
 
-#### Scenario: Toggle cast shadows
-- **WHEN** the selected directional light changes cast-shadows from true to false
-- **THEN** direct lighting remains while shadow views and stale shadow sampling are disabled for the new frame
+#### Scenario: Higher priority without shadows
+- **WHEN** the highest-priority directional light disables cast-shadows and another light remains eligible
+- **THEN** both illuminate and the eligible light supplies shadows
 
-#### Scenario: No lights in a native scene
-- **WHEN** a v4 scene explicitly contains no selected lights
-- **THEN** it stays unlit by directional and environment sources across load, render, save and reload without automatic default-light resurrection
+#### Scenario: Empty scene
+- **WHEN** a scene has no enabled sky or directional lights
+- **THEN** it contributes no corresponding light and no automatic nodes are created
 
 ### Requirement: Default lighting is explicit scene content
-Legacy scene migration SHALL create actual default light nodes matching established radiance and direction. An empty FScene SHALL remain empty. An explicit authored light edit SHALL mutate or explicitly create and select a scene light once after scene initialization, rather than continuously injecting session parameters.
-
-#### Scenario: Load a legacy scene
-- **WHEN** a legacy scene without stored lights is migrated
-- **THEN** the migrated scene contains deterministic default light nodes, preserves the prior appearance, and subsequent edits to those nodes can be saved
+Legacy scene migration SHALL create actual default light nodes where historically required. An empty FScene SHALL remain empty. CLI overrides SHALL edit or explicitly create scene components once, and SHALL NOT continuously inject session parameters or authored main-light selections.
 
 #### Scenario: CLI override followed by save
-- **WHEN** a user applies the existing light-direction CLI override and saves the scene
-- **THEN** the saved scene contains the overridden scene-node direction and reload does not restore the prior session default
+- **WHEN** a light-direction override is applied and saved
+- **THEN** the edited component direction persists on reload
 
 ### Requirement: Persistent environment source selection
 Environment lights SHALL select either ConstantColor or SkyAsset, with an always-present native sky reference, a linear RGB tint, finite yaw in degrees, shared radiance intensity and independently controlled background visibility. New environment values SHALL default to SkyAsset with the Engine default sky. Sky orientation SHALL use explicit yaw, independent of node transform. SkyAsset mode SHALL replace constant ambient, and the constant color SHALL affect only ConstantColor mode. Existing environment records SHALL migrate while retaining their source, yaw orientation and requested sky. A record without a sky reference SHALL receive the Engine default sky. Snapshot and Save As SHALL preserve and rebase requested references, including pending or failed choices.
@@ -92,3 +60,14 @@ Environment loading SHALL be asynchronous and selection-generation-safe. Complet
 #### Scenario: Rapid selection and failure
 - **WHEN** sky A is replaced by B and then a missing asset before B completes
 - **THEN** stale completions do not become authoritative, the failure is reported, and saving never substitutes the previously rendered asset for the requested one
+
+### Requirement: Additive directional lights and priority environment
+All effectively enabled directional lights SHALL contribute their individual direct radiance in builtin Forward, Deferred and transparent paths. One effectively enabled sky SHALL be resolved by Priority and supply background and environment lighting consistently. Sky intensity, background visibility and resource readiness SHALL NOT affect selection. Directional lights SHALL use a global list rather than duplicate entries in every local-light cluster.
+
+#### Scenario: Multiple directions without shadows
+- **WHEN** two enabled nonzero directional lights have different directions/colors and neither casts shadows
+- **THEN** both illuminate the scene, with indirect and emissive terms evaluated once
+
+#### Scenario: Zero or invisible sky
+- **WHEN** the winning sky has zero intensity or disables background visibility
+- **THEN** it remains selected and lower-priority environments do not contribute

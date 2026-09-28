@@ -6,11 +6,11 @@ namespace Hyperion
 void ResolveSceneLightShadows(const FSceneMetadata* InMetadata, FCascadedShadowSettings& InOutDirectional,
                               FContactShadowSettings& InOutContact)
 {
-	if (!InMetadata || !InMetadata->Settings.MainDirectionalLight)
+	if (!InMetadata || !InMetadata->Lighting.Directional.Handle)
 	{
 		return;
 	}
-	const auto Light = InMetadata->DirectionalLights.find(*InMetadata->Settings.MainDirectionalLight);
+	const auto Light = InMetadata->DirectionalLights.find(*InMetadata->Lighting.Directional.Handle);
 	if (Light == InMetadata->DirectionalLights.end() || !Light->second.bEnabled || !Light->second.Light.ShadowSettings)
 	{
 		return;

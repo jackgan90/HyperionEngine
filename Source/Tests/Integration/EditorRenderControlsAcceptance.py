@@ -90,7 +90,7 @@ def author_shadows(agent, output):
         assert version(agent) == before
         completed(agent.call("scene.undo", **version(agent)))
         assert not ready(agent)["dirty"]
-    main = completed(agent.call("light.main.get"))["handle"]
+    main = completed(agent.call("scene.lighting.get"))["shadowDirectionalLight"]
     value = read_light(agent, main)
     assert value["shadowSettings"] is None, value
     settings = completed(agent.call("render.settings.get"))["values"]
@@ -115,12 +115,14 @@ def author_shadows(agent, output):
     assert read_light(agent, main)["shadowSettings"] == shadow
     wait_contact(agent, True, 4 * 1024 * 1024 * 4)
     other = completed(agent.call("scene.node.create", **version(agent), name="Second sun", components=[LIGHT]))["handle"]
-    scene_settings = completed(agent.call("scene.settings.get", **version(agent)))
-    scene_settings["mainDirectionalLight"] = other
-    completed(agent.call("scene.settings.set", **version(agent), settings=scene_settings))
+    other_value = read_light(agent, other)
+    other_value["priority"] = 10
+    write_light(agent, other, other_value)
+    assert completed(agent.call("scene.lighting.get"))["shadowDirectionalLight"] == other
     wait_contact(agent, False, 4 * 2048 * 2048 * 4)
-    scene_settings["mainDirectionalLight"] = main
-    completed(agent.call("scene.settings.set", **version(agent), settings=scene_settings))
+    value["priority"] = 20
+    write_light(agent, main, value)
+    assert completed(agent.call("scene.lighting.get"))["shadowDirectionalLight"] == main
     wait_contact(agent, True)
     path = output / "Authored.hasset"
     saved = completed(agent.wait(agent.call("scene.save", **version(agent), path=str(path))))
@@ -148,7 +150,7 @@ def automation(cli, editor, root, output):
         try:
             agent = AttachedSession(cli, app.target(), False)
             ready(agent)
-            main = completed(agent.call("light.main.get"))["handle"]
+            main = completed(agent.call("scene.lighting.get"))["shadowDirectionalLight"]
             assert read_light(agent, main)["shadowSettings"] == expected
             assert not ready(agent)["dirty"]
             wait_contact(agent, not disabled)

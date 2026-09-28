@@ -246,7 +246,5 @@ void FSceneStorage::ValidateSettings(const FSceneSettings& InSettings) const
 		}
 	};
 	Validate(InSettings.DefaultCamera, ESceneNodeKind::Camera);
-	Validate(InSettings.MainDirectionalLight, ESceneNodeKind::DirectionalLight);
-	Validate(InSettings.EnvironmentLight, ESceneNodeKind::EnvironmentLight);
 }
 } // namespace Hyperion

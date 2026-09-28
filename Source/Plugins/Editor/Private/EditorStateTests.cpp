@@ -44,14 +44,12 @@ void CheckHistoryRemapping()
 	const FSceneHandle B{1, 1, 1};
 	const FSceneHandle NewA{1, 1, 2};
 	const FSceneHandle NewB{1, 0, 2};
-	const FSceneHandle Foreign{2, 0, 1};
 	std::vector<FEditorHistoryEntry> History(2);
 	for (auto& Entry : History)
 	{
 		Entry.Handle = A;
 		Entry.BeforeSettings.DefaultCamera = A;
-		Entry.AfterSettings.MainDirectionalLight = B;
-		Entry.AfterSettings.EnvironmentLight = Foreign;
+		Entry.AfterSettings.DefaultCamera = B;
 		Entry.DeletedSubtree = {{A, {}}, {B, {}}};
 		Entry.Edits = {{B, {}, {}}};
 		Entry.DeletedRoots = {A};
@@ -62,7 +60,7 @@ void CheckHistoryRemapping()
 	for (const auto& Entry : History)
 	{
 		Check(Entry.Handle == NewA && Entry.BeforeSettings.DefaultCamera == NewA);
-		Check(Entry.AfterSettings.MainDirectionalLight == NewB && Entry.AfterSettings.EnvironmentLight == Foreign);
+		Check(Entry.AfterSettings.DefaultCamera == NewB);
 		Check(Entry.DeletedSubtree[0].first == NewA && Entry.DeletedSubtree[1].first == NewB);
 		Check(Entry.Edits[0].Handle == NewB && Entry.DeletedRoots.front() == NewA);
 		Check(Entry.BeforeSelection.All() == std::vector<FSceneHandle>({NewA, NewB}));

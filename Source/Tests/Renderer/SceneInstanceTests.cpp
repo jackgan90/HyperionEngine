@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <iostream>
+#include <source_location>
 #include <thread>
 
 using namespace Hyperion;
@@ -131,7 +132,9 @@ struct FSceneFixture
 	}
 };
 
-template<typename Predicate> void Await(FSceneInstance& InScene, const Predicate& InPredicate)
+template<typename Predicate>
+void Await(FSceneInstance& InScene, const Predicate& InPredicate,
+           std::source_location InLocation = std::source_location::current())
 {
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 	while (!InPredicate() && std::chrono::steady_clock::now() < Deadline)
@@ -140,7 +143,15 @@ template<typename Predicate> void Await(FSceneInstance& InScene, const Predicate
 		HYP_CHECK(InScene.GetStatus().Error.empty());
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
-	HYP_CHECK(InPredicate());
+	if (!InPredicate())
+	{
+		std::string Message = "Scene wait timed out at line " + std::to_string(InLocation.line());
+		for (const auto& Model : InScene.GetModels())
+		{
+			Message += "\n" + Model.Id + ": " + InScene.GetError(Model.Handle);
+		}
+		throw std::runtime_error(Message);
+	}
 }
 
 void CheckLoadingEdits(FSceneFixture& InFixture)
@@ -572,7 +583,7 @@ void CheckNodeOnlySnapshot(FSceneFixture& InFixture)
 	const auto Other = Scene.AddNode(MakeSceneCameraNode("other", {2, 0, 8}, {}));
 	const auto Sun = Scene.AddNode(MakeSceneDirectionalLightNode("sun"));
 	const auto Ambient = Scene.AddNode(MakeSceneEnvironmentLightNode("ambient"));
-	Scene.SetSettings({Camera, Sun, Ambient});
+	Scene.SetSettings({Camera, {}});
 	Scene.Tick();
 	HYP_CHECK(Scene.GetStatus().Nodes == 5 && Scene.GetStatus().Models == 0 && Scene.GetStatus().Cameras == 2);
 	const auto Frozen = Scene.Snapshot("NodeOnly.hasset");
@@ -581,7 +592,7 @@ void CheckNodeOnlySnapshot(FSceneFixture& InFixture)
 	Scene.Reparent(Camera, {}, ESceneReparentMode::KeepWorld);
 	HYP_CHECK(Scene.RemoveNodeKeepChildren(Parent));
 	HYP_CHECK(Frozen.Nodes[1].Parent == "rig" && Frozen.Nodes[1].Camera->FocusDistance == 8);
-	Scene.SetSettings({Other, Sun, Ambient});
+	Scene.SetSettings({Other, {}});
 	Scene.Tick();
 	const auto Saved = Scene.Snapshot("NodeOnly.hasset");
 	F.IO.WriteAsync("NodeOnly.hasset", EncodeAsset(RecordType<FSceneManifest>(), &Saved).Bytes).Get(F.Tasks);
@@ -603,7 +614,7 @@ void CheckSceneFrameTokens(FSceneFixture& InFixture)
 	FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 8}, {}));
 	const auto Sun = Scene.AddNode(MakeSceneDirectionalLightNode("sun"));
-	Scene.SetSettings({Camera, Sun, {}});
+	Scene.SetSettings({Camera, {}});
 	Scene.Tick();
 	const auto InitialToken = Scene.GetToken();
 	const auto Seed = F.Session->FreezeSceneFrame(InitialToken);
@@ -688,7 +699,7 @@ void CheckStrictCameraPreview(FSceneFixture& InFixture)
 	auto Node = MakeSceneCameraNode("preview", {4, 2, 8}, {});
 	Node.Parent() = Parent.Id;
 	const auto Preview = Scene.AddNode(Node);
-	Scene.SetSettings({Default, {}, {}});
+	Scene.SetSettings({Default, {}});
 	FSceneViewRequest Request;
 	Request.Width = 400;
 	Request.Height = 200;
@@ -754,7 +765,7 @@ void CheckSceneViewSelection(FSceneFixture& InFixture)
 	FSceneInstance Scene(*F.Session, F.Tasks, F.Assets);
 	const auto A = Scene.AddNode(MakeSceneCameraNode("a", {0, 0, 8}, {}));
 	const auto B = Scene.AddNode(MakeSceneCameraNode("b", {3, 0, 8}, {3, 0, 0}));
-	Scene.SetSettings({A, {}, {}});
+	Scene.SetSettings({A, {}});
 	Scene.Tick();
 	FSceneViewRequest Request;
 	Request.Width = 400;
@@ -836,9 +847,12 @@ void CheckSceneViewSelection(FSceneFixture& InFixture)
 void CheckSceneMaterialGuards(FSceneFixture& InFixture)
 {
 	auto& F = InFixture;
-	constexpr std::array<const char*, 5> Names{"Engine.Scene.MainDirectionalLightDirection",
-	                                           "Engine.Scene.MainDirectionalLightColor", "Engine.Scene.AmbientColor",
-	                                           "Engine.View.ViewProjection", "Engine.View.CameraPosition"};
+	constexpr std::array<const char*, 6> Names{"Engine.Scene.MainDirectionalLightDirection",
+	                                           "Engine.Scene.MainDirectionalLightColor",
+	                                           "Engine.Scene.AmbientColor",
+	                                           "Engine.View.ViewProjection",
+	                                           "Engine.View.CameraPosition",
+	                                           "Engine.Scene.DirectionalLights"};
 	for (const auto Name : Names)
 	{
 		FRenderSession Session(F.Tasks, *F.Device, F.Compiler);
@@ -939,7 +953,7 @@ void CheckModelStatusCache()
 	}
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 3}, {}));
 	const auto Light = Scene.AddNode(MakeSceneDirectionalLightNode("sun"));
-	Scene.SetSettings({Camera, Light, {}});
+	Scene.SetSettings({Camera, {}});
 	Await(Scene,
 	      [&]
 	      {
@@ -983,7 +997,7 @@ void CheckLargeCoordinateView(FSceneFixture& InFixture)
 	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("large-coordinate", {0, 0, 3}, {}));
 	Scene.SetWorldTransform(Camera, Translation({33554432.f, 33554432.f, 33554432.f}));
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	Scene.Tick();
 	const auto Seed = InFixture.Session->FreezeSceneFrame(Scene.GetToken());
 	InFixture.Tasks.Wait(
@@ -1008,7 +1022,7 @@ void CheckNavigationPrecision(FSceneFixture& InFixture)
 	const FVec3 Eye{0, 6, 16};
 	const FVec3 Target{0, 0, -8};
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("precision", Eye, Target));
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	const auto Offset = Subtract(Eye, Target);
 	const float Distance = Length(Offset);
 	const float Pitch = std::asin(Offset.Y / Distance);
@@ -1049,7 +1063,7 @@ void CheckSceneNavigation(FSceneFixture& InFixture)
 	auto Node = MakeSceneCameraNode("navigation", {0, 0, 8}, {});
 	Node.Parent() = Rig.Id;
 	const auto Camera = Scene.AddNode(Node);
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	FSceneCameraPose Pose;
 	Scene.SetWorldTransform(Camera, Translation({4, 1, 8}));
 	DollySceneCamera(Scene, .5f);
@@ -1062,11 +1076,11 @@ void CheckSceneNavigation(FSceneFixture& InFixture)
 	const auto Pivot = GetSceneNavigationPivot(Scene);
 	HYP_CHECK(std::abs(Pivot.X - 4) < .0001f && std::abs(Pivot.Y - 1) < .0001f);
 	const auto Other = Scene.AddNode(MakeSceneCameraNode("other-navigation", {0, 0, 10}, {}));
-	Scene.SetSettings({Other, {}, {}});
+	Scene.SetSettings({Other, {}});
 	PanSceneCamera(Scene, {1, 0, 0});
 	Scene.GetCameraPose(Other, Pose);
 	HYP_CHECK(std::abs(Pose.Eye.X - .8f) < .0001f);
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	Scene.SetWorldTransform(Camera, Translation({0, 0, 8}));
 	Scene.SetLocalTransform(Parent, Scale({0, 1, 1}));
 	const auto Before = Serialize(Scene.Snapshot("Navigation.hasset"));
@@ -1125,7 +1139,7 @@ void CheckPendingHierarchy()
 	Scene.Reparent(Removed, DeletedParent, ESceneReparentMode::KeepLocal);
 	Scene.RemoveSubtree(DeletedParent);
 	const auto Replacement = Scene.Add({"replacement after subtree"}, "good");
-	Scene.SetSettings({Camera, Light, {}});
+	Scene.SetSettings({Camera, {}});
 	Scene.Tick();
 	HYP_CHECK(Scene.GetStatus().bHasActiveCamera && !Scene.FindNode(Kept)->Model()->Data);
 	F.Files->bRelease = true;
@@ -1142,7 +1156,8 @@ void CheckPendingHierarchy()
 	HYP_CHECK(Scene.GetCameraPose(Camera, Pose) && Pose.Eye.X == 3 && Pose.Eye.Z == 8);
 	HYP_CHECK(Scene.FindNode(Camera)->Camera()->FocusDistance == 6);
 	HYP_CHECK(Scene.FindNode(Light)->DirectionalLight()->Color.Z == .6f);
-	HYP_CHECK(Scene.GetSettings().MainDirectionalLight == Light);
+	HYP_CHECK(Scene.GetLightingSelection().Directional.Handle == Scene.FindHandle("light-main"));
+	HYP_CHECK(!Scene.FindNode(Light)->DirectionalLight()->bCastShadows);
 	std::cout << "Gated model completion preserves parent, camera/light edits and subtree tombstones\n";
 }
 

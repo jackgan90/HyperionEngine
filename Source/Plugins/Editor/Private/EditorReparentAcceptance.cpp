@@ -85,17 +85,7 @@ void FEditorPlugin::PrepareReparentExercise()
 	}
 	for (auto& Node : Lighting)
 	{
-		const auto Handle = Scene->AddNode(Node);
-		auto Settings = Scene->GetSettings();
-		if (Node.DirectionalLight())
-		{
-			Settings.MainDirectionalLight = Handle;
-		}
-		if (Node.EnvironmentLight())
-		{
-			Settings.EnvironmentLight = Handle;
-		}
-		Scene->SetSettings(Settings);
+		Scene->AddNode(Node);
 	}
 	ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
 	bViewportCameraInitialized = true;

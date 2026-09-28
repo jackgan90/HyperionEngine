@@ -63,7 +63,7 @@ Renderer bridge 把组件发布为派生状态。Main UI 不读取 `IRenderPrimi
 
 ## 灯光阴影属性
 
-Directional Light 记录版本 2 增加可选 `shadowSettings`，包含独立的 `directional` 和 `contact` CPU 参数组。Details 的 **Override Shadow settings** 创建或清除该值，组内编辑沿用组件验证、事务、撤销/重做和原生场景保存。版本 1 读取后保持无覆盖值，不在加载时修改资产；渲染继续采用兼容的会话默认设置。切换主方向光会使用对应灯光的参数，不会把上一盏灯的值写入默认配置。`castsShadows` 同时约束两类阴影。
+Directional Light 记录版本 3 增加整数 `priority`（默认 0）；版本 2 增加可选 `shadowSettings`，包含独立的 `directional` 和 `contact` CPU 参数组。Details 的 **Override Shadow settings** 创建或清除该值，组内编辑沿用组件验证、事务、撤销/重做和原生场景保存。版本 1 读取后保持无覆盖值，不在加载时修改资产；渲染继续采用兼容的会话默认设置。Priority 选出的阴影方向光使用自己的参数，不会把上一盏灯的值写入默认配置。`castShadows` 同时约束两类阴影。
 
 这些类型位于 Scene，不依赖 Renderer 或 RHI；Renderer 从不可变场景发布中解析主光设置。当前 Point / Spot Light 不暴露阴影字段，未来可扩展相应方法组。Details 不再附加渲染诊断伪组件，运行时 primitive 诊断只通过只读服务查询。
 

@@ -132,7 +132,7 @@ public:
 	bool Button(const char* InLabel, bool bInEnabled = true);
 	bool CenteredButton(const char* InLabel, bool bInEnabled = true);
 	bool IconButton(const char* InId, EGuiIcon InIcon, const char* InTooltip, bool bInSelected = false);
-	void Tooltip(const char* InText);
+	void Tooltip(const char* InText, std::span<const FPropertyTooltipLine> InLines = {});
 	float AvailableWidth() const;
 	bool BeginSplitPane(const char* InId, float InLeftWidth = 220);
 	bool BeginTileGrid(const char* InId, float InTileWidth = 108);
@@ -152,12 +152,15 @@ public:
 	bool InputInteger(const char* InLabel, std::int64_t& InValue);
 	bool InputInteger(const char* InLabel, std::uint64_t& InValue);
 	// Pair around a value widget with a hidden label to draw a left-aligned property name.
-	void BeginPropertyRow(const char* InLabel, bool* bOutExpanded = nullptr, const char* InTooltip = nullptr);
+	void BeginPropertyRow(const char* InLabel, bool* bOutExpanded = nullptr, const char* InTooltip = nullptr,
+	                      std::span<const FPropertyTooltipLine> InTooltipLines = {},
+	                      const char* InWarningTooltip = nullptr);
 	void EndPropertyRow();
 	void BeginDisabled(bool bInDisabled);
 	void EndDisabled();
 	bool EditRecord(FRecordDraft& InDraft, std::string_view InIdentity,
-	                const std::function<void(std::string_view, FVec4)>& InObserve = {});
+	                const std::function<void(std::string_view, FVec4)>& InObserve = {},
+	                const std::function<void(std::string_view, FPropertyPresentation&)>& InPresent = {});
 	bool EditRecord(FRecordSelectionDraft& InDraft, std::string_view InIdentity,
 	                const std::function<void(std::string_view, FVec4)>& InObserve = {},
 	                std::span<const std::string> InReadOnlyFields = {});

@@ -12,6 +12,7 @@ std::shared_ptr<const FSceneMetadata> FSceneRenderBridge::PrepareMetadata(
 	Result->Token = {Scene.GetIdentity(), AttachmentEpoch, Metadata ? Metadata->Token.PublicationSerial + 1 : 1,
 	                 Scene.GetRevision()};
 	Result->Settings = Scene.GetSettings();
+	Result->Lighting = Scene.GetLightingSelection();
 	const bool bLocalChanged = std::any_of(
 	    InChanges.begin(), InChanges.end(),
 	    [&](const FSceneChange& InChange)

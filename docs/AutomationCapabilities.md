@@ -25,7 +25,8 @@
 | 对象剪贴板 | `scene.selection.copy`、`scene.clipboard.info/paste` | 与 Ctrl+C/Ctrl+V 共用系统剪贴板和不可变子树快照；同一 Editor、同一文档；数字后缀、原父级/local、一次粘贴一个历史事务；普通文本替换使旧对象不可粘贴。返回摘要，新 handle 通过 selection.get 或 nodes.list 查询 |
 | 放置 primitive/light/native model | `scene.placement.list/place` | `IScenePlacement` 与 Editor registry 的准备/提交路径；显式 position 为世界坐标。Sky Light 默认使用 SkyAsset 与 Engine Cloudy；放置或新增天空光组件仅在没有活动天空光时自动激活 |
 | Inspector 组件 | `scene.components.list`、`scene.component_types.list`、`scene.components.edit_structure`、`scene.component.<type>.get/set/set_batch` | `SceneEditing` 与组件反射；组件实例 ID 来自 list，不必等于类型 ID。保留资源绑定，完整候选经文档/场景校验；资源模型组件必须通过 prepared placement 创建 |
-| 主相机、主灯、活动天空光、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换。`environmentLight` 与 Details 的 Set as active sky light 共用 |
+| 默认相机、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换 |
+| 灯光 Priority 与生效诊断 | `scene.component.<type>.get/set/set_batch`、`scene.lighting.get` | 与 Details 共用组件、校验、事务、历史和保存；Priority 为有符号 32 位整数，默认 0，越大越优先；诊断返回阴影方向光、天空光、顶层同优先级冲突、有效启用状态和天空资产错误；无独立主光设置接口 |
 | 浏览相机和临时视口选项 | `view.get/set/frame_scene/preview_camera` | `ISceneViewport` / SceneCameraController；null option 表示此 host 不支持。patch 中 null 保留原值；曝光、Visualizer 0–6、独立状态/profiling HUD 和 0–255 分类掩码均为临时视口状态 |
 | 用浏览视角编写相机 | `view.save_initial/create_camera/apply_to_camera` | Editor 与 GUI 同一文档操作；与临时相机移动区分 |
 | 非场景资产页签 | `asset.open/info/documents.list/activate/close/save/undo/redo/rename` | Editor 发布 `IAssetWorkspace`，GUI 和多个 agent 使用同一草稿、历史与 busy 状态；其他宿主可使用独立 CPU 文档 |
@@ -35,7 +36,7 @@
 | 天空属性 | `sky.radiance.get/specular.get/brdf.get/irradiance.get/convention.get` | GUI 中这些产品为只读；天空重新生成使用 import；名称使用 asset.rename |
 | 资产预览 | `asset.preview.get/set` | `IAssetPreviewWorkspace`；模型/材质/天空 camera、曝光、形状、yaw；纹理 mip/face/channel/EV/zoom/pan/fit/checker。临时预览不增加资产 generation/history |
 | 渲染与配置 | `render.settings.get/set/save`、`render.shadows.get/set` | `IRenderSettings`；完整候选校验、revision 和原子保存；activeReversedZ 与待重启值分离；不修改场景 history；shadow 参数为旧场景的会话默认值，已配置的主方向光组件参数优先 |
-| 灯光阴影属性 | `scene.component.hyperion.scenedirectionallight.get/set`、`light.main.get/set` | `shadowSettings` 可选嵌套组件字段；SceneEditing 验证、历史和原生保存；point/spot 尚不支持阴影 |
+| 灯光阴影属性 | `scene.component.hyperion.scenedirectionallight.get/set` | `shadowSettings` 可选嵌套组件字段；SceneEditing 验证、历史和原生保存；point/spot 尚不支持阴影 |
 | 渲染结果和诊断 | `render.statistics`、`render.component_diagnostics`、`render.screenshot` | 完成帧统计、分页 primitive 诊断和现有 readback。PNG 成功返回时文件已写入，返回目标本地路径、尺寸、frame 和 bytes |
 | RenderDoc | `renderdoc.status/capture/open/set_preference` | 复用 host capture/replay；Editor preference 与 GUI 同样持久化；未编译/缺 DLL/不可绘制等情况返回 unavailable |
 | GUI scale / Profiling | `gui.scale.get/set`、`profiling.get/set` | 共用 GUI scale 和 Core profiling 控制。scale 下一 GUI frame 生效并沿正常偏好路径保存；profiling 取决于构建和 collector |
@@ -87,7 +88,7 @@
 
 - `asset.documents.list` / `asset.info` 包含 loading/failed 页签的稳定 ID、state/error；未构造草稿的 generation 为 `"0"`。可 activate 或 close 后重新 open，不必清空整个 workspace。
 - `scene.component.<type>.set_batch` 的 handles/components/values 三个数组一一对应，长度为 1–128。读取各对象后分别保留未修改字段，完整批次验证后一次提交和 Undo；旧 set 的广播语义保持不变。
-- `light.main.get/set` 使用当前主灯 handle/revision，经 SceneEditing 修改 authored 节点；支持 undo/redo 和场景保存。相机浏览、剔除和渲染诊断设置为临时状态。
+- `scene.lighting.get` 只读返回当前推导结果。编辑灯光通过 typed component 操作和 Transform 操作，与 GUI 相同；旧 `light.main.get/set` 已移除。相机浏览、剔除和渲染诊断设置为临时状态。
 - `render.statistics.sceneError` 优先报告当前 scene producer 的终止错误，否则报告场景准备错误。
 - `application.close.status/request` 由 Editor 发布正常关闭服务。action 为 0（默认：拒绝未保存内容）、1（保存后退出）、2（明确丢弃后退出）、3（取消退出，不取消已接收保存）。Editor 未命名脏场景保存退出须提供 scenePath。
 - 未发布导入属性修改参与 close 的 dirty 与内容根保护；action=1 拒绝 dirty 导入草稿，须先 submit 或显式 discard，action=2 明确丢弃。准备/发布中的草稿参与 busy；正常退出按插件生命周期排空工作。

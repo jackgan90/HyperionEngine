@@ -255,7 +255,7 @@ struct FAsyncModelFixture
 		const auto View = Scene.AddNode(MakeSceneCameraNode("camera", {2, 2, 7}, {}));
 		const auto Light = Scene.AddNode(MakeSceneDirectionalLightNode("light"));
 		const auto Sky = Scene.AddNode(MakeSceneEnvironmentLightNode("sky"));
-		Scene.SetSettings({View, Light, Sky});
+		Scene.SetSettings({View, {}});
 		Load = LoadNativeModel(InAssets, InTasks, InPath, Cancellation, &InSession.GetResources());
 	}
 

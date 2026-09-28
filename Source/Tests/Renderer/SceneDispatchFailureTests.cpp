@@ -16,7 +16,7 @@ void CheckRetry(FRenderSession& InSession, FTaskSystem& InTasks, int InFailureIn
 	std::cerr << "Case " << InFailureIndex << " first=" << bInFirstPublication << " start\n";
 	FScene Scene;
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 3}, {}));
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	FSceneRenderBridge Bridge(Scene, InSession, InTasks);
 	if (!bInFirstPublication)
 	{

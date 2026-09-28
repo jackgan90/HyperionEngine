@@ -79,8 +79,8 @@ public:
 	void FinishInteraction();
 	void CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision,
 	                 std::uint64_t InInteraction = 0);
-	// Created or newly added lights become main/environment lights only when that selection is empty.
-	FSceneHandle CommitCreate(FSceneNode InNode, bool bInAssignLights = true);
+	// Light selection is derived from component priority; creation authors no separate selection.
+	FSceneHandle CommitCreate(FSceneNode InNode);
 	// Structural operations share document history and resource-preserving target operations.
 	FSceneHandle CommitDuplicate(FSceneHandle InHandle);
 	void CommitRemoveKeepChildren(FSceneHandle InHandle);
@@ -107,7 +107,6 @@ public:
 	void ReplaceSelection(FSceneSelection InSelection);
 
 private:
-	void AssignAddedEnvironment(const FSceneHistoryEntry& InEntry);
 	void RestoreHistory(std::size_t InIndex, bool bInAfter);
 	void RestoreDeletedSubtree(std::size_t InIndex);
 	void RestoreCreatedBatch(std::size_t InIndex, bool bInAfter);

@@ -1,3 +1,4 @@
+#include "DirectionalLighting.h"
 #include "EnvironmentParameters.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 
@@ -8,6 +9,15 @@ namespace
 FViewport Viewport(const FRenderView& InView)
 {
 	return InView.Viewport.value_or(FViewport{0, 0, float(InView.Width), float(InView.Height)});
+}
+
+std::shared_ptr<const FMaterialDefinition> LightingMaterial(std::string InName, std::string InShader)
+{
+	// Fullscreen passes receive already resolved values as manual parameters, without scene providers.
+	auto Description = MakeFullscreenMaterial(std::move(InName), std::move(InShader))->GetDescription();
+	Description.Parameters.push_back(
+	    {"Pixel:HyperionDirectionalLightsV1", FMaterialParameterType::Resource(EMaterialValueKind::ReadBuffer)});
+	return std::make_shared<const FMaterialDefinition>(std::move(Description));
 }
 
 void SetLightingParameters(FFullscreenPassDesc& InPass, FRenderSession& InSession, const FMaterialFrameContext& InFrame,
@@ -22,6 +32,9 @@ void SetLightingParameters(FFullscreenPassDesc& InPass, FRenderSession& InSessio
 	Set("Viewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height}));
 	Set("DepthRange", FMaterialValue::Float(FVec2{View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)}));
 	Set("Eye", FMaterialValue::Float(InMain.Eye));
+	const auto Directionals = InSession.ResolveFrameSemantic(InFrame, DirectionalLightsSemantic);
+	InPass.Parameters.push_back(
+	    {"Pixel:HyperionDirectionalLightsV1", Directionals ? *Directionals : DirectionalLightBuffer()});
 	for (const auto& Default : EnvironmentParameters())
 	{
 		const auto Value = InSession.ResolveFrameSemantic(InFrame, Default.Name);
@@ -51,12 +64,12 @@ void SetLightingParameters(FFullscreenPassDesc& InPass, FRenderSession& InSessio
 FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, const FMaterialFrameContext& InFrame,
                                                    FVec4 InClear) const
 {
-	static const auto Material = MakeFullscreenMaterial("Deferred lighting", "Deferred/Lighting.hlsl");
-	static const auto Clustered = MakeFullscreenMaterial("Deferred clustered lighting", "Deferred/Clustered.hlsl");
-	static const auto ClusterOnly = MakeFullscreenMaterial("Deferred cluster only", "Deferred/ClusteredOnly.hlsl");
-	static const auto Contact = MakeFullscreenMaterial("Deferred contact lighting", "Deferred/LightingContact.hlsl");
+	static const auto Material = LightingMaterial("Deferred lighting", "Deferred/Lighting.hlsl");
+	static const auto Clustered = LightingMaterial("Deferred clustered lighting", "Deferred/Clustered.hlsl");
+	static const auto ClusterOnly = LightingMaterial("Deferred cluster only", "Deferred/ClusteredOnly.hlsl");
+	static const auto Contact = LightingMaterial("Deferred contact lighting", "Deferred/LightingContact.hlsl");
 	static const auto ClusterContact =
-	    MakeFullscreenMaterial("Deferred clustered contact lighting", "Deferred/ClusteredContact.hlsl");
+	    LightingMaterial("Deferred clustered contact lighting", "Deferred/ClusteredContact.hlsl");
 	const bool bClustered = Settings.bClusteredLighting && LastStatistics.LocalLights.bActive;
 	const auto Direct = Session.ResolveFrameSemantic(InFrame, "Engine.Scene.MainDirectionalLightColor");
 	if (!Direct || Direct->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
@@ -80,14 +93,8 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	}
 	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
-	if (const auto Metadata = InFrame.GetSceneMetadata(); Metadata && Metadata->Settings.EnvironmentLight)
-	{
-		const auto Found = Metadata->EnvironmentLights.find(*Metadata->Settings.EnvironmentLight);
-		if (Found != Metadata->EnvironmentLights.end())
-		{
-			Result.ResourceLifetime = Found->second.Light.Data;
-		}
-	}
+	// Manual fullscreen bindings must retire with their immutable scene inputs, including directional buffers.
+	Result.ResourceLifetime = InFrame.Inputs.Scopes[static_cast<std::size_t>(EMaterialScope::Scene)].Lifetime;
 	Result.Statistics = FullscreenStatistics;
 	Result.Viewport = Viewport(InMain);
 	Result.Targets =

@@ -35,9 +35,11 @@ def authoring(cli, editor, assets, output):
         assert not schema["unavailable"], schema
         offset = 0
         described_types = set()
+        operations = set()
         while True:
             page = agent.request("api.search", {"offset": offset, "limit": 50})
             for item in page["items"]:
+                operations.add(item["id"])
                 definition = agent.request("api.describe", {"operation": item["id"]})
                 assert "inputSchema" in definition and "outputSchema" in definition, definition
                 for type_id in referenced_types(definition):
@@ -48,6 +50,11 @@ def authoring(cli, editor, assets, output):
             if page["nextOffset"] is None:
                 break
             offset = page["nextOffset"]
+        assert "scene.lighting.get" in operations
+        assert not {"light.main.get", "light.main.set"} & operations
+        for light_type in ("hyperion.scenedirectionallight", "hyperion.sceneenvironmentlight"):
+            light_schema = agent.request("types.describe", {"type": light_type})
+            assert light_schema["properties"]["priority"]["type"] == "integer", light_schema
         group = completed(agent.call("scene.node.create", document=info["document"],
                                      revision=info["revision"], name="Agent group"))
         info = ready(peer)
@@ -282,19 +289,22 @@ def render_controls(cli, editor, assets, output):
         info = ready(agent)
         selected = completed(agent.call("scene.selection.get", document=info["document"], revision=info["revision"]))
         assert selected["primary"] is not None
-        completed(agent.call("scene.node.create", document=info["document"], revision=info["revision"], name="Sun", components=["hyperion.scenedirectionallight"]))
-        light = completed(agent.call("light.main.get"))
-        original_light = dict(light["light"])
-        light["light"]["intensity"] = 2.25
-        light["direction"] = {"x": 1, "y": 2, "z": 3}
-        updated = completed(agent.call("light.main.set", **light))
-        assert updated["light"]["intensity"] == 2.25
-        assert agent.call("light.main.set", **light)["error"]["code"] == "stale_revision"
-        updated["direction"] = {"x": 0, "y": 0, "z": 0}
-        assert agent.call("light.main.set", **updated)["error"]["code"] == "invalid_arguments"
+        light_type = "hyperion.scenedirectionallight"
+        sun = completed(agent.call("scene.node.create", document=info["document"], revision=info["revision"], name="Sun", components=[light_type]))["handle"]
+        info = ready(agent)
+        original_light = completed(agent.call(f"scene.component.{light_type}.get", document=info["document"], revision=info["revision"], handle=sun, component=light_type))
+        light = dict(original_light, intensity=2.25, priority=10)
+        request = dict(document=info["document"], revision=info["revision"], handles=[sun], component=light_type, value=light)
+        completed(agent.call(f"scene.component.{light_type}.set", **request))
+        assert completed(agent.call("scene.lighting.get"))["shadowDirectionalLight"] == sun
+        assert agent.call(f"scene.component.{light_type}.set", **request)["error"]["code"] == "stale_revision"
+        info = ready(agent)
+        request.update(revision=info["revision"], value=dict(light, priority=2**31))
+        assert agent.call(f"scene.component.{light_type}.set", **request)["error"]["code"] == "invalid_arguments"
         info = ready(agent)
         completed(agent.call("scene.undo", document=info["document"], revision=info["revision"]))
-        assert completed(agent.call("light.main.get"))["light"] == original_light
+        info = ready(agent)
+        assert completed(agent.call(f"scene.component.{light_type}.get", document=info["document"], revision=info["revision"], handle=sun, component=light_type)) == original_light
         assert completed(agent.call("render.statistics"))["ready"]
         screenshot = completed(agent.wait(agent.call("render.screenshot", path=str(output / "Render.png"), overwrite=True)))
         assert pathlib.Path(screenshot["path"]).is_file()

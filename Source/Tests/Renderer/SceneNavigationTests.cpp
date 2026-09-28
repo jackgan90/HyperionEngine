@@ -662,7 +662,6 @@ void CheckSnapshotIsolationAndFailure(FSceneFixture& InFixture)
 	const auto Light = Scene.AddNode(MakeSceneDirectionalLightNode("save-light"));
 	auto Settings = Scene.GetSettings();
 	Settings.DefaultCamera = Camera;
-	Settings.MainDirectionalLight = Light;
 	Scene.SetSettings(Settings);
 	Scene.Tick();
 	HYP_CHECK(Scene.GetNodes(ESceneNodeKind::Camera).size() == 2);
@@ -724,8 +723,8 @@ void CheckEmptyAndNodeOnlySave(FSceneFixture& InFixture)
 			Camera.Parent() = "saved-group";
 			FSceneSettings Settings;
 			Settings.DefaultCamera = Scene.AddNode(Camera);
-			Settings.MainDirectionalLight = Scene.AddNode(MakeSceneDirectionalLightNode("saved-sun"));
-			Settings.EnvironmentLight = Scene.AddNode(MakeSceneEnvironmentLightNode("saved-environment"));
+			Scene.AddNode(MakeSceneDirectionalLightNode("saved-sun"));
+			Scene.AddNode(MakeSceneEnvironmentLightNode("saved-environment"));
 			Scene.SetSettings(Settings);
 		}
 		F.Tick();

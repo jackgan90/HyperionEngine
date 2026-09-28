@@ -140,13 +140,12 @@ void CheckNodeIdentityAndChanges()
 	HYP_CHECK(Scene.SetCamera(Camera, CameraValue) && Scene.SetWorldTransform(Camera, World(Scene, Camera)));
 	HYP_CHECK(Scene.SetModelComponent(Model, *Scene.FindNode(Model)->Model()) && Scene.SetEnabled(Parent, true));
 	HYP_CHECK(Scene.Reparent(Model, Parent, ESceneReparentMode::KeepWorld) && Scene.GetRevision() == Revision);
-	Scene.SetSettings({Camera, Light, Ambient});
+	Scene.SetSettings({Camera, {}});
 	Scene.Acknowledge(Scene.GetRevision());
 	Scene.RemoveSubtree(Light);
-	HYP_CHECK(!Scene.GetSettings().MainDirectionalLight && Scene.GetSettings().DefaultCamera == Camera);
+	HYP_CHECK(!Scene.GetLightingSelection().Directional.Handle && Scene.GetSettings().DefaultCamera == Camera);
 	const auto Removed = Scene.GetChanges();
-	HYP_CHECK(Removed.size() == 2 && Removed[0].bRemoved && Removed[0].Kind == ESceneNodeKind::DirectionalLight);
-	HYP_CHECK(Removed[1].Settings && !Removed[1].Settings->MainDirectionalLight);
+	HYP_CHECK(Removed.size() == 1 && Removed[0].bRemoved && Removed[0].Kind == ESceneNodeKind::DirectionalLight);
 	const auto Reused = Scene.AddNode(Group("new"));
 	HYP_CHECK(Reused.Slot == Light.Slot && Reused.Generation != Light.Generation && !Scene.FindNode(Light));
 	HYP_CHECK(Scene.GetNodes().back() == Reused && !Scene.SetName(Light, "stale"));
@@ -166,7 +165,7 @@ void CheckNodeIdentityAndChanges()
 	RejectUnchanged(Scene,
 	                [&]
 	                {
-		                Scene.SetSettings({ForeignHandle, {}, {}});
+		                Scene.SetSettings({ForeignHandle, {}});
 	                });
 	const auto Generated = Scene.AddNode(Group(""));
 	HYP_CHECK(!Scene.FindNode(Generated)->Id.empty());
@@ -207,7 +206,7 @@ void CheckInheritedEnabledAndRemoval()
 	HYP_CHECK(Scene.FindNode(Camera)->Parent().empty() && Near(World(Scene, Camera), Before) &&
 	          Scene.IsEffectivelyEnabled(Camera));
 	HYP_CHECK(Scene.GetNodes().size() == 2 && Scene.CountNodes(ESceneNodeKind::Model) == 0);
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	Scene.RemoveSubtree(Camera);
 	HYP_CHECK(!Scene.GetSettings().DefaultCamera && Scene.GetNodes() == std::vector<FSceneHandle>{Other});
 }
@@ -268,7 +267,7 @@ void CheckWideKeepChildren()
 		Worlds.push_back(World(Scene, Child));
 		HYP_CHECK(!Scene.IsEffectivelyEnabled(Child));
 	}
-	Scene.SetSettings({Children.front(), {}, {}});
+	Scene.SetSettings({Children.front(), {}});
 	auto ExpectedOrder = Scene.GetNodes();
 	std::erase(ExpectedOrder, Removed);
 	std::vector<FSceneHandle> ExpectedChildren{Scene.FindHandle("before"), Scene.FindHandle("after")};

@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/Scene/LightSelection.h"
 #include <algorithm>
 #include <cmath>
 
@@ -140,43 +141,58 @@ std::optional<FSceneHandle> FEditorPlugin::PickLightMarker(FVec2 InPoint) const
 	return {};
 }
 
-void FEditorPlugin::DrawMainLightAction(FSceneHandle InHandle)
+void FEditorPlugin::InspectLightProperty(const FSceneNodeView& InView, const FSceneComponent& InComponent,
+                                         std::string_view InField, FPropertyPresentation& InOutPresentation) const
 {
-	const bool bMain = Scene->GetSettings().MainDirectionalLight == InHandle;
-	Gui->TextWrapped(bMain ? "Main directional light" : "Additional directional light (not used for scene lighting)");
-	if (Gui->Button("Set as main directional light", !bMain))
+	const bool bSky = InComponent.Type->CppType == typeid(FSceneEnvironmentLight);
+	if ((!bSky && InComponent.Type->CppType != typeid(FSceneDirectionalLight)) ||
+	    (InField != "priority" && InField != "sky"))
 	{
-		auto Settings = Scene->GetSettings();
-		Settings.MainDirectionalLight = InHandle;
-		CommitSettings(std::move(Settings));
+		return;
 	}
-}
-
-void FEditorPlugin::DrawSkyLightAction(const FSceneNodeView& InView)
-{
-	const auto Active = Scene->GetSettings().EnvironmentLight;
-	const bool bActive = Active == InView.Handle;
-	Gui->TextWrapped(bActive  ? "Active sky light"
-	                 : Active ? "Not effective: another sky light is active"
-	                          : "Not effective: no sky light is active");
-	if (bActive && !InView.bEffectiveEnabled)
+	for (const auto& Entry : Scene->GetLightingInfo().Lights)
 	{
-		Gui->TextWrapped("Contributes no lighting or background while this object is disabled.");
-	}
-	if (const auto& Light = InView.Node->EnvironmentLight();
-	    Light && Light->Source == ESceneEnvironmentSource::SkyAsset)
-	{
-		Gui->TextWrapped("Sky asset: " + Scene->GetSkyStatus(InView.Handle));
-	}
-	if (Gui->Button("Set as active sky light", !bActive))
-	{
-		auto Settings = Scene->GetSettings();
-		Settings.EnvironmentLight = InView.Handle;
-		CommitSettings(std::move(Settings));
-	}
-	if (!Options.ExerciseDocument.empty())
-	{
-		InspectionBounds["sky-light/activate"] = Gui->LastItemBounds();
+		if (Entry.Handle != InView.Handle || Entry.Type != (bSky ? "sky" : "directional"))
+		{
+			continue;
+		}
+		if (InField == "priority")
+		{
+			const bool bEligible =
+			    Entry.bEnabled && (bSky || CanCastDirectionalShadows(*InView.Node->DirectionalLight()));
+			const auto Tone = !bEligible        ? EPropertyTooltipTone::Default
+			                  : Entry.bSelected ? EPropertyTooltipTone::Positive
+			                                    : EPropertyTooltipTone::Negative;
+			InOutPresentation.TooltipLines.push_back({Entry.Message, Tone});
+			if (bEligible && !Entry.bSelected)
+			{
+				if (!bSky)
+				{
+					InOutPresentation.TooltipLines.push_back({"This light still contributes direct lighting."});
+				}
+				InOutPresentation.TooltipLines.push_back(
+				    {bSky ? "Increase Priority above the other sky lights to make this sky light effective."
+				          : "Increase Priority above the other shadow-casting directional lights to make this light "
+				            "the shadow source."});
+			}
+			if (Entry.bTied)
+			{
+				InOutPresentation.WarningTooltip =
+				    bSky ? "Multiple enabled Sky Lights share the highest Priority."
+				         : "Multiple Directional Lights eligible to cast shadows share the highest Priority.";
+			}
+		}
+		else if (Entry.Asset.State == "failed")
+		{
+			InOutPresentation.Label += " [!]";
+			InOutPresentation.Tooltip = Entry.Asset.Error;
+		}
+		else if (!Entry.Asset.State.empty() && Entry.Asset.State != "ready")
+		{
+			InOutPresentation.Label += " [...]";
+			InOutPresentation.Tooltip = "Sky asset: " + Entry.Asset.State;
+		}
+		return;
 	}
 }
 } // namespace Hyperion

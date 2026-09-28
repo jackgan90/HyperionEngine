@@ -172,12 +172,9 @@ void FSceneStorage::FMutation::Remove(std::uint32_t InSlot)
 {
 	auto& Entry = Edit(InSlot);
 	const FSceneHandle Handle{Storage.Identity, InSlot, Entry.Generation};
-	for (auto* Selection : {&Settings.DefaultCamera, &Settings.MainDirectionalLight, &Settings.EnvironmentLight})
+	if (Settings.DefaultCamera == Handle)
 	{
-		if (*Selection == Handle)
-		{
-			Selection->reset();
-		}
+		Settings.DefaultCamera.reset();
 	}
 	RemovedIds.push_back(Entry.Node->Id);
 	Entry.Node.reset();

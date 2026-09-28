@@ -122,10 +122,6 @@ template<> const FRecordDescriptor& RecordType<FSceneSettings>()
 	    "hyperion.scene.settings", {
 	                                   Member("defaultCamera", &FSceneSettings::DefaultCamera,
 	                                          {.bRequired = true, .Description = "Runtime camera or null."}),
-	                                   Member("mainDirectionalLight", &FSceneSettings::MainDirectionalLight,
-	                                          {.bRequired = true, .Description = "Main light or null."}),
-	                                   Member("environmentLight", &FSceneSettings::EnvironmentLight,
-	                                          {.bRequired = true, .Description = "Environment light or null."}),
 	                                   Member("initialView", &FSceneSettings::InitialView,
 	                                          {.bRequired = true, .Description = "Saved browsing view or null."}),
 	                               });

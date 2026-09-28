@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/SceneBridge.h"
+#include "Hyperion/Renderer/SceneLightControls.h"
 #include "Hyperion/Scene/SceneManifest.h"
 
 namespace Hyperion
@@ -102,6 +103,7 @@ public:
 	bool Reparent(FSceneHandle InHandle, std::optional<FSceneHandle> InParent, ESceneReparentMode InMode);
 	bool SetSettings(FSceneSettings InSettings);
 	const FSceneSettings& GetSettings() const;
+	FSceneLightingSelection GetLightingSelection() const;
 	FSceneHandle Add(FSceneModel InModel, std::string InAsset = {});
 	bool Update(FSceneHandle InHandle, FSceneModel InModel);
 	bool Remove(FSceneHandle InHandle);
@@ -114,6 +116,8 @@ public:
 	const FSceneInstanceStatus& GetStatus() const;
 	std::string GetError(FSceneHandle InHandle) const;
 	std::string GetSkyStatus(FSceneHandle InHandle) const;
+	FSceneSkyStatus GetSkyAssetStatus(FSceneHandle InHandle) const;
+	FSceneLightingInfo GetLightingInfo() const;
 	std::vector<FRenderDrawResult> GetDrawResults(FSceneHandle InHandle) const;
 	std::shared_ptr<const FSceneComponentDiagnostics> GetComponentDiagnostics(FSceneHandle InHandle,
 	                                                                          std::string_view InComponent) const;

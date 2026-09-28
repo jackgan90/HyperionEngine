@@ -734,7 +734,6 @@ void CheckClusteredDirectionalAndDense(FFixture& InFixture, FScene& InScene, FSc
 	SunNode.DirectionalLight() = FSceneDirectionalLight{{1, 1, 1}, .5f, false};
 	const auto Sun = InScene.AddNode(SunNode);
 	auto Settings = Original;
-	Settings.MainDirectionalLight = Sun;
 	InScene.SetSettings(Settings);
 	InBridge.Flush();
 	const auto Fused = InFixture.Frame();
@@ -773,7 +772,7 @@ void CheckOwnedLocalLights(FFixture& InFixture)
 	auto& F = InFixture;
 	FScene Scene;
 	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 5}, {}, {1, .1f, 40, 5}));
-	Scene.SetSettings({Camera, {}, {}});
+	Scene.SetSettings({Camera, {}});
 	FModelMaterial Material;
 	Material.BaseColor = {.5f, .5f, .5f, 1};
 	Material.Metallic = 0;
@@ -883,13 +882,159 @@ void CheckClusteredMaterialCapacity(FFixture& InFixture)
 	F.LogicalBridge = nullptr;
 }
 
+void CheckDirectionalEditLifetime(FFixture& InFixture, FScene& InScene, FSceneHandle InLight, FSceneHandle InLocal,
+                                  FSceneRenderBridge& InBridge)
+{
+	auto& F = InFixture;
+	const auto Original = *InScene.FindNode(InLight)->DirectionalLight();
+	for (const auto [bClustered, bLocal] : {std::pair{false, false}, std::pair{true, false}, std::pair{true, true}})
+	{
+		F.Settings.bClusteredLighting = bClustered;
+		InScene.SetEnabled(InLocal, bLocal);
+		InBridge.Flush();
+		for (unsigned Index = 0; Index < 6; ++Index)
+		{
+			F.Frame();
+		}
+		const auto Before = F.Session->GetResources().Statistics().Materials.LiveObjects;
+		const auto Reference = F.Frame();
+		const auto Seed = F.Session->FreezeSceneFrame(InBridge.GetToken());
+		FRenderGraph Pending;
+		F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+		                              [&]
+		                              {
+			                              FSceneViewRequest Request;
+			                              Request.Width = F.View.Width;
+			                              Request.Height = F.View.Height;
+			                              Request.DepthConvention = F.View.DepthConvention;
+			                              F.Pipeline->Build(Pending, Request, Seed, F.Shadows, F.Clear, {}, true);
+		                              }));
+		for (unsigned Index = 0; Index < 32; ++Index)
+		{
+			auto Light = Original;
+			Light.Intensity = 1 + float(Index) * .1f;
+			InScene.SetDirectionalLight(InLight, Light);
+			InBridge.Flush();
+			F.Frame();
+		}
+		for (unsigned Index = 0; Index < 6; ++Index)
+		{
+			F.Frame();
+		}
+		const auto After = F.Session->GetResources().Statistics().Materials.LiveObjects;
+		std::cout << "Directional edit lifetime clustered=" << bClustered << " local=" << bLocal << " before=" << Before
+		          << " after=" << After << '\n';
+		HYP_CHECK(After <= Before + 16);
+		FImage Retained;
+		F.Tasks.Wait(F.Tasks.Dispatch({EDomain::Render},
+		                              [&]
+		                              {
+			                              Retained = ExecuteGraph(std::move(Pending), F.Tasks, *F.Swapchain,
+			                                                      {F.View.Width, F.View.Height}, false, true);
+		                              }));
+		Similar(Reference, Retained, .008f);
+	}
+	InScene.SetDirectionalLight(InLight, Original);
+	InScene.SetEnabled(InLocal, true);
+	InBridge.Flush();
+}
+
+void CheckMultipleDirectionals(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	FScene Scene;
+	const auto Camera = Scene.AddNode(MakeSceneCameraNode("camera", {0, 0, 5}, {}, {1, .1f, 40, 5}));
+	Scene.SetSettings({Camera, {}});
+	auto Red = MakeSceneDirectionalLightNode("red");
+	Red.Local() = SceneCameraTransform({}, {0, 0, -1});
+	Red.DirectionalLight() = FSceneDirectionalLight{{1, 0, 0}, 2, true};
+	const auto A = Scene.AddNode(Red);
+	auto Green = MakeSceneDirectionalLightNode("green");
+	Green.Local() = Red.Local();
+	Green.DirectionalLight() = FSceneDirectionalLight{{0, 1, 0}, 2, false};
+	Green.DirectionalLight()->Priority = 10;
+	const auto B = Scene.AddNode(Green);
+	auto Point = MakeScenePointLightNode("cluster-route");
+	Point.Local() = Translation({0, 0, 2});
+	Point.PointLight() = FScenePointLight{{1, 1, 1}, .001f, 4};
+	const auto Local = Scene.AddNode(Point);
+	FModelMaterial Material;
+	Material.BaseColor = {.5f, .5f, .5f, 1};
+	Material.Roughness = 1;
+	Material.Metallic = 0;
+	const auto Opaque = Scene.Add({"opaque", PrepareSourceModel(Quad(Material))});
+	Material.AlphaMode = EAlphaMode::Blend;
+	Material.BaseColor.W = .5f;
+	const auto Blend = Scene.Add({"blend", PrepareSourceModel(Quad(Material))});
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	F.LogicalBridge = &Bridge;
+	AwaitScene(Bridge, std::array{Opaque, Blend});
+	F.Shadows.bEnabled = false;
+	for (const auto Model : {Opaque, Blend})
+	{
+		Scene.SetEnabled(Opaque, Model == Opaque);
+		Scene.SetEnabled(Blend, Model == Blend);
+		for (const bool bClustered : {false, true})
+		{
+			F.Settings.bClusteredLighting = bClustered;
+			Scene.SetEnabled(B, false);
+			Bridge.Flush();
+			const auto OnlyRed = F.Frame();
+			Scene.SetEnabled(B, true);
+			Bridge.Flush();
+			const auto Both = F.Frame();
+			HYP_CHECK(Pixel(Both, 192, 144, 1) > Pixel(OnlyRed, 192, 144, 1) + .1f);
+			HYP_CHECK(std::abs(Pixel(Both, 192, 144) - Pixel(OnlyRed, 192, 144)) < .008f);
+			Similar(Both, F.Frame(ESceneRenderPipeline::Forward), .025f);
+			Scene.SetEnabled(A, false);
+			Bridge.Flush();
+			const auto NoShadowSource = F.Frame();
+			HYP_CHECK(!Scene.GetLightingSelection().Directional.Handle && !F.Statistics.bShadows);
+			HYP_CHECK(Pixel(NoShadowSource, 192, 144, 1) > .1f);
+			Similar(NoShadowSource, F.Frame(ESceneRenderPipeline::Forward), .025f);
+			Scene.SetEnabled(A, true);
+		}
+	}
+	// Changing which light owns shadows must not change unshadowed illumination or double-count either light.
+	Green.DirectionalLight()->bCastShadows = true;
+	Scene.SetDirectionalLight(B, *Green.DirectionalLight());
+	Bridge.Flush();
+	const auto GreenSelected = F.Frame();
+	HYP_CHECK(Scene.GetLightingSelection().Directional.Handle == B);
+	Red.DirectionalLight()->Priority = 20;
+	Scene.SetDirectionalLight(A, *Red.DirectionalLight());
+	Bridge.Flush();
+	Similar(GreenSelected, F.Frame(), .008f);
+	HYP_CHECK(Scene.GetLightingSelection().Directional.Handle == A);
+	F.Frame();
+	const auto Before = F.DeviceStats;
+	F.Frame();
+	HYP_CHECK(F.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
+	CheckDirectionalEditLifetime(F, Scene, B, Local, Bridge);
+	F.Settings.bClusteredLighting = true;
+	Scene.SetEnabled(Opaque, false);
+	Scene.SetEnabled(Blend, false);
+	Material.bUnlit = true;
+	Material.AlphaMode = EAlphaMode::Opaque;
+	const auto Unlit = Scene.Add({"unlit", PrepareSourceModel(Quad(Material))});
+	AwaitScene(Bridge, std::array{Unlit});
+	const auto UnlitReference = F.Frame();
+	Scene.SetEnabled(A, false);
+	Scene.SetEnabled(B, false);
+	Bridge.Flush();
+	Similar(UnlitReference, F.Frame(), .008f);
+	Similar(UnlitReference, F.Frame(ESceneRenderPipeline::Forward), .025f);
+	Bridge.Close();
+	F.LogicalBridge = nullptr;
+}
+
 void CheckOwnedOffscreenShadow(FFixture& InFixture)
 {
 	auto& F = InFixture;
 	FScene Scene;
 	AddDefaultSceneContent(Scene, {0, 0, 5}, {}, {1, .1f, 40, 5});
 	const auto Camera = *Scene.GetSettings().DefaultCamera;
-	const auto Sun = *Scene.GetSettings().MainDirectionalLight;
+	const auto Sun = *Scene.GetLightingSelection().Directional.Handle;
 	Scene.SetWorldTransform(Sun, SceneCameraTransform({}, {-3, 0, -1}));
 	Scene.SetDirectionalLight(Sun, {{1, 1, 1}, 3, true});
 	FSceneNode Parent;
@@ -978,7 +1123,7 @@ void CheckOwnedCameraLightRoutes(FFixture& InFixture)
 	auto Environment = MakeSceneEnvironmentLightNode("environment");
 	Environment.EnvironmentLight() = FSceneEnvironmentLight{{1, 1, 1}, .2f, ESceneEnvironmentSource::ConstantColor};
 	const auto Ambient = Scene.AddNode(Environment);
-	Scene.SetSettings({Camera, Sun, Ambient});
+	Scene.SetSettings({Camera, {}});
 	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
 	F.LogicalBridge = &Bridge;
 	FModelMaterial Material;
@@ -1271,6 +1416,7 @@ int main()
 			CheckQueuedGenerations(Fixture);
 			CheckReplacementAndRecovery(Fixture);
 			CheckOwnedCameraLightRoutes(Fixture);
+			CheckMultipleDirectionals(Fixture);
 			CheckOwnedLocalLights(Fixture);
 			Fixture.Settings.bClusteredLighting = false;
 			CheckOwnedLocalLights(Fixture);

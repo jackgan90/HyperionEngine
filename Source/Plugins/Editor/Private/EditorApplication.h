@@ -138,8 +138,7 @@ public:
 	void SetRenderCapturePreference(bool bInEnabled) override;
 	FRenderDiagnostics RenderDiagnostics() override;
 	FRenderHealth RenderHealth() override;
-	FSceneMainLight MainLight() override;
-	void SetMainLight(const FSceneMainLight& InLight) override;
+	FSceneLightingInfo LightingInfo() override;
 	FRenderSettingsState RenderSettings() const override;
 	void SetRenderSettings(std::uint64_t InRevision, const FRenderSettings& InSettings) override;
 	void SaveRenderSettings(const std::filesystem::path& InPath) override;
@@ -161,6 +160,7 @@ private:
 	std::uint64_t HudUpdated{};
 	bool bRenderControlsVerified{};
 	void ExerciseRenderControlsInput(std::vector<FInputEvent>& InEvents);
+	bool ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEvents);
 	void CheckRenderControlsHud() const;
@@ -318,8 +318,8 @@ private:
 	void DrawLightMarker(const FSceneNode& InNode, const FMat4& InWorld, bool bInSelected);
 	std::optional<FSceneHandle> PickLightMarker(FVec2 InPoint) const;
 	std::uint64_t LightTexture(const FSceneNode& InNode) const;
-	void DrawMainLightAction(FSceneHandle InHandle);
-	void DrawSkyLightAction(const FSceneNodeView& InView);
+	void InspectLightProperty(const FSceneNodeView& InView, const FSceneComponent& InComponent,
+	                          std::string_view InField, FPropertyPresentation& InOutPresentation) const;
 	void DrawOpenDialog();
 	void DrawViewport(float InDelta, std::span<const FInputEvent> InEvents);
 	void DrawGizmoToolbar();
@@ -757,6 +757,7 @@ private:
 	std::map<std::string, FVec4> InspectionBounds;
 	FSceneNode ExerciseOriginal;
 	std::uint32_t TransformExerciseStep{};
+	std::uint32_t LightPriorityExerciseStep{};
 	std::uint64_t TransformDragReadyAt{};
 	FMat4 ExerciseTransformResult;
 	bool bDocumentVerified{};

@@ -28,12 +28,32 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	{
 		return false;
 	}
-	auto& Record = InspectorDrafts.Single(InComponent);
 	Gui->Indent();
+	if (InComponent.Type->CppType == typeid(FSceneDirectionalLight))
+	{
+		if (!Context.Require<FRenderFeatureRegistry>().Contains("contact-shadows"))
+		{
+			Gui->TextWrapped("Contact shadows are unavailable in this session. Light properties can still be saved.");
+		}
+		else if (Rendering.Pipeline != "deferred")
+		{
+			Gui->TextWrapped("Contact shadows require the Deferred pipeline.");
+		}
+	}
+	if (Scene->GetRevision() != InRevision)
+	{
+		Gui->Unindent();
+		return true;
+	}
+	auto& Record = InspectorDrafts.Single(InComponent);
 	Gui->BeginLiveEdit();
 	const bool bChanged = Gui->EditRecord(Record, Identity, (Options.ExerciseDocument.empty() && Options.ExerciseRenderControls.empty()) ?
 	    std::function<void(std::string_view, FVec4)>{} : [&](std::string_view InField, FVec4 InBounds)
-	    { InspectionBounds[InComponent.Type->Id + "/" + std::string(InField)] = InBounds; });
+	    { InspectionBounds[InComponent.Type->Id + "/" + std::string(InField)] = InBounds; },
+	    [&](std::string_view InField, FPropertyPresentation& InOutPresentation)
+	    {
+		    InspectLightProperty(InView, InComponent, InField, InOutPresentation);
+	    });
 	const auto Edit = Gui->EndLiveEdit();
 	Gui->Unindent();
 	if (Edit.ActiveInteraction)
@@ -100,30 +120,6 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 	if (Scene->GetRevision() != Revision)
 	{
 		return;
-	}
-	if (Node.DirectionalLight())
-	{
-		DrawMainLightAction(InView.Handle);
-		if (!Context.Require<FRenderFeatureRegistry>().Contains("contact-shadows"))
-		{
-			Gui->TextWrapped("Contact shadows are unavailable in this session. Light properties can still be saved.");
-		}
-		else if (Rendering.Pipeline != "deferred")
-		{
-			Gui->TextWrapped("Contact shadows require the Deferred pipeline.");
-		}
-		if (Scene->GetRevision() != Revision)
-		{
-			return;
-		}
-	}
-	if (Node.EnvironmentLight())
-	{
-		DrawSkyLightAction(InView);
-		if (Scene->GetRevision() != Revision)
-		{
-			return;
-		}
 	}
 	if (Node.Camera())
 	{

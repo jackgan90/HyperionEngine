@@ -63,14 +63,6 @@ void FSceneStorage::FMutation::StageNode(std::uint32_t InSlot, FSceneNode InNode
 	{
 		Settings.DefaultCamera.reset();
 	}
-	if (Settings.MainDirectionalLight == Handle && !Edited.DirectionalLight())
-	{
-		Settings.MainDirectionalLight.reset();
-	}
-	if (Settings.EnvironmentLight == Handle && !Edited.EnvironmentLight())
-	{
-		Settings.EnvironmentLight.reset();
-	}
 	Mark(InSlot, Mask);
 }
 

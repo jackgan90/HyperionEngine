@@ -12,6 +12,7 @@ struct FSceneDirectionalLight
 	float Intensity = 1;
 	bool bCastShadows = true;
 	std::optional<FSceneLightShadowSettings> ShadowSettings;
+	std::int32_t Priority{};
 	bool operator==(const FSceneDirectionalLight& InOther) const;
 };
 
@@ -43,6 +44,7 @@ struct FSceneEnvironmentLight
 	float YawDegrees{};
 	bool bVisible = true;
 	std::shared_ptr<const FSceneSkyData> Data;
+	std::int32_t Priority{};
 	bool operator==(const FSceneEnvironmentLight& InOther) const;
 };
 

@@ -82,8 +82,6 @@ struct FSceneManifest
 	std::vector<FSceneAssetEntry> Assets;
 	std::vector<FSceneNodeEntry> Nodes;
 	std::string DefaultCamera;
-	std::string MainDirectionalLight;
-	std::string EnvironmentLight;
 	std::optional<FSceneCameraView> InitialView;
 };
 
