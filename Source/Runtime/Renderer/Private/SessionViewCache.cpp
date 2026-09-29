@@ -1,4 +1,5 @@
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Renderer/TransientGeometry.h"
 #include "LocalMaterialPreparation.h"
 #include "RenderPassDeclaration.h"
 #include "SessionMaterialsInternal.h"
@@ -122,11 +123,15 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
     const FRenderView& InView, const FRenderPassTargets& InTargets,
     std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
     std::optional<std::uint64_t> InSceneRevision, std::uint64_t InResourceRevision,
-    std::vector<FRenderTargetSource>& OutReads)
+    std::vector<FRenderTargetSource>& OutReads, const FTransientGeometry* InTransient)
 {
 	HYP_PERF_SCOPE_C(Render, PrepareRetainedView);
 	FMaterialState::FPreparedView Uncached;
-	auto& Cached = MaterialState->PreparedViews.size() >= 64 && !MaterialState->PreparedViews.contains(InView.Identity)
+	// Moving preview items never enter retained snapshots or invalidate persistent scene registrations.
+	const bool bTransient = InTransient && ((!InTransient->SceneItems.empty() && InView.Usage != "ShadowDepth") ||
+	                                        !InTransient->ReplacedPrimitives.empty());
+	auto& Cached = bTransient || (MaterialState->PreparedViews.size() >= 64 &&
+	                              !MaterialState->PreparedViews.contains(InView.Identity))
 	                   ? Uncached
 	                   : MaterialState->PreparedViews[InView.Identity];
 	const bool bReuseCollection = InSceneRevision && Cached.Snapshot && Cached.bValid &&
@@ -152,6 +157,10 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 		Cached.bValid = false;
 		Cached.Snapshot = std::make_shared<FRenderSceneSnapshot>(
 		    Scene.CollectPrepared(InView, InResourceRevision, bStableCollection ? Cached.Snapshot.get() : nullptr));
+		if (bTransient)
+		{
+			AppendTransientSceneItems(*Cached.Snapshot, *InTransient);
+		}
 		Cached.bDepthSorted = HasDepthSortedItems(*Cached.Snapshot);
 	}
 	else if (Cached.Snapshot.use_count() != 1)

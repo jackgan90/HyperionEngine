@@ -1,6 +1,7 @@
 #include "Hyperion/Automation/Endpoint.h"
 #include "Hyperion/Automation/Session.h"
 #include "Hyperion/SceneEditing/SceneComponentEditing.h"
+#include "Hyperion/SceneEditing/ScenePlacement.h"
 #include "SceneOperations.h"
 #include "SceneTestTarget.h"
 #include <cmath>
@@ -577,6 +578,18 @@ void Authoring()
 	Check(Target.Nodes().size() == 2 && Document.Selection().All().size() == 2);
 	Document.Detach(Tasks);
 }
+
+void PlacementWithoutProvider()
+{
+	FOperationCatalog Catalog;
+	RegisterPlacementOperations(Catalog, nullptr);
+	Catalog.Seal();
+	Check(!Catalog.Find("scene.placement.place_model").Info.Unavailable.empty());
+	FAutomationSession Agent(Catalog);
+	const FSceneModelPlacementRequest Request{
+	    "absent-document", 1, {"", "/Game/Model.hasset", RecordType<FModelAsset>().Id, ""}, {}};
+	Error(Call(Agent, "scene.placement.place_model", Request), "unavailable");
+}
 } // namespace
 
 void CheckSceneClipboardOperations();
@@ -586,6 +599,7 @@ int main()
 	try
 	{
 		Editing();
+		PlacementWithoutProvider();
 		CheckSceneClipboardOperations();
 		NoHistory();
 		Authoring();

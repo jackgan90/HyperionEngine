@@ -22,6 +22,7 @@ struct FRenderViewFamilyStatistics
 };
 
 struct FPreparedViewFamily;
+struct FTransientGeometry;
 
 // Owns one family independently of subsequent Session builds. Statistics throws until prepared.
 class FRenderViewPreparation
@@ -51,11 +52,13 @@ public:
 	FRenderPassTargets FrameTargets(std::optional<FVec4> InClear = {},
 	                                EDepthConvention InConvention = EDepthConvention::Standard) const;
 	std::size_t Build(FRenderGraph& InGraph, FRenderView InView, FRenderPassTargets InTargets);
+	// Optional viewport-owned source geometry joins ordinary view snapshots only; shadow views exclude it.
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
 	                       std::span<const FRenderPassTargets> InTargets,
 	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
 	                       bool bInSpatialPrepared = false, bool bInDeferPreparation = false,
-	                       const std::function<void(std::size_t)>& InAfterView = {});
+	                       const std::function<void(std::size_t)>& InAfterView = {},
+	                       const FTransientGeometry* InTransient = nullptr);
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
 	                       const FRenderPassTargets& InTargets,
 	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,
@@ -111,12 +114,10 @@ private:
 	FMaterialProviderInputs PrepareViewInputs(const FRenderSceneSnapshot& InSnapshot);
 	void InvalidatePreparedViews();
 	void InitializeMaterialScopes();
-	std::shared_ptr<const FRenderSceneSnapshot> PrepareView(const FRenderView& InView,
-	                                                        const FRenderPassTargets& InTargets,
-	                                                        std::shared_ptr<const FMaterialFrameContext> InFrame,
-	                                                        std::uint64_t InFamily,
-	                                                        std::optional<std::uint64_t> InSceneRevision,
-	                                                        std::uint64_t InResourceRevision,
-	                                                        std::vector<FRenderTargetSource>& OutReads);
+	std::shared_ptr<const FRenderSceneSnapshot> PrepareView(
+	    const FRenderView& InView, const FRenderPassTargets& InTargets,
+	    std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
+	    std::optional<std::uint64_t> InSceneRevision, std::uint64_t InResourceRevision,
+	    std::vector<FRenderTargetSource>& OutReads, const FTransientGeometry* InTransient);
 };
 } // namespace Hyperion

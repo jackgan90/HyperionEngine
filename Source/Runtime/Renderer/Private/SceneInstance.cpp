@@ -293,4 +293,11 @@ std::vector<FRenderDrawResult> FSceneInstance::GetDrawResults(FSceneHandle InHan
 	Impl->Tasks.Require({EDomain::Main});
 	return Impl->Bridge ? Impl->Bridge->GetDrawResults(InHandle) : std::vector<FRenderDrawResult>{};
 }
+
+bool FSceneInstance::IsModelReady(FSceneHandle InHandle) const
+{
+	Impl->RequireOpen();
+	return Impl->Bridge && Impl->Status.Error.empty() && Impl->Bridge->GetSceneError().empty() &&
+	       Impl->Bridge->IsReady(InHandle) && Impl->Bridge->GetToken().LogicalRevision == Impl->Scene.GetRevision();
+}
 } // namespace Hyperion

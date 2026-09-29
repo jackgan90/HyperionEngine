@@ -26,7 +26,9 @@ std::string FSceneInstance::RegisterModelAsset(FAssetRef InReference, const std:
 			// An old unresolved reference retains its own load error without blocking unrelated registrations.
 			continue;
 		}
-		if (Reference == InReference)
+		// Unused registrations invalidated by an asset publication must prepare a fresh graph.
+		// Keep the old entry alive for historical nodes that still refer to its registration ID.
+		if (Reference == InReference && !Load.bNeedsRebind)
 		{
 			return Id;
 		}

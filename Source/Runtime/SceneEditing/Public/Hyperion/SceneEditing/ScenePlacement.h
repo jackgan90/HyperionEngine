@@ -24,6 +24,14 @@ struct FScenePlacementRequest
 	FVec3 Position;
 };
 
+struct FSceneModelPlacementRequest
+{
+	std::string Document;
+	std::uint64_t Revision{};
+	FAssetRef Model;
+	FVec3 Position;
+};
+
 class IScenePlacement
 {
 public:
@@ -31,9 +39,11 @@ public:
 	virtual FPlacementCatalog PlacementCatalog() const = 0;
 	// Main polling. The host prepares resources and commits through its shared document once ready.
 	virtual std::optional<FSceneNodeInfo> PlaceObject(const FScenePlacementRequest& InRequest) = 0;
+	virtual std::optional<FSceneNodeInfo> PlaceModel(const FSceneModelPlacementRequest& InRequest) = 0;
 };
 
 template<> const FRecordDescriptor& RecordType<FPlaceableInfo>();
 template<> const FRecordDescriptor& RecordType<FPlacementCatalog>();
 template<> const FRecordDescriptor& RecordType<FScenePlacementRequest>();
+template<> const FRecordDescriptor& RecordType<FSceneModelPlacementRequest>();
 } // namespace Hyperion

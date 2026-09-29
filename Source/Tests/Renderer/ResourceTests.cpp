@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/TransientGeometry.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
@@ -711,6 +712,91 @@ void CheckPendingSection(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCom
 	HYP_CHECK(Valid.GetStatus().State == ERenderPrimitiveStatus::Removed);
 }
 
+void CheckTransientMaterialReadiness(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompiler& InCompiler)
+{
+	FRenderSession Session(InTasks, InDevice, InCompiler);
+	InDevice.bUploadComplete = false;
+	auto Resource = Session.GetResources().Request(std::make_shared<const int>(12), 1, "preview-materials",
+	                                               []
+	                                               {
+		                                               auto Description = Geometry(true);
+		                                               Description.Materials.push_back(Geometry().Materials[0]);
+		                                               Description.Sections.push_back({0, 1, 0, 3});
+		                                               return Description;
+	                                               });
+	Await(
+	    [&]
+	    {
+		    return Resource->GetMaterial(0) &&
+		           Resource->GetMaterial(0)->GetStatus() == ERenderMaterialStatus::Uploading &&
+		           Resource->GetMaterial(1)->GetStatus() == ERenderMaterialStatus::Ready;
+	    });
+	const auto Fallback = Resource->GetMaterial(1);
+	FRenderPrimitiveState State;
+	State.Resource = Resource;
+	FTransientGeometry Pending;
+	Pending.AddModelInstance(State, Fallback);
+	State.Section = 1;
+	Pending.AddModelInstance(State, Fallback);
+	HYP_CHECK(Pending.Items.size() == 1 && Pending.SceneItems.size() == 1);
+	HYP_CHECK(Pending.Items[0].Surface == Fallback && Pending.SceneItems[0].Section == 1);
+	std::vector<FRenderPrimitiveState> States{State, State};
+	States[0].Section = 0;
+	auto Bindings = Session.GetScene().CreateBatch(std::move(States));
+	InTasks.Wait(Session.GetScene().Flush());
+	for (const auto& Binding : Bindings)
+	{
+		Pending.ReplacedPrimitives.push_back(Binding.GetHandle());
+		HYP_CHECK(!Binding.GetLastDrawResult().bReady);
+	}
+	// Binding/draw-result entries exist before a formal material can draw; retain a single preview copy.
+	InTasks.Wait(InTasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    auto Snapshot = Session.GetScene().CollectPrepared({}, Session.GetResources().GetPublicationRevision());
+		    AppendTransientSceneItems(Snapshot, Pending);
+		    HYP_CHECK(Snapshot.Items.Size() == 1 && Snapshot.Items[0].Primitive.Scene == 0x7472616e7369656e);
+		    auto Shadows = Session.GetScene().Collect({});
+		    Shadows.View.Usage = "ShadowDepth";
+		    AppendTransientSceneItems(Shadows, Pending);
+		    HYP_CHECK(Shadows.Items.IsEmpty());
+	    }));
+	InDevice.bUploadComplete = true;
+	Await(
+	    [&]
+	    {
+		    return Resource->GetMaterial(0)->GetStatus() == ERenderMaterialStatus::Ready;
+	    });
+	FTransientGeometry Ready;
+	State.Section = 0;
+	Ready.AddModelInstance(State, Fallback);
+	State.Section = 1;
+	Ready.AddModelInstance(State, Fallback);
+	HYP_CHECK(Ready.Items.empty() && Ready.SceneItems.size() == 2);
+	Ready.ReplacedPrimitives = Pending.ReplacedPrimitives;
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              auto Snapshot = Session.GetScene().CollectPrepared(
+		                                  {}, Session.GetResources().GetPublicationRevision());
+		                              AppendTransientSceneItems(Snapshot, Ready);
+		                              HYP_CHECK(Snapshot.Items.Size() == 2);
+		                              for (const auto& Item : Snapshot.Items)
+		                              {
+			                              HYP_CHECK(Item.Primitive.Scene == 0x7472616e7369656e);
+		                              }
+	                              }));
+	HYP_CHECK(Ready.SceneItems[0].Surface == Resource->GetMaterial(0));
+	HYP_CHECK(Pending.Items.size() == 1 && Pending.Items[0].Surface == Fallback);
+	const auto Uploads = InDevice.TextureUploads.load();
+	FTransientGeometry Cached;
+	State.Section = 0;
+	Cached.AddModelInstance(State, Fallback);
+	HYP_CHECK(Cached.Items.empty() && Cached.SceneItems.size() == 1);
+	HYP_CHECK(InDevice.TextureUploads == Uploads);
+}
+
 void CheckVisibilityAndAggregation(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompiler& InCompiler)
 {
 	FRenderSession Session(InTasks, InDevice, InCompiler);
@@ -879,6 +965,7 @@ int main()
 		CheckNoFrameCleanup(Tasks, Device, Compiler);
 		CheckSectionTransactions(Tasks, Device, Compiler);
 		CheckPendingSection(Tasks, Device, Compiler);
+		CheckTransientMaterialReadiness(Tasks, Device, Compiler);
 		CheckVisibilityAndAggregation(Tasks, Device, Compiler);
 		CheckBoundsReadiness(Tasks, Device, Compiler);
 		CheckFullscreenPendingUpload(Tasks, Device, Compiler);

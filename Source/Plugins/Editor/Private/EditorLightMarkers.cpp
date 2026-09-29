@@ -113,9 +113,9 @@ void FEditorPlugin::DrawLightMarkers()
 	}
 	if (Placement.GetPreview())
 	{
-		if (const auto* Object = PlacementRegistry.Find(Placement.GetType()); Object && !Object->Icon.empty())
+		if (PlacementCandidate && !PlacementCandidate->Icon.empty())
 		{
-			auto Node = Object->Create();
+			auto Node = PlacementCandidate->Node;
 			Node.Local().Values[12] = Placement.GetPreview()->Position.X;
 			Node.Local().Values[13] = Placement.GetPreview()->Position.Y;
 			Node.Local().Values[14] = Placement.GetPreview()->Position.Z;

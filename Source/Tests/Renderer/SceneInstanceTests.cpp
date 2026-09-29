@@ -157,6 +157,7 @@ void Await(FSceneInstance& InScene, const Predicate& InPredicate,
 void CheckLoadingEdits(FSceneFixture& InFixture)
 {
 	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets, true);
+	HYP_CHECK(!Scene.IsModelReady({}));
 
 	// Release the IO gate before Scene unwinds even when an assertion fails.
 	struct FRelease
@@ -179,6 +180,7 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 	const auto Kept = Scene.GetModels()[1].Handle;
 	HYP_CHECK(Scene.Raycast({{0, 0, 5}, {0, 0, -1}, 0, 10}).Status == ESceneRayStatus::Unavailable);
 	const auto Failed = Scene.GetModels()[2].Handle;
+	HYP_CHECK(!Scene.IsModelReady(Kept));
 	HYP_CHECK(Scene.Remove(Removed));
 	const auto Added = Scene.Add({"replacement"}, "good");
 	HYP_CHECK(Added.Slot == Removed.Slot && Added.Generation != Removed.Generation);
@@ -199,6 +201,7 @@ void CheckLoadingEdits(FSceneFixture& InFixture)
 		      return Scene.GetStatus().ReadyModels == 3 && Scene.GetStatus().FailedModels == 1;
 	      });
 	HYP_CHECK(!Scene.Find(Removed) && !Scene.Remove(Removed));
+	HYP_CHECK(Scene.IsModelReady(Kept) && !Scene.IsModelReady(Failed) && !Scene.IsModelReady(Removed));
 	HYP_CHECK(Scene.Find(Kept)->World.Values[12] == 4 && !Scene.Find(Kept)->bVisible);
 	HYP_CHECK(Scene.Find(Kept)->Data == Scene.Find(Added)->Data);
 	HYP_CHECK(Scene.Find(Kept)->Data->QueryGeometry);
@@ -992,6 +995,36 @@ void CheckModelStatusCache()
 	std::cout << "64 camera/light updates reused model status; inherited model transforms and deletion invalidate\n";
 }
 
+void CheckFailedPublicationReadiness()
+{
+	FSceneFixture Fixture;
+	// An explicit primitive makes the initial logical publication fail its empty-scene contract.
+	FSourceModel External(Fixture.Session->GetScene(), Fixture.Session->GetResources(), MakeModel());
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+	while (!External.IsReady() && std::chrono::steady_clock::now() < Deadline)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	HYP_CHECK(External.IsReady());
+	FSceneInstance Scene(*Fixture.Session, Fixture.Tasks, Fixture.Assets);
+	const auto Handle = Scene.Add({"failed publication", PrepareSourceModel(MakeModel())});
+	HYP_CHECK(!Scene.IsModelReady(Handle));
+	Scene.Tick();
+	bool bReceiptFailed{};
+	try
+	{
+		Fixture.Tasks.Wait(Scene.GetReceipt());
+	}
+	catch (const std::logic_error&)
+	{
+		bReceiptFailed = true;
+	}
+	HYP_CHECK(bReceiptFailed);
+	Scene.Tick();
+	HYP_CHECK(!Scene.GetStatus().PublicationError.empty());
+	HYP_CHECK(!Scene.IsModelReady(Handle));
+}
+
 void CheckLargeCoordinateView(FSceneFixture& InFixture)
 {
 	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
@@ -1547,6 +1580,55 @@ void CheckRegistrationWithUnresolvedAsset(FSceneFixture& InFixture)
 	HYP_CHECK(Snapshot.Assets.size() == 1 && Snapshot.Assets.front().Id == Id && Snapshot.Nodes.size() == 1);
 	std::cout << "An unresolved old asset stays isolated from valid model registration and deduplication\n";
 }
+
+void CheckUnusedRegistrationRefresh()
+{
+	FSceneFixture Fixture;
+	Fixture.Files->bEnabled = false;
+	FSceneInstance Scene(*Fixture.Session, Fixture.Tasks, Fixture.Assets, true);
+	const FAssetRef Reference{"", "SceneRuntime.model.hasset", RecordType<FModelAsset>().Id, ""};
+	const auto PreviousId = Scene.RegisterModelAsset(Reference);
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetAssets().front().Data != nullptr;
+	      });
+	const auto Loaded = Fixture.Assets.LoadAsync("SceneRuntime.model.hasset").Get(Fixture.Tasks);
+	auto Model = *Loaded->As<FModelAsset>();
+	Model.Name = "Updated unused placement";
+	Model.Nodes.front().Local = Translation({4, 2, 0});
+	const auto Saved = Fixture.Assets
+	                       .SaveDocumentAsync(Loaded->Path, *Loaded->Type, WriteValue(Model),
+	                                          {Loaded->Header.Id, {}, Loaded->Header.TypeId, Loaded->Header.Revision})
+	                       .Get(Fixture.Tasks);
+	Scene.RefreshAssets(std::array{*Saved});
+	Scene.Tick();
+	const auto CurrentId = Scene.RegisterModelAsset(Reference);
+	HYP_CHECK(CurrentId != PreviousId && Scene.RegisterModelAsset(Reference) == CurrentId);
+	Await(Scene,
+	      [&]
+	      {
+		      const auto Entries = Scene.GetAssets();
+		      return std::any_of(Entries.begin(), Entries.end(),
+		                         [&](const auto& InEntry)
+		                         {
+			                         return InEntry.Id == CurrentId && InEntry.Data &&
+			                                InEntry.Data->Asset->Name == Model.Name;
+		                         });
+	      });
+	HYP_CHECK(Scene.GetNodes().empty() && Scene.Snapshot("UnusedPlacement.hasset").Assets.empty());
+	FSceneNode Node;
+	Node.Model() = FSceneModelComponent{};
+	Node.Model()->Asset = CurrentId;
+	const auto Handle = Scene.AddNode(Node);
+	Await(Scene,
+	      [&]
+	      {
+		      return Scene.GetStatus().bReady;
+	      });
+	HYP_CHECK(Scene.FindNode(Handle)->Model()->Data->Instances.front().World.Values ==
+	          Model.Nodes.front().Local.Values);
+}
 } // namespace
 
 int main()
@@ -1570,12 +1652,14 @@ int main()
 		CheckNavigationPrecision(Fixture);
 		CheckLargeCoordinateView(Fixture);
 		CheckModelStatusCache();
+		CheckFailedPublicationReadiness();
 		CheckClosedDependencies();
 		CheckPendingHierarchy();
 		CheckConsumersAddedDuringRefresh();
 		CheckClipboardRefreshWithoutConsumers();
 		CheckRefreshBesideMissingModel();
 		CheckFailedDependencyRecovery();
+		CheckUnusedRegistrationRefresh();
 		std::cout << "Independent scene loading, shared models, generation-safe edits and close passed\n";
 	}
 	catch (const std::exception& Error)

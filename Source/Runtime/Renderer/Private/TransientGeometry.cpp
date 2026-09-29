@@ -1,4 +1,6 @@
 #include "Hyperion/Renderer/TransientGeometry.h"
+#include <set>
+#include <tuple>
 
 namespace Hyperion
 {
@@ -38,6 +40,58 @@ public:
 	}
 };
 } // namespace
+
+void FTransientGeometry::AddModelInstance(FRenderPrimitiveState InState,
+                                          std::shared_ptr<const FRenderMaterial> InFallback)
+{
+	const auto Surface = InState.Resource ? InState.Resource->GetMaterial(InState.Section) : nullptr;
+	if (Surface && Surface->GetStatus() == ERenderMaterialStatus::Ready)
+	{
+		InState.Surface = Surface;
+		SceneItems.push_back(std::move(InState));
+	}
+	else
+	{
+		InState.Surface = std::move(InFallback);
+		Items.push_back(std::move(InState));
+	}
+}
+
+void AppendTransientSceneItems(FRenderSceneSnapshot& InSnapshot, const FTransientGeometry& InGeometry)
+{
+	std::set<std::tuple<std::uint64_t, std::uint32_t, std::uint64_t>> Replaced;
+	for (const auto& Handle : InGeometry.ReplacedPrimitives)
+	{
+		Replaced.emplace(Handle.Scene, Handle.Slot, Handle.Generation);
+	}
+	if (!Replaced.empty())
+	{
+		FRenderItemList Retained;
+		for (std::size_t Index = 0; Index < InSnapshot.Items.Size(); ++Index)
+		{
+			const auto& Handle = InSnapshot.Items[Index].Primitive;
+			if (!Replaced.contains({Handle.Scene, Handle.Slot, Handle.Generation}))
+			{
+				Retained.MoveFrom(InSnapshot.Items, Index);
+			}
+		}
+		InSnapshot.Items = std::move(Retained);
+	}
+	if (InSnapshot.View.Usage == "ShadowDepth")
+	{
+		InSnapshot.Statistics.VisibleItems = InSnapshot.Items.Size();
+		return;
+	}
+	for (const auto& State : InGeometry.SceneItems)
+	{
+		FRenderItem Item;
+		Item.State = State;
+		Item.Lifetime = InGeometry.Lifetime;
+		Item.Primitive = {0x7472616e7369656e, static_cast<std::uint32_t>(InSnapshot.Items.Size()), 1};
+		InSnapshot.Items.PushBack(std::move(Item));
+	}
+	InSnapshot = PrepareSceneSnapshot(std::move(InSnapshot));
+}
 
 std::unique_ptr<IRenderFeature> MakeTransientGeometryFeature()
 {

@@ -187,7 +187,8 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
                                        std::span<const FRenderPassTargets> InTargets,
                                        std::shared_ptr<const FMaterialFrameContext> InFrame, std::uint64_t InFamily,
                                        bool bInSpatialPrepared, bool bInDeferPreparation,
-                                       const std::function<void(std::size_t)>& InAfterView)
+                                       const std::function<void(std::size_t)>& InAfterView,
+                                       const FTransientGeometry* InTransient)
 {
 	HYP_PERF_SCOPE_C(Render, BuildViews);
 	Tasks.Require({EDomain::Render});
@@ -217,8 +218,8 @@ std::size_t FRenderSession::BuildViews(FRenderGraph& InGraph, std::span<const FR
 	for (std::size_t Index = 0; Index < InViews.size(); ++Index)
 	{
 		std::vector<FRenderTargetSource> Reads;
-		auto Snapshot =
-		    PrepareView(InViews[Index], InTargets[Index], InFrame, InFamily, SceneRevision, ResourceRevision, Reads);
+		auto Snapshot = PrepareView(InViews[Index], InTargets[Index], InFrame, InFamily, SceneRevision,
+		                            ResourceRevision, Reads, InTransient);
 		bRefreshed |= Snapshot->Statistics.PreparationReuses == 0;
 		Count += Snapshot->Items.Size();
 		auto Preparation = Resources.GetPreparation();

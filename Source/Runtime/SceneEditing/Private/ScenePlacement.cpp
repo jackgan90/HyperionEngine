@@ -30,4 +30,17 @@ template<> const FRecordDescriptor& RecordType<FScenePlacementRequest>()
 	            {.bRequired = true, .Description = "World-space placement pivot, in scene units."})});
 	return Type;
 }
+
+template<> const FRecordDescriptor& RecordType<FSceneModelPlacementRequest>()
+{
+	static const auto Type = MakeRecord<FSceneModelPlacementRequest>(
+	    "hyperion.scene.model_placement",
+	    {Member("document", &FSceneModelPlacementRequest::Document, {.bRequired = true}),
+	     Member("revision", &FSceneModelPlacementRequest::Revision, {.bRequired = true}),
+	     Member("model", &FSceneModelPlacementRequest::Model,
+	            {.bRequired = true, .Description = "Native model asset reference from content.assets.list."}),
+	     Member("position", &FSceneModelPlacementRequest::Position,
+	            {.bRequired = true, .Description = "World-space placement pivot, in scene units."})});
+	return Type;
+}
 } // namespace Hyperion

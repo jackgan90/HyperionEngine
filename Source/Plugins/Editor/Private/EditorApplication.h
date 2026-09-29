@@ -14,6 +14,7 @@
 #include "Hyperion/Renderer/RenderBenchmark.h"
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneLightControls.h"
+#include "PlacementService.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
 #endif
@@ -62,6 +63,7 @@ struct FEditorOptions
 	std::filesystem::path ExerciseViews;
 	std::filesystem::path ExerciseRenderControls;
 	std::filesystem::path ExercisePlacement;
+	std::filesystem::path ExerciseModelPlacement;
 	std::filesystem::path ExerciseReparent;
 	std::filesystem::path ExerciseOutlines;
 	std::filesystem::path ExerciseContent;
@@ -130,6 +132,7 @@ public:
 	void ApplyViewToCamera(FSceneHandle InHandle) override;
 	FPlacementCatalog PlacementCatalog() const override;
 	std::optional<FSceneNodeInfo> PlaceObject(const FScenePlacementRequest& InRequest) override;
+	std::optional<FSceneNodeInfo> PlaceModel(const FSceneModelPlacementRequest& InRequest) override;
 	std::shared_ptr<FPendingImageOutput> RequestImage(const FImageOutputRequest& InRequest) override;
 	std::optional<FImageArtifact> PollImage(const std::shared_ptr<FPendingImageOutput>& InPending) override;
 	FRenderCaptureInfo RenderCaptureInfo() const override;
@@ -310,10 +313,19 @@ private:
 	void PollPlacementResources();
 	void PollPlacementIcons();
 	std::string PlacementUnavailableReason(const FPlaceableObject& InObject) const;
+	std::string PlacementUnavailableReason(const FPlacementCandidate& InCandidate) const;
+	std::optional<FSceneNodeInfo> PollPlacement(const FPlacementCandidate& InCandidate, FVec3 InPosition);
+	FPlacementCandidate ResolvePlacementPayload(const FGuiDragPayload& InPayload);
+	void RoutePlacementPayload(const FGuiDragPayload& InPayload, const std::optional<FGuiDragPayload>& InDrop);
 	void RoutePlacement();
-	void UpdatePlacementPreview(const FPlaceableObject& InObject, const FSceneCameraView& InCamera, FVec2 InPointer);
+	void ExerciseModelPlacement(std::vector<FInputEvent>& InEvents);
+	void ExerciseModelDrag(std::vector<FInputEvent>& InEvents);
+	void CompleteModelDrag(std::vector<FInputEvent>& InEvents, FVec2 InSource);
+	void ExerciseModelPlacementHistory();
+	void UpdatePlacementPreview(const FPlacementCandidate& InObject, const FSceneCameraView& InCamera, FVec2 InPointer);
 	void CancelPlacement();
 	void CommitPlacement(const FPlaceableObject& InObject, FVec3 InPosition);
+	void CommitPlacement(const FPlacementCandidate& InCandidate, FVec3 InPosition);
 	FSceneHandle CommitCreate(FSceneNode InNode);
 	std::shared_ptr<const FTransientGeometry> FreezePlacementPreview() const;
 	void DrawLightMarkers();
@@ -515,15 +527,11 @@ private:
 	bool bPlacementUsedMouse{};
 	std::string PlacementStatus;
 
-	struct FPlacementModel
-	{
-		std::string Asset;
-		std::shared_ptr<const FSceneModelData> Data;
-		std::shared_ptr<const FRenderResource> Resource;
-		std::string Error;
-	};
-
-	std::map<std::string, FPlacementModel> PlacementModels;
+	FPlacementService PlacementService;
+	std::map<std::string, FPlacementModel>& PlacementModels = PlacementService.Models;
+	std::optional<FPlacementCandidate> PlacementCandidate;
+	std::string PlacementSourceType;
+	std::string PlacementSourceValue;
 
 	struct FPlacementIcon
 	{
@@ -540,6 +548,8 @@ private:
 	std::shared_ptr<const void> PlacementLifetime;
 	std::optional<FSceneHandle> PlacementPublication;
 	FMat4 PlacementPublicationLocal;
+	std::uint64_t PlacementPublicationRevision{};
+	bool bPlacementPublicationSourceMaterials{};
 	std::shared_ptr<const FTransientGeometry> PlacementPublicationPreview;
 	std::uint32_t PlacementExerciseStep{};
 	std::uint32_t PlacementMenuStep{};
@@ -555,6 +565,13 @@ private:
 	std::vector<std::string> PlacementExerciseIds;
 	std::filesystem::path PlacementCapture;
 	bool bPlacementVerified{};
+	bool bModelPlacementVerified{};
+	unsigned ModelPlacementStep{};
+	unsigned ModelPlacementCase{};
+	std::size_t ModelPlacementBaseHistory{};
+	std::size_t ModelPlacementBaseNodes{};
+	FVec3 ModelPlacementPosition;
+	std::vector<std::string> ModelPlacementIds;
 	ETransformGizmoMode GizmoMode = ETransformGizmoMode::Position;
 
 	struct FGizmoTarget

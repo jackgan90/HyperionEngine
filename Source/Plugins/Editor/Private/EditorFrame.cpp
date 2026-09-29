@@ -143,6 +143,14 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 		}
 	}
 	const auto Preview = FreezePlacementPreview();
+	if (!Options.ExerciseModelPlacement.empty() && PlacementPublication && Preview)
+	{
+		const auto Primitives = Scene->ResolveRenderPrimitives(*PlacementPublication);
+		if (Primitives.empty() || Preview->ReplacedPrimitives != Primitives)
+		{
+			throw std::runtime_error("Model placement publication retained duplicate formal geometry");
+		}
+	}
 	std::vector<FGuiTextureBinding> IconTextures;
 	for (const auto& [Id, Icon] : PlacementIcons)
 	{

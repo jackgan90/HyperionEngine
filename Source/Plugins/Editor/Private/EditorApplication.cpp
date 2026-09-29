@@ -274,6 +274,10 @@ void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::
 	{
 		ExercisePlacementInput(InEvents);
 	}
+	if (!Options.ExerciseModelPlacement.empty())
+	{
+		ExerciseModelPlacement(InEvents);
+	}
 	if (!Options.ExerciseOutlines.empty())
 	{
 		ExerciseOutlines();
@@ -361,7 +365,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	CollectEditorInput(Events, AssetEvents);
 	// Synthetic clicks use a fixed GUI clock: hidden swapchains can run fast enough
 	// to merge separate double-click sequences after the content grid scrolls.
-	const float GuiDelta = Options.ExerciseAssets.empty() && Options.ExerciseReparent.empty() ? InDelta : 1.f / 60;
+	const float GuiDelta =
+	    Options.ExerciseAssets.empty() && Options.ExerciseReparent.empty() && Options.ExerciseModelPlacement.empty()
+	        ? InDelta
+	        : 1.f / 60;
 	auto Data = DrawMainWindow(GuiDelta, Events, bMainDrawable);
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
@@ -370,8 +377,9 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	// Async scene readiness is independent of render frame rate.
 	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
-	                               bOutlinesVerified || bMultiSelectionVerified || bContentVerified ||
-	                               bRenderControlsVerified || bReparentVerified || bClipboardVerified;
+	                               bModelPlacementVerified || bOutlinesVerified || bMultiSelectionVerified ||
+	                               bContentVerified || bRenderControlsVerified || bReparentVerified ||
+	                               bClipboardVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -446,6 +454,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	const auto SavedAssets = AssetWorkspace->Poll();
 	if (!SavedAssets.empty())
 	{
+		CancelPlacement();
+		PlacementModels.clear();
+		PlacementPublication.reset();
+		PlacementPublicationPreview.reset();
 		SceneDocument.AssetsRefreshed();
 		Scene->RefreshAssets(SavedAssets);
 		RefreshContent();
@@ -478,14 +490,16 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	}
 	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
 	     Options.bExerciseClipboard || !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() ||
-	     !Options.ExercisePlacement.empty() || !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() ||
-	     !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
-	     !Options.ExerciseRenderControls.empty() || !Options.ExerciseImport.empty() ||
-	     !Options.ExerciseReparent.empty()) &&
+	     !Options.ExercisePlacement.empty() || !Options.ExerciseModelPlacement.empty() ||
+	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
+	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty() ||
+	     !Options.ExerciseImport.empty() || !Options.ExerciseReparent.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
-		throw std::runtime_error("Editor interaction acceptance timed out at step " + std::to_string(ExerciseStep) +
-		                         ": " + AssetWorkspace->ActiveStatus());
+		throw std::runtime_error("Editor interaction acceptance timed out; model placement case " +
+		                         std::to_string(ModelPlacementCase) + " step " + std::to_string(ModelPlacementStep) +
+		                         " (" + PlacementStatus + "); step " + std::to_string(ExerciseStep) + ": " +
+		                         AssetWorkspace->ActiveStatus());
 	}
 	if (AdvanceFrame(InUpdate.DeltaSeconds))
 	{
@@ -497,6 +511,11 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (!Options.ExerciseModelPlacement.empty() && !bModelPlacementVerified)
+	{
+		throw std::runtime_error("Model placement acceptance incomplete at case " + std::to_string(ModelPlacementCase) +
+		                         " step " + std::to_string(ModelPlacementStep) + ": " + PlacementStatus);
+	}
 	if (Options.bExerciseClipboard && !bClipboardVerified)
 	{
 		throw std::runtime_error("Editor clipboard acceptance did not complete at step " +

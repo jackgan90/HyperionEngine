@@ -87,6 +87,7 @@ bool ParsePath(FEditorOptions& InOptions, std::string_view InArgument, const std
 	    {"--exercise-views", &FEditorOptions::ExerciseViews},
 	    {"--exercise-render-controls", &FEditorOptions::ExerciseRenderControls},
 	    {"--exercise-placement", &FEditorOptions::ExercisePlacement},
+	    {"--exercise-model-placement", &FEditorOptions::ExerciseModelPlacement},
 	    {"--exercise-reparent", &FEditorOptions::ExerciseReparent},
 	    {"--exercise-outlines", &FEditorOptions::ExerciseOutlines},
 	    {"--exercise-content", &FEditorOptions::ExerciseContent}};

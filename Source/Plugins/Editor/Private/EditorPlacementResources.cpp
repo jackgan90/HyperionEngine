@@ -5,29 +5,27 @@ namespace Hyperion
 {
 std::string FEditorPlugin::PlacementUnavailableReason(const FPlaceableObject& InObject) const
 {
+	return PlacementUnavailableReason(FPlacementService::Candidate(InObject));
+}
+
+std::string FEditorPlugin::PlacementUnavailableReason(const FPlacementCandidate& InObject) const
+{
 	if (!Scene->GetStatus().bLoaded || !Scene->GetStatus().Error.empty())
 	{
 		return "Wait for a valid scene document";
 	}
 	if (InObject.Model)
 	{
-		const auto It = PlacementModels.find(InObject.Id);
-		if (It == PlacementModels.end())
+		const auto Unavailable = PlacementService.Unavailable(InObject);
+		if (!Unavailable.empty())
 		{
-			return "Preparing model";
-		}
-		if (!It->second.Error.empty())
-		{
-			return It->second.Error;
+			return Unavailable;
 		}
 		if (PlacementMaterial->GetStatus() == ERenderMaterialStatus::Failed)
 		{
 			return PlacementMaterial->GetError();
 		}
-		return It->second.Resource && It->second.Resource->GetStatus() == ERenderResourceStatus::Ready &&
-		               PlacementMaterial->GetStatus() == ERenderMaterialStatus::Ready
-		           ? ""
-		           : "Preparing model preview";
+		return PlacementMaterial->GetStatus() == ERenderMaterialStatus::Ready ? "" : "Preparing model preview";
 	}
 	if (const auto It = PlacementIcons.find(InObject.Icon); It != PlacementIcons.end())
 	{
@@ -124,8 +122,10 @@ void FEditorPlugin::PollPlacementResources()
 	if (PlacementPublication)
 	{
 		const auto* Node = Scene->FindNode(*PlacementPublication);
-		const auto Results = Scene->GetDrawResults(*PlacementPublication);
-		if (!Node || !Results.empty() || Node->Local().Values != PlacementPublicationLocal.Values)
+		if (!Node || !Scene->GetStatus().Error.empty() || !Scene->GetStatus().PublicationError.empty() ||
+		    Scene->IsModelReady(*PlacementPublication) || !Scene->GetError(*PlacementPublication).empty() ||
+		    Scene->GetRevision() != PlacementPublicationRevision ||
+		    Node->Local().Values != PlacementPublicationLocal.Values)
 		{
 			PlacementPublication.reset();
 			PlacementPublicationPreview.reset();
@@ -140,37 +140,17 @@ void FEditorPlugin::PollPlacementResources()
 	{
 		if (bShowPlacement && Object->Model && !PlacementModels.contains(Object->Id))
 		{
-			auto& Model = PlacementModels[Object->Id];
 			try
 			{
-				Model.Asset = Scene->RegisterModelAsset(*Object->Model);
+				PlacementService.Prepare(FPlacementService::Candidate(*Object), *Scene);
 			}
 			catch (const std::exception& Failure)
 			{
-				Model.Error = Failure.what();
+				PlacementModels[Object->Id].Error = Failure.what();
 			}
 		}
 	}
-	const auto AssetsInScene = Scene->GetAssets();
-	for (auto& [Id, Model] : PlacementModels)
-	{
-		for (const auto& Asset : AssetsInScene)
-		{
-			if (Asset.Id == Model.Asset)
-			{
-				Model.Error = Asset.Error;
-				if (!Model.Resource && Asset.Data)
-				{
-					Model.Data = Asset.Data;
-					Model.Resource = Session->GetResources().RequestModel(Asset.Data);
-				}
-			}
-		}
-		if (Model.Resource && Model.Resource->GetStatus() == ERenderResourceStatus::Failed)
-		{
-			Model.Error = Model.Resource->GetError();
-		}
-	}
+	PlacementService.Poll(*Scene, *Session);
 }
 
 void FEditorPlugin::PollPlacementIcons()
@@ -221,7 +201,31 @@ std::shared_ptr<const FTransientGeometry> FEditorPlugin::FreezePlacementPreview(
 {
 	if (!Placement.GetPreview())
 	{
-		return PlacementPublication && Scene->FindNode(*PlacementPublication) ? PlacementPublicationPreview : nullptr;
+		if (!PlacementPublication || !PlacementPublicationPreview || !Scene->GetStatus().Error.empty() ||
+		    !Scene->GetStatus().PublicationError.empty() || !Scene->FindNode(*PlacementPublication) ||
+		    Scene->IsModelReady(*PlacementPublication) || !Scene->GetError(*PlacementPublication).empty() ||
+		    Scene->GetRevision() != PlacementPublicationRevision)
+		{
+			return {};
+		}
+		auto Result = std::make_shared<FTransientGeometry>();
+		Result->Lifetime = PlacementPublicationPreview->Lifetime;
+		Result->ReplacedPrimitives = Scene->ResolveRenderPrimitives(*PlacementPublication);
+		for (const auto* Items : {&PlacementPublicationPreview->Items, &PlacementPublicationPreview->SceneItems})
+		{
+			for (const auto& State : *Items)
+			{
+				if (bPlacementPublicationSourceMaterials)
+				{
+					Result->AddModelInstance(State, PlacementMaterial);
+				}
+				else
+				{
+					Result->Items.push_back(State);
+				}
+			}
+		}
+		return Result;
 	}
 	const auto It = PlacementModels.find(Placement.GetType());
 	if (It == PlacementModels.end() || !It->second.Resource)
@@ -238,7 +242,14 @@ std::shared_ptr<const FTransientGeometry> FEditorPlugin::FreezePlacementPreview(
 		State.Section = Instance.Primitive;
 		State.Surface = PlacementMaterial;
 		State.World = Multiply(Translation(Placement.GetPreview()->Position), Instance.World);
-		Result->Items.push_back(std::move(State));
+		if (PlacementCandidate && PlacementCandidate->bPreferModelMaterials)
+		{
+			Result->AddModelInstance(std::move(State), PlacementMaterial);
+		}
+		else
+		{
+			Result->Items.push_back(std::move(State));
+		}
 	}
 	return Result;
 }

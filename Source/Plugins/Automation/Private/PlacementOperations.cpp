@@ -45,5 +45,30 @@ void RegisterPlacementOperations(FOperationCatalog& InCatalog, IScenePlacement* 
 			                                             }
 		                                             }};
 	    }));
+	Info.Id = "scene.placement.place_model";
+	Info.Summary = "Prepare and place a native model asset";
+	Info.Description =
+	    "Shares native model preparation and the creation/history transaction with Content Browser viewport drops. "
+	    "Creates one node preserving model instances and materials at an explicit world pivot. "
+	    "Concurrent scene replacement or edits reject the stale request before commit.";
+	const FSceneModelPlacementRequest ModelExample{
+	    "document-from-scene.info", 1, {"", "/Game/Models/Example.hasset", RecordType<FModelAsset>().Id, ""}, {}};
+	Info.Example = WriteRecordWire(RecordType<FSceneModelPlacementRequest>(), &ModelExample);
+	InCatalog.Register(MakeAsyncOperation<FSceneModelPlacementRequest, FSceneNodeInfo>(
+	    Info,
+	    [InPlacement](const auto& InRequest)
+	    {
+		    return TPendingOperation<FSceneNodeInfo>{[InPlacement, InRequest]()
+		                                             {
+			                                             try
+			                                             {
+				                                             return InPlacement->PlaceModel(InRequest);
+			                                             }
+			                                             catch (const FSceneEditError& Error)
+			                                             {
+				                                             throw FAutomationError(Error.Code, Error.what());
+			                                             }
+		                                             }};
+	    }));
 }
 } // namespace Hyperion

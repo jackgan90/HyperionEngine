@@ -204,7 +204,8 @@ void FEditorPlugin::DrawContentGrid()
 			// Typed reference properties accept this path when the indexed asset type is compatible.
 			Gui->DragSource(AssetPathPayloadType, Path, Name.c_str());
 		}
-		if (!Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty())
+		if (!Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
+		    !Options.ExerciseModelPlacement.empty())
 		{
 			ContentTileBounds[Path] = Gui->LastItemBounds();
 		}

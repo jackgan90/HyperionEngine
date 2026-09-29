@@ -115,6 +115,7 @@ public:
 	FSceneManifest Snapshot(const std::filesystem::path& InDestination) const;
 	const FSceneInstanceStatus& GetStatus() const;
 	std::string GetError(FSceneHandle InHandle) const;
+	bool IsModelReady(FSceneHandle InHandle) const;
 	std::string GetSkyStatus(FSceneHandle InHandle) const;
 	FSceneSkyStatus GetSkyAssetStatus(FSceneHandle InHandle) const;
 	FSceneLightingInfo GetLightingInfo() const;

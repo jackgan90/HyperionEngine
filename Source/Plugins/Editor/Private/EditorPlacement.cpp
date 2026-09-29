@@ -21,13 +21,30 @@ std::optional<FSceneNodeInfo> FEditorPlugin::PlaceObject(const FScenePlacementRe
 	{
 		throw std::invalid_argument("A registered placeable ID and finite position are required");
 	}
-	if (Object->Model && !PlacementModels.contains(Object->Id))
+	return PollPlacement(FPlacementService::Candidate(*Object), InRequest.Position);
+}
+
+std::optional<FSceneNodeInfo> FEditorPlugin::PlaceModel(const FSceneModelPlacementRequest& InRequest)
+{
+	UpdateDocumentInteraction();
+	SceneDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+	if (!IsFinite(InRequest.Position))
 	{
-		PlacementModels[Object->Id].Asset = Scene->RegisterModelAsset(*Object->Model);
+		throw std::invalid_argument("Placement requires a finite position");
 	}
+	return PollPlacement(FPlacementService::ModelCandidate(InRequest.Model, Assets), InRequest.Position);
+}
+
+std::optional<FSceneNodeInfo> FEditorPlugin::PollPlacement(const FPlacementCandidate& InCandidate, FVec3 InPosition)
+{
+	const auto Document = SceneDocument.Id();
+	const auto Revision = Scene->GetRevision();
 	Scene->Tick();
+	// Publishing completed scene work can advance the revision after the request's admission check.
+	SceneDocument.RequireIdle(Document, Revision);
+	PlacementService.Prepare(InCandidate, *Scene);
 	PollPlacementResources();
-	const auto Unavailable = PlacementUnavailableReason(*Object);
+	const auto Unavailable = PlacementUnavailableReason(InCandidate);
 	if (!Unavailable.empty())
 	{
 		if (Unavailable.starts_with("Preparing"))
@@ -36,7 +53,7 @@ std::optional<FSceneNodeInfo> FEditorPlugin::PlaceObject(const FScenePlacementRe
 		}
 		throw FSceneEditError("load_failed", Unavailable);
 	}
-	CommitPlacement(*Object, InRequest.Position);
+	CommitPlacement(InCandidate, InPosition);
 	return DescribeSceneNode(SceneDocument, {SceneDocument.Id(), *SceneDocument.Selection().Primary()});
 }
 
@@ -112,32 +129,87 @@ void FEditorPlugin::CancelPlacement()
 	if (Gui)
 	{
 		// Window docking also uses GUI drag payloads; cancel only the gesture owned by placement.
-		if (const auto Payload = Gui->DragPayload(); Payload && Payload->Type == PlacementPayload)
+		if (const auto Payload = Gui->DragPayload();
+		    Payload && (Payload->Type == PlacementPayload ||
+		                (Payload->Type == PlacementSourceType && Payload->Value == PlacementSourceValue)))
 		{
 			Gui->CancelDragDrop();
 		}
 	}
+	PlacementCandidate.reset();
+	PlacementSourceType.clear();
+	PlacementSourceValue.clear();
 }
 
 void FEditorPlugin::RoutePlacement()
 {
 	// The image must remain the last submitted item while the generic drop target is queried.
-	const auto Drop = Gui->DropTarget(PlacementPayload);
-	const auto Payload = Drop ? Drop : Gui->DragPayload();
-	bPlacementUsedMouse = Placement.IsActive() || (Payload && Payload->Type == PlacementPayload);
-	if (!Payload || Payload->Type != PlacementPayload)
+	const auto Payload = Gui->DragPayload();
+	const bool bSupported = Payload && (Payload->Type == PlacementPayload || Payload->Type == AssetPathPayloadType);
+	bPlacementUsedMouse = Placement.IsActive() || bSupported;
+	if (!bSupported)
 	{
-		Placement.Cancel();
+		CancelPlacement();
 		return;
 	}
+	const auto Drop = Gui->DropTarget(Payload->Type.c_str());
+	// A content drag belongs to placement only after entering this viewport target.
+	if (!Drop && !Placement.IsActive())
+	{
+		return;
+	}
+	try
+	{
+		RoutePlacementPayload(*Payload, Drop);
+	}
+	catch (const std::exception& Failure)
+	{
+		PlacementStatus = Failure.what();
+		Placement.SetPreview({});
+		if (Drop)
+		{
+			Gui->DrawDropFeedback(false, PlacementStatus.c_str());
+		}
+		if (Payload->bDelivery || Gui->PointerState().bReleased)
+		{
+			CancelPlacement();
+		}
+	}
+}
+
+FPlacementCandidate FEditorPlugin::ResolvePlacementPayload(const FGuiDragPayload& InPayload)
+{
+	if (InPayload.Type == PlacementPayload)
+	{
+		const auto* Object = PlacementRegistry.Find(InPayload.Value);
+		if (!Object)
+		{
+			throw std::invalid_argument("Unknown placeable object");
+		}
+		return FPlacementService::Candidate(*Object);
+	}
+	for (auto Reference : Assets.GetAssetIndex())
+	{
+		if (Reference.Path == InPayload.Value)
+		{
+			Reference.Revision.clear();
+			return FPlacementService::ModelCandidate(std::move(Reference), Assets);
+		}
+	}
+	throw std::invalid_argument("Asset is unavailable; refresh Content Browser and try again");
+}
+
+void FEditorPlugin::RoutePlacementPayload(const FGuiDragPayload& InPayload,
+                                          const std::optional<FGuiDragPayload>& InDrop)
+{
 	ViewportClick.reset();
 	Camera.Reset();
 	bCameraDragging = false;
 	const auto CameraView = PickingCamera();
 	const auto Pointer = Gui->PointerState();
-	const auto* Object = PlacementRegistry.Find(Payload->Value);
-	if (!Object || !CameraView || !bViewportVisible || bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot ||
-	    bDiscardDialog || bViewOptionsOpen || Pointer.bCancel || Pointer.bRightDown || Gizmo.IsDragging())
+	if (!CameraView || !bViewportVisible || bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot ||
+	    bDiscardDialog || bPreferencesDialog || bViewOptionsOpen || Pointer.bCancel || Pointer.bRightDown ||
+	    Gizmo.IsDragging())
 	{
 		CancelPlacement();
 		return;
@@ -151,15 +223,19 @@ void FEditorPlugin::RoutePlacement()
 	if (!Placement.IsActive())
 	{
 		FinishInspectorEdit();
-		Placement.Begin(Object->Id, PlacementContext);
+		PlacementCandidate = ResolvePlacementPayload(InPayload);
+		PlacementSourceType = InPayload.Type;
+		PlacementSourceValue = InPayload.Value;
+		Placement.Begin(PlacementCandidate->Id, PlacementContext);
 	}
-	if (!Placement.IsCurrent(Object->Id, PlacementContext))
+	if (InPayload.Type != PlacementSourceType || InPayload.Value != PlacementSourceValue ||
+	    !Placement.IsCurrent(PlacementCandidate->Id, PlacementContext))
 	{
 		CancelPlacement();
 		return;
 	}
 	Placement.SetPreview({});
-	if (!Drop || !Pointer.bPositionValid)
+	if (!InDrop || !Pointer.bPositionValid)
 	{
 		if (Pointer.bReleased || !Pointer.bDown)
 		{
@@ -167,23 +243,26 @@ void FEditorPlugin::RoutePlacement()
 		}
 		return;
 	}
-	PlacementStatus = PlacementUnavailableReason(*Object);
+	PlacementService.Prepare(*PlacementCandidate, *Scene);
+	PlacementStatus = PlacementUnavailableReason(*PlacementCandidate);
 	if (!PlacementStatus.empty())
 	{
+		Gui->DrawDropFeedback(false, PlacementStatus.c_str());
 		if (Pointer.bReleased)
 		{
 			CancelPlacement();
 		}
 		return;
 	}
-	UpdatePlacementPreview(*Object, *CameraView, Pointer.Position);
-	if (Drop->bDelivery)
+	UpdatePlacementPreview(*PlacementCandidate, *CameraView, Pointer.Position);
+	Gui->DrawDropFeedback(Placement.GetPreview().has_value(), PlacementStatus.c_str());
+	if (InDrop->bDelivery)
 	{
 		if (Placement.GetPreview())
 		{
 			try
 			{
-				CommitPlacement(*Object, Placement.GetPreview()->Position);
+				CommitPlacement(*PlacementCandidate, Placement.GetPreview()->Position);
 				// The selected object is now in the viewport; subsequent scene shortcuts belong there.
 				Gui->FocusWindow("Viewport");
 			}
@@ -196,7 +275,7 @@ void FEditorPlugin::RoutePlacement()
 	}
 }
 
-void FEditorPlugin::UpdatePlacementPreview(const FPlaceableObject& InObject, const FSceneCameraView& InCamera,
+void FEditorPlugin::UpdatePlacementPreview(const FPlacementCandidate& InObject, const FSceneCameraView& InCamera,
                                            FVec2 InPointer)
 {
 	const FBounds Bounds = InObject.Model ? PlacementModels.at(InObject.Id).Data->Bounds : FBounds{};
@@ -216,27 +295,28 @@ void FEditorPlugin::UpdatePlacementPreview(const FPlaceableObject& InObject, con
 
 void FEditorPlugin::CommitPlacement(const FPlaceableObject& InObject, FVec3 InPosition)
 {
+	CommitPlacement(FPlacementService::Candidate(InObject), InPosition);
+}
+
+void FEditorPlugin::CommitPlacement(const FPlacementCandidate& InObject, FVec3 InPosition)
+{
 	if (!IsFinite(InPosition) || !PlacementUnavailableReason(InObject).empty())
 	{
 		throw std::invalid_argument("Placement requires finite coordinates and prepared resources");
 	}
-	auto Node = InObject.Create();
-	Node.Name = InObject.Label;
-	Node.Local().Values[12] = InPosition.X;
-	Node.Local().Values[13] = InPosition.Y;
-	Node.Local().Values[14] = InPosition.Z;
-	if (InObject.Model)
-	{
-		Node.Model() = FSceneModelComponent{};
-		Node.Model()->Asset = PlacementModels.at(InObject.Id).Asset;
-	}
-	const auto Preview = InObject.Model ? FreezePlacementPreview() : nullptr;
-	const auto Local = Node.Local();
-	const auto Handle = CommitCreate(std::move(Node));
+	const auto Preview = InObject.Model && Placement.GetType() == InObject.Id && Placement.GetPreview()
+	                         ? FreezePlacementPreview()
+	                         : nullptr;
+	FinishInspectorEdit();
+	const auto Handle = PlacementService.Commit(InObject, InPosition, SceneDocument);
+	bSelectionInitialized = true;
+	Error.clear();
 	if (Preview)
 	{
 		PlacementPublication = Handle;
-		PlacementPublicationLocal = Local;
+		PlacementPublicationLocal = Scene->FindNode(Handle)->Local();
+		PlacementPublicationRevision = Scene->GetRevision();
+		bPlacementPublicationSourceMaterials = InObject.bPreferModelMaterials;
 		PlacementPublicationPreview = Preview;
 	}
 	PlacementStatus = "Placed " + InObject.Label;

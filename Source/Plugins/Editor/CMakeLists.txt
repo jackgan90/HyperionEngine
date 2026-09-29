@@ -64,7 +64,9 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorCapture.cpp
   Private/EditorCaptureAcceptance.cpp
   Private/EditorPlacement.cpp
+  Private/PlacementService.cpp
   Private/EditorPlacementAcceptance.cpp
+  Private/EditorModelPlacementAcceptance.cpp
   Private/EditorPlacementResources.cpp
   Private/EditorLightMarkers.cpp
   Private/EditorLightMarkerAcceptance.cpp

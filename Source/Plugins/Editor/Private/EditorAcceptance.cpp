@@ -337,6 +337,7 @@ void FEditorPlugin::WriteReport()
 	       << "\"picking_verified\": " << bPickingVerified << ",\n"
 	       << "\"outlines_verified\": " << bOutlinesVerified << ",\n"
 	       << "\"placement_verified\": " << bPlacementVerified << ",\n"
+	       << "\"model_placement_verified\": " << bModelPlacementVerified << ",\n"
 	       << "\"placement_status\": " << std::quoted(PlacementStatus) << ",\n"
 	       << "\"placement_unavailable\": " << Unavailable << ",\n"
 	       << "\"save_ms\": " << LastSaveMilliseconds << ",\n"

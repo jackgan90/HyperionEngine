@@ -23,7 +23,7 @@
 | 多选、删除、历史 | `scene.selection.get/set/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary；Editor 删除后不自动选择替代物。Editor undo 恢复并重新选择新 handle |
 | 复制与保留子节点删除 | `scene.selection.duplicate/remove_keep_children` | SceneEditing 共享事务；操作 primary，复制共享资源，删除保留子节点世界变换，支持 undo/redo 和选择恢复；GUI 入口待后续 Outliner/viewport 交互设计 |
 | 对象剪贴板 | `scene.selection.copy`、`scene.clipboard.info/paste` | 与 Ctrl+C/Ctrl+V 共用系统剪贴板和不可变子树快照；同一 Editor、同一文档；数字后缀、原父级/local、一次粘贴一个历史事务；普通文本替换使旧对象不可粘贴。返回摘要，新 handle 通过 selection.get 或 nodes.list 查询 |
-| 放置 primitive/light/native model | `scene.placement.list/place` | `IScenePlacement` 与 Editor registry 的准备/提交路径；显式 position 为世界坐标。Sky Light 默认使用 SkyAsset 与 Engine Cloudy；放置或新增天空光组件仅在没有活动天空光时自动激活 |
+| 放置 primitive/light/native model | `scene.placement.list/place/place_model` | `IScenePlacement` 与 Editor 共用候选、资源准备和提交路径；`place` 使用注册预设 ID，`place_model` 使用原生模型 `FAssetRef`，显式 position 为世界坐标 pivot。异步准备后创建并选中一个节点，记录一次历史，需显式保存；过期 document/revision 或 busy 请求拒绝。Sky Light 默认使用 SkyAsset 与 Engine Cloudy；放置或新增天空光组件仅在没有活动天空光时自动激活 |
 | Inspector 组件 | `scene.components.list`、`scene.component_types.list`、`scene.components.edit_structure`、`scene.component.<type>.get/set/set_batch` | `SceneEditing` 与组件反射；组件实例 ID 来自 list，不必等于类型 ID。保留资源绑定，完整候选经文档/场景校验；资源模型组件必须通过 prepared placement 创建 |
 | 默认相机、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换 |
 | 灯光 Priority 与生效诊断 | `scene.component.<type>.get/set/set_batch`、`scene.lighting.get` | 与 Details 共用组件、校验、事务、历史和保存；Priority 为有符号 32 位整数，默认 0，越大越优先；诊断返回阴影方向光、天空光、顶层同优先级冲突、有效启用状态和天空资产错误；无独立主光设置接口 |

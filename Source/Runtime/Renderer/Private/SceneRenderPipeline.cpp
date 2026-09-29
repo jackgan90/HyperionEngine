@@ -205,33 +205,34 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	}
 	PrepareClusters(InMain, *InFrame, Settings.bClusteredLighting && !InShadows.DebugMode);
 	auto Family = MakeViews(InMain, Clear);
-	Session.BuildViews(InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
-	                   [&](std::size_t InIndex)
-	                   {
-		                   if (InIndex == Family.BaseIndex)
-		                   {
-			                   BuildFeatures(ERenderFeatureStage::AfterOpaque, FeatureContext);
-		                   }
-		                   if (bDeferred && InIndex == Family.BaseIndex)
-		                   {
-			                   BuildFeatures(ERenderFeatureStage::BeforeLighting, FeatureContext);
-			                   AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear),
-			                                     bInDeferPreparation);
-			                   if (!InShadows.DebugMode && !Settings.bClusteredLighting)
-			                   {
-				                   AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
-			                   }
-		                   }
-		                   if (InIndex + 1 == Family.TransparentIndex)
-		                   {
-			                   AddSky(InGraph, InMain, *InFrame, bInDeferPreparation);
-		                   }
-		                   if (InIndex == Family.TransparentIndex)
-		                   {
-			                   BuildFeatures(ERenderFeatureStage::BeforeTonemap, FeatureContext);
-			                   AddFullscreenPass(Session, InGraph, Tonemap(InMain), bInDeferPreparation);
-		                   }
-	                   });
+	Session.BuildViews(
+	    InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
+	    [&](std::size_t InIndex)
+	    {
+		    if (InIndex == Family.BaseIndex)
+		    {
+			    BuildFeatures(ERenderFeatureStage::AfterOpaque, FeatureContext);
+		    }
+		    if (bDeferred && InIndex == Family.BaseIndex)
+		    {
+			    BuildFeatures(ERenderFeatureStage::BeforeLighting, FeatureContext);
+			    AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear), bInDeferPreparation);
+			    if (!InShadows.DebugMode && !Settings.bClusteredLighting)
+			    {
+				    AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
+			    }
+		    }
+		    if (InIndex + 1 == Family.TransparentIndex)
+		    {
+			    AddSky(InGraph, InMain, *InFrame, bInDeferPreparation);
+		    }
+		    if (InIndex == Family.TransparentIndex)
+		    {
+			    BuildFeatures(ERenderFeatureStage::BeforeTonemap, FeatureContext);
+			    AddFullscreenPass(Session, InGraph, Tonemap(InMain), bInDeferPreparation);
+		    }
+	    },
+	    TransientGeometry.get());
 	bPending = bInDeferPreparation;
 	if (bDeferred && Settings.DebugMode)
 	{
