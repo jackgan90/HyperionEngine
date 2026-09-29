@@ -38,7 +38,7 @@
 | 渲染与配置 | `render.settings.get/set/save`、`render.shadows.get/set` | `IRenderSettings`；完整候选校验、revision 和原子保存；get/set version 2 的 activeReversedZ 表示已提交给后续场景/三维资产预览帧的实时值，完成不等待 GPU 呈现；save version 1 独立持久化；不修改场景/资产 history；shadow 参数为旧场景的会话默认值，已配置的主方向光组件参数优先 |
 | 灯光阴影属性 | `scene.component.hyperion.scenedirectionallight.get/set` | `shadowSettings` 可选嵌套组件字段；SceneEditing 验证、历史和原生保存；point/spot 尚不支持阴影 |
 | 渲染结果和诊断 | `render.statistics`、`render.component_diagnostics`、`render.screenshot` | 完成帧统计、分页 primitive 诊断和现有 readback。PNG 成功返回时文件已写入，返回目标本地路径、尺寸、frame 和 bytes |
-| RenderDoc | `renderdoc.status/capture/open/set_preference` | 复用 host capture/replay；Editor preference 与 GUI 同样持久化；未编译/缺 DLL/不可绘制等情况返回 unavailable |
+| RenderDoc | `renderdoc.status/capture/open/set_preference`、`renderdoc.hud.get/set` | 复用 host capture/replay；HUD 默认隐藏、独立持久化、已加载时即时生效；HUD 返回 preference 与实际 enabled，运行库不可用时 enabled 为 null，仍可保存偏好；抓帧不可用时返回 unavailable |
 | GUI scale / Profiling | `gui.scale.get/set`、`profiling.get/set` | 共用 GUI scale 和 Core profiling 控制。scale 下一 GUI frame 生效并沿正常偏好路径保存；profiling 取决于构建和 collector |
 | 导入与发布 | `asset.import`、`asset.import.capabilities/validate/tasks/task` | `FAssetImportWorkspace` 共用 GUI 请求、校验和任务；GUI 自动校验，提交时再次校验，完成后以模态框显示成功或失败原因，不提供独立 Validate 按钮；底层复用 importer/publication lease；不静默覆盖已打开草稿 |
 | 导入输出目录选择 | GUI Save as / Browse；agent 使用导入请求的 `output` | 原生目录选择器与上次目录偏好仅为 GUI 适配，暂不提供自动化偏好接口；选择后转换为 `/Game` 路径，仍使用共享导入校验与发布 |

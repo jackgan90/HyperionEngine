@@ -8,6 +8,27 @@ void IRenderCaptureControl::SetRenderCapturePreference(bool)
 	throw FSceneEditError("unavailable", "This host configures RenderDoc through startup settings");
 }
 
+FRenderCaptureHudInfo IRenderCaptureControl::RenderCaptureHudInfo() const
+{
+	return {};
+}
+
+void IRenderCaptureControl::SetRenderCaptureHudPreference(bool)
+{
+	throw FSceneEditError("unavailable", "This host does not provide a RenderDoc HUD preference");
+}
+
+template<> const FRecordDescriptor& RecordType<FRenderCaptureHudInfo>()
+{
+	static const auto Type = MakeRecord<FRenderCaptureHudInfo>(
+	    "hyperion.render.capture.hud.info",
+	    {Member("preference", &FRenderCaptureHudInfo::Preference,
+	            {.Description = "Saved HUD preference; null when host does not support preferences."}),
+	     Member("enabled", &FRenderCaptureHudInfo::Enabled,
+	            {.Description = "Actual process-wide HUD visibility; null when capture runtime is unavailable."})});
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FRenderCaptureInfo>()
 {
 	static const auto Type = MakeRecord<FRenderCaptureInfo>(

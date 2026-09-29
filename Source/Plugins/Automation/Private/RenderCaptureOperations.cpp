@@ -138,6 +138,43 @@ void RegisterCapturePreference(FOperationCatalog& InCatalog, IRenderCaptureContr
 	    }));
 }
 
+void RegisterCaptureHud(FOperationCatalog& InCatalog, IRenderCaptureControl* InCapture)
+{
+	const bool bAvailable = InCapture && InCapture->RenderCaptureHudInfo().Preference.has_value();
+	auto Info = ControlInfo("renderdoc.hud.get",
+	                        "Read saved RenderDoc HUD preference and actual process-wide overlay "
+	                        "state. Null enabled means the capture runtime is unavailable.",
+	                        true, bAvailable);
+	InCatalog.Register(
+	    MakeOperation<FSceneInfoRequest, FRenderCaptureHudInfo>(Info,
+	                                                            [InCapture](const auto&)
+	                                                            {
+		                                                            return InCapture->RenderCaptureHudInfo();
+	                                                            }));
+	Info =
+	    ControlInfo("renderdoc.hud.set",
+	                "Persist Show RenderDoc HUD through the Editor preference service and apply immediately when "
+	                "the runtime is loaded. Does not enable capture or load plugins. No restart required for a "
+	                "loaded runtime; null enabled means only the preference was saved. Save failure preserves state.",
+	                false, bAvailable);
+	const FCapturePreference Preference{false};
+	Info.Example = WriteRecordWire(RecordType<FCapturePreference>(), &Preference);
+	InCatalog.Register(MakeOperation<FCapturePreference, FRenderCaptureHudInfo>(
+	    Info,
+	    [InCapture](const auto& InRequest)
+	    {
+		    try
+		    {
+			    InCapture->SetRenderCaptureHudPreference(InRequest.bEnabled);
+			    return InCapture->RenderCaptureHudInfo();
+		    }
+		    catch (const FSceneEditError& Error)
+		    {
+			    throw FAutomationError(Error.Code, Error.what());
+		    }
+	    }));
+}
+
 void RegisterGuiScale(FOperationCatalog& InCatalog, FGui* InGui)
 {
 	auto Info = ControlInfo("gui.scale.get", "Read currently applied GUI scale.", true, InGui);
@@ -165,6 +202,7 @@ void RegisterRenderCapture(FOperationCatalog& InCatalog, IRenderCaptureControl* 
 {
 	RegisterCaptureActions(InCatalog, InCapture);
 	RegisterCapturePreference(InCatalog, InCapture);
+	RegisterCaptureHud(InCatalog, InCapture);
 	RegisterGuiScale(InCatalog, InGui);
 }
 } // namespace Hyperion

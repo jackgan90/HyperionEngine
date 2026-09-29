@@ -32,7 +32,9 @@ void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBack
 	RegisterAssetAutomation(Registry);
 	RegisterAutomationLocal(Registry, "Editor");
 #if HYP_ENABLE_RENDERDOC
-	RegisterRenderDocPlugin(Registry, {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor"});
+	RegisterRenderDocPlugin(
+	    Registry,
+	    {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor", Options.Preferences.bRenderDocHud});
 #endif
 	const bool bInteractive =
 	    Options.ExerciseAssets.empty() && Options.ExerciseContent.empty() && !Options.bExercise &&

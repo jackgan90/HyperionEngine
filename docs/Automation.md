@@ -195,6 +195,8 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 应用附着 | 默认本机发现、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |
 | 底层与维护工具 | 现有 AssetTool 离线维护 CLI 保留 | 不逐个 RPC Public C++ 方法；库迁移、Engine 内容生成、性能测量及导出 envelope 不作为 Editor 交互任务扩展 |
 
+RenderDoc HUD 的 `renderdoc.hud.get/set` 与 Editor preference 共用领域操作；默认隐藏，已加载时即时生效并独立保存，不写场景历史。返回的 `preference` 表示保存值，`enabled` 表示进程级实际状态（运行库不可用时为 null）；保存偏好不会加载插件。保存失败保留原值与显示状态。`automation_renderdoc_hud` 验证发现、schema、CLI/MCP 调用、重启、禁用与保存失败；`editor_capture_ui` 覆盖 GUI 等价行为。
+
 领域操作族、共享服务及工作流见 [AutomationCapabilities.md](AutomationCapabilities.md)。新增功能必须同步更新该覆盖表，并给出 discovery、实际调用和相应 GUI/保存/失效验证。
 
 目标是持续扩大人类任务的等价能力，不是一比一 RPC 每个 C++ 方法。独立资产模式拥有自己的草稿，通过保存时的 digest/identity 检查防止覆盖外部修改；附着模式直接操作目标应用的同一场景服务实例。

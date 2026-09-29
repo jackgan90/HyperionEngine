@@ -118,6 +118,18 @@ void FEditorPlugin::DrawPreferences()
 		}
 	}
 	CapturePreferenceBounds = Gui->LastItemBounds();
+	bool bHudEnabled = Options.Preferences.bRenderDocHud;
+	if (Gui->Checkbox("Show RenderDoc HUD", bHudEnabled))
+	{
+		try
+		{
+			SetRenderCaptureHudPreference(bHudEnabled);
+		}
+		catch (const FSceneEditError&)
+		{ /* The shared operation retains the persistence error displayed below. */
+		}
+	}
+	CaptureHudPreferenceBounds = Gui->LastItemBounds();
 	if (!Options.PreferenceError.empty())
 	{
 		Gui->TextWrapped(Options.PreferenceError);

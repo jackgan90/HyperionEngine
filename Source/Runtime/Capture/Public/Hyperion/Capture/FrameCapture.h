@@ -2,6 +2,7 @@
 #include "Hyperion/Platform/Window.h"
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace Hyperion
@@ -22,6 +23,7 @@ struct FFrameCaptureSettings
 	std::filesystem::path LibraryPath;
 	std::filesystem::path OutputDirectory;
 	std::string Prefix = "Hyperion";
+	std::optional<bool> OverlayEnabled;
 };
 
 struct FFrameCaptureStatus
@@ -49,6 +51,8 @@ public:
 	void Initialize();
 	void Shutdown() noexcept;
 	FFrameCaptureStatus Status() const;
+	std::optional<bool> OverlayEnabled() const;
+	bool SetOverlayEnabled(bool bInEnabled);
 	bool RequestCapture();
 	bool BeginFrame(FNativeSurface InSurface);
 	bool EndFrame();

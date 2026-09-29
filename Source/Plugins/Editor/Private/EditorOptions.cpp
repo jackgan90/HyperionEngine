@@ -200,9 +200,9 @@ void ParseValue(FEditorOptions& InOptions, std::string_view InArgument, const st
 	}
 	else if (InArgument == "--exercise-capture")
 	{
-		if (InValue != "toggle" && InValue != "capture" && InValue != "unavailable")
+		if (InValue != "toggle" && InValue != "capture" && InValue != "unavailable" && InValue != "hud")
 		{
-			throw std::invalid_argument("--exercise-capture expects toggle, capture or unavailable");
+			throw std::invalid_argument("--exercise-capture expects toggle, capture, unavailable or hud");
 		}
 		InOptions.ExerciseCapture = InValue;
 	}

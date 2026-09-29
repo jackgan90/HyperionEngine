@@ -38,9 +38,17 @@ def main():
     disabled = run('explicit-disable', 'unavailable', '--disable-plugin', 'renderdoc')
     assert 'explicitly disabled' in disabled if compiled else 'not compiled' in disabled
     assert 'RenderDoc capture saved:' not in disabled
+    run('hud-disabled-provider-enable', 'hud', '--disable-plugin', 'renderdoc')
+    assert 'renderdoc_hud=true' in preferences.read_text()
+    run('hud-disabled-provider-disable', 'hud', '--disable-plugin', 'renderdoc')
+    assert 'renderdoc_hud=false' in preferences.read_text()
     runtime = pathlib.Path(r'C:\Program Files\RenderDoc')
     command = runtime / 'renderdoccmd.exe'
     if compiled and command.is_file() and (runtime / 'renderdoc.dll').is_file():
+        run('hud-enable', 'hud')
+        assert 'renderdoc_hud=true' in preferences.read_text()
+        run('hud-restart-disable', 'hud')
+        assert 'renderdoc_hud=false' in preferences.read_text()
         text = run('capture', 'capture', '--scene', '/Game/Scenes/Sponza.hasset')
         captures = re.findall(r'RenderDoc capture saved: (.+)', text)
         launches = re.findall(r'RenderDoc replay launched: (\d+); (.+)', text)

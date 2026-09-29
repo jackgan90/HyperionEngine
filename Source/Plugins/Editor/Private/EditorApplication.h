@@ -136,6 +136,8 @@ public:
 	void RequestRenderCapture() override;
 	void OpenRenderCapture() override;
 	void SetRenderCapturePreference(bool bInEnabled) override;
+	FRenderCaptureHudInfo RenderCaptureHudInfo() const override;
+	void SetRenderCaptureHudPreference(bool bInEnabled) override;
 	FRenderDiagnostics RenderDiagnostics() override;
 	FRenderHealth RenderHealth() override;
 	FSceneLightingInfo LightingInfo() override;
@@ -295,6 +297,7 @@ private:
 	bool CanCapture() const;
 	void SavePreferences();
 	void ExerciseCaptureInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents);
 	void DrawWindowMenu();
 	void DrawApplicationScale();
 	void DrawToolbar();
@@ -465,9 +468,11 @@ private:
 	FVec4 EditMenuBounds;
 	FVec4 PreferencesMenuBounds;
 	FVec4 CapturePreferenceBounds;
+	FVec4 CaptureHudPreferenceBounds;
 	FVec4 PreferencesCloseBounds;
 	FVec4 CaptureButtonBounds;
 	bool bInitialCapturePreference{};
+	bool bInitialCaptureHudPreference{};
 #if HYP_ENABLE_RENDERDOC
 	FFrameCapture* FrameCapture{};
 #endif

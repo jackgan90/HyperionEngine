@@ -46,6 +46,42 @@ void FEditorPlugin::OpenRenderCapture()
 	throw FSceneEditError("unavailable", CaptureStatus());
 }
 
+FRenderCaptureHudInfo FEditorPlugin::RenderCaptureHudInfo() const
+{
+	FRenderCaptureHudInfo Result;
+	Result.Preference = Options.Preferences.bRenderDocHud;
+#if HYP_ENABLE_RENDERDOC
+	if (FrameCapture)
+	{
+		Result.Enabled = FrameCapture->OverlayEnabled();
+	}
+#endif
+	return Result;
+}
+
+void FEditorPlugin::SetRenderCaptureHudPreference(bool bInEnabled)
+{
+	auto Preferences = Options.Preferences;
+	Preferences.bRenderDocHud = bInEnabled;
+	try
+	{
+		SaveEditorPreferences(Options.PreferencesPath, Preferences);
+	}
+	catch (const std::exception& Error)
+	{
+		Options.PreferenceError = "Could not save editor preferences: " + std::string(Error.what());
+		throw FSceneEditError("save_failed", Options.PreferenceError);
+	}
+	Options.Preferences = std::move(Preferences);
+	Options.PreferenceError.clear();
+#if HYP_ENABLE_RENDERDOC
+	if (FrameCapture)
+	{
+		FrameCapture->SetOverlayEnabled(bInEnabled);
+	}
+#endif
+}
+
 void FEditorPlugin::SetRenderCapturePreference(bool bInEnabled)
 {
 	if (RenderCaptureInfo().bBusy)

@@ -138,9 +138,11 @@ void NoHistory()
 	Document.Detach(Tasks);
 	FOperationCatalog Missing;
 	RegisterSceneOperations(Missing, nullptr);
+	RegisterRenderCapture(Missing, nullptr, nullptr);
 	Missing.Seal();
 	FAutomationSession Absent(Missing);
 	Error(Call(Absent, "scene.info", FSceneInfoRequest{}), "unavailable");
+	Error(Call(Absent, "renderdoc.hud.get", FSceneInfoRequest{}), "unavailable");
 }
 
 void ComponentAdmissionAndBatch()

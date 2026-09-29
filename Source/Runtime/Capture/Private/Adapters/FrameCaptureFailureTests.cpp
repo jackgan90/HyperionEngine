@@ -70,6 +70,34 @@ struct FScopedFailure
 	}
 };
 
+void CheckOverlay()
+{
+	using namespace Hyperion;
+	FFrameCapture Capture({{}, "capture-failure-tests", "Overlay", false});
+	Check(!Capture.OverlayEnabled().has_value() && !Capture.SetOverlayEnabled(true));
+	Capture.Initialize();
+	Check(Capture.OverlayEnabled() == false);
+	const auto GetApi =
+	    reinterpret_cast<pRENDERDOC_GetAPI>(GetProcAddress(GetModuleHandleW(L"renderdoc.dll"), "RENDERDOC_GetAPI"));
+	RENDERDOC_API_1_6_0* Api = nullptr;
+	Check(GetApi && GetApi(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&Api)) && Api);
+	const auto Original = Api->GetOverlayBits();
+	Api->MaskOverlayBits(0, eRENDERDOC_Overlay_FrameNumber);
+	Check(Capture.SetOverlayEnabled(true));
+	Check(Api->GetOverlayBits() == (eRENDERDOC_Overlay_FrameNumber | eRENDERDOC_Overlay_Enabled));
+	Check(Capture.RequestCapture());
+	Check(Capture.SetOverlayEnabled(false));
+	Check(Api->GetOverlayBits() == eRENDERDOC_Overlay_FrameNumber);
+	Check(Capture.Status().State == EFrameCaptureState::Pending);
+	Capture.Cancel();
+	Api->MaskOverlayBits(0, Original);
+	Capture.Shutdown();
+	Check(!Capture.OverlayEnabled().has_value() && !Capture.SetOverlayEnabled(true));
+	FFrameCapture Visible({{}, "capture-failure-tests", "OverlayVisible", true});
+	Visible.Initialize();
+	Check(Visible.OverlayEnabled() == true);
+}
+
 void CheckScope()
 {
 	using namespace Hyperion;
@@ -166,6 +194,7 @@ int main()
 			Check(!Capture.Status().bAvailable);
 		}
 		CheckScope();
+		CheckOverlay();
 		std::cout << "Cancel/End/Shutdown failure ownership, scope cleanup, retry and inactive-error recovery passed\n";
 		return 0;
 	}

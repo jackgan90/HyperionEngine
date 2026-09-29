@@ -137,6 +137,11 @@ void FFrameCapture::Initialize()
 		int Minor = 0;
 		int Patch = 0;
 		P.Api->GetAPIVersion(&Major, &Minor, &Patch);
+		if (P.Settings.OverlayEnabled)
+		{
+			P.Api->MaskOverlayBits(~std::uint32_t(eRENDERDOC_Overlay_Enabled),
+			                       *P.Settings.OverlayEnabled ? eRENDERDOC_Overlay_Enabled : 0U);
+		}
 		P.Status.State = EFrameCaptureState::Ready;
 		P.Status.bAvailable = true;
 		P.Status.Message =
@@ -172,6 +177,28 @@ void FFrameCapture::Shutdown() noexcept
 	catch (...)
 	{
 	}
+}
+
+std::optional<bool> FFrameCapture::OverlayEnabled() const
+{
+	std::lock_guard Lock(Impl->Mutex);
+	if (!Impl->Api || !Impl->Status.bAvailable)
+	{
+		return {};
+	}
+	return (Impl->Api->GetOverlayBits() & eRENDERDOC_Overlay_Enabled) != 0;
+}
+
+bool FFrameCapture::SetOverlayEnabled(bool bInEnabled)
+{
+	std::lock_guard Lock(Impl->Mutex);
+	if (!Impl->Api || !Impl->Status.bAvailable)
+	{
+		return false;
+	}
+	Impl->Api->MaskOverlayBits(~std::uint32_t(eRENDERDOC_Overlay_Enabled),
+	                           bInEnabled ? eRENDERDOC_Overlay_Enabled : 0U);
+	return true;
 }
 
 FFrameCaptureStatus FFrameCapture::Status() const

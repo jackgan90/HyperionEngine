@@ -17,6 +17,12 @@ struct FRenderCaptureInfo
 	std::string ReplayMessage;
 };
 
+struct FRenderCaptureHudInfo
+{
+	std::optional<bool> Preference;
+	std::optional<bool> Enabled;
+};
+
 class IRenderCaptureControl
 {
 public:
@@ -25,7 +31,10 @@ public:
 	virtual void RequestRenderCapture() = 0;
 	virtual void OpenRenderCapture() = 0;
 	virtual void SetRenderCapturePreference(bool bInEnabled);
+	virtual FRenderCaptureHudInfo RenderCaptureHudInfo() const;
+	virtual void SetRenderCaptureHudPreference(bool bInEnabled);
 };
 
 template<> const FRecordDescriptor& RecordType<FRenderCaptureInfo>();
+template<> const FRecordDescriptor& RecordType<FRenderCaptureHudInfo>();
 } // namespace Hyperion

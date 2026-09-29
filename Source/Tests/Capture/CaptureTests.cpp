@@ -19,6 +19,8 @@ void Unavailable(const std::filesystem::path& InLibrary)
 	Capture.Initialize();
 	HYP_CHECK(Capture.Status().State == EFrameCaptureState::Unavailable);
 	HYP_CHECK(!Capture.Status().bAvailable);
+	HYP_CHECK(!Capture.OverlayEnabled().has_value());
+	HYP_CHECK(!Capture.SetOverlayEnabled(true));
 	HYP_CHECK(!Capture.RequestCapture());
 	HYP_CHECK(!Capture.BeginFrame({}));
 	HYP_CHECK(!Capture.EndFrame());

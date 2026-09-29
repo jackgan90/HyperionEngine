@@ -20,6 +20,7 @@ FEditorPreferences LoadEditorPreferences(const std::filesystem::path& InPath)
 	std::string Line;
 	bool bVersion{};
 	bool bCapture{};
+	bool bHud{};
 	bool bRoot{};
 	bool bImportOutput{};
 	while (std::getline(Stream, Line))
@@ -43,6 +44,11 @@ FEditorPreferences LoadEditorPreferences(const std::filesystem::path& InPath)
 		{
 			bCapture = true;
 			Result.bRenderDocCapture = Value == "true";
+		}
+		else if (Key == "renderdoc_hud" && (Value == "true" || Value == "false") && !bHud)
+		{
+			bHud = true;
+			Result.bRenderDocHud = Value == "true";
 		}
 		else if (Key == "asset_root" && !bRoot)
 		{
@@ -75,6 +81,7 @@ void SaveEditorPreferences(const std::filesystem::path& InPath, const FEditorPre
 	std::string Text =
 	    std::string("version=1\nrenderdoc_capture=") + (InPreferences.bRenderDocCapture ? "true\n" : "false\n");
 	Text += "asset_root=" + PathToUtf8(InPreferences.AssetRoot) + "\n";
+	Text += std::string("renderdoc_hud=") + (InPreferences.bRenderDocHud ? "true\n" : "false\n");
 	Text += "import_output_directory=" + PathToUtf8(InPreferences.ImportOutputDirectory) + "\n";
 	for (std::size_t Index = 0; Index < std::min<std::size_t>(5, InPreferences.RecentRoots.size()); ++Index)
 	{

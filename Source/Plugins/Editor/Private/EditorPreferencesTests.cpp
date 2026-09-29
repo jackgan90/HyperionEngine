@@ -24,18 +24,25 @@ int main()
 		const auto Path = Root / "Preferences.ini";
 		std::filesystem::remove(Path);
 		Check(!LoadEditorPreferences(Path).bRenderDocCapture);
+		Check(!LoadEditorPreferences(Path).bRenderDocHud);
 		FEditorPreferences Preferences;
 		Preferences.ImportOutputDirectory = Root / "Output directory";
 		SaveEditorPreferences(Path, Preferences);
 		Check(LoadEditorPreferences(Path).ImportOutputDirectory == Preferences.ImportOutputDirectory);
 		std::ofstream(Path) << "version=1\nrenderdoc_capture=false\n";
 		Check(LoadEditorPreferences(Path).ImportOutputDirectory.empty());
+		Check(!LoadEditorPreferences(Path).bRenderDocHud);
+		Preferences.bRenderDocHud = true;
+		SaveEditorPreferences(Path, Preferences);
+		Check(LoadEditorPreferences(Path).bRenderDocHud);
 		SaveEditorPreferences(Path, {true});
 		Check(LoadEditorPreferences(Path).bRenderDocCapture);
 		SaveEditorPreferences(Path, {false});
 		Check(!LoadEditorPreferences(Path).bRenderDocCapture);
 		for (const std::string Text : {"", "version=2\nrenderdoc_capture=true", "version=1\nrenderdoc_capture=yes",
-		                               "version=1\nrenderdoc_capture=true\nrenderdoc_capture=false"})
+		                               "version=1\nrenderdoc_capture=true\nrenderdoc_capture=false",
+		                               "version=1\nrenderdoc_capture=true\nrenderdoc_hud=yes",
+		                               "version=1\nrenderdoc_capture=true\nrenderdoc_hud=true\nrenderdoc_hud=false"})
 		{
 			std::ofstream(Path) << Text;
 			bool bFailed{};

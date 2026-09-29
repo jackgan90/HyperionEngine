@@ -215,6 +215,9 @@ add_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTABLE}" "${C
 set_tests_properties(automation_parity_regressions PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_capture_ui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorCaptureAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
 set_tests_properties(editor_capture_ui PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+add_test(NAME automation_renderdoc_hud COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/RenderDocHudAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
+set_tests_properties(automation_renderdoc_hud PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_outlines COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OutlineAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_outlines PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_multiselect COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/MultiSelectionAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")

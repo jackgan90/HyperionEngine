@@ -66,6 +66,7 @@ void FEditorPlugin::Initialize()
 		                                                  SavePreferences();
 	                                                  });
 	bInitialCapturePreference = Options.Preferences.bRenderDocCapture;
+	bInitialCaptureHudPreference = Options.Preferences.bRenderDocHud;
 #if HYP_ENABLE_RENDERDOC
 	FrameCapture = Context.Find<FFrameCapture>();
 #endif
