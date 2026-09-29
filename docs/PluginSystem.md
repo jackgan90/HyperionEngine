@@ -23,6 +23,7 @@ Editor 的可执行入口位于 `Applications`，只选择 D3D12 provider 并调
 | `automation-catalog` | 操作和类型目录 | 无 |
 | `automation-assets` | 共享资产文档的操作适配与任务 | automation-catalog；可选 assets |
 | `automation-session` | 封闭目录、Main 会话任务、endpoint | automation-catalog；在操作适配器之后启动 |
+| `automation-log` | 当前进程日志分页读取适配 | automation-catalog；可选 Editor 发布的 Core history |
 | `automation-stdio` | CLI / JSONL / MCP 管道和输入缓冲 | automation-session |
 | `window` | FWindow、Main 事件轮询 | 无 |
 | `graphics` | Device、Swapchain、ShaderCompiler、RenderSession、渲染扩展注册表 | assets、window |
@@ -73,7 +74,7 @@ Contact-shadow feature 自行管理 HZB 请求、visibility mask、debug preview
 
 ## 配置与构建
 
-Editor 默认选择 editor、contact-shadows、automation-scene 和 automation-local。`--disable-plugin` 具有最终优先级，`--kernel-only` 仅运行最小宿主；插件选择只发生在启动时。
+Editor 默认选择 editor、contact-shadows、automation-scene、automation-assets、automation-log 和 automation-local。`--disable-plugin` 具有最终优先级，`--kernel-only` 仅运行最小宿主；插件选择只发生在启动时。
 
 Editor 的 **Edit > Editor preference > Enable RenderDoc capture** 是独立保存的显式启动选择，默认关闭。启用时在设备创建前请求 `renderdoc`，通过可选 `FFrameCapture` 服务供 viewport 使用；`--disable-plugin renderdoc` 仍具有最终优先级。运行中关闭偏好只隐藏操作入口，不卸载插件；首次启用需要重启。详见 [Editor](Editor.md#editor-preference-与抓帧)。
 

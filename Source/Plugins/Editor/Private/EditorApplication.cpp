@@ -242,6 +242,10 @@ void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::
 	{
 		ExerciseCaptureInput(InEvents);
 	}
+	if (Options.bExerciseLog)
+	{
+		ExerciseLogInput(InEvents);
+	}
 	if (!Options.ExerciseAssets.empty())
 	{
 		const bool bAssetInput = (ExerciseStep >= 13 && ExerciseStep <= 20) ||
@@ -379,7 +383,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
 	                               bModelPlacementVerified || bOutlinesVerified || bMultiSelectionVerified ||
 	                               bContentVerified || bRenderControlsVerified || bReparentVerified ||
-	                               bClipboardVerified;
+	                               bClipboardVerified || bLogVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -426,6 +430,10 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 
 void FEditorPlugin::Start(FPluginContext&)
 {
+	if (Options.LogHistory)
+	{
+		Context.Provide(*Options.LogHistory);
+	}
 	BenchmarkStarted = ClockNanoseconds();
 	Initialize();
 	Context.Provide(SceneDocument);
@@ -488,12 +496,13 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		Finish();
 		return;
 	}
-	if ((Options.bExercise || Options.bExerciseGizmo || Options.bExercisePicking || Options.bExerciseMultiSelection ||
-	     Options.bExerciseClipboard || !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() ||
-	     !Options.ExercisePlacement.empty() || !Options.ExerciseModelPlacement.empty() ||
-	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
-	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty() ||
-	     !Options.ExerciseImport.empty() || !Options.ExerciseReparent.empty()) &&
+	if ((Options.bExercise || Options.bExerciseLog || Options.bExerciseGizmo || Options.bExercisePicking ||
+	     Options.bExerciseMultiSelection || Options.bExerciseClipboard || !Options.ExerciseDocument.empty() ||
+	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
+	     !Options.ExerciseModelPlacement.empty() || !Options.ExerciseOutlines.empty() ||
+	     !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
+	     !Options.ExerciseRenderControls.empty() || !Options.ExerciseImport.empty() ||
+	     !Options.ExerciseReparent.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out; model placement case " +
@@ -560,6 +569,10 @@ void FEditorPlugin::Finish()
 	if (Options.bExerciseGizmo && !bGizmoVerified)
 	{
 		throw std::runtime_error("Editor gizmo acceptance did not complete");
+	}
+	if (Options.bExerciseLog && !bLogVerified)
+	{
+		throw std::runtime_error("Editor Log acceptance incomplete at step " + std::to_string(ExerciseStep));
 	}
 	bFinished = true;
 	SaveBenchmark();

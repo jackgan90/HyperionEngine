@@ -194,6 +194,7 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 导入、发布 | GUI/agent 共用 AssetImport workspace，支持 glTF/GLB、独立 PNG/JPEG、HDR/EXR 天空 | 提供能力/校验/共享任务查询；textureEncoding、sky 与 createFolder 为可选参数；createFolder 与 Editor 默认分组规则一致，按来源命名目录并跨会话复用，相同内容零写入；天空烘焙仅接受 HDR/EXR；不接受 `.hasset` 原生资产或自有资产 JSON 导入；发布接收后不可取消 |
 | 导入属性预览 | `asset.import.draft.*` 与 `asset.import.drafts` 共用未发布快照、分页查询、受限编辑及 Undo/Redo/Reset | mutation 使用草稿 generation；submit 保留 provenance 与来源校验；脏草稿参与换根/关闭保护 |
 | 应用附着 | 默认本机发现、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |
+| 进程日志 | `application.log.read` 分页读取 Editor 当前进程日志，与 Log 面板共用 Core history | 含启动、隐藏面板期间与 stdout/stderr 记录；无 history provider 时 unavailable；窗口显隐、大小和停靠属于呈现，不模拟输入 |
 | 底层与维护工具 | 现有 AssetTool 离线维护 CLI 保留 | 不逐个 RPC Public C++ 方法；库迁移、Engine 内容生成、性能测量及导出 envelope 不作为 Editor 交互任务扩展 |
 
 RenderDoc HUD 的 `renderdoc.hud.get/set` 与 Editor preference 共用领域操作；默认隐藏，已加载时即时生效并独立保存，不写场景历史。返回的 `preference` 表示保存值，`enabled` 表示进程级实际状态（运行库不可用时为 null）；保存偏好不会加载插件。保存失败保留原值与显示状态。`automation_renderdoc_hud` 验证发现、schema、CLI/MCP 调用、重启、禁用与保存失败；`editor_capture_ui` 覆盖 GUI 等价行为。

@@ -8,9 +8,6 @@
 #include <memory>
 #include <mimalloc.h>
 #include <new>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <tracy/TracyC.h>
 
@@ -35,41 +32,6 @@ struct FHeader
 };
 
 } // namespace
-
-void InitializeLog(const std::filesystem::path& InFile)
-{
-	if (!InFile.parent_path().empty())
-	{
-		std::filesystem::create_directories(InFile.parent_path());
-	}
-	auto Console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-	auto Disk = std::make_shared<spdlog::sinks::basic_file_sink_mt>(InFile.string(), false);
-	auto Logger = std::make_shared<spdlog::logger>("Hyperion", spdlog::sinks_init_list{Console, Disk});
-	Logger->set_pattern("[%H:%M:%S.%e] [%t] [%l] %v");
-	Logger->flush_on(spdlog::level::info);
-	spdlog::set_default_logger(std::move(Logger));
-}
-
-void InitializeStderrLog()
-{
-	auto Logger = std::make_shared<spdlog::logger>("Hyperion", std::make_shared<spdlog::sinks::stderr_color_sink_mt>());
-	Logger->set_pattern("[%H:%M:%S.%e] [%l] %v");
-	Logger->flush_on(spdlog::level::info);
-	spdlog::set_default_logger(std::move(Logger));
-}
-
-void Log(ELogLevel InLevel, std::string_view InMessage)
-{
-	const auto Severity = InLevel == ELogLevel::Error     ? spdlog::level::err
-	                      : InLevel == ELogLevel::Warning ? spdlog::level::warn
-	                                                      : spdlog::level::info;
-	spdlog::log(Severity, "{}", InMessage);
-}
-
-void ShutdownLog()
-{
-	spdlog::shutdown();
-}
 
 void* Allocate(std::size_t InSize, std::size_t InAlignment, EMemoryTag InTag)
 {

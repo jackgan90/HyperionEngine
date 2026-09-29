@@ -265,6 +265,12 @@ void FEditorPlugin::DrawWindowMenu()
 			*Visible = !*Visible;
 		}
 	}
+	if (Gui->MenuItem("Log", nullptr, bShowLog))
+	{
+		bShowLog = !bShowLog;
+		bFocusLog = bShowLog;
+	}
+	InspectionBounds["log/toggle"] = Gui->LastItemBounds();
 	Gui->Separator();
 	if (Gui->MenuItem("Reset Layout"))
 	{
@@ -619,7 +625,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawToolbar();
 	DrawRenderSettings();
 	Gui->StatusBar(StatusText());
-	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser", "Place Object"}, bResetLayout);
+	Gui->DockSpace({"Viewport", "Outliner", "Details", "Content Browser", "Place Object", .25f, {"Log"}}, bResetLayout);
 	bResetLayout = false;
 	UpdateReparentGesture(InEvents);
 	DrawPlacementPanel();
@@ -641,6 +647,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 		SceneDocument.FinishInteraction();
 	}
 	DrawSceneBrowser();
+	DrawLog();
 	ImportPanel->Draw(*Gui);
 	Gui->EndDisabled();
 	DrawOpenDialog();

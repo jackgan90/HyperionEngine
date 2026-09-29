@@ -2,6 +2,12 @@
 
 本页按 Editor 的现有人类任务组织能力。精确参数、可用性、示例和完成语义以目标的 `api.search` / `api.describe` / `types.describe` 为准，不要求启动时枚举所有声明。连接方式见 [AutomationConnections.md](AutomationConnections.md)，通用契约见 [Automation.md](Automation.md)。
 
+## Editor 进程日志
+
+`application.log.read` 与 **Window > Log** 共用当前进程的日志历史。`after` 为上次读到的序号（十进制字符串，默认 `"0"` 从启动开始），`limit` 默认为 100，范围 1–256。响应包含 `entries`、`next` 和 `total`；按字节预算可能提前结束一页，继续传 `next`，直到等于 `total`，之后可继续读取新增日志。
+
+每行带 sequence、time、thread、level、source、message。等级 wire 值保持 Info=0、Warning=1、Error=2，并新增 Debug=3；schema 包含可读名称。stdout/stderr 使用 Info/Error，thread 是采集线程标识。多行或超过 8192 字节的文字按显示行/UTF-8 边界分段。关闭面板不影响读取，重启后序号重新开始；游标不能跨实例或重启复用。无 history provider 时返回 unavailable；非法游标或 limit 无副作用。能力由 `automation-log` 注册，可独立禁用。窗口显隐、拖拽和停靠属于呈现，不作为模拟输入操作暴露。
+
 ## 推荐调用顺序
 
 1. 连接明确的应用实例，搜索当前任务需要的操作；查询场景文档 `scene.info` 或资产页签 `asset.info`。

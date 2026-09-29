@@ -31,5 +31,6 @@ void RegisterAutomationLocal(FPluginRegistry& InRegistry, std::string InApplicat
                              std::string InLabel = {});
 void RegisterAssetAutomation(FPluginRegistry& InRegistry);
 void RegisterSceneAutomation(FPluginRegistry& InRegistry);
+void RegisterLogAutomation(FPluginRegistry& InRegistry);
 void RegisterAutomationStdio(FPluginRegistry& InRegistry, FAutomationStreamOptions InOptions);
 } // namespace Hyperion

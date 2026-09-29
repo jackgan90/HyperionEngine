@@ -9,6 +9,7 @@
 #include "EditorSelection.h"
 #include "Hyperion/Config/ApplicationClose.h"
 #include "Hyperion/Content/ContentRootService.h"
+#include "Hyperion/Core/Logging/LogHistory.h"
 #include "Hyperion/Core/ProfilingControl.h"
 #include "Hyperion/Core/ProfilingSession.h"
 #include "Hyperion/Renderer/RenderBenchmark.h"
@@ -44,6 +45,8 @@ namespace Hyperion
 {
 struct FEditorOptions
 {
+	FLogHistory* LogHistory{};
+	bool bExerciseLog{};
 	std::filesystem::path EngineContent;
 	std::optional<std::filesystem::path> AssetRoot;
 	bool bReadOnly{};
@@ -302,6 +305,11 @@ private:
 	void ExerciseCaptureInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents);
 	void DrawWindowMenu();
+	void DrawLog();
+	void ExerciseLogInput(std::vector<FInputEvent>& InEvents);
+	bool bShowLog{};
+	bool bFocusLog{};
+	bool bLogVerified{};
 	void DrawApplicationScale();
 	void DrawToolbar();
 	void DrawOutliner();

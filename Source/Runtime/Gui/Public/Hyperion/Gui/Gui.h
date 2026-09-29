@@ -62,6 +62,13 @@ struct FGuiDockLayout
 	std::string Bottom;
 	std::string Left;
 	float RightFraction = .25f;
+	std::vector<std::string> BottomTabs;
+};
+
+struct FGuiTextRow
+{
+	std::string Text;
+	FVec4 Color{1, 1, 1, 1};
 };
 
 // Drag payload carrying a Content Browser asset path.
@@ -122,6 +129,9 @@ public:
 	bool EndActionLayout(const char* InLabel, const std::string& InMessage, bool bInEnabled = true);
 	void Text(const std::string& InValue);
 	void TextWrapped(const std::string& InValue);
+	// Raw, single-line rows with visible-range reads; follows new rows only from the bottom.
+	void TextRows(const char* InId, std::uint64_t InCount,
+	              const std::function<std::vector<FGuiTextRow>(std::uint64_t, std::uint32_t)>& InRead);
 	FVec2 DisplaySize() const;
 	FVec2 FramebufferScale() const;
 	void OverlayLine(FVec2 InNormalizedA, FVec2 InNormalizedB, std::uint32_t InColor);

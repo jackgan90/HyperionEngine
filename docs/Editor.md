@@ -4,6 +4,16 @@
 
 原生标题栏默认使用黑色背景和浅色文字，由 Platform 封装 Windows DWM 设置。精确标题栏颜色需要 Windows 11；不支持时保留系统可用的外观，不影响编辑器启动。
 
+## Log 窗口
+
+Editor 启动不再自动打开命令行窗口。通过 **Window > Log** 开关日志面板；默认隐藏，首次打开时与底部 Content Browser 共用停靠节点。可拖动页签重新停靠或浮动，位置随现有布局保存；Reset Layout 恢复底部位置。升级旧布局时只补充 Log，不重置其他窗口。
+
+面板显示本次进程从日志初始化起的输出，包括窗口创建前的启动日志和关闭面板期间的记录。Error 为红色、Warning 为黄色、Info 和 Debug 为白色。正文保留原始路径；多行消息按行显示，超长行按 UTF-8 边界分段。位于底部时跟随新输出，向上浏览时保留当前位置。正文按可见行从临时日志读取，不因显示缓存容量而删除历史。
+
+结构化引擎日志保留等级；直接写入 stdout/stderr 的文字分别按 Info/Error 显示，并标记来源。原始标准流不含可靠的日志等级，其线程字段表示采集线程。尚未换行的短片段在换行或正常退出排空时记录。采集不包括其他进程、OS 调试流，以及入口初始化之前的输出。持久诊断仍写入 `out/logs/editor.log`，窗口不会混入之前运行的内容；临时会话文件正常退出时删除。
+
+从脚本启动仍支持 stdout/stderr 重定向、现有参数和退出码。交互式致命错误提供原生提示；隐藏、重定向或有限帧运行不会等待错误弹窗。AssetTool 和 Automation CLI 保留命令行程序行为。附着 agent 可通过 `application.log.read` 分页读取同一份日志，见 [自动化能力](AutomationCapabilities.md)。
+
 ## 外部资产导入
 
 使用 **File > Import Asset...** 打开非模态导入面板。Source、Conversion settings、Output、Asset properties 和 Import options and actions 各自可展开或折叠。选择源文件后自动准备属性；手工输入路径时，在离开 Source 输入框后准备。必须先通过 File > Open... 选择可写 Game 根。

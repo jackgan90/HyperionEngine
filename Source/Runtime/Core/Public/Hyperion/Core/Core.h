@@ -13,7 +13,8 @@ enum class ELogLevel
 {
 	Info,
 	Warning,
-	Error
+	Error,
+	Debug
 };
 void InitializeLog(const std::filesystem::path& InFile);
 // Process entrypoints using stdout as a protocol channel select this before starting services.

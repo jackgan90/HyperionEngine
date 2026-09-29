@@ -138,8 +138,33 @@ void FGui::DockSpace(const FGuiDockLayout& InLayout, bool bInReset)
 		{
 			const auto Bottom = ImGui::DockBuilderSplitNode(Center, ImGuiDir_Down, .30f, nullptr, &Center);
 			ImGui::DockBuilderDockWindow(InLayout.Bottom.c_str(), Bottom);
+			for (const auto& Tab : InLayout.BottomTabs)
+			{
+				ImGui::DockBuilderDockWindow(Tab.c_str(), Bottom);
+			}
 		}
 		ImGui::DockBuilderDockWindow(InLayout.Center.c_str(), Center);
+		ImGui::DockBuilderFinish(Id);
+	}
+	// Add newly introduced tabs without rebuilding an existing user workspace.
+	for (const auto& Tab : InLayout.BottomTabs)
+	{
+		if (ImGui::FindWindowSettingsByID(ImHashStr(Tab.c_str())) || ImGui::FindWindowByName(Tab.c_str()))
+		{
+			continue;
+		}
+		const auto* Anchor = ImGui::FindWindowSettingsByID(ImHashStr(InLayout.Bottom.c_str()));
+		auto Bottom = Anchor ? Anchor->DockId : 0;
+		if (!Bottom || !ImGui::DockBuilderGetNode(Bottom))
+		{
+			auto* Node = ImGui::DockBuilderGetCentralNode(Id);
+			if (!Node)
+			{
+				continue;
+			}
+			Bottom = ImGui::DockBuilderSplitNode(Node->ID, ImGuiDir_Down, .30f, nullptr, nullptr);
+		}
+		ImGui::DockBuilderDockWindow(Tab.c_str(), Bottom);
 		ImGui::DockBuilderFinish(Id);
 	}
 	ImGui::DockSpaceOverViewport(Id, Viewport);
