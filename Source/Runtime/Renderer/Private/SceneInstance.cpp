@@ -1,10 +1,20 @@
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/Core/Core.h"
+#include "Hyperion/IO/Path.h"
 #include "SceneInstanceInternal.h"
 #include <algorithm>
 #include <stdexcept>
 
 namespace Hyperion
 {
+void FSceneInstance::FImpl::LogFailure(std::string_view InOperation, std::string_view InSubject,
+                                       std::string_view InReason) const
+{
+	Log(ELogLevel::Error, "Scene " + std::string(InOperation) + " failed; scene='" + PathToUtf8(Path) +
+	                          "'; epoch=" + std::to_string(LoadEpoch) + "; subject='" + std::string(InSubject) +
+	                          "'; reason=" + std::string(InReason));
+}
+
 FSceneInstance::FImpl::FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets,
                              bool bInPrepareQueries)
     : bPrepareQueries(bInPrepareQueries), Session(InSession), Tasks(InTasks), Assets(InAssets)
@@ -87,6 +97,7 @@ void FSceneInstance::Tick()
 	{
 		P.Status.Error = Failure.what();
 		P.Status.bReady = false;
+		P.LogFailure("load/update", "scene instance stopped updating", P.Status.Error);
 	}
 }
 

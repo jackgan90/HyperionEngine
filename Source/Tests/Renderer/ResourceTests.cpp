@@ -1,6 +1,7 @@
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/TransientGeometry.h"
+#include "Support/LogSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
@@ -350,6 +351,7 @@ void CheckSharedUpload(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompi
 
 void CheckKeysAndFailures(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCompiler& InCompiler)
 {
+	FTestLogCapture Logs("render-resource-diagnostics");
 	FRenderSession Session(InTasks, InDevice, InCompiler);
 	FTestDevice OtherDevice(InTasks);
 	FRenderSession Other(InTasks, OtherDevice, InCompiler);
@@ -365,6 +367,15 @@ void CheckKeysAndFailures(FTaskSystem& InTasks, FTestDevice& InDevice, FShaderCo
 		    return Failed->GetStatus() == ERenderResourceStatus::Failed;
 	    });
 	HYP_CHECK(Failed->GetError() == "Expected preparation failure");
+	HYP_CHECK(Logs.Count(ELogLevel::Error, {"Render resource failed;", std::to_string(Failed->GetIdentity()),
+	                                        "Expected preparation failure"}) == 1);
+	const auto Before = Logs.History->Count();
+	for (int Index = 0; Index < 32; ++Index)
+	{
+		(void)Failed->GetStatus();
+		(void)Failed->GetError();
+	}
+	HYP_CHECK(Logs.History->Count() == Before);
 	auto Retry = Session.GetResources().Request(Identity, 1, "same",
 	                                            []
 	                                            {

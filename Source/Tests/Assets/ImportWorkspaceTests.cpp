@@ -1,8 +1,10 @@
+#include "Hyperion/AssetEditing/AssetDocument.h"
 #include "Hyperion/AssetImport/AssetSourceJson.h"
 #include "Hyperion/AssetImport/ImportWorkspace.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/Scene/SceneManifest.h"
+#include "Support/LogSupport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 #include <thread>
@@ -173,8 +175,84 @@ void CheckSky(FFixture& InFixture)
 	HYP_CHECK(InFixture.Wait(InFixture.Imports->Start(Request)).WrittenAssets > 0);
 }
 
+void CheckContentFailureDiagnostic()
+{
+	FFixture Fixture;
+	FTestLogCapture Logs(Fixture.Root / "ContentDiagnostics");
+
+	struct FFailingParticipant final : IContentRootParticipant
+	{
+		FContentRootParticipantState ContentRootState() const override
+		{
+			return {};
+		}
+
+		void ReleaseContentRoot() override
+		{
+			throw std::runtime_error("injected retirement failure");
+		}
+
+		void ContentRootChanged() override
+		{
+		}
+	} Participant;
+
+	Fixture.Content->RegisterParticipant(Participant);
+	std::filesystem::create_directories(Fixture.Root / "Other");
+	bool bFailed{};
+	try
+	{
+		Fixture.Content->Change(Fixture.Root / "Other");
+	}
+	catch (const FContentRootError& Failure)
+	{
+		bFailed = Failure.Code == "content_failed";
+	}
+	Fixture.Content->UnregisterParticipant(Participant);
+	HYP_CHECK(bFailed);
+	HYP_CHECK(Logs.Count(ELogLevel::Error, {"Content root transition failed;", PathToUtf8(Fixture.Root / "Game"),
+	                                        PathToUtf8(Fixture.Root / "Other"), "consumer retirement",
+	                                        "requires restart", "injected retirement failure"}) == 1);
+}
+
+void CheckSaveDiagnostics(FFixture& InFixture)
+{
+	InFixture.Wait(InFixture.Imports->Start(InFixture.Request("Color.png", "SaveDiagnostic.hasset")));
+	FTestLogCapture Logs(InFixture.Root / "SaveDiagnostics");
+	const auto Loaded = InFixture.Assets->LoadAsync("/Game/SaveDiagnostic.hasset").Get(InFixture.Tasks);
+	FAssetEditDocument Current(Loaded);
+	FAssetEditDocument Stale(Loaded);
+	Current.Set("name", WriteValue(std::string("Updated diagnostic asset")));
+	Stale.Set("name", WriteValue(std::string("Stale diagnostic asset")));
+	for (auto* Document : {&Current, &Stale})
+	{
+		Document->Save(*InFixture.Assets);
+		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+		while (Document->IsSaving() && std::chrono::steady_clock::now() < Deadline)
+		{
+			Document->PollSave();
+			InFixture.Tasks.PumpMain();
+			std::this_thread::yield();
+		}
+		HYP_CHECK(!Document->IsSaving());
+	}
+	HYP_CHECK(Current.Error.empty() && !Stale.Error.empty() && Stale.IsDirty());
+	HYP_CHECK(Logs.Count(ELogLevel::Info,
+	                     {"Asset save completed;", "SaveDiagnostic.hasset", Loaded->Header.Id, "revision="}) == 1);
+	HYP_CHECK(Logs.Count(ELogLevel::Error,
+	                     {"Asset save failed;", "SaveDiagnostic.hasset", Loaded->Header.Id, Stale.Error}) == 1);
+	const auto Before = Logs.History->Count();
+	for (int Index = 0; Index < 32; ++Index)
+	{
+		Current.PollSave();
+		Stale.PollSave();
+	}
+	HYP_CHECK(Logs.History->Count() == Before);
+}
+
 void CheckFailedImport(FFixture& InFixture)
 {
+	FTestLogCapture Logs(InFixture.Root / "Diagnostics");
 	InFixture.IO->WriteAsync(InFixture.Root / "Broken.png", FBytes{std::byte{0}}).Get(InFixture.Tasks);
 	const auto Task = InFixture.Imports->Start(InFixture.Request("Broken.png", "Broken.hasset"));
 	Reject(
@@ -185,6 +263,19 @@ void CheckFailedImport(FFixture& InFixture)
 	HYP_CHECK(Task->Info.Status == "failed" && !Task->Info.Error.empty());
 	HYP_CHECK(!InFixture.Imports->ContentRootState().bBusy);
 	HYP_CHECK(!InFixture.Files->Exists("/Game/Broken.hasset"));
+	HYP_CHECK(Logs.Count(ELogLevel::Error,
+	                     {"Import failed;", Task->Info.Task, Task->Info.Source, Task->Info.Output, "reason="}) == 1);
+	const auto Succeeded = InFixture.Imports->Start(InFixture.Request("Color.png", "LogSuccess.hasset"));
+	InFixture.Wait(Succeeded);
+	HYP_CHECK(Logs.Count(ELogLevel::Info, {"Import completed;", Succeeded->Info.Task, Succeeded->Info.Output,
+	                                       "written_assets=", "asset='"}) == 1);
+	const auto Before = Logs.History->Count();
+	for (int Index = 0; Index < 64; ++Index)
+	{
+		InFixture.Imports->Update();
+		(void)InFixture.Imports->Get({Task->Info.Task});
+	}
+	HYP_CHECK(Logs.History->Count() == Before);
 }
 
 FImportDraftInfo WaitDraft(FFixture& InFixture, const std::string& InId)
@@ -534,6 +625,8 @@ int main()
 		CheckImage(Fixture);
 		CheckSky(Fixture);
 		CheckFailedImport(Fixture);
+		CheckSaveDiagnostics(Fixture);
+		CheckContentFailureDiagnostic();
 		CheckPanoramaDimensions(Fixture);
 		CheckDraftEditing(Fixture);
 		CheckDraftFreshness(Fixture);

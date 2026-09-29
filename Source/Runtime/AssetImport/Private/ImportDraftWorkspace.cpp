@@ -1,5 +1,6 @@
 #include "Hyperion/AssetImport/ImportWorkspace.h"
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/IO/Path.h"
 #include <algorithm>
 
@@ -105,6 +106,9 @@ void FAssetImportWorkspace::UpdateDrafts()
 			Entry->Status = "failed";
 			Entry->Error = std::string(Failure.what()).substr(0, 8192);
 			++Entry->Generation;
+			Log(ELogLevel::Error, "Import draft preparation failed; draft='" + Entry->Id + "'; source='" +
+			                          Entry->Request.Source + "'; output='" + Entry->Request.Output +
+			                          "'; reason=" + Failure.what());
 		}
 		Entry->Pending = {};
 	}

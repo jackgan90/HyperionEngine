@@ -98,6 +98,7 @@ void FSceneInstance::FImpl::PollSky(FSkyLoad& InLoad)
 	{
 		InLoad.Error = Failure.what();
 		InLoad.bComplete = true;
+		LogFailure("sky preparation", "path=" + InLoad.Reference.Path + "; asset=" + InLoad.Reference.Id, InLoad.Error);
 	}
 }
 

@@ -54,8 +54,16 @@ void FApplicationHost::Start(const FPluginRegistry& InRegistry, const FPluginSel
 	Plugins = std::make_unique<FPluginSet>(InRegistry.Activate(InSelection, Services));
 	for (const auto& Diagnostic : Plugins->GetDiagnostics())
 	{
-		Log(ELogLevel::Warning, "Plugin " + Diagnostic.Id + ": " + Diagnostic.Message);
+		Log(Diagnostic.bStartupFailure ? ELogLevel::Error : ELogLevel::Warning,
+		    "Plugin " + Diagnostic.Id + ": " + Diagnostic.Message + "; outcome=activation skipped");
 	}
+	std::string Active;
+	for (const auto& Id : Plugins->GetOrder())
+	{
+		Active += (Active.empty() ? "" : ", ") + Id;
+	}
+	Log(ELogLevel::Info, "Application plugins started; active=[" + Active +
+	                         "]; skipped=" + std::to_string(Plugins->GetDiagnostics().size()));
 }
 
 void FApplicationHost::Run(std::uint64_t InFrames)

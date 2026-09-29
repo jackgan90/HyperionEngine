@@ -3,6 +3,7 @@
 #include "Hyperion/AssetImport/SkyImport.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/IO/Path.h"
 #include <algorithm>
 
@@ -101,6 +102,9 @@ std::shared_ptr<const FImportTask> FAssetImportWorkspace::StartPrepared(
 		Tasks.pop_back();
 		throw;
 	}
+	Log(ELogLevel::Debug, "Import accepted; task='" + Task->Info.Task + "'; source='" + Task->Info.Source +
+	                          "'; output='" + Task->Info.Output +
+	                          "'; generation=" + std::to_string(Task->Info.Generation));
 	return Task;
 }
 
@@ -136,6 +140,23 @@ void FAssetImportWorkspace::Complete(FImportTask& InTask)
 		InTask.Info.Error.resize(std::min<std::size_t>(InTask.Info.Error.size(), 8192));
 	}
 	InTask.Pending = {};
+	const auto& Info = InTask.Info;
+	const std::string Context = "task='" + Info.Task + "'; source='" + Info.Source + "'; output='" + Info.Output +
+	                            "'; generation=" + std::to_string(Info.Generation);
+	if (Info.Result)
+	{
+		Log(ELogLevel::Info, "Import completed; " + Context + "; asset='" + Info.Result->Asset.Id +
+		                         "'; written_assets=" + std::to_string(Info.Result->WrittenAssets) +
+		                         "; up_to_date=" + (Info.Result->bUpToDate ? "true" : "false"));
+		if (!Info.Result->Warning.empty())
+		{
+			Log(ELogLevel::Warning, "Import completed with warning; " + Context + "; reason=" + Info.Result->Warning);
+		}
+	}
+	else
+	{
+		Log(ELogLevel::Error, "Import failed; " + Context + "; reason=" + Info.Error);
+	}
 }
 
 void FAssetImportWorkspace::Update()

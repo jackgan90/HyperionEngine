@@ -491,12 +491,29 @@ std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const 
 	        "DXC invocation failed");
 	HRESULT Status{};
 	Checked(Result->GetStatus(&Status), "DXC status failed");
+	ComPtr<IDxcBlobUtf8> Diagnostics;
+	Result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&Diagnostics), nullptr);
+	if (Diagnostics && Diagnostics->GetStringLength())
+	{
+		std::string Defines;
+		for (const auto& Define : InOptions.Defines)
+		{
+			Defines += (Defines.empty() ? "" : ", ") + Define.Name + "=" + Define.Value;
+		}
+		Log(FAILED(Status) ? ELogLevel::Error : ELogLevel::Warning,
+		    "Shader compiler diagnostics; path='" + PathToUtf8(InPath) + "'; entry='" + InEntry + "'; profile=" +
+		        (InStage == EShaderStage::Vertex  ? "vs_6_0"
+		         : InStage == EShaderStage::Pixel ? "ps_6_0"
+		                                          : "cs_6_0") +
+		        "; target=" + (InFormat == EShaderFormat::Dxil ? "DXIL" : "SPIR-V") +
+		        "; optimize=" + (InOptions.bOptimize ? "true" : "false") + "; defines=[" + Defines +
+		        "]; reason=" + Diagnostics->GetStringPointer());
+	}
 	if (FAILED(Status))
 	{
-		ComPtr<IDxcBlobUtf8> Errors;
-		Result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&Errors), nullptr);
-		throw std::runtime_error(std::string(Errors ? Errors->GetStringPointer() : "Shader compilation failed") + "\n" +
-		                         IncludeError);
+		throw std::runtime_error(
+		    std::string(Diagnostics ? Diagnostics->GetStringPointer() : "Shader compilation failed") + "\n" +
+		    IncludeError);
 	}
 	ComPtr<IDxcBlob> Object;
 	Checked(Result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&Object), nullptr), "DXC object missing");

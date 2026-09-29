@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/Plugins/PluginRuntime.h"
 #include <algorithm>
 #include <map>
@@ -5,6 +6,34 @@
 
 namespace Hyperion
 {
+namespace
+{
+void ReportCleanupFailure(std::string_view InPlugin, std::exception_ptr InFailure) noexcept
+{
+	try
+	{
+		std::string Reason = "unknown exception";
+		try
+		{
+			std::rethrow_exception(InFailure);
+		}
+		catch (const std::exception& Failure)
+		{
+			Reason = Failure.what();
+		}
+		catch (...)
+		{
+		}
+		Log(ELogLevel::Error, "Plugin cleanup failed; plugin='" + std::string(InPlugin) +
+		                          "'; remaining cleanup will continue; reason=" + Reason);
+	}
+	catch (...)
+	{
+		// Diagnostics must not replace the original failure or interrupt noexcept cleanup.
+	}
+}
+} // namespace
+
 struct FPluginServices::FImpl
 {
 	struct FService
@@ -203,6 +232,7 @@ void FPluginContext::Drain() noexcept
 		}
 		catch (...)
 		{
+			ReportCleanupFailure(Id, std::current_exception());
 			if (!CleanupFailure)
 			{
 				CleanupFailure = std::current_exception();

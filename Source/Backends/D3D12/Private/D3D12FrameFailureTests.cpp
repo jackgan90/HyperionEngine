@@ -5,6 +5,7 @@
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Support/LogSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include <atomic>
 #include <chrono>
@@ -112,6 +113,40 @@ struct FFrameFixture
 		                          }));
 	}
 };
+
+void CheckValidationDiagnostics(FFrameFixture& InFixture)
+{
+	FTestLogCapture Logs("d3d12-diagnostics");
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Rhi, 0},
+	    [&]
+	    {
+		    auto& Info = *InFixture.State->Info.Get();
+		    const auto Before = InFixture.Device->Statistics().ValidationErrors;
+		    for (int Index = 0; Index < 2; ++Index)
+		    {
+			    CheckCondition(SUCCEEDED(
+			        Info.AddApplicationMessage(D3D12_MESSAGE_SEVERITY_WARNING, "diagnostic repeated warning")));
+			    CheckCondition(
+			        SUCCEEDED(Info.AddApplicationMessage(D3D12_MESSAGE_SEVERITY_ERROR, "diagnostic repeated error")));
+			    CheckCondition(InFixture.Device->Statistics().ValidationErrors == Before + Index + 1);
+		    }
+		    CheckCondition(
+		        SUCCEEDED(Info.AddApplicationMessage(D3D12_MESSAGE_SEVERITY_WARNING, "diagnostic distinct warning")));
+		    CheckCondition(
+		        SUCCEEDED(Info.AddApplicationMessage(D3D12_MESSAGE_SEVERITY_CORRUPTION, "diagnostic corruption")));
+		    for (int Index = 0; Index < 32; ++Index)
+		    {
+			    CheckCondition(InFixture.Device->Statistics().ValidationErrors == Before + 3);
+		    }
+		    Info.ClearStoredMessages();
+	    }));
+	CheckCondition(
+	    Logs.Count(ELogLevel::Warning, {"D3D12 validation;", "message_id=", "diagnostic repeated warning"}) == 1);
+	CheckCondition(Logs.Count(ELogLevel::Warning, {"diagnostic distinct warning"}) == 1);
+	CheckCondition(Logs.Count(ELogLevel::Error, {"diagnostic repeated error"}) == 1);
+	CheckCondition(Logs.Count(ELogLevel::Error, {"diagnostic corruption"}) == 1);
+}
 
 FRenderGraph ClearGraph()
 {
@@ -727,6 +762,7 @@ int main(int InArgc, char** InArgv)
 			                                          Hyperion::CheckOwnedConstantSubmission(Fixture, false);
 		                                          }));
 		Hyperion::CheckPrimitiveFenceRetirement(Fixture);
+		Hyperion::CheckValidationDiagnostics(Fixture);
 #if HYP_ENABLE_PROFILING
 		Hyperion::CheckProfileQueryLifetime(Fixture, Graph);
 #endif

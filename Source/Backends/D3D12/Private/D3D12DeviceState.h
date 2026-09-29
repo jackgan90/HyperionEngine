@@ -6,6 +6,8 @@
 #include <d3d12sdklayers.h>
 #include <functional>
 #include <mutex>
+#include <set>
+#include <tuple>
 
 namespace Hyperion
 {
@@ -45,6 +47,8 @@ struct FD3D12DeviceState : std::enable_shared_from_this<FD3D12DeviceState>
 	ComPtr<ID3D12CommandQueue> Queue;
 	ComPtr<ID3D12Fence> Fence;
 	ComPtr<ID3D12InfoQueue> Info;
+	UINT64 ValidationLogCursor{};
+	std::set<std::tuple<D3D12_MESSAGE_SEVERITY, D3D12_MESSAGE_ID, std::string>> ReportedValidationMessages;
 	HANDLE Event{};
 	std::uint64_t NextFence = 1;
 	std::uint64_t Submitted{};

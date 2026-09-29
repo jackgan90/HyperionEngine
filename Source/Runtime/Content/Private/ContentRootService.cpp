@@ -18,9 +18,14 @@ void IndexContent(FTaskSystem& InTasks, FMountedFileSystem& InFiles, FAssetServi
 		                                                      })
 		                           .Get(InTasks);
 		InAssets.AddAssetIndex(BuildAssetIndex(Discovery->Entries), Mount.Root);
+		Log(ELogLevel::Debug, "Content index prepared; mount='" + PathToUtf8(Mount.Root) + "'; directory='" +
+		                          PathToUtf8(Mount.Directory) +
+		                          "'; assets=" + std::to_string(Discovery->Entries.size()) +
+		                          "; rejected=" + std::to_string(Discovery->Errors.size()));
 		for (const auto& [Path, Error] : Discovery->Errors)
 		{
-			Log(ELogLevel::Warning, "Asset unavailable: " + PathToUtf8(Path) + ": " + Error);
+			Log(ELogLevel::Warning, "Content index skipped asset; mount='" + PathToUtf8(Mount.Root) + "'; path='" +
+			                            PathToUtf8(Path) + "'; reason=" + Error);
 		}
 	}
 }
@@ -149,15 +154,18 @@ void FContentRootService::Commit(FContentRootCandidate InCandidate, bool bInDisc
 		}
 	}
 	bChanging = true;
+	const char* Stage = "consumer retirement";
 	try
 	{
 		for (auto* Participant : Participants)
 		{
 			Participant->ReleaseContentRoot();
 		}
+		Stage = "asset and mount replacement";
 		Assets.ResetContent(*InCandidate.Assets);
 		Files.ReplaceExclusive(*InCandidate.Files);
 		++Generation;
+		Stage = "consumer reinitialization";
 		for (auto* Participant : Participants)
 		{
 			Participant->ContentRootChanged();
@@ -169,9 +177,28 @@ void FContentRootService::Commit(FContentRootCandidate InCandidate, bool bInDisc
 	{
 		bChanging = false;
 		bFailed = true;
+		std::string Reason = "unknown exception";
+		try
+		{
+			throw;
+		}
+		catch (const std::exception& Failure)
+		{
+			Reason = Failure.what();
+		}
+		catch (...)
+		{
+		}
+		Log(ELogLevel::Error, "Content root transition failed; previous='" + Current.Directory + "'; target='" +
+		                          PathToUtf8(InCandidate.Directory) + "'; stage=" + Stage +
+		                          "; host requires restart; reason=" + Reason);
 		throw FContentRootError("content_failed",
 		                        "Content consumer retirement or reinitialization failed; restart the host");
 	}
+	Log(ELogLevel::Info, "Content root changed; previous='" + Current.Directory + "'; current='" +
+	                         PathToUtf8(InCandidate.Directory) + "'; generation=" + std::to_string(Generation) +
+	                         "; read_only=" + (InCandidate.bReadOnly ? "true" : "false") +
+	                         "; discard_requested=" + (bInDiscard ? "true" : "false"));
 }
 
 void FContentRootService::Change(const std::filesystem::path& InDirectory, bool bInReadOnly, bool bInDiscard)

@@ -25,6 +25,8 @@ void FSceneInstance::FImpl::BeginManifest()
 		{
 			Load.Error = Failure.what();
 			Load.bComplete = true;
+			LogFailure("model preparation", Entry.Id + "; path=" + Load.Reference.Path + "; asset=" + Load.Reference.Id,
+			           Load.Error);
 		}
 	}
 	BeginMaterials();
@@ -47,6 +49,8 @@ void FSceneInstance::FImpl::PollModels()
 		catch (const std::exception& Failure)
 		{
 			Load.Error = Failure.what();
+			LogFailure("model preparation", Id + "; path=" + Load.Reference.Path + "; asset=" + Load.Reference.Id,
+			           Load.Error);
 		}
 		Load.bComplete = true;
 		bModelStatusDirty = true;

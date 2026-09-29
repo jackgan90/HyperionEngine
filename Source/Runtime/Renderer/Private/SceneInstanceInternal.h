@@ -12,6 +12,7 @@ struct FSceneInstance::FImpl
 {
 	FImpl(FRenderSession& InSession, FTaskSystem& InTasks, FAssetService& InAssets, bool bInPrepareQueries);
 	bool bPrepareQueries{};
+	void LogFailure(std::string_view InOperation, std::string_view InSubject, std::string_view InReason) const;
 
 	struct FLoad
 	{

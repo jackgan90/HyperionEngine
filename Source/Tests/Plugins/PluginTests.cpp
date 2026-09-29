@@ -1,4 +1,5 @@
 #include "Hyperion/Application/ApplicationHost.h"
+#include "Support/LogSupport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 
@@ -420,6 +421,77 @@ void CheckScopeFailures()
 		    Host.GetServices().Require<FApplicationControl>().RethrowFailure();
 	    });
 }
+
+void CheckCleanupWithFailedLogging()
+{
+	FTestLogCapture Logs("plugin-log-failure");
+	FPluginServices Services;
+	FPluginContext Context(Services, "cleanup-after-sink-failure", {}, {}, {});
+	int Completed{};
+	Context.Defer(
+	    [&]
+	    {
+		    ++Completed;
+	    });
+	Context.Defer(
+	    []
+	    {
+		    throw std::runtime_error("original cleanup failure");
+	    });
+	InitializeEditorLog("plugin-log-failure/Output.log", Logs.History,
+	                    [](std::string_view, bool)
+	                    {
+		                    throw std::runtime_error("injected log output failure");
+	                    });
+	Context.Drain();
+	HYP_CHECK(Completed == 1);
+	bool bOriginal{};
+	try
+	{
+		std::rethrow_exception(Context.GetCleanupFailure());
+	}
+	catch (const std::exception& Failure)
+	{
+		bOriginal = std::string_view(Failure.what()) == "original cleanup failure";
+	}
+	HYP_CHECK(bOriginal);
+}
+
+void CheckDiagnosticLogging()
+{
+	FTestLogCapture Logs("plugin-diagnostics");
+	FApplicationHost Host(1, 1);
+	FPluginRegistry Registry;
+	Registry.Add(Probe("broken-start",
+	                   [](FPluginContext&)
+	                   {
+		                   throw std::runtime_error("injected startup failure");
+	                   }));
+	Registry.Add(Probe("broken-cleanup",
+	                   [](FPluginContext& InContext)
+	                   {
+		                   InContext.Defer(
+		                       []
+		                       {
+			                       throw std::runtime_error("injected cleanup failure");
+		                       });
+	                   }));
+	Host.Start(Registry, {{"broken-start", "broken-cleanup"}});
+	HYP_CHECK(Logs.Count(ELogLevel::Error,
+	                     {"Plugin broken-start:", "outcome=activation skipped", "injected startup failure"}) == 1);
+	const auto Before = Logs.History->Count();
+	Host.Run(32);
+	HYP_CHECK(Logs.History->Count() == Before);
+	Host.Stop();
+	Host.Stop();
+	HYP_CHECK(Logs.Count(ELogLevel::Error, {"Plugin cleanup failed", "broken-cleanup", "injected cleanup failure"}) ==
+	          1);
+	Rejects(
+	    [&]
+	    {
+		    Host.GetServices().Require<FApplicationControl>().RethrowFailure();
+	    });
+}
 } // namespace
 
 int main()
@@ -436,6 +508,8 @@ int main()
 		CheckStartupCleanupFailure(false);
 		CheckStartupCleanupFailure(true);
 		CheckScopeFailures();
+		CheckDiagnosticLogging();
+		CheckCleanupWithFailedLogging();
 		std::cout << "Plugin services, isolation, ordering, shutdown and empty application host passed\n";
 	}
 	catch (const std::exception& InError)

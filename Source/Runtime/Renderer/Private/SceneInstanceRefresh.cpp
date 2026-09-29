@@ -375,6 +375,7 @@ void FSceneInstance::FImpl::PollAssetRefresh()
 		RefreshResources.reset();
 		bRefreshRequested = false;
 		Status.AssetRefreshError = Failure.what();
+		LogFailure("asset refresh", "automatic retry stopped; request another refresh", Status.AssetRefreshError);
 	}
 }
 } // namespace Hyperion

@@ -1,4 +1,5 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
+#include "Support/LogSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include <fstream>
 #include <iostream>
@@ -21,6 +22,26 @@ void Check(bool bInB, const char* InM)
 		throw std::runtime_error(InM);
 	}
 }
+
+void CheckDiagnosticLogging()
+{
+	const auto Root = std::filesystem::absolute("shader-diagnostics") / std::to_string(ClockNanoseconds());
+	FTestLogCapture Logs(Root);
+	std::filesystem::create_directories(Root / "Source");
+	{
+		std::ofstream Source(Root / "Source/Warning.hlsl");
+		Source << "float4 PSMain() : SV_Target { float2 Value = float3(1, 2, 3); return float4(Value, 0, 1); }";
+	}
+	FShaderCompiler Compiler(Root / "Source", Root / "Cache");
+	Compiler.Compile("Warning.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);
+	Check(Logs.Count(ELogLevel::Warning,
+	                 {"Shader compiler diagnostics;", "Warning.hlsl", "PSMain", "profile=ps_6_0", "target=DXIL"}) == 1,
+	      "Successful compiler warnings include context");
+	const auto Before = Logs.History->Count();
+	Check(Compiler.Compile("Warning.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil).bCacheHit,
+	      "Diagnostic shader cache hit");
+	Check(Logs.History->Count() == Before, "Cache hits do not replay compiler diagnostics");
+}
 } // namespace
 
 int main()
@@ -30,6 +51,7 @@ int main()
 	{
 		TestMountedShaders();
 		TestShaderSnapshots();
+		CheckDiagnosticLogging();
 		auto Root = std::filesystem::absolute("shader-test/source");
 		std::filesystem::create_directories(Root);
 		for (auto Name : {"Triangle.hlsl", "Gui.hlsl", "Common.hlsli"})

@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Core.h"
 #include "RenderResourcesInternal.h"
 
 namespace Hyperion
@@ -59,6 +60,14 @@ void FRenderMaterialRecord::Publish(ERenderMaterialStatus InStatus, std::string 
 	if (bChanged)
 	{
 		Owner->PublicationRevision.fetch_add(1, std::memory_order_release);
+		if (InStatus == ERenderMaterialStatus::Failed)
+		{
+			Log(ELogLevel::Error,
+			    "Render material failed; snapshot_id=" + std::to_string(StaticSnapshot ? StaticSnapshot->Identity : 0) +
+			        "; definition_id=" +
+			        std::to_string(Program && Program->Definition ? Program->Definition->GetIdentity() : 0) +
+			        "; preparation/upload unavailable; reason=" + Error);
+		}
 	}
 }
 

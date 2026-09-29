@@ -4,6 +4,8 @@
 
 ## Editor 进程日志
 
+引擎关键操作的诊断由共享领域服务记录，GUI 和 agent 操作走同一日志路径；沿用 `application.log.read` 即可读取导入、保存、内容切换和场景准备等诊断，无需独立诊断接口。独立 CLI 的日志继续输出到 stderr，不占用 JSONL/MCP stdout。
+
 `application.log.read` 与 **Window > Log** 共用当前进程的日志历史。`after` 为上次读到的序号（十进制字符串，默认 `"0"` 从启动开始），`limit` 默认为 100，范围 1–256。响应包含 `entries`、`next` 和 `total`；按字节预算可能提前结束一页，继续传 `next`，直到等于 `total`，之后可继续读取新增日志。
 
 每行带 sequence、time、thread、level、source、message。等级 wire 值保持 Info=0、Warning=1、Error=2，并新增 Debug=3；schema 包含可读名称。stdout/stderr 使用 Info/Error，thread 是采集线程标识。多行或超过 8192 字节的文字按显示行/UTF-8 边界分段。关闭面板不影响读取，重启后序号重新开始；游标不能跨实例或重启复用。无 history provider 时返回 unavailable；非法游标或 limit 无副作用。能力由 `automation-log` 注册，可独立禁用。窗口显隐、拖拽和停靠属于呈现，不作为模拟输入操作暴露。

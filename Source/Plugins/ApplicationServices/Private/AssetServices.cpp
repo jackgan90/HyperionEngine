@@ -39,6 +39,8 @@ public:
 					throw;
 				}
 				Content->StartupError = "Could not restore asset root: " + std::string(Failure.what());
+				Log(ELogLevel::Warning, "Content root restore failed; directory='" + PathToUtf8(*Options.AssetRoot) +
+				                            "'; continuing without /Game; reason=" + Failure.what());
 			}
 		}
 		InContext.Provide(*Files);

@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/SceneBridge.h"
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Renderer/RenderSession.h"
 
@@ -46,6 +47,10 @@ void FSceneRenderBridge::Observe(bool bInWait)
 			if (Entry != Attachments.end() && Entry->second.Revision == It->Revision)
 			{
 				Entry->second.Error = Error.what();
+				Log(ELogLevel::Error, "Render model publication failed; scene_id=" + std::to_string(It->Handle.Scene) +
+				                          "; node_slot=" + std::to_string(It->Handle.Slot) +
+				                          "; node_generation=" + std::to_string(It->Handle.Generation) +
+				                          "; revision=" + std::to_string(It->Revision) + "; reason=" + Error.what());
 			}
 		}
 		It = Receipts.erase(It);

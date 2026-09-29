@@ -1,4 +1,5 @@
 #include "Hyperion/AssetEditing/AssetDocument.h"
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 
 namespace Hyperion
@@ -235,6 +236,7 @@ std::optional<FAssetSaveResult> FAssetEditDocument::PollSave()
 	{
 		return {};
 	}
+	std::optional<FAssetSaveResult> Saved;
 	try
 	{
 		const auto Result = *PendingSave->GetReady();
@@ -242,14 +244,17 @@ std::optional<FAssetSaveResult> FAssetEditDocument::PollSave()
 		Updated->Header = Result.Header;
 		Asset = std::move(Updated);
 		SavedState = SubmittedState;
-		PendingSave.reset();
-		return Result;
+		Saved = Result;
 	}
 	catch (const std::exception& Failure)
 	{
 		Error = Failure.what();
-		PendingSave.reset();
-		return {};
 	}
+	PendingSave.reset();
+	Log(Saved ? ELogLevel::Info : ELogLevel::Error,
+	    std::string(Saved ? "Asset save completed" : "Asset save failed") + "; path='" + PathToUtf8(Asset->Path) +
+	        "'; asset='" + Asset->Header.Id + "'; type='" + Asset->Header.TypeId + "'; revision='" +
+	        Asset->Header.Revision + "'" + (Saved ? "" : "; reason=" + Error));
+	return Saved;
 }
 } // namespace Hyperion

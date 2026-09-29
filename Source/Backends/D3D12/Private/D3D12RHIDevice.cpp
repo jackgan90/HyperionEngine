@@ -12,6 +12,46 @@ namespace Hyperion
 {
 namespace
 {
+std::uint64_t ReadValidationMessages(FD3D12DeviceState& InState)
+{
+	if (!InState.Info)
+	{
+		return 0;
+	}
+	const UINT64 Count = InState.Info->GetNumStoredMessages();
+	if (Count < InState.ValidationLogCursor)
+	{
+		InState.ValidationLogCursor = 0;
+	}
+	std::uint64_t Errors{};
+	for (UINT64 Index = 0; Index < Count; ++Index)
+	{
+		SIZE_T Size{};
+		InState.Info->GetMessage(Index, nullptr, &Size);
+		std::vector<std::byte> Bytes(Size);
+		auto Message = reinterpret_cast<D3D12_MESSAGE*>(Bytes.data());
+		if (FAILED(InState.Info->GetMessage(Index, Message, &Size)))
+		{
+			continue;
+		}
+		const bool bError =
+		    Message->Severity == D3D12_MESSAGE_SEVERITY_ERROR || Message->Severity == D3D12_MESSAGE_SEVERITY_CORRUPTION;
+		Errors += bError;
+		if (Index < InState.ValidationLogCursor || (!bError && Message->Severity != D3D12_MESSAGE_SEVERITY_WARNING))
+		{
+			continue;
+		}
+		if (InState.ReportedValidationMessages.emplace(Message->Severity, Message->ID, Message->pDescription).second)
+		{
+			Log(bError ? ELogLevel::Error : ELogLevel::Warning, "D3D12 validation; adapter='" + InState.AdapterName +
+			                                                        "'; message_id=" + std::to_string(Message->ID) +
+			                                                        "; description=" + Message->pDescription);
+		}
+	}
+	InState.ValidationLogCursor = Count;
+	return Errors;
+}
+
 void InitializeCapabilities(FD3D12DeviceState& InState, const FRHIDeviceDesc& InDesc)
 {
 	auto& Caps = InState.Capabilities;
@@ -363,22 +403,7 @@ FDeviceStats FD3D12RHIDevice::Statistics() const
 	D3D12MA::Budget Nonlocal{};
 	P.Allocator->GetBudget(&Local, &Nonlocal);
 	Stats.GpuAllocationBytes = Local.Stats.AllocationBytes + Nonlocal.Stats.AllocationBytes;
-	if (P.Info)
-	{
-		for (UINT64 I = 0; I < P.Info->GetNumStoredMessages(); ++I)
-		{
-			SIZE_T Size{};
-			P.Info->GetMessage(I, nullptr, &Size);
-			std::vector<std::byte> Bytes(Size);
-			auto Msg = reinterpret_cast<D3D12_MESSAGE*>(Bytes.data());
-			if (SUCCEEDED(P.Info->GetMessage(I, Msg, &Size)) &&
-			    (Msg->Severity == D3D12_MESSAGE_SEVERITY_ERROR || Msg->Severity == D3D12_MESSAGE_SEVERITY_CORRUPTION))
-			{
-				++Stats.ValidationErrors;
-				Log(ELogLevel::Error, Msg->pDescription);
-			}
-		}
-	}
+	Stats.ValidationErrors = ReadValidationMessages(P);
 	return Stats;
 }
 

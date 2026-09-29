@@ -51,6 +51,8 @@ std::string FSceneInstance::RegisterModelAsset(FAssetRef InReference, const std:
 	{
 		Load.Error = Failure.what();
 		Load.bComplete = true;
+		P.LogFailure("model preparation", Id + "; path=" + Load.Reference.Path + "; asset=" + Load.Reference.Id,
+		             Load.Error);
 	}
 	return Id;
 }

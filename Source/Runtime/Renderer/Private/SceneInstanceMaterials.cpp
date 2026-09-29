@@ -95,6 +95,13 @@ void FSceneInstance::FImpl::PollMaterials()
 			{
 				continue;
 			}
+			if (!Selection.Error.empty())
+			{
+				LogFailure("material selection",
+				           "node_slot=" + std::to_string(Selection.Handle.Slot) +
+				               "; node_generation=" + std::to_string(Selection.Handle.Generation),
+				           Selection.Error);
+			}
 			for (const auto Handle : Found->second)
 			{
 				if (Scene.FindModelComponent(Handle))
@@ -144,6 +151,10 @@ void FSceneInstance::FImpl::PublishModels()
 		catch (const std::exception& Error)
 		{
 			SelectedMaterials[Instance.Handle].Error = Error.what();
+			LogFailure("model publication",
+			           "node_slot=" + std::to_string(Instance.Handle.Slot) +
+			               "; node_generation=" + std::to_string(Instance.Handle.Generation),
+			           Error.what());
 		}
 		bModelStatusDirty = true;
 	}

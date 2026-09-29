@@ -50,6 +50,11 @@ void FSceneEditDocument::PollSave()
 	}
 	State.Save.reset();
 	SaveOutcome = std::move(Outcome);
+	const auto& Report = *SaveOutcome;
+	Log(Report.bSucceeded ? ELogLevel::Info : ELogLevel::Error,
+	    std::string(Report.bSucceeded ? "Scene save completed" : "Scene save failed") + "; path='" + Report.Path +
+	        "'; current_document=" + (Report.bCurrentDocument ? "true" : "false") + "; elapsed_ms=" +
+	        std::to_string(Report.Milliseconds) + (Report.bSucceeded ? "" : "; reason=" + Report.Error));
 }
 
 std::optional<FSceneSaveOutcome> FSceneEditDocument::TakeSaveOutcome()

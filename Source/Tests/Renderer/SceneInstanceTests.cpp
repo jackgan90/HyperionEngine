@@ -5,6 +5,7 @@
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include "Hyperion/SceneEditing/SceneDocument.h"
+#include "Support/LogSupport.h"
 #include "Support/ModelAssetSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
@@ -1629,6 +1630,60 @@ void CheckUnusedRegistrationRefresh()
 	HYP_CHECK(Scene.FindNode(Handle)->Model()->Data->Instances.front().World.Values ==
 	          Model.Nodes.front().Local.Values);
 }
+
+void CheckSaveDiagnostics(FSceneFixture& InFixture)
+{
+	FTestLogCapture Logs("scene-save-diagnostics");
+	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
+	FSceneInstanceEditTarget Target(Scene, InFixture.Assets);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	Document.Save("scene-save-diagnostics/Saved.hasset").Get(InFixture.Tasks);
+	Document.PollSave();
+	HYP_CHECK(Document.TakeSaveOutcome()->bSucceeded);
+	std::filesystem::create_directories("scene-save-diagnostics/Blocked.hasset");
+	try
+	{
+		Document.Save("scene-save-diagnostics/Blocked.hasset").Get(InFixture.Tasks);
+	}
+	catch (const std::exception&)
+	{
+	}
+	Document.PollSave();
+	const auto Failed = Document.TakeSaveOutcome();
+	HYP_CHECK(Failed && !Failed->bSucceeded && !Failed->Error.empty());
+	HYP_CHECK(Logs.Count(ELogLevel::Info, {"Scene save completed;", "Saved.hasset", "elapsed_ms="}) == 1);
+	HYP_CHECK(Logs.Count(ELogLevel::Error, {"Scene save failed;", "Blocked.hasset", "reason="}) == 1);
+	const auto Before = Logs.History->Count();
+	for (int Index = 0; Index < 32; ++Index)
+	{
+		Document.PollSave();
+	}
+	HYP_CHECK(Logs.History->Count() == Before);
+	Document.Detach(InFixture.Tasks);
+}
+
+void CheckFailureDiagnostic(FSceneFixture& InFixture)
+{
+	FTestLogCapture Logs("scene-diagnostics");
+	FSceneInstance Scene(*InFixture.Session, InFixture.Tasks, InFixture.Assets);
+	Scene.Load("scene-diagnostics/MissingScene.hasset");
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+	while (Scene.GetStatus().Error.empty() && std::chrono::steady_clock::now() < Deadline)
+	{
+		Scene.Tick();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	HYP_CHECK(!Scene.GetStatus().Error.empty());
+	HYP_CHECK(Logs.Count(ELogLevel::Error, {"Scene load/update failed;", "MissingScene.hasset", "epoch=", "reason="}) ==
+	          1);
+	const auto Before = Logs.History->Count();
+	for (int Index = 0; Index < 64; ++Index)
+	{
+		Scene.Tick();
+	}
+	HYP_CHECK(Logs.History->Count() == Before);
+}
 } // namespace
 
 int main()
@@ -1636,6 +1691,8 @@ int main()
 	try
 	{
 		FSceneFixture Fixture;
+		CheckFailureDiagnostic(Fixture);
+		CheckSaveDiagnostics(Fixture);
 		CheckLoadingEdits(Fixture);
 		CheckClosePending(Fixture);
 		CheckPendingMaterialEdits(Fixture);

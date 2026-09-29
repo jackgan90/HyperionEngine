@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneBridge.h"
 #include <algorithm>
@@ -98,6 +99,7 @@ void FSceneRenderBridge::ObserveScene(bool bInWait)
 			++It;
 			continue;
 		}
+		bool bFailed{};
 		try
 		{
 			Tasks.Wait(*It);
@@ -105,13 +107,21 @@ void FSceneRenderBridge::ObserveScene(bool bInWait)
 		catch (const std::exception& Error)
 		{
 			SceneError = Error.what();
+			bFailed = true;
 		}
 		catch (...)
 		{
 			SceneError = "Unknown scene publication failure";
+			bFailed = true;
 		}
 		It = SceneReceipts.erase(It);
 		++StatusRevision;
+		if (bFailed)
+		{
+			Log(ELogLevel::Error, "Render scene publication failed; scene_id=" + std::to_string(Scene.GetIdentity()) +
+			                          "; attachment_epoch=" + std::to_string(AttachmentEpoch) +
+			                          "; reason=" + SceneError);
+		}
 	}
 }
 

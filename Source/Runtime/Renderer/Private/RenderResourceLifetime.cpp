@@ -1,3 +1,4 @@
+#include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
 #include "RenderResourcesInternal.h"
 #include <algorithm>
@@ -58,6 +59,11 @@ void FRenderResourceRecord::Publish(ERenderResourceStatus InStatus, std::string 
 	if (bChanged)
 	{
 		Owner->PublicationRevision.fetch_add(1, std::memory_order_release);
+		if (InStatus == ERenderResourceStatus::Failed)
+		{
+			Log(ELogLevel::Error, "Render resource failed; resource_id=" + std::to_string(Identity) +
+			                          "; preparation/upload unavailable; reason=" + Error);
+		}
 	}
 }
 
