@@ -203,9 +203,8 @@ void FEditorPlugin::UpdatePlacementPreview(const FPlaceableObject& InObject, con
 	const auto& Region = ViewportRegion.Bounds;
 	const FVec2 Position{(InPointer.X - Region.X) / (Region.Z - Region.X),
 	                     (InPointer.Y - Region.Y) / (Region.W - Region.Y)};
-	const auto Ray =
-	    MakeViewportRay(InCamera, Position, ViewportSize.Width, ViewportSize.Height,
-	                    (Options.Rendering.bReversedZ ? EDepthConvention::Reversed : EDepthConvention::Standard));
+	const auto Ray = MakeViewportRay(InCamera, Position, ViewportSize.Width, ViewportSize.Height,
+	                                 GetDepthConvention(Rendering.bReversedZ));
 	if (Ray)
 	{
 		const auto Hit = Scene->Raycast(*Ray, MakeSceneRayOptions(MakePipelineSettings(Rendering).Pipeline));

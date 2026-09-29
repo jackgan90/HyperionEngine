@@ -19,9 +19,9 @@ void FEditorPlugin::DrawDebugBounds()
 			Nodes.push_back(View);
 		}
 	}
-	const auto Matrix = SceneCameraViewProjection(
-	    ExtractScenePose(CameraView->World), CameraView->Lens, float(ViewportSize.Width) / ViewportSize.Height,
-	    Options.Rendering.bReversedZ ? EDepthConvention::Reversed : EDepthConvention::Standard);
+	const auto Matrix = SceneCameraViewProjection(ExtractScenePose(CameraView->World), CameraView->Lens,
+	                                              float(ViewportSize.Width) / ViewportSize.Height,
+	                                              GetDepthConvention(Rendering.bReversedZ));
 	for (const auto& Line : BuildSceneDebugLines(Nodes, bModelBounds, bLightBounds))
 	{
 		if (const auto Points = ProjectDebugLine(Line, Matrix, ViewportRegion.Bounds))

@@ -758,6 +758,10 @@ private:
 	FSceneNode ExerciseOriginal;
 	std::uint32_t TransformExerciseStep{};
 	std::uint32_t LightPriorityExerciseStep{};
+	std::uint32_t DepthExerciseStep{};
+	FMat4 DepthExerciseFrozenView;
+	FSceneCameraView DepthExerciseCamera;
+	bool ExerciseLiveDepth(std::vector<FInputEvent>& InEvents);
 	std::uint64_t TransformDragReadyAt{};
 	FMat4 ExerciseTransformResult;
 	bool bDocumentVerified{};

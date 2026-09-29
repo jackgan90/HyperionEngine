@@ -342,7 +342,8 @@ void FAssetWorkspace::PrepareFrame()
 	}
 }
 
-void FAssetWorkspace::Build(FRenderGraph& InGraph, std::vector<FGuiTextureBinding>& OutTextures)
+void FAssetWorkspace::Build(FRenderGraph& InGraph, std::vector<FGuiTextureBinding>& OutTextures,
+                            EDepthConvention InConvention)
 {
 	for (const auto& Entry : Entries)
 	{
@@ -361,7 +362,7 @@ void FAssetWorkspace::Build(FRenderGraph& InGraph, std::vector<FGuiTextureBindin
 		FSceneViewRequest Request;
 		Request.Width = Entry->Size.Width;
 		Request.Height = Entry->Size.Height;
-		Request.DepthConvention = EDepthConvention::Reversed;
+		Request.DepthConvention = InConvention;
 		Request.CameraOverride = Entry->Camera;
 		FScenePipelineSettings Settings;
 		Settings.Exposure = Entry->Exposure;

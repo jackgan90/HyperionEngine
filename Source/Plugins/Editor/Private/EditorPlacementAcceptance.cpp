@@ -103,11 +103,16 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 	switch (PlacementExerciseStep)
 	{
 		case 0:
+		{
+			auto Candidate = Rendering;
+			Candidate.bReversedZ = PlacementExerciseType % 2 != 0;
+			SetRenderSettings(RenderSettingsRevision, Candidate);
 			PlacementExerciseBaseNodes = Scene->GetNodes().size();
 			PlacementExerciseBaseHistory = HistoryCursor;
 			PlacementExerciseBaseState = DocumentState;
 			Move(InEvents, Center(Source));
 			break;
+		}
 		case 1:
 			Button(InEvents, true);
 			break;

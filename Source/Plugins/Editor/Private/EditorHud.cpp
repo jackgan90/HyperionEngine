@@ -241,15 +241,11 @@ void FEditorPlugin::DrawViewportHud()
 		    "RENDER STATUS",
 		    "Pipeline: " + Rendering.Pipeline,
 		    "GBuffer: " + (Rendering.Pipeline == "deferred" ? Rendering.GBuffer : std::string("not used")),
-		    Options.Rendering.bReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z",
+		    Rendering.bReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z",
 		    "Visualizer: " + Visualizers[Rendering.Pipeline == "deferred" ? Rendering.DebugMode : 0],
 		    "Exposure: " + Number(Exposure),
 		    "Viewport: " + std::to_string(ViewportSize.Width) + " x " + std::to_string(ViewportSize.Height),
 		    HudDiagnostics.Adapter};
-		if (Rendering.bReversedZ != Options.Rendering.bReversedZ)
-		{
-			Lines.push_back("Depth change pending restart");
-		}
 		InspectionBounds["hud/status"] = Gui->DrawImageText(Left, Lines);
 	}
 	if (bShowProfilingHud)

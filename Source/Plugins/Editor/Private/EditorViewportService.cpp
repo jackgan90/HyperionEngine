@@ -95,9 +95,9 @@ void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 		{
 			throw FSceneEditError("unavailable", "A ready viewport camera is required before freezing culling");
 		}
-		FrozenCullingView = SceneCameraViewProjection(
-		    ExtractScenePose(CameraView->World), CameraView->Lens, float(ViewportSize.Width) / ViewportSize.Height,
-		    Options.Rendering.bReversedZ ? EDepthConvention::Reversed : EDepthConvention::Standard);
+		FrozenCullingView = SceneCameraViewProjection(ExtractScenePose(CameraView->World), CameraView->Lens,
+		                                              float(ViewportSize.Width) / ViewportSize.Height,
+		                                              GetDepthConvention(Rendering.bReversedZ));
 	}
 	if (InOptions.Frozen && !*InOptions.Frozen)
 	{

@@ -42,9 +42,10 @@ void RegisterRenderSettings(FOperationCatalog& InCatalog, IRenderSettings* InSet
 	FOperationInfo Info;
 	Info.Id = "render.settings.get";
 	Info.Owner = "automation-scene";
-	Info.Summary = "Read rendering and startup depth settings";
+	Info.Version = 2;
+	Info.Summary = "Read live rendering settings";
 	Info.Description = "Shared render settings and legacy shadow defaults. Authored main-light shadows take "
-	                   "precedence; activeReversedZ is the startup convention.";
+	                   "precedence; activeReversedZ is committed for subsequent scene and 3D asset preview frames.";
 	Info.bReadOnly = true;
 	Info.Effects = "Reads Main settings state.";
 	Info.Completion = "Current snapshot.";
@@ -56,11 +57,12 @@ void RegisterRenderSettings(FOperationCatalog& InCatalog, IRenderSettings* InSet
 	                                                                          }));
 	Info.Id = "render.settings.set";
 	Info.Summary = "Replace rendering settings";
-	Info.Description = "Read first and retain fields. Values are validated before replacement. reversedZ requires save "
-	                   "and restart. Does not modify scene history.";
+	Info.Description = "Read first and retain fields. Values are validated before replacement. reversedZ applies to "
+	                   "subsequent scene and 3D asset preview frames. Save separately for the next launch. "
+	                   "Does not modify scene history.";
 	Info.bReadOnly = false;
-	Info.Effects = "Changes subsequent viewport rendering; depth convention applies on restart.";
-	Info.Completion = "Main settings committed.";
+	Info.Effects = "Changes subsequent viewport rendering, including depth convention.";
+	Info.Completion = "Main settings committed; does not wait for GPU presentation.";
 	const FRenderSettingsEdit Example{1, {}};
 	Info.Example = WriteRecordWire(RecordType<FRenderSettingsEdit>(), &Example);
 	InCatalog.Register(MakeOperation<FRenderSettingsEdit, FRenderSettingsState>(
@@ -78,6 +80,7 @@ void RegisterRenderSettings(FOperationCatalog& InCatalog, IRenderSettings* InSet
 		    }
 	    }));
 	Info.Id = "render.settings.save";
+	Info.Version = 1;
 	Info.Summary = "Save rendering settings";
 	Info.Description = "Persist the current rendering settings to a target-local path; no scene or asset write.";
 	Info.Effects = "Writes a settings file.";

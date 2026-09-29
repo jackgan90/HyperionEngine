@@ -1,6 +1,8 @@
 #include "EditorApplication.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Renderer/SceneNavigation.h"
+#include <cmath>
 
 namespace Hyperion
 {
@@ -74,6 +76,10 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			{
 				throw std::runtime_error("Render settings menu did not open its window");
 			}
+			if (!ExerciseLiveDepth(InEvents))
+			{
+				return;
+			}
 			PlacementCapture = Options.ExerciseRenderControls / "Settings.png";
 			++ExerciseStep;
 			return;
@@ -118,6 +124,60 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			++ExerciseStep;
 			return;
 	}
+}
+
+bool FEditorPlugin::ExerciseLiveDepth(std::vector<FInputEvent>& InEvents)
+{
+	if (DepthExerciseStep == 0)
+	{
+		FSceneViewportOptions ViewOptions;
+		ViewOptions.Frozen = true;
+		SetViewportOptions(ViewOptions);
+		DepthExerciseFrozenView = *FrozenCullingView;
+		DepthExerciseCamera = ViewCamera;
+		ViewCamera.World = Multiply(Translation({.25f, 0, 0}), ViewCamera.World);
+		++DepthExerciseStep;
+	}
+	if (DepthExerciseStep == 1 || DepthExerciseStep == 3)
+	{
+		const auto Step = ExerciseStep;
+		ExerciseClick(InEvents, InspectionBounds.at("render/reversed-z"));
+		if (ExerciseStep != Step)
+		{
+			++DepthExerciseStep;
+		}
+		ExerciseStep = Step;
+		return false;
+	}
+	const bool bExpected = DepthExerciseStep == 2 ? !Options.Rendering.bReversedZ : Options.Rendering.bReversedZ;
+	const auto State = RenderSettings();
+	if (State.Values.bReversedZ != bExpected || State.bActiveReversedZ != bExpected || !FrozenCullingView ||
+	    IsDirty() || !RenderStats.MainCameraView ||
+	    RenderStats.MainCameraView->DepthConvention != GetDepthConvention(bExpected))
+	{
+		throw std::runtime_error("GUI depth toggle did not commit and render without changing the document");
+	}
+	const auto Expected = DepthExerciseStep == 2
+	                          ? Multiply(ClipDepthTransform(EDepthConvention::Reversed), DepthExerciseFrozenView)
+	                          : DepthExerciseFrozenView;
+	for (std::size_t Index = 0; Index < Expected.Values.size(); ++Index)
+	{
+		if (std::abs(FrozenCullingView->Values[Index] - Expected.Values[Index]) > .00001f)
+		{
+			throw std::runtime_error("Depth switching changed the frozen camera's physical frustum");
+		}
+	}
+	if (DepthExerciseStep == 2)
+	{
+		++DepthExerciseStep;
+		return false;
+	}
+	ViewCamera = DepthExerciseCamera;
+	FSceneViewportOptions ViewOptions;
+	ViewOptions.Frozen = false;
+	SetViewportOptions(ViewOptions);
+	Log(ELogLevel::Info, "Live GUI depth switching and frozen-camera preservation passed");
+	return true;
 }
 
 bool FEditorPlugin::ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents)

@@ -143,6 +143,22 @@ bool FAssetWorkspace::IsPreviewReady() const
 	            : Active->Texture.Target.Texture && Active->Texture.TargetRevision == Active->Texture.Revision);
 }
 
+std::optional<FRenderView> FAssetWorkspace::RenderedPreviewView() const
+{
+	Tasks.Require({EDomain::Main});
+	std::optional<FRenderView> Result;
+	if (Active && Active->Pipeline)
+	{
+		// Query preparation on its owning domain after the asset host has joined Render/RHI.
+		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+		                          [&, Entry = Active]
+		                          {
+			                          Result = Entry->Pipeline->GetFrame().Statistics().MainCameraView;
+		                          }));
+	}
+	return Result;
+}
+
 std::string FAssetWorkspace::ActiveStatus() const
 {
 	if (!Active)

@@ -52,9 +52,10 @@ public:
 	void DrawProperties(FGui& InGui);
 	void DrawCloseDialog(FGui& InGui);
 	void PrepareFrame();
-	void Build(FRenderGraph& InGraph, std::vector<FGuiTextureBinding>& OutTextures);
+	void Build(FRenderGraph& InGraph, std::vector<FGuiTextureBinding>& OutTextures, EDepthConvention InConvention);
 	const FAssetEditDocument* ActiveDocument() const;
 	bool IsPreviewReady() const;
+	std::optional<FRenderView> RenderedPreviewView() const;
 	std::string ActiveStatus() const;
 	FVec4 ObservedBounds(std::string_view InId) const;
 	void RevealProperty(std::string InId);

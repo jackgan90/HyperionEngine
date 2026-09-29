@@ -145,17 +145,18 @@ std::uint64_t FAssetEditorWindow::RenderedFrames() const
 	return FrameCount;
 }
 
-void FAssetEditorWindow::Render(FGuiDrawData InData, const std::filesystem::path& InCapture, bool bInVsync)
+void FAssetEditorWindow::Render(FGuiDrawData InData, const std::filesystem::path& InCapture, bool bInVsync,
+                                EDepthConvention InConvention)
 {
 	Workspace.PrepareFrame();
 	const auto Size = Window->PixelSize();
 	FImage Capture;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-	                          [&, Data = std::move(InData)]() mutable
+	                          [&, Data = std::move(InData), InConvention]() mutable
 	                          {
 		                          FRenderGraph Graph;
 		                          std::vector<FGuiTextureBinding> Textures;
-		                          Workspace.Build(Graph, Textures);
+		                          Workspace.Build(Graph, Textures, InConvention);
 		                          Renderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
 		                          Capture = ExecuteGraph(std::move(Graph), Tasks, *Swapchain, Size, bInVsync,
 		                                                 !InCapture.empty() || PendingImage != nullptr);

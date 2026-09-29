@@ -90,10 +90,11 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 {
 	ResizeViewport();
 	const auto Size = Window->PixelSize();
+	const auto FrameSettings = Rendering;
 	FSceneViewRequest Request;
 	Request.Width = ViewportSize.Width;
 	Request.Height = ViewportSize.Height;
-	Request.DepthConvention = Options.Rendering.bReversedZ ? EDepthConvention::Reversed : EDepthConvention::Standard;
+	Request.DepthConvention = GetDepthConvention(FrameSettings.bReversedZ);
 	Request.CullingMode = CullingMode;
 	Request.CullingViewProjection = FrozenCullingView;
 	Request.bInstanceBatching = bInstanceBatching;
@@ -158,19 +159,18 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	const bool bCaptureRdc = std::exchange(bCaptureRequested, false);
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 	                          [&, Data = std::move(InGui), Preview, Outline, IconTextures = std::move(IconTextures),
-	                           Surface, bCaptureRdc]() mutable
+	                           Surface, bCaptureRdc, Request, FrameSettings]() mutable
 	                          {
 		                          FRenderGraph Graph;
 		                          auto Textures = std::move(IconTextures);
 		                          if (bRenderScene)
 		                          {
-			                          auto Settings = MakePipelineSettings(Rendering);
-			                          Settings.Exposure = Exposure;
+			                          const auto Settings = MakePipelineSettings(FrameSettings);
 			                          Pipeline->Configure(Settings);
 			                          Pipeline->SetOutputTarget(Target);
 			                          Pipeline->SetTransientGeometry(Preview);
 			                          Pipeline->SetSelectionOutline(Outline);
-			                          auto Shadows = Rendering.Shadows;
+			                          auto Shadows = FrameSettings.Shadows;
 			                          const float PreviewSize = float(std::min({256u, Request.Width, Request.Height}));
 			                          Shadows.PreviewViewport = {0, 0, PreviewSize, PreviewSize};
 			                          Pipeline->Build(Graph, Request, Seed, Shadows, {.13f, .13f, .13f, 1}, {}, true);

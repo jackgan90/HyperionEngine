@@ -47,7 +47,8 @@ void FEditorPlugin::AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> I
 	if (AssetWindow)
 	{
 		const bool bMainDrawable = !Window->Minimized() && Window->PixelSize().Width && Window->PixelSize().Height;
-		AssetWindow->Advance(InDelta, std::move(InEvents), Gui->ApplicationScale(), IsAssetWindowBlocked(), InCapture,
+		AssetWindow->Advance(InDelta, std::move(InEvents), Gui->ApplicationScale(), IsAssetWindowBlocked(),
+		                     GetDepthConvention(Rendering.bReversedZ), InCapture,
 		                     !bMainDrawable && Options.ExerciseAssets.empty() && Options.Benchmark.empty());
 		if (PendingImage && (PendingImage->Result || !PendingImage->Error.empty()))
 		{

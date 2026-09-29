@@ -278,4 +278,4 @@ Editor 默认允许同一 Windows 用户通过 CLI/MCP 附着；`--disable-plugi
 
 普通树和搜索结果都支持落点，悬停折叠节点会展开，靠近列表边缘会滚动。绿色边框表示可放下，红色边框和提示说明非法目标；Esc、失焦、右键或放到其他区域取消操作。自己、后代、失效节点和不可逆父变换被拒绝，整组不会部分修改。保持世界变换不改变 Enabled 的父级继承规则，挂到禁用父节点仍会隐藏。既有单节点 duplicate 与保留子节点删除仍提供 SceneEditing 和 Automation 能力，尚无专用 GUI 入口；场景对象的 Ctrl+C/Ctrl+V 使用上述完整子树剪贴板流程。
 
-Edit > Render settings 打开渲染设置窗口。视口工具栏的信息与统计按钮分别显示左上角只读状态和右上角 profiling HUD；Stats... 选择统计分类及采集选项。方向光 Details 的 Override Shadow settings 启用该灯光自己的 Directional / Contact shadows 参数，随场景保存并支持撤销/重做。视口选项继续提供剔除、冻结、合批、包围盒与光影响范围。字段、持久化、启动深度和 Automation 接口见 [渲染诊断](RenderDiagnostics.md)。
+Edit > Render settings 打开渲染设置窗口。Reversed Z 修改后在场景及三维资产预览的下一渲染帧生效，Save render settings 独立保存下次启动值。视口工具栏的信息与统计按钮分别显示左上角只读状态和右上角 profiling HUD；Stats... 选择统计分类及采集选项。方向光 Details 的 Override Shadow settings 启用该灯光自己的 Directional / Contact shadows 参数，随场景保存并支持撤销/重做。视口选项继续提供剔除、冻结、合批、包围盒与光影响范围。字段、持久化、实时深度和 Automation 接口见 [渲染诊断](RenderDiagnostics.md)。

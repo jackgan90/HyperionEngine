@@ -62,10 +62,13 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 			break;
 		case 3:
 		{
+			auto Candidate = Rendering;
+			Candidate.bReversedZ = !Options.Rendering.bReversedZ;
+			SetRenderSettings(RenderSettingsRevision, Candidate);
 			CheckPicking(Selection == Light, "Outliner did not select courtyard light 3");
 			CheckPicking(Gizmo.HitTest(Surface) == ETransformGizmoHandle::None, "surface overlaps light gizmo");
 			const auto Ray = MakeViewportRay(ViewCamera, {.2f, .7f}, ViewportSize.Width, ViewportSize.Height,
-			                                 EDepthConvention::Reversed);
+			                                 GetDepthConvention(Rendering.bReversedZ));
 			CheckPicking(Ray.has_value(), "Sponza view ray is unavailable");
 			const auto QueryOptions = MakeSceneRayOptions(ESceneRenderPipeline::Deferred);
 			const auto Hit = Scene->Raycast(*Ray, QueryOptions);
@@ -80,8 +83,13 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 			             "held Sponza click lost image ownership");
 			break;
 		case 8:
+		{
+			auto Candidate = Rendering;
+			Candidate.bReversedZ = Options.Rendering.bReversedZ;
+			SetRenderSettings(RenderSettingsRevision, Candidate);
 			Pointer(InEvents, Surface, false);
 			break;
+		}
 		case 9:
 			CheckPicking(Selection == Scene->GetNodes(ESceneNodeKind::Model).front(),
 			             "held Sponza click did not replace Outliner light selection");

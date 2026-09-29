@@ -189,7 +189,7 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 文档与内容 | Editor 场景打开/清空、加载状态；内容分页搜索；root 设置/清空与偏好保存 | dirty/discard/busy、generation 和旧 handle 失效由共享服务处理 |
 | 视图与预览 | 浏览相机、frame、速度、曝光、场景相机预览/创建/应用；资产预览相机/形状/纹理显示 | 临时状态不写场景历史；保存 initial view 或创建相机是明确的文档操作 |
 | 对象剪贴板 | 有序多选子树 copy、clipboard info、paste；与 Editor 快捷键共用服务 | Windows provider；同实例同文档；普通文字覆盖对象 token，换场景或内容根失效；16,384 节点与 64 MiB 编辑数据预算；paste 原子提交一个历史事务，copy 不改场景历史；无 provider 时明确 unavailable |
-| 渲染与工具 | 共享渲染配置、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |
+| 渲染与工具 | 共享渲染配置、实时深度约定、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 深度切换共用 IRenderSettings，影响后续场景和三维资产预览帧，保存独立；可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |
 | 导入、发布 | GUI/agent 共用 AssetImport workspace，支持 glTF/GLB、独立 PNG/JPEG、HDR/EXR 天空 | 提供能力/校验/共享任务查询；textureEncoding、sky 与 createFolder 为可选参数；createFolder 与 Editor 默认分组规则一致，按来源命名目录并跨会话复用，相同内容零写入；天空烘焙仅接受 HDR/EXR；不接受 `.hasset` 原生资产或自有资产 JSON 导入；发布接收后不可取消 |
 | 导入属性预览 | `asset.import.draft.*` 与 `asset.import.drafts` 共用未发布快照、分页查询、受限编辑及 Undo/Redo/Reset | mutation 使用草稿 generation；submit 保留 provenance 与来源校验；脏草稿参与换根/关闭保护 |
 | 应用附着 | 默认本机发现、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |

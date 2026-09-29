@@ -1,4 +1,5 @@
-"""Live render controls, depth persistence, feature absence and matched benchmark coverage."""
+"""Live render controls, depth switching/persistence and feature absence coverage."""
+import copy
 import csv
 import json
 import math
@@ -10,6 +11,42 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "Automation"))
 from AutomationAcceptance import completed
 from AttachmentAcceptance import Application, AttachedSession, ready
+
+
+def live_depth(agent, state, info):
+    page = agent.request("api.search", {"query": "render.settings", "limit": 10})
+    assert {item["id"] for item in page["items"]} >= {"render.settings.get", "render.settings.set", "render.settings.save"}
+    for operation in ("render.settings.get", "render.settings.set"):
+        description = agent.request("api.describe", {"operation": operation})
+        assert description["version"] == 2, description
+    assert agent.request("api.describe", {"operation": "render.settings.save"})["version"] == 1
+    original = copy.deepcopy(state["values"])
+    before_view = completed(agent.call("view.get"))
+    for pipeline in ("forward", "deferred"):
+        for reversed_z in (False, True, False, True):
+            previous = copy.deepcopy(state)
+            frame = int(completed(agent.call("render.statistics"))["frame"])
+            candidate = dict(state["values"], pipeline=pipeline, reversedZ=reversed_z)
+            state = completed(agent.call("render.settings.set", revision=state["revision"], values=candidate))
+            assert state["activeReversedZ"] == reversed_z and state["values"] == candidate, state
+            assert int(state["revision"]) == int(previous["revision"]) + 1
+            assert completed(agent.call("render.settings.get")) == state
+            assert agent.call("render.settings.set", revision=previous["revision"], values=original)["error"]["code"] == "stale_revision"
+            invalid = dict(candidate, reversedZ=not reversed_z, pipeline="missing")
+            assert agent.call("render.settings.set", revision=state["revision"], values=invalid)["error"]["code"] == "invalid_arguments"
+            assert completed(agent.call("render.settings.get")) == state
+            deadline = time.monotonic() + 15
+            while True:
+                stats = completed(agent.call("render.statistics"))
+                assert int(stats["device"]["validationErrors"]) == 0, stats
+                if int(stats["frame"]) > frame + 2:
+                    break
+                assert time.monotonic() < deadline, stats
+                time.sleep(.02)
+            current = ready(agent)
+            assert current["revision"] == info["revision"] and not current["dirty"]
+            assert completed(agent.call("view.get")) == before_view
+    return completed(agent.call("render.settings.set", revision=state["revision"], values=original))
 
 
 def render_controls(cli, editor, root, output):
@@ -44,6 +81,9 @@ def render_controls(cli, editor, root, output):
                                              options={"culling": culling, "frozen": True, "instanceBatching": False,
                                                       "modelBounds": True, "lightBounds": True}))
                 assert view["options"]["culling"] == culling and view["options"]["frozen"]
+            saved_before = settings_path.read_bytes() if settings_path.exists() else None
+            state = live_depth(agent, state, info)
+            assert (settings_path.read_bytes() if settings_path.exists() else None) == saved_before
             completed(agent.call("view.set", document=info["document"], revision=info["revision"],
                                  options={"frozen": False, "instanceBatching": True}))
             state["values"]["contact"].update(enabled=True, debugMode=1)
@@ -64,7 +104,7 @@ def render_controls(cli, editor, root, output):
             state["values"]["contact"].update(enabled=False, debugMode=0)
             state["values"]["reversedZ"] = False
             state = completed(agent.call("render.settings.set", revision=state["revision"], values=state["values"]))
-            assert state["activeReversedZ"] == (index == 0)
+            assert not state["activeReversedZ"]
             completed(agent.call("render.settings.save", revision=state["revision"], path=str(settings_path)))
             before = settings_path.read_bytes()
             invalid = dict(state["values"], pipeline="missing")
@@ -94,6 +134,13 @@ def render_controls(cli, editor, root, output):
         state["values"]["contact"]["enabled"] = True
         assert agent.call("render.settings.set", revision=state["revision"], values=state["values"])["error"]["code"] == "unavailable"
         assert completed(agent.call("render.settings.get"))["revision"] == state["revision"]
+        state["values"]["contact"]["enabled"] = False
+        for reversed_z in (False, True):
+            state["values"]["reversedZ"] = reversed_z
+            state = completed(agent.call("render.settings.set", revision=state["revision"], values=state["values"]))
+            assert state["activeReversedZ"] == reversed_z
+            completed(agent.wait(agent.call("render.screenshot", path=str(output / f"Empty-{reversed_z}.png"), overwrite=True)))
+            assert int(completed(agent.call("render.statistics"))["device"]["validationErrors"]) == 0
         completed(agent.call("application.close.request"))
         app.finish()
     finally:
@@ -169,4 +216,4 @@ if __name__ == "__main__":
     disabled_saved_contact(cli, editor, root, output)
     for warmup in (0, 20):
         benchmarks(editor, root, output, warmup)
-    print("Editor rendering, depth restart, feature absence and deterministic benchmarks passed")
+    print("Editor live depth switching, persistence, feature absence and deterministic benchmarks passed")

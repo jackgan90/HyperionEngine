@@ -5,7 +5,7 @@ namespace Hyperion
 {
 FRenderSettingsState FEditorPlugin::RenderSettings() const
 {
-	return {Rendering, RenderSettingsRevision, Options.Rendering.bReversedZ};
+	return {Rendering, RenderSettingsRevision, Rendering.bReversedZ};
 }
 
 void FEditorPlugin::SetRenderSettings(std::uint64_t InRevision, const FRenderSettings& InSettings)
@@ -21,6 +21,11 @@ void FEditorPlugin::SetRenderSettings(std::uint64_t InRevision, const FRenderSet
 		throw FSceneEditError("unavailable", "Contact shadow feature is disabled in this session");
 	}
 	MakePipelineSettings(InSettings).GBuffer.Validate(Device->GetCapabilities());
+	if (InSettings.bReversedZ != Rendering.bReversedZ && FrozenCullingView)
+	{
+		// z -> w-z works in both directions and preserves the frozen physical frustum.
+		FrozenCullingView = Multiply(ClipDepthTransform(EDepthConvention::Reversed), *FrozenCullingView);
+	}
 	Rendering = InSettings;
 	Exposure = Rendering.Exposure;
 	++RenderSettingsRevision;

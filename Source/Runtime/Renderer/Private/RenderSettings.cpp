@@ -41,7 +41,7 @@ template<> const FRecordDescriptor& RecordType<FRenderSettings>()
 	     Member("contact", &FRenderSettings::Contact, Inspect("Contact shadows")),
 	     Member("shadows", &FRenderSettings::Shadows, Inspect("Directional shadows")),
 	     Member("vsync", &FRenderSettings::bVsync, Inspect("VSync")),
-	     Member("reversedZ", &FRenderSettings::bReversedZ, Inspect("Reversed Z (restart)"))},
+	     Member("reversedZ", &FRenderSettings::bReversedZ, Inspect("Reversed Z"))},
 	    1, ValidateRenderSettings);
 	return Type;
 }

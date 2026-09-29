@@ -28,9 +28,9 @@ void FEditorPlugin::DrawRenderSettings()
 		Candidate.GBuffer = FormatIndex ? "high" : "compact";
 		bChanged |= Gui->Checkbox("Clustered lighting", Candidate.bClusteredLighting);
 		bChanged |= Gui->Checkbox("VSync", Candidate.bVsync);
-		bChanged |= Gui->Checkbox("Reversed Z (restart required)", Candidate.bReversedZ);
-		Gui->TextWrapped(
-		    "Save settings and restart to apply the depth convention. Other switches apply to subsequent frames.");
+		bChanged |= Gui->Checkbox("Reversed Z", Candidate.bReversedZ);
+		InspectionBounds["render/reversed-z"] = Gui->LastItemBounds();
+		Gui->TextWrapped("Changes apply to subsequent frames. Save settings to restore them on the next launch.");
 		try
 		{
 			if (bChanged)

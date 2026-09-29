@@ -151,13 +151,18 @@ void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 	switch (ExerciseStep)
 	{
 		case 205:
+		{
 			CheckAssetWindow(AssetWindow && AssetWorkspace->IsDirty() && !Window->ShouldClose(),
 			                 "Cancel asset-window close lost its draft or closed the main window");
 			AssetWindow->NativeWindow().Resize({1100, 760});
 			AssetExerciseScale = Gui->ApplicationScale();
 			Gui->SetApplicationScale(1.5f);
+			auto Candidate = Rendering;
+			Candidate.bReversedZ = !Options.Rendering.bReversedZ;
+			SetRenderSettings(RenderSettingsRevision, Candidate);
 			++ExerciseStep;
 			break;
+		}
 		case 206:
 			if (++ExerciseWait < 6)
 			{
@@ -167,23 +172,32 @@ void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 			                     AssetWindow->NativeWindow().LogicalSize().Width == 1100,
 			                 "Asset resize or application scaling affected the main viewport");
 			Gui->SetApplicationScale(AssetExerciseScale);
+			CheckAssetWindow(AssetWorkspace->RenderedPreviewView() &&
+			                     AssetWorkspace->RenderedPreviewView()->DepthConvention ==
+			                         GetDepthConvention(Rendering.bReversedZ),
+			                 "Open 3D asset preview did not follow live depth settings");
 			AssetExerciseFrames = AssetWindow->RenderedFrames();
 			AssetWindow->NativeWindow().Minimize();
 			ExerciseWait = 0;
 			++ExerciseStep;
 			break;
 		case 207:
+		{
 			if (++ExerciseWait < 6)
 			{
 				break;
 			}
 			CheckAssetWindow(bViewportVisible && AssetWindow->RenderedFrames() == AssetExerciseFrames,
 			                 "Minimized asset window rendered or stopped the scene viewport");
+			auto Candidate = Rendering;
+			Candidate.bReversedZ = Options.Rendering.bReversedZ;
+			SetRenderSettings(RenderSettingsRevision, Candidate);
 			AssetWindow->NativeWindow().Restore();
 			Window->Minimize();
 			ExerciseWait = 0;
 			++ExerciseStep;
 			break;
+		}
 		case 208:
 			if (++ExerciseWait < 6)
 			{
@@ -217,6 +231,10 @@ void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvent
 			}
 			CheckAssetWindow(bViewportVisible && AssetWindow->RenderedFrames() > AssetExerciseFrames + 2,
 			                 "Owner restoration did not resume both windows");
+			CheckAssetWindow(AssetWorkspace->RenderedPreviewView() &&
+			                     AssetWorkspace->RenderedPreviewView()->DepthConvention ==
+			                         GetDepthConvention(Rendering.bReversedZ),
+			                 "Resumed asset preview retained the old depth convention");
 			ExerciseWait = 0;
 			AssetWindow->NativeWindow().RequestClose();
 			++ExerciseStep;
@@ -235,9 +253,12 @@ void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvent
 			break;
 		}
 		case 212:
-			if (AssetWindow && Document && AssetWorkspace->IsPreviewReady())
+			if (AssetWindow && Document && AssetWorkspace->IsPreviewReady() && AssetWorkspace->RenderedPreviewView())
 			{
 				CheckAssetWindow(!Document->IsDirty(), "Recreated asset window restored discarded edits");
+				CheckAssetWindow(AssetWorkspace->RenderedPreviewView()->DepthConvention ==
+				                     GetDepthConvention(Rendering.bReversedZ),
+				                 "Reopened asset preview did not use the committed depth convention");
 				AssetWorkspace->RevealProperty("field/name");
 				++ExerciseStep;
 			}

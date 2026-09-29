@@ -94,6 +94,7 @@ struct FFixture
 	FDeviceStats DeviceStats;
 	FScenePipelineSettings Settings;
 	FSceneRenderBridge* LogicalBridge{};
+	FRenderTargetSource Output{ERenderTargetKind::Backbuffer};
 	FVec4 Clear{.025f, .035f, .065f, 1};
 
 	explicit FFixture(EDepthConvention InConvention = EDepthConvention::Standard)
@@ -146,42 +147,64 @@ struct FFixture
 		const auto Frame = LogicalBridge ? std::shared_ptr<const FMaterialFrameContext>{} : Session->FreezeFrame();
 		const auto Seed = LogicalBridge ? Session->FreezeSceneFrame(LogicalBridge->GetToken()) : nullptr;
 		FImage Result;
-		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-		                          [&]
-		                          {
-			                          Pipeline->Configure(Settings);
-			                          FRenderGraph Graph;
-			                          if (Seed)
-			                          {
-				                          FSceneViewRequest Request;
-				                          Request.Width = View.Width;
-				                          Request.Height = View.Height;
-				                          Request.Viewport = View.Viewport;
-				                          Request.DepthConvention = View.DepthConvention;
-				                          Request.bInstanceBatching = View.bInstanceBatching;
-				                          Request.CullingMode = View.CullingMode;
-				                          Pipeline->Build(Graph, Request, Seed, Shadows, Clear, {}, true);
-			                          }
-			                          else
-			                          {
-				                          Pipeline->Build(Graph, View, Frame, Shadows, Clear, {}, true);
-			                          }
-			                          const auto Prepared = Pipeline->GetFrame();
-			                          Result = ExecuteGraph(std::move(Graph), Tasks, *Swapchain,
-			                                                {View.Width, View.Height}, false, bInCapture);
-			                          Statistics = Prepared.Statistics();
-			                          for (const auto& Row : Statistics.Views)
-			                          {
-				                          HYP_CHECK(Row.Visibility.Batches.FailedItems == 0);
-			                          }
-			                          Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-			                                                    [&]
-			                                                    {
-				                                                    Device->CollectCompletedResources();
-				                                                    DeviceStats = Device->Statistics();
-				                                                    HYP_CHECK(DeviceStats.ValidationErrors == 0);
-			                                                    }));
-		                          }));
+		Tasks.Wait(Tasks.Dispatch(
+		    {EDomain::Render},
+		    [&]
+		    {
+			    Pipeline->Configure(Settings);
+			    Pipeline->SetOutputTarget(Output);
+			    FRenderGraph Graph;
+			    if (Seed)
+			    {
+				    FSceneViewRequest Request;
+				    Request.Width = View.Width;
+				    Request.Height = View.Height;
+				    Request.Viewport = View.Viewport;
+				    Request.DepthConvention = View.DepthConvention;
+				    Request.bInstanceBatching = View.bInstanceBatching;
+				    Request.CullingMode = View.CullingMode;
+				    Pipeline->Build(Graph, Request, Seed, Shadows, Clear, {}, true);
+			    }
+			    else
+			    {
+				    Pipeline->Build(Graph, View, Frame, Shadows, Clear, {}, true);
+			    }
+			    if (Output.Texture)
+			    {
+				    FRenderSceneSnapshot DisplayClear;
+				    DisplayClear.Targets = FRenderPassTargets::ColorOnly(FVec4{});
+				    Graph.Add(Session->GetResources().GetPreparation().DeclarePass(Graph, DisplayClear));
+				    Session->AppendDepthPreview(Graph, Output.Texture, Output.Lifetime,
+				                                {0, 0, float(View.Width), float(View.Height)}, true);
+			    }
+			    const auto Prepared = Pipeline->GetFrame();
+			    Result =
+			        ExecuteGraph(std::move(Graph), Tasks, *Swapchain, {View.Width, View.Height}, false, bInCapture);
+			    Statistics = Prepared.Statistics();
+			    for (const auto& Row : Statistics.Views)
+			    {
+				    HYP_CHECK(Row.Visibility.Batches.FailedItems == 0);
+			    }
+			    Tasks.Wait(Tasks.Dispatch(
+			        {EDomain::Rhi, 0},
+			        [&]
+			        {
+				        if (Output.Texture && bInCapture)
+				        {
+					        const auto Texture = Session->GetResources().GetPreparation().ResolveTexture(
+					            Output.Texture, Output.Lifetime);
+					        const auto Bytes = Device->ReadTexture({Texture, 0, 1}, EResourceState::ShaderRead);
+					        Result = {View.Width, View.Height, EColorSpace::Srgb};
+					        for (const auto Byte : Bytes)
+					        {
+						        Result.Rgba.push_back(float(std::to_integer<unsigned char>(Byte)) / 255);
+					        }
+				        }
+				        Device->CollectCompletedResources();
+				        DeviceStats = Device->Statistics();
+				        HYP_CHECK(DeviceStats.ValidationErrors == 0);
+			        }));
+		    }));
 		return Result;
 	}
 };
@@ -445,6 +468,87 @@ void CheckCoverageAndInstances(FFixture& InFixture)
 	Similar(InFixture.Frame(), InFixture.Frame(ESceneRenderPipeline::Forward));
 	A.Remove();
 	B.Remove();
+}
+
+void CheckLiveOffscreenDepth(FFixture& InFixture)
+{
+	auto& F = InFixture;
+	const auto Initial = F.View.DepthConvention;
+	F.Output = {ERenderTargetKind::Texture,
+	            std::make_shared<const FMaterialTextureSource>(
+	                FMaterialColorTexture{384, 288, EMaterialColorFormat::Rgba8Unorm}),
+	            F.Session->GetResources().CreateScopeLifetime(), false};
+	FModelMaterial Material;
+	Material.BaseColor = {.6f, .5f, .4f, 1};
+	Material.Metallic = 0;
+	Material.Roughness = 1;
+	FSourceModel Receiver(F.Session->GetScene(), F.Session->GetResources(), Quad(Material));
+	Receiver.SetTransform(Scale({4, 4, 1}));
+	const auto Shared = Quad(Material);
+	FSourceModel A(F.Session->GetScene(), F.Session->GetResources(), Shared);
+	FSourceModel B(F.Session->GetScene(), F.Session->GetResources(), Shared);
+	A.SetTransform(Multiply(Translation({-.6f, 0, 1}), Scale({.4f, .4f, 1})));
+	B.SetTransform(Multiply(Translation({.6f, 0, 1}), Scale({.4f, .4f, 1})));
+	Material.AlphaMode = EAlphaMode::Blend;
+	Material.BaseColor = {.1f, .2f, .8f, .4f};
+	FSourceModel Blend(F.Session->GetScene(), F.Session->GetResources(), Quad(Material));
+	Blend.SetTransform(Multiply(Translation({0, -.5f, 2}), Scale({.5f, .5f, 1})));
+	for (const auto* Model : {&Receiver, &A, &B, &Blend})
+	{
+		Await(*Model);
+	}
+	F.Session->SetSceneParameters(
+	    {{"Engine.Scene.MainDirectionalLightDirection", FMaterialValue::Float(Normalize(FVec3{1, 0, 1}))},
+	     {"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(FVec3{3, 3, 3})},
+	     {"Engine.Scene.AmbientColor", FMaterialValue::Float(FVec3{.2f, .2f, .2f})}});
+	F.Shadows.bEnabled = true;
+	F.Settings.ContactShadows.bEnabled = true;
+	for (const auto Pipeline : {ESceneRenderPipeline::Deferred, ESceneRenderPipeline::Forward})
+	{
+		const auto Reference = F.Frame(Pipeline);
+		FDeviceStats Before;
+		std::uint64_t LiveBefore{};
+		for (unsigned Cycle = 0; Cycle < 2; ++Cycle)
+		{
+			for (unsigned Index = 0; Index < 24; ++Index)
+			{
+				F.View.DepthConvention = F.View.DepthConvention == EDepthConvention::Standard
+				                             ? EDepthConvention::Reversed
+				                             : EDepthConvention::Standard;
+				F.View.ViewProjection = Multiply(ClipDepthTransform(EDepthConvention::Reversed), F.View.ViewProjection);
+				const auto Image = F.Frame(Pipeline, Index < 4);
+				if (Index < 4)
+				{
+					Similar(Reference, Image, .065f);
+				}
+				HYP_CHECK(F.Statistics.bShadows && F.Statistics.MainView().Batches.InstancedItems == 2);
+				HYP_CHECK(F.Statistics.bContactShadows == (Pipeline == ESceneRenderPipeline::Deferred));
+			}
+			for (unsigned Index = 0; Index < 6; ++Index)
+			{
+				Similar(Reference, F.Frame(Pipeline), .065f);
+			}
+			const auto Live = F.Session->GetResources().Statistics().Materials.LiveObjects;
+			if (Cycle)
+			{
+				HYP_CHECK(F.DeviceStats.GpuAllocationBytes <= Before.GpuAllocationBytes + 4 * 1024 * 1024);
+				HYP_CHECK(Live <= LiveBefore + 16);
+			}
+			Before = F.DeviceStats;
+			LiveBefore = Live;
+		}
+		const auto Pipelines = F.DeviceStats.PipelinesCreated;
+		F.Frame(Pipeline);
+		HYP_CHECK(F.DeviceStats.PipelinesCreated == Pipelines);
+	}
+	HYP_CHECK(F.View.DepthConvention == Initial);
+	F.Output = {ERenderTargetKind::Backbuffer};
+	F.Shadows.bEnabled = false;
+	F.Settings.ContactShadows = {};
+	Receiver.Remove();
+	A.Remove();
+	B.Remove();
+	Blend.Remove();
 }
 
 void CheckShadowContinuity(FFixture& InFixture)
@@ -1400,6 +1504,7 @@ int main()
 			CheckHdrAndRoutes(Fixture);
 			CheckDepthOrdering(Fixture);
 			CheckViewDepthCacheIsolation(Fixture);
+			CheckLiveOffscreenDepth(Fixture);
 			CheckCoverageAndInstances(Fixture);
 			CheckShadowContinuity(Fixture);
 			Fixture.View.Viewport = FViewport{32, 24, 320, 240, .2f, .8f};

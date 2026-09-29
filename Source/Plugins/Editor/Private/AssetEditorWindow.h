@@ -20,7 +20,7 @@ public:
 	bool ShouldClose() const;
 	bool IsDrawable() const;
 	void Advance(float InDelta, std::vector<FInputEvent> InEvents, float InScale, bool bInBlocked,
-	             const std::filesystem::path& InCapture = {}, bool bInVsync = false);
+	             EDepthConvention InConvention, const std::filesystem::path& InCapture = {}, bool bInVsync = false);
 	FWindow& NativeWindow();
 	FGui& GuiContext();
 	FVec4 ObservedBounds(std::string_view InId) const;
@@ -35,7 +35,8 @@ private:
 	FGuiDrawData Draw(float InDelta, std::span<const FInputEvent> InEvents, bool bInBlocked);
 	void DrawMenus();
 	void DrawCloseDialog();
-	void Render(FGuiDrawData InData, const std::filesystem::path& InCapture, bool bInVsync);
+	void Render(FGuiDrawData InData, const std::filesystem::path& InCapture, bool bInVsync,
+	            EDepthConvention InConvention);
 	FTaskSystem& Tasks;
 	IRHIDevice& Device;
 	FShaderCompiler& Compiler;

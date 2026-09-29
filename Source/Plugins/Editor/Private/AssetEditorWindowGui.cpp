@@ -79,7 +79,7 @@ void FAssetEditorWindow::RouteShortcuts(std::vector<FInputEvent>& InEvents)
 }
 
 void FAssetEditorWindow::Advance(float InDelta, std::vector<FInputEvent> InEvents, float InScale, bool bInBlocked,
-                                 const std::filesystem::path& InCapture, bool bInVsync)
+                                 EDepthConvention InConvention, const std::filesystem::path& InCapture, bool bInVsync)
 {
 	Workspace.BeginFrame();
 	if (!IsDrawable())
@@ -94,7 +94,7 @@ void FAssetEditorWindow::Advance(float InDelta, std::vector<FInputEvent> InEvent
 		RouteShortcuts(InEvents);
 	}
 	auto Data = Draw(InDelta, InEvents, bInBlocked);
-	Render(std::move(Data), InCapture, bInVsync);
+	Render(std::move(Data), InCapture, bInVsync, InConvention);
 }
 
 void FAssetEditorWindow::DrawMenus()

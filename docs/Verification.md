@@ -61,4 +61,4 @@ CTest 日志保存在构建目录的 `Testing/Temporary/LastTest.log`，生成�
 
 涉及 SceneEditing 的变更还须运行 `editor_state`、`editor_acceptance`、`editor_multiselect`、`editor_placement`、`editor_content_transition`、`scene_navigation` 和 `plugin_applications`，保护 GUI 历史、手势、选择、保存、换根及 provider 缺失路径。通信故障应验证无目标回退、无变更重放、断连后的任务排空和未知 scheme。
 
-渲染迁移回归使用 `render_controls` 与 `editor_render_acceptance`，覆盖配置持久化、启动深度、离屏调试、缺失特性与匹配负载的合批比较。
+渲染迁移回归使用 `render_controls` 与 `editor_render_acceptance`，覆盖配置持久化、实时深度切换及重启恢复、离屏调试、缺失特性与匹配负载的合批比较。`editor_render_controls` 验证 GUI 切换及冻结相机保持；`deferred_rendering` 包含同一 session/swapchain 的离屏深度反复切换、像素和资源退休检查。
