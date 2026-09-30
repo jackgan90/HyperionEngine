@@ -61,6 +61,10 @@ def main():
     picking, _ = run_editor(executable, root, output, 'picking', '--exercise-picking',
                            '--scene', '/Game/Scenes/Sponza.hasset')
     assert picking['picking_verified'] and picking['validation_errors'] == 0, picking
+    framing, _ = run_editor(executable, root, output, 'framing', '--exercise-framing',
+                           '--scene', '/Game/Scenes/Sponza.hasset')
+    assert framing['framing_verified'] and not framing['document_dirty'], framing
+    assert framing['validation_errors'] == 0 and not framing['scene_error'], framing
     report, _ = run_editor(executable, root, output, 'missing-scene', '--frames', '20',
                             '--scene', '/Game/Scenes/DoesNotExist.hasset')
     assert report['scene_error'] and report['validation_errors'] == 0, report

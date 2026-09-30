@@ -186,7 +186,9 @@ Content Browser 模型预览按分部优先使用已就绪的原材质，保留�
 - **不按右键滚动滚轮**沿当前镜头前后方向推拉，保持原有步幅与对焦距离调整，不改变选定的 WASDQE 速度。
 - 视口工具栏的 **Viewport options**（滑杆图标）菜单显示 **Camera speed**，单位 **u/s**（场景单位/秒）。初始速度使用编辑器视角的 `max(1, FocusDistance)`，范围为 `0.01–100000 u/s`；失焦、打开对话框或重开场景保留选定速度，退出应用后不保存该设置。
 - 复用 Runtime 的 `FSceneCameraController` 飞行模式。共享控制器也支持环绕模式。
-- **Home** 或工具栏 **Frame Scene** 将镜头对准场景范围。
+- **F** 将浏览镜头对准当前选择。场景点击和 Outliner 选择共用同一操作；多选使用所有选中子树世界包围盒的合并中心，不受主对象和选择顺序影响。保留当前朝向与 FOV，按视口比例调整距离和临时裁剪面。Group 使用后代范围；灯光、相机和空 Group 使用世界位置与半边长 0.5 场景单位的稳定范围，不使用灯光照射半径。
+- **F** 在 Viewport、Outliner 或 Details 获得焦点时生效；文本输入、弹窗、拖拽、右键导航和失焦期间停用。无选择时不移动；按住或配合修饰键不重复取景。隐藏或停用的选中模型仍使用可用几何范围，已有 SourceNode/SourcePrimitive 和隐藏 section 的边界口径保持一致。
+- **Home** 在浏览视口将镜头对准全场景范围，并为全场景重新拟合临时裁剪面；先用 F 聚焦小物体再按 Home 仍能看到整个场景。主工具栏不再显示单独的 Frame Scene 按钮。
 - 视口工具栏的 **Exposure** 调整曝光，**Visualizer** 下拉菜单提供 Lit 和已有六种 GBuffer 模式；GBuffer 模式仅支持 Deferred，不写回场景资产。
 - Outliner 支持搜索和层级选择，一个完整模型实例对应一个模型对象，内部 primitive 不自动成为场景子对象。Details 展示反射属性，合法输入实时更新场景，无需 Apply/Revert；无效中间输入不写入场景。模型整体及 section 材质 override 仍属于实例，不改变共享资产；已有显式展开的场景继续兼容。
 - Details 隐藏内部 Object ID；所有组件展开后的内容统一缩进。单选时，非必需组件标题栏右侧的 **×** 移除该组件，悬停提示组件名称，折叠时也可操作；Transform 等必需组件不显示移除按钮。移除支持 Undo/Redo。
@@ -224,11 +226,11 @@ Content Browser 模型预览按分部优先使用已就绪的原材质，保留�
 
 ## 编辑器视角、初始视图与场景相机
 
-**Editor view** 是临时浏览视角，不出现在 Outliner。导航、Frame Scene 和曝光不使场景变脏；普通 Save Scene 不保存浏览位置。打开场景时使用场景的可选 `initialView`，缺省时对可见模型取景，空场景使用稳定的默认视角；不隐式跟随 `defaultCamera`。
+**Editor view** 是临时浏览视角，不出现在 Outliner。导航、F/Home 取景和曝光不使场景变脏，也不修改场景 revision 或撤销历史；普通 Save Scene 不保存浏览位置。打开场景时使用场景的可选 `initialView`，缺省时对可见模型取景，空场景使用稳定的默认视角；不隐式跟随 `defaultCamera`。
 
 视口选项菜单的 **Set initial view** 将当前编辑器视角的位置、朝向与镜头参数写入场景设置。它支持 Undo/Redo，保存后下次打开采用该视图。它没有 Enabled、父对象或 Outliner 节点。导航不会自动更新这个预设。
 
-Camera 组件用于用户明确创作的场景相机。在视口选项菜单点击 **Create camera from view** 创建可撤销的相机对象；它不会自动成为运行时默认相机。选择相机后，**Preview camera** 或视口的视角下拉框可切换为该相机的实时预览。此时导航与 Frame Scene 停用，修改 Transform/Camera 组件时直接看到效果。视口选项菜单的 **Return to editor view** 恢复进入预览前的独立浏览视角。
+Camera 组件用于用户明确创作的场景相机。在视口选项菜单点击 **Create camera from view** 创建可撤销的相机对象；它不会自动成为运行时默认相机。选择相机后，**Preview camera** 或视口的视角下拉框可切换为该相机的实时预览。此时导航与 F/Home 取景停用，修改 Transform/Camera 组件时直接看到效果。视口选项菜单的 **Return to editor view** 恢复进入预览前的独立浏览视角。
 
 预览相机或其父对象禁用、相机删除、Camera 组件移除时，视口清空并显示不可用原因，不保留旧相机副本，也不切换到其他相机。**Apply editor view to camera** 把保留的编辑器视角应用到所选相机；有父对象时换算为局部变换，父变换不可逆则拒绝整次修改。该操作同时写入镜头参数，支持 Undo/Redo。当前版本不提供 Pilot、相机画中画或视锥 Gizmo。
 

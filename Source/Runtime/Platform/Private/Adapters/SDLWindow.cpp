@@ -62,6 +62,8 @@ EKey Translate(SDL_Keycode InKey)
 			return EKey::Q;
 		case SDLK_E:
 			return EKey::E;
+		case SDLK_F:
+			return EKey::F;
 		case SDLK_C:
 			return EKey::C;
 		case SDLK_V:

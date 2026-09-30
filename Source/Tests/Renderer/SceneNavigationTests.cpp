@@ -18,6 +18,8 @@
 #include <limits>
 #include <thread>
 
+void CheckSelectionFraming(Hyperion::FSceneInstance& InScene);
+
 namespace
 {
 using namespace Hyperion;
@@ -754,6 +756,7 @@ int main()
 	try
 	{
 		FSceneFixture Fixture;
+		CheckSelectionFraming(*Fixture.Scene);
 		CheckContinuousCamera(Fixture);
 		CheckCameraInterruptions(Fixture);
 		CheckFlyCamera(Fixture);

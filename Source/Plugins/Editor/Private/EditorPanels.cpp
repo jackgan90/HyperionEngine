@@ -289,11 +289,6 @@ void FEditorPlugin::DrawToolbar()
 			ShowOpenScene();
 		}
 		Gui->SameLine();
-		if (Gui->Button("Frame Scene", Scene->GetStatus().bReady && !PreviewCamera))
-		{
-			FrameScene();
-		}
-		Gui->SameLine();
 		Gui->Text("  |  Scene Editor");
 	}
 	Gui->EndToolbar();
@@ -337,7 +332,7 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 			PickingLightBounds = Gui->LastItemBounds();
 		}
 		RouteReparentRow(Visit.Handle);
-		if (Options.bExerciseMultiSelection || !Options.ExerciseReparent.empty())
+		if (Options.bExerciseMultiSelection || Options.bExerciseFraming || !Options.ExerciseReparent.empty())
 		{
 			MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 		}
@@ -375,7 +370,7 @@ void FEditorPlugin::DrawOutliner()
 		Gui->Text("Search objects");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##SearchObjects", Filter, false);
-		if (Options.bExerciseClipboard)
+		if (Options.bExerciseClipboard || Options.bExerciseFraming)
 		{
 			InspectionBounds["clipboard/search"] = Gui->LastItemBounds();
 		}
@@ -405,7 +400,8 @@ void FEditorPlugin::DrawOutliner()
 					const bool bActivated =
 					    Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle));
 					RouteReparentRow(Handle, bActivated);
-					if (Options.bExerciseMultiSelection || !Options.ExerciseReparent.empty())
+					if (Options.bExerciseMultiSelection || Options.bExerciseFraming ||
+					    !Options.ExerciseReparent.empty())
 					{
 						MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 					}
@@ -568,11 +564,6 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 			BenchmarkCamera();
 		}
 		RouteViewportPicking(InEvents);
-		DrawLightMarkers();
-		DrawSelectionMarkers();
-		DrawDebugBounds();
-		DrawGizmoOverlay();
-		DrawViewportHud();
 	}
 	Gui->EndWindow();
 }
@@ -611,7 +602,8 @@ std::string FEditorPlugin::StatusText() const
 	const auto& Status = Scene->GetStatus();
 	return (Status.bReady ? "Ready  |  " : "Loading  |  ") + std::to_string(Status.ReadyModels) + "/" +
 	       std::to_string(Status.Models) + " meshes  |  " + CurrentPath +
-	       "  |  RMB + WASDQE: move   RMB drag: look   RMB + Wheel: speed   Wheel: dolly";
+	       "  |  F: frame selection   Home: frame scene   RMB + WASDQE: move   RMB drag: look   RMB + Wheel: speed   "
+	       "Wheel: dolly";
 }
 
 FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> InEvents)
@@ -658,6 +650,8 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	Context.Publish(FGuiPanelEvent{*Gui});
 	RouteDeleteShortcut(InEvents);
 	RouteClipboardShortcuts(InEvents);
+	RouteFrameSelectionShortcut(InEvents);
+	DrawViewportOverlays();
 	return Gui->Render();
 }
 } // namespace Hyperion

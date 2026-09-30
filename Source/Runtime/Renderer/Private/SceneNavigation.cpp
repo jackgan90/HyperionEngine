@@ -231,10 +231,21 @@ void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, f
 	{
 		return;
 	}
+	FitSceneCamera(InCamera, Bounds, InAspect, bInFitClipPlanes);
+}
+
+void FitSceneCamera(FSceneCameraView& InCamera, const FBounds& InBounds, float InAspect, bool bInFitClipPlanes)
+{
+	if (!IsUsable(InBounds) || !std::isfinite(InAspect) || InAspect <= 0)
+	{
+		throw std::invalid_argument("Camera framing requires finite bounds and a positive aspect ratio");
+	}
+	ValidateSceneCameraView(InCamera);
+	auto Candidate = InCamera;
 	const auto Pose = ExtractScenePose(InCamera.World);
-	auto& Camera = InCamera.Lens;
-	const auto Center = ScaleVector(Add(Bounds.Minimum, Bounds.Maximum), .5f);
-	const float Radius = std::max(.01f, Length(Subtract(Bounds.Maximum, Center)));
+	auto& Camera = Candidate.Lens;
+	const auto Center = ScaleVector(Add(InBounds.Minimum, InBounds.Maximum), .5f);
+	const float Radius = std::max(.01f, Length(Subtract(InBounds.Maximum, Center)));
 	const float Half = Camera.VerticalRadians * .5f;
 	Camera.FocusDistance =
 	    Radius / std::sin(std::min(Half, std::atan(std::tan(Half) * std::max(.001f, InAspect)))) * 1.12f;
@@ -245,6 +256,8 @@ void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, f
 	}
 	auto Moved = Pose;
 	Moved.Eye = Subtract(Center, ScaleVector(Pose.Forward, Camera.FocusDistance));
-	InCamera.World = SceneCameraTransform(Moved);
+	Candidate.World = SceneCameraTransform(Moved);
+	ValidateSceneCameraView(Candidate);
+	InCamera = Candidate;
 }
 } // namespace Hyperion

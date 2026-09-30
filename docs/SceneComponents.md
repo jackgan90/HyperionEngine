@@ -83,6 +83,6 @@ Directional Light 记录版本 3 增加整数 `priority`（默认 0）；版本 
 
 Editor 在合法输入变化时实时提交，并将同一控件的连续输入或同一颜色弹窗会话合并为一条撤销记录，保留最初状态与最新状态。即使值改回原值，记录和修改标记仍保留。Ctrl+Z 连续逐条撤销，Ctrl+Y / Ctrl+Shift+Z 重做；新编辑截断重做分支。Undo/Redo 重新验证，并清除当前控件的活动输入，防止旧值再次写回。切换对象、保存和其他文档操作结束当前编辑，不再需要 Apply/Revert。Save 冻结状态并使用 AssetService 原子写入，完成只标记捕获时的保存点，后续编辑仍为脏。失败保留脏状态，打开其他文档和退出检查未保存修改。
 
-独立 `FSceneCameraView` 复用导航控制器，经 `FSceneViewRequest::CameraOverride` 冻结给 Render。导航、曝光和 Frame Scene 不修改场景相机或撤销历史；编辑 Camera 组件属于文档修改。
+独立 `FSceneCameraView` 复用导航控制器，经 `FSceneViewRequest::CameraOverride` 冻结给 Render。导航、曝光和 F/Home 取景不修改场景相机或撤销历史；编辑 Camera 组件属于文档修改。
 
 `export-envelope` 导出原生记录 JSON 供诊断，不作为 importer 输入。自定义组件和稳定 ID 保存在原生 `.hasset` 中，通过场景编辑和保存维护。外部模型/天空可从 glTF/GLB 或 HDR/EXR 来源导入。容器、依赖表与发布顺序见 [NativeAssets.md](NativeAssets.md)。

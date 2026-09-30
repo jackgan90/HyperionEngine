@@ -76,8 +76,45 @@ void FEditorPlugin::FrameScene()
 	{
 		throw FSceneEditError("busy", "Frame scene requires a ready scene and the editor browsing view");
 	}
-	FitSceneCamera(ViewCamera, *Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
+	FitSceneCamera(ViewCamera, *Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1, true);
 	Camera.Reset();
+}
+
+void FEditorPlugin::FrameSelection(const FSceneMutationRequest& InRequest)
+{
+	UpdateDocumentInteraction();
+	SceneDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+	if (PreviewCamera)
+	{
+		throw FSceneEditError("unavailable", "Selection framing requires the editor browsing view");
+	}
+	if (bCameraDragging || Gui->PointerState().bRightDown || Gui->HasOpenPopup())
+	{
+		throw FSceneEditError("busy", "Selection framing is blocked by camera navigation or popup interaction");
+	}
+	if (!bViewportCameraInitialized || !ViewportSize.Width || !ViewportSize.Height)
+	{
+		throw FSceneEditError("busy", "Selection framing requires a ready scene and initialized viewport");
+	}
+	if (!Selection)
+	{
+		return;
+	}
+	// Validate every selection handle before SelectedRoots can discard stale entries.
+	for (const auto Handle : Selection.All())
+	{
+		if (!Scene->FindNode(Handle))
+		{
+			throw FSceneEditError("stale_handle", "Selected object is no longer in this scene");
+		}
+	}
+	const auto Bounds = SceneSelectionBounds(*Scene, SelectedRoots());
+	auto Candidate = ViewCamera;
+	FitSceneCamera(Candidate, Bounds, float(ViewportSize.Width) / ViewportSize.Height, true);
+	ViewCamera = Candidate;
+	ViewportClick.reset();
+	Camera.Reset();
+	bCameraDragging = false;
 }
 
 void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)

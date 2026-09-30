@@ -92,6 +92,7 @@ struct FEditorOptions
 	bool bExercisePicking{};
 	bool bExerciseMultiSelection{};
 	bool bExerciseClipboard{};
+	bool bExerciseFraming{};
 };
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
@@ -127,6 +128,7 @@ public:
 	FSceneViewportState ViewportState() const override;
 	void SetViewportCamera(const FSceneCameraView& InCamera) override;
 	void FrameScene() override;
+	void FrameSelection(const FSceneMutationRequest& InRequest) override;
 	void SetViewportOptions(const FSceneViewportOptions& InOptions) override;
 	void SetViewportSpeed(float InSpeed) override;
 	void PreviewSceneCamera(std::optional<FSceneHandle> InHandle) override;
@@ -399,6 +401,23 @@ private:
 	std::string StatusText() const;
 	FGuiDrawData DrawGui(float InDelta, std::span<const FInputEvent> InEvents);
 	void RouteCamera(float InDelta, std::span<const FInputEvent> InEvents);
+	void RouteFrameSelectionShortcut(std::span<const FInputEvent> InEvents);
+	void DrawViewportOverlays();
+	void ExerciseFraming(std::vector<FInputEvent>& InEvents);
+	void PrepareFramingExercise();
+	void ExerciseFramingSelection(std::vector<FInputEvent>& InEvents);
+	void ExerciseFramingGuards(std::vector<FInputEvent>& InEvents);
+	void ExerciseFramingViewGuards(std::vector<FInputEvent>& InEvents);
+	void ExerciseFramingPopup(std::vector<FInputEvent>& InEvents);
+	void CheckFramingResult(FVec3 InCenter);
+	std::vector<FSceneHandle> FramingObjects;
+	unsigned FramingStep{};
+	unsigned FramingWait{};
+	std::uint64_t FramingRevision{};
+	FSceneCameraView FramingBefore;
+	FSceneCameraView FramingMultiple;
+	FBytes FramingSnapshot;
+	bool bFramingVerified{};
 	void Render(FGuiDrawData InGui, bool bInCapture);
 	FImage ExecuteEditorGraph(FRenderGraph InGraph, FSize InSize, bool bInScreenshot, FNativeSurface InSurface,
 	                          bool bInCaptureRdc);

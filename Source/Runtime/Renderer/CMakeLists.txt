@@ -26,6 +26,7 @@ target_sources(hyperion_render PRIVATE Private/RenderSettings.cpp
   Private/RenderBenchmark.cpp)
 target_sources(hyperion_render PRIVATE Private/DebugGeometry.cpp)
 target_sources(hyperion_render PRIVATE Private/SceneViewport.cpp)
+target_sources(hyperion_render PRIVATE Private/SceneFraming.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderOutput.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderCaptureControl.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderDiagnostics.cpp)

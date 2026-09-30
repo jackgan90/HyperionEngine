@@ -17,6 +17,8 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorDebugGeometry.cpp
   Private/EditorCloseService.cpp
   Private/EditorViewportService.cpp
+  Private/EditorFraming.cpp
+  Private/EditorFramingAcceptance.cpp
   Private/EditorCaptureService.cpp
   Private/AssetPreviewService.cpp
   Private/EditorSceneDocument.cpp

@@ -29,6 +29,7 @@ bool ParseFlag(FEditorOptions& InOptions, std::string_view InArgument)
 	    {"--exercise-picking", &FEditorOptions::bExercisePicking},
 	    {"--exercise-multiselect", &FEditorOptions::bExerciseMultiSelection},
 	    {"--exercise-clipboard", &FEditorOptions::bExerciseClipboard},
+	    {"--exercise-framing", &FEditorOptions::bExerciseFraming},
 	    {"--benchmark-camera", &FEditorOptions::bBenchmarkCamera},
 	    {"--benchmark-light", &FEditorOptions::bBenchmarkLight},
 	    {"--benchmark-collapsed", &FEditorOptions::bBenchmarkCollapsed}};

@@ -258,6 +258,10 @@ void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::
 	{
 		ExerciseClipboard(InEvents);
 	}
+	if (Options.bExerciseFraming)
+	{
+		ExerciseFraming(InEvents);
+	}
 	if (Options.bExerciseGizmo)
 	{
 		ExerciseGizmoInput(InEvents);
@@ -383,7 +387,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
 	                               bModelPlacementVerified || bOutlinesVerified || bMultiSelectionVerified ||
 	                               bContentVerified || bRenderControlsVerified || bReparentVerified ||
-	                               bClipboardVerified || bLogVerified;
+	                               bClipboardVerified || bLogVerified || bFramingVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -497,8 +501,8 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		return;
 	}
 	if ((Options.bExercise || Options.bExerciseLog || Options.bExerciseGizmo || Options.bExercisePicking ||
-	     Options.bExerciseMultiSelection || Options.bExerciseClipboard || !Options.ExerciseDocument.empty() ||
-	     !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
+	     Options.bExerciseMultiSelection || Options.bExerciseClipboard || Options.bExerciseFraming ||
+	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
 	     !Options.ExerciseModelPlacement.empty() || !Options.ExerciseOutlines.empty() ||
 	     !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
 	     !Options.ExerciseRenderControls.empty() || !Options.ExerciseImport.empty() ||
@@ -520,6 +524,10 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (Options.bExerciseFraming && !bFramingVerified)
+	{
+		throw std::runtime_error("Editor framing acceptance incomplete at step " + std::to_string(FramingStep));
+	}
 	if (!Options.ExerciseModelPlacement.empty() && !bModelPlacementVerified)
 	{
 		throw std::runtime_error("Model placement acceptance incomplete at case " + std::to_string(ModelPlacementCase) +

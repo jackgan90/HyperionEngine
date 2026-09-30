@@ -59,6 +59,8 @@ ImGuiKey Key(EKey InK)
 			return ImGuiKey_Q;
 		case EKey::E:
 			return ImGuiKey_E;
+		case EKey::F:
+			return ImGuiKey_F;
 		case EKey::C:
 			return ImGuiKey_C;
 		case EKey::V:

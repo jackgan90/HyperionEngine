@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/SceneEditing/SceneDocument.h"
+#include "Hyperion/SceneEditing/SceneRequests.h"
 
 namespace Hyperion
 {
@@ -39,6 +39,7 @@ public:
 	virtual FSceneViewportState ViewportState() const = 0;
 	virtual void SetViewportCamera(const FSceneCameraView& InCamera) = 0;
 	virtual void FrameScene() = 0;
+	virtual void FrameSelection(const FSceneMutationRequest& InRequest);
 	virtual void SetViewportOptions(const FSceneViewportOptions& InOptions) = 0;
 	virtual void SetViewportSpeed(float InSpeed);
 	virtual void PreviewSceneCamera(std::optional<FSceneHandle> InHandle);

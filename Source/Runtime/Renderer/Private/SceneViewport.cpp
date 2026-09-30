@@ -24,6 +24,11 @@ void ISceneViewport::SetViewportSpeed(float)
 	Unsupported();
 }
 
+void ISceneViewport::FrameSelection(const FSceneMutationRequest&)
+{
+	Unsupported();
+}
+
 void ISceneViewport::PreviewSceneCamera(std::optional<FSceneHandle>)
 {
 	Unsupported();

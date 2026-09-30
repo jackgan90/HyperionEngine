@@ -140,10 +140,12 @@ void NoHistory()
 	FOperationCatalog Missing;
 	RegisterSceneOperations(Missing, nullptr);
 	RegisterRenderCapture(Missing, nullptr, nullptr);
+	RegisterViewportOperations(Missing, nullptr, nullptr);
 	Missing.Seal();
 	FAutomationSession Absent(Missing);
 	Error(Call(Absent, "scene.info", FSceneInfoRequest{}), "unavailable");
 	Error(Call(Absent, "renderdoc.hud.get", FSceneInfoRequest{}), "unavailable");
+	Error(Call(Absent, "view.frame_selection", FSceneMutationRequest{}), "unavailable");
 }
 
 void ComponentAdmissionAndBatch()

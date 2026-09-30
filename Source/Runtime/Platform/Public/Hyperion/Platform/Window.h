@@ -44,7 +44,8 @@ enum class EKey
 	S,
 	D,
 	Q,
-	E
+	E,
+	F
 };
 enum class EEventType
 {

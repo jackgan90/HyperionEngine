@@ -14,6 +14,10 @@ void RotateSceneCamera(FSceneCameraView& InCamera, float InYaw, float InPitch);
 void DollySceneCamera(FSceneCameraView& InCamera, float InFactor, float InMinimum = .02f, float InMaximum = 100000.f,
                       std::optional<float> InFarPadding = {});
 void PanSceneCamera(FSceneCameraView& InCamera, FVec3 InSteps);
+// Validates a complete candidate before replacing the temporary view.
+void FitSceneCamera(FSceneCameraView& InCamera, const FBounds& InBounds, float InAspect, bool bInFitClipPlanes = false);
+// Main: includes selected subtrees once; empty selection returns invalid bounds.
+FBounds SceneSelectionBounds(const FSceneInstance& InScene, std::span<const FSceneHandle> InHandles);
 void FitSceneCamera(FSceneCameraView& InCamera, const FSceneInstance& InScene, float InAspect,
                     bool bInFitClipPlanes = false);
 FVec3 GetSceneNavigationPivot(const FSceneInstance& InScene);

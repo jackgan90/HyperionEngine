@@ -35,7 +35,7 @@
 | Inspector 组件 | `scene.components.list`、`scene.component_types.list`、`scene.components.edit_structure`、`scene.component.<type>.get/set/set_batch` | `SceneEditing` 与组件反射；组件实例 ID 来自 list，不必等于类型 ID。保留资源绑定，完整候选经文档/场景校验；资源模型组件必须通过 prepared placement 创建 |
 | 默认相机、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换 |
 | 灯光 Priority 与生效诊断 | `scene.component.<type>.get/set/set_batch`、`scene.lighting.get` | 与 Details 共用组件、校验、事务、历史和保存；Priority 为有符号 32 位整数，默认 0，越大越优先；诊断返回阴影方向光、天空光、顶层同优先级冲突、有效启用状态和天空资产错误；无独立主光设置接口 |
-| 浏览相机和临时视口选项 | `view.get/set/frame_scene/preview_camera` | `ISceneViewport` / SceneCameraController；null option 表示此 host 不支持。patch 中 null 保留原值；曝光、Visualizer 0–6、独立状态/profiling HUD 和 0–255 分类掩码均为临时视口状态 |
+| 浏览相机和临时视口选项 | `view.get/set/frame_scene/frame_selection/preview_camera` | `ISceneViewport` / SceneCameraController；`frame_selection` 与 F 共用服务，读取当前选中子树的世界范围，保留朝向/FOV，空选择不移动；需当前 document/revision、idle 与浏览视角，RMB 导航或普通弹出菜单期间返回 busy。`frame_scene` 为全场景重新拟合临时裁剪面。null option 表示此 host 不支持。patch 中 null 保留原值；曝光、Visualizer 0–6、独立状态/profiling HUD 和 0–255 分类掩码均为临时视口状态 |
 | 用浏览视角编写相机 | `view.save_initial/create_camera/apply_to_camera` | Editor 与 GUI 同一文档操作；与临时相机移动区分 |
 | 非场景资产页签 | `asset.open/info/documents.list/activate/close/save/undo/redo/rename` | Editor 发布 `IAssetWorkspace`，GUI 和多个 agent 使用同一草稿、历史与 busy 状态；其他宿主可使用独立 CPU 文档 |
 | 模型属性 | `model.nodes.get/set`、`model.material_slots.get/set`、`model.primitives.get/set`、`model.roots.get` | AssetEditing 共享校验；节点/primitive 身份、几何和拓扑固定；引用先加载校验再提交 |
@@ -63,6 +63,8 @@
 `asset.workspace.policy` 明确失败条目策略：下文 loading/failed 页签指附着 Editor workspace；standalone/无 workspace 宿主只保留 ready 草稿，打开失败由 job 返回。常规轮询优先用 application.health 查询场景就绪和错误，完整渲染计数仍由 render.statistics 提供。
 
 ## 值与完成语义
+
+`view.frame_selection` 在 Main 提交独立浏览相机，后续渲染帧使用新状态，不修改 selection、场景 revision、dirty 或历史。Group 包含后代并去重；隐藏或停用模型使用已有几何边界，灯光/相机/空 Group 使用世界位置与半边长 0.5 的范围。选中模型仍加载时返回 busy，终止资源失败可使用其位置取景。相机预览返回 unavailable，过期 document/revision 拒绝且不移动镜头。现有 `view.frame_scene` ID 和输入/结果契约保持不变。
 
 资产序列字段 get 支持 offset/limit（1–100），返回 total/next；set 可使用 offset 替换现有范围，不隐式 resize。每页带当前 generation，修改后从第一页重新查询。字段类型来自成员指针和现有反射，不另写 JSON schema。
 

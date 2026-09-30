@@ -156,6 +156,15 @@ void RegisterViewportOperations(FOperationCatalog& InCatalog, ISceneViewport* In
 	                               {
 		                               InView.FrameScene();
 	                               });
+	AddView<FSceneMutationRequest>(
+	    InCatalog, InView && InDocument ? InView : nullptr, InDocument, "view.frame_selection",
+	    "Fit the browsing camera to the current selected subtrees. Preserves orientation/FOV; empty selection is a "
+	    "no-op. Non-geometric objects use a stable extent. Requires an idle scene and browsing view.",
+	    false,
+	    [](auto& InView, const auto& InRequest)
+	    {
+		    InView.FrameSelection(InRequest);
+	    });
 	AddView<FPreviewCameraRequest>(
 	    InCatalog, InView, InDocument, "view.preview_camera",
 	    "Select an enabled scene camera or return to the browsing view.", false,

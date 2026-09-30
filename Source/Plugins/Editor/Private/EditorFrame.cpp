@@ -78,8 +78,10 @@ void FEditorPlugin::RouteCamera(float InDelta, std::span<const FInputEvent> InEv
 		}
 		if (Event.Type == EEventType::Key && Event.Key == EKey::Home && Event.bDown && !Event.bRepeat)
 		{
-			FitSceneCamera(ViewCamera, *Scene,
-			               ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
+			if (Scene->GetStatus().bReady)
+			{
+				FrameScene();
+			}
 		}
 	}
 	Camera.Input(ViewCamera, InEvents, !ViewportRegion.bHovered && !bCameraDragging, false);

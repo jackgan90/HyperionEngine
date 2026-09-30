@@ -101,6 +101,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_CONFIGURATION_TYPES)
   set_tests_properties(cache_allocation_failure PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 endif()
 hyp_test(scene_navigation_tests scene_navigation hyperion_render Renderer/SceneNavigationTests.cpp)
+target_sources(scene_navigation_tests PRIVATE Renderer/SceneFramingTests.cpp)
 target_link_libraries(scene_navigation_tests PRIVATE hyperion_scene_editing hyperion_rhi_d3d12)
 target_compile_definitions(scene_navigation_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(scene_navigation PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
@@ -226,6 +227,10 @@ add_test(NAME automation_capability_parity COMMAND "${Python3_EXECUTABLE}" "${CM
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParity")
 set_tests_properties(automation_capability_parity PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+add_test(NAME automation_selection_framing COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/SelectionFramingAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
+  $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/SelectionFraming")
+set_tests_properties(automation_selection_framing PROPERTIES TIMEOUT 120 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ParityRegressionAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParityRegressions")
