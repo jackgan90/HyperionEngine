@@ -1,6 +1,7 @@
 #include "EditorApplication.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include "Hyperion/Renderer/ViewportRay.h"
+#include <algorithm>
 
 namespace Hyperion
 {
@@ -76,7 +77,10 @@ void FEditorPlugin::FrameScene()
 	{
 		throw FSceneEditError("busy", "Frame scene requires a ready scene and the editor browsing view");
 	}
-	FitSceneCamera(ViewCamera, *Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1, true);
+	auto Candidate = ViewCamera;
+	FitSceneCamera(Candidate, *Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1, true);
+	Candidate.Lens.Far = std::max(ViewCamera.Lens.Far, Candidate.Lens.Far);
+	ViewCamera = Candidate;
 	Camera.Reset();
 }
 
@@ -111,6 +115,8 @@ void FEditorPlugin::FrameSelection(const FSceneMutationRequest& InRequest)
 	const auto Bounds = SceneSelectionBounds(*Scene, SelectedRoots());
 	auto Candidate = ViewCamera;
 	FitSceneCamera(Candidate, Bounds, float(ViewportSize.Width) / ViewportSize.Height, true);
+	// Keep distant scene geometry visible when framing small objects.
+	Candidate.Lens.Far = std::max(ViewCamera.Lens.Far, Candidate.Lens.Far);
 	ViewCamera = Candidate;
 	ViewportClick.reset();
 	Camera.Reset();

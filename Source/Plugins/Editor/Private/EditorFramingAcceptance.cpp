@@ -77,6 +77,24 @@ void RequireFramingVisible(const FSceneCameraView& InCamera, FSize InSize, const
 		}
 	}
 }
+
+void RequireFramingNavigation(FSceneCameraView& InCamera, FSize InSize)
+{
+	const auto Before = InCamera;
+	FSceneCameraController Navigation(ESceneCameraNavigationMode::Fly);
+	Navigation.SetMovementSpeed(100);
+	std::vector<FInputEvent> Events;
+	FramingClick(Events, {}, true, 1);
+	FramingKey(Events, EKey::S);
+	Navigation.Input(InCamera, Events, false, false);
+	Navigation.Advance(InCamera, .1f);
+	const auto BeforePose = ExtractScenePose(Before.World);
+	const auto AfterPose = ExtractScenePose(InCamera.World);
+	RequireFraming(Dot(Subtract(BeforePose.Eye, AfterPose.Eye), BeforePose.Forward) > 9.99f,
+	               "framed camera did not move backward");
+	RequireFraming(InCamera.Lens == Before.Lens, "backward navigation changed the framed camera lens");
+	RequireFramingVisible(InCamera, InSize, {{-3.5f, -.5f, -.5f}, {3.5f, 1.5f, .5f}, true});
+}
 } // namespace
 
 void FEditorPlugin::PrepareFramingExercise()
@@ -115,6 +133,7 @@ void FEditorPlugin::CheckFramingResult(FVec3 InCenter)
 	RequireFraming(Length(Subtract(Pose.Forward, Before.Forward)) < .00001f &&
 	                   ViewCamera.Lens.VerticalRadians == FramingBefore.Lens.VerticalRadians,
 	               "framing changed orientation or FOV");
+	RequireFraming(ViewCamera.Lens.Far >= FramingBefore.Lens.Far, "framing shortened the browsing far plane");
 	RequireFraming(Scene->GetRevision() == FramingRevision && !IsDirty() && History.empty(),
 	               "framing changed document revision, dirty state or history");
 	RequireFraming(Serialize(Scene->Snapshot("FramingAcceptance.hasset")) == FramingSnapshot,
@@ -185,6 +204,7 @@ void FEditorPlugin::ExerciseFramingSelection(std::vector<FInputEvent>& InEvents)
 			break;
 		case 12:
 			CheckFramingResult({-3, 0, 0});
+			RequireFramingNavigation(ViewCamera, ViewportSize);
 			ViewCamera = FramingBefore;
 			Gui->FocusWindow("Content Browser");
 			break;

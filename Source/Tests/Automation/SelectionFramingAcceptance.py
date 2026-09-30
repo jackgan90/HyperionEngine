@@ -58,9 +58,13 @@ def verify_framing(agent, peer):
                                                 object=cube["id"], position=position)))
         handles.append(placed["handle"])
         info = ready(agent)
+    completed(agent.wait(agent.call("scene.placement.place", **request(info), object=cube["id"],
+                                    position={"x": -300, "y": 0, "z": -60})))
+    info = ready(agent)
     original = completed(agent.call("view.get"))["camera"]
     original = copy.deepcopy(original)
     original["world"]["values"] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 2, 20, 1]
+    original["lens"]["far"] = 5000
     completed(agent.call("view.set", **request(info), camera=original))
     selection = completed(agent.call("scene.selection.set", **request(info), handles=handles))
     definition = agent.request("api.describe", {"operation": "scene.selection.select_all"})
@@ -76,6 +80,7 @@ def verify_framing(agent, peer):
     selection = completed(agent.call("scene.selection.set", **request(info), handles=handles))
     multiple = completed(agent.call("view.frame_selection", **request(info)))["camera"]
     check_center(multiple, [0, 0.5, 0])
+    assert multiple["lens"]["far"] >= original["lens"]["far"], (original, multiple)
     assert multiple["lens"]["verticalRadians"] == original["lens"]["verticalRadians"]
     assert multiple["world"]["values"][:12] == original["world"]["values"][:12]
     check_unchanged(agent, peer, multiple, info, selection)
@@ -85,9 +90,17 @@ def verify_framing(agent, peer):
     reversed_camera = completed(peer.call("view.frame_selection", **request(info)))["camera"]
     assert reversed_camera == multiple
     completed(agent.call("scene.selection.set", **request(info), handles=[handles[0]]))
+    assert completed(peer.call("view.get"))["camera"] == multiple
     single = completed(agent.call("view.frame_selection", **request(info)))["camera"]
     check_center(single, [-300, 0, 0])
     assert single["lens"]["focusDistance"] < multiple["lens"]["focusDistance"]
+    assert single["lens"]["far"] >= multiple["lens"]["far"], (multiple, single)
+    check_clipping(single, [(-300, 0, -60)])
+    retreated = copy.deepcopy(single)
+    retreated["world"]["values"][14] += 100
+    completed(agent.call("view.set", **request(info), camera=retreated))
+    check_clipping(completed(peer.call("view.get"))["camera"], [(-300, 0, 0), (-300, 0, -60)])
+    completed(agent.call("view.set", **request(info), camera=single))
 
     selection = completed(agent.call("scene.selection.get", **request(info)))
     for arguments, code in ((dict(request(info), document="expired-document"), "stale_document"),
@@ -104,8 +117,9 @@ def verify_framing(agent, peer):
     check_unchanged(agent, peer, single, info, empty)
     completed(agent.call("view.frame_scene", **request(info)))
     scene = completed(peer.call("view.get"))["camera"]
-    check_center(scene, [0, 0.5, 0])
-    check_clipping(scene, [(-300, 0, 0), (300, 1, 0)])
+    check_center(scene, [0, 0.5, -30])
+    assert scene["lens"]["far"] >= single["lens"]["far"], (single, scene)
+    check_clipping(scene, [(-300, 0, 0), (300, 1, 0), (-300, 0, -60)])
     return info
 
 
