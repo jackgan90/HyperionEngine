@@ -25,59 +25,42 @@ void FEditorPlugin::FinishInspectorEdit()
 	InspectorInteraction = 0;
 }
 
-void FEditorPlugin::RouteHistoryShortcuts(std::vector<FInputEvent>& InEvents)
+void FEditorPlugin::RouteHistoryShortcuts(std::span<const FInputEvent> InEvents)
 {
-	const bool bAllowSave = !Placement.IsActive() && !Gui->DragPayload() && !IsAssetWindowBlocked() &&
-	                        Scene->GetStatus().bReady && !CurrentPath.empty() && !PendingSave;
-	std::erase_if(InEvents,
-	              [&](const FInputEvent& InEvent)
-	              {
-		              if (InEvent.Type != EEventType::Key || !InEvent.bDown || InEvent.bRepeat ||
-		                  !(InEvent.Modifiers & 1) || InEvent.Key != EKey::S)
-		              {
-			              return false;
-		              }
-		              if (bAllowSave)
-		              {
-			              try
-			              {
-				              SaveScene(CurrentPath);
-			              }
-			              catch (const std::exception& Failure)
-			              {
-				              Error = Failure.what();
-			              }
-		              }
-		              return true;
-	              });
-	const bool bAllowHistory = !Placement.IsActive() && !Gui->DragPayload() && !bOpenDialog && !bSaveDialog &&
-	                           !bDiscardDialog && !bAssetMessage && !PendingRoot && !bPreferencesDialog &&
-	                           (!Gui->IsEditingText() || InspectorInteraction != 0);
-	std::erase_if(InEvents,
-	              [&](const FInputEvent& InEvent)
-	              {
-		              if (!bAllowHistory || InEvent.Type != EEventType::Key || !InEvent.bDown ||
-		                  !(InEvent.Modifiers & 1) || (InEvent.Key != EKey::Z && InEvent.Key != EKey::Y))
-		              {
-			              return false;
-		              }
-		              try
-		              {
-			              if (InEvent.Key == EKey::Y || (InEvent.Modifiers & 2))
-			              {
-				              Redo();
-			              }
-			              else
-			              {
-				              Undo();
-			              }
-		              }
-		              catch (const std::exception& Failure)
-		              {
-			              Error = Failure.what();
-		              }
-		              return true;
-	              });
+	const auto Interaction = CaptureShortcutInteraction(InEvents);
+	for (const auto& Event : InEvents)
+	{
+		if (Event.Type != EEventType::Key || !Event.bDown ||
+		    !HasInputModifier(Event.Modifiers, InputModifiers::Control))
+		{
+			continue;
+		}
+		try
+		{
+			if (Event.Key == EKey::S && !Event.bRepeat && Interaction.Allows(EEditorShortcut::Save) &&
+			    !CurrentPath.empty() && !PendingSave)
+			{
+				SaveScene(CurrentPath);
+			}
+			else if ((Event.Key == EKey::Z || Event.Key == EKey::Y) && Interaction.Allows(EEditorShortcut::History))
+			{
+				// Runs after NewFrame but before widgets: FinishEditing retires the inspector's native text owner.
+				// Ownership-changing batches are declined, so ordinary text Undo remains entirely native.
+				if (Event.Key == EKey::Y || HasInputModifier(Event.Modifiers, InputModifiers::Shift))
+				{
+					Redo();
+				}
+				else
+				{
+					Undo();
+				}
+			}
+		}
+		catch (const std::exception& Failure)
+		{
+			Error = Failure.what();
+		}
+	}
 }
 
 void FEditorPlugin::CommitSettings(FSceneSettings InSettings)

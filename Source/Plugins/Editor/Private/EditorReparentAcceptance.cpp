@@ -77,34 +77,34 @@ void FEditorPlugin::PrepareReparentExercise()
 			Node.PointLight() = FScenePointLight{};
 			Node.Local() = Translation({-2, 2, 0});
 		}
-		ReparentExerciseNodes.push_back(Scene->AddNode(Node));
-		ReparentExerciseIds.push_back(Node.Id);
+		Acceptance.ReparentExerciseNodes.push_back(Scene->AddNode(Node));
+		Acceptance.ReparentExerciseIds.push_back(Node.Id);
 		FSceneNodeView View;
-		Scene->GetNodeView(ReparentExerciseNodes.back(), View);
-		ReparentExerciseWorlds.push_back(View.World);
+		Scene->GetNodeView(Acceptance.ReparentExerciseNodes.back(), View);
+		Acceptance.ReparentExerciseWorlds.push_back(View.World);
 	}
 	for (auto& Node : Lighting)
 	{
 		Scene->AddNode(Node);
 	}
-	ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
-	bViewportCameraInitialized = true;
+	Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
+	Viewport.bViewportCameraInitialized = true;
 	bShowLightMarkers = true;
 	ResetDocument();
-	ReparentExerciseStep = 1;
+	Acceptance.ReparentExerciseStep = 1;
 }
 
 void FEditorPlugin::ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents)
 {
-	const auto Step = ReparentKeyboardStep;
+	const auto Step = Acceptance.ReparentKeyboardStep;
 	if (Step == 0)
 	{
 		Filter = "Reparent";
-		ReparentExerciseHistory = HistoryCursor;
+		Acceptance.ReparentExerciseHistory = HistoryCursor;
 	}
 	else if (Step == 1 || Step == 2)
 	{
-		MoveReparent(InEvents, RowCenter(MultiSelectionRows.at(ReparentExerciseIds[0])));
+		MoveReparent(InEvents, RowCenter(Acceptance.MultiSelectionRows.at(Acceptance.ReparentExerciseIds[0])));
 		ReparentButton(InEvents, Step == 1);
 	}
 	else if (Step >= 3 && Step <= 6)
@@ -117,29 +117,29 @@ void FEditorPlugin::ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents)
 	}
 	else
 	{
-		RequireReparent(Selection == ReparentExerciseNodes[1] && Selection.All().size() == 1,
+		RequireReparent(Selection == Acceptance.ReparentExerciseNodes[1] && Selection.All().size() == 1,
 		                "keyboard activation of filtered Outliner row did not select object: " +
 		                    (Selection ? Scene->FindNode(*Selection)->Id : "none") +
 		                    " gesture=" + std::to_string(ReparentGesture.has_value()));
-		RequireReparent(!ReparentGesture && !Gui->DragPayload() && HistoryCursor == ReparentExerciseHistory,
+		RequireReparent(!ReparentGesture && !Gui->DragPayload() && HistoryCursor == Acceptance.ReparentExerciseHistory,
 		                "keyboard selection created a drag or history entry");
 	}
-	++ReparentKeyboardStep;
+	++Acceptance.ReparentKeyboardStep;
 }
 
 void FEditorPlugin::ExerciseReparentSelection(std::vector<FInputEvent>& InEvents)
 {
-	const bool bLight = ReparentSelectionStep >= 15;
-	const unsigned Phase = ReparentSelectionStep % 15;
-	const auto Handle = ReparentExerciseNodes[bLight ? 5 : 0];
-	const auto Screen =
-	    ProjectViewportPoint(ViewCamera, ViewportRegion.Bounds, bLight ? FVec3{-2, 2, 0} : FVec3{-1.3f, -.3f, .5f});
+	const bool bLight = Acceptance.ReparentSelectionStep >= 15;
+	const unsigned Phase = Acceptance.ReparentSelectionStep % 15;
+	const auto Handle = Acceptance.ReparentExerciseNodes[bLight ? 5 : 0];
+	const auto Screen = ProjectViewportPoint(Viewport.ViewCamera, Viewport.ViewportRegion.Bounds,
+	                                         bLight ? FVec3{-2, 2, 0} : FVec3{-1.3f, -.3f, .5f});
 	RequireReparent(Screen.has_value(), "selection point is outside viewport");
 	const FVec2 Point{Screen->X, Screen->Y};
 	if (Phase == 0)
 	{
 		SelectObject(std::nullopt);
-		ReparentExerciseHistory = HistoryCursor;
+		Acceptance.ReparentExerciseHistory = HistoryCursor;
 		Filter.clear();
 	}
 	else if (Phase == 1 || Phase == 4)
@@ -170,7 +170,7 @@ void FEditorPlugin::ExerciseReparentSelection(std::vector<FInputEvent>& InEvents
 		}
 		else if (Phase == 6)
 		{
-			MoveReparent(InEvents, RowCenter(MultiSelectionRows.at(ReparentExerciseIds[3])));
+			MoveReparent(InEvents, RowCenter(Acceptance.MultiSelectionRows.at(Acceptance.ReparentExerciseIds[3])));
 		}
 		else
 		{
@@ -192,9 +192,9 @@ void FEditorPlugin::ExerciseReparentSelection(std::vector<FInputEvent>& InEvents
 	}
 	else if (Phase == 9)
 	{
-		RequireReparent(Selection == Handle && HistoryCursor == ReparentExerciseHistory,
+		RequireReparent(Selection == Handle && HistoryCursor == Acceptance.ReparentExerciseHistory,
 		                "selection or history changed after cancelled viewport gesture");
-		MoveReparent(InEvents, RowCenter(MultiSelectionRows.at(Scene->FindNode(Handle)->Id)));
+		MoveReparent(InEvents, RowCenter(Acceptance.MultiSelectionRows.at(Scene->FindNode(Handle)->Id)));
 	}
 	else if (Phase == 10)
 	{
@@ -208,7 +208,7 @@ void FEditorPlugin::ExerciseReparentSelection(std::vector<FInputEvent>& InEvents
 	}
 	else if (Phase == 12)
 	{
-		MoveReparent(InEvents, RowCenter(MultiSelectionRows.at(ReparentExerciseIds[3])));
+		MoveReparent(InEvents, RowCenter(Acceptance.MultiSelectionRows.at(Acceptance.ReparentExerciseIds[3])));
 	}
 	else if (Phase == 13)
 	{
@@ -217,18 +217,18 @@ void FEditorPlugin::ExerciseReparentSelection(std::vector<FInputEvent>& InEvents
 	}
 	else
 	{
-		RequireReparent(Scene->FindNode(Handle)->Parent() == ReparentExerciseIds[3] &&
-		                    HistoryCursor == ReparentExerciseHistory + 1 && Selection == Handle,
+		RequireReparent(Scene->FindNode(Handle)->Parent() == Acceptance.ReparentExerciseIds[3] &&
+		                    HistoryCursor == Acceptance.ReparentExerciseHistory + 1 && Selection == Handle,
 		                "Outliner reparent after viewport selection failed");
 		Undo();
 		RequireReparent(Scene->FindNode(Handle)->Parent().empty(), "selection exercise undo failed");
 	}
-	++ReparentSelectionStep;
+	++Acceptance.ReparentSelectionStep;
 }
 
 void FEditorPlugin::ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents)
 {
-	const auto Case = ReparentExerciseCase;
+	const auto Case = Acceptance.ReparentExerciseCase;
 	RequireReparent(Case == 7 || (ReparentGesture && ReparentGesture->bTargetPreview),
 	                "target did not preview case " + std::to_string(Case));
 	if (Case == 5 || Case == 6 || Case == 11)
@@ -236,17 +236,17 @@ void FEditorPlugin::ExerciseReparentInterruption(std::vector<FInputEvent>& InEve
 		FInputEvent Event;
 		Event.Type = Case == 5 ? EEventType::Key : Case == 6 ? EEventType::Focus : EEventType::MouseButton;
 		Event.Key = EKey::Escape;
-		Event.Button = 1;
+		Event.Button = InputButtons::Right;
 		Event.bDown = Case != 6;
 		InEvents.push_back(Event);
 	}
 	if (Case == 8)
 	{
-		const auto B = ReparentExerciseNodes[1];
+		const auto B = Acceptance.ReparentExerciseNodes[1];
 		auto Node = *Scene->FindNode(B);
 		Node.Name += " changed";
 		Scene->EditNode(B, Node, Scene->GetRevision());
-		ReparentExerciseRevision = Scene->GetRevision();
+		Acceptance.ReparentExerciseRevision = Scene->GetRevision();
 	}
 	if (Case == 12)
 	{
@@ -254,17 +254,17 @@ void FEditorPlugin::ExerciseReparentInterruption(std::vector<FInputEvent>& InEve
 	}
 	if (Case == 13)
 	{
-		ClickObject(ReparentExerciseNodes[2], true);
+		ClickObject(Acceptance.ReparentExerciseNodes[2], true);
 	}
 }
 
 void FEditorPlugin::ExerciseReparentDrag(std::vector<FInputEvent>& InEvents)
 {
-	const auto A = ReparentExerciseNodes[0];
-	const auto B = ReparentExerciseNodes[1];
-	const auto Child = ReparentExerciseNodes[2];
-	const unsigned Case = ReparentExerciseCase;
-	if (ReparentExerciseStep == 1)
+	const auto A = Acceptance.ReparentExerciseNodes[0];
+	const auto B = Acceptance.ReparentExerciseNodes[1];
+	const auto Child = Acceptance.ReparentExerciseNodes[2];
+	const unsigned Case = Acceptance.ReparentExerciseCase;
+	if (Acceptance.ReparentExerciseStep == 1)
 	{
 		FEditorSelection Selected;
 		Selected.Toggle(A);
@@ -276,48 +276,52 @@ void FEditorPlugin::ExerciseReparentDrag(std::vector<FInputEvent>& InEvents)
 		}
 		if (Case == 10)
 		{
-			Selected = ReparentExerciseNodes[5];
+			Selected = Acceptance.ReparentExerciseNodes[5];
 			Selected.Toggle(B);
 		}
 		SetSelection(std::move(Selected));
 		Filter = Case == 1 || Case == 9 ? "Reparent" : "";
-		ReparentExerciseRevision = Scene->GetRevision();
-		ReparentExerciseHistory = HistoryCursor;
+		Acceptance.ReparentExerciseRevision = Scene->GetRevision();
+		Acceptance.ReparentExerciseHistory = HistoryCursor;
 		Error.clear();
 	}
-	else if (ReparentExerciseStep == 2)
+	else if (Acceptance.ReparentExerciseStep == 2)
 	{
-		const auto Point = RowCenter(MultiSelectionRows.at(ReparentExerciseIds[Case == 9 ? 1 : Case == 10 ? 5 : 0]));
+		const auto Point =
+		    RowCenter(Acceptance.MultiSelectionRows.at(Acceptance.ReparentExerciseIds[Case == 9    ? 1
+		                                                                              : Case == 10 ? 5
+		                                                                                           : 0]));
 		MoveReparent(InEvents, Point);
 		ReparentButton(InEvents, true);
 	}
-	else if (ReparentExerciseStep == 3)
+	else if (Acceptance.ReparentExerciseStep == 3)
 	{
 		RequireReparent(ReparentGesture.has_value(), "press did not prepare source case " + std::to_string(Case));
 		MoveReparent(InEvents, {ReparentGesture->Start.X + 20, ReparentGesture->Start.Y});
 	}
-	else if (ReparentExerciseStep == 4)
+	else if (Acceptance.ReparentExerciseStep == 4)
 	{
 		RequireReparent(ReparentGesture && ReparentGesture->bDragging, "drag did not start");
 		RequireReparent(Selection.All().size() == (Case == 9    ? 1u
 		                                           : Case == 10 ? 2u
 		                                                        : 3u),
 		                "drag collapsed the selection");
-		const auto Bounds = Case == 1 || Case == 2 ? InspectionBounds.at("hierarchy/root")
-		                                           : MultiSelectionRows.at(ReparentExerciseIds[Case == 3   ? 2
-		                                                                                       : Case == 4 ? 4
-		                                                                                                   : 3]);
+		const auto Bounds = Case == 1 || Case == 2
+		                        ? InspectionBounds.at("hierarchy/root")
+		                        : Acceptance.MultiSelectionRows.at(Acceptance.ReparentExerciseIds[Case == 3   ? 2
+		                                                                                          : Case == 4 ? 4
+		                                                                                                      : 3]);
 		MoveReparent(InEvents, Case == 7 ? FVec2{5, 5} : RowCenter(Bounds));
 	}
-	else if (ReparentExerciseStep == 5)
+	else if (Acceptance.ReparentExerciseStep == 5)
 	{
 		ExerciseReparentInterruption(InEvents);
 	}
-	else if (ReparentExerciseStep == 6)
+	else if (Acceptance.ReparentExerciseStep == 6)
 	{
 		ReparentButton(InEvents, false);
 	}
-	else if (ReparentExerciseStep == 7)
+	else if (Acceptance.ReparentExerciseStep == 7)
 	{
 		FInputEvent Event;
 		Event.Type = Case == 6 ? EEventType::Focus : EEventType::Key;
@@ -326,41 +330,42 @@ void FEditorPlugin::ExerciseReparentDrag(std::vector<FInputEvent>& InEvents)
 		if (Case == 11)
 		{
 			Event.Type = EEventType::MouseButton;
-			Event.Button = 1;
+			Event.Button = InputButtons::Right;
 		}
 		InEvents.push_back(Event);
 	}
 	else
 	{
 		VerifyReparentExercise();
-		++ReparentExerciseCase;
-		ReparentExerciseStep = 1;
+		++Acceptance.ReparentExerciseCase;
+		Acceptance.ReparentExerciseStep = 1;
 		return;
 	}
-	++ReparentExerciseStep;
+	++Acceptance.ReparentExerciseStep;
 }
 
 void FEditorPlugin::VerifyReparentExercise()
 {
-	const auto Case = ReparentExerciseCase;
+	const auto Case = Acceptance.ReparentExerciseCase;
 	const bool bChanged = Case == 0 || Case == 1 || Case == 9 || Case == 10;
 	RequireReparent(!ReparentGesture && !Gui->DragPayload(), "gesture survived delivery/cancellation");
-	RequireReparent(HistoryCursor == ReparentExerciseHistory + (bChanged ? 1 : 0),
+	RequireReparent(HistoryCursor == Acceptance.ReparentExerciseHistory + (bChanged ? 1 : 0),
 	                "unexpected history case " + std::to_string(Case) + " actual " + std::to_string(HistoryCursor) +
 	                    ": " + Error);
-	RequireReparent(Scene->GetRevision() == ReparentExerciseRevision + (bChanged ? 1 : 0), "unexpected revision");
-	RequireReparent(Scene->FindNode(ReparentExerciseNodes[2])->Parent() == ReparentExerciseIds[0],
+	RequireReparent(Scene->GetRevision() == Acceptance.ReparentExerciseRevision + (bChanged ? 1 : 0),
+	                "unexpected revision");
+	RequireReparent(Scene->FindNode(Acceptance.ReparentExerciseNodes[2])->Parent() == Acceptance.ReparentExerciseIds[0],
 	                "child was flattened");
-	const auto Parent = Case == 0 || Case >= 9 ? ReparentExerciseIds[3] : std::string{};
-	RequireReparent(Scene->FindNode(ReparentExerciseNodes[1])->Parent() == Parent, "incorrect parent");
-	for (std::size_t Index = 0; Index < ReparentExerciseNodes.size(); ++Index)
+	const auto Parent = Case == 0 || Case >= 9 ? Acceptance.ReparentExerciseIds[3] : std::string{};
+	RequireReparent(Scene->FindNode(Acceptance.ReparentExerciseNodes[1])->Parent() == Parent, "incorrect parent");
+	for (std::size_t Index = 0; Index < Acceptance.ReparentExerciseNodes.size(); ++Index)
 	{
 		FSceneNodeView View;
-		Scene->GetNodeView(ReparentExerciseNodes[Index], View);
+		Scene->GetNodeView(Acceptance.ReparentExerciseNodes[Index], View);
 		for (std::size_t Element = 0; Element < View.World.Values.size(); ++Element)
 		{
-			RequireReparent(std::abs(View.World.Values[Element] - ReparentExerciseWorlds[Index].Values[Element]) <
-			                    .0001f,
+			RequireReparent(std::abs(View.World.Values[Element] -
+			                         Acceptance.ReparentExerciseWorlds[Index].Values[Element]) < .0001f,
 			                "world transform changed");
 		}
 	}
@@ -368,33 +373,35 @@ void FEditorPlugin::VerifyReparentExercise()
 	{
 		const auto Selected = Selection;
 		Undo();
-		RequireReparent(HistoryCursor == ReparentExerciseHistory && Selection == Selected, "undo selection/history");
+		RequireReparent(HistoryCursor == Acceptance.ReparentExerciseHistory && Selection == Selected,
+		                "undo selection/history");
 		Redo();
-		RequireReparent(Selection == Selected && Scene->FindNode(ReparentExerciseNodes[1])->Parent() == Parent,
+		RequireReparent(Selection == Selected &&
+		                    Scene->FindNode(Acceptance.ReparentExerciseNodes[1])->Parent() == Parent,
 		                "redo parent/selection");
 	}
 }
 
 void FEditorPlugin::ExerciseReparent(std::vector<FInputEvent>& InEvents)
 {
-	if (FrameCount < 12 || !Scene->GetStatus().bReady || !bViewportVisible ||
+	if (FrameCount < 12 || !Scene->GetStatus().bReady || !Viewport.bViewportVisible ||
 	    !PlacementUnavailableReason(*PlacementRegistry.Find("Cube")).empty())
 	{
 		return;
 	}
-	if (ReparentExerciseStep == 0)
+	if (Acceptance.ReparentExerciseStep == 0)
 	{
 		PrepareReparentExercise();
 		return;
 	}
-	if (ReparentExerciseCase < 14)
+	if (Acceptance.ReparentExerciseCase < 14)
 	{
-		if (ReparentKeyboardStep < 8)
+		if (Acceptance.ReparentKeyboardStep < 8)
 		{
 			ExerciseReparentKeyboard(InEvents);
 			return;
 		}
-		if (ReparentSelectionStep < 30)
+		if (Acceptance.ReparentSelectionStep < 30)
 		{
 			ExerciseReparentSelection(InEvents);
 			return;
@@ -402,36 +409,36 @@ void FEditorPlugin::ExerciseReparent(std::vector<FInputEvent>& InEvents)
 		ExerciseReparentDrag(InEvents);
 		return;
 	}
-	if (ReparentExerciseStep == 1)
+	if (Acceptance.ReparentExerciseStep == 1)
 	{
 		SaveScene(Options.ExerciseReparent.generic_string());
-		++ReparentExerciseStep;
+		++Acceptance.ReparentExerciseStep;
 	}
-	else if (ReparentExerciseStep == 2 && !PendingSave)
+	else if (Acceptance.ReparentExerciseStep == 2 && !PendingSave)
 	{
 		RequireReparent(!IsDirty(), "save failed: " + Error);
 		OpenScene(Options.ExerciseReparent.generic_string());
-		++ReparentExerciseStep;
+		++Acceptance.ReparentExerciseStep;
 	}
-	else if (ReparentExerciseStep == 3)
+	else if (Acceptance.ReparentExerciseStep == 3)
 	{
-		for (std::size_t Index = 0; Index < ReparentExerciseIds.size(); ++Index)
+		for (std::size_t Index = 0; Index < Acceptance.ReparentExerciseIds.size(); ++Index)
 		{
-			const auto Handle = Scene->FindHandle(ReparentExerciseIds[Index]);
+			const auto Handle = Scene->FindHandle(Acceptance.ReparentExerciseIds[Index]);
 			FSceneNodeView View;
 			RequireReparent(Scene->GetNodeView(Handle, View), "saved node missing");
-			const auto ExpectedParent = Index == 1 || Index == 5 ? ReparentExerciseIds[3]
-			                            : Index == 2             ? ReparentExerciseIds[0]
+			const auto ExpectedParent = Index == 1 || Index == 5 ? Acceptance.ReparentExerciseIds[3]
+			                            : Index == 2             ? Acceptance.ReparentExerciseIds[0]
 			                                                     : "";
 			RequireReparent(View.Node->Parent() == ExpectedParent, "saved parent changed");
 			for (std::size_t Element = 0; Element < View.World.Values.size(); ++Element)
 			{
-				RequireReparent(std::abs(View.World.Values[Element] - ReparentExerciseWorlds[Index].Values[Element]) <
-				                    .0001f,
+				RequireReparent(std::abs(View.World.Values[Element] -
+				                         Acceptance.ReparentExerciseWorlds[Index].Values[Element]) < .0001f,
 				                "saved world changed");
 			}
 		}
-		bReparentVerified = true;
+		Acceptance.bReparentVerified = true;
 	}
 }
 } // namespace Hyperion

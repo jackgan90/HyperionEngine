@@ -20,60 +20,15 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetField(const std::stri
 {
 	auto Entry = Edit(InDocument, InGeneration);
 	(void)ReadField(InDocument, InType, InField);
-	auto Prepared = PrepareAssetField(*Entry->Document, InField, std::move(InValue));
-	std::vector<TAsyncResult<FAssetGraph>> Graphs;
-	std::erase_if(Work,
-	              [](const auto& InTask)
-	              {
-		              return InTask.Ready();
-	              });
-	Graphs.reserve(Prepared.References.size());
-	Work.reserve(Work.size() + Prepared.References.size());
-	for (const auto& Reference : Prepared.References)
+	try
 	{
-		auto Graph = Assets.LoadGraphAsync(Reference.Reference, Entry->Path);
-		Work.push_back(Graph.Task());
-		Graphs.push_back(std::move(Graph));
+		return PendingEdit(Entry, FAssetEditWorkflow::Field(Tasks, Assets, Entry->Document, InGeneration,
+		                                                    std::move(InField), std::move(InValue)));
 	}
-	Entry->bEditing = true;
-	if (Workspace)
+	catch (const FAssetWorkflowError& Failure)
 	{
-		Workspace->SetExternalEditing(Entry->Id, true);
+		throw FAutomationError(Failure.Code, Failure.what());
 	}
-	return {
-	    [this, Entry, InGeneration, Field = std::move(InField), Prepared = std::move(Prepared),
-	     Graphs = std::move(Graphs)]() -> std::optional<FAssetDocumentInfo>
-	    {
-		    if (std::any_of(Graphs.begin(), Graphs.end(),
-		                    [](const auto& InGraph)
-		                    {
-			                    return !InGraph.Ready();
-		                    }))
-		    {
-			    return {};
-		    }
-		    Entry->bEditing = false;
-		    if (Workspace)
-		    {
-			    Workspace->SetExternalEditing(Entry->Id, false);
-			    const auto Current = Workspace->FindDocument(Entry->Id);
-			    if (!Current || Current->Document != Entry->Document)
-			    {
-				    throw FAutomationError("stale_document", "Workspace document closed while preparing references");
-			    }
-		    }
-		    if (Entry->Document->Generation() != InGeneration)
-		    {
-			    throw FAutomationError("stale_revision", "Asset changed while preparing references");
-		    }
-		    for (std::size_t Index = 0; Index < Graphs.size(); ++Index)
-		    {
-			    const auto& Required = Prepared.References[Index];
-			    ValidateAssetReferenceGraph(*Graphs[Index].GetReady(), Required.Reference.TypeId, Required.Dimension);
-		    }
-		    CommitAssetField(*Entry->Document, Field, Prepared.Value);
-		    return Describe(*Entry);
-	    }};
 }
 
 std::vector<FModelPrimitiveInfo> FAssetAutomation::ModelPrimitives(const FAssetMutationRequest& InRequest)

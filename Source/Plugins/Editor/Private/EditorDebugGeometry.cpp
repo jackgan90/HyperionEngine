@@ -6,7 +6,7 @@ namespace Hyperion
 void FEditorPlugin::DrawDebugBounds()
 {
 	const auto CameraView = PickingCamera();
-	if ((!bModelBounds && !bLightBounds) || !CameraView || !ViewportSize.Height)
+	if ((!bModelBounds && !bLightBounds) || !CameraView || !Viewport.ViewportSize.Height)
 	{
 		return;
 	}
@@ -20,13 +20,13 @@ void FEditorPlugin::DrawDebugBounds()
 		}
 	}
 	const auto Matrix = SceneCameraViewProjection(ExtractScenePose(CameraView->World), CameraView->Lens,
-	                                              float(ViewportSize.Width) / ViewportSize.Height,
+	                                              float(Viewport.ViewportSize.Width) / Viewport.ViewportSize.Height,
 	                                              GetDepthConvention(Rendering.bReversedZ));
 	for (const auto& Line : BuildSceneDebugLines(Nodes, bModelBounds, bLightBounds))
 	{
-		if (const auto Points = ProjectDebugLine(Line, Matrix, ViewportRegion.Bounds))
+		if (const auto Points = ProjectDebugLine(Line, Matrix, Viewport.ViewportRegion.Bounds))
 		{
-			Gui->DrawImageOverlay(ViewportRegion.Bounds, *Points, Line.Color, 1);
+			Gui->DrawImageOverlay(Viewport.ViewportRegion.Bounds, *Points, Line.Color, 1);
 		}
 	}
 }

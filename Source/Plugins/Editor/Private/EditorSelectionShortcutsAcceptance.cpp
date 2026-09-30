@@ -18,8 +18,8 @@ FVec2 ShortcutPoint(FVec4 InBounds)
 	return {(InBounds.X + InBounds.Z) / 2, (InBounds.Y + InBounds.W) / 2};
 }
 
-void ShortcutKey(std::vector<FInputEvent>& InEvents, EKey InKey, unsigned InModifiers = 0, bool bInDown = true,
-                 bool bInRepeat = false)
+void ShortcutKey(std::vector<FInputEvent>& InEvents, EKey InKey, unsigned InModifiers = InputModifiers::None,
+                 bool bInDown = true, bool bInRepeat = false)
 {
 	FInputEvent Event;
 	Event.Type = EEventType::Key;
@@ -30,7 +30,8 @@ void ShortcutKey(std::vector<FInputEvent>& InEvents, EKey InKey, unsigned InModi
 	InEvents.push_back(Event);
 }
 
-void ShortcutMouse(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInDown, unsigned InButton = 0)
+void ShortcutMouse(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInDown,
+                   unsigned InButton = InputButtons::Left)
 {
 	FInputEvent Event;
 	Event.Type = EEventType::MouseMove;
@@ -62,9 +63,9 @@ void FEditorPlugin::PrepareSelectionShortcuts()
 		}
 		if (Index == 2)
 		{
-			Node.Parent() = Scene->FindNode(ShortcutObjects[1])->Id;
+			Node.Parent() = Scene->FindNode(Acceptance.ShortcutObjects[1])->Id;
 		}
-		ShortcutObjects.push_back(Scene->AddNode(std::move(Node)));
+		Acceptance.ShortcutObjects.push_back(Scene->AddNode(std::move(Node)));
 	}
 	FSceneNode Parent;
 	Parent.Name = "Hidden parent";
@@ -79,35 +80,37 @@ void FEditorPlugin::PrepareSelectionShortcuts()
 	}
 	Filter = "Shortcut";
 	bShowLightMarkers = false;
-	ViewCamera.World = SceneCameraTransform({0, 0, 12}, {});
-	bViewportCameraInitialized = true;
+	Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 12}, {});
+	Viewport.bViewportCameraInitialized = true;
 	ResetDocument();
 	SelectObject(std::nullopt);
-	ShortcutRevision = Scene->GetRevision();
+	Acceptance.ShortcutRevision = Scene->GetRevision();
 	Gui->FocusWindow("Outliner");
 }
 
 void FEditorPlugin::CheckShortcutSelection(std::initializer_list<unsigned> InIndices)
 {
 	RequireShortcut(Selection.All().size() == InIndices.size(),
-	                "selection size at step " + std::to_string(ShortcutStep) + ": expected " +
+	                "selection size at step " + std::to_string(Acceptance.ShortcutStep) + ": expected " +
 	                    std::to_string(InIndices.size()) + ", got " + std::to_string(Selection.All().size()));
 	for (const auto Index : InIndices)
 	{
-		RequireShortcut(Selection.Contains(ShortcutObjects[Index]), "missing range member");
+		RequireShortcut(Selection.Contains(Acceptance.ShortcutObjects[Index]), "missing range member");
 	}
-	RequireShortcut(Selection.Primary() == ShortcutObjects[*(InIndices.end() - 1)], "range endpoint is not primary");
-	RequireShortcut(Scene->GetRevision() == ShortcutRevision && !IsDirty() && History.empty(),
+	RequireShortcut(Selection.Primary() == Acceptance.ShortcutObjects[*(InIndices.end() - 1)],
+	                "range endpoint is not primary");
+	RequireShortcut(Scene->GetRevision() == Acceptance.ShortcutRevision && !IsDirty() && History.empty(),
 	                "selection mutated authored state");
 }
 
 void FEditorPlugin::ExerciseSelectionRanges(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Case = (ShortcutStep - 1) / 3;
-	const unsigned Phase = (ShortcutStep - 1) % 3;
+	const unsigned Case = (Acceptance.ShortcutStep - 1) / 3;
+	const unsigned Phase = (Acceptance.ShortcutStep - 1) % 3;
 	const std::array<unsigned, 7> Targets{0, 3, 2, 3, 1, 0, 0};
 	const std::array<unsigned, 7> Modifiers{0, 2, 2, 1, 2, 3, 2};
-	const auto Bounds = MultiSelectionRows.at(Scene->FindNode(ShortcutObjects[Targets[Case]])->Id);
+	const auto Bounds =
+	    Acceptance.MultiSelectionRows.at(Scene->FindNode(Acceptance.ShortcutObjects[Targets[Case]])->Id);
 	if (Phase < 2)
 	{
 		ShortcutKey(InEvents, EKey::None, Phase == 0 ? Modifiers[Case] : 0);
@@ -144,11 +147,11 @@ void FEditorPlugin::ExerciseSelectionRanges(std::vector<FInputEvent>& InEvents)
 void FEditorPlugin::ExerciseSelectionKeys(std::vector<FInputEvent>& InEvents)
 {
 	// Stay inside the model face and clear of the primary object's gizmo handles.
-	const auto Point = ProjectViewportPoint(ViewCamera, ViewportRegion.Bounds, {2.35f, -.35f, 0});
+	const auto Point = ProjectViewportPoint(Viewport.ViewCamera, Viewport.ViewportRegion.Bounds, {2.35f, -.35f, 0});
 	RequireShortcut(bool(Point), "viewport point unavailable");
 	const FVec2 Hit{Point->X, Point->Y};
-	const FVec2 Miss{ViewportRegion.Bounds.X + 8, ViewportRegion.Bounds.Y + 8};
-	switch (ShortcutStep)
+	const FVec2 Miss{Viewport.ViewportRegion.Bounds.X + 8, Viewport.ViewportRegion.Bounds.Y + 8};
+	switch (Acceptance.ShortcutStep)
 	{
 		case 22:
 			Filter = "Shortcut";
@@ -162,12 +165,13 @@ void FEditorPlugin::ExerciseSelectionKeys(std::vector<FInputEvent>& InEvents)
 		{
 			RequireShortcut(Selection.All().size() == Scene->GetNodes().size() && Selection.All().size() > 128,
 			                "Ctrl+A omitted hidden or search-excluded nodes");
-			RequireShortcut(Selection.Primary() == ShortcutObjects[ShortcutStep == 24 ? 0 : 2], "Ctrl+A moved primary");
+			RequireShortcut(Selection.Primary() == Acceptance.ShortcutObjects[Acceptance.ShortcutStep == 24 ? 0 : 2],
+			                "Ctrl+A moved primary");
 			const auto Before = Selection;
-			const auto Summary = SelectAllSceneNodes(SceneDocument, {SceneDocument.Id(), ShortcutRevision});
+			const auto Summary = SelectAllSceneNodes(SceneDocument, {SceneDocument.Id(), Acceptance.ShortcutRevision});
 			RequireShortcut(Selection == Before && Summary.Count == Before.All().size(),
 			                "GUI/domain all-selection mismatch");
-			SelectObject(ShortcutObjects[ShortcutStep == 24 ? 2 : 0]);
+			SelectObject(Acceptance.ShortcutObjects[Acceptance.ShortcutStep == 24 ? 2 : 0]);
 			Gui->FocusWindow("Viewport");
 			break;
 		}
@@ -177,21 +181,21 @@ void FEditorPlugin::ExerciseSelectionKeys(std::vector<FInputEvent>& InEvents)
 		case 27:
 		case 29:
 		case 31:
-			if (ShortcutStep == 29)
+			if (Acceptance.ShortcutStep == 29)
 			{
 				CheckShortcutSelection({0, 2});
 			}
-			if (ShortcutStep == 31)
+			if (Acceptance.ShortcutStep == 31)
 			{
 				CheckShortcutSelection({0});
 			}
 			ShortcutKey(InEvents, EKey::None, 2);
-			ShortcutMouse(InEvents, ShortcutStep == 31 ? Miss : Hit, true);
+			ShortcutMouse(InEvents, Acceptance.ShortcutStep == 31 ? Miss : Hit, true);
 			break;
 		case 28:
 		case 30:
 		case 32:
-			ShortcutMouse(InEvents, ShortcutStep == 32 ? Miss : Hit, false);
+			ShortcutMouse(InEvents, Acceptance.ShortcutStep == 32 ? Miss : Hit, false);
 			break;
 		case 33:
 			CheckShortcutSelection({0});
@@ -202,8 +206,8 @@ void FEditorPlugin::ExerciseSelectionKeys(std::vector<FInputEvent>& InEvents)
 void FEditorPlugin::ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents)
 {
 	const auto Search = ShortcutPoint(InspectionBounds.at("clipboard/search"));
-	const FVec2 Miss{ViewportRegion.Bounds.X + 8, ViewportRegion.Bounds.Y + 8};
-	switch (ShortcutStep)
+	const FVec2 Miss{Viewport.ViewportRegion.Bounds.X + 8, Viewport.ViewportRegion.Bounds.Y + 8};
+	switch (Acceptance.ShortcutStep)
 	{
 		case 34:
 			ShortcutMouse(InEvents, Search, true);
@@ -213,6 +217,7 @@ void FEditorPlugin::ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents)
 			break;
 		case 36:
 			ShortcutKey(InEvents, EKey::A, 1);
+			ShortcutKey(InEvents, EKey::Delete);
 			break;
 		case 37:
 			CheckShortcutSelection({0});
@@ -221,6 +226,7 @@ void FEditorPlugin::ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents)
 			break;
 		case 38:
 			ShortcutKey(InEvents, EKey::A, 1);
+			ShortcutKey(InEvents, EKey::Delete);
 			break;
 		case 39:
 			CheckShortcutSelection({0});
@@ -229,16 +235,19 @@ void FEditorPlugin::ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents)
 		case 40:
 			ShortcutMouse(InEvents, Miss, true, 1);
 			ShortcutKey(InEvents, EKey::A, 1);
+			ShortcutKey(InEvents, EKey::Delete);
 			break;
 		case 41:
 			CheckShortcutSelection({0});
 			// The key belongs to navigation even if its later release shares the same event batch.
 			ShortcutKey(InEvents, EKey::A, 1);
 			ShortcutMouse(InEvents, Miss, false, 1);
+			ShortcutKey(InEvents, EKey::Delete);
 			break;
 		case 42:
 			CheckShortcutSelection({0});
 			ShortcutKey(InEvents, EKey::A, 1, true, true);
+			ShortcutKey(InEvents, EKey::Delete, InputModifiers::None, true, true);
 			break;
 		case 43:
 			CheckShortcutSelection({0});
@@ -246,6 +255,7 @@ void FEditorPlugin::ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents)
 			break;
 		case 44:
 			ShortcutKey(InEvents, EKey::A, 1);
+			ShortcutKey(InEvents, EKey::Delete);
 			break;
 		case 45:
 			CheckShortcutSelection({0});
@@ -259,33 +269,40 @@ void FEditorPlugin::ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseSelectionTree(std::vector<FInputEvent>& InEvents)
 {
-	const FVec2 Miss{ViewportRegion.Bounds.X + 8, ViewportRegion.Bounds.Y + 8};
-	switch (ShortcutStep)
+	const FVec2 Miss{Viewport.ViewportRegion.Bounds.X + 8, Viewport.ViewportRegion.Bounds.Y + 8};
+	switch (Acceptance.ShortcutStep)
 	{
 		case 46:
 		case 47:
 		{
-			const auto Bounds = MultiSelectionRows.at(Scene->FindNode(ShortcutObjects[1])->Id);
-			ShortcutMouse(InEvents, {Bounds.X + Gui->Scale(8), (Bounds.Y + Bounds.W) / 2}, ShortcutStep == 46);
+			const auto Bounds = Acceptance.MultiSelectionRows.at(Scene->FindNode(Acceptance.ShortcutObjects[1])->Id);
+			ShortcutMouse(InEvents, {Bounds.X + Gui->Scale(8), (Bounds.Y + Bounds.W) / 2},
+			              Acceptance.ShortcutStep == 46);
 			break;
 		}
 		case 48:
-			RequireShortcut(std::find(OutlinerRows.begin(), OutlinerRows.end(), ShortcutObjects[2]) ==
+			RequireShortcut(std::find(OutlinerRows.begin(), OutlinerRows.end(), Acceptance.ShortcutObjects[2]) ==
 			                    OutlinerRows.end(),
 			                "tree child did not fold");
 			ShortcutKey(InEvents, EKey::None, 2);
-			ShortcutMouse(InEvents, ShortcutPoint(MultiSelectionRows.at(Scene->FindNode(ShortcutObjects[3])->Id)),
-			              true);
+			ShortcutMouse(
+			    InEvents,
+			    ShortcutPoint(Acceptance.MultiSelectionRows.at(Scene->FindNode(Acceptance.ShortcutObjects[3])->Id)),
+			    true);
 			break;
 		case 49:
-			ShortcutMouse(InEvents, ShortcutPoint(MultiSelectionRows.at(Scene->FindNode(ShortcutObjects[3])->Id)),
-			              false);
+			ShortcutMouse(
+			    InEvents,
+			    ShortcutPoint(Acceptance.MultiSelectionRows.at(Scene->FindNode(Acceptance.ShortcutObjects[3])->Id)),
+			    false);
 			break;
 		case 50:
 			CheckShortcutSelection({0, 1, 3});
 			ShortcutKey(InEvents, EKey::None, 2);
-			ShortcutMouse(InEvents, ShortcutPoint(MultiSelectionRows.at(Scene->FindNode(ShortcutObjects[3])->Id)),
-			              true);
+			ShortcutMouse(
+			    InEvents,
+			    ShortcutPoint(Acceptance.MultiSelectionRows.at(Scene->FindNode(Acceptance.ShortcutObjects[3])->Id)),
+			    true);
 			break;
 		case 51:
 			ShortcutMouse(InEvents, Miss, true);
@@ -294,6 +311,7 @@ void FEditorPlugin::ExerciseSelectionTree(std::vector<FInputEvent>& InEvents)
 			RequireShortcut(ReparentGesture && ReparentGesture->bDragging,
 			                "Shift gesture did not enter drag arbitration");
 			ShortcutKey(InEvents, EKey::Escape);
+			ShortcutKey(InEvents, EKey::Delete);
 			break;
 		case 53:
 			ShortcutMouse(InEvents, Miss, false);
@@ -301,29 +319,33 @@ void FEditorPlugin::ExerciseSelectionTree(std::vector<FInputEvent>& InEvents)
 			break;
 		case 54:
 			CheckShortcutSelection({0, 1, 3});
-			RequireShortcut(!ReparentGesture && Scene->FindNode(ShortcutObjects[2])->Parent() ==
-			                                        Scene->FindNode(ShortcutObjects[1])->Id,
+			RequireShortcut(!ReparentGesture && Scene->FindNode(Acceptance.ShortcutObjects[2])->Parent() ==
+			                                        Scene->FindNode(Acceptance.ShortcutObjects[1])->Id,
 			                "cancelled Shift gesture reparented nodes");
-			bSelectionShortcutsVerified = true;
+			SelectObject(Acceptance.ShortcutObjects[0]);
+			Gui->FocusWindow("Content Browser");
 			break;
 	}
 }
 
 void FEditorPlugin::ExerciseSelectionShortcuts(std::vector<FInputEvent>& InEvents)
 {
-	if (!Scene->GetStatus().bReady || !bViewportVisible || bSelectionShortcutsVerified)
+	if (!Scene->GetStatus().bReady || !Viewport.bViewportVisible || Acceptance.bSelectionShortcutsVerified)
 	{
 		return;
 	}
-	if (++ShortcutWait % 3 != 0)
+	if (++Acceptance.ShortcutWait % 3 != 0)
 	{
-		if (ShortcutWait % 3 == 1)
+		if (Acceptance.ShortcutWait % 3 == 1)
 		{
-			ShortcutKey(InEvents, EKey::A, 0, false);
+			for (const auto Key : {EKey::A, EKey::Delete, EKey::Z, EKey::Y, EKey::S, EKey::Tab, EKey::End})
+			{
+				ShortcutKey(InEvents, Key, InputModifiers::None, false);
+			}
 		}
 		return;
 	}
-	if (!ShortcutStep)
+	if (!Acceptance.ShortcutStep)
 	{
 		PrepareSelectionShortcuts();
 		FInputEvent Focus;
@@ -331,22 +353,26 @@ void FEditorPlugin::ExerciseSelectionShortcuts(std::vector<FInputEvent>& InEvent
 		Focus.bDown = true;
 		InEvents.push_back(Focus);
 	}
-	else if (ShortcutStep <= 21)
+	else if (Acceptance.ShortcutStep <= 21)
 	{
 		ExerciseSelectionRanges(InEvents);
 	}
-	else if (ShortcutStep <= 33)
+	else if (Acceptance.ShortcutStep <= 33)
 	{
 		ExerciseSelectionKeys(InEvents);
 	}
-	else if (ShortcutStep <= 45)
+	else if (Acceptance.ShortcutStep <= 45)
 	{
 		ExerciseSelectionGuards(InEvents);
 	}
-	else
+	else if (Acceptance.ShortcutStep <= 54)
 	{
 		ExerciseSelectionTree(InEvents);
 	}
-	++ShortcutStep;
+	else if (!ExerciseShortcutRouting(InEvents))
+	{
+		return;
+	}
+	++Acceptance.ShortcutStep;
 }
 } // namespace Hyperion

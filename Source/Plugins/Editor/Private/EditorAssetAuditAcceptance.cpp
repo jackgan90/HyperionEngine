@@ -20,7 +20,7 @@ std::vector<FInputEvent> SaveShortcut()
 	FInputEvent Event;
 	Event.Type = EEventType::Key;
 	Event.Key = EKey::S;
-	Event.Modifiers = 1;
+	Event.Modifiers = InputModifiers::Control;
 	Event.bDown = true;
 	return {Event};
 }
@@ -36,8 +36,8 @@ void FEditorPlugin::CheckAssetSaveShortcut()
 		RouteHistoryShortcuts(Events);
 		RequireAudit(!PendingSave, "Unavailable scene shortcut admitted a save");
 	};
-	for (bool* bModal :
-	     {&bOpenDialog, &bSaveDialog, &bDiscardDialog, &bAssetMessage, &bPreferencesDialog, &bSaveThenClose})
+	for (bool* bModal : {&bOpenDialog, &bSaveDialog, &Transition.bDiscardDialog, &bAssetMessage, &bPreferencesDialog,
+	                     &Transition.bSaveThenClose})
 	{
 		*bModal = true;
 		SendSave();
@@ -103,11 +103,12 @@ void FEditorPlugin::CheckPendingAssetEdit()
 	SceneDocument.MarkSaved(DocumentEpoch, DocumentState);
 	RequireAudit(!IsDirty(), "Pending edit exit fixture must have a clean scene");
 	Window->RequestClose();
-	RequireAudit(!PollClose() && bDiscardDialog, "Pending texture edit bypassed application exit protection");
+	RequireAudit(!PollClose() && Transition.bDiscardDialog,
+	             "Pending texture edit bypassed application exit protection");
 	SceneDocument.MarkSaved(DocumentEpoch, PreviousSavedState);
 	CancelDiscardAction();
-	bRequestDiscard = false;
-	bPendingAssetEditChecked = true;
+	Transition.bRequestDiscard = false;
+	Acceptance.bPendingAssetEditChecked = true;
 	Log(ELogLevel::Info, "Pending texture edit blocks stale saves and protects native-window/application closure");
 }
 } // namespace Hyperion

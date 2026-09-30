@@ -78,7 +78,6 @@ private:
 	bool bImportResultOpen{};
 	std::string OutputError;
 	std::string ValidatedOutputKey;
-	std::size_t TypeIndex{};
 	std::size_t EncodingIndex = 1;
 	bool bBrowse{};
 	bool bBrowseOutput{};

@@ -79,6 +79,67 @@ void Failure(const FArchiveNode& InResult, std::string_view InCode)
 	Check(Text(InResult, "status") == "failed" && Text(Field(InResult, "error"), "code") == InCode);
 }
 
+void CheckWorkflowCompletion(FAssetService& InAssets, FTaskSystem& InTasks)
+{
+	InAssets.Invalidate("automation-texture.hasset");
+	const auto Loaded = InAssets.LoadAsync("automation-texture.hasset").Get(InTasks);
+	auto Document = std::make_shared<FAssetEditDocument>(Loaded);
+	const auto Before = Document->Snapshot();
+	auto Work = FAssetEditWorkflow::Encoding(InTasks, Document, Document->Generation(), EMaterialTextureEncoding::Srgb);
+	Check(Document->IsEditing());
+	try
+	{
+		FAssetEditWorkflow::Encoding(InTasks, Document, Document->Generation(), EMaterialTextureEncoding::Srgb);
+		Check(false);
+	}
+	catch (const FAssetWorkflowError& Error)
+	{
+		Check(Error.Code == "busy");
+	}
+	while (!Work->Poll(Document))
+	{
+		InTasks.PumpMain();
+		std::this_thread::yield();
+	}
+	Check(!Document->IsEditing() && Document->IsDirty() && Document->CanUndo());
+	Check(Document->Undo() && EqualInspectionValue(Document->Snapshot(), Before));
+	Work = FAssetEditWorkflow::Encoding(InTasks, Document, Document->Generation(), EMaterialTextureEncoding::Srgb);
+	Document->Set("name", WriteValue(std::string("Intervening")));
+	const auto Changed = Document->Snapshot();
+	try
+	{
+		while (!Work->Poll(Document))
+		{
+			InTasks.PumpMain();
+			std::this_thread::yield();
+		}
+		Check(false);
+	}
+	catch (const FAssetWorkflowError& Error)
+	{
+		Check(Error.Code == "stale_revision");
+	}
+	Check(!Document->IsEditing() && EqualInspectionValue(Document->Snapshot(), Changed));
+	Work = FAssetEditWorkflow::Encoding(InTasks, Document, Document->Generation(), EMaterialTextureEncoding::Linear);
+	try
+	{
+		while (!Work->Poll(nullptr))
+		{
+			InTasks.PumpMain();
+			std::this_thread::yield();
+		}
+		Check(false);
+	}
+	catch (const FAssetWorkflowError& Error)
+	{
+		Check(Error.Code == "stale_document");
+	}
+	Check(!Document->IsEditing() && EqualInspectionValue(Document->Snapshot(), Changed));
+	Work = FAssetEditWorkflow::Encoding(InTasks, Document, Document->Generation(), EMaterialTextureEncoding::Linear);
+	Work->Drain();
+	Check(!Document->IsEditing() && EqualInspectionValue(Document->Snapshot(), Changed));
+}
+
 void CheckEditing(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSystem& InFiles)
 {
 	const auto Path = InAssets.NormalizePath("automation-texture.hasset");
@@ -358,6 +419,8 @@ void CheckRootOperations(FTaskSystem& InTasks)
 }
 } // namespace
 
+void CheckAssetWorkflowAdapters();
+
 int main(int InCount, char** InValues)
 {
 	try
@@ -372,6 +435,8 @@ int main(int InCount, char** InValues)
 		FIOService IO(Tasks, Files);
 		FAssetService Assets(IO);
 		CheckEditing(Assets, Tasks, *Files);
+		CheckWorkflowCompletion(Assets, Tasks);
+		CheckAssetWorkflowAdapters();
 		CheckMaterialNumericAutomation(Tasks, Assets, *Files);
 		CheckPluginLifetime();
 		CheckRegistrationFailure();

@@ -97,7 +97,7 @@ void FAssetImportPanel::ProcessDraft()
 		{
 			try
 			{
-				PreviewInfo = Imports->Draft({DraftId, PreviewOffset});
+				PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 			}
 			catch (const FAssetImportError& Failure)
 			{
@@ -164,7 +164,7 @@ void FAssetImportPanel::ProcessDraft()
 void FAssetImportPanel::ApplyDraftEdit(const FImportDraftInfo& InInfo, FImportPropertyEdits InEdits)
 {
 	Imports->EditDraft({DraftId, InInfo.Generation, std::move(InEdits)});
-	PreviewInfo = Imports->Draft({DraftId, PreviewOffset});
+	PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 }
 
 void FAssetImportPanel::DrawImportProperties(FGui& InGui)
@@ -209,21 +209,21 @@ void FAssetImportPanel::DrawPropertyHistory(FGui& InGui)
 	if (InGui.Button("Undo", PreviewInfo.bCanUndo))
 	{
 		Imports->DraftHistory({DraftId, PreviewInfo.Generation, "undo"});
-		PreviewInfo = Imports->Draft({DraftId, PreviewOffset});
+		PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 	}
 	UndoBounds = InGui.LastItemBounds();
 	InGui.SameLine();
 	if (InGui.Button("Redo", PreviewInfo.bCanRedo))
 	{
 		Imports->DraftHistory({DraftId, PreviewInfo.Generation, "redo"});
-		PreviewInfo = Imports->Draft({DraftId, PreviewOffset});
+		PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 	}
 	RedoBounds = InGui.LastItemBounds();
 	InGui.SameLine();
 	if (InGui.Button("Reset to source"))
 	{
 		Imports->DraftHistory({DraftId, PreviewInfo.Generation, "reset"});
-		PreviewInfo = Imports->Draft({DraftId, PreviewOffset});
+		PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 	}
 }
 
@@ -235,15 +235,6 @@ void FAssetImportPanel::RestorePreparedRequest()
 	Preferences.ImportOutputDirectory = (PathFromUtf8(Roots.Info().Directory) / Directory).lexically_normal();
 	SavePreferences();
 	ValidatedOutputKey.clear();
-	const auto Formats = FAssetImportWorkspace::Capabilities().Formats;
-	TypeIndex = 0;
-	for (std::size_t Index = 0; Index < Formats.size(); ++Index)
-	{
-		if (Formats[Index].Type == Request.Type)
-		{
-			TypeIndex = Index + 1;
-		}
-	}
 	if (Request.TextureEncoding)
 	{
 		EncodingIndex = static_cast<std::size_t>(*Request.TextureEncoding);

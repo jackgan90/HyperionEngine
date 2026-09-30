@@ -48,65 +48,65 @@ void Wheel(std::vector<FInputEvent>& InEvents, float InDelta)
 
 void FEditorPlugin::ExerciseClick(std::vector<FInputEvent>& InEvents, FVec4 InBounds)
 {
-	if (++ExerciseWait <= 2 || InBounds.Z <= InBounds.X || InBounds.W <= InBounds.Y)
+	if (++Acceptance.ExerciseWait <= 2 || InBounds.Z <= InBounds.X || InBounds.W <= InBounds.Y)
 	{
 		return;
 	}
 	const float X = (InBounds.X + InBounds.Z) * .5f;
 	const float Y = (InBounds.Y + InBounds.W) * .5f;
 	Move(InEvents, X, Y);
-	bExerciseMouseDown = !bExerciseMouseDown;
-	Button(InEvents, 0, bExerciseMouseDown, X, Y);
-	if (!bExerciseMouseDown)
+	Acceptance.bExerciseMouseDown = !Acceptance.bExerciseMouseDown;
+	Button(InEvents, 0, Acceptance.bExerciseMouseDown, X, Y);
+	if (!Acceptance.bExerciseMouseDown)
 	{
-		++ExerciseStep;
-		ExerciseWait = 0;
+		++Acceptance.ExerciseStep;
+		Acceptance.ExerciseWait = 0;
 	}
 }
 
 void FEditorPlugin::ExerciseMovement(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX,
                                      float InY)
 {
-	switch (ExerciseMovementStep)
+	switch (Acceptance.ExerciseMovementStep)
 	{
 		case 0:
-			ExercisePose = InPose;
+			Acceptance.ExercisePose = InPose;
 			Key(InEvents, true);
-			ExerciseWait = 0;
-			++ExerciseMovementStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseMovementStep;
 			break;
 		case 1:
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
-			bMovementGateVerified = Length(Subtract(InPose.Eye, ExercisePose.Eye)) < .00001f;
+			Acceptance.bMovementGateVerified = Length(Subtract(InPose.Eye, Acceptance.ExercisePose.Eye)) < .00001f;
 			Move(InEvents, InX, InY);
 			Button(InEvents, 1, true, InX, InY);
-			ExercisePose = InPose;
-			ExerciseWait = 0;
-			++ExerciseMovementStep;
+			Acceptance.ExercisePose = InPose;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseMovementStep;
 			break;
 		case 2:
-			if (++ExerciseWait < 8)
+			if (++Acceptance.ExerciseWait < 8)
 			{
 				break;
 			}
-			bMovementVerified = Length(Subtract(InPose.Eye, ExercisePose.Eye)) > .01f;
+			Acceptance.bMovementVerified = Length(Subtract(InPose.Eye, Acceptance.ExercisePose.Eye)) > .01f;
 			Button(InEvents, 1, false, InX, InY);
-			ExercisePose = InPose;
-			ExerciseWait = 0;
-			++ExerciseMovementStep;
+			Acceptance.ExercisePose = InPose;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseMovementStep;
 			break;
 		case 3:
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
-			bRightReleaseVerified = Length(Subtract(InPose.Eye, ExercisePose.Eye)) < .00001f;
+			Acceptance.bRightReleaseVerified = Length(Subtract(InPose.Eye, Acceptance.ExercisePose.Eye)) < .00001f;
 			Key(InEvents, false);
-			ExerciseWait = 0;
-			ExerciseStep = 6;
+			Acceptance.ExerciseWait = 0;
+			Acceptance.ExerciseStep = 6;
 			break;
 		default:
 			break;
@@ -116,49 +116,51 @@ void FEditorPlugin::ExerciseMovement(std::vector<FInputEvent>& InEvents, const F
 void FEditorPlugin::ExerciseWheel(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX,
                                   float InY)
 {
-	const float Speed = Camera.GetMovementSpeed(ViewCamera);
-	switch (ExerciseWheelStep)
+	const float Speed = Camera.GetMovementSpeed(Viewport.ViewCamera);
+	switch (Acceptance.ExerciseWheelStep)
 	{
 		case 0:
-			ExercisePose = InPose;
-			ExerciseSpeed = Speed;
+			Acceptance.ExercisePose = InPose;
+			Acceptance.ExerciseSpeed = Speed;
 			Button(InEvents, 1, true, InX, InY);
 			Wheel(InEvents, 1);
-			++ExerciseWheelStep;
+			++Acceptance.ExerciseWheelStep;
 			break;
 		case 1:
-			bSpeedVerified = std::abs(Speed - ExerciseSpeed * 1.2f) < .0001f &&
-			                 Length(Subtract(InPose.Eye, ExercisePose.Eye)) < .00001f &&
-			                 Length(Subtract(InPose.Forward, ExercisePose.Forward)) < .00001f;
+			Acceptance.bSpeedVerified = std::abs(Speed - Acceptance.ExerciseSpeed * 1.2f) < .0001f &&
+			                            Length(Subtract(InPose.Eye, Acceptance.ExercisePose.Eye)) < .00001f &&
+			                            Length(Subtract(InPose.Forward, Acceptance.ExercisePose.Forward)) < .00001f;
 			Key(InEvents, true);
-			ExerciseWait = 0;
-			++ExerciseWheelStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseWheelStep;
 			break;
 		case 2:
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
-			bSpeedVerified &= std::abs(Length(Subtract(InPose.Eye, ExercisePose.Eye)) - Speed * 6 / 60) < .001f;
-			ExercisePose = InPose;
+			Acceptance.bSpeedVerified &=
+			    std::abs(Length(Subtract(InPose.Eye, Acceptance.ExercisePose.Eye)) - Speed * 6 / 60) < .001f;
+			Acceptance.ExercisePose = InPose;
 			Key(InEvents, false);
 			Button(InEvents, 1, false, InX, InY);
 			Wheel(InEvents, -1);
-			++ExerciseWheelStep;
+			++Acceptance.ExerciseWheelStep;
 			break;
 		case 3:
-			bSpeedVerified &= Dot(Subtract(InPose.Eye, ExercisePose.Eye), InPose.Forward) < -.01f &&
-			                  std::abs(Speed - ExerciseSpeed * 1.2f) < .0001f;
-			ExercisePose = InPose;
+			Acceptance.bSpeedVerified &=
+			    Dot(Subtract(InPose.Eye, Acceptance.ExercisePose.Eye), InPose.Forward) < -.01f &&
+			    std::abs(Speed - Acceptance.ExerciseSpeed * 1.2f) < .0001f;
+			Acceptance.ExercisePose = InPose;
 			Button(InEvents, 1, true, InX, InY);
 			Wheel(InEvents, -1);
-			++ExerciseWheelStep;
+			++Acceptance.ExerciseWheelStep;
 			break;
 		case 4:
-			bSpeedVerified &=
-			    std::abs(Speed - ExerciseSpeed) < .0001f && Length(Subtract(InPose.Eye, ExercisePose.Eye)) < .00001f;
+			Acceptance.bSpeedVerified &= std::abs(Speed - Acceptance.ExerciseSpeed) < .0001f &&
+			                             Length(Subtract(InPose.Eye, Acceptance.ExercisePose.Eye)) < .00001f;
 			Button(InEvents, 1, false, InX, InY);
-			ExerciseStep = 7;
+			Acceptance.ExerciseStep = 7;
 			break;
 		default:
 			break;
@@ -167,10 +169,10 @@ void FEditorPlugin::ExerciseWheel(std::vector<FInputEvent>& InEvents, const FSce
 
 void FEditorPlugin::ExerciseCamera(std::vector<FInputEvent>& InEvents)
 {
-	const auto Pose = ExtractScenePose(ViewCamera.World);
-	const float X = (ViewportRegion.Bounds.X + ViewportRegion.Bounds.Z) * .5f;
-	const float Y = (ViewportRegion.Bounds.Y + ViewportRegion.Bounds.W) * .5f;
-	switch (ExerciseStep)
+	const auto Pose = ExtractScenePose(Viewport.ViewCamera.World);
+	const float X = (Viewport.ViewportRegion.Bounds.X + Viewport.ViewportRegion.Bounds.Z) * .5f;
+	const float Y = (Viewport.ViewportRegion.Bounds.Y + Viewport.ViewportRegion.Bounds.W) * .5f;
+	switch (Acceptance.ExerciseStep)
 	{
 		case 5:
 			ExerciseMovement(InEvents, Pose, X, Y);
@@ -179,50 +181,51 @@ void FEditorPlugin::ExerciseCamera(std::vector<FInputEvent>& InEvents)
 			ExerciseWheel(InEvents, Pose, X, Y);
 			break;
 		case 7:
-			ExercisePose = Pose;
+			Acceptance.ExercisePose = Pose;
 			Move(InEvents, X, Y);
 			Button(InEvents, 1, true, X, Y);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 8:
 			Move(InEvents, X + 36, Y + 20);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 9:
 			Button(InEvents, 1, false, X + 36, Y + 20);
-			bLookVerified = Length(Subtract(Pose.Forward, ExercisePose.Forward)) > .01f &&
-			                Length(Subtract(Pose.Eye, ExercisePose.Eye)) < .00001f;
-			++ExerciseStep;
+			Acceptance.bLookVerified = Length(Subtract(Pose.Forward, Acceptance.ExercisePose.Forward)) > .01f &&
+			                           Length(Subtract(Pose.Eye, Acceptance.ExercisePose.Eye)) < .00001f;
+			++Acceptance.ExerciseStep;
 			break;
 		case 10:
-			ExercisePose = Pose;
+			Acceptance.ExercisePose = Pose;
 			Wheel(InEvents, 1);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 11:
-			bDollyVerified = Length(Subtract(Pose.Eye, ExercisePose.Eye)) > .01f;
+			Acceptance.bDollyVerified = Length(Subtract(Pose.Eye, Acceptance.ExercisePose.Eye)) > .01f;
 			ExerciseClick(InEvents, FileMenuBounds);
 			break;
 		case 13:
-			ExercisePose = Pose;
-			ExerciseSpeed = Camera.GetMovementSpeed(ViewCamera);
+			Acceptance.ExercisePose = Pose;
+			Acceptance.ExerciseSpeed = Camera.GetMovementSpeed(Viewport.ViewCamera);
 			Button(InEvents, 1, true, X, Y);
 			Key(InEvents, true);
 			Wheel(InEvents, 1);
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			break;
 		case 14:
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
 			Key(InEvents, false);
 			Button(InEvents, 1, false, X, Y);
-			bInputIsolationVerified = Length(Subtract(Pose.Eye, ExercisePose.Eye)) < .00001f &&
-			                          Length(Subtract(Pose.Forward, ExercisePose.Forward)) < .00001f &&
-			                          Camera.GetMovementSpeed(ViewCamera) == ExerciseSpeed;
-			++ExerciseStep;
+			Acceptance.bInputIsolationVerified =
+			    Length(Subtract(Pose.Eye, Acceptance.ExercisePose.Eye)) < .00001f &&
+			    Length(Subtract(Pose.Forward, Acceptance.ExercisePose.Forward)) < .00001f &&
+			    Camera.GetMovementSpeed(Viewport.ViewCamera) == Acceptance.ExerciseSpeed;
+			++Acceptance.ExerciseStep;
 			break;
 		default:
 			break;
@@ -233,14 +236,14 @@ void FEditorPlugin::ExerciseInput(std::vector<FInputEvent>& InEvents)
 {
 	if (bOpenDialog && Browser->IsScanning())
 	{
-		ExerciseWait = 0;
+		Acceptance.ExerciseWait = 0;
 		return;
 	}
 	if (FrameCount < 3)
 	{
 		return;
 	}
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
 		case 18:
@@ -255,11 +258,11 @@ void FEditorPlugin::ExerciseInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, SponzaBounds);
 			break;
 		case 3:
-			if (!bExerciseMouseDown && !bOpenDialog)
+			if (!Acceptance.bExerciseMouseDown && !bOpenDialog)
 			{
 				throw std::runtime_error("Single scene click unexpectedly opened the scene");
 			}
-			ExerciseWait = 2;
+			Acceptance.ExerciseWait = 2;
 			ExerciseClick(InEvents, SponzaBounds);
 			break;
 		case 20:
@@ -272,7 +275,7 @@ void FEditorPlugin::ExerciseInput(std::vector<FInputEvent>& InEvents)
 			}
 			if (ReadyFrames > 8)
 			{
-				ExerciseClick(InEvents, ViewportRegion.Bounds);
+				ExerciseClick(InEvents, Viewport.ViewportRegion.Bounds);
 			}
 			break;
 		case 15:
@@ -281,17 +284,17 @@ void FEditorPlugin::ExerciseInput(std::vector<FInputEvent>& InEvents)
 		case 16:
 			Window->Resize({1440, 900});
 			bShowViewport = false;
-			++ExerciseStep;
-			ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
+			Acceptance.ExerciseWait = 0;
 			break;
 		case 17:
-			if (++ExerciseWait < 4)
+			if (++Acceptance.ExerciseWait < 4)
 			{
 				break;
 			}
 			bShowViewport = true;
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			break;
 		default:
 			ExerciseCamera(InEvents);
@@ -299,72 +302,4 @@ void FEditorPlugin::ExerciseInput(std::vector<FInputEvent>& InEvents)
 	}
 }
 
-void FEditorPlugin::WriteReport()
-{
-	if (Options.Report.empty())
-	{
-		return;
-	}
-	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
-	                          [&]
-	                          {
-		                          DeviceStats = Device->Statistics();
-	                          }));
-	if (!Options.Report.parent_path().empty())
-	{
-		std::filesystem::create_directories(Options.Report.parent_path());
-	}
-	const auto Objects = PlacementRegistry.Search("All", {});
-	const auto Unavailable = std::count_if(Objects.begin(), Objects.end(),
-	                                       [&](const auto* InObject)
-	                                       {
-		                                       return !PlacementUnavailableReason(*InObject).empty();
-	                                       });
-	std::ofstream Stream(Options.Report);
-	Stream << std::boolalpha << "{\n"
-	       << "\"scene\": " << std::quoted(CurrentPath) << ",\n"
-	       << "\"asset_root\": " << std::quoted(PathToUtf8(Context.Require<FContentRootService>().Directory())) << ",\n"
-	       << "\"content_verified\": " << bContentVerified << ",\n"
-	       << "\"root_restore_failed\": " << !Context.Require<FContentRootService>().StartupError.empty() << ",\n"
-	       << "\"open_count\": " << OpenCount << ",\n"
-	       << "\"document_verified\": " << bDocumentVerified << ",\n"
-	       << "\"views_verified\": " << bViewsVerified << ",\n"
-	       << "\"render_controls_verified\": " << bRenderControlsVerified << ",\n"
-	       << "\"gizmo_verified\": " << bGizmoVerified << ",\n"
-	       << "\"multiselect_verified\": " << bMultiSelectionVerified << ",\n"
-	       << "\"selection_shortcuts_verified\": " << bSelectionShortcutsVerified << ",\n"
-	       << "\"clipboard_verified\": " << bClipboardVerified << ",\n"
-	       << "\"framing_verified\": " << bFramingVerified << ",\n"
-	       << "\"reparent_verified\": " << bReparentVerified << ",\n"
-	       << "\"picking_verified\": " << bPickingVerified << ",\n"
-	       << "\"outlines_verified\": " << bOutlinesVerified << ",\n"
-	       << "\"placement_verified\": " << bPlacementVerified << ",\n"
-	       << "\"model_placement_verified\": " << bModelPlacementVerified << ",\n"
-	       << "\"placement_status\": " << std::quoted(PlacementStatus) << ",\n"
-	       << "\"placement_unavailable\": " << Unavailable << ",\n"
-	       << "\"save_ms\": " << LastSaveMilliseconds << ",\n"
-	       << "\"document_dirty\": " << IsDirty() << ",\n"
-	       << "\"ready_frames\": " << ReadyFrames << ",\n"
-	       << "\"nodes\": " << Scene->GetNodes().size() << ",\n"
-	       << "\"scene_error\": " << std::quoted(Scene->GetStatus().Error) << ",\n"
-	       << "\"failed_models\": " << Scene->GetStatus().FailedModels << ",\n"
-	       << "\"load_error_observed\": " << bLoadErrorObserved << ",\n"
-	       << "\"draws\": " << RenderStats.MainView().Draws << ",\n"
-	       << "\"validation_errors\": " << DeviceStats.ValidationErrors << ",\n"
-	       << "\"viewport_width\": " << ViewportSize.Width << ",\n"
-	       << "\"viewport_height\": " << ViewportSize.Height << ",\n"
-	       << "\"exercise_step\": " << ExerciseStep << ",\n"
-	       << "\"movement\": " << bMovementVerified << ",\n"
-	       << "\"movement_gate\": " << bMovementGateVerified << ",\n"
-	       << "\"right_release\": " << bRightReleaseVerified << ",\n"
-	       << "\"look\": " << bLookVerified << ",\n"
-	       << "\"dolly\": " << bDollyVerified << ",\n"
-	       << "\"wheel_speed\": " << bSpeedVerified << ",\n"
-	       << "\"movement_speed\": " << Camera.GetMovementSpeed(ViewCamera) << ",\n"
-	       << "\"input_isolation\": " << bInputIsolationVerified << "\n}\n";
-	if (!Stream)
-	{
-		throw std::runtime_error("Could not write editor report");
-	}
-}
 } // namespace Hyperion

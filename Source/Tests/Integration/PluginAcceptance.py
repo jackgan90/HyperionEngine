@@ -36,6 +36,10 @@ def main():
         assert "output is unavailable" in output, output
         output = run(name + "-clipboard", *arguments, "--exercise-clipboard", failure=True)
         assert "output is unavailable" in output, output
+        output = run(name + "-framing", *arguments, "--exercise-framing", failure=True)
+        assert "output is unavailable" in output, output
+        output = run(name + "-import", *arguments, "--exercise-import", work / "Color.png", failure=True)
+        assert "output is unavailable" in output, output
     output = run("render-controls-incomplete", "--exercise-render-controls", work, "--frames", "1", failure=True)
     assert "render controls acceptance did not complete" in output, output
     output = run("clipboard-incomplete", "--exercise-clipboard", "--frames", "1", failure=True)

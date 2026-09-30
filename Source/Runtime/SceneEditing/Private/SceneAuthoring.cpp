@@ -2,25 +2,6 @@
 
 namespace Hyperion
 {
-namespace
-{
-void RequireCurrent(const FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest)
-{
-	// Queries allow a busy scene but still reject document replacement and inconsistent snapshots.
-	ListSceneNodes(InDocument, {InRequest.Document, InRequest.Revision, 0, 1});
-}
-
-const FSceneNode& RequireNode(const FSceneEditDocument& InDocument, FSceneHandle InHandle)
-{
-	const auto* Node = InDocument.Target().FindNode(InHandle);
-	if (!Node)
-	{
-		throw FSceneEditError("stale_handle", "Node no longer exists in this document");
-	}
-	return *Node;
-}
-} // namespace
-
 bool CanAddDefaultSceneComponent(const FSceneComponentDescriptor& InType)
 {
 	return !InType.bRequired && InType.CppType != typeid(FSceneModelComponent) &&
@@ -38,7 +19,7 @@ void AddDefaultSceneComponent(FSceneNode& InNode, std::string InId, std::string_
 
 FSceneSelectionInfo GetSceneSelection(const FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest)
 {
-	RequireCurrent(InDocument, InRequest);
+	InDocument.RequireCurrent(InRequest.Document, InRequest.Revision);
 	return {InDocument.Id(), InDocument.Target().Revision(), InDocument.Selection().All(),
 	        InDocument.Selection().Primary()};
 }
@@ -49,7 +30,7 @@ void ApplySceneSelection(FSceneEditDocument& InDocument, const FSceneSelectionRe
 	FSceneSelection Selection;
 	for (const auto Handle : InRequest.Handles)
 	{
-		RequireNode(InDocument, Handle);
+		InDocument.RequireNode(Handle);
 		if (Selection.Contains(Handle))
 		{
 			throw std::invalid_argument("Selection contains duplicate handles");
@@ -90,7 +71,7 @@ FSceneDocumentInfo SetSceneMetadata(FSceneEditDocument& InDocument, const FScene
 	std::vector<FSceneNodeEdit> Edits;
 	for (const auto& Edit : InRequest.Edits)
 	{
-		auto Node = RequireNode(InDocument, Edit.Handle);
+		auto Node = InDocument.RequireNode(Edit.Handle);
 		if (Edit.Name)
 		{
 			Node.Name = *Edit.Name;
@@ -113,7 +94,7 @@ FSceneNodeInfo CreateSceneNode(FSceneEditDocument& InDocument, const FSceneCreat
 	Node.Local() = InRequest.Local;
 	if (InRequest.Parent)
 	{
-		Node.Parent() = RequireNode(InDocument, *InRequest.Parent).Id;
+		Node.Parent() = InDocument.RequireNode(*InRequest.Parent).Id;
 	}
 	if (InRequest.Components.size() > 32)
 	{
@@ -152,7 +133,7 @@ FSceneDocumentInfo DeleteSceneSelection(FSceneEditDocument& InDocument, const FS
 
 FSceneSettings GetSceneSettings(const FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest)
 {
-	RequireCurrent(InDocument, InRequest);
+	InDocument.RequireCurrent(InRequest.Document, InRequest.Revision);
 	return InDocument.Target().Settings();
 }
 

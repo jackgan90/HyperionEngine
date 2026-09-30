@@ -10,7 +10,7 @@ void FEditorPlugin::ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents)
 	{
 		throw std::runtime_error("HUD effective visibility differs from preference");
 	}
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
 			ExerciseClick(InEvents, EditMenuBounds);
@@ -25,13 +25,13 @@ void FEditorPlugin::ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, PreferencesCloseBounds);
 			return;
 	}
-	if (++ExerciseWait < 3)
+	if (++Acceptance.ExerciseWait < 3)
 	{
 		return;
 	}
-	if (Info.Preference == bInitialCaptureHudPreference || bPreferencesDialog ||
+	if (Info.Preference == Acceptance.bInitialCaptureHudPreference || bPreferencesDialog ||
 	    LoadEditorPreferences(Options.PreferencesPath).bRenderDocHud != Info.Preference ||
-	    Options.Preferences.bRenderDocCapture != bInitialCapturePreference)
+	    Options.Preferences.bRenderDocCapture != Acceptance.bInitialCapturePreference)
 	{
 		throw std::runtime_error("Editor HUD preference UI/persistence mismatch");
 	}
@@ -57,7 +57,7 @@ void FEditorPlugin::ExerciseCaptureInput(std::vector<FInputEvent>& InEvents)
 	}
 	if (Options.ExerciseCapture == "toggle")
 	{
-		switch (ExerciseStep)
+		switch (Acceptance.ExerciseStep)
 		{
 			case 0:
 				ExerciseClick(InEvents, EditMenuBounds);
@@ -72,13 +72,13 @@ void FEditorPlugin::ExerciseCaptureInput(std::vector<FInputEvent>& InEvents)
 				ExerciseClick(InEvents, PreferencesCloseBounds);
 				return;
 		}
-		if (++ExerciseWait < 3)
+		if (++Acceptance.ExerciseWait < 3)
 		{
 			return;
 		}
 		const bool bEnabled = Options.Preferences.bRenderDocCapture;
 		const bool bVisible = CaptureButtonBounds.Z > CaptureButtonBounds.X;
-		if (bEnabled == bInitialCapturePreference || bVisible != bEnabled || bPreferencesDialog ||
+		if (bEnabled == Acceptance.bInitialCapturePreference || bVisible != bEnabled || bPreferencesDialog ||
 		    LoadEditorPreferences(Options.PreferencesPath).bRenderDocCapture != bEnabled)
 		{
 			throw std::runtime_error("Editor capture preference UI/persistence mismatch");
@@ -94,9 +94,10 @@ void FEditorPlugin::ExerciseCaptureInput(std::vector<FInputEvent>& InEvents)
 	else
 	{
 #if HYP_ENABLE_RENDERDOC
-		if (ExerciseStep == 0)
+		if (Acceptance.ExerciseStep == 0)
 		{
-			if (CaptureButtonBounds.X < ViewportRegion.Bounds.X || CaptureButtonBounds.Z > ViewportRegion.Bounds.Z)
+			if (CaptureButtonBounds.X < Viewport.ViewportRegion.Bounds.X ||
+			    CaptureButtonBounds.Z > Viewport.ViewportRegion.Bounds.Z)
 			{
 				throw std::runtime_error("Capture button is clipped by the narrow viewport");
 			}

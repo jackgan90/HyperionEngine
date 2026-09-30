@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Automation/ResponseLimits.h"
 #include "Hyperion/Transport/Transport.h"
 #include <deque>
 #include <optional>
@@ -11,7 +12,7 @@ class FAutomationChannel
 {
 public:
 	explicit FAutomationChannel(std::unique_ptr<ITransportConnection> InConnection,
-	                            std::size_t InMaxFrame = 4 * 1024 * 1024 + 65536);
+	                            std::size_t InMaxFrame = AutomationResponseLimits.MaxBytes);
 	void Poll(bool bInSend = true);
 	void Send(std::string_view InMessage);
 	std::optional<std::string> Receive();

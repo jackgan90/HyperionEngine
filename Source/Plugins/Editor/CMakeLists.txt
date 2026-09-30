@@ -1,38 +1,26 @@
 add_library(hyperion_editor_plugin STATIC
   Private/EditorLog.cpp
-  Private/EditorLogAcceptance.cpp
   Private/EditorClipboard.cpp
-  Private/EditorClipboardAcceptance.cpp
   Private/AssetImportPanel.cpp
   Private/ImportPreviewPanel.cpp Private/ImportPreviewProperties.cpp
-  Private/EditorImportAcceptance.cpp
   Private/EditorStructure.cpp
-  Private/EditorReparentAcceptance.cpp
   Private/EditorRenderSettings.cpp
   Private/EditorLightControls.cpp
   Private/EditorRenderSettingsGui.cpp
   Private/EditorProfilingGui.cpp
   Private/EditorHud.cpp
-  Private/EditorRenderControlsAcceptance.cpp
   Private/EditorDebugGeometry.cpp
   Private/EditorCloseService.cpp
   Private/EditorViewportService.cpp
   Private/EditorFraming.cpp
-  Private/EditorFramingAcceptance.cpp
   Private/EditorCaptureService.cpp
   Private/AssetPreviewService.cpp
   Private/EditorSceneDocument.cpp
-  Private/EditorAcceptance.cpp
-  Private/EditorAssetAcceptance.cpp
-  Private/EditorAssetPropertyAcceptance.cpp
-  Private/EditorAssetWorkspaceAcceptance.cpp
   Private/EditorApplication.cpp
+  Private/EditorReport.cpp
   Private/AssetEditorWindow.cpp
   Private/AssetEditorWindowGui.cpp
   Private/EditorAssetWindow.cpp
-  Private/EditorAssetWindowAcceptance.cpp
-  Private/EditorAssetAuditAcceptance.cpp
-  Private/EditorAssetPreviewAcceptance.cpp
   Private/AssetWorkspace.cpp
   Private/AssetWorkspaceService.cpp
   Private/AssetPreview.cpp
@@ -43,43 +31,31 @@ add_library(hyperion_editor_plugin STATIC
   Private/ContentBrowser.cpp
   Private/EditorContent.cpp
   Private/EditorContentTransition.cpp
-  Private/EditorContentAcceptance.cpp
   Private/EditorBenchmark.cpp
   Private/EditorDocument.cpp
   Private/EditorDeletion.cpp
-  Private/EditorDeletionAcceptance.cpp
-  Private/EditorDocumentAcceptance.cpp
   Private/EditorFrame.cpp
+  Private/EditorViewport.cpp
+  Private/EditorDocumentTransition.cpp
   Private/EditorGizmo.cpp
   Private/EditorGizmoTransaction.cpp
-  Private/EditorGizmoAcceptance.cpp
-  Private/EditorMultiSelectionAcceptance.cpp
-  Private/EditorMultiTransformAcceptance.cpp
   Private/EditorHistory.cpp
+  Private/EditorShortcuts.cpp
   Private/EditorSelection.cpp
-  Private/EditorSelectionShortcutsAcceptance.cpp
   Private/EditorBatchHistory.cpp
   Private/EditorHost.cpp
   Private/EditorInspector.cpp
   Private/EditorSelectionInspector.cpp
   Private/EditorOptions.cpp
-  Private/EditorOutlineAcceptance.cpp
   Private/EditorPanels.cpp
   Private/EditorPreferences.cpp
   Private/EditorCapture.cpp
-  Private/EditorCaptureAcceptance.cpp
   Private/EditorPlacement.cpp
   Private/PlacementService.cpp
-  Private/EditorPlacementAcceptance.cpp
-  Private/EditorModelPlacementAcceptance.cpp
   Private/EditorPlacementResources.cpp
   Private/EditorLightMarkers.cpp
-  Private/EditorLightMarkerAcceptance.cpp
-  Private/EditorTransformAcceptance.cpp
-  Private/EditorViewAcceptance.cpp
   Private/EditorViews.cpp
   Private/EditorPicking.cpp
-  Private/EditorPickingAcceptance.cpp
 )
 hyp_module(hyperion_editor_plugin)
 target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_asset_import)
@@ -94,6 +70,43 @@ if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
+  target_sources(hyperion_editor_plugin PRIVATE
+    Private/EditorAcceptanceDriver.cpp
+    Private/EditorLogAcceptance.cpp
+    Private/EditorClipboardAcceptance.cpp
+    Private/EditorImportAcceptance.cpp
+    Private/EditorReparentAcceptance.cpp
+    Private/EditorRenderControlsAcceptance.cpp
+    Private/EditorFramingAcceptance.cpp
+    Private/EditorAcceptance.cpp
+    Private/EditorAssetAcceptance.cpp
+    Private/EditorAssetPropertyAcceptance.cpp
+    Private/EditorAssetWorkspaceAcceptance.cpp
+    Private/EditorAssetWindowAcceptance.cpp
+    Private/EditorAssetAuditAcceptance.cpp
+    Private/EditorAssetPreviewAcceptance.cpp
+    Private/EditorContentAcceptance.cpp
+    Private/EditorDeletionAcceptance.cpp
+    Private/EditorDocumentAcceptance.cpp
+    Private/EditorGizmoAcceptance.cpp
+    Private/EditorMultiSelectionAcceptance.cpp
+    Private/EditorMultiTransformAcceptance.cpp
+    Private/EditorSelectionShortcutsAcceptance.cpp
+    Private/EditorShortcutRoutingAcceptance.cpp
+    Private/EditorOutlineAcceptance.cpp
+    Private/EditorCaptureAcceptance.cpp
+    Private/EditorPlacementAcceptance.cpp
+    Private/EditorModelPlacementAcceptance.cpp
+    Private/EditorLightMarkerAcceptance.cpp
+    Private/EditorTransformAcceptance.cpp
+    Private/EditorViewAcceptance.cpp
+    Private/EditorPickingAcceptance.cpp
+  )
+  add_executable(editor_import_choices_tests Private/ImportChoicesTests.cpp)
+  hyp_executable(editor_import_choices_tests)
+  target_link_libraries(editor_import_choices_tests PRIVATE hyperion_asset_import hyperion_platform)
+  set_target_properties(editor_import_choices_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_import_choices COMMAND editor_import_choices_tests)
   add_executable(editor_asset_workspace_tests Private/AssetWorkspaceTests.cpp)
   hyp_executable(editor_asset_workspace_tests)
   target_sources(editor_asset_workspace_tests PRIVATE
@@ -154,3 +167,8 @@ if(BUILD_TESTING)
 endif()
 
 target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_automation_plugin hyperion_scene_editing hyperion_reflection)
+
+if(NOT BUILD_TESTING)
+  target_sources(hyperion_editor_plugin PRIVATE Private/EditorAcceptanceUnavailable.cpp)
+endif()
+target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_BUILD_TESTING=$<BOOL:${BUILD_TESTING}>)

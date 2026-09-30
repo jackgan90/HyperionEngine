@@ -31,7 +31,7 @@
 | 多选、全选、删除、历史 | `scene.selection.get/set/select_all/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary。select_all 与 Ctrl+A 共用领域服务，包含全部逻辑节点、保留已有 primary，返回 document/revision/count/primary 摘要；count 为 64 位十进制字符串。set 的数量受 wire 预算而非 128 编辑批次限制；选择不改变 revision/dirty/history。Outliner 范围按显示顺序转换为显式集合后共用校验提交，agent 通过 set 表达集合，不模拟面板输入。Editor 删除后不自动选择替代物；undo 恢复并重新选择新 handle |
 | 复制与保留子节点删除 | `scene.selection.duplicate/remove_keep_children` | SceneEditing 共享事务；操作 primary，复制共享资源，删除保留子节点世界变换，支持 undo/redo 和选择恢复；GUI 入口待后续 Outliner/viewport 交互设计 |
 | 对象剪贴板 | `scene.selection.copy`、`scene.clipboard.info/paste` | 与 Ctrl+C/Ctrl+V 共用系统剪贴板和不可变子树快照；同一 Editor、同一文档；数字后缀、原父级/local、一次粘贴一个历史事务；普通文本替换使旧对象不可粘贴。返回摘要，新 handle 通过 selection.get 或 nodes.list 查询 |
-| 放置 primitive/light/native model | `scene.placement.list/place/place_model` | `IScenePlacement` 与 Editor 共用候选、资源准备和提交路径；`place` 使用注册预设 ID，`place_model` 使用原生模型 `FAssetRef`，显式 position 为世界坐标 pivot。异步准备后创建并选中一个节点，记录一次历史，需显式保存；过期 document/revision 或 busy 请求拒绝。Sky Light 默认使用 SkyAsset 与 Engine Cloudy；放置或新增天空光组件仅在没有活动天空光时自动激活 |
+| 放置 primitive/light/native model | `scene.placement.list/place/place_model` | `IScenePlacement` 与 Editor 共用候选、资源准备和提交路径；`place` 使用注册预设 ID，`place_model` 使用原生模型 `FAssetRef`，显式 position 为世界坐标 pivot。异步准备后创建并选中一个节点，记录一次历史，需显式保存；过期 document/revision 或 busy 请求拒绝。Sky Light 默认使用 SkyAsset 与 Engine Cloudy；放置或新增天空光组件后按 Priority 和持久对象 ID 推导生效天空光 |
 | Inspector 组件 | `scene.components.list`、`scene.component_types.list`、`scene.components.edit_structure`、`scene.component.<type>.get/set/set_batch` | `SceneEditing` 与组件反射；组件实例 ID 来自 list，不必等于类型 ID。保留资源绑定，完整候选经文档/场景校验；资源模型组件必须通过 prepared placement 创建 |
 | 默认相机、初始视图 | `scene.settings.get/set` | 文档设置；get 后保留不修改的字段，set 是完整替换 |
 | 灯光 Priority 与生效诊断 | `scene.component.<type>.get/set/set_batch`、`scene.lighting.get` | 与 Details 共用组件、校验、事务、历史和保存；Priority 为有符号 32 位整数，默认 0，越大越优先；诊断返回阴影方向光、天空光、顶层同优先级冲突、有效启用状态和天空资产错误；无独立主光设置接口 |
@@ -40,10 +40,10 @@
 | 非场景资产页签 | `asset.open/info/documents.list/activate/close/save/undo/redo/rename` | Editor 发布 `IAssetWorkspace`，GUI 和多个 agent 使用同一草稿、历史与 busy 状态；其他宿主可使用独立 CPU 文档 |
 | 模型属性 | `model.nodes.get/set`、`model.material_slots.get/set`、`model.primitives.get/set`、`model.roots.get` | AssetEditing 共享校验；节点/primitive 身份、几何和拓扑固定；引用先加载校验再提交 |
 | 材质参数 | `material.parameters.get`、`material.passes.get`、`material.values.get/set` | 共享可编辑性、类型/维数、PBR clamp 和引用图校验；不允许修改系统/声明参数 |
-| 纹理 | `texture.dimension.get/format.get/encoding.get/sample`、`texture.set_encoding` | 编码修改与 GUI 同一重建算法。sample 返回 mip/face 信息与源像素 RGBA，不返回 bulk |
+| 纹理 | `texture.dimension.get/format.get/encoding.get/sample`、`texture.set_encoding` | 编码修改与 GUI 使用同一个 AssetEditing 异步工作流，共用 snapshot、busy、generation 检查和历史提交。sample 返回 mip/face 信息与源像素 RGBA，不返回 bulk |
 | 天空属性 | `sky.radiance.get/specular.get/brdf.get/irradiance.get/convention.get` | GUI 中这些产品为只读；天空重新生成使用 import；名称使用 asset.rename |
 | 资产预览 | `asset.preview.get/set` | `IAssetPreviewWorkspace`；模型/材质/天空 camera、曝光、形状、yaw；纹理 mip/face/channel/EV/zoom/pan/fit/checker。临时预览不增加资产 generation/history |
-| 渲染与配置 | `render.settings.get/set/save`、`render.shadows.get/set` | `IRenderSettings`；完整候选校验、revision 和原子保存；get/set version 2 的 activeReversedZ 表示已提交给后续场景/三维资产预览帧的实时值，完成不等待 GPU 呈现；save version 1 独立持久化；不修改场景/资产 history；shadow 参数为旧场景的会话默认值，已配置的主方向光组件参数优先 |
+| 渲染与配置 | `render.settings.get/set/save`、`render.shadows.get/set` | `IRenderSettings`；完整候选校验、revision 和原子保存；get/set version 2 的 activeReversedZ 表示已提交给后续场景/三维资产预览帧的实时值，完成不等待 GPU 呈现；save version 1 独立持久化；不修改场景/资产 history；shadow 参数为会话默认值，Priority 推导出的阴影方向光组件参数（若配置）优先 |
 | 灯光阴影属性 | `scene.component.hyperion.scenedirectionallight.get/set` | `shadowSettings` 可选嵌套组件字段；SceneEditing 验证、历史和原生保存；point/spot 尚不支持阴影 |
 | 渲染结果和诊断 | `render.statistics`、`render.component_diagnostics`、`render.screenshot` | 完成帧统计、分页 primitive 诊断和现有 readback。PNG 成功返回时文件已写入，返回目标本地路径、尺寸、frame 和 bytes |
 | RenderDoc | `renderdoc.status/capture/open/set_preference`、`renderdoc.hud.get/set` | 复用 host capture/replay；HUD 默认隐藏、独立持久化、已加载时即时生效；HUD 返回 preference 与实际 enabled，运行库不可用时 enabled 为 null，仍可保存偏好；抓帧不可用时返回 unavailable |
@@ -86,6 +86,8 @@
 
 `asset.import.draft.prepare` 接收相同导入请求，返回独立的 draft ID 和 preparing 状态；轮询 `draft.get` 到 ready 或 failed。准备和属性编辑不发布文件。应用最多保留四份草稿；`asset.import.drafts` 列出跨连接和 GUI 的草稿。`draft.get` 的 offset/limit 分页节点、primitive、材质参数、材质槽、依赖、产品与诊断，limit 为 1–64，默认 32；返回各列表总数及完整属性覆盖集，不返回几何或像素 bulk。
 
+纹理草稿的 get 结果保留 `width`、`height`、`mips`、`format`、`encoding` 和展示用 `details`，并增加反射字段 `dimension` 与 `pixelBytes`。`dimension` 使用 Texture2D/Cube 枚举；`pixelBytes` 是全部 mip/face 像素 payload 的总字节数，以 64 位十进制字符串编码。非纹理草稿该字节数为零，dimension 缺省值不表示存在纹理。GUI 直接消费这些字段，不解析 details；导入类型与设置按能力中的稳定 type ID 选择，列表位置只用于呈现，支持的来源格式不变。
+
 `draft.edit` 必须带最新 generation，properties **替换完整覆盖集**，请从 get 保留其他已修改字段。name 修改模型/贴图/天空/材质根名称；nodes 按稳定 id 修改 name/local，primitives 按 id 修改 name/material，material 按参数 name 修改 values。只接受已有模型元素与材质允许的 numeric 值；场景结构和生成依赖只读。`draft.history` 的 action 为 undo/redo/reset，最多 64 步，reset 可撤销。无效修改不会改变版本。所有 mutation 的 generation 是草稿版本，不是内容根 generation；后者只用于 prepare 请求。
 
 `draft.submit` 发布当前快照并返回应用 import task ID，通过 `asset.import.task` 查询实际完成结果，draft 同时进入 publishing；结束后重新查询 draft 获取新 generation。发布前和提交时重新检查所有捕获来源指纹，force 或 up-to-date 不能绕过。成功后 dirty 清除，后续编辑可继续提交。属性覆盖写入导入 provenance，相同请求和覆盖保持重复导入零写入。源或转换参数变化需显式 discard 旧草稿并 prepare，不自动迁移编辑；新草稿从源重建。`draft.discard` 对 dirty 草稿要求 discard=true，准备/发布期间返回 busy；隐藏窗口不会 discard。draft ID、import task ID 与 session job ID 不可混用。
@@ -107,7 +109,7 @@
 
 ## 新功能维护方式
 
-- CPU 事务和校验放 SceneEditing / AssetEditing；Renderer 提供渲染、相机、capture/readiness 的 engine-owned 接口；宿主发布当前实例的 typed service。不要为 agent 新建第二份 Editor 文档。
+- CPU 事务和校验放 SceneEditing / AssetEditing；纹理编码与引用异步编辑由 FAssetEditWorkflow 统一 admission、准备、身份/generation 检查和历史提交，workspace/automation 负责 polling 与关闭排空。Renderer 提供渲染、相机、capture/readiness 的 engine-owned 接口；宿主发布当前实例的 typed service。不要为 agent 新建第二份 Editor 文档。
 - 新属性优先复用反射成员；新组件注册类型与 typed operation。临时状态、保存状态和 generation/revision 的语义必须写进说明。
 - GUI 的候选值和 agent 的候选值最终调用同一领域方法。Inspector 提示不是授权依据；不可变身份由业务规则保证。
 - DTO 不直接复用只用于 Inspector 的 transient-only record；API 投影须显式声明可序列化字段，验证真实返回值。

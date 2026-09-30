@@ -88,6 +88,13 @@ def workflow(cli, tool, directory, mcp):
         assert {"asset.import.drafts", *("asset.import.draft." + action for action in
                 ("prepare", "get", "edit", "history", "submit", "discard"))} <= {item["id"] for item in discovered["items"]}
         state = wait_draft(session, completed(session.call("asset.import.draft.prepare", **request)))
+        description = session.request("api.describe", {"operation": "asset.import.draft.get"})
+        metadata = description["outputSchema"]["properties"]
+        assert metadata["pixelBytes"]["type"] == "string"
+        assert len(metadata["dimension"]["enum"]) == 2
+        assert state["dimension"] == 0 and state["width"] == 8 and state["height"] == 8, state
+        assert state["pixelBytes"] == "340" and state["details"] == ["Texture2D | pixel bytes: 340"], state
+        assert completed(session.call("asset.import.draft.get", draft=state["draft"])) == state
         assert not list((directory / "Game").rglob("*.hasset"))
         assert session.call("asset.import.draft.get", draft=state["draft"], limit=65)["error"]["code"] == "invalid_arguments"
         old = state

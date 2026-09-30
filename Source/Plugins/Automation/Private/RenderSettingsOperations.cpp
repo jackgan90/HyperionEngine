@@ -44,8 +44,9 @@ void RegisterRenderSettings(FOperationCatalog& InCatalog, IRenderSettings* InSet
 	Info.Owner = "automation-scene";
 	Info.Version = 2;
 	Info.Summary = "Read live rendering settings";
-	Info.Description = "Shared render settings and legacy shadow defaults. Authored main-light shadows take "
-	                   "precedence; activeReversedZ is committed for subsequent scene and 3D asset preview frames.";
+	Info.Description = "Shared render settings and session shadow defaults. The highest-priority eligible "
+	                   "directional light supplies CSM and contact shadows; its authored shadow settings override "
+	                   "the defaults. activeReversedZ is committed for subsequent scene and 3D asset preview frames.";
 	Info.bReadOnly = true;
 	Info.Effects = "Reads Main settings state.";
 	Info.Completion = "Current snapshot.";

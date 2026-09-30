@@ -50,8 +50,12 @@ void FAssetWorkspace::Close(FEntry& InEntry)
 	Bounds.erase("tab/" + PathToUtf8(InEntry.Path));
 	InEntry.Cancellation.Cancel();
 	InEntry.Load.Cancel();
+	if (InEntry.EditWorkflow)
+	{
+		InEntry.EditWorkflow->Drain();
+		InEntry.EditWorkflow.reset();
+	}
 	for (const auto Task : {InEntry.Initialization ? InEntry.Initialization->Task() : FTaskHandle{},
-	                        InEntry.EncodingEdit ? InEntry.EncodingEdit->Task() : FTaskHandle{},
 	                        InEntry.Pending ? InEntry.Pending->Task() : FTaskHandle{},
 	                        InEntry.Texture.Upload ? InEntry.Texture.Upload->Task() : FTaskHandle{},
 	                        InEntry.Texture.Pending ? InEntry.Texture.Pending->Task() : FTaskHandle{}})
@@ -420,16 +424,7 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 			    },
 			    InEntry.Cancellation);
 		}
-		PollReferenceEdit(InEntry);
-		if (InEntry.EncodingEdit && InEntry.EncodingEdit->Ready())
-		{
-			const auto Texture = InEntry.EncodingEdit->GetReady();
-			InEntry.EncodingEdit.reset();
-			if (InEntry.EncodingGeneration == InEntry.Document->Generation())
-			{
-				InEntry.Document->Set({}, *Texture);
-			}
-		}
+		PollEditWorkflow(InEntry);
 		if (InEntry.bSaveRequested && !InEntry.HasPendingEdit() && !InEntry.Document->IsSaving())
 		{
 			InEntry.bSaveRequested = false;
@@ -482,11 +477,6 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 		if (InEntry.Initialization && InEntry.Initialization->Ready())
 		{
 			InEntry.Initialization.reset();
-		}
-		if (InEntry.EncodingEdit && InEntry.EncodingEdit->Ready())
-		{
-			InEntry.EncodingEdit.reset();
-			InEntry.bSaveRequested = false;
 		}
 		InEntry.Error = Failure.what();
 	}

@@ -1,4 +1,5 @@
 #include "Hyperion/SceneEditing/SceneDocument.h"
+#include "SceneSelectionRoots.h"
 
 namespace Hyperion
 {
@@ -151,22 +152,11 @@ std::vector<FSceneNodeEdit> FSceneEditDocument::PrepareReparent(std::span<const 
 	const auto ParentId = InParent ? Parent.Node->Id : std::string{};
 	std::vector<FSceneNodeEdit> Edits;
 	std::optional<FMat4> ParentInverse;
-	for (const auto Handle : InHandles)
+	for (const auto Handle : FilterSceneSelectionRoots(Scene, InHandles))
 	{
 		FSceneNodeView View;
 		Scene.NodeView(Handle, View);
-		bool bCovered{};
-		for (auto Node = View.Node; !Node->Parent().empty();)
-		{
-			const auto Ancestor = Scene.FindHandle(Node->Parent());
-			if (Handles.contains(Ancestor))
-			{
-				bCovered = true;
-				break;
-			}
-			Node = Scene.FindNode(Ancestor);
-		}
-		if (bCovered || View.Node->Parent() == ParentId)
+		if (View.Node->Parent() == ParentId)
 		{
 			continue;
 		}

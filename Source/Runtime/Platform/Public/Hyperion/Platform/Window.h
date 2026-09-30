@@ -59,6 +59,30 @@ enum class EEventType
 	Focus
 };
 
+namespace InputButtons
+{
+inline constexpr std::uint32_t Left = 0;
+inline constexpr std::uint32_t Right = 1;
+inline constexpr std::uint32_t Middle = 2;
+inline constexpr std::uint32_t Extra1 = 3;
+inline constexpr std::uint32_t Extra2 = 4;
+inline constexpr std::uint32_t Count = 5;
+} // namespace InputButtons
+
+namespace InputModifiers
+{
+inline constexpr std::uint32_t None = 0;
+inline constexpr std::uint32_t Control = 1;
+inline constexpr std::uint32_t Shift = 2;
+inline constexpr std::uint32_t Alt = 4;
+inline constexpr std::uint32_t Super = 8;
+} // namespace InputModifiers
+
+inline bool HasInputModifier(std::uint32_t InMask, std::uint32_t InModifier)
+{
+	return (InMask & InModifier) != 0;
+}
+
 struct FInputEvent
 {
 	EEventType Type{};

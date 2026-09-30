@@ -29,8 +29,8 @@ void FEditorPlugin::DrawGizmo()
 {
 	FSceneNodeView View;
 	if ((ReparentGesture && ReparentGesture->bDragging) || Placement.IsActive() || bPlacementUsedMouse || !Selection ||
-	    !Scene->GetNodeView(*Selection, View) || !bViewportCameraInitialized || bOpenDialog || bSaveDialog ||
-	    bAssetMessage || PendingRoot || bDiscardDialog || PreviewCamera)
+	    !Scene->GetNodeView(*Selection, View) || !Viewport.bViewportCameraInitialized || bOpenDialog || bSaveDialog ||
+	    bAssetMessage || Transition.PendingRoot || Transition.bDiscardDialog || Viewport.PreviewCamera)
 	{
 		FinishGizmo();
 		return;
@@ -42,11 +42,11 @@ void FEditorPlugin::DrawGizmo()
 		FinishGizmo(Pointer.bCancel);
 		return;
 	}
-	const auto Bounds = ViewportRegion.Bounds;
-	if (GizmoEdit &&
-	    (GizmoEdit->Handle != *Selection || GizmoEdit->Revision != Scene->GetRevision() || !ViewportRegion.bFocused ||
-	     Pointer.bCancel || Pointer.bRightDown || GizmoEdit->Bounds.X != Bounds.X || GizmoEdit->Bounds.Y != Bounds.Y ||
-	     GizmoEdit->Bounds.Z != Bounds.Z || GizmoEdit->Bounds.W != Bounds.W))
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
+	if (GizmoEdit && (GizmoEdit->Handle != *Selection || GizmoEdit->Revision != Scene->GetRevision() ||
+	                  !Viewport.ViewportRegion.bFocused || Pointer.bCancel || Pointer.bRightDown ||
+	                  GizmoEdit->Bounds.X != Bounds.X || GizmoEdit->Bounds.Y != Bounds.Y ||
+	                  GizmoEdit->Bounds.Z != Bounds.Z || GizmoEdit->Bounds.W != Bounds.W))
 	{
 		FinishGizmo(Pointer.bCancel);
 		return;
@@ -62,12 +62,12 @@ void FEditorPlugin::DrawGizmo()
 		}
 		Parent = ParentView.World;
 	}
-	if (!Gizmo.Configure(ViewCamera, Bounds, View.Node->Local(), Parent, GizmoMode, Gui->ApplicationScale()))
+	if (!Gizmo.Configure(Viewport.ViewCamera, Bounds, View.Node->Local(), Parent, GizmoMode, Gui->ApplicationScale()))
 	{
 		return;
 	}
-	if (!GizmoEdit && Pointer.bPressed && !Pointer.bRightDown && !bCameraDragging && ViewportRegion.bHovered &&
-	    ViewportRegion.bFocused)
+	if (!GizmoEdit && Pointer.bPressed && !Pointer.bRightDown && !Viewport.bCameraDragging &&
+	    Viewport.ViewportRegion.bHovered && Viewport.ViewportRegion.bFocused)
 	{
 		FinishInspectorEdit();
 		if (Gizmo.Begin(Pointer.Position))
@@ -92,8 +92,9 @@ void FEditorPlugin::DrawGizmo()
 void FEditorPlugin::DrawGizmoOverlay()
 {
 	FSceneNodeView View;
-	if (!Selection || !Scene->GetNodeView(*Selection, View) || !bViewportCameraInitialized || PreviewCamera ||
-	    bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot || bDiscardDialog)
+	if (!Selection || !Scene->GetNodeView(*Selection, View) || !Viewport.bViewportCameraInitialized ||
+	    Viewport.PreviewCamera || bOpenDialog || bSaveDialog || bAssetMessage || Transition.PendingRoot ||
+	    Transition.bDiscardDialog)
 	{
 		return;
 	}
@@ -107,14 +108,14 @@ void FEditorPlugin::DrawGizmoOverlay()
 		}
 		Parent = ParentView.World;
 	}
-	const auto Bounds = ViewportRegion.Bounds;
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	const auto Pointer = Gui->PointerState();
 	FTransformGizmo Display;
-	Display.Configure(ViewCamera, Bounds, Scene->FindNode(*Selection)->Local(), Parent, GizmoMode,
+	Display.Configure(Viewport.ViewCamera, Bounds, Scene->FindNode(*Selection)->Local(), Parent, GizmoMode,
 	                  Gui->ApplicationScale());
-	const auto Hovered = Gizmo.IsDragging()        ? Gizmo.ActiveHandle()
-	                     : ViewportRegion.bHovered ? Display.HitTest(Pointer.Position)
-	                                               : ETransformGizmoHandle::None;
+	const auto Hovered = Gizmo.IsDragging()                 ? Gizmo.ActiveHandle()
+	                     : Viewport.ViewportRegion.bHovered ? Display.HitTest(Pointer.Position)
+	                                                        : ETransformGizmoHandle::None;
 	// Freeze the drag basis across zero/mirrored scales. Position handles follow the moving pivot.
 	const auto Strokes = Gizmo.IsDragging() && GizmoMode != ETransformGizmoMode::Position ? Gizmo.Geometry(Hovered)
 	                                                                                      : Display.Geometry(Hovered);

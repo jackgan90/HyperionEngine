@@ -51,11 +51,11 @@ void ClipboardKey(std::vector<FInputEvent>& InEvents, EKey InKey, bool bInDown)
 
 bool FEditorPlugin::ExercisePlacementMenu(std::vector<FInputEvent>& InEvents)
 {
-	if (PlacementMenuStep > 8)
+	if (Acceptance.PlacementMenuStep > 8)
 	{
 		return true;
 	}
-	switch (PlacementMenuStep)
+	switch (Acceptance.PlacementMenuStep)
 	{
 		case 0:
 		{
@@ -84,32 +84,32 @@ bool FEditorPlugin::ExercisePlacementMenu(std::vector<FInputEvent>& InEvents)
 			Check(bShowPlacement, "Window > Place Object did not reopen the panel");
 			break;
 	}
-	++PlacementMenuStep;
+	++Acceptance.PlacementMenuStep;
 	return false;
 }
 
 void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 {
-	if (PlacementExerciseStep >= 13)
+	if (Acceptance.PlacementExerciseStep >= 13)
 	{
 		ExercisePlacedClipboard(InEvents);
 		return;
 	}
-	const std::string Type = PlacementTypes.at(PlacementExerciseType);
+	const std::string Type = PlacementTypes.at(Acceptance.PlacementExerciseType);
 	const auto Source = InspectionBounds.at("placement/" + Type);
-	const auto Bounds = ViewportRegion.Bounds;
-	const FVec2 Target{Bounds.X + (Bounds.Z - Bounds.X) * (.2f + .18f * (PlacementExerciseType % 4)),
-	                   Bounds.Y + (Bounds.W - Bounds.Y) * (.5f + .2f * (PlacementExerciseType / 4))};
-	switch (PlacementExerciseStep)
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
+	const FVec2 Target{Bounds.X + (Bounds.Z - Bounds.X) * (.2f + .18f * (Acceptance.PlacementExerciseType % 4)),
+	                   Bounds.Y + (Bounds.W - Bounds.Y) * (.5f + .2f * (Acceptance.PlacementExerciseType / 4))};
+	switch (Acceptance.PlacementExerciseStep)
 	{
 		case 0:
 		{
 			auto Candidate = Rendering;
-			Candidate.bReversedZ = PlacementExerciseType % 2 != 0;
+			Candidate.bReversedZ = Acceptance.PlacementExerciseType % 2 != 0;
 			SetRenderSettings(RenderSettingsRevision, Candidate);
-			PlacementExerciseBaseNodes = Scene->GetNodes().size();
-			PlacementExerciseBaseHistory = HistoryCursor;
-			PlacementExerciseBaseState = DocumentState;
+			Acceptance.PlacementExerciseBaseNodes = Scene->GetNodes().size();
+			Acceptance.PlacementExerciseBaseHistory = HistoryCursor;
+			Acceptance.PlacementExerciseBaseState = DocumentState;
 			Move(InEvents, Center(Source));
 			break;
 		}
@@ -125,16 +125,17 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 			break;
 		case 6:
 			Check(Placement.GetPreview().has_value(), Type + " has no world preview: " + PlacementStatus);
-			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes &&
-			          HistoryCursor == PlacementExerciseBaseHistory && DocumentState == PlacementExerciseBaseState,
+			Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes &&
+			          HistoryCursor == Acceptance.PlacementExerciseBaseHistory &&
+			          DocumentState == Acceptance.PlacementExerciseBaseState,
 			      "preview modified document");
-			PlacementExercisePosition = Placement.GetPreview()->Position;
-			PlacementCapture = Options.ExercisePlacement.parent_path() / (Type + "Preview.png");
+			Acceptance.PlacementExercisePosition = Placement.GetPreview()->Position;
+			Acceptance.PlacementCapture = Options.ExercisePlacement.parent_path() / (Type + "Preview.png");
 			Move(InEvents, {Target.X + 25, Target.Y + 12});
 			break;
 		case 8:
 			Check(Placement.GetPreview() &&
-			          Length(Subtract(Placement.GetPreview()->Position, PlacementExercisePosition)) > .01f,
+			          Length(Subtract(Placement.GetPreview()->Position, Acceptance.PlacementExercisePosition)) > .01f,
 			      Type + " preview did not follow pointer");
 			Check(!PlacementRegistry.Find(Type)->Model || FreezePlacementPreview()->Items.size() == 1,
 			      "missing mesh preview packet");
@@ -144,10 +145,10 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 			break;
 		case 12:
 			Check(!Placement.IsActive() && bool(Selection), Type + " did not finish its drop");
-			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1 &&
-			          HistoryCursor == PlacementExerciseBaseHistory + 1,
+			Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes + 1 &&
+			          HistoryCursor == Acceptance.PlacementExerciseBaseHistory + 1,
 			      Type + " did not create exactly one transaction: " + Error);
-			PlacementExerciseIds.push_back(Scene->FindNode(*Selection)->Id);
+			Acceptance.PlacementExerciseIds.push_back(Scene->FindNode(*Selection)->Id);
 			if (Type == "DirectionalLight")
 			{
 				Check(Scene->GetLightingSelection().Directional.Handle == Selection.Primary(),
@@ -164,20 +165,20 @@ void FEditorPlugin::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 			}
 			break;
 	}
-	++PlacementExerciseStep;
+	++Acceptance.PlacementExerciseStep;
 }
 
 void FEditorPlugin::ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents)
 {
-	const auto Original = Scene->FindHandle(PlacementExerciseIds.back());
-	switch (PlacementExerciseStep)
+	const auto Original = Scene->FindHandle(Acceptance.PlacementExerciseIds.back());
+	switch (Acceptance.PlacementExerciseStep)
 	{
 		case 13:
 			// No extra click or FocusWindow: reproduce typing immediately after a real panel-to-viewport drop.
 			ClipboardKey(InEvents, EKey::C, true);
 			break;
 		case 14:
-			Check(Gui->IsWindowFocused("Viewport") && HistoryCursor == PlacementExerciseBaseHistory + 1,
+			Check(Gui->IsWindowFocused("Viewport") && HistoryCursor == Acceptance.PlacementExerciseBaseHistory + 1,
 			      "placed object did not retain scene shortcut focus or copy changed history: " + Error);
 			ClipboardKey(InEvents, EKey::C, false);
 			break;
@@ -189,8 +190,9 @@ void FEditorPlugin::ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents)
 			break;
 		case 17:
 		{
-			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 2 &&
-			          HistoryCursor == PlacementExerciseBaseHistory + 2 && Selection && *Selection != Original,
+			Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes + 2 &&
+			          HistoryCursor == Acceptance.PlacementExerciseBaseHistory + 2 && Selection &&
+			          *Selection != Original,
 			      "Ctrl+V after placement did not create a separate selected object: " + Error);
 			const auto* Source = Scene->FindNode(Original);
 			auto Copy = *Scene->FindNode(*Selection);
@@ -214,37 +216,37 @@ void FEditorPlugin::ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents)
 				Check(Scene->GetLightingSelection().Environment.bTied, "copied sky priority tie was not reported");
 			}
 			Undo();
-			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1 && Selection == Original,
+			Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes + 1 && Selection == Original,
 			      "placed copy undo failed to restore selection");
 			Undo();
-			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes, "creation undo failed");
+			Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes, "creation undo failed");
 			Check(!bSkyLight || !Scene->GetLightingSelection().Environment.Handle,
 			      "creation undo kept the active sky light");
 			Redo();
-			Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1, "creation redo failed");
+			Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes + 1, "creation redo failed");
 			Check(!bSkyLight || Scene->GetLightingSelection().Environment.Handle ==
-			                        Scene->FindHandle(PlacementExerciseIds.back()),
+			                        Scene->FindHandle(Acceptance.PlacementExerciseIds.back()),
 			      "creation redo did not restore the active sky light");
-			PlacementExerciseStep = 0;
-			++PlacementExerciseType;
+			Acceptance.PlacementExerciseStep = 0;
+			++Acceptance.PlacementExerciseType;
 			return;
 		}
 	}
-	++PlacementExerciseStep;
+	++Acceptance.PlacementExerciseStep;
 }
 
 void FEditorPlugin::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 {
 	const auto Source = InspectionBounds.at("placement/Cube");
-	switch (PlacementExerciseStep)
+	switch (Acceptance.PlacementExerciseStep)
 	{
 		case 0:
-			if (PlacementCancelCase == 0)
+			if (Acceptance.PlacementCancelCase == 0)
 			{
 				Undo();
-				PlacementExerciseBaseNodes = Scene->GetNodes().size();
-				PlacementExerciseBaseHistory = HistoryCursor;
-				PlacementExerciseBaseState = DocumentState;
+				Acceptance.PlacementExerciseBaseNodes = Scene->GetNodes().size();
+				Acceptance.PlacementExerciseBaseHistory = HistoryCursor;
+				Acceptance.PlacementExerciseBaseState = DocumentState;
 			}
 			Move(InEvents, Center(Source));
 			break;
@@ -255,36 +257,36 @@ void FEditorPlugin::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 			Move(InEvents, {Center(Source).X + 15, Center(Source).Y});
 			break;
 		case 3:
-			Move(InEvents, Center(ViewportRegion.Bounds));
+			Move(InEvents, Center(Viewport.ViewportRegion.Bounds));
 			break;
 		case 6:
 		{
 			Check(Placement.GetPreview().has_value(), "cancellation setup has no preview");
 			FInputEvent Event;
-			Event.Type = PlacementCancelCase == 1 ? EEventType::Focus : EEventType::Key;
+			Event.Type = Acceptance.PlacementCancelCase == 1 ? EEventType::Focus : EEventType::Key;
 			Event.Key = EKey::Escape;
-			Event.bDown = PlacementCancelCase != 1;
-			if (PlacementCancelCase <= 1)
+			Event.bDown = Acceptance.PlacementCancelCase != 1;
+			if (Acceptance.PlacementCancelCase <= 1)
 			{
 				InEvents.push_back(Event);
 			}
-			else if (PlacementCancelCase == 2)
+			else if (Acceptance.PlacementCancelCase == 2)
 			{
 				Move(InEvents, Center(Source));
 			}
-			else if (PlacementCancelCase == 3)
+			else if (Acceptance.PlacementCancelCase == 3)
 			{
 				bOpenDialog = true;
 			}
-			else if (PlacementCancelCase == 4)
+			else if (Acceptance.PlacementCancelCase == 4)
 			{
 				bShowViewport = false;
 			}
-			else if (PlacementCancelCase == 5)
+			else if (Acceptance.PlacementCancelCase == 5)
 			{
 				Window->Resize({1440, 900});
 			}
-			else if (PlacementCancelCase == 6)
+			else if (Acceptance.PlacementCancelCase == 6)
 			{
 				Gui->SetApplicationScale(1.5f);
 			}
@@ -299,9 +301,9 @@ void FEditorPlugin::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 			break;
 		case 9:
 		{
-			Check(!Placement.IsActive() && Scene->GetNodes().size() == PlacementExerciseBaseNodes &&
-			          DocumentState == PlacementExerciseBaseState && HistoryCursor == PlacementExerciseBaseHistory &&
-			          History.size() == HistoryCursor + 2,
+			Check(!Placement.IsActive() && Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes &&
+			          DocumentState == Acceptance.PlacementExerciseBaseState &&
+			          HistoryCursor == Acceptance.PlacementExerciseBaseHistory && History.size() == HistoryCursor + 2,
 			      "cancel changed document or redo branch");
 			FInputEvent Event;
 			Event.Type = EEventType::Key;
@@ -315,20 +317,22 @@ void FEditorPlugin::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 			break;
 		}
 		case 14:
-			++PlacementCancelCase;
-			PlacementExerciseStep = 0;
+			++Acceptance.PlacementCancelCase;
+			Acceptance.PlacementExerciseStep = 0;
 			return;
 	}
-	++PlacementExerciseStep;
+	++Acceptance.PlacementExerciseStep;
 }
 
 void FEditorPlugin::ExercisePlacementHistory()
 {
 	// Marker checks already restored the last creation; its copied object remains on the redo branch.
 	Redo();
-	Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 2, "paste redo did not survive cancelled gestures");
+	Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes + 2,
+	      "paste redo did not survive cancelled gestures");
 	Undo();
-	Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes + 1, "paste undo after cancelled gestures failed");
+	Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes + 1,
+	      "paste undo after cancelled gestures failed");
 	CommitPlacement(*PlacementRegistry.Find("DirectionalLight"), {3, 1, 0});
 	const auto Additional = *Selection;
 	const auto Previous = Scene->GetLightingSelection().Directional.Handle;
@@ -340,10 +344,10 @@ void FEditorPlugin::ExercisePlacementHistory()
 	Redo();
 	Check(Scene->GetLightingSelection().Directional.Handle == Additional, "directional priority redo failed");
 	ExercisePlacedSkyActivation();
-	const auto Point = Scene->FindHandle(PlacementExerciseIds.at(6));
+	const auto Point = Scene->FindHandle(Acceptance.PlacementExerciseIds.at(6));
 	FSceneNodeView View;
 	Check(Scene->GetNodeView(Point, View), "placed point light disappeared");
-	const auto Screen = ProjectViewportPoint(ViewCamera, ViewportRegion.Bounds,
+	const auto Screen = ProjectViewportPoint(Viewport.ViewCamera, Viewport.ViewportRegion.Bounds,
 	                                         {View.World.Values[12], View.World.Values[13], View.World.Values[14]});
 	Check(Screen && PickLightMarker({Screen->X, Screen->Y}) == Point, "light marker hit test failed");
 	bShowLightMarkers = false;
@@ -352,7 +356,7 @@ void FEditorPlugin::ExercisePlacementHistory()
 	Scene->SetEnabled(Point, false);
 	Check(!PickLightMarker({Screen->X, Screen->Y}), "disabled light remained pickable");
 	Scene->SetEnabled(Point, true);
-	PlacementExerciseBaseNodes = Scene->GetNodes().size();
+	Acceptance.PlacementExerciseBaseNodes = Scene->GetNodes().size();
 }
 
 void FEditorPlugin::ExercisePlacedSkyActivation()
@@ -384,8 +388,8 @@ void FEditorPlugin::ExercisePlacementInput(std::vector<FInputEvent>& InEvents)
 	{
 		Check(Scene->GetError(Handle).empty(), Scene->GetError(Handle));
 	}
-	if (FrameCount < 12 || (!bViewportVisible && PlacementExerciseStep == 0) || !Scene->GetStatus().bReady ||
-	    PlacementModels.size() != 5)
+	if (FrameCount < 12 || (!Viewport.bViewportVisible && Acceptance.PlacementExerciseStep == 0) ||
+	    !Scene->GetStatus().bReady || PlacementModels.size() != 5)
 	{
 		return;
 	}
@@ -407,17 +411,17 @@ void FEditorPlugin::ExercisePlacementInput(std::vector<FInputEvent>& InEvents)
 	{
 		return;
 	}
-	if (PlacementExerciseType < PlacementTypes.size())
+	if (Acceptance.PlacementExerciseType < PlacementTypes.size())
 	{
 		ExercisePlacementDrag(InEvents);
 		return;
 	}
-	if (PlacementCancelCase < 8)
+	if (Acceptance.PlacementCancelCase < 8)
 	{
 		ExercisePlacementCancel(InEvents);
 		return;
 	}
-	if (PlacementMarkerCase < 3)
+	if (Acceptance.PlacementMarkerCase < 3)
 	{
 		ExercisePlacementMarkers(InEvents);
 		return;
@@ -427,56 +431,57 @@ void FEditorPlugin::ExercisePlacementInput(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExercisePlacementDocument(std::vector<FInputEvent>& InEvents)
 {
-	if (PlacementExerciseStep == 0)
+	if (Acceptance.PlacementExerciseStep == 0)
 	{
 		ExercisePlacementHistory();
 		Scene->Tick();
-		PlacementExerciseBaseHistory = HistoryCursor;
+		Acceptance.PlacementExerciseBaseHistory = HistoryCursor;
 		SelectObject(std::nullopt);
-		++PlacementExerciseStep;
+		++Acceptance.PlacementExerciseStep;
 	}
-	else if (PlacementExerciseStep == 1)
+	else if (Acceptance.PlacementExerciseStep == 1)
 	{
 		FSceneNodeView View;
-		Check(Scene->GetNodeView(Scene->FindHandle(PlacementExerciseIds.at(6)), View), "point light unavailable");
-		const auto Screen = ProjectViewportPoint(ViewCamera, ViewportRegion.Bounds,
+		Check(Scene->GetNodeView(Scene->FindHandle(Acceptance.PlacementExerciseIds.at(6)), View),
+		      "point light unavailable");
+		const auto Screen = ProjectViewportPoint(Viewport.ViewCamera, Viewport.ViewportRegion.Bounds,
 		                                         {View.World.Values[12], View.World.Values[13], View.World.Values[14]});
 		Check(Screen.has_value(), "point light is outside viewport");
 		Move(InEvents, {Screen->X, Screen->Y});
-		++PlacementExerciseStep;
+		++Acceptance.PlacementExerciseStep;
 	}
-	else if (PlacementExerciseStep == 2 || PlacementExerciseStep == 3)
+	else if (Acceptance.PlacementExerciseStep == 2 || Acceptance.PlacementExerciseStep == 3)
 	{
-		Button(InEvents, PlacementExerciseStep == 2);
-		++PlacementExerciseStep;
+		Button(InEvents, Acceptance.PlacementExerciseStep == 2);
+		++Acceptance.PlacementExerciseStep;
 	}
-	else if (PlacementExerciseStep == 4)
+	else if (Acceptance.PlacementExerciseStep == 4)
 	{
-		Check(Selection == Scene->FindHandle(PlacementExerciseIds.at(6)) &&
-		          HistoryCursor == PlacementExerciseBaseHistory,
+		Check(Selection == Scene->FindHandle(Acceptance.PlacementExerciseIds.at(6)) &&
+		          HistoryCursor == Acceptance.PlacementExerciseBaseHistory,
 		      "clicking light marker did not select it without editing history");
 		SaveScene(Options.ExercisePlacement.generic_string());
-		++PlacementExerciseStep;
+		++Acceptance.PlacementExerciseStep;
 	}
-	else if (PlacementExerciseStep == 5 && !PendingSave)
+	else if (Acceptance.PlacementExerciseStep == 5 && !PendingSave)
 	{
 		Check(!IsDirty(), "save did not complete");
 		OpenScene(Options.ExercisePlacement.generic_string());
-		++PlacementExerciseStep;
+		++Acceptance.PlacementExerciseStep;
 	}
-	else if (PlacementExerciseStep == 6)
+	else if (Acceptance.PlacementExerciseStep == 6)
 	{
-		Check(Scene->GetNodes().size() == PlacementExerciseBaseNodes, "saved placed objects did not reload");
-		for (const auto& Id : PlacementExerciseIds)
+		Check(Scene->GetNodes().size() == Acceptance.PlacementExerciseBaseNodes, "saved placed objects did not reload");
+		for (const auto& Id : Acceptance.PlacementExerciseIds)
 		{
 			Check(Scene->FindHandle(Id).Scene != 0, "placed object missing after reload: " + Id);
 		}
 		Check(Scene->GetLightingSelection().Directional.Handle.has_value(), "main light selection did not persist");
 		const auto Sky = Scene->GetLightingSelection().Environment.Handle;
 		Check(Sky && Scene->FindNode(*Sky) && Scene->FindNode(*Sky)->EnvironmentLight() &&
-		          *Sky != Scene->FindHandle(PlacementExerciseIds.at(8)),
+		          *Sky != Scene->FindHandle(Acceptance.PlacementExerciseIds.at(8)),
 		      "sky priority did not persist");
-		bPlacementVerified = true;
+		Acceptance.bPlacementVerified = true;
 	}
 }
 } // namespace Hyperion

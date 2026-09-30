@@ -4,6 +4,8 @@ namespace Hyperion
 {
 namespace
 {
+constexpr std::size_t MaxMcpPendingRequests = 32;
+
 class FRpcError : public std::runtime_error
 {
 public:
@@ -109,7 +111,7 @@ FEndpointRequest FMcpConnection::BeginTool(const FArchiveNode& InParameters)
 	{
 		throw FRpcError(-32600, "Initialize and send notifications/initialized first");
 	}
-	if (Pending.size() >= 32)
+	if (Pending.size() >= MaxMcpPendingRequests)
 	{
 		throw FRpcError(-32000, "Too many pending requests");
 	}

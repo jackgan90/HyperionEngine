@@ -16,7 +16,7 @@ void FEditorPlugin::BenchmarkCamera()
 	{
 		const auto Events = BenchmarkCameraInput(ReadyFrames - Options.BenchmarkWarmup, Options.BenchmarkCameraStep);
 		FSceneCameraController BenchmarkNavigation(ESceneCameraNavigationMode::Orbit);
-		BenchmarkNavigation.Input(ViewCamera, Events, false, false);
+		BenchmarkNavigation.Input(Viewport.ViewCamera, Events, false, false);
 	}
 	if (Options.bBenchmarkLight)
 	{
@@ -64,7 +64,7 @@ void FEditorPlugin::RecordBenchmark()
 		return;
 	}
 	const auto Main = RenderStats.MainView();
-	if (!bViewportVisible || !Main.VisibleItems || Main.Batches.FailedItems)
+	if (!Viewport.bViewportVisible || !Main.VisibleItems || Main.Batches.FailedItems)
 	{
 		throw std::runtime_error("Editor benchmark requires a visible nonempty successfully rendered scene");
 	}
@@ -76,10 +76,10 @@ void FEditorPlugin::RecordBenchmark()
 	BenchmarkFrame.VisibleItems = Main.VisibleItems;
 	BenchmarkFrame.Batches = Main.Batches;
 	BenchmarkFrame.CpuLatencyMilliseconds = BenchmarkFrame.Milliseconds;
-	BenchmarkFrame.Viewport = ViewportSize;
+	BenchmarkFrame.Viewport = Viewport.ViewportSize;
 	const auto Logical = Window->LogicalSize();
 	const auto Pixels = Window->PixelSize();
-	const auto Bounds = ViewportRegion.Bounds;
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	BenchmarkFrame.CaptureViewport = {
 	    Bounds.X * Pixels.Width / Logical.Width, Bounds.Y * Pixels.Height / Logical.Height,
 	    (Bounds.Z - Bounds.X) * Pixels.Width / Logical.Width, (Bounds.W - Bounds.Y) * Pixels.Height / Logical.Height};
@@ -130,5 +130,43 @@ void FEditorPlugin::SaveBenchmark()
 	MatchBenchmarkTimings(BenchmarkSamples, std::move(Capture));
 	WriteRenderBenchmark(Options.Benchmark, BenchmarkSamples);
 	Log(ELogLevel::Info, "Editor benchmark: " + std::to_string(BenchmarkSamples.size()) + " ready frames; vsync=off");
+}
+
+void FEditorPlugin::BeginBenchmarkTiming()
+{
+	if (!Options.Benchmark.empty() && !bBenchmarkTiming && ReadyFrames >= Options.BenchmarkWarmup &&
+	    Scene->GetStatus().bReady)
+	{
+		Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
+		                          [&]
+		                          {
+			                          Device->BeginGpuTimingCapture(Options.BenchmarkSamples + 4);
+		                          }));
+		bBenchmarkTiming = true;
+	}
+}
+
+void FEditorPlugin::FinishFrameTiming(std::uint64_t InStarted, bool bInSceneReady)
+{
+	if (!Options.Benchmark.empty())
+	{
+		BenchmarkFrame.Milliseconds = double(ClockNanoseconds() - InStarted) / 1e6;
+		RecordBenchmark();
+	}
+	ProfileFrame();
+	++FrameCount;
+	if (Scene->GetStatus().bReady && !CurrentPath.empty())
+	{
+		// Admit a benchmark frame only if it began ready, matching timing capture and profiling.
+		if (Options.Benchmark.empty() || bInSceneReady)
+		{
+			++ReadyFrames;
+		}
+		if (!bReadyLogged)
+		{
+			Log(ELogLevel::Info, "Editor scene ready: " + CurrentPath);
+			bReadyLogged = true;
+		}
+	}
 }
 } // namespace Hyperion

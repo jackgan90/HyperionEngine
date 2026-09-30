@@ -53,19 +53,19 @@ void AssetShortcut(std::vector<FInputEvent>& InEvents, EKey InKey)
 
 void FEditorPlugin::ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvents)
 {
-	if (AssetExerciseLoggedStep != static_cast<int>(ExerciseStep))
+	if (Acceptance.AssetExerciseLoggedStep != static_cast<int>(Acceptance.ExerciseStep))
 	{
-		AssetExerciseLoggedStep = static_cast<int>(ExerciseStep);
-		Log(ELogLevel::Info, "Asset property acceptance step " + std::to_string(ExerciseStep));
+		Acceptance.AssetExerciseLoggedStep = static_cast<int>(Acceptance.ExerciseStep);
+		Log(ELogLevel::Info, "Asset property acceptance step " + std::to_string(Acceptance.ExerciseStep));
 	}
-	if (ExerciseStep >= 161)
+	if (Acceptance.ExerciseStep >= 161)
 	{
 		ExerciseAssetWorkspaceInput(InEvents);
 		return;
 	}
-	if (ExerciseStep >= 130)
+	if (Acceptance.ExerciseStep >= 130)
 	{
-		if (ExerciseStep >= 150)
+		if (Acceptance.ExerciseStep >= 150)
 		{
 			ExerciseCustomMaterialInput(InEvents);
 			return;
@@ -73,26 +73,26 @@ void FEditorPlugin::ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvent
 		ExerciseAssetTextureInput(InEvents);
 		return;
 	}
-	if (ExerciseStep >= 111)
+	if (Acceptance.ExerciseStep >= 111)
 	{
 		ExerciseAssetReferences(InEvents);
 		return;
 	}
 	const auto* Document = AssetWorkspace->ActiveDocument();
 	const auto& Model = Scene->FindNode(Scene->FindHandle("model"))->Model();
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 100:
 			AssetWorkspace->Open("/Game/Material.hasset");
-			AssetExerciseModel = Model->Data;
-			AssetExerciseRoughness = Roughness(*Model->Data->Materials.front()->Asset);
-			++ExerciseStep;
+			Acceptance.AssetExerciseModel = Model->Data;
+			Acceptance.AssetExerciseRoughness = Roughness(*Model->Data->Materials.front()->Asset);
+			++Acceptance.ExerciseStep;
 			break;
 		case 101:
 			if (Document && Document->Loaded().Path == "/Game/Material.hasset" && AssetWorkspace->IsPreviewReady())
 			{
 				AssetWorkspace->RevealProperty("value/Pbr.RoughnessFactor/0");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 102:
@@ -100,12 +100,12 @@ void FEditorPlugin::ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvent
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("value/Pbr.RoughnessFactor/0"));
 			break;
 		case 103:
-			++ExerciseWait;
-			if (ExerciseWait == 1)
+			++Acceptance.ExerciseWait;
+			if (Acceptance.ExerciseWait == 1)
 			{
 				AssetKey(InEvents, EKey::A, true, 1);
 			}
-			if (ExerciseWait == 2)
+			if (Acceptance.ExerciseWait == 2)
 			{
 				AssetKey(InEvents, EKey::A, false);
 				FInputEvent Text;
@@ -113,49 +113,50 @@ void FEditorPlugin::ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvent
 				Text.Text = "0.31";
 				InEvents.push_back(Text);
 			}
-			if (ExerciseWait == 4)
+			if (Acceptance.ExerciseWait == 4)
 			{
 				AssetKey(InEvents, EKey::Enter, true);
 			}
-			if (ExerciseWait == 5)
+			if (Acceptance.ExerciseWait == 5)
 			{
 				AssetKey(InEvents, EKey::Enter, false);
-				ExerciseWait = 0;
-				++ExerciseStep;
+				Acceptance.ExerciseWait = 0;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 104:
 			RequireAsset(Roughness(ReadValue<FMaterialAsset>(Document->Snapshot())) == .31f,
 			             "Material numeric input failed");
-			RequireAsset(Roughness(*Model->Data->Materials.front()->Asset) == AssetExerciseRoughness,
+			RequireAsset(Roughness(*Model->Data->Materials.front()->Asset) == Acceptance.AssetExerciseRoughness,
 			             "Draft leaked into scene");
 			Gui->FinishEditing();
 			AssetShortcut(InEvents, EKey::Z);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 105:
-			RequireAsset(Roughness(ReadValue<FMaterialAsset>(Document->Snapshot())) == AssetExerciseRoughness,
+			RequireAsset(Roughness(ReadValue<FMaterialAsset>(Document->Snapshot())) ==
+			                 Acceptance.AssetExerciseRoughness,
 			             "Material numeric Undo failed");
 			AssetShortcut(InEvents, EKey::Y);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 106:
 			RequireAsset(Roughness(ReadValue<FMaterialAsset>(Document->Snapshot())) == .31f,
 			             "Material numeric Redo failed");
 			AssetShortcut(InEvents, EKey::S);
-			ExerciseStep = 110;
+			Acceptance.ExerciseStep = 110;
 			break;
 		case 110:
 			if (!Document->IsSaving() && !Document->IsDirty() &&
 			    Roughness(*Model->Data->Materials.front()->Asset) == .31f)
 			{
-				RequireAsset(Model->Data->Asset == AssetExerciseModel->Asset &&
-				                 Model->Data->QueryGeometry == AssetExerciseModel->QueryGeometry,
+				RequireAsset(Model->Data->Asset == Acceptance.AssetExerciseModel->Asset &&
+				                 Model->Data->QueryGeometry == Acceptance.AssetExerciseModel->QueryGeometry,
 				             "Material refresh rebuilt geometry");
 				RequireAsset(Model->Material.Roughness == .73f && Model->Surface.Reference &&
 				                 !Model->Surface.Overrides.empty(),
 				             "Material refresh discarded scene overrides");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 	}
@@ -166,18 +167,18 @@ void FEditorPlugin::ExerciseAssetReferences(std::vector<FInputEvent>& InEvents)
 	const auto* Document = AssetWorkspace->ActiveDocument();
 	const auto& Model = Scene->FindNode(Scene->FindHandle("model"))->Model();
 	const std::string ReferenceControl = "Texture##BaseColorTexture";
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 111:
 			AssetWorkspace->RevealProperty(ReferenceControl);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 112:
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds(ReferenceControl));
 			break;
 		case 113:
 			AssetWorkspace->RevealProperty("choice/" + ReferenceControl + "/Game/SecondTexture.hasset");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 114:
 			ExerciseClick(InEvents,
@@ -191,7 +192,7 @@ void FEditorPlugin::ExerciseAssetReferences(std::vector<FInputEvent>& InEvents)
 				                 "/Game/SecondTexture.hasset",
 				             "Draft reference leaked into scene");
 				AssetShortcut(InEvents, EKey::S);
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 116:
@@ -200,19 +201,19 @@ void FEditorPlugin::ExerciseAssetReferences(std::vector<FInputEvent>& InEvents)
 			        "/Game/SecondTexture.hasset")
 			{
 				AssetWorkspace->Open("/Game/Model.hasset");
-				ExerciseStep = 120;
+				Acceptance.ExerciseStep = 120;
 			}
 			break;
 		case 120:
 			if (Document && Document->Loaded().Path == "/Game/Model.hasset" &&
-			    (AssetPreviewExercise.Step != 0 || AssetWorkspace->IsPreviewReady()))
+			    (Acceptance.AssetPreviewExercise.Step != 0 || AssetWorkspace->IsPreviewReady()))
 			{
 				if (!ExerciseAssetPreviewInput(InEvents))
 				{
 					break;
 				}
 				AssetWorkspace->RevealProperty("Slot 0");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 121:
@@ -220,7 +221,7 @@ void FEditorPlugin::ExerciseAssetReferences(std::vector<FInputEvent>& InEvents)
 			break;
 		case 122:
 			AssetWorkspace->RevealProperty("choice/Slot 0/Game/CustomMaterial.hasset");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 123:
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("choice/Slot 0/Game/CustomMaterial.hasset"));
@@ -230,7 +231,7 @@ void FEditorPlugin::ExerciseAssetReferences(std::vector<FInputEvent>& InEvents)
 			    "/Game/CustomMaterial.hasset")
 			{
 				AssetShortcut(InEvents, EKey::S);
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 125:
@@ -238,7 +239,7 @@ void FEditorPlugin::ExerciseAssetReferences(std::vector<FInputEvent>& InEvents)
 			    Model->Data->Materials.front()->Asset->Name == "Edited CustomMaterial")
 			{
 				AssetWorkspace->Open("/Game/Texture.hasset");
-				ExerciseStep = 130;
+				Acceptance.ExerciseStep = 130;
 			}
 			break;
 	}
@@ -247,13 +248,13 @@ void FEditorPlugin::ExerciseAssetReferences(std::vector<FInputEvent>& InEvents)
 void FEditorPlugin::ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents)
 {
 	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 130:
 			if (Document && Document->Loaded().Path == "/Game/Texture.hasset" && AssetWorkspace->IsPreviewReady())
 			{
 				AssetWorkspace->RevealProperty("encoding");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 131:
@@ -265,9 +266,9 @@ void FEditorPlugin::ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents
 		case 133:
 			if (ReadValue<EMaterialTextureEncoding>(Document->Get("encoding")) == EMaterialTextureEncoding::Srgb)
 			{
-				RequireAsset(bPendingAssetEditChecked, "Pending encoding protection was not exercised");
+				RequireAsset(Acceptance.bPendingAssetEditChecked, "Pending encoding protection was not exercised");
 				AssetShortcut(InEvents, EKey::S);
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 134:
@@ -278,22 +279,22 @@ void FEditorPlugin::ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents
 				                 Saved->Mips.front() == Document->Loaded().As<FTextureAsset>()->Mips.front(),
 				             "Encoding save changed mip zero");
 				AssetWorkspace->Open("/Game/Radiance.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 135:
 			if (Document && Document->Loaded().Path == "/Game/Radiance.hasset" && AssetWorkspace->IsPreviewReady())
 			{
-				PlacementCapture = Options.ExerciseAssets.parent_path() / "AssetEditor-Cube.png";
+				Acceptance.PlacementCapture = Options.ExerciseAssets.parent_path() / "AssetEditor-Cube.png";
 				AssetWorkspace->Open("/Game/Model.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 136:
 			if (Document && Document->Loaded().Path == "/Game/Model.hasset" && AssetWorkspace->IsPreviewReady())
 			{
 				AssetShortcut(InEvents, EKey::Z);
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 137:
@@ -308,9 +309,9 @@ void FEditorPlugin::ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents
 			Pointer.Y = (Bounds.Y + Bounds.W) * .5f;
 			InEvents.push_back(Pointer);
 			// Settle scrolling and hover before pressing the overlapping tab close control.
-			if (ExerciseWait < 30)
+			if (Acceptance.ExerciseWait < 30)
 			{
-				++ExerciseWait;
+				++Acceptance.ExerciseWait;
 				break;
 			}
 			ExerciseClick(InEvents, Bounds);
@@ -321,25 +322,25 @@ void FEditorPlugin::ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents
 			break;
 		case 139:
 			RequireAsset(Document && Document->IsDirty(), "Cancel asset close discarded draft");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 141:
-			if (ExerciseWait == 60)
+			if (Acceptance.ExerciseWait == 60)
 			{
-				PlacementCapture = Options.ExerciseAssets.parent_path() / "AssetEditor-CloseRequest.png";
+				Acceptance.PlacementCapture = Options.ExerciseAssets.parent_path() / "AssetEditor-CloseRequest.png";
 			}
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("close/save"));
 			break;
 		case 142:
-			if (++ExerciseWait == 60)
+			if (++Acceptance.ExerciseWait == 60)
 			{
-				PlacementCapture = Options.ExerciseAssets.parent_path() / "AssetEditor-Close.png";
+				Acceptance.PlacementCapture = Options.ExerciseAssets.parent_path() / "AssetEditor-Close.png";
 				Log(ELogLevel::Info, "Waiting for close: " + AssetWorkspace->ActiveStatus());
 			}
 			if (!Document || Document->Loaded().Path != "/Game/Model.hasset")
 			{
-				ExerciseWait = 0;
-				ExerciseStep = 150;
+				Acceptance.ExerciseWait = 0;
+				Acceptance.ExerciseStep = 150;
 			}
 			break;
 	}
@@ -347,24 +348,24 @@ void FEditorPlugin::ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents
 
 void FEditorPlugin::ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEvents)
 {
-	if (ExerciseStep >= 156)
+	if (Acceptance.ExerciseStep >= 156)
 	{
 		ExerciseCustomMaterialReset(InEvents);
 		return;
 	}
 	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 150:
 			AssetWorkspace->Open("/Game/CustomMaterial.hasset");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 151:
 			if (Document && Document->Loaded().Path == "/Game/CustomMaterial.hasset" &&
 			    AssetWorkspace->IsPreviewReady())
 			{
 				AssetWorkspace->RevealProperty("value/Tint/3");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 152:
@@ -372,12 +373,12 @@ void FEditorPlugin::ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEven
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("value/Tint/3"));
 			break;
 		case 153:
-			++ExerciseWait;
-			if (ExerciseWait == 1)
+			++Acceptance.ExerciseWait;
+			if (Acceptance.ExerciseWait == 1)
 			{
 				AssetKey(InEvents, EKey::A, true, 1);
 			}
-			if (ExerciseWait == 2)
+			if (Acceptance.ExerciseWait == 2)
 			{
 				AssetKey(InEvents, EKey::A, false);
 				FInputEvent Text;
@@ -385,15 +386,15 @@ void FEditorPlugin::ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEven
 				Text.Text = "0.37";
 				InEvents.push_back(Text);
 			}
-			if (ExerciseWait == 4)
+			if (Acceptance.ExerciseWait == 4)
 			{
 				AssetKey(InEvents, EKey::Enter, true);
 			}
-			if (ExerciseWait == 5)
+			if (Acceptance.ExerciseWait == 5)
 			{
 				AssetKey(InEvents, EKey::Enter, false);
-				ExerciseWait = 0;
-				++ExerciseStep;
+				Acceptance.ExerciseWait = 0;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 154:
@@ -401,7 +402,7 @@ void FEditorPlugin::ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEven
 			                 AssetValue(ReadValue<FMaterialAsset>(Document->Snapshot()), "Tint").Words[3]) == .37f,
 			             "Custom vector parameter edit failed");
 			AssetShortcut(InEvents, EKey::S);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 155:
 			if (!Document->IsSaving() && !Document->IsDirty() && AssetWorkspace->IsPreviewReady())
@@ -410,7 +411,7 @@ void FEditorPlugin::ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEven
 				RequireAsset(std::bit_cast<float>(AssetValue(*Saved, "Tint").Words[3]) == .37f,
 				             "Custom vector parameter save failed");
 				AssetWorkspace->RevealProperty("reset/Tint");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 	}
@@ -425,7 +426,7 @@ void FEditorPlugin::ExerciseCustomMaterialReset(std::vector<FInputEvent>& InEven
 	                                     {
 		                                     return InValue.Name == "Tint";
 	                                     });
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 156:
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("reset/Tint"));
@@ -433,17 +434,17 @@ void FEditorPlugin::ExerciseCustomMaterialReset(std::vector<FInputEvent>& InEven
 		case 157:
 			RequireAsset(!bOverridden && Document->IsDirty(), "Reset did not restore declared default");
 			AssetShortcut(InEvents, EKey::Z);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 158:
 			RequireAsset(bOverridden && !Document->IsDirty(), "Custom reset undo did not restore saved baseline");
 			AssetShortcut(InEvents, EKey::Y);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 159:
 			RequireAsset(!bOverridden && Document->IsDirty(), "Custom reset redo failed");
 			AssetShortcut(InEvents, EKey::S);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 160:
 			if (!Document->IsSaving() && !Document->IsDirty() && AssetWorkspace->IsPreviewReady())
@@ -455,8 +456,8 @@ void FEditorPlugin::ExerciseCustomMaterialReset(std::vector<FInputEvent>& InEven
 					                          return InValue.Name == "Tint";
 				                          }),
 				             "Reset was not persisted");
-				AssetExerciseIndex = 0;
-				ExerciseStep = 161;
+				Acceptance.AssetExerciseIndex = 0;
+				Acceptance.ExerciseStep = 161;
 			}
 			break;
 	}

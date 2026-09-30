@@ -3,6 +3,7 @@
 #include "Hyperion/AssetImport/ImportWorkspace.h"
 #include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Core/ContentHash.h"
+#include "Hyperion/Reflection/Wire.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Support/LogSupport.h"
 #include "Support/TestSupport.h"
@@ -470,6 +471,75 @@ void CheckPanoramaDimensions(FFixture& InFixture)
 	}
 }
 
+void CheckDraftMetadataSchema()
+{
+	const auto Schema = RecordWireSchema(RecordType<FImportDraftInfo>());
+	const auto& Fields =
+	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Schema.Value).at("properties").Value);
+	const auto& Dimension = std::get<FArchiveNode::FObject>(Fields.at("dimension").Value);
+	HYP_CHECK(std::get<FArchiveNode::FArray>(Dimension.at("enum").Value).size() == 2);
+	HYP_CHECK(std::get<FArchiveNode::FArray>(Dimension.at("oneOf").Value).size() == 2);
+	const auto& Bytes = std::get<FArchiveNode::FObject>(Fields.at("pixelBytes").Value);
+	HYP_CHECK(ReadValue<std::string>(Bytes.at("type")) == "string");
+	HYP_CHECK(ReadValue<std::string>(Bytes.at("description")).find("mips and faces") != std::string::npos);
+	HYP_CHECK(Fields.contains("width") && Fields.contains("height") && Fields.contains("details"));
+	auto Texture = std::make_shared<FTextureAsset>();
+	Texture->Name = "Cube";
+	Texture->Dimension = ETextureDimension::Cube;
+	Texture->Mips = {{2, 2, std::vector<std::uint8_t>(96)}, {1, 1, std::vector<std::uint8_t>(24)}};
+	ValidateTextureAsset(*Texture);
+	const FConvertedAsset Root{std::make_shared<FRecordDescriptor>(RecordType<FTextureAsset>()), Texture};
+	FImportDraftInfo Info;
+	DescribeImportRoot(Info, Root, {});
+	HYP_CHECK(Info.Dimension == ETextureDimension::Cube && Info.PixelBytes == 120 && Info.Width == 2 &&
+	          Info.Height == 2);
+	HYP_CHECK(Info.Details == std::vector<std::string>{"Cube | pixel bytes: 120"});
+}
+
+void CheckDraftPagination()
+{
+	auto Model = std::make_shared<FModelAsset>();
+	Model->Name = "Paged";
+	FModelPrimitive Primitive;
+	Primitive.Name = "Triangle";
+	Primitive.Positions = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+	Primitive.Indices = {0, 1, 2};
+	Primitive.Material = 0;
+	Primitive.Id = "triangle";
+	Model->Primitives.push_back(std::move(Primitive));
+	Model->MaterialSlots.push_back(
+	    {.Id = CreateIdentifier(), .Path = "/Game/Material.hasset", .TypeId = "hyperion.materialasset"});
+	const auto Count = 2 * ImportDraftPreviewPageLimit + 5;
+	for (std::uint32_t Index = 0; Index < Count; ++Index)
+	{
+		Model->Nodes.push_back({"Node " + std::to_string(Index), Identity(), {0}, {}, "node-" + std::to_string(Index)});
+		Model->Roots.push_back(Index);
+	}
+	const FConvertedAsset Root{std::make_shared<FRecordDescriptor>(RecordType<FModelAsset>()), Model};
+	std::vector<std::string> Observed;
+	for (std::uint32_t Offset = 0; Offset < Count; Offset += ImportDraftPreviewPageLimit)
+	{
+		FImportDraftInfo Page;
+		DescribeImportRoot(Page, Root, {"", Offset, ImportDraftPreviewPageLimit});
+		HYP_CHECK(Page.TotalNodes == Count);
+		HYP_CHECK(Page.Nodes.size() == std::min(ImportDraftPreviewPageLimit, Count - Offset));
+		for (const auto& Node : Page.Nodes)
+		{
+			Observed.push_back(Node.Id);
+		}
+	}
+	HYP_CHECK(Observed.size() == Count);
+	for (std::uint32_t Index = 0; Index < Count; ++Index)
+	{
+		HYP_CHECK(Observed[Index] == Model->Nodes[Index].Id);
+	}
+	FImportDraftInfo Previous;
+	DescribeImportRoot(Previous, Root, {"", ImportDraftPreviewPageLimit, ImportDraftPreviewPageLimit});
+	HYP_CHECK(Previous.Nodes.front().Id == Observed[ImportDraftPreviewPageLimit]);
+	HYP_CHECK(Previous.Nodes.back().Id == Observed[2 * ImportDraftPreviewPageLimit - 1]);
+	HYP_CHECK(FImportDraftQuery{}.Limit == ImportDraftPreviewPageLimit);
+}
+
 void CheckDraftEditing(FFixture& InFixture)
 {
 	const auto Request = InFixture.Request("Color.png", "Draft.hasset");
@@ -478,6 +548,16 @@ void CheckDraftEditing(FFixture& InFixture)
 	HYP_CHECK(InFixture.Imports->ContentRootState().bBusy);
 	State = WaitDraft(InFixture, State.Draft);
 	HYP_CHECK(State.Status == "ready" && State.Width == 2 && State.Mips == 2);
+	HYP_CHECK(State.Height == 2 && State.Dimension == ETextureDimension::Texture2D && State.PixelBytes == 20);
+	HYP_CHECK(State.Details == std::vector<std::string>{"Texture2D | pixel bytes: 20"});
+	const auto Wire = WriteRecordWire(RecordType<FImportDraftInfo>(), &State);
+	const auto& WireFields = std::get<FArchiveNode::FObject>(Wire.Value);
+	HYP_CHECK(ReadValue<ETextureDimension>(WireFields.at("dimension")) == State.Dimension);
+	HYP_CHECK(ReadValue<std::string>(WireFields.at("pixelBytes")) == std::to_string(State.PixelBytes));
+	const auto Decoded = ReadRecordWire(RecordType<FImportDraftInfo>(), Wire);
+	const auto& RoundTrip = *static_cast<const FImportDraftInfo*>(Decoded.get());
+	HYP_CHECK(RoundTrip.Dimension == State.Dimension && RoundTrip.PixelBytes == State.PixelBytes &&
+	          RoundTrip.Width == State.Width && RoundTrip.Height == State.Height && RoundTrip.Details == State.Details);
 	HYP_CHECK(InFixture.IO->Statistics().Writes.load() == Before);
 	const auto OldGeneration = State.Generation;
 	FImportPropertyEdits Edits;
@@ -628,6 +708,8 @@ int main()
 		CheckSaveDiagnostics(Fixture);
 		CheckContentFailureDiagnostic();
 		CheckPanoramaDimensions(Fixture);
+		CheckDraftMetadataSchema();
+		CheckDraftPagination();
 		CheckDraftEditing(Fixture);
 		CheckDraftFreshness(Fixture);
 		CheckOutputValidation(Fixture);

@@ -4,17 +4,14 @@ namespace Hyperion
 {
 void FEditorPlugin::RouteClipboardShortcuts(std::span<const FInputEvent> InEvents)
 {
-	const bool bSceneFocus =
-	    Gui->IsWindowFocused("Viewport") || Gui->IsWindowFocused("Outliner") || Gui->IsWindowFocused("Details");
-	if (!bSceneFocus || Gui->IsTextInputOwnedThisFrame() || Gui->HasOpenPopup() || ReparentGesture ||
-	    Gizmo.IsDragging() || bCameraDragging || IsDocumentInteractionBusy() || IsAssetWindowBlocked())
+	if (!CaptureShortcutInteraction(InEvents).Allows(EEditorShortcut::Clipboard))
 	{
 		return;
 	}
 	for (const auto& Event : InEvents)
 	{
-		if (Event.Type != EEventType::Key || !Event.bDown || Event.bRepeat || Event.Modifiers != 1 ||
-		    (Event.Key != EKey::C && Event.Key != EKey::V))
+		if (Event.Type != EEventType::Key || !Event.bDown || Event.bRepeat ||
+		    Event.Modifiers != InputModifiers::Control || (Event.Key != EKey::C && Event.Key != EKey::V))
 		{
 			continue;
 		}

@@ -279,14 +279,8 @@ void FAssetWorkspace::DrawTextureProperties(FGui& InGui, FEntry& InEntry)
 	{
 		try
 		{
-			InEntry.EncodingGeneration = InEntry.Document->Generation();
-			InEntry.EncodingEdit = DispatchAsync<FArchiveNode>(
-			    Tasks, {EDomain::Worker},
-			    [Draft = InEntry.Document->Snapshot(), Encoding]
-			    {
-				    return RebuildTextureEncodingDraft(Draft, static_cast<EMaterialTextureEncoding>(Encoding));
-			    },
-			    InEntry.Cancellation);
+			InEntry.EditWorkflow = FAssetEditWorkflow::Encoding(Tasks, InEntry.Document, InEntry.Document->Generation(),
+			                                                    static_cast<EMaterialTextureEncoding>(Encoding));
 		}
 		catch (const std::exception& Failure)
 		{

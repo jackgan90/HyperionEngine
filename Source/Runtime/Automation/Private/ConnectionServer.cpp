@@ -14,7 +14,7 @@ struct FAutomationServer::FImpl
 		bool bClosing{};
 
 		FPeer(std::unique_ptr<ITransportConnection> InConnection, const FOperationCatalog& InCatalog)
-		    : Channel(std::move(InConnection)), Session(InCatalog, {8, 32}), Endpoint(Session)
+		    : Channel(std::move(InConnection)), Session(InCatalog, PeerSessionLimits), Endpoint(Session)
 		{
 		}
 	};
@@ -48,7 +48,7 @@ FAutomationServer::~FAutomationServer() = default;
 
 void FAutomationServer::FImpl::Accept()
 {
-	if (bStopped || Peers.size() >= 32)
+	if (bStopped || Peers.size() >= MaxServerPeers)
 	{
 		return;
 	}
@@ -101,14 +101,14 @@ void FAutomationServer::FImpl::Message(FPeer& InPeer, const std::string& InMessa
 		const auto& Fields = ConnectionFields(Request);
 		CheckConnectionKeys(Fields, {"id", "method", "params"});
 		Id = ReadValue<std::string>(Fields.at("id"));
-		if (Id.empty() || Id.size() > 64)
+		if (Id.empty() || Id.size() > MaxCorrelationIdBytes)
 		{
 			throw FAutomationError("protocol_error", "Invalid request correlation ID");
 		}
 		const auto Method = ReadValue<std::string>(Fields.at("method"));
 		if (!InPeer.bHello)
 		{
-			if (Method != "hello" || InMessage.size() > 8192)
+			if (Method != "hello" || InMessage.size() > MaxHandshakeBytes)
 			{
 				throw FAutomationError("protocol_error", "A bounded hello must precede requests");
 			}
@@ -143,7 +143,7 @@ void FAutomationServer::FImpl::PollPeer(FPeer& InPeer)
 		{
 			InPeer.Channel.Close();
 		}
-		for (unsigned Count = 0; Count < 4 && !InPeer.bClosing && !bStopped; ++Count)
+		for (unsigned Count = 0; Count < MaxRequestsPerPeerPoll && !InPeer.bClosing && !bStopped; ++Count)
 		{
 			const auto Request = InPeer.Channel.Receive();
 			if (!Request)
@@ -193,7 +193,7 @@ void FAutomationServer::StopAdmission()
 	}
 	Impl->bStopped = true;
 	// Flush already queued replies before normal shutdown. A stalled peer must not prevent exit.
-	Impl->DrainDeadline = FConnectionClock::now() + std::chrono::seconds(2);
+	Impl->DrainDeadline = FConnectionClock::now() + ConnectionDrainTimeout;
 	Impl->Listener->Close();
 	for (auto& Peer : Impl->Peers)
 	{

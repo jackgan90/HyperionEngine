@@ -1,5 +1,6 @@
-#include "EditorHistoryState.h"
 #include "EditorInspectionCache.h"
+#include "EditorSelection.h"
+#include "Hyperion/SceneEditing/SceneHistory.h"
 #include "OutlinerSelection.h"
 #include <source_location>
 #include <stdexcept>
@@ -32,7 +33,7 @@ void CheckSelection()
 	Selection.Clear();
 	Check(!Selection && Copy.Contains(A));
 	Selection = Copy;
-	Selection.Remap(FEditorHandleMap{{A, B}, {C, A}});
+	Selection.Remap(FSceneHandleMap{{A, B}, {C, A}});
 	Check(Selection.All() == std::vector<FSceneHandle>({B, A}));
 	Check(Selection.Contains(A) && Selection.Contains(B) && !Selection.Contains(C));
 	Selection = std::nullopt;
@@ -88,7 +89,7 @@ void CheckHistoryRemapping()
 	const FSceneHandle B{1, 1, 1};
 	const FSceneHandle NewA{1, 1, 2};
 	const FSceneHandle NewB{1, 0, 2};
-	std::vector<FEditorHistoryEntry> History(2);
+	std::vector<FSceneHistoryEntry> History(2);
 	for (auto& Entry : History)
 	{
 		Entry.Handle = A;
@@ -100,7 +101,7 @@ void CheckHistoryRemapping()
 		Entry.BeforeSelection.Toggle(A);
 		Entry.BeforeSelection.Toggle(B);
 	}
-	RemapEditorHistory(History, {{A, NewA}, {B, NewB}});
+	RemapSceneHistory(History, {{A, NewA}, {B, NewB}});
 	for (const auto& Entry : History)
 	{
 		Check(Entry.Handle == NewA && Entry.BeforeSettings.DefaultCamera == NewA);
@@ -109,7 +110,7 @@ void CheckHistoryRemapping()
 		Check(Entry.Edits[0].Handle == NewB && Entry.DeletedRoots.front() == NewA);
 		Check(Entry.BeforeSelection.All() == std::vector<FSceneHandle>({NewA, NewB}));
 	}
-	RemapEditorHistory(History, {{NewA, A}, {NewB, B}});
+	RemapSceneHistory(History, {{NewA, A}, {NewB, B}});
 	Check(History.front().BeforeSelection.Primary() == B);
 }
 

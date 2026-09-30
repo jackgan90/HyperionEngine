@@ -48,35 +48,30 @@ bool FEditorPlugin::PollClose()
 	{
 		Window->Raise();
 	}
-	bPendingClose = true;
-	bDiscardDialog = bRequestDiscard = true;
+	Transition.bPendingClose = true;
+	Transition.bDiscardDialog = Transition.bRequestDiscard = true;
 	return false;
 }
 
 void FEditorPlugin::CancelDiscardAction()
 {
-	CloseState = "idle";
-	CloseError.clear();
-	bDiscardDialog = bPendingClose = bSaveThenClose = false;
-	PendingOpen.clear();
-	PendingRoot.reset();
-	bCommitRoot = bSaveThenSwitch = false;
+	Transition.Cancel();
 }
 
 void FEditorPlugin::DrawDiscardDialog()
 {
-	if (bRequestDiscard)
+	if (Transition.bRequestDiscard)
 	{
 		Gui->OpenPopup("Unsaved changes");
-		bRequestDiscard = false;
+		Transition.bRequestDiscard = false;
 	}
-	if (!bDiscardDialog)
+	if (!Transition.bDiscardDialog)
 	{
 		return;
 	}
-	if (!Gui->BeginModal("Unsaved changes", bDiscardDialog))
+	if (!Gui->BeginModal("Unsaved changes", Transition.bDiscardDialog))
 	{
-		if (!bDiscardDialog)
+		if (!Transition.bDiscardDialog)
 		{
 			CancelDiscardAction();
 		}
@@ -94,10 +89,11 @@ void FEditorPlugin::DrawDiscardDialog()
 	{
 		Gui->TextWrapped("Wait for pending texture edits to finish before saving, or discard them explicitly.");
 	}
-	Gui->TextWrapped(PendingSave   ? "Wait for the current save to finish."
-	                 : PendingRoot ? "Save changes to the current asset root before switching, discard them, or cancel."
-	                               : "Open documents have unsaved changes. Save, discard, or cancel to keep editing.");
-	if (bPendingClose)
+	Gui->TextWrapped(PendingSave ? "Wait for the current save to finish."
+	                 : Transition.PendingRoot
+	                     ? "Save changes to the current asset root before switching, discard them, or cancel."
+	                     : "Open documents have unsaved changes. Save, discard, or cancel to keep editing.");
+	if (Transition.bPendingClose)
 	{
 		if (Gui->Button("Save all and exit", !bImportDirty && !PendingSave && !AssetWorkspace->IsSaving() &&
 		                                         !AssetWorkspace->HasPendingEdits()))
@@ -106,65 +102,20 @@ void FEditorPlugin::DrawDiscardDialog()
 		}
 		Gui->SameLine();
 	}
-	if (PendingRoot && Gui->Button("Save and switch", !bImportDirty && !PendingSave && !bSaveThenSwitch &&
-	                                                      !AssetWorkspace->HasPendingEdits()))
+	if (Transition.PendingRoot &&
+	    Gui->Button("Save and switch",
+	                !bImportDirty && !PendingSave && !Transition.bSaveThenSwitch && !AssetWorkspace->HasPendingEdits()))
 	{
-		try
-		{
-			bSaveThenSwitch = true;
-			AssetWorkspace->SaveAll();
-			if (!IsDirty())
-			{
-				bDiscardDialog = false;
-				Gui->ClosePopup();
-			}
-			else if (CurrentPath.empty())
-			{
-				SavePath = "/Game/Scenes/Untitled.hasset";
-				bSaveDialog = bRequestSaveDialog = true;
-				bDiscardDialog = false;
-				Gui->ClosePopup();
-			}
-			else
-			{
-				SaveScene(CurrentPath);
-			}
-		}
-		catch (const std::exception& Failure)
-		{
-			Error = Failure.what();
-			bSaveThenSwitch = false;
-		}
+		SaveBeforeRootSwitch();
 	}
-	if (PendingRoot)
+	if (Transition.PendingRoot)
 	{
 		SaveSwitchBounds = Gui->LastItemBounds();
 		Gui->SameLine();
 	}
 	if (Gui->Button("Discard changes", !PendingSave && !AssetWorkspace->IsSaving()))
 	{
-		if (!PendingRoot && !bPendingClose)
-		{
-			ResetDocument();
-		}
-		bDiscardDialog = false;
-		Gui->ClosePopup();
-		if (bPendingClose)
-		{
-			DiscardBeforeClose();
-		}
-		else if (PendingRoot)
-		{
-			bDiscardRoot = true;
-			bCommitRoot = true;
-		}
-		else if (!PendingOpen.empty())
-		{
-			const auto Path = std::exchange(PendingOpen, {});
-			OpenScene(Path);
-		}
-		bPendingClose = false;
-		bSaveThenClose = false;
+		ConfirmDiscardAction();
 	}
 	DiscardChangesBounds = Gui->LastItemBounds();
 	Gui->SameLine();
@@ -175,6 +126,62 @@ void FEditorPlugin::DrawDiscardDialog()
 	}
 	CancelChangesBounds = Gui->LastItemBounds();
 	Gui->EndModal();
+}
+
+void FEditorPlugin::SaveBeforeRootSwitch()
+{
+	try
+	{
+		Transition.bSaveThenSwitch = true;
+		AssetWorkspace->SaveAll();
+		if (!IsDirty())
+		{
+			Transition.bDiscardDialog = false;
+			Gui->ClosePopup();
+		}
+		else if (CurrentPath.empty())
+		{
+			SavePath = "/Game/Scenes/Untitled.hasset";
+			bSaveDialog = bRequestSaveDialog = true;
+			Transition.bDiscardDialog = false;
+			Gui->ClosePopup();
+		}
+		else
+		{
+			SaveScene(CurrentPath);
+		}
+	}
+	catch (const std::exception& Failure)
+	{
+		Error = Failure.what();
+		Transition.bSaveThenSwitch = false;
+	}
+}
+
+void FEditorPlugin::ConfirmDiscardAction()
+{
+	const auto Action = Transition.DiscardAction();
+	if (Action == EEditorDiscardAction::Document || Action == EEditorDiscardAction::Open)
+	{
+		ResetDocument();
+	}
+	Transition.bDiscardDialog = false;
+	Gui->ClosePopup();
+	switch (Action)
+	{
+		case EEditorDiscardAction::Close:
+			DiscardBeforeClose();
+			break;
+		case EEditorDiscardAction::Root:
+			Transition.ConfirmRootDiscard();
+			break;
+		case EEditorDiscardAction::Open:
+			OpenScene(std::exchange(Transition.PendingOpen, {}));
+			break;
+		case EEditorDiscardAction::Document:
+			break;
+	}
+	Transition.FinishDiscard();
 }
 
 bool FEditorPlugin::IsDirty() const
@@ -248,16 +255,16 @@ void FEditorPlugin::PollSave()
 		return;
 	}
 	Error = "Save failed: " + Outcome->Error;
-	if (bSaveThenClose)
+	if (Transition.bSaveThenClose)
 	{
-		CloseError = Error;
+		Transition.CloseError = Error;
 	}
 	SaveStatus = Error;
-	if (bSaveThenSwitch || PendingRoot || !RequestedRoot.empty())
+	if (Transition.bSaveThenSwitch || Transition.PendingRoot || !Transition.RequestedRoot.empty())
 	{
-		RequestedRoot.clear();
-		PendingRoot.reset();
-		bSaveThenSwitch = bCommitRoot = bDiscardDialog = false;
+		Transition.RequestedRoot.clear();
+		Transition.PendingRoot.reset();
+		Transition.bSaveThenSwitch = Transition.bCommitRoot = Transition.bDiscardDialog = false;
 		Gui->ClosePopups();
 		AssetMessage = Error;
 		bAssetMessage = bRequestAssetMessage = true;
@@ -282,7 +289,7 @@ void FEditorPlugin::DrawSaveDialog()
 		{
 			try
 			{
-				if (bSaveThenClose)
+				if (Transition.bSaveThenClose)
 				{
 					StartSaveBeforeClose(SavePath);
 				}
@@ -303,25 +310,25 @@ void FEditorPlugin::DrawSaveDialog()
 		if (Gui->Button("Cancel"))
 		{
 			bSaveDialog = false;
-			bSaveThenClose = bPendingClose = false;
-			if (bSaveThenSwitch)
+			Transition.bSaveThenClose = Transition.bPendingClose = false;
+			if (Transition.bSaveThenSwitch)
 			{
-				bSaveThenSwitch = false;
-				PendingRoot.reset();
+				Transition.bSaveThenSwitch = false;
+				Transition.PendingRoot.reset();
 			}
 			Gui->ClosePopup();
 		}
 		Gui->TextWrapped(Error);
 		Gui->EndModal();
 	}
-	if (bWasSaveDialog && !bSaveDialog && bSaveThenSwitch && !PendingSave)
+	if (bWasSaveDialog && !bSaveDialog && Transition.bSaveThenSwitch && !PendingSave)
 	{
-		bSaveThenSwitch = false;
-		PendingRoot.reset();
+		Transition.bSaveThenSwitch = false;
+		Transition.PendingRoot.reset();
 	}
-	if (bWasSaveDialog && !bSaveDialog && bSaveThenClose && !PendingSave)
+	if (bWasSaveDialog && !bSaveDialog && Transition.bSaveThenClose && !PendingSave)
 	{
-		bSaveThenClose = bPendingClose = false;
+		Transition.bSaveThenClose = Transition.bPendingClose = false;
 	}
 }
 
@@ -331,10 +338,10 @@ void FEditorPlugin::SaveBeforeClose()
 	{
 		if (IsDirty() && CurrentPath.empty())
 		{
-			bSaveThenClose = true;
+			Transition.bSaveThenClose = true;
 			SavePath = "/Game/Scenes/Untitled.hasset";
 			bSaveDialog = bRequestSaveDialog = true;
-			bDiscardDialog = false;
+			Transition.bDiscardDialog = false;
 			Gui->ClosePopup();
 			return;
 		}
@@ -342,33 +349,34 @@ void FEditorPlugin::SaveBeforeClose()
 	}
 	catch (const std::exception& Failure)
 	{
-		bSaveThenClose = false;
+		Transition.bSaveThenClose = false;
 		Error = Failure.what();
 	}
 }
 
 void FEditorPlugin::PollSavedClose()
 {
-	if (!bSaveThenClose || bSaveDialog || PendingSave || AssetWorkspace->IsSaving() ||
+	if (!Transition.bSaveThenClose || bSaveDialog || PendingSave || AssetWorkspace->IsSaving() ||
 	    AssetWorkspace->HasPendingEdits())
 	{
 		return;
 	}
-	bSaveThenClose = false;
+	Transition.bSaveThenClose = false;
 	if (!IsDirty() && !AssetWorkspace->IsDirty())
 	{
-		bPendingClose = false;
-		CloseState = "closing";
+		Transition.bPendingClose = false;
+		Transition.CloseState = "closing";
 		Window->RequestClose();
 	}
 	else
 	{
-		CloseState = "failed";
-		if (CloseError.empty())
+		Transition.CloseState = "failed";
+		if (Transition.CloseError.empty())
 		{
-			CloseError = "Documents remain dirty after save; inspect asset.info or scene.status before retrying";
+			Transition.CloseError =
+			    "Documents remain dirty after save; inspect asset.info or scene.status before retrying";
 		}
-		bDiscardDialog = bRequestDiscard = true;
+		Transition.bDiscardDialog = Transition.bRequestDiscard = true;
 	}
 }
 } // namespace Hyperion

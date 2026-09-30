@@ -24,7 +24,7 @@ void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInButton, 
 	if (bInButton)
 	{
 		Event.Type = EEventType::MouseButton;
-		Event.Button = 0;
+		Event.Button = InputButtons::Left;
 		Event.bDown = bInDown;
 		InEvents.push_back(Event);
 	}
@@ -33,9 +33,9 @@ void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInButton, 
 
 void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Mode = (MultiSelectionStep - 30) / 8;
-	const unsigned Phase = (MultiSelectionStep - 30) % 8;
-	const auto Bounds = ViewportRegion.Bounds;
+	const unsigned Mode = (Acceptance.MultiSelectionStep - 30) / 8;
+	const unsigned Phase = (Acceptance.MultiSelectionStep - 30) % 8;
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
 	const float Size = 85 * Gui->ApplicationScale();
 	const float Diagonal = Size / std::sqrt(2.f);
@@ -48,10 +48,10 @@ void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 		std::vector<FSceneNodeEdit> Edits;
 		for (unsigned Index = 0; Index < 2; ++Index)
 		{
-			auto Node = *Scene->FindNode(MultiSelectionObjects[Index]);
+			auto Node = *Scene->FindNode(Acceptance.MultiSelectionObjects[Index]);
 			Node.Local() = Translation({float(Index * 2), 0, 0});
-			MultiSelectionInitial[Index] = Node.Local();
-			Edits.push_back({MultiSelectionObjects[Index], std::move(Node)});
+			Acceptance.MultiSelectionInitial[Index] = Node.Local();
+			Edits.push_back({Acceptance.MultiSelectionObjects[Index], std::move(Node)});
 		}
 		Scene->EditNodes(std::move(Edits), Scene->GetRevision());
 		ResetDocument();
@@ -70,10 +70,10 @@ void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 		RequireMulti(HistoryCursor == 1 && !Gizmo.IsDragging(), "one group history entry");
 		for (unsigned Index = 0; Index < 2; ++Index)
 		{
-			MultiSelectionFinal[Index] = Scene->FindNode(MultiSelectionObjects[Index])->Local();
+			Acceptance.MultiSelectionFinal[Index] = Scene->FindNode(Acceptance.MultiSelectionObjects[Index])->Local();
 		}
-		const auto& A = MultiSelectionFinal[0];
-		const auto& B = MultiSelectionFinal[1];
+		const auto& A = Acceptance.MultiSelectionFinal[0];
+		const auto& B = Acceptance.MultiSelectionFinal[1];
 		if (Mode == 0)
 		{
 			RequireMulti(A.Values[12] > 0 && std::abs(B.Values[12] - A.Values[12] - 2) < .0001f,
@@ -104,8 +104,9 @@ void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 	{
 		for (unsigned Index = 0; Index < 2; ++Index)
 		{
-			const auto& Expected = Phase == 5 ? MultiSelectionInitial[Index] : MultiSelectionFinal[Index];
-			RequireMulti(Scene->FindNode(MultiSelectionObjects[Index])->Local().Values == Expected.Values,
+			const auto& Expected =
+			    Phase == 5 ? Acceptance.MultiSelectionInitial[Index] : Acceptance.MultiSelectionFinal[Index];
+			RequireMulti(Scene->FindNode(Acceptance.MultiSelectionObjects[Index])->Local().Values == Expected.Values,
 			             "group undo/redo exact matrices");
 		}
 	}
@@ -113,13 +114,13 @@ void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 	{
 		Redo();
 	}
-	++MultiSelectionStep;
+	++Acceptance.MultiSelectionStep;
 }
 
 void FEditorPlugin::ExerciseMultiHistory()
 {
-	const auto A = MultiSelectionObjects[0];
-	const auto B = MultiSelectionObjects[1];
+	const auto A = Acceptance.MultiSelectionObjects[0];
+	const auto B = Acceptance.MultiSelectionObjects[1];
 	const auto AId = Scene->FindNode(A)->Id;
 	const auto BId = Scene->FindNode(B)->Id;
 	auto Child = MakeSceneCameraNode("multi-child");
@@ -140,11 +141,11 @@ void FEditorPlugin::ExerciseMultiHistory()
 	Scene->GetNodeView(ChildHandle, Primary);
 	Scene->GetNodeView(A, Parent);
 	const FVec3 Pivot{Primary.World.Values[12], Primary.World.Values[13], Primary.World.Values[14]};
-	ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
+	Viewport.ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
 	GizmoMode = ETransformGizmoMode::Position;
-	const auto Bounds = ViewportRegion.Bounds;
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
-	RequireMulti(Gizmo.Configure(ViewCamera, Bounds, Primary.Node->Local(), Parent.World, GizmoMode) &&
+	RequireMulti(Gizmo.Configure(Viewport.ViewCamera, Bounds, Primary.Node->Local(), Parent.World, GizmoMode) &&
 	                 Gizmo.Begin(Center),
 	             "hierarchy primary gizmo");
 	BeginGizmoEdit(Primary, Bounds);
@@ -210,13 +211,13 @@ void FEditorPlugin::ExerciseMultiCancellation()
 	Scene->GetNodeView(A, Primary);
 	Scene->GetNodeView(Scene->FindHandle(Primary.Node->Parent()), Parent);
 	const FVec3 Pivot{Primary.World.Values[12], Primary.World.Values[13], Primary.World.Values[14]};
-	ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
-	const auto Bounds = ViewportRegion.Bounds;
+	Viewport.ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
-	RequireMulti(
-	    Gizmo.Configure(ViewCamera, Bounds, Primary.Node->Local(), Parent.World, ETransformGizmoMode::Position) &&
-	        Gizmo.Begin(Center),
-	    "cancel group capture");
+	RequireMulti(Gizmo.Configure(Viewport.ViewCamera, Bounds, Primary.Node->Local(), Parent.World,
+	                             ETransformGizmoMode::Position) &&
+	                 Gizmo.Begin(Center),
+	             "cancel group capture");
 	BeginGizmoEdit(Primary, Bounds);
 	const auto Targets = GizmoEdit->Targets;
 	FMat4 Local;

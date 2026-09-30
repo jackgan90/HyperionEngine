@@ -5,9 +5,7 @@ namespace Hyperion
 {
 void FEditorPlugin::RouteDeleteShortcut(std::span<const FInputEvent> InEvents)
 {
-	if (!Selection || !Scene->GetStatus().bReady || Gui->IsEditingText() || Gui->DragPayload() ||
-	    Placement.IsActive() || Gizmo.IsDragging() || bCameraDragging || bOpenDialog || bSaveDialog || bAssetMessage ||
-	    PendingRoot || bDiscardDialog || bPreferencesDialog || Gui->PointerState().bCancel)
+	if (!CaptureShortcutInteraction(InEvents).Allows(EEditorShortcut::Delete))
 	{
 		return;
 	}
@@ -21,6 +19,8 @@ void FEditorPlugin::RouteDeleteShortcut(std::span<const FInputEvent> InEvents)
 	{
 		try
 		{
+			UpdateDocumentInteraction();
+			SceneDocument.RequireIdle(SceneDocument.Id(), Scene->GetRevision());
 			CommitDelete();
 		}
 		catch (const std::exception& Failure)

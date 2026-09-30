@@ -18,7 +18,7 @@ void WindowShortcut(std::vector<FInputEvent>& InEvents, EKey InKey)
 	FInputEvent Event;
 	Event.Type = EEventType::Key;
 	Event.Key = InKey;
-	Event.Modifiers = 1;
+	Event.Modifiers = InputModifiers::Control;
 	Event.bDown = true;
 	InEvents.push_back(Event);
 	Event.bDown = false;
@@ -46,57 +46,57 @@ void CheckFailedAssetWindow(FWindow& InOwner, FTaskSystem& InTasks, IRHIDevice& 
 
 void FEditorPlugin::ExerciseAssetWindowInput(std::vector<FInputEvent>& InEvents)
 {
-	if (ExerciseStep < 200)
+	if (Acceptance.ExerciseStep < 200)
 	{
 		ExerciseAssetWindowFixture(InEvents);
 		return;
 	}
-	if (AssetExerciseLoggedStep != static_cast<int>(ExerciseStep))
+	if (Acceptance.AssetExerciseLoggedStep != static_cast<int>(Acceptance.ExerciseStep))
 	{
-		AssetExerciseLoggedStep = static_cast<int>(ExerciseStep);
-		Log(ELogLevel::Info, "Asset window acceptance step " + std::to_string(ExerciseStep));
+		Acceptance.AssetExerciseLoggedStep = static_cast<int>(Acceptance.ExerciseStep);
+		Log(ELogLevel::Info, "Asset window acceptance step " + std::to_string(Acceptance.ExerciseStep));
 	}
-	if (ExerciseStep >= 209)
+	if (Acceptance.ExerciseStep >= 209)
 	{
 		ExerciseAssetWindowClosing(InEvents);
 		return;
 	}
-	if (ExerciseStep >= 205)
+	if (Acceptance.ExerciseStep >= 205)
 	{
 		ExerciseAssetWindowSizing(InEvents);
 		return;
 	}
 	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 200:
 			CheckAssetSaveShortcut();
 			CheckFailedAssetWindow(*Window, Tasks, *Device, *Compiler, *Session, *AssetWorkspace, Control);
-			CheckAssetWindow(AssetWindow && bViewportVisible && AssetWindow->RenderedFrames() > 5 &&
+			CheckAssetWindow(AssetWindow && Viewport.bViewportVisible && AssetWindow->RenderedFrames() > 5 &&
 			                     AssetWindow->NativeWindow().Surface().Handle != Window->Surface().Handle,
 			                 "Scene and asset were not rendered in separate native windows");
 			CheckAssetWindow(Document && !Document->IsDirty(), "Window fixture must begin with a saved asset");
-			AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
-			AssetExerciseSceneCamera = ViewCamera;
+			Acceptance.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
+			Acceptance.AssetExerciseSceneCamera = Viewport.ViewCamera;
 			WindowShortcut(InEvents, EKey::Z);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 201:
 			CheckAssetWindow(!IsDirty() && !Document->IsDirty(), "Main-window undo targeted the asset document");
 			WindowShortcut(InEvents, EKey::Y);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 202:
 			CheckAssetWindow(IsDirty() && !Document->IsDirty(), "Main-window redo affected the asset document");
 			WindowShortcut(InEvents, EKey::Z);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 203:
 			CheckAssetWindow(IsDirty() && HistoryCursor == 1 && Document->IsDirty() &&
-			                     ViewCamera == AssetExerciseSceneCamera,
+			                     Viewport.ViewCamera == Acceptance.AssetExerciseSceneCamera,
 			                 "Asset-window undo affected scene history or camera");
 			AssetWindow->NativeWindow().RequestClose();
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 204:
 			ExerciseClick(InEvents, AssetWindow->ObservedBounds("cancel"));
@@ -106,27 +106,27 @@ void FEditorPlugin::ExerciseAssetWindowInput(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvents)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 190:
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("field/name"));
 			break;
 		case 191:
-			if (++ExerciseWait == 1)
+			if (++Acceptance.ExerciseWait == 1)
 			{
 				WindowShortcut(InEvents, EKey::A);
 			}
-			if (ExerciseWait == 3)
+			if (Acceptance.ExerciseWait == 3)
 			{
 				FInputEvent Text;
 				Text.Type = EEventType::Text;
 				Text.Text = "Window history baseline";
 				InEvents.push_back(Text);
 			}
-			if (ExerciseWait == 6)
+			if (Acceptance.ExerciseWait == 6)
 			{
-				ExerciseWait = 0;
-				++ExerciseStep;
+				Acceptance.ExerciseWait = 0;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 192:
@@ -135,12 +135,12 @@ void FEditorPlugin::ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvent
 		case 193:
 			CheckAssetWindow(AssetWorkspace->IsDirty(), "Window history fixture was not edited");
 			WindowShortcut(InEvents, EKey::S);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 194:
 			if (!AssetWorkspace->IsSaving() && !AssetWorkspace->IsDirty())
 			{
-				ExerciseStep = 200;
+				Acceptance.ExerciseStep = 200;
 			}
 			break;
 	}
@@ -148,67 +148,69 @@ void FEditorPlugin::ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvent
 
 void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 205:
 		{
 			CheckAssetWindow(AssetWindow && AssetWorkspace->IsDirty() && !Window->ShouldClose(),
 			                 "Cancel asset-window close lost its draft or closed the main window");
 			AssetWindow->NativeWindow().Resize({1100, 760});
-			AssetExerciseScale = Gui->ApplicationScale();
+			Acceptance.AssetExerciseScale = Gui->ApplicationScale();
 			Gui->SetApplicationScale(1.5f);
 			auto Candidate = Rendering;
 			Candidate.bReversedZ = !Options.Rendering.bReversedZ;
 			SetRenderSettings(RenderSettingsRevision, Candidate);
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 206:
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
-			CheckAssetWindow(bViewportVisible && AssetWindow->GuiContext().ApplicationScale() == 1.5f &&
+			CheckAssetWindow(Viewport.bViewportVisible && AssetWindow->GuiContext().ApplicationScale() == 1.5f &&
 			                     AssetWindow->NativeWindow().LogicalSize().Width == 1100,
 			                 "Asset resize or application scaling affected the main viewport");
-			Gui->SetApplicationScale(AssetExerciseScale);
+			Gui->SetApplicationScale(Acceptance.AssetExerciseScale);
 			CheckAssetWindow(AssetWorkspace->RenderedPreviewView() &&
 			                     AssetWorkspace->RenderedPreviewView()->DepthConvention ==
 			                         GetDepthConvention(Rendering.bReversedZ),
 			                 "Open 3D asset preview did not follow live depth settings");
-			AssetExerciseFrames = AssetWindow->RenderedFrames();
+			Acceptance.AssetExerciseFrames = AssetWindow->RenderedFrames();
 			AssetWindow->NativeWindow().Minimize();
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			break;
 		case 207:
 		{
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
-			CheckAssetWindow(bViewportVisible && AssetWindow->RenderedFrames() == AssetExerciseFrames,
+			CheckAssetWindow(Viewport.bViewportVisible &&
+			                     AssetWindow->RenderedFrames() == Acceptance.AssetExerciseFrames,
 			                 "Minimized asset window rendered or stopped the scene viewport");
 			auto Candidate = Rendering;
 			Candidate.bReversedZ = Options.Rendering.bReversedZ;
 			SetRenderSettings(RenderSettingsRevision, Candidate);
 			AssetWindow->NativeWindow().Restore();
 			Window->Minimize();
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 208:
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
-			CheckAssetWindow(!bViewportVisible && AssetWindow->RenderedFrames() == AssetExerciseFrames &&
+			CheckAssetWindow(!Viewport.bViewportVisible &&
+			                     AssetWindow->RenderedFrames() == Acceptance.AssetExerciseFrames &&
 			                     AssetWorkspace->IsDirty(),
 			                 "Owner minimization rendered the asset window or lost its draft");
 			Window->Restore();
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			Log(ELogLevel::Info, "Native window rendering, input, resize, scale and owner minimization passed");
 			break;
 	}
@@ -216,28 +218,29 @@ void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 
 void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvents)
 {
-	if (ExerciseStep >= 213)
+	if (Acceptance.ExerciseStep >= 213)
 	{
 		ExerciseAssetWindowSaving(InEvents);
 		return;
 	}
 	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 209:
-			if (++ExerciseWait < 6)
+			if (++Acceptance.ExerciseWait < 6)
 			{
 				break;
 			}
-			CheckAssetWindow(bViewportVisible && AssetWindow->RenderedFrames() > AssetExerciseFrames + 2,
+			CheckAssetWindow(Viewport.bViewportVisible &&
+			                     AssetWindow->RenderedFrames() > Acceptance.AssetExerciseFrames + 2,
 			                 "Owner restoration did not resume both windows");
 			CheckAssetWindow(AssetWorkspace->RenderedPreviewView() &&
 			                     AssetWorkspace->RenderedPreviewView()->DepthConvention ==
 			                         GetDepthConvention(Rendering.bReversedZ),
 			                 "Resumed asset preview retained the old depth convention");
-			ExerciseWait = 0;
+			Acceptance.ExerciseWait = 0;
 			AssetWindow->NativeWindow().RequestClose();
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 210:
 			ExerciseClick(InEvents, AssetWindow->ObservedBounds("discard"));
@@ -247,9 +250,10 @@ void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvent
 			CheckAssetWindow(!AssetWindow && !AssetWorkspace->HasDocuments() && IsDirty() && HistoryCursor == 1,
 			                 "Discard asset window affected scene or left documents open");
 			const auto Saved = Assets.LoadAsync<FSkyAsset>("/Game/Sky.hasset").Get(Tasks);
-			CheckAssetWindow(Saved->Name == AssetExerciseOriginalName, "Asset window discard persisted changes");
+			CheckAssetWindow(Saved->Name == Acceptance.AssetExerciseOriginalName,
+			                 "Asset window discard persisted changes");
 			RequestOpenAsset("/Game/Sky.hasset");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 212:
@@ -260,7 +264,7 @@ void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvent
 				                     GetDepthConvention(Rendering.bReversedZ),
 				                 "Reopened asset preview did not use the committed depth convention");
 				AssetWorkspace->RevealProperty("field/name");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 	}
@@ -269,35 +273,35 @@ void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvent
 void FEditorPlugin::ExerciseAssetWindowSaving(std::vector<FInputEvent>& InEvents)
 {
 	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 213:
 			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("field/name"));
 			break;
 		case 214:
-			if (++ExerciseWait == 1)
+			if (++Acceptance.ExerciseWait == 1)
 			{
 				WindowShortcut(InEvents, EKey::A);
 			}
-			if (ExerciseWait == 3)
+			if (Acceptance.ExerciseWait == 3)
 			{
 				FInputEvent Text;
 				Text.Type = EEventType::Text;
 				Text.Text = "Saved on window close";
 				InEvents.push_back(Text);
 			}
-			if (ExerciseWait == 6)
+			if (Acceptance.ExerciseWait == 6)
 			{
 				AssetWindow->NativeWindow().RequestClose();
-				ExerciseWait = 0;
-				++ExerciseStep;
+				Acceptance.ExerciseWait = 0;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 215:
 			CheckAssetWindow(Document && Document->IsDirty(), "Window close fixture was not edited");
-			if (!AssetExerciseSavedBytes)
+			if (!Acceptance.AssetExerciseSavedBytes)
 			{
-				AssetExerciseSavedBytes = IO.ReadAsync("/Game/Sky.hasset").Get(Tasks);
+				Acceptance.AssetExerciseSavedBytes = IO.ReadAsync("/Game/Sky.hasset").Get(Tasks);
 				IO.WriteAsync("/Game/Sky.hasset", {std::byte{0}}).Get(Tasks);
 			}
 			ExerciseClick(InEvents, AssetWindow->ObservedBounds("save"));
@@ -307,10 +311,10 @@ void FEditorPlugin::ExerciseAssetWindowSaving(std::vector<FInputEvent>& InEvents
 			if (!Document->IsSaving() && !Document->Error.empty())
 			{
 				CheckAssetWindow(Document->IsDirty() && IsDirty(), "Failed save lost document drafts");
-				IO.WriteAsync("/Game/Sky.hasset", *AssetExerciseSavedBytes).Get(Tasks);
-				AssetExerciseSavedBytes.reset();
+				IO.WriteAsync("/Game/Sky.hasset", *Acceptance.AssetExerciseSavedBytes).Get(Tasks);
+				Acceptance.AssetExerciseSavedBytes.reset();
 				Log(ELogLevel::Info, "Failed asset-window save retained the window and dirty documents");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 217:
@@ -323,8 +327,8 @@ void FEditorPlugin::ExerciseAssetWindowSaving(std::vector<FInputEvent>& InEvents
 				CheckAssetWindow(Saved->Name == "Saved on window close" && IsDirty() && HistoryCursor == 1,
 				                 "Asset window save/close lost changes or affected the scene");
 				Log(ELogLevel::Info, "Native asset window cancel, discard, recreation and save/close passed");
-				AssetExerciseIndex = 4;
-				ExerciseStep = 21;
+				Acceptance.AssetExerciseIndex = 4;
+				Acceptance.ExerciseStep = 21;
 			}
 			break;
 	}

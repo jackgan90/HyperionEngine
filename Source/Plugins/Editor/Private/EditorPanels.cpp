@@ -38,7 +38,7 @@ void FEditorPlugin::ShowOpenScene()
 	bRequestOpen = true;
 	bOpenDialog = true;
 	Camera.Reset();
-	bCameraDragging = false;
+	Viewport.bCameraDragging = false;
 	if (OpenPath.empty() && !ScenePaths.empty())
 	{
 		OpenPath = ScenePaths.front();
@@ -72,7 +72,7 @@ void FEditorPlugin::DrawApplicationScale()
 
 void FEditorPlugin::DrawRootMenu()
 {
-	Gui->BeginDisabled(PendingRoot.has_value() || !Options.Benchmark.empty());
+	Gui->BeginDisabled(Transition.PendingRoot.has_value() || !Options.Benchmark.empty());
 	if (Gui->MenuItem("Open..."))
 	{
 		bRequestRootDialog = true;
@@ -330,13 +330,13 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 		                                 Selection.Contains(Visit.Handle), bClicked, !Options.bBenchmarkCollapsed);
 		if (Options.bExercisePicking && Node->Id == "light-courtyard-3")
 		{
-			PickingLightBounds = Gui->LastItemBounds();
+			Acceptance.PickingLightBounds = Gui->LastItemBounds();
 		}
 		RouteReparentRow(Visit.Handle);
 		if (Options.bExerciseMultiSelection || Options.bExerciseFraming || Options.bExerciseSelectionShortcuts ||
 		    !Options.ExerciseReparent.empty())
 		{
-			MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
+			Acceptance.MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 		}
 		Gui->NextColumn();
 		Gui->Text(KindName(Node->GetKind()));
@@ -413,7 +413,7 @@ void FEditorPlugin::DrawOutliner()
 					if (Options.bExerciseMultiSelection || Options.bExerciseFraming ||
 					    Options.bExerciseSelectionShortcuts || !Options.ExerciseReparent.empty())
 					{
-						MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
+						Acceptance.MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 					}
 					Gui->NextColumn();
 					Gui->Text(KindName(Node->GetKind()));
@@ -549,8 +549,8 @@ void FEditorPlugin::DrawOpenDialog()
 
 void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InEvents)
 {
-	bViewportVisible = false;
-	ViewportRegion = {};
+	Viewport.bViewportVisible = false;
+	Viewport.ViewportRegion = {};
 	if (!bShowViewport)
 	{
 		return;
@@ -560,8 +560,8 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 		DrawGizmoToolbar();
 		Gui->SameLine();
 		DrawViewControls();
-		ViewportRegion = Gui->Image(2);
-		bViewportVisible = true;
+		Viewport.ViewportRegion = Gui->Image(2);
+		Viewport.bViewportVisible = true;
 		ResizeViewport();
 		RoutePlacement();
 		DrawGizmo();
@@ -619,9 +619,10 @@ std::string FEditorPlugin::StatusText() const
 FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> InEvents)
 {
 	Gui->BeginFrame(Window->LogicalSize(), Window->PixelSize(), std::clamp(InDelta, .001f, .1f), InEvents);
+	RouteHistoryShortcuts(InEvents);
 	bGizmoUsedMouse = false;
 	bPlacementUsedMouse = false;
-	Gui->BeginDisabled(PendingRoot.has_value() || !Options.Benchmark.empty());
+	Gui->BeginDisabled(Transition.PendingRoot.has_value() || !Options.Benchmark.empty());
 	DrawMenus();
 	CaptureButtonBounds = {};
 	DrawToolbar();
@@ -632,7 +633,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	UpdateReparentGesture(InEvents);
 	DrawPlacementPanel();
 	DrawViewport(InDelta, InEvents);
-	if (!bViewportVisible)
+	if (!Viewport.bViewportVisible)
 	{
 		CancelPlacement();
 		ViewportClick.reset();
@@ -658,6 +659,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawPreferences();
 	DrawAssetMessage();
 	Context.Publish(FGuiPanelEvent{*Gui});
+	Acceptance.DrawPanels(*this);
 	RouteDeleteShortcut(InEvents);
 	RouteClipboardShortcuts(InEvents);
 	RouteSelectAllShortcut(InEvents);

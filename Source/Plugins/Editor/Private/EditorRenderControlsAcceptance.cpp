@@ -8,7 +8,7 @@ namespace Hyperion
 {
 void FEditorPlugin::CheckRenderControlsHud() const
 {
-	const auto Clip = ViewportRegion.Bounds;
+	const auto Clip = Viewport.ViewportRegion.Bounds;
 	for (const auto* Name : {"hud/status", "hud/profiling"})
 	{
 		const auto Bounds = InspectionBounds.at(Name);
@@ -47,12 +47,12 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 	{
 		return;
 	}
-	if (ExerciseStep >= 11)
+	if (Acceptance.ExerciseStep >= 11)
 	{
 		ExerciseProfilingHudInput(InEvents);
 		return;
 	}
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
 			ExerciseClick(InEvents, InspectionBounds["hud/status-toggle"]);
@@ -62,8 +62,8 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			return;
 		case 2:
 			CheckRenderControlsHud();
-			PlacementCapture = Options.ExerciseRenderControls / "Hud.png";
-			++ExerciseStep;
+			Acceptance.PlacementCapture = Options.ExerciseRenderControls / "Hud.png";
+			++Acceptance.ExerciseStep;
 			return;
 		case 3:
 			ExerciseClick(InEvents, EditMenuBounds);
@@ -80,13 +80,13 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			{
 				return;
 			}
-			PlacementCapture = Options.ExerciseRenderControls / "Settings.png";
-			++ExerciseStep;
+			Acceptance.PlacementCapture = Options.ExerciseRenderControls / "Settings.png";
+			++Acceptance.ExerciseStep;
 			return;
 		case 6:
 			bShowRenderSettings = false;
 			SceneDocument.ReplaceSelection(FSceneSelection(Scene->GetLightingSelection().Directional.Handle));
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			return;
 		case 7:
 			if (!ExerciseLightPriorityInput(InEvents))
@@ -103,8 +103,8 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			{
 				throw std::runtime_error("Light shadow Inspector did not author component values");
 			}
-			PlacementCapture = Options.ExerciseRenderControls / "Light.png";
-			++ExerciseStep;
+			Acceptance.PlacementCapture = Options.ExerciseRenderControls / "Light.png";
+			++Acceptance.ExerciseStep;
 			return;
 		case 10:
 			Undo();
@@ -120,36 +120,37 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			Undo();
 			Window->Resize({1000, 900});
 			Gui->SetApplicationScale(2);
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			return;
 	}
 }
 
 bool FEditorPlugin::ExerciseLiveDepth(std::vector<FInputEvent>& InEvents)
 {
-	if (DepthExerciseStep == 0)
+	if (Acceptance.DepthExerciseStep == 0)
 	{
 		FSceneViewportOptions ViewOptions;
 		ViewOptions.Frozen = true;
 		SetViewportOptions(ViewOptions);
-		DepthExerciseFrozenView = *FrozenCullingView;
-		DepthExerciseCamera = ViewCamera;
-		ViewCamera.World = Multiply(Translation({.25f, 0, 0}), ViewCamera.World);
-		++DepthExerciseStep;
+		Acceptance.DepthExerciseFrozenView = *FrozenCullingView;
+		Acceptance.DepthExerciseCamera = Viewport.ViewCamera;
+		Viewport.ViewCamera.World = Multiply(Translation({.25f, 0, 0}), Viewport.ViewCamera.World);
+		++Acceptance.DepthExerciseStep;
 	}
-	if (DepthExerciseStep == 1 || DepthExerciseStep == 3)
+	if (Acceptance.DepthExerciseStep == 1 || Acceptance.DepthExerciseStep == 3)
 	{
-		const auto Step = ExerciseStep;
+		const auto Step = Acceptance.ExerciseStep;
 		ExerciseClick(InEvents, InspectionBounds.at("render/reversed-z"));
-		if (ExerciseStep != Step)
+		if (Acceptance.ExerciseStep != Step)
 		{
-			++DepthExerciseStep;
+			++Acceptance.DepthExerciseStep;
 		}
-		ExerciseStep = Step;
+		Acceptance.ExerciseStep = Step;
 		return false;
 	}
-	const bool bExpected = DepthExerciseStep == 2 ? !Options.Rendering.bReversedZ : Options.Rendering.bReversedZ;
+	const bool bExpected =
+	    Acceptance.DepthExerciseStep == 2 ? !Options.Rendering.bReversedZ : Options.Rendering.bReversedZ;
 	const auto State = RenderSettings();
 	if (State.Values.bReversedZ != bExpected || State.bActiveReversedZ != bExpected || !FrozenCullingView ||
 	    IsDirty() || !RenderStats.MainCameraView ||
@@ -157,9 +158,9 @@ bool FEditorPlugin::ExerciseLiveDepth(std::vector<FInputEvent>& InEvents)
 	{
 		throw std::runtime_error("GUI depth toggle did not commit and render without changing the document");
 	}
-	const auto Expected = DepthExerciseStep == 2
-	                          ? Multiply(ClipDepthTransform(EDepthConvention::Reversed), DepthExerciseFrozenView)
-	                          : DepthExerciseFrozenView;
+	const auto Expected = Acceptance.DepthExerciseStep == 2 ? Multiply(ClipDepthTransform(EDepthConvention::Reversed),
+	                                                                   Acceptance.DepthExerciseFrozenView)
+	                                                        : Acceptance.DepthExerciseFrozenView;
 	for (std::size_t Index = 0; Index < Expected.Values.size(); ++Index)
 	{
 		if (std::abs(FrozenCullingView->Values[Index] - Expected.Values[Index]) > .00001f)
@@ -167,12 +168,12 @@ bool FEditorPlugin::ExerciseLiveDepth(std::vector<FInputEvent>& InEvents)
 			throw std::runtime_error("Depth switching changed the frozen camera's physical frustum");
 		}
 	}
-	if (DepthExerciseStep == 2)
+	if (Acceptance.DepthExerciseStep == 2)
 	{
-		++DepthExerciseStep;
+		++Acceptance.DepthExerciseStep;
 		return false;
 	}
-	ViewCamera = DepthExerciseCamera;
+	Viewport.ViewCamera = Acceptance.DepthExerciseCamera;
 	FSceneViewportOptions ViewOptions;
 	ViewOptions.Frozen = false;
 	SetViewportOptions(ViewOptions);
@@ -182,12 +183,12 @@ bool FEditorPlugin::ExerciseLiveDepth(std::vector<FInputEvent>& InEvents)
 
 bool FEditorPlugin::ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents)
 {
-	if (LightPriorityExerciseStep >= 16)
+	if (Acceptance.LightPriorityExerciseStep >= 16)
 	{
 		return true;
 	}
-	const bool bSky = LightPriorityExerciseStep >= 8;
-	const unsigned Phase = LightPriorityExerciseStep % 8;
+	const bool bSky = Acceptance.LightPriorityExerciseStep >= 8;
+	const unsigned Phase = Acceptance.LightPriorityExerciseStep % 8;
 	const auto Type = bSky ? RecordType<FSceneEnvironmentLight>().Id : RecordType<FSceneDirectionalLight>().Id;
 	if (Phase == 0 && bSky)
 	{
@@ -197,26 +198,26 @@ bool FEditorPlugin::ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvent
 	}
 	if (Phase == 1)
 	{
-		const auto Step = ExerciseStep;
+		const auto Step = Acceptance.ExerciseStep;
 		ExerciseClick(InEvents, InspectionBounds.at(Type + "/priority"));
-		if (Step == ExerciseStep)
+		if (Step == Acceptance.ExerciseStep)
 		{
 			return false;
 		}
-		ExerciseStep = Step;
+		Acceptance.ExerciseStep = Step;
 	}
 	else if (Phase >= 2 && Phase <= 5)
 	{
-		if (Phase == 4 && ExerciseWait++ == 0)
+		if (Phase == 4 && Acceptance.ExerciseWait++ == 0)
 		{
 			return false;
 		}
-		ExerciseWait = 0;
+		Acceptance.ExerciseWait = 0;
 		FInputEvent Key;
 		Key.Type = EEventType::Key;
 		Key.Key = Phase < 4 ? EKey::A : EKey::Enter;
 		Key.bDown = Phase == 2 || Phase == 4;
-		Key.Modifiers = Phase == 2 ? 1 : 0;
+		Key.Modifiers = Phase == 2 ? InputModifiers::Control : InputModifiers::None;
 		InEvents.push_back(Key);
 		if (Phase == 3)
 		{
@@ -234,7 +235,8 @@ bool FEditorPlugin::ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvent
 		{
 			throw std::runtime_error("Priority Inspector did not commit a signed integer: " + Error);
 		}
-		PlacementCapture = Options.ExerciseRenderControls / (bSky ? "SkyPriority.png" : "DirectionalPriority.png");
+		Acceptance.PlacementCapture =
+		    Options.ExerciseRenderControls / (bSky ? "SkyPriority.png" : "DirectionalPriority.png");
 	}
 	else if (Phase == 7)
 	{
@@ -257,32 +259,32 @@ bool FEditorPlugin::ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvent
 			SceneDocument.ReplaceSelection(FSceneSelection(Scene->GetLightingSelection().Directional.Handle));
 		}
 	}
-	++LightPriorityExerciseStep;
+	++Acceptance.LightPriorityExerciseStep;
 	return false;
 }
 
 void FEditorPlugin::ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents)
 {
-	if (ExerciseStep >= 17)
+	if (Acceptance.ExerciseStep >= 17)
 	{
 		ExerciseProfilingDetailsInput(InEvents);
 		return;
 	}
 	const auto Profiling = GetProfilingStatus();
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 11:
-			if (++ExerciseWait < 8)
+			if (++Acceptance.ExerciseWait < 8)
 			{
 				return;
 			}
 			CheckRenderControlsHud();
-			PlacementCapture = Options.ExerciseRenderControls / "Narrow.png";
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.PlacementCapture = Options.ExerciseRenderControls / "Narrow.png";
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			return;
 		case 12:
-			if (!ExerciseWait)
+			if (!Acceptance.ExerciseWait)
 			{
 				// The narrow HUD was checked above; collection controls use unscrolled click bounds.
 				Window->Resize({1600, 960});
@@ -302,7 +304,7 @@ void FEditorPlugin::ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents
 			{
 				ChangeProfiling(ProfileCategoryMask(EProfileCategory::Frame), {});
 			}
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			return;
 		case 15:
 			if (Profiling.bCompiled)
@@ -311,7 +313,7 @@ void FEditorPlugin::ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents
 			}
 			else
 			{
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			return;
 	}
@@ -324,13 +326,13 @@ void FEditorPlugin::ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents
 		}
 		ChangeProfiling(0, {});
 	}
-	PlacementCapture = Options.ExerciseRenderControls / "Stats.png";
-	++ExerciseStep;
+	Acceptance.PlacementCapture = Options.ExerciseRenderControls / "Stats.png";
+	++Acceptance.ExerciseStep;
 }
 
 void FEditorPlugin::ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEvents)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 17:
 		{
@@ -341,15 +343,15 @@ void FEditorPlugin::ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEv
 			ViewOptions.ProfilingCategories = 0;
 			ViewOptions.InstanceBatching = false;
 			SetViewportOptions(ViewOptions);
-			ExerciseWait = 0;
-			++ExerciseStep;
+			Acceptance.ExerciseWait = 0;
+			++Acceptance.ExerciseStep;
 			return;
 		}
 		case 18:
-			if (++ExerciseWait >= 8)
+			if (++Acceptance.ExerciseWait >= 8)
 			{
-				++ExerciseStep;
-				ExerciseWait = 0;
+				++Acceptance.ExerciseStep;
+				Acceptance.ExerciseWait = 0;
 			}
 			return;
 		case 19:
@@ -380,8 +382,8 @@ void FEditorPlugin::ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEv
 			}
 			Gui->ClosePopups();
 			HudUpdated = 0;
-			PlacementCapture = Options.ExerciseRenderControls / "Visibility.png";
-			++ExerciseStep;
+			Acceptance.PlacementCapture = Options.ExerciseRenderControls / "Visibility.png";
+			++Acceptance.ExerciseStep;
 			return;
 	}
 	if (ProfilingCategories != 128 || IsDirty() || GetProfilingStatus().Mask ||
@@ -391,8 +393,8 @@ void FEditorPlugin::ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEv
 	}
 	Gui->ClosePopups();
 	HudUpdated = 0;
-	PlacementCapture = Options.ExerciseRenderControls / "Batching.png";
-	bRenderControlsVerified = true;
+	Acceptance.PlacementCapture = Options.ExerciseRenderControls / "Batching.png";
+	Acceptance.bRenderControlsVerified = true;
 	Log(ELogLevel::Info, "Editor render controls acceptance passed");
 }
 } // namespace Hyperion

@@ -27,7 +27,8 @@ FContentRootParticipantState FAssetAutomation::ContentRootState() const
 	FContentRootParticipantState Result;
 	for (const auto& [Id, Entry] : Documents)
 	{
-		Result.bBusy |= !Entry->Document || Entry->bEditing || (Entry->Document && Entry->Document->IsSaving());
+		Result.bBusy |= !Entry->Document || Entry->bEditing ||
+		                (Entry->Document && (Entry->Document->IsEditing() || Entry->Document->IsSaving()));
 		Result.bDirty |= Entry->Document && Entry->Document->IsDirty();
 	}
 	return Result;
@@ -45,6 +46,11 @@ void FAssetAutomation::ContentRootChanged()
 
 void FAssetAutomation::Drain()
 {
+	for (const auto& Workflow : EditWork)
+	{
+		Workflow->Drain();
+	}
+	EditWork.clear();
 	for (const auto& Task : Work)
 	{
 		try
@@ -110,7 +116,7 @@ std::shared_ptr<FAssetAutomation::FEntry> FAssetAutomation::Edit(std::string_vie
 		throw FAutomationError("stale_revision", "Document changed; query asset.info and retry with its generation",
 		                       "generation");
 	}
-	if (Entry->bEditing)
+	if (Entry->bEditing || Entry->Document->IsEditing())
 	{
 		throw FAutomationError("busy", "Texture edit is still running");
 	}
@@ -136,7 +142,7 @@ FAssetDocumentInfo FAssetAutomation::Describe(const FEntry& InEntry) const
 	                          Document.CanRedo(),
 	                          IsAssetPathReadOnly(Assets, InEntry.Path),
 	                          Document.IsSaving(),
-	                          InEntry.bEditing,
+	                          InEntry.bEditing || Document.IsEditing(),
 	                          Loaded.Header.Revision};
 	if (Workspace)
 	{
@@ -210,7 +216,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 				        {
 					        throw FAutomationError("unsupported_type",
 					                               "This adapter opens model, material, texture and sky documents; "
-					                               "scene editing is not yet registered");
+					                               "scene documents use the attached scene.open workflow");
 				        }
 				        Entry->Document = std::make_shared<FAssetEditDocument>(std::move(Loaded));
 				        return Describe(*Entry);
@@ -362,53 +368,46 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Save(const FAssetMutatio
 	        }};
 }
 
+TPendingOperation<FAssetDocumentInfo> FAssetAutomation::PendingEdit(const std::shared_ptr<FEntry>& InEntry,
+                                                                    std::shared_ptr<FAssetEditWorkflow> InWorkflow)
+{
+	std::erase_if(EditWork,
+	              [](const auto& InWork)
+	              {
+		              return !InWork->IsPending();
+	              });
+	EditWork.push_back(InWorkflow);
+	return {[this, Entry = InEntry, Workflow = std::move(InWorkflow)]() -> std::optional<FAssetDocumentInfo>
+	        {
+		        const auto Current =
+		            Workspace ? Workspace->FindDocument(Entry->Id) : std::optional<FAssetWorkspaceEntry>{};
+		        try
+		        {
+			        if (!Workflow->Poll(Workspace ? (Current ? Current->Document : nullptr) : Entry->Document))
+			        {
+				        return {};
+			        }
+		        }
+		        catch (const FAssetWorkflowError& Failure)
+		        {
+			        throw FAutomationError(Failure.Code, Failure.what());
+		        }
+		        return Describe(*Entry);
+	        }};
+}
+
 TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetEncoding(const FAssetEncodingRequest& InRequest)
 {
 	auto Entry = Edit(InRequest.Document, InRequest.Generation);
-	if (Entry->Document->Loaded().Type->CppType != typeid(FTextureAsset))
+	try
 	{
-		throw FAutomationError("unsupported_type", "Texture encoding requires a texture document");
+		return PendingEdit(
+		    Entry, FAssetEditWorkflow::Encoding(Tasks, Entry->Document, InRequest.Generation, InRequest.Encoding));
 	}
-	if (!CanEditTextureEncoding(*Entry->Document->Loaded().As<FTextureAsset>()))
+	catch (const FAssetWorkflowError& Failure)
 	{
-		throw FAutomationError("unsupported_type", "Encoding is fixed for floating-point textures and cube maps");
+		throw FAutomationError(Failure.Code, Failure.what());
 	}
-	std::erase_if(Work,
-	              [](const auto& InTask)
-	              {
-		              return InTask.Ready();
-	              });
-	Work.reserve(Work.size() + 1);
-	auto Rebuild = DispatchAsync<FArchiveNode>(Tasks, {EDomain::Worker},
-	                                           [Draft = Entry->Document->Snapshot(), Encoding = InRequest.Encoding]
-	                                           {
-		                                           return RebuildTextureEncodingDraft(Draft, Encoding);
-	                                           });
-	Work.push_back(Rebuild.Task());
-	Entry->bEditing = true;
-	if (Workspace)
-	{
-		Workspace->SetExternalEditing(Entry->Id, true);
-	}
-	return {[this, Entry, Rebuild]() -> std::optional<FAssetDocumentInfo>
-	        {
-		        if (!Rebuild.Ready())
-		        {
-			        return {};
-		        }
-		        Entry->bEditing = false;
-		        if (Workspace)
-		        {
-			        Workspace->SetExternalEditing(Entry->Id, false);
-			        const auto Current = Workspace->FindDocument(Entry->Id);
-			        if (!Current || Current->Document != Entry->Document)
-			        {
-				        throw FAutomationError("stale_document", "The edited workspace document was closed");
-			        }
-		        }
-		        Entry->Document->Set("", *Rebuild.GetReady());
-		        return Describe(*Entry);
-	        }};
 }
 
 FAssetCloseResult FAssetAutomation::Close(const FAssetCloseRequest& InRequest)
@@ -439,7 +438,7 @@ FAssetCloseResult FAssetAutomation::Close(const FAssetCloseRequest& InRequest)
 	{
 		throw FAutomationError("stale_revision", "Document changed", "generation");
 	}
-	if (Entry->bEditing || Entry->Document->IsSaving())
+	if (Entry->bEditing || Entry->Document->IsEditing() || Entry->Document->IsSaving())
 	{
 		throw FAutomationError("busy", "Wait for pending edits and saves before closing");
 	}

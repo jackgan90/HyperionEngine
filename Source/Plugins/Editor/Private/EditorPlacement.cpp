@@ -204,12 +204,12 @@ void FEditorPlugin::RoutePlacementPayload(const FGuiDragPayload& InPayload,
 {
 	ViewportClick.reset();
 	Camera.Reset();
-	bCameraDragging = false;
+	Viewport.bCameraDragging = false;
 	const auto CameraView = PickingCamera();
 	const auto Pointer = Gui->PointerState();
-	if (!CameraView || !bViewportVisible || bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot ||
-	    bDiscardDialog || bPreferencesDialog || bViewOptionsOpen || Pointer.bCancel || Pointer.bRightDown ||
-	    Gizmo.IsDragging())
+	if (!CameraView || !Viewport.bViewportVisible || bOpenDialog || bSaveDialog || bAssetMessage ||
+	    Transition.PendingRoot || Transition.bDiscardDialog || bPreferencesDialog || bViewOptionsOpen ||
+	    Pointer.bCancel || Pointer.bRightDown || Gizmo.IsDragging())
 	{
 		CancelPlacement();
 		return;
@@ -217,9 +217,12 @@ void FEditorPlugin::RoutePlacementPayload(const FGuiDragPayload& InPayload,
 	const auto Logical = Window->LogicalSize();
 	const auto Pixels = Window->PixelSize();
 	const FViewportPlacementContext PlacementContext{
-	    DocumentEpoch,           Scene->GetRevision(),
-	    ViewportRegion.Bounds,   {float(Pixels.Width) / Logical.Width, float(Pixels.Height) / Logical.Height},
-	    Gui->ApplicationScale(), *CameraView};
+	    DocumentEpoch,
+	    Scene->GetRevision(),
+	    Viewport.ViewportRegion.Bounds,
+	    {float(Pixels.Width) / Logical.Width, float(Pixels.Height) / Logical.Height},
+	    Gui->ApplicationScale(),
+	    *CameraView};
 	if (!Placement.IsActive())
 	{
 		FinishInspectorEdit();
@@ -279,10 +282,10 @@ void FEditorPlugin::UpdatePlacementPreview(const FPlacementCandidate& InObject, 
                                            FVec2 InPointer)
 {
 	const FBounds Bounds = InObject.Model ? PlacementModels.at(InObject.Id).Data->Bounds : FBounds{};
-	const auto& Region = ViewportRegion.Bounds;
+	const auto& Region = Viewport.ViewportRegion.Bounds;
 	const FVec2 Position{(InPointer.X - Region.X) / (Region.Z - Region.X),
 	                     (InPointer.Y - Region.Y) / (Region.W - Region.Y)};
-	const auto Ray = MakeViewportRay(InCamera, Position, ViewportSize.Width, ViewportSize.Height,
+	const auto Ray = MakeViewportRay(InCamera, Position, Viewport.ViewportSize.Width, Viewport.ViewportSize.Height,
 	                                 GetDepthConvention(Rendering.bReversedZ));
 	if (Ray)
 	{

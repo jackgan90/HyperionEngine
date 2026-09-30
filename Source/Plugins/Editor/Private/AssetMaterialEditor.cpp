@@ -199,9 +199,7 @@ bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FM
 	if (IsMaterialTexture(InValue.Type.Kind))
 	{
 		auto Reference = InValue.Texture.value_or(FAssetRef{});
-		const auto Dimension = InValue.Type.Kind == EMaterialValueKind::TextureCube ? ETextureDimension::Cube
-		                                                                            : ETextureDimension::Texture2D;
-		if (EditReference(InGui, ("Texture##" + InId).c_str(), Reference, RecordType<FTextureAsset>().Id, Dimension))
+		if (EditReference(InGui, ("Texture##" + InId).c_str(), Reference, RecordType<FTextureAsset>().Id))
 		{
 			InValue.Texture = Reference;
 			return true;

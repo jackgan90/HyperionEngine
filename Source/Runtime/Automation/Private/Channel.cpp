@@ -6,10 +6,16 @@ namespace Hyperion
 {
 namespace
 {
+constexpr std::size_t MaxChannelFrameBytes = 16 * 1024 * 1024;
+constexpr std::size_t MaxQueuedChannelFrames = 32;
+constexpr std::size_t ChannelWriteBytesPerPoll = 65536;
+constexpr std::size_t ChannelFramePrefixBytes = 4;
+constexpr std::size_t MaxBufferedChannelFrames = 2;
+
 std::size_t FrameSize(const FTransportBytes& InBytes)
 {
 	std::size_t Size{};
-	for (std::size_t Index = 0; Index < 4; ++Index)
+	for (std::size_t Index = 0; Index < ChannelFramePrefixBytes; ++Index)
 	{
 		Size = (Size << 8) | std::to_integer<unsigned>(InBytes[Index]);
 	}
@@ -20,7 +26,7 @@ std::size_t FrameSize(const FTransportBytes& InBytes)
 FAutomationChannel::FAutomationChannel(std::unique_ptr<ITransportConnection> InConnection, std::size_t InMaxFrame)
     : Connection(std::move(InConnection)), MaxFrame(InMaxFrame)
 {
-	if (!Connection || !MaxFrame || MaxFrame > 16 * 1024 * 1024)
+	if (!Connection || !MaxFrame || MaxFrame > MaxChannelFrameBytes)
 	{
 		throw std::invalid_argument("Invalid automation channel limits");
 	}
@@ -28,7 +34,7 @@ FAutomationChannel::FAutomationChannel(std::unique_ptr<ITransportConnection> InC
 
 void FAutomationChannel::ValidatePrefix() const
 {
-	if (Input.size() >= 4 && (!FrameSize(Input) || FrameSize(Input) > MaxFrame))
+	if (Input.size() >= ChannelFramePrefixBytes && (!FrameSize(Input) || FrameSize(Input) > MaxFrame))
 	{
 		throw FTransportError("protocol_error", "Frame length exceeds channel limits");
 	}
@@ -38,7 +44,7 @@ void FAutomationChannel::Poll(bool bInSend)
 {
 	Connection->Poll();
 	auto Bytes = Connection->Receive();
-	if (Bytes.size() > 2 * MaxFrame + 8 - Input.size())
+	if (Bytes.size() > MaxBufferedChannelFrames * (MaxFrame + ChannelFramePrefixBytes) - Input.size())
 	{
 		throw FTransportError("protocol_error", "Buffered input limit exceeded");
 	}
@@ -47,7 +53,8 @@ void FAutomationChannel::Poll(bool bInSend)
 	if (bInSend && !Output.empty() && Connection->State() == ETransportState::Connected)
 	{
 		const auto& Front = Output.front();
-		const auto Count = std::min({Connection->WriteCapacity(), Front.size() - OutputOffset, std::size_t(65536)});
+		const auto Count =
+		    std::min({Connection->WriteCapacity(), Front.size() - OutputOffset, ChannelWriteBytesPerPoll});
 		if (Count &&
 		    Connection->Send(FTransportBytes(Front.begin() + OutputOffset, Front.begin() + OutputOffset + Count)))
 		{
@@ -68,16 +75,18 @@ void FAutomationChannel::Send(std::string_view InMessage)
 	{
 		throw FTransportError("protocol_error", "Output frame exceeds channel limits");
 	}
-	if (Output.size() >= 32 || InMessage.size() + 4 > 2 * MaxFrame + 8 - OutputBytes)
+	if (Output.size() >= MaxQueuedChannelFrames ||
+	    InMessage.size() + ChannelFramePrefixBytes >
+	        MaxBufferedChannelFrames * (MaxFrame + ChannelFramePrefixBytes) - OutputBytes)
 	{
 		throw FTransportError("backpressure", "Peer output queue is full");
 	}
-	FTransportBytes Bytes(4 + InMessage.size());
-	for (std::size_t Index = 0; Index < 4; ++Index)
+	FTransportBytes Bytes(ChannelFramePrefixBytes + InMessage.size());
+	for (std::size_t Index = 0; Index < ChannelFramePrefixBytes; ++Index)
 	{
-		Bytes[Index] = std::byte((InMessage.size() >> ((3 - Index) * 8)) & 255);
+		Bytes[Index] = std::byte((InMessage.size() >> ((ChannelFramePrefixBytes - 1 - Index) * 8)) & 255);
 	}
-	std::memcpy(Bytes.data() + 4, InMessage.data(), InMessage.size());
+	std::memcpy(Bytes.data() + ChannelFramePrefixBytes, InMessage.data(), InMessage.size());
 	OutputBytes += Bytes.size();
 	Output.push_back(std::move(Bytes));
 }
@@ -85,13 +94,13 @@ void FAutomationChannel::Send(std::string_view InMessage)
 std::optional<std::string> FAutomationChannel::Receive()
 {
 	ValidatePrefix();
-	if (Input.size() < 4 || Input.size() < FrameSize(Input) + 4)
+	if (Input.size() < ChannelFramePrefixBytes || Input.size() < FrameSize(Input) + ChannelFramePrefixBytes)
 	{
 		return {};
 	}
 	const auto Size = FrameSize(Input);
-	std::string Message(reinterpret_cast<const char*>(Input.data() + 4), Size);
-	Input.erase(Input.begin(), Input.begin() + Size + 4);
+	std::string Message(reinterpret_cast<const char*>(Input.data() + ChannelFramePrefixBytes), Size);
+	Input.erase(Input.begin(), Input.begin() + Size + ChannelFramePrefixBytes);
 	return Message;
 }
 

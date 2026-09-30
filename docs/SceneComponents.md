@@ -65,7 +65,7 @@ Renderer bridge 把组件发布为派生状态。Main UI 不读取 `IRenderPrimi
 
 Directional Light 记录版本 3 增加整数 `priority`（默认 0）；版本 2 增加可选 `shadowSettings`，包含独立的 `directional` 和 `contact` CPU 参数组。Details 的 **Override Shadow settings** 创建或清除该值，组内编辑沿用组件验证、事务、撤销/重做和原生场景保存。版本 1 读取后保持无覆盖值，不在加载时修改资产；渲染继续采用兼容的会话默认设置。Priority 选出的阴影方向光使用自己的参数，不会把上一盏灯的值写入默认配置。`castShadows` 同时约束两类阴影。
 
-这些类型位于 Scene，不依赖 Renderer 或 RHI；Renderer 从不可变场景发布中解析主光设置。当前 Point / Spot Light 不暴露阴影字段，未来可扩展相应方法组。Details 不再附加渲染诊断伪组件，运行时 primitive 诊断只通过只读服务查询。
+这些类型位于 Scene，不依赖 Renderer 或 RHI；Renderer 从不可变场景发布中解析 Priority 推导出的阴影来源及其设置。当前 Point / Spot Light 不暴露阴影字段，未来可扩展相应方法组。Details 不再附加渲染诊断伪组件，运行时 primitive 诊断只通过只读服务查询。
 
 ## 模型层级与共享
 
@@ -79,7 +79,7 @@ Directional Light 记录版本 3 增加整数 `priority`（默认 0）；版本 
 
 ## 文档与迁移
 
-原生场景 schema 7、节点 schema 3 使用 `{id, type, state}` 组件封装；场景设置额外保存可选 `initialView`。Model 组件的序列化类型 ID 继续使用 `hyperion.staticmesh`，持久化适配保留引用及材质选择，排除解析后的资源。旧字段只在读取时迁移，加载不会写回或改变拓扑。未知类型保留原始封装并标记不可用，保存明确拒绝，避免静默遗漏插件数据。
+原生场景 schema 8、节点 schema 3 使用 `{id, type, state}` 组件封装；场景设置保存默认相机和可选 `initialView`，灯光来源由组件 Priority 推导。Model 组件的序列化类型 ID 继续使用 `hyperion.staticmesh`，持久化适配保留引用及材质选择，排除解析后的资源。旧字段只在读取时迁移，加载不会写回或改变拓扑。未知类型保留原始封装并标记不可用，保存明确拒绝，避免静默遗漏插件数据。
 
 Editor 在合法输入变化时实时提交，并将同一控件的连续输入或同一颜色弹窗会话合并为一条撤销记录，保留最初状态与最新状态。即使值改回原值，记录和修改标记仍保留。Ctrl+Z 连续逐条撤销，Ctrl+Y / Ctrl+Shift+Z 重做；新编辑截断重做分支。Undo/Redo 重新验证，并清除当前控件的活动输入，防止旧值再次写回。切换对象、保存和其他文档操作结束当前编辑，不再需要 Apply/Revert。Save 冻结状态并使用 AssetService 原子写入，完成只标记捕获时的保存点，后续编辑仍为脏。失败保留脏状态，打开其他文档和退出检查未保存修改。
 

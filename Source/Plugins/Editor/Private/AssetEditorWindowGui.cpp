@@ -50,7 +50,7 @@ void FAssetEditorWindow::RouteShortcuts(std::vector<FInputEvent>& InEvents)
 	              [&](const FInputEvent& InEvent)
 	              {
 		              if (InEvent.Type != EEventType::Key || !InEvent.bDown || InEvent.bRepeat ||
-		                  !(InEvent.Modifiers & 1))
+		                  !(InEvent.Modifiers & InputModifiers::Control))
 		              {
 			              return false;
 		              }
@@ -64,7 +64,7 @@ void FAssetEditorWindow::RouteShortcuts(std::vector<FInputEvent>& InEvents)
 		                  (!Gui->IsEditingText() || Workspace.HasActiveInteraction()) && !Gui->DragPayload())
 		              {
 			              Gui->FinishEditing();
-			              if (InEvent.Key == EKey::Y || (InEvent.Modifiers & 2))
+			              if (InEvent.Key == EKey::Y || (InEvent.Modifiers & InputModifiers::Shift))
 			              {
 				              Workspace.Redo();
 			              }

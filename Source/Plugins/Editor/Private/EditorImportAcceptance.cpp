@@ -10,7 +10,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 	{
 		throw std::runtime_error("Import GUI acceptance needs import services");
 	}
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
 			ExerciseClick(InEvents, FileMenuBounds);
@@ -23,17 +23,17 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			break;
 		case 3:
 		{
-			if (++ExerciseWait == 1)
+			if (++Acceptance.ExerciseWait == 1)
 			{
 				FInputEvent Text;
 				Text.Type = EEventType::Text;
 				Text.Text = PathToUtf8(Options.ExerciseImport);
 				InEvents.push_back(std::move(Text));
 			}
-			if (ExerciseWait > 4)
+			if (Acceptance.ExerciseWait > 4)
 			{
-				ExerciseWait = 0;
-				++ExerciseStep;
+				Acceptance.ExerciseWait = 0;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		}
@@ -52,11 +52,18 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 				}
 				if (Draft.Status == "ready")
 				{
+					if (Draft.Dimension != ETextureDimension::Texture2D || Draft.Width != 8 || Draft.Height != 8 ||
+					    Draft.PixelBytes != 340 ||
+					    Draft.Details != std::vector<std::string>{"Texture2D | pixel bytes: 340"})
+					{
+						throw std::runtime_error(
+						    "GUI import texture metadata differs from the reflected draft contract");
+					}
 					if (ImportPanel->OutputFolder != "/Game/Destination/Color")
 					{
 						throw std::runtime_error("Browse selection did not update the displayed import folder");
 					}
-					++ExerciseStep;
+					++Acceptance.ExerciseStep;
 				}
 			}
 			break;
@@ -65,16 +72,16 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			break;
 		case 7:
 		{
-			++ExerciseWait;
-			if (ExerciseWait <= 2)
+			++Acceptance.ExerciseWait;
+			if (Acceptance.ExerciseWait <= 2)
 			{
 				FInputEvent Key;
 				Key.Type = EEventType::Key;
 				Key.Key = EKey::A;
-				Key.bDown = ExerciseWait == 1;
-				Key.Modifiers = ExerciseWait == 1 ? 1 : 0;
+				Key.bDown = Acceptance.ExerciseWait == 1;
+				Key.Modifiers = Acceptance.ExerciseWait == 1 ? InputModifiers::Control : InputModifiers::None;
 				InEvents.push_back(Key);
-				if (ExerciseWait == 2)
+				if (Acceptance.ExerciseWait == 2)
 				{
 					FInputEvent Text;
 					Text.Type = EEventType::Text;
@@ -82,10 +89,10 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 					InEvents.push_back(std::move(Text));
 				}
 			}
-			if (ExerciseWait > 5)
+			if (Acceptance.ExerciseWait > 5)
 			{
-				ExerciseWait = 0;
-				++ExerciseStep;
+				Acceptance.ExerciseWait = 0;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		}
@@ -97,7 +104,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				throw std::runtime_error("Import preview undo failed");
 			}
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 10:
 			ExerciseClick(InEvents, ImportPanel->RedoBounds);
@@ -107,7 +114,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				throw std::runtime_error("Import preview redo failed");
 			}
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 12:
 			ExerciseClick(InEvents, ImportPanel->ImportBounds);
@@ -117,9 +124,9 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				break;
 			}
-			if (!ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			if (!Acceptance.ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
 			{
-				PlacementCapture = Options.ExerciseImport.parent_path() / "ImportSuccess.png";
+				Acceptance.PlacementCapture = Options.ExerciseImport.parent_path() / "ImportSuccess.png";
 			}
 			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
 			break;
@@ -135,7 +142,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				throw std::runtime_error("GUI import failed: " + State.Tasks.front().Error);
 			}
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 15:
@@ -179,7 +186,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			Edits.Name = "Keep these edits";
 			Imports->EditDraft({Draft.Draft, Draft.Generation, Edits});
 			ImportPanel->Request.Output = "/Game/Changed.hasset";
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 20:
@@ -195,7 +202,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 				throw std::runtime_error("Cancelling automatic refresh lost settings or property edits");
 			}
 			ImportPanel->Request.Output = "/Game/Changed.hasset";
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 22:
 			if (ImportPanel->RefreshApplyBounds.Z > ImportPanel->RefreshApplyBounds.X)
@@ -217,7 +224,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			auto Bytes = *IO.ReadAsync(Options.ExerciseImport).Get(IO.TaskSystem());
 			Bytes.push_back(std::byte{});
 			IO.WriteAsync(Options.ExerciseImport, std::move(Bytes)).Get(IO.TaskSystem());
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 24:
@@ -239,9 +246,9 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				break;
 			}
-			if (!ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			if (!Acceptance.ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
 			{
-				PlacementCapture = Options.ExerciseImport.parent_path() / "ImportFailure.png";
+				Acceptance.PlacementCapture = Options.ExerciseImport.parent_path() / "ImportFailure.png";
 			}
 			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
 			break;
@@ -256,7 +263,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			if (Draft.Status == "ready" && Draft.Error.empty() &&
 			    ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
 			{
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		}
@@ -290,10 +297,10 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			auto Bytes = *IO.ReadAsync(Options.ExerciseImport).Get(IO.TaskSystem());
 			Bytes.pop_back();
 			IO.WriteAsync(Options.ExerciseImport, std::move(Bytes)).Get(IO.TaskSystem());
-			PlacementCapture = Options.ExerciseImport.parent_path() / "ImportPanel.png";
-			bImportVerified = true;
+			Acceptance.PlacementCapture = Options.ExerciseImport.parent_path() / "ImportPanel.png";
+			Acceptance.bImportVerified = true;
 			Log(ELogLevel::Info, "Import GUI acceptance passed");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		default:

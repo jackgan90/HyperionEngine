@@ -22,22 +22,22 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 	{
 		throw std::runtime_error(Scene->GetStatus().Error);
 	}
-	if (ExerciseStep >= 100)
+	if (Acceptance.ExerciseStep >= 100)
 	{
 		ExerciseContentSaveAs(InEvents);
 		return;
 	}
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
 			QueueContentRoot(Options.ExerciseContent / "A");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 1:
 			CheckContent(CurrentPath.empty() && !Selection && History.empty(),
 			             "Root switch retained old document state");
 			RequestOpenAsset("/Game/Texture.hasset");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 2:
 			if (!PendingAssetOpen)
@@ -46,7 +46,7 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 				Gui->ClosePopups();
 				bAssetMessage = bRequestAssetMessage = false;
 				RequestOpenAsset("/Game/Scene.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 3:
@@ -57,8 +57,8 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 				                 ScenePaths.end(),
 				             "Uncataloged scene was not discovered");
 				CheckContent(!IsDirty(), "Save As regression requires an unmodified loaded scene");
-				ContentSaveOriginal = IO.FileSystem()->Read("/Game/Scene.hasset", 1024 * 1024);
-				ExerciseStep = 100;
+				Acceptance.ContentSaveOriginal = IO.FileSystem()->Read("/Game/Scene.hasset", 1024 * 1024);
+				Acceptance.ExerciseStep = 100;
 			}
 			break;
 		case 4:
@@ -69,17 +69,17 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 			Node.Name = "A saved";
 			CommitEdit(Handle, std::move(Node), Scene->GetRevision());
 			QueueContentRoot(Options.ExerciseContent / "B");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 5:
 			ExerciseClick(InEvents, CancelChangesBounds);
 			break;
 		case 6:
-			CheckContent(!PendingRoot && IsDirty() && CurrentPath == "/Game/Scene.hasset",
+			CheckContent(!Transition.PendingRoot && IsDirty() && CurrentPath == "/Game/Scene.hasset",
 			             "Cancel lost document changes");
 			QueueContentRoot(Options.ExerciseContent / "B");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 7:
 			ExerciseClick(InEvents, SaveSwitchBounds);
@@ -92,7 +92,7 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 100:
 			ExerciseClick(InEvents, FileMenuBounds);
@@ -109,7 +109,7 @@ void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 			FInputEvent Key;
 			Key.Type = EEventType::Key;
 			Key.Key = EKey::A;
-			Key.bDown = ExerciseStep == 103;
+			Key.bDown = Acceptance.ExerciseStep == 103;
 			Key.Modifiers = Key.bDown ? 1 : 0;
 			InEvents.push_back(Key);
 			if (!Key.bDown)
@@ -119,7 +119,7 @@ void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 				Text.Text = "Other/SceneCopy.hasset";
 				InEvents.push_back(std::move(Text));
 			}
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 105:
@@ -130,7 +130,7 @@ void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 			if (!PendingSave && !bSaveDialog)
 			{
 				const bool bOriginalUnchanged =
-				    IO.FileSystem()->Read("/Game/Scene.hasset", 1024 * 1024) == ContentSaveOriginal;
+				    IO.FileSystem()->Read("/Game/Scene.hasset", 1024 * 1024) == Acceptance.ContentSaveOriginal;
 				const bool bCopyExists = IO.FileSystem()->Exists("/Game/Other/SceneCopy.hasset");
 				CheckContent(CurrentPath == "/Game/Other/SceneCopy.hasset" && bOriginalUnchanged && bCopyExists,
 				             ("Save As used the wrong destination: current=" + CurrentPath + ", original unchanged=" +
@@ -138,7 +138,7 @@ void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 				                 .c_str());
 				CheckContent(!IsDirty(), "Save As left an unmodified scene dirty");
 				OpenScene("/Game/Other/SceneCopy.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 107:
@@ -147,14 +147,14 @@ void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 				CheckContent(Scene->FindNode(Scene->FindHandle("model"))->Name == "A" && !IsDirty(),
 				             "Save As copy did not reopen with the original scene contents");
 				OpenScene("/Game/Scene.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 108:
 			if (Scene->GetStatus().bReady && ReadyFrames > 8)
 			{
 				QueueContentRoot(Options.ExerciseContent / "A");
-				ExerciseStep = 4;
+				Acceptance.ExerciseStep = 4;
 			}
 			break;
 	}
@@ -162,15 +162,15 @@ void FEditorPlugin::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseContentSwitch(std::vector<FInputEvent>& InEvents)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 8:
-			if (!PendingRoot && !PendingSave)
+			if (!Transition.PendingRoot && !PendingSave)
 			{
 				CheckContent(CurrentPath.empty() && !IsDirty() && History.empty(),
 				             "Saved root transition retained document");
 				RequestOpenAsset("/Game/Scene.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 9:
@@ -182,17 +182,17 @@ void FEditorPlugin::ExerciseContentSwitch(std::vector<FInputEvent>& InEvents)
 				Node.Name = "B discarded";
 				CommitEdit(Handle, std::move(Node), Scene->GetRevision());
 				QueueContentRoot(Options.ExerciseContent / "A");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 10:
 			ExerciseClick(InEvents, DiscardChangesBounds);
 			break;
 		case 11:
-			if (!PendingRoot)
+			if (!Transition.PendingRoot)
 			{
 				RequestOpenAsset("/Game/Scene.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 12:
@@ -206,7 +206,7 @@ void FEditorPlugin::ExerciseContentSwitch(std::vector<FInputEvent>& InEvents)
 				CheckContent(std::static_pointer_cast<FSceneManifest>(Manifest)->Nodes.front().Name == "B",
 				             "Discard unexpectedly saved B");
 				CheckContent(Options.Preferences.RecentRoots.size() == 2, "Recent roots did not deduplicate");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		default:
@@ -217,7 +217,7 @@ void FEditorPlugin::ExerciseContentSwitch(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseContentBrowser(std::vector<FInputEvent>& InEvents)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 13:
 			if (ContentTileBounds.contains("/Game/Other"))
@@ -241,14 +241,14 @@ void FEditorPlugin::ExerciseContentBrowser(std::vector<FInputEvent>& InEvents)
 			if (Scene->GetStatus().bReady && ReadyFrames > 8 && CurrentPath == "/Game/Other/Scene.hasset")
 			{
 				Browser->Navigate("/Game");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 18:
 			if (!Browser->IsScanning() && ContentTileBounds.contains("/Game/.assets"))
 			{
 				CheckContent(!ContentTileBounds.contains("/Game/.cache"), "Cache directory remained visible");
-				ExerciseStep = 20;
+				Acceptance.ExerciseStep = 20;
 			}
 			break;
 		default:
@@ -260,7 +260,7 @@ void FEditorPlugin::ExerciseContentBrowser(std::vector<FInputEvent>& InEvents)
 void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 {
 	const auto OldScene = Options.ExerciseContent / "A/Other/Scene.hasset";
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 20:
 		{
@@ -270,14 +270,14 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 			CommitEdit(Handle, std::move(Node), Scene->GetRevision());
 			std::filesystem::permissions(OldScene, std::filesystem::perms::owner_read);
 			QueueContentRoot(Options.ExerciseContent / "B");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 21:
 			ExerciseClick(InEvents, SaveSwitchBounds);
 			break;
 		case 22:
-			if (!PendingSave && !PendingRoot)
+			if (!PendingSave && !Transition.PendingRoot)
 			{
 				std::filesystem::permissions(OldScene, std::filesystem::perms::owner_all);
 				CheckContent(IsDirty() && bAssetMessage && AssetMessage.find("Save failed") != std::string::npos,
@@ -287,7 +287,7 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 				Options.Preferences.RecentRoots.push_back(Options.ExerciseContent / "Missing");
 				SavePreferences();
 				QueueContentRoot(Options.ExerciseContent / "Missing");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 23:
@@ -307,28 +307,28 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 			Gui->ClosePopups();
 			bAssetMessage = bRequestAssetMessage = false;
 			QueueContentRoot(Options.ExerciseContent / "B");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 24:
 			ExerciseClick(InEvents, DiscardChangesBounds);
 			break;
 		case 25:
-			if (!PendingRoot)
+			if (!Transition.PendingRoot)
 			{
 				OpenScene("/Game/Scene.hasset");
 				QueueContentRoot(Options.ExerciseContent / "A");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 26:
-			if (!PendingRoot && !Browser->IsScanning())
+			if (!Transition.PendingRoot && !Browser->IsScanning())
 			{
 				CheckContent(CurrentPath.empty() && History.empty() && !Selection &&
 				                 SameAssetRoot(Context.Require<FContentRootService>().Directory(),
 				                               Options.ExerciseContent / "A"),
 				             "Loading transition retained old content");
 				OpenScene("/Game/Scene.hasset");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		default:
@@ -339,7 +339,7 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 27:
 			if (Scene->GetStatus().bReady && ReadyFrames > 8)
@@ -349,27 +349,28 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 				Node.Name = "A saved after dismissal";
 				CommitEdit(Handle, std::move(Node), Scene->GetRevision());
 				QueueContentRoot(Options.ExerciseContent / "B");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 28:
-			CheckContent(PendingRoot.has_value() && bDiscardDialog, "Root prompt was not prepared");
+			CheckContent(Transition.PendingRoot.has_value() && Transition.bDiscardDialog,
+			             "Root prompt was not prepared");
 			// Keep the real save queued until the title-bar click has been processed. The timeout
 			// permits orderly shutdown even if an earlier assertion interrupts the exercise.
-			ContentSaveGate = std::make_shared<std::binary_semaphore>(0);
+			Acceptance.ContentSaveGate = std::make_shared<std::binary_semaphore>(0);
 			Tasks.Dispatch({EDomain::Io},
-			               [Gate = ContentSaveGate]
+			               [Gate = Acceptance.ContentSaveGate]
 			               {
 				               std::ignore = Gate->try_acquire_for(std::chrono::seconds(30));
 			               });
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 29:
 			ExerciseClick(InEvents, SaveSwitchBounds);
 			break;
 		case 30:
 		{
-			CheckContent(PendingSave && !PendingSave->Result.Ready() && bSaveThenSwitch,
+			CheckContent(PendingSave && !PendingSave->Result.Ready() && Transition.bSaveThenSwitch,
 			             "Save was not held pending during dismissal");
 			// BeginModal leaves the title bar as the last item; its rightmost square contains X.
 			auto CloseBounds = DiscardTitleBounds;
@@ -378,12 +379,12 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 			break;
 		}
 		case 31:
-			CheckContent(PendingSave && !PendingSave->Result.Ready() && !PendingRoot && !bDiscardDialog &&
-			                 !bSaveThenSwitch && !bCommitRoot,
+			CheckContent(PendingSave && !PendingSave->Result.Ready() && !Transition.PendingRoot &&
+			                 !Transition.bDiscardDialog && !Transition.bSaveThenSwitch && !Transition.bCommitRoot,
 			             "Title-bar dismissal retained the root transition");
-			ContentSaveGate->release();
-			ContentSaveGate.reset();
-			++ExerciseStep;
+			Acceptance.ContentSaveGate->release();
+			Acceptance.ContentSaveGate.reset();
+			++Acceptance.ExerciseStep;
 			break;
 		case 32:
 			if (!PendingSave)
@@ -404,7 +405,7 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 				Node.Name = "Discard on application close";
 				CommitEdit(Handle, std::move(Node), Scene->GetRevision());
 				QueueContentRoot(Options.ExerciseContent / "B");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		default:
@@ -415,47 +416,52 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseContentClose(std::vector<FInputEvent>& InEvents)
 {
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 33:
-			CheckContent(PendingRoot.has_value() && bDiscardDialog, "Close overlap lacked a root prompt");
+			CheckContent(Transition.PendingRoot.has_value() && Transition.bDiscardDialog,
+			             "Close overlap lacked a root prompt");
 			CancelDiscardAction();
 			Gui->ClosePopups();
 			std::filesystem::permissions(Options.ExerciseContent / "A/Scene.hasset",
 			                             std::filesystem::perms::owner_read);
 			RequestApplicationClose({EApplicationCloseAction::Save, CurrentPath});
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 34:
-			if (CloseState == "failed" && !PendingSave)
+			if (Transition.CloseState == "failed" && !PendingSave)
 			{
 				std::filesystem::permissions(Options.ExerciseContent / "A/Scene.hasset",
 				                             std::filesystem::perms::owner_all);
-				CheckContent(bPendingClose && bDiscardDialog && IsDirty() && !Window->ShouldClose(),
+				CheckContent(Transition.bPendingClose && Transition.bDiscardDialog && IsDirty() &&
+				                 !Window->ShouldClose(),
 				             "Failed API save-close lost GUI exit intent or dirty work");
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 35:
 			ExerciseClick(InEvents, CancelChangesBounds);
 			break;
 		case 36:
-			CheckContent(CloseState == "idle" && !bPendingClose && !bDiscardDialog && IsDirty(),
+			CheckContent(Transition.CloseState == "idle" && !Transition.bPendingClose && !Transition.bDiscardDialog &&
+			                 IsDirty(),
 			             "GUI cancel after API save-close failure lost work or retained exit intent");
 			QueueContentRoot(Options.ExerciseContent / "B");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 37:
-			CheckContent(PendingRoot.has_value() && bDiscardDialog, "Close overlap lacked a root prompt");
+			CheckContent(Transition.PendingRoot.has_value() && Transition.bDiscardDialog,
+			             "Close overlap lacked a root prompt");
 			Window->RequestClose();
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 38:
-			CheckContent(bPendingClose && PendingRoot && IsDirty(), "Close overlap was not exercised");
+			CheckContent(Transition.bPendingClose && Transition.PendingRoot && IsDirty(),
+			             "Close overlap was not exercised");
 			ExerciseClick(InEvents, DiscardChangesBounds);
-			if (ExerciseStep == 39)
+			if (Acceptance.ExerciseStep == 39)
 			{
-				bContentVerified = true;
+				Acceptance.bContentVerified = true;
 				Log(ELogLevel::Info,
 				    "Editor content A/B/A, save/cancel/discard, double-click, internal filter, "
 				    "save failure, loading transition, title-bar dismissal and API close failure GUI cancel verified");

@@ -25,9 +25,13 @@ public:
 	void Save(FAssetService& InAssets);
 	std::optional<FAssetSaveResult> PollSave();
 	bool IsSaving() const;
+	bool IsEditing() const;
 	std::string Error;
 
 private:
+	friend class FAssetEditWorkflow;
+	bool bEditing{};
+
 	struct FEdit
 	{
 		std::string Field;

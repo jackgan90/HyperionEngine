@@ -37,19 +37,20 @@ void FEditorPlugin::DrawLightMarker(const FSceneNode& InNode, const FMat4& InWor
 	{
 		return;
 	}
-	const auto Point = ProjectViewportPoint(*CameraView, ViewportRegion.Bounds, Origin(InWorld));
+	const auto Point = ProjectViewportPoint(*CameraView, Viewport.ViewportRegion.Bounds, Origin(InWorld));
 	if (!Point)
 	{
 		return;
 	}
 	const float Half = Gui->Scale(24);
 	const FVec4 Bounds{Point->X - Half, Point->Y - Half, Point->X + Half, Point->Y + Half};
-	Gui->DrawImageOverlay(Texture, ViewportRegion.Bounds, Bounds,
+	Gui->DrawImageOverlay(Texture, Viewport.ViewportRegion.Bounds, Bounds,
 	                      bInSelected ? FVec4{1, .85f, .45f, 1} : FVec4{1, 1, 1, 1});
 	if (InNode.DirectionalLight() || InNode.SpotLight())
 	{
 		const auto Direction = ExtractScenePose(InWorld).Forward;
-		const auto End = ProjectViewportPoint(*CameraView, ViewportRegion.Bounds, Add(Origin(InWorld), Direction));
+		const auto End =
+		    ProjectViewportPoint(*CameraView, Viewport.ViewportRegion.Bounds, Add(Origin(InWorld), Direction));
 		if (End)
 		{
 			const float X = End->X - Point->X;
@@ -67,8 +68,8 @@ void FEditorPlugin::DrawLightMarker(const FSceneNode& InNode, const FMat4& InWor
 				                      Tip,
 				                      FVec2{Tip.X - Delta.X * HeadLength + Delta.Y * HeadWidth,
 				                            Tip.Y - Delta.Y * HeadLength - Delta.X * HeadWidth}};
-				Gui->DrawImageOverlay(ViewportRegion.Bounds, Line, {1, .95f, .8f, 1}, 2);
-				Gui->DrawImageOverlay(ViewportRegion.Bounds, Head, {1, .95f, .8f, 1}, 2);
+				Gui->DrawImageOverlay(Viewport.ViewportRegion.Bounds, Line, {1, .95f, .8f, 1}, 2);
+				Gui->DrawImageOverlay(Viewport.ViewportRegion.Bounds, Head, {1, .95f, .8f, 1}, 2);
 			}
 		}
 	}
@@ -92,7 +93,7 @@ std::vector<FEditorPlugin::FProjectedLightMarker> FEditorPlugin::CollectLightMar
 		{
 			continue;
 		}
-		if (const auto Point = ProjectViewportPoint(*CameraView, ViewportRegion.Bounds, Origin(View.World)))
+		if (const auto Point = ProjectViewportPoint(*CameraView, Viewport.ViewportRegion.Bounds, Origin(View.World)))
 		{
 			Result.push_back({View, {Point->X - Half, Point->Y - Half, Point->X + Half, Point->Y + Half}, Point->Z});
 		}
@@ -126,7 +127,7 @@ void FEditorPlugin::DrawLightMarkers()
 
 std::optional<FSceneHandle> FEditorPlugin::PickLightMarker(FVec2 InPoint) const
 {
-	if (!Contains(ViewportRegion.Bounds, InPoint))
+	if (!Contains(Viewport.ViewportRegion.Bounds, InPoint))
 	{
 		return {};
 	}

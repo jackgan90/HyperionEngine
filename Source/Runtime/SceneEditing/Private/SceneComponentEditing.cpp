@@ -17,9 +17,8 @@ bool IsImmutableModelBinding(const FRecordDescriptor& InType, std::string_view I
 
 const FSceneComponent& GetSceneComponent(const FSceneEditDocument& InDocument, const FSceneComponentRequest& InRequest)
 {
-	GetSceneSettings(InDocument, {InRequest.Document, InRequest.Revision});
-	DescribeSceneNode(InDocument, {InRequest.Document, InRequest.Handle});
-	const auto* Component = InDocument.Target().FindNode(InRequest.Handle)->Components.Find(InRequest.Component);
+	InDocument.RequireCurrent(InRequest.Document, InRequest.Revision);
+	const auto* Component = InDocument.RequireNode(InRequest.Handle).Components.Find(InRequest.Component);
 	if (!Component || !Component->Get())
 	{
 		throw FSceneEditError("not_found", "Node does not contain the requested component");
@@ -29,9 +28,10 @@ const FSceneComponent& GetSceneComponent(const FSceneEditDocument& InDocument, c
 
 FSceneComponentList ListSceneComponents(const FSceneEditDocument& InDocument, const FSceneNodeRequest& InRequest)
 {
-	DescribeSceneNode(InDocument, InRequest);
+	InDocument.RequireCurrent(InRequest.Document, InDocument.Target().Revision());
+	const auto& Node = InDocument.RequireNode(InRequest.Handle);
 	FSceneComponentList Result;
-	for (const auto& Component : InDocument.Target().FindNode(InRequest.Handle)->Components.All())
+	for (const auto& Component : Node.Components.All())
 	{
 		if (Component.Get())
 		{
@@ -53,8 +53,7 @@ FSceneDocumentInfo EditSceneComponentStructure(FSceneEditDocument& InDocument,
 	std::vector<FSceneNodeEdit> Edits;
 	for (const auto Handle : InRequest.Handles)
 	{
-		DescribeSceneNode(InDocument, {InRequest.Document, Handle});
-		auto Node = *InDocument.Target().FindNode(Handle);
+		auto Node = InDocument.RequireNode(Handle);
 		if (InRequest.bRemove)
 		{
 			Node.Components.Remove(InRequest.Component);
@@ -69,33 +68,22 @@ FSceneDocumentInfo EditSceneComponentStructure(FSceneEditDocument& InDocument,
 	return DescribeSceneDocument(InDocument);
 }
 
-FSceneDocumentInfo SetSceneComponent(FSceneEditDocument& InDocument, const FSceneSelectionRequest& InRequest,
-                                     std::string_view InComponent, const FRecordDescriptor& InType, const void* InValue)
+static FSceneNodeEdit PrepareCurrentSceneComponentEdit(const FSceneEditDocument& InDocument,
+                                                       const FSceneComponentRequest& InRequest,
+                                                       const FRecordDescriptor& InType, const void* InValue)
 {
-	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
-	if (InRequest.Handles.empty() || InRequest.Handles.size() > 128)
+	const auto& Original = InDocument.RequireNode(InRequest.Handle);
+	const auto* Found = Original.Components.Find(InRequest.Component);
+	if (!Found || !Found->Get())
 	{
-		throw std::invalid_argument("Edit between 1 and 128 distinct objects");
+		throw FSceneEditError("not_found", "Node does not contain the requested component");
 	}
-	std::vector<FSceneNodeEdit> Edits;
-	for (const auto Handle : InRequest.Handles)
-	{
-		Edits.push_back(PrepareSceneComponentEdit(
-		    InDocument, {InRequest.Document, InRequest.Revision, Handle, std::string(InComponent)}, InType, InValue));
-	}
-	InDocument.CommitEdits(std::move(Edits), InRequest.Revision);
-	return DescribeSceneDocument(InDocument);
-}
-
-FSceneNodeEdit PrepareSceneComponentEdit(const FSceneEditDocument& InDocument, const FSceneComponentRequest& InRequest,
-                                         const FRecordDescriptor& InType, const void* InValue)
-{
-	const auto& Source = GetSceneComponent(InDocument, InRequest);
+	const auto& Source = *Found;
 	if (Source.Type->Record != &InType)
 	{
 		throw std::invalid_argument("Component type does not match the operation");
 	}
-	auto Node = *InDocument.Target().FindNode(InRequest.Handle);
+	auto Node = Original;
 	auto* Value = Node.Components.Find(InRequest.Component)->Edit();
 	for (const auto& Member : InType.Members)
 	{
@@ -115,5 +103,48 @@ FSceneNodeEdit PrepareSceneComponentEdit(const FSceneEditDocument& InDocument, c
 		InType.Validate(Value);
 	}
 	return {InRequest.Handle, std::move(Node)};
+}
+
+FSceneDocumentInfo SetSceneComponentValues(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest,
+                                           const FRecordDescriptor& InType,
+                                           std::span<const FSceneComponentEditValue> InValues)
+{
+	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+	if (InValues.empty() || InValues.size() > 128)
+	{
+		throw std::invalid_argument("Edit between 1 and 128 distinct objects");
+	}
+	std::vector<FSceneNodeEdit> Edits;
+	for (const auto& Value : InValues)
+	{
+		Edits.push_back(PrepareCurrentSceneComponentEdit(
+		    InDocument, {InRequest.Document, InRequest.Revision, Value.Handle, std::string(Value.Component)}, InType,
+		    Value.Value));
+	}
+	InDocument.CommitEdits(std::move(Edits), InRequest.Revision);
+	return DescribeSceneDocument(InDocument);
+}
+
+FSceneDocumentInfo SetSceneComponent(FSceneEditDocument& InDocument, const FSceneSelectionRequest& InRequest,
+                                     std::string_view InComponent, const FRecordDescriptor& InType, const void* InValue)
+{
+	if (InRequest.Handles.empty() || InRequest.Handles.size() > 128)
+	{
+		InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+		throw std::invalid_argument("Edit between 1 and 128 distinct objects");
+	}
+	std::vector<FSceneComponentEditValue> Values;
+	for (const auto Handle : InRequest.Handles)
+	{
+		Values.push_back({Handle, InComponent, InValue});
+	}
+	return SetSceneComponentValues(InDocument, {InRequest.Document, InRequest.Revision}, InType, Values);
+}
+
+FSceneNodeEdit PrepareSceneComponentEdit(const FSceneEditDocument& InDocument, const FSceneComponentRequest& InRequest,
+                                         const FRecordDescriptor& InType, const void* InValue)
+{
+	InDocument.RequireCurrent(InRequest.Document, InRequest.Revision);
+	return PrepareCurrentSceneComponentEdit(InDocument, InRequest, InType, InValue);
 }
 } // namespace Hyperion

@@ -14,38 +14,39 @@ void FEditorPlugin::SetPreviewCamera(std::optional<FSceneHandle> InHandle)
 		FinishInspectorEdit();
 		SceneDocument.ReplaceSelection(FSceneSelection(InHandle));
 	}
-	PreviewCamera = InHandle;
+	Viewport.PreviewCamera = InHandle;
 	Camera.Reset();
-	bCameraDragging = false;
+	Viewport.bCameraDragging = false;
 }
 
 bool FEditorPlugin::IsPreviewAvailable() const
 {
 	FSceneNodeView View;
-	return PreviewCamera && Scene->GetNodeView(*PreviewCamera, View) && View.bEffectiveEnabled && View.Node->Camera();
+	return Viewport.PreviewCamera && Scene->GetNodeView(*Viewport.PreviewCamera, View) && View.bEffectiveEnabled &&
+	       View.Node->Camera();
 }
 
 void FEditorPlugin::SetInitialView()
 {
-	if (!bViewportCameraInitialized || PreviewCamera)
+	if (!Viewport.bViewportCameraInitialized || Viewport.PreviewCamera)
 	{
 		throw std::runtime_error("Return to the editor view before setting the initial view");
 	}
 	auto Settings = Scene->GetSettings();
-	Settings.InitialView = ViewCamera;
+	Settings.InitialView = Viewport.ViewCamera;
 	CommitSettings(std::move(Settings));
 }
 
 void FEditorPlugin::ApplyEditorView(FSceneHandle InHandle)
 {
 	const auto* Node = Scene->FindNode(InHandle);
-	if (!bViewportCameraInitialized || !Node || !Node->Camera())
+	if (!Viewport.bViewportCameraInitialized || !Node || !Node->Camera())
 	{
 		throw std::runtime_error("Select an available camera first");
 	}
 	auto Candidate = *Node;
-	Candidate.Camera() = ViewCamera.Lens;
-	Candidate.Local() = ViewCamera.World;
+	Candidate.Camera() = Viewport.ViewCamera.Lens;
+	Candidate.Local() = Viewport.ViewCamera.World;
 	if (!Candidate.Parent().empty())
 	{
 		FSceneNodeView Parent;
@@ -58,7 +59,7 @@ void FEditorPlugin::ApplyEditorView(FSceneHandle InHandle)
 		{
 			throw std::runtime_error("Cannot apply a world view under a singular parent transform");
 		}
-		Candidate.Local() = Multiply(ParentInverse, ViewCamera.World);
+		Candidate.Local() = Multiply(ParentInverse, Viewport.ViewCamera.World);
 	}
 	CommitEdit(InHandle, std::move(Candidate), Scene->GetRevision());
 }
@@ -66,14 +67,14 @@ void FEditorPlugin::ApplyEditorView(FSceneHandle InHandle)
 void FEditorPlugin::CreateCameraFromView()
 {
 	FinishInspectorEdit();
-	if (!bViewportCameraInitialized || PreviewCamera)
+	if (!Viewport.bViewportCameraInitialized || Viewport.PreviewCamera)
 	{
 		throw std::runtime_error("Return to the editor view before creating a camera");
 	}
 	FSceneNode Node;
 	Node.Name = "Camera";
-	Node.Local() = ViewCamera.World;
-	Node.Camera() = ViewCamera.Lens;
+	Node.Local() = Viewport.ViewCamera.World;
+	Node.Camera() = Viewport.ViewCamera.Lens;
 	CommitCreate(std::move(Node));
 }
 
@@ -104,7 +105,7 @@ void FEditorPlugin::DrawViewSelector(float InWidth)
 			const auto* Node = Scene->FindNode(Handle);
 			if (Node && Node->Camera())
 			{
-				if (PreviewCamera == Handle)
+				if (Viewport.PreviewCamera == Handle)
 				{
 					Index = Labels.size();
 				}
@@ -112,18 +113,18 @@ void FEditorPlugin::DrawViewSelector(float InWidth)
 				Cameras.push_back(Handle);
 			}
 		}
-		if (PreviewCamera && Index == 0)
+		if (Viewport.PreviewCamera && Index == 0)
 		{
 			Index = Labels.size();
 			Labels.push_back("Unavailable camera");
-			Cameras.push_back(PreviewCamera);
+			Cameras.push_back(Viewport.PreviewCamera);
 		}
 		Gui->SetNextItemWidth(InWidth);
 		if (Gui->Combo("##ViewSource", Labels, Index))
 		{
 			SetPreviewCamera(Cameras.at(Index));
 		}
-		Gui->Tooltip(PreviewCamera ? "View source - camera preview" : "View source - editor perspective");
+		Gui->Tooltip(Viewport.PreviewCamera ? "View source - camera preview" : "View source - editor perspective");
 	}
 	catch (const std::exception& Failure)
 	{
@@ -142,7 +143,8 @@ void FEditorPlugin::DrawViewOptions()
 	Gui->Text("View source");
 	DrawViewSelector(240);
 	std::ostringstream Speed;
-	Speed << "Camera speed: " << std::fixed << std::setprecision(3) << Camera.GetMovementSpeed(ViewCamera) << " u/s";
+	Speed << "Camera speed: " << std::fixed << std::setprecision(3) << Camera.GetMovementSpeed(Viewport.ViewCamera)
+	      << " u/s";
 	Gui->Text(Speed.str());
 	Gui->Tooltip("Hold right mouse and scroll to adjust movement speed");
 	auto ViewOptions = ViewportState().Options;
@@ -179,7 +181,7 @@ void FEditorPlugin::DrawViewOptions()
 	Gui->Separator();
 	try
 	{
-		if (PreviewCamera)
+		if (Viewport.PreviewCamera)
 		{
 			if (Gui->Button("Return to editor view"))
 			{
@@ -193,13 +195,13 @@ void FEditorPlugin::DrawViewOptions()
 		}
 		else
 		{
-			if (Gui->Button("Set initial view", bViewportCameraInitialized))
+			if (Gui->Button("Set initial view", Viewport.bViewportCameraInitialized))
 			{
 				SetInitialView();
 				Gui->ClosePopup();
 			}
 			InspectionBounds["view/initial"] = Gui->LastItemBounds();
-			if (Gui->Button("Create camera from view", bViewportCameraInitialized))
+			if (Gui->Button("Create camera from view", Viewport.bViewportCameraInitialized))
 			{
 				CreateCameraFromView();
 				Gui->ClosePopup();
@@ -222,7 +224,7 @@ void FEditorPlugin::DrawCameraActions(FSceneHandle InHandle)
 	}
 	InspectionBounds["view/preview"] = Gui->LastItemBounds();
 	Gui->SameLineIfFits("Apply editor view to camera");
-	if (Gui->Button("Apply editor view to camera", bViewportCameraInitialized))
+	if (Gui->Button("Apply editor view to camera", Viewport.bViewportCameraInitialized))
 	{
 		ApplyEditorView(InHandle);
 	}

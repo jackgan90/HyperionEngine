@@ -1,6 +1,7 @@
 #include "AssetImportPanel.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Platform/FileDialog.h"
+#include "ImportChoices.h"
 #include <algorithm>
 #include <cctype>
 
@@ -29,23 +30,6 @@ std::optional<std::filesystem::path> RelativeOutputDirectory(const std::filesyst
 		}
 	}
 	return Relative;
-}
-
-std::string Extension(const std::string& InPath)
-{
-	auto Result = PathToUtf8(PathFromUtf8(InPath).extension());
-	std::transform(Result.begin(), Result.end(), Result.begin(),
-	               [](unsigned char InValue)
-	               {
-		               return static_cast<char>(std::tolower(InValue));
-	               });
-	return Result;
-}
-
-bool IsImage(const std::string& InPath)
-{
-	const auto Ext = Extension(InPath);
-	return Ext == ".png" || Ext == ".jpg" || Ext == ".jpeg";
 }
 
 void BakeSize(FGui& InGui, const char* InLabel, std::uint32_t& OutValue, const char* InTooltip)
@@ -103,21 +87,9 @@ void FAssetImportPanel::UpdateSource()
 
 FImportRequest FAssetImportPanel::Snapshot() const
 {
-	auto Result = Request;
+	auto Result = ImportSettingsSnapshot(Request, ImportTypeChoices(FAssetImportWorkspace::Capabilities()),
+	                                     static_cast<EMaterialTextureEncoding>(EncodingIndex), Bake);
 	Result.bCreateFolder = true;
-	const auto Formats = FAssetImportWorkspace::Capabilities().Formats;
-	Result.Type = TypeIndex ? Formats.at(TypeIndex - 1).Type : "";
-	const auto Ext = Extension(Result.Source);
-	const bool bModel = TypeIndex == 1 || (TypeIndex == 0 && (Ext == ".gltf" || Ext == ".glb"));
-	Result.bScene = bModel && Request.bScene;
-	if (!bModel && !IsImage(Result.Source))
-	{
-		Result.Name.clear();
-	}
-	Result.TextureEncoding =
-	    IsImage(Result.Source) ? std::optional(static_cast<EMaterialTextureEncoding>(EncodingIndex)) : std::nullopt;
-	const bool bSky = (TypeIndex == 0 || TypeIndex == 3) && (Ext == ".hdr" || Ext == ".exr");
-	Result.Sky = bSky ? std::optional(Bake) : std::nullopt;
 	return Result;
 }
 
@@ -155,10 +127,8 @@ void FAssetImportPanel::Process(FNativeSurface InOwner)
 	}
 	try
 	{
-		const std::array Filters{FFileDialogFilter{"Supported assets", "*.gltf;*.glb;*.png;*.jpg;*.jpeg;*.hdr;*.exr"},
-		                         FFileDialogFilter{"Models", "*.gltf;*.glb"},
-		                         FFileDialogFilter{"Textures", "*.png;*.jpg;*.jpeg"},
-		                         FFileDialogFilter{"Sky panoramas", "*.hdr;*.exr"}};
+		const auto Filters =
+		    ImportSourceFilters(ImportTypeChoices(FAssetImportWorkspace::Capabilities()), Request.Type);
 		if (const auto Selected = SelectFile(InOwner, PathFromUtf8(Request.Source), Filters))
 		{
 			Request.Source = PathToUtf8(*Selected);
@@ -220,10 +190,21 @@ void FAssetImportPanel::SetOutputDirectory(const std::filesystem::path& InDirect
 
 void FAssetImportPanel::DrawSource(FGui& InGui)
 {
-	const std::array<std::string, 4> Types{"Auto detect", "Model", "Texture", "Sky"};
+	const auto Choices = ImportTypeChoices(FAssetImportWorkspace::Capabilities());
+	std::vector<std::string> Types{"Auto detect"};
+	std::size_t TypeIndex{};
+	for (const auto& Choice : Choices)
+	{
+		Types.push_back(Choice.Label);
+		if (Choice.Type == Request.Type)
+		{
+			TypeIndex = Types.size() - 1;
+		}
+	}
 	InGui.BeginPropertyRow("Asset type");
 	if (InGui.Combo("##Type", Types, TypeIndex))
 	{
+		Request.Type = TypeIndex ? Choices.at(TypeIndex - 1).Type : "";
 		Request.bScene = false;
 	}
 	InGui.EndPropertyRow();
@@ -244,10 +225,12 @@ void FAssetImportPanel::DrawSource(FGui& InGui)
 
 void FAssetImportPanel::DrawSettings(FGui& InGui)
 {
-	const auto Ext = Extension(Request.Source);
-	const bool bImage = IsImage(Request.Source);
-	const bool bModel = TypeIndex == 1 || (TypeIndex == 0 && (Ext == ".gltf" || Ext == ".glb"));
-	const bool bSky = (TypeIndex == 0 || TypeIndex == 3) && (Ext == ".hdr" || Ext == ".exr");
+	const auto Settings = Snapshot();
+	const auto Choices = ImportTypeChoices(FAssetImportWorkspace::Capabilities());
+	const auto* Choice = ResolveImportChoice(Choices, Request.Type, Request.Source);
+	const bool bImage = Settings.TextureEncoding.has_value();
+	const bool bModel = Choice && Choice->Type == RecordType<FModelAsset>().Id;
+	const bool bSky = Settings.Sky.has_value();
 	if (!bModel && !bImage && !bSky)
 	{
 		return;

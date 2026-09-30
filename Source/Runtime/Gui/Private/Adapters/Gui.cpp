@@ -208,7 +208,7 @@ void FGui::BeginFrame(FSize InLogical, FSize InPixels, float InDelta, std::span<
 				Io.AddMousePosEvent(E.X, E.Y);
 				break;
 			case EEventType::MouseButton:
-				if (E.Button < 5)
+				if (E.Button < InputButtons::Count)
 				{
 					Io.AddMouseButtonEvent(static_cast<int>(E.Button), E.bDown);
 				}
@@ -223,10 +223,10 @@ void FGui::BeginFrame(FSize InLogical, FSize InPixels, float InDelta, std::span<
 				Io.AddInputCharactersUTF8(E.Text.c_str());
 				break;
 			case EEventType::Key:
-				Io.AddKeyEvent(ImGuiMod_Ctrl, (E.Modifiers & 1) != 0);
-				Io.AddKeyEvent(ImGuiMod_Shift, (E.Modifiers & 2) != 0);
-				Io.AddKeyEvent(ImGuiMod_Alt, (E.Modifiers & 4) != 0);
-				Io.AddKeyEvent(ImGuiMod_Super, (E.Modifiers & 8) != 0);
+				Io.AddKeyEvent(ImGuiMod_Ctrl, (E.Modifiers & InputModifiers::Control) != 0);
+				Io.AddKeyEvent(ImGuiMod_Shift, (E.Modifiers & InputModifiers::Shift) != 0);
+				Io.AddKeyEvent(ImGuiMod_Alt, (E.Modifiers & InputModifiers::Alt) != 0);
+				Io.AddKeyEvent(ImGuiMod_Super, (E.Modifiers & InputModifiers::Super) != 0);
 				if (auto Mapped = Key(E.Key); Mapped != ImGuiKey_None)
 				{
 					Io.AddKeyEvent(Mapped, E.bDown);

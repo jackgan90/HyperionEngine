@@ -88,6 +88,10 @@ void FEditorPlugin::DrawObjectMetadata(const FSceneNodeView& InView)
 	Gui->BeginLiveEdit();
 	Gui->BeginPropertyRow("Object name");
 	const bool bNameChanged = Gui->InputText("##value", Name);
+	if (Options.bExerciseSelectionShortcuts)
+	{
+		InspectionBounds["shortcut/name"] = Gui->LastItemBounds();
+	}
 	Gui->EndPropertyRow();
 	Gui->BeginPropertyRow("Object enabled", nullptr, "Disabling this object also disables its children.");
 	const bool bEnabledChanged = Gui->Checkbox("##value", bEnabled);

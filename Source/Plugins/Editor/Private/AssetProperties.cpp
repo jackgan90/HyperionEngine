@@ -4,6 +4,7 @@
 #include "Hyperion/AssetEditing/ModelProperties.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Math/AffineTransform.h"
+#include "Hyperion/Math/Angle.h"
 #include <algorithm>
 #include <sstream>
 
@@ -172,9 +173,9 @@ void FAssetWorkspace::DrawProperties(FGui& InGui)
 	{
 		InGui.TextWrapped("This content mount is read-only.");
 	}
-	if (Entry.EncodingEdit)
+	if (Entry.EditWorkflow)
 	{
-		InGui.Text("Rebuilding texture mips...");
+		InGui.Text("Preparing asset edit...");
 	}
 	if (PreviousInteraction && InGui.PointerState().bCancel)
 	{
@@ -259,11 +260,10 @@ void FAssetWorkspace::DrawModelNodes(FGui& InGui, FEntry& InEntry)
 			        InGui.InputVectorRow("Position", Transform.Position, "", "Local position", ComponentBounds);
 			    Bounds["node/position/x"] = ComponentBounds[0];
 			    ObserveProperty(InGui, "node/position");
-			    FVec3 Degrees{Transform.Rotation.X * 57.2957795f, Transform.Rotation.Y * 57.2957795f,
-			                  Transform.Rotation.Z * 57.2957795f};
+			    auto Degrees = RadiansToDegrees(Transform.Rotation);
 			    if (InGui.InputVectorRow("Rotation", Degrees, "deg", "Local rotation", ComponentBounds))
 			    {
-				    Transform.Rotation = {Degrees.X / 57.2957795f, Degrees.Y / 57.2957795f, Degrees.Z / 57.2957795f};
+				    Transform.Rotation = DegreesToRadians(Degrees);
 				    bChanged = true;
 			    }
 			    bChanged |= InGui.InputVectorRow("Scale", Transform.Scale, "", "Local scale", ComponentBounds);

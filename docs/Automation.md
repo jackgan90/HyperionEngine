@@ -192,7 +192,7 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 对象剪贴板 | 有序多选子树 copy、clipboard info、paste；与 Editor 快捷键共用服务 | Windows provider；同实例同文档；普通文字覆盖对象 token，换场景或内容根失效；16,384 节点与 64 MiB 编辑数据预算；paste 原子提交一个历史事务，copy 不改场景历史；无 provider 时明确 unavailable |
 | 渲染与工具 | 共享渲染配置、实时深度约定、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 深度切换共用 IRenderSettings，影响后续场景和三维资产预览帧，保存独立；可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |
 | 导入、发布 | GUI/agent 共用 AssetImport workspace，支持 glTF/GLB、独立 PNG/JPEG、HDR/EXR 天空 | 提供能力/校验/共享任务查询；textureEncoding、sky 与 createFolder 为可选参数；createFolder 与 Editor 默认分组规则一致，按来源命名目录并跨会话复用，相同内容零写入；天空烘焙仅接受 HDR/EXR；不接受 `.hasset` 原生资产或自有资产 JSON 导入；发布接收后不可取消 |
-| 导入属性预览 | `asset.import.draft.*` 与 `asset.import.drafts` 共用未发布快照、分页查询、受限编辑及 Undo/Redo/Reset | mutation 使用草稿 generation；submit 保留 provenance 与来源校验；脏草稿参与换根/关闭保护 |
+| 导入属性预览 | `asset.import.draft.*` 与 `asset.import.drafts` 共用未发布快照、分页查询、受限编辑及 Undo/Redo/Reset | mutation 使用草稿 generation；纹理尺寸、dimension 和 pixelBytes 为共享反射字段，details 保留展示兼容；submit 保留 provenance 与来源校验；脏草稿参与换根/关闭保护 |
 | 应用附着 | 默认本机发现、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |
 | 进程日志 | `application.log.read` 分页读取 Editor 当前进程日志，与 Log 面板共用 Core history | 含启动、隐藏面板期间与 stdout/stderr 记录；无 history provider 时 unavailable；窗口显隐、大小和停靠属于呈现，不模拟输入 |
 | 底层与维护工具 | 现有 AssetTool 离线维护 CLI 保留 | 不逐个 RPC Public C++ 方法；库迁移、Engine 内容生成、性能测量及导出 envelope 不作为 Editor 交互任务扩展 |
@@ -200,6 +200,10 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 RenderDoc HUD 的 `renderdoc.hud.get/set` 与 Editor preference 共用领域操作；默认隐藏，已加载时即时生效并独立保存，不写场景历史。返回的 `preference` 表示保存值，`enabled` 表示进程级实际状态（运行库不可用时为 null）；保存偏好不会加载插件。保存失败保留原值与显示状态。`automation_renderdoc_hud` 验证发现、schema、CLI/MCP 调用、重启、禁用与保存失败；`editor_capture_ui` 覆盖 GUI 等价行为。
 
 领域操作族、共享服务及工作流见 [AutomationCapabilities.md](AutomationCapabilities.md)。新增功能必须同步更新该覆盖表，并给出 discovery、实际调用和相应 GUI/保存/失效验证。
+
+纹理编码和资产引用异步编辑由 Runtime/AssetEditing 的 `FAssetEditWorkflow` 统一 admission、准备快照、busy 状态和 Main 事务提交；Editor workspace 和独立/附着 automation 使用同一工作流。完成时重新核对文档身份、资产身份和 generation，失败或过期结果不修改草稿、历史或磁盘。关闭和 quiesce 在释放捕获状态前汇合任务，Drain 不提交准备结果；成功编辑仍需显式 `asset.save`。
+
+Automation 插件的私有场景 registration adapter 只共享类型化反射编解码和 `FSceneEditError` 转换。每个 operation family 继续声明 owner、效果、完成语义、可用性、示例和关键词；组件模板保留显式请求 descriptor。Runtime transport 不解释场景类型或执行领域分支。
 
 目标是持续扩大人类任务的等价能力，不是一比一 RPC 每个 C++ 方法。独立资产模式拥有自己的草稿，通过保存时的 digest/identity 检查防止覆盖外部修改；附着模式直接操作目标应用的同一场景服务实例。
 

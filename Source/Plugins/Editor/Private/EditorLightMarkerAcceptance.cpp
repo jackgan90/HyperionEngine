@@ -32,64 +32,70 @@ bool ContainsTriangle(FVec2 InA, FVec2 InB, FVec2 InC, FVec2 InPoint)
 
 void FEditorPlugin::ExercisePlacementMarkers(std::vector<FInputEvent>& InEvents)
 {
-	if (PlacementMarkerStep == 0 && PlacementMarkerCase == 0)
+	if (Acceptance.PlacementMarkerStep == 0 && Acceptance.PlacementMarkerCase == 0)
 	{
 		// Cancellation deliberately leaves the last light creation on the redo branch.
 		Redo();
 	}
-	const auto Point = Scene->FindHandle(PlacementExerciseIds.at(6));
-	const auto Spot = Scene->FindHandle(PlacementExerciseIds.at(7));
+	const auto Point = Scene->FindHandle(Acceptance.PlacementExerciseIds.at(6));
+	const auto Spot = Scene->FindHandle(Acceptance.PlacementExerciseIds.at(7));
 	Check(Scene->FindNode(Point) && Scene->FindNode(Spot), "overlap fixtures unavailable");
-	if (PlacementMarkerStep == 0)
+	if (Acceptance.PlacementMarkerStep == 0)
 	{
 		SelectObject(std::nullopt);
-		PlacementMarkerTransforms = {Scene->FindNode(Point)->Local(), Scene->FindNode(Spot)->Local()};
-		const auto Ray = MakeViewportRay(ViewCamera, {.42f, .3f}, ViewportSize.Width, ViewportSize.Height);
+		Acceptance.PlacementMarkerTransforms = {Scene->FindNode(Point)->Local(), Scene->FindNode(Spot)->Local()};
+		const auto Ray = MakeViewportRay(Viewport.ViewCamera, {.42f, .3f}, Viewport.ViewportSize.Width,
+		                                 Viewport.ViewportSize.Height);
 		Check(Ray.has_value(), "overlap ray unavailable");
 		Scene->SetLocalTransform(
-		    Point, Translation(Add(Ray->Origin, ScaleVector(Ray->Direction, PlacementMarkerCase == 1 ? 4.f : 2.f))));
+		    Point, Translation(
+		               Add(Ray->Origin, ScaleVector(Ray->Direction, Acceptance.PlacementMarkerCase == 1 ? 4.f : 2.f))));
 		Scene->SetLocalTransform(
-		    Spot, Translation(Add(Ray->Origin, ScaleVector(Ray->Direction, PlacementMarkerCase == 0 ? 4.f : 2.f))));
+		    Spot, Translation(
+		              Add(Ray->Origin, ScaleVector(Ray->Direction, Acceptance.PlacementMarkerCase == 0 ? 4.f : 2.f))));
 		Scene->Tick();
 	}
-	else if (PlacementMarkerStep == 1)
+	else if (Acceptance.PlacementMarkerStep == 1)
 	{
 		FInputEvent Event;
 		Event.Type = EEventType::MouseMove;
-		Event.X = ViewportRegion.Bounds.X + (ViewportRegion.Bounds.Z - ViewportRegion.Bounds.X) * .42f;
-		Event.Y = ViewportRegion.Bounds.Y + (ViewportRegion.Bounds.W - ViewportRegion.Bounds.Y) * .3f;
+		Event.X = Viewport.ViewportRegion.Bounds.X +
+		          (Viewport.ViewportRegion.Bounds.Z - Viewport.ViewportRegion.Bounds.X) * .42f;
+		Event.Y = Viewport.ViewportRegion.Bounds.Y +
+		          (Viewport.ViewportRegion.Bounds.W - Viewport.ViewportRegion.Bounds.Y) * .3f;
 		InEvents.push_back(Event);
 	}
-	else if (PlacementMarkerStep == 2 || PlacementMarkerStep == 3)
+	else if (Acceptance.PlacementMarkerStep == 2 || Acceptance.PlacementMarkerStep == 3)
 	{
 		FInputEvent Event;
 		Event.Type = EEventType::MouseButton;
-		Event.bDown = PlacementMarkerStep == 2;
+		Event.bDown = Acceptance.PlacementMarkerStep == 2;
 		InEvents.push_back(Event);
 	}
 	else
 	{
-		Check(Selection == (PlacementMarkerCase == 1 ? Spot : Point),
+		Check(Selection == (Acceptance.PlacementMarkerCase == 1 ? Spot : Point),
 		      "overlapping marker click selected a covered light");
-		Scene->SetLocalTransform(Point, PlacementMarkerTransforms[0]);
-		Scene->SetLocalTransform(Spot, PlacementMarkerTransforms[1]);
+		Scene->SetLocalTransform(Point, Acceptance.PlacementMarkerTransforms[0]);
+		Scene->SetLocalTransform(Spot, Acceptance.PlacementMarkerTransforms[1]);
 		Scene->Tick();
 		SelectObject(std::nullopt);
-		++PlacementMarkerCase;
-		PlacementMarkerStep = 0;
+		++Acceptance.PlacementMarkerCase;
+		Acceptance.PlacementMarkerStep = 0;
 		return;
 	}
-	++PlacementMarkerStep;
+	++Acceptance.PlacementMarkerStep;
 }
 
 void FEditorPlugin::CheckPlacementMarkerDraws(const FGuiDrawData& InData) const
 {
-	if (PlacementMarkerCase >= 3 || PlacementMarkerStep != 2)
+	if (Acceptance.PlacementMarkerCase >= 3 || Acceptance.PlacementMarkerStep != 2)
 	{
 		return;
 	}
-	const FVec2 Point{ViewportRegion.Bounds.X + (ViewportRegion.Bounds.Z - ViewportRegion.Bounds.X) * .42f,
-	                  ViewportRegion.Bounds.Y + (ViewportRegion.Bounds.W - ViewportRegion.Bounds.Y) * .3f};
+	const FVec2 Point{
+	    Viewport.ViewportRegion.Bounds.X + (Viewport.ViewportRegion.Bounds.Z - Viewport.ViewportRegion.Bounds.X) * .42f,
+	    Viewport.ViewportRegion.Bounds.Y + (Viewport.ViewportRegion.Bounds.W - Viewport.ViewportRegion.Bounds.Y) * .3f};
 	const auto PointTexture = PlacementIcons.at("PointLight").Texture;
 	const auto SpotTexture = PlacementIcons.at("SpotLight").Texture;
 	std::uint64_t TopTexture{};
@@ -110,6 +116,7 @@ void FEditorPlugin::CheckPlacementMarkerDraws(const FGuiDrawData& InData) const
 			}
 		}
 	}
-	Check(TopTexture == (PlacementMarkerCase == 1 ? SpotTexture : PointTexture), "the covered light was drawn on top");
+	Check(TopTexture == (Acceptance.PlacementMarkerCase == 1 ? SpotTexture : PointTexture),
+	      "the covered light was drawn on top");
 }
 } // namespace Hyperion

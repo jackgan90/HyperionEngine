@@ -1,6 +1,7 @@
 #include "AssetImportPanel.h"
 #include "AssetPropertyWidgets.h"
 #include "Hyperion/Math/AffineTransform.h"
+#include "Hyperion/Math/Angle.h"
 #include <algorithm>
 
 namespace Hyperion
@@ -100,15 +101,8 @@ void FAssetImportPanel::DrawDraftProperties(FGui& InGui, FImportDraftInfo& InInf
 	}
 	if (InInfo.Width)
 	{
-		for (const auto& Detail : InInfo.Details)
-		{
-			const auto Separator = Detail.find(" | pixel bytes: ");
-			if (Separator != std::string::npos)
-			{
-				ReadOnlyProperty(InGui, "Texture type", Detail.substr(0, Separator));
-				ReadOnlyProperty(InGui, "Pixel bytes", Detail.substr(Separator + 16));
-			}
-		}
+		ReadOnlyProperty(InGui, "Texture type", InInfo.Dimension == ETextureDimension::Cube ? "Cube" : "Texture2D");
+		ReadOnlyProperty(InGui, "Pixel bytes", std::to_string(InInfo.PixelBytes));
 		ReadOnlyProperty(InGui, "Width", std::to_string(InInfo.Width));
 		ReadOnlyProperty(InGui, "Height", std::to_string(InInfo.Height));
 		ReadOnlyProperty(InGui, "Format", InInfo.Format);
@@ -129,20 +123,20 @@ void FAssetImportPanel::DrawDraftProperties(FGui& InGui, FImportDraftInfo& InInf
 	}
 	const auto Total =
 	    std::max({InInfo.TotalNodes, InInfo.TotalPrimitives, InInfo.TotalMaterialSlots, InInfo.TotalDiagnostics});
-	if (Total > 32)
+	if (Total > ImportDraftPreviewPageLimit)
 	{
 		if (InGui.Button("Previous properties", PreviewOffset > 0))
 		{
-			PreviewOffset -= 32;
+			PreviewOffset -= ImportDraftPreviewPageLimit;
 			SelectedNode = SelectedPrimitive = 0;
 		}
 		InGui.SameLine();
-		if (InGui.Button("Next properties", PreviewOffset + 32 < Total))
+		if (InGui.Button("Next properties", PreviewOffset + ImportDraftPreviewPageLimit < Total))
 		{
-			PreviewOffset += 32;
+			PreviewOffset += ImportDraftPreviewPageLimit;
 			SelectedNode = SelectedPrimitive = 0;
 		}
-		InGui.Text("Property page " + std::to_string(PreviewOffset / 32 + 1));
+		InGui.Text("Property page " + std::to_string(PreviewOffset / ImportDraftPreviewPageLimit + 1));
 	}
 }
 
@@ -168,11 +162,10 @@ void FAssetImportPanel::DrawDraftModel(FGui& InGui, FImportDraftInfo& InInfo)
 		auto Transform = DecomposeAffine(Node.Local);
 		bool bChanged = AssetText(InGui, "Node name", Node.Name);
 		bool bTransformChanged = InGui.InputVector("Position", Transform.Position);
-		FVec3 Degrees{Transform.Rotation.X * 57.2957795f, Transform.Rotation.Y * 57.2957795f,
-		              Transform.Rotation.Z * 57.2957795f};
+		auto Degrees = RadiansToDegrees(Transform.Rotation);
 		if (InGui.InputVector("Rotation (degrees)", Degrees))
 		{
-			Transform.Rotation = {Degrees.X / 57.2957795f, Degrees.Y / 57.2957795f, Degrees.Z / 57.2957795f};
+			Transform.Rotation = DegreesToRadians(Degrees);
 			bTransformChanged = true;
 		}
 		bTransformChanged |= InGui.InputVector("Scale", Transform.Scale);

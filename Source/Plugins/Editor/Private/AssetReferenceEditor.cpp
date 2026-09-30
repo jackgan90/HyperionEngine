@@ -4,8 +4,7 @@
 
 namespace Hyperion
 {
-bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef& InReference, std::string_view InType,
-                                    std::optional<ETextureDimension> InDimension)
+bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef& InReference, std::string_view InType)
 {
 	try
 	{
@@ -38,8 +37,7 @@ bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef&
 			return false;
 		}
 		const auto& Reference = Choices.References.at(Selected);
-		Active->ReferenceEdit = FReferenceSelection{Active->Document->Generation(), std::string(InType), InDimension,
-		                                            Assets.LoadGraphAsync(Reference, Active->Path)};
+		Active->ReferenceEdit = FReferenceSelection{Active->Document->Generation()};
 		InReference = Reference;
 		return true;
 	}
@@ -53,33 +51,39 @@ bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef&
 
 void FAssetWorkspace::CommitReferenceEdit(FEntry& InEntry, std::string InField, FArchiveNode InCandidate)
 {
-	if (InEntry.ReferenceEdit)
-	{
-		InEntry.ReferenceEdit->Field = std::move(InField);
-		InEntry.ReferenceEdit->Candidate = std::move(InCandidate);
-	}
-}
-
-void FAssetWorkspace::PollReferenceEdit(FEntry& InEntry)
-{
-	if (!InEntry.ReferenceEdit || !InEntry.ReferenceEdit->Request.Ready())
+	if (!InEntry.ReferenceEdit)
 	{
 		return;
 	}
-	auto Edit = std::move(*InEntry.ReferenceEdit);
+	const auto Generation = InEntry.ReferenceEdit->Generation;
 	InEntry.ReferenceEdit.reset();
 	try
 	{
-		if (Edit.Generation != InEntry.Document->Generation() || Edit.Field.empty())
-		{
-			throw std::runtime_error("Reference edit was superseded; select the asset again");
-		}
-		const auto Graph = Edit.Request.GetReady();
-		ValidateAssetReferenceGraph(*Graph, Edit.Type, Edit.Dimension);
-		CommitAssetField(*InEntry.Document, std::move(Edit.Field), std::move(Edit.Candidate));
+		InEntry.EditWorkflow = FAssetEditWorkflow::Field(Tasks, Assets, InEntry.Document, Generation,
+		                                                 std::move(InField), std::move(InCandidate));
 	}
 	catch (const std::exception& Failure)
 	{
+		InEntry.Document->Error = Failure.what();
+	}
+}
+
+void FAssetWorkspace::PollEditWorkflow(FEntry& InEntry)
+{
+	if (!InEntry.EditWorkflow)
+	{
+		return;
+	}
+	try
+	{
+		if (InEntry.EditWorkflow->Poll(InEntry.Document))
+		{
+			InEntry.EditWorkflow.reset();
+		}
+	}
+	catch (const std::exception& Failure)
+	{
+		InEntry.EditWorkflow.reset();
 		InEntry.bSaveRequested = false;
 		InEntry.Document->Error = Failure.what();
 	}

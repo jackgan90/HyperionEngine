@@ -8,40 +8,40 @@ namespace Hyperion
 {
 std::optional<FSceneCameraView> FEditorPlugin::PickingCamera() const
 {
-	if (PreviewCamera)
+	if (Viewport.PreviewCamera)
 	{
 		FSceneNodeView View;
-		if (!Scene->GetNodeView(*PreviewCamera, View) || !View.bEffectiveEnabled || !View.Node->Camera())
+		if (!Scene->GetNodeView(*Viewport.PreviewCamera, View) || !View.bEffectiveEnabled || !View.Node->Camera())
 		{
 			return {};
 		}
 		return FSceneCameraView{*View.Node->Camera(), View.World};
 	}
 	// Render uses this value even before automatic framing finishes loading the scene.
-	return ViewCamera;
+	return Viewport.ViewCamera;
 }
 
 void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 {
-	const bool bInputInterrupted =
-	    std::any_of(InEvents.begin(), InEvents.end(),
-	                [](const FInputEvent& InEvent)
-	                {
-		                return (InEvent.Type == EEventType::Focus && !InEvent.bDown) ||
-		                       (InEvent.Type == EEventType::MouseButton && InEvent.Button == 1 && InEvent.bDown);
-	                });
+	const bool bInputInterrupted = std::any_of(InEvents.begin(), InEvents.end(),
+	                                           [](const FInputEvent& InEvent)
+	                                           {
+		                                           return (InEvent.Type == EEventType::Focus && !InEvent.bDown) ||
+		                                                  (InEvent.Type == EEventType::MouseButton &&
+		                                                   InEvent.Button == InputButtons::Right && InEvent.bDown);
+	                                           });
 	const auto Pointer = Gui->PointerState();
 	const auto ActiveCamera = PickingCamera();
 	if (Gui->DragPayload() || Placement.IsActive() || bPlacementUsedMouse || bInputInterrupted || !ActiveCamera ||
-	    !bViewportVisible || !ViewportRegion.bFocused || !ViewportRegion.bHovered || bOpenDialog || bSaveDialog ||
-	    bAssetMessage || PendingRoot || bDiscardDialog || bPreferencesDialog || Gui->IsEditingText() ||
-	    !Pointer.bPositionValid || Pointer.bCancel || Pointer.bRightDown || bCameraDragging || bGizmoUsedMouse ||
-	    Gizmo.IsDragging())
+	    !Viewport.bViewportVisible || !Viewport.ViewportRegion.bFocused || !Viewport.ViewportRegion.bHovered ||
+	    bOpenDialog || bSaveDialog || bAssetMessage || Transition.PendingRoot || Transition.bDiscardDialog ||
+	    bPreferencesDialog || Gui->IsEditingText() || !Pointer.bPositionValid || Pointer.bCancel ||
+	    Pointer.bRightDown || Viewport.bCameraDragging || bGizmoUsedMouse || Gizmo.IsDragging())
 	{
 		ViewportClick.reset();
 		return;
 	}
-	const auto& Bounds = ViewportRegion.Bounds;
+	const auto& Bounds = Viewport.ViewportRegion.Bounds;
 	if (Bounds.Z <= Bounds.X || Bounds.W <= Bounds.Y)
 	{
 		ViewportClick.reset();
@@ -49,9 +49,9 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	}
 	if (Pointer.bPressed)
 	{
-		ViewportClick =
-		    FViewportClick{Pointer.Position,    Pointer.bCtrl || Pointer.bShift, Bounds, ViewportSize, *ActiveCamera,
-		                   Scene->GetRevision()};
+		ViewportClick = FViewportClick{Pointer.Position, Pointer.bCtrl || Pointer.bShift,
+		                               Bounds,           Viewport.ViewportSize,
+		                               *ActiveCamera,    Scene->GetRevision()};
 	}
 	if (!ViewportClick)
 	{
@@ -62,8 +62,8 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	const float DeltaY = Pointer.Position.Y - Click.Start.Y;
 	if (DeltaX * DeltaX + DeltaY * DeltaY > 16 || Click.Revision != Scene->GetRevision() ||
 	    Click.Bounds.X != Bounds.X || Click.Bounds.Y != Bounds.Y || Click.Bounds.Z != Bounds.Z ||
-	    Click.Bounds.W != Bounds.W || Click.Size.Width != ViewportSize.Width ||
-	    Click.Size.Height != ViewportSize.Height || Click.Camera.World.Values != ActiveCamera->World.Values ||
+	    Click.Bounds.W != Bounds.W || Click.Size.Width != Viewport.ViewportSize.Width ||
+	    Click.Size.Height != Viewport.ViewportSize.Height || Click.Camera.World.Values != ActiveCamera->World.Values ||
 	    Click.Camera.Lens != ActiveCamera->Lens)
 	{
 		ViewportClick.reset();
@@ -86,7 +86,7 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	}
 	const FVec2 Position{(Pointer.Position.X - Bounds.X) / (Bounds.Z - Bounds.X),
 	                     (Pointer.Position.Y - Bounds.Y) / (Bounds.W - Bounds.Y)};
-	const auto Ray = MakeViewportRay(*ActiveCamera, Position, ViewportSize.Width, ViewportSize.Height,
+	const auto Ray = MakeViewportRay(*ActiveCamera, Position, Viewport.ViewportSize.Width, Viewport.ViewportSize.Height,
 	                                 GetDepthConvention(Rendering.bReversedZ));
 	if (!Ray)
 	{

@@ -27,7 +27,8 @@ void FramingKey(std::vector<FInputEvent>& InEvents, EKey InKey = EKey::F, bool b
 	InEvents.push_back(Event);
 }
 
-void FramingClick(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInDown, unsigned InButton = 0)
+void FramingClick(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInDown,
+                  unsigned InButton = InputButtons::Left)
 {
 	FInputEvent Event;
 	Event.Type = EEventType::MouseMove;
@@ -108,51 +109,52 @@ void FEditorPlugin::PrepareFramingExercise()
 	Model.Model()->Asset = PlacementModels.at("Cube").Asset;
 	Model.Name = "Framing A";
 	Model.Local() = Translation({-3, 0, 0});
-	FramingObjects.push_back(Scene->AddNode(Model));
+	Acceptance.FramingObjects.push_back(Scene->AddNode(Model));
 	Model.Name = "Framing B";
 	Model.Id.clear();
 	Model.Local() = Translation({3, 1, 0});
-	FramingObjects.push_back(Scene->AddNode(Model));
+	Acceptance.FramingObjects.push_back(Scene->AddNode(Model));
 	Filter = "Framing";
 	bShowLightMarkers = false;
 	ResetDocument();
 	SelectObject(std::nullopt);
-	ViewCamera.World = SceneCameraTransform({0, 0, 20}, {});
-	FramingBefore = ViewCamera;
-	FramingRevision = Scene->GetRevision();
-	FramingSnapshot = Serialize(Scene->Snapshot("FramingAcceptance.hasset"));
+	Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 20}, {});
+	Acceptance.FramingBefore = Viewport.ViewCamera;
+	Acceptance.FramingRevision = Scene->GetRevision();
+	Acceptance.FramingSnapshot = Serialize(Scene->Snapshot("FramingAcceptance.hasset"));
 	Gui->FocusWindow("Outliner");
 }
 
 void FEditorPlugin::CheckFramingResult(FVec3 InCenter)
 {
-	const auto Pose = ExtractScenePose(ViewCamera.World);
-	const auto Before = ExtractScenePose(FramingBefore.World);
-	const auto Target = Add(Pose.Eye, ScaleVector(Pose.Forward, ViewCamera.Lens.FocusDistance));
+	const auto Pose = ExtractScenePose(Viewport.ViewCamera.World);
+	const auto Before = ExtractScenePose(Acceptance.FramingBefore.World);
+	const auto Target = Add(Pose.Eye, ScaleVector(Pose.Forward, Viewport.ViewCamera.Lens.FocusDistance));
 	RequireFraming(Length(Subtract(Target, InCenter)) < .001f, "camera did not focus selection bounds center");
 	RequireFraming(Length(Subtract(Pose.Forward, Before.Forward)) < .00001f &&
-	                   ViewCamera.Lens.VerticalRadians == FramingBefore.Lens.VerticalRadians,
+	                   Viewport.ViewCamera.Lens.VerticalRadians == Acceptance.FramingBefore.Lens.VerticalRadians,
 	               "framing changed orientation or FOV");
-	RequireFraming(ViewCamera.Lens.Far >= FramingBefore.Lens.Far, "framing shortened the browsing far plane");
-	RequireFraming(Scene->GetRevision() == FramingRevision && !IsDirty() && History.empty(),
+	RequireFraming(Viewport.ViewCamera.Lens.Far >= Acceptance.FramingBefore.Lens.Far,
+	               "framing shortened the browsing far plane");
+	RequireFraming(Scene->GetRevision() == Acceptance.FramingRevision && !IsDirty() && History.empty(),
 	               "framing changed document revision, dirty state or history");
-	RequireFraming(Serialize(Scene->Snapshot("FramingAcceptance.hasset")) == FramingSnapshot,
+	RequireFraming(Serialize(Scene->Snapshot("FramingAcceptance.hasset")) == Acceptance.FramingSnapshot,
 	               "framing changed the authored snapshot");
 }
 
 void FEditorPlugin::ExerciseFramingSelection(std::vector<FInputEvent>& InEvents)
 {
-	const auto A = FramingObjects[0];
-	const auto B = FramingObjects[1];
+	const auto A = Acceptance.FramingObjects[0];
+	const auto B = Acceptance.FramingObjects[1];
 	const auto Row = [&](FSceneHandle InHandle)
 	{
-		return FramingPoint(MultiSelectionRows.at(Scene->FindNode(InHandle)->Id));
+		return FramingPoint(Acceptance.MultiSelectionRows.at(Scene->FindNode(InHandle)->Id));
 	};
-	switch (FramingStep)
+	switch (Acceptance.FramingStep)
 	{
 		case 1:
 		case 2:
-			FramingClick(InEvents, Row(A), FramingStep == 1);
+			FramingClick(InEvents, Row(A), Acceptance.FramingStep == 1);
 			break;
 		case 3:
 			RequireFraming(Selection == A && Gui->IsWindowFocused("Outliner"), "Outliner did not select A");
@@ -160,7 +162,7 @@ void FEditorPlugin::ExerciseFramingSelection(std::vector<FInputEvent>& InEvents)
 			break;
 		case 4:
 			CheckFramingResult({-3, 0, 0});
-			ViewCamera = FramingBefore;
+			Viewport.ViewCamera = Acceptance.FramingBefore;
 			FramingKey(InEvents, EKey::None, true, false, 1);
 			FramingClick(InEvents, Row(B), true);
 			break;
@@ -174,28 +176,30 @@ void FEditorPlugin::ExerciseFramingSelection(std::vector<FInputEvent>& InEvents)
 		case 7:
 		{
 			CheckFramingResult({0, .5f, 0});
-			FramingMultiple = ViewCamera;
+			Acceptance.FramingMultiple = Viewport.ViewCamera;
 			FSceneSelection Reversed(B);
 			Reversed.Toggle(A);
 			SetSelection(std::move(Reversed));
-			ViewCamera = FramingBefore;
+			Viewport.ViewCamera = Acceptance.FramingBefore;
 			Gui->FocusWindow("Details");
 			FramingKey(InEvents);
 			break;
 		}
 		case 8:
-			RequireFraming(ViewCamera == FramingMultiple, "primary/order or Details focus changed framing");
+			RequireFraming(Viewport.ViewCamera == Acceptance.FramingMultiple,
+			               "primary/order or Details focus changed framing");
 			CheckFramingResult({0, .5f, 0});
 			SelectObject(std::nullopt);
-			ViewCamera = FramingBefore;
+			Viewport.ViewCamera = Acceptance.FramingBefore;
 			Gui->FocusWindow("Viewport");
 			break;
 		case 9:
 		case 10:
 		{
-			const auto Point = ProjectViewportPoint(ViewCamera, ViewportRegion.Bounds, {-2.75f, .25f, .5f});
+			const auto Point =
+			    ProjectViewportPoint(Viewport.ViewCamera, Viewport.ViewportRegion.Bounds, {-2.75f, .25f, .5f});
 			RequireFraming(Point.has_value(), "viewport test surface is off screen");
-			FramingClick(InEvents, {Point->X, Point->Y}, FramingStep == 9);
+			FramingClick(InEvents, {Point->X, Point->Y}, Acceptance.FramingStep == 9);
 			break;
 		}
 		case 11:
@@ -204,8 +208,8 @@ void FEditorPlugin::ExerciseFramingSelection(std::vector<FInputEvent>& InEvents)
 			break;
 		case 12:
 			CheckFramingResult({-3, 0, 0});
-			RequireFramingNavigation(ViewCamera, ViewportSize);
-			ViewCamera = FramingBefore;
+			RequireFramingNavigation(Viewport.ViewCamera, Viewport.ViewportSize);
+			Viewport.ViewCamera = Acceptance.FramingBefore;
 			Gui->FocusWindow("Content Browser");
 			break;
 	}
@@ -213,8 +217,8 @@ void FEditorPlugin::ExerciseFramingSelection(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseFramingGuards(std::vector<FInputEvent>& InEvents)
 {
-	RequireFraming(ViewCamera == FramingBefore, "guarded shortcut changed camera");
-	switch (FramingStep)
+	RequireFraming(Viewport.ViewCamera == Acceptance.FramingBefore, "guarded shortcut changed camera");
+	switch (Acceptance.FramingStep)
 	{
 		case 13:
 			FramingKey(InEvents);
@@ -230,7 +234,7 @@ void FEditorPlugin::ExerciseFramingGuards(std::vector<FInputEvent>& InEvents)
 			break;
 		case 17:
 		case 18:
-			FramingClick(InEvents, FramingPoint(InspectionBounds.at("clipboard/search")), FramingStep == 17);
+			FramingClick(InEvents, FramingPoint(InspectionBounds.at("clipboard/search")), Acceptance.FramingStep == 17);
 			break;
 		case 19:
 		{
@@ -272,23 +276,23 @@ void FEditorPlugin::ExerciseFramingGuards(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseFramingViewGuards(std::vector<FInputEvent>& InEvents)
 {
-	RequireFraming(ViewCamera == FramingBefore, "guarded view shortcut changed camera");
-	switch (FramingStep)
+	RequireFraming(Viewport.ViewCamera == Acceptance.FramingBefore, "guarded view shortcut changed camera");
+	switch (Acceptance.FramingStep)
 	{
 		case 23:
 			bOpenDialog = false;
 			Gui->ClosePopups();
 			Gui->FocusWindow("Viewport");
 			PreviewSceneCamera(Scene->AddNode(MakeSceneCameraNode("framing-preview")));
-			FramingRevision = Scene->GetRevision();
-			FramingSnapshot = Serialize(Scene->Snapshot("FramingAcceptance.hasset"));
+			Acceptance.FramingRevision = Scene->GetRevision();
+			Acceptance.FramingSnapshot = Serialize(Scene->Snapshot("FramingAcceptance.hasset"));
 			break;
 		case 24:
 			FramingKey(InEvents);
 			break;
 		case 25:
 		{
-			CheckFramingResult({0, 0, 20 - FramingBefore.Lens.FocusDistance});
+			CheckFramingResult({0, 0, 20 - Acceptance.FramingBefore.Lens.FocusDistance});
 			SetPreviewCamera({});
 			FInputEvent Focus;
 			Focus.Type = EEventType::Focus;
@@ -306,21 +310,21 @@ void FEditorPlugin::ExerciseFramingViewGuards(std::vector<FInputEvent>& InEvents
 			break;
 		}
 		case 27:
-			FramingClick(InEvents, FramingPoint(ViewportRegion.Bounds), true, 1);
+			FramingClick(InEvents, FramingPoint(Viewport.ViewportRegion.Bounds), true, 1);
 			FramingKey(InEvents);
 			break;
 		case 28:
-			RequireFraming(bCameraDragging, "RMB navigation did not start");
+			RequireFraming(Viewport.bCameraDragging, "RMB navigation did not start");
 			RequireFramingBusy(*this, {SceneDocument.Id(), Scene->GetRevision()});
-			RequireFraming(bCameraDragging, "rejected framing interrupted RMB navigation");
-			FramingClick(InEvents, FramingPoint(ViewportRegion.Bounds), false, 1);
+			RequireFraming(Viewport.bCameraDragging, "rejected framing interrupted RMB navigation");
+			FramingClick(InEvents, FramingPoint(Viewport.ViewportRegion.Bounds), false, 1);
 			SelectObject(std::nullopt);
 			break;
 		case 29:
 			FramingKey(InEvents);
 			break;
 		case 30:
-			SelectObject(FramingObjects[0]);
+			SelectObject(Acceptance.FramingObjects[0]);
 			FrameSelection({SceneDocument.Id(), Scene->GetRevision()});
 			SelectObject(std::nullopt);
 			FramingKey(InEvents, EKey::Home);
@@ -330,12 +334,12 @@ void FEditorPlugin::ExerciseFramingViewGuards(std::vector<FInputEvent>& InEvents
 
 void FEditorPlugin::ExerciseFramingPopup(std::vector<FInputEvent>& InEvents)
 {
-	RequireFraming(ViewCamera == FramingBefore, "popup interaction changed camera");
-	switch (FramingStep)
+	RequireFraming(Viewport.ViewCamera == Acceptance.FramingBefore, "popup interaction changed camera");
+	switch (Acceptance.FramingStep)
 	{
 		case 32:
 		case 33:
-			FramingClick(InEvents, FramingPoint(InspectionBounds.at("view/options")), FramingStep == 32);
+			FramingClick(InEvents, FramingPoint(InspectionBounds.at("view/options")), Acceptance.FramingStep == 32);
 			break;
 		case 34:
 			RequireFraming(Gui->HasOpenPopup(), "viewport options popup did not open");
@@ -347,20 +351,20 @@ void FEditorPlugin::ExerciseFramingPopup(std::vector<FInputEvent>& InEvents)
 			CheckFramingResult({0, .5f, 0});
 			Gui->ClosePopups();
 			SelectObject(std::nullopt);
-			bFramingVerified = true;
+			Acceptance.bFramingVerified = true;
 			break;
 	}
 }
 
 void FEditorPlugin::ExerciseFraming(std::vector<FInputEvent>& InEvents)
 {
-	if (!Scene->GetStatus().bReady || !bViewportVisible || bFramingVerified)
+	if (!Scene->GetStatus().bReady || !Viewport.bViewportVisible || Acceptance.bFramingVerified)
 	{
 		return;
 	}
-	if (++FramingWait % 3 != 0)
+	if (++Acceptance.FramingWait % 3 != 0)
 	{
-		if (FramingWait % 3 == 1)
+		if (Acceptance.FramingWait % 3 == 1)
 		{
 			FramingKey(InEvents, EKey::F, false);
 			FramingKey(InEvents, EKey::Escape, false);
@@ -368,7 +372,7 @@ void FEditorPlugin::ExerciseFraming(std::vector<FInputEvent>& InEvents)
 		}
 		return;
 	}
-	if (!FramingStep)
+	if (!Acceptance.FramingStep)
 	{
 		PrepareFramingExercise();
 		FInputEvent Focus;
@@ -376,31 +380,32 @@ void FEditorPlugin::ExerciseFraming(std::vector<FInputEvent>& InEvents)
 		Focus.bDown = true;
 		InEvents.push_back(Focus);
 	}
-	else if (FramingStep <= 12)
+	else if (Acceptance.FramingStep <= 12)
 	{
 		ExerciseFramingSelection(InEvents);
 	}
-	else if (FramingStep <= 22)
+	else if (Acceptance.FramingStep <= 22)
 	{
 		ExerciseFramingGuards(InEvents);
 	}
-	else if (FramingStep <= 30)
+	else if (Acceptance.FramingStep <= 30)
 	{
 		ExerciseFramingViewGuards(InEvents);
 	}
-	else if (FramingStep == 31)
+	else if (Acceptance.FramingStep == 31)
 	{
 		CheckFramingResult({0, .5f, 0});
-		RequireFramingVisible(ViewCamera, ViewportSize, {{-3.5f, -.5f, -.5f}, {3.5f, 1.5f, .5f}, true});
+		RequireFramingVisible(Viewport.ViewCamera, Viewport.ViewportSize,
+		                      {{-3.5f, -.5f, -.5f}, {3.5f, 1.5f, .5f}, true});
 		RequireFraming(!Selection, "empty selection was modified");
-		FramingBefore = ViewCamera;
-		SelectObject(FramingObjects[0]);
+		Acceptance.FramingBefore = Viewport.ViewCamera;
+		SelectObject(Acceptance.FramingObjects[0]);
 		Gui->FocusWindow("Viewport");
 	}
 	else
 	{
 		ExerciseFramingPopup(InEvents);
 	}
-	++FramingStep;
+	++Acceptance.FramingStep;
 }
 } // namespace Hyperion

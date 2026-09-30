@@ -1,5 +1,6 @@
 #include "Hyperion/SceneEditing/SceneDocument.h"
 #include "Hyperion/Core/Identity.h"
+#include "SceneSelectionRoots.h"
 #include <utility>
 
 namespace Hyperion
@@ -93,6 +94,32 @@ void FSceneEditDocument::SetInteractionState(bool bInBusy, bool bInPreviewDirty)
 {
 	bBusy = bInBusy;
 	bPreviewDirty = bInPreviewDirty;
+}
+
+void FSceneEditDocument::RequireCurrent(const std::string& InDocument, std::uint64_t InRevision) const
+{
+	if (InDocument != Id())
+	{
+		throw FSceneEditError("stale_document", "Query the current scene document before accessing nodes");
+	}
+	if (!Target().IsLoaded())
+	{
+		throw FSceneEditError("unavailable", "Scene has not loaded");
+	}
+	if (InRevision != Target().Revision())
+	{
+		throw FSceneEditError("stale_revision", "Scene changed; query current values before editing");
+	}
+}
+
+const FSceneNode& FSceneEditDocument::RequireNode(FSceneHandle InHandle) const
+{
+	const auto* Node = Target().FindNode(InHandle);
+	if (!Node)
+	{
+		throw FSceneEditError("stale_handle", "Node no longer exists in this document");
+	}
+	return *Node;
 }
 
 void FSceneEditDocument::RequireIdle(const std::string& InDocument, std::uint64_t InRevision) const
@@ -264,23 +291,7 @@ void FSceneEditDocument::CommitSettings(FSceneSettings InSettings)
 
 std::vector<FSceneHandle> FSceneEditDocument::SelectedRoots() const
 {
-	std::vector<FSceneHandle> Roots;
-	for (const auto Handle : Selected.All())
-	{
-		const auto* Node = Target().FindNode(Handle);
-		bool bCovered = !Node;
-		while (Node && !Node->Parent().empty())
-		{
-			const auto Parent = Target().FindHandle(Node->Parent());
-			bCovered |= Selected.Contains(Parent);
-			Node = Target().FindNode(Parent);
-		}
-		if (!bCovered)
-		{
-			Roots.push_back(Handle);
-		}
-	}
-	return Roots;
+	return FilterSceneSelectionRoots(Target(), Selected.All());
 }
 
 void FSceneEditDocument::CommitDelete()

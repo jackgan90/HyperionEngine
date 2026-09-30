@@ -12,14 +12,14 @@ void FEditorPlugin::PrepareOutlineExercise()
 	Model.Data = PlacementModels.at("Cube").Data;
 	Model.Name = "Outline left";
 	Model.World = Translation({-.35f, 0, 0});
-	OutlineExerciseObjects.push_back(Scene->Add(Model));
+	Acceptance.OutlineExerciseObjects.push_back(Scene->Add(Model));
 	Model.Name = "Outline right";
 	Model.World = Translation({.35f, .15f, -.4f});
-	OutlineExerciseObjects.push_back(Scene->Add(Model));
+	Acceptance.OutlineExerciseObjects.push_back(Scene->Add(Model));
 	Model.Name = "Outline occluder";
 	Model.World = Multiply(Translation({0, 0, 1.5f}), Scale({3, 3, .2f}));
-	OutlineExerciseWall = Scene->Add(Model);
-	Scene->SetModelVisible(OutlineExerciseWall, false);
+	Acceptance.OutlineExerciseWall = Scene->Add(Model);
+	Scene->SetModelVisible(Acceptance.OutlineExerciseWall, false);
 	auto Light = MakeSceneDirectionalLightNode("outline-key");
 	Light.Local() = SceneCameraTransform({3, 4, 5}, {});
 	Light.DirectionalLight()->Intensity = 2;
@@ -30,23 +30,23 @@ void FEditorPlugin::PrepareOutlineExercise()
 	Environment.EnvironmentLight()->Priority = 10;
 	Scene->AddNode(std::move(Light));
 	Scene->AddNode(std::move(Environment));
-	ViewCamera.World = SceneCameraTransform({2, 1.5f, 5}, {});
-	PreviewCamera.reset();
-	bViewportCameraInitialized = true;
+	Viewport.ViewCamera.World = SceneCameraTransform({2, 1.5f, 5}, {});
+	Viewport.PreviewCamera.reset();
+	Viewport.bViewportCameraInitialized = true;
 	bShowLightMarkers = false;
 	ResetDocument();
 	SelectObject(std::nullopt);
 	OutlineSettings = {};
-	++OutlineExerciseStep;
+	++Acceptance.OutlineExerciseStep;
 }
 
 void FEditorPlugin::ExerciseOutlines()
 {
-	if (!bViewportVisible || !Scene->GetStatus().bReady || bOutlinesVerified)
+	if (!Viewport.bViewportVisible || !Scene->GetStatus().bReady || Acceptance.bOutlinesVerified)
 	{
 		return;
 	}
-	if (OutlineExerciseStep == 0)
+	if (Acceptance.OutlineExerciseStep == 0)
 	{
 		const auto Found = PlacementModels.find("Cube");
 		if (Found == PlacementModels.end() || !Found->second.Data)
@@ -55,33 +55,36 @@ void FEditorPlugin::ExerciseOutlines()
 		}
 		PrepareOutlineExercise();
 	}
-	if (OutlineExerciseWait++ == 0)
+	if (Acceptance.OutlineExerciseWait++ == 0)
 	{
 		OutlineSettings.Overlap =
-		    OutlineExerciseStep == 2 ? EOutlineOverlapMode::PerObject : EOutlineOverlapMode::Union;
-		OutlineSettings.bSupersample = OutlineExerciseStep == 5;
-		Scene->SetModelVisible(OutlineExerciseWall, OutlineExerciseStep >= 4);
-		if (OutlineExerciseStep == 6)
+		    Acceptance.OutlineExerciseStep == 2 ? EOutlineOverlapMode::PerObject : EOutlineOverlapMode::Union;
+		OutlineSettings.bSupersample = Acceptance.OutlineExerciseStep == 5;
+		Scene->SetModelVisible(Acceptance.OutlineExerciseWall, Acceptance.OutlineExerciseStep >= 4);
+		if (Acceptance.OutlineExerciseStep == 6)
 		{
-			OutlineExerciseObjects.clear();
+			Acceptance.OutlineExerciseObjects.clear();
 			SelectObject(std::nullopt);
 		}
 		return;
 	}
 	const auto& Stats = RenderStats.SelectionOutline;
-	if (OutlineExerciseWait < 4 || Stats.PendingItems || (OutlineExerciseStep < 6 && !Stats.Items))
+	if (Acceptance.OutlineExerciseWait < 4 || Stats.PendingItems ||
+	    (Acceptance.OutlineExerciseStep < 6 && !Stats.Items))
 	{
 		return;
 	}
-	const auto ExpectedPasses = OutlineExerciseStep == 6 ? 0u : OutlineExerciseStep == 2 ? 2u : 1u;
+	const auto ExpectedPasses = Acceptance.OutlineExerciseStep == 6   ? 0u
+	                            : Acceptance.OutlineExerciseStep == 2 ? 2u
+	                                                                  : 1u;
 	if (Stats.MaskPasses != ExpectedPasses || IsDirty() || !History.empty())
 	{
 		throw std::runtime_error("Outline modes changed document history or submitted incorrect mask passes");
 	}
 	const std::array Names{"Union.png", "PerObject.png", "UnionAgain.png", "Occluded.png", "Smooth.png", "Cleared.png"};
-	OutlineCapture = Options.ExerciseOutlines / Names.at(OutlineExerciseStep - 1);
-	bOutlinesVerified = OutlineExerciseStep == 6;
-	++OutlineExerciseStep;
-	OutlineExerciseWait = 0;
+	Acceptance.OutlineCapture = Options.ExerciseOutlines / Names.at(Acceptance.OutlineExerciseStep - 1);
+	Acceptance.bOutlinesVerified = Acceptance.OutlineExerciseStep == 6;
+	++Acceptance.OutlineExerciseStep;
+	Acceptance.OutlineExerciseWait = 0;
 }
 } // namespace Hyperion

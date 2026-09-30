@@ -229,7 +229,7 @@ void FEditorPlugin::DrawViewportHud()
 		HudDiagnostics = RenderDiagnostics();
 		HudUpdated = Now;
 	}
-	auto Left = ViewportRegion.Bounds;
+	auto Left = Viewport.ViewportRegion.Bounds;
 	auto Right = Left;
 	if (bShowStatusHud && bShowProfilingHud)
 	{
@@ -244,7 +244,8 @@ void FEditorPlugin::DrawViewportHud()
 		    Rendering.bReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z",
 		    "Visualizer: " + Visualizers[Rendering.Pipeline == "deferred" ? Rendering.DebugMode : 0],
 		    "Exposure: " + Number(Exposure),
-		    "Viewport: " + std::to_string(ViewportSize.Width) + " x " + std::to_string(ViewportSize.Height),
+		    "Viewport: " + std::to_string(Viewport.ViewportSize.Width) + " x " +
+		        std::to_string(Viewport.ViewportSize.Height),
 		    HudDiagnostics.Adapter};
 		InspectionBounds["hud/status"] = Gui->DrawImageText(Left, Lines);
 	}

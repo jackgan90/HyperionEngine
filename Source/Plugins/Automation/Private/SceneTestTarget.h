@@ -15,6 +15,8 @@ public:
 	bool bRejectAdd{};
 	bool bRejectRebind{};
 	std::size_t RebindCount{};
+	mutable std::size_t NodesCount{};
+	mutable std::size_t FindHandleCount{};
 
 	bool IsLoaded() const override
 	{
@@ -43,11 +45,13 @@ public:
 
 	FSceneHandle FindHandle(std::string_view InId) const override
 	{
+		++FindHandleCount;
 		return Scene.FindHandle(InId);
 	}
 
 	std::vector<FSceneHandle> Nodes() const override
 	{
+		++NodesCount;
 		return Scene.GetNodes();
 	}
 

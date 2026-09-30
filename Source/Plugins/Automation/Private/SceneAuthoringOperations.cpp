@@ -1,5 +1,5 @@
 #include "Hyperion/SceneEditing/SceneAuthoring.h"
-#include "SceneOperations.h"
+#include "SceneOperationRegistration.h"
 
 namespace Hyperion
 {
@@ -20,20 +20,12 @@ void AddAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument, 
 	                   : "Updates the shared document; persistent edits use host history. No implicit disk write.";
 	Info.Completion = "Main state committed; rendering observes the change on subsequent frames.";
 	Info.Keywords = {"scene", "authoring", "selection", "hierarchy", "settings"};
-	Info.Example = WriteRecordWire(RecordType<TRequest>(), &InExample);
 	Info.Unavailable = InDocument ? "" : "This target has no scene document provider.";
-	InCatalog.Register(MakeOperation<TRequest, TResult>(std::move(Info),
-	                                                    [InDocument, InFunction](const TRequest& InRequest)
-	                                                    {
-		                                                    try
-		                                                    {
-			                                                    return InFunction(*InDocument, InRequest);
-		                                                    }
-		                                                    catch (const FSceneEditError& Error)
-		                                                    {
-			                                                    throw FAutomationError(Error.Code, Error.what());
-		                                                    }
-	                                                    }));
+	RegisterSceneOperation<TRequest, TResult>(InCatalog, std::move(Info), InExample,
+	                                          [InDocument, InFunction](const TRequest& InRequest)
+	                                          {
+		                                          return InFunction(*InDocument, InRequest);
+	                                          });
 }
 } // namespace
 
@@ -111,7 +103,7 @@ void RegisterSceneAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* In
 	    false, {Document, 1}, DeleteSceneSelection);
 	AddAuthoring<FSceneMutationRequest, FSceneSettings>(
 	    InCatalog, InDocument, "scene.settings.get", "Read scene settings",
-	    "Reads runtime camera, main lights and saved initial browsing view.", true, {Document, 1}, GetSceneSettings);
+	    "Reads the default runtime camera and saved initial browsing view.", true, {Document, 1}, GetSceneSettings);
 	AddAuthoring<FSceneSettingsRequest, FSceneDocumentInfo>(
 	    InCatalog, InDocument, "scene.settings.set", "Replace scene settings",
 	    "Read current settings first. Complete replacement validates referenced handles and camera values and uses "

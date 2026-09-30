@@ -3,10 +3,13 @@
 
 namespace Hyperion
 {
+inline constexpr std::size_t AutomationDefaultRunningJobs = 32;
+inline constexpr std::size_t AutomationDefaultRetainedJobs = 128;
+
 struct FAutomationLimits
 {
-	std::size_t MaxRunningJobs = 32;
-	std::size_t MaxRetainedJobs = 128;
+	std::size_t MaxRunningJobs = AutomationDefaultRunningJobs;
+	std::size_t MaxRetainedJobs = AutomationDefaultRetainedJobs;
 };
 
 // Stop admission, pump/Poll admitted jobs, then drain providers before destroying captured state.

@@ -70,6 +70,8 @@ public:
 	bool IsDirty() const;
 	bool IsBusy() const;
 	void SetInteractionState(bool bInBusy, bool bInPreviewDirty);
+	void RequireCurrent(const std::string& InDocument, std::uint64_t InRevision) const;
+	const FSceneNode& RequireNode(FSceneHandle InHandle) const;
 	void RequireIdle(const std::string& InDocument, std::uint64_t InRevision) const;
 	void Reset();
 	void Invalidate();

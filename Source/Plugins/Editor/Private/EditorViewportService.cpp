@@ -59,7 +59,11 @@ FSceneViewportState FEditorPlugin::ViewportState() const
 	ViewOptions.ProfilingHud = bShowProfilingHud;
 	ViewOptions.ProfilingCategories = ProfilingCategories;
 	ViewOptions.Visualizer = Rendering.DebugMode;
-	return {ViewCamera, PreviewCamera, ViewOptions, Camera.GetMovementSpeed(ViewCamera), bViewportCameraInitialized,
+	return {Viewport.ViewCamera,
+	        Viewport.PreviewCamera,
+	        ViewOptions,
+	        Camera.GetMovementSpeed(Viewport.ViewCamera),
+	        Viewport.bViewportCameraInitialized,
 	        true};
 }
 
@@ -67,36 +71,28 @@ void FEditorPlugin::SetViewportCamera(const FSceneCameraView& InCamera)
 {
 	ValidateSceneCameraView(InCamera);
 	SetPreviewCamera({});
-	ViewCamera = InCamera;
-	bViewportCameraInitialized = true;
+	Viewport.ViewCamera = InCamera;
+	Viewport.bViewportCameraInitialized = true;
 }
 
 void FEditorPlugin::FrameScene()
 {
-	if (!Scene->GetStatus().bReady || PreviewCamera)
-	{
-		throw FSceneEditError("busy", "Frame scene requires a ready scene and the editor browsing view");
-	}
-	auto Candidate = ViewCamera;
-	FitSceneCamera(Candidate, *Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1, true);
-	Candidate.Lens.Far = std::max(ViewCamera.Lens.Far, Candidate.Lens.Far);
-	ViewCamera = Candidate;
-	Camera.Reset();
+	Viewport.FrameScene(*Scene);
 }
 
 void FEditorPlugin::FrameSelection(const FSceneMutationRequest& InRequest)
 {
 	UpdateDocumentInteraction();
 	SceneDocument.RequireIdle(InRequest.Document, InRequest.Revision);
-	if (PreviewCamera)
+	if (Viewport.PreviewCamera)
 	{
 		throw FSceneEditError("unavailable", "Selection framing requires the editor browsing view");
 	}
-	if (bCameraDragging || Gui->PointerState().bRightDown || Gui->HasOpenPopup())
+	if (Viewport.bCameraDragging || Gui->PointerState().bRightDown || Gui->HasOpenPopup())
 	{
 		throw FSceneEditError("busy", "Selection framing is blocked by camera navigation or popup interaction");
 	}
-	if (!bViewportCameraInitialized || !ViewportSize.Width || !ViewportSize.Height)
+	if (!Viewport.bViewportCameraInitialized || !Viewport.ViewportSize.Width || !Viewport.ViewportSize.Height)
 	{
 		throw FSceneEditError("busy", "Selection framing requires a ready scene and initialized viewport");
 	}
@@ -113,14 +109,14 @@ void FEditorPlugin::FrameSelection(const FSceneMutationRequest& InRequest)
 		}
 	}
 	const auto Bounds = SceneSelectionBounds(*Scene, SelectedRoots());
-	auto Candidate = ViewCamera;
-	FitSceneCamera(Candidate, Bounds, float(ViewportSize.Width) / ViewportSize.Height, true);
+	auto Candidate = Viewport.ViewCamera;
+	FitSceneCamera(Candidate, Bounds, float(Viewport.ViewportSize.Width) / Viewport.ViewportSize.Height, true);
 	// Keep distant scene geometry visible when framing small objects.
-	Candidate.Lens.Far = std::max(ViewCamera.Lens.Far, Candidate.Lens.Far);
-	ViewCamera = Candidate;
+	Candidate.Lens.Far = std::max(Viewport.ViewCamera.Lens.Far, Candidate.Lens.Far);
+	Viewport.ViewCamera = Candidate;
 	ViewportClick.reset();
 	Camera.Reset();
-	bCameraDragging = false;
+	Viewport.bCameraDragging = false;
 }
 
 void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
@@ -134,12 +130,12 @@ void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 	if (InOptions.Frozen.value_or(false) && !FrozenCullingView)
 	{
 		const auto CameraView = PickingCamera();
-		if (!CameraView || !bViewportCameraInitialized || !ViewportSize.Height)
+		if (!CameraView || !Viewport.bViewportCameraInitialized || !Viewport.ViewportSize.Height)
 		{
 			throw FSceneEditError("unavailable", "A ready viewport camera is required before freezing culling");
 		}
 		FrozenCullingView = SceneCameraViewProjection(ExtractScenePose(CameraView->World), CameraView->Lens,
-		                                              float(ViewportSize.Width) / ViewportSize.Height,
+		                                              float(Viewport.ViewportSize.Width) / Viewport.ViewportSize.Height,
 		                                              GetDepthConvention(Rendering.bReversedZ));
 	}
 	if (InOptions.Frozen && !*InOptions.Frozen)

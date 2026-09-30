@@ -103,11 +103,11 @@ std::optional<FInputEvent> Translate(const SDL_Event& InNative)
 			Event.X = InNative.button.x;
 			Event.Y = InNative.button.y;
 			Event.bDown = InNative.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
-			Event.Button = InNative.button.button == SDL_BUTTON_LEFT     ? 0
-			               : InNative.button.button == SDL_BUTTON_RIGHT  ? 1
-			               : InNative.button.button == SDL_BUTTON_MIDDLE ? 2
-			               : InNative.button.button == SDL_BUTTON_X1     ? 3
-			                                                             : 4;
+			Event.Button = InNative.button.button == SDL_BUTTON_LEFT     ? InputButtons::Left
+			               : InNative.button.button == SDL_BUTTON_RIGHT  ? InputButtons::Right
+			               : InNative.button.button == SDL_BUTTON_MIDDLE ? InputButtons::Middle
+			               : InNative.button.button == SDL_BUTTON_X1     ? InputButtons::Extra1
+			                                                             : InputButtons::Extra2;
 			break;
 		case SDL_EVENT_MOUSE_WHEEL:
 			Event.Type = EEventType::MouseWheel;
@@ -125,9 +125,10 @@ std::optional<FInputEvent> Translate(const SDL_Event& InNative)
 			Event.bDown = InNative.type == SDL_EVENT_KEY_DOWN;
 			Event.Key = Translate(InNative.key.key);
 			Event.bRepeat = InNative.key.repeat;
-			Event.Modifiers =
-			    ((InNative.key.mod & SDL_KMOD_CTRL) ? 1u : 0u) | ((InNative.key.mod & SDL_KMOD_SHIFT) ? 2u : 0u) |
-			    ((InNative.key.mod & SDL_KMOD_ALT) ? 4u : 0u) | ((InNative.key.mod & SDL_KMOD_GUI) ? 8u : 0u);
+			Event.Modifiers = ((InNative.key.mod & SDL_KMOD_CTRL) ? InputModifiers::Control : InputModifiers::None) |
+			                  ((InNative.key.mod & SDL_KMOD_SHIFT) ? InputModifiers::Shift : InputModifiers::None) |
+			                  ((InNative.key.mod & SDL_KMOD_ALT) ? InputModifiers::Alt : InputModifiers::None) |
+			                  ((InNative.key.mod & SDL_KMOD_GUI) ? InputModifiers::Super : InputModifiers::None);
 			break;
 		case SDL_EVENT_TEXT_INPUT:
 			Event.Type = EEventType::Text;

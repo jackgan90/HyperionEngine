@@ -3,9 +3,13 @@
 #include "Hyperion/AssetEditing/ModelProperties.h"
 #include "Hyperion/AssetImport/AssetImportService.h"
 #include "Hyperion/Scene/Model.h"
+#include "Hyperion/Textures/TextureAsset.h"
 
 namespace Hyperion
 {
+inline constexpr std::uint32_t ImportDraftPreviewPageLimit = 32;
+inline constexpr std::uint32_t ImportDraftMaxPageLimit = 64;
+
 struct FImportNodeEdit
 {
 	std::string Id;
@@ -32,7 +36,7 @@ struct FImportDraftQuery
 {
 	std::string Draft;
 	std::uint32_t Offset{};
-	std::uint32_t Limit = 32;
+	std::uint32_t Limit = ImportDraftPreviewPageLimit;
 };
 
 struct FImportDraftList
@@ -117,6 +121,8 @@ struct FImportDraftInfo
 	std::uint32_t SourceWidth{};
 	std::uint32_t SourceHeight{};
 	std::optional<FEnvironmentBakeSettings> Sky;
+	ETextureDimension Dimension = ETextureDimension::Texture2D;
+	std::uint64_t PixelBytes{};
 };
 
 FConvertedAsset ApplyImportProperties(const FConvertedAsset& InSource, const FImportPropertyEdits& InEdits);

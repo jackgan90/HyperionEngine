@@ -211,6 +211,11 @@ const FLoadedAsset& FAssetEditDocument::Loaded() const
 	return *Asset;
 }
 
+bool FAssetEditDocument::IsEditing() const
+{
+	return bEditing;
+}
+
 bool FAssetEditDocument::IsSaving() const
 {
 	return PendingSave.has_value();

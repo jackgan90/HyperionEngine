@@ -39,17 +39,17 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 		return;
 	}
 	const auto MeshType = RecordType<FSceneModelComponent>().Id;
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
-			ExerciseOriginal = *Scene->FindNode(*Selection);
+			Acceptance.ExerciseOriginal = *Scene->FindNode(*Selection);
 			if (InspectionBounds.contains(RecordType<FSceneModelSource>().Id + "/header"))
 			{
 				ExerciseClick(InEvents, InspectionBounds.at(RecordType<FSceneModelSource>().Id + "/header"));
 			}
 			else
 			{
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 1:
@@ -71,7 +71,7 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 				    std::to_string(Bounds.Y) + "," + std::to_string(Bounds.Z) + "," + std::to_string(Bounds.W));
 			}
 			Check(HistoryCursor == 1 && History.size() == 1, "New editing did not truncate the redo branch");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 4:
 		{
@@ -88,13 +88,13 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 			Check(!IsDirty() && Scene->FindNode(*Selection)->Model()->bVisible, "Undo lost the save point");
 			Redo();
 			auto Transformed = *Scene->FindNode(*Selection);
-			Transformed.Local() = ExerciseTransformResult;
+			Transformed.Local() = Acceptance.ExerciseTransformResult;
 			CommitEdit(*Selection, std::move(Transformed), Scene->GetRevision());
 			SaveScene(Options.ExerciseDocument.string());
 			auto Candidate = *Scene->FindNode(*Selection);
 			Candidate.Name += " unsaved";
 			CommitEdit(*Selection, std::move(Candidate), Scene->GetRevision());
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 5:
@@ -106,15 +106,15 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 			Undo();
 			Check(!IsDirty(), "Undo did not return to the captured save state");
 			OpenScene(Options.ExerciseDocument.string());
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		case 6:
 		{
-			const auto Handle = Scene->FindHandle(ExerciseOriginal.Id);
+			const auto Handle = Scene->FindHandle(Acceptance.ExerciseOriginal.Id);
 			const auto* Node = Scene->FindNode(Handle);
-			Check(Node && !Node->Model()->bVisible && Node->Name == ExerciseOriginal.Name,
+			Check(Node && !Node->Model()->bVisible && Node->Name == Acceptance.ExerciseOriginal.Name,
 			      "Saved component state did not survive reload");
-			Check(Node->Local().Values == ExerciseTransformResult.Values,
+			Check(Node->Local().Values == Acceptance.ExerciseTransformResult.Values,
 			      "Transform display edit did not survive native scene save/reload");
 			const auto Revision = Scene->GetRevision();
 			auto Invalid = *Node;
@@ -129,15 +129,15 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 			    {
 				    CommitEdit(Handle, *Node, Revision - 1);
 			    });
-			const auto PreviousCamera = ViewCamera;
-			DollySceneCamera(ViewCamera, .9f);
+			const auto PreviousCamera = Viewport.ViewCamera;
+			DollySceneCamera(Viewport.ViewCamera, .9f);
 			Check(Scene->GetRevision() == Revision && !IsDirty(), "Viewport camera changed authored data");
-			ViewCamera = PreviousCamera;
+			Viewport.ViewCamera = PreviousCamera;
 			auto Candidate = *Node;
 			Candidate.Name += " rejected save";
 			CommitEdit(Handle, std::move(Candidate), Revision);
 			SaveScene("/Engine/Scenes/ReadOnlySaveMustFail.hasset");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 7:
@@ -149,7 +149,7 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 			Undo();
 			Check(!IsDirty(), "Failed save advanced the save point");
 			Error.clear();
-			bDocumentVerified = true;
+			Acceptance.bDocumentVerified = true;
 			break;
 	}
 }

@@ -65,10 +65,10 @@ void FEditorPlugin::InitializeSceneDocument()
 	SceneDocument.SetHistoryObserver(
 	    [this](const FSceneHandleMap& InMapping)
 	    {
-		    RemapSceneHandle(PreviewCamera, InMapping);
+		    RemapSceneHandle(Viewport.PreviewCamera, InMapping);
 		    ViewportClick.reset();
 		    OutlinerSelection.Reset();
-		    if (PreviewCamera && !Scene->FindNode(*PreviewCamera))
+		    if (Viewport.PreviewCamera && !Scene->FindNode(*Viewport.PreviewCamera))
 		    {
 			    SetPreviewCamera(std::nullopt);
 		    }
@@ -79,8 +79,8 @@ bool FEditorPlugin::IsDocumentInteractionBusy() const
 {
 	return !Options.Benchmark.empty() || GizmoEdit.has_value() || InspectorInteraction || PendingInspectorEdit ||
 	       ReparentGesture.has_value() || Placement.IsActive() || Gui->DragPayload() || Gui->IsEditingText() ||
-	       bOpenDialog || bSaveDialog || bDiscardDialog || bAssetMessage || PendingRoot || bPreferencesDialog ||
-	       bFinished;
+	       bOpenDialog || bSaveDialog || Transition.bDiscardDialog || bAssetMessage || Transition.PendingRoot ||
+	       bPreferencesDialog || bFinished;
 }
 
 void FEditorPlugin::UpdateDocumentInteraction()

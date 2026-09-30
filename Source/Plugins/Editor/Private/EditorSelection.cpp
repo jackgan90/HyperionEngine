@@ -53,20 +53,7 @@ void FEditorPlugin::ClickOutlinerObject(FSceneHandle InHandle, bool bInToggle, b
 
 void FEditorPlugin::RouteSelectAllShortcut(std::span<const FInputEvent> InEvents)
 {
-	const bool bSceneFocus =
-	    (bViewportVisible && Gui->IsWindowFocused("Viewport")) || (bShowOutliner && Gui->IsWindowFocused("Outliner"));
-	// A later navigation release must not expose an earlier key from this event batch to selection.
-	const bool bInterrupted = std::any_of(InEvents.begin(), InEvents.end(),
-	                                      [](const FInputEvent& InEvent)
-	                                      {
-		                                      return (InEvent.Type == EEventType::Focus && !InEvent.bDown) ||
-		                                             (InEvent.Type == EEventType::MouseButton && InEvent.Button == 1);
-	                                      });
-	const auto Pointer = Gui->PointerState();
-	if (!bSceneFocus || bInterrupted || !Scene->GetStatus().bReady || Gui->IsTextInputOwnedThisFrame() ||
-	    Gui->HasOpenPopup() || ReparentGesture || Gizmo.IsDragging() || bGizmoUsedMouse || bPlacementUsedMouse ||
-	    bCameraDragging || Pointer.bRightDown || Pointer.bDown || Pointer.bCancel || IsDocumentInteractionBusy() ||
-	    IsAssetWindowBlocked())
+	if (!CaptureShortcutInteraction(InEvents).Allows(EEditorShortcut::SelectAll))
 	{
 		return;
 	}
@@ -74,7 +61,8 @@ void FEditorPlugin::RouteSelectAllShortcut(std::span<const FInputEvent> InEvents
 	                                    [](const FInputEvent& InEvent)
 	                                    {
 		                                    return InEvent.Type == EEventType::Key && InEvent.Key == EKey::A &&
-		                                           InEvent.bDown && !InEvent.bRepeat && InEvent.Modifiers == 1;
+		                                           InEvent.bDown && !InEvent.bRepeat &&
+		                                           InEvent.Modifiers == InputModifiers::Control;
 	                                    });
 	if (bSelectAll)
 	{
@@ -129,7 +117,7 @@ void FEditorPlugin::DrawSelectionMarkers()
 			continue;
 		}
 		const FVec3 Origin{View.World.Values[12], View.World.Values[13], View.World.Values[14]};
-		if (const auto Point = ProjectViewportPoint(*ActiveCamera, ViewportRegion.Bounds, Origin))
+		if (const auto Point = ProjectViewportPoint(*ActiveCamera, Viewport.ViewportRegion.Bounds, Origin))
 		{
 			const float Radius = Gui->Scale(6);
 			const std::array<FVec2, 5> Points{{{Point->X, Point->Y - Radius},
@@ -137,7 +125,7 @@ void FEditorPlugin::DrawSelectionMarkers()
 			                                   {Point->X, Point->Y + Radius},
 			                                   {Point->X - Radius, Point->Y},
 			                                   {Point->X, Point->Y - Radius}}};
-			Gui->DrawImageOverlay(ViewportRegion.Bounds, Points, {1, .7f, .1f, 1}, 2);
+			Gui->DrawImageOverlay(Viewport.ViewportRegion.Bounds, Points, {1, .7f, .1f, 1}, 2);
 		}
 	}
 }

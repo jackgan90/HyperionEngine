@@ -18,7 +18,8 @@ void FEditorPlugin::BeginReparentGesture(FSceneHandle InHandle, FVec4 InBounds)
 {
 	const auto Pointer = Gui->PointerState();
 	if (!Scene->GetStatus().bReady || Gui->DragPayload() || Pointer.bRightDown || bOpenDialog || bSaveDialog ||
-	    bAssetMessage || PendingRoot || bDiscardDialog || bPreferencesDialog || Placement.IsActive())
+	    bAssetMessage || Transition.PendingRoot || Transition.bDiscardDialog || bPreferencesDialog ||
+	    Placement.IsActive())
 	{
 		return;
 	}
@@ -64,8 +65,8 @@ void FEditorPlugin::UpdateReparentGesture(std::span<const FInputEvent> InEvents)
 	const auto& Gesture = *ReparentGesture;
 	if (bLostFocus || Pointer.bCancel || Pointer.bRightDown || !Pointer.bPositionValid || !bShowOutliner ||
 	    Gesture.Document != SceneDocument.Id() || Gesture.Revision != Scene->GetRevision() ||
-	    Gesture.Handles != Selection.All() || bOpenDialog || bSaveDialog || bAssetMessage || PendingRoot ||
-	    bDiscardDialog || bPreferencesDialog || !Scene->GetStatus().bReady)
+	    Gesture.Handles != Selection.All() || bOpenDialog || bSaveDialog || bAssetMessage || Transition.PendingRoot ||
+	    Transition.bDiscardDialog || bPreferencesDialog || !Scene->GetStatus().bReady)
 	{
 		CancelReparentGesture();
 		return;
@@ -85,7 +86,7 @@ void FEditorPlugin::UpdateReparentGesture(std::span<const FInputEvent> InEvents)
 		ReparentGesture->bDragging = true;
 		ViewportClick.reset();
 		Camera.Reset();
-		bCameraDragging = false;
+		Viewport.bCameraDragging = false;
 	}
 	if (Gesture.bDragging)
 	{

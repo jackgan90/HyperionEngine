@@ -148,7 +148,7 @@ Material 的运行时语义、锁定参数、矩阵布局、Shader/Pass 结构�
 
 从 Place Object 拖放对象到 Viewport 成功后，新对象被选中，键盘焦点转到 Viewport，可直接按 `Ctrl+C`、`Ctrl+V`，无需额外点击。
 
-副本放在复制时的原父级下，继承其当前世界状态；外部父级或引用已删除则整批拒绝。复制后编辑或删除被复制对象不改变快照。模型、纹理、材质和天空资产继续共享，对象材质覆盖独立；复制相机或灯光不更改场景默认相机、主光、环境光或预览相机。
+副本放在复制时的原父级下，继承其当前世界状态；外部父级或引用已删除则整批拒绝。复制后编辑或删除被复制对象不改变快照。模型、纹理、材质和天空资产继续共享，对象材质覆盖独立。复制相机不更改场景默认相机或预览相机；灯光保留 Priority 和其他组件属性，复制方向光会叠加直接照明，复制天空光或符合阴影条件的方向光可能产生同优先级候选，并按持久对象 ID 字典序重新确定生效来源。
 
 每次粘贴是一个 Undo/Redo 事务。Undo 恢复之前的选择，Redo 从历史恢复而不读取剪贴板。复制不改变 dirty、历史或 redo，保存仍需显式执行。
 
@@ -196,7 +196,7 @@ Content Browser 模型预览按分部优先使用已就绪的原材质，保留�
 - Outliner 支持搜索和层级选择，一个完整模型实例对应一个模型对象，内部 primitive 不自动成为场景子对象。Details 展示反射属性，合法输入实时更新场景，无需 Apply/Revert；无效中间输入不写入场景。模型整体及 section 材质 override 仍属于实例，不改变共享资产；已有显式展开的场景继续兼容。
 - Details 隐藏内部 Object ID；所有组件展开后的内容统一缩进。单选时，非必需组件标题栏右侧的 **×** 移除该组件，悬停提示组件名称，折叠时也可操作；Transform 等必需组件不显示移除按钮。移除支持 Undo/Redo。
 - **Object enabled** 控制对象及其子树的实际启用状态；悬停帮助说明停用对象也会停用其子对象。自身勾选但因父对象停用而未生效时，Details 显示原因，多选时显示受影响对象数量。修改此开关支持 Undo/Redo 并随场景保存。
-- 多选时 Details 只显示所有对象共有的组件。同一属性完全相等时显示数值，否则显示 **Multiple Values**；向量和展开的颜色通道独立判断。显式输入只修改该字段，输入主对象已有的数值也会应用到所有对象。Optional override 单独展示混合存在状态，启用时保留已有 override，并仅为缺失项创建默认值。模型 section 只有在模型资产和 primitive 身份对应时可批量编辑，不对应的集合只读。多选支持 Object enabled；名称、增删组件和单对象相机/主光/活动天空光操作仅在单选时提供。多选的 Source 混合时，隐藏依赖该字段的属性。
+- 多选时 Details 只显示所有对象共有的组件。同一属性完全相等时显示数值，否则显示 **Multiple Values**；向量和展开的颜色通道独立判断。显式输入只修改该字段，输入主对象已有的数值也会应用到所有对象。Optional override 单独展示混合存在状态，启用时保留已有 override，并仅为缺失项创建默认值。模型 section 只有在模型资产和 primitive 身份对应时可批量编辑，不对应的集合只读。多选支持 Object enabled 和灯光 Priority；名称、增删组件和单对象相机操作仅在单选时提供。多选的 Source 混合时，隐藏依赖该字段的属性。
 - **Ctrl+Z** 或 **Edit > Undo** 撤销，**Ctrl+Y / Ctrl+Shift+Z** 或 **Edit > Redo** 重做。一次连续输入、拖动或颜色选择器会话合并为一条历史，切换属性、结束输入或关闭选择器后开始新的记录。即使值改回原值，本次操作仍标记为修改，直到撤销回到保存点。连续撤销按操作逐项恢复；撤销后进行新编辑会清除重做分支。Inspector 文本输入也使用文档级撤销，其他文本框保留自身编辑行为。保存、切换对象或场景操作会结束当前编辑；**File > Save Scene / Save Scene As** 保存文档。标题 `*` 表示未保存修改，保存期间的新修改仍保持为脏。
 - **Transform (Local)** 分为 Position、Rotation、Scale 三行，分别提供 X/Y/Z 输入。Rotation 使用度数（不显示 deg 后缀），绕固定 X、Y、Z 轴依次旋转；悬停查看具体约定。数值框支持单击输入和按住左键左右拖拽调节；悬停显示左右箭头，拖拽期间隐藏指针，松开恢复。一次拖拽作为一条撤销记录。输入数值即时生效，Enter 或失焦结束本次编辑，Ctrl+Z 恢复本次编辑前的值。原有剪切信息保留，Parent ID 不在属性面板中显示，已有父子关系保持不变。Add component 菜单支持添加注册的 CPU 组件，组件标题栏支持移除非必需组件，提交前验证完整场景。
 - 多选 **Transform (Local)** 始终绝对赋值，包括在 Details 中拖动数值：例如 Position X 输入 3，会将各对象的局部 X 都设为 3，保留其余分量。父子同时选中时，各自局部值都按输入修改；这与 gizmo 的成组变换语义不同。批量修改先验证全部对象再一次发布，任一目标无效时整次拒绝；一次属性交互对应一条历史，Undo/Redo 恢复各对象各自的值，并保留当前选择。
@@ -243,6 +243,10 @@ Camera 组件用于用户明确创作的场景相机。在视口选项菜单点�
 
 ## 模块与帧顺序
 
+Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorViewport` 拥有浏览相机、视口目标、尺寸和区域，执行初始化、resize、取景和导航重置；`FEditorDocumentTransition` 维护场景打开、内容根切换和关闭/discard 的待执行状态。验收状态、输入窗口选择与完成/超时检查由 `FEditorAcceptanceDriver` 处理，仅在 BUILD_TESTING 中编入；禁用测试的构建收到验收参数时给出受控不可用诊断，正常 report 输出仍可用。
+
+纹理编码和引用编辑使用 Runtime/AssetEditing 的 `FAssetEditWorkflow`，与 automation 共用 snapshot、busy admission、文档/资产身份及 generation 校验和单次历史提交。Worker 只准备拥有数据的快照，Main 提交文档；关闭或退出前 Drain 汇合任务，销毁路径不提交准备结果。资产窗口继续管理预览和页签，保存仍显式执行。
+
 ```text
 Editor panels / scene selection / viewport input
           |                         |
@@ -279,7 +283,7 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 `editor_selection_shortcuts` 使用 `--exercise-selection-shortcuts` 验证双面板全选、超过 128 个节点、连续/反向范围、Ctrl+Shift 追加、过滤和折叠、Shift 按下时捕获、文本/焦点/弹窗/导航占用、重复键及取消层级拖拽。`editor_state` 补充行序、过期锚点、句柄 generation 和大范围验证；`automation_scene` 与 `automation_selection_framing` 验证 select_all 的目录、schema、共享选择、原子拒绝和实际 CLI/MCP 调用。
 
-`object_placement` 覆盖分类、基本形状几何与放置计算；`gui_input_and_data` 覆盖复制载荷、跨面板预览/交付和取消；`scene_runtime_instance` 覆盖空场景动态注册、去重、保存重载和加载失败隔离。`editor_placement` 使用真实 GUI 输入依次放置九种对象，检查连续预览、八种取消路径、撤销重做、主方向光与活动天空光、图标拾取/隐藏、空文档 Save As 与重载，并验证缺失资源只禁用对应条目。可单独运行 `--exercise-placement OUTPUT.hasset`，截图随输出场景保存在同一目录。
+`object_placement` 覆盖分类、基本形状几何与放置计算；`gui_input_and_data` 覆盖复制载荷、跨面板预览/交付和取消；`scene_runtime_instance` 覆盖空场景动态注册、去重、保存重载和加载失败隔离。`editor_placement` 使用真实 GUI 输入依次放置九种对象，检查连续预览、八种取消路径、撤销重做、方向光阴影来源与生效天空光、图标拾取/隐藏、空文档 Save As 与重载，并验证缺失资源只禁用对应条目。可单独运行 `--exercise-placement OUTPUT.hasset`，截图随输出场景保存在同一目录。
 
 `gui_docking` 验证布局保存恢复和纹理 ID；`gui_texture_rendering` 验证真实 RHI 离屏 sRGB 输出、GUI 采样和无效绑定拒绝。`scene_navigation` 覆盖共享控制器的默认环绕模式、飞行模式的按键门槛、固定位置旋转、滚轮调速/推拉分流、速度与位移一致性、速度边界及输入中断恢复。`editor_acceptance` 使用真实控件位置产生 Platform 格式的输入事件，覆盖菜单打开 Sponza、右键移动门槛、松开右键停止、原地旋转、右键滚轮调速、普通滚轮推拉、模态输入隔离、视口隐藏与恢复、窗口缩放、场景重开、加载错误恢复和加载中退出。GPU 验收需要 D3D12 环境及挂载的 Sponza 资产。
 
@@ -295,11 +299,11 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 ## Agent 附着
 
-Editor 默认允许同一 Windows 用户通过 CLI/MCP 附着；`--disable-plugin automation-local` 可关闭。首批接口支持当前场景查询、节点变换、共享 Undo/Redo 和显式保存。自动化与 GUI 共同使用 Runtime/SceneEditing 的同一个文档实例；agent 变换进入 GUI 历史，保存更新同一 dirty/save point。用法见 [应用附着](AutomationConnections.md)。资产页签及内容根修改的 live adapter 尚未开放；内容根查询已开放。
+Editor 默认允许同一 Windows 用户通过 CLI/MCP 附着；`--disable-plugin automation-local` 可关闭。场景查询、组件与层级编辑、选择、剪贴板、放置、Undo/Redo 和显式保存使用 Runtime/SceneEditing 的同一个文档实例；agent 修改进入 GUI 历史，保存更新同一 dirty/save point。资产页签通过 `IAssetWorkspace` 共享实际草稿、历史与 busy 状态，内容根查询、设置和清空使用 `FContentRootService`，共同执行 dirty/busy 检查和旧文档失效。用法见 [应用附着](AutomationConnections.md)，操作范围见 [自动化能力](AutomationCapabilities.md)。
 
 ## 结构编辑和渲染诊断
 
-场景相机、主方向光和环境光沿用对象的现有设置入口。Details 不再显示 Hierarchy。修改父节点只在 Outliner 内拖拽：将已选节点行拖到目标父节点行，固定保持世界变换；拖拽期间的 **Move to scene root** 落区解除父节点。可先在 Viewport 点选模型或灯光，选择会同步到 Outliner，再从已选行起拖。Viewport 不提供 Re-parent 拖拽，保留点选与 Gizmo 操作。多选时拖动任一已选行会带上完整选择；父子同时选中只移动最外层节点，保留内部层级与主选中对象。一次放下对应一次 Undo/Redo，保存会记录新的 parent/local；局部变换数值可能变化。
+场景默认相机和初始视图通过相机操作编辑；方向光和天空光在各自 Details 组件中编辑，照明与阴影来源由 Priority 推导。Details 不再显示 Hierarchy。修改父节点只在 Outliner 内拖拽：将已选节点行拖到目标父节点行，固定保持世界变换；拖拽期间的 **Move to scene root** 落区解除父节点。可先在 Viewport 点选模型或灯光，选择会同步到 Outliner，再从已选行起拖。Viewport 不提供 Re-parent 拖拽，保留点选与 Gizmo 操作。多选时拖动任一已选行会带上完整选择；父子同时选中只移动最外层节点，保留内部层级与主选中对象。一次放下对应一次 Undo/Redo，保存会记录新的 parent/local；局部变换数值可能变化。
 
 普通树和搜索结果都支持落点，悬停折叠节点会展开，靠近列表边缘会滚动。绿色边框表示可放下，红色边框和提示说明非法目标；Esc、失焦、右键或放到其他区域取消操作。自己、后代、失效节点和不可逆父变换被拒绝，整组不会部分修改。保持世界变换不改变 Enabled 的父级继承规则，挂到禁用父节点仍会隐藏。既有单节点 duplicate 与保留子节点删除仍提供 SceneEditing 和 Automation 能力，尚无专用 GUI 入口；场景对象的 Ctrl+C/Ctrl+V 使用上述完整子树剪贴板流程。
 

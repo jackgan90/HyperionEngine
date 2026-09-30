@@ -21,7 +21,7 @@ void Click(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInDown)
 	Event.Y = InPoint.Y;
 	InEvents.push_back(Event);
 	Event.Type = EEventType::MouseButton;
-	Event.Button = 0;
+	Event.Button = InputButtons::Left;
 	Event.bDown = bInDown;
 	InEvents.push_back(Event);
 }
@@ -45,74 +45,74 @@ void FEditorPlugin::PrepareMultiSelection()
 	Model.Data = PlacementModels.at("Cube").Data;
 	Model.Name = "Multi A";
 	Model.World = Translation({-1, 0, 0});
-	MultiSelectionObjects.push_back(Scene->Add(Model));
+	Acceptance.MultiSelectionObjects.push_back(Scene->Add(Model));
 	Model.Name = "Multi B";
 	Model.World = Translation({1, 1, 0});
-	MultiSelectionObjects.push_back(Scene->Add(Model));
+	Acceptance.MultiSelectionObjects.push_back(Scene->Add(Model));
 	Filter = "Multi";
-	ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
-	bViewportCameraInitialized = true;
+	Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
+	Viewport.bViewportCameraInitialized = true;
 	bShowLightMarkers = false;
 	ResetDocument();
 	SelectObject(std::nullopt);
-	MultiSelectionStep = 1;
+	Acceptance.MultiSelectionStep = 1;
 }
 
 void FEditorPlugin::ExerciseMultiSelectionClicks(std::vector<FInputEvent>& InEvents)
 {
-	const auto A = MultiSelectionObjects[0];
-	const auto B = MultiSelectionObjects[1];
+	const auto A = Acceptance.MultiSelectionObjects[0];
+	const auto B = Acceptance.MultiSelectionObjects[1];
 	const auto Row = [&](FSceneHandle InHandle)
 	{
-		const auto Bounds = MultiSelectionRows.at(Scene->FindNode(InHandle)->Id);
+		const auto Bounds = Acceptance.MultiSelectionRows.at(Scene->FindNode(InHandle)->Id);
 		return FVec2{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
 	};
-	if (MultiSelectionStep <= 4)
+	if (Acceptance.MultiSelectionStep <= 4)
 	{
-		if (MultiSelectionStep == 3)
+		if (Acceptance.MultiSelectionStep == 3)
 		{
 			RequireMulti(Selection == A && Selection.All().size() == 1, "plain outliner click");
 			Modifier(InEvents, 1);
 		}
-		if (MultiSelectionStep == 4)
+		if (Acceptance.MultiSelectionStep == 4)
 		{
 			Modifier(InEvents, 0);
 		}
-		Click(InEvents, Row(MultiSelectionStep <= 2 ? A : B), MultiSelectionStep % 2 == 1);
+		Click(InEvents, Row(Acceptance.MultiSelectionStep <= 2 ? A : B), Acceptance.MultiSelectionStep % 2 == 1);
 	}
-	else if (MultiSelectionStep == 5)
+	else if (Acceptance.MultiSelectionStep == 5)
 	{
 		RequireMulti(Selection == B && Selection.All().size() == 2 && !IsDirty() && History.empty(),
 		             "Ctrl-add in outliner");
 	}
-	else if (MultiSelectionStep >= 6 && MultiSelectionStep <= 8)
+	else if (Acceptance.MultiSelectionStep >= 6 && Acceptance.MultiSelectionStep <= 8)
 	{
-		if (MultiSelectionStep == 6)
+		if (Acceptance.MultiSelectionStep == 6)
 		{
 			Modifier(InEvents, 1);
 		}
-		const auto Point = ProjectViewportPoint(ViewCamera, ViewportRegion.Bounds, {-1, 0, 0});
+		const auto Point = ProjectViewportPoint(Viewport.ViewCamera, Viewport.ViewportRegion.Bounds, {-1, 0, 0});
 		RequireMulti(bool(Point), "viewport point");
-		if (MultiSelectionStep == 7)
+		if (Acceptance.MultiSelectionStep == 7)
 		{
 			Modifier(InEvents, 0);
 		}
 		else
 		{
-			Click(InEvents, {Point->X, Point->Y}, MultiSelectionStep == 6);
+			Click(InEvents, {Point->X, Point->Y}, Acceptance.MultiSelectionStep == 6);
 		}
 	}
-	else if (MultiSelectionStep == 9)
+	else if (Acceptance.MultiSelectionStep == 9)
 	{
 		RequireMulti(Selection == B && Selection.All().size() == 1,
 		             "viewport Ctrl-toggle did not retain press modifier");
 	}
-	else if (MultiSelectionStep == 10 || MultiSelectionStep == 11)
+	else if (Acceptance.MultiSelectionStep == 10 || Acceptance.MultiSelectionStep == 11)
 	{
 		Modifier(InEvents, 1);
-		Click(InEvents, Row(A), MultiSelectionStep == 10);
+		Click(InEvents, Row(A), Acceptance.MultiSelectionStep == 10);
 	}
-	else if (MultiSelectionStep == 12)
+	else if (Acceptance.MultiSelectionStep == 12)
 	{
 		Modifier(InEvents, 0);
 		RequireMulti(Selection == A && Selection.All().size() == 2, "primary after re-add");
@@ -125,15 +125,15 @@ void FEditorPlugin::ExerciseMultiSelectionClicks(std::vector<FInputEvent>& InEve
 		}
 		RequireMulti(RenderStats.SelectionOutline.Items >= 2, "both selected models need outlines");
 	}
-	++MultiSelectionStep;
+	++Acceptance.MultiSelectionStep;
 }
 
 void FEditorPlugin::ExerciseMultiDetails(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Pass = (MultiSelectionStep - 14) / 8;
-	const unsigned Phase = (MultiSelectionStep - 14) % 8;
-	const auto A = MultiSelectionObjects[0];
-	const auto B = MultiSelectionObjects[1];
+	const unsigned Pass = (Acceptance.MultiSelectionStep - 14) / 8;
+	const unsigned Phase = (Acceptance.MultiSelectionStep - 14) % 8;
+	const auto A = Acceptance.MultiSelectionObjects[0];
+	const auto B = Acceptance.MultiSelectionObjects[1];
 	if (Phase == 0 && Pass == 1)
 	{
 		auto Candidate = *Scene->FindNode(B);
@@ -189,16 +189,17 @@ void FEditorPlugin::ExerciseMultiDetails(std::vector<FInputEvent>& InEvents)
 		Redo();
 		RequireMulti(Scene->FindNode(B)->Local().Values[12] == 3, "batch redo values");
 	}
-	++MultiSelectionStep;
+	++Acceptance.MultiSelectionStep;
 }
 
 void FEditorPlugin::ExerciseMultiSelection(std::vector<FInputEvent>& InEvents)
 {
-	if (!bViewportVisible || !Scene->GetStatus().bReady || bMultiSelectionVerified || ++MultiSelectionWait % 3 != 0)
+	if (!Viewport.bViewportVisible || !Scene->GetStatus().bReady || Acceptance.bMultiSelectionVerified ||
+	    ++Acceptance.MultiSelectionWait % 3 != 0)
 	{
 		return;
 	}
-	if (MultiSelectionStep == 0)
+	if (Acceptance.MultiSelectionStep == 0)
 	{
 		const auto Found = PlacementModels.find("Cube");
 		if (Found != PlacementModels.end() && Found->second.Data)
@@ -206,32 +207,32 @@ void FEditorPlugin::ExerciseMultiSelection(std::vector<FInputEvent>& InEvents)
 			PrepareMultiSelection();
 		}
 	}
-	else if (MultiSelectionStep < 14)
+	else if (Acceptance.MultiSelectionStep < 14)
 	{
 		ExerciseMultiSelectionClicks(InEvents);
 	}
-	else if (MultiSelectionStep < 30)
+	else if (Acceptance.MultiSelectionStep < 30)
 	{
 		ExerciseMultiDetails(InEvents);
 	}
-	else if (MultiSelectionStep < 54)
+	else if (Acceptance.MultiSelectionStep < 54)
 	{
 		ExerciseMultiGizmo(InEvents);
 	}
-	else if (MultiSelectionStep == 54)
+	else if (Acceptance.MultiSelectionStep == 54)
 	{
 		ExerciseMultiHistory();
 		ExerciseMultiCancellation();
-		++MultiSelectionStep;
+		++Acceptance.MultiSelectionStep;
 	}
-	else if (MultiSelectionStep == 55)
+	else if (Acceptance.MultiSelectionStep == 55)
 	{
 		RequireMulti(InspectionBounds.contains(RecordType<FSceneTransform>().Id + "/position/x") &&
 		                 !InspectionBounds.contains(RecordType<FSceneModelComponent>().Id + "/visible") &&
 		                 !InspectionBounds.contains(RecordType<FSceneCamera>().Id + "/verticalRadians"),
 		             "heterogeneous selection must show only the common components");
 		PrepareMultiSelectionMarkers();
-		++MultiSelectionStep;
+		++Acceptance.MultiSelectionStep;
 	}
 }
 
@@ -241,7 +242,7 @@ void FEditorPlugin::PrepareMultiSelectionMarkers()
 	{
 		Scene->SetModelVisible(Handle, false);
 	}
-	MultiSelectionObjects.clear();
+	Acceptance.MultiSelectionObjects.clear();
 	FSceneModel Model;
 	Model.Data = PlacementModels.at("Cube").Data;
 	Model.Name = "Multi Hidden Sections";
@@ -250,25 +251,26 @@ void FEditorPlugin::PrepareMultiSelectionMarkers()
 	{
 		Model.Sections.push_back({ModelPrimitiveId(*Model.Data->Asset, Instance.Primitive), false});
 	}
-	MultiSelectionObjects.push_back(Scene->Add(Model));
+	Acceptance.MultiSelectionObjects.push_back(Scene->Add(Model));
 	Model.Name = "Multi Visible";
 	Model.World = Translation({1, 0, 0});
 	Model.Sections.clear();
-	MultiSelectionObjects.push_back(Scene->Add(Model));
-	ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
+	Acceptance.MultiSelectionObjects.push_back(Scene->Add(Model));
+	Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
 	GizmoMode = ETransformGizmoMode::Position;
-	SelectObject(MultiSelectionObjects[0]);
-	ClickObject(MultiSelectionObjects[1], true);
+	SelectObject(Acceptance.MultiSelectionObjects[0]);
+	ClickObject(Acceptance.MultiSelectionObjects[1], true);
 }
 
 void FEditorPlugin::CheckMultiSelectionMarkerDraws(const FGuiDrawData& InData)
 {
-	if (MultiSelectionStep != 56)
+	if (Acceptance.MultiSelectionStep != 56)
 	{
 		return;
 	}
-	RequireMulti(Selection.All().size() == 2 && Selection == MultiSelectionObjects[1], "marker non-primary fixture");
-	const auto Point = ProjectViewportPoint(ViewCamera, ViewportRegion.Bounds, {-1, 0, 0});
+	RequireMulti(Selection.All().size() == 2 && Selection == Acceptance.MultiSelectionObjects[1],
+	             "marker non-primary fixture");
+	const auto Point = ProjectViewportPoint(Viewport.ViewCamera, Viewport.ViewportRegion.Bounds, {-1, 0, 0});
 	RequireMulti(bool(Point), "marker origin must be in view");
 	const float Radius = Gui->Scale(6);
 	const std::array<FVec2, 4> Corners{{{Point->X, Point->Y - Radius},
@@ -305,6 +307,6 @@ void FEditorPlugin::CheckMultiSelectionMarkerDraws(const FGuiDrawData& InData)
 		                         return bInDrawn;
 	                         }),
 	             "all hidden sections require a visible selection marker");
-	bMultiSelectionVerified = true;
+	Acceptance.bMultiSelectionVerified = true;
 }
 } // namespace Hyperion

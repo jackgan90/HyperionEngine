@@ -33,8 +33,8 @@ void FEditorPlugin::CloseAssetWindow()
 
 bool FEditorPlugin::IsAssetWindowBlocked() const
 {
-	return PendingRoot.has_value() || bDiscardDialog || bSaveDialog || bOpenDialog || bAssetMessage ||
-	       bPreferencesDialog || bSaveThenClose;
+	return Transition.PendingRoot.has_value() || Transition.bDiscardDialog || bSaveDialog || bOpenDialog ||
+	       bAssetMessage || bPreferencesDialog || Transition.bSaveThenClose;
 }
 
 void FEditorPlugin::AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> InEvents,
@@ -54,11 +54,7 @@ void FEditorPlugin::AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> I
 		{
 			PendingImage.reset();
 		}
-		if (!Options.ExerciseAssets.empty() && (ExerciseStep == 132 || ExerciseStep == 133) &&
-		    AssetWorkspace->HasPendingEdits() && !bPendingAssetEditChecked)
-		{
-			CheckPendingAssetEdit();
-		}
+		Acceptance.CheckAssetWindow(*this);
 	}
 }
 } // namespace Hyperion

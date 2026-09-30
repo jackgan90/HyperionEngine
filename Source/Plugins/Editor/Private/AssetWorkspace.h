@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/AssetEditing/AssetDocument.h"
+#include "Hyperion/AssetEditing/AssetEditWorkflow.h"
 #include "Hyperion/AssetEditing/AssetPreview.h"
 #include "Hyperion/AssetEditing/AssetWorkspace.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
@@ -70,11 +71,6 @@ private:
 	struct FReferenceSelection
 	{
 		std::uint64_t Generation{};
-		std::string Type;
-		std::optional<ETextureDimension> Dimension;
-		TAsyncResult<FAssetGraph> Request;
-		std::string Field;
-		FArchiveNode Candidate;
 	};
 
 	struct FPrepared
@@ -117,10 +113,9 @@ private:
 		FAssetRequest Load;
 		std::shared_ptr<FAssetEditDocument> Document;
 		std::optional<TAsyncResult<std::shared_ptr<FAssetEditDocument>>> Initialization;
-		std::optional<TAsyncResult<FArchiveNode>> EncodingEdit;
+		std::shared_ptr<FAssetEditWorkflow> EditWorkflow;
 		std::optional<FReferenceSelection> ReferenceEdit;
 		bool bSaveRequested{};
-		std::uint64_t EncodingGeneration{};
 		std::uint64_t GuiInteraction{};
 		bool bReadOnly{};
 		std::optional<TAsyncResult<FPrepared>> Pending;
@@ -154,7 +149,7 @@ private:
 
 		bool HasPendingEdit() const
 		{
-			return bExternalEditing || EncodingEdit.has_value() || ReferenceEdit.has_value();
+			return bExternalEditing || (Document && Document->IsEditing()) || ReferenceEdit.has_value();
 		}
 
 		float Exposure = 1;
@@ -164,7 +159,7 @@ private:
 	FPrepared Prepare(const FLoadedAsset& InLoaded, FArchiveNode InDraft, std::size_t InShape,
 	                  FCancellationToken InCancellation, std::shared_ptr<const FSceneModelData> InExisting);
 	void PollEntry(FEntry& InEntry);
-	void PollReferenceEdit(FEntry& InEntry);
+	void PollEditWorkflow(FEntry& InEntry);
 	void CommitReferenceEdit(FEntry& InEntry, std::string InField, FArchiveNode InCandidate);
 	void Publish(FEntry& InEntry, const FPrepared& InPrepared);
 	void Close(FEntry& InEntry);
@@ -180,8 +175,7 @@ private:
 	void DrawModelPrimitives(FGui& InGui, FEntry& InEntry, const FModelAsset& InModel);
 	void DrawSkyProperties(FGui& InGui, FEntry& InEntry);
 	void DrawMaterialProperties(FGui& InGui, FEntry& InEntry);
-	bool EditReference(FGui& InGui, const char* InLabel, FAssetRef& InReference, std::string_view InType,
-	                   std::optional<ETextureDimension> InDimension = {});
+	bool EditReference(FGui& InGui, const char* InLabel, FAssetRef& InReference, std::string_view InType);
 	bool EditMaterialValue(FGui& InGui, const std::string& InId, FMaterialAssetValue& InValue);
 	void DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMaterialAsset& InMaterial,
 	                           const FMaterialAssetParameter& InParameter);

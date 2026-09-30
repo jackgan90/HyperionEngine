@@ -13,7 +13,7 @@ void FEditorPlugin::ExerciseLogInput(std::vector<FInputEvent>& InEvents)
 	{
 		throw std::runtime_error("Editor Log acceptance requires process history");
 	}
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
 			if (bShowLog)
@@ -34,7 +34,7 @@ void FEditorPlugin::ExerciseLogInput(std::vector<FInputEvent>& InEvents)
 			{
 				throw std::runtime_error("Log did not close");
 			}
-			if (!ExerciseWait)
+			if (!Acceptance.ExerciseWait)
 			{
 				Log(ELogLevel::Info, "Log records while its panel is closed");
 			}
@@ -46,7 +46,7 @@ void FEditorPlugin::ExerciseLogInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, InspectionBounds["log/toggle"]);
 			return;
 	}
-	if (ExerciseStep == 6 && ++ExerciseWait == 4)
+	if (Acceptance.ExerciseStep == 6 && ++Acceptance.ExerciseWait == 4)
 	{
 		if (!bShowLog)
 		{
@@ -59,14 +59,14 @@ void FEditorPlugin::ExerciseLogInput(std::vector<FInputEvent>& InEvents)
 		std::cout << "Editor stdout captured\n";
 		std::cerr << "Editor stderr captured\n";
 	}
-	if (ExerciseStep == 6 && ExerciseWait > 12)
+	if (Acceptance.ExerciseStep == 6 && Acceptance.ExerciseWait > 12)
 	{
 		const auto First = Options.LogHistory->Read({0, 1});
 		if (First.Entries.empty() || First.Entries.front().Message != "Hyperion Editor starting")
 		{
 			throw std::runtime_error("Editor Log lost startup history");
 		}
-		bLogVerified = true;
+		Acceptance.bLogVerified = true;
 		Log(ELogLevel::Info, "Editor Log menu, reopening, startup replay and colors acceptance passed");
 	}
 }

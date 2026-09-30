@@ -13,7 +13,7 @@ void CheckPicking(bool bInCondition, const std::string& InMessage)
 	}
 }
 
-void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPosition, bool bInDown, unsigned InButton = 0)
+void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPosition, bool bInDown, unsigned InButton = InputButtons::Left)
 {
 	FInputEvent Move;
 	Move.Type = EEventType::MouseMove;
@@ -29,11 +29,11 @@ void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPosition, bool bInDown,
 
 bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 {
-	if (PickingSceneStep > 10)
+	if (Acceptance.PickingSceneStep > 10)
 	{
 		return true;
 	}
-	if (PickingSceneStep == 10)
+	if (Acceptance.PickingSceneStep == 10)
 	{
 		const auto& Outline = RenderStats.SelectionOutline;
 		CheckPicking(Outline.UnsupportedItems == 0, "native scene material has no outline coverage");
@@ -42,19 +42,20 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 			return false;
 		}
 	}
-	if ((PickingSceneStep == 3 || PickingSceneStep == 9) && !ExerciseDeletionInput(InEvents))
+	if ((Acceptance.PickingSceneStep == 3 || Acceptance.PickingSceneStep == 9) && !ExerciseDeletionInput(InEvents))
 	{
 		return false;
 	}
 	const auto Light = Scene->FindHandle("light-courtyard-3");
 	CheckPicking(Light.Scene != 0, "requires Sponza courtyard light 3");
-	const auto Bounds = ViewportRegion.Bounds;
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	const FVec2 Surface{Bounds.X + (Bounds.Z - Bounds.X) * .2f, Bounds.Y + (Bounds.W - Bounds.Y) * .7f};
-	const FVec2 LightRow{PickingLightBounds.X + 60, (PickingLightBounds.Y + PickingLightBounds.W) * .5f};
-	switch (PickingSceneStep)
+	const FVec2 LightRow{Acceptance.PickingLightBounds.X + 60,
+	                     (Acceptance.PickingLightBounds.Y + Acceptance.PickingLightBounds.W) * .5f};
+	switch (Acceptance.PickingSceneStep)
 	{
 		case 0:
-			CheckPicking(PickingLightBounds.W > PickingLightBounds.Y, "light row is not visible");
+			CheckPicking(Acceptance.PickingLightBounds.W > Acceptance.PickingLightBounds.Y, "light row is not visible");
 			Pointer(InEvents, LightRow, true);
 			break;
 		case 2:
@@ -67,8 +68,8 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 			SetRenderSettings(RenderSettingsRevision, Candidate);
 			CheckPicking(Selection == Light, "Outliner did not select courtyard light 3");
 			CheckPicking(Gizmo.HitTest(Surface) == ETransformGizmoHandle::None, "surface overlaps light gizmo");
-			const auto Ray = MakeViewportRay(ViewCamera, {.2f, .7f}, ViewportSize.Width, ViewportSize.Height,
-			                                 GetDepthConvention(Rendering.bReversedZ));
+			const auto Ray = MakeViewportRay(Viewport.ViewCamera, {.2f, .7f}, Viewport.ViewportSize.Width,
+			                                 Viewport.ViewportSize.Height, GetDepthConvention(Rendering.bReversedZ));
 			CheckPicking(Ray.has_value(), "Sponza view ray is unavailable");
 			const auto QueryOptions = MakeSceneRayOptions(ESceneRenderPipeline::Deferred);
 			const auto Hit = Scene->Raycast(*Ray, QueryOptions);
@@ -79,7 +80,7 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 			break;
 		}
 		case 7:
-			CheckPicking(ViewportClick && ViewportRegion.bFocused && !Gizmo.IsDragging(),
+			CheckPicking(ViewportClick && Viewport.ViewportRegion.bFocused && !Gizmo.IsDragging(),
 			             "held Sponza click lost image ownership");
 			break;
 		case 8:
@@ -101,7 +102,7 @@ bool FEditorPlugin::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 			             "gizmo retained the light transform after selecting Sponza");
 			break;
 	}
-	++PickingSceneStep;
+	++Acceptance.PickingSceneStep;
 	return false;
 }
 
@@ -141,19 +142,19 @@ void FEditorPlugin::PreparePickingExercise()
 	FSceneModel Model;
 	Model.Name = "Picking far";
 	Model.Data = Data;
-	PickingFar = Scene->Add(Model);
+	Acceptance.PickingFar = Scene->Add(Model);
 	Model.Name = "Picking near";
 	Model.World = Translation({0, 0, 1});
-	PickingNear = Scene->Add(Model);
-	ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
-	PickingPreview = Scene->AddNode(MakeSceneCameraNode("picking-preview", {0, 0, 10}, {}));
+	Acceptance.PickingNear = Scene->Add(Model);
+	Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
+	Acceptance.PickingPreview = Scene->AddNode(MakeSceneCameraNode("picking-preview", {0, 0, 10}, {}));
 	ResetDocument();
 	SelectObject(std::nullopt);
 }
 
 void FEditorPlugin::ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter, FVec2 InEmpty)
 {
-	switch (PickingExerciseStep)
+	switch (Acceptance.PickingExerciseStep)
 	{
 		case 2:
 			Pointer(InEvents, InCenter, true);
@@ -162,7 +163,7 @@ void FEditorPlugin::ExercisePickingSelection(std::vector<FInputEvent>& InEvents,
 			Pointer(InEvents, InCenter, false);
 			break;
 		case 4:
-			CheckPicking(Selection == PickingNear,
+			CheckPicking(Selection == Acceptance.PickingNear,
 			             "nearest triangle was not selected; selected " +
 			                 (Selection ? Scene->FindNode(*Selection)->Id : std::string("nothing")));
 			CheckPicking(History.empty() && !IsDirty(), "selection changed document history");
@@ -182,7 +183,7 @@ void FEditorPlugin::ExercisePickingSelection(std::vector<FInputEvent>& InEvents,
 			break;
 		case 9:
 		case 10:
-			Pointer(InEvents, {InCenter.X + 50, InCenter.Y}, PickingExerciseStep == 9);
+			Pointer(InEvents, {InCenter.X + 50, InCenter.Y}, Acceptance.PickingExerciseStep == 9);
 			break;
 		case 11:
 			CheckPicking(!Selection, "drag selected a model");
@@ -206,7 +207,7 @@ void FEditorPlugin::ExercisePickingSelection(std::vector<FInputEvent>& InEvents,
 		{
 			FInputEvent Focus;
 			Focus.Type = EEventType::Focus;
-			Focus.bDown = PickingExerciseStep == 17;
+			Focus.bDown = Acceptance.PickingExerciseStep == 17;
 			InEvents.push_back(Focus);
 			if (Focus.bDown)
 			{
@@ -221,24 +222,24 @@ void FEditorPlugin::ExercisePickingSelection(std::vector<FInputEvent>& InEvents,
 			Pointer(InEvents, InCenter, true);
 			break;
 		case 20:
-			ViewCamera.World = Translation({1, 0, 10});
+			Viewport.ViewCamera.World = Translation({1, 0, 10});
 			break;
 		case 21:
 			Pointer(InEvents, InCenter, false);
 			break;
 		case 22:
 			CheckPicking(!Selection, "view change completed a click");
-			ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
+			Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
 			break;
 	}
 }
 
 void FEditorPlugin::ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec2 InCenter)
 {
-	switch (PickingExerciseStep)
+	switch (Acceptance.PickingExerciseStep)
 	{
 		case 23:
-			SetPreviewCamera(PickingPreview);
+			SetPreviewCamera(Acceptance.PickingPreview);
 			break;
 		case 24:
 			Pointer(InEvents, InCenter, true);
@@ -247,11 +248,11 @@ void FEditorPlugin::ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec
 			Pointer(InEvents, InCenter, false);
 			break;
 		case 26:
-			CheckPicking(Selection == PickingNear, "preview camera picking failed");
+			CheckPicking(Selection == Acceptance.PickingNear, "preview camera picking failed");
 			break;
 		case 27:
-			Scene->SetEnabled(PickingPreview, false);
-			SelectObject(PickingFar);
+			Scene->SetEnabled(Acceptance.PickingPreview, false);
+			SelectObject(Acceptance.PickingFar);
 			break;
 		case 28:
 			Pointer(InEvents, InCenter, true);
@@ -260,8 +261,8 @@ void FEditorPlugin::ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec
 			Pointer(InEvents, InCenter, false);
 			break;
 		case 30:
-			CheckPicking(Selection == PickingFar, "invalid preview cleared selection or used editor camera");
-			Scene->SetEnabled(PickingPreview, true);
+			CheckPicking(Selection == Acceptance.PickingFar, "invalid preview cleared selection or used editor camera");
+			Scene->SetEnabled(Acceptance.PickingPreview, true);
 			SelectObject(std::nullopt);
 			break;
 		case 31:
@@ -276,7 +277,7 @@ void FEditorPlugin::ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec
 		case 35:
 			CheckPicking(!Selection, "resize completed a stale click");
 			SetPreviewCamera(std::nullopt);
-			SelectObject(PickingFar);
+			SelectObject(Acceptance.PickingFar);
 			break;
 		case 36:
 			Pointer(InEvents, InCenter, true);
@@ -288,21 +289,21 @@ void FEditorPlugin::ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec
 			Pointer(InEvents, InCenter, false);
 			break;
 		case 39:
-			CheckPicking(Selection == PickingFar, "picking stole a gizmo gesture");
+			CheckPicking(Selection == Acceptance.PickingFar, "picking stole a gizmo gesture");
 			CheckPicking(History.empty() && !IsDirty(), "interaction authored unintended edits");
 			bShowLightMarkers = true;
 			OpenScene(CurrentPath);
 			break;
 		case 40:
-			CheckPicking(!Scene->Find(PickingNear) && !ViewportClick, "reopen retained stale picking state");
-			bPickingVerified = true;
+			CheckPicking(!Scene->Find(Acceptance.PickingNear) && !ViewportClick, "reopen retained stale picking state");
+			Acceptance.bPickingVerified = true;
 			break;
 	}
 }
 
 void FEditorPlugin::ExercisePickingInput(std::vector<FInputEvent>& InEvents)
 {
-	if (ReadyFrames < 10 || !bViewportVisible)
+	if (ReadyFrames < 10 || !Viewport.bViewportVisible)
 	{
 		return;
 	}
@@ -310,15 +311,15 @@ void FEditorPlugin::ExercisePickingInput(std::vector<FInputEvent>& InEvents)
 	{
 		return;
 	}
-	if (PickingExerciseStep == 0)
+	if (Acceptance.PickingExerciseStep == 0)
 	{
 		PreparePickingExercise();
 	}
-	const auto Bounds = ViewportRegion.Bounds;
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
 	const FVec2 Empty{Bounds.X + 10, Bounds.Y + 10};
 	ExercisePickingSelection(InEvents, Center, Empty);
 	ExercisePickingView(InEvents, Center);
-	++PickingExerciseStep;
+	++Acceptance.PickingExerciseStep;
 }
 } // namespace Hyperion

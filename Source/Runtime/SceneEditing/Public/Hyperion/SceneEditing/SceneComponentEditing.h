@@ -55,25 +55,33 @@ template<class T> struct TSceneComponentBatchRequest
 FSceneNodeEdit PrepareSceneComponentEdit(const FSceneEditDocument& InDocument, const FSceneComponentRequest& InRequest,
                                          const FRecordDescriptor& InType, const void* InValue);
 
+struct FSceneComponentEditValue
+{
+	FSceneHandle Handle;
+	std::string_view Component;
+	const void* Value{};
+};
+
+FSceneDocumentInfo SetSceneComponentValues(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest,
+                                           const FRecordDescriptor& InType,
+                                           std::span<const FSceneComponentEditValue> InValues);
+
 template<class T>
 FSceneDocumentInfo SetSceneComponentBatch(FSceneEditDocument& InDocument,
                                           const TSceneComponentBatchRequest<T>& InRequest)
 {
-	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
 	const auto Count = InRequest.Handles.size();
 	if (!Count || Count > 128 || InRequest.Components.size() != Count || InRequest.Values.size() != Count)
 	{
+		InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
 		throw std::invalid_argument("Supply 1-128 distinct handles with one component ID and value per handle");
 	}
-	std::vector<FSceneNodeEdit> Edits;
+	std::vector<FSceneComponentEditValue> Values;
 	for (std::size_t Index = 0; Index < Count; ++Index)
 	{
-		Edits.push_back(PrepareSceneComponentEdit(
-		    InDocument, {InRequest.Document, InRequest.Revision, InRequest.Handles[Index], InRequest.Components[Index]},
-		    RecordType<T>(), &InRequest.Values[Index]));
+		Values.push_back({InRequest.Handles[Index], InRequest.Components[Index], &InRequest.Values[Index]});
 	}
-	InDocument.CommitEdits(std::move(Edits), InRequest.Revision);
-	return DescribeSceneDocument(InDocument);
+	return SetSceneComponentValues(InDocument, {InRequest.Document, InRequest.Revision}, RecordType<T>(), Values);
 }
 
 template<class T> const FRecordDescriptor& SceneComponentBatchRequestType()

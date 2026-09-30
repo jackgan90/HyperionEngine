@@ -1,4 +1,4 @@
-#include "SceneOperations.h"
+#include "SceneOperationRegistration.h"
 
 namespace Hyperion
 {
@@ -19,19 +19,11 @@ void AddClipboardOperation(FOperationCatalog& InCatalog, FSceneEditDocument* InD
 	Info.Effects = InEffects;
 	Info.Completion = "Completed on Main. Scene rendering observes committed edits on subsequent frames.";
 	Info.Unavailable = InDocument && InDocument->HasClipboardProvider() ? "" : "No scene clipboard provider.";
-	Info.Example = WriteRecordWire(RecordType<TRequest>(), &InExample);
-	InCatalog.Register(MakeOperation<TRequest, TResult>(std::move(Info),
-	                                                    [InDocument, InFunction](const TRequest& InRequest)
-	                                                    {
-		                                                    try
-		                                                    {
-			                                                    return InFunction(*InDocument, InRequest);
-		                                                    }
-		                                                    catch (const FSceneEditError& Error)
-		                                                    {
-			                                                    throw FAutomationError(Error.Code, Error.what());
-		                                                    }
-	                                                    }));
+	RegisterSceneOperation<TRequest, TResult>(InCatalog, std::move(Info), InExample,
+	                                          [InDocument, InFunction](const TRequest& InRequest)
+	                                          {
+		                                          return InFunction(*InDocument, InRequest);
+	                                          });
 }
 } // namespace
 

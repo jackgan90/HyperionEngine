@@ -9,71 +9,36 @@ namespace Hyperion
 {
 void FEditorPlugin::InitializeViewportCamera()
 {
-	if (bViewportCameraInitialized || !CanInitializeSceneBrowsingView(*Scene))
-	{
-		return;
-	}
-	ViewCamera =
-	    MakeSceneBrowsingView(*Scene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1);
-	bViewportCameraInitialized = true;
+	Viewport.InitializeCamera(*Scene);
 }
 
 void FEditorPlugin::ResizeViewport()
 {
-	if (!bViewportVisible)
-	{
-		return;
-	}
-	const auto Logical = Window->LogicalSize();
-	const auto Pixels = Window->PixelSize();
-	const auto& Bounds = ViewportRegion.Bounds;
-	const auto Limit = Device->GetCapabilities().MaxTextureDimension;
-	FSize Size{std::clamp(static_cast<std::uint32_t>(
-	                          std::max(1.f, std::round((Bounds.Z - Bounds.X) * Pixels.Width / Logical.Width))),
-	                      1u, Limit),
-	           std::clamp(static_cast<std::uint32_t>(
-	                          std::max(1.f, std::round((Bounds.W - Bounds.Y) * Pixels.Height / Logical.Height))),
-	                      1u, Limit)};
-	if (Options.BenchmarkViewport.Width)
-	{
-		Size = Options.BenchmarkViewport;
-		if (Size.Width > Limit || Size.Height > Limit)
-		{
-			throw std::invalid_argument("Benchmark viewport exceeds device limits");
-		}
-	}
-	if (Size.Width == ViewportSize.Width && Size.Height == ViewportSize.Height)
-	{
-		return;
-	}
-	ViewportSize = Size;
-	ViewportTarget = {ERenderTargetKind::Texture,
-	                  std::make_shared<const FMaterialTextureSource>(
-	                      FMaterialColorTexture{Size.Width, Size.Height, EMaterialColorFormat::Rgba8Unorm}),
-	                  Session->GetResources().CreateScopeLifetime(), false};
+	Viewport.Resize(Window->LogicalSize(), Window->PixelSize(), Device->GetCapabilities().MaxTextureDimension, *Session,
+	                Options.BenchmarkViewport);
 }
 
 void FEditorPlugin::RouteCamera(float InDelta, std::span<const FInputEvent> InEvents)
 {
 	if (ReparentGesture || Placement.IsActive() || bPlacementUsedMouse || Gizmo.IsDragging() || bGizmoUsedMouse ||
-	    PreviewCamera || !bViewportCameraInitialized || !bViewportVisible || bOpenDialog || bSaveDialog ||
-	    bAssetMessage || PendingRoot || bDiscardDialog || bPreferencesDialog || Gui->IsEditingText() ||
-	    !ViewportRegion.bFocused)
+	    Viewport.PreviewCamera || !Viewport.bViewportCameraInitialized || !Viewport.bViewportVisible || bOpenDialog ||
+	    bSaveDialog || bAssetMessage || Transition.PendingRoot || Transition.bDiscardDialog || bPreferencesDialog ||
+	    Gui->IsEditingText() || !Viewport.ViewportRegion.bFocused)
 	{
 		// Focus recovery still reaches the controller while GUI navigation is blocked.
 		Camera.SuspendInput(InEvents);
-		bCameraDragging = false;
+		Viewport.bCameraDragging = false;
 		return;
 	}
 	for (const auto& Event : InEvents)
 	{
-		if (Event.Type == EEventType::MouseButton && Event.Button == 1)
+		if (Event.Type == EEventType::MouseButton && Event.Button == InputButtons::Right)
 		{
-			bCameraDragging = Event.bDown && (ViewportRegion.bHovered || bCameraDragging);
+			Viewport.bCameraDragging = Event.bDown && (Viewport.ViewportRegion.bHovered || Viewport.bCameraDragging);
 		}
 		if (Event.Type == EEventType::Focus && !Event.bDown)
 		{
-			bCameraDragging = false;
+			Viewport.bCameraDragging = false;
 			Camera.Reset();
 		}
 		if (Event.Type == EEventType::Key && Event.Key == EKey::Home && Event.bDown && !Event.bRepeat)
@@ -84,8 +49,8 @@ void FEditorPlugin::RouteCamera(float InDelta, std::span<const FInputEvent> InEv
 			}
 		}
 	}
-	Camera.Input(ViewCamera, InEvents, !ViewportRegion.bHovered && !bCameraDragging, false);
-	Camera.Advance(ViewCamera, InDelta);
+	Camera.Input(Viewport.ViewCamera, InEvents, !Viewport.ViewportRegion.bHovered && !Viewport.bCameraDragging, false);
+	Camera.Advance(Viewport.ViewCamera, InDelta);
 }
 
 void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
@@ -93,24 +58,9 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	ResizeViewport();
 	const auto Size = Window->PixelSize();
 	const auto FrameSettings = Rendering;
-	FSceneViewRequest Request;
-	Request.Width = ViewportSize.Width;
-	Request.Height = ViewportSize.Height;
-	Request.DepthConvention = GetDepthConvention(FrameSettings.bReversedZ);
-	Request.CullingMode = CullingMode;
-	Request.CullingViewProjection = FrozenCullingView;
-	Request.bInstanceBatching = bInstanceBatching;
-	if (PreviewCamera)
-	{
-		Request.Camera = PreviewCamera;
-		Request.bAllowCameraFallback = false;
-	}
-	else
-	{
-		Request.CameraOverride = ViewCamera;
-	}
+	const auto Request = Viewport.MakeViewRequest(FrameSettings, CullingMode, FrozenCullingView, bInstanceBatching);
 	const auto& Status = Scene->GetStatus();
-	const bool bRenderScene = bViewportVisible && Status.Error.empty() && Status.PublicationError.empty();
+	const bool bRenderScene = Viewport.bViewportVisible && Status.Error.empty() && Status.PublicationError.empty();
 	if (!bRenderScene)
 	{
 		// Scene IO can fail after GUI construction. Keep the window chrome, without sampling an unavailable target.
@@ -123,27 +73,8 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	const auto Seed = bRenderScene ? Session->FreezeSceneFrame(Scene->GetToken(),
 	                                                           static_cast<float>(double(ClockNanoseconds()) / 1e9))
 	                               : nullptr;
-	const auto Target = ViewportTarget;
-	auto Outline = std::make_shared<FSelectionOutlineRequest>();
-	if (Seed)
-	{
-		Outline->Publication = Seed->GetToken();
-	}
-	Outline->Settings = OutlineSettings;
-	if (!OutlineExerciseObjects.empty())
-	{
-		for (const auto Object : OutlineExerciseObjects)
-		{
-			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Object));
-		}
-	}
-	else
-	{
-		for (const auto Handle : Selection.All())
-		{
-			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Handle));
-		}
-	}
+	const auto Target = Viewport.ViewportTarget;
+	const auto Outline = MakeSelectionOutline(Seed);
 	const auto Preview = FreezePlacementPreview();
 	if (!Options.ExerciseModelPlacement.empty() && PlacementPublication && Preview)
 	{
@@ -162,7 +93,8 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 		}
 	}
 	FImage Capture;
-	const auto ExerciseCapture = OutlineCapture.empty() ? PlacementCapture : OutlineCapture;
+	const auto ExerciseCapture =
+	    Acceptance.OutlineCapture.empty() ? Acceptance.PlacementCapture : Acceptance.OutlineCapture;
 	const bool bAgentCapture = PendingImage && PendingImage->Request.Window == "main";
 	const bool bCaptureFrame = bInCapture || !ExerciseCapture.empty() || bAgentCapture;
 	const auto Surface = Window->Surface();
@@ -194,25 +126,57 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 			                          RenderStats = Pipeline->GetFrame().Statistics();
 		                          }
 	                          }));
+	CompleteFrameCapture(Capture, bInCapture, bAgentCapture, ExerciseCapture);
+}
+
+std::shared_ptr<FSelectionOutlineRequest> FEditorPlugin::MakeSelectionOutline(
+    const std::shared_ptr<const FSceneFrameSeed>& InSeed) const
+{
+	auto Outline = std::make_shared<FSelectionOutlineRequest>();
+	if (InSeed)
+	{
+		Outline->Publication = InSeed->GetToken();
+	}
+	Outline->Settings = OutlineSettings;
+	if (!Acceptance.OutlineExerciseObjects.empty())
+	{
+		for (const auto Object : Acceptance.OutlineExerciseObjects)
+		{
+			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Object));
+		}
+	}
+	else
+	{
+		for (const auto Handle : Selection.All())
+		{
+			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Handle));
+		}
+	}
+	return Outline;
+}
+
+void FEditorPlugin::CompleteFrameCapture(const FImage& InImage, bool bInCapture, bool bInAgentCapture,
+                                         const std::filesystem::path& InExerciseCapture)
+{
 	if (bInCapture)
 	{
 		if (!Options.Capture.parent_path().empty())
 		{
 			std::filesystem::create_directories(Options.Capture.parent_path());
 		}
-		SaveImage(Options.Capture, Capture);
+		SaveImage(Options.Capture, InImage);
 	}
-	if (bAgentCapture)
+	if (bInAgentCapture)
 	{
-		CompleteImageOutput(*PendingImage, Capture, FrameCount);
+		CompleteImageOutput(*PendingImage, InImage, FrameCount);
 		PendingImage.reset();
 	}
-	if (!ExerciseCapture.empty())
+	if (!InExerciseCapture.empty())
 	{
-		std::filesystem::create_directories(ExerciseCapture.parent_path());
-		SaveImage(ExerciseCapture, Capture);
-		PlacementCapture.clear();
-		OutlineCapture.clear();
+		std::filesystem::create_directories(InExerciseCapture.parent_path());
+		SaveImage(InExerciseCapture, InImage);
+		Acceptance.PlacementCapture.clear();
+		Acceptance.OutlineCapture.clear();
 	}
 }
 } // namespace Hyperion

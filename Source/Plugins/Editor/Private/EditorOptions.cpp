@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "EditorHostOptions.h"
 #include <charconv>
 #include <cmath>
 
@@ -6,6 +7,17 @@ namespace Hyperion
 {
 namespace
 {
+bool HasIsolatedEditorAcceptanceRequest(const FEditorOptions& InOptions)
+{
+	return !InOptions.ExerciseAssets.empty() || InOptions.bExercise || InOptions.bExerciseGizmo ||
+	       InOptions.bExercisePicking || InOptions.bExerciseMultiSelection || InOptions.bExerciseClipboard ||
+	       InOptions.bExerciseFraming || InOptions.bExerciseSelectionShortcuts || !InOptions.ExerciseDocument.empty() ||
+	       !InOptions.ExerciseViews.empty() || !InOptions.ExercisePlacement.empty() ||
+	       !InOptions.ExerciseOutlines.empty() || !InOptions.ExerciseCapture.empty() ||
+	       !InOptions.ExerciseRenderControls.empty() || !InOptions.ExerciseReparent.empty() ||
+	       !InOptions.ExerciseModelPlacement.empty();
+}
+
 std::uint32_t UnsignedOption(std::string_view InValue)
 {
 	std::uint32_t Result{};
@@ -217,6 +229,18 @@ void ParseValue(FEditorOptions& InOptions, std::string_view InArgument, const st
 }
 } // namespace
 
+bool HasEditorAcceptanceRequest(const FEditorOptions& InOptions)
+{
+	return HasIsolatedEditorAcceptanceRequest(InOptions) || InOptions.bExerciseLog ||
+	       !InOptions.ExerciseContent.empty() || !InOptions.ExerciseImport.empty();
+}
+
+bool ShouldPersistEditorGui(const FEditorOptions& InOptions)
+{
+	// Log acceptance retains normal layout; content/import preserve their existing separate layout suppression.
+	return InOptions.Benchmark.empty() && !HasIsolatedEditorAcceptanceRequest(InOptions);
+}
+
 FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 {
 	FEditorOptions Result;
@@ -228,6 +252,12 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 	for (int Index = 1; Index < InCount; ++Index)
 	{
 		const std::string Argument = InValues[Index];
+#if !HYP_BUILD_TESTING
+		if (Argument.starts_with("--exercise"))
+		{
+			throw std::invalid_argument("Editor acceptance is unavailable: configure BUILD_TESTING=ON");
+		}
+#endif
 		if (ParseFlag(Result, Argument))
 		{
 			continue;

@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/AssetEditing/AssetDocument.h"
+#include "Hyperion/AssetEditing/AssetEditWorkflow.h"
 #include "Hyperion/AssetEditing/AssetWorkspace.h"
 #include "Hyperion/AssetEditing/MaterialNumeric.h"
 #include "Hyperion/AssetEditing/ModelProperties.h"
@@ -185,6 +186,9 @@ private:
 	TPendingOperation<FAssetDocumentInfo> OpenWorkspace(const FAssetOpenRequest& InRequest);
 	std::map<std::string, std::shared_ptr<FEntry>, std::less<>> Documents;
 	std::vector<FTaskHandle> Work;
+	std::vector<std::shared_ptr<FAssetEditWorkflow>> EditWork;
+	TPendingOperation<FAssetDocumentInfo> PendingEdit(const std::shared_ptr<FEntry>& InEntry,
+	                                                  std::shared_ptr<FAssetEditWorkflow> InWorkflow);
 	std::string Identity;
 	std::uint64_t NextDocument{};
 };

@@ -23,14 +23,14 @@ Source/
     Platform/      # 窗口、输入与 SDL wrapper
     AssetTypes/    # 轻量引用、头部和来源记录
     Assets/        # 原生异步加载/保存、依赖解析、缓存和图片 wrapper
-    AssetEditing/  # GUI/agent 共用 CPU 资产草稿、历史、保存和编辑算法
+    AssetEditing/  # GUI/agent 共用 CPU 资产草稿、历史、保存和异步编辑工作流
     Content/       # Engine 资源定位、Game 根状态、索引候选和切换参与者
     Textures/      # CPU 纹理反射记录、颜色编码和离线 mip
     Materials/     # CPU 材质定义、实例、semantic、反射资产和纹理引用
     Environment/   # CPU 天空资产、全景转 cubemap、SH 与 GGX 预过滤
     Scene/         # 独立 CPU 模型、Main 逻辑场景、清单与反射注册
     SceneEditing/  # CPU 场景文档、事务、历史、保存点、选择及反射请求/结果
-    AssetImport/   # 离线 glTF/JSON 转换、增量导入和完整依赖发布
+    AssetImport/   # glTF/GLB、PNG/JPEG、HDR/EXR 转换、草稿、增量导入和完整依赖发布
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
     RHI/           # 公共图形契约、能力查询、后端注册表
     Renderer/      # render session / primitive / resources / SceneInstance / Model 桥接 / RenderGraph
@@ -85,3 +85,7 @@ Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Con
 `Gui` 只组织控件和生成引擎自有绘制数据；`GuiRenderer` 通过 Renderer/RHI 创建纹理、buffer、管线及绑定。Editor 将场景输出纹理交给 GuiRenderer 合成，公共接口不暴露 ImGui 或原生 D3D12 类型。具体帧顺序和扩展位置见 [Editor.md](Editor.md)。
 
 附着到运行应用的模块关系和扩展规则见 [AutomationConnections](AutomationConnections.md)。`ISceneEditTarget` 属于 CPU SceneEditing，Renderer 实现 `FSceneInstanceEditTarget`；GUI 与 agent 消费同一个 `FSceneEditDocument`。连接管理不依赖本机 PID、Named Pipe 或具体应用类型。
+
+`AssetEditing/FAssetEditWorkflow` 统一纹理编码和资产引用编辑的 admission、拥有数据的准备快照、busy 生命周期及 Main 提交；`FAssetWorkspace` 和 `FAssetAutomation` 只维护各自文档/会话适配和 polling。完成提交前重新检查文档身份、资产身份与 generation，使用共享资产文档历史；关闭和插件排空调用 Drain 汇合准备任务，不在销毁路径提交草稿。`AssetImport/FImportDraftInfo` 的纹理尺寸、dimension 和 pixelBytes 是 GUI/agent 共用的反射元信息，展示文字不作为数据接口。
+
+Editor 私有 `FEditorViewport` 拥有浏览相机、视口目标和尺寸/区域，并执行初始化、resize、取景和导航重置；`FEditorDocumentTransition` 拥有待执行的场景打开、root 切换、关闭和 discard 决策；插件继续持有生命周期与 typed service 注册。`FEditorAcceptanceDriver` 拥有验收状态及语义输入窗口路由，implementation sources 仅在 BUILD_TESTING 下编入；关闭测试的 Editor 通过受控 unavailable 诊断处理验收请求，生产 report 输出保持独立。Renderer 的冻结快照和 GPU fence 退休边界不由这些私有 owner 替代。

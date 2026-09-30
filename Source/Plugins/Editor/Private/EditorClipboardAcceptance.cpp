@@ -59,14 +59,14 @@ void FEditorPlugin::PrepareClipboardExercise()
 	FSceneSelection Chosen(Nodes[0]);
 	Chosen.Toggle(Nodes[1]);
 	SetSelection(std::move(Chosen));
-	ClipboardExerciseCount = Scene->GetNodes().size();
+	Acceptance.ClipboardExerciseCount = Scene->GetNodes().size();
 	Window->SetClipboard("initial ordinary text");
 	Gui->FocusWindow("Outliner");
 }
 
 void FEditorPlugin::ExerciseClipboardHistory(std::vector<FInputEvent>& InEvents)
 {
-	switch (ClipboardExerciseStep)
+	switch (Acceptance.ClipboardExerciseStep)
 	{
 		case 1:
 			ClipboardKey(InEvents, EKey::C, true, true);
@@ -81,7 +81,7 @@ void FEditorPlugin::ExerciseClipboardHistory(std::vector<FInputEvent>& InEvents)
 			ClipboardKey(InEvents, EKey::V);
 			break;
 		case 4:
-			RequireClipboard(Scene->GetNodes().size() == ClipboardExerciseCount + 3 && HistoryCursor == 1 &&
+			RequireClipboard(Scene->GetNodes().size() == Acceptance.ClipboardExerciseCount + 3 && HistoryCursor == 1 &&
 			                     Selection.All().size() == 2,
 			                 "first paste batch: " + Error);
 			RequireClipboard(Scene->FindNode(*Selection)->Name == "Clipboard camera (1)", "numbered name");
@@ -92,17 +92,17 @@ void FEditorPlugin::ExerciseClipboardHistory(std::vector<FInputEvent>& InEvents)
 			ClipboardKey(InEvents, EKey::V);
 			break;
 		case 6:
-			RequireClipboard(Scene->GetNodes().size() == ClipboardExerciseCount + 6 && HistoryCursor == 2,
+			RequireClipboard(Scene->GetNodes().size() == Acceptance.ClipboardExerciseCount + 6 && HistoryCursor == 2,
 			                 "second paste batch: " + Error);
 			Undo();
 			Window->SetClipboard("ordinary text");
 			ClipboardKey(InEvents, EKey::V);
 			break;
 		case 7:
-			RequireClipboard(Scene->GetNodes().size() == ClipboardExerciseCount + 3 && HistoryCursor == 1,
+			RequireClipboard(Scene->GetNodes().size() == Acceptance.ClipboardExerciseCount + 3 && HistoryCursor == 1,
 			                 "text replacement pasted stale objects");
 			Redo();
-			RequireClipboard(Scene->GetNodes().size() == ClipboardExerciseCount + 6 && HistoryCursor == 2,
+			RequireClipboard(Scene->GetNodes().size() == Acceptance.ClipboardExerciseCount + 6 && HistoryCursor == 2,
 			                 "redo read the clipboard");
 			SceneDocument.CopySelection(SceneDocument.Id(), Scene->GetRevision());
 			Gui->FocusWindow("Content Browser");
@@ -120,7 +120,7 @@ void FEditorPlugin::ExerciseClipboardHistory(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseClipboardText(std::vector<FInputEvent>& InEvents)
 {
-	switch (ClipboardExerciseStep)
+	switch (Acceptance.ClipboardExerciseStep)
 	{
 		case 10:
 			ClipboardClick(InEvents, InspectionBounds.at("clipboard/search"), false);
@@ -150,23 +150,23 @@ void FEditorPlugin::ExerciseClipboardText(std::vector<FInputEvent>& InEvents)
 			ClipboardKey(InEvents, EKey::V);
 			break;
 		case 17:
-			RequireClipboard(HistoryCursor == 2 && Scene->GetNodes().size() == ClipboardExerciseCount + 6,
+			RequireClipboard(HistoryCursor == 2 && Scene->GetNodes().size() == Acceptance.ClipboardExerciseCount + 6,
 			                 "viewport pasted old object snapshot");
 			Error.clear();
-			bClipboardVerified = true;
+			Acceptance.bClipboardVerified = true;
 			break;
 	}
 }
 
 void FEditorPlugin::ExerciseClipboard(std::vector<FInputEvent>& InEvents)
 {
-	if (!Scene->GetStatus().bReady || !bViewportVisible || bClipboardVerified)
+	if (!Scene->GetStatus().bReady || !Viewport.bViewportVisible || Acceptance.bClipboardVerified)
 	{
 		return;
 	}
-	if (++ClipboardExerciseWait % 3 != 0)
+	if (++Acceptance.ClipboardExerciseWait % 3 != 0)
 	{
-		if (ClipboardExerciseWait % 3 == 1)
+		if (Acceptance.ClipboardExerciseWait % 3 == 1)
 		{
 			for (const auto Key : {EKey::A, EKey::C, EKey::V})
 			{
@@ -175,7 +175,7 @@ void FEditorPlugin::ExerciseClipboard(std::vector<FInputEvent>& InEvents)
 		}
 		return;
 	}
-	if (!ClipboardExerciseStep)
+	if (!Acceptance.ClipboardExerciseStep)
 	{
 		PrepareClipboardExercise();
 		FInputEvent Focus;
@@ -183,7 +183,7 @@ void FEditorPlugin::ExerciseClipboard(std::vector<FInputEvent>& InEvents)
 		Focus.bDown = true;
 		InEvents.push_back(Focus);
 	}
-	else if (ClipboardExerciseStep < 10)
+	else if (Acceptance.ClipboardExerciseStep < 10)
 	{
 		ExerciseClipboardHistory(InEvents);
 	}
@@ -191,6 +191,6 @@ void FEditorPlugin::ExerciseClipboard(std::vector<FInputEvent>& InEvents)
 	{
 		ExerciseClipboardText(InEvents);
 	}
-	++ClipboardExerciseStep;
+	++Acceptance.ClipboardExerciseStep;
 }
 } // namespace Hyperion

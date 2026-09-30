@@ -5,17 +5,8 @@ namespace Hyperion
 {
 void FEditorPlugin::RouteFrameSelectionShortcut(std::span<const FInputEvent> InEvents)
 {
-	const bool bSceneFocus =
-	    Gui->IsWindowFocused("Viewport") || Gui->IsWindowFocused("Outliner") || Gui->IsWindowFocused("Details");
-	const bool bInterrupted = std::any_of(InEvents.begin(), InEvents.end(),
-	                                      [](const FInputEvent& InEvent)
-	                                      {
-		                                      return InEvent.Type == EEventType::Focus && !InEvent.bDown;
-	                                      });
-	if (!bSceneFocus || bInterrupted || !bViewportVisible || !bViewportCameraInitialized || PreviewCamera ||
-	    Gui->IsTextInputOwnedThisFrame() || Gui->HasOpenPopup() || ReparentGesture || Gizmo.IsDragging() ||
-	    bGizmoUsedMouse || bPlacementUsedMouse || bCameraDragging || Gui->PointerState().bRightDown ||
-	    Gui->PointerState().bCancel || IsDocumentInteractionBusy() || IsAssetWindowBlocked())
+	if (!Viewport.bViewportVisible || !Viewport.bViewportCameraInitialized || Viewport.PreviewCamera ||
+	    !CaptureShortcutInteraction(InEvents).Allows(EEditorShortcut::FrameSelection))
 	{
 		return;
 	}
@@ -41,7 +32,7 @@ void FEditorPlugin::RouteFrameSelectionShortcut(std::span<const FInputEvent> InE
 
 void FEditorPlugin::DrawViewportOverlays()
 {
-	if (!bViewportVisible)
+	if (!Viewport.bViewportVisible)
 	{
 		return;
 	}

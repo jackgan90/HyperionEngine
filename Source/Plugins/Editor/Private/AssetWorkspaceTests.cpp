@@ -99,7 +99,7 @@ struct FWorkspaceFixture
 	{
 		FInputEvent Key;
 		Key.Type = EEventType::Key;
-		Key.Modifiers = 1;
+		Key.Modifiers = InputModifiers::Control;
 		Frame(std::array{Key});
 		Click(InBounds);
 		Key.Key = EKey::A;

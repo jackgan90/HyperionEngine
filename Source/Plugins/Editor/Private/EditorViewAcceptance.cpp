@@ -30,12 +30,12 @@ bool Near(const FMat4& InA, const FMat4& InB)
 void FEditorPlugin::ExerciseViewHistory()
 {
 	Check(Selection && Scene->FindNode(*Selection)->Camera(), "Create camera widget failed");
-	ExerciseOriginal = *Scene->FindNode(*Selection);
+	Acceptance.ExerciseOriginal = *Scene->FindNode(*Selection);
 	const auto FirstHandle = *Selection;
 	Undo();
 	Check(!Scene->FindNode(FirstHandle), "Undo creation left the camera in the scene");
 	Redo();
-	Check(*Selection != FirstHandle && Scene->FindNode(*Selection)->Id == ExerciseOriginal.Id,
+	Check(*Selection != FirstHandle && Scene->FindNode(*Selection)->Id == Acceptance.ExerciseOriginal.Id,
 	      "Redo did not recreate the camera safely");
 	FSceneNode Parent;
 	Parent.Id = "view-acceptance-parent";
@@ -46,13 +46,13 @@ void FEditorPlugin::ExerciseViewHistory()
 	CommitEdit(*Selection, Child, Scene->GetRevision());
 	ApplyEditorView(*Selection);
 	FSceneNodeView View;
-	Check(Scene->GetNodeView(*Selection, View) && Near(View.World, ViewCamera.World),
+	Check(Scene->GetNodeView(*Selection, View) && Near(View.World, Viewport.ViewCamera.World),
 	      "Applying world view ignored the camera parent");
 	Undo();
 	Undo();
 	Redo();
 	Redo();
-	Check(Scene->GetNodeView(*Selection, View) && Near(View.World, ViewCamera.World),
+	Check(Scene->GetNodeView(*Selection, View) && Near(View.World, Viewport.ViewCamera.World),
 	      "Redo lost parent-relative camera transform");
 	Undo();
 	Undo();
@@ -74,31 +74,31 @@ void FEditorPlugin::ExerciseViewHistory()
 	Check(bRejected && Scene->GetRevision() == Revision, "Singular parent edit was not rejected atomically");
 	Undo();
 	Scene->RemoveSubtree(ParentHandle);
-	DollySceneCamera(ViewCamera, .8f);
-	ExerciseEditorView = ViewCamera;
+	DollySceneCamera(Viewport.ViewCamera, .8f);
+	Acceptance.ExerciseEditorView = Viewport.ViewCamera;
 }
 
 void FEditorPlugin::ExerciseViewPreview(std::vector<FInputEvent>& InEvents)
 {
-	const auto Handle = Scene->FindHandle(ExerciseOriginal.Id);
-	switch (ExerciseStep)
+	const auto Handle = Scene->FindHandle(Acceptance.ExerciseOriginal.Id);
+	switch (Acceptance.ExerciseStep)
 	{
 		case 3:
-			Check(Scene->FindNode(Handle)->Local().Values == ViewCamera.World.Values,
+			Check(Scene->FindNode(Handle)->Local().Values == Viewport.ViewCamera.World.Values,
 			      "Apply editor view widget failed");
 			Undo();
-			Check(Scene->FindNode(Handle)->Local().Values == ExerciseOriginal.Local().Values,
+			Check(Scene->FindNode(Handle)->Local().Values == Acceptance.ExerciseOriginal.Local().Values,
 			      "Undo camera view failed");
 			Redo();
 			ExerciseClick(InEvents, InspectionBounds.at("view/preview"));
 			break;
 		case 4:
 		{
-			Check(PreviewCamera == Handle && IsPreviewAvailable(), "Preview camera widget failed");
+			Check(Viewport.PreviewCamera == Handle && IsPreviewAvailable(), "Preview camera widget failed");
 			auto Node = *Scene->FindNode(Handle);
 			Node.bEnabled = false;
 			CommitEdit(Handle, Node, Scene->GetRevision());
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 5:
@@ -109,11 +109,11 @@ void FEditorPlugin::ExerciseViewPreview(std::vector<FInputEvent>& InEvents)
 			Node.Camera().reset();
 			Node.bEnabled = true;
 			CommitEdit(Handle, Node, Scene->GetRevision());
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 6:
-			if (ExerciseWait == 0)
+			if (Acceptance.ExerciseWait == 0)
 			{
 				Check(!IsPreviewAvailable() && RenderStats.MainView().Draws == 0,
 				      "Missing Camera component fell back to another camera");
@@ -124,10 +124,12 @@ void FEditorPlugin::ExerciseViewPreview(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, InspectionBounds.at("view/return"));
 			break;
 		case 7:
-			Check(!PreviewCamera && ViewCamera == ExerciseEditorView, "Returning from preview lost the editor view");
-			Check(Scene->GetSettings().InitialView == ExerciseInitialView, "Camera edit changed the initial view");
+			Check(!Viewport.PreviewCamera && Viewport.ViewCamera == Acceptance.ExerciseEditorView,
+			      "Returning from preview lost the editor view");
+			Check(Scene->GetSettings().InitialView == Acceptance.ExerciseInitialView,
+			      "Camera edit changed the initial view");
 			SaveScene(Options.ExerciseViews.string());
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 	}
 }
@@ -138,36 +140,37 @@ void FEditorPlugin::ExerciseViewInput(std::vector<FInputEvent>& InEvents)
 	{
 		throw std::runtime_error(Scene->GetStatus().Error);
 	}
-	if (!Scene->GetStatus().bReady || !bViewportCameraInitialized || ReadyFrames < 8)
+	if (!Scene->GetStatus().bReady || !Viewport.bViewportCameraInitialized || ReadyFrames < 8)
 	{
 		return;
 	}
-	if ((ExerciseStep == 0 || ExerciseStep == 1 || ExerciseStep == 6) && !bViewOptionsOpen)
+	if ((Acceptance.ExerciseStep == 0 || Acceptance.ExerciseStep == 1 || Acceptance.ExerciseStep == 6) &&
+	    !bViewOptionsOpen)
 	{
-		const auto Step = ExerciseStep;
+		const auto Step = Acceptance.ExerciseStep;
 		ExerciseClick(InEvents, InspectionBounds.at("view/options"));
-		ExerciseStep = Step;
+		Acceptance.ExerciseStep = Step;
 		return;
 	}
-	if (ExerciseStep >= 3 && ExerciseStep <= 7)
+	if (Acceptance.ExerciseStep >= 3 && Acceptance.ExerciseStep <= 7)
 	{
 		ExerciseViewPreview(InEvents);
 		return;
 	}
-	switch (ExerciseStep)
+	switch (Acceptance.ExerciseStep)
 	{
 		case 0:
-			if (ExerciseWait == 0)
+			if (Acceptance.ExerciseWait == 0)
 			{
 				const auto Revision = Scene->GetRevision();
-				DollySceneCamera(ViewCamera, .9f);
+				DollySceneCamera(Viewport.ViewCamera, .9f);
 				Check(!IsDirty() && Scene->GetRevision() == Revision, "Navigation changed authored scene data");
-				ExerciseInitialView = ViewCamera;
+				Acceptance.ExerciseInitialView = Viewport.ViewCamera;
 			}
 			ExerciseClick(InEvents, InspectionBounds.at("view/initial"));
 			break;
 		case 1:
-			Check(IsDirty() && Scene->GetSettings().InitialView == ExerciseInitialView,
+			Check(IsDirty() && Scene->GetSettings().InitialView == Acceptance.ExerciseInitialView,
 			      "Set initial view widget failed");
 			Undo();
 			Check(!IsDirty(), "Initial view undo lost save point");
@@ -175,7 +178,7 @@ void FEditorPlugin::ExerciseViewInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, InspectionBounds.at("view/create"));
 			break;
 		case 2:
-			if (ExerciseWait == 0)
+			if (Acceptance.ExerciseWait == 0)
 			{
 				ExerciseViewHistory();
 			}
@@ -186,27 +189,27 @@ void FEditorPlugin::ExerciseViewInput(std::vector<FInputEvent>& InEvents)
 			{
 				Check(!IsDirty(), "View document save failed");
 				OpenScene(Options.ExerciseViews.string());
-				++ExerciseStep;
+				++Acceptance.ExerciseStep;
 			}
 			break;
 		case 9:
 		{
-			Check(ViewCamera == ExerciseInitialView && !IsDirty(),
+			Check(Viewport.ViewCamera == Acceptance.ExerciseInitialView && !IsDirty(),
 			      "Opening scene did not restore the explicit initial view");
-			const auto Handle = Scene->FindHandle(ExerciseOriginal.Id);
+			const auto Handle = Scene->FindHandle(Acceptance.ExerciseOriginal.Id);
 			const auto* Node = Scene->FindNode(Handle);
-			Check(Node && Node->Camera() && Node->Local().Values == ExerciseEditorView.World.Values,
+			Check(Node && Node->Camera() && Node->Local().Values == Acceptance.ExerciseEditorView.World.Values,
 			      "Authored camera did not survive save/reload");
 			SetPreviewCamera(Handle);
 			Scene->RemoveSubtree(Handle);
 			Check(!IsPreviewAvailable(), "Deleted camera preview remained available");
-			++ExerciseStep;
+			++Acceptance.ExerciseStep;
 			break;
 		}
 		case 10:
 			Check(RenderStats.MainView().Draws == 0, "Deleted preview still rendered scene geometry");
 			SetPreviewCamera({});
-			bViewsVerified = true;
+			Acceptance.bViewsVerified = true;
 			break;
 	}
 }

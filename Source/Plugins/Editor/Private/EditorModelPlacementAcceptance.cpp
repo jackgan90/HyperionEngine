@@ -60,7 +60,7 @@ void WritePlacementFixture(const std::filesystem::path& InRoot)
 void FEditorPlugin::ExerciseModelPlacement(std::vector<FInputEvent>& InEvents)
 {
 	CheckModelPlacement(!bAssetMessage, AssetMessage);
-	if (ModelPlacementStep == 0 && ModelPlacementCase == 0)
+	if (Acceptance.ModelPlacementStep == 0 && Acceptance.ModelPlacementCase == 0)
 	{
 		const auto Root = Options.ExerciseModelPlacement / "Game";
 		std::filesystem::create_directories(Root);
@@ -70,19 +70,20 @@ void FEditorPlugin::ExerciseModelPlacement(std::vector<FInputEvent>& InEvents)
 		Focus.Type = EEventType::Focus;
 		Focus.bDown = true;
 		InEvents.push_back(Focus);
-		ModelPlacementStep = 1;
+		Acceptance.ModelPlacementStep = 1;
 		return;
 	}
-	if (ExerciseWait)
+	if (Acceptance.ExerciseWait)
 	{
-		--ExerciseWait;
+		--Acceptance.ExerciseWait;
 		return;
 	}
-	if (PendingRoot || Browser->IsScanning() || FrameCount < 12 || !bViewportVisible || !Scene->GetStatus().bReady)
+	if (Transition.PendingRoot || Browser->IsScanning() || FrameCount < 12 || !Viewport.bViewportVisible ||
+	    !Scene->GetStatus().bReady)
 	{
 		return;
 	}
-	if (ModelPlacementCase < ModelPlacementNames.size())
+	if (Acceptance.ModelPlacementCase < ModelPlacementNames.size())
 	{
 		ExerciseModelDrag(InEvents);
 	}
@@ -94,25 +95,25 @@ void FEditorPlugin::ExerciseModelPlacement(std::vector<FInputEvent>& InEvents)
 
 void FEditorPlugin::ExerciseModelDrag(std::vector<FInputEvent>& InEvents)
 {
-	const std::string Path = "/Game/" + std::string(ModelPlacementNames.at(ModelPlacementCase)) + ".hasset";
+	const std::string Path = "/Game/" + std::string(ModelPlacementNames.at(Acceptance.ModelPlacementCase)) + ".hasset";
 	if (!ContentTileBounds.contains(Path))
 	{
 		return;
 	}
 	const auto Source = ContentTileBounds.at(Path);
 	const FVec2 Start{(Source.X + Source.Z) * .5f, (Source.Y + Source.W) * .5f};
-	const auto Bounds = ViewportRegion.Bounds;
+	const auto Bounds = Viewport.ViewportRegion.Bounds;
 	const FVec2 Target{Bounds.X + (Bounds.Z - Bounds.X) * .55f, Bounds.Y + (Bounds.W - Bounds.Y) * .65f};
-	if (ModelPlacementStep >= 7)
+	if (Acceptance.ModelPlacementStep >= 7)
 	{
 		CompleteModelDrag(InEvents, Start);
 		return;
 	}
-	switch (ModelPlacementStep)
+	switch (Acceptance.ModelPlacementStep)
 	{
 		case 1:
-			ModelPlacementBaseNodes = Scene->GetNodes().size();
-			ModelPlacementBaseHistory = HistoryCursor;
+			Acceptance.ModelPlacementBaseNodes = Scene->GetNodes().size();
+			Acceptance.ModelPlacementBaseHistory = HistoryCursor;
 			MoveModelPointer(InEvents, Start);
 			break;
 		case 2:
@@ -123,17 +124,17 @@ void FEditorPlugin::ExerciseModelDrag(std::vector<FInputEvent>& InEvents)
 			break;
 		case 4:
 			MoveModelPointer(InEvents, Target);
-			if (ModelPlacementCase == 0)
+			if (Acceptance.ModelPlacementCase == 0)
 			{
 				ModelButton(InEvents, false);
-				ModelPlacementStep = 8;
+				Acceptance.ModelPlacementStep = 8;
 				return;
 			}
 			break;
 		case 5:
-			CheckModelPlacement(Gui->DragPayload().has_value(),
-			                    "Content tile did not start a drag in case " + std::to_string(ModelPlacementCase));
-			if (ModelPlacementCase >= 4 && ModelPlacementCase <= 6)
+			CheckModelPlacement(Gui->DragPayload().has_value(), "Content tile did not start a drag in case " +
+			                                                        std::to_string(Acceptance.ModelPlacementCase));
+			if (Acceptance.ModelPlacementCase >= 4 && Acceptance.ModelPlacementCase <= 6)
 			{
 				if (PlacementStatus.starts_with("Preparing"))
 				{
@@ -141,7 +142,7 @@ void FEditorPlugin::ExerciseModelDrag(std::vector<FInputEvent>& InEvents)
 				}
 				CheckModelPlacement(!Placement.GetPreview() && !PlacementStatus.empty(), "Invalid asset accepted");
 				ModelButton(InEvents, false);
-				ModelPlacementStep = 8;
+				Acceptance.ModelPlacementStep = 8;
 				return;
 			}
 			if (!Placement.GetPreview())
@@ -162,37 +163,38 @@ void FEditorPlugin::ExerciseModelDrag(std::vector<FInputEvent>& InEvents)
 					                    "Preview did not use the source material");
 				}
 			}
-			CheckModelPlacement(HistoryCursor == ModelPlacementBaseHistory &&
-			                        Scene->GetNodes().size() == ModelPlacementBaseNodes,
+			CheckModelPlacement(HistoryCursor == Acceptance.ModelPlacementBaseHistory &&
+			                        Scene->GetNodes().size() == Acceptance.ModelPlacementBaseNodes,
 			                    "Preview modified document");
 			MoveModelPointer(InEvents, Start);
 			break;
 		case 6:
 			CheckModelPlacement(Placement.IsActive() && !Placement.GetPreview(), "Outside preview was not hidden");
 			MoveModelPointer(InEvents, Target);
-			PlacementCapture = Options.ExerciseModelPlacement / "ModelPreview.png";
+			Acceptance.PlacementCapture = Options.ExerciseModelPlacement / "ModelPreview.png";
 			break;
 	}
-	++ModelPlacementStep;
+	++Acceptance.ModelPlacementStep;
 }
 
 void FEditorPlugin::CompleteModelDrag(std::vector<FInputEvent>& InEvents, FVec2 InSource)
 {
-	if (ModelPlacementStep == 7)
+	if (Acceptance.ModelPlacementStep == 7)
 	{
 		CheckModelPlacement(Placement.GetPreview().has_value(), "Returning drag lost preview");
-		ModelPlacementPosition = Placement.GetPreview()->Position;
+		Acceptance.ModelPlacementPosition = Placement.GetPreview()->Position;
 		bool bBusyRejected{};
 		try
 		{
-			PlaceModel({SceneDocument.Id(), Scene->GetRevision(), *PlacementCandidate->Model, ModelPlacementPosition});
+			PlaceModel({SceneDocument.Id(), Scene->GetRevision(), *PlacementCandidate->Model,
+			            Acceptance.ModelPlacementPosition});
 		}
 		catch (const FSceneEditError& Failure)
 		{
 			bBusyRejected = Failure.Code == "busy";
 		}
 		CheckModelPlacement(bBusyRejected, "Automation did not reject placement during a GUI gesture");
-		if (ModelPlacementCase == 3)
+		if (Acceptance.ModelPlacementCase == 3)
 		{
 			FInputEvent Cancel;
 			Cancel.Type = EEventType::Key;
@@ -200,19 +202,19 @@ void FEditorPlugin::CompleteModelDrag(std::vector<FInputEvent>& InEvents, FVec2 
 			Cancel.bDown = true;
 			InEvents.push_back(Cancel);
 		}
-		else if (ModelPlacementCase == 7)
+		else if (Acceptance.ModelPlacementCase == 7)
 		{
 			MoveModelPointer(InEvents, InSource);
 		}
-		else if (ModelPlacementCase == 8)
+		else if (Acceptance.ModelPlacementCase == 8)
 		{
-			ViewCamera.World.Values[12] += 1;
+			Viewport.ViewCamera.World.Values[12] += 1;
 		}
 		ModelButton(InEvents, false);
-		ModelPlacementStep = 8;
+		Acceptance.ModelPlacementStep = 8;
 		return;
 	}
-	if (ModelPlacementCase == 3)
+	if (Acceptance.ModelPlacementCase == 3)
 	{
 		FInputEvent Release;
 		Release.Type = EEventType::Key;
@@ -220,40 +222,40 @@ void FEditorPlugin::CompleteModelDrag(std::vector<FInputEvent>& InEvents, FVec2 
 		InEvents.push_back(Release);
 	}
 	CheckModelPlacement(!Placement.IsActive(), "Drop/cancellation left an active gesture");
-	if (ModelPlacementCase == 1 || ModelPlacementCase == 2)
+	if (Acceptance.ModelPlacementCase == 1 || Acceptance.ModelPlacementCase == 2)
 	{
-		CheckModelPlacement(HistoryCursor == ModelPlacementBaseHistory + 1 &&
-		                        Scene->GetNodes().size() == ModelPlacementBaseNodes + 1,
+		CheckModelPlacement(HistoryCursor == Acceptance.ModelPlacementBaseHistory + 1 &&
+		                        Scene->GetNodes().size() == Acceptance.ModelPlacementBaseNodes + 1,
 		                    "Drop did not create exactly one history entry and node");
 		const auto* Node = Scene->FindNode(*Selection);
 		CheckModelPlacement(Node && Node->Name == "Model" && Node->Model() && Gui->IsWindowFocused("Viewport"),
 		                    "Drop selection/name/focus mismatch");
-		CheckModelPlacement(Node->Local().Values == Translation(ModelPlacementPosition).Values,
+		CheckModelPlacement(Node->Local().Values == Translation(Acceptance.ModelPlacementPosition).Values,
 		                    "Preview/commit transform mismatch");
-		ModelPlacementIds.push_back(Node->Id);
+		Acceptance.ModelPlacementIds.push_back(Node->Id);
 	}
 	else
 	{
-		CheckModelPlacement(HistoryCursor == ModelPlacementBaseHistory &&
-		                        Scene->GetNodes().size() == ModelPlacementBaseNodes,
+		CheckModelPlacement(HistoryCursor == Acceptance.ModelPlacementBaseHistory &&
+		                        Scene->GetNodes().size() == Acceptance.ModelPlacementBaseNodes,
 		                    "Cancelled or invalid drop changed document");
 	}
-	++ModelPlacementCase;
-	if (ModelPlacementCase < ModelPlacementNames.size())
+	++Acceptance.ModelPlacementCase;
+	if (Acceptance.ModelPlacementCase < ModelPlacementNames.size())
 	{
-		ContentRevealPath = "/Game/" + std::string(ModelPlacementNames.at(ModelPlacementCase)) + ".hasset";
+		ContentRevealPath = "/Game/" + std::string(ModelPlacementNames.at(Acceptance.ModelPlacementCase)) + ".hasset";
 	}
-	ModelPlacementStep = 1;
-	ExerciseWait = 24;
+	Acceptance.ModelPlacementStep = 1;
+	Acceptance.ExerciseWait = 24;
 }
 
 void FEditorPlugin::ExerciseModelPlacementHistory()
 {
 	const auto Output = Options.ExerciseModelPlacement / "Placed.hasset";
-	if (ModelPlacementStep == 1)
+	if (Acceptance.ModelPlacementStep == 1)
 	{
-		const auto* First = Scene->FindNode(Scene->FindHandle(ModelPlacementIds.at(0)));
-		const auto* Second = Scene->FindNode(Scene->FindHandle(ModelPlacementIds.at(1)));
+		const auto* First = Scene->FindNode(Scene->FindHandle(Acceptance.ModelPlacementIds.at(0)));
+		const auto* Second = Scene->FindNode(Scene->FindHandle(Acceptance.ModelPlacementIds.at(1)));
 		CheckModelPlacement(First->Model()->Asset == Second->Model()->Asset &&
 		                        First->Model()->Data == Second->Model()->Data,
 		                    "Repeated placement did not share model data");
@@ -266,23 +268,23 @@ void FEditorPlugin::ExerciseModelPlacementHistory()
 		const auto Snapshot = Scene->Snapshot(Output);
 		CheckModelPlacement(Snapshot.Assets.size() == 1, "Cancelled/failed models leaked into saved references");
 		SaveScene(PathToUtf8(Output));
-		++ModelPlacementStep;
+		++Acceptance.ModelPlacementStep;
 	}
-	else if (ModelPlacementStep == 2 && !PendingSave)
+	else if (Acceptance.ModelPlacementStep == 2 && !PendingSave)
 	{
 		CheckModelPlacement(!IsDirty(), "Model placement save failed");
 		OpenScene(PathToUtf8(Output));
-		++ModelPlacementStep;
+		++Acceptance.ModelPlacementStep;
 	}
-	else if (ModelPlacementStep == 3)
+	else if (Acceptance.ModelPlacementStep == 3)
 	{
 		CheckModelPlacement(Scene->GetNodes().size() == 2 && !IsDirty(), "Saved model scene did not reload");
-		for (const auto& Id : ModelPlacementIds)
+		for (const auto& Id : Acceptance.ModelPlacementIds)
 		{
 			const auto* Node = Scene->FindNode(Scene->FindHandle(Id));
 			CheckModelPlacement(Node && Node->Model()->Data->Instances.size() == 2, "Reload lost model or instances");
 		}
-		bModelPlacementVerified = true;
+		Acceptance.bModelPlacementVerified = true;
 	}
 }
 } // namespace Hyperion

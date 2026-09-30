@@ -6,7 +6,7 @@ FApplicationCloseState FEditorPlugin::ApplicationCloseState() const
 {
 	const auto* Imports = Context.Find<FAssetImportWorkspace>();
 	const auto ImportState = Imports ? Imports->ContentRootState() : FContentRootParticipantState{};
-	return {CloseState, CloseError, IsDirty() || AssetWorkspace->IsDirty() || ImportState.bDirty,
+	return {Transition.CloseState, Transition.CloseError, IsDirty() || AssetWorkspace->IsDirty() || ImportState.bDirty,
 	        bool(PendingSave) || AssetWorkspace->IsSaving() || AssetWorkspace->HasPendingEdits() ||
 	            GizmoEdit.has_value() || InspectorInteraction || PendingInspectorEdit.has_value() ||
 	            Placement.IsActive() || ImportState.bBusy,
@@ -25,23 +25,23 @@ void FEditorPlugin::StartSaveBeforeClose(const std::string& InPath)
 	}
 	try
 	{
-		CloseError.clear();
-		CloseState = "saving";
-		bPendingClose = true;
-		bSaveThenClose = true;
+		Transition.CloseError.clear();
+		Transition.CloseState = "saving";
+		Transition.bPendingClose = true;
+		Transition.bSaveThenClose = true;
 		AssetWorkspace->SaveAll();
 		if (IsDirty())
 		{
 			SaveScene(InPath);
 		}
-		bDiscardDialog = false;
+		Transition.bDiscardDialog = false;
 		Gui->ClosePopups();
 	}
 	catch (const std::exception& Failure)
 	{
-		bSaveThenClose = false;
-		CloseState = "failed";
-		CloseError = Failure.what();
+		Transition.bSaveThenClose = false;
+		Transition.CloseState = "failed";
+		Transition.CloseError = Failure.what();
 		throw;
 	}
 }
@@ -61,10 +61,11 @@ void FEditorPlugin::DiscardBeforeClose()
 	}
 	ResetDocument();
 	AssetWorkspace->CloseAll();
-	bDiscardDialog = bRequestDiscard = bPendingClose = bSaveThenClose = false;
+	Transition.bDiscardDialog = Transition.bRequestDiscard = Transition.bPendingClose = Transition.bSaveThenClose =
+	    false;
 	Gui->ClosePopups();
-	CloseError.clear();
-	CloseState = "closing";
+	Transition.CloseError.clear();
+	Transition.CloseState = "closing";
 	Window->RequestClose();
 }
 
@@ -72,23 +73,24 @@ FApplicationCloseState FEditorPlugin::RequestApplicationClose(const FApplication
 {
 	if (InRequest.Action == EApplicationCloseAction::Cancel)
 	{
-		if (CloseState == "idle" && !bPendingClose && !bSaveThenClose && !Window->ShouldClose())
+		if (Transition.CloseState == "idle" && !Transition.bPendingClose && !Transition.bSaveThenClose &&
+		    !Window->ShouldClose())
 		{
 			return ApplicationCloseState();
 		}
-		if (bPendingClose || bSaveThenClose)
+		if (Transition.bPendingClose || Transition.bSaveThenClose)
 		{
 			bSaveDialog = bRequestSaveDialog = false;
 		}
 		CancelDiscardAction();
 		Window->CancelClose();
 		Gui->ClosePopups();
-		CloseState = "idle";
-		CloseError.clear();
+		Transition.CloseState = "idle";
+		Transition.CloseError.clear();
 		return ApplicationCloseState();
 	}
 	const auto State = ApplicationCloseState();
-	if (bFinished || State.bBusy || bOpenDialog || bSaveDialog || PendingRoot || bPreferencesDialog)
+	if (bFinished || State.bBusy || bOpenDialog || bSaveDialog || Transition.PendingRoot || bPreferencesDialog)
 	{
 		throw FSceneEditError("busy", "Finish active edits, transitions and saves before closing");
 	}
@@ -105,8 +107,8 @@ FApplicationCloseState FEditorPlugin::RequestApplicationClose(const FApplication
 			{
 				throw FSceneEditError("dirty_document", "Save first or explicitly choose save/discard close action");
 			}
-			CloseError.clear();
-			CloseState = "closing";
+			Transition.CloseError.clear();
+			Transition.CloseState = "closing";
 			Window->RequestClose();
 			break;
 		default:

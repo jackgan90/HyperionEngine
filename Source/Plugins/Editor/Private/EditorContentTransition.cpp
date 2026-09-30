@@ -26,8 +26,9 @@ void FEditorPlugin::ContentRootChanged()
 	InitializePlacement();
 	Browser->SelectedDirectory = "/Game";
 	Browser->SelectedFile.clear();
-	bOpenDialog = bSaveDialog = bDiscardDialog = bRequestOpen = bRequestSaveDialog = bRequestDiscard = false;
-	bSaveThenSwitch = false;
+	bOpenDialog = bSaveDialog = Transition.bDiscardDialog = bRequestOpen = bRequestSaveDialog =
+	    Transition.bRequestDiscard = false;
+	Transition.bSaveThenSwitch = false;
 	bAssetMessage = bRequestAssetMessage = false;
 	Error.clear();
 	RefreshContent();
@@ -65,10 +66,7 @@ void FEditorPlugin::CancelContentRequests()
 
 void FEditorPlugin::QueueContentRoot(const std::filesystem::path& InDirectory)
 {
-	if (!PendingRoot)
-	{
-		RequestedRoot = InDirectory;
-	}
+	Transition.QueueRoot(InDirectory);
 }
 
 void FEditorPlugin::CloseContentDocument()
@@ -84,12 +82,12 @@ void FEditorPlugin::CloseContentDocument()
 	Selection.Clear();
 	InspectorDrafts.Clear();
 	PendingInspectorEdit.reset();
-	Camera.Reset();
-	bCameraDragging = bViewportCameraInitialized = bSelectionInitialized = false;
+	Viewport.ResetNavigation();
+	bSelectionInitialized = false;
 	ViewportClick.reset();
 	SceneDocument.SetPath({});
 	OpenPath.clear();
-	PendingOpen.clear();
+	Transition.PendingOpen.clear();
 	SavePath.clear();
 	ScenePaths.clear();
 	bReadyLogged = false;
@@ -105,8 +103,8 @@ void FEditorPlugin::CloseContentDocument()
 	PlacementLifetime.reset();
 	PlacementRegistry = {};
 	Pipeline.reset();
-	ViewportTarget = {};
-	ViewportSize = {};
+	Viewport.ViewportTarget = {};
+	Viewport.ViewportSize = {};
 	GuiRenderer->ReleaseFrame();
 	Session->ResetContent();
 }
@@ -114,7 +112,7 @@ void FEditorPlugin::CloseContentDocument()
 void FEditorPlugin::PrepareContentRoot()
 {
 	auto& Content = Context.Require<FContentRootService>();
-	const auto Requested = std::exchange(RequestedRoot, {});
+	const auto Requested = std::exchange(Transition.RequestedRoot, {});
 	std::error_code PathError;
 	const auto Canonical = std::filesystem::canonical(Requested, PathError);
 	if (PathError)
@@ -139,29 +137,29 @@ void FEditorPlugin::PrepareContentRoot()
 		SavePreferences();
 		return;
 	}
-	PendingRoot.emplace(Content.Prepare(Canonical));
-	bDiscardRoot = false;
+	Transition.PendingRoot.emplace(Content.Prepare(Canonical));
+	Transition.bDiscardRoot = false;
 	FinishGizmo();
 	FinishInspectorEdit();
 	if (ApplicationCloseState().bDirty || PendingSave || AssetWorkspace->IsSaving())
 	{
-		bDiscardDialog = bRequestDiscard = true;
+		Transition.bDiscardDialog = Transition.bRequestDiscard = true;
 	}
 	else
 	{
-		bCommitRoot = true;
+		Transition.bCommitRoot = true;
 	}
 }
 
 void FEditorPlugin::CompleteContentRoot()
 {
 	auto& Content = Context.Require<FContentRootService>();
-	auto Prepared = Content.Prepare(PendingRoot->GetDirectory());
-	PendingRoot.reset();
-	bCommitRoot = false;
+	auto Prepared = Content.Prepare(Transition.PendingRoot->GetDirectory());
+	Transition.PendingRoot.reset();
+	Transition.bCommitRoot = false;
 	try
 	{
-		Content.Commit(std::move(Prepared), bDiscardRoot);
+		Content.Commit(std::move(Prepared), Transition.bDiscardRoot);
 	}
 	catch (const FContentRootError& Failure)
 	{
@@ -183,32 +181,33 @@ void FEditorPlugin::ProcessContentRoot()
 		if (std::exchange(bRequestRootDialog, false))
 		{
 			Camera.Reset();
-			bCameraDragging = false;
+			Viewport.bCameraDragging = false;
 			if (const auto Selected = SelectFolder(Window->Surface(), Content.Directory()))
 			{
 				QueueContentRoot(*Selected);
 			}
 		}
-		if (!RequestedRoot.empty())
+		if (!Transition.RequestedRoot.empty())
 		{
 			PrepareContentRoot();
 		}
-		if (bSaveThenSwitch && !bSaveDialog && !PendingSave && !AssetWorkspace->IsSaving())
+		if (Transition.bSaveThenSwitch && !bSaveDialog && !PendingSave && !AssetWorkspace->IsSaving())
 		{
-			bSaveThenSwitch = false;
-			bCommitRoot = !IsDirty() && !AssetWorkspace->IsDirty();
-			bDiscardDialog = bRequestDiscard = !bCommitRoot;
-			if (bCommitRoot)
+			Transition.bSaveThenSwitch = false;
+			Transition.bCommitRoot = !IsDirty() && !AssetWorkspace->IsDirty();
+			Transition.bDiscardDialog = Transition.bRequestDiscard = !Transition.bCommitRoot;
+			if (Transition.bCommitRoot)
 			{
 				Gui->ClosePopups();
 			}
 		}
-		if (!bCommitRoot || !PendingRoot || PendingSave || AssetWorkspace->IsSaving() ||
+		if (!Transition.bCommitRoot || !Transition.PendingRoot || PendingSave || AssetWorkspace->IsSaving() ||
 		    AssetWorkspace->HasPendingEdits())
 		{
-			if (PendingRoot && !bDiscardDialog && !bSaveDialog && !bSaveThenSwitch && !bCommitRoot)
+			if (Transition.PendingRoot && !Transition.bDiscardDialog && !bSaveDialog && !Transition.bSaveThenSwitch &&
+			    !Transition.bCommitRoot)
 			{
-				PendingRoot.reset();
+				Transition.PendingRoot.reset();
 			}
 			return;
 		}
@@ -219,8 +218,8 @@ void FEditorPlugin::ProcessContentRoot()
 		Error = "Could not change asset root: " + std::string(Failure.what());
 		AssetMessage = Error;
 		bAssetMessage = bRequestAssetMessage = true;
-		PendingRoot.reset();
-		bCommitRoot = bSaveThenSwitch = false;
+		Transition.PendingRoot.reset();
+		Transition.bCommitRoot = Transition.bSaveThenSwitch = false;
 	}
 }
 } // namespace Hyperion

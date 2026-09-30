@@ -32,7 +32,7 @@ Sponza 原生资产位于 HyperionAssets，由 `/Game/Scenes/Sponza.hasset` 加�
 
 从占位 Main Camera 迁移时，显式核对它是启用的根节点、仅含 Transform/Camera、没有子对象或额外引用，且场景没有已有初始视图。逐值复制镜头和世界矩阵后移除该节点并清空 `defaultCamera`，其他对象与共享依赖保持原样。该历史迁移已写入原生场景；当前编辑通过共享场景服务保存。该转换仅适用于核验过的示例；通用 schema 升级保留旧相机和拓扑，不自动执行删除。
 
-默认使用 Deferred、compact GBuffer、reversed-Z 和聚簇光照。主方向光使用四级 CSM；三盏暖色点光照亮庭院。Cloudy 天空提供背景、SH 漫反射和 GGX 镜面 IBL；Scene 面板可换为 Dusk、Clear 或自定义原生天空。关闭天空背景仍保留天光。
+默认使用 Deferred、compact GBuffer、reversed-Z 和聚簇光照。符合条件且 Priority 最高的方向光使用四级 CSM；三盏暖色点光照亮庭院。Cloudy 天空提供背景、SH 漫反射和 GGX 镜面 IBL；天空光的 Details 组件可换为 Dusk、Clear 或自定义原生天空，Priority 决定多盏天空光的生效来源。关闭天空背景仍保留天光。
 
 这些设置是对参考构图与照明的近似，不保证逐像素匹配。局部光没有阴影；天光没有场景遮蔽或多次反弹 GI。曝光与 Reinhard 输出、GBuffer 量化、纹理过滤和切线生成也会影响最终画面。详细契约见 [局部光](LocalLights.md)、[聚簇光照](ClusteredLighting.md)、[天空与 IBL](SkyLighting.md) 和 [Deferred 渲染](DeferredRendering.md)。
 

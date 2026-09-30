@@ -105,13 +105,14 @@ void DescribeImportRoot(FImportDraftInfo& OutInfo, const FConvertedAsset& InRoot
 		OutInfo.Mips = static_cast<std::uint32_t>(Texture.Mips.size());
 		OutInfo.Format = TextureFormat(Texture.Format);
 		OutInfo.Encoding = Texture.Encoding == EMaterialTextureEncoding::Srgb ? "sRGB" : "Linear";
-		std::uint64_t Bytes{};
+		OutInfo.Dimension = Texture.Dimension;
+		OutInfo.PixelBytes = 0;
 		for (const auto& Mip : Texture.Mips)
 		{
-			Bytes += Mip.Bytes.size();
+			OutInfo.PixelBytes += Mip.Bytes.size();
 		}
 		OutInfo.Details.push_back((Texture.Dimension == ETextureDimension::Cube ? std::string("Cube") : "Texture2D") +
-		                          " | pixel bytes: " + std::to_string(Bytes));
+		                          " | pixel bytes: " + std::to_string(OutInfo.PixelBytes));
 	}
 	else if (InRoot.Type->CppType == typeid(FMaterialAsset))
 	{
@@ -151,7 +152,7 @@ void DescribeImportRoot(FImportDraftInfo& OutInfo, const FConvertedAsset& InRoot
 
 FImportDraftInfo FAssetImportWorkspace::Draft(const FImportDraftQuery& InRequest) const
 {
-	if (!InRequest.Limit || InRequest.Limit > 64)
+	if (!InRequest.Limit || InRequest.Limit > ImportDraftMaxPageLimit)
 	{
 		throw FAssetImportError("invalid_arguments", "Draft property page limit must be 1-64");
 	}

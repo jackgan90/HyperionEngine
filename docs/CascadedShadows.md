@@ -1,6 +1,6 @@
 # Cascaded Shadow Maps
 
-Editor uses four directional cascades. Select a Directional Light and enable **Override Shadow settings** in Details to edit resolution, distance, split distribution, bias, normal offset, blend/fade and preview. These are authored component properties with undo/redo and native scene persistence. Open `/Game/Scenes/Shadows.hasset` for the dedicated example. The selected main light supplies its settings; old lights without overrides use the session defaults retained by `IRenderSettings` and `render.shadows.get/set`. Light direction/color/intensity/castsShadows remain authored node properties.
+Editor uses four directional cascades. Select a Directional Light and enable **Override Shadow settings** in Details to edit resolution, distance, split distribution, bias, normal offset, blend/fade and preview. These are authored component properties with undo/redo and native scene persistence. Open `/Game/Scenes/Shadows.hasset` for the dedicated example. The highest-Priority effectively enabled directional light with Cast shadows and nonzero radiance supplies both CSM and contact shadows; equal priorities resolve by lexical persistent object ID. Its settings override the session defaults retained by `IRenderSettings` and `render.shadows.get/set`; lights without overrides use those defaults. Other enabled directional lights still contribute direct illumination without shadows. Light direction/color/intensity/castsShadows remain authored node properties.
 
 Debug mode 1 shows cascade colors; modes 2–5 preview the four depth textures inside the Editor scene output. Defaults are 2048 resolution, distance 100, lambda 0.6, normal offset 0.6 texel, receiver bias 0.15 texel, blend/fade 0.1. See [RenderDiagnostics](RenderDiagnostics.md) for settings and measurement commands.
 
@@ -8,7 +8,7 @@ Debug mode 1 shows cascade colors; modes 2–5 preview the four depth textures i
 
 Editor 使用 `FSceneRenderPipeline`，在共享 CSM 后运行 HDR Forward 或 Deferred，详见 [DeferredRendering.md](DeferredRendering.md)。保留的 legacy `FForwardRenderPipeline` 在 Renderer 内组织：共享场景空间索引维护 → 四个 `ShadowDepth` view → `Forward` 主 view → 可选深度预览 → 扩展/plugin passes。所有 view 使用同一个冻结材质 frame，一次 Render 准备完成后再交给 RHI 0；空间索引每个 family 更新一次。`FRenderSession::ViewStatistics()` 分别报告各 view；原 `Statistics()` 保留“最后 view 的可见性、family 总 draw/batch 数”的兼容语义。
 
-`FCascadedShadowMap` 持有稳定 view identity 和纹理 source。`Views()` 提供相机/剔除输入，`Targets(lifetime)` 单独提供各级深度附件，`Bind(main, targets, lifetime)` 声明 Forward 的 sampled reads 和材质参数。主相机的 forward、up、FOV、near/far 显式放入 `FRenderView::Camera`。当前 pipeline 接受单个透视主相机和单个方向光；普通 `BuildViews` 仍可单独使用。
+`FCascadedShadowMap` 持有稳定 view identity 和纹理 source。`Views()` 提供相机/剔除输入，`Targets(lifetime)` 单独提供各级深度附件，`Bind(main, targets, lifetime)` 声明 Forward 的 sampled reads 和材质参数。主相机的 forward、up、FOV、near/far 显式放入 `FRenderView::Camera`。每个 CSM family 使用单个透视主相机和一个推导出的阴影方向光；普通 `BuildViews` 仍可单独使用，其他启用方向光继续叠加照明。
 
 方向光通过冻结 frame 的 semantic provider 解析，与 Forward 的材质求值使用同一注册规则；允许 Global/Scene/Frame 依赖。若该 provider 依赖 Material/View/Pass/Object/Draw，则保留 Forward 的局部光照求值并关闭全局 CSM，避免一套投影对应多个光源。各阴影视图使用光相机的量化 near-plane origin 作为 Eye；主相机的亚 texel 移动不会单独刷新其 View scope。光方向不变时复用已有正交 basis，避免反复归一化产生浮点漂移。
 
@@ -26,7 +26,7 @@ Editor 使用 `FSceneRenderPipeline`，在共享 CSM 后运行 HDR Forward 或 D
 
 CSM 使用 uniform/log 混合 splits、旋转不变的 receiver 包围球、filter guard band 与光空间 texel snapping。光源 basis 避免与 up 共线，并在缓慢改变方向时保持连续。Caster 查询将每个 receiver 沿光方向挤出，独立查询共享 BVH，包含主相机外的遮挡物；caster 决定保守 Z 范围，向外量化避免近裁剪遗漏。未知 bounds 保守通过，非有限/退化输入和投影溢出关闭阴影并发布有限缺省值。
 
-Forward 与 Deferred 只对方向光直接光照施加 shadow visibility，ambient/emissive 不受影响。固定 3×3 comparison PCF 配合有上限的 raster slope/depth bias、按世界 texel 缩放的 receiver bias 和几何 normal offset、受限 receiver-plane correction。相邻 cascade 在重叠区混合，最远距离淡出；采样越界返回 lit。
+Forward 与 Deferred 只对阴影来源方向光的直接光照施加 shadow visibility，其他方向光以及 ambient/emissive 不受影响。固定 3×3 comparison PCF 配合有上限的 raster slope/depth bias、按世界 texel 缩放的 receiver bias 和几何 normal offset、受限 receiver-plane correction。相邻 cascade 在重叠区混合，最远距离淡出；采样越界返回 lit。
 
 固定分辨率无法表示任意细小几何，bias 也存在 acne 与 peter panning 的精度权衡。当前默认值在专用接触、斜面、薄片、mask 和镜像场景中没有观察到明显条纹或分离；不声称消除任意场景比例下的全部 artifacts。初版没有分帧更新、PCSS、VSM、多个 shadowed lights、GPU culling 或 transient aliasing。
 

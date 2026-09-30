@@ -636,6 +636,85 @@ void SelectAll()
 	Document.Detach(Tasks);
 }
 
+void ValidationAndRootCosts()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	std::vector<FSceneHandle> Handles;
+	std::string Parent;
+	for (std::size_t Index = 0; Index < 256; ++Index)
+	{
+		auto Node = MakeScenePointLightNode({});
+		Node.Parent() = Parent;
+		const auto Handle = Target.AddNode(std::move(Node));
+		Handles.push_back(Handle);
+		Parent = Target.FindNode(Handle)->Id;
+	}
+	const auto Handle = Handles.back();
+	const auto Component = RecordType<FScenePointLight>().Id;
+	Target.NodesCount = 0;
+	GetSceneSettings(Document, {Document.Id(), Target.Revision()});
+	GetSceneSelection(Document, {Document.Id(), Target.Revision()});
+	GetSceneComponent(Document, {Document.Id(), Target.Revision(), Handle, Component});
+	ListSceneComponents(Document, {Document.Id(), Handle});
+	Check(Target.NodesCount == 0);
+	const auto Value =
+	    *static_cast<const FScenePointLight*>(Target.FindNode(Handle)->Components.Find(Component)->Get());
+	const std::vector Batch(Handles.begin(), Handles.begin() + 64);
+	SetSceneComponent(Document, {Document.Id(), Target.Revision(), Batch}, Component, RecordType<FScenePointLight>(),
+	                  &Value);
+	Check(Target.NodesCount == 1); // Only the result's nodeCount query enumerates.
+	TSceneComponentBatchRequest<FScenePointLight> Typed{Document.Id(), Target.Revision(), Batch};
+	for (std::size_t Index = 0; Index < Batch.size(); ++Index)
+	{
+		Typed.Components.push_back(Component);
+		auto Item = Value;
+		Item.Intensity = static_cast<float>(Index + 1);
+		Typed.Values.push_back(Item);
+	}
+	SetSceneComponentBatch(Document, Typed);
+	Check(Target.NodesCount == 2);
+	Document.ReplaceSelection(FSceneSelection{});
+	for (const auto Selected : Handles)
+	{
+		Document.Selection().Toggle(Selected);
+	}
+	Target.FindHandleCount = 0;
+	Check(Document.SelectedRoots() == std::vector{Handles.front()});
+	Check(Target.FindHandleCount == Handles.size() - 1);
+	Target.FindHandleCount = 0;
+	Check(Document.PrepareReparent(Handles, {}).empty());
+	Check(Target.FindHandleCount == Handles.size() - 1);
+	const auto Revision = Target.Revision();
+	const auto History = Document.GetState().HistoryCursor;
+	auto Invalid = Batch;
+	Invalid.push_back({Handle.Scene, Handle.Slot, Handle.Generation + 1});
+	auto Different = Value;
+	Different.Intensity = 900.f;
+	const auto BeforeValue =
+	    *static_cast<const FScenePointLight*>(Target.FindNode(Batch.front())->Components.Find(Component)->Get());
+	try
+	{
+		SetSceneComponent(Document, {Document.Id(), Revision, Invalid}, Component, RecordType<FScenePointLight>(),
+		                  &Different);
+		Check(false);
+	}
+	catch (const FSceneEditError& Failure)
+	{
+		Check(Failure.Code == "stale_handle");
+	}
+	Check(Target.Revision() == Revision && Document.GetState().HistoryCursor == History);
+	Check(*static_cast<const FScenePointLight*>(Target.FindNode(Batch.front())->Components.Find(Component)->Get()) ==
+	      BeforeValue);
+	FSceneNode Independent;
+	const auto Other = Target.AddNode(std::move(Independent));
+	SetSceneSelection(Document, {Document.Id(), Target.Revision(), {Other, Handles.back(), Handles.front()}});
+	Check(Document.SelectedRoots() == std::vector{Other, Handles.front()});
+	Document.Detach(Tasks);
+}
+
 void SelectionWithoutProvider()
 {
 	FOperationCatalog Catalog;
@@ -660,14 +739,17 @@ void PlacementWithoutProvider()
 } // namespace
 
 void CheckSceneClipboardOperations();
+void CheckSceneRegistrationOperations();
 
 int main()
 {
 	try
 	{
 		Editing();
+		ValidationAndRootCosts();
 		PlacementWithoutProvider();
 		CheckSceneClipboardOperations();
+		CheckSceneRegistrationOperations();
 		NoHistory();
 		Authoring();
 		SelectAll();

@@ -44,11 +44,13 @@ if(BUILD_TESTING)
   target_link_libraries(automation_local_tests PRIVATE hyperion_automation_plugin hyperion_application)
   add_test(NAME automation_local_lifecycle COMMAND automation_local_tests)
   set_tests_properties(automation_local_lifecycle PROPERTIES TIMEOUT 30)
-  add_executable(automation_scene_tests Private/SceneOperationTests.cpp Private/SceneClipboardTests.cpp)
+  add_executable(automation_scene_tests Private/SceneOperationTests.cpp Private/SceneClipboardTests.cpp
+    Private/SceneRegistrationTests.cpp)
   hyp_executable(automation_scene_tests)
   target_link_libraries(automation_scene_tests PRIVATE hyperion_automation_plugin hyperion_scene_editing)
   add_test(NAME automation_scene COMMAND automation_scene_tests)
-  add_executable(automation_asset_tests Private/AssetOperationTests.cpp Private/MaterialNumericTests.cpp)
+  add_executable(automation_asset_tests Private/AssetOperationTests.cpp Private/MaterialNumericTests.cpp
+    Private/AssetWorkflowTests.cpp)
   hyp_executable(automation_asset_tests)
   target_link_libraries(automation_asset_tests PRIVATE hyperion_automation_plugin hyperion_asset_editing hyperion_application
     hyperion_assets hyperion_content hyperion_scene hyperion_io hyperion_textures)

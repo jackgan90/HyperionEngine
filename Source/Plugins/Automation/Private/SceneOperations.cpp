@@ -1,21 +1,9 @@
-#include "SceneOperations.h"
+#include "SceneOperationRegistration.h"
 
 namespace Hyperion
 {
 namespace
 {
-template<class TFunction> auto SceneCall(TFunction InFunction)
-{
-	try
-	{
-		return InFunction();
-	}
-	catch (const FSceneEditError& Error)
-	{
-		throw FAutomationError(Error.Code, Error.what());
-	}
-}
-
 FOperationInfo SceneInfo(std::string InId, std::string InSummary, std::string InDescription, bool bInReadOnly,
                          const FSceneEditDocument* InDocument)
 {
@@ -34,22 +22,6 @@ FOperationInfo SceneInfo(std::string InId, std::string InSummary, std::string In
 	return Info;
 }
 
-template<class TRequest, class TResult, class TFunction>
-void AddSceneOperation(FOperationCatalog& InCatalog, FOperationInfo InInfo, const TRequest& InExample,
-                       TFunction InFunction)
-{
-	InInfo.Example = WriteRecordWire(RecordType<TRequest>(), &InExample);
-	InCatalog.Register(MakeOperation<TRequest, TResult>(std::move(InInfo),
-	                                                    [InFunction](const TRequest& InRequest)
-	                                                    {
-		                                                    return SceneCall(
-		                                                        [&]
-		                                                        {
-			                                                        return InFunction(InRequest);
-		                                                        });
-	                                                    }));
-}
-
 void RegisterSceneHistory(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument)
 {
 	for (const bool bUndo : {true, false})
@@ -63,7 +35,7 @@ void RegisterSceneHistory(FOperationCatalog& InCatalog, FSceneEditDocument* InDo
 		{
 			Info.Unavailable = "This host does not provide scene undo/redo history.";
 		}
-		AddSceneOperation<FSceneMutationRequest, FSceneDocumentInfo>(
+		RegisterSceneOperation<FSceneMutationRequest, FSceneDocumentInfo>(
 		    InCatalog, std::move(Info), {"document-from-scene.info", 1},
 		    [InDocument, bUndo](const FSceneMutationRequest& InRequest)
 		    {
@@ -97,7 +69,7 @@ void RegisterSceneSave(FOperationCatalog& InCatalog, FSceneEditDocument* InDocum
 	    std::move(Info),
 	    [InDocument](const FSceneSaveRequest& InRequest)
 	    {
-		    return SceneCall(
+		    return InvokeSceneOperation(
 		        [&]() -> TPendingOperation<FSceneDocumentInfo>
 		        {
 			        InDocument->RequireIdle(InRequest.Document, InRequest.Revision);
@@ -129,7 +101,7 @@ void RegisterSceneSave(FOperationCatalog& InCatalog, FSceneEditDocument* InDocum
 
 void RegisterSceneOperations(FOperationCatalog& InCatalog, FSceneEditDocument* InDocument)
 {
-	AddSceneOperation<FSceneInfoRequest, FSceneDocumentInfo>(
+	RegisterSceneOperation<FSceneInfoRequest, FSceneDocumentInfo>(
 	    InCatalog,
 	    SceneInfo("scene.info", "Inspect the live scene document",
 	              "Query document identity, revision, loading, busy, dirty, save and history state before editing. The "
@@ -140,7 +112,7 @@ void RegisterSceneOperations(FOperationCatalog& InCatalog, FSceneEditDocument* I
 	    {
 		    return DescribeSceneDocument(*InDocument);
 	    });
-	AddSceneOperation<FSceneListRequest, FSceneNodePage>(
+	RegisterSceneOperation<FSceneListRequest, FSceneNodePage>(
 	    InCatalog,
 	    SceneInfo("scene.nodes.list", "List live scene nodes",
 	              "Bounded snapshot pages (1-100 nodes). Supply the current document and revision; restart pagination "
@@ -151,7 +123,7 @@ void RegisterSceneOperations(FOperationCatalog& InCatalog, FSceneEditDocument* I
 	    {
 		    return ListSceneNodes(*InDocument, InRequest);
 	    });
-	AddSceneOperation<FSceneNodeRequest, FSceneNodeInfo>(
+	RegisterSceneOperation<FSceneNodeRequest, FSceneNodeInfo>(
 	    InCatalog,
 	    SceneInfo("scene.node.get", "Inspect a live scene node",
 	              "Returns authored local and derived world affine matrices with name, kind and parent. Reads do not "
@@ -162,7 +134,7 @@ void RegisterSceneOperations(FOperationCatalog& InCatalog, FSceneEditDocument* I
 	    {
 		    return DescribeSceneNode(*InDocument, InRequest);
 	    });
-	AddSceneOperation<FSceneTransformRequest, FSceneDocumentInfo>(
+	RegisterSceneOperation<FSceneTransformRequest, FSceneDocumentInfo>(
 	    InCatalog,
 	    SceneInfo("scene.nodes.set_transform", "Set live node transforms atomically",
 	              "Supply current document and revision, plus 1-128 distinct handles and column-major local affine "

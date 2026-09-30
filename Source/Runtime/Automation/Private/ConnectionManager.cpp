@@ -39,7 +39,7 @@ FEndpointRequest FRemoteConnection::Begin(std::string_view InMethod, const FArch
 	{
 		throw FAutomationError("disconnected", "Target connection is closed; no fallback or retry was performed");
 	}
-	if (Requests.size() >= 32)
+	if (Requests.size() >= MaxRemoteConnectionRequests)
 	{
 		throw FAutomationError("busy", "Connection request limit reached");
 	}
@@ -92,7 +92,7 @@ void FRemoteConnection::Poll()
 			bAdmitted = true;
 		}
 		// Drain up to the entire outstanding-request budget before interpreting a terminal stream state.
-		for (unsigned Count = 0; bAdmitted && Count < 32; ++Count)
+		for (unsigned Count = 0; bAdmitted && Count < MaxRemoteConnectionRequests; ++Count)
 		{
 			const auto Message = Channel.Receive();
 			if (!Message)
@@ -214,15 +214,18 @@ FArchiveNode FConnectionManager::List()
 
 FEndpointRequest FConnectionManager::Connect(const FArchiveNode& InParameters)
 {
-	return BeginConnection(InParameters, false, 10000);
+	return BeginConnection(
+	    InParameters, false,
+	    static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(ConnectionTimeout).count()));
 }
 
 FEndpointRequest FConnectionManager::Probe(const FArchiveNode& InParameters)
 {
 	auto Fields = ConnectionFields(InParameters);
 	CheckConnectionKeys(Fields, {"instance", "address", "timeoutMs"});
-	const auto Timeout = Fields.contains("timeoutMs") ? ReadValue<std::uint32_t>(Fields.at("timeoutMs")) : 1000;
-	if (Timeout < 50 || Timeout > 5000)
+	const auto Timeout =
+	    Fields.contains("timeoutMs") ? ReadValue<std::uint32_t>(Fields.at("timeoutMs")) : DefaultProbeTimeoutMs;
+	if (Timeout < MinProbeTimeoutMs || Timeout > MaxProbeTimeoutMs)
 	{
 		throw FAutomationError("invalid_arguments", "Probe timeoutMs must be 50-5000");
 	}
@@ -235,7 +238,7 @@ FEndpointRequest FConnectionManager::BeginConnection(const FArchiveNode& InParam
 {
 	const auto& Fields = ConnectionFields(InParameters);
 	CheckConnectionKeys(Fields, {"instance", "address"});
-	if (Impl->Clients.size() >= 16)
+	if (Impl->Clients.size() >= MaxRemoteConnections)
 	{
 		throw FAutomationError("busy", "Disconnect an existing target before opening more connections");
 	}

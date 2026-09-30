@@ -1,6 +1,6 @@
 # Hierarchical depth and contact shadows
 
-Deferred contact shadows add short-range screen-space directional visibility to CSM. Select a Directional Light, enable **Override Shadow settings**, and edit its **Contact shadows** group in Details. The switch and parameters belong to that light, persist with the scene and participate in undo/redo. Renderer consumes the main light settings from its immutable frame publication. Lights without overrides retain session defaults. CSM and contact enable switches are independent; the selected scene light's **casts shadows** flag applies to both.
+Deferred contact shadows add short-range screen-space directional visibility to CSM. Select a Directional Light, enable **Override Shadow settings**, and edit its **Contact shadows** group in Details. The switch and parameters belong to that light, persist with the scene and participate in undo/redo. Renderer consumes the derived shadow source and its settings from immutable frame publication: the highest-Priority effectively enabled directional light with **Cast shadows** and nonzero radiance, with lexical persistent object ID breaking ties. Lights without overrides retain session defaults. CSM and contact enable switches are independent; they use the same eligible source, while other enabled directional lights contribute unshadowed direct illumination.
 
 ```text
 CSM views -> Deferred BasePass (GBuffer + depth)
@@ -28,7 +28,7 @@ HZB generation issues one dispatch per mip with restricted input/output views. E
 
 ## Tracing and settings
 
-The full-resolution R8 visibility pass reconstructs world positions from normalized HZB depth and the matching inverse view projection. Rays point toward the same main directional-light vector used by shading. Geometric-normal and light-direction bias offset the start. Homogeneous clipping limits the ray to the camera frustum; a bounded hierarchical cell traversal skips empty depth and descends toward candidate intersections. Mip-zero depth, coverage and world-space thickness confirm hits. Coplanar receiver rejection, screen-edge fade and end-of-ray fade reduce self-shadowing and discontinuities. Tracing is deterministic and needs no temporal history or denoiser.
+The full-resolution R8 visibility pass reconstructs world positions from normalized HZB depth and the matching inverse view projection. Rays point toward the same derived shadow directional-light vector used by shading. Geometric-normal and light-direction bias offset the start. Homogeneous clipping limits the ray to the camera frustum; a bounded hierarchical cell traversal skips empty depth and descends toward candidate intersections. Mip-zero depth, coverage and world-space thickness confirm hits. Coplanar receiver rejection, screen-edge fade and end-of-ray fade reduce self-shadowing and discontinuities. Tracing is deterministic and needs no temporal history or denoiser.
 
 | Setting key | Default | Meaning |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ The full-resolution R8 visibility pass reconstructs world positions from normali
 | `debugMode` | 0 | 0 lighting, 1 mask, 2 HZB mip preview |
 | `previewMip` | 4 | Preview level, clamped to the actual chain |
 
-The viewport profiling HUD's **Lighting / HZB** category reports consumers, dispatches and active HZB bytes. HZB preview displays near depth bright in either convention. The benchmark CSV includes `contact_active`, `hzb_consumers`, `hzb_dispatches`, `hzb_bytes`, `hzb_gpu_ms` and `contact_gpu_ms`; timings come from ordinary fenced GPU timestamp capture. Use a ready scene, sufficient warmup and matching camera/viewport/settings when comparing runs. `editor_render_controls` verifies authored contact activation, undo/redo, main-light switching, save/reopen and feature disablement; `editor_render_acceptance` covers legacy session defaults and both depth conventions.
+The viewport profiling HUD's **Lighting / HZB** category reports consumers, dispatches and active HZB bytes. HZB preview displays near depth bright in either convention. The benchmark CSV includes `contact_active`, `hzb_consumers`, `hzb_dispatches`, `hzb_bytes`, `hzb_gpu_ms` and `contact_gpu_ms`; timings come from ordinary fenced GPU timestamp capture. Use a ready scene, sufficient warmup and matching camera/viewport/settings when comparing runs. `editor_render_controls` verifies authored contact activation, undo/redo, Priority-based shadow-source switching, save/reopen and feature disablement; `editor_render_acceptance` covers legacy session defaults and both depth conventions.
 
 ## Pipeline references and trade-offs
 

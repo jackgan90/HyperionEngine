@@ -19,39 +19,39 @@ bool FEditorPlugin::ExerciseDeletionInput(std::vector<FInputEvent>& InEvents)
 	Key.Type = EEventType::Key;
 	Key.Key = EKey::Delete;
 	Key.bDown = true;
-	switch (DeletionExerciseStep++)
+	switch (Acceptance.DeletionExerciseStep++)
 	{
 		case 0:
 			CheckDeletion(bool(Selection), "click did not select deletion target");
-			DeletionExerciseHandle = *Selection;
-			DeletionExerciseId = Scene->FindNode(*Selection)->Id;
+			Acceptance.DeletionExerciseHandle = *Selection;
+			Acceptance.DeletionExerciseId = Scene->FindNode(*Selection)->Id;
 			Key.bRepeat = true;
 			InEvents.push_back(Key);
 			break;
 		case 1:
-			CheckDeletion(Selection == DeletionExerciseHandle && !IsDirty(), "repeat deleted an object");
+			CheckDeletion(Selection == Acceptance.DeletionExerciseHandle && !IsDirty(), "repeat deleted an object");
 			InEvents.push_back(Key);
 			break;
 		case 2:
-			CheckDeletion(!Selection && !Scene->FindNode(DeletionExerciseHandle) && IsDirty(),
+			CheckDeletion(!Selection && !Scene->FindNode(Acceptance.DeletionExerciseHandle) && IsDirty(),
 			              "Del did not delete and clear selection");
 			CheckDeletion(HistoryCursor == 1, "delete was not one history entry");
 			break;
 		case 3:
 			CheckDeletion(!Selection, "Outliner automatically selected a replacement");
 			Undo();
-			CheckDeletion(!IsDirty() && Scene->FindHandle(DeletionExerciseId).Scene &&
-			                  Selection == Scene->FindHandle(DeletionExerciseId),
+			CheckDeletion(!IsDirty() && Scene->FindHandle(Acceptance.DeletionExerciseId).Scene &&
+			                  Selection == Scene->FindHandle(Acceptance.DeletionExerciseId),
 			              "undo did not restore the object, selection and save point");
 			Redo();
 			break;
 		case 4:
-			CheckDeletion(!Selection && !Scene->FindHandle(DeletionExerciseId).Scene && IsDirty(),
+			CheckDeletion(!Selection && !Scene->FindHandle(Acceptance.DeletionExerciseId).Scene && IsDirty(),
 			              "redo did not delete and clear selection");
 			Undo();
-			SelectObject(Scene->FindHandle(DeletionExerciseId));
+			SelectObject(Scene->FindHandle(Acceptance.DeletionExerciseId));
 			ResetDocument();
-			DeletionExerciseStep = 0;
+			Acceptance.DeletionExerciseStep = 0;
 			return true;
 	}
 	return false;
@@ -78,7 +78,7 @@ void FEditorPlugin::ExerciseDeletionHistory()
 	SetPreviewCamera(ChildHandle);
 	SelectObject(ParentHandle);
 	CommitDelete();
-	CheckDeletion(!Selection && !PreviewCamera && !Scene->FindHandle(ChildId).Scene &&
+	CheckDeletion(!Selection && !Viewport.PreviewCamera && !Scene->FindHandle(ChildId).Scene &&
 	                  !Scene->GetSettings().DefaultCamera,
 	              "subtree deletion left selection, preview or scene references");
 	for (unsigned Cycle = 0; Cycle < 2; ++Cycle)

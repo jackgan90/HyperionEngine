@@ -29,7 +29,7 @@ void PreviewShortcut(std::vector<FInputEvent>& InEvents, EKey InKey)
 	FInputEvent Event;
 	Event.Type = EEventType::Key;
 	Event.Key = InKey;
-	Event.Modifiers = 1;
+	Event.Modifiers = InputModifiers::Control;
 	Event.bDown = true;
 	InEvents.push_back(Event);
 	Event.bDown = false;
@@ -47,7 +47,7 @@ void CheckCanvas(FVec4 InBefore, FVec4 InAfter)
 
 bool FEditorPlugin::ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents)
 {
-	auto& Exercise = AssetPreviewExercise;
+	auto& Exercise = Acceptance.AssetPreviewExercise;
 	const auto* Document = AssetWorkspace->ActiveDocument();
 	Exercise.bSawReady |= AssetWorkspace->IsPreviewReady();
 	Exercise.bSawPreparing |= AssetWorkspace->ActiveStatus().find("0/1 models ready") != std::string::npos;
@@ -101,7 +101,7 @@ bool FEditorPlugin::ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents
 
 bool FEditorPlugin::ExerciseAssetPreviewHistory(std::vector<FInputEvent>& InEvents)
 {
-	auto& Exercise = AssetPreviewExercise;
+	auto& Exercise = Acceptance.AssetPreviewExercise;
 	const auto* Document = AssetWorkspace->ActiveDocument();
 	CheckCanvas(Exercise.Canvas, AssetWorkspace->ObservedBounds("canvas"));
 	if (++Exercise.Frames < 3 || !AssetWorkspace->IsPreviewReady())
