@@ -180,6 +180,9 @@ Content Browser 模型预览按分部优先使用已就绪的原材质，保留�
 
 - **左键单击模型**选中最近命中的模型对象，**单击空白处**清除选择。选择同步到 Outliner / Details，不修改场景或撤销历史。按下后移动超过 4 个逻辑像素视为拖动；gizmo 手柄优先，右键导航、失焦、对话框、视口或相机变化会取消本次点击。
 - **Ctrl+左键**在 Outliner、模型和灯光图标之间增减选择；再次点击已选对象会取消该对象。最后加入的对象为主对象，拥有唯一的 gizmo；移除主对象后使用最后一个仍选中的对象。Ctrl 点击空白保留选择，普通点击替换整个选择。所有已选 Outliner 行高亮，搜索和折叠不清除选择。
+- **Ctrl+A** 在 Viewport 或 Outliner 获得焦点时选中当前场景的全部节点，包括折叠、搜索排除、隐藏和停用节点，保留已有主对象。文本框中的 Ctrl+A 仍全选文字；Details、Content Browser、资产窗口、弹窗和导航/操纵/放置/层级拖拽期间不触发场景全选，长按不重复执行。
+- Outliner 的 **Shift+左键**选择锚点至当前行的全部显示节点，包含两端并替换原选择；**Ctrl+Shift+左键**将区间追加到现有选择，不取消已选区间成员。普通或 Ctrl 点击建立锚点，连续 Shift 点击保留锚点，终点为主对象。区间包含滚动区域外的行，跳过折叠子节点和搜索排除的节点；无有效锚点时使用列表中的当前主对象，否则仅选当前行。过滤、场景/历史和外部选择变化会重置锚点。
+- Viewport 的 **Shift+左键**与 Ctrl+左键相同，切换模型或灯光图标的选中状态；修饰键按鼠标按下时捕获，松开 Shift 后再松开鼠标仍执行原动作。Shift 点击空白或查询不可用时保留选择。上述选择操作均不改变场景 revision、dirty 或历史。
 - 在视口中**按住鼠标右键**，使用 **WASD** 前后左右移动、**Q/E** 下降/上升；方向键与 PageUp/PageDown 为别名。单独按移动键不移动镜头，松开右键立即停止平移。
 - **右键拖动**在当前位置调整镜头朝向，鼠标向右转头、向下低头；只旋转时世界位置、镜头参数及对焦距离保持不变。
 - **按住右键滚动滚轮**调整 WASDQE 移动速度：向上加速、向下减速，每格乘以或除以 1.2。仅调速不会改变镜头位置、朝向或镜头参数；移动中调速立即影响后续平移。
@@ -265,7 +268,7 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 
 - 一个主场景窗口和一个按需创建的原生资产窗口，各自内部可停靠和浮动；未启用跨原生窗口的 ImGui multi-viewport，也不支持将任意面板拖出为新的原生窗口。
 - 一个场景视口，默认 Deferred / reversed-Z；此版本不开放 offscreen 深度调试预览。
-- Details 支持单选/多选反射编辑、保存与撤销重做，并提供从编辑器视角创建相机的入口；可通过 FGuiPanelEvent 订阅绘制扩展面板；内置文档面板仍属于同一个 Editor 插件。PRS 支持成组操纵，Del 支持删除选中子树，Place Object 支持内置形状、三种灯光和天空光；反射的类型化资产引用使用按类型筛选的选择器；尚无 Play、框选、范围选择或自定义轴心。任意资产的模型替换和实例创建使用 Runtime 或导入工具。
+- Details 支持单选/多选反射编辑、保存与撤销重做，并提供从编辑器视角创建相机的入口；可通过 FGuiPanelEvent 订阅绘制扩展面板；内置文档面板仍属于同一个 Editor 插件。PRS 支持成组操纵，Del 支持删除选中子树，Place Object 支持内置形状、三种灯光和天空光；反射的类型化资产引用使用按类型筛选的选择器；尚无 Play、框选或自定义轴心。任意资产的模型替换和实例创建使用 Runtime 或导入工具。
 - 界面使用内置 Roboto 字体和英文标签。字体 atlas 在启动时生成；中文字符显示与动态字体更新尚未加入。
 
 ## 验证入口
@@ -273,6 +276,8 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 `editor_asset_editors` 覆盖各类资产预览、属性保存和独立历史，以及场景与资产原生窗口同时渲染、窗口内快捷键路由、缩放、资产最小化、主窗口整组最小化/恢复、关闭取消/丢弃/保存失败重试和窗口重建。`gui_docking` 补充两个 GUI context 的布局与 framebuffer 缩放隔离；`window_event_routing` 验证原生窗口事件路由。`window_ownership` 会短暂创建可见原生窗口，验证激活主窗口后的层级/焦点、非全局置顶、最小化/恢复、关闭隔离与重建。
 
 `editor_multiselect` 使用真实编辑器输入验证 Outliner/Viewport Ctrl 增减选择、按下时的 Ctrl 状态、双目标描边、Details 混合值逐轴赋值、输入主对象已有数值、三个 gizmo 模式和整组 Undo/Redo，并检查父子选择、取消预览、无效批量提交、删除恢复及句柄重映射。独立入口为 `--exercise-multiselect`。`scene_management` 验证原子批量编辑/增删、最终层级校验及混合反射值；`transform_gizmo` 补充非均匀父级、剪切、跨零缩放和零缩放旋转的成组运算；`gui_input_and_data` 验证混合颜色逐通道编辑。
+
+`editor_selection_shortcuts` 使用 `--exercise-selection-shortcuts` 验证双面板全选、超过 128 个节点、连续/反向范围、Ctrl+Shift 追加、过滤和折叠、Shift 按下时捕获、文本/焦点/弹窗/导航占用、重复键及取消层级拖拽。`editor_state` 补充行序、过期锚点、句柄 generation 和大范围验证；`automation_scene` 与 `automation_selection_framing` 验证 select_all 的目录、schema、共享选择、原子拒绝和实际 CLI/MCP 调用。
 
 `object_placement` 覆盖分类、基本形状几何与放置计算；`gui_input_and_data` 覆盖复制载荷、跨面板预览/交付和取消；`scene_runtime_instance` 覆盖空场景动态注册、去重、保存重载和加载失败隔离。`editor_placement` 使用真实 GUI 输入依次放置九种对象，检查连续预览、八种取消路径、撤销重做、主方向光与活动天空光、图标拾取/隐藏、空文档 Save As 与重载，并验证缺失资源只禁用对应条目。可单独运行 `--exercise-placement OUTPUT.hasset`，截图随输出场景保存在同一目录。
 

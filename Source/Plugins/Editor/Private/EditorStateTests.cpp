@@ -1,5 +1,6 @@
 #include "EditorHistoryState.h"
 #include "EditorInspectionCache.h"
+#include "OutlinerSelection.h"
 #include <source_location>
 #include <stdexcept>
 
@@ -36,6 +37,49 @@ void CheckSelection()
 	Check(Selection.Contains(A) && Selection.Contains(B) && !Selection.Contains(C));
 	Selection = std::nullopt;
 	Check(!Selection && !Selection.Contains(A));
+}
+
+void CheckOutlinerRanges()
+{
+	const FSceneHandle A{1, 0, 1};
+	const FSceneHandle B{1, 1, 1};
+	const FSceneHandle C{1, 2, 1};
+	const FSceneHandle D{1, 3, 1};
+	const std::array Rows{A, C, B, D};
+	FOutlinerSelectionState State;
+	auto Selected = State.Click({}, Rows, C, false, false);
+	Selected = State.Click(Selected, Rows, D, true, false);
+	Check(Selected.All() == std::vector<FSceneHandle>({C, B, D}));
+	Selected = State.Click(Selected, Rows, A, true, false);
+	Check(Selected.All() == std::vector<FSceneHandle>({C, A}) && Selected.Primary() == A);
+	Selected = State.Click(Selected, Rows, D, true, true);
+	Check(Selected.All() == std::vector<FSceneHandle>({C, A, B, D}));
+	Selected = State.Click(Selected, Rows, B, true, true);
+	Check(Selected.All().size() == 4 && Selected.Primary() == B);
+	State.Reset();
+	const std::array Filtered{D, A};
+	Selected = State.Click(Selected, Filtered, D, true, false);
+	Check(Selected.All() == std::vector<FSceneHandle>({D}));
+	Selected = State.Click(Selected, Filtered, A, true, false);
+	Check(Selected.All() == std::vector<FSceneHandle>({D, A}));
+	// Slot reuse cannot retain the deleted anchor's generation.
+	const FSceneHandle NewD{1, 3, 2};
+	const std::array Restored{NewD, B, A};
+	Selected = State.Click(Selected, Restored, B, true, false);
+	Check(Selected.All() == std::vector<FSceneHandle>({A, B}));
+	Selected = State.Click(Selected, Restored, B, false, true);
+	Check(!Selected.Contains(B) && Selected.Contains(A));
+	Selected = State.Click(Selected, Restored, NewD, true, false);
+	Check(Selected.All() == std::vector<FSceneHandle>({B, NewD}));
+	std::vector<FSceneHandle> Large;
+	for (unsigned Index = 0; Index < 512; ++Index)
+	{
+		Large.push_back({2, Index, 1});
+	}
+	State.Reset();
+	Selected = State.Click({}, Large, Large.front(), false, false);
+	Selected = State.Click(Selected, Large, Large.back(), true, false);
+	Check(Selected.All() == Large);
 }
 
 void CheckHistoryRemapping()
@@ -118,6 +162,7 @@ void CheckInspectionCache()
 int main()
 {
 	CheckSelection();
+	CheckOutlinerRanges();
 	CheckHistoryRemapping();
 	CheckInspectionCache();
 }

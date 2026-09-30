@@ -318,6 +318,7 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 			continue;
 		}
 		const auto Children = Scene->GetChildren(Visit.Handle);
+		OutlinerRows.push_back(Visit.Handle);
 		Gui->NextRow();
 		Gui->NextColumn();
 		bool bClicked{};
@@ -332,7 +333,8 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 			PickingLightBounds = Gui->LastItemBounds();
 		}
 		RouteReparentRow(Visit.Handle);
-		if (Options.bExerciseMultiSelection || Options.bExerciseFraming || !Options.ExerciseReparent.empty())
+		if (Options.bExerciseMultiSelection || Options.bExerciseFraming || Options.bExerciseSelectionShortcuts ||
+		    !Options.ExerciseReparent.empty())
 		{
 			MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 		}
@@ -352,6 +354,7 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 
 void FEditorPlugin::DrawOutliner()
 {
+	OutlinerRows.clear();
 	if (!bShowOutliner)
 	{
 		return;
@@ -370,7 +373,13 @@ void FEditorPlugin::DrawOutliner()
 		Gui->Text("Search objects");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##SearchObjects", Filter, false);
-		if (Options.bExerciseClipboard || Options.bExerciseFraming)
+		if (OutlinerSelectionFilter != Filter)
+		{
+			OutlinerSelectionFilter = Filter;
+			OutlinerSelection.Reset();
+			CancelReparentGesture();
+		}
+		if (Options.bExerciseClipboard || Options.bExerciseFraming || Options.bExerciseSelectionShortcuts)
 		{
 			InspectionBounds["clipboard/search"] = Gui->LastItemBounds();
 		}
@@ -397,11 +406,12 @@ void FEditorPlugin::DrawOutliner()
 					}
 					Gui->NextRow();
 					Gui->NextColumn();
+					OutlinerRows.push_back(Handle);
 					const bool bActivated =
 					    Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle));
 					RouteReparentRow(Handle, bActivated);
 					if (Options.bExerciseMultiSelection || Options.bExerciseFraming ||
-					    !Options.ExerciseReparent.empty())
+					    Options.bExerciseSelectionShortcuts || !Options.ExerciseReparent.empty())
 					{
 						MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
 					}
@@ -650,6 +660,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	Context.Publish(FGuiPanelEvent{*Gui});
 	RouteDeleteShortcut(InEvents);
 	RouteClipboardShortcuts(InEvents);
+	RouteSelectAllShortcut(InEvents);
 	RouteFrameSelectionShortcut(InEvents);
 	DrawViewportOverlays();
 	return Gui->Render();

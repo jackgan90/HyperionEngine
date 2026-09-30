@@ -15,6 +15,7 @@
 #include "Hyperion/Renderer/RenderBenchmark.h"
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneLightControls.h"
+#include "OutlinerSelection.h"
 #include "PlacementService.h"
 #if HYP_ENABLE_RENDERDOC
 #include "Hyperion/Capture/FrameCapture.h"
@@ -93,6 +94,7 @@ struct FEditorOptions
 	bool bExerciseMultiSelection{};
 	bool bExerciseClipboard{};
 	bool bExerciseFraming{};
+	bool bExerciseSelectionShortcuts{};
 };
 
 FEditorOptions ParseEditorOptions(int InCount, char** InValues);
@@ -370,6 +372,13 @@ private:
 	bool ExercisePickingScene(std::vector<FInputEvent>& InEvents);
 	void ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter, FVec2 InEmpty);
 	void ExerciseMultiSelection(std::vector<FInputEvent>& InEvents);
+	void PrepareSelectionShortcuts();
+	void ExerciseSelectionShortcuts(std::vector<FInputEvent>& InEvents);
+	void ExerciseSelectionRanges(std::vector<FInputEvent>& InEvents);
+	void ExerciseSelectionKeys(std::vector<FInputEvent>& InEvents);
+	void ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents);
+	void ExerciseSelectionTree(std::vector<FInputEvent>& InEvents);
+	void CheckShortcutSelection(std::initializer_list<unsigned> InIndices);
 	void ExerciseReparent(std::vector<FInputEvent>& InEvents);
 	void PrepareReparentExercise();
 	void ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents);
@@ -402,6 +411,8 @@ private:
 	FGuiDrawData DrawGui(float InDelta, std::span<const FInputEvent> InEvents);
 	void RouteCamera(float InDelta, std::span<const FInputEvent> InEvents);
 	void RouteFrameSelectionShortcut(std::span<const FInputEvent> InEvents);
+	void RouteSelectAllShortcut(std::span<const FInputEvent> InEvents);
+	void ClickOutlinerObject(FSceneHandle InHandle, bool bInToggle, bool bInRange);
 	void DrawViewportOverlays();
 	void ExerciseFraming(std::vector<FInputEvent>& InEvents);
 	void PrepareFramingExercise();
@@ -646,6 +657,11 @@ private:
 	bool bMultiSelectionVerified{};
 	std::vector<FSceneHandle> MultiSelectionObjects;
 	std::map<std::string, FVec4> MultiSelectionRows;
+	std::vector<FSceneHandle> ShortcutObjects;
+	unsigned ShortcutStep{};
+	unsigned ShortcutWait{};
+	std::uint64_t ShortcutRevision{};
+	bool bSelectionShortcutsVerified{};
 	std::array<FMat4, 2> MultiSelectionInitial;
 	std::array<FMat4, 2> MultiSelectionFinal;
 	unsigned PickingExerciseStep{};
@@ -678,11 +694,15 @@ private:
 		FVec2 Start;
 		FVec4 Bounds;
 		bool bToggle{};
+		bool bRange{};
 		bool bDragging{};
 		bool bTargetPreview{};
 	};
 
 	std::optional<FReparentGesture> ReparentGesture;
+	FOutlinerSelectionState OutlinerSelection;
+	std::vector<FSceneHandle> OutlinerRows;
+	std::string OutlinerSelectionFilter;
 	std::optional<std::optional<FSceneHandle>> ReparentDrop;
 	std::unordered_set<std::string> ReparentOpenNodes;
 	std::uint64_t ReparentSerial{};

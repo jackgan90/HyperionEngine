@@ -24,7 +24,7 @@ void FEditorPlugin::BeginReparentGesture(FSceneHandle InHandle, FVec4 InBounds)
 	}
 	FinishInspectorEdit();
 	// A selected row keeps the original group until click versus drag is resolved.
-	if (!Selection.Contains(InHandle) && !Pointer.bCtrl)
+	if (!Selection.Contains(InHandle) && !Pointer.bCtrl && !Pointer.bShift)
 	{
 		SelectObject(InHandle);
 	}
@@ -35,7 +35,8 @@ void FEditorPlugin::BeginReparentGesture(FSceneHandle InHandle, FVec4 InBounds)
 	                                   InHandle,
 	                                   Pointer.Position,
 	                                   InBounds,
-	                                   Pointer.bCtrl};
+	                                   Pointer.bCtrl,
+	                                   Pointer.bShift};
 }
 
 void FEditorPlugin::CancelReparentGesture()
@@ -104,7 +105,7 @@ void FEditorPlugin::RouteReparentRow(FSceneHandle InHandle, bool bInActivated)
 	else if (bInActivated && !ReparentGesture && !Gui->PointerState().bReleased)
 	{
 		// Keyboard activation has no mouse gesture; mouse release is resolved once by FinishReparentGesture.
-		ClickObject(InHandle, Gui->PointerState().bCtrl);
+		ClickOutlinerObject(InHandle, Gui->PointerState().bCtrl, false);
 	}
 	DrawReparentTarget(InHandle);
 }
@@ -195,7 +196,7 @@ void FEditorPlugin::FinishReparentGesture()
 		CancelReparentGesture();
 		if (!Gesture.bDragging && ContainsPoint(Gesture.Bounds, Pointer.Position))
 		{
-			ClickObject(Gesture.Source, Gesture.bToggle);
+			ClickOutlinerObject(Gesture.Source, Gesture.bToggle, Gesture.bRange);
 		}
 	}
 }

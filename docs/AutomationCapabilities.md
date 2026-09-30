@@ -28,7 +28,7 @@
 | 选择、清空资产目录 | `content.root.get/set/clear` | `FContentRootService`；Editor 与 GUI 同样检查 busy/dirty、关闭旧内容并保存 Preferences |
 | 打开、新建、关闭场景 | `scene.open`、`scene.status` | `ISceneDocumentHost`；Editor 空 path 表示空文档，旧场景 ID 失效。失败不声称恢复旧场景 |
 | 查询与编辑层级 | `scene.nodes.list/reparent`、`scene.node.get/create/reparent`、`scene.nodes.set_metadata/set_transform` | `FSceneEditDocument`；metadata/transform 最多 128 个目标，事务先全量校验。批量 reparent 接收 document/revision、非空唯一 handles 和 parent（null 表示根），固定 KeepWorld，选中祖先覆盖后代，保留内部层级和选择；一次历史事务，全部无变化时不增加 revision/history；单节点旧模式兼容 |
-| 多选、删除、历史 | `scene.selection.get/set/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary；Editor 删除后不自动选择替代物。Editor undo 恢复并重新选择新 handle |
+| 多选、全选、删除、历史 | `scene.selection.get/set/select_all/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary。select_all 与 Ctrl+A 共用领域服务，包含全部逻辑节点、保留已有 primary，返回 document/revision/count/primary 摘要；count 为 64 位十进制字符串。set 的数量受 wire 预算而非 128 编辑批次限制；选择不改变 revision/dirty/history。Outliner 范围按显示顺序转换为显式集合后共用校验提交，agent 通过 set 表达集合，不模拟面板输入。Editor 删除后不自动选择替代物；undo 恢复并重新选择新 handle |
 | 复制与保留子节点删除 | `scene.selection.duplicate/remove_keep_children` | SceneEditing 共享事务；操作 primary，复制共享资源，删除保留子节点世界变换，支持 undo/redo 和选择恢复；GUI 入口待后续 Outliner/viewport 交互设计 |
 | 对象剪贴板 | `scene.selection.copy`、`scene.clipboard.info/paste` | 与 Ctrl+C/Ctrl+V 共用系统剪贴板和不可变子树快照；同一 Editor、同一文档；数字后缀、原父级/local、一次粘贴一个历史事务；普通文本替换使旧对象不可粘贴。返回摘要，新 handle 通过 selection.get 或 nodes.list 查询 |
 | 放置 primitive/light/native model | `scene.placement.list/place/place_model` | `IScenePlacement` 与 Editor 共用候选、资源准备和提交路径；`place` 使用注册预设 ID，`place_model` 使用原生模型 `FAssetRef`，显式 position 为世界坐标 pivot。异步准备后创建并选中一个节点，记录一次历史，需显式保存；过期 document/revision 或 busy 请求拒绝。Sky Light 默认使用 SkyAsset 与 Engine Cloudy；放置或新增天空光组件仅在没有活动天空光时自动激活 |

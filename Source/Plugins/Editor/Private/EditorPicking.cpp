@@ -50,7 +50,8 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	if (Pointer.bPressed)
 	{
 		ViewportClick =
-		    FViewportClick{Pointer.Position, Pointer.bCtrl, Bounds, ViewportSize, *ActiveCamera, Scene->GetRevision()};
+		    FViewportClick{Pointer.Position,    Pointer.bCtrl || Pointer.bShift, Bounds, ViewportSize, *ActiveCamera,
+		                   Scene->GetRevision()};
 	}
 	if (!ViewportClick)
 	{

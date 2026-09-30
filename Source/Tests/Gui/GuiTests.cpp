@@ -28,6 +28,28 @@ void Check(bool bInB, const char* InM)
 	}
 }
 
+void CheckPointerModifiers()
+{
+	FGui Gui;
+	for (unsigned Modifiers = 0; Modifiers < 4; ++Modifiers)
+	{
+		FInputEvent Event;
+		Event.Type = EEventType::Key;
+		Event.Modifiers = Modifiers;
+		Gui.BeginFrame({640, 480}, {640, 480}, 1.f / 60, std::span(&Event, 1));
+		const auto Pointer = Gui.PointerState();
+		Check(Pointer.bCtrl == bool(Modifiers & 1) && Pointer.bShift == bool(Modifiers & 2),
+		      "Engine pointer state preserves independent Ctrl and Shift modifiers");
+		Gui.Render();
+	}
+	FInputEvent Focus;
+	Focus.Type = EEventType::Focus;
+	Focus.bDown = false;
+	Gui.BeginFrame({640, 480}, {640, 480}, 1.f / 60, std::span(&Focus, 1));
+	Check(!Gui.PointerState().bCtrl && !Gui.PointerState().bShift, "Focus loss releases selection modifiers");
+	Gui.Render();
+}
+
 void CheckAnchoredPopup()
 {
 	for (const float Scale : {1.f, 2.f})
@@ -229,6 +251,7 @@ int main()
 		CheckApplicationScale();
 		CheckActionLayout();
 		CheckAnchoredPopup();
+		CheckPointerModifiers();
 		Check(MemoryStats(EMemoryTag::Gui).LiveBytes == 0, "GUI allocations released");
 		std::cout << "GUI input, reflection, owned draw data and cleanup passed\n";
 		return 0;

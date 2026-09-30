@@ -243,6 +243,8 @@ set_tests_properties(automation_renderdoc_hud PROPERTIES TIMEOUT 180 LABELS "gpu
 add_test(NAME editor_outlines COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OutlineAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_outlines PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_multiselect COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/MultiSelectionAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+add_test(NAME editor_selection_shortcuts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/SelectionShortcutsAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+set_tests_properties(editor_selection_shortcuts PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_clipboard COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ClipboardAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_clipboard PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_test(NAME editor_reparent COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ReparentAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")

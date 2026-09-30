@@ -78,6 +78,12 @@ void RegisterSceneAuthoring(FOperationCatalog& InCatalog, FSceneEditDocument* In
 	    InCatalog, InDocument, "scene.selection.set", "Replace ordered scene selection",
 	    "Validate all handles before replacing selection. Empty clears. Does not dirty the document or create history.",
 	    false, {Document, 1, {}}, SetSceneSelection);
+	AddAuthoring<FSceneMutationRequest, FSceneSelectionSummary>(
+	    InCatalog, InDocument, "scene.selection.select_all", "Select all logical scene objects",
+	    "Includes hidden, disabled, folded and search-excluded nodes. Retains a live primary, otherwise uses stable "
+	    "scene order. Returns count and primary; no authored revision, dirty or history change. Requires an idle "
+	    "document.",
+	    false, {Document, 1}, SelectAllSceneNodes);
 	AddAuthoring<FSceneMetadataRequest, FSceneDocumentInfo>(
 	    InCatalog, InDocument, "scene.nodes.set_metadata", "Edit node names and enabled state",
 	    "1-128 distinct targets. Optional fields retain existing values when absent. One atomic history transaction.",

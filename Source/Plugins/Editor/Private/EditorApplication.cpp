@@ -262,6 +262,10 @@ void FEditorPlugin::CollectEditorInput(std::vector<FInputEvent>& InEvents, std::
 	{
 		ExerciseFraming(InEvents);
 	}
+	if (Options.bExerciseSelectionShortcuts)
+	{
+		ExerciseSelectionShortcuts(InEvents);
+	}
 	if (Options.bExerciseGizmo)
 	{
 		ExerciseGizmoInput(InEvents);
@@ -383,11 +387,11 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 		Scene->Tick();
 	}
 	// Async scene readiness is independent of render frame rate.
-	const bool bExerciseComplete = (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified ||
-	                               bViewsVerified || bGizmoVerified || bPickingVerified || bPlacementVerified ||
-	                               bModelPlacementVerified || bOutlinesVerified || bMultiSelectionVerified ||
-	                               bContentVerified || bRenderControlsVerified || bReparentVerified ||
-	                               bClipboardVerified || bLogVerified || bFramingVerified;
+	const bool bExerciseComplete =
+	    (Options.bExercise && ExerciseStep == 21 && ReadyFrames > 8) || bDocumentVerified || bViewsVerified ||
+	    bGizmoVerified || bPickingVerified || bPlacementVerified || bModelPlacementVerified || bOutlinesVerified ||
+	    bMultiSelectionVerified || bContentVerified || bRenderControlsVerified || bReparentVerified ||
+	    bClipboardVerified || bLogVerified || bFramingVerified || bSelectionShortcutsVerified;
 	const bool bCapture =
 	    !Options.Capture.empty() &&
 	    (bExerciseComplete || (!Options.bExercise && Options.Frames && FrameCount + 1 == Options.Frames) ||
@@ -502,11 +506,11 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	}
 	if ((Options.bExercise || Options.bExerciseLog || Options.bExerciseGizmo || Options.bExercisePicking ||
 	     Options.bExerciseMultiSelection || Options.bExerciseClipboard || Options.bExerciseFraming ||
-	     !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() || !Options.ExercisePlacement.empty() ||
-	     !Options.ExerciseModelPlacement.empty() || !Options.ExerciseOutlines.empty() ||
-	     !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
-	     !Options.ExerciseRenderControls.empty() || !Options.ExerciseImport.empty() ||
-	     !Options.ExerciseReparent.empty()) &&
+	     Options.bExerciseSelectionShortcuts || !Options.ExerciseDocument.empty() || !Options.ExerciseViews.empty() ||
+	     !Options.ExercisePlacement.empty() || !Options.ExerciseModelPlacement.empty() ||
+	     !Options.ExerciseOutlines.empty() || !Options.ExerciseCapture.empty() || !Options.ExerciseContent.empty() ||
+	     !Options.ExerciseAssets.empty() || !Options.ExerciseRenderControls.empty() ||
+	     !Options.ExerciseImport.empty() || !Options.ExerciseReparent.empty()) &&
 	    InUpdate.ElapsedSeconds > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out; model placement case " +
@@ -524,6 +528,11 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	if (Options.bExerciseSelectionShortcuts && !bSelectionShortcutsVerified)
+	{
+		throw std::runtime_error("Editor selection shortcut acceptance incomplete at step " +
+		                         std::to_string(ShortcutStep));
+	}
 	if (Options.bExerciseFraming && !bFramingVerified)
 	{
 		throw std::runtime_error("Editor framing acceptance incomplete at step " + std::to_string(FramingStep));

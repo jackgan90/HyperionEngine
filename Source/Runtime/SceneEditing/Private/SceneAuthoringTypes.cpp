@@ -13,7 +13,8 @@ template<> const FRecordDescriptor& RecordType<FSceneSelectionRequest>()
 	               {.bRequired = true, .Description = "Expected scene revision."}),
 	        Member("handles", &FSceneSelectionRequest::Handles,
 	               {.bRequired = true,
-	                .Description = "Ordered distinct handles; last is primary. Empty clears selection. Maximum 128."}),
+	                .Description = "Ordered distinct live handles; last is primary. Empty clears selection. Subject to "
+	                               "wire message budgets."}),
 	    });
 	return Type;
 }
@@ -29,6 +30,24 @@ template<> const FRecordDescriptor& RecordType<FSceneSelectionInfo>()
 	               {.bRequired = true, .Description = "Expected scene revision."}),
 	        Member("handles", &FSceneSelectionInfo::Handles, {.bRequired = true, .Description = ""}),
 	        Member("primary", &FSceneSelectionInfo::Primary, {.bRequired = true, .Description = ""}),
+	    });
+	return Type;
+}
+
+template<> const FRecordDescriptor& RecordType<FSceneSelectionSummary>()
+{
+	static const auto Type = MakeRecord<FSceneSelectionSummary>(
+	    "hyperion.scene.selection.summary",
+	    {
+	        Member("document", &FSceneSelectionSummary::Document,
+	               {.bRequired = true, .Description = "Current shared document."}),
+	        Member("revision", &FSceneSelectionSummary::Revision,
+	               {.bRequired = true, .Description = "Unchanged authored scene revision."}),
+	        Member("count", &FSceneSelectionSummary::Count,
+	               {.bRequired = true, .Description = "Number of selected logical scene nodes."}),
+	        Member("primary", &FSceneSelectionSummary::Primary,
+	               {.bRequired = true,
+	                .Description = "Retained live primary, or the last scene node; null for an empty scene."}),
 	    });
 	return Type;
 }

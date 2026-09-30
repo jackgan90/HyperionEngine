@@ -581,6 +581,71 @@ void Authoring()
 	Document.Detach(Tasks);
 }
 
+void SelectAll()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, &Document);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	Check(WriteJson(Catalog.Search("scene.selection.select_all")).find("scene.selection.select_all") !=
+	      std::string::npos);
+	Check(WriteJson(Catalog.Describe("scene.selection.select_all")).find("hyperion.scene.selection.summary") !=
+	      std::string::npos);
+	const auto Empty = SelectAllSceneNodes(Document, {Document.Id(), Target.Revision()});
+	Check(Empty.Count == 0 && !Empty.Primary && !Document.IsDirty());
+	for (unsigned Index = 0; Index < 300; ++Index)
+	{
+		FSceneNode Node;
+		Node.Id = "selection-" + std::to_string(Index);
+		Node.bEnabled = Index % 2 != 0;
+		Node.Parent() = Index ? "selection-0" : "";
+		Target.AddNode(std::move(Node));
+	}
+	const auto Handles = Target.Nodes();
+	const auto Revision = Target.Revision();
+	Document.ReplaceSelection(FSceneSelection(Handles.front()));
+	const FSceneMutationRequest Request{Document.Id(), Revision};
+	const auto Result = Call(Agent, "scene.selection.select_all", Request);
+	Check(ReadValue<std::string>(Field(Result, "status")) == "completed");
+	Check(ReadValue<std::string>(Field(Field(Result, "result"), "count")) == std::to_string(Handles.size()));
+	Check(Document.Selection().All().size() == Handles.size() && Document.Selection().Primary() == Handles.front());
+	Check(WriteJson(Result).size() < 1000);
+	Check(Target.Revision() == Revision && !Document.IsDirty() && Document.GetState().History.empty());
+	Call(Agent, "scene.selection.set", FSceneSelectionRequest{Document.Id(), Revision, Handles});
+	Check(Document.Selection().All() == Handles);
+	const auto Before = Document.Selection();
+	auto Invalid = Handles;
+	Invalid.push_back(Handles.front());
+	Error(Call(Agent, "scene.selection.set", FSceneSelectionRequest{Document.Id(), Revision, Invalid}),
+	      "invalid_arguments");
+	Invalid.back().Generation += 1;
+	Error(Call(Agent, "scene.selection.set", FSceneSelectionRequest{Document.Id(), Revision, Invalid}), "stale_handle");
+	Invalid.back() = {Target.Identity() + 1, 0, 1};
+	Error(Call(Agent, "scene.selection.set", FSceneSelectionRequest{Document.Id(), Revision, Invalid}), "stale_handle");
+	Error(Call(Agent, "scene.selection.select_all", FSceneMutationRequest{Document.Id(), Revision - 1}),
+	      "stale_revision");
+	Error(Call(Agent, "scene.selection.select_all", FSceneMutationRequest{"old-document", Revision}), "stale_document");
+	Document.SetInteractionState(true, false);
+	Error(Call(Agent, "scene.selection.select_all", Request), "busy");
+	Document.SetInteractionState(false, false);
+	Check(Document.Selection() == Before && Target.Revision() == Revision && !Document.IsDirty());
+	Document.Detach(Tasks);
+}
+
+void SelectionWithoutProvider()
+{
+	FOperationCatalog Catalog;
+	RegisterSceneOperations(Catalog, nullptr);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	Check(!Catalog.Find("scene.selection.select_all").Info.Unavailable.empty());
+	Error(Call(Agent, "scene.selection.select_all", FSceneMutationRequest{"absent-document", 1}), "unavailable");
+}
+
 void PlacementWithoutProvider()
 {
 	FOperationCatalog Catalog;
@@ -605,6 +670,8 @@ int main()
 		CheckSceneClipboardOperations();
 		NoHistory();
 		Authoring();
+		SelectAll();
+		SelectionWithoutProvider();
 		BatchReparent();
 		AffineReparentRounding();
 		BatchReparentRejection();

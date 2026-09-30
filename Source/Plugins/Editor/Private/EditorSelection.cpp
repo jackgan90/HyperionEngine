@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/SceneEditing/SceneAuthoring.h"
 
 namespace Hyperion
 {
@@ -26,6 +27,70 @@ bool HasVisibleGeometry(const FSceneModel* InModel)
 	return false;
 }
 } // namespace
+
+void FEditorPlugin::ClickOutlinerObject(FSceneHandle InHandle, bool bInToggle, bool bInRange)
+{
+	if (std::find(OutlinerRows.begin(), OutlinerRows.end(), InHandle) == OutlinerRows.end())
+	{
+		return;
+	}
+	try
+	{
+		auto PendingState = OutlinerSelection;
+		const auto Updated = PendingState.Click(Selection, OutlinerRows, InHandle, bInRange, bInToggle);
+		FinishInspectorEdit();
+		UpdateDocumentInteraction();
+		ApplySceneSelection(SceneDocument, {SceneDocument.Id(), Scene->GetRevision(), Updated.All()});
+		// Selection observers invalidate external anchors; publish this gesture's anchor after admission.
+		OutlinerSelection = std::move(PendingState);
+		Error.clear();
+	}
+	catch (const std::exception& Failure)
+	{
+		Error = Failure.what();
+	}
+}
+
+void FEditorPlugin::RouteSelectAllShortcut(std::span<const FInputEvent> InEvents)
+{
+	const bool bSceneFocus =
+	    (bViewportVisible && Gui->IsWindowFocused("Viewport")) || (bShowOutliner && Gui->IsWindowFocused("Outliner"));
+	// A later navigation release must not expose an earlier key from this event batch to selection.
+	const bool bInterrupted = std::any_of(InEvents.begin(), InEvents.end(),
+	                                      [](const FInputEvent& InEvent)
+	                                      {
+		                                      return (InEvent.Type == EEventType::Focus && !InEvent.bDown) ||
+		                                             (InEvent.Type == EEventType::MouseButton && InEvent.Button == 1);
+	                                      });
+	const auto Pointer = Gui->PointerState();
+	if (!bSceneFocus || bInterrupted || !Scene->GetStatus().bReady || Gui->IsTextInputOwnedThisFrame() ||
+	    Gui->HasOpenPopup() || ReparentGesture || Gizmo.IsDragging() || bGizmoUsedMouse || bPlacementUsedMouse ||
+	    bCameraDragging || Pointer.bRightDown || Pointer.bDown || Pointer.bCancel || IsDocumentInteractionBusy() ||
+	    IsAssetWindowBlocked())
+	{
+		return;
+	}
+	const bool bSelectAll = std::any_of(InEvents.begin(), InEvents.end(),
+	                                    [](const FInputEvent& InEvent)
+	                                    {
+		                                    return InEvent.Type == EEventType::Key && InEvent.Key == EKey::A &&
+		                                           InEvent.bDown && !InEvent.bRepeat && InEvent.Modifiers == 1;
+	                                    });
+	if (bSelectAll)
+	{
+		try
+		{
+			FinishInspectorEdit();
+			UpdateDocumentInteraction();
+			SelectAllSceneNodes(SceneDocument, {SceneDocument.Id(), Scene->GetRevision()});
+			Error.clear();
+		}
+		catch (const std::exception& Failure)
+		{
+			Error = Failure.what();
+		}
+	}
+}
 
 void FEditorPlugin::PruneSelection()
 {

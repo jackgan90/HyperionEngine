@@ -298,7 +298,8 @@ FGuiPointerState FGui::PointerState() const
 	        ImGui::IsKeyPressed(ImGuiKey_Escape),
 	        ImGui::IsMouseDown(1),
 	        ImGui::IsMousePosValid(&Position),
-	        ImGui::GetIO().KeyCtrl};
+	        ImGui::GetIO().KeyCtrl,
+	        ImGui::GetIO().KeyShift};
 }
 
 void FGui::CaptureImagePointer(bool bInCapture)

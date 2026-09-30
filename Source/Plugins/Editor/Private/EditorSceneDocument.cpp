@@ -60,12 +60,14 @@ void FEditorPlugin::InitializeSceneDocument()
 	    {
 		    bSelectionInitialized = true;
 		    ViewportClick.reset();
+		    OutlinerSelection.Reset();
 	    });
 	SceneDocument.SetHistoryObserver(
 	    [this](const FSceneHandleMap& InMapping)
 	    {
 		    RemapSceneHandle(PreviewCamera, InMapping);
 		    ViewportClick.reset();
+		    OutlinerSelection.Reset();
 		    if (PreviewCamera && !Scene->FindNode(*PreviewCamera))
 		    {
 			    SetPreviewCamera(std::nullopt);

@@ -1,15 +1,4 @@
-# editor-viewport-picking Specification
-
-## Purpose
-Define viewport model selection using the active camera and Main-owned static geometry, with input ownership, persistent selection state and no changes to document history.
-
-## Requirements
-### Requirement: View-consistent geometric ray
-Viewport picking SHALL use the active editor or preview camera and the rendered viewport pixel aspect with near/far clipping for either depth convention. An invalid camera or viewport SHALL produce Unavailable. The contract SHALL describe current Main static geometry rather than shader-accurate displayed pixels.
-
-#### Scenario: Resized preview camera
-- **WHEN** a valid scene camera is previewed after viewport resize or DPI change
-- **THEN** picking uses that camera and the updated render extent
+## MODIFIED Requirements
 
 ### Requirement: Click ownership and selection
 Editor SHALL select a model on an eligible left-button release after a small-movement click. Gizmos, navigation, modal/text UI and viewport lifetime transitions SHALL take priority. Plain clicks SHALL replace selection, while Ctrl or Shift captured at press SHALL toggle the hit object. Confirmed empty space SHALL clear selection persistently only for a plain click; modified misses and unavailable queries SHALL preserve it. Light-marker hits SHALL follow the same selection policy.
@@ -33,10 +22,3 @@ Editor SHALL select a model on an eligible left-button release after a small-mov
 #### Scenario: Shift matches Ctrl
 - **WHEN** Shift is held at press over a model or light and released before mouse release, or the modified click misses geometry
 - **THEN** a hit toggles the object and a miss preserves selection exactly like Ctrl
-
-### Requirement: Selection is not an authored edit
-Viewport selection SHALL reuse the existing selection and inspector transition path, create no document mutation or history entry, and cancel pending gestures when scenes or views change.
-
-#### Scenario: Select then save or undo
-- **WHEN** a user changes selection through the viewport
-- **THEN** document dirty state and undo history remain unchanged

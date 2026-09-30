@@ -57,6 +57,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorMultiTransformAcceptance.cpp
   Private/EditorHistory.cpp
   Private/EditorSelection.cpp
+  Private/EditorSelectionShortcutsAcceptance.cpp
   Private/EditorBatchHistory.cpp
   Private/EditorHost.cpp
   Private/EditorInspector.cpp

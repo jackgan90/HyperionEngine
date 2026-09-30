@@ -52,6 +52,7 @@ struct FGuiPointerState
 	bool bRightDown{};
 	bool bPositionValid{};
 	bool bCtrl{};
+	bool bShift{};
 };
 
 struct FGuiDockLayout

@@ -63,6 +63,17 @@ def verify_framing(agent, peer):
     original["world"]["values"] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 2, 20, 1]
     completed(agent.call("view.set", **request(info), camera=original))
     selection = completed(agent.call("scene.selection.set", **request(info), handles=handles))
+    definition = agent.request("api.describe", {"operation": "scene.selection.select_all"})
+    assert not definition["unavailable"] and "count" in definition["outputSchema"]["properties"], definition
+    found = peer.request("api.search", {"query": "scene.selection.select_all"})
+    assert "scene.selection.select_all" in {item["id"] for item in found["items"]}, found
+    summary = completed(peer.call("scene.selection.select_all", **request(info)))
+    all_selection = completed(agent.call("scene.selection.get", **request(info)))
+    assert int(summary["count"]) == len(all_selection["handles"]) >= len(handles)
+    assert summary["primary"] == handles[-1] == all_selection["primary"]
+    current = ready(agent)
+    assert all(current[key] == info[key] for key in ("document", "revision", "dirty", "canUndo", "canRedo"))
+    selection = completed(agent.call("scene.selection.set", **request(info), handles=handles))
     multiple = completed(agent.call("view.frame_selection", **request(info)))["camera"]
     check_center(multiple, [0, 0.5, 0])
     assert multiple["lens"]["verticalRadians"] == original["lens"]["verticalRadians"]

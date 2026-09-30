@@ -43,13 +43,9 @@ FSceneSelectionInfo GetSceneSelection(const FSceneEditDocument& InDocument, cons
 	        InDocument.Selection().Primary()};
 }
 
-FSceneSelectionInfo SetSceneSelection(FSceneEditDocument& InDocument, const FSceneSelectionRequest& InRequest)
+void ApplySceneSelection(FSceneEditDocument& InDocument, const FSceneSelectionRequest& InRequest)
 {
 	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
-	if (InRequest.Handles.size() > 128)
-	{
-		throw std::invalid_argument("Select at most 128 distinct objects");
-	}
 	FSceneSelection Selection;
 	for (const auto Handle : InRequest.Handles)
 	{
@@ -61,7 +57,27 @@ FSceneSelectionInfo SetSceneSelection(FSceneEditDocument& InDocument, const FSce
 		Selection.Toggle(Handle);
 	}
 	InDocument.ReplaceSelection(std::move(Selection));
+}
+
+FSceneSelectionInfo SetSceneSelection(FSceneEditDocument& InDocument, const FSceneSelectionRequest& InRequest)
+{
+	ApplySceneSelection(InDocument, InRequest);
 	return GetSceneSelection(InDocument, {InRequest.Document, InRequest.Revision});
+}
+
+FSceneSelectionSummary SelectAllSceneNodes(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest)
+{
+	InDocument.RequireIdle(InRequest.Document, InRequest.Revision);
+	auto Handles = InDocument.Target().Nodes();
+	if (const auto Primary = InDocument.Selection().Primary();
+	    Primary && std::find(Handles.begin(), Handles.end(), *Primary) != Handles.end())
+	{
+		std::erase(Handles, *Primary);
+		Handles.push_back(*Primary);
+	}
+	ApplySceneSelection(InDocument, {InRequest.Document, InRequest.Revision, std::move(Handles)});
+	return {InDocument.Id(), InDocument.Target().Revision(), InDocument.Selection().All().size(),
+	        InDocument.Selection().Primary()};
 }
 
 FSceneDocumentInfo SetSceneMetadata(FSceneEditDocument& InDocument, const FSceneMetadataRequest& InRequest)

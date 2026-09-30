@@ -18,6 +18,14 @@ struct FSceneSelectionInfo
 	std::optional<FSceneHandle> Primary;
 };
 
+struct FSceneSelectionSummary
+{
+	std::string Document;
+	std::uint64_t Revision{};
+	std::uint64_t Count{};
+	std::optional<FSceneHandle> Primary;
+};
+
 struct FSceneMetadataEdit
 {
 	FSceneHandle Handle;
@@ -69,7 +77,9 @@ struct FSceneNodesReparentRequest
 bool CanAddDefaultSceneComponent(const FSceneComponentDescriptor& InType);
 void AddDefaultSceneComponent(FSceneNode& InNode, std::string InId, std::string_view InType);
 FSceneSelectionInfo GetSceneSelection(const FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest);
+void ApplySceneSelection(FSceneEditDocument& InDocument, const FSceneSelectionRequest& InRequest);
 FSceneSelectionInfo SetSceneSelection(FSceneEditDocument& InDocument, const FSceneSelectionRequest& InRequest);
+FSceneSelectionSummary SelectAllSceneNodes(FSceneEditDocument& InDocument, const FSceneMutationRequest& InRequest);
 FSceneDocumentInfo SetSceneMetadata(FSceneEditDocument& InDocument, const FSceneMetadataRequest& InRequest);
 FSceneNodeInfo CreateSceneNode(FSceneEditDocument& InDocument, const FSceneCreateRequest& InRequest);
 FSceneDocumentInfo ReparentSceneNode(FSceneEditDocument& InDocument, const FSceneReparentRequest& InRequest);
@@ -80,6 +90,7 @@ FSceneDocumentInfo SetSceneSettings(FSceneEditDocument& InDocument, const FScene
 
 template<> const FRecordDescriptor& RecordType<FSceneSelectionRequest>();
 template<> const FRecordDescriptor& RecordType<FSceneSelectionInfo>();
+template<> const FRecordDescriptor& RecordType<FSceneSelectionSummary>();
 template<> const FRecordDescriptor& RecordType<FSceneMetadataEdit>();
 template<> const FRecordDescriptor& RecordType<FSceneMetadataRequest>();
 template<> const FRecordDescriptor& RecordType<FSceneCreateRequest>();
