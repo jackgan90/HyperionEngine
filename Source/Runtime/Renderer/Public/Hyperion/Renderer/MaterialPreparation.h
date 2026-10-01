@@ -5,6 +5,12 @@
 
 namespace Hyperion
 {
+enum class EMaterialEngineBindingMode
+{
+	Automatic,
+	Explicit
+};
+
 struct FMaterialVariantRequest
 {
 	std::string Usage = "Forward";
@@ -59,10 +65,10 @@ FShaderBinding PrepareMaterialInstanceBinding(const FShaderBinding& InResource, 
 std::vector<FMaterialProgramBinding> MergeMaterialBindings(std::vector<FMaterialProgramBinding> InBindings);
 
 // Synchronous Worker preparation, also usable by existing resource-production jobs.
-FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompiler,
-                                                      std::shared_ptr<const FMaterialDefinition> InDefinition,
-                                                      EShaderFormat InFormat,
-                                                      std::vector<FMaterialVariantRequest> InVariants = {});
+FCompiledMaterialDefinition CompileMaterialDefinition(
+    FShaderCompiler& InCompiler, std::shared_ptr<const FMaterialDefinition> InDefinition, EShaderFormat InFormat,
+    std::vector<FMaterialVariantRequest> InVariants = {},
+    EMaterialEngineBindingMode InEngineMode = EMaterialEngineBindingMode::Automatic);
 
 // Main starts preparation. The captured compiler/definition stay alive until Worker completion.
 TAsyncResult<FCompiledMaterialDefinition> PrepareMaterialDefinition(

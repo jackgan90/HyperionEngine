@@ -155,7 +155,7 @@ struct FViewMaterialProviders
 	};
 
 	FMaterialProviderRegistry& Registry;
-	std::map<std::string, FMaterialProvidedValue, std::less<>> Shared;
+	std::map<FMaterialSemanticId, FMaterialProvidedValue> Shared;
 	std::map<FRefreshKey, FRefresh, FRefreshOrder> Refreshes;
 	std::map<const std::vector<std::size_t>*, FRefresh> GroupRefreshes;
 	std::set<const void*> ValidatedSharedBases;
@@ -174,7 +174,7 @@ struct FViewMaterialProviders
 	    const std::shared_ptr<const FMaterialSharedBinding>& InBinding, const FMaterialProviderInputs& InInputs);
 	std::shared_ptr<const FMaterialProviderInputs> RetainInputs(const FMaterialProviderInputs& InInputs,
 	                                                            std::uint32_t InDependencies);
-	FMaterialProvidedValue Evaluate(const FMaterialProviderInputs& InInputs, std::string_view InSemantic);
+	FMaterialProvidedValue Evaluate(const FMaterialProviderInputs& InInputs, FMaterialSemanticId InSemantic);
 	const FRefresh& PrepareShared(const FMaterialEvaluationCache::FEntry& InEntry, const FCompiledMaterialPass& InPass,
 	                              const FMaterialProviderInputs& InInputs);
 };

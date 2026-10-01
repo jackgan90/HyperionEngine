@@ -1,6 +1,7 @@
 #include "Hyperion/Scene/Scene.h"
 #include <set>
 #include <stdexcept>
+#include <tuple>
 
 namespace Hyperion
 {
@@ -17,10 +18,27 @@ void ValidateSelection(const FSceneMaterialSelection& InSelection)
 		throw std::invalid_argument("Incomplete scene material snapshot");
 	}
 	std::set<std::string> Names;
+	std::set<FMaterialSemanticId> Semantics;
+	std::set<std::tuple<std::uint64_t, std::uint64_t, std::size_t>> Handles;
 	for (const auto& Override : InSelection.Overrides)
 	{
 		Override.Value.Validate();
-		if (Override.Name.empty() || !Names.insert(Override.Name).second)
+		bool bDuplicate;
+		if (Override.Handle.SchemaIdentity)
+		{
+			bDuplicate =
+			    !Handles.emplace(Override.Handle.SchemaIdentity, Override.Handle.SchemaVersion, Override.Handle.Index)
+			         .second;
+		}
+		else if (!Override.Semantic.IsEmpty())
+		{
+			bDuplicate = !Semantics.insert(Override.Semantic).second;
+		}
+		else
+		{
+			bDuplicate = Override.Name.empty() || !Names.insert(Override.Name).second;
+		}
+		if (bDuplicate)
 		{
 			throw std::invalid_argument("Duplicate or empty scene material override");
 		}

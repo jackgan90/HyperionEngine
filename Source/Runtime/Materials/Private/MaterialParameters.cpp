@@ -3,10 +3,46 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <mutex>
 #include <set>
 
 namespace Hyperion
 {
+namespace
+{
+std::shared_ptr<const FMaterialParameterIdentityToken> InternParameterIdentity(const std::string& InName)
+{
+	static std::mutex Mutex;
+	static std::map<std::string, std::weak_ptr<const FMaterialParameterIdentityToken>, std::less<>> Identities;
+	static std::uint64_t Serial = 0;
+	std::lock_guard Lock(Mutex);
+	if (const auto Found = Identities.find(InName); Found != Identities.end())
+	{
+		if (auto Existing = Found->second.lock())
+		{
+			return Existing;
+		}
+	}
+	// Weak entries retain no schema, program, value, or GPU lifetime. Periodically retire names too.
+	if (++Serial % 64 == 0)
+	{
+		std::erase_if(Identities,
+		              [](const auto& InEntry)
+		              {
+			              return InEntry.second.expired();
+		              });
+	}
+	auto Token = std::make_shared<const FMaterialParameterIdentityToken>(Serial);
+	Identities.insert_or_assign(InName, Token);
+	return Token;
+}
+} // namespace
+
+const FMaterialParameterIdentity& FMaterialParameterSchema::GetParameterIdentity(std::size_t InIndex) const
+{
+	return ParameterIdentities.at(InIndex);
+}
+
 FMaterialParameterType FMaterialParameterType::Numeric(EMaterialScalar InScalar, std::uint32_t InColumns,
                                                        std::uint32_t InRows)
 {
@@ -279,7 +315,7 @@ FMaterialParameterSchema::FMaterialParameterSchema(std::vector<FMaterialParamete
 		    Parameter.Source > EMaterialParameterSource::Semantic ||
 		    Parameter.OverridePolicy > EMaterialOverridePolicy::AllowOverride ||
 		    (Parameter.OverrideScopes & ~255U) != 0 ||
-		    (Parameter.Source == EMaterialParameterSource::Semantic && Parameter.Semantic.empty()))
+		    (Parameter.Source == EMaterialParameterSource::Semantic && Parameter.Semantic.IsEmpty()))
 		{
 			throw std::invalid_argument("Invalid material parameter declaration: " + Parameter.Name);
 		}
@@ -324,10 +360,16 @@ const std::vector<FMaterialParameterDeclaration>& FMaterialParameterSchema::GetP
 
 void FMaterialParameterSchema::BuildLookup()
 {
+	for (const auto& Parameter : Parameters)
+	{
+		ParameterIdentities.push_back({InternParameterIdentity(Parameter.Name), Parameter.Semantic});
+	}
+
 	for (std::size_t Index = 0; Index < Parameters.size(); ++Index)
 	{
 		const auto& Parameter = Parameters[Index];
 		Names.emplace(Parameter.Name, Index);
+		AuthorIdentities.emplace(ParameterIdentities[Index].AuthorIdentity, Index);
 		const auto Add = [&](const std::string& InName)
 		{
 			for (const auto& Name : {InName, InName.substr(InName.find_last_of(".:") + 1)})
@@ -344,11 +386,55 @@ void FMaterialParameterSchema::BuildLookup()
 		{
 			Add(Target);
 		}
-		if (!Parameter.Semantic.empty())
+		if (!Parameter.Semantic.IsEmpty())
 		{
 			SemanticNames[Parameter.Semantic].push_back(Index);
 		}
 	}
+}
+
+FMaterialSemanticId FMaterialParameterEntry::GetSemantic() const
+{
+	if (Handle.SchemaIdentity)
+	{
+		throw std::invalid_argument("A schema parameter handle cannot be used as a provider semantic");
+	}
+	return Semantic.IsEmpty() ? FMaterialSemanticId(Name) : Semantic;
+}
+
+FMaterialParameterHandle FMaterialParameterEntry::Resolve(const FMaterialParameterSchema& InSchema) const
+{
+	if (Handle.SchemaIdentity)
+	{
+		InSchema.Get(Handle);
+		return Handle;
+	}
+	return Semantic.IsEmpty() ? InSchema.Find(Name) : InSchema.FindSemantic(Semantic);
+}
+
+std::string_view FMaterialParameterEntry::GetName(const FMaterialParameterSchema& InSchema) const
+{
+	return InSchema.Get(Resolve(InSchema)).Name;
+}
+
+FMaterialParameterHandle FMaterialParameterSchema::GetHandle(std::size_t InIndex) const
+{
+	FMaterialParameterHandle Handle{Identity, Version, InIndex};
+	Get(Handle);
+	return Handle;
+}
+
+std::vector<FMaterialParameterHandle> FMaterialParameterSchema::FindSemantics(FMaterialSemanticId InSemantic) const
+{
+	std::vector<FMaterialParameterHandle> Result;
+	if (const auto Found = SemanticNames.find(InSemantic); Found != SemanticNames.end())
+	{
+		for (const auto Index : Found->second)
+		{
+			Result.push_back(GetHandle(Index));
+		}
+	}
+	return Result;
 }
 
 FMaterialParameterHandle FMaterialParameterSchema::Find(std::string_view InName) const
@@ -375,18 +461,29 @@ FMaterialParameterHandle FMaterialParameterSchema::Find(std::string_view InName)
 	return {Identity, Version, It->second.front()};
 }
 
-FMaterialParameterHandle FMaterialParameterSchema::FindSemantic(std::string_view InSemantic) const
+FMaterialParameterHandle FMaterialParameterSchema::FindSemantic(FMaterialSemanticId InSemantic) const
 {
 	const auto It = SemanticNames.find(InSemantic);
 	if (It == SemanticNames.end())
 	{
-		throw std::invalid_argument("Unknown material semantic: " + std::string(InSemantic));
+		throw std::invalid_argument("Unknown material semantic: " + std::string(InSemantic.GetName()));
 	}
 	if (It->second.size() != 1)
 	{
-		throw std::invalid_argument("Ambiguous material semantic: " + std::string(InSemantic));
+		throw std::invalid_argument("Ambiguous material semantic: " + std::string(InSemantic.GetName()));
 	}
 	return {Identity, Version, It->second.front()};
+}
+
+FMaterialParameterHandle FMaterialParameterSchema::FindAuthorIdentity(
+    const std::shared_ptr<const FMaterialParameterIdentityToken>& InIdentity) const
+{
+	const auto Found = AuthorIdentities.find(InIdentity);
+	if (Found == AuthorIdentities.end())
+	{
+		throw std::invalid_argument("Material schema rebinding changed authored parameter identity");
+	}
+	return GetHandle(Found->second);
 }
 
 const FMaterialParameterDeclaration& FMaterialParameterSchema::Get(FMaterialParameterHandle InHandle) const

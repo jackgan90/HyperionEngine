@@ -203,6 +203,13 @@ void CheckSharedModels(FSceneFixture& InFixture)
 	AwaitModel(Right);
 	HYP_CHECK(Resources.Statistics().GeometryUploads == Before.GeometryUploads + 1);
 	auto Image = InFixture.Frame(2);
+	for (const auto& Result : Left.GetDrawResults())
+	{
+		if (!Result.Error.empty())
+		{
+			throw std::runtime_error(Result.Error);
+		}
+	}
 	Pixel(Image, 110, {1, 0, 0});
 	Pixel(Image, 210, {0, 0, 1});
 	// Exact incremental upload counts require the previous GPU cache's owners to remain live.
@@ -353,10 +360,8 @@ std::shared_ptr<FMaterialInstance> SharedSurface(FSceneFixture& InFixture, std::
 	AwaitModel(Warm);
 	const auto Surface = Warm.GetResource()->GetMaterial(0);
 	auto Instance = std::make_shared<FMaterialInstance>(Surface->GetCompiled()->Interface);
-	for (const auto& Parameter : Surface->GetSnapshot()->Overrides)
-	{
-		Instance->Set(Parameter.Name, Parameter.Value);
-	}
+	Instance->SetParameters(RebindMaterialParameters(Surface->GetSnapshot()->Overrides, *Surface->GetSnapshot()->Schema,
+	                                                 *Instance->Freeze()->Schema));
 	return Instance;
 }
 
@@ -769,7 +774,7 @@ std::shared_ptr<const FRenderMaterial> RetirementMaterial(FSceneFixture& InFixtu
 	FMaterialInstance Instance(std::make_shared<const FMaterialDefinition>(std::move(Description)));
 	for (const auto& Override : InOriginal.GetSnapshot()->Overrides)
 	{
-		Instance.Set(Override.Name, Override.Value);
+		Instance.Set(Instance.Find(Override.GetName(*InOriginal.GetSnapshot()->Schema)), Override.Value);
 	}
 	auto Result = InFixture.Session->GetResources().RequestMaterial(Instance.Freeze());
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
@@ -1000,7 +1005,7 @@ std::shared_ptr<const FRenderMaterial> SharedOverrideMaterial(FSceneFixture& InF
 	FMaterialInstance Instance(std::make_shared<const FMaterialDefinition>(std::move(Description)));
 	for (const auto& Override : InOriginal.GetSnapshot()->Overrides)
 	{
-		Instance.Set(Override.Name, Override.Value);
+		Instance.Set(Instance.Find(Override.GetName(*InOriginal.GetSnapshot()->Schema)), Override.Value);
 	}
 	auto Result = InFixture.Session->GetResources().RequestMaterial(Instance.Freeze());
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);

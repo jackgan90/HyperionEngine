@@ -1,5 +1,7 @@
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/SelectionOutline.h"
+#include "Hyperion/Renderer/ShaderParameters/OutlineParameters.h"
 #include <cmath>
 
 namespace Hyperion
@@ -10,6 +12,7 @@ std::shared_ptr<const FMaterialDefinition> OutlineMaterial(bool bInComposite)
 {
 	FMaterialDescription Description;
 	Description.Name = bInComposite ? "Outline composite" : "Silhouette exterior";
+	Description.ShaderContracts = {GetOutlineShaderContracts()};
 	FMaterialPass Pass;
 	Pass.Vertex = {"Common/Fullscreen.hlsl", "VSMain"};
 	Pass.Pixel = {bInComposite ? "Outline/Composite.hlsl" : "Outline/Exterior.hlsl", "PSMain"};
@@ -49,9 +52,8 @@ void AddSilhouetteOutlinePass(FRenderSession& InSession, FRenderGraph& InGraph, 
 	Pass.Targets.Color = FRenderColorTarget{
 	    InOutput, {bInClear ? EAttachmentLoad::Clear : EAttachmentLoad::Load}, {}, EGraphColorView::Linear};
 	Pass.Targets.Reads = {InMask};
-	Pass.Parameters = {{"Pixel:ObjectMask", FMaterialValue::FromTexture(InMask.Texture)},
-	                   {"Pixel:OutlineV1.Parameters",
-	                    FMaterialValue::Float(FVec4{InWidth, float(Mask->Width / Output->Width), 0, 0})}};
+	Pass.Parameters = {{EOutlineSemantic::OutlineObjectMask, FMaterialValue::FromTexture(InMask.Texture)}};
+	AppendShaderParameters(Pass.Parameters, FOutlineV1Parameters{{InWidth, float(Mask->Width / Output->Width), 0, 0}});
 	AddFullscreenPass(InSession, InGraph, std::move(Pass), bInDeferPreparation);
 }
 
@@ -67,8 +69,8 @@ void AddOutlineCompositePass(FRenderSession& InSession, FRenderGraph& InGraph, F
 	Pass.Targets.Name = std::move(InName);
 	Pass.Targets.Color = FRenderColorTarget{InOutput, {EAttachmentLoad::Load}, {}, EGraphColorView::Srgb};
 	Pass.Targets.Reads = {InOutline};
-	Pass.Parameters = {{"Pixel:OutlineMask", FMaterialValue::FromTexture(InOutline.Texture)},
-	                   {"Pixel:OutlineColorV1.Color", FMaterialValue::Float(InColor)}};
+	Pass.Parameters = {{EOutlineSemantic::OutlineMask, FMaterialValue::FromTexture(InOutline.Texture)}};
+	AppendShaderParameters(Pass.Parameters, FOutlineColorV1Parameters{InColor});
 	AddFullscreenPass(InSession, InGraph, std::move(Pass), bInDeferPreparation);
 }
 } // namespace Hyperion

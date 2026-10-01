@@ -1,3 +1,5 @@
+#include "ClusterParameters.generated.hlsli"
+#include "HyperionUniforms.generated.hlsli"
 #ifndef HYP_CLUSTERED_LIGHTING
 #define HYP_CLUSTERED_LIGHTING
 #include "LocalLighting.hlsli"
@@ -10,14 +12,7 @@ struct FClusterLight
 	float4 Outer;
 };
 
-cbuffer ClusterViewV1 : register(b0, space3)
-{
-	float4 ClusterViewport;
-	float4 ClusterGrid;
-	float4 ClusterCamera;
-	float4 ClusterForward;
-	float4 ClusterDepth;
-};
+HYP_UNIFORM_ClusterViewV1(b0, space3);
 
 StructuredBuffer<FClusterLight> ClusterLights : register(t0, space3);
 StructuredBuffer<uint2> ClusterHeaders : register(t1, space3);

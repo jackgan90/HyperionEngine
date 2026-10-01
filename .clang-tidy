@@ -11,10 +11,12 @@ CheckOptions:
   readability-identifier-naming.AbstractClassPrefix: I
   readability-identifier-naming.StructCase: CamelCase
   readability-identifier-naming.StructPrefix: F
-  readability-identifier-naming.StructIgnoredRegexp: '^(TAsyncState|TMaterialGpuEntry|TPendingOperation|TSceneComponentRequest|TSceneComponentBatchRequest|TAssetMember|TAssetFieldValue|TAssetFieldEdit|TRecordEnumEntry)$'
+  readability-identifier-naming.StructIgnoredRegexp: '^(TAsyncState|TMaterialGpuEntry|TPendingOperation|TSceneComponentRequest|TSceneComponentBatchRequest|TAssetMember|TAssetFieldValue|TAssetFieldEdit|TRecordEnumEntry|TShaderValueType|TShaderFieldType)$'
   readability-identifier-naming.EnumCase: CamelCase
   readability-identifier-naming.EnumPrefix: E
   readability-identifier-naming.EnumConstantCase: CamelCase
+  # Generated field enums mirror boolean member spellings from their single declaration.
+  readability-identifier-naming.EnumConstantIgnoredRegexp: '^b[A-Z][A-Za-z0-9]*$'
   readability-identifier-naming.TypeAliasCase: CamelCase
   readability-identifier-naming.TypeAliasPrefix: F
   readability-identifier-naming.TypedefCase: CamelCase
@@ -31,3 +33,5 @@ CheckOptions:
   readability-identifier-naming.ParameterIgnoredRegexp: '^(Out|bIn|bOut)[A-Z][A-Za-z0-9]*$'
   readability-identifier-naming.TemplateParameterCase: CamelCase
   readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+  # Token lookup suffixes preserve the native HLSL type keywords used in field declarations.
+  readability-identifier-naming.MacroDefinitionIgnoredRegexp: '^HYP_SHADER_TYPE_(float|float2|float3|float4|float4x4|uint|uint2|int|bool)$'

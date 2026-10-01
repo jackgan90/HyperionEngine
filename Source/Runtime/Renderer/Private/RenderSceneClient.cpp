@@ -158,7 +158,7 @@ FRenderBindingStatus FRenderBinding::GetStatus() const
 				try
 				{
 					auto Snapshot = *Surface->GetSnapshot();
-					Snapshot.Schema = Surface->GetCompiled()->Interface.Schema;
+					RebindMaterialSnapshot(Snapshot, Surface->GetCompiled()->Interface.Schema);
 					const std::array<std::size_t, 0> NoRequiredParameters{};
 					ResolveMaterialParameters(Snapshot, {},
 					                          Admitted ? GetPrimitiveMaterialOverrides(*Admitted, *Snapshot.Schema)

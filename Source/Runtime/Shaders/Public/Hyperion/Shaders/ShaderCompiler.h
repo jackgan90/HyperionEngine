@@ -107,7 +107,7 @@ struct FShaderBinding
 
 struct FShaderReflection
 {
-	std::uint32_t Version = 6;
+	std::uint32_t Version = 8;
 	EShaderFormat LayoutFormat = EShaderFormat::Dxil;
 	std::vector<FShaderSignatureParameter> Inputs;
 	std::vector<FShaderSignatureParameter> Outputs;
@@ -122,10 +122,18 @@ struct FShaderDefine
 	bool operator==(const FShaderDefine&) const = default;
 };
 
+struct FShaderVirtualInclude
+{
+	std::string Name;
+	std::string Source;
+	bool operator==(const FShaderVirtualInclude&) const = default;
+};
+
 struct FShaderCompileOptions
 {
 	std::vector<FShaderDefine> Defines;
 	bool bOptimize = true;
+	std::vector<FShaderVirtualInclude> VirtualIncludes;
 	bool operator==(const FShaderCompileOptions&) const = default;
 };
 

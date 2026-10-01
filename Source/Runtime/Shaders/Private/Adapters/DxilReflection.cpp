@@ -41,7 +41,7 @@ EShaderScalar Scalar(D3D_SHADER_VARIABLE_TYPE InType)
 }
 
 FShaderMember ReadType(ID3D12ShaderReflectionType* InType, std::string InName, bool bInElement = false,
-                       std::uint32_t InDepth = 0)
+                       std::uint32_t InDepth = 0, bool bInStructured = false)
 {
 	if (InDepth > 32)
 	{
@@ -56,8 +56,8 @@ FShaderMember ReadType(ID3D12ShaderReflectionType* InType, std::string InName, b
 	{
 		Result.Kind = EShaderValueKind::Array;
 		Result.ArrayCount = Desc.Elements;
-		Result.Members.push_back(ReadType(InType, "", true, InDepth + 1));
-		Result.ArrayStride = (Result.Members.front().Size + 15U) & ~15U;
+		Result.Members.push_back(ReadType(InType, "", true, InDepth + 1, bInStructured));
+		Result.ArrayStride = bInStructured ? Result.Members.front().Size : (Result.Members.front().Size + 15U) & ~15U;
 		const std::uint64_t Size =
 		    std::uint64_t(Result.ArrayCount - 1) * Result.ArrayStride + Result.Members.front().Size;
 		if (Size > 65536)
@@ -71,8 +71,8 @@ FShaderMember ReadType(ID3D12ShaderReflectionType* InType, std::string InName, b
 		Result.Kind = EShaderValueKind::Structure;
 		for (UINT Index = 0; Index < Desc.Members; ++Index)
 		{
-			FShaderMember Member =
-			    ReadType(InType->GetMemberTypeByIndex(Index), InType->GetMemberTypeName(Index), false, InDepth + 1);
+			FShaderMember Member = ReadType(InType->GetMemberTypeByIndex(Index), InType->GetMemberTypeName(Index),
+			                                false, InDepth + 1, bInStructured);
 			Result.Size = std::max(Result.Size, Member.Offset + Member.Size);
 			Result.Members.push_back(std::move(Member));
 		}
@@ -85,9 +85,9 @@ FShaderMember ReadType(ID3D12ShaderReflectionType* InType, std::string InName, b
 		if (Desc.Class == D3D_SVC_MATRIX_ROWS || Desc.Class == D3D_SVC_MATRIX_COLUMNS)
 		{
 			Result.bRowMajor = Desc.Class == D3D_SVC_MATRIX_ROWS;
-			Result.MatrixStride = 16;
 			const std::uint32_t Major = Result.bRowMajor ? Desc.Rows : Desc.Columns;
 			const std::uint32_t Minor = Result.bRowMajor ? Desc.Columns : Desc.Rows;
+			Result.MatrixStride = bInStructured ? Minor * 4 : 16;
 			Result.Size = (Major - 1) * Result.MatrixStride + Minor * 4;
 		}
 		else if (Desc.Class == D3D_SVC_SCALAR || Desc.Class == D3D_SVC_VECTOR)
@@ -214,6 +214,24 @@ FShaderBinding ReadBinding(ID3D12ShaderReflection* InReflection, const D3D12_SHA
 			Member.Size = VariableDesc.Size;
 			Member.bActive = (VariableDesc.uFlags & D3D_SVF_USED) != 0;
 			Result.Members.push_back(std::move(Member));
+		}
+	}
+	if (Result.Kind == EBindingKind::StructuredBuffer || Result.Kind == EBindingKind::StorageStructuredBuffer)
+	{
+		auto* ElementBuffer = InReflection->GetConstantBufferByName(InDesc.Name);
+		D3D12_SHADER_BUFFER_DESC ElementDesc{};
+		if (SUCCEEDED(ElementBuffer->GetDesc(&ElementDesc)) && ElementDesc.Variables == 1)
+		{
+			Result.Members.push_back(ReadType(ElementBuffer->GetVariableByIndex(0)->GetType(), "", false, 0, true));
+		}
+		else
+		{
+			auto* ElementType = InReflection->GetVariableByName(InDesc.Name)->GetType()->GetSubType();
+			D3D12_SHADER_TYPE_DESC TypeDesc{};
+			if (ElementType && SUCCEEDED(ElementType->GetDesc(&TypeDesc)))
+			{
+				Result.Members.push_back(ReadType(ElementType, "", false, 0, true));
+			}
 		}
 	}
 	return Result;

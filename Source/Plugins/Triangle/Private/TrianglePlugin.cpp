@@ -1,4 +1,6 @@
 #include "Hyperion/Triangle/TrianglePlugin.h"
+#include "Hyperion/Materials/ObjectParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include <algorithm>
 #include <array>
@@ -18,7 +20,7 @@ FRenderResourceDesc PrepareTriangle(FShaderCompiler& InCompiler, EShaderFormat I
 	Pass.Vertex = {"/Game/Shaders/Triangle.hlsl", "VSMain"};
 	Pass.Pixel = {"/Game/Shaders/Triangle.hlsl", "PSMain"};
 	Pass.Vertex.Defines.push_back({"HYP_INSTANCE_CAPACITY", "128"});
-	Pass.InstanceArrays = {{"DrawConstants", "DrawInstances"}};
+	Pass.InstanceArrays = {MakeEngineInstanceArray(EObjectUniform::DrawConstants)};
 	Pass.State.bDepthTest = true;
 	Pass.State.bDepthWrite = true;
 	Pass.State.bViewRelativeDepth = true;
@@ -28,10 +30,8 @@ FRenderResourceDesc PrepareTriangle(FShaderCompiler& InCompiler, EShaderFormat I
 	Description.Passes.push_back(Pass);
 	Pass.Usage = "HdrCompatibility";
 	Description.Passes.push_back(Pass);
-	auto Transform =
-	    DeclareMaterialSemantic("Transform", "Engine.Object.WorldViewProjection", *GetStandardMaterialSemantics());
-	Transform.Targets = {"DrawConstants.TransformMatrix"};
-	Description.Parameters.push_back(std::move(Transform));
+	Description.Parameters =
+	    GetStandardMaterialBlockParameters(EObjectUniform::DrawConstants, *GetStandardMaterialSemantics());
 	const auto Definition = std::make_shared<const FMaterialDefinition>(std::move(Description));
 	Material.Compiled = std::make_shared<const FCompiledMaterialDefinition>(
 	    CompileMaterialDefinition(InCompiler, Definition, InFormat));

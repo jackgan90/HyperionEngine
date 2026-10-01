@@ -75,6 +75,10 @@ private:
 
 ## 检查与格式化
 
+shader 的 `HyperionUniforms.generated.hlsli` 及拥有者的 `<Domain>Parameters.generated.hlsli` 是编译侧生成并注入的虚拟 include，由 `Materials/ShaderParameters.cpp` 提供。路径检查接受公共 include 的准确拼写，以及有实际 `HYP_SHADER_DOMAIN` / `HYP_SHADER_DECLARATIONS` 声明头文件支持的局部 include；不豁免任意 generated 文件，也不要求存在同名磁盘源文件。
+
+局部 shader 以显式 cbuffer 引用生成的 `F<Name>Uniform`，例如 ContactShadows.hlsl 对应 ContactShadowParameters.inl。声明文件用 `HYP_UNIFORM_BEGIN/END`、`HYP_UNIFORM_FIELD(Type, Name, Scope)` 单次声明字段，由固定的 BEGIN/END 和 statement 宏配置保持缩进。公共兼容 shader 中完整 uniform 声明的宏调用以分号结束，例如 `HYP_UNIFORM_FrameInfo(b0);`，使声明边界对格式化工具明确，避免随后顶层函数或资源声明被误排为续行。
+
 新增或修改用户可操作功能时，同时遵守 [自动化接入契约](Automation.md#新功能接入契约)。请求/结果复用反射，GUI 与 agent 共享领域逻辑；尚未注册的能力记录在覆盖表，避免以后另建一套实现。
 
 需要 Python 3.10+ 和 与仓库格式配置兼容的 LLVM（格式基线为 22.1.1）的 `clang-format` / `clang-tidy` / `clang-query`。脚本先检查 PATH，也会查找 Windows 默认 LLVM 安装目录。普通构建不强制安装 LLVM。
@@ -93,8 +97,8 @@ python tools/CheckStyle.py --naming --build-dir out/build/debug
 
 `--naming` 需要有效的 Ninja `compile_commands.json`；Visual Studio generator 不导出该文件。clang-tidy 理解符号所属类型，因此不会把 `std::vector::size()` 或 SDK 字段误判为引擎方法。命名检查覆盖普通声明；依赖模板、宏、HLSL 标识符及模板类型前缀仍需代码审阅。不要对整个仓库（包含 `out/deps`）执行自动修复。
 
-`.clang-tidy` 允许 `b` / `bIn` / `bOut` 前缀，`--naming` 同时用 clang-query 的类型信息检查布尔变量、布尔引用和 `std::atomic<bool>`，包括推导为布尔值的普通 `auto` 变量；也会拒绝非布尔变量借此前缀绕过普通命名规则。泛型模板的实例化不会把通用参数误判为布尔专用参数；布尔集合和查询函数仍遵循普通命名。
+`.clang-tidy` 允许 `b` / `bIn` / `bOut` 前缀，`--naming` 同时用 clang-query 的类型信息检查布尔变量、布尔引用和 `std::atomic<bool>`，包括推导为布尔值的普通 `auto` 变量；也会拒绝非布尔变量借此前缀绕过普通命名规则。生成的字段 enum 镜像布尔成员的 `b` 拼写；HLSL 类型 token 查找宏的明确例外保留 `float4/uint/bool` 等语言拼写。泛型模板的实例化不会把通用参数误判为布尔专用参数；布尔集合和查询函数仍遵循普通命名。
 
 CTest 的 `code_style_paths` 检查自有文件名和 include 路径的准确大小写，不需要 LLVM；完整格式/命名检查由上述命令显式运行。
 
-clang-tidy 尚无独立的类模板前缀配置，`.clang-tidy` 对 `TAsyncState`、`TAsyncResult`、`TAssetRequest`、`TImportRequest`、`TRecordCallback`、`TPendingOperation`、`TTrackedResource`、`TMaterialGpuEntry`、`TMaterialParameterTable` 设置了精确命名例外，以保留仓库要求的 T 前缀。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。
+clang-tidy 尚无独立的类模板前缀配置，`.clang-tidy` 对 `TAsyncState`、`TAsyncResult`、`TAssetRequest`、`TImportRequest`、`TRecordCallback`、`TPendingOperation`、`TTrackedResource`、`TMaterialGpuEntry`、`TMaterialParameterTable`、`TShaderValueType`、`TShaderFieldType` 设置了精确命名例外，以保留仓库要求的 T 前缀。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。

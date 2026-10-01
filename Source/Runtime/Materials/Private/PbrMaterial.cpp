@@ -1,5 +1,7 @@
 #include "Hyperion/Materials/PbrMaterial.h"
-#include "Hyperion/Materials/MaterialBlocks.h"
+#include "Hyperion/Materials/ObjectParameters.h"
+#include "Hyperion/Materials/PbrParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 
 namespace Hyperion
 {
@@ -10,7 +12,8 @@ FMaterialPass PbrPass(EMaterialQueue InQueue, bool bInDoubleSided)
 	FMaterialPass Pass;
 	Pass.Vertex = {"Model.hlsl", "VSMain"};
 	Pass.Pixel = {"Model.hlsl", "PSMain"};
-	Pass.InstanceArrays = {{"HyperionObjectV1", "ObjectInstances"}, {"HyperionMaterialV1", "SurfaceInstances"}};
+	Pass.InstanceArrays = {MakeEngineInstanceArray(EObjectUniform::HyperionObjectV1),
+	                       MakeEngineInstanceArray(EPbrUniform::HyperionMaterialV1)};
 	Pass.bAllowBatchReordering = InQueue != EMaterialQueue::Transparent;
 	Pass.bSrgbTarget = true;
 	Pass.bAlphaClip = InQueue == EMaterialQueue::Masked;
@@ -43,7 +46,7 @@ FMaterialPass ShadowPass(EMaterialQueue InQueue, bool bInDoubleSided)
 	else
 	{
 		Pass.Pixel = {};
-		Pass.InstanceArrays = {{"HyperionObjectV1", "ObjectInstances"}};
+		Pass.InstanceArrays = {MakeEngineInstanceArray(EObjectUniform::HyperionObjectV1)};
 	}
 	return Pass;
 }
@@ -51,51 +54,16 @@ FMaterialPass ShadowPass(EMaterialQueue InQueue, bool bInDoubleSided)
 void AddParameters(FMaterialDescription& InDescription)
 {
 	const auto Semantics = GetStandardMaterialSemantics();
-	InDescription.Parameters = GetStandardMaterialBlockParameters("HyperionMaterialV1", *Semantics);
-	for (const auto* Name :
-	     {"EnvironmentControl", "EnvironmentRotation", "EnvironmentSh0", "EnvironmentSh1", "EnvironmentSh2",
-	      "EnvironmentSh3", "EnvironmentSh4", "EnvironmentSh5", "EnvironmentSh6", "EnvironmentSh7", "EnvironmentSh8",
-	      "EnvironmentSpecular", "EnvironmentBrdf", "EnvironmentSampler"})
+	InDescription.Parameters = GetStandardMaterialBlockParameters(EPbrUniform::HyperionMaterialV1, *Semantics);
+	for (const auto& Resource : GetPbrShaderContracts()->Resources)
 	{
-		auto Parameter = DeclareMaterialSemantic(std::string("Engine.Scene.") + Name,
-		                                         std::string("Engine.Scene.") + Name, *Semantics);
-		Parameter.Targets = {Parameter.Type.Kind == EMaterialValueKind::Numeric ? std::string("EnvironmentV1.") + Name
-		                                                                        : Name};
-		InDescription.Parameters.push_back(std::move(Parameter));
-	}
-	const auto AddShadow = [&](std::string InName)
-	{
-		auto Parameter = DeclareMaterialSemantic("Engine.View." + InName, "Engine.View." + InName, *Semantics);
-		Parameter.Targets = {Parameter.Type.Kind == EMaterialValueKind::Numeric ? "ShadowViewV1." + InName : InName};
-		InDescription.Parameters.push_back(std::move(Parameter));
-	};
-	for (const auto* Name : {"ClusterViewport", "ClusterGrid", "ClusterCamera", "ClusterForward", "ClusterDepth",
-	                         "ClusterLights", "ClusterHeaders", "ClusterIndices"})
-	{
-		auto Parameter =
-		    DeclareMaterialSemantic(std::string("Engine.View.") + Name, std::string("Engine.View.") + Name, *Semantics);
-		Parameter.Targets = {Parameter.Type.Kind == EMaterialValueKind::Numeric ? std::string("ClusterViewV1.") + Name
-		                                                                        : Name};
-		InDescription.Parameters.push_back(std::move(Parameter));
-	}
-	for (const auto* Name : {"ShadowSplits", "ShadowTexels", "ShadowRanges", "ShadowCamera", "ShadowFilter",
-	                         "ShadowControl", "ShadowSampler"})
-	{
-		AddShadow(Name);
-	}
-	for (unsigned Index = 0; Index < 4; ++Index)
-	{
-		AddShadow("ShadowMatrix" + std::to_string(Index));
-		AddShadow("ShadowDepth" + std::to_string(Index));
-	}
-	for (const std::string Role : {"BaseColor", "MetallicRoughness", "Normal", "Occlusion", "Emissive"})
-	{
-		for (const auto* Kind : {"Texture", "Sampler"})
+		if (Semantics->Find(Resource.second.Semantic).Scope != EMaterialScope::Material)
 		{
-			auto Parameter = DeclareMaterialSemantic(Role + Kind, "Pbr." + Role + Kind, *Semantics);
-			Parameter.Targets = {Role + Kind};
-			InDescription.Parameters.push_back(std::move(Parameter));
+			continue;
 		}
+		auto Parameter = DeclareMaterialSemantic(Resource.first, Resource.second.Semantic, *Semantics);
+		Parameter.Targets = {Resource.first};
+		InDescription.Parameters.push_back(std::move(Parameter));
 	}
 }
 } // namespace

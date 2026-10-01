@@ -15,7 +15,9 @@ for cmake in SOURCE.rglob('CMakeLists.txt'):
     target = re.search(r'add_(?:library|executable)\((hyperion_\w+)', body)[1]
     dependencies = set(re.findall(r'\bhyperion_\w+', body)) - {target}
     modules[cmake.parent] = (target, dependencies)
-    for path in (cmake.parent / 'Public').rglob('*.h'):
+    for path in (cmake.parent / 'Public').rglob('*'):
+        if path.suffix not in ('.h', '.inl'):
+            continue
         name = path.relative_to(cmake.parent / 'Public').as_posix()
         if name in headers:
             bad.append(f'Duplicate public include: {name}')
@@ -23,7 +25,7 @@ for cmake in SOURCE.rglob('CMakeLists.txt'):
 
 count = 0
 for path in SOURCE.rglob('*'):
-    if path.suffix not in ('.h', '.hpp', '.cpp'):
+    if path.suffix not in ('.h', '.inl', '.hpp', '.cpp'):
         continue
     count += 1
     test = (path.is_relative_to(SOURCE / 'Tests') or

@@ -17,7 +17,7 @@ struct FConstantKey
 	EShaderFormat Format{};
 	std::uint32_t Size{};
 	std::vector<FShaderMember> Layout;
-	std::vector<std::string> Mapping;
+	std::vector<FMaterialParameterIdentity> Mapping;
 	std::vector<std::shared_ptr<const FMaterialValue>> Values;
 	std::vector<std::pair<EMaterialScope, FMaterialScopeKey>> Scopes;
 };
@@ -44,14 +44,14 @@ std::uint64_t HashBinding(const FMaterialProgramBinding& InBinding, EShaderForma
 	}
 	for (const auto& Member : InBinding.Members)
 	{
+		const auto& Identity = InSchema.GetParameterIdentity(Member.ParameterIndex);
+		Add(Identity.AuthorIdentity->Identity);
 		const auto& Parameter = InSchema.GetParameters().at(Member.ParameterIndex);
-		Add(Parameter.Name.size() + 1 + Parameter.Semantic.size());
-		for (const unsigned char Character : Parameter.Name)
-		{
-			Add(Character);
-		}
 		Add(0);
-		for (const unsigned char Character : Parameter.Semantic)
+		Add(static_cast<unsigned>(Parameter.Semantic.GetBuiltin()));
+		Add(reinterpret_cast<std::uintptr_t>(Parameter.Semantic.GetDescriptor()));
+		for (const unsigned char Character :
+		     !Parameter.Semantic.IsBuiltin() ? Parameter.Semantic.GetName() : std::string_view{})
 		{
 			Add(Character);
 		}
@@ -92,14 +92,11 @@ bool MatchesBinding(const FConstantKey& InKey, const FMaterialProgramBinding& In
 	for (std::size_t Index = 0; Index < InBinding.Members.size(); ++Index)
 	{
 		const auto& Member = InBinding.Members[Index];
-		const auto& Parameter = InSchema.GetParameters().at(Member.ParameterIndex);
-		const std::string_view Mapping = InKey.Mapping[Index];
+		const auto& Mapping = InKey.Mapping[Index];
 		if (InKey.Layout[Index] != Member.Layout ||
 		    (bInCompareValues &&
 		     !SameMaterialValue(InKey.Values[Index], InParameters.Values.Get(Member.ParameterIndex))) ||
-		    Mapping.size() != Parameter.Name.size() + 1 + Parameter.Semantic.size() ||
-		    !Mapping.starts_with(Parameter.Name) || Mapping[Parameter.Name.size()] != '\0' ||
-		    Mapping.substr(Parameter.Name.size() + 1) != Parameter.Semantic)
+		    Mapping != InSchema.GetParameterIdentity(Member.ParameterIndex))
 		{
 			return false;
 		}
@@ -151,8 +148,7 @@ FCacheEntry MakeEntry(const FMaterialProgramBinding& InBinding, EShaderFormat In
 	for (const auto& Member : InBinding.Members)
 	{
 		Key.Layout.push_back(Member.Layout);
-		const auto& Declaration = InSchema.GetParameters().at(Member.ParameterIndex);
-		Key.Mapping.push_back(Declaration.Name + std::string(1, '\0') + Declaration.Semantic);
+		Key.Mapping.push_back(InSchema.GetParameterIdentity(Member.ParameterIndex));
 		Key.Values.push_back(InParameters.Values.Get(Member.ParameterIndex));
 		Dependencies |= InParameters.Dependencies.Get(Member.ParameterIndex);
 	}

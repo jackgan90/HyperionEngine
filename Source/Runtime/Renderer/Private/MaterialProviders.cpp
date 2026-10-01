@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/MaterialProviders.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Materials/ObjectParameters.h"
 #include <algorithm>
 #include <atomic>
 #include <list>
@@ -9,15 +10,9 @@
 
 namespace Hyperion
 {
-const FMaterialValue* FMaterialProviderInputs::Find(EMaterialScope InScope, std::string_view InName) const
+const FMaterialValue* FMaterialProviderInputs::Find(EMaterialScope InScope, FMaterialSemanticId InName) const
 {
-	const auto& Entries = Values.at(static_cast<std::size_t>(InScope)).Get();
-	const auto It = std::lower_bound(Entries.begin(), Entries.end(), InName,
-	                                 [](const auto& InEntry, std::string_view InKey)
-	                                 {
-		                                 return InEntry.Name < InKey;
-	                                 });
-	return It != Entries.end() && It->Name == InName ? &It->Value : nullptr;
+	return Values.at(static_cast<std::size_t>(InScope)).Find(InName);
 }
 
 struct FMaterialProviderRegistry::FImpl
@@ -30,7 +25,7 @@ struct FMaterialProviderRegistry::FImpl
 		std::vector<std::weak_ptr<const FMaterialParameterValues>> Sources;
 		std::size_t Bytes{};
 		FMaterialSharedValue Value;
-		const std::pair<std::string, std::uint64_t>* BucketKey{};
+		const std::pair<FMaterialSemanticId, std::uint64_t>* BucketKey{};
 		std::list<FEntry>::iterator Location;
 		std::list<FEntry*>::iterator Recency;
 
@@ -48,9 +43,9 @@ struct FMaterialProviderRegistry::FImpl
 	};
 
 	std::shared_ptr<const FMaterialSemanticRegistry> Semantics;
-	std::map<std::string, FMaterialProviderDescription, std::less<>> Providers;
-	std::map<std::string, FMaterialProviderDescription, std::less<>> Defaults;
-	std::map<std::pair<std::string, std::uint64_t>, std::list<FEntry>> Cache;
+	std::map<FMaterialSemanticId, FMaterialProviderDescription> Providers;
+	std::map<FMaterialSemanticId, FMaterialProviderDescription> Defaults;
+	std::map<std::pair<FMaterialSemanticId, std::uint64_t>, std::list<FEntry>> Cache;
 	std::list<FEntry*> Recent;
 	std::uint64_t Version = 1;
 	std::atomic<bool> bFrozen{};
@@ -87,15 +82,7 @@ struct FMaterialProviderRegistry::FImpl
 				return false;
 			}
 			// Default providers read only their semantic; unrelated values must not invalidate them.
-			const FMaterialValue* OldValue{};
-			for (const auto& Entry : Previous.Get())
-			{
-				if (Entry.Name == InProvider.Semantic)
-				{
-					OldValue = &Entry.Value;
-					break;
-				}
-			}
+			const auto* OldValue = Previous.Find(InProvider.Semantic);
 			const auto* NewValue = InInputs.Find(static_cast<EMaterialScope>(Scope), InProvider.Semantic);
 			if ((!OldValue != !NewValue) || (OldValue && *OldValue != *NewValue))
 			{
@@ -130,7 +117,7 @@ struct FMaterialProviderRegistry::FImpl
 		}
 	}
 
-	void Store(const std::pair<std::string, std::uint64_t>& InKey, FEntry InEntry)
+	void Store(const std::pair<FMaterialSemanticId, std::uint64_t>& InKey, FEntry InEntry)
 	{
 		const auto Bucket = Cache.find(InKey);
 		if (Bucket != Cache.end())
@@ -316,9 +303,16 @@ FMaterialProviderRegistry::FMaterialProviderRegistry(std::shared_ptr<const FMate
 	{
 		throw std::invalid_argument("Material providers require a semantic registry");
 	}
-	auto Registry = std::make_shared<FMaterialSemanticRegistry>(*InSemantics);
-	Registry->Freeze();
-	Impl->Semantics = std::move(Registry);
+	if (InSemantics->IsFrozen())
+	{
+		Impl->Semantics = std::move(InSemantics);
+	}
+	else
+	{
+		auto Registry = std::make_shared<FMaterialSemanticRegistry>(*InSemantics);
+		Registry->Freeze();
+		Impl->Semantics = std::move(Registry);
+	}
 	Impl->Limits = InLimits;
 }
 
@@ -329,26 +323,24 @@ void FMaterialProviderRegistry::Register(FMaterialProviderDescription InDescript
 	const auto& Semantic = Impl->Semantics->Find(InDescription.Semantic);
 	if (Impl->bFrozen || !InDescription.Evaluate || InDescription.Dependencies == 0 ||
 	    (InDescription.Dependencies >> MaterialScopeCount) != 0 ||
-	    (InDescription.Dependencies & MaterialScopeBit(Semantic.Scope)) == 0 || Impl->Providers.contains(Semantic.Name))
+	    (InDescription.Dependencies & MaterialScopeBit(Semantic.Scope)) == 0 ||
+	    Impl->Providers.contains(Impl->Semantics->Normalize(InDescription.Semantic)))
 	{
 		throw std::invalid_argument("Invalid, duplicate or frozen material provider registration");
 	}
-	InDescription.Semantic = Semantic.Name;
-	Impl->Providers.emplace(Semantic.Name, std::move(InDescription));
+	InDescription.Semantic = Impl->Semantics->Normalize(InDescription.Semantic);
+	Impl->Providers.emplace(InDescription.Semantic, std::move(InDescription));
 	++Impl->Version;
 }
 
 namespace
 {
-bool IsSceneOwnedSemantic(std::string_view InName)
+bool IsSceneOwnedSemantic(FMaterialSemanticId InName)
 {
-	return InName == "Engine.Scene.MainDirectionalLightDirection" ||
-	       InName == "Engine.Scene.MainDirectionalLightColor" || InName == "Engine.Scene.AmbientColor" ||
-	       InName.starts_with("Engine.Scene.Environment") || InName == "Engine.Scene.DirectionalLights" ||
-	       InName == "Engine.View.ViewProjection" || InName == "Engine.View.CameraPosition";
+	return GetEngineSemanticPolicy(InName).bSceneOwned;
 }
 
-bool IsSceneInput(const FMaterialSemanticRegistry& InSemantics, std::string_view InName)
+bool IsSceneInput(const FMaterialSemanticRegistry& InSemantics, FMaterialSemanticId InName)
 {
 	try
 	{
@@ -367,7 +359,8 @@ void FMaterialProviderRegistry::ValidateSceneBinding() const
 	{
 		if (IsSceneOwnedSemantic(Name))
 		{
-			throw std::invalid_argument("Custom provider conflicts with scene-owned semantic: " + Name);
+			throw std::invalid_argument("Custom provider conflicts with scene-owned semantic: " +
+			                            std::string(Name.GetName()));
 		}
 	}
 }
@@ -377,13 +370,15 @@ void FMaterialProviderRegistry::ValidateSceneInputs(const FMaterialParameterValu
 {
 	for (const auto& Value : InValues)
 	{
-		if (IsSceneInput(*Impl->Semantics, Value.Name))
+		if (IsSceneInput(*Impl->Semantics, Value.GetSemantic()))
 		{
-			if (bInAllowDefaultLights && Impl->Semantics->Normalize(Value.Name).starts_with("Engine.Scene."))
+			if (bInAllowDefaultLights &&
+			    GetEngineSemanticPolicy(Impl->Semantics->Normalize(Value.GetSemantic())).bAllowDefaultSceneInput)
 			{
 				continue;
 			}
-			throw std::invalid_argument("External input conflicts with scene-owned semantic: " + Value.Name);
+			throw std::invalid_argument("External input conflicts with scene-owned semantic: " +
+			                            std::string(Value.GetSemantic().GetName()));
 		}
 	}
 }
@@ -393,7 +388,7 @@ FMaterialParameterValues FMaterialProviderRegistry::WithoutSceneInputs(FMaterial
 	std::erase_if(InValues,
 	              [&](const auto& InValue)
 	              {
-		              return IsSceneInput(*Impl->Semantics, InValue.Name);
+		              return IsSceneInput(*Impl->Semantics, InValue.GetSemantic());
 	              });
 	return InValues;
 }
@@ -408,59 +403,71 @@ std::uint64_t FMaterialProviderRegistry::GetVersion() const
 	return Impl->Version;
 }
 
-std::vector<FMaterialProvidedValue> FMaterialProviderRegistry::Evaluate(const FMaterialProviderInputs& InInputs,
-                                                                        std::span<const std::string> InSemantics)
+std::vector<FMaterialProvidedValue> FMaterialProviderRegistry::Evaluate(
+    const FMaterialProviderInputs& InInputs, std::span<const FMaterialSemanticId> InSemantics)
 {
 	if (!Impl->bFrozen)
 	{
 		throw std::logic_error("Freeze material providers before preparing a frame");
 	}
 	std::vector<FMaterialProvidedValue> Result;
-	std::set<std::string> Seen;
+	std::set<FMaterialSemanticId> Seen;
 	for (const auto& Requested : InSemantics)
 	{
-		const auto& Semantic = Impl->Semantics->Find(Requested);
-		if (!Seen.insert(Semantic.Name).second)
+		Impl->Semantics->Find(Requested);
+		if (!Seen.insert(Impl->Semantics->Normalize(Requested)).second)
 		{
 			continue;
 		}
-		Result.push_back(EvaluateOne(InInputs, Semantic.Name));
+		Result.push_back(EvaluateOne(InInputs, Impl->Semantics->Normalize(Requested)));
 	}
 	return Result;
 }
 
 FMaterialProvidedValue FMaterialProviderRegistry::EvaluateOne(const FMaterialProviderInputs& InInputs,
-                                                              std::string_view InSemantic)
+                                                              FMaterialSemanticId InSemantic)
 {
 	if (!Impl->bFrozen)
 	{
 		throw std::logic_error("Freeze material providers before preparing a frame");
 	}
-	const auto& Semantic = Impl->Semantics->Find(InSemantic);
-	const auto Custom = Impl->Providers.find(Semantic.Name);
+	const auto Identity = Impl->Semantics->Normalize(InSemantic);
+	const auto& Semantic = Impl->Semantics->Find(Identity);
+	const auto Custom = Impl->Providers.find(Identity);
 	if (Custom != Impl->Providers.end())
 	{
 		return Impl->Evaluate(Custom->second, InInputs, false);
 	}
-	auto Existing = Impl->Defaults.find(Semantic.Name);
+	auto Existing = Impl->Defaults.find(Identity);
 	if (Existing == Impl->Defaults.end())
 	{
 		FMaterialProviderDescription Provider;
-		Provider.Semantic = Semantic.Name;
+		Provider.Semantic = Identity;
 		Provider.Dependencies = MaterialScopeBit(Semantic.Scope);
-		if (Semantic.Name == "Engine.Object.WorldViewProjection")
+		if (Identity == EDrawConstantsField::TransformMatrix)
 		{
 			Provider.Dependencies |= MaterialScopeBit(EMaterialScope::View);
 		}
-		Provider.Evaluate = [Scope = Semantic.Scope, Name = Semantic.Name](
-		                        const FMaterialProviderInputs& InValues) -> std::optional<FMaterialValue>
+		Provider.Evaluate = [Scope = Semantic.Scope,
+		                     Name = Identity](const FMaterialProviderInputs& InValues) -> std::optional<FMaterialValue>
 		{
 			const auto* Value = InValues.Find(Scope, Name);
 			return Value ? std::optional<FMaterialValue>(*Value) : std::nullopt;
 		};
-		Existing = Impl->Defaults.emplace(Semantic.Name, std::move(Provider)).first;
+		Existing = Impl->Defaults.emplace(Identity, std::move(Provider)).first;
 	}
 	return Impl->Evaluate(Existing->second, InInputs, true);
+}
+
+std::vector<FMaterialProvidedValue> FMaterialProviderRegistry::Evaluate(const FMaterialProviderInputs& InInputs,
+                                                                        std::span<const std::string> InSemantics)
+{
+	std::vector<FMaterialSemanticId> Identities;
+	for (const auto& Name : InSemantics)
+	{
+		Identities.emplace_back(Name);
+	}
+	return Evaluate(InInputs, Identities);
 }
 
 void FMaterialProviderRegistry::Collect()

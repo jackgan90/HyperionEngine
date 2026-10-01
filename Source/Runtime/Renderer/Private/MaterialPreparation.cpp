@@ -1,5 +1,10 @@
 #include "Hyperion/Renderer/MaterialPreparation.h"
+#include "EnvironmentParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
+#include "Hyperion/Renderer/CascadedShadowMap.h"
+#include "Hyperion/Renderer/ClusteredLights.h"
 #include "Hyperion/Renderer/MaterialBlocks.h"
+#include "Hyperion/Renderer/MaterialInputValues.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -8,6 +13,28 @@ namespace Hyperion
 {
 namespace
 {
+void CompleteEngineDefaults(FMaterialParameterDeclaration& InParameter)
+{
+	if (InParameter.Source != EMaterialParameterSource::Semantic || InParameter.Default ||
+	    !InParameter.Semantic.IsBuiltin())
+	{
+		return;
+	}
+	static const FMaterialInputValues Defaults = []
+	{
+		auto Values = DefaultShadowParameters();
+		for (const auto& Inputs : {DefaultClusterParameters(), EnvironmentParameters()})
+		{
+			Values.insert(Values.end(), Inputs.begin(), Inputs.end());
+		}
+		return FMaterialInputValues(std::move(Values));
+	}();
+	if (const auto* Value = Defaults.Find(InParameter.Semantic))
+	{
+		InParameter.Default = *Value;
+	}
+}
+
 FShaderMember NestArrayLayout(const FMaterialParameterType& InType, const FShaderMember& InLeaf,
                               std::uint32_t InLeafStride)
 {
@@ -96,6 +123,31 @@ struct FInterfaceBuilder
 	std::string Usage;
 	std::string Variant;
 	const FMaterialSemanticRegistry* Semantics{};
+	std::span<const std::shared_ptr<const FShaderParameterContractSet>> Contracts;
+	EMaterialEngineBindingMode EngineMode = EMaterialEngineBindingMode::Automatic;
+
+	void AddEngineParameter(FMaterialParameterDeclaration InParameter)
+	{
+		const auto Existing =
+		    std::find_if(Parameters.begin(), Parameters.end(),
+		                 [&](const auto& InExisting)
+		                 {
+			                 return InExisting.Name == InParameter.Name && InExisting.Semantic == InParameter.Semantic;
+		                 });
+		if (Existing != Parameters.end())
+		{
+			Existing->Targets.insert(Existing->Targets.end(), InParameter.Targets.begin(), InParameter.Targets.end());
+			return;
+		}
+		if (EngineMode == EMaterialEngineBindingMode::Explicit)
+		{
+			InParameter.Source = EMaterialParameterSource::Manual;
+			InParameter.OverridePolicy = EMaterialOverridePolicy::AllowOverride;
+		}
+		CompleteEngineDefaults(InParameter);
+		InParameter.bActive = false;
+		Parameters.push_back(std::move(InParameter));
+	}
 
 	std::optional<std::size_t> Find(const std::string& InPath) const
 	{
@@ -218,26 +270,40 @@ void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, cons
 		auto Resource = InPass.Variant == "Instance"
 		                    ? PrepareMaterialInstanceBinding(NativeResource, InDescription, Binding)
 		                    : NativeResource;
-		if (NormalizeStandardMaterialBlock(Resource))
+		if (NormalizeStandardMaterialBlock(Resource, InBuilder.Contracts))
 		{
-			for (auto Parameter : GetStandardMaterialBlockParameters(Resource.Name, *InBuilder.Semantics))
+			for (auto Parameter :
+			     GetStandardMaterialBlockParameters(Resource.Name, *InBuilder.Semantics, InBuilder.Contracts))
 			{
+				const auto& Contract = GetStandardMaterialBlock(Resource.Name, InBuilder.Contracts);
+				const auto Member = std::find_if(Contract.Members.begin(), Contract.Members.end(),
+				                                 [&](const auto& InMember)
+				                                 {
+					                                 return InMember.Semantic == Parameter.Semantic;
+				                                 });
+				if (Member == Contract.Members.end() || std::none_of(Resource.Members.begin(), Resource.Members.end(),
+				                                                     [&](const auto& InMember)
+				                                                     {
+					                                                     return InMember.Name == Member->Name;
+				                                                     }))
+				{
+					continue;
+				}
 				if (!InBuilder.Find(Stage + Parameter.Targets.front()))
 				{
-					Parameter.bActive = false;
-					InBuilder.Parameters.push_back(std::move(Parameter));
+					InBuilder.AddEngineParameter(std::move(Parameter));
 				}
 			}
 		}
 		if (!Binding.InstanceStride)
 		{
-			if (Resource.Name == "HyperionDirectionalLightsV1" && !InBuilder.Find(Stage + Resource.Name))
+			const auto Contract = ValidateEngineMaterialResource(Resource, InBuilder.Contracts);
+			if (!Contract.Semantic.IsEmpty() && !InBuilder.Find(Stage + Resource.Name))
 			{
-				auto Parameter = DeclareMaterialSemantic("Engine.Scene.DirectionalLights",
-				                                         "Engine.Scene.DirectionalLights", *InBuilder.Semantics);
+				auto Parameter = DeclareMaterialSemantic(std::string(Contract.Semantic.GetName()), Contract.Semantic,
+				                                         *InBuilder.Semantics);
 				Parameter.Targets = {Resource.Name};
-				Parameter.bActive = false;
-				InBuilder.Parameters.push_back(std::move(Parameter));
+				InBuilder.AddEngineParameter(std::move(Parameter));
 			}
 			Binding.Resource = Resource;
 		}
@@ -269,9 +335,14 @@ void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, cons
 	}
 }
 
-FShaderCompileOptions CompileOptions(const FMaterialShader& InShader, const FMaterialVariantRequest& InVariant)
+FShaderCompileOptions CompileOptions(const FMaterialShader& InShader, const FMaterialVariantRequest& InVariant,
+                                     std::span<const std::shared_ptr<const FShaderParameterContractSet>> InContracts)
 {
 	FShaderCompileOptions Result;
+	for (auto& Include : GenerateShaderIncludes(InContracts))
+	{
+		Result.VirtualIncludes.push_back({std::move(Include.first), std::move(Include.second)});
+	}
 	for (const FMaterialShaderDefine& Define : InShader.Defines)
 	{
 		Result.Defines.push_back({Define.Name, Define.Value});
@@ -298,12 +369,12 @@ FCompiledMaterialPass CompileVariant(FShaderCompiler& InCompiler, const FMateria
 	Compiled.Variant = InVariant.Name;
 	Compiled.VariantDefines = InVariant.Defines;
 	Compiled.Vertex = InCompiler.Compile(Pass.Vertex.Path, Pass.Vertex.Entry, EShaderStage::Vertex, InFormat,
-	                                     CompileOptions(Pass.Vertex, InVariant), InSources);
+	                                     CompileOptions(Pass.Vertex, InVariant, InBuilder.Contracts), InSources);
 	BindStage(InBuilder, Compiled, Compiled.Vertex, Pass);
 	if (!Pass.Pixel.Path.empty())
 	{
 		Compiled.Pixel = InCompiler.Compile(Pass.Pixel.Path, Pass.Pixel.Entry, EShaderStage::Pixel, InFormat,
-		                                    CompileOptions(Pass.Pixel, InVariant), InSources);
+		                                    CompileOptions(Pass.Pixel, InVariant, InBuilder.Contracts), InSources);
 		BindStage(InBuilder, Compiled, Compiled.Pixel, Pass);
 	}
 	Compiled.Bindings = MergeMaterialBindings(std::move(Compiled.Bindings));
@@ -383,7 +454,8 @@ void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefini
 FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompiler,
                                                       std::shared_ptr<const FMaterialDefinition> InDefinition,
                                                       EShaderFormat InFormat,
-                                                      std::vector<FMaterialVariantRequest> InVariants)
+                                                      std::vector<FMaterialVariantRequest> InVariants,
+                                                      EMaterialEngineBindingMode InEngineMode)
 {
 	if (!InDefinition)
 	{
@@ -419,14 +491,19 @@ FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompile
 	const auto Sources = InCompiler.CaptureSources(SourcePaths);
 	FInterfaceBuilder Builder;
 	Builder.Semantics = &InDefinition->GetSemantics();
+	Builder.Contracts = InDefinition->GetDescription().ShaderContracts;
+	Builder.EngineMode = InEngineMode;
 	Builder.Parameters = InDefinition->GetSchema()->GetParameters();
 	for (FMaterialParameterDeclaration& Parameter : Builder.Parameters)
 	{
+		CompleteEngineDefaults(Parameter);
 		Parameter.bActive = false;
 	}
 	FCompiledMaterialDefinition Result;
 	Result.Interface.Definition = InDefinition;
-	Result.Key = "material-v1/" + std::to_string(InDefinition->GetIdentity()) + "/" +
+	Result.Key = "material-v2/contract" + std::to_string(GetEngineSemanticContractVersion()) + "/" +
+	             std::to_string(static_cast<unsigned>(InEngineMode)) + "/" +
+	             std::to_string(InDefinition->GetIdentity()) + "/" +
 	             std::to_string(InDefinition->GetDescription().Version);
 	for (const FMaterialVariantRequest& Variant : InVariants)
 	{

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <set>
 
 namespace Hyperion
 {
@@ -17,7 +18,7 @@ void ValidateInterface(const FPreparedMaterialInterface& InInterface)
 	}
 	for (const FMaterialParameterDeclaration& Parameter : InInterface.Schema->GetParameters())
 	{
-		if (!Parameter.Semantic.empty() &&
+		if (!Parameter.Semantic.IsEmpty() &&
 		    InInterface.Definition->GetSemantics().Find(Parameter.Semantic).Type != Parameter.Type)
 		{
 			throw std::invalid_argument("Prepared material interface semantic type mismatch: " + Parameter.Name);
@@ -39,10 +40,10 @@ void ApplyOverrides(std::vector<std::optional<FMaterialValue>>& InValues, const 
 	std::vector<bool> Seen(InValues.size());
 	for (const FMaterialParameterEntry& Entry : InOverrides)
 	{
-		const FMaterialParameterHandle Handle = InSchema.Find(Entry.Name);
+		const FMaterialParameterHandle Handle = Entry.Resolve(InSchema);
 		if (Seen[Handle.Index])
 		{
-			throw std::invalid_argument("Duplicate override of material parameter: " + Entry.Name);
+			throw std::invalid_argument("Duplicate override of material parameter: " + InSchema.Get(Handle).Name);
 		}
 		Seen[Handle.Index] = true;
 		ValidateMaterialOverride(InSchema.Get(Handle), Entry.Value, InScope);
@@ -84,10 +85,26 @@ FMaterialInstance::FMaterialInstance(std::shared_ptr<const FMaterialSnapshot> In
 	}
 	for (const auto& Entry : InSnapshot->Overrides)
 	{
-		ValidateMaterialOverride(InSnapshot->Schema->Get(InSnapshot->Schema->Find(Entry.Name)), Entry.Value,
+		ValidateMaterialOverride(InSnapshot->Schema->Get(Entry.Resolve(*InSnapshot->Schema)), Entry.Value,
 		                         EMaterialScope::Material);
 	}
 	auto Initial = *InSnapshot;
+	Initial.Overrides.clear();
+	std::set<std::size_t> Seen;
+	for (const auto& Entry : InSnapshot->Overrides)
+	{
+		const auto Handle = Entry.Resolve(*InSnapshot->Schema);
+		if (!Seen.insert(Handle.Index).second)
+		{
+			throw std::invalid_argument("Duplicate material snapshot override");
+		}
+		Initial.Overrides.push_back({Handle, Entry.Value});
+	}
+	std::sort(Initial.Overrides.begin(), Initial.Overrides.end(),
+	          [](const auto& InA, const auto& InB)
+	          {
+		          return InA.Handle.Index < InB.Handle.Index;
+	          });
 	Initial.Identity = MaterialsPrivate::NextIdentity();
 	Initial.Revision = 1;
 	Snapshot = std::make_shared<const FMaterialSnapshot>(std::move(Initial));
@@ -148,9 +165,9 @@ EMaterialWriteResult FMaterialInstance::Set(FMaterialParameterHandle InHandle, F
 	const EMaterialWriteResult Result =
 	    Parameter.bActive ? EMaterialWriteResult::Active : EMaterialWriteResult::Inactive;
 	const auto Existing = std::find_if(Snapshot->Overrides.begin(), Snapshot->Overrides.end(),
-	                                   [&Parameter](const FMaterialParameterEntry& InEntry)
+	                                   [InHandle](const FMaterialParameterEntry& InEntry)
 	                                   {
-		                                   return InEntry.Name == Parameter.Name;
+		                                   return InEntry.Handle == InHandle;
 	                                   });
 	if (Existing != Snapshot->Overrides.end() && Existing->Value == InValue)
 	{
@@ -163,18 +180,18 @@ EMaterialWriteResult FMaterialInstance::Set(FMaterialParameterHandle InHandle, F
 	}
 	else
 	{
-		Next.Overrides.push_back({Parameter.Name, std::move(InValue)});
+		Next.Overrides.push_back({InHandle, std::move(InValue)});
 		std::sort(Next.Overrides.begin(), Next.Overrides.end(),
 		          [](const FMaterialParameterEntry& InA, const FMaterialParameterEntry& InB)
 		          {
-			          return InA.Name < InB.Name;
+			          return InA.Handle.Index < InB.Handle.Index;
 		          });
 	}
 	Publish(std::move(Next));
 	return Result;
 }
 
-EMaterialWriteResult FMaterialInstance::SetSemantic(std::string_view InSemantic, FMaterialValue InValue)
+EMaterialWriteResult FMaterialInstance::SetSemantic(FMaterialSemanticId InSemantic, FMaterialValue InValue)
 {
 	CheckOwner();
 	return Set(Snapshot->Schema->FindSemantic(Snapshot->Definition->GetSemantics().Normalize(InSemantic)),
@@ -183,17 +200,75 @@ EMaterialWriteResult FMaterialInstance::SetSemantic(std::string_view InSemantic,
 
 void FMaterialInstance::Clear(std::string_view InName)
 {
+	Clear(Find(InName));
+}
+
+void FMaterialInstance::SetParameters(const FMaterialParameterValues& InValues)
+{
 	CheckOwner();
-	const FMaterialParameterDeclaration& Parameter = Snapshot->Schema->Get(Find(InName));
+	FMaterialParameterValues Updates;
+	std::set<std::size_t> Seen;
+	for (const auto& Entry : InValues)
+	{
+		const auto Handles =
+		    !Entry.Semantic.IsEmpty()
+		        ? Snapshot->Schema->FindSemantics(Snapshot->Definition->GetSemantics().Normalize(Entry.Semantic))
+		        : std::vector{Entry.Resolve(*Snapshot->Schema)};
+		if (Handles.empty())
+		{
+			throw std::invalid_argument("Unknown typed material semantic");
+		}
+		for (const auto Handle : Handles)
+		{
+			if (!Seen.insert(Handle.Index).second)
+			{
+				throw std::invalid_argument("Duplicate material parameter update");
+			}
+			ValidateMaterialOverride(Snapshot->Schema->Get(Handle), Entry.Value, EMaterialScope::Material);
+			Updates.push_back({Handle, Entry.Value});
+		}
+	}
+	auto Next = *Snapshot;
+	for (auto& Entry : Updates)
+	{
+		const auto Existing = std::find_if(Next.Overrides.begin(), Next.Overrides.end(),
+		                                   [&](const auto& InEntry)
+		                                   {
+			                                   return InEntry.Handle == Entry.Handle;
+		                                   });
+		if (Existing == Next.Overrides.end())
+		{
+			Next.Overrides.push_back(std::move(Entry));
+		}
+		else
+		{
+			Existing->Value = std::move(Entry.Value);
+		}
+	}
+	std::sort(Next.Overrides.begin(), Next.Overrides.end(),
+	          [](const auto& InA, const auto& InB)
+	          {
+		          return InA.Handle.Index < InB.Handle.Index;
+	          });
+	if (Next.Overrides != Snapshot->Overrides)
+	{
+		Publish(std::move(Next));
+	}
+}
+
+void FMaterialInstance::Clear(FMaterialParameterHandle InHandle)
+{
+	CheckOwner();
+	const FMaterialParameterDeclaration& Parameter = Snapshot->Schema->Get(InHandle);
 	if (Parameter.OverridePolicy == EMaterialOverridePolicy::Locked ||
 	    (Parameter.OverrideScopes & MaterialScopeBit(EMaterialScope::Material)) == 0)
 	{
 		throw std::invalid_argument("Cannot clear a locked material parameter: " + Parameter.Name);
 	}
 	const auto Existing = std::find_if(Snapshot->Overrides.begin(), Snapshot->Overrides.end(),
-	                                   [&Parameter](const FMaterialParameterEntry& InEntry)
+	                                   [InHandle](const FMaterialParameterEntry& InEntry)
 	                                   {
-		                                   return InEntry.Name == Parameter.Name;
+		                                   return InEntry.Handle == InHandle;
 	                                   });
 	if (Existing != Snapshot->Overrides.end())
 	{
@@ -212,13 +287,16 @@ void FMaterialInstance::ReplaceDefinition(const FPreparedMaterialInterface& InIn
 	Next.Schema = InInterface.Schema;
 	for (FMaterialParameterEntry& Entry : Next.Overrides)
 	{
-		const FMaterialParameterDeclaration& Parameter = Next.Schema->Get(Next.Schema->Find(Entry.Name));
-		if (Parameter.Name != Entry.Name)
+		const auto Name = Entry.GetName(*Snapshot->Schema);
+		const auto Handle = Next.Schema->Find(Name);
+		const FMaterialParameterDeclaration& Parameter = Next.Schema->Get(Handle);
+		if (Parameter.Name != Name)
 		{
 			throw std::invalid_argument("Definition replacement must preserve logical parameter identity: " +
-			                            Entry.Name);
+			                            std::string(Name));
 		}
 		ValidateMaterialOverride(Parameter, Entry.Value, EMaterialScope::Material);
+		Entry = {Handle, std::move(Entry.Value)};
 	}
 	Publish(std::move(Next));
 }
@@ -233,13 +311,13 @@ FMaterialParameterValues ResolveMaterialParameters(const FMaterialSnapshot& InSn
 	{
 		throw std::invalid_argument("Material snapshot is incomplete");
 	}
-	std::map<std::string, const FMaterialValue*> Providers;
+	std::map<FMaterialSemanticId, const FMaterialValue*> Providers;
 	for (const FMaterialParameterEntry& Entry : InProviders)
 	{
-		const std::string Name = InSnapshot.Definition->GetSemantics().Normalize(Entry.Name);
+		const auto Name = InSnapshot.Definition->GetSemantics().Normalize(Entry.GetSemantic());
 		if (!Providers.emplace(Name, &Entry.Value).second)
 		{
-			throw std::invalid_argument("Conflicting material providers: " + Name);
+			throw std::invalid_argument("Conflicting material providers: " + std::string(Name.GetName()));
 		}
 	}
 	const std::vector<FMaterialParameterDeclaration>& Parameters = InSnapshot.Schema->GetParameters();
@@ -268,7 +346,7 @@ FMaterialParameterValues ResolveMaterialParameters(const FMaterialSnapshot& InSn
 				Provider->second->Validate();
 				if (Provider->second->Type != Parameter.Type)
 				{
-					throw std::invalid_argument("Provider type mismatch: " + Parameter.Semantic);
+					throw std::invalid_argument("Provider type mismatch: " + std::string(Parameter.Semantic.GetName()));
 				}
 				Values[Index] = *Provider->second;
 			}
@@ -284,13 +362,46 @@ FMaterialParameterValues ResolveMaterialParameters(const FMaterialSnapshot& InSn
 		if (!Values[Index] && Parameter.bActive && Active[Index] && Parameter.bRequired)
 		{
 			throw std::invalid_argument("Missing material input: " + Parameter.Name +
-			                            " semantic=" + Parameter.Semantic);
+			                            " semantic=" + std::string(Parameter.Semantic.GetName()));
 		}
 		if (Values[Index])
 		{
-			Result.push_back({Parameter.Name, *Values[Index]});
+			Result.push_back({InSnapshot.Schema->GetHandle(Index), *Values[Index]});
 		}
 	}
 	return Result;
+}
+
+FMaterialParameterValues RebindMaterialParameters(const FMaterialParameterValues& InValues,
+                                                  const FMaterialParameterSchema& InPrevious,
+                                                  const FMaterialParameterSchema& InNext)
+{
+	FMaterialParameterValues Result;
+	for (const auto& Entry : InValues)
+	{
+		const auto Previous = Entry.Resolve(InPrevious);
+		const auto Handle = InNext.FindAuthorIdentity(InPrevious.GetParameterIdentity(Previous.Index).AuthorIdentity);
+		if (InNext.Get(Handle).Type != Entry.Value.Type)
+		{
+			throw std::invalid_argument("Material schema rebinding changed parameter identity or type");
+		}
+		Result.emplace_back(Handle, Entry.Value);
+	}
+	return Result;
+}
+
+void RebindMaterialSnapshot(FMaterialSnapshot& InSnapshot, std::shared_ptr<const FMaterialParameterSchema> InSchema)
+{
+	if (!InSnapshot.Schema || !InSchema)
+	{
+		throw std::invalid_argument("Material snapshot rebinding requires schemas");
+	}
+	if (InSnapshot.Schema == InSchema)
+	{
+		return;
+	}
+	auto Overrides = RebindMaterialParameters(InSnapshot.Overrides, *InSnapshot.Schema, *InSchema);
+	InSnapshot.Overrides = std::move(Overrides);
+	InSnapshot.Schema = std::move(InSchema);
 }
 } // namespace Hyperion

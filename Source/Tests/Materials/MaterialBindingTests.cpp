@@ -7,6 +7,7 @@ using namespace Hyperion;
 
 void RunMaterialBlockTests();
 void RunMaterialProviderTests();
+void RunEngineSemanticTests();
 
 namespace
 {
@@ -190,6 +191,8 @@ void CheckBindingConflicts()
 }
 } // namespace
 
+void RunShaderParameterTests();
+
 int main()
 {
 	try
@@ -199,6 +202,8 @@ int main()
 		CheckTextureComponentRejection();
 		RunMaterialBlockTests();
 		RunMaterialProviderTests();
+		RunEngineSemanticTests();
+		RunShaderParameterTests();
 		std::cout << "PASS: material interface preparation and stage bindings\n";
 		return 0;
 	}

@@ -221,6 +221,78 @@ void CheckResources()
 	    "booleans");
 }
 
+void CheckBatchSemanticAliases()
+{
+	auto Registry = std::make_shared<FMaterialSemanticRegistry>();
+	Registry->Register({"Game.Amount",
+	                    FMaterialParameterType::Numeric(EMaterialScalar::Float),
+	                    EMaterialScope::Material,
+	                    "Amount",
+	                    true,
+	                    {"Game.AmountAlias"}});
+	auto Description = MakeDescription();
+	auto Parameter = DeclareMaterialSemantic("Amount", "Game.AmountAlias", *Registry);
+	Parameter.Source = EMaterialParameterSource::Manual;
+	Parameter.OverridePolicy = EMaterialOverridePolicy::AllowOverride;
+	Description.Parameters.push_back(Parameter);
+	const auto Definition = std::make_shared<const FMaterialDefinition>(Description, Registry);
+	FMaterialInstance Instance(Definition);
+	Instance.SetSemantic("Game.AmountAlias", FMaterialValue::Float(1));
+	const auto Before = Instance.Freeze();
+	Instance.SetParameters({{FMaterialSemanticId("Game.AmountAlias"), FMaterialValue::Float(2)}});
+	HYP_CHECK(Instance.GetRevision() == Before->Revision + 1 &&
+	          Before->Overrides.front().Value == FMaterialValue::Float(1));
+	const auto Updated = Instance.Freeze();
+	HYP_CHECK(Updated->Overrides.front().Value == FMaterialValue::Float(2));
+	ExpectError(
+	    [&]
+	    {
+		    Instance.SetParameters({{FMaterialSemanticId("Game.AmountAlias"), FMaterialValue::Float(3)},
+		                            {FMaterialSemanticId("Game.Amount"), FMaterialValue::Float(4)}});
+	    },
+	    "Duplicate");
+	HYP_CHECK(Instance.Freeze() == Updated);
+}
+
+void CheckTypedSchemaBridge()
+{
+	FMaterialParameterDeclaration First;
+	First.Name = "Surface.Strength";
+	First.Type = FMaterialParameterType::Numeric(EMaterialScalar::Float);
+	FMaterialParameterDeclaration Other = First;
+	Other.Name = "Other.Strength";
+	const FMaterialParameterSchema Previous({First, Other}, 1, false);
+	First.Semantic = "Game.Amount"; // Prepared metadata can add semantics without changing authored identity.
+	const FMaterialParameterSchema Next({Other, First}, 2);
+	const auto Source = Previous.GetHandle(0);
+	const auto Target = Next.FindAuthorIdentity(Previous.GetParameterIdentity(Source.Index).AuthorIdentity);
+	HYP_CHECK(Target.Index == 1);
+	const auto Values = RebindMaterialParameters({{Source, FMaterialValue::Float(3)}}, Previous, Next);
+	HYP_CHECK(Values.front().Handle == Target && Values.front().Value == FMaterialValue::Float(3));
+	Other.Targets = {"Surface.Strength"};
+	const FMaterialParameterSchema Renamed({Other}, 3);
+	ExpectError(
+	    [&]
+	    {
+		    RebindMaterialParameters(Values, Next, Renamed);
+	    },
+	    "authored parameter identity");
+	First.Type = FMaterialParameterType::Numeric(EMaterialScalar::Int);
+	const FMaterialParameterSchema Retyped({First}, 4);
+	ExpectError(
+	    [&]
+	    {
+		    RebindMaterialParameters(Values, Next, Retyped);
+	    },
+	    "identity or type");
+	ExpectError(
+	    [&]
+	    {
+		    RebindMaterialParameters({{Source, FMaterialValue::Float(3)}}, Next, Previous);
+	    },
+	    "Stale");
+}
+
 void CheckStateAndRegistry()
 {
 	FMaterialDescription Description = MakeDescription();
@@ -283,6 +355,8 @@ int main()
 		CheckResolution();
 		CheckResources();
 		CheckStateAndRegistry();
+		CheckBatchSemanticAliases();
+		CheckTypedSchemaBridge();
 		std::cout << "PASS: CPU material contracts, snapshots, semantics and owned resources\n";
 		return 0;
 	}

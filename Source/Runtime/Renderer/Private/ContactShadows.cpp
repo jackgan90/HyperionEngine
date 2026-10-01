@@ -1,4 +1,7 @@
 #include "Hyperion/Renderer/ContactShadows.h"
+#include "Hyperion/Materials/ShaderParameters.h"
+#include "Hyperion/Renderer/ShaderParameters/ContactShadowParameters.h"
+#include "Hyperion/Renderer/ShaderParameters/DepthPreviewParameters.h"
 #include <cmath>
 
 namespace Hyperion
@@ -33,7 +36,8 @@ FFullscreenPassDesc MakeContactShadowPass(const FRenderGraph& InGraph, const FCo
 	{
 		throw std::invalid_argument("Contact shadow requires matching nearest HZB, GBuffer, mask and light");
 	}
-	static const auto Material = MakeFullscreenMaterial("Contact shadows", "Depth/ContactShadows.hlsl");
+	static const auto Material = MakeFullscreenMaterial("Contact shadows", "Depth/ContactShadows.hlsl", false,
+	                                                    {GetContactShadowShaderContracts()});
 	FFullscreenPassDesc Pass;
 	Pass.Material = Material;
 	Pass.Lifetime = InInputs.Mask.Lifetime;
@@ -48,31 +52,30 @@ FFullscreenPassDesc MakeContactShadowPass(const FRenderGraph& InGraph, const FCo
 	Pass.Targets.Reads = {{ERenderTargetKind::Texture, InInputs.Depth.Texture, InInputs.Depth.Lifetime, false},
 	                      InInputs.Normals,
 	                      InInputs.Surface};
-	Pass.Parameters = {{"Pixel:HierarchicalDepth", FMaterialValue::FromTexture(InInputs.Depth.Texture)},
-	                   {"Pixel:SurfaceNormals", FMaterialValue::FromTexture(InInputs.Normals.Texture)},
-	                   {"Pixel:SurfaceCoverage", FMaterialValue::FromTexture(InInputs.Surface.Texture)}};
-	const auto Set = [&](std::string InName, FMaterialValue InValue)
-	{
-		Pass.Parameters.push_back({"Pixel:ContactV1." + InName, std::move(InValue)});
-	};
-	Set("ViewProjection", FMaterialValue::Matrix(InInputs.View.ViewProjection));
-	Set("InverseViewProjection", FMaterialValue::Matrix(Inverse(InInputs.View.ViewProjection)));
-	Set("Viewport",
-	    FMaterialValue::Float(FVec4{Pass.Viewport.X, Pass.Viewport.Y, Pass.Viewport.Width, Pass.Viewport.Height}));
-	Set("Eye", FMaterialValue::Float(InInputs.View.Eye));
-	Set("LightDirection", FMaterialValue::Float(Normalize(InInputs.LightDirection)));
-	Set("RayLength", FMaterialValue::Float(InInputs.Settings.Length));
-	Set("Thickness", FMaterialValue::Float(InInputs.Settings.Thickness));
-	Set("Bias", FMaterialValue::Float(InInputs.Settings.Bias));
-	Set("MaxSteps", FMaterialValue::Uint(InInputs.Settings.Steps));
-	Set("bReversed", FMaterialValue::Uint(InInputs.View.DepthConvention == EDepthConvention::Reversed ? 1 : 0));
+	Pass.Parameters = {
+	    {EContactShadowSemantic::HierarchicalDepth, FMaterialValue::FromTexture(InInputs.Depth.Texture)},
+	    {EContactShadowSemantic::SurfaceNormals, FMaterialValue::FromTexture(InInputs.Normals.Texture)},
+	    {EContactShadowSemantic::SurfaceCoverage, FMaterialValue::FromTexture(InInputs.Surface.Texture)}};
+	FContactV1Parameters Parameters;
+	Parameters.ViewProjection = InInputs.View.ViewProjection;
+	Parameters.InverseViewProjection = Inverse(InInputs.View.ViewProjection);
+	Parameters.Viewport = {Pass.Viewport.X, Pass.Viewport.Y, Pass.Viewport.Width, Pass.Viewport.Height};
+	Parameters.Eye = InInputs.View.Eye;
+	Parameters.LightDirection = Normalize(InInputs.LightDirection);
+	Parameters.RayLength = InInputs.Settings.Length;
+	Parameters.Thickness = InInputs.Settings.Thickness;
+	Parameters.Bias = InInputs.Settings.Bias;
+	Parameters.MaxSteps = InInputs.Settings.Steps;
+	Parameters.bReversed = InInputs.View.DepthConvention == EDepthConvention::Reversed;
+	AppendShaderParameters(Pass.Parameters, Parameters);
 	return Pass;
 }
 
 FFullscreenPassDesc MakeScreenTexturePreview(FRenderTargetSource InSource, FViewport InViewport, std::uint32_t InMip,
                                              bool bInInvert)
 {
-	static const auto Material = MakeFullscreenMaterial("Screen texture preview", "Depth/ContactDebug.hlsl", true);
+	static const auto Material = MakeFullscreenMaterial("Screen texture preview", "Depth/ContactDebug.hlsl", true,
+	                                                    {GetDepthPreviewShaderContracts()});
 	FFullscreenPassDesc Pass;
 	Pass.Material = Material;
 	Pass.Lifetime = InSource.Lifetime;
@@ -80,11 +83,10 @@ FFullscreenPassDesc MakeScreenTexturePreview(FRenderTargetSource InSource, FView
 	Pass.Targets = FRenderPassTargets::ColorOnly();
 	Pass.Targets.Name = "Debug/ContactDepth";
 	Pass.Targets.Reads = {InSource};
-	Pass.Parameters = {{"Pixel:Source", FMaterialValue::FromTexture(InSource.Texture)},
-	                   {"Pixel:PreviewV1.Mip", FMaterialValue::Uint(InMip)},
-	                   {"Pixel:PreviewV1.bInvert", FMaterialValue::Uint(bInInvert ? 1 : 0)},
-	                   {"Pixel:PreviewV1.Viewport",
-	                    FMaterialValue::Float(FVec4{InViewport.X, InViewport.Y, InViewport.Width, InViewport.Height})}};
+	Pass.Parameters = {{EDepthPreviewSemantic::PreviewSource, FMaterialValue::FromTexture(InSource.Texture)}};
+	AppendShaderParameters(
+	    Pass.Parameters,
+	    FPreviewV1Parameters{InMip, bInInvert, {InViewport.X, InViewport.Y, InViewport.Width, InViewport.Height}});
 	return Pass;
 }
 } // namespace Hyperion

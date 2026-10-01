@@ -1,4 +1,5 @@
 #include "Hyperion/AssetEditing/AssetProperties.h"
+#include "Hyperion/Materials/PbrParameters.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -7,11 +8,12 @@ namespace Hyperion
 {
 bool CanEditMaterialParameter(const FMaterialAssetParameter& InParameter)
 {
+	const FMaterialSemanticId Semantic(InParameter.Semantic);
 	return InParameter.bActive && InParameter.Source == EMaterialParameterSource::Manual &&
 	       InParameter.OverridePolicy == EMaterialOverridePolicy::AllowOverride &&
 	       (InParameter.OverrideScopes & MaterialScopeBit(EMaterialScope::Material)) &&
-	       InParameter.Semantic != "Pbr.AlphaMode" && InParameter.Semantic != "Pbr.DoubleSided" &&
-	       InParameter.Semantic != "Pbr.Unlit";
+	       Semantic != EHyperionMaterialV1Field::AlphaMode && Semantic != EHyperionMaterialV1Field::bDoubleSided &&
+	       Semantic != EHyperionMaterialV1Field::bUnlit;
 }
 
 void ClampEditableMaterialParameter(std::string_view InSemantic, FMaterialAssetValue& InValue)
@@ -20,9 +22,11 @@ void ClampEditableMaterialParameter(std::string_view InSemantic, FMaterialAssetV
 	{
 		return;
 	}
-	const bool bNormalized = InSemantic == "Pbr.MetallicFactor" || InSemantic == "Pbr.RoughnessFactor" ||
-	                         InSemantic == "Pbr.OcclusionStrength" || InSemantic == "Pbr.AlphaCutoff" ||
-	                         InSemantic == "Pbr.BaseColorFactor";
+	const FMaterialSemanticId Semantic(InSemantic);
+	const bool bNormalized =
+	    Semantic == EHyperionMaterialV1Field::Metallic || Semantic == EHyperionMaterialV1Field::Roughness ||
+	    Semantic == EHyperionMaterialV1Field::OcclusionStrength || Semantic == EHyperionMaterialV1Field::AlphaCutoff ||
+	    Semantic == EHyperionMaterialV1Field::BaseColor;
 	for (auto& Word : InValue.Words)
 	{
 		const auto Value = std::bit_cast<float>(Word);

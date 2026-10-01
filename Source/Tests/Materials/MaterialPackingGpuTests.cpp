@@ -161,7 +161,7 @@ FDrawPacket PrepareDraw(IRHIDevice& InDevice, const FCompiledMaterialDefinition&
 	std::vector<std::optional<FMaterialValue>> Indexed(Snapshot->Schema->GetParameters().size());
 	for (const auto& Entry : Values)
 	{
-		Indexed[Snapshot->Schema->Find(Entry.Name).Index] = Entry.Value;
+		Indexed[Entry.Resolve(*Snapshot->Schema).Index] = Entry.Value;
 	}
 	FDrawPacket Draw;
 	const auto Layout = InDevice.CreateBindingLayout(DescribeMaterialLayout(Program));

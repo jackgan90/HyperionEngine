@@ -1,19 +1,9 @@
+#include "HyperionUniforms.generated.hlsli"
+#include "ShadowParameters.generated.hlsli"
 #ifndef HYP_CASCADED_SHADOWS_V1
 #define HYP_CASCADED_SHADOWS_V1
 
-cbuffer ShadowViewV1 : register(b4)
-{
-	column_major float4x4 ShadowMatrix0;
-	column_major float4x4 ShadowMatrix1;
-	column_major float4x4 ShadowMatrix2;
-	column_major float4x4 ShadowMatrix3;
-	float4 ShadowSplits;
-	float4 ShadowTexels;
-	float4 ShadowRanges;
-	float4 ShadowCamera;
-	float4 ShadowFilter;
-	float4 ShadowControl;
-};
+HYP_UNIFORM_ShadowViewV1(b4);
 
 Texture2D<float> ShadowDepth0 : register(t5);
 Texture2D<float> ShadowDepth1 : register(t6);

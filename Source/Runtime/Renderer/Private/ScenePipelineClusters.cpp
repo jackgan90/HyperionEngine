@@ -23,7 +23,7 @@ void FSceneRenderPipeline::PrepareClusters(const FRenderView& InView, const FMat
 	    std::equal(ClusterParameters.begin(), ClusterParameters.end(), Frame.Parameters.begin(), Frame.Parameters.end(),
 	               [](const auto& InA, const auto& InB)
 	               {
-		               return InA.Name == InB.Name && InA.Value.Type == InB.Value.Type &&
+		               return InA.GetSemantic() == InB.GetSemantic() && InA.Value.Type == InB.Value.Type &&
 		                      (InA.Value.Type.Kind == EMaterialValueKind::Numeric || InA.Value == InB.Value);
 	               });
 	if (!ClusterLifetime || !bSameResources)

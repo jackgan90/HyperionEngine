@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/ClusteredLights.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Materials/Lighting/ClusterParameters.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -232,14 +233,14 @@ FMaterialParameterValues DefaultClusterParameters()
 	static const auto Light = Buffer<FClusterLightData>({});
 	static const auto Header = Buffer<FClusterHeader>({});
 	static const auto Indices = Buffer<std::uint32_t>({});
-	return {{"Engine.View.ClusterViewport", FMaterialValue::Float(FVec4{})},
-	        {"Engine.View.ClusterGrid", FMaterialValue::Float(FVec4{})},
-	        {"Engine.View.ClusterCamera", FMaterialValue::Float(FVec4{})},
-	        {"Engine.View.ClusterForward", FMaterialValue::Float(FVec4{})},
-	        {"Engine.View.ClusterDepth", FMaterialValue::Float(FVec4{})},
-	        {"Engine.View.ClusterLights", BufferValue(Light, 64)},
-	        {"Engine.View.ClusterHeaders", BufferValue(Header, 8)},
-	        {"Engine.View.ClusterIndices", BufferValue(Indices, 4)}};
+	return {{EClusterViewV1Field::ClusterViewport, FMaterialValue::Float(FVec4{})},
+	        {EClusterViewV1Field::ClusterGrid, FMaterialValue::Float(FVec4{})},
+	        {EClusterViewV1Field::ClusterCamera, FMaterialValue::Float(FVec4{})},
+	        {EClusterViewV1Field::ClusterForward, FMaterialValue::Float(FVec4{})},
+	        {EClusterViewV1Field::ClusterDepth, FMaterialValue::Float(FVec4{})},
+	        {EClusterSemantic::ClusterLights, BufferValue(Light, 64)},
+	        {EClusterSemantic::ClusterHeaders, BufferValue(Header, 8)},
+	        {EClusterSemantic::ClusterIndices, BufferValue(Indices, 4)}};
 }
 
 FClusterLightFrame FClusteredLights::Build(const FRenderView& InView, std::span<const FLocalLight> InLights)
@@ -297,17 +298,18 @@ FClusterLightFrame FClusteredLights::Build(const FRenderView& InView, std::span<
 	FClusterLightFrame Result;
 	const auto& Port = Layout.Viewport;
 	Result.Parameters = {
-	    {"Engine.View.ClusterViewport", FMaterialValue::Float(FVec4{Port.X, Port.Y, 1.f / TileSize, 1.f / TileSize})},
-	    {"Engine.View.ClusterGrid",
+	    {EClusterViewV1Field::ClusterViewport,
+	     FMaterialValue::Float(FVec4{Port.X, Port.Y, 1.f / TileSize, 1.f / TileSize})},
+	    {EClusterViewV1Field::ClusterGrid,
 	     FMaterialValue::Float(FVec4{float(Layout.X), float(Layout.Y), float(DepthSlices), 1})},
-	    {"Engine.View.ClusterCamera", FMaterialValue::Float(FVec4{InView.Eye.X, InView.Eye.Y, InView.Eye.Z, 0})},
-	    {"Engine.View.ClusterForward",
+	    {EClusterViewV1Field::ClusterCamera, FMaterialValue::Float(FVec4{InView.Eye.X, InView.Eye.Y, InView.Eye.Z, 0})},
+	    {EClusterViewV1Field::ClusterForward,
 	     FMaterialValue::Float(FVec4{Layout.Forward.X, Layout.Forward.Y, Layout.Forward.Z, 0})},
-	    {"Engine.View.ClusterDepth",
+	    {EClusterViewV1Field::ClusterDepth,
 	     FMaterialValue::Float(FVec4{Layout.DepthScale, Layout.DepthBias, Layout.Near, Layout.Far})},
-	    {"Engine.View.ClusterLights", BufferValue(LightBuffer, 64)},
-	    {"Engine.View.ClusterHeaders", BufferValue(HeaderBuffer, 8)},
-	    {"Engine.View.ClusterIndices", BufferValue(IndexBuffer, 4)}};
+	    {EClusterSemantic::ClusterLights, BufferValue(LightBuffer, 64)},
+	    {EClusterSemantic::ClusterHeaders, BufferValue(HeaderBuffer, 8)},
+	    {EClusterSemantic::ClusterIndices, BufferValue(IndexBuffer, 4)}};
 	Result.Statistics = Statistics;
 	Result.Statistics.bRebuilt = bRebuild;
 	Result.Statistics.BufferBytes =

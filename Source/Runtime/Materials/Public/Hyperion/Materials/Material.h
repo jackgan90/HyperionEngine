@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Materials/MaterialBlocks.h"
 #include "Hyperion/Materials/MaterialSemantics.h"
 #include "Hyperion/Materials/MaterialState.h"
 #include <thread>
@@ -11,6 +12,7 @@ struct FMaterialDescription
 	std::uint64_t Version = 1;
 	std::vector<FMaterialPass> Passes;
 	std::vector<FMaterialParameterDeclaration> Parameters;
+	FShaderParameterContracts ShaderContracts;
 };
 
 class FMaterialDefinition
@@ -84,8 +86,10 @@ public:
 	FMaterialParameterHandle Find(std::string_view InName) const;
 	EMaterialWriteResult Set(std::string_view InName, FMaterialValue InValue);
 	EMaterialWriteResult Set(FMaterialParameterHandle InHandle, FMaterialValue InValue);
-	EMaterialWriteResult SetSemantic(std::string_view InSemantic, FMaterialValue InValue);
+	EMaterialWriteResult SetSemantic(FMaterialSemanticId InSemantic, FMaterialValue InValue);
+	void SetParameters(const FMaterialParameterValues& InValues);
 	void Clear(std::string_view InName);
+	void Clear(FMaterialParameterHandle InHandle);
 	void ReplaceDefinition(const FPreparedMaterialInterface& InInterface);
 
 private:
@@ -95,10 +99,14 @@ private:
 	std::shared_ptr<const FMaterialSnapshot> Snapshot;
 };
 
-// Provider entries use normalized semantic names. Override entries use schema parameter names/aliases.
+// Provider entries carry semantic IDs. Overrides carry handles; authored names resolve at the boundary.
 FMaterialParameterValues ResolveMaterialParameters(const FMaterialSnapshot& InSnapshot,
                                                    const FMaterialParameterValues& InProviders,
                                                    const FMaterialParameterValues& InObject = {},
                                                    const FMaterialParameterValues& InDraw = {},
                                                    std::optional<std::span<const std::size_t>> InActiveParameters = {});
+FMaterialParameterValues RebindMaterialParameters(const FMaterialParameterValues& InValues,
+                                                  const FMaterialParameterSchema& InPrevious,
+                                                  const FMaterialParameterSchema& InNext);
+void RebindMaterialSnapshot(FMaterialSnapshot& InSnapshot, std::shared_ptr<const FMaterialParameterSchema> InSchema);
 } // namespace Hyperion

@@ -1,0 +1,41 @@
+// Cluster shader parameters. Field order defines the GPU layout.
+HYP_SHADER_CONTRACT(Cluster, 1)
+
+HYP_UNIFORM_FLAT_BEGIN(ClusterViewV1)
+	HYP_UNIFORM_WIRE_NAMESPACE("Engine.View")
+	HYP_UNIFORM_FIELD(float4, ClusterViewport, View)
+	HYP_SEMANTIC_CONVENTION("Clustered local lighting view contract V1")
+	HYP_UNIFORM_FIELD(float4, ClusterGrid, View)
+	HYP_SEMANTIC_CONVENTION("Clustered local lighting view contract V1")
+	HYP_UNIFORM_FIELD(float4, ClusterCamera, View)
+	HYP_SEMANTIC_CONVENTION("Clustered local lighting view contract V1")
+	HYP_UNIFORM_FIELD(float4, ClusterForward, View)
+	HYP_SEMANTIC_CONVENTION("Clustered local lighting view contract V1")
+	HYP_UNIFORM_FIELD(float4, ClusterDepth, View)
+	HYP_SEMANTIC_CONVENTION("Clustered local lighting view contract V1")
+HYP_UNIFORM_END()
+
+HYP_RESOURCE_NAMESPACE("Engine.View")
+HYP_READ_BUFFER(FClusterLight, ClusterLights, View)
+HYP_SEMANTIC_CONVENTION("Clustered local lighting structured buffer V1")
+HYP_READ_BUFFER(uint2, ClusterHeaders, View)
+HYP_SEMANTIC_CONVENTION("Clustered local lighting structured buffer V1")
+HYP_READ_BUFFER(uint, ClusterIndices, View)
+HYP_SEMANTIC_CONVENTION("Clustered local lighting structured buffer V1")
+
+HYP_STRUCTURED_BEGIN(FClusterLight)
+	HYP_STRUCTURED_FIELD(float4, PositionRange)
+	HYP_STRUCTURED_FIELD(float4, RadianceType)
+	HYP_STRUCTURED_FIELD(float4, DirectionInner)
+	HYP_STRUCTURED_FIELD(float4, Outer)
+HYP_STRUCTURED_END()
+
+HYP_STRUCTURED_BEGIN(uint2)
+	HYP_STRUCTURED_FIELD(uint2, )
+HYP_STRUCTURED_END()
+
+HYP_STRUCTURED_BEGIN(uint)
+	HYP_STRUCTURED_FIELD(uint, )
+HYP_STRUCTURED_END()
+
+HYP_UNIFORM_ALIAS(ClusterViewInfo, ClusterViewV1)

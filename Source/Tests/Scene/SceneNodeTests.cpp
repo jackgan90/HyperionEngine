@@ -612,6 +612,45 @@ void CheckLocalLightNodes()
 	Scene.RemoveSubtree(Parent);
 	HYP_CHECK(!Scene.FindPointLight(A) && Scene.FindSpotLight(B));
 }
+
+void CheckAuthoredMaterialNames()
+{
+	FMaterialParameterDeclaration First;
+	First.Name = "Pbr.BaseColorTexture";
+	First.Type = FMaterialParameterType::Numeric(EMaterialScalar::Float);
+	FMaterialParameterDeclaration Second = First;
+	Second.Name = "ALBEDO_TEXTURE";
+	FMaterialDescription Description;
+	Description.Name = "Distinct authored parameters";
+	FMaterialPass Pass;
+	Pass.Vertex = {"Unused.hlsl", "VSMain"};
+	Pass.Pixel = {"Unused.hlsl", "PSMain"};
+	Description.Passes.push_back(Pass);
+	Description.Parameters = {First, Second};
+	const auto Definition = std::make_shared<const FMaterialDefinition>(Description);
+	FSceneModel Model;
+	Model.Surface.Instance = std::make_shared<FMaterialInstance>(Definition);
+	Model.Surface.Overrides = {{First.Name, FMaterialValue::Float(3)}, {Second.Name, FMaterialValue::Float(4)}};
+	ValidateSceneMaterialSelections(Model);
+	const auto Resolved = ResolveMaterialParameters(*Model.Surface.Instance->Freeze(), {}, Model.Surface.Overrides);
+	HYP_CHECK(Resolved.size() == 2 && Resolved[0].Value != Resolved[1].Value);
+	for (const FMaterialParameterEntry Entry :
+	     {Model.Surface.Overrides.front(), FMaterialParameterEntry(EEngineSemantic::Time, FMaterialValue::Float(1)),
+	      FMaterialParameterEntry(Definition->GetSchema()->GetHandle(0), FMaterialValue::Float(1))})
+	{
+		Model.Surface.Overrides = {Entry, Entry};
+		bool bRejected{};
+		try
+		{
+			ValidateSceneMaterialSelections(Model);
+		}
+		catch (const std::invalid_argument&)
+		{
+			bRejected = true;
+		}
+		HYP_CHECK(bRejected);
+	}
+}
 } // namespace
 
 void CheckSceneNodes()
@@ -625,4 +664,5 @@ void CheckSceneNodes()
 	CheckCameraAndLightValues();
 	CheckDefaultLightValues();
 	CheckLocalLightNodes();
+	CheckAuthoredMaterialNames();
 }

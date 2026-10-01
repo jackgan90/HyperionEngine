@@ -1,5 +1,5 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
-#include "Support/ShaderSourceSupport.h"
+#include "Support/RendererShaderSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
 
@@ -7,7 +7,7 @@ using namespace Hyperion;
 
 void CheckDeferredShaders()
 {
-	FShaderCompiler Compiler(TestShaderRoot(), "deferred-shader-contract-cache");
+	FShaderCompiler Compiler(RendererTestShaderRoot(), "deferred-shader-contract-cache");
 	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
 	{
 		for (const bool bInstance : {false, true})

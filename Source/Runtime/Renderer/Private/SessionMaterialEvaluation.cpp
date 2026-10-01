@@ -280,7 +280,7 @@ const FViewMaterialProviders::FRefresh& FViewMaterialProviders::PrepareShared(
 }
 
 FMaterialProvidedValue FViewMaterialProviders::Evaluate(const FMaterialProviderInputs& InInputs,
-                                                        std::string_view InSemantic)
+                                                        FMaterialSemanticId InSemantic)
 {
 	if (const auto Found = Shared.find(InSemantic); Found != Shared.end())
 	{

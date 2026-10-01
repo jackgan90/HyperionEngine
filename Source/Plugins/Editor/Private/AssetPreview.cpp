@@ -1,6 +1,7 @@
 #include "AssetWorkspace.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Materials/PbrMaterial.h"
+#include "Hyperion/Materials/PbrParameters.h"
 #include "Hyperion/Renderer/NativeModel.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
@@ -62,13 +63,31 @@ std::shared_ptr<const FMaterialAssetData> ReferenceSurface(FAssetService& InAsse
 	auto Data = std::make_shared<FMaterialAssetData>(*ResolveMaterialAssetGraph(*Graph, *Graph->Root, InAssets));
 	auto Material = std::make_shared<FMaterialAsset>(*Data->Asset);
 	Material->Name = bInMetal ? "Reflective" : "Diffuse";
-	for (auto& Entry : Material->Values)
+	for (const auto& Parameter : Material->Parameters)
 	{
-		if (Entry.Name == "Pbr.MetallicFactor")
+		const auto Semantic = FMaterialSemanticId(Parameter.Semantic);
+		if (Semantic != EHyperionMaterialV1Field::Metallic && Semantic != EHyperionMaterialV1Field::Roughness)
+		{
+			continue;
+		}
+		auto Found = std::find_if(Material->Values.begin(), Material->Values.end(),
+		                          [&](const auto& InEntry)
+		                          {
+			                          return InEntry.Name == Parameter.Name;
+		                          });
+		if (Found == Material->Values.end())
+		{
+			FMaterialAssetValue Value;
+			Value.Type = Parameter.Type;
+			Material->Values.push_back({Parameter.Name, Parameter.Default.value_or(std::move(Value))});
+			Found = std::prev(Material->Values.end());
+		}
+		auto& Entry = *Found;
+		if (Semantic == EHyperionMaterialV1Field::Metallic)
 		{
 			Entry.Value.Words = {std::bit_cast<std::uint32_t>(bInMetal ? 1.f : 0.f)};
 		}
-		if (Entry.Name == "Pbr.RoughnessFactor")
+		if (Semantic == EHyperionMaterialV1Field::Roughness)
 		{
 			Entry.Value.Words = {std::bit_cast<std::uint32_t>(bInMetal ? .08f : .8f)};
 		}

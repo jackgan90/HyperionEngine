@@ -1,20 +1,9 @@
+#include "EnvironmentParameters.generated.hlsli"
+#include "HyperionUniforms.generated.hlsli"
 #ifndef HYP_ENVIRONMENT_LIGHTING
 #define HYP_ENVIRONMENT_LIGHTING
 
-cbuffer EnvironmentV1 : register(b0, space2)
-{
-	float4 EnvironmentControl;
-	float4 EnvironmentRotation;
-	float4 EnvironmentSh0;
-	float4 EnvironmentSh1;
-	float4 EnvironmentSh2;
-	float4 EnvironmentSh3;
-	float4 EnvironmentSh4;
-	float4 EnvironmentSh5;
-	float4 EnvironmentSh6;
-	float4 EnvironmentSh7;
-	float4 EnvironmentSh8;
-};
+HYP_UNIFORM_EnvironmentV1(b0, space2);
 
 TextureCube<float4> EnvironmentSpecular : register(t0, space2);
 Texture2D<float4> EnvironmentBrdf : register(t1, space2);

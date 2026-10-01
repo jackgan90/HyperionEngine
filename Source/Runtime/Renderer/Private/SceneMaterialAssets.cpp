@@ -66,7 +66,7 @@ FSceneMaterialSelection PrepareSelection(const FSceneMaterialAsset& InSelection,
 		FMaterialInstance Edited(Result.AssetSnapshot);
 		for (auto& Value : InResources.PrepareAssetValues(InSelection.Values, Textures))
 		{
-			Edited.Set(Value.Name, std::move(Value.Value));
+			Edited.Set(Value.Resolve(*Edited.Freeze()->Schema), std::move(Value.Value));
 		}
 		Result.Snapshot = Edited.Freeze();
 	}
@@ -129,11 +129,12 @@ FSceneMaterialAsset PersistSceneMaterialSelection(const FSceneMaterialSelection&
 			const auto Found = std::find_if(Base.begin(), Base.end(),
 			                                [&](const auto& InEntry)
 			                                {
-				                                return InEntry.Name == Entry.Name;
+				                                return InEntry.Handle == Entry.Handle;
 			                                });
 			if (Found == Base.end() || Found->Value != Entry.Value)
 			{
-				Result.Values.push_back({Entry.Name, PersistValue(InSelection, Entry.Value)});
+				Result.Values.push_back(
+				    {std::string(Entry.GetName(*Snapshot->Schema)), PersistValue(InSelection, Entry.Value)});
 			}
 		}
 		for (const auto& Entry : InSelection.AssetSnapshot->Overrides)
@@ -141,16 +142,17 @@ FSceneMaterialAsset PersistSceneMaterialSelection(const FSceneMaterialSelection&
 			if (std::none_of(Snapshot->Overrides.begin(), Snapshot->Overrides.end(),
 			                 [&](const auto& InEntry)
 			                 {
-				                 return InEntry.Name == Entry.Name;
+				                 return InEntry.Handle == Entry.Handle;
 			                 }))
 			{
 				// Clearing a base value would change fallback semantics; represent the effective default explicitly.
-				const auto& Parameter = Snapshot->Schema->Get(Snapshot->Schema->Find(Entry.Name));
+				const auto& Parameter = Snapshot->Schema->Get(Entry.Resolve(*Snapshot->Schema));
 				if (!Parameter.Default)
 				{
 					throw std::runtime_error("Cannot persist removal of a required asset material value");
 				}
-				Result.Values.push_back({Entry.Name, PersistValue(InSelection, *Parameter.Default)});
+				Result.Values.push_back(
+				    {std::string(Entry.GetName(*Snapshot->Schema)), PersistValue(InSelection, *Parameter.Default)});
 			}
 		}
 	}
@@ -160,7 +162,13 @@ FSceneMaterialAsset PersistSceneMaterialSelection(const FSceneMaterialSelection&
 	}
 	for (const auto& Entry : InSelection.Overrides)
 	{
-		Result.Overrides.push_back({Entry.Name, PersistValue(InSelection, Entry.Value)});
+		const bool bTyped = Entry.Handle.SchemaIdentity || !Entry.Semantic.IsEmpty();
+		if (bTyped && !Snapshot)
+		{
+			throw std::invalid_argument("Typed scene material overrides require a schema for persistence");
+		}
+		const auto Name = bTyped ? std::string(Entry.GetName(*Snapshot->Schema)) : Entry.Name;
+		Result.Overrides.push_back({Name, PersistValue(InSelection, Entry.Value)});
 	}
 	ValidateSceneMaterialAsset(Result);
 	return Result;

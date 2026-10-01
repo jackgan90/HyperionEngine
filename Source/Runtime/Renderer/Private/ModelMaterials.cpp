@@ -1,7 +1,4 @@
 #include "ModelMaterials.h"
-#include "EnvironmentParameters.h"
-#include "Hyperion/Renderer/CascadedShadowMap.h"
-#include "Hyperion/Renderer/ClusteredLights.h"
 
 namespace Hyperion
 {
@@ -13,29 +10,6 @@ struct FMaterialAssetLifetime
 	std::shared_ptr<const FCompiledMaterialDefinition> Compiled;
 };
 
-void SemanticDefaults(FMaterialDescription& InDescription)
-{
-	auto Defaults = DefaultShadowParameters();
-	const auto ClusterDefaults = DefaultClusterParameters();
-	Defaults.insert(Defaults.end(), ClusterDefaults.begin(), ClusterDefaults.end());
-	const auto EnvironmentDefaults = EnvironmentParameters();
-	Defaults.insert(Defaults.end(), EnvironmentDefaults.begin(), EnvironmentDefaults.end());
-	for (auto& Parameter : InDescription.Parameters)
-	{
-		if (Parameter.Source != EMaterialParameterSource::Semantic || Parameter.Default)
-		{
-			continue;
-		}
-		for (const auto& Entry : Defaults)
-		{
-			if (Parameter.Semantic == Entry.Name)
-			{
-				Parameter.Default = Entry.Value;
-				break;
-			}
-		}
-	}
-}
 } // namespace
 
 std::vector<FVertexAttribute> ModelVertexAttributes()
@@ -183,11 +157,10 @@ FRenderMaterialDesc FMaterialAssetCache::Prepare(const std::shared_ptr<const FMa
 	if (!Existing)
 	{
 		auto Description = ResolveMaterialAssetDescription(*InData->Asset, Resolve);
-		SemanticDefaults(Description);
 		FMaterialInstance Instance(std::make_shared<const FMaterialDefinition>(std::move(Description)));
 		for (auto& Entry : ResolveMaterialAssetValues(InData->Asset->Values, Resolve))
 		{
-			Instance.Set(Entry.Name, std::move(Entry.Value));
+			Instance.Set(Entry.Resolve(*Instance.Freeze()->Schema), std::move(Entry.Value));
 		}
 		Existing = Instance.Freeze();
 		{
@@ -203,7 +176,7 @@ FRenderMaterialDesc FMaterialAssetCache::Prepare(const std::shared_ptr<const FMa
 			Compiled = std::make_shared<const FCompiledMaterialDefinition>(
 			    CompileMaterialDefinition(InCompiler, Surface->Definition, InFormat));
 		}
-		Surface->Schema = Compiled->Interface.Schema;
+		RebindMaterialSnapshot(*Surface, Compiled->Interface.Schema);
 	}
 	Surface->Lifetime = std::make_shared<const FMaterialAssetLifetime>(InData, Compiled);
 	if (!bInCompile)

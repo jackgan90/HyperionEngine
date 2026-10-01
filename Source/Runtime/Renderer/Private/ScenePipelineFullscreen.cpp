@@ -1,6 +1,11 @@
 #include "DirectionalLighting.h"
 #include "EnvironmentParameters.h"
+#include "Hyperion/Materials/Lighting/SceneLightingParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
+#include "Hyperion/Renderer/ShaderParameters/DeferredLightingParameters.h"
+#include "Hyperion/Renderer/ShaderParameters/OutputParameters.h"
+#include <bit>
 
 namespace Hyperion
 {
@@ -15,49 +20,41 @@ std::shared_ptr<const FMaterialDefinition> LightingMaterial(std::string InName, 
 {
 	// Fullscreen passes receive already resolved values as manual parameters, without scene providers.
 	auto Description = MakeFullscreenMaterial(std::move(InName), std::move(InShader))->GetDescription();
-	Description.Parameters.push_back(
-	    {"Pixel:HyperionDirectionalLightsV1", FMaterialParameterType::Resource(EMaterialValueKind::ReadBuffer)});
+	Description.ShaderContracts = {GetDeferredLightingShaderContracts()};
 	return std::make_shared<const FMaterialDefinition>(std::move(Description));
 }
 
 void SetLightingParameters(FFullscreenPassDesc& InPass, FRenderSession& InSession, const FMaterialFrameContext& InFrame,
                            const FRenderView& InMain, bool bInNoDirectional)
 {
-	const auto Set = [&](std::string InName, FMaterialValue InValue)
-	{
-		InPass.Parameters.push_back({"Pixel:DeferredLightV1." + InName, std::move(InValue)});
-	};
-	Set("InverseViewProjection", FMaterialValue::Matrix(Inverse(InMain.ViewProjection)));
+	FDeferredLightV1Parameters Parameters;
+	Parameters.InverseViewProjection = Inverse(InMain.ViewProjection);
 	const auto View = InPass.Viewport;
-	Set("Viewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height}));
-	Set("DepthRange", FMaterialValue::Float(FVec2{View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)}));
-	Set("Eye", FMaterialValue::Float(InMain.Eye));
+	Parameters.Viewport = {View.X, View.Y, View.Width, View.Height};
+	Parameters.DepthRange = {View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)};
+	Parameters.Eye = InMain.Eye;
 	const auto Directionals = InSession.ResolveFrameSemantic(InFrame, DirectionalLightsSemantic);
 	InPass.Parameters.push_back(
-	    {"Pixel:HyperionDirectionalLightsV1", Directionals ? *Directionals : DirectionalLightBuffer()});
+	    {ESceneLightingSemantic::DirectionalLights, Directionals ? *Directionals : DirectionalLightBuffer()});
 	for (const auto& Default : EnvironmentParameters())
 	{
-		const auto Value = InSession.ResolveFrameSemantic(InFrame, Default.Name);
-		const auto Name = Default.Name.substr(std::string("Engine.Scene.").size());
-		InPass.Parameters.push_back(
-		    {"Pixel:" + (Default.Value.Type.Kind == EMaterialValueKind::Numeric ? "EnvironmentV1." + Name : Name),
-		     Value ? *Value : Default.Value});
+		const auto Value = InSession.ResolveFrameSemantic(InFrame, Default.GetSemantic());
+		InPass.Parameters.push_back({Default.GetSemantic(), Value ? *Value : Default.Value});
 	}
-	for (const auto& Mapping : {std::pair{"LightDirection", "Engine.Scene.MainDirectionalLightDirection"},
-	                            std::pair{"LightColor", "Engine.Scene.MainDirectionalLightColor"},
-	                            std::pair{"Ambient", "Engine.Scene.AmbientColor"}})
+	const auto SceneVector = [&](FMaterialSemanticId InSemantic)
 	{
-		if (bInNoDirectional && std::string_view(Mapping.first) != "Ambient")
-		{
-			continue;
-		}
-		const auto Value = InSession.ResolveFrameSemantic(InFrame, Mapping.second);
+		const auto Value = InSession.ResolveFrameSemantic(InFrame, InSemantic);
 		if (!Value || Value->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
 		{
 			throw std::invalid_argument("Deferred lighting requires frame-resolved scene light semantics");
 		}
-		Set(Mapping.first, *Value);
-	}
+		return FVec3{std::bit_cast<float>(Value->Words[0]), std::bit_cast<float>(Value->Words[1]),
+		             std::bit_cast<float>(Value->Words[2])};
+	};
+	Parameters.LightDirection = bInNoDirectional ? FVec3{} : SceneVector(EHyperionSceneV1Field::MainLightDirection);
+	Parameters.LightColor = bInNoDirectional ? FVec3{} : SceneVector(EHyperionSceneV1Field::MainLightColor);
+	Parameters.Ambient = SceneVector(EHyperionSceneV1Field::AmbientColor);
+	AppendShaderParameters(InPass.Parameters, Parameters);
 }
 } // namespace
 
@@ -71,7 +68,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	static const auto ClusterContact =
 	    LightingMaterial("Deferred clustered contact lighting", "Deferred/ClusteredContact.hlsl");
 	const bool bClustered = Settings.bClusteredLighting && LastStatistics.LocalLights.bActive;
-	const auto Direct = Session.ResolveFrameSemantic(InFrame, "Engine.Scene.MainDirectionalLightColor");
+	const auto Direct = Session.ResolveFrameSemantic(InFrame, EHyperionSceneV1Field::MainLightColor);
 	if (!Direct || Direct->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
 	{
 		throw std::invalid_argument("Deferred lighting requires scene directional radiance");
@@ -82,14 +79,14 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	if (FeatureResources.DirectionalVisibility.Texture && !bNoDirectional)
 	{
 		Result.Material = bClustered ? ClusterContact : Contact;
-		Result.Parameters.push_back(
-		    {"Pixel:ContactVisibility", FMaterialValue::FromTexture(FeatureResources.DirectionalVisibility.Texture)});
+		Result.Parameters.push_back({EDeferredLightingSemantic::ContactVisibility,
+		                             FMaterialValue::FromTexture(FeatureResources.DirectionalVisibility.Texture)});
 		FMaterialSampler Sampler;
 		Sampler.U = Sampler.V = Sampler.W = EMaterialAddressMode::Clamp;
 		Sampler.bMinLinear = false;
 		Sampler.bMagLinear = false;
 		Sampler.bMipLinear = false;
-		Result.Parameters.push_back({"Pixel:ContactSampler", FMaterialValue::FromSampler(Sampler)});
+		Result.Parameters.push_back({EDeferredLightingSemantic::ContactSampler, FMaterialValue::FromSampler(Sampler)});
 	}
 	Result.DepthConvention = InMain.DepthConvention;
 	Result.Lifetime = Lifetime;
@@ -107,13 +104,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	{
 		Result.Targets.Name = bNoDirectional ? "Deferred/ClusterLighting" : "Deferred/LightingClustered";
 		Result.ParameterLifetime = ClusterLifetime;
-		for (const auto& Parameter : ClusterParameters)
-		{
-			const auto Name = Parameter.Name.substr(std::string("Engine.View.").size());
-			Result.Parameters.push_back(
-			    {"Pixel:" + (Parameter.Value.Type.Kind == EMaterialValueKind::Numeric ? "ClusterViewV1." + Name : Name),
-			     Parameter.Value});
-		}
+		Result.Parameters.insert(Result.Parameters.end(), ClusterParameters.begin(), ClusterParameters.end());
 	}
 	auto ShadowView = InMain;
 	if (!bNoDirectional)
@@ -122,12 +113,9 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	}
 	for (const auto& Parameter : ShadowView.Parameters)
 	{
-		if (!bNoDirectional && Parameter.Name.starts_with("Engine.View.Shadow"))
+		if (!bNoDirectional && GetEngineSemanticPolicy(Parameter.GetSemantic()).Group == EEngineSemanticGroup::Shadow)
 		{
-			const auto Name = Parameter.Name.substr(std::string("Engine.View.").size());
-			Result.Parameters.push_back(
-			    {"Pixel:" + (Parameter.Value.Type.Kind == EMaterialValueKind::Numeric ? "ShadowViewV1." + Name : Name),
-			     Parameter.Value});
+			Result.Parameters.push_back(Parameter);
 			if (Parameter.Value.Texture && !LastStatistics.bShadows)
 			{
 				Result.Targets.Reads.push_back({ERenderTargetKind::Texture, Parameter.Value.Texture, Lifetime, true});
@@ -138,17 +126,20 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	{
 		Result.Targets.Reads.push_back({ERenderTargetKind::Texture, GBuffer[Index], Lifetime, false});
 		Result.Parameters.push_back(
-		    {"Pixel:GBuffer" + std::to_string(Index), FMaterialValue::FromTexture(GBuffer[Index])});
+		    {std::array{EDeferredLightingSemantic::GBuffer0, EDeferredLightingSemantic::GBuffer1,
+		                EDeferredLightingSemantic::GBuffer2, EDeferredLightingSemantic::GBuffer3}[Index],
+		     FMaterialValue::FromTexture(GBuffer[Index])});
 	}
 	Result.Targets.Reads.push_back({ERenderTargetKind::Texture, SceneDepth, Lifetime, false});
-	Result.Parameters.push_back({"Pixel:SceneDepth", FMaterialValue::FromTexture(SceneDepth)});
+	Result.Parameters.push_back({EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(SceneDepth)});
 	SetLightingParameters(Result, Session, InFrame, InMain, bNoDirectional);
 	return Result;
 }
 
 FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 {
-	static const auto Material = MakeFullscreenMaterial("GBuffer debug", "Deferred/Debug.hlsl", true);
+	static const auto Material =
+	    MakeFullscreenMaterial("GBuffer debug", "Deferred/Debug.hlsl", true, {GetDeferredLightingShaderContracts()});
 	FFullscreenPassDesc Result;
 	Result.Material = Material;
 	Result.DepthConvention = InMain.DepthConvention;
@@ -161,17 +152,20 @@ FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 	{
 		Result.Targets.Reads.push_back({ERenderTargetKind::Texture, GBuffer[Index], Lifetime, false});
 		Result.Parameters.push_back(
-		    {"Pixel:GBuffer" + std::to_string(Index), FMaterialValue::FromTexture(GBuffer[Index])});
+		    {std::array{EDeferredLightingSemantic::GBuffer0, EDeferredLightingSemantic::GBuffer1,
+		                EDeferredLightingSemantic::GBuffer2, EDeferredLightingSemantic::GBuffer3}[Index],
+		     FMaterialValue::FromTexture(GBuffer[Index])});
 	}
 	Result.Targets.Reads.push_back({ERenderTargetKind::Texture, SceneDepth, Lifetime, false});
-	Result.Parameters.push_back({"Pixel:SceneDepth", FMaterialValue::FromTexture(SceneDepth)});
-	Result.Parameters.push_back({"Pixel:GBufferDebugV1.Mode", FMaterialValue::Uint(Settings.DebugMode)});
+	Result.Parameters.push_back({EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(SceneDepth)});
+	AppendShaderParameters(Result.Parameters, FGBufferDebugV1Parameters{Settings.DebugMode});
 	return Result;
 }
 
 FFullscreenPassDesc FSceneRenderPipeline::Tonemap(const FRenderView& InMain) const
 {
-	static const auto Material = MakeFullscreenMaterial("HDR tonemap", "Common/Tonemap.hlsl", true);
+	static const auto Material =
+	    MakeFullscreenMaterial("HDR tonemap", "Common/Tonemap.hlsl", true, {GetOutputShaderContracts()});
 	FFullscreenPassDesc Result;
 	Result.Material = Material;
 	Result.DepthConvention = InMain.DepthConvention;
@@ -183,8 +177,8 @@ FFullscreenPassDesc FSceneRenderPipeline::Tonemap(const FRenderView& InMain) con
 	Result.Targets = OutputTargets(FVec4{});
 	Result.Targets.Name = "Output/Tonemap";
 	Result.Targets.Reads = {{ERenderTargetKind::Texture, SceneColor, Lifetime, false}};
-	Result.Parameters = {{"Pixel:SceneColor", FMaterialValue::FromTexture(SceneColor)},
-	                     {"Pixel:OutputV1.Exposure", FMaterialValue::Float(Settings.Exposure)}};
+	Result.Parameters = {{EOutputSemantic::SceneColor, FMaterialValue::FromTexture(SceneColor)}};
+	AppendShaderParameters(Result.Parameters, FOutputV1Parameters{Settings.Exposure});
 	return Result;
 }
 } // namespace Hyperion

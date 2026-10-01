@@ -176,7 +176,8 @@ private:
 	void DrawSkyProperties(FGui& InGui, FEntry& InEntry);
 	void DrawMaterialProperties(FGui& InGui, FEntry& InEntry);
 	bool EditReference(FGui& InGui, const char* InLabel, FAssetRef& InReference, std::string_view InType);
-	bool EditMaterialValue(FGui& InGui, const std::string& InId, FMaterialAssetValue& InValue);
+	bool EditMaterialValue(FGui& InGui, const std::string& InId, FMaterialAssetValue& InValue,
+	                       EMaterialEditHint InHint = EMaterialEditHint::Default);
 	void DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMaterialAsset& InMaterial,
 	                           const FMaterialAssetParameter& InParameter);
 	void ObserveProperty(FGui& InGui, const std::string& InId);

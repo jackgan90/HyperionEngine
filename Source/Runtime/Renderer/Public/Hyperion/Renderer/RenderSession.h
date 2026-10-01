@@ -78,7 +78,7 @@ public:
 	void SetSceneParameters(FMaterialParameterValues InValues);
 	FMaterialProviderRegistry& GetProviders();
 	// Render only. Resolves Global/Frame/Scene dependencies; returns no value for any local dependency.
-	FMaterialSharedValue ResolveFrameSemantic(const FMaterialFrameContext& InFrame, std::string_view InSemantic);
+	FMaterialSharedValue ResolveFrameSemantic(const FMaterialFrameContext& InFrame, FMaterialSemanticId InSemantic);
 	FRenderBatchSystem& GetBatchSystem();     // Register strategies on Main before the first build.
 	FSceneVisibilityStats Statistics() const; // Legacy: last-view visibility, family-wide draws/batches.
 	const std::vector<FRenderViewStatistics>& ViewStatistics() const;

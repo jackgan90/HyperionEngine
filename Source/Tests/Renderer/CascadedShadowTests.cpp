@@ -1,3 +1,4 @@
+#include "Hyperion/Materials/Lighting/ShadowParameters.h"
 #include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Support/TestSupport.h"
 #include <cmath>
@@ -255,7 +256,7 @@ void CheckDepthConventions()
 	HYP_CHECK(Queries == 8);
 	for (const auto& Parameter : DefaultShadowParameters(EDepthConvention::Reversed))
 	{
-		if (Parameter.Name == "Engine.View.ShadowSampler")
+		if (Parameter.GetSemantic() == EShadowSemantic::ShadowSampler)
 		{
 			HYP_CHECK(Parameter.Value.Sampler.Compare == EMaterialSamplerCompare::GreaterEqual);
 		}

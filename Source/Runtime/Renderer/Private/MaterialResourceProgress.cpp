@@ -9,7 +9,7 @@ std::vector<std::optional<FMaterialValue>> StaticValues(const FMaterialSnapshot&
                                                         const FCompiledMaterialDefinition& InCompiled)
 {
 	FMaterialSnapshot Snapshot = InSnapshot;
-	Snapshot.Schema = InCompiled.Interface.Schema;
+	RebindMaterialSnapshot(Snapshot, InCompiled.Interface.Schema);
 	std::vector<std::size_t> Required;
 	const auto& Parameters = Snapshot.Schema->GetParameters();
 	for (const auto& Pass : InCompiled.Passes)
@@ -27,7 +27,7 @@ std::vector<std::optional<FMaterialValue>> StaticValues(const FMaterialSnapshot&
 	std::vector<std::optional<FMaterialValue>> Result(Parameters.size());
 	for (const auto& Value : Values)
 	{
-		Result[Snapshot.Schema->Find(Value.Name).Index] = Value.Value;
+		Result[Value.Resolve(*Snapshot.Schema).Index] = Value.Value;
 	}
 	return Result;
 }
@@ -178,10 +178,10 @@ bool FRenderResourceCoordinator::ProcessMaterials()
 			++Iterator;
 		}
 	}
+	Compute.Collect();
 	if (MaterialGpu)
 	{
 		Fullscreen.Collect();
-		Compute.Collect();
 		bPending |= MaterialGpu->Collect();
 		Stats.Materials = MaterialGpu->Statistics();
 	}

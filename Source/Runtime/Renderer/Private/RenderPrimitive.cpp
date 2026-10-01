@@ -113,7 +113,7 @@ void ValidatePrimitiveState(const FRenderPrimitiveState& InState)
 	if (Surface && Surface->GetCompiled())
 	{
 		auto Snapshot = *Surface->GetSnapshot();
-		Snapshot.Schema = Surface->GetCompiled()->Interface.Schema;
+		RebindMaterialSnapshot(Snapshot, Surface->GetCompiled()->Interface.Schema);
 		const std::array<std::size_t, 0> NoRequiredParameters{};
 		ResolveMaterialParameters(Snapshot, {}, GetPrimitiveMaterialOverrides(InState, *Snapshot.Schema), {},
 		                          NoRequiredParameters);

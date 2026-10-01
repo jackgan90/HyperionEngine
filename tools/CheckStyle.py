@@ -10,7 +10,7 @@ import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE_DIRS = ('Source', 'Content/Shaders')
-SOURCE_SUFFIXES = ('.h', '.cpp', '.hlsl', '.hlsli')
+SOURCE_SUFFIXES = ('.h', '.inl', '.cpp', '.hlsl', '.hlsli')
 
 
 def owned_files():
@@ -29,14 +29,28 @@ def check_paths(sources):
             failures.append(f'{path.relative_to(ROOT)}: expected PascalCase filename (.h for headers)')
     headers = {path.relative_to(public).as_posix(): path
                for public in (ROOT / 'Source').rglob('Public')
-               for path in public.rglob('*.h')}
+               for path in public.rglob('*') if path.suffix in ('.h', '.inl')}
     lookup = {name.lower(): name for name in headers}
+    generated_includes = {'HyperionUniforms.generated.hlsli'}
+    for header in headers.values():
+        if header.suffix != '.h':
+            continue
+        text = header.read_text(encoding='utf-8')
+        domain = re.search(r'^#define HYP_SHADER_DOMAIN ([A-Za-z][A-Za-z0-9]*)$', text, re.MULTILINE)
+        declaration = re.search(r'^#define HYP_SHADER_DECLARATIONS "([^"]+)"$', text, re.MULTILINE)
+        if domain and declaration and declaration[1] in headers:
+            generated_includes.add(domain[1] + 'Parameters.generated.hlsli')
     for path in sources:
         for line, include in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
             match = re.match(r'\s*#\s*include\s*[<"]([^>"]+)[>"]', include)
             if not match:
                 continue
             name = match[1]
+            if (name in generated_includes
+                    and path.suffix in ('.hlsl', '.hlsli')
+                    and (ROOT / 'Source/Runtime/Materials/Private/ShaderParameters.cpp').is_file()):
+                # Accept only virtual includes backed by an existing owner declaration.
+                continue
             if name.lower().startswith('hyperion/'):
                 if name not in headers:
                     failures.append(f'{path.relative_to(ROOT)}:{line}: invalid include {name}; '

@@ -1,8 +1,9 @@
+#include "OutlineParameters.generated.hlsli"
 Texture2D<float> ObjectMask : register(t0);
 
 cbuffer OutlineV1 : register(b0)
 {
-	float4 Parameters;
+	FOutlineV1Uniform Outline;
 };
 
 float Exterior(int2 InPixel, int2 InSize, float InRadius)
@@ -33,14 +34,14 @@ float PSMain(float4 InPosition : SV_Position) : SV_Target0
 	uint Width;
 	uint Height;
 	ObjectMask.GetDimensions(Width, Height);
-	int Scale = int(Parameters.y);
+	int Scale = int(Outline.Parameters.y);
 	int2 Pixel = int2(InPosition.xy) * Scale;
 	float Coverage = 0;
 	for (int Y = 0; Y < Scale; ++Y)
 	{
 		for (int X = 0; X < Scale; ++X)
 		{
-			Coverage += Exterior(Pixel + int2(X, Y), int2(Width, Height), Parameters.x * Scale);
+			Coverage += Exterior(Pixel + int2(X, Y), int2(Width, Height), Outline.Parameters.x * Scale);
 		}
 	}
 	return Coverage / (Scale * Scale);

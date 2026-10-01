@@ -36,27 +36,43 @@ std::size_t MaterialValueStorageBytes(const FMaterialValue& InValue)
 
 FMaterialInputValues::FMaterialInputValues(FMaterialParameterValues InValues)
 {
+	for (auto& Entry : InValues)
+	{
+		Entry = {Entry.GetSemantic(), std::move(Entry.Value)};
+	}
 	std::sort(InValues.begin(), InValues.end(),
 	          [](const FMaterialParameterEntry& InA, const FMaterialParameterEntry& InB)
 	          {
-		          return InA.Name < InB.Name;
+		          return InA.Semantic < InB.Semantic;
 	          });
-	std::string_view Previous;
+	FMaterialSemanticId Previous;
 	for (const auto& Entry : InValues)
 	{
-		if (Entry.Name.empty() || Entry.Name == Previous)
+		if (Entry.Semantic.IsEmpty() || Entry.Semantic == Previous)
 		{
 			throw std::invalid_argument("Duplicate or empty material provider input");
 		}
 		Entry.Value.Validate();
-		Previous = Entry.Name;
+		Previous = Entry.Semantic;
 	}
 	if (!InValues.empty())
 	{
+		auto Lookup = std::make_shared<FSemanticLookup>();
+		for (std::size_t Index = 0; Index < InValues.size(); ++Index)
+		{
+			if (!Lookup->emplace(InValues[Index].Semantic, Index).second)
+			{
+				throw std::invalid_argument("Duplicate material provider semantic identity");
+			}
+		}
+		SemanticLookup = std::move(Lookup);
 		StorageBytes = sizeof(FMaterialParameterValues) + InValues.capacity() * sizeof(FMaterialParameterEntry);
+		StorageBytes +=
+		    sizeof(FSemanticLookup) + InValues.size() * (sizeof(FSemanticLookup::value_type) + 3 * sizeof(void*));
 		for (const auto& Entry : InValues)
 		{
-			StorageBytes += Entry.Name.capacity() + MaterialValueStorageBytes(Entry.Value) - sizeof(Entry.Value);
+			StorageBytes += Entry.Name.capacity() + Entry.Semantic.GetStorageBytes() +
+			                MaterialValueStorageBytes(Entry.Value) - sizeof(Entry.Value);
 		}
 		Storage = std::make_shared<const FMaterialParameterValues>(std::move(InValues));
 	}
@@ -66,5 +82,15 @@ const FMaterialParameterValues& FMaterialInputValues::Get() const
 {
 	static const FMaterialParameterValues Empty;
 	return Storage ? *Storage : Empty;
+}
+
+const FMaterialValue* FMaterialInputValues::Find(FMaterialSemanticId InSemantic) const
+{
+	if (!SemanticLookup)
+	{
+		return nullptr;
+	}
+	const auto Found = SemanticLookup->find(InSemantic);
+	return Found != SemanticLookup->end() ? &Storage->at(Found->second).Value : nullptr;
 }
 } // namespace Hyperion

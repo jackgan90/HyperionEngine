@@ -1,0 +1,23 @@
+// ContactShadow shader parameters. Field order defines the GPU layout.
+HYP_SHADER_CONTRACT(ContactShadow, 1)
+
+HYP_UNIFORM_BEGIN(ContactV1, ContactShadow)
+	HYP_UNIFORM_FIELD(float4x4, ViewProjection, View)
+	HYP_SEMANTIC_CONVENTION("Column-vector world to clip")
+	HYP_UNIFORM_FIELD(float4x4, InverseViewProjection, View)
+	HYP_UNIFORM_FIELD(float4, Viewport, View)
+	HYP_UNIFORM_FIELD(float3, Eye, View)
+	HYP_SEMANTIC_CONVENTION("World-space eye position")
+	HYP_UNIFORM_FIELD(float3, LightDirection, Scene)
+	HYP_SEMANTIC_CONVENTION("Unit world-space surface-to-light vector")
+	HYP_UNIFORM_FIELD(float, RayLength, Pass)
+	HYP_UNIFORM_FIELD(float, Thickness, Pass)
+	HYP_UNIFORM_FIELD(float, Bias, Pass)
+	HYP_UNIFORM_FIELD(uint, MaxSteps, Pass)
+	HYP_UNIFORM_FIELD(bool, bReversed, Pass)
+HYP_UNIFORM_END()
+
+HYP_RESOURCE_NAMESPACE("Engine.Pass")
+HYP_TEXTURE_2D(float, HierarchicalDepth, Pass)
+HYP_TEXTURE_2D(float4, SurfaceNormals, Pass)
+HYP_TEXTURE_2D(float4, SurfaceCoverage, Pass)

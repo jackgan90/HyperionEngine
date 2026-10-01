@@ -1,3 +1,4 @@
+#include "Hyperion/Materials/Lighting/SceneLightingParameters.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include <algorithm>
 #include <bit>
@@ -57,7 +58,7 @@ void FContactShadowFeature::AddShadows(FRenderFeatureContext& InContext)
 {
 	auto& Session = InContext.Session;
 	const auto& Settings = InContext.Settings.ContactShadows;
-	const auto Direct = Session.ResolveFrameSemantic(InContext.Frame, "Engine.Scene.MainDirectionalLightColor");
+	const auto Direct = Session.ResolveFrameSemantic(InContext.Frame, EHyperionSceneV1Field::MainLightColor);
 	const bool bDirectional = Direct && Direct->Words != FMaterialValue::Float(FVec3{}).Words;
 	bActive =
 	    Settings.bEnabled && bDirectional && (!InContext.Frame.GetSceneToken() || InContext.Frame.CastsSceneShadows());
@@ -73,8 +74,7 @@ void FContactShadowFeature::AddShadows(FRenderFeatureContext& InContext)
 			            InContext.View.Width, InContext.View.Height, EMaterialColorFormat::R8Unorm}),
 			        Session.GetResources().CreateScopeLifetime(), false};
 		}
-		const auto Direction =
-		    Session.ResolveFrameSemantic(InContext.Frame, "Engine.Scene.MainDirectionalLightDirection");
+		const auto Direction = Session.ResolveFrameSemantic(InContext.Frame, EHyperionSceneV1Field::MainLightDirection);
 		if (!Direction || Direction->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
 		{
 			throw std::invalid_argument("Contact shadows require a scene light direction");

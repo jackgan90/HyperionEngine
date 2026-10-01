@@ -1,0 +1,20 @@
+HYP_SHADER_CONTRACT(UniformDeclarationFixture, 1)
+
+HYP_UNIFORM_BEGIN(ScopeViewFixture, ScopeView)
+	HYP_UNIFORM_FIELD(float3, Eye, View)
+	HYP_UNIFORM_FIELD(bool, bEnabled, View)
+	HYP_UNIFORM_FIELD(float4x4, Matrix, View)
+HYP_UNIFORM_END()
+
+HYP_UNIFORM_BEGIN(ScopePassFixture, ScopePass)
+	HYP_UNIFORM_FIELD(float3, Eye, Pass)
+	HYP_UNIFORM_FIELD(bool, bEnabled, Pass)
+	HYP_UNIFORM_FIELD(float4x4, Matrix, Pass)
+HYP_UNIFORM_END()
+
+HYP_UNIFORM_BEGIN(HistoricalLayoutFixture, Historical)
+	HYP_UNIFORM_FIELD(float, A, Pass)
+	HYP_UNIFORM_ABI_OFFSET(32)
+	HYP_UNIFORM_FIELD(bool, bEnabled, Pass)
+	HYP_UNIFORM_ABI_SIZE(64)
+HYP_UNIFORM_END()

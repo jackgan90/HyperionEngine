@@ -93,6 +93,9 @@ FMaterialAsset MakeMaterial()
 	Sampler.Name = "Sampler";
 	Sampler.Type = FMaterialParameterType::Resource(EMaterialValueKind::Sampler);
 	Description.Parameters.push_back(Sampler);
+	auto Time = DeclareMaterialSemantic("Clock", EEngineSemantic::Time, *GetStandardMaterialSemantics());
+	Time.Targets = {"LegacyClock.Tick"};
+	Description.Parameters.push_back(Time);
 	auto Result = PersistMaterialDescription(Description);
 	FMaterialAssetValue TextureValue;
 	TextureValue.Type = Texture.Type;
@@ -114,6 +117,14 @@ void CheckMaterials()
 	    std::static_pointer_cast<FMaterialAsset>(ReadRecord(RecordType<FMaterialAsset>(), Document.Object));
 	HYP_CHECK(Loaded->Values == Material.Values);
 	HYP_CHECK(Loaded->Parameters[0].Default == Material.Parameters[0].Default);
+	HYP_CHECK(Loaded->Parameters.back().Semantic == "Engine.Frame.Time");
+	HYP_CHECK(Loaded->Parameters.back().Targets == std::vector<std::string>{"LegacyClock.Tick"});
+	const auto Description = ResolveMaterialAssetDescription(*Loaded,
+	                                                         [](const FAssetRef&)
+	                                                         {
+		                                                         return std::shared_ptr<const FMaterialTextureSource>{};
+	                                                         });
+	HYP_CHECK(Description.Parameters.back().Semantic == EEngineSemantic::Time);
 	HYP_CHECK(Loaded->Passes[0].Vertex == Material.Passes[0].Vertex);
 	HYP_CHECK(Loaded->Passes[0].State == Material.Passes[0].State);
 	HYP_CHECK(Loaded->Passes[0].DynamicState == Material.Passes[0].DynamicState);

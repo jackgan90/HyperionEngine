@@ -33,8 +33,7 @@ FInstanceRecordLayout DescribeInstanceRecordLayout(const FCompiledMaterialDefini
 	for (const auto& Member : InBinding.Members)
 	{
 		Result.Members.push_back(Member.Layout);
-		const auto& Parameter = InProgram.Interface.Schema->GetParameters().at(Member.ParameterIndex);
-		Result.Mapping.emplace_back(Parameter.Name, Parameter.Semantic);
+		Result.Mapping.push_back(InProgram.Interface.Schema->GetParameterIdentity(Member.ParameterIndex));
 	}
 	return Result;
 }

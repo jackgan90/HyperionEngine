@@ -9,12 +9,12 @@ struct FMaterialProviderInputs
 {
 	std::array<FMaterialScopeInput, MaterialScopeCount> Scopes;
 	std::array<FMaterialInputValues, MaterialScopeCount> Values;
-	const FMaterialValue* Find(EMaterialScope InScope, std::string_view InName) const;
+	const FMaterialValue* Find(EMaterialScope InScope, FMaterialSemanticId InName) const;
 };
 
 struct FMaterialProviderDescription
 {
-	std::string Semantic;
+	FMaterialSemanticId Semantic;
 	std::uint32_t Dependencies{};
 	std::function<std::optional<FMaterialValue>(const FMaterialProviderInputs&)> Evaluate;
 };
@@ -52,8 +52,10 @@ public:
 	FMaterialParameterValues WithoutSceneInputs(FMaterialParameterValues InValues) const;
 	std::uint64_t GetVersion() const;
 	std::vector<FMaterialProvidedValue> Evaluate(const FMaterialProviderInputs& InInputs,
+	                                             std::span<const FMaterialSemanticId> InSemantics);
+	std::vector<FMaterialProvidedValue> Evaluate(const FMaterialProviderInputs& InInputs,
 	                                             std::span<const std::string> InSemantics);
-	FMaterialProvidedValue EvaluateOne(const FMaterialProviderInputs& InInputs, std::string_view InSemantic);
+	FMaterialProvidedValue EvaluateOne(const FMaterialProviderInputs& InInputs, FMaterialSemanticId InSemantic);
 	void Collect();
 	void ClearCache();
 	FMaterialProviderStats Statistics() const;

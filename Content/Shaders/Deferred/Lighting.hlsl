@@ -1,4 +1,5 @@
 #include "../Lighting/SurfaceLighting.hlsli"
+#include "DeferredLightingParameters.generated.hlsli"
 #include "GBuffer.hlsli"
 #if HYP_CLUSTERED
 #include "../Lighting/ClusteredLighting.hlsli"
@@ -15,23 +16,22 @@ SamplerState ContactSampler : register(s6);
 
 cbuffer DeferredLightV1 : register(b0)
 {
-	column_major float4x4 InverseViewProjection;
-	float4 Viewport;
-	float2 DepthRange;
-	float3 Eye;
-#if !HYP_NO_DIRECTIONAL
-	float3 LightDirection;
-	float3 LightColor;
-#endif
-	float3 Ambient;
+	FDeferredLightV1Uniform DeferredLighting;
 };
 
 #include "Reconstruction.hlsli"
 
+float3 ReconstructWorld(float2 InPixel, float InDepth)
+{
+	return ReconstructWorld(InPixel, InDepth, DeferredLighting.Viewport, DeferredLighting.DepthRange,
+	                        DeferredLighting.InverseViewProjection);
+}
+
 float3 NeighborDelta(int2 InPixel, int2 InOffset, float3 InWorld, float3 InNormal)
 {
 	int2 P = InPixel + InOffset;
-	if (any(P < int2(Viewport.xy)) || any(P >= int2(Viewport.xy + Viewport.zw)))
+	if (any(P < int2(DeferredLighting.Viewport.xy)) ||
+	    any(P >= int2(DeferredLighting.Viewport.xy + DeferredLighting.Viewport.zw)))
 	{
 		return 0;
 	}
@@ -40,7 +40,7 @@ float3 NeighborDelta(int2 InPixel, int2 InOffset, float3 InWorld, float3 InNorma
 	float3 Normal = DecodeNormal(GBuffer1.Load(int3(P, 0)).zw);
 	float3 Delta = ReconstructWorld(float2(P) + .5, Depth) - InWorld;
 	// Avoid receiver derivatives across uncovered pixels, silhouettes and depth discontinuities.
-	float Limit = max(length(InWorld - Eye) * .02, .001);
+	float Limit = max(length(InWorld - DeferredLighting.Eye) * .02, .001);
 	if (Surface.z < .5 || dot(Normal, InNormal) < .8 || length(Delta) > Limit)
 	{
 		return 0;
@@ -66,9 +66,10 @@ float4 PSMain(float4 InPosition : SV_Position) : SV_Target0
 	                                             GBuffer3.Load(int3(Pixel, 0)));
 	float3 World = ReconstructWorld(InPosition.xy, SceneDepth.Load(int3(Pixel, 0)));
 #if HYP_NO_DIRECTIONAL
-	float3 Color =
-	    Material.bUnlit ? Material.BaseColor : EvaluateIndirectLighting(Material, Ambient, normalize(Eye - World));
-	Color += EvaluateAdditionalDirectionalLighting(Material, World, Eye);
+	float3 Color = Material.bUnlit ? Material.BaseColor
+	                               : EvaluateIndirectLighting(Material, DeferredLighting.Ambient,
+	                                                          normalize(DeferredLighting.Eye - World));
+	Color += EvaluateAdditionalDirectionalLighting(Material, World, DeferredLighting.Eye);
 #else
 	float3 Dx = ReceiverDerivative(Pixel, int2(1, 0), World, Material.GeometricNormal);
 	float3 Dy = ReceiverDerivative(Pixel, int2(0, 1), World, Material.GeometricNormal);
@@ -79,10 +80,11 @@ float4 PSMain(float4 InPosition : SV_Position) : SV_Target0
 	ContactVisibility.GetDimensions(Width, Height);
 	Contact = ContactVisibility.SampleLevel(ContactSampler, InPosition.xy / float2(Width, Height), 0);
 #endif
-	float3 Color = EvaluateLighting(Material, World, Eye, LightDirection, LightColor, Ambient, Dx, Dy, Contact);
+	float3 Color = EvaluateLighting(Material, World, DeferredLighting.Eye, DeferredLighting.LightDirection,
+	                                DeferredLighting.LightColor, DeferredLighting.Ambient, Dx, Dy, Contact);
 #endif
 #if HYP_CLUSTERED
-	Color += EvaluateClusteredLighting(Material, World, Eye, InPosition.xy);
+	Color += EvaluateClusteredLighting(Material, World, DeferredLighting.Eye, InPosition.xy);
 #endif
 	return float4(Color, 1);
 }

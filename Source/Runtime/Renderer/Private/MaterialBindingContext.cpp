@@ -24,15 +24,15 @@ void ApplyDependencyOverrides(FResolvedMaterialParameters& InResult, const FMate
 {
 	for (const auto& Entry : InValues)
 	{
-		InResult.Dependencies.Set(InSchema.Find(Entry.Name).Index, MaterialScopeBit(InScope));
+		InResult.Dependencies.Set(Entry.Resolve(InSchema).Index, MaterialScopeBit(InScope));
 	}
 }
 
-std::map<std::string, const FMaterialProvidedValue*> SelectProviders(const FMaterialSnapshot& InSnapshot,
-                                                                     const FMaterialBindingContext& InContext,
-                                                                     FMaterialParameterValues& OutValues)
+std::map<FMaterialSemanticId, const FMaterialProvidedValue*> SelectProviders(const FMaterialSnapshot& InSnapshot,
+                                                                             const FMaterialBindingContext& InContext,
+                                                                             FMaterialParameterValues& OutValues)
 {
-	std::map<std::string, const FMaterialProvidedValue*> Result;
+	std::map<FMaterialSemanticId, const FMaterialProvidedValue*> Result;
 	for (const auto& Provider : InContext.Providers)
 	{
 		// A session can serve shaders with different extension registries. Unused providers are irrelevant.
@@ -50,14 +50,14 @@ std::map<std::string, const FMaterialProvidedValue*> SelectProviders(const FMate
 		const auto& Semantic = InSnapshot.Definition->GetSemantics().Find(Provider.Semantic);
 		if (Provider.Dependencies == 0 || (Provider.Dependencies >> MaterialScopeCount) != 0 ||
 		    (Provider.Dependencies & MaterialScopeBit(Semantic.Scope)) == 0 ||
-		    !Result.emplace(Semantic.Name, &Provider).second)
+		    !Result.emplace(Provider.Semantic, &Provider).second)
 		{
 			throw std::invalid_argument("Conflicting material provider or incomplete scope dependency: " +
 			                            Semantic.Name);
 		}
 		if (Provider.Value)
 		{
-			OutValues.push_back({Semantic.Name, *Provider.Value});
+			OutValues.push_back({Provider.Semantic, *Provider.Value});
 		}
 	}
 	return Result;
@@ -76,7 +76,7 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
 	}
 	// Declared-only snapshots are valid for asynchronous imported materials; bind against the prepared schema.
 	FMaterialSnapshot Snapshot = *InMaterial;
-	Snapshot.Schema = InCompiled.Interface.Schema;
+	RebindMaterialSnapshot(Snapshot, InCompiled.Interface.Schema);
 	FMaterialParameterValues ProviderValues;
 	const auto Providers = SelectProviders(Snapshot, InContext, ProviderValues);
 	const auto Values = ResolveMaterialParameters(Snapshot, ProviderValues, InContext.ObjectParameters,
@@ -91,7 +91,7 @@ FResolvedMaterialParameters ResolveMaterialBindingContext(std::shared_ptr<const 
 	Result.Dependencies.Reset(Parameters.size(), MaterialScopeBit(EMaterialScope::Material));
 	for (const auto& Value : Values)
 	{
-		Result.Values.Set(Snapshot.Schema->Find(Value.Name).Index, std::make_shared<const FMaterialValue>(Value.Value));
+		Result.Values.Set(Value.Handle.Index, std::make_shared<const FMaterialValue>(Value.Value));
 	}
 	for (std::size_t Index = 0; Index < Parameters.size(); ++Index)
 	{

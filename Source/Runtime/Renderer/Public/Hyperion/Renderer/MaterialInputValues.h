@@ -19,6 +19,7 @@ public:
 	}
 
 	const FMaterialParameterValues& Get() const;
+	const FMaterialValue* Find(FMaterialSemanticId InSemantic) const;
 
 	bool operator==(const FMaterialInputValues& InOther) const
 	{
@@ -42,6 +43,8 @@ public:
 
 private:
 	std::shared_ptr<const FMaterialParameterValues> Storage;
+	using FSemanticLookup = std::map<FMaterialSemanticId, std::size_t>;
+	std::shared_ptr<const FSemanticLookup> SemanticLookup;
 	std::size_t StorageBytes{};
 };
 } // namespace Hyperion

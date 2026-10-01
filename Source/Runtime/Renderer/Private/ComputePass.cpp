@@ -66,6 +66,50 @@ FGraphTextureImport DescribeTexture(const FComputeTextureParameter& InParameter,
 	Import.Size = {std::max(1U, Import.Size.Width >> InMip), std::max(1U, Import.Size.Height >> InMip)};
 	return Import;
 }
+
+void DeclareComputeBuffers(FRenderGraph& InGraph, FComputePass& InPass, const FComputePassDesc& InDescription,
+                           const FRenderResourcePreparation& InPreparation)
+{
+	for (const auto& Parameter : InDescription.Buffers)
+	{
+		Parameter.View.Validate();
+		const auto Source = Parameter.View.Source;
+		if (Parameter.bFullOverwrite && (Parameter.View.Offset || Parameter.View.Size != Source->GetSize()))
+		{
+			throw std::invalid_argument("Full buffer overwrite requires full view coverage");
+		}
+		FGraphBufferImport Import{
+		    Parameter.Semantic.IsEmpty() ? Parameter.Name : std::string(Parameter.Semantic.GetName()),
+		    {},
+		    Source->GetSize(),
+		    BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead) |
+		        (Source->IsStorage()
+		             ? BufferUsage(ERHIBufferUsage::StructuredWrite) | BufferUsage(ERHIBufferUsage::RawWrite)
+		             : 0U),
+		    Source->IsStorage() ? Parameter.bInitialized : true,
+		    EResourceState::ShaderRead,
+		    Source,
+		    [Preparation = InPreparation, Source, Lifetime = InDescription.Lifetime]
+		    {
+			    return Preparation.ResolveBuffer(Source, Lifetime);
+		    }};
+		const auto Buffer = InGraph.Import(std::move(Import));
+		const auto Existing = std::find_if(InPass.Buffers.begin(), InPass.Buffers.end(),
+		                                   [&](const auto& InAccess)
+		                                   {
+			                                   return InAccess.Buffer == Buffer;
+		                                   });
+		if (Existing == InPass.Buffers.end())
+		{
+			InPass.Buffers.push_back({Buffer, Parameter.Access, Parameter.bFullOverwrite});
+		}
+		else if (Existing->State != Parameter.Access || Existing->bFullOverwrite != Parameter.bFullOverwrite)
+		{
+			throw std::invalid_argument("Conflicting compute buffer access declarations");
+		}
+		InGraph.Export(Buffer, EResourceState::ShaderRead);
+	}
+}
 } // namespace
 
 FBuffer FRenderResourcePreparation::ResolveBuffer(std::shared_ptr<const FMaterialReadBufferSource> InSource,
@@ -83,14 +127,28 @@ FBuffer FRenderResourcePreparation::ResolveBuffer(std::shared_ptr<const FMateria
 	return Owner.MaterialGpu->GetBuffer(std::move(InSource), {InLifetime});
 }
 
-FComputePass FRenderResourcePreparation::DeclareCompute(FRenderGraph& InGraph, const FComputePassDesc& InPass) const
+FComputePass FRenderResourcePreparation::DeclareCompute(FRenderGraph& InGraph,
+                                                        const FComputePassDesc& InDescription) const
 {
 	Coordinator->Tasks.Require({EDomain::Render});
-	if (!InPass.Lifetime || InPass.Shader.Source.empty() || InPass.Shader.Entry.empty() || !InPass.Extent[0] ||
-	    !InPass.Extent[1] || !InPass.Extent[2])
+	if (!InDescription.Lifetime || InDescription.Shader.Source.empty() || InDescription.Shader.Entry.empty() ||
+	    !InDescription.Extent[0] || !InDescription.Extent[1] || !InDescription.Extent[2])
 	{
 		throw std::invalid_argument("Compute pass requires a shader, live scope and nonempty extent");
 	}
+	const auto InPass = [&]
+	{
+		std::lock_guard Lock(Coordinator->Mutex);
+		if (Coordinator->bClosed)
+		{
+			throw std::logic_error("Compute declaration requires a live resource coordinator");
+		}
+		Coordinator->TrackScope(InDescription.Lifetime);
+		// CPU compilation precedes graph access declaration; native resources remain deferred to RHI preparation.
+		const auto& Program = Coordinator->Compute.GetProgram(
+		    Coordinator->Compiler, Coordinator->Device.GetCapabilities().ShaderFormat, InDescription);
+		return SelectComputeParameters(InDescription, Program);
+	}();
 	FComputePass Pass;
 	Pass.Name = InPass.Name;
 	Pass.After = InPass.After;
@@ -119,44 +177,7 @@ FComputePass FRenderResourcePreparation::DeclareCompute(FRenderGraph& InGraph, c
 			InGraph.Export(Texture, EResourceState::ShaderRead);
 		}
 	}
-	for (const auto& Parameter : InPass.Buffers)
-	{
-		Parameter.View.Validate();
-		const auto Source = Parameter.View.Source;
-		if (Parameter.bFullOverwrite && (Parameter.View.Offset || Parameter.View.Size != Source->GetSize()))
-		{
-			throw std::invalid_argument("Full buffer overwrite requires full view coverage");
-		}
-		FGraphBufferImport Import{Parameter.Name,
-		                          {},
-		                          Source->GetSize(),
-		                          BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead) |
-		                              (Source->IsStorage() ? BufferUsage(ERHIBufferUsage::StructuredWrite) |
-		                                                         BufferUsage(ERHIBufferUsage::RawWrite)
-		                                                   : 0U),
-		                          Source->IsStorage() ? Parameter.bInitialized : true,
-		                          EResourceState::ShaderRead,
-		                          Source,
-		                          [Preparation = *this, Source, Lifetime = InPass.Lifetime]
-		                          {
-			                          return Preparation.ResolveBuffer(Source, Lifetime);
-		                          }};
-		const auto Buffer = InGraph.Import(std::move(Import));
-		const auto Existing = std::find_if(Pass.Buffers.begin(), Pass.Buffers.end(),
-		                                   [&](const auto& InAccess)
-		                                   {
-			                                   return InAccess.Buffer == Buffer;
-		                                   });
-		if (Existing == Pass.Buffers.end())
-		{
-			Pass.Buffers.push_back({Buffer, Parameter.Access, Parameter.bFullOverwrite});
-		}
-		else if (Existing->State != Parameter.Access || Existing->bFullOverwrite != Parameter.bFullOverwrite)
-		{
-			throw std::invalid_argument("Conflicting compute buffer access declarations");
-		}
-		InGraph.Export(Buffer, EResourceState::ShaderRead);
-	}
+	DeclareComputeBuffers(InGraph, Pass, InPass, *this);
 	return Pass;
 }
 

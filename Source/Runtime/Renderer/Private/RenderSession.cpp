@@ -1,4 +1,5 @@
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Materials/Lighting/SceneLightingParameters.h"
 #include "SessionMaterialsInternal.h"
 #include <chrono>
 #include <mutex>
@@ -132,9 +133,9 @@ void FRenderSession::InitializeMaterialScopes()
 		Scope = {{MaterialState->Identity, 1}, Resources.CreateScopeLifetime()};
 	}
 	SetSceneParameters(
-	    {{"Engine.Scene.MainDirectionalLightDirection", FMaterialValue::Float(Normalize(FVec3{-.45f, .8f, .65f}))},
-	     {"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(FVec3{3.f, 2.85f, 2.7f})},
-	     {"Engine.Scene.AmbientColor", FMaterialValue::Float(FVec3{.22f, .25f, .3f})}});
+	    {{EHyperionSceneV1Field::MainLightDirection, FMaterialValue::Float(Normalize(FVec3{-.45f, .8f, .65f}))},
+	     {EHyperionSceneV1Field::MainLightColor, FMaterialValue::Float(FVec3{3.f, 2.85f, 2.7f})},
+	     {EHyperionSceneV1Field::AmbientColor, FMaterialValue::Float(FVec3{.22f, .25f, .3f})}});
 }
 
 FRenderSession::~FRenderSession()

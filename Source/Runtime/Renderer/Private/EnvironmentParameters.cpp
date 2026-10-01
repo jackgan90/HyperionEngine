@@ -1,3 +1,4 @@
+#include "Hyperion/Materials/Lighting/EnvironmentParameters.h"
 #include "EnvironmentParameters.h"
 #include <cmath>
 #include <numbers>
@@ -30,30 +31,33 @@ FMaterialParameterValues EnvironmentParameters(const FSceneEnvironmentLight* InL
 	const float Yaw = InLight ? EnvironmentYawRadians(InLight->YawDegrees) : 0;
 	const FVec3 Tint = Data ? InLight->Tint : FVec3{};
 	FMaterialParameterValues Result;
-	const auto Set = [&](std::string InName, FMaterialValue InValue)
+	const auto Set = [&](FMaterialSemanticId InSemantic, FMaterialValue InValue)
 	{
-		Result.push_back({"Engine.Scene." + InName, std::move(InValue)});
+		Result.push_back({InSemantic, std::move(InValue)});
 	};
-	Set("EnvironmentControl",
+	Set(EEnvironmentV1Field::EnvironmentControl,
 	    FMaterialValue::Float(Data ? FVec4{1, InLight->Intensity, float(Data->Textures[1]->GetMips().size() - 1), 0}
 	                               : FVec4{}));
-	Set("EnvironmentRotation", FMaterialValue::Float(FVec4{std::cos(Yaw), std::sin(Yaw), 0, 0}));
+	Set(EEnvironmentV1Field::EnvironmentRotation, FMaterialValue::Float(FVec4{std::cos(Yaw), std::sin(Yaw), 0, 0}));
 	// Diffuse tint is premultiplied into SH; the unused w lanes of SH0-SH2 carry the specular tint.
+	const std::array ShSemantics{
+	    EEnvironmentV1Field::EnvironmentSh0, EEnvironmentV1Field::EnvironmentSh1, EEnvironmentV1Field::EnvironmentSh2,
+	    EEnvironmentV1Field::EnvironmentSh3, EEnvironmentV1Field::EnvironmentSh4, EEnvironmentV1Field::EnvironmentSh5,
+	    EEnvironmentV1Field::EnvironmentSh6, EEnvironmentV1Field::EnvironmentSh7, EEnvironmentV1Field::EnvironmentSh8};
 	const std::array<float, 3> SpecularTint{Tint.X, Tint.Y, Tint.Z};
 	for (unsigned Index = 0; Index < 9; ++Index)
 	{
 		const auto Sh = Data ? Data->Irradiance[Index] : std::array<float, 3>{};
-		Set("EnvironmentSh" + std::to_string(Index),
-		    FMaterialValue::Float(
-		        FVec4{Sh[0] * Tint.X, Sh[1] * Tint.Y, Sh[2] * Tint.Z, Index < 3 ? SpecularTint[Index] : 0}));
+		Set(ShSemantics[Index], FMaterialValue::Float(FVec4{Sh[0] * Tint.X, Sh[1] * Tint.Y, Sh[2] * Tint.Z,
+		                                                    Index < 3 ? SpecularTint[Index] : 0}));
 	}
-	Set("EnvironmentSpecular", FMaterialValue::FromTexture(Data ? Data->Textures[1] : Cube));
-	Set("EnvironmentBrdf", FMaterialValue::FromTexture(Data ? Data->Textures[2] : Brdf));
+	Set(EEnvironmentSemantic::EnvironmentSpecular, FMaterialValue::FromTexture(Data ? Data->Textures[1] : Cube));
+	Set(EEnvironmentSemantic::EnvironmentBrdf, FMaterialValue::FromTexture(Data ? Data->Textures[2] : Brdf));
 	FMaterialSampler Sampler;
 	Sampler.U = EMaterialAddressMode::Clamp;
 	Sampler.V = EMaterialAddressMode::Clamp;
 	Sampler.W = EMaterialAddressMode::Clamp;
-	Set("EnvironmentSampler", FMaterialValue::FromSampler(Sampler));
+	Set(EEnvironmentSemantic::EnvironmentSampler, FMaterialValue::FromSampler(Sampler));
 	return Result;
 }
 } // namespace Hyperion

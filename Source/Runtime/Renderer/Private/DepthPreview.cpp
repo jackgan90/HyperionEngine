@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/ShaderParameters/DepthPreviewParameters.h"
 #include "RenderResourcesInternal.h"
 
 namespace Hyperion
@@ -9,7 +10,8 @@ namespace
 FFullscreenPassDesc PreviewPass(std::shared_ptr<const FMaterialTextureSource> InSource,
                                 std::shared_ptr<const void> InLifetime, FViewport InViewport)
 {
-	static const auto Material = MakeFullscreenMaterial("Depth preview", "DepthPreview.hlsl");
+	static const auto Material =
+	    MakeFullscreenMaterial("Depth preview", "DepthPreview.hlsl", false, {GetDepthPreviewShaderContracts()});
 	FFullscreenPassDesc Pass;
 	Pass.Material = Material;
 	Pass.Lifetime = std::move(InLifetime);
@@ -17,7 +19,7 @@ FFullscreenPassDesc PreviewPass(std::shared_ptr<const FMaterialTextureSource> In
 	Pass.Targets = FRenderPassTargets::ColorOnly();
 	Pass.Targets.Name = "Shadow depth preview";
 	Pass.Targets.Reads = {{ERenderTargetKind::Texture, InSource, Pass.Lifetime, false}};
-	Pass.Parameters = {{"Pixel:DepthMap", FMaterialValue::FromTexture(std::move(InSource))}};
+	Pass.Parameters = {{EDepthPreviewSemantic::DepthPreviewMap, FMaterialValue::FromTexture(std::move(InSource))}};
 	return Pass;
 }
 } // namespace

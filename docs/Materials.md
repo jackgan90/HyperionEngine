@@ -42,7 +42,7 @@ FMaterialPass Pass;
 Pass.Vertex = {"Colored.hlsl", "VSMain"};
 Pass.Pixel = {"Colored.hlsl", "PSMain"};
 Description.Passes.push_back(Pass);
-auto Camera = DeclareMaterialSemantic("Camera", "Engine.View.ViewProjection", *Semantics);
+auto Camera = DeclareMaterialSemantic("Camera", EEngineSemantic::ViewProjection, *Semantics);
 Camera.Targets = {"CameraData.CameraMatrix"};
 Description.Parameters.push_back(Camera);
 FMaterialParameterDeclaration Color;
@@ -66,7 +66,105 @@ auto Surface = Session.GetResources().RequestMaterial(Instance->Freeze());
 
 DXIL 原生反射会将直接多维数组展平为总元素数，自动 schema 如实使用该布局；SPIR-V/MSL 保留各层数组维度。需要跨目标一致的逻辑形状时，显式声明嵌套数组 schema。准备阶段检查完整叶类型和总元素数，以 DXIL 原生 leaf stride 重建嵌套地址，保留实际 offset、extent 及矩阵/struct 内部布局。原生信息无法区分 `[2][3]` 与 `[3][2]`，维度顺序由作者负责，不能把兼容性检查当作原 HLSL 维度恢复。当前 DXC 对直接多维矩阵数组生成 SPIR-V 会报告缺少 MatrixStride decoration；因此这类数组的实际 GPU 验收限于 DXIL，SPIR-V/MSL 的多维测试覆盖 float/bool/struct。编译器错误正常向上报告，不绕过其验证或修改依赖代码。
 
-纹理 sampled component type 与 structured-buffer element stride 同样进入接口约束。当前 RGBA8 路径拒绝 integer texture；structured view 的 stride 必须与 shader 反射值一致。RHI layout 的 `StructureByteStride=0` 表示尚未约束，但这种布局不能用于需要确定 stride 的真实 structured-buffer shader。当前 shader cache key 为 v7、reflection 为 v5；磁盘缓存沿用编译内容寻址，没有自动容量/TTL 淘汰，旧文件由缓存目录所有者管理。
+纹理 sampled component type、structured-buffer element stride 和元素结构树同样进入接口约束。内置 structured resource 还校验字段名称、类型、顺序、offset 和大小，不能仅用相同 stride 判定兼容。当前 RGBA8 路径拒绝 integer texture；structured view 的 stride 必须与 shader 反射值一致。RHI layout 的 `StructureByteStride=0` 表示尚未约束，但这种布局不能用于需要确定 stride 的真实 structured-buffer shader。当前 shader cache key 为 v12、reflection 为 v8，反射版本参与缓存身份；Defines 与 VirtualIncludes 各自编码列表类别和数量，避免跨类别碰撞。磁盘缓存沿用编译内容寻址，没有自动容量/TTL 淘汰，旧文件由缓存目录所有者管理。
+
+## 内置语义与 shader 资源契约
+
+公共进程、Frame/View 输入集中在 [EngineSemantics.inl](../Source/Runtime/Materials/Public/Hyperion/Materials/EngineSemantics.inl)，生成 `EEngineSemantic`、类型、scope 和公共 uniform。具体渲染问题使用相同宏机制在各自文件声明，不加入全局枚举：Object/Draw 与 PBR 位于 Materials 的 `ObjectParameters.inl` / `PbrParameters.inl`，共享 shadow、cluster、environment 和 scene lighting 位于 Materials/Lighting，Deferred、ContactShadow、HZB、Sky、Outline、Output、DepthPreview 位于 Renderer/ShaderParameters。声明归属与更新 scope 分开；shadow 的 View 输入仍属于 shadow 契约。
+
+每个 uniform 生成字段枚举，例如 `EContactV1Field::Viewport`；独立资源/数值使用所属域的枚举，例如 `EContactShadowSemantic::HierarchicalDepth`，uniform 资源使用 `EHierarchicalDepthUniform` 等枚举。声明同时生成不可变描述和 C++ 参数结构体。`FMaterialSemanticId` 的公共身份是枚举，局部身份引用所属声明的静态描述，自定义身份保留拥有的字符串；运行时使用类型化身份，同名字段和相同枚举序号不会跨契约混淆。逻辑参数名、序列化 `semantic/targets` 和自定义 shader 路径仍是字符串。枚举序号和描述地址不进入资产文件，已有 PBR/共享光照名称与兼容别名仍可读取。
+
+shader 通过约定的资源名选择内置契约。例如 `ClusterViewInfo` 的字段映射来自 `Lighting/ClusterParameters.inl`，材质工厂无需重复写成员映射。实际寄存器、space 和 stage 来自反射。不需要自定义 HLSL resource semantic 注解。未反射到 cluster、environment 或 shadow 资源的 variant 不引入对应依赖；PBR 工厂只预声明反射前需要编辑的 PBR 值和资源。
+
+| Uniform 契约 | 兼容资源名 | CPU 契约最大 extent |
+| --- | --- | --- |
+| `FrameInfo` | — | 16 |
+| `HyperionViewV1` | `ViewInfo` | 80 |
+| `HyperionObjectV1` | `ObjectInfo` | 144 |
+| `HyperionMaterialV1` | `MaterialInfo` | 96 |
+| `HyperionSceneV1` | `SceneInfo` | 48 |
+| `ClusterViewV1` | `ClusterViewInfo` | 80 |
+| `ShadowViewV1` | `ShadowViewInfo` | 352 |
+| `EnvironmentV1` | `EnvironmentInfo` | 176 |
+
+texture、sampler 和 structured-buffer 名称及元素布局也由各自拥有者声明。`FShaderParameterContractSet` 将不可变 uniform/resource 元数据交给通用准备层；graphics 使用 `FMaterialDescription.ShaderContracts`，compute 使用 `FComputeShader.Contracts`。公共 Materials 契约共用默认集合，局部工厂显式提供自己的集合；Materials 与 Shaders 不依赖 Renderer。校验覆盖实际反射字段，包括仍有元数据的 inactive 字段；完全优化掉的资源没有待校验的声明。保留目标实际 extent、offset、matrix major/stride 和 array shape，不用假定字段替换反射；不同目标的末尾 padding 可以不同。错误资源 kind/count、维度、comparison 模式和布局在准备阶段失败。`Hyperion` 前缀保留给引擎契约；任意自定义资源名称仍使用通用反射或显式 `Targets`。
+
+同一 shader 选中的契约集合需要具有明确的 include 和资源身份：重复的相同集合可以共用，同一 include 名下的元数据冲突或不同集合中的资源重名会在编译准备阶段失败。局部 struct 的字段可以同名，通过各自实例限定访问；这项声明冲突检查不等于校验未反射到的资源 ABI。
+
+所有 registry 共用不可变内置表。definition/provider 直接持有已冻结 registry；未冻结的自定义扩展在接收时复制并冻结，后续注册不会修改已发布的语义视图。
+
+自动准备在发现对应资源后，为 shadow、cluster 和 environment 输入补充原有的中性默认值，保留未启用相关场景功能时的行为；已有默认值保持优先。Frame 等必须由调用方提供的输入不会因此变成可选。显式 fullscreen/compute 路径仍由 pass 提供实际输入。
+
+新增 uniform 时先确定归属：公共输入修改 EngineSemantics，功能输入修改自己的声明文件。局部头文件指定 `HYP_SHADER_DOMAIN` 和 `HYP_SHADER_DECLARATIONS`，包含 `ShaderParameterDeclarations.inl` 生成独立类型与元数据。拥有者文件直接声明字段，内部 visitor 的条件宏不会出现在这里。例如 ContactShadowParameters.inl 的核心声明如下：
+
+```cpp
+HYP_SHADER_CONTRACT(ContactShadow, 1)
+
+HYP_UNIFORM_BEGIN(ContactV1, ContactShadow)
+	HYP_UNIFORM_FIELD(float4x4, ViewProjection, View)
+	HYP_UNIFORM_FIELD(float4x4, InverseViewProjection, View)
+	HYP_UNIFORM_FIELD(float4, Viewport, View)
+	HYP_UNIFORM_FIELD(float3, Eye, View)
+	HYP_UNIFORM_FIELD(float3, LightDirection, Scene)
+	HYP_UNIFORM_FIELD(float, RayLength, Pass)
+	HYP_UNIFORM_FIELD(float, Thickness, Pass)
+	HYP_UNIFORM_FIELD(float, Bias, Pass)
+	HYP_UNIFORM_FIELD(uint, MaxSteps, Pass)
+	HYP_UNIFORM_FIELD(bool, bReversed, Pass)
+HYP_UNIFORM_END()
+
+HYP_RESOURCE_NAMESPACE("Engine.Pass")
+HYP_TEXTURE_2D(float, HierarchicalDepth, Pass)
+HYP_TEXTURE_2D(float4, SurfaceNormals, Pass)
+HYP_TEXTURE_2D(float4, SurfaceCoverage, Pass)
+```
+
+`HYP_UNIFORM_BEGIN` 指定资源名和实例名，`HYP_UNIFORM_FIELD` 的三个参数是 shader 类型、字段名和 scope。每个字段只声明一次，C++ 类型、语义、HLSL 字段和预期布局由它生成。普通声明不填写 offset 或总大小；scope 只控制更新频率，不参与布局计算。当前 frontend 支持 `float/float2/float3/float4/float4x4`、`uint/uint2`、`int`、`bool`；矩阵为 column-major float4x4，GPU bool 为四字节。数值按 16 字节 cbuffer 寄存器规则排列，矩阵从新寄存器开始、列 stride 为 16，总大小对齐到 16。Contact 的布局仍为 192 字节，Eye 后的间隙自动推导。数组、嵌套字段、其他矩阵形状和 row-major 尚未暴露为声明宏；布局构建器拒绝不支持的类型，不使用 C++ `sizeof/offsetof` 推测。
+
+`HYP_UNIFORM_FLAT_BEGIN(Name)` 保留公共兼容块的平铺字段。`HYP_SHADER_VALUE(Type, Name, Scope)` 声明独立数值；texture/cube、sampler/comparison sampler 和可写 texture 分别使用 `HYP_TEXTURE_2D/HYP_TEXTURE_CUBE`、`HYP_SAMPLER/HYP_COMPARISON_SAMPLER`、`HYP_RW_TEXTURE_2D`。当前纹理契约接受浮点元素。`HYP_READ_BUFFER(ElementType, Name, Scope)` 引用 `HYP_STRUCTURED_BEGIN(ElementType)` / `HYP_STRUCTURED_FIELD(Type, Name)` / `HYP_STRUCTURED_END()` 声明的元素布局；scalar/vector structured profile 按四字节分量排列并独立推导 stride，不套用 cbuffer 的寄存器规则，实际 native 布局仍需反射兼容。
+
+默认策略为 General、非 Scene 所有、无默认 Scene 输入、Default 编辑提示；`HYP_CONTRACT_POLICY(Group, SceneOwned, DefaultInput)` 修改后续声明的默认策略。`HYP_SEMANTIC_POLICY`、`HYP_SEMANTIC_WIRE`、`HYP_SEMANTIC_ALIAS`、`HYP_SEMANTIC_CONVENTION` 为紧邻的上一条字段/资源声明补充例外元数据，不重复类型或 scope；`HYP_UNIFORM_WIRE_NAMESPACE` / `HYP_RESOURCE_NAMESPACE` 设置名称前缀，`HYP_RESOURCE_SHADER_NAME` 保留不同的既有 shader 资源名。字段 enum 保留布尔成员的 `b` 拼写。需要固定历史 ABI 时，可显式使用 `HYP_UNIFORM_ABI_OFFSET` 指定下一字段的位置、`HYP_UNIFORM_ABI_SIZE` 保留 extent；普通内置声明无需这些数字。
+
+工厂提供 `Get<Domain>ShaderContracts()`，无需修改通用绑定层或全局枚举。布局在构造不可变契约集合时计算一次，数值赋值不重算。`HYP_SHADER_CONTRACT(Name, Version)` 声明版本，必要时新增版本化资源名并保留兼容别名；预期布局独立于 shader 反射，实际出现的资源仍按完整 native 布局校验。
+
+fullscreen 使用 `EMaterialEngineBindingMode::Explicit`，接收 Render 已冻结的输入，按相同目录映射到实际参数。compute 使用相同校验；`FComputePassDesc.EngineParameters` 接收类型化语义数值/sampler，原有 `Parameters` 保留自定义 `Buffer.Member` 写法。texture/buffer 在图中的读写仍需显式声明。Render 在声明图依赖前复用 CPU 编译/反射结果，忽略所选契约内完全未反射到的类型化输入；未知或重复输入仍拒绝。图只导入实际使用的资源，原生资源与 dispatch 准备仍在 RHI 执行，RHI 准备不会调用场景 provider。
+
+## 内置 pass 的类型化参数
+
+`ShaderParameters.h` 提供公共类型和逻辑值转换，各个拥有者的参数头文件生成自己的 `F<Name>Parameters` 和枚举。内置 pass 通过结构体成员赋值，texture、sampler 和 compute storage 资源使用所属契约的枚举。例如包含 `Hyperion/Renderer/ShaderParameters/ContactShadowParameters.h` 后：
+
+```cpp
+FContactV1Parameters Parameters;
+Parameters.ViewProjection = View.ViewProjection;
+Parameters.InverseViewProjection = Inverse(View.ViewProjection);
+Parameters.Eye = View.Eye;
+Parameters.RayLength = Settings.Length;
+Parameters.bReversed = View.DepthConvention == EDepthConvention::Reversed;
+AppendShaderParameters(Pass.Parameters, Parameters);
+Pass.Parameters.push_back({EContactShadowSemantic::HierarchicalDepth,
+                          FMaterialValue::FromTexture(Depth.Texture)});
+```
+
+这些结构体承载逻辑值，不能按 `sizeof` 直接复制到 GPU。成员类型来自 catalog；实际 constant-buffer offset、matrix stride、major 和 extent 仍由目标反射决定，并与 catalog 校验后打包。`SetParameters` 先通过 definition registry 归一化语义别名，再验证整个批次，然后一次发布不可变 snapshot；失败时实例不变。解析后的值和覆盖使用带 schema identity/version 的 handle，`Clear(handle)` 也检查过期身份。更换 definition 保留作者身份；声明 schema 到反射 schema 的运行时桥接使用已共享的精确作者身份 token，不反复按名字查找，也不把 shader target 别名当作作者身份。缓存把作者名称在 schema 构造时解析成共享身份 token，仍完整比较 semantic、布局、值和 scope；身份表使用弱引用并定期清理。
+
+公共 shader include 是 `HyperionUniforms.generated.hlsli`，各个声明生成自己的 `<Domain>Parameters.generated.hlsli`。局部 shader 显式声明 cbuffer，字段在对应的 Parameters.inl 中阅读。例如：
+
+```hlsl
+#include "ContactShadowParameters.generated.hlsli"
+
+cbuffer ContactV1 : register(b0)
+{
+	FContactV1Uniform ContactShadow;
+};
+```
+
+通过 `ContactShadow.LightDirection` / `ContactShadow.Viewport` 访问字段；Deferred 使用 `DeferredLighting.LightDirection` / `DeferredLighting.Viewport`。公共兼容块继续使用既有字段和 `packoffset`，实例记录使用自动生成的 padding。C++ 逻辑值、shader 声明和预期校验布局来自同一份拥有者声明；原生反射独立验证实际布局。每个 uniform 仍提供完整声明的兼容宏，调用时以分号结束。
+
+`HYP_INSTANCE_ARRAY` 生成 C++ 的实例数组声明，序列化的 block/member 字段保持兼容。引擎没有额外的 C++ header 处理器或磁盘生成步骤；C++ 重编译后，编译准备通过 `GenerateShaderIncludes` 提供虚拟 include。编译选项拥有 include 名称和源码，cache key 包含其完整内容；compute 程序复用也比较契约集合身份。通用 shader 编译器不依赖 Materials。直接调用编译器时，需要显式提供生成声明。局部修改不扩大公共 include 内容，但现有源目录 snapshot 仍整体参与 shader cache，不能据此保证只失效一个 shader。
+
+HZB 的 copy/reduce 分别使用 `HZBCopyV1` / `HZBReduceV1`，避免同一 buffer 名称对应不同布局。Deferred 无主方向光 variant 保留同一个 `DeferredLightV1` 布局，通过 shader 分支控制计算。准备阶段只导入实际反射到的字段和资源；未使用的 shadow/environment/cluster 输入可以不出现。
+
+`HYP_SEMANTIC_POLICY` 集中声明 scene 所有权、shadow 分组和材质编辑提示。内置 PBR 的 UV/颜色控件与预览参数调整依据 semantic，作者重命名不会改变这些规则。资产名称、序列化 semantic/targets、GUI 属性路径和自定义材质/compute 的按名称适配器继续保留；它们在边界解析为 ID 或 handle。内置 pass 的赋值接口不依赖 shader 变量名字字符串。
 
 ## Semantic 与更新频率
 
@@ -81,17 +179,17 @@ DXIL 原生反射会将直接多维数组展平为总元素数，自动 schema �
 | Pass | `FRenderView.PassParameters`，限定于 frame/family/view 的这次用途 |
 | Material | instance snapshot identity/revision |
 | Object | primitive 的 World/normal/orientation、`ObjectInputs`，以及发射 item 的稳定身份和实际内容 |
-| Draw | `FRenderItem.DrawInputs`，限定于 frame/family/view、primitive 的 Scene/Slot/Generation、LocalItemId 是否存在及其值和当前 ordinal；`DrawParameters` 是按参数名覆盖 |
+| Draw | `FRenderItem.DrawInputs`，限定于 frame/family/view、primitive 的 Scene/Slot/Generation、LocalItemId 是否存在及其值和当前 ordinal；`DrawParameters` 是按 schema handle 覆盖 |
 
-`GetProviders().Register` 只用于首次冻结前配置；provider 显式声明全部依赖 scope，只接收这些 scope 的 owned inputs。View×Object 派生矩阵同时依赖二者。`ObjectInputs`/`DrawInputs` 使用 semantic 名称；`ObjectParameters`、`SectionParameters`、`DrawParameters` 使用 schema 参数名，二者不混用。
+`GetProviders().Register` 只用于首次冻结前配置；provider 显式声明全部依赖 scope，只接收这些 scope 的 owned inputs。View×Object 派生矩阵同时依赖二者。`ObjectInputs`/`DrawInputs` 使用 semantic ID；`ObjectParameters`、`SectionParameters`、`DrawParameters` 使用 schema handle，按作者名称构造的值在入口解析，二者不混用。
 
 参数解析顺序是 default → semantic provider → instance → Object → Draw。每次覆盖都检查类型、`OverridePolicy` 和 `OverrideScopes`。Engine semantic 默认 Locked，PBR semantic 默认允许手动设置。`Clear` 去除该层覆盖，恢复较低层值；不会把参数写成零。缺少活跃且 required 的值会产生明确错误，inactive 参数不触发缺失错误。
 
 provider 返回空值仍保留全部声明依赖，保证原先采用 default 的参数在输入随后出现时重新求值。内置 provider 缓存只保存实际读取的同名值及弱输入身份，不延长无关 texture/buffer 的寿命；custom callback 仍比较全部声明 scope 的输入。同一组完整 scope key 只保留当前输入结果，内容变化替换旧项，过期 token 在 Collect 回收。默认预算为 4096 条、16 MiB 值树估算字节，超限淘汰最近最少访问项；估算包含输入、输出和 qualifiers，不包含外部共享资源载荷及全部分配器开销。`ProviderStatistics()` 提供 `CachedEntries/CachedValueBytes/Evictions`。float/vector/matrix helper 保留有限 float32 的原始位模式，包括正负零。
 
-冻结输入采用 `FMaterialInputValues`：构造或整体替换时验证并排序，之后通过 `Get()` 只读访问；复制共享不可变值树。Global/Scene 写入相同内容时保留 scope revision/token。provider callback 仍返回 `optional<FMaterialValue>`，求值结果用 `FMaterialSharedValue` 共享；scope key 的 qualifiers 通过 `GetQualifiers/SetQualifiers` 访问。直接使用 Renderer 解析接口时，Values/Dependencies 表用 `Reset/Get/Set` 访问：每页 8 项的 copy-on-write 存储共享未变内容，前 4 页引用内联，更多参数使用扩展页，不限制材质参数数量。
+冻结输入采用 `FMaterialInputValues`：构造或整体替换时验证并排序，解析一次语义身份并拒绝别名形成的重复输入；通过 `Get()` 只读访问或 `Find(FMaterialSemanticId)` 查询，复制共享不可变值树和类型化索引。Global/Scene 写入相同内容时保留 scope revision/token。provider callback 仍返回 `optional<FMaterialValue>`，求值结果用 `FMaterialSharedValue` 共享；scope key 的 qualifiers 通过 `GetQualifiers/SetQualifiers` 访问。直接使用 Renderer 解析接口时，Values/Dependencies 表用 `Reset/Get/Set` 访问：每页 8 项的 copy-on-write 存储共享未变内容，前 4 页引用内联，更多参数使用扩展页，不限制材质参数数量。
 
-标准块 `HyperionViewV1`（80 字节）、`HyperionObjectV1`（144）、`HyperionMaterialV1`（96）、`HyperionSceneV1`（48）见 `Content/Shaders/MaterialBlocks.hlsli`。标准块按完整版本化 ABI 校验，包括被优化掉的成员；用户自定义块按各目标反射打包，不要求使用标准名称。CPU 数值矩阵采用逻辑行序，打包器处理目标 major/stride，padding 清零。
+标准块 `HyperionViewV1`（80 字节）、`HyperionObjectV1`（144）、`HyperionMaterialV1`（96）、`HyperionSceneV1`（48）见 `Content/Shaders/MaterialBlocks.hlsli`。标准块按版本化 ABI 校验实际反射成员，包括仍有元数据的 inactive 字段；用户自定义块按各目标反射打包，不要求使用标准名称。CPU 数值矩阵采用逻辑行序，打包器处理目标 major/stride，padding 清零。
 
 相同有效 layout、成员映射、值和完整 scope dependency 可复用实际的 GPU buffer/offset。引擎准备路径另外按不可变程序及值身份复用未变块；scope 改变但最终数值相同时，也可安全复用原 slice。公共 `FMaterialConstantCache::Bind` 保留完整内容检查，接受同 key 下不同值并返回新 slice。相机变化只求值依赖 View 的参数；Frame/Pass/Draw 同样增量更新。混合 Object×View provider 在派生矩阵更新后求值。纯数值变化保留资源身份，不重新查询纹理 descriptor set 或 PSO；资源值或其依赖 owner 变化则失效。混合 cbuffer 中任一成员的有效数值变化时整块重新打包，不依赖标准块名称。
 

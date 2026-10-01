@@ -14,7 +14,7 @@ const FMaterialValue& Parameter(const FClusterLightFrame& InFrame, const std::st
 	const auto It = std::find_if(InFrame.Parameters.begin(), InFrame.Parameters.end(),
 	                             [&](const auto& InEntry)
 	                             {
-		                             return InEntry.Name == "Engine.View." + InName;
+		                             return InEntry.GetSemantic() == FMaterialSemanticId("Engine.View." + InName);
 	                             });
 	HYP_CHECK(It != InFrame.Parameters.end());
 	return It->Value;

@@ -1,5 +1,6 @@
 #include "DirectionalLighting.h"
 #include "EnvironmentParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "SessionMaterialsInternal.h"
 #include <algorithm>
 #include <cmath>
@@ -63,14 +64,13 @@ std::shared_ptr<const FMaterialFrameContext> FRenderSession::FMaterialState::Fra
 	}
 	for (const auto& Value : EnvironmentParameters())
 	{
-		if (!Result->Inputs.Find(EMaterialScope::Scene, Value.Name))
+		if (!Result->Inputs.Find(EMaterialScope::Scene, Value.GetSemantic()))
 		{
 			SceneValues.push_back(Value);
 		}
 	}
 	Result->Inputs.Values[ScopeIndex(EMaterialScope::Scene)] = FMaterialInputValues(std::move(SceneValues));
-	InValues.push_back({"Engine.Frame.Time", FMaterialValue::Float(InTime)});
-	InValues.push_back({"Engine.Frame.Index", FMaterialValue::Uint(static_cast<std::uint32_t>(Result->Frame))});
+	AppendShaderParameters(InValues, FFrameInfoParameters{InTime, static_cast<std::uint32_t>(Result->Frame)});
 	ReplaceValues(Result->Inputs, EMaterialScope::Frame, std::move(InValues), InResources);
 	Result->Inputs.Scopes[ScopeIndex(EMaterialScope::Frame)].Key = {Identity, Result->Frame};
 	return Result;
@@ -151,7 +151,7 @@ FMaterialProviderRegistry& FRenderSession::GetProviders()
 }
 
 FMaterialSharedValue FRenderSession::ResolveFrameSemantic(const FMaterialFrameContext& InFrame,
-                                                          std::string_view InSemantic)
+                                                          FMaterialSemanticId InSemantic)
 {
 	Tasks.Require({EDomain::Render});
 	if (bClosed || InFrame.Session != MaterialState->Identity || InFrame.Frame < MaterialState->LastFrame)

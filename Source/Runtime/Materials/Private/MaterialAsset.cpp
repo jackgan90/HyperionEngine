@@ -103,7 +103,7 @@ FMaterialAsset PersistMaterialDescription(const FMaterialDescription& InDescript
 		FMaterialAssetParameter Stored;
 		Stored.Name = Parameter.Name;
 		Stored.Type = Parameter.Type;
-		Stored.Semantic = Parameter.Semantic;
+		Stored.Semantic = Parameter.Semantic.GetName();
 		Stored.Targets = Parameter.Targets;
 		Stored.Source = Parameter.Source;
 		Stored.OverridePolicy = Parameter.OverridePolicy;
@@ -185,7 +185,7 @@ void ValidateMaterialAsset(const FMaterialAsset& InAsset)
 	for (const auto& Entry : ResolveValues(InAsset.Values, ValidationTexture, true))
 	{
 		const auto& Schema = *Definition.GetSchema();
-		ValidateMaterialOverride(Schema.Get(Schema.Find(Entry.Name)), Entry.Value, EMaterialScope::Material);
+		ValidateMaterialOverride(Schema.Get(Entry.Resolve(Schema)), Entry.Value, EMaterialScope::Material);
 	}
 }
 } // namespace Hyperion

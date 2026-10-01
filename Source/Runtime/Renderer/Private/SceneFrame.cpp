@@ -1,5 +1,7 @@
 #include "DirectionalLighting.h"
 #include "EnvironmentParameters.h"
+#include "Hyperion/Materials/Lighting/SceneLightingParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/Renderer/ViewportRay.h"
 #include "SessionMaterialsInternal.h"
 #include <cmath>
@@ -148,9 +150,7 @@ FResolvedSceneFrame FRenderSession::ResolveSceneFrame(const FSceneFrameSeed& InS
 	}
 	const auto Light = Lighting(*Metadata);
 	auto Values = MaterialState->Providers.WithoutSceneInputs(InSeed.Frame->Inputs.Values[SceneIndex].Get());
-	Values.push_back({"Engine.Scene.MainDirectionalLightDirection", FMaterialValue::Float(Light.Direction)});
-	Values.push_back({"Engine.Scene.MainDirectionalLightColor", FMaterialValue::Float(Light.Direct)});
-	Values.push_back({"Engine.Scene.AmbientColor", FMaterialValue::Float(Light.Ambient)});
+	AppendShaderParameters(Values, FHyperionSceneV1Parameters{Light.Direction, Light.Direct, Light.Ambient});
 	Values.push_back({DirectionalLightsSemantic,
 	                  DirectionalLightBuffer(Metadata.get(), MaterialState->EffectiveSceneInputs.Find(
 	                                                             EMaterialScope::Scene, DirectionalLightsSemantic))});

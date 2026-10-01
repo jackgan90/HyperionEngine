@@ -179,7 +179,7 @@ private:
 
 struct FMaterialProvidedValue
 {
-	std::string Semantic;
+	FMaterialSemanticId Semantic;
 	FMaterialSharedValue Value; // An absent result still carries its invalidation dependencies.
 	std::uint32_t Dependencies{};
 };

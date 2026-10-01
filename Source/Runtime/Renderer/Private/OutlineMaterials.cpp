@@ -99,7 +99,7 @@ std::shared_ptr<const FRenderMaterial> FOutlineMaterials::Resolve(FRenderResourc
 		{
 			auto Mask = std::make_shared<FMaterialSnapshot>(*Source);
 			Mask->Definition = Definition.Mask;
-			Mask->Schema = Definition.Mask->GetSchema();
+			RebindMaterialSnapshot(*Mask, Definition.Mask->GetSchema());
 			Entry.Material = InResources.RequestAuxiliaryMaterial(std::move(Mask));
 		}
 	}

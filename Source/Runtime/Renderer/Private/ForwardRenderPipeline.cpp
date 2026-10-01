@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/ForwardRenderPipeline.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Materials/Lighting/SceneLightingParameters.h"
 #include "PipelineShadows.h"
 #include <algorithm>
 #include <bit>
@@ -73,7 +74,7 @@ void FForwardRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView In
 	Session.ValidateSceneFrame(*InFrame);
 	LastStatistics = {};
 	LastStatistics.Spatial = Session.GetScene().BeginViews();
-	const auto Direction = Session.ResolveFrameSemantic(*InFrame, "Engine.Scene.MainDirectionalLightDirection");
+	const auto Direction = Session.ResolveFrameSemantic(*InFrame, EHyperionSceneV1Field::MainLightDirection);
 	FVec3 Light;
 	if (Direction && Direction->Type == FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
 	{

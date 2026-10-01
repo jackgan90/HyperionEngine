@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Materials/Lighting/SceneLightingParameters.h"
 #include "Hyperion/Renderer/ShadowControls.h"
 #include "PipelineShadows.h"
 #include <algorithm>
@@ -13,7 +14,7 @@ namespace
 {
 FVec3 Direction(FRenderSession& InSession, const FMaterialFrameContext& InFrame)
 {
-	const auto Value = InSession.ResolveFrameSemantic(InFrame, "Engine.Scene.MainDirectionalLightDirection");
+	const auto Value = InSession.ResolveFrameSemantic(InFrame, EHyperionSceneV1Field::MainLightDirection);
 	if (!Value || Value->Type != FMaterialParameterType::Numeric(EMaterialScalar::Float, 3))
 	{
 		throw std::invalid_argument("Scene lighting direction must resolve from Global, Frame or Scene");

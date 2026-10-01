@@ -57,6 +57,8 @@ hyp_test(material_tests material_contracts hyperion_materials Materials/Material
 hyp_test(material_binding_tests material_bindings hyperion_render Materials/MaterialBindingTests.cpp)
 target_sources(material_binding_tests PRIVATE Materials/MaterialBlockTests.cpp)
 target_sources(material_binding_tests PRIVATE Materials/MaterialProviderTests.cpp)
+target_sources(material_binding_tests PRIVATE Materials/EngineSemanticTests.cpp)
+target_sources(material_binding_tests PRIVATE Materials/ShaderParameterTests.cpp)
 target_compile_definitions(material_binding_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 hyp_test(material_gpu_tests material_rendering hyperion_render Materials/MaterialGpuTests.cpp)
 target_link_libraries(material_gpu_tests PRIVATE hyperion_rhi_d3d12)
@@ -135,6 +137,7 @@ target_link_libraries(sky_render_tests PRIVATE hyperion_rhi_d3d12 hyperion_asset
 target_compile_definitions(sky_render_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(sky_rendering PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_test(shader_tests shaders hyperion_shaders Shaders/ShaderTests.cpp)
+target_link_libraries(shader_tests PRIVATE hyperion_render)
 target_sources(shader_tests PRIVATE Shaders/ShaderReflectionTests.cpp Shaders/DeferredShaderTests.cpp Shaders/ComputeShaderTests.cpp)
 target_sources(shader_tests PRIVATE Shaders/MountedShaderTests.cpp)
 target_sources(shader_tests PRIVATE Shaders/ShaderSnapshotTests.cpp)
@@ -409,3 +412,8 @@ add_test(NAME source_fixture_contracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_
 set_tests_properties(sample_source_fixtures PROPERTIES FIXTURES_SETUP sample_source_data TIMEOUT 60 LABELS "external-content;source-import")
 set_property(TEST environment_preprocessing APPEND PROPERTY FIXTURES_REQUIRED sample_source_data)
 set_property(TEST scene_navigation APPEND PROPERTY FIXTURES_REQUIRED native_model_data)
+
+# Shader fixtures generate the same declarations as production material preparation.
+foreach(ShaderFixtureTarget shader_tests d3d12_device_tests rhi_contract_tests compute_rhi_tests submission_benchmark)
+  target_link_libraries(${ShaderFixtureTarget} PRIVATE hyperion_materials)
+endforeach()

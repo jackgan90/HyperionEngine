@@ -194,7 +194,8 @@ void ClampMaterialParameter(std::string_view InSemantic, FMaterialAssetValue& In
 }
 } // namespace
 
-bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FMaterialAssetValue& InValue)
+bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FMaterialAssetValue& InValue,
+                                        EMaterialEditHint InHint)
 {
 	if (IsMaterialTexture(InValue.Type.Kind))
 	{
@@ -229,8 +230,7 @@ bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FM
 	const bool bReadOnly = InValue.Type.Kind != EMaterialValueKind::Numeric || InValue.Type.Rows != 1;
 	InGui.BeginDisabled(bReadOnly);
 	bool bChanged{};
-	if (InValue.Type.Scalar == EMaterialScalar::Uint && InValue.Words.size() == 1 && InId.starts_with("Pbr.") &&
-	    InId.find("Uv") != std::string::npos)
+	if (InValue.Type.Scalar == EMaterialScalar::Uint && InValue.Words.size() == 1 && InHint == EMaterialEditHint::UvSet)
 	{
 		const std::array<std::string, 2> Choices{"UV0", "UV1"};
 		std::size_t Selected = std::min(InValue.Words[0], 1u);
@@ -244,8 +244,7 @@ bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FM
 		return false;
 	}
 	const bool bColor = InValue.Type.Scalar == EMaterialScalar::Float && InValue.Words.size() >= 3 &&
-	                    (InId.find("Color") != std::string::npos || InId.find("Tint") != std::string::npos) &&
-	                    InId.find("Emissive") == std::string::npos;
+	                    InHint == EMaterialEditHint::Color;
 	if (bColor)
 	{
 		FVec3 Color{std::bit_cast<float>(InValue.Words[0]), std::bit_cast<float>(InValue.Words[1]),
@@ -335,7 +334,8 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 	}
 	InGui.BeginDisabled(!bEditable);
 	FAssetLiveEditScope Editing(InGui);
-	const bool bChanged = EditMaterialValue(InGui, InParameter.Name, Value);
+	const bool bChanged = EditMaterialValue(
+	    InGui, InParameter.Name, Value, GetEngineSemanticPolicy(FMaterialSemanticId(InParameter.Semantic)).EditHint);
 	const auto Interaction = Editing.Finish();
 	if (Interaction.ActiveInteraction)
 	{

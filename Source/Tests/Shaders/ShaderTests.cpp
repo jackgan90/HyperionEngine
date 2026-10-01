@@ -42,6 +42,40 @@ void CheckDiagnosticLogging()
 	      "Diagnostic shader cache hit");
 	Check(Logs.History->Count() == Before, "Cache hits do not replay compiler diagnostics");
 }
+
+void CheckCompileOptionDomains()
+{
+	const auto Root = std::filesystem::absolute("shader-option-domains") / std::to_string(ClockNanoseconds());
+	std::filesystem::create_directories(Root / "Source");
+	std::ofstream(Root / "Source/Options.hlsl") << R"(
+float4 PSMain() : SV_Target0
+{
+#ifdef FLAG
+    return 1;
+#else
+    return 0;
+#endif
+}
+)";
+	FShaderCompiler Compiler(Root / "Source", Root / "Cache");
+	FShaderCompiler Independent(Root / "Source", Root / "IndependentCache");
+	FShaderCompileOptions Defined;
+	Defined.Defines = {{"FLAG", "1"}};
+	FShaderCompileOptions Included;
+	Included.VirtualIncludes = {{"FLAG", "1"}};
+	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
+	{
+		const auto First = Compiler.Compile("Options.hlsl", "PSMain", EShaderStage::Pixel, Format, Defined);
+		const auto Second = Compiler.Compile("Options.hlsl", "PSMain", EShaderStage::Pixel, Format, Included);
+		const auto Expected = Independent.Compile("Options.hlsl", "PSMain", EShaderStage::Pixel, Format, Included);
+		Check(!First.bCacheHit && !Second.bCacheHit && First.CacheKey != Second.CacheKey,
+		      "Compile option domain boundaries");
+		Check(First.Bytes != Second.Bytes && Second.Bytes == Expected.Bytes,
+		      "Cold compilation matches separated cache result");
+		const auto Warm = Compiler.Compile("Options.hlsl", "PSMain", EShaderStage::Pixel, Format, Included);
+		Check(Warm.bCacheHit && Warm.Bytes == Expected.Bytes, "Warm cache preserves option domain identity");
+	}
+}
 } // namespace
 
 int main()
@@ -52,9 +86,15 @@ int main()
 		TestMountedShaders();
 		TestShaderSnapshots();
 		CheckDiagnosticLogging();
+		CheckCompileOptionDomains();
 		auto Root = std::filesystem::absolute("shader-test/source");
 		std::filesystem::create_directories(Root);
-		for (auto Name : {"Triangle.hlsl", "Gui.hlsl", "Common.hlsli"})
+		for (const auto& Include : GenerateShaderIncludes())
+		{
+			std::filesystem::copy_file(TestShaderRoot() / Include.first, Root / Include.first,
+			                           std::filesystem::copy_options::overwrite_existing);
+		}
+		for (auto Name : {"Triangle.hlsl", "Gui.hlsl", "Common.hlsli", "HyperionUniforms.generated.hlsli"})
 		{
 			std::filesystem::copy_file(TestShaderRoot() / Name, Root / Name,
 			                           std::filesystem::copy_options::overwrite_existing);

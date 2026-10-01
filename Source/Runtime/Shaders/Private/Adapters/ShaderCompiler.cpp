@@ -178,9 +178,10 @@ class FIncludeHandler final : public IDxcIncludeHandler
 {
 public:
 	FIncludeHandler(IDxcUtils* InUtils, std::filesystem::path InRoot, IFileSystem& InFiles,
-	                std::filesystem::path InAdditionalRoot, const FShaderSourceTrees& InSources, std::string& OutError)
+	                std::filesystem::path InAdditionalRoot, const FShaderSourceTrees& InSources,
+	                const std::vector<FShaderVirtualInclude>& InIncludes, std::string& OutError)
 	    : Utils(InUtils), Root(std::move(InRoot)), Files(InFiles), AdditionalRoot(std::move(InAdditionalRoot)),
-	      Sources(InSources), Error(OutError)
+	      Sources(InSources), Includes(InIncludes), Error(OutError)
 	{
 	}
 
@@ -253,7 +254,14 @@ public:
 				return E_ACCESSDENIED;
 			}
 			ComPtr<IDxcBlobEncoding> Blob;
-			const auto& Content = ReadSource(Sources, Root, AdditionalRoot, Path);
+			const auto Virtual =
+			    std::find_if(Includes.begin(), Includes.end(),
+			                 [&](const auto& InInclude)
+			                 {
+				                 return Path == (Root / PathFromUtf8(InInclude.Name)).lexically_normal();
+			                 });
+			const auto& Content =
+			    Virtual != Includes.end() ? Virtual->Source : ReadSource(Sources, Root, AdditionalRoot, Path);
 			auto Hr = Utils->CreateBlob(Content.data(), static_cast<UINT32>(Content.size()), DXC_CP_UTF8, &Blob);
 			if (FAILED(Hr))
 			{
@@ -276,6 +284,7 @@ private:
 	IFileSystem& Files;
 	std::filesystem::path AdditionalRoot;
 	const FShaderSourceTrees& Sources;
+	const std::vector<FShaderVirtualInclude>& Includes;
 	std::string& Error;
 };
 } // namespace
@@ -382,7 +391,7 @@ std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::files
                            const std::string& InEntry, EShaderStage InStage, EShaderFormat InFormat,
                            const FShaderCompileOptions& InOptions, const FShaderSourceTrees& InSources)
 {
-	std::string Identity = "hyperion-shader-v10-snapshot-msl20:" HYP_TOOLCHAIN_ID;
+	std::string Identity = "hyperion-shader-v12-virtual-msl20:" HYP_TOOLCHAIN_ID;
 	auto Append = [&](const std::string& InPart)
 	{
 		AppendIdentity(Identity, InPart);
@@ -394,10 +403,19 @@ std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::files
 	Append(std::to_string(ShaderBindingMappingVersion));
 	Append(std::to_string(FShaderReflection{}.Version));
 	Append(InOptions.bOptimize ? "O3" : "Od");
+	Append("Defines");
+	Append(std::to_string(InOptions.Defines.size()));
 	for (const FShaderDefine& Define : InOptions.Defines)
 	{
 		Append(Define.Name);
 		Append(Define.Value);
+	}
+	Append("VirtualIncludes");
+	Append(std::to_string(InOptions.VirtualIncludes.size()));
+	for (const auto& Include : InOptions.VirtualIncludes)
+	{
+		Append(Include.Name);
+		Append(Include.Source);
 	}
 	Append(InSources.at(InRoot).Digest);
 	const auto Additional = AdditionalShaderRoot(InPath);
@@ -411,6 +429,24 @@ std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::files
 
 void NormalizeOptions(FShaderCompileOptions& InOptions)
 {
+	std::sort(InOptions.VirtualIncludes.begin(), InOptions.VirtualIncludes.end(),
+	          [](const auto& InA, const auto& InB)
+	          {
+		          return InA.Name < InB.Name;
+	          });
+	std::string PreviousInclude;
+	for (const auto& Include : InOptions.VirtualIncludes)
+	{
+		const auto Path = PathFromUtf8(Include.Name);
+		if (Include.Name.empty() || Include.Name == PreviousInclude || Path.is_absolute() || Path.has_root_name() ||
+		    Path.lexically_normal() != Path || Include.Name.find("..") != std::string::npos ||
+		    Include.Name.find('\\') != std::string::npos)
+		{
+			throw std::invalid_argument("Invalid or duplicate virtual shader include: " + Include.Name);
+		}
+		PreviousInclude = Include.Name;
+	}
+
 	std::sort(InOptions.Defines.begin(), InOptions.Defines.end(),
 	          [](const FShaderDefine& InA, const FShaderDefine& InB)
 	          {
@@ -483,8 +519,8 @@ std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const 
 	}
 	ComPtr<IDxcIncludeHandler> Include;
 	std::string IncludeError;
-	Include.Attach(
-	    new FIncludeHandler(InUtils, InRoot, InFiles, AdditionalShaderRoot(InPath), InSources, IncludeError));
+	Include.Attach(new FIncludeHandler(InUtils, InRoot, InFiles, AdditionalShaderRoot(InPath), InSources,
+	                                   InOptions.VirtualIncludes, IncludeError));
 	ComPtr<IDxcResult> Result;
 	Checked(InCompiler->Compile(&Buffer, Pointers.data(), static_cast<UINT32>(Pointers.size()), Include.Get(),
 	                            IID_PPV_ARGS(&Result)),

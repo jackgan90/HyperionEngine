@@ -1,5 +1,9 @@
 add_library(hyperion_materials STATIC
   Private/MaterialBlocks.cpp
+  Private/ShaderParameters.cpp
+  Private/ShaderParameterLayout.cpp
+  Private/ShaderContracts.cpp
+  Private/MaterialSemanticId.cpp
   Private/PbrMaterial.cpp
   Private/MaterialAsset.cpp
   Private/MaterialAssetEnums.cpp

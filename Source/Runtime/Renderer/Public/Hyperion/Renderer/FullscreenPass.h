@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Materials/MaterialBlocks.h"
 #include "Hyperion/Materials/MaterialParameters.h"
 #include "Hyperion/Renderer/RenderPass.h"
 
@@ -31,7 +32,8 @@ struct FFullscreenPassDesc
 };
 
 std::shared_ptr<const FMaterialDefinition> MakeFullscreenMaterial(std::string InName, std::string InPixelShader,
-                                                                  bool bInSrgb = false);
+                                                                  bool bInSrgb = false,
+                                                                  FShaderParameterContracts InContracts = {});
 void AddFullscreenPass(FRenderSession& InSession, FRenderGraph& InGraph, FFullscreenPassDesc InPass,
                        bool bInDeferPreparation = true);
 } // namespace Hyperion

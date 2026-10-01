@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Materials/MaterialResources.h"
+#include "Hyperion/Materials/MaterialSemanticId.h"
 #include "Hyperion/Math/Math.h"
 #include <map>
 #include <optional>
@@ -109,7 +110,7 @@ struct FMaterialParameterDeclaration
 {
 	std::string Name;
 	FMaterialParameterType Type;
-	std::string Semantic;
+	FMaterialSemanticId Semantic;
 	std::vector<std::string> Targets;
 	EMaterialParameterSource Source = EMaterialParameterSource::Manual;
 	EMaterialOverridePolicy OverridePolicy = EMaterialOverridePolicy::AllowOverride;
@@ -120,20 +121,69 @@ struct FMaterialParameterDeclaration
 	std::optional<FMaterialValue> Default;
 };
 
+struct FMaterialParameterHandle
+{
+	std::uint64_t SchemaIdentity{};
+	std::uint64_t SchemaVersion{};
+	std::size_t Index{};
+	bool operator==(const FMaterialParameterHandle&) const = default;
+};
+
+class FMaterialParameterSchema;
+
+// Names are authored boundary inputs. Runtime values retain semantic IDs or schema-bound handles.
 struct FMaterialParameterEntry
 {
+	FMaterialParameterEntry() = default;
+
+	FMaterialParameterEntry(std::string InName, FMaterialValue InValue)
+	    : Name(std::move(InName)), Value(std::move(InValue))
+	{
+	}
+
+	FMaterialParameterEntry(const char* InName, FMaterialValue InValue)
+	    : FMaterialParameterEntry(std::string(InName), std::move(InValue))
+	{
+	}
+
+	FMaterialParameterEntry(FMaterialSemanticId InSemantic, FMaterialValue InValue)
+	    : Semantic(std::move(InSemantic)), Value(std::move(InValue))
+	{
+	}
+
+	FMaterialParameterEntry(EEngineSemantic InSemantic, FMaterialValue InValue)
+	    : FMaterialParameterEntry(FMaterialSemanticId(InSemantic), std::move(InValue))
+	{
+	}
+
+	FMaterialParameterEntry(FMaterialParameterHandle InHandle, FMaterialValue InValue)
+	    : Handle(InHandle), Value(std::move(InValue))
+	{
+	}
+
+	FMaterialSemanticId GetSemantic() const;
+	FMaterialParameterHandle Resolve(const FMaterialParameterSchema& InSchema) const;
+	std::string_view GetName(const FMaterialParameterSchema& InSchema) const;
+
 	std::string Name;
+	FMaterialSemanticId Semantic;
+	FMaterialParameterHandle Handle;
 	FMaterialValue Value;
 	bool operator==(const FMaterialParameterEntry&) const = default;
 };
 
 using FMaterialParameterValues = std::vector<FMaterialParameterEntry>;
 
-struct FMaterialParameterHandle
+struct FMaterialParameterIdentityToken
 {
-	std::uint64_t SchemaIdentity{};
-	std::uint64_t SchemaVersion{};
-	std::size_t Index{};
+	std::uint64_t Identity{};
+};
+
+struct FMaterialParameterIdentity
+{
+	std::shared_ptr<const FMaterialParameterIdentityToken> AuthorIdentity;
+	FMaterialSemanticId Semantic;
+	bool operator==(const FMaterialParameterIdentity&) const = default;
 };
 
 class FMaterialParameterSchema
@@ -148,7 +198,13 @@ public:
 	bool IsPrepared() const;
 	const std::vector<FMaterialParameterDeclaration>& GetParameters() const;
 	FMaterialParameterHandle Find(std::string_view InName) const;
-	FMaterialParameterHandle FindSemantic(std::string_view InSemantic) const;
+	// Exact authored identity only; shader target aliases never participate in schema bridging.
+	FMaterialParameterHandle FindAuthorIdentity(
+	    const std::shared_ptr<const FMaterialParameterIdentityToken>& InIdentity) const;
+	FMaterialParameterHandle FindSemantic(FMaterialSemanticId InSemantic) const;
+	std::vector<FMaterialParameterHandle> FindSemantics(FMaterialSemanticId InSemantic) const;
+	FMaterialParameterHandle GetHandle(std::size_t InIndex) const;
+	const FMaterialParameterIdentity& GetParameterIdentity(std::size_t InIndex) const;
 	const FMaterialParameterDeclaration& Get(FMaterialParameterHandle InHandle) const;
 
 private:
@@ -156,9 +212,11 @@ private:
 	std::uint64_t Version;
 	bool bPrepared;
 	std::vector<FMaterialParameterDeclaration> Parameters;
+	std::vector<FMaterialParameterIdentity> ParameterIdentities;
+	std::map<std::shared_ptr<const FMaterialParameterIdentityToken>, std::size_t> AuthorIdentities;
 	std::map<std::string, std::size_t, std::less<>> Names;
 	std::map<std::string, std::vector<std::size_t>, std::less<>> Aliases;
-	std::map<std::string, std::vector<std::size_t>, std::less<>> SemanticNames;
+	std::map<FMaterialSemanticId, std::vector<std::size_t>> SemanticNames;
 	void BuildLookup();
 };
 

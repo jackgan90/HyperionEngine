@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/IOService.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 
 namespace Hyperion
 {
@@ -15,6 +16,10 @@ inline const std::filesystem::path& TestShaderRoot()
 		                      std::filesystem::copy_options::recursive |
 		                          std::filesystem::copy_options::overwrite_existing);
 		FLocalFileSystem Files;
+		for (const auto& Include : GenerateShaderIncludes())
+		{
+			Files.WriteAtomic(Directory / Include.first, std::as_bytes(std::span(Include.second)));
+		}
 		const std::string_view Triangle = "#include \"Common.hlsli\"\n#include \"Common/ColorSpace.hlsli\"\n"
 		                                  R"SHADER(struct FVertexInput
 {

@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/FullscreenPass.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/ShaderParameters/OutputParameters.h"
 #include "Hyperion/Renderer/TransientGeometry.h"
 #include "Support/LogSupport.h"
 #include "Support/ShaderSourceSupport.h"
@@ -933,14 +934,17 @@ void CheckFullscreenPendingUpload(FTaskSystem& InTasks, FTestDevice& InDevice, F
 {
 	FRenderSession Session(InTasks, InDevice, InCompiler);
 	FFullscreenPassDesc Pass;
-	Pass.Material = MakeFullscreenMaterial("Pending fullscreen", "Common/Tonemap.hlsl", true);
+	Pass.Material =
+	    MakeFullscreenMaterial("Pending fullscreen", "Common/Tonemap.hlsl", true, {GetOutputShaderContracts()});
 	Pass.Lifetime = Session.GetResources().CreateScopeLifetime();
 	Pass.Targets = FRenderPassTargets::ColorOnly();
 	Pass.Viewport = {0, 0, 1, 1};
 	const auto Texture = std::make_shared<const FMaterialTextureSource>(
 	    EMaterialTextureEncoding::Linear, std::vector<FMaterialTextureMip>{{1, 1, {255, 255, 255, 255}}});
-	Pass.Parameters = {{"Pixel:SceneColor", FMaterialValue::FromTexture(Texture)},
-	                   {"Pixel:OutputV1.Exposure", FMaterialValue::Float(1.f)}};
+	Pass.Parameters = {{EOutputSemantic::SceneColor, FMaterialValue::FromTexture(Texture)}};
+	FOutputV1Parameters Output;
+	Output.Exposure = 1.f;
+	AppendShaderParameters(Pass.Parameters, Output);
 	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
 	                              [&]
 	                              {

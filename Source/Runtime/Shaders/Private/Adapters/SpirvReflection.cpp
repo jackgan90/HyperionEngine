@@ -49,6 +49,37 @@ const FShaderMember* FindMember(const FShaderMember* InParent, const std::string
 	return nullptr;
 }
 
+void ReadMatrixLayout(spirv_cross::Compiler& InCross, const spirv_cross::SPIRType& InParent, std::uint32_t InIndex,
+                      FShaderMember& OutMember)
+{
+	if (InCross.has_member_decoration(InParent.self, InIndex, spv::DecorationMatrixStride))
+	{
+		OutMember.MatrixStride = InCross.type_struct_member_matrix_stride(InParent, InIndex);
+		// DXC transposes the logical HLSL matrix when expressing it as SPIR-V.
+		OutMember.bRowMajor = !InCross.has_member_decoration(InParent.self, InIndex, spv::DecorationRowMajor);
+	}
+}
+
+void RestoreLoweredNumericType(FShaderMember& InMember, const FShaderMember* InLogical)
+{
+	if (!InLogical || InLogical->Kind != EShaderValueKind::Numeric)
+	{
+		return;
+	}
+	const bool bLoweredBool = InLogical->Scalar == EShaderScalar::Bool && InMember.Scalar == EShaderScalar::Uint;
+	// DXC lowers N x 1 matrices to vectors. Recover only that shape, without replacing native matrix/vector widths.
+	if (!InMember.MatrixStride && InMember.Rows == 1 && InMember.Columns > 1 && InLogical->Rows == InMember.Columns &&
+	    InLogical->Columns == 1 && (InLogical->Scalar == InMember.Scalar || bLoweredBool))
+	{
+		InMember.Rows = InLogical->Rows;
+		InMember.Columns = 1;
+	}
+	if (InLogical->Rows == InMember.Rows && InLogical->Columns == InMember.Columns && bLoweredBool)
+	{
+		InMember.Scalar = EShaderScalar::Bool;
+	}
+}
+
 FShaderMember ReadType(spirv_cross::Compiler& InCross, const spirv_cross::SPIRType& InType, FShaderMember InResult,
                        const FShaderMember* InLogical, std::uint32_t InDepth = 0)
 {
@@ -100,12 +131,7 @@ FShaderMember ReadType(spirv_cross::Compiler& InCross, const spirv_cross::SPIRTy
 			{
 				Member.ArrayStride = InCross.type_struct_member_array_stride(InType, Index);
 			}
-			if (InCross.has_member_decoration(InType.self, Index, spv::DecorationMatrixStride))
-			{
-				Member.MatrixStride = InCross.type_struct_member_matrix_stride(InType, Index);
-				// DXC transposes the logical HLSL matrix when expressing it as SPIR-V.
-				Member.bRowMajor = !InCross.has_member_decoration(InType.self, Index, spv::DecorationRowMajor);
-			}
+			ReadMatrixLayout(InCross, InType, Index, Member);
 			const FShaderMember* Logical = FindMember(InLogical, Member.Name);
 			InResult.Members.push_back(ReadType(InCross, InCross.get_type(InType.member_types[Index]),
 			                                    std::move(Member), Logical, InDepth + 1));
@@ -116,16 +142,8 @@ FShaderMember ReadType(spirv_cross::Compiler& InCross, const spirv_cross::SPIRTy
 		InResult.Scalar = Scalar(InType);
 		InResult.Rows = InType.columns;
 		InResult.Columns = InType.vecsize;
-		if (InLogical && InLogical->Kind == EShaderValueKind::Numeric)
-		{
-			InResult.Rows = InLogical->Rows;
-			InResult.Columns = InLogical->Columns;
-			if (InLogical->Scalar == EShaderScalar::Bool && InResult.Scalar == EShaderScalar::Uint)
-			{
-				InResult.Scalar = EShaderScalar::Bool;
-			}
-		}
-		if (InResult.Rows > 1)
+		RestoreLoweredNumericType(InResult, InLogical);
+		if (InResult.MatrixStride)
 		{
 			const std::uint32_t Major = InResult.bRowMajor ? InResult.Rows : InResult.Columns;
 			const std::uint32_t Minor = InResult.bRowMajor ? InResult.Columns : InResult.Rows;
@@ -133,7 +151,7 @@ FShaderMember ReadType(spirv_cross::Compiler& InCross, const spirv_cross::SPIRTy
 		}
 		else
 		{
-			InResult.Size = InResult.Columns * 4;
+			InResult.Size = InResult.Rows * InResult.Columns * 4;
 		}
 	}
 	return InResult;
@@ -236,6 +254,13 @@ FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Re
 		{
 			Result.StructureByteStride =
 			    InCross.type_struct_member_array_stride(InCross.get_type(InResource.base_type_id), 0);
+			const auto& BlockType = InCross.get_type(InResource.base_type_id);
+			const auto& ArrayType = InCross.get_type(BlockType.member_types[0]);
+			const auto& ElementType = InCross.get_type(ArrayType.parent_type);
+			const auto* LogicalElement = Logical && !Logical->Members.empty() ? &Logical->Members.front() : nullptr;
+			FShaderMember Element;
+			ReadMatrixLayout(InCross, BlockType, 0, Element);
+			Result.Members.push_back(ReadType(InCross, ElementType, std::move(Element), LogicalElement));
 		}
 	}
 	return Result;

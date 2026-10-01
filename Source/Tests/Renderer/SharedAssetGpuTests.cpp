@@ -411,7 +411,7 @@ void CheckRawCacheUpgrade(FFixture& InFixture, FSceneInstance& InScene,
 			                              Prepared = Resources.PrepareMaterialAsset(InData->Materials[0]);
 		                              }));
 		HYP_CHECK(Prepared->Schema->IsPrepared() && Prepared->Definition == Raw->Definition);
-		HYP_CHECK(Prepared->Overrides == Raw->Overrides);
+		HYP_CHECK(Prepared->Overrides == RebindMaterialParameters(Raw->Overrides, *Raw->Schema, *Prepared->Schema));
 	}
 	const auto Copy = InScene.Add({"same raw material after temporary preparation", InData});
 	F.Await(InScene);

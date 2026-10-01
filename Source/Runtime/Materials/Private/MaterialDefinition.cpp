@@ -147,9 +147,16 @@ FMaterialDefinition::FMaterialDefinition(FMaterialDescription InDescription,
 	{
 		throw std::invalid_argument("Material requires a name, version, semantic registry and at least one pass");
 	}
-	auto Registry = std::make_shared<FMaterialSemanticRegistry>(*InSemantics);
-	Registry->Freeze();
-	Semantics = std::move(Registry);
+	if (InSemantics->IsFrozen())
+	{
+		Semantics = std::move(InSemantics);
+	}
+	else
+	{
+		auto Registry = std::make_shared<FMaterialSemanticRegistry>(*InSemantics);
+		Registry->Freeze();
+		Semantics = std::move(Registry);
+	}
 	std::set<std::string> Usages;
 	for (FMaterialPass& Pass : Description.Passes)
 	{
@@ -161,14 +168,14 @@ FMaterialDefinition::FMaterialDefinition(FMaterialDescription InDescription,
 	}
 	for (FMaterialParameterDeclaration& Parameter : Description.Parameters)
 	{
-		if (!Parameter.Semantic.empty())
+		if (!Parameter.Semantic.IsEmpty())
 		{
 			const FMaterialSemantic& Semantic = Semantics->Find(Parameter.Semantic);
 			if (Semantic.Type != Parameter.Type)
 			{
 				throw std::invalid_argument("Material semantic type mismatch: " + Parameter.Name);
 			}
-			Parameter.Semantic = Semantic.Name;
+			Parameter.Semantic = Semantics->Normalize(Parameter.Semantic);
 		}
 	}
 	Schema = std::make_shared<FMaterialParameterSchema>(Description.Parameters, Description.Version, false);

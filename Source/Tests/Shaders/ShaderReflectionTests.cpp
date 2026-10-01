@@ -46,6 +46,116 @@ void ExpectError(const std::function<void()>& InAction, std::string_view InText)
 	throw std::runtime_error("Expected shader reflection error");
 }
 
+void CheckDirectMatrixBuffers(const std::filesystem::path& InRoot)
+{
+	std::ofstream(InRoot / "MatrixBuffer.hlsl") << R"(
+StructuredBuffer<MATRIX_TYPE> Input : register(t0);
+RWStructuredBuffer<MATRIX_TYPE> Output : register(u0);
+[numthreads(1,1,1)] void CSMain() { Output[0] = Input[0]; }
+)";
+	FShaderCompiler Compiler(InRoot, "material-shader-test/direct-matrices");
+	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
+	{
+		for (const auto Major : {"row_major", "column_major"})
+		{
+			const FShaderCompileOptions Options{{{"MATRIX_TYPE", std::string(Major) + " float3x2"}}};
+			const auto Shader = Compiler.Compile("MatrixBuffer.hlsl", "CSMain", EShaderStage::Compute, Format, Options);
+			for (const auto Name : {"Input", "Output"})
+			{
+				const auto& Binding = FindBinding(Shader, Name);
+				const auto& Matrix = Binding.Members.at(0);
+				HYP_CHECK(Matrix.Rows == 3 && Matrix.Columns == 2);
+				if (Format == EShaderFormat::Dxil)
+				{
+					HYP_CHECK(Binding.StructureByteStride == 24 && Matrix.MatrixStride == 12 && Matrix.Size == 24);
+				}
+				else
+				{
+					const bool bRows = std::string_view(Major) == "row_major";
+					HYP_CHECK(Matrix.bRowMajor == bRows);
+					HYP_CHECK(Matrix.MatrixStride == (bRows ? 8U : 16U));
+					HYP_CHECK(Matrix.Size == (bRows ? 24U : 28U));
+					HYP_CHECK(Binding.StructureByteStride == (bRows ? 24U : 32U));
+				}
+			}
+			const auto Cached = Compiler.Compile("MatrixBuffer.hlsl", "CSMain", EShaderStage::Compute, Format, Options);
+			HYP_CHECK(Cached.bCacheHit && Cached.Bindings == Shader.Bindings);
+		}
+	}
+}
+
+void CheckDegenerateMatrixShapes(const std::filesystem::path& InRoot)
+{
+	std::ofstream(InRoot / "DegenerateMatrix.hlsl") << R"(
+cbuffer Parameters : register(b0) { MATRIX_TYPE Value; };
+float4 PSMain() : SV_Target0 { return Value[0][0] + Value[LAST_ROW][LAST_COLUMN]; }
+)";
+	FShaderCompiler Compiler(InRoot, "material-shader-test/degenerate-matrices");
+	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
+	{
+		for (const auto Major : {"row_major", "column_major"})
+		{
+			for (std::uint32_t Rows = 1; Rows <= 4; ++Rows)
+			{
+				for (std::uint32_t Columns = 1; Columns <= 4; ++Columns)
+				{
+					if (Rows > 1 && Columns > 1)
+					{
+						continue;
+					}
+					const FShaderCompileOptions Options{
+					    {{"MATRIX_TYPE",
+					      std::string(Major) + " float" + std::to_string(Rows) + "x" + std::to_string(Columns)},
+					     {"LAST_ROW", std::to_string(Rows - 1)},
+					     {"LAST_COLUMN", std::to_string(Columns - 1)}}};
+					const auto Shader =
+					    Compiler.Compile("DegenerateMatrix.hlsl", "PSMain", EShaderStage::Pixel, Format, Options);
+					const auto& Member = FindBinding(Shader, "Parameters").Members.at(0);
+					const bool bRows = std::string_view(Major) == "row_major";
+					const auto MajorCount = bRows ? Rows : Columns;
+					const auto MinorCount = bRows ? Columns : Rows;
+					const auto ExpectedSize =
+					    Format == EShaderFormat::Dxil ? (MajorCount - 1) * 16 + MinorCount * 4 : Rows * Columns * 4;
+					HYP_CHECK(Member.Rows == Rows && Member.Columns == Columns && Member.Size == ExpectedSize);
+				}
+			}
+		}
+	}
+}
+
+void CheckLoweredBoolMatrices(const std::filesystem::path& InRoot)
+{
+	std::ofstream(InRoot / "BoolMatrix.hlsl") << R"(
+cbuffer Parameters : register(b0) { MATRIX_TYPE Value; };
+float4 PSMain() : SV_Target0 { return Value[0][0] + Value[LAST_ROW][0]; }
+)";
+	const auto RunIdentity = std::chrono::steady_clock::now().time_since_epoch().count();
+	FShaderCompiler Compiler(InRoot,
+	                         std::filesystem::path("material-shader-test/bool-matrices") / std::to_string(RunIdentity));
+	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
+	{
+		for (const auto Major : {"row_major", "column_major"})
+		{
+			for (std::uint32_t Rows = 2; Rows <= 4; ++Rows)
+			{
+				const FShaderCompileOptions Options{
+				    {{"MATRIX_TYPE", std::string(Major) + " bool" + std::to_string(Rows) + "x1"},
+				     {"LAST_ROW", std::to_string(Rows - 1)}}};
+				const auto Shader = Compiler.Compile("BoolMatrix.hlsl", "PSMain", EShaderStage::Pixel, Format, Options);
+				HYP_CHECK(!Shader.bCacheHit);
+				const auto& Member = FindBinding(Shader, "Parameters").Members.at(0);
+				const bool bRows = std::string_view(Major) == "row_major";
+				const auto ExpectedSize = Format == EShaderFormat::Dxil && bRows ? (Rows - 1) * 16 + 4 : Rows * 4;
+				HYP_CHECK(Member.Scalar == EShaderScalar::Bool && Member.Rows == Rows && Member.Columns == 1);
+				HYP_CHECK(Member.Size == ExpectedSize &&
+				          Member.MatrixStride == (Format == EShaderFormat::Dxil ? 16U : 0U));
+				const auto Hot = Compiler.Compile("BoolMatrix.hlsl", "PSMain", EShaderStage::Pixel, Format, Options);
+				HYP_CHECK(Hot.bCacheHit && Hot.Bindings == Shader.Bindings && Hot.Reflection == Shader.Reflection);
+			}
+		}
+	}
+}
+
 void CheckMembers(const FShaderArtifact& InArtifact)
 {
 	const FShaderBinding& Block = FindBinding(InArtifact, "Parameters");
@@ -131,6 +241,9 @@ void CheckMaterialShaderReflection(const std::filesystem::path& InRoot)
 {
 	CheckTextureComponents(InRoot);
 	CheckNestedArrayTypes(InRoot);
+	CheckDirectMatrixBuffers(InRoot);
+	CheckDegenerateMatrixShapes(InRoot);
+	CheckLoweredBoolMatrices(InRoot);
 	{
 		std::ofstream Shader(InRoot / "MaterialReflection.hlsl");
 		Shader << R"(

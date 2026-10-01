@@ -1,4 +1,5 @@
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Materials/ObjectParameters.h"
 #include "MaterialBindingGroups.h"
 #include "MaterialEvaluationCache.h"
 #include "MaterialProfiling.h"
@@ -8,6 +9,8 @@
 #include <algorithm>
 #include <bit>
 #include <stdexcept>
+
+#include "Hyperion/Materials/ShaderParameters.h"
 
 namespace Hyperion
 {
@@ -110,7 +113,14 @@ void ClassifyMaterialProviders(FMaterialEvaluationCache::FEntry& InEntry)
 	{
 		for (const auto& Override : *Overrides)
 		{
-			Overridden[InEntry.Compiled->Interface.Schema->Find(Override.Name).Index] = true;
+			Overridden[(Overrides == &InEntry.Snapshot->Overrides &&
+			                    InEntry.Snapshot->Schema != InEntry.Compiled->Interface.Schema
+			                ? InEntry.Compiled->Interface.Schema->FindAuthorIdentity(
+			                      InEntry.Snapshot->Schema
+			                          ->GetParameterIdentity(Override.Resolve(*InEntry.Snapshot->Schema).Index)
+			                          .AuthorIdentity)
+			                : Override.Resolve(*InEntry.Compiled->Interface.Schema))
+			               .Index] = true;
 		}
 	}
 	for (const auto Index : InEntry.Compiled->GetPass(InEntry.Usage).ActiveParameters)
@@ -214,11 +224,9 @@ void FillMaterialObjectInputs(FMaterialProviderInputs& InInputs, const FRenderIt
 {
 	const auto WorldViewProjection =
 	    PrimitiveClipTransform(InItem.State, InSnapshot.View.ViewProjection, InSnapshot.View.DepthConvention);
-	FMaterialParameterValues ObjectValues = {
-	    {"Engine.Object.World", FMaterialValue::Matrix(InItem.State.World)},
-	    {"Engine.Object.Normal", FMaterialValue::Matrix(NormalMatrix(InItem.State.World))},
-	    {"Engine.Object.OrientationSign", FMaterialValue::Float(Determinant(InItem.State.World) < 0 ? -1.f : 1.f)},
-	    {"Engine.Object.WorldViewProjection", FMaterialValue::Matrix(WorldViewProjection)}};
+	auto ObjectValues = MakeShaderParameters(FHyperionObjectV1Parameters{
+	    InItem.State.World, NormalMatrix(InItem.State.World), Determinant(InItem.State.World) < 0 ? -1.f : 1.f});
+	AppendShaderParameters(ObjectValues, FDrawConstantsParameters{WorldViewProjection});
 	ObjectValues.insert(ObjectValues.end(), InItem.State.ObjectInputs.begin(), InItem.State.ObjectInputs.end());
 	InInputs.Values[ScopeIndex(EMaterialScope::Object)] = std::move(ObjectValues);
 	const auto Key = ItemKey(InItem, InSnapshot);
@@ -243,9 +251,8 @@ FMaterialProviderInputs FRenderSession::PrepareViewInputs(const FRenderSceneSnap
 	auto Inputs = InSnapshot.Frame->Inputs;
 	auto& View = MaterialState->Views[InSnapshot.View.Identity];
 	View.AccessFrame = InSnapshot.Frame->Frame;
-	FMaterialParameterValues ViewValues{
-	    {"Engine.View.ViewProjection", FMaterialValue::Matrix(InSnapshot.View.ViewProjection)},
-	    {"Engine.View.CameraPosition", FMaterialValue::Float(InSnapshot.View.Eye)}};
+	auto ViewValues =
+	    MakeShaderParameters(FHyperionViewV1Parameters{InSnapshot.View.ViewProjection, InSnapshot.View.Eye});
 	ViewValues.insert(ViewValues.end(), InSnapshot.View.Parameters.begin(), InSnapshot.View.Parameters.end());
 	FMaterialInputValues PublishedView(std::move(ViewValues));
 	std::vector<std::uint64_t> Qualifiers{InSnapshot.View.Identity};
@@ -341,7 +348,7 @@ void PrepareMaterialItem(FRenderItem& InItem, FRenderSceneSnapshot& InSnapshot, 
 		const auto& Pass = Compiled->GetPass(InSnapshot.View.Usage);
 		FillMaterialObjectInputs(InInputs, InItem, InSnapshot, InResources);
 		FillMaterialDrawInputs(InInputs, InItem, InSnapshot);
-		std::vector<std::string> Semantics;
+		std::vector<FMaterialSemanticId> Semantics;
 		for (const auto Index : Pass.ActiveParameters)
 		{
 			const auto& Parameter = Compiled->Interface.Schema->GetParameters()[Index];

@@ -1,7 +1,10 @@
 #include "Hyperion/Renderer/LightVolumePass.h"
 #include "Hyperion/Core/Profiling.h"
+#include "Hyperion/Materials/ObjectParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/ShaderParameters/DeferredLightingParameters.h"
 #include "RenderResourcesInternal.h"
 
 namespace Hyperion
@@ -14,6 +17,7 @@ std::shared_ptr<const FMaterialDefinition> VolumeMaterial()
 	{
 		FMaterialDescription Description;
 		Description.Name = "Deferred local light";
+		Description.ShaderContracts = {GetDeferredLightingShaderContracts()};
 		FMaterialPass Pass;
 		Pass.Vertex = {"Deferred/LocalLight.hlsl", "VSMain"};
 		Pass.Pixel = {"Deferred/LocalLight.hlsl", "PSMain"};
@@ -35,29 +39,31 @@ void SetView(FMaterialInstance& InMaterial, const FLightVolumePassDesc& InPass)
 {
 	const auto& View = InPass.View;
 	const auto Port = View.Viewport.value_or(FViewport{0, 0, float(View.Width), float(View.Height)});
-	InMaterial.Set("Vertex:LocalVolumeV1.ViewProjection", FMaterialValue::Matrix(View.ViewProjection));
-	InMaterial.Set("Pixel:LocalLightV1.InverseViewProjection", FMaterialValue::Matrix(Inverse(View.ViewProjection)));
-	InMaterial.Set("Pixel:LocalLightV1.Viewport",
-	               FMaterialValue::Float(FVec4{Port.X, Port.Y, Port.Width, Port.Height}));
-	InMaterial.Set("Pixel:LocalLightV1.DepthRange",
-	               FMaterialValue::Float(FVec2{Port.MinDepth, 1.f / (Port.MaxDepth - Port.MinDepth)}));
-	InMaterial.Set("Pixel:LocalLightV1.Eye", FMaterialValue::Float(View.Eye));
+	InMaterial.SetSemantic(ELocalVolumeV1Field::ViewProjection, FMaterialValue::Matrix(View.ViewProjection));
+	FLocalLightV1Parameters Parameters;
+	Parameters.InverseViewProjection = Inverse(View.ViewProjection);
+	Parameters.Viewport = {Port.X, Port.Y, Port.Width, Port.Height};
+	Parameters.DepthRange = {Port.MinDepth, 1.f / (Port.MaxDepth - Port.MinDepth)};
+	Parameters.Eye = View.Eye;
+	InMaterial.SetParameters(MakeShaderParameters(Parameters));
 	for (std::size_t Index = 0; Index < 3; ++Index)
 	{
-		InMaterial.Set("Pixel:GBuffer" + std::to_string(Index), FMaterialValue::FromTexture(InPass.GBuffer[Index]));
+		InMaterial.SetSemantic(std::array{EDeferredLightingSemantic::GBuffer0, EDeferredLightingSemantic::GBuffer1,
+		                                  EDeferredLightingSemantic::GBuffer2}[Index],
+		                       FMaterialValue::FromTexture(InPass.GBuffer[Index]));
 	}
-	InMaterial.Set("Pixel:SceneDepth", FMaterialValue::FromTexture(InPass.Depth));
+	InMaterial.SetSemantic(EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(InPass.Depth));
 }
 
 void SetLight(FMaterialInstance& InMaterial, const FLocalLight& InLight)
 {
-	InMaterial.Set("Vertex:LocalVolumeV1.World", FMaterialValue::Matrix(InLight.VolumeWorld));
-	InMaterial.Set("Pixel:LocalLightV1.Position", FMaterialValue::Float(InLight.Position));
-	InMaterial.Set("Pixel:LocalLightV1.Radiance", FMaterialValue::Float(InLight.Radiance));
-	InMaterial.Set("Pixel:LocalLightV1.Direction", FMaterialValue::Float(InLight.Direction));
-	InMaterial.Set("Pixel:LocalLightV1.ConeRange",
-	               FMaterialValue::Float(
-	                   FVec4{1.f / InLight.Range, InLight.InnerCos, InLight.OuterCos, InLight.bSpot ? 1.f : 0.f}));
+	InMaterial.SetSemantic(ELocalVolumeV1Field::World, FMaterialValue::Matrix(InLight.VolumeWorld));
+	InMaterial.SetSemantic(ELocalLightV1Field::Position, FMaterialValue::Float(InLight.Position));
+	InMaterial.SetSemantic(ELocalLightV1Field::Radiance, FMaterialValue::Float(InLight.Radiance));
+	InMaterial.SetSemantic(ELocalLightV1Field::Direction, FMaterialValue::Float(InLight.Direction));
+	InMaterial.SetSemantic(ELocalLightV1Field::ConeRange,
+	                       FMaterialValue::Float(FVec4{1.f / InLight.Range, InLight.InnerCos, InLight.OuterCos,
+	                                                   InLight.bSpot ? 1.f : 0.f}));
 }
 } // namespace
 
@@ -80,7 +86,8 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildLightVolumes(const FLightVol
 	if (!Entry.Program)
 	{
 		Entry.Program = std::make_shared<const FCompiledMaterialDefinition>(
-		    CompileMaterialDefinition(Owner.Compiler, Definition, Owner.Device.GetCapabilities().ShaderFormat));
+		    CompileMaterialDefinition(Owner.Compiler, Definition, Owner.Device.GetCapabilities().ShaderFormat, {},
+		                              EMaterialEngineBindingMode::Explicit));
 		Entry.Instance = std::make_unique<FMaterialInstance>(Entry.Program->Interface);
 	}
 	FGraphicsDrawBatch Result;

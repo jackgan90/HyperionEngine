@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Renderer/ComputePass.h"
 #include "Hyperion/Renderer/MaterialPreparation.h"
+#include <set>
 
 namespace Hyperion
 {
@@ -11,6 +12,9 @@ struct FComputeResources
 		FComputeShader Description;
 		FShaderArtifact Shader;
 		std::vector<FMaterialProgramBinding> Bindings;
+		std::vector<std::vector<FMaterialSemanticId>> MemberSemantics;
+		std::vector<FMaterialSemanticId> ResourceSemantics;
+		std::set<FMaterialSemanticId> ActiveSemantics;
 		std::vector<std::weak_ptr<const void>> Owners;
 	};
 
@@ -26,4 +30,6 @@ struct FComputeResources
 	FProgram& GetProgram(FShaderCompiler& InCompiler, EShaderFormat InFormat, const FComputePassDesc& InPass);
 	void Collect();
 };
+
+FComputePassDesc SelectComputeParameters(const FComputePassDesc& InPass, const FComputeResources::FProgram& InProgram);
 } // namespace Hyperion

@@ -82,6 +82,10 @@ void FEditorPlugin::ExerciseAssetWindowInput(std::vector<FInputEvent>& InEvents)
 			++Acceptance.ExerciseStep;
 			break;
 		case 201:
+			if (!Scene->GetStatus().bReady)
+			{
+				break;
+			}
 			CheckAssetWindow(!IsDirty() && !Document->IsDirty(), "Main-window undo targeted the asset document");
 			WindowShortcut(InEvents, EKey::Y);
 			++Acceptance.ExerciseStep;

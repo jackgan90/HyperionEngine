@@ -1,3 +1,5 @@
+#include "HyperionUniforms.generated.hlsli"
+#include "ObjectParameters.generated.hlsli"
 #ifndef HYP_ENABLE_INSTANCE
 #define HYP_ENABLE_INSTANCE 0
 #endif
@@ -7,7 +9,7 @@
 #endif
 struct FDrawInstance
 {
-	column_major float4x4 TransformMatrix;
+	HYP_RECORD_DrawConstants
 };
 
 cbuffer DrawConstants : register(b0)
@@ -15,8 +17,5 @@ cbuffer DrawConstants : register(b0)
 	FDrawInstance DrawInstances[HYP_INSTANCE_CAPACITY];
 };
 #else
-cbuffer DrawConstants : register(b0)
-{
-	column_major float4x4 TransformMatrix;
-};
+HYP_UNIFORM_DrawConstants(b0);
 #endif

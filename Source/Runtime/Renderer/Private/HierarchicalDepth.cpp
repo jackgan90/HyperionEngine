@@ -1,6 +1,8 @@
 #include "Hyperion/Renderer/HierarchicalDepth.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/RHI/RHIPipeline.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "Hyperion/Renderer/ShaderParameters/HierarchicalDepthParameters.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -41,31 +43,31 @@ void Generate(FRenderSession& InSession, FRenderGraph& InGraph, const FHierarchi
 		            std::to_string(InRequest.Depth.Texture->GetIdentity()) + "/" +
 		            (InRequest.Reduction == EDepthReduction::Nearest ? "Nearest/" : "Farthest/") + std::to_string(Mip);
 		Pass.Shader.Source = Mip == 0 ? "Depth/HierarchicalCopy.hlsl" : "Depth/HierarchicalReduce.hlsl";
+		Pass.Shader.Contracts = {GetHierarchicalDepthShaderContracts()};
 		Pass.Lifetime = InProduct.Lifetime;
 		Pass.Extent = {Size.Width, Size.Height, 1};
-		Pass.Textures = {{"SourceDepth", Mip == 0 ? InRequest.Depth.Texture : InProduct.Texture, Mip == 0 ? 0 : Mip - 1,
-		                  1, EResourceState::ShaderRead, false, Mip == 0 ? InRequest.Depth.bInitialized : false},
-		                 {"OutputDepth", InProduct.Texture, Mip, 1, EResourceState::ShaderWrite, true, false}};
-		Pass.Parameters = {{"DepthParameters.Width", FMaterialValue::Uint(Size.Width)},
-		                   {"DepthParameters.Height", FMaterialValue::Uint(Size.Height)}};
+		Pass.Textures = {{EHierarchicalDepthSemantic::DepthSource,
+		                  Mip == 0 ? InRequest.Depth.Texture : InProduct.Texture, Mip == 0 ? 0 : Mip - 1, 1,
+		                  EResourceState::ShaderRead, false, Mip == 0 ? InRequest.Depth.bInitialized : false},
+		                 {EHierarchicalDepthSemantic::DepthOutput, InProduct.Texture, Mip, 1,
+		                  EResourceState::ShaderWrite, true, false}};
 		if (Mip == 0)
 		{
-			Pass.Parameters.push_back(
-			    {"DepthParameters.Viewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height})});
-			Pass.Parameters.push_back(
-			    {"DepthParameters.DepthRange",
-			     FMaterialValue::Float(FVec2{View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)})});
-			Pass.Parameters.push_back({"DepthParameters.FarDepth",
-			                           FMaterialValue::Float(GetDepthClearValue(InRequest.View.DepthConvention))});
+			FHZBCopyV1Parameters Parameters;
+			Parameters.Width = Size.Width;
+			Parameters.Height = Size.Height;
+			Parameters.Viewport = {View.X, View.Y, View.Width, View.Height};
+			Parameters.DepthRange = {View.MinDepth, 1.f / (View.MaxDepth - View.MinDepth)};
+			Parameters.FarDepth = GetDepthClearValue(InRequest.View.DepthConvention);
+			Pass.EngineParameters = MakeShaderParameters(Parameters);
 		}
 		else
 		{
 			const auto Previous = InProduct.MipSizes[Mip - 1];
-			Pass.Parameters.push_back({"DepthParameters.SourceWidth", FMaterialValue::Uint(Previous.Width)});
-			Pass.Parameters.push_back({"DepthParameters.SourceHeight", FMaterialValue::Uint(Previous.Height)});
 			const bool bMaximum = (InRequest.Reduction == EDepthReduction::Nearest) ==
 			                      (InRequest.View.DepthConvention == EDepthConvention::Reversed);
-			Pass.Parameters.push_back({"DepthParameters.bMaximum", FMaterialValue::Uint(bMaximum ? 1 : 0)});
+			Pass.EngineParameters = MakeShaderParameters(
+			    FHZBReduceV1Parameters{Size.Width, Size.Height, Previous.Width, Previous.Height, bMaximum});
 		}
 		AddComputePass(InSession, InGraph, std::move(Pass), bInDeferPreparation);
 	}

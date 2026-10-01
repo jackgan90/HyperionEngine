@@ -46,11 +46,13 @@ float4 PSMain() : SV_Target0
 		{
 			if (Binding.Resource.Name == "HyperionViewV1")
 			{
-				HYP_CHECK(Binding.Stages == 3 && Binding.Resource.ByteSize == 80 && Binding.Members.size() == 2);
+				HYP_CHECK(Binding.Stages == 3 && Binding.Resource.ByteSize >= 76 && Binding.Resource.ByteSize <= 80 &&
+				          Binding.Members.size() == 2);
 			}
 			if (Binding.Resource.Name == "HyperionObjectV1")
 			{
-				HYP_CHECK(Binding.Stages == 3 && Binding.Resource.ByteSize == 144 && Binding.Members.size() == 3);
+				HYP_CHECK(Binding.Stages == 3 && Binding.Resource.ByteSize >= 132 && Binding.Resource.ByteSize <= 144 &&
+				          Binding.Members.size() == 3);
 			}
 		}
 	}

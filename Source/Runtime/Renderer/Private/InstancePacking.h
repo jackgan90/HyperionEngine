@@ -11,7 +11,7 @@ struct FInstanceRecordLayout
 	EShaderFormat Format{};
 	std::uint32_t Stride{};
 	std::vector<FShaderMember> Members;
-	std::vector<std::pair<std::string, std::string>> Mapping;
+	std::vector<FMaterialParameterIdentity> Mapping;
 
 	bool Matches(const FInstanceRecordLayout& InOther) const;
 };

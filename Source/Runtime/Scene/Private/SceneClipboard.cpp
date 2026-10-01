@@ -79,7 +79,8 @@ void FreezeMaterial(FSceneMaterialSelection& InSelection, std::size_t& OutBytes)
 	{
 		for (const auto& Value : InValues)
 		{
-			OutBytes += sizeof(Value) + Value.Name.size() + MaterialValueBytes(Value.Value);
+			OutBytes +=
+			    sizeof(Value) + Value.Name.size() + Value.Semantic.GetStorageBytes() + MaterialValueBytes(Value.Value);
 		}
 	};
 	Count(InSelection.Overrides);

@@ -1,5 +1,7 @@
 #include "EnvironmentParameters.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
+#include "Hyperion/Renderer/ShaderParameters/SkyParameters.h"
 #include <cmath>
 
 namespace Hyperion
@@ -10,6 +12,7 @@ std::shared_ptr<const FMaterialDefinition> SkyMaterial(bool bInReversed)
 {
 	FMaterialDescription Description;
 	Description.Name = bInReversed ? "Sky reversed depth" : "Sky standard depth";
+	Description.ShaderContracts = {GetSkyShaderContracts()};
 	FMaterialPass Pass;
 	Pass.Vertex = {"Common/Sky.hlsl", "VSMain"};
 	Pass.Vertex.Defines = {{"HYP_REVERSED_SKY", bInReversed ? "1" : "0"}};
@@ -63,14 +66,14 @@ void FSceneRenderPipeline::AddSky(FRenderGraph& InGraph, const FRenderView& InVi
 	Sampler.U = EMaterialAddressMode::Clamp;
 	Sampler.V = EMaterialAddressMode::Clamp;
 	Sampler.W = EMaterialAddressMode::Clamp;
-	Pass.Parameters = {
-	    {"Pixel:SkyViewV1.InverseSkyViewProjection", FMaterialValue::Matrix(Inverse(SkyViewProjection))},
-	    {"Pixel:SkyViewV1.SkyViewport", FMaterialValue::Float(FVec4{View.X, View.Y, View.Width, View.Height})},
-	    {"Pixel:SkyViewV1.SkyRotationIntensity",
-	     FMaterialValue::Float(FVec4{std::cos(Yaw), std::sin(Yaw), Light.Intensity, 0})},
-	    {"Pixel:SkyViewV1.SkyTint", FMaterialValue::Float(FVec4{Light.Tint.X, Light.Tint.Y, Light.Tint.Z, 1})},
-	    {"Pixel:SkyRadiance", FMaterialValue::FromTexture(Light.Data->Textures[0])},
-	    {"Pixel:SkySampler", FMaterialValue::FromSampler(Sampler)}};
+	FSkyViewV1Parameters Parameters;
+	Parameters.InverseSkyViewProjection = Inverse(SkyViewProjection);
+	Parameters.SkyViewport = {View.X, View.Y, View.Width, View.Height};
+	Parameters.SkyRotationIntensity = {std::cos(Yaw), std::sin(Yaw), Light.Intensity, 0};
+	Parameters.SkyTint = {Light.Tint.X, Light.Tint.Y, Light.Tint.Z, 1};
+	Pass.Parameters = MakeShaderParameters(Parameters);
+	Pass.Parameters.push_back({ESkySemantic::SkyRadiance, FMaterialValue::FromTexture(Light.Data->Textures[0])});
+	Pass.Parameters.push_back({ESkySemantic::SkySampler, FMaterialValue::FromSampler(Sampler)});
 	AddFullscreenPass(Session, InGraph, std::move(Pass), bInDeferPreparation);
 }
 } // namespace Hyperion

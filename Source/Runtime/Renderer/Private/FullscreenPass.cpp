@@ -34,10 +34,11 @@ void FFullscreenResources::Collect()
 }
 
 std::shared_ptr<const FMaterialDefinition> MakeFullscreenMaterial(std::string InName, std::string InPixelShader,
-                                                                  bool bInSrgb)
+                                                                  bool bInSrgb, FShaderParameterContracts InContracts)
 {
 	FMaterialDescription Description;
 	Description.Name = std::move(InName);
+	Description.ShaderContracts = std::move(InContracts);
 	FMaterialPass Pass;
 	Pass.Vertex = {"Common/Fullscreen.hlsl", "VSMain"};
 	Pass.Pixel = {std::move(InPixelShader), "PSMain"};
@@ -50,22 +51,40 @@ namespace
 {
 void UpdateMaterial(FFullscreenResources::FMaterialEntry& InEntry, const FMaterialParameterValues& InValues)
 {
-	for (const auto& Previous : InEntry.Values)
-	{
-		if (std::none_of(InValues.begin(), InValues.end(),
-		                 [&](const auto& InValue)
-		                 {
-			                 return InValue.Name == Previous.Name;
-		                 }))
-		{
-			InEntry.Instance->Clear(Previous.Name);
-		}
-	}
+	FMaterialParameterValues ActiveValues;
+	const auto& Schema = *InEntry.Program->Interface.Schema;
 	for (const auto& Value : InValues)
 	{
-		InEntry.Instance->Set(Value.Name, Value.Value);
+		if (!Value.Handle.SchemaIdentity && Value.Semantic.IsBuiltin())
+		{
+			for (const auto Handle : Schema.FindSemantics(Value.Semantic))
+			{
+				ActiveValues.push_back({Handle, Value.Value});
+			}
+		}
+		else if (!Value.Handle.SchemaIdentity && !Value.Semantic.IsEmpty())
+		{
+			const auto Semantic = InEntry.Program->Interface.Definition->GetSemantics().Normalize(Value.Semantic);
+			ActiveValues.push_back({Schema.FindSemantic(Semantic), Value.Value});
+		}
+		else
+		{
+			ActiveValues.push_back({Value.Resolve(Schema), Value.Value});
+		}
 	}
-	InEntry.Values = InValues;
+	for (const auto& Previous : InEntry.Values)
+	{
+		if (std::none_of(ActiveValues.begin(), ActiveValues.end(),
+		                 [&](const auto& InValue)
+		                 {
+			                 return InValue.Handle == Previous.Handle;
+		                 }))
+		{
+			InEntry.Instance->Clear(Previous.Handle);
+		}
+	}
+	InEntry.Instance->SetParameters(ActiveValues);
+	InEntry.Values = std::move(ActiveValues);
 }
 
 void TrackReadOwners(FRenderResourceCoordinator& InOwner, const FFullscreenPassDesc& InPass,
@@ -110,7 +129,8 @@ FGraphicsDrawBatch FRenderResourcePreparation::BuildFullscreen(const FFullscreen
 	if (!Entry.Program)
 	{
 		auto Program = std::make_shared<const FCompiledMaterialDefinition>(
-		    CompileMaterialDefinition(Owner.Compiler, InPass.Material, Owner.Device.GetCapabilities().ShaderFormat));
+		    CompileMaterialDefinition(Owner.Compiler, InPass.Material, Owner.Device.GetCapabilities().ShaderFormat, {},
+		                              EMaterialEngineBindingMode::Explicit));
 		auto Instance = std::make_unique<FMaterialInstance>(Program->Interface);
 		Entry.Program = std::move(Program);
 		Entry.Instance = std::move(Instance);

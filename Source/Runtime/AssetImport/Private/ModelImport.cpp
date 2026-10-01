@@ -1,12 +1,36 @@
 #include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/Materials/PbrMaterial.h"
+#include "Hyperion/Materials/PbrParameters.h"
+#include <algorithm>
 #include <map>
 
 namespace Hyperion
 {
 namespace
 {
-const std::array<std::string, 5> Roles{"BaseColor", "MetallicRoughness", "Normal", "Occlusion", "Emissive"};
+const std::array TextureSemantics{EPbrSemantic::BaseColorTexture, EPbrSemantic::MetallicRoughnessTexture,
+                                  EPbrSemantic::NormalTexture, EPbrSemantic::OcclusionTexture,
+                                  EPbrSemantic::EmissiveTexture};
+const std::array SamplerSemantics{EPbrSemantic::BaseColorSampler, EPbrSemantic::MetallicRoughnessSampler,
+                                  EPbrSemantic::NormalSampler, EPbrSemantic::OcclusionSampler,
+                                  EPbrSemantic::EmissiveSampler};
+const std::array UvSemantics{EHyperionMaterialV1Field::BaseColorUv, EHyperionMaterialV1Field::MetallicRoughnessUv,
+                             EHyperionMaterialV1Field::NormalUv, EHyperionMaterialV1Field::OcclusionUv,
+                             EHyperionMaterialV1Field::EmissiveUv};
+
+std::string MaterialParameterName(const FMaterialAsset& InAsset, FMaterialSemanticId InSemantic)
+{
+	const auto Found = std::find_if(InAsset.Parameters.begin(), InAsset.Parameters.end(),
+	                                [&](const auto& InParameter)
+	                                {
+		                                return FMaterialSemanticId(InParameter.Semantic) == InSemantic;
+	                                });
+	if (Found == InAsset.Parameters.end())
+	{
+		throw std::logic_error("PBR asset lacks a builtin parameter");
+	}
+	return Found->Name;
+}
 
 FMaterialSampler MaterialSampler(const FModelSampler& InSampler)
 {
@@ -29,21 +53,21 @@ FMaterialSampler MaterialSampler(const FModelSampler& InSampler)
 
 void SetFactors(FMaterialAsset& InAsset, const FModelMaterial& InMaterial)
 {
-	const auto Set = [&](std::string InName, FMaterialValue InValue)
+	const auto Set = [&](FMaterialSemanticId InSemantic, FMaterialValue InValue)
 	{
-		InAsset.Values.push_back({std::move(InName), PersistMaterialValue(InValue)});
+		InAsset.Values.push_back({MaterialParameterName(InAsset, InSemantic), PersistMaterialValue(InValue)});
 	};
-	Set("Pbr.BaseColorFactor", FMaterialValue::Float(InMaterial.BaseColor));
-	Set("Pbr.EmissiveFactor", FMaterialValue::Float(InMaterial.Emissive));
-	Set("Pbr.NormalScale", FMaterialValue::Float(InMaterial.NormalScale));
-	Set("Pbr.MetallicFactor", FMaterialValue::Float(InMaterial.Metallic));
-	Set("Pbr.RoughnessFactor", FMaterialValue::Float(InMaterial.Roughness));
-	Set("Pbr.OcclusionStrength", FMaterialValue::Float(InMaterial.OcclusionStrength));
-	Set("Pbr.AlphaCutoff", FMaterialValue::Float(InMaterial.AlphaCutoff));
-	Set("Pbr.AlphaMode", FMaterialValue::Uint(static_cast<std::uint32_t>(InMaterial.AlphaMode)));
-	Set("Pbr.DoubleSided", FMaterialValue::Bool(InMaterial.bDoubleSided));
-	Set("Pbr.Unlit", FMaterialValue::Bool(InMaterial.bUnlit));
-	Set("Pbr.HasNormal", FMaterialValue::Bool(InMaterial.NormalTexture.Image >= 0));
+	Set(EHyperionMaterialV1Field::BaseColor, FMaterialValue::Float(InMaterial.BaseColor));
+	Set(EHyperionMaterialV1Field::Emissive, FMaterialValue::Float(InMaterial.Emissive));
+	Set(EHyperionMaterialV1Field::NormalScale, FMaterialValue::Float(InMaterial.NormalScale));
+	Set(EHyperionMaterialV1Field::Metallic, FMaterialValue::Float(InMaterial.Metallic));
+	Set(EHyperionMaterialV1Field::Roughness, FMaterialValue::Float(InMaterial.Roughness));
+	Set(EHyperionMaterialV1Field::OcclusionStrength, FMaterialValue::Float(InMaterial.OcclusionStrength));
+	Set(EHyperionMaterialV1Field::AlphaCutoff, FMaterialValue::Float(InMaterial.AlphaCutoff));
+	Set(EHyperionMaterialV1Field::AlphaMode, FMaterialValue::Uint(static_cast<std::uint32_t>(InMaterial.AlphaMode)));
+	Set(EHyperionMaterialV1Field::bDoubleSided, FMaterialValue::Bool(InMaterial.bDoubleSided));
+	Set(EHyperionMaterialV1Field::bUnlit, FMaterialValue::Bool(InMaterial.bUnlit));
+	Set(EHyperionMaterialV1Field::bHasNormal, FMaterialValue::Bool(InMaterial.NormalTexture.Image >= 0));
 }
 
 struct FModelSplitter
@@ -93,12 +117,12 @@ struct FModelSplitter
 			FMaterialAssetValue Value;
 			Value.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
 			Value.Texture = Texture(Views[Slot].Image, Slot == 0 || Slot == 4);
-			Asset.Values.push_back({Roles[Slot] + "Texture", std::move(Value)});
+			Asset.Values.push_back({MaterialParameterName(Asset, TextureSemantics[Slot]), std::move(Value)});
 			const auto Sampler = Views[Slot].Sampler < 0 ? FModelSampler{} : Source.Samplers.at(Views[Slot].Sampler);
-			Asset.Values.push_back(
-			    {Roles[Slot] + "Sampler", PersistMaterialValue(FMaterialValue::FromSampler(MaterialSampler(Sampler)))});
-			Asset.Values.push_back(
-			    {"Pbr." + Roles[Slot] + "UvSet", PersistMaterialValue(FMaterialValue::Uint(Views[Slot].TexCoord))});
+			Asset.Values.push_back({MaterialParameterName(Asset, SamplerSemantics[Slot]),
+			                        PersistMaterialValue(FMaterialValue::FromSampler(MaterialSampler(Sampler)))});
+			Asset.Values.push_back({MaterialParameterName(Asset, UvSemantics[Slot]),
+			                        PersistMaterialValue(FMaterialValue::Uint(Views[Slot].TexCoord))});
 		}
 		ValidateMaterialAsset(Asset);
 		const auto Key = "material-" + std::to_string(InIndex);

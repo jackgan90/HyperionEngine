@@ -1,114 +1,27 @@
 #include "Hyperion/Materials/MaterialSemantics.h"
+#include "Hyperion/Materials/ShaderParameters.h"
 #include <algorithm>
 #include <stdexcept>
 
 namespace Hyperion
 {
-FMaterialSemanticRegistry::FMaterialSemanticRegistry()
+FEngineSemanticPolicy GetEngineSemanticPolicy(FMaterialSemanticId InSemantic)
 {
-	auto Numeric = [this](std::string InName, EMaterialScalar InScalar, std::uint32_t InColumns, EMaterialScope InScope,
-	                      std::string InConvention, std::uint32_t InRows = 1)
+	if (InSemantic.GetDescriptor())
 	{
-		Add({std::move(InName), FMaterialParameterType::Numeric(InScalar, InColumns, InRows), InScope,
-		     std::move(InConvention)});
-	};
-	Numeric("Engine.Frame.Time", EMaterialScalar::Float, 1, EMaterialScope::Frame, "Session elapsed seconds");
-	Numeric("Engine.Frame.Index", EMaterialScalar::Uint, 1, EMaterialScope::Frame,
-	        "Session frame serial modulo uint32");
-	Numeric("Engine.View.CameraPosition", EMaterialScalar::Float, 3, EMaterialScope::View, "World-space eye position");
-	Numeric("Engine.View.ViewProjection", EMaterialScalar::Float, 4, EMaterialScope::View,
-	        "Column-vector world to clip", 4);
-	for (unsigned Index = 0; Index < 4; ++Index)
-	{
-		Numeric("Engine.View.ShadowMatrix" + std::to_string(Index), EMaterialScalar::Float, 4, EMaterialScope::View,
-		        "Column-vector world to shadow clip, zero-to-one depth", 4);
-		Add({"Engine.View.ShadowDepth" + std::to_string(Index),
-		     FMaterialParameterType::Resource(EMaterialValueKind::Texture2D), EMaterialScope::View,
-		     "Directional cascade sampled D32 depth"});
+		return InSemantic.GetDescriptor()->Policy;
 	}
-	for (const auto* Name :
-	     {"ShadowSplits", "ShadowTexels", "ShadowRanges", "ShadowCamera", "ShadowFilter", "ShadowControl"})
+	if (InSemantic.GetBuiltin() != EEngineSemantic::None)
 	{
-		Numeric(std::string("Engine.View.") + Name, EMaterialScalar::Float, 4, EMaterialScope::View,
-		        "Cascaded directional shadow contract V1");
+		return GetStandardMaterialSemantics()->Find(InSemantic).Policy;
 	}
-	Add({"Engine.View.ShadowSampler", FMaterialParameterType::Resource(EMaterialValueKind::Sampler),
-	     EMaterialScope::View, "Less-equal depth comparison sampler"});
-	for (const auto* Name : {"ClusterViewport", "ClusterGrid", "ClusterCamera", "ClusterForward", "ClusterDepth"})
-	{
-		Numeric(std::string("Engine.View.") + Name, EMaterialScalar::Float, 4, EMaterialScope::View,
-		        "Clustered local lighting view contract V1");
-	}
-	for (const auto* Name : {"ClusterLights", "ClusterHeaders", "ClusterIndices"})
-	{
-		Add({std::string("Engine.View.") + Name, FMaterialParameterType::Resource(EMaterialValueKind::ReadBuffer),
-		     EMaterialScope::View, "Clustered local lighting structured buffer V1"});
-	}
-	Numeric("Engine.Object.World", EMaterialScalar::Float, 4, EMaterialScope::Object, "Column-vector local to world",
-	        4);
-	Numeric("Engine.Object.Normal", EMaterialScalar::Float, 4, EMaterialScope::Object,
-	        "Inverse transpose local to world", 4);
-	Numeric("Engine.Object.OrientationSign", EMaterialScalar::Float, 1, EMaterialScope::Object,
-	        "World determinant sign");
-	Numeric("Engine.Object.WorldViewProjection", EMaterialScalar::Float, 4, EMaterialScope::Object,
-	        "Derived from World and ViewProjection", 4);
-	Numeric("Engine.Scene.MainDirectionalLightDirection", EMaterialScalar::Float, 3, EMaterialScope::Scene,
-	        "Unit world-space surface-to-light vector");
-	Numeric("Engine.Scene.MainDirectionalLightColor", EMaterialScalar::Float, 3, EMaterialScope::Scene,
-	        "Linear RGB radiance");
-	Numeric("Engine.Scene.AmbientColor", EMaterialScalar::Float, 3, EMaterialScope::Scene,
-	        "Linear ambient RGB radiance");
-	Add({"Engine.Scene.DirectionalLights", FMaterialParameterType::Resource(EMaterialValueKind::ReadBuffer),
-	     EMaterialScope::Scene, "Unshadowed directional lights; excludes the separately evaluated shadow source"});
-	for (const auto* Name :
-	     {"EnvironmentControl", "EnvironmentRotation", "EnvironmentSh0", "EnvironmentSh1", "EnvironmentSh2",
-	      "EnvironmentSh3", "EnvironmentSh4", "EnvironmentSh5", "EnvironmentSh6", "EnvironmentSh7", "EnvironmentSh8"})
-	{
-		Numeric(std::string("Engine.Scene.") + Name, EMaterialScalar::Float, 4, EMaterialScope::Scene,
-		        "Environment V1: ready/intensity/max mip, inverse Y rotation, cosine-convolved SH9 RGB");
-	}
-	for (const auto& [Name, Kind] : {std::pair{"EnvironmentSpecular", EMaterialValueKind::TextureCube},
-	                                 std::pair{"EnvironmentBrdf", EMaterialValueKind::Texture2D},
-	                                 std::pair{"EnvironmentSampler", EMaterialValueKind::Sampler}})
-	{
-		Add({std::string("Engine.Scene.") + Name, FMaterialParameterType::Resource(Kind), EMaterialScope::Scene,
-		     "Linear GGX environment split-sum resources"});
-	}
-	Numeric("Pbr.AlphaMode", EMaterialScalar::Uint, 1, EMaterialScope::Material, "0 opaque, 1 masked, 2 blended");
-	Numeric("Pbr.DoubleSided", EMaterialScalar::Bool, 1, EMaterialScope::Material, "Flip the back-face shading normal");
-	Numeric("Pbr.Unlit", EMaterialScalar::Bool, 1, EMaterialScope::Material, "Use unlit base color and emissive");
-	Numeric("Pbr.HasNormal", EMaterialScalar::Bool, 1, EMaterialScope::Material,
-	        "Enable tangent-space normal sampling");
-	Numeric("Pbr.BaseColorFactor", EMaterialScalar::Float, 4, EMaterialScope::Material, "Linear RGBA multiplier");
-	Numeric("Pbr.EmissiveFactor", EMaterialScalar::Float, 3, EMaterialScope::Material, "Linear RGB multiplier");
-	Numeric("Pbr.MetallicFactor", EMaterialScalar::Float, 1, EMaterialScope::Material, "Metallic scalar");
-	Numeric("Pbr.RoughnessFactor", EMaterialScalar::Float, 1, EMaterialScope::Material, "Perceptual roughness");
-	Numeric("Pbr.NormalScale", EMaterialScalar::Float, 1, EMaterialScope::Material,
-	        "Tangent-space normal XY multiplier");
-	Numeric("Pbr.OcclusionStrength", EMaterialScalar::Float, 1, EMaterialScope::Material, "Occlusion blend strength");
-	Numeric("Pbr.AlphaCutoff", EMaterialScalar::Float, 1, EMaterialScope::Material, "Masked alpha threshold");
-	const std::array<std::string, 5> Roles{"BaseColor", "MetallicRoughness", "Normal", "Occlusion", "Emissive"};
-	const std::array<std::string, 5> Aliases{"ALBEDO_TEXTURE", "METALLIC_ROUGHNESS_TEXTURE", "NORMAL_TEXTURE",
-	                                         "OCCLUSION_TEXTURE", "EMISSIVE_TEXTURE"};
-	for (std::size_t Index = 0; Index < Roles.size(); ++Index)
-	{
-		const std::string Convention = Index == 0 || Index == 4 ? "sRGB source decoded to linear"
-		                               : Index == 2             ? "Linear tangent-space XYZ normal"
-		                                                        : "Linear data channels";
-		Add({"Pbr." + Roles[Index] + "Texture",
-		     FMaterialParameterType::Resource(EMaterialValueKind::Texture2D),
-		     EMaterialScope::Material,
-		     Convention,
-		     true,
-		     {Aliases[Index]}});
-		Add({"Pbr." + Roles[Index] + "Sampler", FMaterialParameterType::Resource(EMaterialValueKind::Sampler),
-		     EMaterialScope::Material, "glTF texture sampler"});
-		Numeric("Pbr." + Roles[Index] + "UvSet", EMaterialScalar::Uint, 1, EMaterialScope::Material,
-		        "Vertex texture coordinate set 0 or 1");
-	}
+	return {};
 }
 
-void FMaterialSemanticRegistry::Add(FMaterialSemantic InSemantic)
+namespace
+{
+void ValidateSemantic(const FMaterialSemantic& InSemantic, std::span<const FMaterialSemantic> InBuiltins,
+                      std::span<const FMaterialSemantic> InCustom)
 {
 	InSemantic.Type.Validate();
 	if (InSemantic.Name.empty() || InSemantic.Convention.empty() || InSemantic.Scope >= EMaterialScope::Count)
@@ -122,17 +35,45 @@ void FMaterialSemanticRegistry::Add(FMaterialSemantic InSemantic)
 	{
 		throw std::invalid_argument("Duplicate or empty material semantic alias");
 	}
-	for (const FMaterialSemantic& Existing : Semantics)
+	for (const auto ExistingSet : {InBuiltins, InCustom})
 	{
-		for (const std::string& Name : Names)
+		for (const FMaterialSemantic& Existing : ExistingSet)
 		{
-			if (Existing.Name == Name ||
-			    std::find(Existing.Aliases.begin(), Existing.Aliases.end(), Name) != Existing.Aliases.end())
+			for (const std::string& Name : Names)
 			{
-				throw std::invalid_argument("Conflicting material semantic registration: " + Name);
+				if (Existing.Name == Name ||
+				    std::find(Existing.Aliases.begin(), Existing.Aliases.end(), Name) != Existing.Aliases.end())
+				{
+					throw std::invalid_argument("Conflicting material semantic registration: " + Name);
+				}
 			}
 		}
 	}
+}
+
+std::shared_ptr<const std::vector<FMaterialSemantic>> BuiltinCatalog()
+{
+	static const auto Catalog = []
+	{
+		std::vector<FMaterialSemantic> Values = GetEngineShaderSemantics();
+
+		for (std::size_t Index = 0; Index < Values.size(); ++Index)
+		{
+			ValidateSemantic(Values[Index], std::span<const FMaterialSemantic>(Values).first(Index), {});
+		}
+		return std::make_shared<const std::vector<FMaterialSemantic>>(std::move(Values));
+	}();
+	return Catalog;
+}
+} // namespace
+
+FMaterialSemanticRegistry::FMaterialSemanticRegistry() : Builtins(BuiltinCatalog())
+{
+}
+
+void FMaterialSemanticRegistry::Add(FMaterialSemantic InSemantic)
+{
+	ValidateSemantic(InSemantic, *Builtins, Semantics);
 	Semantics.push_back(std::move(InSemantic));
 }
 
@@ -164,8 +105,16 @@ std::uint64_t FMaterialSemanticRegistry::GetVersion() const
 	return Version;
 }
 
-const FMaterialSemantic& FMaterialSemanticRegistry::Find(std::string_view InName) const
+const FMaterialSemantic& FMaterialSemanticRegistry::Find(FMaterialSemanticId InName) const
 {
+	if (InName.GetDescriptor())
+	{
+		return *InName.GetDescriptor();
+	}
+	if (InName.GetBuiltin() != EEngineSemantic::None)
+	{
+		return Builtins->at(static_cast<std::size_t>(InName.GetBuiltin()) - 1);
+	}
 	for (const FMaterialSemantic& Semantic : Semantics)
 	{
 		if (Semantic.Name == InName ||
@@ -174,24 +123,28 @@ const FMaterialSemantic& FMaterialSemanticRegistry::Find(std::string_view InName
 			return Semantic;
 		}
 	}
-	throw std::invalid_argument("Unknown material semantic: " + std::string(InName));
+	throw std::invalid_argument("Unknown material semantic: " + std::string(InName.GetName()));
 }
 
-std::string FMaterialSemanticRegistry::Normalize(std::string_view InName) const
+FMaterialSemanticId FMaterialSemanticRegistry::Normalize(FMaterialSemanticId InName) const
 {
+	if (InName.IsBuiltin())
+	{
+		return InName;
+	}
 	return Find(InName).Name;
 }
 
-FMaterialParameterDeclaration DeclareMaterialSemantic(std::string InName, std::string_view InSemantic,
+FMaterialParameterDeclaration DeclareMaterialSemantic(std::string InName, FMaterialSemanticId InSemantic,
                                                       const FMaterialSemanticRegistry& InRegistry)
 {
 	const FMaterialSemantic& Semantic = InRegistry.Find(InSemantic);
 	FMaterialParameterDeclaration Result;
 	Result.Name = std::move(InName);
 	Result.Type = Semantic.Type;
-	Result.Semantic = Semantic.Name;
+	Result.Semantic = InRegistry.Normalize(InSemantic);
 	Result.bRequired = Semantic.bRequired;
-	if (!Semantic.Name.starts_with("Pbr."))
+	if (GetEngineSemanticPolicy(InRegistry.Normalize(InSemantic)).Group != EEngineSemanticGroup::Pbr)
 	{
 		Result.Source = EMaterialParameterSource::Semantic;
 		Result.OverridePolicy = EMaterialOverridePolicy::Locked;

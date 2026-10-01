@@ -4,6 +4,9 @@
 #include <cstddef>
 #include <map>
 
+#include "Hyperion/Materials/ShaderParameters.h"
+#include "Hyperion/Renderer/MaterialBlocks.h"
+
 namespace Hyperion
 {
 struct FGuiRenderer::FImpl
@@ -85,15 +88,25 @@ void FGuiRenderer::Start()
 	Desc.State.DestinationRgb = ERHIBlendFactor::InverseSourceAlpha;
 	Desc.State.DestinationAlpha = ERHIBlendFactor::InverseSourceAlpha;
 	Desc.VertexStride = sizeof(FGuiVertex);
-	P.Tasks.Wait(P.Tasks.Dispatch({EDomain::Worker},
-	                              [&]
-	                              {
-		                              Desc.Vertex = P.Compiler.Compile("Gui.hlsl", "VSMain", EShaderStage::Vertex,
-		                                                               P.Device.GetCapabilities().ShaderFormat);
-		                              Desc.Pixel = P.Compiler.Compile("Gui.hlsl", "PSMain", EShaderStage::Pixel,
-		                                                              P.Device.GetCapabilities().ShaderFormat,
-		                                                              {{{"HYP_GUI_SRGB", "1"}}});
-	                              }));
+	P.Tasks.Wait(P.Tasks.Dispatch(
+	    {EDomain::Worker},
+	    [&]
+	    {
+		    FShaderCompileOptions Options;
+		    for (auto& Include : GenerateShaderIncludes())
+		    {
+			    Options.VirtualIncludes.push_back({std::move(Include.first), std::move(Include.second)});
+		    }
+		    Desc.Vertex = P.Compiler.Compile("Gui.hlsl", "VSMain", EShaderStage::Vertex,
+		                                     P.Device.GetCapabilities().ShaderFormat, Options);
+		    for (auto Binding : Desc.Vertex.Bindings)
+		    {
+			    NormalizeStandardMaterialBlock(Binding);
+		    }
+		    Options.Defines = {{"HYP_GUI_SRGB", "1"}};
+		    Desc.Pixel = P.Compiler.Compile("Gui.hlsl", "PSMain", EShaderStage::Pixel,
+		                                    P.Device.GetCapabilities().ShaderFormat, Options);
+	    }));
 	Desc.Attributes = {{"POSITION", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Position)},
 	                   {"TEXCOORD", 0, EVertexFormat::Float2, offsetof(FGuiVertex, Uv)},
 	                   {"COLOR", 0, EVertexFormat::Unorm8x4, offsetof(FGuiVertex, Color)}};
