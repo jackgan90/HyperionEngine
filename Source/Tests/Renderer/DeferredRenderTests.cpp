@@ -3,6 +3,8 @@
 #include "Hyperion/Renderer/SceneBridge.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/RecordedDrawSupport.h"
+#include "Support/SceneRouteTestSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
@@ -147,7 +149,8 @@ struct FFixture
 		                          }));
 	}
 
-	FImage Frame(ESceneRenderPipeline InPipeline = ESceneRenderPipeline::Deferred, bool bInCapture = true)
+	FImage Frame(ESceneRenderPipeline InPipeline = ESceneRenderPipeline::Deferred, bool bInCapture = true,
+	             std::vector<std::shared_ptr<const FPassCommands>>* OutCommands = nullptr)
 	{
 		Window.Poll();
 		Tasks.Wait(Session->GetScene().Flush());
@@ -186,8 +189,10 @@ struct FFixture
 				                                {0, 0, float(View.Width), float(View.Height)}, true);
 			    }
 			    const auto Prepared = Pipeline->GetFrame();
-			    Result =
-			        ExecuteGraph(std::move(Graph), Tasks, *Swapchain, {View.Width, View.Height}, false, bInCapture);
+			    std::vector<std::shared_ptr<const FPassCommands>> Unobserved;
+			    FObservedSwapchain Observer(*Swapchain, OutCommands ? *OutCommands : Unobserved);
+			    Result = ExecuteGraph(std::move(Graph), Tasks, OutCommands ? Observer : *Swapchain,
+			                          {View.Width, View.Height}, false, bInCapture);
 			    Statistics = Prepared.Statistics();
 			    for (const auto& Row : Statistics.Views)
 			    {
@@ -1599,6 +1604,12 @@ int main()
 		for (const auto Convention : {EDepthConvention::Standard, EDepthConvention::Reversed})
 		{
 			FFixture Fixture(Convention);
+			RunSceneRouteTests(
+			    {Fixture.Tasks, *Fixture.Session, Fixture.Compiler, Fixture.View, Fixture.Statistics,
+			     [&](ESceneRenderPipeline InPipeline, std::vector<std::shared_ptr<const FPassCommands>>& OutCommands)
+			     {
+				     return Fixture.Frame(InPipeline, true, &OutCommands);
+			     }});
 			CheckFeatureSelection(Fixture);
 			CheckConfiguration(Fixture);
 			CheckVisualizerPixels(Fixture);

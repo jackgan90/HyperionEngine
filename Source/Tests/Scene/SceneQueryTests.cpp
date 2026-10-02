@@ -1,6 +1,7 @@
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Hyperion/Renderer/ViewportRay.h"
 #include "Hyperion/Scene/Scene.h"
+#include "Support/SceneRouteTestSupport.h"
 #include "Support/TestSupport.h"
 #include <cmath>
 #include <iostream>
@@ -282,27 +283,21 @@ void CheckRoundedTies()
 
 void CheckScheduledMaterialPasses()
 {
-	struct FCase
-	{
-		std::vector<std::string> Usages;
-		bool bDeferred{};
-		bool bForward{};
-	};
-
-	const std::vector<FCase> Cases{{{"Forward"}, true, true},
-	                               {{"HdrForwardOpaque", "Forward"}, false, true},
-	                               {{"DeferredBase", "Forward"}, true, false},
-	                               {{"HdrCompatibility", "Forward"}, true, false},
-	                               {{"HdrTransparent", "Forward"}, true, true},
-	                               {{"HdrForwardOpaque", "DeferredBase", "Forward"}, true, true},
-	                               {{"ShadowDepth", "Forward"}, true, true},
-	                               {{"ShadowDepth"}, false, false}};
+	const auto Deferred = MakeSceneRayOptions(ESceneRenderPipeline::Deferred);
+	const auto Forward = MakeSceneRayOptions(ESceneRenderPipeline::Forward);
+	HYP_CHECK((Deferred.MaterialUsages ==
+	           std::vector<std::string>{"DeferredBase", "HdrCompatibility", "HdrTransparent", "Forward"}));
+	HYP_CHECK((Forward.MaterialUsages == std::vector<std::string>{"HdrForwardOpaque", "HdrTransparent", "Forward"}));
+	const std::vector<std::string> Exclusions{"HdrForwardOpaque", "DeferredBase", "HdrCompatibility", "HdrTransparent"};
+	HYP_CHECK(Deferred.MaterialUsageExclusions.size() == 1 && Forward.MaterialUsageExclusions.size() == 1);
+	HYP_CHECK(Deferred.MaterialUsageExclusions.at("Forward") == Exclusions);
+	HYP_CHECK(Forward.MaterialUsageExclusions.at("Forward") == Exclusions);
 	const auto Data = Prepared(Mesh());
-	for (const auto& Test : Cases)
+	for (const auto& Test : SceneRouteCases())
 	{
 		FMaterialDescription Description;
 		Description.Name = "scheduled pass policy";
-		for (const auto& Usage : Test.Usages)
+		for (const auto& Usage : Test.Authored)
 		{
 			FMaterialPass Pass;
 			Pass.Usage = Usage;
@@ -314,12 +309,19 @@ void CheckScheduledMaterialPasses()
 		auto Value = Model(Data);
 		Value.Surface.Instance =
 		    std::make_shared<FMaterialInstance>(std::make_shared<FMaterialDefinition>(Description));
-		Scene.Add(Value);
+		const auto Handle = Scene.Add(Value);
 		const FRay Ray{{0, 0, 1}, {0, 0, -1}, 0, 10};
-		HYP_CHECK((Scene.Raycast(Ray, MakeSceneRayOptions(ESceneRenderPipeline::Deferred)).Status ==
-		           ESceneRayStatus::Hit) == Test.bDeferred);
-		HYP_CHECK((Scene.Raycast(Ray, MakeSceneRayOptions(ESceneRenderPipeline::Forward)).Status ==
-		           ESceneRayStatus::Hit) == Test.bForward);
+		HYP_CHECK(Scene.Raycast(Ray, Deferred).Status ==
+		          (Test.bDeferredPick ? ESceneRayStatus::Hit : ESceneRayStatus::Miss));
+		HYP_CHECK(Scene.Raycast(Ray, Forward).Status ==
+		          (Test.bForwardPick ? ESceneRayStatus::Hit : ESceneRayStatus::Miss));
+		if (Test.Authored == std::vector<std::string>{"CustomOnly"})
+		{
+			FSceneRayOptions Explicit;
+			Explicit.MaterialUsages = {"CustomOnly"};
+			const auto Hit = Scene.Raycast(Ray, Explicit);
+			HYP_CHECK(Hit.Status == ESceneRayStatus::Hit && Hit.Handle == Handle && Hit.Distance == 1);
+		}
 	}
 }
 

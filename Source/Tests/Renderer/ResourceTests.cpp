@@ -12,6 +12,9 @@
 #include <iostream>
 #include <thread>
 
+void RunViewParticipationTests(Hyperion::FTaskSystem& InTasks, Hyperion::IRHIDevice& InDevice,
+                               Hyperion::FShaderCompiler& InCompiler, const Hyperion::FRenderResourceDesc& InGeometry);
+
 namespace
 {
 using namespace Hyperion;
@@ -981,6 +984,7 @@ int main()
 		CheckSectionTransactions(Tasks, Device, Compiler);
 		CheckPendingSection(Tasks, Device, Compiler);
 		CheckTransientMaterialReadiness(Tasks, Device, Compiler);
+		RunViewParticipationTests(Tasks, Device, Compiler, Geometry());
 		CheckVisibilityAndAggregation(Tasks, Device, Compiler);
 		CheckBoundsReadiness(Tasks, Device, Compiler);
 		CheckFullscreenPendingUpload(Tasks, Device, Compiler);

@@ -12,6 +12,8 @@
 
 using namespace Hyperion;
 
+void RunViewDiagnosticsTests(const std::filesystem::path& InCaptureDirectory);
+
 namespace
 {
 template<class F> void Rejects(F InAction)
@@ -313,10 +315,16 @@ void TimingIdentity()
 }
 } // namespace
 
-int main()
+int main(int InCount, char** InArguments)
 {
 	try
 	{
+		if (InCount == 3 && std::string_view(InArguments[1]) == "--capture-view-diagnostics")
+		{
+			RunViewDiagnosticsTests(std::filesystem::path(InArguments[2]));
+			return 0;
+		}
+		HYP_CHECK(InCount == 1);
 		Settings();
 		SettingsCompatibility();
 		StrictOptionConversions();
@@ -324,6 +332,7 @@ int main()
 		HudOptionsAndExposure();
 		ClipLines();
 		TimingIdentity();
+		RunViewDiagnosticsTests({});
 		std::cout << "Render settings, clipped diagnostics and timing identity passed\n";
 	}
 	catch (const std::exception& Error)
