@@ -3,11 +3,25 @@
 
 namespace Hyperion
 {
+enum class ESceneSkyState
+{
+	None,
+	Unrequested,
+	Loading,
+	Uploading,
+	Ready,
+	Failed
+};
+
 struct FSceneSkyStatus
 {
-	std::string State;
+	ESceneSkyState State = ESceneSkyState::None;
 	std::string Error;
 };
+
+std::string_view SceneSkyStateName(ESceneSkyState InState);
+std::string FormatSceneSkyStatus(const FSceneSkyStatus& InStatus);
+template<> std::span<const ESceneSkyState> RecordEnumValues<ESceneSkyState>();
 
 struct FSceneLightDiagnostic
 {

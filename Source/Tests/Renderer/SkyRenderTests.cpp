@@ -17,6 +17,63 @@ using namespace Hyperion;
 
 namespace
 {
+class FFailingSkyDevice final : public IRHIDevice
+{
+public:
+	std::string Error;
+	FRHICapabilities Capabilities;
+
+	FFailingSkyDevice()
+	{
+		Capabilities.ConstantAlignment = 256;
+		Capabilities.MaxConstantRange = 65536;
+	}
+
+	const FRHICapabilities& GetCapabilities() const noexcept override
+	{
+		return Capabilities;
+	}
+
+	FRHIFeatureSupport QueryFeature(ERHIFeature) const override
+	{
+		return {};
+	}
+
+	FBuffer CreateBuffer(std::span<const std::byte>) override
+	{
+		throw std::logic_error("Unexpected sky test buffer");
+	}
+
+	FTexture CreateTexture(const FImage&) override
+	{
+		throw std::logic_error("Unexpected sky test texture");
+	}
+
+	std::vector<FTexture> CreateTexturesAsync(std::span<const FTextureDesc>) override
+	{
+		throw std::runtime_error(Error);
+	}
+
+	FPipeline CreatePipeline(const FPipelineDesc&) override
+	{
+		throw std::logic_error("Unexpected sky test pipeline");
+	}
+
+	std::unique_ptr<IRHISwapchain> CreateSwapchain(const FRHISwapchainDesc&) override
+	{
+		throw std::logic_error("Unexpected sky test swapchain");
+	}
+
+	void WaitIdle() override
+	{
+	}
+
+	FDeviceStats Statistics() const override
+	{
+		return {};
+	}
+};
+
 struct FSkyFixture
 {
 	FTaskSystem Tasks{2, 1};
@@ -34,6 +91,7 @@ struct FSkyFixture
 	FScenePipelineSettings Settings;
 	FForwardPipelineStatistics Statistics;
 	EDepthConvention Convention;
+	bool bSawSkyUploading{};
 
 	explicit FSkyFixture(EDepthConvention InConvention) : Convention(InConvention)
 	{
@@ -133,6 +191,7 @@ struct FSkyFixture
 		do
 		{
 			Scene->Tick();
+			bSawSkyUploading |= Scene->GetSkyAssetStatus(Environment).State == ESceneSkyState::Uploading;
 			HYP_CHECK(Scene->GetStatus().Error.empty());
 			if (bInFailure ? Scene->GetStatus().FailedSkies > 0 : Scene->GetStatus().bReady)
 			{
@@ -587,6 +646,42 @@ void CheckTint(FSkyFixture& InFixture, const FAssetRef& InGray)
 	std::cout << "Sky tint filters background, diffuse and specular sky radiance without reloading\n";
 }
 
+void CheckStateFailures(FSkyFixture& InFixture, const FAssetRef& InValid)
+{
+	for (const std::string Error : {"", "Preparing sky failed", "Failed: sky upload"})
+	{
+		FFailingSkyDevice Device;
+		Device.Error = Error;
+		FRenderSession Session(InFixture.Tasks, Device, InFixture.Compiler);
+		FSceneInstance Scene(Session, InFixture.Tasks, InFixture.Assets);
+		auto Node = MakeSceneEnvironmentLightNode("failed-upload");
+		Node.EnvironmentLight()->Source = ESceneEnvironmentSource::SkyAsset;
+		Node.EnvironmentLight()->Sky = InValid;
+		const auto Handle = Scene.AddNode(Node);
+		const auto End = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+		do
+		{
+			Scene.Tick();
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		} while (Scene.GetStatus().FailedSkies == 0 && std::chrono::steady_clock::now() < End);
+		const auto Status = Scene.GetSkyAssetStatus(Handle);
+		HYP_CHECK(Status.State == ESceneSkyState::Failed);
+		HYP_CHECK(Status.Error == Error);
+		HYP_CHECK(!Scene.GetStatus().bReady && Scene.GetStatus().FailedSkies == 1);
+		HYP_CHECK(Scene.GetStatus().PendingSkies == 0);
+		const auto Info = Scene.GetLightingInfo();
+		HYP_CHECK(Info.Lights.back().Asset.State == ESceneSkyState::Failed);
+		auto Light = *Scene.FindNode(Handle)->EnvironmentLight();
+		Light.Source = ESceneEnvironmentSource::ConstantColor;
+		Scene.SetEnvironmentLight(Handle, Light);
+		Scene.Tick();
+		HYP_CHECK(Scene.GetStatus().bReady && Scene.GetStatus().FailedSkies == 0);
+		Scene.Close();
+		Session.Close();
+	}
+	HYP_CHECK(InFixture.bSawSkyUploading);
+}
+
 void CheckPriorityIsolation(FSkyFixture& InFixture, const FAssetRef& InReference)
 {
 	InFixture.Select(InReference);
@@ -602,7 +697,7 @@ void CheckPriorityIsolation(FSkyFixture& InFixture, const FAssetRef& InReference
 	const auto Info = InFixture.Scene->GetLightingInfo();
 	HYP_CHECK(Info.SkyLight == Handle);
 	const auto Error = InFixture.Scene->GetSkyAssetStatus(Handle);
-	HYP_CHECK(Error.State == "failed" && !Error.Error.empty());
+	HYP_CHECK(Error.State == ESceneSkyState::Failed && !Error.Error.empty());
 	const auto Diagnostic = std::find_if(Info.Lights.begin(), Info.Lights.end(),
 	                                     [&](const auto& InLight)
 	                                     {
@@ -683,6 +778,7 @@ int main()
 			CheckClustered(Fixture);
 			CheckRoughness(Fixture);
 			CheckTint(Fixture, Gray);
+			CheckStateFailures(Fixture, Red);
 			CheckReplacement(Fixture, Red, Blue);
 			CheckPriorityIsolation(Fixture, Red);
 			CheckSourceToggle(Fixture, Red);

@@ -136,11 +136,13 @@ void FEditorPlugin::ExerciseModelDrag(std::vector<FInputEvent>& InEvents)
 			                                                        std::to_string(Acceptance.ModelPlacementCase));
 			if (Acceptance.ModelPlacementCase >= 4 && Acceptance.ModelPlacementCase <= 6)
 			{
-				if (PlacementStatus.starts_with("Preparing"))
+				if (PlacementPreparation.State == EPlacementPreparationState::Pending)
 				{
 					return;
 				}
-				CheckModelPlacement(!Placement.GetPreview() && !PlacementStatus.empty(), "Invalid asset accepted");
+				CheckModelPlacement(!Placement.GetPreview() &&
+				                        PlacementPreparation.State == EPlacementPreparationState::Failed,
+				                    "Invalid asset accepted");
 				ModelButton(InEvents, false);
 				Acceptance.ModelPlacementStep = 8;
 				return;

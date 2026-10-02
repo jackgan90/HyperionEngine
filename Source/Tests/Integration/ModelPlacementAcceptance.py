@@ -30,6 +30,8 @@ def check_automation(cli, editor, output, mcp):
         for model in (dict(reference, type="hyperion.textureasset"), dict(reference, path="/Game/Broken.hasset"), dict(reference, path="/Game/Failed.hasset")):
             rejected = agent.wait(agent.call(operation, **dict(request, model=model)))
             assert rejected["status"] == "failed", rejected
+            expected_code = "invalid_arguments" if model["type"] == "hyperion.textureasset" else "load_failed"
+            assert rejected["error"]["code"] == expected_code, rejected
             unchanged = ready(agent)
             assert int(unchanged["nodes"]) == before and unchanged["revision"] == info["revision"], unchanged
         placed = completed(agent.wait(agent.call(operation, **request)))

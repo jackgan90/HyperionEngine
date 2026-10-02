@@ -190,10 +190,10 @@ std::string FAssetWorkspace::ActiveStatus() const
 		}
 		for (const auto Handle : Active->Scene->GetNodes(ESceneNodeKind::EnvironmentLight))
 		{
-			const auto SkyStatus = Active->Scene->GetSkyStatus(Handle);
-			if (SkyStatus.starts_with("Failed:"))
+			const auto SkyStatus = Active->Scene->GetSkyAssetStatus(Handle);
+			if (SkyStatus.State == ESceneSkyState::Failed)
 			{
-				return SkyStatus;
+				return FormatSceneSkyStatus(SkyStatus);
 			}
 		}
 		for (const auto Handle : Active->Scene->GetHandles())

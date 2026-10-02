@@ -3,35 +3,36 @@
 
 namespace Hyperion
 {
-std::string FEditorPlugin::PlacementUnavailableReason(const FPlaceableObject& InObject) const
+FPlacementPreparation FEditorPlugin::GetPlacementPreparation(const FPlaceableObject& InObject) const
 {
-	return PlacementUnavailableReason(FPlacementService::Candidate(InObject));
+	return GetPlacementPreparation(FPlacementService::Candidate(InObject));
 }
 
-std::string FEditorPlugin::PlacementUnavailableReason(const FPlacementCandidate& InObject) const
+FPlacementPreparation FEditorPlugin::GetPlacementPreparation(const FPlacementCandidate& InObject) const
 {
-	if (!Scene->GetStatus().bLoaded || !Scene->GetStatus().Error.empty())
-	{
-		return "Wait for a valid scene document";
-	}
+	return PlacementService.GetPreparation(InObject, GetPlacementPreparationContext(InObject));
+}
+
+FPlacementPreparationContext FEditorPlugin::GetPlacementPreparationContext(const FPlacementCandidate& InObject) const
+{
+	FPlacementPreparationContext Result;
+	const auto& Status = Scene->GetStatus();
+	Result.bSceneAvailable = Status.bLoaded && Status.Error.empty();
 	if (InObject.Model)
 	{
-		const auto Unavailable = PlacementService.Unavailable(InObject);
-		if (!Unavailable.empty())
-		{
-			return Unavailable;
-		}
-		if (PlacementMaterial->GetStatus() == ERenderMaterialStatus::Failed)
-		{
-			return PlacementMaterial->GetError();
-		}
-		return PlacementMaterial->GetStatus() == ERenderMaterialStatus::Ready ? "" : "Preparing model preview";
+		const auto State = PlacementMaterial ? PlacementMaterial->GetStatus() : ERenderMaterialStatus::Preparing;
+		const bool bFailed = State == ERenderMaterialStatus::Failed || State == ERenderMaterialStatus::Retired;
+		Result.PreviewMaterial = {State == ERenderMaterialStatus::Ready ? EPlacementPreparationState::Ready
+		                          : bFailed                             ? EPlacementPreparationState::Failed
+		                                                                : EPlacementPreparationState::Pending,
+		                          EPlacementPreparationStage::PreviewMaterial,
+		                          bFailed ? PlacementMaterial->GetError() : std::string{}};
 	}
 	if (const auto It = PlacementIcons.find(InObject.Icon); It != PlacementIcons.end())
 	{
-		return !It->second.Error.empty() ? It->second.Error : It->second.Source.Texture ? "" : "Preparing icon";
+		Result.Icon = It->second.Preparation;
 	}
-	return InObject.Icon.empty() ? "" : "Unknown icon resource";
+	return Result;
 }
 
 void FEditorPlugin::InitializePlacement()
@@ -111,8 +112,8 @@ void FEditorPlugin::InitializePlacement()
 		}
 		catch (const std::exception& Failure)
 		{
-			Icon.Error = Failure.what();
-			Icon.bComplete = true;
+			Icon.Preparation = {EPlacementPreparationState::Failed, EPlacementPreparationStage::IconLoading,
+			                    Failure.what()};
 		}
 	}
 }
@@ -147,6 +148,7 @@ void FEditorPlugin::PollPlacementResources()
 			catch (const std::exception& Failure)
 			{
 				PlacementModels[Object->Id].Error = Failure.what();
+				PlacementModels[Object->Id].bLoadComplete = true;
 			}
 		}
 	}
@@ -157,21 +159,23 @@ void FEditorPlugin::PollPlacementIcons()
 {
 	for (auto& [Id, Icon] : PlacementIcons)
 	{
-		if (!Icon.bComplete && Icon.Request.Ready())
+		if (Icon.Preparation.State == EPlacementPreparationState::Pending &&
+		    Icon.Preparation.Stage == EPlacementPreparationStage::IconLoading && Icon.Request.Ready())
 		{
-			Icon.bComplete = true;
 			try
 			{
 				Icon.PendingSource = {ERenderTargetKind::Texture,
 				                      std::make_shared<const FMaterialTextureSource>(Icon.Request.GetReady()),
 				                      PlacementLifetime};
+				Icon.Preparation = {EPlacementPreparationState::Pending, EPlacementPreparationStage::IconUpload};
 			}
 			catch (const std::exception& Failure)
 			{
-				Icon.Error = Failure.what();
+				Icon.Preparation = {EPlacementPreparationState::Failed, EPlacementPreparationStage::IconLoading,
+				                    Failure.what()};
 			}
 		}
-		if (Icon.PendingSource.Texture && Icon.Error.empty())
+		if (Icon.PendingSource.Texture && Icon.Preparation.State == EPlacementPreparationState::Pending)
 		{
 			try
 			{
@@ -187,11 +191,13 @@ void FEditorPlugin::PollPlacementIcons()
 				if (bReady)
 				{
 					Icon.Source = std::exchange(Icon.PendingSource, {});
+					Icon.Preparation = {};
 				}
 			}
 			catch (const std::exception& Failure)
 			{
-				Icon.Error = Failure.what();
+				Icon.Preparation = {EPlacementPreparationState::Failed, EPlacementPreparationStage::IconUpload,
+				                    Failure.what()};
 			}
 		}
 	}

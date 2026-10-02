@@ -63,7 +63,7 @@ struct FSceneInstance::FImpl
 		std::shared_ptr<const FSceneSkyData> Data;
 		std::string Error;
 		bool bGpuSubmitted{};
-		bool bComplete{};
+		ESceneSkyState State = ESceneSkyState::Loading;
 	};
 
 	std::map<FSceneHandle, std::shared_ptr<FSkyLoad>> SkyLoads;

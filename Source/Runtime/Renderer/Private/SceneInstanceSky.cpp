@@ -59,7 +59,7 @@ FSceneSkyData LoadSky(FAssetService& InAssets, FTaskSystem& InTasks, FRenderReso
 
 void FSceneInstance::FImpl::PollSky(FSkyLoad& InLoad)
 {
-	if (InLoad.bComplete || !InLoad.Preparation.Ready())
+	if (InLoad.State == ESceneSkyState::Ready || InLoad.State == ESceneSkyState::Failed || !InLoad.Preparation.Ready())
 	{
 		return;
 	}
@@ -68,6 +68,7 @@ void FSceneInstance::FImpl::PollSky(FSkyLoad& InLoad)
 		if (!InLoad.Data)
 		{
 			InLoad.Data = InLoad.Preparation.GetReady();
+			InLoad.State = ESceneSkyState::Uploading;
 		}
 		if (InLoad.bGpuSubmitted)
 		{
@@ -83,7 +84,7 @@ void FSceneInstance::FImpl::PollSky(FSkyLoad& InLoad)
 				Light.Sky.Revision = InLoad.Data->Reference.Revision;
 				InLoad.Reference = Light.Sky;
 				Scene.SetEnvironmentLight(InLoad.Handle, std::move(Light));
-				InLoad.bComplete = true;
+				InLoad.State = ESceneSkyState::Ready;
 				return;
 			}
 		}
@@ -97,7 +98,7 @@ void FSceneInstance::FImpl::PollSky(FSkyLoad& InLoad)
 	catch (const std::exception& Failure)
 	{
 		InLoad.Error = Failure.what();
-		InLoad.bComplete = true;
+		InLoad.State = ESceneSkyState::Failed;
 		LogFailure("sky preparation", "path=" + InLoad.Reference.Path + "; asset=" + InLoad.Reference.Id, InLoad.Error);
 	}
 }
@@ -148,8 +149,8 @@ void FSceneInstance::FImpl::PollSkies()
 			    Load->Cancellation);
 		}
 		PollSky(*Load);
-		Status.PendingSkies += !Load->bComplete;
-		Status.FailedSkies += !Load->Error.empty();
+		Status.PendingSkies += Load->State == ESceneSkyState::Loading || Load->State == ESceneSkyState::Uploading;
+		Status.FailedSkies += Load->State == ESceneSkyState::Failed;
 	}
 }
 
@@ -183,23 +184,14 @@ FSceneSkyStatus FSceneInstance::GetSkyAssetStatus(FSceneHandle InHandle) const
 	const auto It = Impl->SkyLoads.find(InHandle);
 	if (It == Impl->SkyLoads.end())
 	{
-		return {"unrequested", {}};
+		return {ESceneSkyState::Unrequested, {}};
 	}
 	const auto& Load = *It->second;
-	return {!Load.Error.empty() ? "failed"
-	        : Load.bComplete    ? "ready"
-	        : Load.Data         ? "uploading"
-	                            : "loading",
-	        Load.Error};
+	return {Load.State, Load.Error};
 }
 
 std::string FSceneInstance::GetSkyStatus(FSceneHandle InHandle) const
 {
-	const auto Status = GetSkyAssetStatus(InHandle);
-	return Status.State == "failed"      ? "Failed: " + Status.Error
-	       : Status.State == "ready"     ? "Ready"
-	       : Status.State == "uploading" ? "Uploading"
-	       : Status.State == "loading"   ? "Loading"
-	                                     : "No sky requested";
+	return FormatSceneSkyStatus(GetSkyAssetStatus(InHandle));
 }
 } // namespace Hyperion

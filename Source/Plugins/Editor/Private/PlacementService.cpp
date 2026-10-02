@@ -5,6 +5,39 @@
 
 namespace Hyperion
 {
+std::string FormatPlacementPreparation(const FPlacementPreparation& InPreparation)
+{
+	if (InPreparation.State == EPlacementPreparationState::Ready)
+	{
+		return {};
+	}
+	if (InPreparation.State == EPlacementPreparationState::Failed && !InPreparation.Error.empty())
+	{
+		return InPreparation.Error;
+	}
+	if (InPreparation.Stage == EPlacementPreparationStage::Scene)
+	{
+		return "Wait for a valid scene document";
+	}
+	if (InPreparation.State == EPlacementPreparationState::Failed)
+	{
+		return "Required placement resource preparation failed";
+	}
+	switch (InPreparation.Stage)
+	{
+		case EPlacementPreparationStage::ModelLoading:
+			return "Preparing model";
+		case EPlacementPreparationStage::ModelUpload:
+		case EPlacementPreparationStage::PreviewMaterial:
+			return "Preparing model preview";
+		case EPlacementPreparationStage::IconLoading:
+		case EPlacementPreparationStage::IconUpload:
+			return "Preparing icon";
+		default:
+			return "Preparing placement resources";
+	}
+}
+
 FPlacementCandidate FPlacementService::Candidate(const FPlaceableObject& InObject)
 {
 	return {InObject.Id, InObject.Label, InObject.Create(), InObject.Model, InObject.Icon};
@@ -47,21 +80,27 @@ void FPlacementService::Poll(FSceneInstance& InScene, FRenderSession& InSession)
 			if (Asset.Id == Model.Asset)
 			{
 				Model.Error = Asset.Error;
+				Model.bLoadComplete = Asset.bComplete;
 				if (Model.Data != Asset.Data)
 				{
 					Model.Data = Asset.Data;
-					Model.Resource = Asset.Data ? InSession.GetResources().RequestModel(Asset.Data) : nullptr;
+					Model.Resource.reset();
+					Model.UploadError.reset();
+					try
+					{
+						Model.Resource = Asset.Data ? InSession.GetResources().RequestModel(Asset.Data) : nullptr;
+					}
+					catch (const std::exception& Failure)
+					{
+						Model.UploadError = Failure.what();
+					}
 				}
 			}
-		}
-		if (Model.Resource && Model.Resource->GetStatus() == ERenderResourceStatus::Failed)
-		{
-			Model.Error = Model.Resource->GetError();
 		}
 	}
 }
 
-std::string FPlacementService::Unavailable(const FPlacementCandidate& InCandidate) const
+FPlacementPreparation FPlacementService::ModelPreparation(const FPlacementCandidate& InCandidate) const
 {
 	if (!InCandidate.Model)
 	{
@@ -70,21 +109,67 @@ std::string FPlacementService::Unavailable(const FPlacementCandidate& InCandidat
 	const auto It = Models.find(InCandidate.Id);
 	if (It == Models.end())
 	{
-		return "Preparing model";
+		return {EPlacementPreparationState::Pending, EPlacementPreparationStage::ModelLoading};
 	}
 	const auto& Model = It->second;
-	if (!Model.Error.empty())
+	if (!Model.Error.empty() || (Model.bLoadComplete && !Model.Data))
 	{
-		return Model.Error;
+		return {EPlacementPreparationState::Failed, EPlacementPreparationStage::ModelLoading, Model.Error};
 	}
-	return Model.Resource && Model.Resource->GetStatus() == ERenderResourceStatus::Ready ? ""
-	                                                                                     : "Preparing model preview";
+	if (!Model.Data)
+	{
+		return {EPlacementPreparationState::Pending, EPlacementPreparationStage::ModelLoading};
+	}
+	if (Model.UploadError)
+	{
+		return {EPlacementPreparationState::Failed, EPlacementPreparationStage::ModelUpload, *Model.UploadError};
+	}
+	if (Model.Resource)
+	{
+		const auto State = Model.Resource->GetStatus();
+		if (State == ERenderResourceStatus::Failed || State == ERenderResourceStatus::Retired)
+		{
+			return {EPlacementPreparationState::Failed, EPlacementPreparationStage::ModelUpload,
+			        Model.Resource->GetError()};
+		}
+		if (State == ERenderResourceStatus::Ready)
+		{
+			return {};
+		}
+	}
+	return {EPlacementPreparationState::Pending, EPlacementPreparationStage::ModelUpload};
+}
+
+FPlacementPreparation FPlacementService::ResolvePreparation(const FPlacementCandidate& InCandidate,
+                                                            const FPlacementPreparation& InModel,
+                                                            const FPlacementPreparationContext& InContext)
+{
+	if (!InContext.bSceneAvailable)
+	{
+		return {EPlacementPreparationState::Failed, EPlacementPreparationStage::Scene};
+	}
+	if (InCandidate.Model)
+	{
+		return InModel.State != EPlacementPreparationState::Ready ? InModel : InContext.PreviewMaterial;
+	}
+	if (!InCandidate.Icon.empty())
+	{
+		return InContext.Icon.value_or(FPlacementPreparation{
+		    EPlacementPreparationState::Failed, EPlacementPreparationStage::IconLoading, "Unknown icon resource"});
+	}
+	return {};
+}
+
+FPlacementPreparation FPlacementService::GetPreparation(const FPlacementCandidate& InCandidate,
+                                                        const FPlacementPreparationContext& InContext) const
+{
+	return ResolvePreparation(InCandidate, ModelPreparation(InCandidate), InContext);
 }
 
 FSceneHandle FPlacementService::Commit(const FPlacementCandidate& InCandidate, FVec3 InPosition,
-                                       FSceneEditDocument& InDocument)
+                                       FSceneEditDocument& InDocument, const FPlacementPreparationContext& InContext)
 {
-	if (!IsFinite(InPosition) || !Unavailable(InCandidate).empty())
+	if (!IsFinite(InPosition) || GetPreparation(InCandidate, InContext).State != EPlacementPreparationState::Ready)
 	{
 		throw std::invalid_argument("Placement requires finite coordinates and prepared resources");
 	}

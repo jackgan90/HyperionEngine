@@ -7,7 +7,8 @@ FPlacementCatalog FEditorPlugin::PlacementCatalog() const
 	FPlacementCatalog Result;
 	for (const auto* Object : PlacementRegistry.Search("All", {}))
 	{
-		Result.Items.push_back({Object->Id, Object->Label, Object->Categories, PlacementUnavailableReason(*Object)});
+		Result.Items.push_back({Object->Id, Object->Label, Object->Categories,
+		                        FormatPlacementPreparation(GetPlacementPreparation(*Object))});
 	}
 	return Result;
 }
@@ -44,14 +45,14 @@ std::optional<FSceneNodeInfo> FEditorPlugin::PollPlacement(const FPlacementCandi
 	SceneDocument.RequireIdle(Document, Revision);
 	PlacementService.Prepare(InCandidate, *Scene);
 	PollPlacementResources();
-	const auto Unavailable = PlacementUnavailableReason(InCandidate);
-	if (!Unavailable.empty())
+	const auto Preparation = GetPlacementPreparation(InCandidate);
+	if (Preparation.State == EPlacementPreparationState::Pending)
 	{
-		if (Unavailable.starts_with("Preparing"))
-		{
-			return {};
-		}
-		throw FSceneEditError("load_failed", Unavailable);
+		return {};
+	}
+	if (Preparation.State == EPlacementPreparationState::Failed)
+	{
+		throw FSceneEditError("load_failed", FormatPlacementPreparation(Preparation));
 	}
 	CommitPlacement(InCandidate, InPosition);
 	return DescribeSceneNode(SceneDocument, {SceneDocument.Id(), *SceneDocument.Selection().Primary()});
@@ -98,8 +99,9 @@ void FEditorPlugin::DrawPlacementPanel()
 		Gui->Text(PlacementCategory);
 		for (const auto* Object : PlacementRegistry.Search(PlacementCategory, PlacementFilter))
 		{
-			const auto Unavailable = PlacementUnavailableReason(*Object);
-			Gui->BeginDisabled(!Unavailable.empty());
+			const auto Preparation = GetPlacementPreparation(*Object);
+			const auto Unavailable = FormatPlacementPreparation(Preparation);
+			Gui->BeginDisabled(Preparation.State != EPlacementPreparationState::Ready);
 			if (const auto It = PlacementIcons.find(Object->Icon);
 			    It != PlacementIcons.end() && It->second.Source.Texture)
 			{
@@ -112,7 +114,7 @@ void FEditorPlugin::DrawPlacementPanel()
 			Gui->DragSource(PlacementPayload, Object->Id, Object->Label.c_str());
 			Gui->EndDisabled();
 			Gui->Tooltip(Unavailable.empty() ? "Drag into the viewport to place" : Unavailable.c_str());
-			if (!Unavailable.empty())
+			if (Preparation.State != EPlacementPreparationState::Ready)
 			{
 				Gui->TextWrapped(Unavailable);
 			}
@@ -164,7 +166,8 @@ void FEditorPlugin::RoutePlacement()
 	}
 	catch (const std::exception& Failure)
 	{
-		PlacementStatus = Failure.what();
+		PlacementPreparation = {EPlacementPreparationState::Failed, EPlacementPreparationStage::None, Failure.what()};
+		PlacementStatus = FormatPlacementPreparation(PlacementPreparation);
 		Placement.SetPreview({});
 		if (Drop)
 		{
@@ -247,8 +250,9 @@ void FEditorPlugin::RoutePlacementPayload(const FGuiDragPayload& InPayload,
 		return;
 	}
 	PlacementService.Prepare(*PlacementCandidate, *Scene);
-	PlacementStatus = PlacementUnavailableReason(*PlacementCandidate);
-	if (!PlacementStatus.empty())
+	PlacementPreparation = GetPlacementPreparation(*PlacementCandidate);
+	PlacementStatus = FormatPlacementPreparation(PlacementPreparation);
+	if (PlacementPreparation.State != EPlacementPreparationState::Ready)
 	{
 		Gui->DrawDropFeedback(false, PlacementStatus.c_str());
 		if (Pointer.bReleased)
@@ -303,7 +307,7 @@ void FEditorPlugin::CommitPlacement(const FPlaceableObject& InObject, FVec3 InPo
 
 void FEditorPlugin::CommitPlacement(const FPlacementCandidate& InObject, FVec3 InPosition)
 {
-	if (!IsFinite(InPosition) || !PlacementUnavailableReason(InObject).empty())
+	if (!IsFinite(InPosition) || GetPlacementPreparation(InObject).State != EPlacementPreparationState::Ready)
 	{
 		throw std::invalid_argument("Placement requires finite coordinates and prepared resources");
 	}
@@ -311,7 +315,8 @@ void FEditorPlugin::CommitPlacement(const FPlacementCandidate& InObject, FVec3 I
 	                         ? FreezePlacementPreview()
 	                         : nullptr;
 	FinishInspectorEdit();
-	const auto Handle = PlacementService.Commit(InObject, InPosition, SceneDocument);
+	const auto Handle =
+	    PlacementService.Commit(InObject, InPosition, SceneDocument, GetPlacementPreparationContext(InObject));
 	bSelectionInitialized = true;
 	Error.clear();
 	if (Preview)

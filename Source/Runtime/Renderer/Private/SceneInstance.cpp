@@ -255,7 +255,7 @@ std::vector<FSceneInstanceAsset> FSceneInstance::GetAssets() const
 	std::vector<FSceneInstanceAsset> Result;
 	for (const auto& [Id, Load] : Impl->Loads)
 	{
-		Result.push_back({Id, Load.Data, Load.Error});
+		Result.push_back({Id, Load.Data, Load.Error, Load.bComplete});
 	}
 	return Result;
 }

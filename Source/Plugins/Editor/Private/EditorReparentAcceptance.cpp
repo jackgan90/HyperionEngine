@@ -385,7 +385,7 @@ void FEditorPlugin::VerifyReparentExercise()
 void FEditorPlugin::ExerciseReparent(std::vector<FInputEvent>& InEvents)
 {
 	if (FrameCount < 12 || !Scene->GetStatus().bReady || !Viewport.bViewportVisible ||
-	    !PlacementUnavailableReason(*PlacementRegistry.Find("Cube")).empty())
+	    GetPlacementPreparation(*PlacementRegistry.Find("Cube")).State != EPlacementPreparationState::Ready)
 	{
 		return;
 	}

@@ -183,15 +183,15 @@ void FEditorPlugin::InspectLightProperty(const FSceneNodeView& InView, const FSc
 				         : "Multiple Directional Lights eligible to cast shadows share the highest Priority.";
 			}
 		}
-		else if (Entry.Asset.State == "failed")
+		else if (Entry.Asset.State == ESceneSkyState::Failed)
 		{
 			InOutPresentation.Label += " [!]";
 			InOutPresentation.Tooltip = Entry.Asset.Error;
 		}
-		else if (!Entry.Asset.State.empty() && Entry.Asset.State != "ready")
+		else if (Entry.Asset.State != ESceneSkyState::None && Entry.Asset.State != ESceneSkyState::Ready)
 		{
 			InOutPresentation.Label += " [...]";
-			InOutPresentation.Tooltip = "Sky asset: " + Entry.Asset.State;
+			InOutPresentation.Tooltip = "Sky asset: " + std::string(SceneSkyStateName(Entry.Asset.State));
 		}
 		return;
 	}

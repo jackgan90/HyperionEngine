@@ -20,6 +20,7 @@ struct FSceneInstanceAsset
 	std::string Id;
 	std::shared_ptr<const FSceneModelData> Data;
 	std::string Error;
+	bool bComplete{};
 };
 
 struct FSceneInstanceStatus

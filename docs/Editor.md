@@ -245,6 +245,8 @@ Camera 组件用于用户明确创作的场景相机。在视口选项菜单点�
 
 Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorViewport` 拥有浏览相机、视口目标、尺寸和区域，执行初始化、resize、取景和导航重置；`FEditorDocumentTransition` 维护场景打开、内容根切换和关闭/discard 的待执行状态。验收状态、输入窗口选择与完成/超时检查由 `FEditorAcceptanceDriver` 处理，仅在 BUILD_TESTING 中编入；禁用测试的构建收到验收参数时给出受控不可用诊断，正常 report 输出仍可用。
 
+放置通过私有 `FPlacementService` 聚合场景、模型加载/上传、预览材质和图标加载/上传的准备结果。GUI、automation 轮询与最终提交共用 Ready/Pending/Failed 准入规则，错误信息和显示文案独立；CPU 加载完成不代表 GPU 已就绪。原材质尚未就绪的模型分部仍使用临时预览材质。`editor_placement_preparation` 验证阶段聚合、空错误和前缀碰撞，真实交互由 `editor_placement`、`editor_model_placement` 覆盖。
+
 纹理编码和引用编辑使用 Runtime/AssetEditing 的 `FAssetEditWorkflow`，与 automation 共用 snapshot、busy admission、文档/资产身份及 generation 校验和单次历史提交。Worker 只准备拥有数据的快照，Main 提交文档；关闭或退出前 Drain 汇合任务，销毁路径不提交准备结果。资产窗口继续管理预览和页签，保存仍显式执行。
 
 ```text

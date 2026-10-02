@@ -298,8 +298,9 @@ private:
 	void DrawPlacementPanel();
 	void PollPlacementResources();
 	void PollPlacementIcons();
-	std::string PlacementUnavailableReason(const FPlaceableObject& InObject) const;
-	std::string PlacementUnavailableReason(const FPlacementCandidate& InCandidate) const;
+	FPlacementPreparation GetPlacementPreparation(const FPlaceableObject& InObject) const;
+	FPlacementPreparation GetPlacementPreparation(const FPlacementCandidate& InCandidate) const;
+	FPlacementPreparationContext GetPlacementPreparationContext(const FPlacementCandidate& InCandidate) const;
 	std::optional<FSceneNodeInfo> PollPlacement(const FPlacementCandidate& InCandidate, FVec3 InPosition);
 	FPlacementCandidate ResolvePlacementPayload(const FGuiDragPayload& InPayload);
 	void RoutePlacementPayload(const FGuiDragPayload& InPayload, const std::optional<FGuiDragPayload>& InDrop);
@@ -524,6 +525,7 @@ private:
 	bool bShowLightMarkers = true;
 	bool bPlacementUsedMouse{};
 	std::string PlacementStatus;
+	FPlacementPreparation PlacementPreparation;
 
 	FPlacementService PlacementService;
 	std::map<std::string, FPlacementModel>& PlacementModels = PlacementService.Models;
@@ -537,8 +539,7 @@ private:
 		TAssetRequest<FTextureAsset> Request;
 		FRenderTargetSource Source;
 		FRenderTargetSource PendingSource;
-		std::string Error;
-		bool bComplete{};
+		FPlacementPreparation Preparation{EPlacementPreparationState::Pending, EPlacementPreparationStage::IconLoading};
 	};
 
 	std::map<std::string, FPlacementIcon> PlacementIcons;

@@ -70,6 +70,11 @@ if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
+  add_executable(editor_placement_preparation_tests Private/PlacementPreparationTests.cpp)
+  hyp_executable(editor_placement_preparation_tests)
+  target_link_libraries(editor_placement_preparation_tests PRIVATE hyperion_editor_plugin hyperion_render hyperion_scene_editing)
+  set_target_properties(editor_placement_preparation_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_placement_preparation COMMAND editor_placement_preparation_tests)
   target_sources(hyperion_editor_plugin PRIVATE
     Private/EditorAcceptanceDriver.cpp
     Private/EditorLogAcceptance.cpp

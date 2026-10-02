@@ -21,11 +21,12 @@ void FEditorPlugin::WriteReport()
 		std::filesystem::create_directories(Options.Report.parent_path());
 	}
 	const auto Objects = PlacementRegistry.Search("All", {});
-	const auto Unavailable = std::count_if(Objects.begin(), Objects.end(),
-	                                       [&](const auto* InObject)
-	                                       {
-		                                       return !PlacementUnavailableReason(*InObject).empty();
-	                                       });
+	const auto Unavailable =
+	    std::count_if(Objects.begin(), Objects.end(),
+	                  [&](const auto* InObject)
+	                  {
+		                  return GetPlacementPreparation(*InObject).State != EPlacementPreparationState::Ready;
+	                  });
 	std::ofstream Stream(Options.Report);
 	Stream << std::boolalpha << "{\n"
 	       << "\"scene\": " << std::quoted(CurrentPath) << ",\n"
