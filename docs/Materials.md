@@ -66,7 +66,13 @@ auto Surface = Session.GetResources().RequestMaterial(Instance->Freeze());
 
 DXIL 原生反射会将直接多维数组展平为总元素数，自动 schema 如实使用该布局；SPIR-V/MSL 保留各层数组维度。需要跨目标一致的逻辑形状时，显式声明嵌套数组 schema。准备阶段检查完整叶类型和总元素数，以 DXIL 原生 leaf stride 重建嵌套地址，保留实际 offset、extent 及矩阵/struct 内部布局。原生信息无法区分 `[2][3]` 与 `[3][2]`，维度顺序由作者负责，不能把兼容性检查当作原 HLSL 维度恢复。当前 DXC 对直接多维矩阵数组生成 SPIR-V 会报告缺少 MatrixStride decoration；因此这类数组的实际 GPU 验收限于 DXIL，SPIR-V/MSL 的多维测试覆盖 float/bool/struct。编译器错误正常向上报告，不绕过其验证或修改依赖代码。
 
-纹理 sampled component type、structured-buffer element stride 和元素结构树同样进入接口约束。内置 structured resource 还校验字段名称、类型、顺序、offset 和大小，不能仅用相同 stride 判定兼容。当前 RGBA8 路径拒绝 integer texture；structured view 的 stride 必须与 shader 反射值一致。RHI layout 的 `StructureByteStride=0` 表示尚未约束，但这种布局不能用于需要确定 stride 的真实 structured-buffer shader。当前 shader cache key 为 v12、reflection 为 v8，反射版本参与缓存身份；Defines 与 VirtualIncludes 各自编码列表类别和数量，避免跨类别碰撞。磁盘缓存沿用编译内容寻址，没有自动容量/TTL 淘汰，旧文件由缓存目录所有者管理。
+纹理 sampled component type、structured-buffer element stride 和元素结构树同样进入接口约束。内置 structured resource 还校验字段名称、类型、顺序、offset 和大小，不能仅用相同 stride 判定兼容。当前 RGBA8 路径拒绝 integer texture；structured view 的 stride 必须与 shader 反射值一致。RHI layout 的 `StructureByteStride=0` 表示尚未约束，但这种布局不能用于需要确定 stride 的真实 structured-buffer shader。
+
+Shaders 的 `EShaderRegisterClass` 独立表达 b/t/s/u 寄存器类别，`ShaderRegisterMapping.h` 统一编译 shift、SPIR-V 解码和资源范围校验。mapping version 保持 2，space 为 0–3，每类 register 为 0–999；SPIR-V binding 偏移分别是 0/1000/2000/3000。固定数组可恰好结束于该类边界；未知类别、越界 space/register、零或无界 count、跨类别数组均拒绝。SPIRV-Cross 的 storage-buffer family 按 t/u 区分只读与可写，再结合逻辑 DXIL 反射恢复 structured/raw 类型。
+
+私有 `FShaderCompileTarget` 同时驱动实际 DXC 参数、profile 诊断和缓存策略身份，默认 VS/PS/CS profile 为 `vs_6_0`/`ps_6_0`/`cs_6_0`、HLSL 2021、严格模式及 SPIR-V Vulkan 1.1。当前 cache pipeline version 为 13、reflection 为 8；key 保留工具链、stage、最终格式、源目录 snapshot、入口、规范化 Defines/VirtualIncludes 以及 mapping/reflection 版本，并按长度编码实际适用的策略参数。Defines 与 VirtualIncludes 各自编码列表类别和数量；诊断标签和 DXIL 不使用的 Vulkan 设置不进入身份。非 DXIL 编译还纳入生成逻辑反射的 DXIL 策略，两条编译路径读取同一不可变 source snapshot。
+
+缓存保存用于重建反射的未剥离 DXIL 或 SPIR-V；MSL 请求仍有独立 key，命中后从 SPIR-V 中间数据重新生成 MSL 2.0。转换版本和未由策略字段表达的 pipeline 变化保留显式版本身份。损坏缓存重新编译；磁盘缓存没有自动容量/TTL 淘汰，旧文件由缓存目录所有者管理。
 
 ## 内置语义与 shader 资源契约
 

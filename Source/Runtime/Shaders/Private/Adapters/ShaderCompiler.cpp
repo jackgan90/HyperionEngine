@@ -1,4 +1,5 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
+#include "../ShaderCompileTarget.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/IO/IOService.h"
 #include "Hyperion/IO/MountedFileSystem.h"
@@ -23,6 +24,7 @@
 namespace Hyperion
 {
 using Microsoft::WRL::ComPtr;
+using ShadersPrivate::FShaderCompileTarget;
 
 namespace
 {
@@ -306,7 +308,7 @@ struct FShaderCompiler::FImpl
 	std::shared_ptr<const void> SnapshotOwner = std::make_shared<const int>(0);
 
 	FShaderArtifact Compile(const std::filesystem::path& InPath, const std::string& InEntry, EShaderStage InStage,
-	                        EShaderFormat InFormat, const FShaderCompileOptions& InOptions,
+	                        const FShaderCompileTarget& InTarget, const FShaderCompileOptions& InOptions,
 	                        const FShaderSourceTrees& InSources);
 
 	std::filesystem::path SourcePath(const std::filesystem::path& InSource) const
@@ -388,21 +390,20 @@ FShaderSourceSnapshot FShaderCompiler::CaptureSources(std::span<const std::files
 namespace
 {
 std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::filesystem::path& InRoot,
-                           const std::string& InEntry, EShaderStage InStage, EShaderFormat InFormat,
+                           const std::string& InEntry, EShaderStage InStage, const FShaderCompileTarget& InTarget,
+                           const std::optional<FShaderCompileTarget>& InLogicalTarget,
                            const FShaderCompileOptions& InOptions, const FShaderSourceTrees& InSources)
 {
-	std::string Identity = "hyperion-shader-v12-virtual-msl20:" HYP_TOOLCHAIN_ID;
+	std::string Identity = "hyperion-shader:";
 	auto Append = [&](const std::string& InPart)
 	{
 		AppendIdentity(Identity, InPart);
 	};
+	Append(HYP_TOOLCHAIN_ID);
 	Append(InPath.lexically_relative(InRoot).generic_string());
 	Append(InEntry);
 	Append(std::to_string(static_cast<int>(InStage)));
-	Append(std::to_string(static_cast<int>(InFormat)));
-	Append(std::to_string(ShaderBindingMappingVersion));
-	Append(std::to_string(FShaderReflection{}.Version));
-	Append(InOptions.bOptimize ? "O3" : "Od");
+	Append(ShadersPrivate::ShaderCompilationPolicyIdentity(InTarget, InLogicalTarget));
 	Append("Defines");
 	Append(std::to_string(InOptions.Defines.size()));
 	for (const FShaderDefine& Define : InOptions.Defines)
@@ -468,27 +469,18 @@ void NormalizeOptions(FShaderCompileOptions& InOptions)
 }
 
 std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const std::filesystem::path& InPath,
-                           const std::filesystem::path& InRoot, const std::string& InEntry, EShaderStage InStage,
-                           EShaderFormat InFormat, const FShaderCompileOptions& InOptions, IFileSystem& InFiles,
-                           const FShaderSourceTrees& InSources)
+                           const std::filesystem::path& InRoot, const std::string& InEntry,
+                           const FShaderCompileTarget& InTarget, const FShaderCompileOptions& InOptions,
+                           IFileSystem& InFiles, const FShaderSourceTrees& InSources)
 {
 	const auto& Content = ReadSource(InSources, InRoot, AdditionalShaderRoot(InPath), InPath);
 	DxcBuffer Buffer{Content.data(), Content.size(), DXC_CP_UTF8};
-	std::vector<std::wstring> Arguments{InPath.generic_wstring(),
-	                                    L"-E",
-	                                    std::wstring(InEntry.begin(), InEntry.end()),
-	                                    L"-T",
-	                                    InStage == EShaderStage::Vertex  ? L"vs_6_0"
-	                                    : InStage == EShaderStage::Pixel ? L"ps_6_0"
-	                                                                     : L"cs_6_0",
-	                                    L"-HV",
-	                                    L"2021",
-	                                    L"-Ges",
-	                                    InOptions.bOptimize ? L"-O3" : L"-Od",
-	                                    L"-I",
-	                                    InPath.parent_path().generic_wstring(),
-	                                    L"-I",
-	                                    InRoot.generic_wstring()};
+	std::vector<std::wstring> Arguments{InPath.generic_wstring(), L"-E", std::wstring(InEntry.begin(), InEntry.end())};
+	for (const auto& Argument : ShadersPrivate::ShaderCompileTargetArguments(InTarget))
+	{
+		Arguments.emplace_back(Argument.begin(), Argument.end());
+	}
+	Arguments.insert(Arguments.end(), {L"-I", InPath.parent_path().generic_wstring(), L"-I", InRoot.generic_wstring()});
 	if (IsPackagePath(InRoot))
 	{
 		Arguments.insert(Arguments.end(), {L"-I", L"/"});
@@ -497,20 +489,6 @@ std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const 
 	{
 		const std::string Argument = "-D" + Define.Name + "=" + Define.Value;
 		Arguments.emplace_back(Argument.begin(), Argument.end());
-	}
-	if (InFormat != EShaderFormat::Dxil)
-	{
-		Arguments.insert(Arguments.end(), {L"-spirv", L"-fspv-target-env=vulkan1.1", L"-fspv-reflect"});
-		for (std::uint32_t Space = 0; Space < ShaderRegisterSpaceCount; ++Space)
-		{
-			for (std::uint32_t Kind = 0; Kind < 4; ++Kind)
-			{
-				const std::array<std::wstring, 4> Shifts{L"-fvk-b-shift", L"-fvk-t-shift", L"-fvk-s-shift",
-				                                         L"-fvk-u-shift"};
-				Arguments.insert(Arguments.end(), {Shifts[Kind], std::to_wstring(Kind * ShaderRegistersPerKind),
-				                                   std::to_wstring(Space)});
-			}
-		}
 	}
 	std::vector<LPCWSTR> Pointers;
 	for (const std::wstring& Argument : Arguments)
@@ -537,12 +515,8 @@ std::string CompilePayload(IDxcCompiler3* InCompiler, IDxcUtils* InUtils, const 
 			Defines += (Defines.empty() ? "" : ", ") + Define.Name + "=" + Define.Value;
 		}
 		Log(FAILED(Status) ? ELogLevel::Error : ELogLevel::Warning,
-		    "Shader compiler diagnostics; path='" + PathToUtf8(InPath) + "'; entry='" + InEntry + "'; profile=" +
-		        (InStage == EShaderStage::Vertex  ? "vs_6_0"
-		         : InStage == EShaderStage::Pixel ? "ps_6_0"
-		                                          : "cs_6_0") +
-		        "; target=" + (InFormat == EShaderFormat::Dxil ? "DXIL" : "SPIR-V") +
-		        "; optimize=" + (InOptions.bOptimize ? "true" : "false") + "; defines=[" + Defines +
+		    "Shader compiler diagnostics; path='" + PathToUtf8(InPath) + "'; entry='" + InEntry + "'; " +
+		        ShadersPrivate::ShaderCompileTargetDiagnostics(InTarget) + "; defines=[" + Defines +
 		        "]; reason=" + Diagnostics->GetStringPointer());
 	}
 	if (FAILED(Status))
@@ -587,11 +561,12 @@ FShaderArtifact FShaderCompiler::Compile(const std::filesystem::path& InSource, 
 		throw std::invalid_argument("Shader snapshot belongs to a different compiler or is empty");
 	}
 	std::lock_guard Lock(Impl->Mutex);
-	return Impl->Compile(Impl->SourcePath(InSource), InEntry, InStage, InFormat, InOptions, InSources.Impl->Trees);
+	const auto Target = ShadersPrivate::MakeShaderCompileTarget(InStage, InFormat, InOptions.bOptimize);
+	return Impl->Compile(Impl->SourcePath(InSource), InEntry, InStage, Target, InOptions, InSources.Impl->Trees);
 }
 
 FShaderArtifact FShaderCompiler::FImpl::Compile(const std::filesystem::path& InPath, const std::string& InEntry,
-                                                EShaderStage InStage, EShaderFormat InFormat,
+                                                EShaderStage InStage, const FShaderCompileTarget& InTarget,
                                                 const FShaderCompileOptions& InOptions,
                                                 const FShaderSourceTrees& InSources)
 {
@@ -599,14 +574,16 @@ FShaderArtifact FShaderCompiler::FImpl::Compile(const std::filesystem::path& InP
 	// Logical HLSL types can be lowered (notably bool -> uint) by SPIR-V. Preserve their DXIL source types,
 	// while reflecting every offset and stride from the actual SPIR-V intermediate.
 	FShaderArtifact Logical{};
-	if (InFormat != EShaderFormat::Dxil)
+	std::optional<FShaderCompileTarget> LogicalTarget;
+	if (InTarget.RequestedFormat != EShaderFormat::Dxil)
 	{
-		Logical = Compile(InPath, InEntry, InStage, EShaderFormat::Dxil, InOptions, InSources);
+		LogicalTarget = ShadersPrivate::MakeShaderCompileTarget(InStage, EShaderFormat::Dxil, InOptions.bOptimize);
+		Logical = Compile(InPath, InEntry, InStage, *LogicalTarget, InOptions, InSources);
 	}
 	FShaderArtifact Artifact{};
-	Artifact.Format = InFormat;
+	Artifact.Format = InTarget.RequestedFormat;
 	Artifact.Stage = InStage;
-	Artifact.CacheKey = ShaderCacheKey(InPath, Root, InEntry, InStage, InFormat, InOptions, InSources);
+	Artifact.CacheKey = ShaderCacheKey(InPath, Root, InEntry, InStage, InTarget, LogicalTarget, InOptions, InSources);
 	const auto CacheFile = Cache / (Artifact.CacheKey + ".bin");
 	std::string Payload;
 	if (std::filesystem::exists(CacheFile))
@@ -620,11 +597,11 @@ FShaderArtifact FShaderCompiler::FImpl::Compile(const std::filesystem::path& InP
 	}
 	if (!Artifact.bCacheHit)
 	{
-		Payload = CompilePayload(Compiler.Get(), Utils.Get(), InPath, Root, InEntry, InStage, InFormat, InOptions,
-		                         *Files, InSources);
+		Payload =
+		    CompilePayload(Compiler.Get(), Utils.Get(), InPath, Root, InEntry, InTarget, InOptions, *Files, InSources);
 	}
 	const std::string Intermediate = Payload;
-	if (InFormat == EShaderFormat::Dxil)
+	if (InTarget.PayloadFormat == EShaderFormat::Dxil)
 	{
 		ShadersPrivate::ReflectDxil(Artifact, Payload);
 	}

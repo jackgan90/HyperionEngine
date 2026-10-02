@@ -1,3 +1,4 @@
+#include "../ShaderCompileTarget.h"
 #include "ShaderReflection.h"
 #include <algorithm>
 #include <cctype>
@@ -175,6 +176,30 @@ std::uint32_t DescriptorCount(const spirv_cross::SPIRType& InType)
 	return static_cast<std::uint32_t>(Count);
 }
 
+EBindingKind RegisterResourceKind(EBindingKind InKind, EShaderRegisterClass InClass)
+{
+	if ((InKind == EBindingKind::UniformBuffer && InClass == EShaderRegisterClass::ConstantBuffer) ||
+	    (InKind == EBindingKind::Texture && InClass == EShaderRegisterClass::ShaderResource) ||
+	    (InKind == EBindingKind::Sampler && InClass == EShaderRegisterClass::Sampler) ||
+	    (InKind == EBindingKind::StorageTexture && InClass == EShaderRegisterClass::UnorderedAccess))
+	{
+		return InKind;
+	}
+	// SPIRV-Cross uses one storage-buffer family for both t and u resources.
+	if (InKind == EBindingKind::StructuredBuffer)
+	{
+		if (InClass == EShaderRegisterClass::ShaderResource)
+		{
+			return EBindingKind::StructuredBuffer;
+		}
+		if (InClass == EShaderRegisterClass::UnorderedAccess)
+		{
+			return EBindingKind::StorageStructuredBuffer;
+		}
+	}
+	throw std::runtime_error("SPIR-V resource register mapping collision");
+}
+
 FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Resource& InResource, EBindingKind InKind,
                            const FShaderArtifact& InLogical)
 {
@@ -184,23 +209,16 @@ FShaderBinding ReadBinding(spirv_cross::Compiler& InCross, const spirv_cross::Re
 	Result.Binding = InCross.get_decoration(InResource.id, spv::DecorationBinding);
 	Result.Space = InCross.get_decoration(InResource.id, spv::DecorationDescriptorSet);
 	Result.Stage = InLogical.Stage;
-	if (InKind == EBindingKind::StructuredBuffer && Result.Binding >= 3000)
-	{
-		InKind = EBindingKind::StorageStructuredBuffer;
-		Result.Kind = InKind;
-	}
-	const bool bStorage = InKind == EBindingKind::StorageTexture || InKind == EBindingKind::StorageStructuredBuffer;
-	const std::uint32_t Shift = InKind == EBindingKind::UniformBuffer ? 0
-	                            : InKind == EBindingKind::Sampler     ? 2000
-	                            : bStorage                            ? 3000
-	                                                                  : 1000;
-	if (Result.Binding < Shift || Result.Binding >= Shift + ShaderRegistersPerKind)
+	const spirv_cross::SPIRType& Type = InCross.get_type(InResource.type_id);
+	Result.Count = DescriptorCount(Type);
+	const auto Address = DecodeShaderBinding(Result.Space, Result.Binding, Result.Count);
+	if (!Address)
 	{
 		throw std::runtime_error("SPIR-V resource register mapping collision");
 	}
-	Result.Register = Result.Binding - Shift;
-	const spirv_cross::SPIRType& Type = InCross.get_type(InResource.type_id);
-	Result.Count = DescriptorCount(Type);
+	Result.Register = Address->Register;
+	InKind = RegisterResourceKind(InKind, Address->Class);
+	Result.Kind = InKind;
 	const FShaderBinding* Logical = nullptr;
 	for (const FShaderBinding& Binding : InLogical.Bindings)
 	{
@@ -305,7 +323,7 @@ void ReflectSpirv(FShaderArtifact& InArtifact, std::string& InPayload, const FSh
 	std::memcpy(Words.data(), InPayload.data(), InPayload.size());
 	spirv_cross::CompilerMSL Cross(std::move(Words));
 	auto MslOptions = Cross.get_msl_options();
-	MslOptions.set_msl_version(2, 0);
+	MslOptions.set_msl_version(ShaderMslMajorVersion, ShaderMslMinorVersion);
 	Cross.set_msl_options(MslOptions);
 	const auto Resources = Cross.get_shader_resources(Cross.get_active_interface_variables());
 	std::vector<std::uint32_t> ResourceIds;

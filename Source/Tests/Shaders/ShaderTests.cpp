@@ -1,8 +1,10 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
 #include "Support/LogSupport.h"
 #include "Support/ShaderSourceSupport.h"
+#include <array>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 
 void CheckDeferredShaders();
@@ -10,6 +12,11 @@ void CheckComputeShaders(const std::filesystem::path& InRoot);
 void TestMountedShaders();
 void TestShaderSnapshots();
 void CheckMaterialShaderReflection(const std::filesystem::path& InRoot);
+
+namespace Hyperion::ShadersPrivate
+{
+void CheckShaderCompilationContracts();
+}
 
 namespace
 {
@@ -76,6 +83,68 @@ float4 PSMain() : SV_Target0
 		Check(Warm.bCacheHit && Warm.Bytes == Expected.Bytes, "Warm cache preserves option domain identity");
 	}
 }
+
+void CheckCachedIntermediate(const std::filesystem::path& InCache, const FShaderArtifact& InArtifact)
+{
+	std::ifstream File(InCache / (InArtifact.CacheKey + ".bin"), std::ios::binary);
+	const std::string Cached{std::istreambuf_iterator<char>(File), {}};
+	Check(Cached.size() > 69 && Cached[64] == '\n', "Cache stores a checksummed intermediate");
+	if (InArtifact.Format != EShaderFormat::Dxil)
+	{
+		Check(Cached.substr(65, 4) == std::string("\x03\x02\x23\x07", 4), "SPIR-V magic in cached intermediate");
+	}
+	if (InArtifact.Format == EShaderFormat::Msl)
+	{
+		const std::string Final(InArtifact.Bytes.begin(), InArtifact.Bytes.end());
+		Check(Final.find("metal_stdlib") != std::string::npos && Final != Cached.substr(65),
+		      "MSL output is regenerated from its cached SPIR-V payload");
+	}
+}
+
+void CheckPolicyCacheRecovery()
+{
+	const auto Root = std::filesystem::absolute("shader-policy-cache") / std::to_string(ClockNanoseconds());
+	std::filesystem::create_directories(Root / "Source");
+	std::ofstream(Root / "Source/Policy.hlsl") << R"(
+cbuffer Parameters : register(b0) { float Value; };
+Texture2D<float4> Source : register(t0);
+SamplerState LinearSampler : register(s0);
+float4 PSMain() : SV_Target0 { return Source.SampleLevel(LinearSampler, float2(Value, .5), 0) * Value; }
+)";
+	const auto Cache = Root / "Cache";
+	FShaderCompiler Compiler(Root / "Source", Cache);
+	const std::array Sources{std::filesystem::path("Policy.hlsl")};
+	const auto Snapshot = Compiler.CaptureSources(Sources);
+	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
+	{
+		const auto Original = Compiler.Compile("Policy.hlsl", "PSMain", EShaderStage::Pixel, Format, {}, Snapshot);
+		Check(!Original.bCacheHit, "New applicable policy starts with a cold cache");
+		CheckCachedIntermediate(Cache, Original);
+		FShaderCompileOptions ChangedOptions;
+		ChangedOptions.bOptimize = false;
+		const auto Changed =
+		    Compiler.Compile("Policy.hlsl", "PSMain", EShaderStage::Pixel, Format, ChangedOptions, Snapshot);
+		Check(!Changed.bCacheHit && Changed.CacheKey != Original.CacheKey,
+		      "Actual optimization policy changes artifact identity");
+		const auto Restored = Compiler.Compile("Policy.hlsl", "PSMain", EShaderStage::Pixel, Format, {}, Snapshot);
+		Check(Restored.bCacheHit && Restored.CacheKey == Original.CacheKey && Restored.Bytes == Original.Bytes &&
+		          Restored.Bindings == Original.Bindings && Restored.Reflection == Original.Reflection,
+		      "Restoring actual policy reuses identical bytes and reflection");
+		{
+			std::ofstream Damaged(Cache / (Original.CacheKey + ".bin"), std::ios::binary | std::ios::trunc);
+			Damaged << "corrupt";
+		}
+		const auto Repaired = Compiler.Compile("Policy.hlsl", "PSMain", EShaderStage::Pixel, Format, {}, Snapshot);
+		Check(!Repaired.bCacheHit && Repaired.CacheKey == Original.CacheKey && Repaired.Bytes == Original.Bytes &&
+		          Repaired.Bindings == Original.Bindings && Repaired.Reflection == Original.Reflection,
+		      "Corrupted intermediate is rebuilt with identical bytes and reflection");
+		CheckCachedIntermediate(Cache, Repaired);
+		const auto Hot = Compiler.Compile("Policy.hlsl", "PSMain", EShaderStage::Pixel, Format, {}, Snapshot);
+		Check(Hot.bCacheHit && Hot.Bytes == Repaired.Bytes && Hot.Bindings == Repaired.Bindings &&
+		          Hot.Reflection == Repaired.Reflection,
+		      "Repaired intermediate supports the complete hot path");
+	}
+}
 } // namespace
 
 int main()
@@ -83,10 +152,12 @@ int main()
 	using namespace Hyperion;
 	try
 	{
+		ShadersPrivate::CheckShaderCompilationContracts();
 		TestMountedShaders();
 		TestShaderSnapshots();
 		CheckDiagnosticLogging();
 		CheckCompileOptionDomains();
+		CheckPolicyCacheRecovery();
 		auto Root = std::filesystem::absolute("shader-test/source");
 		std::filesystem::create_directories(Root);
 		for (const auto& Include : GenerateShaderIncludes())

@@ -33,6 +33,11 @@ void CheckReflection(const FShaderArtifact& InArtifact)
 	HYP_CHECK(Binding(InArtifact, "ReadRecords").Kind == EBindingKind::StructuredBuffer);
 	HYP_CHECK(Binding(InArtifact, "ReadRaw").Kind == EBindingKind::RawBuffer);
 	HYP_CHECK(Binding(InArtifact, "Parameters").ByteSize >= 16);
+	const bool bDxil = InArtifact.Format == EShaderFormat::Dxil;
+	HYP_CHECK(Binding(InArtifact, "ReadRecords").Binding == (bDxil ? 5U : 1005U));
+	HYP_CHECK(Binding(InArtifact, "ReadRaw").Binding == (bDxil ? 6U : 1006U));
+	HYP_CHECK(Binding(InArtifact, "Records").Binding == (bDxil ? 5U : 3005U));
+	HYP_CHECK(Binding(InArtifact, "RawOutput").Binding == (bDxil ? 6U : 3006U));
 	for (const auto& Resource : InArtifact.Bindings)
 	{
 		HYP_CHECK(Resource.Stage == EShaderStage::Compute);
@@ -42,11 +47,67 @@ void CheckReflection(const FShaderArtifact& InArtifact)
 		}
 	}
 }
+
+void CheckFixedRegisterBindings(const FShaderArtifact& InArtifact, std::uint32_t InSpace)
+{
+	const bool bDxil = InArtifact.Format == EShaderFormat::Dxil;
+	const std::array<std::pair<const char*, std::uint32_t>, 4> Expected{
+	    {{"Parameters", 7}, {"Source", 1007}, {"Comparison", 2007}, {"Output", 3007}}};
+	for (const auto& [Name, TargetBinding] : Expected)
+	{
+		const auto& Resource = Binding(InArtifact, Name);
+		HYP_CHECK(Resource.Register == 7 && Resource.Space == InSpace && Resource.Count == 1);
+		HYP_CHECK(Resource.Binding == (bDxil ? 7U : TargetBinding));
+	}
+	HYP_CHECK(Binding(InArtifact, "Parameters").Kind == EBindingKind::UniformBuffer);
+	HYP_CHECK(Binding(InArtifact, "Source").Kind == EBindingKind::Texture);
+	HYP_CHECK(Binding(InArtifact, "Comparison").Kind == EBindingKind::Sampler);
+	HYP_CHECK(Binding(InArtifact, "Comparison").bComparison);
+	HYP_CHECK(Binding(InArtifact, "Output").Kind == EBindingKind::StorageTexture);
+	HYP_CHECK(Binding(InArtifact, "Cube").Dimension == EShaderResourceDimension::TextureCube);
+	HYP_CHECK(Binding(InArtifact, "Cube").Binding == (bDxil ? 8U : 1008U));
+	HYP_CHECK(!Binding(InArtifact, "Regular").bComparison);
+	HYP_CHECK(Binding(InArtifact, "Regular").Binding == (bDxil ? 8U : 2008U));
+}
+
+void CheckFixedRegisterMappings(const std::filesystem::path& InRoot)
+{
+	std::ofstream(InRoot / "FixedRegisterMapping.hlsl") << R"(
+cbuffer Parameters : register(b7, TEST_SPACE) { float Value; };
+Texture2D<float> Source : register(t7, TEST_SPACE);
+TextureCube<float4> Cube : register(t8, TEST_SPACE);
+SamplerComparisonState Comparison : register(s7, TEST_SPACE);
+SamplerState Regular : register(s8, TEST_SPACE);
+RWTexture2D<float> Output : register(u7, TEST_SPACE);
+[numthreads(1, 1, 1)] void CSMain(uint3 InId : SV_DispatchThreadID)
+{
+    Output[InId.xy] = Source.SampleCmpLevelZero(Comparison, float2(.25, .5), Value)
+        + Cube.SampleLevel(Regular, float3(1, Value, 0), 0).x;
+}
+)";
+	const auto Identity = std::chrono::steady_clock::now().time_since_epoch().count();
+	FShaderCompiler Compiler(InRoot, std::filesystem::path("compute-shader-test/mapping") / std::to_string(Identity));
+	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
+	{
+		for (std::uint32_t Space = 0; Space != 4; ++Space)
+		{
+			const FShaderCompileOptions Options{{{"TEST_SPACE", "space" + std::to_string(Space)}}};
+			const auto Cold =
+			    Compiler.Compile("FixedRegisterMapping.hlsl", "CSMain", EShaderStage::Compute, Format, Options);
+			CheckFixedRegisterBindings(Cold, Space);
+			const auto Hot =
+			    Compiler.Compile("FixedRegisterMapping.hlsl", "CSMain", EShaderStage::Compute, Format, Options);
+			HYP_CHECK(Hot.bCacheHit && Hot.Bytes == Cold.Bytes && Hot.Bindings == Cold.Bindings &&
+			          Hot.Reflection == Cold.Reflection);
+		}
+	}
+}
 } // namespace
 
 void CheckComputeShaders(const std::filesystem::path& InRoot)
 {
 	using namespace Hyperion;
+	CheckFixedRegisterMappings(InRoot);
 	{
 		std::ofstream Source(InRoot / "ComputeReflection.hlsl");
 		Source << R"(

@@ -46,6 +46,50 @@ void ExpectError(const std::function<void()>& InAction, std::string_view InText)
 	throw std::runtime_error("Expected shader reflection error");
 }
 
+void CheckRegisterArrayBoundaries(const std::filesystem::path& InRoot)
+{
+	std::ofstream(InRoot / "RegisterArrayBoundaries.hlsl") << R"(
+Texture2D<float4> Maps[ARRAY_COUNT] : register(TEST_REGISTER, TEST_SPACE);
+cbuffer Parameters : register(b0) { uint Index; };
+float4 PSMain() : SV_Target0 { return Maps[Index % ARRAY_COUNT].Load(int3(0, 0, 0)); }
+)";
+	const auto Identity = std::chrono::steady_clock::now().time_since_epoch().count();
+	FShaderCompiler Compiler(InRoot, std::filesystem::path("material-shader-test/register-boundaries") /
+	                                     std::to_string(Identity));
+	const std::array<std::pair<std::uint32_t, std::uint32_t>, 3> Valid{{{0, 1}, {999, 1}, {998, 2}}};
+	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
+	{
+		for (const auto& [Register, Count] : Valid)
+		{
+			const FShaderCompileOptions Options{{{"TEST_REGISTER", "t" + std::to_string(Register)},
+			                                     {"TEST_SPACE", "space3"},
+			                                     {"ARRAY_COUNT", std::to_string(Count)}}};
+			const auto Cold =
+			    Compiler.Compile("RegisterArrayBoundaries.hlsl", "PSMain", EShaderStage::Pixel, Format, Options);
+			const auto& Resource = FindBinding(Cold, "Maps");
+			HYP_CHECK(Resource.Register == Register && Resource.Count == Count && Resource.Space == 3);
+			HYP_CHECK(Resource.Binding == Register + (Format == EShaderFormat::Dxil ? 0U : 1000U));
+			const auto Hot =
+			    Compiler.Compile("RegisterArrayBoundaries.hlsl", "PSMain", EShaderStage::Pixel, Format, Options);
+			HYP_CHECK(Hot.bCacheHit && Hot.Bytes == Cold.Bytes && Hot.Bindings == Cold.Bindings &&
+			          Hot.Reflection == Cold.Reflection);
+		}
+		const std::array<FShaderCompileOptions, 3> Invalid{
+		    {{{{"TEST_REGISTER", "t1000"}, {"TEST_SPACE", "space0"}, {"ARRAY_COUNT", "1"}}},
+		     {{{"TEST_REGISTER", "t999"}, {"TEST_SPACE", "space0"}, {"ARRAY_COUNT", "2"}}},
+		     {{{"TEST_REGISTER", "t0"}, {"TEST_SPACE", "space4"}, {"ARRAY_COUNT", "1"}}}}};
+		for (const auto& Options : Invalid)
+		{
+			ExpectError(
+			    [&]
+			    {
+				    Compiler.Compile("RegisterArrayBoundaries.hlsl", "PSMain", EShaderStage::Pixel, Format, Options);
+			    },
+			    "register/space");
+		}
+	}
+}
+
 void CheckDirectMatrixBuffers(const std::filesystem::path& InRoot)
 {
 	std::ofstream(InRoot / "MatrixBuffer.hlsl") << R"(
@@ -239,6 +283,7 @@ float4 PSMain() : SV_Target0 { return Grid[Index % 2][Index % 3] + (Flags[Index 
 
 void CheckMaterialShaderReflection(const std::filesystem::path& InRoot)
 {
+	CheckRegisterArrayBoundaries(InRoot);
 	CheckTextureComponents(InRoot);
 	CheckNestedArrayTypes(InRoot);
 	CheckDirectMatrixBuffers(InRoot);

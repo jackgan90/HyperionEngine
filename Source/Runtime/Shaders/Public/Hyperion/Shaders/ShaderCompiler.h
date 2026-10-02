@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Shaders/ShaderRegisterMapping.h"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -136,10 +137,6 @@ struct FShaderCompileOptions
 	std::vector<FShaderVirtualInclude> VirtualIncludes;
 	bool operator==(const FShaderCompileOptions&) const = default;
 };
-
-inline constexpr std::uint32_t ShaderBindingMappingVersion = 2;
-inline constexpr std::uint32_t ShaderRegisterSpaceCount = 4;
-inline constexpr std::uint32_t ShaderRegistersPerKind = 1000;
 
 struct FShaderArtifact
 {

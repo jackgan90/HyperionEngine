@@ -289,8 +289,7 @@ void ValidateShaderBindings(const FShaderArtifact& InArtifact)
 {
 	for (const FShaderBinding& Binding : InArtifact.Bindings)
 	{
-		if (Binding.Space >= ShaderRegisterSpaceCount || Binding.Register >= ShaderRegistersPerKind ||
-		    Binding.Count == 0 || Binding.Count > ShaderRegistersPerKind - Binding.Register)
+		if (!IsValidShaderRegisterRange(Binding.Space, Binding.Register, Binding.Count))
 		{
 			throw std::invalid_argument("Shader binding exceeds supported register/space range: " + Binding.Name);
 		}
