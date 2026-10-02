@@ -188,10 +188,6 @@ std::string MaterialTypeLabel(const FMaterialParameterType& InType)
 	return Kinds.at(static_cast<std::size_t>(InType.Kind));
 }
 
-void ClampMaterialParameter(std::string_view InSemantic, FMaterialAssetValue& InValue)
-{
-	ClampEditableMaterialParameter(InSemantic, InValue);
-}
 } // namespace
 
 bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FMaterialAssetValue& InValue,
@@ -353,22 +349,20 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 		}
 		else if (bOverridden)
 		{
-			ClampMaterialParameter(InParameter.Semantic, Value);
 			Override->Value = std::move(Value);
 		}
 		else
 		{
-			ClampMaterialParameter(InParameter.Semantic, Value);
 			InMaterial.Values.push_back({InParameter.Name, std::move(Value)});
 		}
-		ValidateMaterialAsset(InMaterial);
+		const auto Policy = ResolveAssetFieldPolicy(*InEntry.Document->Loaded().Type, &FMaterialAsset::Values);
 		if (InEntry.ReferenceEdit)
 		{
-			CommitReferenceEdit(InEntry, "values", WriteValue(InMaterial.Values));
+			CommitReferenceEdit(InEntry, Policy.Field(), WriteValue(InMaterial.Values));
 		}
 		else
 		{
-			CommitAssetField(*InEntry.Document, "values", WriteValue(InMaterial.Values),
+			CommitAssetField(*InEntry.Document, Policy.Field(), WriteValue(InMaterial.Values),
 			                 Interaction.ChangedInteraction);
 		}
 	}

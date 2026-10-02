@@ -3,6 +3,8 @@
 
 namespace Hyperion
 {
+struct FPreparedAssetField;
+
 class FAssetWorkflowError : public std::runtime_error
 {
 public:
@@ -30,6 +32,10 @@ public:
 	                                                 std::shared_ptr<FAssetEditDocument> InDocument,
 	                                                 std::uint64_t InGeneration, std::string InField,
 	                                                 FArchiveNode InValue);
+	static std::shared_ptr<FAssetEditWorkflow> Field(FTaskSystem& InTasks, FAssetService& InAssets,
+	                                                 std::shared_ptr<FAssetEditDocument> InDocument,
+	                                                 std::uint64_t InGeneration, const FRecordMemberIdentity& InField,
+	                                                 FArchiveNode InValue);
 	~FAssetEditWorkflow();
 	bool Poll(const std::shared_ptr<FAssetEditDocument>& InCurrent);
 	void Drain();
@@ -43,8 +49,8 @@ private:
 	std::shared_ptr<FAssetEditDocument> Document;
 	std::uint64_t Generation{};
 	std::string AssetId;
-	std::string FieldName;
-	FPreparedAssetField Prepared;
+	FRecordMemberIdentity FieldIdentity;
+	std::unique_ptr<FPreparedAssetField> Prepared;
 	std::optional<TAsyncResult<FArchiveNode>> EncodingResult;
 	std::vector<TAsyncResult<FAssetGraph>> Graphs;
 	bool bPending = true;

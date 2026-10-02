@@ -3,9 +3,27 @@
 #include "Hyperion/Automation/Session.h"
 #include "Hyperion/AutomationHost/AutomationPlugin.h"
 #include "Hyperion/Scene/SceneManifest.h"
+#include <bit>
 #include <chrono>
+#include <fstream>
 #include <source_location>
 #include <thread>
+
+namespace Hyperion
+{
+struct FAssetAutomationTestAccess
+{
+	static FArchiveNode Snapshot(FAssetAutomation& InProvider, std::string_view InDocument)
+	{
+		return InProvider.Find(InDocument)->Document->Snapshot();
+	}
+
+	static std::uint64_t PreviewGeneration(FAssetAutomation& InProvider, std::string_view InDocument)
+	{
+		return InProvider.Find(InDocument)->Document->PreviewGeneration();
+	}
+};
+} // namespace Hyperion
 
 namespace
 {
@@ -19,26 +37,33 @@ void Check(bool bInValue, std::source_location InLocation = std::source_location
 	}
 }
 
-template<class TFunction> void Wait(FTaskSystem& InTasks, TFunction InFunction)
+template<class TFunction>
+void Wait(FTaskSystem& InTasks, TFunction InFunction, std::string_view InContext = "condition")
 {
 	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 	while (!InFunction())
 	{
-		Check(std::chrono::steady_clock::now() < Deadline);
+		if (std::chrono::steady_clock::now() >= Deadline)
+		{
+			throw std::runtime_error("Asset workflow wait timed out: " + std::string(InContext));
+		}
 		InTasks.PumpMain();
 		std::this_thread::yield();
 	}
 }
 
-template<class T> T Finish(FTaskSystem& InTasks, TPendingOperation<T> InOperation)
+template<class T>
+T Finish(FTaskSystem& InTasks, TPendingOperation<T> InOperation, std::string_view InContext = "pending operation")
 {
 	std::optional<T> Result;
-	Wait(InTasks,
-	     [&]
-	     {
-		     Result = InOperation.Poll();
-		     return Result.has_value();
-	     });
+	Wait(
+	    InTasks,
+	    [&]
+	    {
+		    Result = InOperation.Poll();
+		    return Result.has_value();
+	    },
+	    InContext);
 	return *Result;
 }
 
@@ -86,8 +111,12 @@ public:
 		return false;
 	}
 
-	void PumpDocument(std::string_view) override
+	void PumpDocument(std::string_view InId) override
 	{
+		if (Entry && Entry->Id == InId && Entry->Document)
+		{
+			Entry->Document->PollSave();
+		}
 	}
 
 	std::optional<FAssetWorkspaceEntry> FindDocument(std::string_view InId) const override
@@ -138,6 +167,7 @@ struct FWorkflowFixture
 	FAssetService Assets{IO};
 	FAssetRef Replacement;
 	FAssetRef Broken;
+	FAssetRef CubeReference;
 
 	template<class T> FAssetRef Store(const char* InPath, const T& InAsset)
 	{
@@ -182,6 +212,27 @@ struct FWorkflowFixture
 		Model.Roots = {0};
 		AssignModelSubresourceIds(Model);
 		Store("workflow-model.hasset", Model);
+		Material.Parameters.clear();
+		Parameter.Name = "Roughness";
+		Parameter.Type = FMaterialParameterType::Numeric(EMaterialScalar::Float);
+		Parameter.Semantic = "Pbr.RoughnessFactor";
+		Parameter.Default = FMaterialAssetValue{Parameter.Type, {std::bit_cast<std::uint32_t>(1.f)}};
+		Material.Parameters.push_back(Parameter);
+		Material.Values = {{Parameter.Name, *Parameter.Default}};
+		Store("workflow-numeric.hasset", Material);
+		Parameter.Name = "Albedo";
+		Parameter.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
+		Parameter.Semantic.clear();
+		Parameter.Default = FMaterialAssetValue{Parameter.Type};
+		Parameter.Default->Texture = TextureRef;
+		Material.Parameters = {Parameter};
+		Material.Values = {{Parameter.Name, *Parameter.Default}};
+		Store("workflow-reference.hasset", Material);
+		FTextureAsset Cube;
+		Cube.Name = "Cube";
+		Cube.Dimension = ETextureDimension::Cube;
+		Cube.Mips = {{1, 1, std::vector<std::uint8_t>(24, 255)}};
+		CubeReference = Store("workflow-cube.hasset", Cube);
 	}
 
 	std::shared_ptr<FAssetEditDocument> Document(const char* InPath)
@@ -189,6 +240,435 @@ struct FWorkflowFixture
 		return std::make_shared<FAssetEditDocument>(Assets.LoadAsync(InPath).Get(Tasks));
 	}
 };
+
+struct FBehaviorState
+{
+	FArchiveNode Snapshot;
+	std::uint64_t Generation{};
+	std::uint64_t Preview{};
+	bool bDirty{};
+	bool bCanUndo{};
+	bool bCanRedo{};
+};
+
+FBehaviorState Observe(const FAssetEditDocument& InDocument)
+{
+	return {InDocument.Snapshot(), InDocument.Generation(), InDocument.PreviewGeneration(),
+	        InDocument.IsDirty(),  InDocument.CanUndo(),    InDocument.CanRedo()};
+}
+
+FBehaviorState Observe(FAssetAutomation& InProvider, const std::string& InDocument)
+{
+	const auto Info = InProvider.Info({InDocument});
+	Check(!Info.bEditing && !Info.bSaving);
+	return {FAssetAutomationTestAccess::Snapshot(InProvider, InDocument),
+	        Info.Generation,
+	        FAssetAutomationTestAccess::PreviewGeneration(InProvider, InDocument),
+	        Info.bDirty,
+	        Info.bCanUndo,
+	        Info.bCanRedo};
+}
+
+template<class T> FArchiveNode WireArray(const std::vector<T>& InValues)
+{
+	FArchiveNode::FArray Result;
+	for (const auto& Value : InValues)
+	{
+		Result.push_back(WriteRecordWire(RecordType<T>(), &Value));
+	}
+	return FArchiveNode(std::move(Result));
+}
+
+struct FBehaviorFixture
+{
+	FWorkflowFixture Fixture;
+	std::shared_ptr<FAssetEditDocument> Gui;
+	std::shared_ptr<FAssetEditDocument> Shared;
+	FSharedWorkspace Workspace;
+	FAssetAutomation Attached;
+	FAssetAutomation Standalone;
+	FOperationCatalog AttachedCatalog;
+	FOperationCatalog StandaloneCatalog;
+	std::unique_ptr<FAutomationSession> AttachedSession;
+	std::unique_ptr<FAutomationSession> StandaloneSession;
+	std::string StandaloneId;
+	FBehaviorState Initial;
+
+	explicit FBehaviorFixture(const char* InPath)
+	    : Gui(Fixture.Document(InPath)), Shared(Fixture.Document(InPath)), Workspace(Shared),
+	      Attached(Fixture.Assets, Fixture.Tasks, nullptr, &Workspace), Standalone(Fixture.Assets, Fixture.Tasks)
+	{
+		RegisterAssetOperations(AttachedCatalog, &Attached);
+		RegisterAssetOperations(StandaloneCatalog, &Standalone);
+		AttachedCatalog.Seal();
+		StandaloneCatalog.Seal();
+		AttachedSession = std::make_unique<FAutomationSession>(AttachedCatalog);
+		StandaloneSession = std::make_unique<FAutomationSession>(StandaloneCatalog);
+		StandaloneId = Finish(Fixture.Tasks, Standalone.Open({InPath})).Document;
+		Initial = Observe(*Gui);
+	}
+
+	void Invoke(const char* InOperation, const FArchiveNode::FObject& InFields = {})
+	{
+		const auto Call = [&](FAssetAutomation& InProvider, FAutomationSession& InSession, const std::string& InId,
+		                      const char* InCaller)
+		{
+			const auto Info = InProvider.Info({InId});
+			auto Fields = InFields;
+			Fields.emplace("document", WriteValue(InId));
+			Fields.emplace("generation", WriteValue(std::to_string(Info.Generation)));
+			const auto Result = Outcome(InSession, Fixture.Tasks, InSession.Call(InOperation, FArchiveNode(Fields)));
+			if (Text(Result, "status") != "completed")
+			{
+				throw std::runtime_error("Asset behavior operation failed; operation=" + std::string(InOperation) +
+				                         "; caller=" + InCaller + "; path=" + Info.Path + "; request=" +
+				                         WriteJson(FArchiveNode(Fields)) + "; result=" + WriteJson(Result));
+			}
+		};
+		Call(Attached, *AttachedSession, "gui-document", "attached");
+		Call(Standalone, *StandaloneSession, StandaloneId, "standalone");
+	}
+
+	void CheckStates(FArchiveNode::FObject& OutReport, const char* InCase, std::uint64_t InGeneration,
+	                 std::array<std::uint64_t, 3> InPreview, bool bInDirty, bool bInUndo, bool bInRedo)
+	{
+		const std::array States{Observe(*Gui), Observe(Attached, "gui-document"), Observe(Standalone, StandaloneId)};
+		const std::array Names{"gui", "attached", "standalone"};
+		FArchiveNode::FObject Paths;
+		for (std::size_t Index = 0; Index < States.size(); ++Index)
+		{
+			const auto& State = States[Index];
+			Check(EqualInspectionValue(State.Snapshot, States.front().Snapshot));
+			Check(State.Generation == Initial.Generation + InGeneration &&
+			      State.Preview == Initial.Preview + InPreview[Index]);
+			Check(State.bDirty == bInDirty && State.bCanUndo == bInUndo && State.bCanRedo == bInRedo);
+			Paths.emplace(Names[Index],
+			              FArchiveNode(FArchiveNode::FObject{
+			                  {"generationDelta", WriteValue(State.Generation - Initial.Generation)},
+			                  {"previewDelta", WriteValue(State.Preview - Initial.Preview)},
+			                  {"dirty", WriteValue(State.bDirty)},
+			                  {"canUndo", WriteValue(State.bCanUndo)},
+			                  {"canRedo", WriteValue(State.bCanRedo)},
+			                  {"sameAsInitial", WriteValue(EqualInspectionValue(State.Snapshot, Initial.Snapshot))}}));
+		}
+		Check(OutReport.emplace(InCase, FArchiveNode(std::move(Paths))).second);
+	}
+
+	void RejectOperation(const char* InOperation, const FArchiveNode::FObject& InFields,
+	                     std::string_view InExpectedCode)
+	{
+		const auto Call = [&](FAssetAutomation& InProvider, FAutomationSession& InSession, const std::string& InId)
+		{
+			auto Fields = InFields;
+			Fields.emplace("document", WriteValue(InId));
+			Fields.emplace("generation", WriteValue(std::to_string(InProvider.Info({InId}).Generation)));
+			const auto Result = Outcome(InSession, Fixture.Tasks, InSession.Call(InOperation, FArchiveNode(Fields)));
+			Check(Text(Result, "status") == "failed" && Text(Field(Result, "error"), "code") == InExpectedCode);
+		};
+		Call(Attached, *AttachedSession, "gui-document");
+		Call(Standalone, *StandaloneSession, StandaloneId);
+	}
+};
+
+void CheckNodeEffectBaseline(FArchiveNode::FObject& OutReport)
+{
+	FBehaviorFixture F("workflow-model.hasset");
+	auto Nodes = ReadValue<std::vector<FModelNode>>(F.Gui->Get("nodes"));
+	Nodes.front().Name = "Metadata only";
+	CommitAssetField(*F.Gui, "nodes", WriteValue(Nodes));
+	F.Invoke("model.nodes.set", {{"value", WireArray(Nodes)}});
+	F.CheckStates(OutReport, "nodeName", 1, {0, 0, 0}, true, true, false);
+	Check(F.Gui->Undo());
+	F.Invoke("asset.undo");
+	F.CheckStates(OutReport, "nodeNameUndo", 2, {0, 0, 0}, false, false, true);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+	Check(F.Gui->Redo());
+	F.Invoke("asset.redo");
+	F.CheckStates(OutReport, "nodeNameRedo", 3, {0, 0, 0}, true, true, false);
+	Nodes.front().Name = "Moved and renamed";
+	Nodes.front().Local = Translation({3, 4, 5});
+	CommitAssetField(*F.Gui, "nodes", WriteValue(Nodes));
+	F.Invoke("model.nodes.set", {{"value", WireArray(Nodes)}});
+	F.CheckStates(OutReport, "nodeNameAndLocal", 4, {1, 1, 1}, true, true, false);
+	CommitAssetField(*F.Gui, "nodes", WriteValue(Nodes));
+	F.Invoke("model.nodes.set", {{"value", WireArray(Nodes)}});
+	F.CheckStates(OutReport, "nodeEqual", 5, {1, 1, 1}, true, true, false);
+	Check(F.Gui->Undo());
+	F.Invoke("asset.undo");
+	F.CheckStates(OutReport, "nodeEqualUndo", 6, {1, 1, 1}, true, true, true);
+	Check(ReadValue<std::vector<FModelNode>>(F.Gui->Get("nodes")).front().Local.Values ==
+	      Translation({3, 4, 5}).Values);
+}
+
+void CheckPrimitiveEffectBaseline(FArchiveNode::FObject& OutReport)
+{
+	FBehaviorFixture F("workflow-model.hasset");
+	auto Values = DescribeModelPrimitives(*F.Gui);
+	Values.front().Name = "Primitive metadata";
+	SetModelPrimitives(*F.Gui, Values);
+	F.Invoke("model.primitives.set", {{"values", WireArray(Values)}});
+	F.CheckStates(OutReport, "primitiveName", 1, {0, 0, 0}, true, true, false);
+	Values.front().Name = "Unassigned primitive";
+	Values.front().Material = -1;
+	SetModelPrimitives(*F.Gui, Values);
+	F.Invoke("model.primitives.set", {{"values", WireArray(Values)}});
+	F.CheckStates(OutReport, "primitiveNameAndMaterial", 2, {1, 1, 1}, true, true, false);
+	SetModelPrimitives(*F.Gui, Values);
+	F.Invoke("model.primitives.set", {{"values", WireArray(Values)}});
+	F.CheckStates(OutReport, "primitiveEqual", 3, {1, 1, 1}, true, true, false);
+	const auto Actual = ReadValue<std::vector<FModelPrimitive>>(F.Gui->Get("primitives"));
+	const auto Initial = ReadValue<FModelAsset>(F.Initial.Snapshot);
+	Check(Actual.front().Name == "Unassigned primitive" && Actual.front().Material == -1);
+	Check(Actual.front().Positions == Initial.Primitives.front().Positions &&
+	      Actual.front().Indices == Initial.Primitives.front().Indices &&
+	      Actual.front().Id == Initial.Primitives.front().Id);
+}
+
+void CheckNormalizedEffectBaseline(FArchiveNode::FObject& OutReport)
+{
+	FBehaviorFixture F("workflow-numeric.hasset");
+	auto Values = ReadValue<FMaterialAssetValues>(F.Gui->Get("values"));
+	Values.front().Value.Words.front() = std::bit_cast<std::uint32_t>(2.f);
+	CommitAssetField(*F.Gui, "values", WriteValue(Values));
+	F.Invoke("material.values.set", {{"value", WireArray(Values)}});
+	F.CheckStates(OutReport, "materialNormalizedEqual", 1, {0, 0, 0}, true, true, false);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+	const std::vector<FMaterialNumericEdit> Edits{{"Roughness", {2.0}}};
+	const auto Numeric = PrepareMaterialNumeric(ReadValue<FMaterialAsset>(F.Gui->Snapshot()), Edits);
+	CommitAssetField(*F.Gui, "values", WriteValue(Numeric));
+	F.Invoke("material.numeric.set", {{"edits", WireArray(Edits)}});
+	F.CheckStates(OutReport, "materialNumericNormalizedEqual", 2, {0, 0, 0}, true, true, false);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+	Check(F.Gui->Undo());
+	F.Invoke("asset.undo");
+	F.CheckStates(OutReport, "materialNumericEqualUndo", 3, {0, 0, 0}, true, true, true);
+	Check(F.Gui->Undo());
+	F.Invoke("asset.undo");
+	F.CheckStates(OutReport, "materialNormalizedEqualUndo", 4, {0, 0, 0}, false, false, true);
+}
+
+void CheckNameAndEncodingBaseline(FArchiveNode::FObject& OutReport)
+{
+	FBehaviorFixture F("workflow-texture.hasset");
+	CommitAssetField(*F.Gui, "name", F.Gui->Get("name"));
+	F.Invoke("asset.rename", {{"name", F.Gui->Get("name")}});
+	F.CheckStates(OutReport, "assetNameEqual", 1, {0, 0, 0}, true, true, false);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+	auto Work =
+	    FAssetEditWorkflow::Encoding(F.Fixture.Tasks, F.Gui, F.Gui->Generation(), EMaterialTextureEncoding::Linear);
+	Wait(F.Fixture.Tasks,
+	     [&]
+	     {
+		     return Work->Poll(F.Gui);
+	     });
+	F.Invoke("texture.set_encoding", {{"encoding", WriteValue(EMaterialTextureEncoding::Linear)}});
+	F.CheckStates(OutReport, "encodingEqual", 2, {0, 0, 0}, true, true, false);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+}
+
+void CheckFieldPersistenceBaseline()
+{
+	for (int Path = 0; Path < 3; ++Path)
+	{
+		FBehaviorFixture F("workflow-model.hasset");
+		auto Nodes = ReadValue<std::vector<FModelNode>>(F.Gui->Get("nodes"));
+		Nodes.front().Name = "Persisted edit";
+		Nodes.front().Local = Translation({3, 4, 5});
+		CommitAssetField(*F.Gui, "nodes", WriteValue(Nodes));
+		F.Invoke("model.nodes.set", {{"value", WireArray(Nodes)}});
+		if (Path == 0)
+		{
+			F.Gui->Save(F.Fixture.Assets);
+			Wait(
+			    F.Fixture.Tasks,
+			    [&]
+			    {
+				    F.Gui->PollSave();
+				    return !F.Gui->IsSaving();
+			    },
+			    "GUI persistence save");
+			Check(!F.Gui->IsDirty() && F.Gui->Error.empty());
+		}
+		else
+		{
+			auto& Provider = Path == 1 ? F.Attached : F.Standalone;
+			const std::string Document = Path == 1 ? "gui-document" : F.StandaloneId;
+			const auto Saved = Finish(F.Fixture.Tasks, Provider.Save({Document, Provider.Info({Document}).Generation}),
+			                          Path == 1 ? "attached persistence save" : "standalone persistence save");
+			Check(!Saved.bDirty && !Saved.bSaving && Saved.Error.empty());
+		}
+		const auto Saved = F.Fixture.Assets.LoadAsync<FModelAsset>("workflow-model.hasset").Get(F.Fixture.Tasks);
+		Check(EqualInspectionValue(WriteValue(*Saved), F.Gui->Snapshot()));
+		Check(Saved->Nodes.front().Name == "Persisted edit" &&
+		      Saved->Nodes.front().Local.Values == Translation({3, 4, 5}).Values);
+	}
+}
+
+void CheckFieldEffectBaseline()
+{
+	FArchiveNode::FObject Report;
+	CheckNodeEffectBaseline(Report);
+	CheckPrimitiveEffectBaseline(Report);
+	CheckNormalizedEffectBaseline(Report);
+	CheckNameAndEncodingBaseline(Report);
+	CheckFieldPersistenceBaseline();
+	std::ofstream File("asset-field-policy-behavior.json", std::ios::binary);
+	File << WriteJson(FArchiveNode(std::move(Report)));
+	Check(File.good());
+}
+
+void CheckReferencePolicyFailures()
+{
+	FBehaviorFixture F("workflow-reference.hasset");
+
+	struct FFailureCase
+	{
+		FAssetRef Reference;
+		std::string_view Code;
+	};
+
+	const std::array Cases{
+	    FFailureCase{F.Fixture.CubeReference, "invalid_arguments"},
+	    FFailureCase{F.Fixture.Replacement, "invalid_arguments"},
+	    FFailureCase{{"", "missing-texture.hasset", RecordType<FTextureAsset>().Id, {}}, "operation_failed"}};
+	for (const auto& Case : Cases)
+	{
+		auto Values = ReadValue<FMaterialAssetValues>(F.Gui->Get("values"));
+		auto WireValues = WireArray(Values);
+		auto& WireEntry =
+		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FArray>(WireValues.Value).front().Value);
+		std::get<FArchiveNode::FObject>(WireEntry.at("value").Value).at("texture") =
+		    WriteRecordWire(RecordType<FAssetRef>(), &Case.Reference);
+		Values.front().Value.Texture = Case.Reference;
+		bool bRejected{};
+		try
+		{
+			const auto Work = FAssetEditWorkflow::Field(
+			    F.Fixture.Tasks, F.Fixture.Assets, F.Gui, F.Gui->Generation(),
+			    ResolveAssetFieldPolicy(*F.Gui->Loaded().Type, &FMaterialAsset::Values).Field(), WriteValue(Values));
+			Wait(F.Fixture.Tasks,
+			     [&]
+			     {
+				     return Work->Poll(F.Gui);
+			     });
+		}
+		catch (const std::invalid_argument&)
+		{
+			Check(Case.Code == "invalid_arguments");
+			bRejected = true;
+		}
+		catch (const std::runtime_error& Error)
+		{
+			Check(Case.Code == "operation_failed" &&
+			      std::string_view(Error.what()).find("missing-texture.hasset") != std::string_view::npos);
+			bRejected = true;
+		}
+		Check(bRejected);
+		F.RejectOperation("material.values.set", {{"value", std::move(WireValues)}}, Case.Code);
+		FArchiveNode::FObject State;
+		F.CheckStates(State, "rejectedReference", 0, {0, 0, 0}, false, false, false);
+		Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+	}
+}
+
+void CheckReferenceEffects()
+{
+	FBehaviorFixture F("workflow-reference.hasset");
+	const auto Replacement = F.Fixture.Store(
+	    "workflow-new-texture.hasset",
+	    BuildTextureAsset("Replacement texture", EMaterialTextureEncoding::Linear, {1, 1, {77, 12, 31, 255}}));
+	auto Values = ReadValue<FMaterialAssetValues>(F.Gui->Get("values"));
+	Values.front().Value.Texture = Replacement;
+	const auto Submit = [&]
+	{
+		const auto Work = FAssetEditWorkflow::Field(
+		    F.Fixture.Tasks, F.Fixture.Assets, F.Gui, F.Gui->Generation(),
+		    ResolveAssetFieldPolicy(*F.Gui->Loaded().Type, &FMaterialAsset::Values).Field(), WriteValue(Values));
+		Wait(F.Fixture.Tasks,
+		     [&]
+		     {
+			     return Work->Poll(F.Gui);
+		     });
+		F.Invoke("material.values.set", {{"value", WireArray(Values)}});
+	};
+	FArchiveNode::FObject State;
+	Submit();
+	F.CheckStates(State, "referenceChanged", 1, {1, 1, 1}, true, true, false);
+	Check(ReadValue<FMaterialAssetValues>(F.Gui->Get("values")).front().Value.Texture == Replacement);
+	const auto Changed = F.Gui->Snapshot();
+	Submit();
+	F.CheckStates(State, "referenceEqual", 2, {1, 1, 1}, true, true, false);
+	Check(F.Gui->Undo());
+	F.Invoke("asset.undo");
+	F.CheckStates(State, "referenceEqualUndo", 3, {1, 1, 1}, true, true, true);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), Changed));
+	Check(F.Gui->Undo());
+	F.Invoke("asset.undo");
+	F.CheckStates(State, "referenceChangedUndo", 4, {2, 2, 2}, false, false, true);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+	Check(F.Gui->Redo());
+	F.Invoke("asset.redo");
+	F.CheckStates(State, "referenceChangedRedo", 5, {3, 3, 3}, true, true, true);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), Changed));
+	Check(F.Gui->Redo());
+	F.Invoke("asset.redo");
+	F.CheckStates(State, "referenceEqualRedo", 6, {3, 3, 3}, true, true, false);
+}
+
+void CheckEqualMaterialSlotEffects()
+{
+	FBehaviorFixture F("workflow-model.hasset");
+	const auto Slots = ReadValue<std::vector<FAssetRef>>(F.Gui->Get("materialSlots"));
+	const auto Work = FAssetEditWorkflow::Field(
+	    F.Fixture.Tasks, F.Fixture.Assets, F.Gui, F.Gui->Generation(),
+	    ResolveAssetFieldPolicy(*F.Gui->Loaded().Type, &FModelAsset::MaterialSlots).Field(), WriteValue(Slots));
+	Wait(F.Fixture.Tasks,
+	     [&]
+	     {
+		     return Work->Poll(F.Gui);
+	     });
+	F.Invoke("model.material_slots.set", {{"value", WireArray(Slots)}});
+	FArchiveNode::FObject State;
+	F.CheckStates(State, "materialSlotsEqual", 1, {0, 0, 0}, true, true, false);
+	Check(EqualInspectionValue(F.Gui->Snapshot(), F.Initial.Snapshot));
+	Check(F.Gui->Undo());
+	F.Invoke("asset.undo");
+	F.CheckStates(State, "materialSlotsEqualUndo", 2, {0, 0, 0}, false, false, true);
+	Check(F.Gui->Redo());
+	F.Invoke("asset.redo");
+	F.CheckStates(State, "materialSlotsEqualRedo", 3, {0, 0, 0}, true, true, false);
+}
+
+void CheckDirectReferenceProtection()
+{
+	FWorkflowFixture F;
+	auto Document = F.Document("workflow-model.hasset");
+	const auto Initial = Observe(*Document);
+	for (const bool bDirectSet : {false, true})
+	{
+		bool bRejected{};
+		try
+		{
+			if (bDirectSet)
+			{
+				Document->Set("materialSlots", WriteValue(std::vector{F.Replacement}));
+			}
+			else
+			{
+				CommitAssetField(*Document,
+				                 ResolveAssetFieldPolicy(*Document->Loaded().Type, &FModelAsset::MaterialSlots).Field(),
+				                 WriteValue(std::vector{F.Replacement}));
+			}
+		}
+		catch (const std::invalid_argument&)
+		{
+			bRejected = true;
+		}
+		Check(bRejected && !Document->IsDirty() && !Document->CanUndo());
+		Check(Document->Generation() == Initial.Generation && Document->PreviewGeneration() == Initial.Preview);
+		Check(EqualInspectionValue(Document->Snapshot(), Initial.Snapshot));
+	}
+}
 
 void CheckEncodingParity()
 {
@@ -201,6 +681,13 @@ void CheckEncodingParity()
 	const auto Initial = Gui->Snapshot();
 	const auto Disk = F.Files->Read(Gui->Loaded().Path, 1024 * 1024);
 	const auto State = Finish(F.Tasks, Standalone.Open({"workflow-texture.hasset"}));
+	const auto InitialPreview = Gui->PreviewGeneration();
+	const auto CheckPreview = [&](std::uint64_t InDelta)
+	{
+		Check(Gui->PreviewGeneration() == InitialPreview + InDelta &&
+		      AttachedDocument->PreviewGeneration() == InitialPreview + InDelta &&
+		      FAssetAutomationTestAccess::PreviewGeneration(Standalone, State.Document) == InitialPreview + InDelta);
+	};
 	auto GuiWork = FAssetEditWorkflow::Encoding(F.Tasks, Gui, Gui->Generation(), EMaterialTextureEncoding::Srgb);
 	auto AttachedWork =
 	    Attached.SetEncoding({"gui-document", AttachedDocument->Generation(), EMaterialTextureEncoding::Srgb});
@@ -224,6 +711,7 @@ void CheckEncodingParity()
 	const auto Changed = Finish(F.Tasks, std::move(StandaloneWork));
 	const auto Shared = Finish(F.Tasks, std::move(AttachedWork));
 	Check(!Shared.bEditing && !Changed.bEditing && Shared.bDirty && Changed.bDirty);
+	CheckPreview(1);
 	Check(Shared.Generation == Gui->Generation() && Changed.Generation == Gui->Generation());
 	Check(EqualInspectionValue(Gui->Snapshot(), AttachedDocument->Snapshot()));
 	Check(EqualInspectionValue(Standalone.ReadField(State.Document, RecordType<FTextureAsset>().Id, "mips"),
@@ -231,11 +719,13 @@ void CheckEncodingParity()
 	Check(Gui->Undo() && AttachedDocument->Undo());
 	const auto Undone = Standalone.Undo({Changed.Document, Changed.Generation});
 	Check(!Gui->IsDirty() && !AttachedDocument->IsDirty() && !Undone.bDirty && !Undone.bCanUndo);
+	CheckPreview(2);
 	Check(EqualInspectionValue(Gui->Snapshot(), Initial) &&
 	      EqualInspectionValue(AttachedDocument->Snapshot(), Initial));
 	Check(Gui->Redo() && AttachedDocument->Redo());
 	const auto Redone = Standalone.Redo({Undone.Document, Undone.Generation});
 	Check(Redone.bDirty && !Redone.bCanRedo && Gui->IsDirty() && AttachedDocument->IsDirty());
+	CheckPreview(3);
 	Check(F.Files->Read(Gui->Loaded().Path, 1024 * 1024) == Disk);
 }
 
@@ -409,6 +899,11 @@ void CheckPluginPendingEditShutdown()
 
 void CheckAssetWorkflowAdapters()
 {
+	CheckFieldEffectBaseline();
+	CheckReferencePolicyFailures();
+	CheckReferenceEffects();
+	CheckEqualMaterialSlotEffects();
+	CheckDirectReferenceProtection();
 	CheckEncodingParity();
 	CheckReferenceParityAndFailure();
 	CheckPreparationFailureAndDrain();

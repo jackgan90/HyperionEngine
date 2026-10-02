@@ -249,6 +249,8 @@ Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorV
 
 纹理编码和引用编辑使用 Runtime/AssetEditing 的 `FAssetEditWorkflow`，与 automation 共用 snapshot、busy admission、文档/资产身份及 generation 校验和单次历史提交。Worker 只准备拥有数据的快照，Main 提交文档；关闭或退出前 Drain 汇合任务，销毁路径不提交准备结果。资产窗口继续管理预览和页签，保存仍显式执行。
 
+资产属性控件通过 AssetEditing 的成员策略取得编辑路由，校验、规范化与预览影响由共享文档领域处理。资产、节点和图元改名保留当前预览；变换、材质分配、实际材质值/引用及编码数据变化触发预览更新。自动化节点改名使用相同规则。相等提交仍保留文档事务，连续交互的 Undo/Redo/Cancel 按整个交互累计的影响处理；纹理编码历史恢复准确 mip 数据并共享未改变的 mip0 存储。
+
 ```text
 Editor panels / scene selection / viewport input
           |                         |

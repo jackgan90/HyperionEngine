@@ -68,7 +68,9 @@ FAssetDocumentInfo FAssetAutomation::SetMaterialNumeric(const FAssetMutationRequ
 		throw FAutomationError("unsupported_type", "Numeric parameter operations require a material document");
 	}
 	const auto Values = PrepareMaterialNumeric(ReadValue<FMaterialAsset>(Entry->Document->Snapshot()), InEdits);
-	CommitAssetField(*Entry->Document, "values", WriteValue(Values));
+	CommitAssetField(*Entry->Document,
+	                 ResolveAssetFieldPolicy(*Entry->Document->Loaded().Type, &FMaterialAsset::Values).Field(),
+	                 WriteValue(Values));
 	return Describe(*Entry);
 }
 

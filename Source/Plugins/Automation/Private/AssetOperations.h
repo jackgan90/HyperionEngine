@@ -153,8 +153,11 @@ public:
 	FAssetDocumentInfo Activate(const FAssetDocumentRequest& InRequest);
 	FTextureSample TextureSample(const FTextureSampleRequest& InRequest);
 	FArchiveNode ReadField(const std::string& InDocument, std::string_view InType, std::string_view InField);
+	FArchiveNode ReadField(const std::string& InDocument, const FRecordMemberIdentity& InField);
 	TPendingOperation<FAssetDocumentInfo> SetField(const std::string& InDocument, std::uint64_t InGeneration,
 	                                               std::string_view InType, std::string InField, FArchiveNode InValue);
+	TPendingOperation<FAssetDocumentInfo> SetField(const std::string& InDocument, std::uint64_t InGeneration,
+	                                               const FRecordMemberIdentity& InField, FArchiveNode InValue);
 	void Drain();
 	FMaterialNumericInfo MaterialNumeric(const FAssetMutationRequest& InRequest, const std::string& InName);
 	FAssetDocumentInfo SetMaterialNumeric(const FAssetMutationRequest& InRequest,
@@ -167,6 +170,8 @@ public:
 	void ContentRootChanged() override;
 
 private:
+	friend struct FAssetAutomationTestAccess;
+
 	struct FEntry
 	{
 		std::string Id;

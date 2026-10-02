@@ -4,13 +4,15 @@
 
 namespace Hyperion
 {
+struct FModelPrimitiveInfo;
+
 // Only the edited fields enter history; bulk payloads are immutable and shared.
 class FAssetEditDocument
 {
 public:
 	explicit FAssetEditDocument(std::shared_ptr<const FLoadedAsset> InAsset);
 	const FArchiveNode& Get(std::string_view InField) const;
-	void Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction = 0, bool bInAffectsPreview = true);
+	void Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction = 0);
 	void FinishInteraction();
 	void CancelInteraction(std::uint64_t InInteraction = 0);
 	bool Undo();
@@ -30,11 +32,23 @@ public:
 
 private:
 	friend class FAssetEditWorkflow;
+	friend void CommitAssetField(FAssetEditDocument&, const FRecordMemberIdentity&, FArchiveNode, std::uint64_t);
+	friend void SetModelPrimitives(FAssetEditDocument&, const std::vector<FModelPrimitiveInfo>&, std::uint64_t);
+
+	enum class ETarget
+	{
+		Field,
+		Root
+	};
+
+	void Apply(const FRecordMemberIdentity& InField, FArchiveNode InValue, std::uint64_t InInteraction,
+	           ETarget InTarget = ETarget::Field);
 	bool bEditing{};
 
 	struct FEdit
 	{
-		std::string Field;
+		FRecordMemberIdentity Field;
+		ETarget Target{};
 		FArchiveNode Before;
 		FArchiveNode After;
 		std::uint64_t BeforeState{};

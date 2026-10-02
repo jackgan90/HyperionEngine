@@ -18,12 +18,34 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetField(const std::stri
                                                                  std::uint64_t InGeneration, std::string_view InType,
                                                                  std::string InField, FArchiveNode InValue)
 {
-	auto Entry = Edit(InDocument, InGeneration);
+	const auto Entry = Edit(InDocument, InGeneration);
 	(void)ReadField(InDocument, InType, InField);
+	const auto Policy = ResolveAssetFieldPolicy(*Entry->Document->Loaded().Type, InField);
+	return SetField(InDocument, InGeneration, Policy.Field(), std::move(InValue));
+}
+
+FArchiveNode FAssetAutomation::ReadField(const std::string& InDocument, const FRecordMemberIdentity& InField)
+{
+	const auto Entry = Find(InDocument);
+	if (Entry->Document->Loaded().Header.TypeId != InField.TypeId)
+	{
+		throw FAutomationError("unsupported_type", "Operation requires a " + InField.TypeId + " document");
+	}
+	const auto Policy = ResolveAssetFieldPolicy(*Entry->Document->Loaded().Type, InField);
+	return Entry->Document->Get(Policy.Field().FieldId);
+}
+
+TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetField(const std::string& InDocument,
+                                                                 std::uint64_t InGeneration,
+                                                                 const FRecordMemberIdentity& InField,
+                                                                 FArchiveNode InValue)
+{
+	const auto Entry = Edit(InDocument, InGeneration);
+	(void)ReadField(InDocument, InField);
 	try
 	{
-		return PendingEdit(Entry, FAssetEditWorkflow::Field(Tasks, Assets, Entry->Document, InGeneration,
-		                                                    std::move(InField), std::move(InValue)));
+		return PendingEdit(Entry, FAssetEditWorkflow::Field(Tasks, Assets, Entry->Document, InGeneration, InField,
+		                                                    std::move(InValue)));
 	}
 	catch (const FAssetWorkflowError& Failure)
 	{

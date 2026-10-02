@@ -1,4 +1,5 @@
 #include "Hyperion/AssetEditing/AssetDocument.h"
+#include "AssetFieldPolicy.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 
@@ -8,10 +9,8 @@ namespace
 {
 FArchiveNode& DocumentField(FArchiveNode& InDraft, std::string_view InField)
 {
-	return InField.empty()
-	           ? InDraft
-	           : std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InDraft.Value).at("fields").Value)
-	                 .at(std::string(InField));
+	return std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InDraft.Value).at("fields").Value)
+	    .at(std::string(InField));
 }
 } // namespace
 
@@ -92,28 +91,40 @@ const FArchiveNode& FAssetEditDocument::Get(std::string_view InField) const
 	    .at(std::string(InField));
 }
 
-void FAssetEditDocument::Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction,
-                             bool bInAffectsPreview)
+void FAssetEditDocument::Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction)
 {
-	bInAffectsPreview &= InField != "name";
+	CommitAssetField(*this, std::move(InField), std::move(InValue), InInteraction);
+}
+
+void FAssetEditDocument::Apply(const FRecordMemberIdentity& InField, FArchiveNode InValue, std::uint64_t InInteraction,
+                               ETarget InTarget)
+{
+	const auto Policy = ResolveAssetFieldPolicy(*Asset->Type, InField);
+	if (Policy.Route() == EAssetFieldRoute::ReadOnly ||
+	    (InTarget == ETarget::Root) != (Policy.Route() == EAssetFieldRoute::TextureEncoding))
+	{
+		throw std::invalid_argument("Invalid asset edit target");
+	}
+	const bool bAffectsPreview = AssetFieldAffectsPreview(*this, InField, InValue);
 	ShareAssetBulk(InValue);
-	auto& Current = DocumentField(Draft, InField);
+	auto& Current = InTarget == ETarget::Root ? Draft : DocumentField(Draft, InField.FieldId);
 	if (InInteraction && ActiveInteraction == InInteraction && Cursor && Cursor == History.size() &&
-	    History.back().Field == InField && State != SavedState && (!PendingSave || State != SubmittedState))
+	    History.back().Field == InField && History.back().Target == InTarget && State != SavedState &&
+	    (!PendingSave || State != SubmittedState))
 	{
 		History.back().After = InValue;
-		History.back().bAffectsPreview |= bInAffectsPreview;
+		History.back().bAffectsPreview |= bAffectsPreview;
 	}
 	else
 	{
 		History.resize(Cursor);
-		History.push_back({std::move(InField), Current, InValue, State, ++NextState, InInteraction, bInAffectsPreview});
+		History.push_back({InField, InTarget, Current, InValue, State, ++NextState, InInteraction, bAffectsPreview});
 		++Cursor;
 	}
 	Current = std::move(InValue);
 	State = History.back().AfterState;
 	ActiveInteraction = InInteraction;
-	if (bInAffectsPreview)
+	if (bAffectsPreview)
 	{
 		++PreviewRevision;
 	}
@@ -148,7 +159,7 @@ bool FAssetEditDocument::Undo()
 		return false;
 	}
 	const auto& Edit = History[--Cursor];
-	DocumentField(Draft, Edit.Field) = Edit.Before;
+	(Edit.Target == ETarget::Root ? Draft : DocumentField(Draft, Edit.Field.FieldId)) = Edit.Before;
 	State = Edit.BeforeState;
 	if (Edit.bAffectsPreview)
 	{
@@ -166,7 +177,7 @@ bool FAssetEditDocument::Redo()
 		return false;
 	}
 	const auto& Edit = History[Cursor++];
-	DocumentField(Draft, Edit.Field) = Edit.After;
+	(Edit.Target == ETarget::Root ? Draft : DocumentField(Draft, Edit.Field.FieldId)) = Edit.After;
 	State = Edit.AfterState;
 	if (Edit.bAffectsPreview)
 	{

@@ -1,11 +1,17 @@
 #include "Hyperion/AssetEditing/AssetDocument.h"
+#include "Hyperion/AssetEditing/AssetEditWorkflow.h"
+#include "Hyperion/AssetEditing/AssetProperties.h"
+#include "Hyperion/AssetEditing/ModelProperties.h"
+#include "Hyperion/Environment/SkyAsset.h"
 #include "Hyperion/Math/AffineTransform.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Hyperion/Textures/TextureAsset.h"
+#include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <source_location>
 #include <thread>
+#include <variant>
 
 namespace Hyperion
 {
@@ -36,6 +42,19 @@ void WaitForSave(FAssetEditDocument& InDocument, FTaskSystem& InTasks)
 	}
 }
 
+void RebuildEncoding(FTaskSystem& InTasks, const std::shared_ptr<FAssetEditDocument>& InDocument,
+                     EMaterialTextureEncoding InEncoding)
+{
+	const auto Work = FAssetEditWorkflow::Encoding(InTasks, InDocument, InDocument->Generation(), InEncoding);
+	const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+	while (!Work->Poll(InDocument))
+	{
+		InTasks.PumpMain();
+		Check(std::chrono::steady_clock::now() < Deadline);
+		std::this_thread::yield();
+	}
+}
+
 void CheckDocuments(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSystem& InFiles)
 {
 	const auto Path = InAssets.NormalizePath("asset-document.hasset");
@@ -44,7 +63,8 @@ void CheckDocuments(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSy
 	const auto Encoded = EncodeAsset(RecordType<FTextureAsset>(), &Texture);
 	InFiles.WriteAtomic(Path, Encoded.Bytes);
 	InAssets.Types().Register<FTextureAsset>();
-	FAssetEditDocument A(InAssets.LoadAsync(Path).Get(InTasks));
+	const auto Document = std::make_shared<FAssetEditDocument>(InAssets.LoadAsync(Path).Get(InTasks));
+	auto& A = *Document;
 	FAssetEditDocument B(InAssets.LoadAsync(Path).Get(InTasks));
 	const auto InitialPreview = A.PreviewGeneration();
 	A.Set("name", WriteValue(std::string("First")), 41);
@@ -71,8 +91,8 @@ void CheckDocuments(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSy
 	WaitForSave(B, InTasks);
 	Check(B.IsDirty() && B.Error.find("changed on disk") != std::string::npos);
 	const auto Before = Serialize(ReadValue<FTextureAsset>(A.Snapshot()));
-	const auto Rebuilt = BuildTextureAsset("Encoded", EMaterialTextureEncoding::Srgb, Base);
-	A.Set({}, WriteValue(Rebuilt));
+	const auto Rebuilt = BuildTextureAsset(ReadValue<std::string>(A.Get("name")), EMaterialTextureEncoding::Srgb, Base);
+	RebuildEncoding(InTasks, Document, EMaterialTextureEncoding::Srgb);
 	Check(ReadValue<FTextureAsset>(A.Snapshot()).Mips.front() == Base);
 	Check(A.Undo() && Serialize(ReadValue<FTextureAsset>(A.Snapshot())) == Before);
 	Check(A.Redo() && ReadValue<FTextureAsset>(A.Snapshot()).Mips == Rebuilt.Mips);
@@ -134,7 +154,7 @@ void CheckModelEdits(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileS
 	Check(Saved->Primitives.front().Positions == Primitive.Positions);
 	const auto Preview = Document.PreviewGeneration();
 	Nodes.front().Name = "Metadata only";
-	Document.Set("nodes", WriteValue(Nodes), 0, false);
+	Document.Set("nodes", WriteValue(Nodes));
 	Check(Document.IsDirty() && Document.PreviewGeneration() == Preview);
 	Check(Document.Undo() && !Document.IsDirty() && Document.PreviewGeneration() == Preview);
 	Check(Document.Redo() && Document.PreviewGeneration() == Preview);
@@ -146,7 +166,10 @@ void CheckTextureHistorySharing(FAssetService& InAssets, FTaskSystem& InTasks, F
 	FMaterialTextureMip Base{128, 128, std::vector<std::uint8_t>(128 * 128 * 4, 127)};
 	const auto Texture = BuildTextureAsset("Shared history", EMaterialTextureEncoding::Linear, Base);
 	InFiles.WriteAtomic(Path, EncodeAsset(RecordType<FTextureAsset>(), &Texture).Bytes);
-	FAssetEditDocument Document(InAssets.LoadAsync(Path).Get(InTasks));
+	const auto SharedDocument = std::make_shared<FAssetEditDocument>(InAssets.LoadAsync(Path).Get(InTasks));
+	auto& Document = *SharedDocument;
+	const auto Generation = Document.Generation();
+	const auto Preview = Document.PreviewGeneration();
 	const auto BaseStorage = [&]()
 	{
 		const auto& Mip = std::get<FArchiveNode::FArray>(Document.Get("mips").Value).front();
@@ -159,7 +182,8 @@ void CheckTextureHistorySharing(FAssetService& InAssets, FTaskSystem& InTasks, F
 	for (int Index = 0; Index < 6; ++Index)
 	{
 		const auto Encoding = Index % 2 ? EMaterialTextureEncoding::Linear : EMaterialTextureEncoding::Srgb;
-		Document.Set({}, RebuildTextureEncodingDraft(Document.Snapshot(), Encoding));
+		RebuildEncoding(InTasks, SharedDocument, Encoding);
+		Check(Document.Generation() == Generation + Index + 1 && Document.PreviewGeneration() == Preview + Index + 1);
 		Check(BaseStorage() == Original);
 		Check(ReadValue<FTextureAsset>(Document.Snapshot()).Mips ==
 		      BuildTextureAsset(Texture.Name, Encoding, Base).Mips);
@@ -175,6 +199,220 @@ void CheckTextureHistorySharing(FAssetService& InAssets, FTaskSystem& InTasks, F
 		Check(Document.Redo() && HashArchive(Document.Snapshot()) == Hashes[Index]);
 		Check(BaseStorage() == Original);
 	}
+}
+
+void CheckEqualAndCoalescedHistory(FAssetService& InAssets, FTaskSystem& InTasks)
+{
+	FAssetEditDocument Document(InAssets.LoadAsync("model-document.hasset").Get(InTasks));
+	const auto Initial = Document.Snapshot();
+	const auto Generation = Document.Generation();
+	const auto Preview = Document.PreviewGeneration();
+	CommitAssetField(Document, "name", Document.Get("name"));
+	Check(Document.Generation() == Generation + 1 && Document.PreviewGeneration() == Preview);
+	Check(Document.IsDirty() && Document.CanUndo() && EqualInspectionValue(Document.Snapshot(), Initial));
+	Check(Document.Undo() && !Document.IsDirty() && !Document.CanUndo());
+	Check(Document.Generation() == Generation + 2 && Document.PreviewGeneration() == Preview);
+	auto Nodes = ReadValue<std::vector<FModelNode>>(Document.Get("nodes"));
+	Nodes.front().Name = "Metadata in drag";
+	CommitAssetField(Document, "nodes", WriteValue(Nodes), 71);
+	Nodes.front().Local = Translation({7, 8, 9});
+	CommitAssetField(Document, "nodes", WriteValue(Nodes), 71);
+	Nodes = ReadValue<FModelAsset>(Initial).Nodes;
+	CommitAssetField(Document, "nodes", WriteValue(Nodes), 71);
+	Check(Document.Generation() == Generation + 5 && Document.PreviewGeneration() == Preview + 2);
+	Check(Document.IsDirty() && Document.CanUndo() && !Document.CanRedo());
+	Check(EqualInspectionValue(Document.Snapshot(), Initial));
+	Check(Document.Undo() && !Document.IsDirty() && !Document.CanUndo());
+	Check(Document.Generation() == Generation + 6 && Document.PreviewGeneration() == Preview + 3);
+	Check(Document.Redo() && Document.IsDirty() && !Document.CanRedo());
+	Check(Document.Generation() == Generation + 7 && Document.PreviewGeneration() == Preview + 4);
+	Nodes.front().Name = "Cancelled metadata";
+	CommitAssetField(Document, "nodes", WriteValue(Nodes), 72);
+	Nodes.front().Local = Translation({11, 12, 13});
+	CommitAssetField(Document, "nodes", WriteValue(Nodes), 72);
+	Document.CancelInteraction(72);
+	Check(Document.Generation() == Generation + 10 && Document.PreviewGeneration() == Preview + 6);
+	Check(Document.IsDirty() && Document.CanUndo() && !Document.CanRedo());
+	Check(EqualInspectionValue(Document.Snapshot(), Initial));
+	Check(Document.Undo() && !Document.IsDirty() && !Document.CanUndo());
+	Check(Document.Generation() == Generation + 11 && Document.PreviewGeneration() == Preview + 7);
+}
+
+template<class TFunction> void Reject(TFunction InFunction)
+{
+	bool bRejected{};
+	try
+	{
+		InFunction();
+	}
+	catch (const std::invalid_argument&)
+	{
+		bRejected = true;
+	}
+	catch (const std::runtime_error&)
+	{
+		bRejected = true;
+	}
+	catch (const std::bad_variant_access&)
+	{
+		bRejected = true;
+	}
+	Check(bRejected);
+}
+
+void CheckFieldPolicyIdentity()
+{
+	auto Type = RecordType<FModelAsset>();
+	const auto Nodes = ResolveAssetFieldPolicy(Type, &FModelAsset::Nodes);
+	Check(Nodes.Field().FieldId == "nodes" && Nodes.Field().TypeId == "hyperion.modelasset");
+	Check(Nodes.Route() == EAssetFieldRoute::Field);
+	Check(ResolveAssetFieldPolicy(Type, &FModelAsset::Primitives).Route() == EAssetFieldRoute::ModelPrimitives);
+	Check(ResolveAssetFieldPolicy(Type, &FModelAsset::Roots).Route() == EAssetFieldRoute::ReadOnly);
+	Check(ResolveAssetFieldPolicy(RecordType<FTextureAsset>(), &FTextureAsset::Encoding).Route() ==
+	      EAssetFieldRoute::TextureEncoding);
+	Check(ResolveAssetFieldPolicy(RecordType<FSkyAsset>(), &FSkyAsset::Radiance).Route() == EAssetFieldRoute::ReadOnly);
+	std::reverse(Type.Members.begin(), Type.Members.end());
+	Check(ResolveAssetFieldPolicy(Type, Nodes.Field()).Field() == Nodes.Field());
+	const auto Found = std::find_if(Type.Members.begin(), Type.Members.end(),
+	                                [](const auto& InMember)
+	                                {
+		                                return InMember.Id == "nodes";
+	                                });
+	Found->Options.Aliases.push_back("oldNodes");
+	Reject(
+	    [&]
+	    {
+		    (void)ResolveAssetFieldPolicy(Type, "oldNodes");
+	    });
+	Found->Association = FRecordMemberAssociation(&FModelAsset::Roots);
+	Reject(
+	    [&]
+	    {
+		    (void)ResolveAssetFieldPolicy(Type, Nodes.Field());
+	    });
+	Type = RecordType<FModelAsset>();
+	Type.Definition = std::make_shared<const int>(0);
+	Reject(
+	    [&]
+	    {
+		    (void)ResolveAssetFieldPolicy(Type, Nodes.Field());
+	    });
+	const auto Foreign = ResolveRecordMember(Type, &FModelAsset::Nodes);
+	Reject(
+	    [&]
+	    {
+		    (void)ResolveAssetFieldPolicy(Type, Foreign);
+	    });
+	Reject(
+	    [&]
+	    {
+		    (void)ResolveAssetFieldPolicy(RecordType<FTextureAsset>(), Nodes.Field());
+	    });
+	std::vector<FModelNode> FModelAsset::* NullMember{};
+	Reject(
+	    [&]
+	    {
+		    (void)ResolveAssetFieldPolicy(RecordType<FModelAsset>(), NullMember);
+	    });
+	Type = RecordType<FModelAsset>();
+	Type.Id = "custom.model";
+	Reject(
+	    [&]
+	    {
+		    (void)AssetNamePolicy(Type);
+	    });
+}
+
+template<class TFunction> void RejectUnchanged(FAssetEditDocument& InDocument, TFunction InFunction)
+{
+	const auto Before = InDocument.Snapshot();
+	const auto Generation = InDocument.Generation();
+	const auto Preview = InDocument.PreviewGeneration();
+	Reject(InFunction);
+	Check(EqualInspectionValue(InDocument.Snapshot(), Before));
+	Check(InDocument.Generation() == Generation && InDocument.PreviewGeneration() == Preview);
+	Check(!InDocument.IsEditing() && !InDocument.IsDirty() && !InDocument.CanUndo() && !InDocument.CanRedo());
+}
+
+void CheckFieldProtections(FAssetService& InAssets, FTaskSystem& InTasks)
+{
+	FAssetEditDocument Model(InAssets.LoadAsync("model-document.hasset").Get(InTasks));
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                Model.Set({}, Model.Snapshot());
+	                });
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                Model.Set("primitives", Model.Get("primitives"));
+	                });
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                Model.Set("roots", Model.Get("roots"));
+	                });
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                Model.Set("name", WriteValue(3));
+	                });
+	auto Nodes = ReadValue<std::vector<FModelNode>>(Model.Get("nodes"));
+	Nodes.front().Id = "changed-id";
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                Model.Set("nodes", WriteValue(Nodes));
+	                });
+	Nodes = ReadValue<std::vector<FModelNode>>(Model.Get("nodes"));
+	Nodes.front().Children.push_back(0);
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                Model.Set("nodes", WriteValue(Nodes));
+	                });
+	auto Primitives = DescribeModelPrimitives(Model);
+	Primitives.front().Vertices += 1;
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                SetModelPrimitives(Model, Primitives);
+	                });
+	Primitives = DescribeModelPrimitives(Model);
+	Primitives.front().Material = -2;
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                SetModelPrimitives(Model, Primitives);
+	                });
+	Primitives.front().Material = 1;
+	RejectUnchanged(Model,
+	                [&]
+	                {
+		                SetModelPrimitives(Model, Primitives);
+	                });
+	FAssetEditDocument Texture(InAssets.LoadAsync("texture-history.hasset").Get(InTasks));
+	RejectUnchanged(Texture,
+	                [&]
+	                {
+		                Texture.Set("mips", Texture.Get("mips"));
+	                });
+	RejectUnchanged(Texture,
+	                [&]
+	                {
+		                Texture.Set("encoding", Texture.Get("encoding"));
+	                });
+	FAssetEditDocument Material(InAssets.LoadAsync("model-material.hasset").Get(InTasks));
+	RejectUnchanged(Material,
+	                [&]
+	                {
+		                Material.Set("parameters", Material.Get("parameters"));
+	                });
+	RejectUnchanged(Material,
+	                [&]
+	                {
+		                Material.Set("passes", Material.Get("passes"));
+	                });
 }
 
 void CheckObsoleteCatalog(FAssetService& InAssets, FTaskSystem& InTasks, FMemoryFileSystem& InFiles)
@@ -209,7 +447,10 @@ int main()
 		FAssetService Assets(IO);
 		CheckDocuments(Assets, Tasks, *Files);
 		CheckModelEdits(Assets, Tasks, *Files);
+		CheckEqualAndCoalescedHistory(Assets, Tasks);
 		CheckTextureHistorySharing(Assets, Tasks, *Files);
+		CheckFieldPolicyIdentity();
+		CheckFieldProtections(Assets, Tasks);
 		CheckObsoleteCatalog(Assets, Tasks, *Files);
 		WriteAssetEditorFixture(std::filesystem::current_path() / "editor-asset-tests");
 		Assets.Drain();

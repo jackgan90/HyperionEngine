@@ -320,7 +320,8 @@ FAssetDocumentInfo FAssetAutomation::Activate(const FAssetDocumentRequest& InReq
 FAssetDocumentInfo FAssetAutomation::Rename(const FAssetRenameRequest& InRequest)
 {
 	auto Entry = Edit(InRequest.Document, InRequest.Generation);
-	CommitAssetField(*Entry->Document, "name", WriteValue(InRequest.Name));
+	CommitAssetField(*Entry->Document, AssetNamePolicy(*Entry->Document->Loaded().Type).Field(),
+	                 WriteValue(InRequest.Name));
 	return Describe(*Entry);
 }
 

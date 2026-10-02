@@ -54,9 +54,8 @@ void ModelTree(FGui& InGui, const std::vector<FModelNode>& InNodes, std::uint32_
 }
 } // namespace
 
-void FAssetWorkspace::EditField(FGui& InGui, FEntry& InEntry, const char* InField,
-                                const std::function<bool()>& InWidget, const std::function<FArchiveNode()>& InValue,
-                                bool bInAffectsPreview)
+void FAssetWorkspace::EditField(FGui& InGui, FEntry& InEntry, const FAssetFieldPolicy& InPolicy,
+                                const std::function<bool()>& InWidget, const std::function<FArchiveNode()>& InValue)
 {
 	FAssetLiveEditScope Editing(InGui);
 	const bool bChanged = InWidget();
@@ -67,13 +66,13 @@ void FAssetWorkspace::EditField(FGui& InGui, FEntry& InEntry, const char* InFiel
 	}
 	if (bChanged)
 	{
-		if (std::string_view(InField) == "primitives")
+		if (InPolicy.Route() == EAssetFieldRoute::ModelPrimitives)
 		{
 			CommitModelPrimitiveFields(*InEntry.Document, InValue(), Interaction.ChangedInteraction);
 		}
 		else
 		{
-			CommitAssetField(*InEntry.Document, InField, InValue(), Interaction.ChangedInteraction, bInAffectsPreview);
+			CommitAssetField(*InEntry.Document, InPolicy.Field(), InValue(), Interaction.ChangedInteraction);
 		}
 	}
 }
@@ -111,7 +110,7 @@ void FAssetWorkspace::DrawProperties(FGui& InGui)
 		InGui.TextWrapped("Editable values use input controls. Information rows are read-only.");
 		auto Name = ReadValue<std::string>(Document.Get("name"));
 		EditField(
-		    InGui, Entry, "name",
+		    InGui, Entry, AssetNamePolicy(*Document.Loaded().Type),
 		    [&]
 		    {
 			    return AssetText(InGui, "Name", Name, false);
@@ -214,7 +213,9 @@ void FAssetWorkspace::DrawModelProperties(FGui& InGui, FEntry& InEntry)
 		{
 			if (EditReference(InGui, ("Slot " + std::to_string(I)).c_str(), Slots[I], RecordType<FMaterialAsset>().Id))
 			{
-				CommitReferenceEdit(InEntry, "materialSlots", WriteValue(Slots));
+				CommitReferenceEdit(
+				    InEntry, ResolveAssetFieldPolicy(*Document.Loaded().Type, &FModelAsset::MaterialSlots).Field(),
+				    WriteValue(Slots));
 			}
 		}
 	}
@@ -238,7 +239,7 @@ void FAssetWorkspace::DrawModelNodes(FGui& InGui, FEntry& InEntry)
 		AssetInfo(InGui, "Children / primitives",
 		          std::to_string(Node.Children.size()) + " / " + std::to_string(Node.Primitives.size()));
 		EditField(
-		    InGui, InEntry, "nodes",
+		    InGui, InEntry, ResolveAssetFieldPolicy(*Document.Loaded().Type, &FModelAsset::Nodes),
 		    [&]
 		    {
 			    return AssetText(InGui, "Node name", Node.Name, false);
@@ -247,12 +248,11 @@ void FAssetWorkspace::DrawModelNodes(FGui& InGui, FEntry& InEntry)
 		    {
 			    ValidateNodeHierarchy(Nodes);
 			    return WriteValue(Nodes);
-		    },
-		    false);
+		    });
 		ObserveProperty(InGui, "node/name");
 		auto Transform = DecomposeAffine(Node.Local);
 		EditField(
-		    InGui, InEntry, "nodes",
+		    InGui, InEntry, ResolveAssetFieldPolicy(*Document.Loaded().Type, &FModelAsset::Nodes),
 		    [&]
 		    {
 			    std::array<FVec4, 3> ComponentBounds;
@@ -302,7 +302,7 @@ void FAssetWorkspace::DrawModelPrimitives(FGui& InGui, FEntry& InEntry, const FM
 		auto& Primitive = Fields(Array.at(InEntry.SelectedPrimitive));
 		auto Name = ReadValue<std::string>(Primitive.at("name"));
 		EditField(
-		    InGui, InEntry, "primitives",
+		    InGui, InEntry, ResolveAssetFieldPolicy(*Document.Loaded().Type, &FModelAsset::Primitives),
 		    [&]
 		    {
 			    return AssetText(InGui, "Primitive name", Name, false);
@@ -311,8 +311,7 @@ void FAssetWorkspace::DrawModelPrimitives(FGui& InGui, FEntry& InEntry, const FM
 		    {
 			    Primitive["name"] = WriteValue(Name);
 			    return Primitives;
-		    },
-		    false);
+		    });
 		const auto& Geometry = Model->Primitives[InEntry.SelectedPrimitive];
 		AssetInfo(InGui, "Vertices", std::to_string(Geometry.Positions.size() / 3));
 		AssetInfo(InGui, "Indices", std::to_string(Geometry.Indices.size()));

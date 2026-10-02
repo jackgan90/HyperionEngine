@@ -49,7 +49,8 @@ bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef&
 	}
 }
 
-void FAssetWorkspace::CommitReferenceEdit(FEntry& InEntry, std::string InField, FArchiveNode InCandidate)
+void FAssetWorkspace::CommitReferenceEdit(FEntry& InEntry, const FRecordMemberIdentity& InField,
+                                          FArchiveNode InCandidate)
 {
 	if (!InEntry.ReferenceEdit)
 	{
@@ -59,8 +60,8 @@ void FAssetWorkspace::CommitReferenceEdit(FEntry& InEntry, std::string InField, 
 	InEntry.ReferenceEdit.reset();
 	try
 	{
-		InEntry.EditWorkflow = FAssetEditWorkflow::Field(Tasks, Assets, InEntry.Document, Generation,
-		                                                 std::move(InField), std::move(InCandidate));
+		InEntry.EditWorkflow =
+		    FAssetEditWorkflow::Field(Tasks, Assets, InEntry.Document, Generation, InField, std::move(InCandidate));
 	}
 	catch (const std::exception& Failure)
 	{

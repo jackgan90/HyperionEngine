@@ -1,4 +1,5 @@
 #include "Hyperion/AssetEditing/AssetEditWorkflow.h"
+#include "AssetFieldPolicy.h"
 
 namespace Hyperion
 {
@@ -28,6 +29,7 @@ std::shared_ptr<FAssetEditWorkflow> FAssetEditWorkflow::Encoding(FTaskSystem& In
 		throw FAssetWorkflowError("unsupported_type", "Encoding requires an editable RGBA8 2D texture");
 	}
 	auto Result = std::shared_ptr<FAssetEditWorkflow>(new FAssetEditWorkflow(InTasks, InDocument, InGeneration));
+	Result->FieldIdentity = ResolveAssetFieldPolicy(*InDocument->Loaded().Type, &FTextureAsset::Encoding).Field();
 	Result->EncodingResult = DispatchAsync<FArchiveNode>(InTasks, {EDomain::Worker},
 	                                                     [Draft = InDocument->Snapshot(), InEncoding]
 	                                                     {
@@ -41,10 +43,21 @@ std::shared_ptr<FAssetEditWorkflow> FAssetEditWorkflow::Field(FTaskSystem& InTas
                                                               std::uint64_t InGeneration, std::string InField,
                                                               FArchiveNode InValue)
 {
+	const auto Policy = ResolveAssetFieldPolicy(*InDocument->Loaded().Type, InField);
+	return Field(InTasks, InAssets, std::move(InDocument), InGeneration, Policy.Field(), std::move(InValue));
+}
+
+std::shared_ptr<FAssetEditWorkflow> FAssetEditWorkflow::Field(FTaskSystem& InTasks, FAssetService& InAssets,
+                                                              std::shared_ptr<FAssetEditDocument> InDocument,
+                                                              std::uint64_t InGeneration,
+                                                              const FRecordMemberIdentity& InField,
+                                                              FArchiveNode InValue)
+{
 	auto Result = std::shared_ptr<FAssetEditWorkflow>(new FAssetEditWorkflow(InTasks, InDocument, InGeneration));
-	Result->FieldName = std::move(InField);
-	Result->Prepared = PrepareAssetField(*InDocument, Result->FieldName, std::move(InValue));
-	for (const auto& Reference : Result->Prepared.References)
+	Result->FieldIdentity = InField;
+	Result->Prepared = std::make_unique<FPreparedAssetField>(
+	    PrepareAssetField(*InDocument, Result->FieldIdentity, std::move(InValue)));
+	for (const auto& Reference : Result->Prepared->References)
 	{
 		Result->Graphs.push_back(InAssets.LoadGraphAsync(Reference.Reference, InDocument->Loaded().Path));
 	}
@@ -95,16 +108,16 @@ bool FAssetEditWorkflow::Poll(const std::shared_ptr<FAssetEditDocument>& InCurre
 	}
 	if (EncodingResult)
 	{
-		Document->Set("", *EncodingResult->GetReady());
+		Document->Apply(FieldIdentity, *EncodingResult->GetReady(), 0, FAssetEditDocument::ETarget::Root);
 	}
 	else
 	{
 		for (std::size_t Index = 0; Index < Graphs.size(); ++Index)
 		{
-			const auto& Reference = Prepared.References[Index];
+			const auto& Reference = Prepared->References[Index];
 			ValidateAssetReferenceGraph(*Graphs[Index].GetReady(), Reference.Reference.TypeId, Reference.Dimension);
 		}
-		CommitAssetField(*Document, FieldName, Prepared.Value);
+		Document->Apply(FieldIdentity, std::move(Prepared->Value), 0);
 	}
 	return true;
 }

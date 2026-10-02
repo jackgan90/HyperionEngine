@@ -1,4 +1,5 @@
 #include "Hyperion/AssetEditing/ModelProperties.h"
+#include "Hyperion/AssetEditing/AssetFieldPolicy.h"
 #include "Hyperion/Scene/Model.h"
 
 namespace Hyperion
@@ -18,7 +19,8 @@ std::vector<FModelPrimitiveInfo> DescribeModelPrimitives(const FAssetEditDocumen
 		throw std::invalid_argument("Model document required");
 	}
 	std::vector<FModelPrimitiveInfo> Result;
-	const auto& Primitives = std::get<FArchiveNode::FArray>(InDocument.Get("primitives").Value);
+	const auto Policy = ResolveAssetFieldPolicy(*InDocument.Loaded().Type, &FModelAsset::Primitives);
+	const auto& Primitives = std::get<FArchiveNode::FArray>(InDocument.Get(Policy.Field().FieldId).Value);
 	const auto Model = InDocument.Loaded().As<FModelAsset>();
 	for (std::size_t Index = 0; Index < Primitives.size(); ++Index)
 	{
@@ -40,10 +42,11 @@ void SetModelPrimitives(FAssetEditDocument& InDocument, const std::vector<FModel
 	{
 		throw std::invalid_argument("Primitive count is fixed");
 	}
-	const auto Slots = ReadValue<std::vector<FAssetRef>>(InDocument.Get("materialSlots"));
-	auto Primitives = InDocument.Get("primitives");
+	const auto SlotsPolicy = ResolveAssetFieldPolicy(*InDocument.Loaded().Type, &FModelAsset::MaterialSlots);
+	const auto Slots = ReadValue<std::vector<FAssetRef>>(InDocument.Get(SlotsPolicy.Field().FieldId));
+	const auto Policy = ResolveAssetFieldPolicy(*InDocument.Loaded().Type, &FModelAsset::Primitives);
+	auto Primitives = InDocument.Get(Policy.Field().FieldId);
 	auto& Array = std::get<FArchiveNode::FArray>(Primitives.Value);
-	bool bAffectsPreview{};
 	for (std::size_t Index = 0; Index < Before.size(); ++Index)
 	{
 		const auto& Value = InValues[Index];
@@ -57,9 +60,8 @@ void SetModelPrimitives(FAssetEditDocument& InDocument, const std::vector<FModel
 		auto& Fields = PrimitiveFields(Array[Index]);
 		Fields.at("name") = WriteValue(Value.Name);
 		Fields.at("material") = WriteValue(Value.Material);
-		bAffectsPreview |= Value.Material != Before[Index].Material;
 	}
-	InDocument.Set("primitives", std::move(Primitives), InInteraction, bAffectsPreview);
+	InDocument.Apply(Policy.Field(), std::move(Primitives), InInteraction);
 }
 
 void CommitModelPrimitiveFields(FAssetEditDocument& InDocument, const FArchiveNode& InValue,

@@ -160,6 +160,14 @@ Member 选项依次为 required、persistent、读别名。默认值来自对象
 
 配置和 GUI 的 FTypeDescriptor 继续沿用，不因原生资产引入第二套同用途配置格式。这里没有 C++ 反射代码生成、任意指针对象图或对象内存转储。
 
+## 原生资产编辑策略
+
+`Runtime/AssetEditing` 的 `ResolveAssetFieldPolicy` 从实际反射成员取得规范身份，并核对 C++ 类型、定义身份和成员对应关系。策略区分普通字段、专用图元编辑、专用纹理编码和只读字段；可读取的字段不会因此获得写权限。策略只属于 CPU 编辑领域，Reflection 不依赖文档、任务或预览。
+
+`FAssetEditDocument::Set` 与 `CommitAssetField` 通过同一策略校验和规范化普通字段。引用发生变化时，调用方必须使用 `FAssetEditWorkflow` 加载并校验完整引用图；直接提交不能跳过这一步。图元专用操作保留 ID、几何和数量，只修改名称及已有材质槽或 `-1`。纹理编码工作流限定可编辑的 RGBA8 二维纹理，内部替换完整草稿并共享 mip0 数据；公共空字段名不能选择根替换。
+
+预览影响在私有文档提交边界根据规范化前后值计算：资产、节点和图元名称不使预览失效；节点 Local、图元材质、实际改变的材质值/引用及编码数据会使预览失效。相等提交和规范化后相等的提交仍沿用 generation、dirty 和历史事务语义。历史保存拥有数据的规范字段身份、内部目标及执行时的效果，合并交互按 OR 累积效果；即使拖动返回起点，Undo、Redo 和 Cancel 仍恢复完整交互的预览状态。
+
 ## 二进制格式与限额
 
 .hasset 的 HAST v1 envelope 包含：4 字节 magic、u32 容器版本、u64 payload 长度、64 字节十六进制 SHA-256 和 payload。payload 是 HYPA v2 archive，包含反射 header 和 object。头部 AssetId 使用随机 128 bit 标识；Revision 是根记录规范编码的 SHA-256。依赖表从反射字段自动生成，读取时与存储对象交叉核对；type/schema/revision 也必须与对象一致。

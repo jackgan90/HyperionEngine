@@ -125,9 +125,14 @@ void CheckInvalidTransform(FWorkspaceFixture& InFixture, FRenderSession& InSessi
 	    });
 	InFixture.Frame();
 	const auto Before = HashArchive(InFixture.Workspace.ActiveDocument()->Snapshot());
+	const auto Generation = InFixture.Workspace.ActiveDocument()->Generation();
+	const auto Preview = InFixture.Workspace.ActiveDocument()->PreviewGeneration();
 	InFixture.Type(InFixture.Workspace.ObservedBounds("node/position/x"), "1e40");
 	Check(!InFixture.Workspace.ActiveDocument()->Error.empty());
 	Check(HashArchive(InFixture.Workspace.ActiveDocument()->Snapshot()) == Before);
+	Check(InFixture.Workspace.ActiveDocument()->Generation() == Generation &&
+	      InFixture.Workspace.ActiveDocument()->PreviewGeneration() == Preview);
+	Check(!InFixture.Workspace.ActiveDocument()->IsDirty() && !InFixture.Workspace.ActiveDocument()->CanUndo());
 	InFixture.Gui.FinishEditing();
 	InFixture.Frame();
 	const auto Statistics = InSession.GetResources().Statistics();
@@ -137,6 +142,9 @@ void CheckInvalidTransform(FWorkspaceFixture& InFixture, FRenderSession& InSessi
 	InFixture.Frame();
 	Check(!InFixture.Workspace.IsBlocked());
 	Check(InFixture.Workspace.ActiveDocument()->Error.empty());
+	Check(InFixture.Workspace.ActiveDocument()->Generation() == Generation + 1 &&
+	      InFixture.Workspace.ActiveDocument()->PreviewGeneration() == Preview);
+	Check(InFixture.Workspace.ActiveDocument()->IsDirty() && InFixture.Workspace.ActiveDocument()->CanUndo());
 	Check(ReadValue<std::vector<FModelNode>>(InFixture.Workspace.ActiveDocument()->Get("nodes")).front().Name ==
 	      "Renamed after invalid transform");
 	InFixture.Workspace.Poll();
@@ -144,6 +152,23 @@ void CheckInvalidTransform(FWorkspaceFixture& InFixture, FRenderSession& InSessi
 	Check(InSession.GetResources().Statistics().GeometryUploads == Statistics.GeometryUploads);
 	InFixture.Workspace.Undo();
 	Check(HashArchive(InFixture.Workspace.ActiveDocument()->Snapshot()) == Before);
+	Check(InFixture.Workspace.ActiveDocument()->Generation() == Generation + 2 &&
+	      InFixture.Workspace.ActiveDocument()->PreviewGeneration() == Preview);
+	Check(!InFixture.Workspace.ActiveDocument()->IsDirty() && !InFixture.Workspace.ActiveDocument()->CanUndo());
+	InFixture.Frame();
+	InFixture.Type(InFixture.Workspace.ObservedBounds("node/position/x"), "3");
+	InFixture.Gui.FinishEditing();
+	InFixture.Frame();
+	Check(InFixture.Workspace.ActiveDocument()->Error.empty());
+	Check(InFixture.Workspace.ActiveDocument()->Generation() == Generation + 3 &&
+	      InFixture.Workspace.ActiveDocument()->PreviewGeneration() == Preview + 1);
+	Check(InFixture.Workspace.ActiveDocument()->IsDirty() && InFixture.Workspace.ActiveDocument()->CanUndo());
+	const auto Nodes = ReadValue<std::vector<FModelNode>>(InFixture.Workspace.ActiveDocument()->Get("nodes"));
+	Check(std::abs(DecomposeAffine(Nodes.front().Local).Position.X - 3.f) < .0001f);
+	InFixture.Workspace.Undo();
+	Check(HashArchive(InFixture.Workspace.ActiveDocument()->Snapshot()) == Before);
+	Check(InFixture.Workspace.ActiveDocument()->Generation() == Generation + 4 &&
+	      InFixture.Workspace.ActiveDocument()->PreviewGeneration() == Preview + 2);
 	InFixture.Workspace.CloseAll();
 }
 

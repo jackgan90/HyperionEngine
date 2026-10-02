@@ -161,7 +161,7 @@ private:
 	                  FCancellationToken InCancellation, std::shared_ptr<const FSceneModelData> InExisting);
 	void PollEntry(FEntry& InEntry);
 	void PollEditWorkflow(FEntry& InEntry);
-	void CommitReferenceEdit(FEntry& InEntry, std::string InField, FArchiveNode InCandidate);
+	void CommitReferenceEdit(FEntry& InEntry, const FRecordMemberIdentity& InField, FArchiveNode InCandidate);
 	void Publish(FEntry& InEntry, const FPrepared& InPrepared);
 	void Close(FEntry& InEntry);
 	void DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, std::span<const FInputEvent> InEvents);
@@ -182,8 +182,8 @@ private:
 	void DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMaterialAsset& InMaterial,
 	                           const FMaterialAssetParameter& InParameter);
 	void ObserveProperty(FGui& InGui, const std::string& InId);
-	void EditField(FGui& InGui, FEntry& InEntry, const char* InField, const std::function<bool()>& InWidget,
-	               const std::function<FArchiveNode()>& InValue, bool bInAffectsPreview = true);
+	void EditField(FGui& InGui, FEntry& InEntry, const FAssetFieldPolicy& InPolicy,
+	               const std::function<bool()>& InWidget, const std::function<FArchiveNode()>& InValue);
 	FAssetService& Assets;
 	FTaskSystem& Tasks;
 	FRenderSession& Session;
