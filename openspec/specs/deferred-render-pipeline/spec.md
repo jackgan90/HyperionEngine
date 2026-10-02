@@ -3,7 +3,6 @@
 ## Purpose
 Define the default raster Deferred pipeline, configurable GBuffer, compatible material and shadow routes, and reproducible correctness and performance evidence.
 ## Requirements
-
 ### Requirement: Traditional default Deferred pipeline
 Renderer SHALL provide a default raster Deferred pipeline with opaque/masked GBuffer BasePass followed by a vertex/pixel fullscreen LightingPass producing HDR scene color. It SHALL share CSM visibility, material evaluation and lighting formulas with selectable Forward. Compute lighting and mobile single-pass deferred SHALL NOT be required.
 
@@ -54,3 +53,19 @@ Deferred SHALL allow requested HZB generation and a fullscreen contact mask afte
 #### Scenario: Forward or later surfaces
 - **WHEN** Forward is selected or a surface is shaded after Deferred lighting
 - **THEN** that route retains its existing shadow evaluation without sampling a mask belonging to another receiver surface
+
+### Requirement: Shared built-in material route facts
+
+Renderer SHALL define unchanged built-in Usage strings, pipeline eligibility, pick eligibility and legacy-exclusion membership in one finite route description consumed by scene view construction and ray-pick options. Target/resource construction, stable view identities and pass order SHALL remain explicit and compatible. Custom Usage strings SHALL remain supported independently of this built-in inventory.
+
+#### Scenario: Drawing and picking use compatible routes
+- **WHEN** a material contains legacy, HDR, mixed, shadow-only or custom usages
+- **THEN** Deferred and Forward drawing and picking match their independently specified existing route matrix without duplicate contributions or shadow/fullscreen picking
+
+#### Scenario: Inactive HDR usage still excludes legacy
+- **WHEN** a material has Forward fallback plus an HDR usage not active in the current pipeline
+- **THEN** that HDR membership still excludes the material from legacy fallback under the complete four-usage exclusion set
+
+#### Scenario: Resource and stage ordering
+- **WHEN** a built-in scene frame is constructed from route descriptions
+- **THEN** shadow, BasePass/Forward, compatibility, transparency and display target construction and execution preserve their existing order and resource lifetime contracts
