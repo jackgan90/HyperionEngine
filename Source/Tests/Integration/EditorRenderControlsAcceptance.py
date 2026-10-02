@@ -54,7 +54,8 @@ def viewport_controls(agent):
     for category in (64, 128, 255):
         state = completed(agent.call("view.set", **version(agent), options={"profilingCategories": category}))
         assert state["options"]["profilingCategories"] == category, state
-    for options in ({"visualizer": 7}, {"profilingCategories": 256}, {"exposure": 0}):
+    for options in ({"visualizer": -1}, {"visualizer": 7}, {"visualizer": 4294967295},
+                    {"profilingCategories": 256}, {"exposure": 0}):
         before = completed(agent.call("view.get"))
         result = agent.call("view.set", **version(agent), options=options)
         assert result["error"]["code"] == "invalid_arguments", result
@@ -64,10 +65,17 @@ def viewport_controls(agent):
     changed = completed(agent.call("render.settings.set", revision=settings["revision"], values=settings["values"]))
     # A latent Deferred visualizer must not prevent changing unrelated HUD options in Forward.
     completed(agent.call("view.set", **version(agent), options={"statusHud": False, "profilingCategories": 63}))
+    before_rejection = completed(agent.call("render.settings.get"))
+    before_view = completed(agent.call("view.get"))
+    assert before_rejection["values"]["debugMode"] == 6
     result = agent.call("view.set", **version(agent), options={"visualizer": 2})
     assert result["error"]["code"] == "unavailable", result
+    assert completed(agent.call("render.settings.get")) == before_rejection
+    assert completed(agent.call("view.get")) == before_view
     changed["values"]["pipeline"] = "deferred"
-    completed(agent.call("render.settings.set", revision=changed["revision"], values=changed["values"]))
+    restored = completed(agent.call("render.settings.set", revision=changed["revision"], values=changed["values"]))
+    assert restored["values"]["debugMode"] == 6
+    assert completed(agent.call("view.get"))["options"]["visualizer"] == 6
     completed(agent.call("view.set", **version(agent), options={"visualizer": 0, "statusHud": True}))
     assert ready(agent)["revision"] == original["revision"] and not ready(agent)["dirty"]
 

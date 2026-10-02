@@ -2,6 +2,7 @@
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
+#include "Hyperion/RasterOptions/RasterOptions.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -22,25 +23,39 @@ std::string Fixed(double InValue, int InDecimals = 2)
 void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings, const FDebugMetrics& InMetrics)
 {
 	InGui.Text("RENDER PIPELINE");
-	bool bDeferred = InSettings.RenderPipeline == "deferred";
-	if (InGui.Checkbox("Deferred shading", bDeferred))
+	const auto Pipelines = SceneRenderPipelineOptions();
+	const auto Presets = GBufferPresetOptions();
+	const auto Visualizers = GBufferVisualizerOptions();
+	static const auto PipelineLabels = RasterOptionLabels(Pipelines);
+	static const auto PresetLabels = RasterOptionLabels(Presets);
+	static const auto VisualizerLabels = RasterOptionLabels(Visualizers);
+	auto Pipeline = RasterOptionIndex(Pipelines, ParseSceneRenderPipeline(InSettings.RenderPipeline));
+	if (InGui.Combo("Pipeline", PipelineLabels, Pipeline))
 	{
-		InSettings.RenderPipeline = bDeferred ? "deferred" : "forward";
+		InSettings.RenderPipeline = ToSceneRenderPipelineToken(RasterOptionIdentity(Pipelines, Pipeline));
 	}
-	bool bHighPrecision = InSettings.GBufferLayout == "high";
-	if (InGui.Checkbox("High precision GBuffer", bHighPrecision))
+	auto Preset = RasterOptionIndex(Presets, ParseGBufferPreset(InSettings.GBufferLayout));
+	if (InGui.Combo("GBuffer", PresetLabels, Preset))
 	{
-		InSettings.GBufferLayout = bHighPrecision ? "high" : "compact";
+		InSettings.GBufferLayout = ToGBufferPresetToken(RasterOptionIdentity(Presets, Preset));
 	}
-	constexpr std::array<std::string_view, 4> PipelineIds{"clustered_lighting", "reversed_z", "exposure",
-	                                                      "gbuffer_debug"};
+	const bool bDeferred = ParseSceneRenderPipeline(InSettings.RenderPipeline) == ESceneRenderPipeline::Deferred;
+	auto Visualizer = RasterOptionIndex(Visualizers, bDeferred ? ParseAppGBufferVisualizer(InSettings.GBufferDebug)
+	                                                           : EGBufferVisualizer::Lit);
+	InGui.BeginDisabled(!bDeferred);
+	if (InGui.Combo("Visualizer", VisualizerLabels, Visualizer))
+	{
+		InSettings.GBufferDebug =
+		    static_cast<int>(ToVisualizerWireValue(RasterOptionIdentity(Visualizers, Visualizer)));
+	}
+	InGui.EndDisabled();
+	constexpr std::array<std::string_view, 3> PipelineIds{"clustered_lighting", "reversed_z", "exposure"};
 	InGui.EditProperties(SettingsType(), &InSettings, PipelineIds);
 	InGui.Text(InMetrics.bActiveReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z");
 	if (InSettings.bReversedZ != InMetrics.bActiveReversedZ)
 	{
 		InGui.TextWrapped("Depth change pending: save experiment and restart to apply.");
 	}
-	InGui.TextWrapped("GBuffer: 0 lit, 1 base, 2 normal, 3 rough/metal/AO, 4 emissive, 5 depth, 6 surface normal");
 	constexpr std::array<std::string_view, 6> ContactIds{"contact_shadow_length", "contact_shadow_thickness",
 	                                                     "contact_shadow_bias",   "contact_shadow_steps",
 	                                                     "contact_shadow_debug",  "hierarchical_depth_mip"};

@@ -8,11 +8,6 @@ void ValidateSettings(const FAppSettings& InSettings)
 {
 	FAppSettings Checked;
 	DecodeReflected(EncodeReflected(SettingsType(), &InSettings), SettingsType(), &Checked);
-	if ((InSettings.RenderPipeline != "forward" && InSettings.RenderPipeline != "deferred") ||
-	    (InSettings.GBufferLayout != "compact" && InSettings.GBufferLayout != "high"))
-	{
-		throw std::invalid_argument("Render pipeline must be forward/deferred and GBuffer layout compact/high");
-	}
 }
 
 template<class T> FRecordMember SettingsMember(const FProperty& InProperty)

@@ -145,6 +145,11 @@ std::uint64_t FAssetEditorWindow::RenderedFrames() const
 	return FrameCount;
 }
 
+bool FAssetEditorWindow::LastFrameVsync() const
+{
+	return bLastFrameVsync;
+}
+
 void FAssetEditorWindow::Render(FGuiDrawData InData, const std::filesystem::path& InCapture, bool bInVsync,
                                 EDepthConvention InConvention)
 {
@@ -162,6 +167,7 @@ void FAssetEditorWindow::Render(FGuiDrawData InData, const std::filesystem::path
 		                                                 !InCapture.empty() || PendingImage != nullptr);
 	                          }));
 	++FrameCount;
+	bLastFrameVsync = bInVsync;
 	if (PendingImage)
 	{
 		CompleteImageOutput(*PendingImage, Capture, FrameCount);

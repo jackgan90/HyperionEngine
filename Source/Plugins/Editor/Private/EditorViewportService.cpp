@@ -122,8 +122,9 @@ void FEditorPlugin::FrameSelection(const FSceneMutationRequest& InRequest)
 void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 {
 	ValidateViewportOptions(InOptions, ViewportState().Options);
-	if (InOptions.Visualizer.value_or(0) && InOptions.Visualizer != Rendering.DebugMode &&
-	    Rendering.Pipeline != "deferred")
+	if (InOptions.Visualizer && ParseGBufferVisualizer(*InOptions.Visualizer) != EGBufferVisualizer::Lit &&
+	    InOptions.Visualizer != Rendering.DebugMode &&
+	    ParseSceneRenderPipeline(Rendering.Pipeline) != ESceneRenderPipeline::Deferred)
 	{
 		throw FSceneEditError("unavailable", "GBuffer visualizers require the Deferred pipeline");
 	}

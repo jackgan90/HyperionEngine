@@ -17,6 +17,7 @@ Source/
     Transport/     # 有界双向字节流、provider 基类和私有平台通信实现
     Automation/    # 类型化目录、schema、Main 会话任务、目标发现/连接与协议 endpoint
     Serialization/ # 反射记录的原生二进制内存 Archive
+    RasterOptions/ # 无引擎依赖的光栅管线、GBuffer preset 和 visualizer 稳定身份
     Config/        # 应用/实验配置，依赖 Reflection
     Plugins/       # 静态规划、类型化服务、作用域事件和生命周期
     Application/   # 仅 Tasks、Main 消息泵、帧时钟及退出控制
@@ -65,6 +66,8 @@ Source/Runtime/Assets/
 ```
 
 调用方写 `#include "Hyperion/Assets/Assets.h"`，并在自己的 CMake target 声明依赖。只有公共接口确实依赖的模块使用 `PUBLIC`；实现细节使用 `PRIVATE`。第三方库私有链接，第三方类型不能出现在引擎公共接口中。`tools/CheckBoundaries.py` 检查模块依赖声明、私有头越界、第三方 include 和依赖方向。
+
+`RasterOptions` 仅依赖标准库，拥有 scene pipeline、GBuffer preset 和 visualizer 的稳定类型、token、显示标签及严格转换。Config 与 Renderer 分别消费此模块，Config 不反向依赖 Renderer；完整 GBuffer 格式布局和设备能力校验仍由 Renderer 拥有。旧 `FProperty` 的可选纯值校验由 Config 注入，Reflection 在通用读写预检中调用，不识别领域字段，也不依赖 RasterOptions。GUI 的展示顺序与保存值、shader 编码相互独立。
 
 `Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection、AssetTypes、Materials、Environment，保存模型数据、拥有组件的逻辑对象、Transform 层级、相机/光源与 v7 清单，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 的 Model 桥接将 CPU 数据注册为 Render primitives，共享资源服务管理 GPU 资源，由 session 统一收集和提交场景 pass。组件契约见 [SceneComponents.md](SceneComponents.md)，线程/所有权契约见 [RenderPrimitives.md](RenderPrimitives.md)。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
 

@@ -1,5 +1,6 @@
 #include "EditorApplication.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/RasterOptions/RasterOptions.h"
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
@@ -8,8 +9,12 @@ namespace Hyperion
 {
 namespace
 {
-const std::array<std::string, 7> Visualizers{"Lit",      "Base color",  "Shading normal", "Metallic / Roughness / AO",
-                                             "Emissive", "Scene depth", "Geometry normal"};
+EGBufferVisualizer DisplayedVisualizer(const FRenderSettings& InSettings)
+{
+	return ParseSceneRenderPipeline(InSettings.Pipeline) == ESceneRenderPipeline::Deferred
+	           ? ParseGBufferVisualizer(InSettings.DebugMode)
+	           : EGBufferVisualizer::Lit;
+}
 
 std::string Number(double InValue)
 {
@@ -183,14 +188,23 @@ void FEditorPlugin::DrawVisualizationControls()
 	FSceneViewportOptions Patch;
 	const float Width = Gui->AvailableWidth();
 	const bool bCompact = Width < 300;
-	std::size_t Mode = Rendering.Pipeline == "deferred" ? Rendering.DebugMode : 0;
+	const auto Visualizers = GBufferVisualizerOptions();
+	static const auto Labels = RasterOptionLabels(Visualizers);
+	const bool bDeferred = ParseSceneRenderPipeline(Rendering.Pipeline) == ESceneRenderPipeline::Deferred;
+	auto Mode = RasterOptionIndex(Visualizers, DisplayedVisualizer(Rendering));
 	Gui->SetNextItemWidth(bCompact ? std::max(40.f, Width - 70) : 150);
-	Gui->BeginDisabled(Rendering.Pipeline != "deferred");
-	if (Gui->Combo("##Visualizer", Visualizers, Mode))
+	Gui->BeginDisabled(!bDeferred);
+	if (Gui->Combo(
+	        "##Visualizer", Labels, Mode,
+	        [&](std::size_t InIndex, FVec4 InBounds)
+	        {
+		        InspectionBounds["hud/visualizer/" + std::to_string(ToVisualizerWireValue(Visualizers[InIndex].Id))] =
+		            InBounds;
+	        }))
 	{
-		Patch.Visualizer = static_cast<std::uint32_t>(Mode);
+		Patch.Visualizer = ToVisualizerWireValue(RasterOptionIdentity(Visualizers, Mode));
 	}
-	Gui->Tooltip(Rendering.Pipeline == "deferred" ? "Viewport visualizer" : "GBuffer visualization requires Deferred");
+	Gui->Tooltip(bDeferred ? "Viewport visualizer" : "GBuffer visualization requires Deferred");
 	InspectionBounds["hud/visualizer"] = Gui->LastItemBounds();
 	Gui->EndDisabled();
 	Gui->SameLineIfFits("Stats...");
@@ -240,9 +254,11 @@ void FEditorPlugin::DrawViewportHud()
 		std::vector<std::string> Lines{
 		    "RENDER STATUS",
 		    "Pipeline: " + Rendering.Pipeline,
-		    "GBuffer: " + (Rendering.Pipeline == "deferred" ? Rendering.GBuffer : std::string("not used")),
+		    "GBuffer: " + (ParseSceneRenderPipeline(Rendering.Pipeline) == ESceneRenderPipeline::Deferred
+		                       ? Rendering.GBuffer
+		                       : std::string("not used")),
 		    Rendering.bReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z",
-		    "Visualizer: " + Visualizers[Rendering.Pipeline == "deferred" ? Rendering.DebugMode : 0],
+		    "Visualizer: " + std::string(DescribeGBufferVisualizer(DisplayedVisualizer(Rendering)).Label),
 		    "Exposure: " + Number(Exposure),
 		    "Viewport: " + std::to_string(Viewport.ViewportSize.Width) + " x " +
 		        std::to_string(Viewport.ViewportSize.Height),

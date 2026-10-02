@@ -57,6 +57,7 @@ public:
 	const FAssetEditDocument* ActiveDocument() const;
 	bool IsPreviewReady() const;
 	std::optional<FRenderView> RenderedPreviewView() const;
+	std::optional<FScenePipelineSettings> RenderedPreviewSettings() const;
 	std::string ActiveStatus() const;
 	FVec4 ObservedBounds(std::string_view InId) const;
 	void RevealProperty(std::string InId);

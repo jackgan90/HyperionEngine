@@ -5,13 +5,43 @@
 
 namespace Hyperion
 {
+namespace
+{
+template<class TOption> std::string OptionTokens(std::span<const TOption> InOptions)
+{
+	std::string Result;
+	for (const auto& Option : InOptions)
+	{
+		if (!Result.empty())
+		{
+			Result += " / ";
+		}
+		Result += Option.Token;
+	}
+	return Result;
+}
+
+FGBufferLayout PresetLayout(EGBufferPreset InPreset)
+{
+	switch (InPreset)
+	{
+		case EGBufferPreset::Compact:
+			return {};
+		case EGBufferPreset::HighPrecision:
+			return FGBufferLayout::HighPrecision();
+		default:
+			throw std::invalid_argument("Unknown GBuffer preset");
+	}
+}
+} // namespace
+
 FScenePipelineSettings MakePipelineSettings(const FRenderSettings& InSettings)
 {
 	FScenePipelineSettings Result;
-	Result.Pipeline = InSettings.Pipeline == "forward" ? ESceneRenderPipeline::Forward : ESceneRenderPipeline::Deferred;
-	Result.GBuffer = InSettings.GBuffer == "high" ? FGBufferLayout::HighPrecision() : FGBufferLayout{};
+	Result.Pipeline = ParseSceneRenderPipeline(InSettings.Pipeline);
+	Result.GBuffer = PresetLayout(ParseGBufferPreset(InSettings.GBuffer));
 	Result.Exposure = InSettings.Exposure;
-	Result.DebugMode = InSettings.DebugMode;
+	Result.DebugMode = ToVisualizerWireValue(ParseGBufferVisualizer(InSettings.DebugMode));
 	Result.bClusteredLighting = InSettings.bClusteredLighting;
 	Result.ContactShadows = InSettings.Contact;
 	return Result;
@@ -19,11 +49,12 @@ FScenePipelineSettings MakePipelineSettings(const FRenderSettings& InSettings)
 
 void ValidateRenderSettings(const FRenderSettings& InSettings)
 {
-	if ((InSettings.Pipeline != "forward" && InSettings.Pipeline != "deferred") ||
-	    (InSettings.GBuffer != "compact" && InSettings.GBuffer != "high") || !std::isfinite(InSettings.Exposure) ||
-	    InSettings.Exposure < .05f || InSettings.Exposure > 8 || InSettings.DebugMode > 6)
+	(void)ParseSceneRenderPipeline(InSettings.Pipeline);
+	(void)ParseGBufferPreset(InSettings.GBuffer);
+	(void)ParseGBufferVisualizer(InSettings.DebugMode);
+	if (!std::isfinite(InSettings.Exposure) || InSettings.Exposure < .05f || InSettings.Exposure > 8)
 	{
-		throw std::invalid_argument("Expected forward/deferred, compact/high, exposure 0.05-8 and debug mode 0-6");
+		throw std::invalid_argument("Exposure must be 0.05-8");
 	}
 	InSettings.Contact.Validate();
 	ValidateShadowSettings(InSettings.Shadows);
@@ -33,10 +64,14 @@ template<> const FRecordDescriptor& RecordType<FRenderSettings>()
 {
 	static const auto Type = MakeRecord<FRenderSettings>(
 	    "hyperion.render.settings",
-	    {Member("pipeline", &FRenderSettings::Pipeline, Inspect("Pipeline: deferred / forward")),
-	     Member("gbuffer", &FRenderSettings::GBuffer, Inspect("GBuffer: compact / high")),
+	    {Member("pipeline", &FRenderSettings::Pipeline,
+	            Inspect("Pipeline: " + OptionTokens(SceneRenderPipelineOptions()))),
+	     Member("gbuffer", &FRenderSettings::GBuffer, Inspect("GBuffer: " + OptionTokens(GBufferPresetOptions()))),
 	     Member("exposure", &FRenderSettings::Exposure, Inspect("Exposure", .05, 8)),
-	     Member("debugMode", &FRenderSettings::DebugMode, Inspect("GBuffer debug (0-6)", 0, 6)),
+	     Member("debugMode", &FRenderSettings::DebugMode,
+	            Inspect("GBuffer debug (" + std::to_string(GBufferVisualizerMinimum()) + "-" +
+	                        std::to_string(GBufferVisualizerMaximum()) + ")",
+	                    GBufferVisualizerMinimum(), GBufferVisualizerMaximum())),
 	     Member("clusteredLighting", &FRenderSettings::bClusteredLighting, Inspect("Clustered lighting")),
 	     Member("contact", &FRenderSettings::Contact, Inspect("Contact shadows")),
 	     Member("shadows", &FRenderSettings::Shadows, Inspect("Directional shadows")),

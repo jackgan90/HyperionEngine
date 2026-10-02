@@ -150,6 +150,56 @@ void FEditorPlugin::ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvent
 	}
 }
 
+void FEditorPlugin::CheckAssetRasterOptions() const
+{
+	const auto View = AssetWorkspace->RenderedPreviewView();
+	const auto Actual = AssetWorkspace->RenderedPreviewSettings();
+	CheckAssetWindow(View && Actual && View->DepthConvention == GetDepthConvention(Rendering.bReversedZ),
+	                 "Asset preview did not retain the shared depth convention");
+	CheckAssetWindow(Actual->Pipeline == ESceneRenderPipeline::Deferred && Actual->GBuffer == FGBufferLayout{} &&
+	                     Actual->DebugMode == 0 && !AssetWindow->LastFrameVsync(),
+	                 "Main settings replaced preview defaults or the exercise-mode window VSync policy");
+	bool bCheckedExposure{};
+	for (const auto& Document : AssetWorkspace->Documents())
+	{
+		if (Document.bActive)
+		{
+			const auto Preview = AssetWorkspace->PreviewState(Document.Id);
+			CheckAssetWindow(Preview.Settings.Exposure == Actual->Exposure,
+			                 "Main exposure replaced the asset entry's independent preview exposure");
+			bCheckedExposure = true;
+		}
+	}
+	CheckAssetWindow(bCheckedExposure && Scene->GetRevision() == Acceptance.AssetRasterSceneRevision &&
+	                     HistoryCursor == Acceptance.AssetRasterHistory,
+	                 "Render setting edits changed scene history while exercising asset windows");
+}
+
+void FEditorPlugin::BeginAssetRasterOptions()
+{
+	Acceptance.AssetRasterInitial = Rendering;
+	Acceptance.AssetRasterSceneRevision = Scene->GetRevision();
+	Acceptance.AssetRasterHistory = HistoryCursor;
+	for (const auto& Document : AssetWorkspace->Documents())
+	{
+		if (Document.bActive)
+		{
+			const auto Preview = AssetWorkspace->PreviewState(Document.Id);
+			auto Settings = Preview.Settings;
+			Settings.Exposure = 1.375f;
+			AssetWorkspace->EditPreview(Document.Id, Preview.Generation, Settings, false);
+		}
+	}
+	auto Candidate = Rendering;
+	Candidate.bReversedZ = !Options.Rendering.bReversedZ;
+	Candidate.Pipeline = "forward";
+	Candidate.GBuffer = "high";
+	Candidate.DebugMode = 6;
+	Candidate.Exposure = 2.25f;
+	Candidate.bVsync = !Candidate.bVsync;
+	SetRenderSettings(RenderSettingsRevision, Candidate);
+}
+
 void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 {
 	switch (Acceptance.ExerciseStep)
@@ -161,9 +211,7 @@ void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 			AssetWindow->NativeWindow().Resize({1100, 760});
 			Acceptance.AssetExerciseScale = Gui->ApplicationScale();
 			Gui->SetApplicationScale(1.5f);
-			auto Candidate = Rendering;
-			Candidate.bReversedZ = !Options.Rendering.bReversedZ;
-			SetRenderSettings(RenderSettingsRevision, Candidate);
+			BeginAssetRasterOptions();
 			++Acceptance.ExerciseStep;
 			break;
 		}
@@ -180,6 +228,7 @@ void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 			                     AssetWorkspace->RenderedPreviewView()->DepthConvention ==
 			                         GetDepthConvention(Rendering.bReversedZ),
 			                 "Open 3D asset preview did not follow live depth settings");
+			CheckAssetRasterOptions();
 			Acceptance.AssetExerciseFrames = AssetWindow->RenderedFrames();
 			AssetWindow->NativeWindow().Minimize();
 			Acceptance.ExerciseWait = 0;
@@ -196,6 +245,8 @@ void FEditorPlugin::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 			                 "Minimized asset window rendered or stopped the scene viewport");
 			auto Candidate = Rendering;
 			Candidate.bReversedZ = Options.Rendering.bReversedZ;
+			Candidate.Pipeline = "deferred";
+			Candidate.bVsync = !Candidate.bVsync;
 			SetRenderSettings(RenderSettingsRevision, Candidate);
 			AssetWindow->NativeWindow().Restore();
 			Window->Minimize();
@@ -242,6 +293,7 @@ void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvent
 			                     AssetWorkspace->RenderedPreviewView()->DepthConvention ==
 			                         GetDepthConvention(Rendering.bReversedZ),
 			                 "Resumed asset preview retained the old depth convention");
+			CheckAssetRasterOptions();
 			Acceptance.ExerciseWait = 0;
 			AssetWindow->NativeWindow().RequestClose();
 			++Acceptance.ExerciseStep;
@@ -267,6 +319,8 @@ void FEditorPlugin::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvent
 				CheckAssetWindow(AssetWorkspace->RenderedPreviewView()->DepthConvention ==
 				                     GetDepthConvention(Rendering.bReversedZ),
 				                 "Reopened asset preview did not use the committed depth convention");
+				CheckAssetRasterOptions();
+				SetRenderSettings(RenderSettingsRevision, Acceptance.AssetRasterInitial);
 				AssetWorkspace->RevealProperty("field/name");
 				++Acceptance.ExerciseStep;
 			}

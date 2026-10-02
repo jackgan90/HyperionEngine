@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RasterOptions/RasterOptions.h"
 #include "Hyperion/Reflection/RecordValue.h"
 #include "Hyperion/Reflection/Reflection.h"
 
@@ -14,7 +15,7 @@ struct FAppSettings
 	int MainRenderLead = 1;
 	int RenderRhiLead = 1;
 	std::string RHIBackend = "d3d12";
-	std::string RenderPipeline = "deferred";
+	std::string RenderPipeline{ToSceneRenderPipelineToken(DefaultSceneRenderPipeline)};
 	bool bClusteredLighting = true;
 	bool bContactShadows = false;
 	double ContactShadowLength = .35;
@@ -23,9 +24,9 @@ struct FAppSettings
 	int ContactShadowSteps = 96;
 	int ContactShadowDebug = 0;
 	int HierarchicalDepthMip = 4;
-	std::string GBufferLayout = "compact";
+	std::string GBufferLayout{ToGBufferPresetToken(DefaultGBufferPreset)};
 	double Exposure = 1;
-	int GBufferDebug = 0;
+	int GBufferDebug = static_cast<int>(ToVisualizerWireValue(DefaultGBufferVisualizer));
 	bool bVsync = true;
 	bool bReversedZ = true;
 	bool bShowGui = true;

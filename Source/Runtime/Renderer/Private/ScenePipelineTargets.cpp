@@ -64,10 +64,9 @@ FSceneRenderPipeline::FSceneRenderPipeline(FRenderSession& InSession, FRHICapabi
 void FSceneRenderPipeline::Configure(FScenePipelineSettings InSettings)
 {
 	InSettings.ContactShadows.Validate();
-	if (InSettings.DebugMode > 6 ||
-	    (InSettings.Pipeline != ESceneRenderPipeline::Deferred &&
-	     InSettings.Pipeline != ESceneRenderPipeline::Forward) ||
-	    !std::isfinite(InSettings.Exposure) || InSettings.Exposure <= 0 ||
+	(void)DescribeSceneRenderPipeline(InSettings.Pipeline);
+	(void)ParseGBufferVisualizer(InSettings.DebugMode);
+	if (!std::isfinite(InSettings.Exposure) || InSettings.Exposure <= 0 ||
 	    !Capabilities.SampledColorTargets.at(static_cast<std::size_t>(ERHIColorFormat::Rgba16Float)))
 	{
 		throw std::invalid_argument("Scene pipeline requires positive exposure and sampled RGBA16F targets");
@@ -84,6 +83,11 @@ void FSceneRenderPipeline::Configure(FScenePipelineSettings InSettings)
 	}
 	DefaultContactShadows = InSettings.ContactShadows;
 	Settings = std::move(InSettings);
+}
+
+FScenePipelineSettings FSceneRenderPipeline::Configuration() const
+{
+	return Settings;
 }
 
 void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight, EDepthConvention InConvention)

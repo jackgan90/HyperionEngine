@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Gui/Gui.h"
+#include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Scene/Scene.h"
 #include <filesystem>
@@ -50,6 +51,18 @@ public:
 		bool bSawReady{};
 	};
 
+	struct FRasterOptionExercise
+	{
+		unsigned Case{};
+		unsigned Step{};
+		FRenderSettings Initial;
+		FRenderSettings Before;
+		std::uint64_t SceneRevision{};
+		std::size_t History{};
+	};
+
+	FRasterOptionExercise RasterOptionExercise;
+
 	std::uint32_t PlacementMenuStep{};
 	std::uint32_t PlacementCancelCase{};
 	std::uint32_t PlacementMarkerCase{};
@@ -66,6 +79,9 @@ public:
 	std::shared_ptr<const FBytes> AssetExerciseSavedBytes;
 	float AssetExerciseScale{};
 	FSceneCameraView AssetExerciseSceneCamera;
+	FRenderSettings AssetRasterInitial;
+	std::uint64_t AssetRasterSceneRevision{};
+	std::size_t AssetRasterHistory{};
 	FVec4 AssetExercisePanelStart{};
 	FVec2 AssetExercisePointer{};
 	std::shared_ptr<const FSceneModelData> AssetExerciseModel;

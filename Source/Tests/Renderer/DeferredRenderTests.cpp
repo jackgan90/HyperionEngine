@@ -31,7 +31,8 @@ void Rejects(const std::function<void()>& InAction)
 	throw std::runtime_error("Invalid deferred configuration accepted");
 }
 
-std::shared_ptr<const FModelSource> Quad(FModelMaterial InMaterial, bool bInNormalMap = false)
+std::shared_ptr<const FModelSource> Quad(FModelMaterial InMaterial, bool bInNormalMap = false,
+                                         bool bInOcclusionMap = false)
 {
 	FModelSource Asset;
 	FModelPrimitive Primitive;
@@ -55,6 +56,13 @@ std::shared_ptr<const FModelSource> Quad(FModelMaterial InMaterial, bool bInNorm
 		FModelImage Image{"Normal", 1, 1};
 		Image.Rgba = {170, 140, 245, 255};
 		InMaterial.NormalTexture = {static_cast<int>(Asset.Images.size()), -1, 0};
+		Asset.Images.push_back(Image);
+	}
+	if (bInOcclusionMap)
+	{
+		FModelImage Image{"Occlusion", 1, 1};
+		Image.Rgba = {95, 95, 95, 255};
+		InMaterial.OcclusionTexture = {static_cast<int>(Asset.Images.size()), -1, 0};
 		Asset.Images.push_back(Image);
 	}
 	Asset.Materials.push_back(InMaterial);
@@ -313,6 +321,99 @@ void CheckConfiguration(FFixture& InFixture)
 	{
 		HYP_CHECK(std::abs(IdentityCheck.Values[Index] - Identity().Values[Index]) < .0001f);
 	}
+}
+
+void CheckRejectedOptions(FFixture& InFixture)
+{
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch(
+	    {EDomain::Render},
+	    [&]
+	    {
+		    const auto Before = InFixture.Pipeline->Configuration();
+		    const auto Bytes = InFixture.Pipeline->TargetBytes();
+		    for (unsigned Case = 0; Case < 3; ++Case)
+		    {
+			    auto Invalid = Before;
+			    Invalid.Exposure = 2;
+			    if (Case == 0)
+			    {
+				    Invalid.Pipeline = static_cast<ESceneRenderPipeline>(255);
+			    }
+			    else
+			    {
+				    Invalid.DebugMode = Case == 1 ? 7 : 0xffffffffu;
+			    }
+			    Rejects(
+			        [&]
+			        {
+				        InFixture.Pipeline->Configure(Invalid);
+			        });
+			    const auto After = InFixture.Pipeline->Configuration();
+			    HYP_CHECK(After.Pipeline == Before.Pipeline && After.GBuffer == Before.GBuffer &&
+			              After.DebugMode == Before.DebugMode && After.Exposure == Before.Exposure &&
+			              After.bClusteredLighting == Before.bClusteredLighting &&
+			              After.ContactShadows == Before.ContactShadows);
+			    HYP_CHECK(InFixture.Pipeline->TargetBytes() == Bytes);
+		    }
+	    }));
+}
+
+float ExpectedSrgb(float InLinear)
+{
+	return InLinear <= .0031308f ? 12.92f * InLinear : 1.055f * std::pow(InLinear, 1.f / 2.4f) - .055f;
+}
+
+void CheckVisualizerPixels(FFixture& InFixture)
+{
+	const auto Before = InFixture.Settings;
+	FModelMaterial Material;
+	Material.BaseColor = {.17f, .43f, .79f, 1};
+	Material.Metallic = .23f;
+	Material.Roughness = .67f;
+	Material.Emissive = {.4f, 1.2f, 3};
+	FSourceModel Surface(InFixture.Session->GetScene(), InFixture.Session->GetResources(), Quad(Material, true, true));
+	Await(Surface);
+	const auto Normal = Normalize(FVec3{2 * 170.f / 255 - 1, 2 * 140.f / 255 - 1, 2 * 245.f / 255 - 1});
+	const float StandardDepth = 40.f / 39.9f - 4.f / (39.9f * 5.f);
+	const float Depth =
+	    InFixture.View.DepthConvention == EDepthConvention::Reversed ? 1 - StandardDepth : StandardDepth;
+	// Independent fixed wire semantics; material channels intentionally retain roughness, metallic, AO order.
+	const std::array<FVec3, 6> Expected{{{.17f, .43f, .79f},
+	                                     {Normal.X * .5f + .5f, Normal.Y * .5f + .5f, Normal.Z * .5f + .5f},
+	                                     {.67f, .23f, 95.f / 255},
+	                                     {.4f / 1.4f, 1.2f / 2.2f, 3.f / 4},
+	                                     {Depth, Depth, Depth},
+	                                     {.5f, .5f, 1}}};
+	std::vector<FGBufferVisualizerOption> Reordered(GBufferVisualizerOptions().begin(),
+	                                                GBufferVisualizerOptions().end());
+	std::reverse(Reordered.begin(), Reordered.end());
+	const std::span<const FGBufferVisualizerOption> Presentation(Reordered);
+	for (const auto Layout : {FGBufferLayout{}, FGBufferLayout::HighPrecision()})
+	{
+		InFixture.Settings.GBuffer = Layout;
+		InFixture.Settings.DebugMode = 0;
+		const auto Lit = InFixture.Frame();
+		Similar(Lit, InFixture.Frame(ESceneRenderPipeline::Forward), .02f);
+		for (std::uint32_t Raw = 1; Raw <= 6; ++Raw)
+		{
+			InFixture.Settings.DebugMode = Raw;
+			const auto Image = InFixture.Frame();
+			const auto Value = Expected[Raw - 1];
+			const std::array Channels{Value.X, Value.Y, Value.Z};
+			for (unsigned Channel = 0; Channel < 3; ++Channel)
+			{
+				HYP_CHECK(std::abs(Pixel(Image, 192, 144, Channel) - ExpectedSrgb(Channels[Channel])) < .012f);
+			}
+			const auto Index = RasterOptionIndex(Presentation, ParseGBufferVisualizer(Raw));
+			InFixture.Settings.DebugMode = ToVisualizerWireValue(RasterOptionIdentity(Presentation, Index));
+			Similar(Image, InFixture.Frame(), .0041f);
+		}
+		CheckRejectedOptions(InFixture);
+		InFixture.Settings.DebugMode = 0;
+		Similar(Lit, InFixture.Frame(), .0041f);
+	}
+	Surface.Remove();
+	InFixture.Settings = Before;
 }
 
 void CheckHdrAndRoutes(FFixture& InFixture)
@@ -1500,6 +1601,7 @@ int main()
 			FFixture Fixture(Convention);
 			CheckFeatureSelection(Fixture);
 			CheckConfiguration(Fixture);
+			CheckVisualizerPixels(Fixture);
 			CheckContactRoutes(Fixture);
 			CheckHdrAndRoutes(Fixture);
 			CheckDepthOrdering(Fixture);

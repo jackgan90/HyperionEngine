@@ -1,10 +1,12 @@
 #include "Hyperion/Reflection/Json.h"
+#include "Hyperion/Reflection/Wire.h"
 #include "Hyperion/Renderer/DebugGeometry.h"
 #include "Hyperion/Renderer/RenderBenchmark.h"
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/Scene/Scene.h"
 #include "Support/TestSupport.h"
+#include <fstream>
 #include <iostream>
 #include <limits>
 
@@ -65,6 +67,109 @@ void Settings()
 	    {
 		    ValidateRenderSettings(Values);
 	    });
+}
+
+void SettingsCompatibility()
+{
+	const auto& Type = RecordType<FRenderSettings>();
+	const std::array<std::string_view, 9> Keys{"pipeline", "gbuffer", "exposure", "debugMode", "clusteredLighting",
+	                                           "contact",  "shadows", "vsync",    "reversedZ"};
+	HYP_CHECK(Type.Id == "hyperion.render.settings" && Type.Version == 1 && Type.Members.size() == Keys.size());
+	for (std::size_t Index = 0; Index < Keys.size(); ++Index)
+	{
+		HYP_CHECK(Type.Members[Index].Id == Keys[Index] && !Type.Members[Index].Options.bRequired);
+	}
+	const FRenderSettings Defaults;
+	HYP_CHECK(Defaults.Pipeline == "deferred" && Defaults.GBuffer == "compact" && Defaults.DebugMode == 0);
+	HYP_CHECK(Defaults.Exposure == 1 && Defaults.bVsync && Defaults.bReversedZ);
+	HYP_CHECK(Type.Members[0].Shape().Kind == ERecordValueKind::String);
+	HYP_CHECK(Type.Members[1].Shape().Kind == ERecordValueKind::String);
+	HYP_CHECK(Type.Members[3].Shape().Kind == ERecordValueKind::UnsignedInteger);
+	HYP_CHECK(Type.Members[3].Shape().ElementBytes == 4);
+	FArchiveNode::FObject Examples;
+	for (const std::string Pipeline : {"deferred", "forward"})
+	{
+		for (const std::string Preset : {"compact", "high"})
+		{
+			FRenderSettings Values;
+			Values.Pipeline = Pipeline;
+			Values.GBuffer = Preset;
+			Values.DebugMode = 6;
+			Values.Exposure = .05f;
+			const auto Wire = WriteRecordWire(Type, &Values);
+			const auto Loaded = ReadRecordWire(Type, Wire);
+			HYP_CHECK(WriteJson(WriteRecordWire(Type, Loaded.get())) == WriteJson(Wire));
+			Examples.emplace(Pipeline + "/" + Preset, FArchiveNode(FArchiveNode::FObject{
+			                                              {"record", WriteRecord(Type, &Values)}, {"wire", Wire}}));
+		}
+	}
+	const FArchiveNode Snapshot(FArchiveNode::FObject{{"schema", RecordWireSchema(Type)},
+	                                                  {"defaults", WriteRecordWire(Type, &Defaults)},
+	                                                  {"examples", FArchiveNode(std::move(Examples))}});
+	std::ofstream File("render-option-render-contract.json", std::ios::binary);
+	File << WriteJson(Snapshot);
+	HYP_CHECK(File.good());
+}
+
+void StrictOptionConversions()
+{
+	for (const auto* Pipeline : {"deferred", "forward"})
+	{
+		for (const auto* Preset : {"compact", "high"})
+		{
+			FRenderSettings Values;
+			Values.Pipeline = Pipeline;
+			Values.GBuffer = Preset;
+			Values.DebugMode = 6;
+			Values.Exposure = 1.75f;
+			const auto Before = WriteRecordWire(RecordType<FRenderSettings>(), &Values);
+			Values.bVsync = !Values.bVsync;
+			auto Expected = Before;
+			std::get<FArchiveNode::FObject>(Expected.Value)["vsync"] = WriteValue(Values.bVsync);
+			HYP_CHECK(WriteJson(WriteRecordWire(RecordType<FRenderSettings>(), &Values)) == WriteJson(Expected));
+			const auto Converted = MakePipelineSettings(Values);
+			HYP_CHECK(Converted.Pipeline == ParseSceneRenderPipeline(Pipeline));
+			HYP_CHECK(Converted.GBuffer ==
+			          (std::string_view(Preset) == "high" ? FGBufferLayout::HighPrecision() : FGBufferLayout{}));
+			HYP_CHECK(Converted.DebugMode == 6 && Converted.Exposure == Values.Exposure);
+		}
+	}
+	FRenderSettings Invalid;
+	Invalid.Pipeline = "unknown";
+	Rejects(
+	    [&]
+	    {
+		    (void)MakePipelineSettings(Invalid);
+	    });
+	Invalid = {};
+	Invalid.GBuffer = "unknown";
+	Rejects(
+	    [&]
+	    {
+		    (void)MakePipelineSettings(Invalid);
+	    });
+	Invalid = {};
+	for (const auto Mode : {7u, std::numeric_limits<std::uint32_t>::max()})
+	{
+		Invalid.DebugMode = Mode;
+		Rejects(
+		    [&]
+		    {
+			    (void)MakePipelineSettings(Invalid);
+		    });
+		Rejects(
+		    [&]
+		    {
+			    ValidateRenderSettings(Invalid);
+		    });
+		FSceneViewportOptions View;
+		View.Visualizer = Mode;
+		Rejects(
+		    [&]
+		    {
+			    ValidateViewportOptions(View, View);
+		    });
+	}
 }
 
 void LightShadowProperties()
@@ -213,6 +318,8 @@ int main()
 	try
 	{
 		Settings();
+		SettingsCompatibility();
+		StrictOptionConversions();
 		LightShadowProperties();
 		HudOptionsAndExposure();
 		ClipLines();

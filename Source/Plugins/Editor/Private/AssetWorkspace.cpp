@@ -163,6 +163,21 @@ std::optional<FRenderView> FAssetWorkspace::RenderedPreviewView() const
 	return Result;
 }
 
+std::optional<FScenePipelineSettings> FAssetWorkspace::RenderedPreviewSettings() const
+{
+	Tasks.Require({EDomain::Main});
+	std::optional<FScenePipelineSettings> Result;
+	if (Active && Active->Pipeline)
+	{
+		Tasks.Wait(Tasks.Dispatch({EDomain::Render},
+		                          [&, Entry = Active]
+		                          {
+			                          Result = Entry->Pipeline->Configuration();
+		                          }));
+	}
+	return Result;
+}
+
 std::string FAssetWorkspace::ActiveStatus() const
 {
 	if (!Active)

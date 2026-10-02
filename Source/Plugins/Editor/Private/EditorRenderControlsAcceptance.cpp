@@ -72,11 +72,13 @@ void FEditorPlugin::ExerciseRenderControlsInput(std::vector<FInputEvent>& InEven
 			ExerciseClick(InEvents, InspectionBounds["render/settings-menu"]);
 			return;
 		case 5:
-			if (!bShowRenderSettings || InspectionBounds["render/pipeline"].Z <= InspectionBounds["render/pipeline"].X)
+			if (Acceptance.RasterOptionExercise.Case == 0 && Acceptance.RasterOptionExercise.Step == 0 &&
+			    (!bShowRenderSettings ||
+			     InspectionBounds["render/pipeline"].Z <= InspectionBounds["render/pipeline"].X))
 			{
 				throw std::runtime_error("Render settings menu did not open its window");
 			}
-			if (!ExerciseLiveDepth(InEvents))
+			if (!ExerciseRasterOptions(InEvents) || !ExerciseLiveDepth(InEvents))
 			{
 				return;
 			}

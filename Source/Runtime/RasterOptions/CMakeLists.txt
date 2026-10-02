@@ -1,0 +1,2 @@
+add_library(hyperion_raster_options STATIC Private/RasterOptions.cpp)
+hyp_module(hyperion_raster_options)

@@ -7,13 +7,14 @@ namespace
 {
 template<class M>
 FProperty Field(std::string InId, std::string InLabel, M FAppSettings::* InMember, double InMinimum = 0,
-                double InMaximum = 0)
+                double InMaximum = 0, std::function<void(const FValue&)> InValidate = {})
 {
 	FProperty P;
 	P.Id = std::move(InId);
 	P.Label = std::move(InLabel);
 	P.Minimum = InMinimum;
 	P.Maximum = InMaximum;
+	P.Validate = std::move(InValidate);
 	if constexpr (std::is_same_v<M, bool>)
 	{
 		P.Kind = EPropertyKind::Boolean;
@@ -46,8 +47,12 @@ FProperty Field(std::string InId, std::string InLabel, M FAppSettings::* InMembe
 			return Value;
 		}
 	};
-	P.Set = [InMember](void* InObject, const FValue& InValue)
+	P.Set = [InMember, Validate = P.Validate](void* InObject, const FValue& InValue)
 	{
+		if (Validate)
+		{
+			Validate(InValue);
+		}
 		if constexpr (std::is_integral_v<M> && !std::is_same_v<M, bool>)
 		{
 			static_cast<FAppSettings*>(InObject)->*InMember = static_cast<M>(std::get<std::int64_t>(InValue));
@@ -58,6 +63,21 @@ FProperty Field(std::string InId, std::string InLabel, M FAppSettings::* InMembe
 		}
 	};
 	return P;
+}
+
+void ValidatePipeline(const FValue& InValue)
+{
+	(void)ParseSceneRenderPipeline(std::get<std::string>(InValue));
+}
+
+void ValidatePreset(const FValue& InValue)
+{
+	(void)ParseGBufferPreset(std::get<std::string>(InValue));
+}
+
+void ValidateVisualizer(const FValue& InValue)
+{
+	(void)ParseAppGBufferVisualizer(std::get<std::int64_t>(InValue));
 }
 } // namespace
 
@@ -74,7 +94,7 @@ const FTypeDescriptor& SettingsType()
 	     Field("main_render_lead", "Main to Render lead (restart)", &FAppSettings::MainRenderLead, 0, 16),
 	     Field("render_rhi_lead", "Render to RHI lead (restart)", &FAppSettings::RenderRhiLead, 0, 16),
 	     Field("rhi_backend", "RHI backend (restart)", &FAppSettings::RHIBackend),
-	     Field("render_pipeline", "Render pipeline", &FAppSettings::RenderPipeline),
+	     Field("render_pipeline", "Render pipeline", &FAppSettings::RenderPipeline, 0, 0, ValidatePipeline),
 	     Field("clustered_lighting", "Clustered local lighting", &FAppSettings::bClusteredLighting),
 	     Field("contact_shadows", "Contact shadows", &FAppSettings::bContactShadows),
 	     Field("contact_shadow_length", "Contact ray length (world)", &FAppSettings::ContactShadowLength, .01, 5),
@@ -84,9 +104,10 @@ const FTypeDescriptor& SettingsType()
 	     Field("contact_shadow_debug", "Contact debug", &FAppSettings::ContactShadowDebug, 0, 2),
 	     Field("hierarchical_depth_mip", "HZB preview mip", &FAppSettings::HierarchicalDepthMip, 0, 16),
 	     Field("reversed_z", "Reversed Z (restart)", &FAppSettings::bReversedZ),
-	     Field("gbuffer_layout", "GBuffer layout", &FAppSettings::GBufferLayout),
+	     Field("gbuffer_layout", "GBuffer layout", &FAppSettings::GBufferLayout, 0, 0, ValidatePreset),
 	     Field("exposure", "Exposure", &FAppSettings::Exposure, .01, 16),
-	     Field("gbuffer_debug", "GBuffer debug", &FAppSettings::GBufferDebug, 0, 6),
+	     Field("gbuffer_debug", "GBuffer debug", &FAppSettings::GBufferDebug, GBufferVisualizerMinimum(),
+	           GBufferVisualizerMaximum(), ValidateVisualizer),
 	     Field("vsync", "Vertical sync", &FAppSettings::bVsync),
 	     Field("show_gui", "Show debug UI", &FAppSettings::bShowGui),
 	     Field("renderdoc_library", "RenderDoc DLL path (restart)", &FAppSettings::RenderDocLibrary),

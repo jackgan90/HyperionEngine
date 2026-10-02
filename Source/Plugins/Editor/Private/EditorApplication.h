@@ -176,6 +176,10 @@ private:
 	FRenderDiagnostics HudDiagnostics;
 	std::uint64_t HudUpdated{};
 	void ExerciseRenderControlsInput(std::vector<FInputEvent>& InEvents);
+	bool ExerciseRasterOptions(std::vector<FInputEvent>& InEvents);
+	void CheckRasterOptionFrame() const;
+	void CheckAssetRasterOptions() const;
+	void BeginAssetRasterOptions();
 	bool ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEvents);

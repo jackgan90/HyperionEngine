@@ -29,6 +29,8 @@ struct FProperty
 	bool bPersistent = true;
 	std::function<FValue(const void*)> Get;
 	std::function<void(void*, const FValue&)> Set;
+	// Pure-value preflight, before generic decoding assigns any pending property or encoding writes a file.
+	std::function<void(const FValue&)> Validate;
 };
 
 struct FTypeDescriptor

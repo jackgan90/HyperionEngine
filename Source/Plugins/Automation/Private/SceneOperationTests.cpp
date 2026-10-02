@@ -740,6 +740,7 @@ void PlacementWithoutProvider()
 
 void CheckSceneClipboardOperations();
 void CheckSceneRegistrationOperations();
+void CheckRenderOptionOperations();
 
 int main()
 {
@@ -750,6 +751,7 @@ int main()
 		PlacementWithoutProvider();
 		CheckSceneClipboardOperations();
 		CheckSceneRegistrationOperations();
+		CheckRenderOptionOperations();
 		NoHistory();
 		Authoring();
 		SelectAll();

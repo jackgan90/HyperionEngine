@@ -1,10 +1,25 @@
 #include "Hyperion/Renderer/SceneViewport.h"
+#include "Hyperion/RasterOptions/RasterOptions.h"
 #include <cmath>
 
 namespace Hyperion
 {
 namespace
 {
+std::string VisualizerDescription()
+{
+	std::string Result;
+	for (const auto& Option : GBufferVisualizerOptions())
+	{
+		if (!Result.empty())
+		{
+			Result += ", ";
+		}
+		Result += std::to_string(ToVisualizerWireValue(Option.Id)) + " " + std::string(Option.Label);
+	}
+	return Result + ". GBuffer modes require Deferred.";
+}
+
 void Unsupported()
 {
 	throw FSceneEditError("unavailable", "This viewport does not support the requested control");
@@ -65,14 +80,16 @@ void ValidateViewportOptions(const FSceneViewportOptions& InPatch, const FSceneV
 	RequireSupported(InPatch.ProfilingHud, InSupported.ProfilingHud);
 	RequireSupported(InPatch.ProfilingCategories, InSupported.ProfilingCategories);
 	RequireSupported(InPatch.Visualizer, InSupported.Visualizer);
+	if (InPatch.Visualizer)
+	{
+		(void)ParseGBufferVisualizer(*InPatch.Visualizer);
+	}
 	if ((InPatch.Exposure &&
 	     (!std::isfinite(*InPatch.Exposure) || *InPatch.Exposure < .05f || *InPatch.Exposure > 8)) ||
 	    (InPatch.OutlineMode && *InPatch.OutlineMode > 1) || (InPatch.Culling && *InPatch.Culling > 2) ||
-	    (InPatch.Visualizer && *InPatch.Visualizer > 6) ||
 	    (InPatch.ProfilingCategories && (*InPatch.ProfilingCategories & ~255u)))
 	{
-		throw std::invalid_argument(
-		    "Exposure must be 0.05-8; outlineMode 0-1; culling 0-2; visualizer 0-6; profiling mask 0-255");
+		throw std::invalid_argument("Exposure must be 0.05-8; outlineMode 0-1; culling 0-2; profiling mask 0-255");
 	}
 }
 
@@ -95,9 +112,7 @@ template<> const FRecordDescriptor& RecordType<FSceneViewportOptions>()
 	     Member("profilingCategories", &FSceneViewportOptions::ProfilingCategories,
 	            {.Description = "Bit mask: 1 overview, 2 tasks, 4 GPU passes, 8 device, 16 views, 32 lighting, "
 	                            "64 visibility, 128 batching."}),
-	     Member("visualizer", &FSceneViewportOptions::Visualizer,
-	            {.Description = "0 Lit, 1 base color, 2 shading normal, 3 metallic/roughness/AO, 4 emissive, 5 depth, "
-	                            "6 geometry normal. GBuffer modes require Deferred."})});
+	     Member("visualizer", &FSceneViewportOptions::Visualizer, {.Description = VisualizerDescription()})});
 	return Type;
 }
 

@@ -58,6 +58,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorPicking.cpp
 )
 hyp_module(hyperion_editor_plugin)
+target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_raster_options)
 target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_asset_import)
 target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_content)
 target_link_libraries(hyperion_editor_plugin PUBLIC hyperion_application_services
@@ -82,6 +83,7 @@ if(BUILD_TESTING)
     Private/EditorImportAcceptance.cpp
     Private/EditorReparentAcceptance.cpp
     Private/EditorRenderControlsAcceptance.cpp
+    Private/EditorRasterOptionsAcceptance.cpp
     Private/EditorFramingAcceptance.cpp
     Private/EditorAcceptance.cpp
     Private/EditorAssetAcceptance.cpp

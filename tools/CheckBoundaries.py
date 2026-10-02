@@ -59,7 +59,7 @@ for path in SOURCE.rglob('*'):
             if owner.is_relative_to(SOURCE / 'Runtime') and dependency.is_relative_to(SOURCE / 'Plugins'):
                 bad.append(f'{prefix}: Runtime must not depend on experiment plugins')
             if (owner.is_relative_to(SOURCE / 'Runtime') and
-                    owner.name in ('Core', 'Math', 'Reflection', 'Tasks', 'Plugins', 'Config', 'Platform', 'Assets', 'AssetEditing', 'Automation', 'Transport', 'Content', 'Materials', 'Textures', 'Scene', 'SceneEditing', 'Animation') and
+                    owner.name in ('Core', 'Math', 'Reflection', 'Tasks', 'Plugins', 'Config', 'RasterOptions', 'Platform', 'Assets', 'AssetEditing', 'Automation', 'Transport', 'Content', 'Materials', 'Textures', 'Scene', 'SceneEditing', 'Animation') and
                     dependency.name in ('RHI', 'Renderer')):
                 bad.append(f'{prefix}: data/foundation module must not depend on rendering')
         elif '"' in text:
@@ -87,6 +87,8 @@ if 'hyperion_materials' in targets:
     unexpected = targets['hyperion_materials'][1] - {'hyperion_core', 'hyperion_math', 'hyperion_reflection', 'hyperion_asset_types', 'hyperion_textures'}
     if unexpected:
         bad.append(f'Materials has unexpected data-module dependencies: {sorted(unexpected)}')
+if 'hyperion_raster_options' in targets and targets['hyperion_raster_options'][1]:
+    bad.append(f'RasterOptions must have no engine dependencies: {sorted(targets["hyperion_raster_options"][1])}')
 
 if bad:
     raise SystemExit('\n'.join(bad))

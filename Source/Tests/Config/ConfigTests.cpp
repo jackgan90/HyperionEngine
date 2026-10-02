@@ -1,9 +1,12 @@
 #include "Support/TestSupport.h"
 #include <Hyperion/Config/AppSettings.h>
 #include <Hyperion/Plugins/PluginRuntime.h>
+#include <Hyperion/Reflection/Wire.h>
 #include <array>
 #include <fstream>
 #include <iostream>
+
+void CheckRasterOptionSettings();
 
 namespace
 {
@@ -117,6 +120,84 @@ void CheckFrameLeadValidation()
 	HYP_CHECK(Defaults.MainRenderLead == 1 && Defaults.RenderRhiLead == 1);
 }
 
+void CheckSettingsCompatibility()
+{
+	using namespace Hyperion;
+	const std::array<std::string_view, 32> Keys{"title",
+	                                            "width",
+	                                            "height",
+	                                            "workers",
+	                                            "rhi_threads",
+	                                            "main_render_lead",
+	                                            "render_rhi_lead",
+	                                            "rhi_backend",
+	                                            "render_pipeline",
+	                                            "clustered_lighting",
+	                                            "contact_shadows",
+	                                            "contact_shadow_length",
+	                                            "contact_shadow_thickness",
+	                                            "contact_shadow_bias",
+	                                            "contact_shadow_steps",
+	                                            "contact_shadow_debug",
+	                                            "hierarchical_depth_mip",
+	                                            "reversed_z",
+	                                            "gbuffer_layout",
+	                                            "exposure",
+	                                            "gbuffer_debug",
+	                                            "vsync",
+	                                            "show_gui",
+	                                            "renderdoc_library",
+	                                            "renderdoc_output",
+	                                            "renderdoc_auto_open",
+	                                            "triangle_scale",
+	                                            "clear_red",
+	                                            "clear_green",
+	                                            "clear_blue",
+	                                            "disabled_plugins",
+	                                            "plugins"};
+	const auto& Legacy = SettingsType();
+	const auto& Record = RecordType<FAppSettings>();
+	HYP_CHECK(Legacy.Id == "hyperion.application-settings" && Legacy.Version == 1);
+	HYP_CHECK(Record.Id == "hyperion.applicationsettings.values" && Record.Version == 1);
+	HYP_CHECK(Legacy.Properties.size() == Keys.size() && Record.Members.size() == Keys.size());
+	for (std::size_t Index = 0; Index < Keys.size(); ++Index)
+	{
+		HYP_CHECK(Legacy.Properties[Index].Id == Keys[Index] && Record.Members[Index].Id == Keys[Index]);
+		HYP_CHECK(Record.Members[Index].Options.bRequired && Record.Members[Index].Options.bPersistent);
+	}
+	HYP_CHECK(Legacy.Properties[8].Kind == EPropertyKind::String);
+	HYP_CHECK(Legacy.Properties[18].Kind == EPropertyKind::String);
+	HYP_CHECK(Legacy.Properties[20].Kind == EPropertyKind::Integer);
+	HYP_CHECK(Legacy.Properties[20].Minimum == 0 && Legacy.Properties[20].Maximum == 6);
+	FAppSettings Settings;
+	HYP_CHECK(Settings.RenderPipeline == "deferred" && Settings.GBufferLayout == "compact" &&
+	          Settings.GBufferDebug == 0);
+	FArchiveNode::FObject Examples;
+	for (const std::string Pipeline : {"deferred", "forward"})
+	{
+		for (const std::string Preset : {"compact", "high"})
+		{
+			Settings.RenderPipeline = Pipeline;
+			Settings.GBufferLayout = Preset;
+			Settings.GBufferDebug = 6;
+			const auto Wire = WriteRecordWire(Record, &Settings);
+			const auto Loaded = std::static_pointer_cast<FAppSettings>(ReadRecordWire(Record, Wire));
+			HYP_CHECK(EqualAppSettings(Settings, *Loaded));
+			Examples.emplace(Pipeline + "/" + Preset, FArchiveNode(FArchiveNode::FObject{
+			                                              {"legacy", ParseJson(EncodeReflected(Legacy, &Settings))},
+			                                              {"record", WriteRecord(Record, &Settings)},
+			                                              {"wire", Wire}}));
+		}
+	}
+	const FAppSettings Defaults;
+	const FArchiveNode Snapshot(FArchiveNode::FObject{{"schema", RecordWireSchema(Record)},
+	                                                  {"defaults", WriteRecordWire(Record, &Defaults)},
+	                                                  {"examples", FArchiveNode(std::move(Examples))}});
+	std::ofstream File("render-option-config-contract.json", std::ios::binary);
+	File << WriteJson(Snapshot);
+	HYP_CHECK(File.good());
+}
+
 } // namespace
 
 int main()
@@ -125,6 +206,8 @@ int main()
 	{
 		CheckSettingsPersistence();
 		CheckFrameLeadValidation();
+		CheckSettingsCompatibility();
+		CheckRasterOptionSettings();
 		bool bRejected = false;
 		std::vector<int> Events;
 		Hyperion::FPluginRegistry Registry;

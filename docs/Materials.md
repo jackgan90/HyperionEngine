@@ -170,6 +170,10 @@ cbuffer ContactV1 : register(b0)
 
 HZB 的 copy/reduce 分别使用 `HZBCopyV1` / `HZBReduceV1`，避免同一 buffer 名称对应不同布局。Deferred 无主方向光 variant 保留同一个 `DeferredLightV1` 布局，通过 shader 分支控制计算。准备阶段只导入实际反射到的字段和资源；未使用的 shadow/environment/cluster 输入可以不出现。
 
+`RasterOptions` 拥有 GBuffer visualizer 的稳定身份与 shader define 名称。Renderer 的 `MakeGBufferVisualizerShaderDefines` 按稳定身份生成规范化的名称/数值对，通过 GBuffer debug material 的 `FMaterialShader::Defines` 进入现有编译选项与缓存键；其他材质和全局编译器不注入这组定义。`Deferred/Debug.hlsl` 使用具名常量，缺少任一必要定义时编译失败。
+
+Visualizer 保持既有 wire 数值：0 Lit、1 Base color、2 Shading normal、3 Metallic / Roughness / AO、4 Emissive、5 Scene depth、6 Geometry normal。显示标签或顺序不参与 shader 编码和缓存身份；直接 shader 测试使用同一生产适配器，像素验收则用固定 raw 值和独立数学期望。`GBufferDebugV1` 的 uniform 字段与布局不变，Materials/Shaders 不反向依赖 RasterOptions 或 Renderer。
+
 `HYP_SEMANTIC_POLICY` 集中声明 scene 所有权、shadow 分组和材质编辑提示。内置 PBR 的 UV/颜色控件与预览参数调整依据 semantic，作者重命名不会改变这些规则。资产名称、序列化 semantic/targets、GUI 属性路径和自定义材质/compute 的按名称适配器继续保留；它们在边界解析为 ID 或 handle。内置 pass 的赋值接口不依赖 shader 变量名字字符串。
 
 ## Semantic 与更新频率

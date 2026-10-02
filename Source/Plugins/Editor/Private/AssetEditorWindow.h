@@ -25,6 +25,7 @@ public:
 	FGui& GuiContext();
 	FVec4 ObservedBounds(std::string_view InId) const;
 	std::uint64_t RenderedFrames() const;
+	bool LastFrameVsync() const;
 	void RequestImage(std::shared_ptr<FPendingImageOutput> InPending);
 
 private:
@@ -52,6 +53,7 @@ private:
 	std::map<std::string, FVec4, std::less<>> Bounds;
 	std::string Error;
 	std::uint64_t FrameCount{};
+	bool bLastFrameVsync{};
 	bool bHidden{};
 	bool bClosePending{};
 	bool bCloseDialog{};

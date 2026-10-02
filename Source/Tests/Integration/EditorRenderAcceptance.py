@@ -49,8 +49,40 @@ def live_depth(agent, state, info):
     return completed(agent.call("render.settings.set", revision=state["revision"], values=original))
 
 
+def raster_options(agent, state, info):
+    original = copy.deepcopy(state["values"])
+    original_view = completed(agent.call("view.get"))
+    for pipeline in ("deferred", "forward"):
+        for preset in ("compact", "high"):
+            for mode in range(7):
+                candidate = dict(state["values"], pipeline=pipeline, gbuffer=preset, debugMode=mode)
+                state = completed(agent.call("render.settings.set", revision=state["revision"], values=candidate))
+                assert state["values"] == candidate
+                assert completed(agent.call("render.settings.get")) == state
+                assert completed(agent.call("view.get"))["options"]["visualizer"] == mode
+            previous = copy.deepcopy(state)
+            candidate = dict(state["values"], vsync=not state["values"]["vsync"])
+            state = completed(agent.call("render.settings.set", revision=state["revision"], values=candidate))
+            assert state["values"] == candidate
+            assert int(state["revision"]) == int(previous["revision"]) + 1
+            stale = agent.call("render.settings.set", revision=previous["revision"], values=previous["values"])
+            assert stale["error"]["code"] == "stale_revision", stale
+            for invalid in ({"pipeline": "missing"}, {"gbuffer": "missing"}, {"debugMode": -1},
+                            {"debugMode": 7}, {"debugMode": 4294967295}):
+                rejected = dict(candidate, exposure=2.5, **invalid)
+                result = agent.call("render.settings.set", revision=state["revision"], values=rejected)
+                assert result["error"]["code"] == "invalid_arguments", result
+                assert completed(agent.call("render.settings.get")) == state
+            current = ready(agent)
+            assert current["revision"] == info["revision"] and not current["dirty"]
+    state = completed(agent.call("render.settings.set", revision=state["revision"], values=original))
+    assert completed(agent.call("view.get")) == original_view
+    return state
+
+
 def render_controls(cli, editor, root, output):
     settings_path = output / "Settings.json"
+    saved_values = None
     for index in range(2):
         extra = ("--render-settings", settings_path) if index else ()
         app = Application(editor, output, f"depth-{index}", "/Game/Scenes/Showcase.hasset",
@@ -63,7 +95,9 @@ def render_controls(cli, editor, root, output):
             assert state["activeReversedZ"] == (index == 0), state
             if index:
                 assert not state["values"]["reversedZ"]
-            for pipeline, layout in (("forward", "compact"), ("deferred", "compact"), ("deferred", "high")):
+                assert state["values"] == saved_values, state
+            for pipeline, layout in (("forward", "compact"), ("forward", "high"),
+                                     ("deferred", "compact"), ("deferred", "high")):
                 state["values"].update(pipeline=pipeline, gbuffer=layout)
                 state = completed(agent.call("render.settings.set", revision=state["revision"], values=state["values"]))
                 deadline = time.monotonic() + 15
@@ -82,6 +116,7 @@ def render_controls(cli, editor, root, output):
                                                       "modelBounds": True, "lightBounds": True}))
                 assert view["options"]["culling"] == culling and view["options"]["frozen"]
             saved_before = settings_path.read_bytes() if settings_path.exists() else None
+            state = raster_options(agent, state, info)
             state = live_depth(agent, state, info)
             assert (settings_path.read_bytes() if settings_path.exists() else None) == saved_before
             completed(agent.call("view.set", document=info["document"], revision=info["revision"],
@@ -106,6 +141,7 @@ def render_controls(cli, editor, root, output):
             state = completed(agent.call("render.settings.set", revision=state["revision"], values=state["values"]))
             assert not state["activeReversedZ"]
             completed(agent.call("render.settings.save", revision=state["revision"], path=str(settings_path)))
+            saved_values = copy.deepcopy(state["values"])
             before = settings_path.read_bytes()
             invalid = dict(state["values"], pipeline="missing")
             assert agent.call("render.settings.set", revision=state["revision"], values=invalid)["error"]["code"] == "invalid_arguments"

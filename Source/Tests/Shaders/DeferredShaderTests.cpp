@@ -5,11 +5,80 @@
 
 using namespace Hyperion;
 
+namespace
+{
+FShaderCompileOptions DebugOptions(
+    std::span<const FGBufferVisualizerOption> InPresentation = GBufferVisualizerOptions())
+{
+	FShaderCompileOptions Result;
+	for (const auto& Define : MakeGBufferVisualizerShaderDefines(InPresentation))
+	{
+		Result.Defines.push_back({Define.Name, Define.Value});
+	}
+	return Result;
+}
+
+void CheckDebugShader(FShaderCompiler& InCompiler, EShaderFormat InFormat)
+{
+	const auto Options = DebugOptions();
+	HYP_CHECK(Options.Defines.size() == 7);
+	for (std::size_t Index = 0; Index < Options.Defines.size(); ++Index)
+	{
+		HYP_CHECK(Options.Defines[Index].Value == std::to_string(Index));
+	}
+	const auto Compile = [&](const FShaderCompileOptions& InOptions)
+	{
+		return InCompiler.Compile("Deferred/Debug.hlsl", "PSMain", EShaderStage::Pixel, InFormat, InOptions);
+	};
+	const auto Shader = Compile(Options);
+	HYP_CHECK(!Shader.Bytes.empty() && Shader.Reflection.Outputs.size() == 1);
+	const auto Block = std::find_if(Shader.Bindings.begin(), Shader.Bindings.end(),
+	                                [](const auto& InBinding)
+	                                {
+		                                return InBinding.Name == "GBufferDebugV1";
+	                                });
+	HYP_CHECK(Block != Shader.Bindings.end() && Block->ByteSize == 16);
+	HYP_CHECK(Block->Members.size() == 1 && Block->Members.front().Name == "GBufferDebug");
+	const auto& Mode = Block->Members.front().Members.front();
+	HYP_CHECK(Mode.Name == "Mode" && Mode.Offset == 0 && Mode.Scalar == EShaderScalar::Uint);
+	std::vector<FGBufferVisualizerOption> Reordered(GBufferVisualizerOptions().begin(),
+	                                                GBufferVisualizerOptions().end());
+	std::reverse(Reordered.begin(), Reordered.end());
+	Reordered.front().Label = "Presentation-only rename";
+	const auto Presented = DebugOptions(Reordered);
+	HYP_CHECK(Presented == Options);
+	const auto Same = Compile(Presented);
+	HYP_CHECK(Same.bCacheHit && Same.CacheKey == Shader.CacheKey);
+	auto Changed = Options;
+	Changed.Defines[2].Value = "27";
+	const auto Different = Compile(Changed);
+	HYP_CHECK(Different.CacheKey != Shader.CacheKey);
+	const auto Restored = Compile(Options);
+	HYP_CHECK(Restored.bCacheHit && Restored.CacheKey == Shader.CacheKey);
+	for (std::size_t Missing = 0; Missing < Options.Defines.size(); ++Missing)
+	{
+		auto Incomplete = Options;
+		Incomplete.Defines.erase(Incomplete.Defines.begin() + Missing);
+		bool bRejected{};
+		try
+		{
+			(void)Compile(Incomplete);
+		}
+		catch (const std::exception&)
+		{
+			bRejected = true;
+		}
+		HYP_CHECK(bRejected);
+	}
+}
+} // namespace
+
 void CheckDeferredShaders()
 {
 	FShaderCompiler Compiler(RendererTestShaderRoot(), "deferred-shader-contract-cache");
 	for (const auto Format : {EShaderFormat::Dxil, EShaderFormat::Spirv, EShaderFormat::Msl})
 	{
+		CheckDebugShader(Compiler, Format);
 		for (const bool bInstance : {false, true})
 		{
 			FShaderCompileOptions Options;
@@ -52,7 +121,7 @@ void CheckDeferredShaders()
 		}
 		HYP_CHECK(!Volume.Bytes.empty());
 		for (const auto* Shader : {"Deferred/Lighting.hlsl", "Deferred/Clustered.hlsl", "Deferred/ClusteredOnly.hlsl",
-		                           "Deferred/LocalLight.hlsl", "Deferred/Debug.hlsl", "Common/Tonemap.hlsl"})
+		                           "Deferred/LocalLight.hlsl", "Common/Tonemap.hlsl"})
 		{
 			const auto Pixel = Compiler.Compile(Shader, "PSMain", EShaderStage::Pixel, Format);
 			HYP_CHECK(!Pixel.Bytes.empty() && Pixel.Reflection.Outputs.size() == 1);

@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RasterOptions/RasterOptions.h"
 #include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Hyperion/Renderer/ClusteredLights.h"
 #include "Hyperion/Renderer/FullscreenPass.h"
@@ -8,12 +9,6 @@
 
 namespace Hyperion
 {
-enum class ESceneRenderPipeline : std::uint8_t
-{
-	Deferred,
-	Forward
-};
-
 // CPU query policy for the pipeline's scheduled color passes, including legacy exclusions.
 FSceneRayOptions MakeSceneRayOptions(ESceneRenderPipeline InPipeline);
 
@@ -29,10 +24,10 @@ struct FGBufferLayout
 
 struct FScenePipelineSettings
 {
-	ESceneRenderPipeline Pipeline = ESceneRenderPipeline::Deferred;
+	ESceneRenderPipeline Pipeline = DefaultSceneRenderPipeline;
 	FGBufferLayout GBuffer;
 	float Exposure = 1;
-	std::uint32_t DebugMode{};
+	std::uint32_t DebugMode = ToVisualizerWireValue(DefaultGBufferVisualizer);
 	bool bClusteredLighting = true;
 	FContactShadowSettings ContactShadows;
 };
@@ -45,6 +40,8 @@ public:
 	                     FScenePipelineSettings InSettings = {},
 	                     FRenderFeatureList InFeatures = MakeDefaultRenderFeatures());
 	void Configure(FScenePipelineSettings InSettings);
+	// Render domain: owned current settings, including resolved scene light overrides.
+	FScenePipelineSettings Configuration() const;
 	// Render domain: presentation defaults to the backbuffer; RGBA8 output is encoded through an sRGB view.
 	void SetOutputTarget(FRenderTargetSource InTarget = {ERenderTargetKind::Backbuffer});
 	// Render only: replacement is immutable and applies to subsequent builds, including an empty packet.

@@ -235,7 +235,7 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	    },
 	    TransientGeometry.get());
 	bPending = bInDeferPreparation;
-	if (bDeferred && Settings.DebugMode)
+	if (bDeferred && ParseGBufferVisualizer(Settings.DebugMode) != EGBufferVisualizer::Lit)
 	{
 		AddFullscreenPass(Session, InGraph, Debug(InMain), bInDeferPreparation);
 	}

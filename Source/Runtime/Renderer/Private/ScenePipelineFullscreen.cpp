@@ -24,6 +24,15 @@ std::shared_ptr<const FMaterialDefinition> LightingMaterial(std::string InName, 
 	return std::make_shared<const FMaterialDefinition>(std::move(Description));
 }
 
+std::shared_ptr<const FMaterialDefinition> GBufferDebugMaterial()
+{
+	auto Description =
+	    MakeFullscreenMaterial("GBuffer debug", "Deferred/Debug.hlsl", true, {GetDeferredLightingShaderContracts()})
+	        ->GetDescription();
+	Description.Passes.front().Pixel.Defines = MakeGBufferVisualizerShaderDefines();
+	return std::make_shared<const FMaterialDefinition>(std::move(Description));
+}
+
 void SetLightingParameters(FFullscreenPassDesc& InPass, FRenderSession& InSession, const FMaterialFrameContext& InFrame,
                            const FRenderView& InMain, bool bInNoDirectional)
 {
@@ -138,8 +147,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 
 FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 {
-	static const auto Material =
-	    MakeFullscreenMaterial("GBuffer debug", "Deferred/Debug.hlsl", true, {GetDeferredLightingShaderContracts()});
+	static const auto Material = GBufferDebugMaterial();
 	FFullscreenPassDesc Result;
 	Result.Material = Material;
 	Result.DepthConvention = InMain.DepthConvention;
@@ -158,7 +166,8 @@ FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 	}
 	Result.Targets.Reads.push_back({ERenderTargetKind::Texture, SceneDepth, Lifetime, false});
 	Result.Parameters.push_back({EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(SceneDepth)});
-	AppendShaderParameters(Result.Parameters, FGBufferDebugV1Parameters{Settings.DebugMode});
+	AppendShaderParameters(Result.Parameters, FGBufferDebugV1Parameters{
+	                                              ToVisualizerShaderCode(ParseGBufferVisualizer(Settings.DebugMode))});
 	return Result;
 }
 

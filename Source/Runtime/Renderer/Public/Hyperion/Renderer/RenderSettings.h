@@ -6,10 +6,10 @@ namespace Hyperion
 {
 struct FRenderSettings
 {
-	std::string Pipeline = "deferred";
-	std::string GBuffer = "compact";
+	std::string Pipeline{ToSceneRenderPipelineToken(DefaultSceneRenderPipeline)};
+	std::string GBuffer{ToGBufferPresetToken(DefaultGBufferPreset)};
 	float Exposure = 1;
-	std::uint32_t DebugMode{};
+	std::uint32_t DebugMode = ToVisualizerWireValue(DefaultGBufferVisualizer);
 	bool bClusteredLighting = true;
 	FContactShadowSettings Contact;
 	FCascadedShadowSettings Shadows;

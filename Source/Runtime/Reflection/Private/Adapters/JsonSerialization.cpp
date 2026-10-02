@@ -12,7 +12,7 @@ namespace
 {
 using FJson = nlohmann::json;
 
-FValue ReadValue(const FJson& InJson, const FProperty& InProperty)
+FValue ReadPrimitiveValue(const FJson& InJson, const FProperty& InProperty)
 {
 	auto Bad = [&]
 	{
@@ -73,6 +73,16 @@ FValue ReadValue(const FJson& InJson, const FProperty& InProperty)
 			return InJson.get<std::vector<std::string>>();
 	}
 	throw Bad();
+}
+
+FValue ReadValue(const FJson& InJson, const FProperty& InProperty)
+{
+	auto Value = ReadPrimitiveValue(InJson, InProperty);
+	if (InProperty.Validate)
+	{
+		InProperty.Validate(Value);
+	}
+	return Value;
 }
 } // namespace
 
@@ -160,9 +170,9 @@ void DecodeReflected(std::string_view InText, const FTypeDescriptor& InType, voi
 			Pending.emplace_back(&Property, ReadValue(Properties.at(Property.Id), Property));
 		}
 	}
-	for (const auto& [property, value] : Pending)
+	for (const auto& [Property, Value] : Pending)
 	{
-		property->Set(InObject, value);
+		Property->Set(InObject, Value);
 	}
 }
 } // namespace Hyperion
