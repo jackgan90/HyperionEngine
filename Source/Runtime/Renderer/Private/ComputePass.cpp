@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/ComputePass.h"
 #include "Hyperion/Renderer/RenderSession.h"
+#include "MaterialBufferUsage.h"
 #include "RenderResourcesInternal.h"
 #include <algorithm>
 #include <set>
@@ -78,21 +79,18 @@ void DeclareComputeBuffers(FRenderGraph& InGraph, FComputePass& InPass, const FC
 		{
 			throw std::invalid_argument("Full buffer overwrite requires full view coverage");
 		}
-		FGraphBufferImport Import{
-		    Parameter.Semantic.IsEmpty() ? Parameter.Name : std::string(Parameter.Semantic.GetName()),
-		    {},
-		    Source->GetSize(),
-		    BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead) |
-		        (Source->IsStorage()
-		             ? BufferUsage(ERHIBufferUsage::StructuredWrite) | BufferUsage(ERHIBufferUsage::RawWrite)
-		             : 0U),
-		    Source->IsStorage() ? Parameter.bInitialized : true,
-		    EResourceState::ShaderRead,
-		    Source,
-		    [Preparation = InPreparation, Source, Lifetime = InDescription.Lifetime]
-		    {
-			    return Preparation.ResolveBuffer(Source, Lifetime);
-		    }};
+		FGraphBufferImport Import{Parameter.Semantic.IsEmpty() ? Parameter.Name
+		                                                       : std::string(Parameter.Semantic.GetName()),
+		                          {},
+		                          Source->GetSize(),
+		                          GetMaterialBufferUsage(*Source),
+		                          Source->IsStorage() ? Parameter.bInitialized : true,
+		                          EResourceState::ShaderRead,
+		                          Source,
+		                          [Preparation = InPreparation, Source, Lifetime = InDescription.Lifetime]
+		                          {
+			                          return Preparation.ResolveBuffer(Source, Lifetime);
+		                          }};
 		const auto Buffer = InGraph.Import(std::move(Import));
 		const auto Existing = std::find_if(InPass.Buffers.begin(), InPass.Buffers.end(),
 		                                   [&](const auto& InAccess)

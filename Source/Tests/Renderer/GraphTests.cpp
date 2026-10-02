@@ -4,6 +4,7 @@
 
 using namespace Hyperion;
 void CheckComputeGraph();
+void CheckGraphBufferUsage();
 
 namespace
 {
@@ -579,6 +580,7 @@ int main()
 	{
 		CheckPacketOwnership();
 		CheckComputeGraph();
+		CheckGraphBufferUsage();
 		CheckDeferredPreparation();
 		CheckResourceHazards();
 		CheckContents();

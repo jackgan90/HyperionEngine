@@ -39,12 +39,10 @@ void ValidateResourceAccesses(const FD3D12DeviceState& InState, const FPassComma
 		const auto& Access = InCommands.BufferAccesses[Index];
 		const auto& Buffer = NativeResource<FD3D12Buffer>(Access.View.Buffer.Payload, &InState);
 		const bool bWrite = Access.State == EResourceState::ShaderWrite;
-		const auto Usage = bWrite
-		                       ? BufferUsage(ERHIBufferUsage::StructuredWrite) | BufferUsage(ERHIBufferUsage::RawWrite)
-		                       : BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead);
+		const auto Usage = bWrite ? ShaderWriteBufferUsages : ShaderReadBufferUsages;
 		// Access declarations describe byte ranges; the binding view separately validates raw/structured layout.
 		if ((!bWrite && Access.State != EResourceState::ShaderRead) || (bWrite && !InCommands.bCompute) ||
-		    !(Buffer.Usage & Usage) || !Access.View.Size || Access.View.Offset > Buffer.Size ||
+		    !HasAnyBufferUsage(Buffer.Usage, Usage) || !Access.View.Size || Access.View.Offset > Buffer.Size ||
 		    Access.View.Size > Buffer.Size - Access.View.Offset)
 		{
 			throw std::invalid_argument("Invalid buffer access range, state or usage");

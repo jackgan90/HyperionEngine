@@ -56,7 +56,7 @@ std::vector<std::byte> FD3D12RHIDevice::ReadBuffer(const FReadBufferView& InView
 {
 	const auto& Buffer = NativeResource<FD3D12Buffer>(InView.Buffer.Payload, State.get());
 	if (!InView.Size || InView.Offset > Buffer.Size || InView.Size > Buffer.Size - InView.Offset ||
-	    (Buffer.Usage & 96U) == 0)
+	    !HasAnyBufferUsage(Buffer.Usage, ShaderWriteBufferUsages))
 	{
 		throw std::invalid_argument("Readback requires a valid storage buffer range");
 	}

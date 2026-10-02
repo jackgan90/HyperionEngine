@@ -1,6 +1,7 @@
 #include "RenderPassDeclaration.h"
 #include "Hyperion/Renderer/RenderMaterial.h"
 #include "Hyperion/Renderer/RenderResources.h"
+#include "MaterialBufferUsage.h"
 #include "MaterialSharedBinding.h"
 #include "RenderResourcesInternal.h"
 #include <algorithm>
@@ -235,21 +236,18 @@ FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph, con
 			throw std::invalid_argument("Graphics buffer reads require a live resource scope");
 		}
 		const auto Source = Read.View.Source;
-		const auto Buffer = InGraph.Import(
-		    FGraphBufferImport{"Graphics buffer " + std::to_string(Source->GetIdentity()),
-		                       {},
-		                       Source->GetSize(),
-		                       BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead) |
-		                           (Source->IsStorage() ? BufferUsage(ERHIBufferUsage::StructuredWrite) |
-		                                                      BufferUsage(ERHIBufferUsage::RawWrite)
-		                                                : 0U),
-		                       Source->IsStorage() ? Read.bInitialized : true,
-		                       EResourceState::ShaderRead,
-		                       Source,
-		                       [Preparation = *this, Source, Lifetime = Read.Lifetime]
-		                       {
-			                       return Preparation.ResolveBuffer(Source, Lifetime);
-		                       }});
+		const auto Buffer =
+		    InGraph.Import(FGraphBufferImport{"Graphics buffer " + std::to_string(Source->GetIdentity()),
+		                                      {},
+		                                      Source->GetSize(),
+		                                      GetMaterialBufferUsage(*Source),
+		                                      Source->IsStorage() ? Read.bInitialized : true,
+		                                      EResourceState::ShaderRead,
+		                                      Source,
+		                                      [Preparation = *this, Source, Lifetime = Read.Lifetime]
+		                                      {
+			                                      return Preparation.ResolveBuffer(Source, Lifetime);
+		                                      }});
 		if (std::none_of(Pass.Buffers.begin(), Pass.Buffers.end(),
 		                 [&](const auto& InAccess)
 		                 {

@@ -6,6 +6,7 @@
 #include "Hyperion/Renderer/ShaderParameters/HierarchicalDepthParameters.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -43,6 +44,11 @@ RWStructuredBuffer<float> Values : register(u1);
 [numthreads(4,2,1)] void CSMain(uint3 Id : SV_DispatchThreadID) { if (all(Id.xy < uint2(19,7))) { Output[Id.xy] = Value; Values[Id.y * 19 + Id.x] = Value; } }
 [numthreads(8,4,1)] void Alternate(uint3 Id : SV_DispatchThreadID) { if (all(Id.xy < uint2(19,7))) { Output[Id.xy] = Value * 2; Values[Id.y * 19 + Id.x] = Value * 2; } }
 [numthreads(8,4,1)] void Accumulate(uint3 Id : SV_DispatchThreadID) { if (all(Id.xy < uint2(19,7))) { Output[Id.xy] += Value; Values[Id.y * 19 + Id.x] += Value; } }
+)";
+	std::ofstream(Root / "ReadOnlyBufferInput.hlsl") << R"(
+StructuredBuffer<float> Input : register(t0);
+RWTexture2D<float> Output : register(u0);
+[numthreads(1,1,1)] void CSMain(uint3 Id : SV_DispatchThreadID) { Output[Id.xy] = Input[Id.y * 19 + Id.x]; }
 )";
 	std::ofstream(Root / "ComputeConsumer.hlsl")
 	    << "Texture2D<float> Source:register(t0); StructuredBuffer<float> Values:register(t1); float4 "
@@ -245,6 +251,53 @@ void CheckComputeContractRejection(FTaskSystem& InTasks, FRenderSession& InSessi
 	HYP_CHECK(bRejected);
 }
 
+void CheckReadOnlyBuffer(FTaskSystem& InTasks, FRenderSession& InSession, IRHIDevice& InDevice,
+                         IRHISwapchain& InSwapchain, const std::shared_ptr<const void>& InScope)
+{
+	std::array<float, 133> Values;
+	Values.fill(.625f);
+	const FMaterialBufferView View{std::make_shared<const FMaterialReadBufferSource>(std::as_bytes(std::span(Values))),
+	                               EMaterialBufferViewKind::Structured, 0, sizeof(Values), 4};
+	Values.fill(99.f); // Published source bytes must not alias the producer's memory.
+	const auto Output = std::make_shared<const FMaterialTextureSource>(FMaterialStorageTexture{19, 7});
+	FComputePassDesc Pass;
+	Pass.Name = "Read-only buffer producer";
+	Pass.Shader.Source = "ReadOnlyBufferInput.hlsl";
+	Pass.Lifetime = InScope;
+	Pass.Extent = {19, 7, 1};
+	Pass.Textures = {{"Output", Output, 0, 1, EResourceState::ShaderWrite, true, false}};
+	Pass.Buffers = {{"Input", View, EResourceState::ShaderRead}};
+	InTasks.Wait(InTasks.Dispatch({EDomain::Render},
+	                              [&]
+	                              {
+		                              FRenderGraph Graph;
+		                              AddComputePass(InSession, Graph, Pass);
+		                              FFullscreenPassDesc Consumer;
+		                              Consumer.Material =
+		                                  MakeFullscreenMaterial("Read-only buffer consumer", "ComputeConsumer.hlsl");
+		                              Consumer.Lifetime = InScope;
+		                              Consumer.Viewport = {0, 0, 64, 64};
+		                              Consumer.Targets = FRenderPassTargets::ColorOnly(FVec4{});
+		                              Consumer.Targets.Reads = {{ERenderTargetKind::Texture, Output, InScope, false}};
+		                              Consumer.Targets.BufferReads = {{View, InScope}};
+		                              Consumer.Parameters = {{"Pixel:Source", FMaterialValue::FromTexture(Output)},
+		                                                     {"Pixel:Values", FMaterialValue::FromBuffer(View)}};
+		                              AddFullscreenPass(InSession, Graph, std::move(Consumer));
+		                              const auto Image =
+		                                  ExecuteGraph(std::move(Graph), InTasks, InSwapchain, {64, 64}, false, true);
+		                              HYP_CHECK(std::abs(Image.Rgba[0] - .625f) < .006f);
+		                              HYP_CHECK(std::abs(Image.Rgba[1] - .625f) < .006f);
+	                              }));
+	InTasks.Wait(InTasks.Dispatch({EDomain::Rhi, 0},
+	                              [&]
+	                              {
+		                              const auto Buffer =
+		                                  InSession.GetResources().GetPreparation().ResolveBuffer(View.Source, InScope);
+		                              HYP_CHECK(Buffer.Payload->GetInfo().Usage == 24);
+		                              CheckOutput(InDevice, InSession, Output, InScope, .625f);
+	                              }));
+}
+
 void CheckComputeRenderer()
 {
 	const auto Root = WriteComputeShaders();
@@ -262,6 +315,7 @@ void CheckComputeRenderer()
 		CheckComputeContractRejection(Tasks, Session, Scope);
 		CheckAuthoredFullscreen(Tasks, Session, Scope);
 		CheckFullscreenSemanticAliases(Tasks, Session, *Swapchain, Scope);
+		CheckReadOnlyBuffer(Tasks, Session, *Device, *Swapchain, Scope);
 		auto Source = std::make_shared<const FMaterialTextureSource>(FMaterialStorageTexture{19, 7});
 		FMaterialBufferView View{std::make_shared<const FMaterialReadBufferSource>(19U * 7U * 4U),
 		                         EMaterialBufferViewKind::Structured, 0, 19U * 7U * 4U, 4};
@@ -320,6 +374,9 @@ void CheckComputeRenderer()
 			Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 			                          [&]
 			                          {
+				                          const auto Buffer =
+				                              Session.GetResources().GetPreparation().ResolveBuffer(View.Source, Scope);
+				                          HYP_CHECK(Buffer.Payload->GetInfo().Usage == 120);
 				                          const auto Stats = CheckOutput(*Device, Session, Source, Scope, Expected);
 				                          if (Frame == 4)
 				                          {

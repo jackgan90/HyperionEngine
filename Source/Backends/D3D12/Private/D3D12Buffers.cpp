@@ -12,7 +12,9 @@ namespace
 FBuffer CreateStorageBuffer(const std::shared_ptr<FD3D12DeviceState>& InState, const FBufferDesc& InDesc,
                             std::span<const std::byte> InBytes)
 {
-	if ((InDesc.Usage & 7U) != 0 || InDesc.Size % 4 != 0)
+	if (HasAnyBufferUsage(InDesc.Usage,
+	                      BufferUsage({ERHIBufferUsage::Vertex, ERHIBufferUsage::Index, ERHIBufferUsage::Constant})) ||
+	    InDesc.Size % 4 != 0)
 	{
 		throw std::invalid_argument("Storage buffer requires exclusive shader usage and four-byte alignment");
 	}
@@ -56,23 +58,23 @@ FBuffer CreateStorageBuffer(const std::shared_ptr<FD3D12DeviceState>& InState, c
 FBuffer FD3D12RHIDevice::CreateBuffer(const FBufferDesc& InDesc, std::span<const std::byte> InBytes)
 {
 	HYP_PERF_SCOPE_C(Detail, CreateBuffer);
-	if (InDesc.Size == 0 || InDesc.Size > std::numeric_limits<std::size_t>::max() || InDesc.Usage == 0 ||
-	    (InDesc.Usage & ~127U) != 0 || InBytes.size() > InDesc.Size)
+	if (InDesc.Size == 0 || InDesc.Size > std::numeric_limits<std::size_t>::max() ||
+	    !IsKnownBufferUsage(InDesc.Usage) || InBytes.size() > InDesc.Size)
 	{
 		throw std::invalid_argument("Invalid typed buffer size, usage or initial data");
 	}
-	if ((InDesc.Usage & (BufferUsage(ERHIBufferUsage::StructuredWrite) | BufferUsage(ERHIBufferUsage::RawWrite))) != 0)
+	if (HasAnyBufferUsage(InDesc.Usage, ShaderWriteBufferUsages))
 	{
 		return CreateStorageBuffer(State, InDesc, InBytes);
 	}
-	const bool bConstant = (InDesc.Usage & BufferUsage(ERHIBufferUsage::Constant)) != 0;
+	const bool bConstant = HasAnyBufferUsage(InDesc.Usage, BufferUsage(ERHIBufferUsage::Constant));
 	if (bConstant && (InDesc.Usage != BufferUsage(ERHIBufferUsage::Constant) || InDesc.Size % 256 != 0))
 	{
 		throw std::invalid_argument("Constant pages require exclusive constant usage and 256-byte alignment");
 	}
 	auto Buffer = State->AllocateBuffer(InDesc.Size, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 	Buffer->Usage = InDesc.Usage;
-	if ((InDesc.Usage & BufferUsage(ERHIBufferUsage::Index)) != 0)
+	if (HasAnyBufferUsage(InDesc.Usage, BufferUsage(ERHIBufferUsage::Index)))
 	{
 		Buffer->IndexData.resize(static_cast<std::size_t>(InDesc.Size / sizeof(std::uint32_t)));
 		const auto Bytes = std::min(InBytes.size(), Buffer->IndexData.size() * sizeof(std::uint32_t));

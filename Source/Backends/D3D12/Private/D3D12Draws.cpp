@@ -91,8 +91,8 @@ void ValidateTargetBindings(const FD3D12DeviceState& InState, const FPassCommand
 				}
 				else if (const auto* BufferView = std::get_if<FReadBufferView>(&Value);
 				         BufferView &&
-				         (NativeResource<FD3D12Buffer>(BufferView->Buffer.Payload, &InState).Usage &
-				          (BufferUsage(ERHIBufferUsage::StructuredWrite) | BufferUsage(ERHIBufferUsage::RawWrite))))
+				         HasAnyBufferUsage(NativeResource<FD3D12Buffer>(BufferView->Buffer.Payload, &InState).Usage,
+				                           ShaderWriteBufferUsages))
 				{
 					ValidateBufferAccess(*BufferView, EResourceState::ShaderRead, InCommands);
 				}

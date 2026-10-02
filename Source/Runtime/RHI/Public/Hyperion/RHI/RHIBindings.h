@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <variant>
 #include <vector>
 
@@ -22,6 +23,40 @@ enum class ERHIBufferUsage : std::uint32_t
 constexpr std::uint32_t BufferUsage(ERHIBufferUsage InUsage)
 {
 	return static_cast<std::uint32_t>(InUsage);
+}
+
+constexpr std::uint32_t BufferUsage(std::initializer_list<ERHIBufferUsage> InUsages)
+{
+	std::uint32_t Result{};
+	for (const auto Usage : InUsages)
+	{
+		Result |= BufferUsage(Usage);
+	}
+	return Result;
+}
+
+inline constexpr std::uint32_t ShaderReadBufferUsages =
+    BufferUsage({ERHIBufferUsage::StructuredRead, ERHIBufferUsage::RawRead});
+inline constexpr std::uint32_t ShaderWriteBufferUsages =
+    BufferUsage({ERHIBufferUsage::StructuredWrite, ERHIBufferUsage::RawWrite});
+inline constexpr std::uint32_t KnownBufferUsages =
+    BufferUsage({ERHIBufferUsage::Vertex, ERHIBufferUsage::Index, ERHIBufferUsage::Constant}) | ShaderReadBufferUsages |
+    ShaderWriteBufferUsages;
+
+constexpr bool HasAnyBufferUsage(std::uint32_t InUsage, std::uint32_t InUsages)
+{
+	return (InUsage & InUsages) != 0;
+}
+
+constexpr bool HasOnlyBufferUsage(std::uint32_t InUsage, std::uint32_t InAllowedUsages)
+{
+	return (InUsage & ~InAllowedUsages) == 0;
+}
+
+// Membership only; graph support and native allocation/access restrictions remain with their owners.
+constexpr bool IsKnownBufferUsage(std::uint32_t InUsage)
+{
+	return InUsage != 0 && HasOnlyBufferUsage(InUsage, KnownBufferUsages);
 }
 
 struct FBufferDesc

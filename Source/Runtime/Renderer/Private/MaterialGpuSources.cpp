@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/RenderPass.h"
+#include "MaterialBufferUsage.h"
 #include "MaterialGpuCacheInternal.h"
 
 namespace Hyperion
@@ -120,12 +121,8 @@ FBuffer FMaterialGpuCache::FImpl::Buffer(std::shared_ptr<const FMaterialReadBuff
 	if (!Entry.Resource)
 	{
 		Entry.Description = InSource;
-		Entry.Resource = Device.CreateBuffer(
-		    {InSource->GetSize(), BufferUsage(ERHIBufferUsage::StructuredRead) | BufferUsage(ERHIBufferUsage::RawRead) |
-		                              (InSource->IsStorage() ? BufferUsage(ERHIBufferUsage::StructuredWrite) |
-		                                                           BufferUsage(ERHIBufferUsage::RawWrite)
-		                                                     : 0U)},
-		    InSource->GetBytes());
+		Entry.Resource =
+		    Device.CreateBuffer({InSource->GetSize(), GetMaterialBufferUsage(*InSource)}, InSource->GetBytes());
 		++Stats.ReadBufferUploads;
 	}
 	return Entry.Resource;

@@ -93,7 +93,8 @@ void ValidateTransitions(const FD3D12DeviceState& InState, const FPassCommands& 
 				       InValue == EResourceState::CopySource || InValue == EResourceState::CopyDestination;
 			};
 			if (Barrier.Target.Kind != ERenderTargetKind::None || Barrier.Target.Texture || Barrier.FirstMip ||
-			    Barrier.MipCount > 1 || (Buffer.Usage & 96U) == 0 || !Valid(Barrier.Before) || !Valid(Barrier.After) ||
+			    Barrier.MipCount > 1 || !HasAnyBufferUsage(Buffer.Usage, ShaderWriteBufferUsages) ||
+			    !Valid(Barrier.Before) || !Valid(Barrier.After) ||
 			    (Barrier.bUavBarrier &&
 			     (Barrier.Before != EResourceState::ShaderWrite || Barrier.After != EResourceState::ShaderWrite)))
 			{

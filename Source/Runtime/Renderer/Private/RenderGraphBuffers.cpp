@@ -3,10 +3,17 @@
 
 namespace Hyperion
 {
+namespace
+{
+// Graph support is an explicit subset, independent of future RHI usage additions.
+constexpr std::uint32_t GraphBufferUsages = BufferUsage({ERHIBufferUsage::StructuredRead, ERHIBufferUsage::RawRead,
+                                                         ERHIBufferUsage::StructuredWrite, ERHIBufferUsage::RawWrite});
+} // namespace
+
 void ValidateGraphBufferState(const FGraphBufferImport& InImport, EResourceState InState)
 {
 	if (InState != EResourceState::ShaderRead &&
-	    (InState != EResourceState::ShaderWrite || (InImport.Usage & 96U) == 0))
+	    (InState != EResourceState::ShaderWrite || !HasAnyBufferUsage(InImport.Usage, ShaderWriteBufferUsages)))
 	{
 		throw std::invalid_argument("Graph buffer state is incompatible with its usage");
 	}
@@ -15,7 +22,8 @@ void ValidateGraphBufferState(const FGraphBufferImport& InImport, EResourceState
 FGraphBuffer FRenderGraph::Import(FGraphBufferImport InResource)
 {
 	CheckMutable();
-	if (InResource.Name.empty() || !InResource.Size || !InResource.Usage || (InResource.Usage & ~120U) != 0 ||
+	if (InResource.Name.empty() || !InResource.Size || !IsKnownBufferUsage(InResource.Usage) ||
+	    !HasOnlyBufferUsage(InResource.Usage, GraphBufferUsages) ||
 	    (InResource.Resolve ? (!InResource.Identity || bool(InResource.Buffer)) : !InResource.Buffer))
 	{
 		throw std::invalid_argument("Invalid graph buffer source, size or shader usage");

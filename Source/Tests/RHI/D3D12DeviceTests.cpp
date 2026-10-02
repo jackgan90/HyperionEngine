@@ -4,6 +4,10 @@
 #include "Support/TestSupport.h"
 #include <iostream>
 
+void CheckBufferUsageCreation(Hyperion::IRHIDevice& InDevice);
+void CheckBufferUsageAccess(Hyperion::IRHIDevice& InDevice, Hyperion::IRHISwapchain& InSwapchain,
+                            Hyperion::FSize InSize);
+
 namespace
 {
 using namespace Hyperion;
@@ -289,6 +293,7 @@ void CheckDeviceOwnership()
 	auto Device = Registry.CreateDevice(ERHIBackend::D3D12, Desc);
 	auto OtherDevice = Registry.CreateDevice(ERHIBackend::D3D12, Desc);
 	CheckDeviceCapabilities(Registry, *Device, Desc);
+	CheckBufferUsageCreation(*Device);
 
 	// Both devices and resources exist before any window is created.
 	const std::array<std::uint32_t, 3> Indices{0, 1, 2};
@@ -320,6 +325,7 @@ void CheckDeviceOwnership()
 	FWindow OtherWindow("RHI second swapchain", {64, 64}, true);
 	auto Swapchain = Device->CreateSwapchain({Window.Surface(), Window.PixelSize()});
 	auto OtherSwapchain = Device->CreateSwapchain({OtherWindow.Surface(), OtherWindow.PixelSize()});
+	CheckBufferUsageAccess(*Device, *Swapchain, Window.PixelSize());
 	Swapchain->BeginFrame(Window.PixelSize());
 	OtherSwapchain->BeginFrame(OtherWindow.PixelSize());
 	auto Commands = ClearCommands();
