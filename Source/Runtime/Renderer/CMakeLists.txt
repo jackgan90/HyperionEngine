@@ -22,6 +22,8 @@ add_library(hyperion_render STATIC Private/SceneCameraController.cpp Private/Sce
 hyp_module(hyperion_render)
 target_link_libraries(hyperion_render PUBLIC hyperion_raster_options)
 target_sources(hyperion_render PRIVATE Private/GBufferVisualizerDefines.cpp)
+
+target_sources(hyperion_render PRIVATE Private/SceneMaterialRoutes.cpp)
 target_sources(hyperion_render PRIVATE Private/DirectionalLighting.cpp)
 target_sources(hyperion_render PRIVATE Private/LightingWireContracts.cpp)
 target_sources(hyperion_render PRIVATE Private/SceneLightingInfo.cpp)

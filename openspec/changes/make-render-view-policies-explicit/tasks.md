@@ -13,12 +13,12 @@
 
 ## 3. M03B: Shared built-in route facts
 
-- [ ] 3.1 Add a finite private route description for unchanged usages, pipeline/pick eligibility and legacy exclusions; keep custom Usage open.
-- [ ] 3.2 Migrate explicit scene view construction and MakeSceneRayOptions to shared facts while preserving target/resource construction, pass order, identities and view indices.
-- [ ] 3.3 Verify independent Forward/Deferred draw and pick matrices, complete four-HDR legacy exclusion even for inactive routes, mixed/custom materials and no duplicated contributions.
+- [x] 3.1 Add a finite private route description for unchanged usages, pipeline/pick eligibility and legacy exclusions; keep custom Usage open.
+- [x] 3.2 Migrate explicit scene view construction and MakeSceneRayOptions to shared facts while preserving target/resource construction, pass order, identities and view indices.
+- [x] 3.3 Verify independent Forward/Deferred draw and pick matrices, complete four-HDR legacy exclusion even for inactive routes, mixed/custom materials and no duplicated contributions.
 
 ## 4. Validate and review
 
-- [ ] 4.1 Rebuild/run affected Debug/Release transient, spatial, instance, deferred, CSM, ray-query and outline regressions with serialized GPU execution; report M03A/M03B separately.
-- [ ] 4.2 Update rendering documentation and run relevant style/naming, dependency boundaries, diff and strict OpenSpec validation.
-- [ ] 4.3 Obtain independent final frozen-file review, verify findings directly and resolve scoped issues before reporting completion and a local stage commit; do not push.
+- [x] 4.1 Rebuild/run affected Debug/Release transient, spatial, instance, deferred, CSM, ray-query and outline regressions with serialized GPU execution; report M03A/M03B separately.
+- [x] 4.2 Update rendering documentation and run relevant style/naming, dependency boundaries, diff and strict OpenSpec validation.
+- [x] 4.3 Obtain independent final frozen-file review, verify findings directly and resolve scoped issues before reporting completion and a local stage commit; do not push.
