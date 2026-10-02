@@ -9,11 +9,12 @@ Private::FArchiveWriter Prefix(const FArchiveNode& InNode, FArchiveLimits InLimi
 {
 	Private::FArchiveWriter Metadata{InLimits};
 	Metadata.Node(InNode, 0);
-	if (InLimits.MaxBytes < 24 || Metadata.Blocks.size() > (InLimits.MaxBytes - 24) / 16)
+	if (InLimits.MaxBytes < Private::ArchivePrefixSize ||
+	    Metadata.Blocks.size() > (InLimits.MaxBytes - Private::ArchivePrefixSize) / Private::ArchiveDirectoryEntrySize)
 	{
 		throw std::runtime_error("Archive block directory limit exceeded");
 	}
-	const auto PrefixSize = 24 + Metadata.Blocks.size() * 16;
+	const auto PrefixSize = Private::ArchivePrefixSize + Metadata.Blocks.size() * Private::ArchiveDirectoryEntrySize;
 	if (Metadata.Bytes.size() > InLimits.MaxBytes - PrefixSize)
 	{
 		throw std::runtime_error("Archive size limit exceeded");
@@ -30,7 +31,7 @@ Private::FArchiveWriter Prefix(const FArchiveNode& InNode, FArchiveLimits InLimi
 	Private::FArchiveWriter Output{InLimits};
 	Output.Bytes.reserve(PrefixSize + Metadata.Bytes.size());
 	Output.Raw(Private::ArchiveMagic);
-	Output.Scalar(std::uint32_t{2});
+	Output.Scalar(Private::ArchiveVersion);
 	Output.Scalar(static_cast<std::uint64_t>(Metadata.Bytes.size()));
 	Output.Scalar(static_cast<std::uint32_t>(Metadata.Blocks.size()));
 	Output.Scalar(std::uint32_t{0});

@@ -1,8 +1,10 @@
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/MountedFileSystem.h"
+#include "Support/BinaryFixtures.h"
 #include "Support/TestSupport.h"
 #include <iostream>
+#include <limits>
 #include <thread>
 
 namespace Hyperion
@@ -164,6 +166,61 @@ void CheckContainer()
 	HYP_CHECK(Legacy.bLegacy && ReadValue<FNativeFixture>(Legacy.Object).Name == Value.Name);
 	auto Upgraded = EncodeAsset(RecordType<FNativeFixture>(), &Value, Legacy.Header);
 	HYP_CHECK(!DecodeAsset(Upgraded.Bytes).bLegacy && Upgraded.Header.Id == Legacy.Header.Id);
+}
+
+void CheckNativeProbe()
+{
+	using namespace Hyperion::Test;
+	auto Prefix = FixtureBytes("48415354010000001800000000000000");
+	Prefix.resize(80, std::byte{'0'});
+	HYP_CHECK(GetNativeAssetPrefixSize() == 80);
+	const auto Range = ProbeNativeAssetPayload(Prefix, {.MaxBytes = 104});
+	HYP_CHECK(Range.Offset == 80 && Range.Size == 24);
+	for (std::size_t Size = 0; Size < Prefix.size(); ++Size)
+	{
+		Reject(
+		    [&]
+		    {
+			    ProbeNativeAssetPayload(std::span(Prefix).first(Size));
+		    },
+		    "container header");
+	}
+	for (const auto Limit : {std::size_t{0}, std::size_t{79}, std::size_t{80}, std::size_t{103}})
+	{
+		Reject(
+		    [&]
+		    {
+			    ProbeNativeAssetPayload(Prefix, {.MaxBytes = Limit});
+		    },
+		    "size");
+	}
+	for (const auto Offset : {std::size_t{0}, std::size_t{4}})
+	{
+		auto Bad = Prefix;
+		Bad[Offset] = std::byte{99};
+		Reject(
+		    [&]
+		    {
+			    ProbeNativeAssetPayload(Bad);
+		    },
+		    "container header");
+	}
+	WriteFixtureInteger(Prefix, 8, 8, FArchiveLimits{}.MaxBytes - 80);
+	HYP_CHECK(ProbeNativeAssetPayload(Prefix).Size == FArchiveLimits{}.MaxBytes - 80);
+	WriteFixtureInteger(Prefix, 8, 8, FArchiveLimits{}.MaxBytes - 79);
+	Reject(
+	    [&]
+	    {
+		    ProbeNativeAssetPayload(Prefix);
+	    },
+	    "size");
+	WriteFixtureInteger(Prefix, 8, 8, std::numeric_limits<std::uint64_t>::max());
+	Reject(
+	    [&]
+	    {
+		    ProbeNativeAssetPayload(Prefix);
+	    },
+	    "size");
 }
 
 void CheckNativeSizeBudget()
@@ -488,6 +545,7 @@ int main()
 	{
 		CheckMountedNativeAssets();
 		CheckContainer();
+		CheckNativeProbe();
 		CheckNativeSizeBudget();
 		CheckCustomArchiveLimits();
 		CheckGraphDrain();

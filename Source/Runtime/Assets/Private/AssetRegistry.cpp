@@ -1,5 +1,6 @@
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/Assets/AssetService.h"
+#include "Hyperion/Assets/NativeAsset.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/IO/Path.h"
 #include <set>
@@ -8,42 +9,36 @@ namespace Hyperion
 {
 namespace
 {
-std::uint64_t Integer(std::span<const std::byte> InBytes, std::size_t InOffset, unsigned InSize)
+FBytes ReadDiscoveryRange(IFileSystem& InFiles, const std::filesystem::path& InPath, std::size_t InOffset,
+                          std::size_t InSize)
 {
-	std::uint64_t Value{};
-	for (unsigned Index = 0; Index < InSize; ++Index)
+	auto Bytes = InFiles.ReadRange(InPath, InOffset, InSize);
+	if (Bytes.size() != InSize)
 	{
-		Value |= std::uint64_t(std::to_integer<unsigned>(InBytes[InOffset + Index])) << (Index * 8);
+		throw std::runtime_error("Incomplete native metadata range: " + PathToUtf8(InPath));
 	}
-	return Value;
+	return Bytes;
 }
 } // namespace
 
 FAssetHeader ReadAssetHeader(IFileSystem& InFiles, const std::filesystem::path& InPath)
 {
-	constexpr std::size_t PrefixSize = 80;
 	constexpr std::size_t MetadataLimit = 32u * 1024u * 1024u;
-	const auto Prefix = InFiles.ReadRange(InPath, 0, PrefixSize + 24);
-	const std::string Magic(reinterpret_cast<const char*>(Prefix.data()), 4);
-	if (Magic != "HAST" || Integer(Prefix, 4, 4) != 1 || Integer(Prefix, PrefixSize + 4, 4) != 2)
+	const auto Prefix = ReadDiscoveryRange(InFiles, InPath, 0, GetNativeAssetPrefixSize());
+	const auto Payload = ProbeNativeAssetPayload(Prefix);
+	const auto ArchivePrefixSize = GetArchiveMetadataPrefixSize();
+	if (ArchivePrefixSize > Payload.Size)
 	{
-		throw std::runtime_error("Discovery requires a current native container: " + PathToUtf8(InPath));
+		throw std::runtime_error("Native payload is too small for metadata: " + PathToUtf8(InPath));
 	}
-	const auto Total = Integer(Prefix, 8, 8);
-	const auto Metadata = Integer(Prefix, PrefixSize + 8, 8);
-	const auto Blocks = Integer(Prefix, PrefixSize + 16, 4);
-	if (Total > FArchiveLimits{}.MaxBytes - PrefixSize || Metadata > MetadataLimit ||
-	    Blocks > FArchiveLimits{}.MaxNodes)
+	const auto ArchivePrefix = ReadDiscoveryRange(InFiles, InPath, Payload.Offset, ArchivePrefixSize);
+	const auto Size = ProbeArchiveMetadataSize(ArchivePrefix, Payload.Size);
+	if (Size > MetadataLimit)
 	{
 		throw std::runtime_error("Native metadata exceeds discovery limits");
 	}
-	const auto Size = 24 + Blocks * 16 + Metadata;
-	if (Size > Total || Size > MetadataLimit)
-	{
-		throw std::runtime_error("Invalid native metadata size");
-	}
-	const auto Bytes = InFiles.ReadRange(InPath, PrefixSize, static_cast<std::size_t>(Size));
-	const auto Envelope = DecodeArchiveMetadata(Bytes, static_cast<std::size_t>(Total));
+	const auto Bytes = ReadDiscoveryRange(InFiles, InPath, Payload.Offset, Size);
+	const auto Envelope = DecodeArchiveMetadata(Bytes, Payload.Size);
 	const auto& Fields = std::get<FArchiveNode::FObject>(Envelope.Value);
 	auto Header = ReadValue<FAssetHeader>(Fields.at("header"));
 	ValidateAssetHeader(Header);

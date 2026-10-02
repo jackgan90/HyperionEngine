@@ -6,8 +6,11 @@ namespace Hyperion
 {
 namespace
 {
-constexpr std::size_t HeaderSize = 80;
 constexpr std::array<std::byte, 4> Magic{std::byte{'H'}, std::byte{'A'}, std::byte{'S'}, std::byte{'T'}};
+constexpr std::uint32_t ContainerVersion = 1;
+constexpr std::size_t DigestOffset = Magic.size() + sizeof(std::uint32_t) + sizeof(std::uint64_t);
+constexpr std::size_t DigestSize = 64;
+constexpr std::size_t HeaderSize = DigestOffset + DigestSize;
 
 void AppendInteger(std::vector<std::byte>& OutBytes, std::uint64_t InValue, unsigned InSize)
 {
@@ -105,6 +108,26 @@ FAssetDocument ReadLegacy(std::shared_ptr<const std::vector<std::byte>> InBytes,
 }
 } // namespace
 
+std::size_t GetNativeAssetPrefixSize()
+{
+	return HeaderSize;
+}
+
+FNativeAssetPayloadRange ProbeNativeAssetPayload(std::span<const std::byte> InPrefix, FArchiveLimits InLimits)
+{
+	if (InPrefix.size() < HeaderSize || !std::equal(Magic.begin(), Magic.end(), InPrefix.begin()) ||
+	    ReadInteger(InPrefix, Magic.size(), sizeof(std::uint32_t)) != ContainerVersion)
+	{
+		throw std::runtime_error("Invalid or unsupported native asset container header");
+	}
+	const auto Size = ReadInteger(InPrefix, Magic.size() + sizeof(std::uint32_t), sizeof(std::uint64_t));
+	if (InLimits.MaxBytes < HeaderSize || Size > InLimits.MaxBytes - HeaderSize)
+	{
+		throw std::runtime_error("Invalid native asset size");
+	}
+	return {HeaderSize, static_cast<std::size_t>(Size)};
+}
+
 FEncodedAsset EncodeAsset(const FRecordDescriptor& InType, const void* InObject, FAssetHeader InHeader,
                           FArchiveLimits InLimits)
 {
@@ -129,8 +152,8 @@ FEncodedAsset EncodeAsset(const FRecordDescriptor& InType, const void* InObject,
 	FEncodedAsset Result{std::move(InHeader)};
 	Result.Bytes.reserve(HeaderSize + Payload.size());
 	Result.Bytes.insert(Result.Bytes.end(), Magic.begin(), Magic.end());
-	AppendInteger(Result.Bytes, 1, 4);
-	AppendInteger(Result.Bytes, Payload.size(), 8);
+	AppendInteger(Result.Bytes, ContainerVersion, sizeof(ContainerVersion));
+	AppendInteger(Result.Bytes, Payload.size(), sizeof(std::uint64_t));
 	for (char Character : Digest)
 	{
 		Result.Bytes.push_back(std::byte(Character));
@@ -150,17 +173,17 @@ FAssetDocument DecodeAsset(std::shared_ptr<const std::vector<std::byte>> InBytes
 	{
 		return ReadLegacy(std::move(InBytes), InLimits);
 	}
-	if (InBytes->size() < HeaderSize || !std::equal(Magic.begin(), Magic.end(), InBytes->begin()) ||
-	    ReadInteger(*InBytes, 4, 4) != 1 || ReadInteger(*InBytes, 8, 8) != InBytes->size() - HeaderSize)
+	const auto Payload = ProbeNativeAssetPayload(*InBytes, InLimits);
+	if (Payload.Size != InBytes->size() - Payload.Offset)
 	{
 		throw std::runtime_error("Invalid or unsupported native asset container header");
 	}
-	const std::string Digest(reinterpret_cast<const char*>(InBytes->data() + 16), 64);
-	if (Digest != ContentHash(std::span(*InBytes).subspan(HeaderSize)))
+	const std::string Digest(reinterpret_cast<const char*>(InBytes->data() + DigestOffset), DigestSize);
+	if (Digest != ContentHash(std::span(*InBytes).subspan(Payload.Offset)))
 	{
 		throw std::runtime_error("Native asset integrity check failed");
 	}
-	auto Envelope = DecodeArchive(InBytes, HeaderSize, InLimits);
+	auto Envelope = DecodeArchive(InBytes, Payload.Offset, InLimits);
 	auto& Fields = std::get<FArchiveNode::FObject>(Envelope.Value);
 	if (Fields.size() != 2)
 	{

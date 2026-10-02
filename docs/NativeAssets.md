@@ -124,6 +124,10 @@ Editor 导入默认按来源文件名创建文件夹：例如 `Clear.hdr` 在 Br
 
 资产索引是从元数据重建的内存 ID/路径映射，不是可持久化的资产类型。`DiscoverAssets` 递归扫描原生元数据，忽略 `.git`、`.cache` 和发布状态；本地/挂载存储通过范围读取跳过 bulk。重复 ID 报错；损坏文件提供逐项诊断，不伪装为有效资产。实际加载仍执行完整内容校验。`validate-library ROOT` 验证全库；`migrate-library /Game EMPTY_STAGING_DIRECTORY` 用当前原生图生成隔离迁移候选，不修改输入。旧 Catalog 资产类型和 `catalog` 创建命令已移除。
 
+发现器只接受当前 HAST v1 容器中的 HYPA v2 元数据。NativeAsset 的 `ProbeNativeAssetPayload` 解释外层前缀并返回声明的 payload 范围；Serialization 的 `ProbeArchiveMetadataSize` 解释 archive 前缀并返回前缀、目录和 metadata 的总读取长度。它们仅接收字节 span，与完整解码共享各自格式的解释，不访问文件系统。返回读取范围表示前缀和长度已验证；后续 `DecodeArchiveMetadata` 继续检查目录连续性、块索引、元素对齐、节点/深度和分配预算。
+
+`ReadAssetHeader` 按拥有者提供的范围读取并检查实际返回长度，整个 archive 前缀、目录及 metadata 受 32 MiB 发现预算约束；声明的完整 native 文件仍受含外层头部的单文件字节预算约束。发现不读取或哈希 bulk，不验证 object revision 或完整依赖图，因此 bulk 损坏或仅 bulk 被截断时仍可能发现有效头部，而完整加载会失败。前缀、目录或 metadata 缺失会被拒绝。裸 HYPA v1/v2 的兼容完整读取保持独立，不因可完整读取就进入当前格式的发现集合。
+
 ## 反射契约与版本迁移
 
 ~~~cpp

@@ -18,6 +18,11 @@ enum class EArchiveTag : std::uint8_t
 };
 
 constexpr std::array<std::byte, 4> ArchiveMagic{std::byte{'H'}, std::byte{'Y'}, std::byte{'P'}, std::byte{'A'}};
+constexpr std::uint32_t ArchiveVersion = 2;
+constexpr std::uint32_t LegacyArchiveVersion = 1;
+constexpr std::size_t ArchiveVersionSize = ArchiveMagic.size() + sizeof(std::uint32_t);
+constexpr std::size_t ArchivePrefixSize = ArchiveVersionSize + sizeof(std::uint64_t) + 2 * sizeof(std::uint32_t);
+constexpr std::size_t ArchiveDirectoryEntrySize = 2 * sizeof(std::uint64_t);
 
 struct FArchiveWriter
 {

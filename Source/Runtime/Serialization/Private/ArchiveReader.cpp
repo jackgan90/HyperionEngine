@@ -2,6 +2,67 @@
 
 namespace Hyperion::Private
 {
+namespace
+{
+struct FArchivePrefix
+{
+	std::uint32_t Version{};
+	std::uint64_t MetadataBytes{};
+	std::uint32_t BlockCount{};
+};
+
+FArchivePrefix ReadArchivePrefix(std::span<const std::byte> InBytes, FArchiveLimits InLimits)
+{
+	if (InBytes.size() < ArchiveVersionSize || InBytes.size() > InLimits.MaxBytes ||
+	    !std::equal(ArchiveMagic.begin(), ArchiveMagic.end(), InBytes.begin()))
+	{
+		throw std::runtime_error("Invalid Hyperion archive header/size");
+	}
+	FArchiveReader Reader{InLimits, InBytes, {}, 0, ArchiveMagic.size(), InBytes.size()};
+	FArchivePrefix Result;
+	Result.Version = Reader.Scalar<std::uint32_t>();
+	if (Result.Version == LegacyArchiveVersion)
+	{
+		return Result;
+	}
+	if (Result.Version != ArchiveVersion)
+	{
+		throw std::runtime_error("Unsupported archive container version");
+	}
+	Result.MetadataBytes = Reader.Scalar<std::uint64_t>();
+	Result.BlockCount = Reader.Scalar<std::uint32_t>();
+	if (Reader.Scalar<std::uint32_t>() != 0)
+	{
+		throw std::runtime_error("Invalid archive block directory");
+	}
+	return Result;
+}
+
+std::size_t ResolveArchiveMetadataSize(const FArchivePrefix& InPrefix, std::size_t InTotalBytes,
+                                       FArchiveLimits InLimits)
+{
+	if (InPrefix.Version != ArchiveVersion)
+	{
+		throw std::runtime_error("Unsupported archive container version");
+	}
+	if (InTotalBytes < ArchivePrefixSize || InTotalBytes > InLimits.MaxBytes)
+	{
+		throw std::runtime_error("Invalid archive total length");
+	}
+	if (InPrefix.BlockCount > InLimits.MaxNodes ||
+	    InPrefix.BlockCount > (InTotalBytes - ArchivePrefixSize) / ArchiveDirectoryEntrySize)
+	{
+		throw std::runtime_error("Invalid archive block directory");
+	}
+	const auto MetadataOffset = ArchivePrefixSize + std::size_t(InPrefix.BlockCount) * ArchiveDirectoryEntrySize;
+	if (InPrefix.MetadataBytes > InTotalBytes - MetadataOffset)
+	{
+		throw std::runtime_error("Invalid archive metadata length");
+	}
+	return MetadataOffset + static_cast<std::size_t>(InPrefix.MetadataBytes);
+}
+} // namespace
+
 void FArchiveReader::Charge(std::size_t InBytes)
 {
 	if (InBytes > Limits.MaxAllocatedBytes - Allocated)
@@ -31,43 +92,24 @@ std::string FArchiveReader::String()
 
 void FArchiveReader::Header()
 {
-	if (Bytes.size() < 8 || Bytes.size() > Limits.MaxBytes ||
-	    !std::equal(ArchiveMagic.begin(), ArchiveMagic.end(), Bytes.begin()))
-	{
-		throw std::runtime_error("Invalid Hyperion archive header/size");
-	}
-	Position = 4;
-	const auto Version = Scalar<std::uint32_t>();
-	if (Version == 1 && !bMetadataOnly)
+	const auto Prefix = ReadArchivePrefix(Bytes, Limits);
+	Position = ArchiveVersionSize;
+	if (Prefix.Version == LegacyArchiveVersion && !bMetadataOnly)
 	{
 		bLegacy = true;
 		return;
 	}
-	if (Version != 2)
-	{
-		throw std::runtime_error("Unsupported archive container version");
-	}
-	const auto MetadataSize = Scalar<std::uint64_t>();
-	const auto Count = Scalar<std::uint32_t>();
-	if (Scalar<std::uint32_t>() != 0 || Count > Limits.MaxNodes || Count > (Bytes.size() - Position) / 16)
-	{
-		throw std::runtime_error("Invalid archive block directory");
-	}
-	Charge(std::size_t(Count) * sizeof(Blocks.front()));
-	const auto Prefix = Position + std::size_t(Count) * 16;
-	if (MetadataSize > Bytes.size() - Prefix)
+	const auto Total = bMetadataOnly ? TotalBytes : Bytes.size();
+	const auto MetadataEnd = ResolveArchiveMetadataSize(Prefix, Total, Limits);
+	if (MetadataEnd > Bytes.size())
 	{
 		throw std::runtime_error("Invalid archive metadata length");
 	}
-	const auto MetadataEnd = Prefix + static_cast<std::size_t>(MetadataSize);
-	const auto Total = bMetadataOnly ? TotalBytes : Bytes.size();
-	if (Total < MetadataEnd || Total > Limits.MaxBytes)
-	{
-		throw std::runtime_error("Invalid archive total length");
-	}
+	Position = ArchivePrefixSize;
+	Charge(std::size_t(Prefix.BlockCount) * sizeof(Blocks.front()));
 	auto Next = MetadataEnd;
-	Blocks.reserve(Count);
-	for (std::uint32_t Index = 0; Index < Count; ++Index)
+	Blocks.reserve(Prefix.BlockCount);
+	for (std::uint32_t Index = 0; Index < Prefix.BlockCount; ++Index)
 	{
 		const auto Offset = Scalar<std::uint64_t>();
 		const auto Size = Scalar<std::uint64_t>();
@@ -221,3 +263,17 @@ FArchiveNode FArchiveReader::Node(unsigned InDepth)
 	}
 }
 } // namespace Hyperion::Private
+
+namespace Hyperion
+{
+std::size_t GetArchiveMetadataPrefixSize()
+{
+	return Private::ArchivePrefixSize;
+}
+
+std::size_t ProbeArchiveMetadataSize(std::span<const std::byte> InPrefix, std::size_t InTotalBytes,
+                                     FArchiveLimits InLimits)
+{
+	return Private::ResolveArchiveMetadataSize(Private::ReadArchivePrefix(InPrefix, InLimits), InTotalBytes, InLimits);
+}
+} // namespace Hyperion

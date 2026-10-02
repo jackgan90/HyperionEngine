@@ -12,6 +12,12 @@ struct FArchiveLimits
 	unsigned MaxDepth = 64;
 };
 
+std::size_t GetArchiveMetadataPrefixSize();
+// Returns the current archive prefix+directory+metadata extent, bounded by the declared total and limits.
+// Only the supplied prefix is validated here; DecodeArchiveMetadata validates the returned range's contents.
+std::size_t ProbeArchiveMetadataSize(std::span<const std::byte> InPrefix, std::size_t InTotalBytes,
+                                     FArchiveLimits InLimits = {});
+
 // Hash the canonical encoding without copying bulk blocks.
 std::string HashArchive(const FArchiveNode& InNode, FArchiveLimits InLimits = {});
 std::vector<std::byte> EncodeArchive(const FArchiveNode& InNode, FArchiveLimits InLimits = {});
