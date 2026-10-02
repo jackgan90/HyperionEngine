@@ -1,11 +1,19 @@
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
+#include "RHI/DrawStateFixture.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <optional>
+
+namespace Hyperion::D3D12Private
+{
+void WriteNativeDrawPlanMetrics(const FBuffer& InAnchor, const std::shared_ptr<const FPassCommands>& InPrepared,
+                                std::ostream& InOutput);
+} // namespace Hyperion::D3D12Private
 
 namespace
 {
@@ -43,8 +51,9 @@ FDrawPacket PrepareTriangle(IRHIDevice& InDevice)
 	return Draw;
 }
 
-void Measure(IRHISwapchain& InSwapchain, const FDrawPacket& InDraw, std::size_t InCount, int InWarmup, int InSamples,
-             std::ostream& InOutput, bool bInOwned)
+std::shared_ptr<const FPassCommands> Measure(IRHISwapchain& InSwapchain, const FDrawPacket& InDraw,
+                                             const FDrawPacket* InAlternate, std::size_t InCount, int InWarmup,
+                                             int InSamples, std::ostream& InOutput, bool bInOwned)
 {
 	FPassCommands Commands;
 	Commands.Color = FColorAttachment{FRenderTarget::Backbuffer()};
@@ -53,6 +62,13 @@ void Measure(IRHISwapchain& InSwapchain, const FDrawPacket& InDraw, std::size_t 
 	Commands.Color->Clear = {.025f, .035f, .065f, 1};
 	Commands.Transitions = {{FRenderTarget::Backbuffer(), EResourceState::Present, EResourceState::RenderTarget}};
 	Commands.Draws.assign(InCount, InDraw);
+	if (InAlternate)
+	{
+		for (std::size_t Index = 1; Index < InCount; Index += 2)
+		{
+			Commands.Draws[Index] = *InAlternate;
+		}
+	}
 	if (bInOwned)
 	{
 		Commands.ShareDraws();
@@ -76,6 +92,68 @@ void Measure(IRHISwapchain& InSwapchain, const FDrawPacket& InDraw, std::size_t 
 		}
 	}
 	InSwapchain.WaitIdle();
+	return Owned;
+}
+
+void WriteString(std::ostream& InOutput, std::string_view InText)
+{
+	constexpr std::string_view Hex = "0123456789abcdef";
+	InOutput << '"';
+	for (const auto Character : InText)
+	{
+		const auto Value = static_cast<unsigned char>(Character);
+		if (Character == '"' || Character == '\\')
+		{
+			InOutput << '\\' << Character;
+		}
+		else if (Value < 32)
+		{
+			InOutput << "\\u00" << Hex[Value >> 4] << Hex[Value & 15];
+		}
+		else
+		{
+			InOutput << Character;
+		}
+	}
+	InOutput << '"';
+}
+
+void WriteMetadata(std::ostream& InOutput, const char* InCsv, const FDeviceStats& InStats, int InWarmup, int InSamples,
+                   bool bInOwned, bool bInSwitching)
+{
+	InOutput << "{\"schema\":\"M08PlanMetricsV1\",\"source\":\"separate-cache-exact-prepared-packets\",\"csv\":";
+	WriteString(InOutput, InCsv);
+	InOutput << ",\"source_root\":";
+	WriteString(InOutput, HYP_SOURCE_DIR);
+	InOutput << ",\"backend\":\"D3D12\",\"adapter\":";
+	WriteString(InOutput, InStats.Adapter);
+	InOutput << ",\"debug_layer\":" << (InStats.bDebugLayer ? "true" : "false")
+	         << ",\"resolution\":[1440,900],\"vsync\":false,\"warmup\":" << InWarmup << ",\"samples\":" << InSamples
+	         << ",\"path\":\"" << (bInOwned ? "owned" : "ordinary") << "\",\"workload\":\""
+	         << (bInSwitching ? "switching" : "homogeneous") << "\",\"groups\":[";
+}
+
+std::pair<bool, bool> ParseFlags(int InArgumentCount, char** InArguments)
+{
+	bool bOwned = false;
+	bool bSwitching = false;
+	for (int Index = 4; Index < InArgumentCount; ++Index)
+	{
+		const std::string_view Flag(InArguments[Index]);
+		if (Flag == "--owned" && !bOwned)
+		{
+			bOwned = true;
+		}
+		else if (Flag == "--switching" && !bSwitching)
+		{
+			bSwitching = true;
+		}
+		else
+		{
+			throw std::invalid_argument("Unknown or duplicate submission benchmark flag");
+		}
+	}
+	return {bOwned, bSwitching};
 }
 } // namespace
 
@@ -83,32 +161,52 @@ int main(int InArgumentCount, char** InArguments)
 {
 	try
 	{
-		if (InArgumentCount != 4 && InArgumentCount != 5)
+		if (InArgumentCount < 4 || InArgumentCount > 6)
 		{
-			throw std::invalid_argument("Usage: submission_benchmark Output.csv Warmup Samples [--owned]");
+			throw std::invalid_argument(
+			    "Usage: submission_benchmark Output.csv Warmup Samples [--owned] [--switching]");
 		}
 		const int Warmup = std::stoi(InArguments[2]);
 		const int Samples = std::stoi(InArguments[3]);
-		const bool bOwned = InArgumentCount == 5 && std::string_view(InArguments[4]) == "--owned";
-		HYP_CHECK(InArgumentCount == 4 || bOwned);
+		const auto [bOwned, bSwitching] = ParseFlags(InArgumentCount, InArguments);
 		HYP_CHECK(Warmup > 0 && Samples > 0);
 		std::ofstream Output(InArguments[1]);
 		Output.exceptions(std::ios::failbit | std::ios::badbit);
 		Output << "draws,sample,record_ms\n" << std::fixed << std::setprecision(6);
+		std::ofstream Metrics(std::string(InArguments[1]) + ".plan.json");
+		Metrics.exceptions(std::ios::failbit | std::ios::badbit);
 		FRHIBackendRegistry Registry;
 		RegisterD3D12RHIBackend(Registry);
 		auto Device = Registry.CreateDevice(ERHIBackend::D3D12, {});
-		const auto Draw = PrepareTriangle(*Device);
+		std::optional<Tests::FDrawStateFixture> Switching;
+		if (bSwitching)
+		{
+			Switching.emplace(*Device, false);
+		}
+		const auto Draw = Switching ? Switching->A : PrepareTriangle(*Device);
 		Device->WaitIdle();
+		WriteMetadata(Metrics, InArguments[1], Device->Statistics(), Warmup, Samples, bOwned, bSwitching);
 		FWindow Window("CPU submission benchmark", {1440, 900}, true);
 		auto Swapchain = Device->CreateSwapchain({Window.Surface(), Window.PixelSize()});
 		for (const auto Count : {0U, 1U, 100U, 300U, 600U, 1200U})
 		{
-			Measure(*Swapchain, Draw, Count, Warmup, Samples, Output, bOwned);
+			const auto Prepared =
+			    Measure(*Swapchain, Draw, Switching ? &Switching->B : nullptr, Count, Warmup, Samples, Output, bOwned);
+			if (Count != 0)
+			{
+				Metrics << ',';
+			}
+			D3D12Private::WriteNativeDrawPlanMetrics(Draw.Vertices, Prepared, Metrics);
 		}
+		Metrics << "]}\n";
+		Metrics.close();
+		Output.close();
 		Device->WaitIdle();
 		HYP_CHECK(Device->Statistics().ValidationErrors == 0);
 		const auto Stats = Device->Statistics();
+		std::cout << "Adapter: " << Stats.Adapter << "; debug layer: " << (Stats.bDebugLayer ? "true" : "false")
+		          << "; workload: " << (bSwitching ? "switching" : "homogeneous")
+		          << "; path: " << (bOwned ? "owned" : "ordinary") << '\n';
 		std::cout << "Native lists created: " << Stats.CommandListsCreated << "; resets: " << Stats.CommandListResets
 		          << "; pipeline binds: " << Stats.GraphicsPipelineBinds
 		          << "; geometry binds: " << Stats.GraphicsGeometryBinds

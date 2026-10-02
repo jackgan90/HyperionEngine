@@ -1,4 +1,5 @@
 #include "D3D12Bindings.h"
+#include "D3D12DrawPlanInspection.h"
 #include "D3D12Draws.h"
 #include "D3D12GraphicsState.h"
 #include "Hyperion/Core/Profiling.h"
@@ -38,6 +39,104 @@ struct FD3D12DrawPlan
 	// Root, heap, constant, table, pipeline, geometry, dynamic binds.
 	std::array<std::uint64_t, 7> Binds{};
 };
+
+FNativeDrawPlanMetrics DescribeNativeDrawPlan(const FD3D12DrawPlan* InPlan)
+{
+	FNativeDrawPlanMetrics Result;
+	Result.CommandSize = sizeof(FD3D12DrawPlan::FCommand);
+	Result.CommandAlignment = alignof(FD3D12DrawPlan::FCommand);
+	if (InPlan)
+	{
+		Result.bHasPlan = true;
+		Result.CommandCount = InPlan->Commands.size();
+		Result.CommandCapacity = InPlan->Commands.capacity();
+		Result.UsedBytes = Result.CommandCount * Result.CommandSize;
+		Result.CapacityBytes = Result.CommandCapacity * Result.CommandSize;
+		const auto& Binds = InPlan->Binds;
+		Result.Binds = {Binds[0], Binds[1], Binds[2], Binds[3], Binds[4], Binds[5], Binds[6]};
+	}
+	return Result;
+}
+
+namespace
+{
+FNativeDrawObservation InspectCommand(const FD3D12DrawPlan::FCommand& InCommand)
+{
+	FNativeDrawObservation Result;
+	const auto& Args = InCommand.Arguments;
+	switch (InCommand.Operation)
+	{
+		case FD3D12DrawPlan::EOperation::Pipeline:
+			Result.Operation = ENativeDrawObservation::Pipeline;
+			Result.Pipeline = static_cast<ID3D12PipelineState*>(InCommand.Pointer);
+			break;
+		case FD3D12DrawPlan::EOperation::Topology:
+			Result.Operation = ENativeDrawObservation::Topology;
+			Result.Topology = D3D_PRIMITIVE_TOPOLOGY(InCommand.Slot);
+			break;
+		case FD3D12DrawPlan::EOperation::Vertices:
+			Result.Operation = ENativeDrawObservation::Vertices;
+			Result.Vertices = {InCommand.Value, Args[0], Args[1]};
+			break;
+		case FD3D12DrawPlan::EOperation::Indices:
+			Result.Operation = ENativeDrawObservation::Indices;
+			Result.Indices = {InCommand.Value, Args[0], DXGI_FORMAT_R32_UINT};
+			break;
+		case FD3D12DrawPlan::EOperation::Stencil:
+			Result.Operation = ENativeDrawObservation::Stencil;
+			Result.StencilReference = InCommand.Slot;
+			break;
+		case FD3D12DrawPlan::EOperation::Blend:
+			Result.Operation = ENativeDrawObservation::Blend;
+			Result.BlendConstants = std::bit_cast<std::array<float, 4>>(Args);
+			break;
+		case FD3D12DrawPlan::EOperation::Scissor:
+			Result.Operation = ENativeDrawObservation::Scissor;
+			Result.Scissor = {std::bit_cast<std::int32_t>(Args[0]), std::bit_cast<std::int32_t>(Args[1]),
+			                  std::bit_cast<std::int32_t>(Args[2]), std::bit_cast<std::int32_t>(Args[3])};
+			break;
+		case FD3D12DrawPlan::EOperation::Root:
+			Result.Operation = ENativeDrawObservation::Root;
+			Result.Root = static_cast<ID3D12RootSignature*>(InCommand.Pointer);
+			break;
+		case FD3D12DrawPlan::EOperation::Heaps:
+			Result.Operation = ENativeDrawObservation::Heaps;
+			Result.Heaps = {static_cast<ID3D12DescriptorHeap*>(InCommand.Pointer),
+			                reinterpret_cast<ID3D12DescriptorHeap*>(InCommand.Value)};
+			break;
+		case FD3D12DrawPlan::EOperation::Constant:
+			Result.Operation = ENativeDrawObservation::Constant;
+			Result.RootParameter = InCommand.Slot;
+			Result.ConstantAddress = InCommand.Value;
+			break;
+		case FD3D12DrawPlan::EOperation::Table:
+			Result.Operation = ENativeDrawObservation::Table;
+			Result.RootParameter = InCommand.Slot;
+			Result.TableHandle = {InCommand.Value};
+			break;
+		case FD3D12DrawPlan::EOperation::Draw:
+			Result.Operation = ENativeDrawObservation::Draw;
+			Result.IndexCount = Args[0];
+			Result.InstanceCount = Args[1];
+			Result.FirstIndex = Args[2];
+			Result.VertexOffset = std::bit_cast<std::int32_t>(Args[3]);
+			Result.FirstInstance = 0;
+			break;
+	}
+	return Result;
+}
+} // namespace
+
+std::vector<FNativeDrawObservation> InspectNativeDrawPlan(const FD3D12DrawPlan& InPlan)
+{
+	std::vector<FNativeDrawObservation> Result;
+	Result.reserve(InPlan.Commands.size());
+	for (const auto& Command : InPlan.Commands)
+	{
+		Result.push_back(InspectCommand(Command));
+	}
+	return Result;
+}
 
 namespace
 {

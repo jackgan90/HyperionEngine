@@ -1,5 +1,6 @@
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
+#include "RHI/DrawStateFixture.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <iostream>
@@ -365,6 +366,7 @@ void CheckDeviceOwnership()
 	HYP_CHECK(Image.Width == 80 && Image.Height == 48);
 	CheckRetainedDrawOwnership(*Device, *Swapchain, Draw, true);
 	CheckRetainedDrawOwnership(*Device, *Swapchain, Draw, false);
+	Tests::CheckNativeDrawStateFixtures(*Device);
 	Device->WaitIdle();
 	OtherDevice->WaitIdle();
 	HYP_CHECK(Device->Statistics().ValidationErrors == 0 && OtherDevice->Statistics().ValidationErrors == 0);
