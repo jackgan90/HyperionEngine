@@ -363,6 +363,55 @@ bool FGui::CenteredButton(const char* InLabel, bool bInEnabled)
 	return Button(InLabel, bInEnabled);
 }
 
+bool FGui::ButtonInCenteredRow(std::span<const char* const> InLabels, std::size_t InIndex, bool bInEnabled)
+{
+	Impl->Select();
+	if (InIndex >= InLabels.size())
+	{
+		throw std::out_of_range("Centered button index is outside the label list");
+	}
+	auto* Window = ImGui::GetCurrentWindow();
+	const auto& Style = ImGui::GetStyle();
+	const float Available = Window->WorkRect.GetWidth();
+	float ContentRight = Window->DC.CursorMaxPos.x;
+	std::size_t RowStart = 0;
+	while (RowStart < InLabels.size())
+	{
+		std::size_t RowEnd = RowStart;
+		float RowWidth = 0;
+		while (RowEnd < InLabels.size())
+		{
+			const float Width = ImGui::CalcTextSize(InLabels[RowEnd], nullptr, true).x + Style.FramePadding.x * 2;
+			const float NextWidth = RowWidth + (RowEnd > RowStart ? Style.ItemSpacing.x : 0) + Width;
+			if (RowEnd > RowStart && NextWidth > Available)
+			{
+				break;
+			}
+			RowWidth = NextWidth;
+			++RowEnd;
+		}
+		if (InIndex < RowEnd)
+		{
+			ContentRight = std::max(ContentRight, Window->WorkRect.Min.x + RowWidth);
+			if (InIndex == RowStart)
+			{
+				ImGui::SetCursorPosX(Window->WorkRect.Min.x - Window->Pos.x +
+				                     std::max(0.f, (Available - RowWidth) * .5f));
+			}
+			else
+			{
+				ImGui::SameLine();
+			}
+			break;
+		}
+		RowStart = RowEnd;
+	}
+	const bool bPressed = Button(InLabels[InIndex], bInEnabled);
+	// Centering is presentation space, not extra content width for an auto-sized modal.
+	Window->DC.CursorMaxPos.x = ContentRight;
+	return bPressed;
+}
+
 void FGui::BeginActionLayout(const char* InId, const std::string& InMessage)
 {
 	Impl->Select();
@@ -400,13 +449,25 @@ bool FGui::EndActionLayout(const char* InLabel, const std::string& InMessage, bo
 	return bPressed;
 }
 
-bool FGui::BeginModal(const char* InTitle, bool& bInOpen)
+bool FGui::BeginModal(const char* InTitle, bool& bInOpen, bool bInAutoResize)
 {
 	Impl->Select();
-	ImGui::SetNextWindowSize({Scale(660), Scale(460)}, ImGuiCond_FirstUseEver);
 	const auto* Viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(Viewport->GetCenter(), ImGuiCond_Appearing, {.5f, .5f});
-	return ImGui::BeginPopupModal(InTitle, &bInOpen, ImGuiWindowFlags_NoCollapse);
+	ImGuiWindowFlags Flags = ImGuiWindowFlags_NoCollapse;
+	if (bInAutoResize)
+	{
+		const float MaxWidth = std::min(Scale(660), Viewport->Size.x * .8f);
+		// Seed wrapping with a readable width; subsequent frames fit the text and action rows.
+		ImGui::SetNextWindowSize({MaxWidth, 0}, ImGuiCond_Appearing);
+		ImGui::SetNextWindowSizeConstraints({0, 0}, {MaxWidth, Viewport->Size.y * .8f});
+		Flags |= ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings;
+	}
+	else
+	{
+		ImGui::SetNextWindowSize({Scale(660), Scale(460)}, ImGuiCond_FirstUseEver);
+	}
+	ImGui::SetNextWindowPos(Viewport->GetCenter(), bInAutoResize ? ImGuiCond_Always : ImGuiCond_Appearing, {.5f, .5f});
+	return ImGui::BeginPopupModal(InTitle, &bInOpen, Flags);
 }
 
 bool FGui::BeginMessageModal(const char* InTitle, bool& bInOpen, const std::string& InMessage)

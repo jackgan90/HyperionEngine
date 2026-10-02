@@ -43,7 +43,10 @@ bool FEditorPlugin::PollClose()
 		return true;
 	}
 	Window->CancelClose();
-	Window->Restore();
+	if (Window->Minimized())
+	{
+		Window->Restore();
+	}
 	if (!Options.bHidden)
 	{
 		Window->Raise();
@@ -69,7 +72,7 @@ void FEditorPlugin::DrawDiscardDialog()
 	{
 		return;
 	}
-	if (!Gui->BeginModal("Unsaved changes", Transition.bDiscardDialog))
+	if (!Gui->BeginModal("Unsaved changes", Transition.bDiscardDialog, true))
 	{
 		if (!Transition.bDiscardDialog)
 		{
@@ -93,33 +96,45 @@ void FEditorPlugin::DrawDiscardDialog()
 	                 : Transition.PendingRoot
 	                     ? "Save changes to the current asset root before switching, discard them, or cancel."
 	                     : "Open documents have unsaved changes. Save, discard, or cancel to keep editing.");
-	if (Transition.bPendingClose)
+	const bool bPendingClose = Transition.bPendingClose;
+	const bool bPendingRoot = Transition.PendingRoot.has_value();
+	std::vector<const char*> ButtonLabels;
+	if (bPendingClose)
 	{
-		if (Gui->Button("Save all and exit", !bImportDirty && !PendingSave && !AssetWorkspace->IsSaving() &&
-		                                         !AssetWorkspace->HasPendingEdits()))
+		ButtonLabels.push_back("Save all and exit");
+	}
+	if (bPendingRoot)
+	{
+		ButtonLabels.push_back("Save and switch");
+	}
+	ButtonLabels.push_back("Discard changes");
+	ButtonLabels.push_back("Cancel");
+	std::size_t ButtonIndex = 0;
+	if (bPendingClose)
+	{
+		if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++,
+		                             !bImportDirty && !PendingSave && !AssetWorkspace->IsSaving() &&
+		                                 !AssetWorkspace->HasPendingEdits()))
 		{
 			SaveBeforeClose();
 		}
-		Gui->SameLine();
 	}
-	if (Transition.PendingRoot &&
-	    Gui->Button("Save and switch",
-	                !bImportDirty && !PendingSave && !Transition.bSaveThenSwitch && !AssetWorkspace->HasPendingEdits()))
+	if (bPendingRoot && Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++,
+	                                             !bImportDirty && !PendingSave && !Transition.bSaveThenSwitch &&
+	                                                 !AssetWorkspace->HasPendingEdits()))
 	{
 		SaveBeforeRootSwitch();
 	}
-	if (Transition.PendingRoot)
+	if (bPendingRoot)
 	{
 		SaveSwitchBounds = Gui->LastItemBounds();
-		Gui->SameLine();
 	}
-	if (Gui->Button("Discard changes", !PendingSave && !AssetWorkspace->IsSaving()))
+	if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++, !PendingSave && !AssetWorkspace->IsSaving()))
 	{
 		ConfirmDiscardAction();
 	}
 	DiscardChangesBounds = Gui->LastItemBounds();
-	Gui->SameLine();
-	if (Gui->Button("Cancel"))
+	if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex))
 	{
 		CancelDiscardAction();
 		Gui->ClosePopup();

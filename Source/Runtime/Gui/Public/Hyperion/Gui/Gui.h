@@ -142,6 +142,8 @@ public:
 	void Separator();
 	bool Button(const char* InLabel, bool bInEnabled = true);
 	bool CenteredButton(const char* InLabel, bool bInEnabled = true);
+	// Draw buttons in label order, wrapping and centering each row within the current content region.
+	bool ButtonInCenteredRow(std::span<const char* const> InLabels, std::size_t InIndex, bool bInEnabled = true);
 	bool IconButton(const char* InId, EGuiIcon InIcon, const char* InTooltip, bool bInSelected = false);
 	void Tooltip(const char* InText, std::span<const FPropertyTooltipLine> InLines = {});
 	float AvailableWidth() const;
@@ -258,7 +260,7 @@ public:
 	// Anchor the popup below the item's screen-space bounds, with scrolling when height is limited.
 	bool BeginPopup(const char* InId, FVec4 InAnchor);
 	void EndPopup();
-	bool BeginModal(const char* InTitle, bool& bInOpen);
+	bool BeginModal(const char* InTitle, bool& bInOpen, bool bInAutoResize = false);
 	bool BeginMessageModal(const char* InTitle, bool& bInOpen, const std::string& InMessage);
 	void EndModal();
 	void ClosePopup();
