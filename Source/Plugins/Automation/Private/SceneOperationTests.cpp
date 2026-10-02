@@ -148,6 +148,213 @@ void NoHistory()
 	Error(Call(Absent, "view.frame_selection", FSceneMutationRequest{}), "unavailable");
 }
 
+void CheckSingleSceneChange(const FTarget& InTarget, FSceneHandle InHandle, ESceneChangeMask InMask)
+{
+	const auto Changes = InTarget.Scene.GetChanges();
+	Check(Changes.size() == 1 && Changes[0].Handle == InHandle);
+	Check(Changes[0].Revision == InTarget.Revision() && Changes[0].Mask == InMask);
+}
+
+void ComponentHistoryBaseline()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	const auto Handle = Target.AddNode(MakeSceneCameraNode("history-camera"));
+	const auto Original = *Target.FindNode(Handle);
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	Document.Selection() = Handle;
+	const auto SavedState = Document.GetState().SavedState;
+	Target.Scene.Acknowledge(Target.Revision());
+	const auto Revision = Target.Revision();
+	auto Lens = *Original.Camera();
+	Lens.Far = 2000;
+	TSceneComponentBatchRequest<FSceneCamera> Request{
+	    Document.Id(), Revision, {Handle}, {RecordType<FSceneCamera>().Id}, {Lens}};
+	SetSceneComponentBatch(Document, Request);
+	Check(Target.Revision() == Revision + 1 && Document.GetState().HistoryCursor == 1 && Document.IsDirty());
+	CheckSingleSceneChange(Target, Handle, ESceneChangeMask::Metadata | ESceneChangeMask::Camera);
+	Check(Document.Selection().Primary() == Handle && Document.GetState().History.size() == 1);
+	Check(Document.GetState().History[0].Edits[0].Before == Original);
+	Check(Document.GetState().History[0].Edits[0].After.Camera() == Lens);
+	const auto NextState = Document.GetState().NextState;
+	Target.Scene.Acknowledge(Target.Revision());
+	Document.Undo();
+	CheckSingleSceneChange(Target, Handle, ESceneChangeMask::Metadata | ESceneChangeMask::Camera);
+	Check(Target.Revision() == Revision + 2 && *Target.FindNode(Handle) == Original);
+	Check(!Document.IsDirty() && Document.GetState().HistoryCursor == 0 && Document.GetState().State == SavedState);
+	Target.Scene.Acknowledge(Target.Revision());
+	Document.Redo();
+	CheckSingleSceneChange(Target, Handle, ESceneChangeMask::Metadata | ESceneChangeMask::Camera);
+	Check(Target.Revision() == Revision + 3 && Document.GetState().HistoryCursor == 1 && Document.IsDirty());
+	Check(Document.GetState().NextState == NextState && Document.Selection().Primary() == Handle);
+	Target.Scene.Acknowledge(Target.Revision());
+	Request.Revision = Target.Revision();
+	SetSceneComponentBatch(Document, Request);
+	Check(Target.Revision() == Revision + 3 && Target.Scene.GetChanges().empty());
+	Check(Document.GetState().HistoryCursor == 1 && Document.GetState().NextState == NextState);
+	const auto BeforeState = Document.GetState().State;
+	Request.Values[0].Far = -1;
+	bool bRejected{};
+	try
+	{
+		SetSceneComponentBatch(Document, Request);
+	}
+	catch (const std::invalid_argument&)
+	{
+		bRejected = true;
+	}
+	Check(bRejected && Target.Revision() == Revision + 3 && Target.Scene.GetChanges().empty());
+	Check(Target.FindNode(Handle)->Camera() == Lens && Document.GetState().State == BeforeState);
+	Check(Document.GetState().HistoryCursor == 1 && Document.GetState().History.size() == 1);
+	Check(Document.GetState().NextState == NextState && Document.GetState().SavedState == SavedState);
+	Check(Document.Selection().Primary() == Handle && Document.IsDirty());
+	const auto PointType = RecordType<FScenePointLight>().Id;
+	EditSceneComponentStructure(Document, {Document.Id(), Target.Revision(), {Handle}, "point", PointType});
+	CheckSingleSceneChange(Target, Handle, ESceneChangeMask::Metadata | ESceneChangeMask::Light);
+	Check(Target.Revision() == Revision + 4);
+	Check(Document.GetState().HistoryCursor == 2 && Target.FindNode(Handle)->PointLight());
+	Target.Scene.Acknowledge(Target.Revision());
+	Document.Undo();
+	CheckSingleSceneChange(Target, Handle, ESceneChangeMask::Metadata | ESceneChangeMask::Light);
+	Check(Target.Revision() == Revision + 5);
+	Check(Document.GetState().HistoryCursor == 1 && !Target.FindNode(Handle)->PointLight());
+	Target.Scene.Acknowledge(Target.Revision());
+	Document.Redo();
+	CheckSingleSceneChange(Target, Handle, ESceneChangeMask::Metadata | ESceneChangeMask::Light);
+	Check(Target.Revision() == Revision + 6);
+	Check(Document.GetState().HistoryCursor == 2 && Target.FindNode(Handle)->PointLight());
+	Document.Detach(Tasks);
+}
+
+void KeepChildrenHistoryBaseline()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	FSceneNode ParentNode;
+	ParentNode.Id = "parent";
+	ParentNode.Local() = Translation({5, 0, 0});
+	const auto Parent = Target.AddNode(ParentNode);
+	auto ChildNode = MakeSceneCameraNode("child");
+	ChildNode.Parent() = "parent";
+	ChildNode.Local() = Translation({2, 0, 0});
+	const auto Child = Target.AddNode(ChildNode);
+	Target.SetSettings({Child, {}});
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	Document.Selection() = Parent;
+	Target.Scene.Acknowledge(Target.Revision());
+	const auto Revision = Target.Revision();
+	Document.CommitRemoveKeepChildren(Parent);
+	Check(Target.Revision() == Revision + 1 && Target.Scene.GetChanges().size() == 2);
+	Check(!Target.FindNode(Parent) && Target.FindNode(Child)->Parent().empty());
+	Check(Target.FindNode(Child)->Local().Values[12] == 7 && Target.Settings().DefaultCamera == Child);
+	Check(!Document.Selection() && Document.IsDirty() && Document.GetState().HistoryCursor == 1);
+	for (const auto& Change : Target.Scene.GetChanges())
+	{
+		Check(Change.Mask == ESceneChangeMask::Structure);
+	}
+	Target.Scene.Acknowledge(Target.Revision());
+	Document.Undo();
+	const auto Restored = Target.FindHandle("parent");
+	Check(Restored.Slot == Parent.Slot && Restored.Generation != Parent.Generation);
+	Check(Target.Revision() == Revision + 2 && Target.Scene.GetChanges().size() == 2);
+	Check(Document.Selection().Primary() == Restored && !Document.IsDirty());
+	Check(Document.GetState().HistoryCursor == 0 && Document.GetState().History[0].Handle == Restored);
+	Check(*Target.FindNode(Child) == ChildNode && Target.Settings().DefaultCamera == Child);
+	for (const auto& Change : Target.Scene.GetChanges())
+	{
+		const auto Expected =
+		    Change.Handle == Restored
+		        ? ESceneChangeMask::Structure | ESceneChangeMask::Transform | ESceneChangeMask::Enabled
+		        : ESceneChangeMask::Metadata | ESceneChangeMask::Structure | ESceneChangeMask::Transform;
+		Check(Change.Mask == Expected);
+	}
+	Target.Scene.Acknowledge(Target.Revision());
+	Document.Redo();
+	Check(Target.Revision() == Revision + 3 && Target.FindNode(Child)->Local().Values[12] == 7);
+	Check(!Target.FindNode(Restored) && !Document.Selection() && Document.GetState().HistoryCursor == 1);
+	Target.Scene.Acknowledge(Target.Revision());
+	const auto State = Document.GetState().State;
+	const auto NextState = Document.GetState().NextState;
+	Target.bRejectAdd = true;
+	bool bRejected{};
+	try
+	{
+		Document.Undo();
+	}
+	catch (const std::runtime_error&)
+	{
+		bRejected = true;
+	}
+	Target.bRejectAdd = false;
+	Check(bRejected && Target.Revision() == Revision + 3 && Target.Scene.GetChanges().empty());
+	Check(Document.GetState().HistoryCursor == 1 && Document.GetState().History[0].Handle == Restored);
+	Check(Document.GetState().State == State && Document.GetState().NextState == NextState);
+	Check(Document.IsDirty() && !Document.Selection() && Target.FindNode(Child)->Parent().empty());
+	Check(Target.Scene.GetRoots() == std::vector{Child} && Target.Settings().DefaultCamera == Child);
+	FSceneNodeView View;
+	Check(Target.NodeView(Child, View) && View.World.Values[12] == 7 && View.bEffectiveEnabled);
+	Document.Detach(Tasks);
+}
+
+void DocumentFailureSequenceBaseline()
+{
+	FTaskSystem Tasks(1, 1);
+	FTarget Target(Tasks);
+	const auto Handle = Target.AddNode(MakeSceneCameraNode("failure-sequence"));
+	FSceneEditDocument Document;
+	Document.Attach(Target);
+	Document.Selection() = Handle;
+	auto Edited = *Target.FindNode(Handle);
+	Edited.Name = "first interaction";
+	Document.CommitEdits({{Handle, Edited}}, Target.Revision(), 31);
+	Target.Scene.Acknowledge(Target.Revision());
+	const auto Revision = Target.Revision();
+	const auto State = Document.GetState().State;
+	const auto NextState = Document.GetState().NextState;
+	Check(Document.GetState().Interaction.has_value());
+	FSceneNode Invalid;
+	Invalid.Local().Values[15] = 0;
+	bool bRejected{};
+	try
+	{
+		Document.CommitCreate(Invalid);
+	}
+	catch (const std::invalid_argument&)
+	{
+		bRejected = true;
+	}
+	// Existing create behavior consumes a serial and ends the interaction before Scene admission.
+	Check(bRejected && !Document.GetState().Interaction && Document.GetState().NextState == NextState + 1);
+	Check(Target.Revision() == Revision && Target.Scene.GetChanges().empty() && *Target.FindNode(Handle) == Edited);
+	Check(Document.GetState().State == State && Document.GetState().HistoryCursor == 1 && Document.IsDirty());
+	Check(Document.Selection().Primary() == Handle);
+	Edited.Name = "second interaction";
+	Document.CommitEdits({{Handle, Edited}}, Target.Revision(), 32);
+	Check(Document.GetState().Interaction.has_value());
+	Target.Scene.RemoveSubtree(Handle);
+	Target.Scene.Acknowledge(Target.Revision());
+	const auto RemovedRevision = Target.Revision();
+	const auto BeforeUndo = Document.GetState().State;
+	const auto BeforeUndoSerial = Document.GetState().NextState;
+	bRejected = false;
+	try
+	{
+		Document.Undo();
+	}
+	catch (const FSceneEditError& Error)
+	{
+		bRejected = Error.Code == "stale_handle";
+	}
+	// Failed history restoration also ends the current interaction, without moving its committed cursor.
+	Check(bRejected && !Document.GetState().Interaction && Document.GetState().HistoryCursor == 2);
+	Check(Document.GetState().State == BeforeUndo && Document.GetState().NextState == BeforeUndoSerial);
+	Check(Target.Revision() == RemovedRevision && Target.Scene.GetChanges().empty());
+	Check(Document.Selection().Primary() == Handle && Document.IsDirty());
+	Document.Detach(Tasks);
+}
+
 void ComponentAdmissionAndBatch()
 {
 	FTaskSystem Tasks(1, 1);
@@ -739,6 +946,7 @@ void PlacementWithoutProvider()
 } // namespace
 
 void CheckSceneClipboardOperations();
+void CheckSceneComponentDomainChanges();
 void CheckSceneRegistrationOperations();
 void CheckRenderOptionOperations();
 
@@ -747,6 +955,10 @@ int main()
 	try
 	{
 		Editing();
+		CheckSceneComponentDomainChanges();
+		ComponentHistoryBaseline();
+		KeepChildrenHistoryBaseline();
+		DocumentFailureSequenceBaseline();
 		ValidationAndRootCosts();
 		PlacementWithoutProvider();
 		CheckSceneClipboardOperations();

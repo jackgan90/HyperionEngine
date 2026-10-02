@@ -170,8 +170,15 @@ void CheckNodeIdentityAndChanges()
 	const auto Generated = Scene.AddNode(Group(""));
 	HYP_CHECK(!Scene.FindNode(Generated)->Id.empty());
 	Scene.Acknowledge(Scene.GetRevision());
+	const auto SyncRevision = Scene.GetRevision();
 	Scene.BeginSynchronization();
 	HYP_CHECK(Scene.GetChanges().size() == Scene.GetNodes().size() + 1);
+	HYP_CHECK(Scene.GetRevision() == SyncRevision);
+	for (const auto& Change : Scene.GetChanges())
+	{
+		HYP_CHECK(Change.Revision == SyncRevision);
+		HYP_CHECK(Change.Mask == (Change.Settings ? ESceneChangeMask::Settings : ESceneChangeMask::Structure));
+	}
 	Scene.EndSynchronization();
 }
 
@@ -209,6 +216,88 @@ void CheckInheritedEnabledAndRemoval()
 	Scene.SetSettings({Camera, {}});
 	Scene.RemoveSubtree(Camera);
 	HYP_CHECK(!Scene.GetSettings().DefaultCamera && Scene.GetNodes() == std::vector<FSceneHandle>{Other});
+}
+
+void CheckExactNodeChange(const FScene& InScene, FSceneHandle InHandle, ESceneChangeMask InMask)
+{
+	const auto Changes = InScene.GetChanges();
+	const auto Found = std::find_if(Changes.begin(), Changes.end(),
+	                                [&](const FSceneChange& InChange)
+	                                {
+		                                return InChange.Handle == InHandle;
+	                                });
+	HYP_CHECK(Found != Changes.end() && Found->Mask == InMask && Found->Revision == InScene.GetRevision());
+}
+
+void CheckReparentMaskBaseline()
+{
+	FScene Scene;
+	const auto Parent = Scene.AddNode(Group("parent", {}, Translation({5, 0, 0})));
+	const auto Other = Scene.AddNode(Group("other", {}, Translation({20, 0, 0})));
+	const auto Child = Scene.AddNode(Group("child", "parent", Translation({2, 0, 0})));
+	const auto Grandchild = Scene.AddNode(Group("grandchild", "child", Translation({3, 0, 0})));
+	Scene.Acknowledge(Scene.GetRevision());
+	const auto Revision = Scene.GetRevision();
+	HYP_CHECK(Scene.Reparent(Child, Other, ESceneReparentMode::KeepLocal));
+	HYP_CHECK(Scene.GetRevision() == Revision + 1 && Scene.GetChanges().size() == 2);
+	CheckExactNodeChange(Scene, Child, ESceneChangeMask::Structure | ESceneChangeMask::Transform);
+	CheckExactNodeChange(Scene, Grandchild, ESceneChangeMask::Transform);
+	HYP_CHECK(World(Scene, Child).Values[12] == 22 && World(Scene, Grandchild).Values[12] == 25);
+	HYP_CHECK(Scene.FindNode(Child)->Local().Values[12] == 2 && Scene.GetChildren(Parent).empty());
+	HYP_CHECK(Scene.GetChildren(Other) == std::vector{Child});
+	Scene.Acknowledge(Scene.GetRevision());
+	HYP_CHECK(Scene.Reparent(Child, Parent, ESceneReparentMode::KeepWorld));
+	HYP_CHECK(Scene.GetRevision() == Revision + 2 && Scene.GetChanges().size() == 1);
+	CheckExactNodeChange(Scene, Child, ESceneChangeMask::Structure);
+	HYP_CHECK(Scene.FindNode(Child)->Local().Values[12] == 17 && World(Scene, Child).Values[12] == 22);
+	HYP_CHECK(World(Scene, Grandchild).Values[12] == 25 && Scene.GetChildren(Other).empty());
+	HYP_CHECK(Scene.GetChildren(Parent) == std::vector{Child});
+	Scene.Acknowledge(Scene.GetRevision());
+	HYP_CHECK(Scene.Reparent(Child, Parent, ESceneReparentMode::KeepLocal));
+	HYP_CHECK(Scene.GetRevision() == Revision + 2 && Scene.GetChanges().empty());
+	HYP_CHECK(Scene.SetLocalTransform(Parent, Translation({6, 0, 0})));
+	CheckExactNodeChange(Scene, Parent, ESceneChangeMask::Metadata | ESceneChangeMask::Transform);
+	CheckExactNodeChange(Scene, Child, ESceneChangeMask::Transform);
+	CheckExactNodeChange(Scene, Grandchild, ESceneChangeMask::Transform);
+	HYP_CHECK(Scene.GetChanges().size() == 3 && Scene.GetRevision() == Revision + 3);
+	HYP_CHECK(Scene.FindNode(Child)->Local().Values[12] == 17 && World(Scene, Grandchild).Values[12] == 26);
+}
+
+void CheckKeepChildrenMaskBaseline()
+{
+	FScene Scene;
+	auto ParentNode = Group("parent", {}, Translation({5, 0, 0}));
+	ParentNode.bEnabled = false;
+	const auto Parent = Scene.AddNode(ParentNode);
+	auto ChildNode = Group("child", "parent", Translation({2, 0, 0}));
+	ChildNode.Camera() = FSceneCamera{};
+	const auto Child = Scene.AddNode(ChildNode);
+	const auto Grandchild = Scene.AddNode(Group("grandchild", "child", Translation({3, 0, 0})));
+	Scene.SetSettings({Child, {}});
+	Scene.Acknowledge(Scene.GetRevision());
+	const auto Revision = Scene.GetRevision();
+	HYP_CHECK(Scene.RemoveNodeKeepChildren(Parent));
+	HYP_CHECK(Scene.GetRevision() == Revision + 1 && Scene.GetChanges().size() == 3);
+	CheckExactNodeChange(Scene, Parent, ESceneChangeMask::Structure);
+	CheckExactNodeChange(Scene, Child, ESceneChangeMask::Structure | ESceneChangeMask::Enabled);
+	CheckExactNodeChange(Scene, Grandchild, ESceneChangeMask::Enabled);
+	HYP_CHECK(!Scene.FindNode(Parent) && Scene.GetRoots() == std::vector{Child});
+	HYP_CHECK(Scene.FindNode(Child)->Parent().empty() && Scene.FindNode(Child)->Local().Values[12] == 7);
+	HYP_CHECK(World(Scene, Child).Values[12] == 7 && World(Scene, Grandchild).Values[12] == 10);
+	HYP_CHECK(Scene.IsEffectivelyEnabled(Child) && Scene.IsEffectivelyEnabled(Grandchild));
+	HYP_CHECK(Scene.GetSettings().DefaultCamera == Child);
+	Scene.Acknowledge(Scene.GetRevision());
+	HYP_CHECK(Scene.RemoveSubtree(Child));
+	HYP_CHECK(Scene.GetRevision() == Revision + 2 && Scene.GetChanges().size() == 3);
+	CheckExactNodeChange(Scene, Child, ESceneChangeMask::Structure);
+	CheckExactNodeChange(Scene, Grandchild, ESceneChangeMask::Structure);
+	HYP_CHECK(!Scene.GetSettings().DefaultCamera && Scene.GetNodes().empty() && Scene.GetRoots().empty());
+	const auto Changes = Scene.GetChanges();
+	const auto& Settings = Changes.back();
+	HYP_CHECK(Settings.Mask == ESceneChangeMask::Settings && Settings.Settings == Scene.GetSettings());
+	Scene.Acknowledge(Scene.GetRevision());
+	Scene.Clear();
+	HYP_CHECK(Scene.GetRevision() == Revision + 2 && Scene.GetChanges().empty());
 }
 
 void CheckBulkClear(FScene& InScene)
@@ -655,6 +744,8 @@ void CheckAuthoredMaterialNames()
 
 void CheckSceneNodes()
 {
+	CheckReparentMaskBaseline();
+	CheckKeepChildrenMaskBaseline();
 	CheckNodeIdentityAndChanges();
 	CheckInheritedEnabledAndRemoval();
 	CheckWideKeepChildren();

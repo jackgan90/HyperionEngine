@@ -83,10 +83,13 @@ void CheckRetry(FRenderSession& InSession, FTaskSystem& InTasks, int InFailureIn
 }
 } // namespace
 
+void CheckSceneComponentAllocations();
+
 int main()
 {
 	try
 	{
+		CheckSceneComponentAllocations();
 		FTaskSystem Tasks{2, 1};
 		FShaderCompiler Compiler{TestShaderRoot(), "dispatch-failure-cache"};
 		std::unique_ptr<IRHIDevice> Device;

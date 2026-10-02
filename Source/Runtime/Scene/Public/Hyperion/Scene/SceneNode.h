@@ -248,6 +248,25 @@ ESceneChangeMask& operator|=(ESceneChangeMask& InA, ESceneChangeMask InB);
 bool HasChange(ESceneChangeMask InMask, ESceneChangeMask InFlags);
 const char* ToString(ESceneNodeKind InKind);
 
+enum class ESceneComponentChangeFlags : std::uint8_t
+{
+	None = 0,
+	Added = 1,
+	Modified = 2,
+	Removed = 4
+};
+ESceneComponentChangeFlags operator|(ESceneComponentChangeFlags InA, ESceneComponentChangeFlags InB);
+ESceneComponentChangeFlags& operator|=(ESceneComponentChangeFlags& InA, ESceneComponentChangeFlags InB);
+bool HasComponentChange(ESceneComponentChangeFlags InFlags, ESceneComponentChangeFlags InChanges);
+
+struct FSceneComponentChange
+{
+	std::string TypeId;
+	std::string InstanceId;
+	ESceneComponentChangeFlags Flags = ESceneComponentChangeFlags::None;
+	bool operator==(const FSceneComponentChange&) const = default;
+};
+
 struct FSceneChange
 {
 	FSceneHandle Handle;
@@ -261,6 +280,8 @@ struct FSceneChange
 	bool bEffectiveEnabled{};
 	bool bRemoved{};
 	std::optional<FSceneSettings> Settings;
+	// Sorted unique identities with accumulated occurrences, independently of the latest Node snapshot.
+	std::vector<FSceneComponentChange> ComponentChanges;
 };
 
 void ValidateSceneNode(const FSceneNode& InNode);

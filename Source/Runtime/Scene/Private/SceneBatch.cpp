@@ -36,20 +36,6 @@ void FSceneStorage::FMutation::StageNode(std::uint32_t InSlot, FSceneNode InNode
 	{
 		Mask |= ESceneChangeMask::Enabled;
 	}
-	if (Before.Model() != InNode.Model())
-	{
-		Mask |= ESceneChangeMask::Model;
-	}
-	if (Before.Camera() != InNode.Camera())
-	{
-		Mask |= ESceneChangeMask::Camera;
-	}
-	if (Before.DirectionalLight() != InNode.DirectionalLight() ||
-	    Before.EnvironmentLight() != InNode.EnvironmentLight() || Before.PointLight() != InNode.PointLight() ||
-	    Before.SpotLight() != InNode.SpotLight())
-	{
-		Mask |= ESceneChangeMask::Light;
-	}
 	Edit(InSlot).Node = std::move(InNode);
 	if (bParentChanged)
 	{

@@ -1,3 +1,4 @@
+#include "SceneComponentChanges.h"
 #include "SceneInternal.h"
 #include <algorithm>
 #include <charconv>
@@ -199,9 +200,15 @@ std::map<FSceneHandle, FSceneChange> FSceneStorage::FMutation::PrepareChanges(st
                                                                               bool bInSettingsChanged)
 {
 	std::map<FSceneHandle, FSceneChange> PendingChanges;
-	for (const auto& [Index, Mask] : Masks)
+	for (auto& [Index, Mask] : Masks)
 	{
 		auto& Entry = Edit(Index);
+		const auto* Before = Index < Storage.Slots.size() && Storage.Slots[Index]->Node &&
+		                             Storage.Slots[Index]->Generation == Entry.Generation
+		                         ? &*Storage.Slots[Index]->Node
+		                         : nullptr;
+		auto Difference = BuildSceneComponentDifference(Before, Entry.Node ? &*Entry.Node : nullptr, bInitialSync);
+		Mask |= Difference.Effects;
 		if (Entry.Node && Entry.Node->Model())
 		{
 			Entry.Transfer = SceneModelTransfer(*Entry.Node, Entry.World, Entry.bEffectiveEnabled);
@@ -210,9 +217,11 @@ std::map<FSceneHandle, FSceneChange> FSceneStorage::FMutation::PrepareChanges(st
 		Change.Handle = {Storage.Identity, Index, Entry.Generation};
 		Change.Revision = InRevision;
 		Change.Mask = Mask;
+		Change.ComponentChanges = std::move(Difference.Changes);
 		if (const auto Old = Storage.Changes.find(Change.Handle); Old != Storage.Changes.end())
 		{
 			Change.Mask |= Old->second.Mask;
+			Change.ComponentChanges = MergeSceneComponentChanges(Old->second.ComponentChanges, Change.ComponentChanges);
 		}
 		Change.bRemoved = !Entry.Node;
 		Change.Kind = Entry.Node ? Entry.Node->GetKind() : Storage.Slots.at(Index)->Node->GetKind();

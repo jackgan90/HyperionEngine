@@ -467,6 +467,7 @@ void FScene::BeginSynchronization()
 		throw std::logic_error("Logical scene already has a synchronization consumer");
 	}
 	FSceneStorage::FMutation Mutation(*Storage);
+	Mutation.bInitialSync = true;
 	for (const auto Slot : Storage->Order)
 	{
 		Mutation.Mark(Slot, ESceneChangeMask::Structure);

@@ -82,6 +82,93 @@ void CheckAtomicHierarchy()
 	HYP_CHECK(!Scene.RemoveSubtrees(BadRemoval) && Scene.FindNode(Restored[0]));
 }
 
+void CheckBatchChangeBaseline()
+{
+	FScene Scene;
+	const auto Handles = Scene.AddNodes({Node("parent"), Node("child", "parent")});
+	auto Parent = *Scene.FindNode(Handles[0]);
+	auto Child = *Scene.FindNode(Handles[1]);
+	Scene.Acknowledge(Scene.GetRevision());
+	const auto Revision = Scene.GetRevision();
+	auto Draft = Child;
+	Draft.Components.Add("temporary-camera", RecordType<FSceneCamera>().Id);
+	Draft.Components.Remove("temporary-camera");
+	HYP_CHECK(Scene.EditNodes({{Handles[0], Parent}, {Handles[1], Draft}}, Revision));
+	HYP_CHECK(Scene.GetRevision() == Revision && Scene.GetChanges().empty());
+	Parent.Local() = Translation({5, 0, 0});
+	Child.Local() = Translation({2, 0, 0});
+	HYP_CHECK(Scene.EditNodes({{Handles[1], Child}, {Handles[0], Parent}}, Revision));
+	HYP_CHECK(Scene.GetRevision() == Revision + 1 && Scene.GetChanges().size() == 2);
+	for (const auto& Change : Scene.GetChanges())
+	{
+		HYP_CHECK(Change.Revision == Revision + 1);
+		HYP_CHECK(Change.Mask == (ESceneChangeMask::Metadata | ESceneChangeMask::Transform));
+	}
+	Scene.Acknowledge(Scene.GetRevision());
+	Parent.Parent() = "child";
+	Child.Parent().clear();
+	HYP_CHECK(Scene.EditNodes({{Handles[0], Parent}, {Handles[1], Child}}, Revision + 1));
+	HYP_CHECK(Scene.GetRevision() == Revision + 2 && Scene.GetChanges().size() == 2);
+	for (const auto& Change : Scene.GetChanges())
+	{
+		HYP_CHECK(Change.Mask ==
+		          (ESceneChangeMask::Metadata | ESceneChangeMask::Structure | ESceneChangeMask::Transform));
+	}
+	Scene.Acknowledge(Scene.GetRevision());
+	auto InvalidChild = Child;
+	InvalidChild.Parent() = "parent";
+	auto ChangedParent = Parent;
+	ChangedParent.Name = "must not be committed";
+	RejectBatch(
+	    [&]
+	    {
+		    Scene.EditNodes({{Handles[0], ChangedParent}, {Handles[1], InvalidChild}}, Revision + 2);
+	    });
+	HYP_CHECK(Scene.GetRevision() == Revision + 2 && Scene.GetChanges().empty());
+	HYP_CHECK(*Scene.FindNode(Handles[0]) == Parent && *Scene.FindNode(Handles[1]) == Child);
+	HYP_CHECK(Scene.GetRoots() == std::vector{Handles[1]} && Scene.GetChildren(Handles[1]) == std::vector{Handles[0]});
+}
+
+void CheckRestoredChildBaseline()
+{
+	FScene Scene;
+	auto Parent = Node("parent");
+	Parent.Local() = Translation({5, 0, 0});
+	auto Child = Node("child", "parent");
+	Child.Local() = Translation({2, 0, 0});
+	const auto Handles = Scene.AddNodes({Parent, Child});
+	Parent = *Scene.FindNode(Handles[0]);
+	Child = *Scene.FindNode(Handles[1]);
+	HYP_CHECK(Scene.RemoveNodeKeepChildren(Handles[0]));
+	Scene.Acknowledge(Scene.GetRevision());
+	const auto Revision = Scene.GetRevision();
+	auto InvalidChild = Child;
+	InvalidChild.Name = "unrelated authored edit";
+	RejectBatch(
+	    [&]
+	    {
+		    Scene.AddNodes({Parent}, {{Handles[1], InvalidChild}});
+	    });
+	HYP_CHECK(Scene.GetRevision() == Revision && Scene.GetChanges().empty() && !Scene.FindNode("parent"));
+	HYP_CHECK(Scene.FindNode(Handles[1])->Parent().empty() && Scene.FindNode(Handles[1])->Local().Values[12] == 7);
+	const auto Restored = Scene.AddNodes({Parent}, {{Handles[1], Child}});
+	HYP_CHECK(Restored.size() == 1 && Restored[0].Slot == Handles[0].Slot);
+	HYP_CHECK(Restored[0].Generation != Handles[0].Generation && !Scene.FindNode(Handles[0]));
+	HYP_CHECK(Scene.GetRevision() == Revision + 1 && Scene.GetChanges().size() == 2);
+	HYP_CHECK(Scene.GetRoots() == Restored && Scene.GetChildren(Restored[0]) == std::vector{Handles[1]});
+	HYP_CHECK(*Scene.FindNode(Handles[1]) == Child);
+	FMat4 World;
+	HYP_CHECK(Scene.GetWorld(Handles[1], World) && World.Values[12] == 7);
+	for (const auto& Change : Scene.GetChanges())
+	{
+		const auto Expected =
+		    Change.Handle == Restored[0]
+		        ? ESceneChangeMask::Structure | ESceneChangeMask::Transform | ESceneChangeMask::Enabled
+		        : ESceneChangeMask::Metadata | ESceneChangeMask::Structure | ESceneChangeMask::Transform;
+		HYP_CHECK(Change.Revision == Revision + 1 && Change.Mask == Expected);
+	}
+}
+
 void CheckMixedTransforms()
 {
 	FSceneTransform A;
@@ -203,6 +290,8 @@ void CheckMixedOptionalsAndCollections()
 void CheckSceneBatches()
 {
 	CheckAtomicHierarchy();
+	CheckBatchChangeBaseline();
+	CheckRestoredChildBaseline();
 	CheckDeepBatchHierarchy();
 	CheckMixedTransforms();
 	CheckMixedOptionalsAndCollections();

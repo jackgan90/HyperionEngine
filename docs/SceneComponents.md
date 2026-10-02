@@ -61,6 +61,18 @@ Render: primitives → copied diagnostics → Main read-only diagnostics service
 
 Renderer bridge 把组件发布为派生状态。Main UI 不读取 `IRenderPrimitive` 或 GPU 对象。`GetComponentDiagnostics()` 返回只读副本，包含对象/组件身份、发布 token、预期 primitive revision、已应用矩阵/可见性及最近 draw 的 frame/view/pass。状态可能落后；`bApplied` 表示版本是否追上，最近 draw 不能解释为本帧一定会绘制。诊断不持久化。Scene 继续独立于 Renderer / RHI。
 
+### 组件变更事实
+
+`FScene::GetChanges()` 返回拥有自身值的变更副本。每条 `FSceneChange::ComponentChanges` 按 `(TypeId, InstanceId)` 排序，同一身份只出现一次；两个 ID 都是 owned string。`ESceneComponentChangeFlags` 的 `Added`、`Modified`、`Removed` 表示自上次有效确认以来已经发生的变更，`HasComponentChange` 查询其中的标志。`Node` 仍表示该句柄最新的完整状态，删除项没有 `Node`，组件事实不携带已删除的组件值。
+
+差异比较发生在 Scene 共享事务的提交准备阶段：以权威旧值和最终候选值配对 live 已注册组件，通过类型描述的 `Equal` 判断同身份的值变化。空 optional 槽位与 opaque 未知封装不产生 typed facts。仅 opaque 封装变化仍沿用 Metadata 变更与原有保存拒绝规则。组件实例重命名产生旧身份 `Removed` 和新身份 `Added`；在同一个实例 ID 下替换类型产生两个不同类型的事实。等值重排、空槽位以及候选内部增删后恢复原值不新增 revision 或事实。
+
+未确认的多次已提交事务按完整场景句柄（含 generation）合并标志。因此先新增后删除保留 `Added | Removed`，先修改再恢复原值仍保留 `Modified`；它们是发生记录，不是相对上次确认状态的净差异，也不是按操作排序的日志。每条变更的 revision 更新为最新事务；`Acknowledge` 只移除 revision 不晚于确认值的整条记录，不会按标志拆分较新的记录。槽位重用产生新 generation，旧删除记录和新新增记录保持分离。调用方已保留的 `GetChanges()` 副本在后续编辑、删除、Clear 或确认后仍有效。
+
+初次 `BeginSynchronization()` 为所有当前 live 组件加入 `Added`，保留已有未确认标志，并发布无组件事实的 settings 项；它不增加场景 revision。结束同步后可重新开始。重设父级与保留子节点删除同样经过共享准备：实际 Parent/Local 变化产生 Transform 组件 `Modified`，只有继承 World 或 effective-enabled 变化的后代不产生局部组件事实。
+
+现有 `ESceneChangeMask` 继续表达消费者兼容效果。Scene 私有适配在本次差异涉及 Model、Camera 或 Light 时比较原有语义值；只重命名唯一内置组件的实例 ID 不触发这些效果，也不额外弄脏查询索引或渲染资源。查询失效只使用当前事务的效果，未确认的旧 mask 不重新制造失效。所有新增 `Get`/`Equal` 回调、事实分配与合并均在首次权威写入前完成；准备失败保持 Scene 值、revision、待确认变更和查询状态不变。GUI 与 automation 继续使用相同的 SceneEditing 服务及其既有历史契约，本事实 API 不新增操作 ID 或持久化格式。
+
 ## 灯光阴影属性
 
 Directional Light 记录版本 3 增加整数 `priority`（默认 0）；版本 2 增加可选 `shadowSettings`，包含独立的 `directional` 和 `contact` CPU 参数组。Details 的 **Override Shadow settings** 创建或清除该值，组内编辑沿用组件验证、事务、撤销/重做和原生场景保存。版本 1 读取后保持无覆盖值，不在加载时修改资产；渲染继续采用兼容的会话默认设置。Priority 选出的阴影方向光使用自己的参数，不会把上一盏灯的值写入默认配置。`castShadows` 同时约束两类阴影。

@@ -36,6 +36,7 @@ public:
 		FSceneSettings Settings;
 		std::uint64_t NextSerial{};
 		std::uint32_t SlotCount{};
+		bool bInitialSync{};
 		FSlot& Edit(std::uint32_t InSlot);
 		const FSlot& Read(std::uint32_t InSlot) const;
 		void Mark(std::uint32_t InSlot, ESceneChangeMask InMask);

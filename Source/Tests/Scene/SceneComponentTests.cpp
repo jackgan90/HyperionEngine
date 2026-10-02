@@ -205,6 +205,84 @@ void CheckRepeatedComponents()
 	HYP_CHECK(NodeFromSceneEntry(Entry) == Node);
 }
 
+void CheckMetadataCommit(FScene& InScene, FSceneHandle InHandle, FSceneNode InNode)
+{
+	InScene.Acknowledge(InScene.GetRevision());
+	const auto Revision = InScene.GetRevision();
+	HYP_CHECK(InScene.EditNode(InHandle, InNode, Revision));
+	const auto Changes = InScene.GetChanges();
+	HYP_CHECK(InScene.GetRevision() == Revision + 1 && Changes.size() == 1);
+	HYP_CHECK(Changes[0].Handle == InHandle && Changes[0].Revision == Revision + 1);
+	HYP_CHECK(Changes[0].Mask == ESceneChangeMask::Metadata && Changes[0].Node == InNode);
+}
+
+void CheckComponentMetadataBaseline()
+{
+	FScene Scene;
+	auto Node = MakeSceneCameraNode("metadata-components");
+	Node.Model() = FSceneModelComponent{};
+	Node.DirectionalLight() = FSceneDirectionalLight{};
+	Node.EnvironmentLight() = FSceneEnvironmentLight{};
+	Node.PointLight() = FScenePointLight{};
+	Node.SpotLight() = FSceneSpotLight{};
+	Node.Components.Add("first", "test.repeated-component");
+	Node.Components.Add("second", "test.repeated-component");
+	const auto Handle = Scene.AddNode(Node);
+	static_cast<FRepeatedTestComponent*>(Node.Components.Find("second")->Edit())->Value = "changed";
+	CheckMetadataCommit(Scene, Handle, Node);
+	const auto Retained = Scene.GetChanges();
+	HYP_CHECK(static_cast<const FRepeatedTestComponent*>(Scene.FindNode(Handle)->Components.Find("first")->Get())
+	              ->Value.empty());
+	for (const auto& Type :
+	     {RecordType<FSceneModelComponent>().Id, RecordType<FSceneCamera>().Id, RecordType<FSceneDirectionalLight>().Id,
+	      RecordType<FSceneEnvironmentLight>().Id, RecordType<FScenePointLight>().Id, RecordType<FSceneSpotLight>().Id})
+	{
+		Node.Components.Rename(Type, "renamed-" + Type);
+		CheckMetadataCommit(Scene, Handle, Node);
+	}
+	const auto Known = Node.Components;
+	for (const auto& Value : {"first opaque value", "replacement opaque value"})
+	{
+		Node.Components = Known;
+		Node.Components.AddOpaque("unknown", std::make_shared<const FArchiveNode>(WriteValue(std::string(Value))));
+		CheckMetadataCommit(Scene, Handle, Node);
+		HYP_CHECK(Scene.FindNode(Handle)->Components.Unknown().at("unknown") ==
+		          Node.Components.Unknown().at("unknown"));
+	}
+	Node.Components = Known;
+	CheckMetadataCommit(Scene, Handle, Node);
+	HYP_CHECK(Retained[0].Node->Components.Find(RecordType<FSceneCamera>().Id));
+	HYP_CHECK(!Retained[0].Node->Components.Find("renamed-" + RecordType<FSceneCamera>().Id));
+	HYP_CHECK(Retained[0].Node->Components.Unknown().empty() && Retained[0].Revision < Scene.GetRevision());
+}
+
+void CheckComponentNoopBaseline()
+{
+	FScene Scene;
+	FSceneNode Node;
+	Node.Id = Node.Name = "component-noop";
+	Node.Components.Add("first", "test.repeated-component");
+	Node.Components.Add("second", "test.repeated-component");
+	static_cast<FRepeatedTestComponent*>(Node.Components.Find("second")->Edit())->Value = "second value";
+	const auto Handle = Scene.AddNode(Node);
+	Scene.Acknowledge(Scene.GetRevision());
+	const auto Revision = Scene.GetRevision();
+	HYP_CHECK(Scene.EditNode(Handle, Node, Revision));
+	Node.Components.Remove("first");
+	Node.Components.Remove("second");
+	Node.Components.Add("second", "test.repeated-component");
+	Node.Components.Add("first", "test.repeated-component");
+	static_cast<FRepeatedTestComponent*>(Node.Components.Find("second")->Edit())->Value = "second value";
+	HYP_CHECK(Scene.EditNode(Handle, Node, Revision));
+	HYP_CHECK(!Node.Components.Slot<FTestComponent>());
+	HYP_CHECK(Scene.EditNode(Handle, Node, Revision));
+	Node.Components.Add("temporary", "test.component");
+	Node.Components.Remove("temporary");
+	HYP_CHECK(Scene.EditNode(Handle, Node, Revision));
+	HYP_CHECK(Scene.GetRevision() == Revision && Scene.GetChanges().empty());
+	HYP_CHECK(*Scene.FindNode(Handle) == Node);
+}
+
 FArchiveNode LegacyEnvironmentLight(std::uint32_t InVersion)
 {
 	FSceneEnvironmentLight Light;
@@ -275,5 +353,7 @@ void CheckSceneComponents()
 	CheckComponentArchive();
 	CheckComponentIdentityRoundTrip();
 	CheckRepeatedComponents();
+	CheckComponentMetadataBaseline();
+	CheckComponentNoopBaseline();
 	CheckEnvironmentLightMigration();
 }

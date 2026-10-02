@@ -15,6 +15,22 @@
 #include <source_location>
 #include <thread>
 
+namespace Hyperion
+{
+struct FRenderMetadataComponent
+{
+	int Value{};
+	bool operator==(const FRenderMetadataComponent&) const = default;
+};
+
+template<> const FRecordDescriptor& RecordType<FRenderMetadataComponent>()
+{
+	static const auto Type = MakeRecord<FRenderMetadataComponent>("test.render-metadata-component",
+	                                                              {Member("value", &FRenderMetadataComponent::Value)});
+	return Type;
+}
+} // namespace Hyperion
+
 namespace
 {
 using namespace Hyperion;
@@ -1187,6 +1203,108 @@ FOwnedFrameResult RenderOwnedFrame(FSceneFixture& InFixture, FForwardRenderPipel
 	return Result;
 }
 
+FOwnedFrameResult RenderMetadataFrame(FSceneFixture& InFixture, FSceneRenderBridge& InBridge,
+                                      FForwardRenderPipeline& InPipeline)
+{
+	InBridge.Flush();
+	const auto Seed = InFixture.Session->FreezeSceneFrame(InBridge.GetToken());
+	FOwnedFrameResult Result;
+	InFixture.Tasks.Wait(InFixture.Tasks.Dispatch({EDomain::Render},
+	                                              [&]
+	                                              {
+		                                              Result = RenderOwnedFrame(InFixture, InPipeline, Seed);
+	                                              }));
+	return Result;
+}
+
+void CheckComponentRenderReuseBaseline(FSceneFixture& InFixture)
+{
+	SceneComponentRegistry().Register(MakeSceneComponent<FRenderMetadataComponent>("Render metadata"));
+	auto& F = InFixture;
+	FScene Scene;
+	AddDefaultSceneContent(Scene, {0, 0, 3}, {}, {1, .1f, 10, 3});
+	const auto Camera = *Scene.GetSettings().DefaultCamera;
+	const auto Point = Scene.AddNode(MakeScenePointLightNode("point"));
+	const auto Model = Scene.Add({"model", PrepareSourceModel(std::make_shared<const FModelSource>(Quad()))});
+	auto ModelNode = *Scene.FindNode(Model);
+	ModelNode.Components.Add("metadata", "test.render-metadata-component");
+	HYP_CHECK(Scene.EditNode(Model, ModelNode, Scene.GetRevision()));
+	FSceneRenderBridge Bridge(Scene, *F.Session, F.Tasks);
+	FForwardRenderPipeline Pipeline(*F.Session);
+	Bridge.Flush();
+	AwaitBridge(Bridge, Model);
+	RenderMetadataFrame(F, Bridge, Pipeline);
+	RenderMetadataFrame(F, Bridge, Pipeline);
+	const auto RetainedItems = CollectItems(F);
+	HYP_CHECK(RetainedItems.size() == 1 && RetainedItems[0].State.Resource && RetainedItems[0].State.Surface);
+	RenderMetadataFrame(F, Bridge, Pipeline);
+	const auto RetainedFrame = RenderMetadataFrame(F, Bridge, Pipeline);
+	const auto RetainedMetadata = RetainedFrame.Resolved.Frame->GetSceneMetadata();
+	const auto RetainedToken = RetainedMetadata->Token;
+	const auto Preparations = Bridge.GetModelPreparationCount();
+	const auto Uploads = F.Session->GetResources().Statistics().GeometryUploads;
+	const std::array Targets{Model, Model, Camera, Point};
+	const std::array<std::string, 4> Types{"", RecordType<FSceneModelComponent>().Id, RecordType<FSceneCamera>().Id,
+	                                       RecordType<FScenePointLight>().Id};
+	for (std::size_t Index = 0; Index < Targets.size(); ++Index)
+	{
+		const auto Revision = Scene.GetRevision();
+		auto Candidate = *Scene.FindNode(Targets[Index]);
+		if (Index == 0)
+		{
+			Candidate.Components.Slot<FRenderMetadataComponent>()->Value = 7;
+		}
+		else
+		{
+			Candidate.Components.Rename(Types[Index], "renamed-" + Types[Index]);
+		}
+		HYP_CHECK(Scene.EditNode(Targets[Index], Candidate, Revision));
+		const auto Changes = Scene.GetChanges();
+		HYP_CHECK(Scene.GetRevision() == Revision + 1 && Changes.size() == 1);
+		HYP_CHECK(Changes[0].Mask == ESceneChangeMask::Metadata);
+		const auto Current = RenderMetadataFrame(F, Bridge, Pipeline);
+		const auto Metadata = Current.Resolved.Frame->GetSceneMetadata();
+		HYP_CHECK(Metadata->Token.LogicalRevision == Revision + 1);
+		HYP_CHECK(Metadata->Token.PublicationSerial == RetainedToken.PublicationSerial + Index + 1);
+		HYP_CHECK(Metadata->LocalLightRevision == RetainedMetadata->LocalLightRevision);
+		HYP_CHECK(Metadata->Cameras.at(Camera).Camera == RetainedMetadata->Cameras.at(Camera).Camera);
+		HYP_CHECK(Metadata->PointLights.at(Point).Light == RetainedMetadata->PointLights.at(Point).Light);
+		HYP_CHECK(Current.Resolved.Camera == RetainedFrame.Resolved.Camera);
+		HYP_CHECK(Bridge.GetModelPreparationCount() == Preparations);
+		HYP_CHECK(F.Session->GetResources().Statistics().GeometryUploads == Uploads);
+		HYP_CHECK(Current.Statistics.Spatial.IndexRebuilds == 0 && Current.Statistics.Spatial.IndexRefits == 0);
+		const auto& Visibility = Current.Statistics.Views.front().Visibility;
+		const auto& Batches = Visibility.Batches;
+		// Metadata-only changes preserve the whole prepared view and its packet content identity.
+		const bool bFullReuse = Visibility.CollectionReuses == 1 && Visibility.PreparationReuses == 1 &&
+		                        Batches.PreparedInputBuilds == 0 && Batches.PacketReuses == 1 &&
+		                        Batches.LocalPacketReuses == 0;
+		if (!bFullReuse)
+		{
+			std::cerr << "Component metadata reuse case=" << Index
+			          << " type=" << (Index == 0 ? RecordType<FRenderMetadataComponent>().Id : Types[Index])
+			          << " collection=" << Visibility.CollectionReuses
+			          << " preparation=" << Visibility.PreparationReuses
+			          << " preparedInputBuilds=" << Batches.PreparedInputBuilds
+			          << " preparedInputReuses=" << Batches.PreparedInputReuses
+			          << " packetReuses=" << Batches.PacketReuses << " localPacketReuses=" << Batches.LocalPacketReuses
+			          << '\n';
+		}
+		HYP_CHECK(bFullReuse);
+		constexpr auto Scope = static_cast<std::size_t>(EMaterialScope::Scene);
+		HYP_CHECK(Current.Resolved.Frame->Inputs.Scopes[Scope].Key ==
+		          RetainedFrame.Resolved.Frame->Inputs.Scopes[Scope].Key);
+	}
+	const auto CurrentItems = CollectItems(F);
+	HYP_CHECK(CurrentItems.size() == 1 && CurrentItems[0].Primitive == RetainedItems[0].Primitive);
+	HYP_CHECK(CurrentItems[0].State.Resource == RetainedItems[0].State.Resource);
+	HYP_CHECK(CurrentItems[0].State.Surface == RetainedItems[0].State.Surface);
+	HYP_CHECK(CurrentItems[0].State.Surface->GetSnapshot() == RetainedItems[0].State.Surface->GetSnapshot());
+	HYP_CHECK(CurrentItems[0].State.Revision == RetainedItems[0].State.Revision);
+	HYP_CHECK(RetainedMetadata->Token == RetainedToken);
+	Bridge.Close();
+}
+
 void CheckSceneMetadataReuse(FSceneFixture& InFixture)
 {
 	auto& F = InFixture;
@@ -1604,6 +1722,7 @@ int main()
 		CheckSharedMaterialPublication(Fixture);
 		CheckRetainedFrames(Fixture);
 		CheckSceneMetadataReuse(Fixture);
+		CheckComponentRenderReuseBaseline(Fixture);
 		CheckGatedScenePublications(Fixture);
 		CheckGatedOldSceneGraph(Fixture);
 		CheckFailedMetadataPublication(Fixture);

@@ -7,6 +7,22 @@
 #include <random>
 #include <thread>
 
+namespace Hyperion
+{
+struct FQueryMetadataComponent
+{
+	int Value{};
+	bool operator==(const FQueryMetadataComponent&) const = default;
+};
+
+template<> const FRecordDescriptor& RecordType<FQueryMetadataComponent>()
+{
+	static const auto Type = MakeRecord<FQueryMetadataComponent>("test.query-metadata-component",
+	                                                             {Member("value", &FQueryMetadataComponent::Value)});
+	return Type;
+}
+} // namespace Hyperion
+
 using namespace Hyperion;
 
 namespace
@@ -112,6 +128,58 @@ void CheckQueries()
 	HYP_CHECK(bWrongOwnerRejected);
 	Scene.Clear();
 	HYP_CHECK(Scene.Raycast(Ray).Status == ESceneRayStatus::Miss);
+}
+
+void CheckComponentQueryReuseBaseline()
+{
+	SceneComponentRegistry().Register(MakeSceneComponent<FQueryMetadataComponent>("Query metadata"));
+	FScene Scene;
+	const auto Data = Prepared(Mesh());
+	const auto Handle = Scene.Add(Model(Data));
+	auto Node = *Scene.FindNode(Handle);
+	Node.Components.Add("metadata", "test.query-metadata-component");
+	HYP_CHECK(Scene.EditNode(Handle, Node, Scene.GetRevision()));
+	const FRay Ray{{0, 0, 5}, {0, 0, -1}, 0, 20};
+	const auto Initial = Scene.Raycast(Ray);
+	HYP_CHECK(Initial.Status == ESceneRayStatus::Hit && Initial.Handle == Handle && Initial.Distance == 5);
+	HYP_CHECK(Initial.Stats.Bounds.IndexRebuilds == 1);
+	for (unsigned Index = 0; Index < 2; ++Index)
+	{
+		Scene.Acknowledge(Scene.GetRevision());
+		const auto Revision = Scene.GetRevision();
+		if (Index == 0)
+		{
+			Node.Components.Slot<FQueryMetadataComponent>()->Value = 7;
+		}
+		else
+		{
+			Node.Components.Rename(RecordType<FSceneModelComponent>().Id, "renamed-model");
+		}
+		HYP_CHECK(Scene.EditNode(Handle, Node, Revision));
+		const auto Changes = Scene.GetChanges();
+		HYP_CHECK(Scene.GetRevision() == Revision + 1 && Changes.size() == 1);
+		HYP_CHECK(Changes[0].Mask == ESceneChangeMask::Metadata);
+		const auto Hit = Scene.Raycast(Ray);
+		HYP_CHECK(Hit.Status == Initial.Status && Hit.Handle == Initial.Handle && Hit.Distance == Initial.Distance);
+		HYP_CHECK(Hit.Stats.Bounds.IndexRebuilds == 0 && Hit.Stats.Bounds.IndexRefits == 0);
+		HYP_CHECK(Scene.FindNode(Handle)->Model()->Data == Data && Data->QueryGeometry);
+	}
+	// Pending Model bits must not make a later metadata-only edit dirty the warmed query index.
+	Node.Model()->bVisible = false;
+	HYP_CHECK(Scene.EditNode(Handle, Node, Scene.GetRevision()));
+	HYP_CHECK(Scene.Raycast(Ray).Status == ESceneRayStatus::Miss);
+	Node.Model()->bVisible = true;
+	HYP_CHECK(Scene.EditNode(Handle, Node, Scene.GetRevision()));
+	HYP_CHECK(Scene.Raycast(Ray).Status == ESceneRayStatus::Hit);
+	Node.Components.Slot<FQueryMetadataComponent>()->Value = 8;
+	HYP_CHECK(Scene.EditNode(Handle, Node, Scene.GetRevision()));
+	const auto Reused = Scene.Raycast(Ray);
+	HYP_CHECK(Reused.Handle == Handle && Reused.Distance == 5);
+	HYP_CHECK(Reused.Stats.Bounds.IndexRebuilds == 0 && Reused.Stats.Bounds.IndexRefits == 0);
+	HYP_CHECK(Scene.SetLocalTransform(Handle, Translation({0, 0, 1})));
+	const auto Moved = Scene.Raycast(Ray);
+	HYP_CHECK(Moved.Handle == Handle && Moved.Distance == 4);
+	HYP_CHECK(Moved.Stats.Bounds.IndexRebuilds == 0 && Moved.Stats.Bounds.IndexRefits == 1);
 }
 
 void CheckTransformsAndReadiness()
@@ -362,6 +430,7 @@ int main()
 	try
 	{
 		CheckQueries();
+		CheckComponentQueryReuseBaseline();
 		CheckTransformsAndReadiness();
 		CheckRoundedTies();
 		CheckScheduledMaterialPasses();
