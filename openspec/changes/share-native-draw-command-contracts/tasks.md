@@ -11,13 +11,13 @@
 
 ## 3. M08B: make cached payloads explicit
 
-- [ ] 3.1 Replace positional command arrays/void pointers with explicit typed trivial payloads and named private bind statistics, with active-member construction and size/copyability checks.
-- [ ] 3.2 Verify first miss, second build, later plan reuse, new-stream invalidation, old immutable commands and exact named bind expectations on real generated plans.
-- [ ] 3.3 Preserve malformed-shell/target/access/foreign-resource rejection, nested constant-page registration/reset protection and dead-stream/fence retirement regressions.
+- [x] 3.1 Replace positional command arrays/void pointers with explicit typed trivial payloads and named private bind statistics, with active-member construction and size/copyability checks.
+- [x] 3.2 Verify first miss, second build, later plan reuse, new-stream invalidation, old immutable commands and exact named bind expectations on real generated plans.
+- [x] 3.3 Preserve malformed-shell/target/access/foreign-resource rejection, nested constant-page registration/reset protection and dead-stream/fence retirement regressions.
 
 ## 4. Measure and accept
 
-- [ ] 4.1 Repeat the frozen Release measurement protocol and report size/count/capacity plus median/p95/variation; investigate reproducible regressions and run paired saved-baseline comparisons where needed.
-- [ ] 4.2 Build and run affected d3d12_device_ownership, rhi_backend_contracts, compute_rhi and instance_batching tests in Debug/Release, including actual native readback.
-- [ ] 4.3 Update focused RHI documentation and run formatting, changed-TU naming, boundaries, diff check and strict OpenSpec validation.
-- [ ] 4.4 Obtain independent frozen review, verify findings directly, repair confirmed scoped issues and repeat affected checks; report M08A and M08B acceptance separately.
+- [x] 4.1 Repeat the frozen Release measurement protocol and report size/count/capacity plus median/p95/variation; investigate reproducible regressions and run paired saved-baseline comparisons where needed.
+- [x] 4.2 Build and run affected d3d12_device_ownership, rhi_backend_contracts, compute_rhi and instance_batching tests in Debug/Release, including actual native readback.
+- [x] 4.3 Update focused RHI documentation and run formatting, changed-TU naming, boundaries, diff check and strict OpenSpec validation.
+- [x] 4.4 Obtain independent frozen review, verify findings directly, repair confirmed scoped issues and repeat affected checks; report M08A and M08B acceptance separately.

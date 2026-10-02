@@ -7,6 +7,7 @@ CPU 提交路径围绕材质依赖、批次准备、D3D12 录制和资源所有�
 - 材质求值按实际依赖预备参数索引。仅依赖 Global/Frame/Scene/View/Pass 的兼容语义使用同一视图内共享的不可变值覆盖层；Object/Material/Draw、混合依赖、覆盖和默认值仍按各自契约处理。覆盖层是平坦存储，不串联历史帧。
 - 内置 instance 策略在局部值、资源、几何、状态及组内共享值仍兼容时复用成员计划；instance 参数变化仍重建载荷，自定义策略仍完整重新求值。全局缓存过期扫描移到 family 边界，逐视图只遍历自己的 chunk 范围。
 - D3D12 按完成 fence 的 frame slot/context 复用原生命令列表。逻辑录制仍独立；外部保留旧录制时创建另一个原生列表。每次录制的 PSO、topology、VB/IB view、stencil、blend 和 scissor 缓存从空状态开始。
+- D3D12 私有 draw plan 使用显式操作标签与可平凡复制的联合体，构造时同时初始化标签和对应的类型化载荷；绑定统计通过具名字段累加。载荷只借用原生资源指针，不持有资源所有权；首次普通录制、后续计划构建/复用、校验前常量页登记以及不可变命令的 fence 保留契约保持一致。
 - 保留设备/类型/范围/发布版本/上传完成/附件验证。常量槽重复检查改用经过 root signature 预算验证的位掩码；已发布常量区间使用有序查找；纹理上传完成用一次 fence 快照和 binding set 的最大上传 fence 验证。
 - `CompileAndConsume()` 转移图的命令向量，`RecordOwned()` 让 fence 保留同一份不可变命令。原有 `Compile() const` 和借用式 `Record()` 继续复制输入。调用 `RecordOwned()` 后不得通过其他别名修改命令。
 - 不透明和 overlay 项不再计算无用的透明深度排序键；关闭剔除时不计算局部剔除矩阵。静态 primitive 直接在输出容器构造条目。设备统计并入 EndFrame 的 RHI 任务，GUI 无绘制时仅在首次隐藏时清理旧数据。

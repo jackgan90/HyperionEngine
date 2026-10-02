@@ -5,7 +5,7 @@
 #include "D3D12GraphicsState.h"
 #include "Hyperion/Core/Profiling.h"
 #include <algorithm>
-#include <bit>
+#include <type_traits>
 
 namespace Hyperion
 {
@@ -27,19 +27,122 @@ struct FD3D12DrawPlan
 		Draw
 	};
 
+	struct FConstantArguments
+	{
+		UINT RootParameter;
+		D3D12_GPU_VIRTUAL_ADDRESS Address;
+	};
+
+	struct FTableArguments
+	{
+		UINT RootParameter;
+		D3D12_GPU_DESCRIPTOR_HANDLE Handle;
+	};
+
 	struct FCommand
 	{
 		EOperation Operation;
-		UINT Slot{};
-		std::uint64_t Value{};
-		std::array<std::uint32_t, 4> Arguments{};
-		void* Pointer{};
+
+		union
+		{
+			ID3D12PipelineState* Pipeline;
+			D3D_PRIMITIVE_TOPOLOGY Topology;
+			D3D12_VERTEX_BUFFER_VIEW Vertices;
+			D3D12_INDEX_BUFFER_VIEW Indices;
+			UINT StencilReference;
+			std::array<float, 4> BlendConstants;
+			D3D12_RECT Scissor;
+			ID3D12RootSignature* Root;
+			std::array<ID3D12DescriptorHeap*, 2> Heaps;
+			FConstantArguments Constant;
+			FTableArguments Table;
+			FD3D12IndexedDrawArguments Draw;
+		};
+
+		explicit FCommand(ID3D12PipelineState* InPipeline) noexcept
+		    : Operation(EOperation::Pipeline), Pipeline(InPipeline)
+		{
+		}
+
+		explicit FCommand(D3D_PRIMITIVE_TOPOLOGY InTopology) noexcept
+		    : Operation(EOperation::Topology), Topology(InTopology)
+		{
+		}
+
+		explicit FCommand(const D3D12_VERTEX_BUFFER_VIEW& InVertices) noexcept
+		    : Operation(EOperation::Vertices), Vertices(InVertices)
+		{
+		}
+
+		explicit FCommand(const D3D12_INDEX_BUFFER_VIEW& InIndices) noexcept
+		    : Operation(EOperation::Indices), Indices(InIndices)
+		{
+		}
+
+		explicit FCommand(UINT InStencilReference) noexcept
+		    : Operation(EOperation::Stencil), StencilReference(InStencilReference)
+		{
+		}
+
+		explicit FCommand(const std::array<float, 4>& InBlendConstants) noexcept
+		    : Operation(EOperation::Blend), BlendConstants(InBlendConstants)
+		{
+		}
+
+		explicit FCommand(const D3D12_RECT& InScissor) noexcept : Operation(EOperation::Scissor), Scissor(InScissor)
+		{
+		}
+
+		explicit FCommand(ID3D12RootSignature* InRoot) noexcept : Operation(EOperation::Root), Root(InRoot)
+		{
+		}
+
+		explicit FCommand(const std::array<ID3D12DescriptorHeap*, 2>& InHeaps) noexcept
+		    : Operation(EOperation::Heaps), Heaps(InHeaps)
+		{
+		}
+
+		explicit FCommand(FConstantArguments InConstant) noexcept
+		    : Operation(EOperation::Constant), Constant(InConstant)
+		{
+		}
+
+		explicit FCommand(FTableArguments InTable) noexcept : Operation(EOperation::Table), Table(InTable)
+		{
+		}
+
+		explicit FCommand(const FD3D12IndexedDrawArguments& InDraw) noexcept : Operation(EOperation::Draw), Draw(InDraw)
+		{
+		}
+	};
+
+	struct FBindCounts
+	{
+		std::uint64_t Root{};
+		std::uint64_t Heap{};
+		std::uint64_t Constant{};
+		std::uint64_t Table{};
+		std::uint64_t Pipeline{};
+		std::uint64_t Geometry{};
+		std::uint64_t Dynamic{};
 	};
 
 	std::vector<FCommand> Commands;
-	// Root, heap, constant, table, pipeline, geometry, dynamic binds.
-	std::array<std::uint64_t, 7> Binds{};
+	FBindCounts Binds;
 };
+
+static_assert(std::is_trivially_copyable_v<FD3D12DrawPlan::FConstantArguments>);
+static_assert(std::is_trivially_copyable_v<FD3D12DrawPlan::FTableArguments>);
+static_assert(std::is_trivially_copyable_v<FD3D12DrawPlan::FCommand>);
+static_assert(std::is_standard_layout_v<FD3D12DrawPlan::FCommand>);
+static_assert(std::is_trivially_destructible_v<FD3D12DrawPlan::FCommand>);
+static_assert(std::is_trivially_copy_constructible_v<FD3D12DrawPlan::FCommand>);
+static_assert(std::is_trivially_move_constructible_v<FD3D12DrawPlan::FCommand>);
+static_assert(std::is_nothrow_copy_constructible_v<FD3D12DrawPlan::FCommand>);
+static_assert(std::is_nothrow_move_constructible_v<FD3D12DrawPlan::FCommand>);
+static_assert(sizeof(FD3D12DrawPlan::FCommand) == 24);
+static_assert(alignof(FD3D12DrawPlan::FCommand) == 8);
+static_assert(sizeof(FD3D12DrawPlan::FBindCounts) == 7 * sizeof(std::uint64_t));
 
 FNativeDrawPlanMetrics DescribeNativeDrawPlan(const FD3D12DrawPlan* InPlan)
 {
@@ -54,7 +157,13 @@ FNativeDrawPlanMetrics DescribeNativeDrawPlan(const FD3D12DrawPlan* InPlan)
 		Result.UsedBytes = Result.CommandCount * Result.CommandSize;
 		Result.CapacityBytes = Result.CommandCapacity * Result.CommandSize;
 		const auto& Binds = InPlan->Binds;
-		Result.Binds = {Binds[0], Binds[1], Binds[2], Binds[3], Binds[4], Binds[5], Binds[6]};
+		Result.Binds.Root = Binds.Root;
+		Result.Binds.Heap = Binds.Heap;
+		Result.Binds.Constant = Binds.Constant;
+		Result.Binds.Table = Binds.Table;
+		Result.Binds.Pipeline = Binds.Pipeline;
+		Result.Binds.Geometry = Binds.Geometry;
+		Result.Binds.Dynamic = Binds.Dynamic;
 	}
 	return Result;
 }
@@ -64,64 +173,61 @@ namespace
 FNativeDrawObservation InspectCommand(const FD3D12DrawPlan::FCommand& InCommand)
 {
 	FNativeDrawObservation Result;
-	const auto& Args = InCommand.Arguments;
 	switch (InCommand.Operation)
 	{
 		case FD3D12DrawPlan::EOperation::Pipeline:
 			Result.Operation = ENativeDrawObservation::Pipeline;
-			Result.Pipeline = static_cast<ID3D12PipelineState*>(InCommand.Pointer);
+			Result.Pipeline = InCommand.Pipeline;
 			break;
 		case FD3D12DrawPlan::EOperation::Topology:
 			Result.Operation = ENativeDrawObservation::Topology;
-			Result.Topology = D3D_PRIMITIVE_TOPOLOGY(InCommand.Slot);
+			Result.Topology = InCommand.Topology;
 			break;
 		case FD3D12DrawPlan::EOperation::Vertices:
 			Result.Operation = ENativeDrawObservation::Vertices;
-			Result.Vertices = {InCommand.Value, Args[0], Args[1]};
+			Result.Vertices = InCommand.Vertices;
 			break;
 		case FD3D12DrawPlan::EOperation::Indices:
 			Result.Operation = ENativeDrawObservation::Indices;
-			Result.Indices = {InCommand.Value, Args[0], DXGI_FORMAT_R32_UINT};
+			Result.Indices = InCommand.Indices;
 			break;
 		case FD3D12DrawPlan::EOperation::Stencil:
 			Result.Operation = ENativeDrawObservation::Stencil;
-			Result.StencilReference = InCommand.Slot;
+			Result.StencilReference = InCommand.StencilReference;
 			break;
 		case FD3D12DrawPlan::EOperation::Blend:
 			Result.Operation = ENativeDrawObservation::Blend;
-			Result.BlendConstants = std::bit_cast<std::array<float, 4>>(Args);
+			Result.BlendConstants = InCommand.BlendConstants;
 			break;
 		case FD3D12DrawPlan::EOperation::Scissor:
 			Result.Operation = ENativeDrawObservation::Scissor;
-			Result.Scissor = {std::bit_cast<std::int32_t>(Args[0]), std::bit_cast<std::int32_t>(Args[1]),
-			                  std::bit_cast<std::int32_t>(Args[2]), std::bit_cast<std::int32_t>(Args[3])};
+			Result.Scissor = InCommand.Scissor;
 			break;
 		case FD3D12DrawPlan::EOperation::Root:
 			Result.Operation = ENativeDrawObservation::Root;
-			Result.Root = static_cast<ID3D12RootSignature*>(InCommand.Pointer);
+			Result.Root = InCommand.Root;
 			break;
 		case FD3D12DrawPlan::EOperation::Heaps:
 			Result.Operation = ENativeDrawObservation::Heaps;
-			Result.Heaps = {static_cast<ID3D12DescriptorHeap*>(InCommand.Pointer),
-			                reinterpret_cast<ID3D12DescriptorHeap*>(InCommand.Value)};
+			Result.Heaps = InCommand.Heaps;
 			break;
 		case FD3D12DrawPlan::EOperation::Constant:
 			Result.Operation = ENativeDrawObservation::Constant;
-			Result.RootParameter = InCommand.Slot;
-			Result.ConstantAddress = InCommand.Value;
+			Result.RootParameter = InCommand.Constant.RootParameter;
+			Result.ConstantAddress = InCommand.Constant.Address;
 			break;
 		case FD3D12DrawPlan::EOperation::Table:
 			Result.Operation = ENativeDrawObservation::Table;
-			Result.RootParameter = InCommand.Slot;
-			Result.TableHandle = {InCommand.Value};
+			Result.RootParameter = InCommand.Table.RootParameter;
+			Result.TableHandle = InCommand.Table.Handle;
 			break;
 		case FD3D12DrawPlan::EOperation::Draw:
 			Result.Operation = ENativeDrawObservation::Draw;
-			Result.IndexCount = Args[0];
-			Result.InstanceCount = Args[1];
-			Result.FirstIndex = Args[2];
-			Result.VertexOffset = std::bit_cast<std::int32_t>(Args[3]);
-			Result.FirstInstance = 0;
+			Result.IndexCount = InCommand.Draw.IndexCount;
+			Result.InstanceCount = InCommand.Draw.InstanceCount;
+			Result.FirstIndex = InCommand.Draw.FirstIndex;
+			Result.VertexOffset = InCommand.Draw.VertexOffset;
+			Result.FirstInstance = FD3D12IndexedDrawArguments::FirstInstance;
 			break;
 	}
 	return Result;
@@ -169,40 +275,35 @@ struct FPlanBuilder
 		if (Pipeline != InPipeline.Pipeline.Get())
 		{
 			Pipeline = InPipeline.Pipeline.Get();
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Pipeline, 0, 0, {}, Pipeline});
-			++Plan.Binds[4];
+			Plan.Commands.emplace_back(Pipeline);
+			++Plan.Binds.Pipeline;
 		}
 		const auto NewTopology = NativeTopology(InPipeline.Topology);
 		if (Topology != NewTopology)
 		{
 			Topology = NewTopology;
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Topology, UINT(Topology)});
-			++Plan.Binds[5];
+			Plan.Commands.emplace_back(Topology);
+			++Plan.Binds.Geometry;
 		}
 		const auto StencilReference = NativeStencilReference(InDraw.DynamicState);
 		if (!Dynamic || Dynamic->StencilReference != StencilReference)
 		{
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Stencil, StencilReference});
-			++Plan.Binds[6];
+			Plan.Commands.emplace_back(StencilReference);
+			++Plan.Binds.Dynamic;
 		}
 		const auto& BlendConstants = NativeBlendConstants(InDraw.DynamicState);
 		if (!Dynamic || Dynamic->BlendConstants != BlendConstants)
 		{
-			Plan.Commands.push_back(
-			    {FD3D12DrawPlan::EOperation::Blend, 0, 0, std::bit_cast<std::array<std::uint32_t, 4>>(BlendConstants)});
-			++Plan.Binds[6];
+			Plan.Commands.emplace_back(BlendConstants);
+			++Plan.Binds.Dynamic;
 		}
 		if (!Dynamic || Scissor.Left != InDraw.Scissor.Left || Scissor.Top != InDraw.Scissor.Top ||
 		    Scissor.Right != InDraw.Scissor.Right || Scissor.Bottom != InDraw.Scissor.Bottom)
 		{
 			Scissor = InDraw.Scissor;
 			const auto NativeRect = NativeScissor(InDraw.Scissor);
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Scissor,
-			                         0,
-			                         0,
-			                         {std::uint32_t(NativeRect.left), std::uint32_t(NativeRect.top),
-			                          std::uint32_t(NativeRect.right), std::uint32_t(NativeRect.bottom)}});
-			++Plan.Binds[6];
+			Plan.Commands.emplace_back(NativeRect);
+			++Plan.Binds.Dynamic;
 		}
 		Dynamic = InDraw.DynamicState;
 	}
@@ -216,20 +317,16 @@ struct FPlanBuilder
 		    Vertices.StrideInBytes != NewVertices.StrideInBytes)
 		{
 			Vertices = NewVertices;
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Vertices,
-			                         0,
-			                         Vertices.BufferLocation,
-			                         {Vertices.SizeInBytes, Vertices.StrideInBytes}});
-			++Plan.Binds[5];
+			Plan.Commands.emplace_back(Vertices);
+			++Plan.Binds.Geometry;
 		}
 		const auto NewIndices = NativeIndexBufferView(IndexBuffer);
 		if (Indices.BufferLocation != NewIndices.BufferLocation || Indices.SizeInBytes != NewIndices.SizeInBytes ||
 		    Indices.Format != NewIndices.Format)
 		{
 			Indices = NewIndices;
-			Plan.Commands.push_back(
-			    {FD3D12DrawPlan::EOperation::Indices, 0, Indices.BufferLocation, {Indices.SizeInBytes}});
-			++Plan.Binds[5];
+			Plan.Commands.emplace_back(Indices);
+			++Plan.Binds.Geometry;
 		}
 	}
 
@@ -241,8 +338,8 @@ struct FPlanBuilder
 			Bindings.Root = InPipeline.Root.Get();
 			Bindings.Constants.fill(0);
 			Bindings.Tables.fill(0);
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Root, 0, 0, {}, Bindings.Root});
-			++Plan.Binds[0];
+			Plan.Commands.emplace_back(Bindings.Root);
+			++Plan.Binds.Root;
 		}
 		const std::array<ID3D12DescriptorHeap*, 2> Heaps{Device.ResourceTables.GetHeap(),
 		                                                 Device.SamplerTables.GetHeap()};
@@ -250,9 +347,8 @@ struct FPlanBuilder
 		{
 			Bindings.Heaps = Heaps;
 			Bindings.Tables.fill(0);
-			Plan.Commands.push_back(
-			    {FD3D12DrawPlan::EOperation::Heaps, 0, reinterpret_cast<std::uintptr_t>(Heaps[1]), {}, Heaps[0]});
-			++Plan.Binds[1];
+			Plan.Commands.emplace_back(Heaps);
+			++Plan.Binds.Heap;
 		}
 		for (const auto& Constant : InDraw.ConstantBindings)
 		{
@@ -262,8 +358,8 @@ struct FPlanBuilder
 			if (Bindings.Constants.at(Root) != Address)
 			{
 				Bindings.Constants[Root] = Address;
-				Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Constant, Root, Address});
-				++Plan.Binds[2];
+				Plan.Commands.emplace_back(FD3D12DrawPlan::FConstantArguments{Root, Address});
+				++Plan.Binds.Constant;
 			}
 		}
 		if (InDraw.Bindings)
@@ -277,8 +373,8 @@ struct FPlanBuilder
 				if (Bindings.Tables.at(Root) != Handle.ptr)
 				{
 					Bindings.Tables[Root] = Handle.ptr;
-					Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Table, Root, Handle.ptr});
-					++Plan.Binds[3];
+					Plan.Commands.emplace_back(FD3D12DrawPlan::FTableArguments{Root, Handle});
+					++Plan.Binds.Table;
 				}
 			}
 		}
@@ -297,71 +393,51 @@ std::shared_ptr<const FD3D12DrawPlan> BuildPlan(const FD3D12DeviceState& InState
 		Builder.Geometry(Draw);
 		Builder.Resources(Draw, Pipeline);
 		const auto Arguments = NativeIndexedDrawArguments(Draw);
-		Builder.Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Draw,
-		                                 0,
-		                                 0,
-		                                 {Arguments.IndexCount, Arguments.InstanceCount, Arguments.FirstIndex,
-		                                  std::bit_cast<std::uint32_t>(Arguments.VertexOffset)}});
+		Builder.Plan.Commands.emplace_back(Arguments);
 	}
 	return std::make_shared<const FD3D12DrawPlan>(std::move(Builder.Plan));
 }
 
 void ExecuteCommand(ID3D12GraphicsCommandList& InList, const FD3D12DrawPlan::FCommand& InCommand)
 {
-	const auto& Args = InCommand.Arguments;
 	switch (InCommand.Operation)
 	{
 		case FD3D12DrawPlan::EOperation::Pipeline:
-			InList.SetPipelineState(static_cast<ID3D12PipelineState*>(InCommand.Pointer));
+			InList.SetPipelineState(InCommand.Pipeline);
 			break;
 		case FD3D12DrawPlan::EOperation::Topology:
-			InList.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY(InCommand.Slot));
+			InList.IASetPrimitiveTopology(InCommand.Topology);
 			break;
 		case FD3D12DrawPlan::EOperation::Vertices:
-		{
-			const D3D12_VERTEX_BUFFER_VIEW View{InCommand.Value, Args[0], Args[1]};
-			InList.IASetVertexBuffers(0, 1, &View);
+			InList.IASetVertexBuffers(0, 1, &InCommand.Vertices);
 			break;
-		}
 		case FD3D12DrawPlan::EOperation::Indices:
-		{
-			const D3D12_INDEX_BUFFER_VIEW View{InCommand.Value, Args[0], DXGI_FORMAT_R32_UINT};
-			InList.IASetIndexBuffer(&View);
+			InList.IASetIndexBuffer(&InCommand.Indices);
 			break;
-		}
 		case FD3D12DrawPlan::EOperation::Stencil:
-			InList.OMSetStencilRef(InCommand.Slot);
+			InList.OMSetStencilRef(InCommand.StencilReference);
 			break;
 		case FD3D12DrawPlan::EOperation::Blend:
-		{
-			const auto Values = std::bit_cast<std::array<float, 4>>(Args);
-			InList.OMSetBlendFactor(Values.data());
+			InList.OMSetBlendFactor(InCommand.BlendConstants.data());
 			break;
-		}
 		case FD3D12DrawPlan::EOperation::Scissor:
-		{
-			const D3D12_RECT Rect{LONG(Args[0]), LONG(Args[1]), LONG(Args[2]), LONG(Args[3])};
-			InList.RSSetScissorRects(1, &Rect);
+			InList.RSSetScissorRects(1, &InCommand.Scissor);
 			break;
-		}
 		case FD3D12DrawPlan::EOperation::Root:
-			InList.SetGraphicsRootSignature(static_cast<ID3D12RootSignature*>(InCommand.Pointer));
+			InList.SetGraphicsRootSignature(InCommand.Root);
 			break;
 		case FD3D12DrawPlan::EOperation::Heaps:
-		{
-			const std::array Heaps{static_cast<ID3D12DescriptorHeap*>(InCommand.Pointer),
-			                       reinterpret_cast<ID3D12DescriptorHeap*>(InCommand.Value)};
-			InList.SetDescriptorHeaps(UINT(Heaps.size()), Heaps.data());
+			InList.SetDescriptorHeaps(static_cast<UINT>(InCommand.Heaps.size()), InCommand.Heaps.data());
 			break;
-		}
 		case FD3D12DrawPlan::EOperation::Constant:
-			InList.SetGraphicsRootConstantBufferView(InCommand.Slot, InCommand.Value);
+			InList.SetGraphicsRootConstantBufferView(InCommand.Constant.RootParameter, InCommand.Constant.Address);
 			break;
 		case FD3D12DrawPlan::EOperation::Table:
-			InList.SetGraphicsRootDescriptorTable(InCommand.Slot, {InCommand.Value});
+			InList.SetGraphicsRootDescriptorTable(InCommand.Table.RootParameter, InCommand.Table.Handle);
 			break;
 		case FD3D12DrawPlan::EOperation::Draw:
-			InList.DrawIndexedInstanced(Args[0], Args[1], Args[2], std::bit_cast<std::int32_t>(Args[3]),
+			InList.DrawIndexedInstanced(InCommand.Draw.IndexCount, InCommand.Draw.InstanceCount,
+			                            InCommand.Draw.FirstIndex, InCommand.Draw.VertexOffset,
 			                            FD3D12IndexedDrawArguments::FirstInstance);
 			break;
 	}
@@ -468,19 +544,19 @@ void RecordNativeDrawPlan(ID3D12GraphicsCommandList& InList, const FD3D12DrawPla
 	{
 		ExecuteCommand(InList, Command);
 	}
-	InState.GraphicsRootBinds += InPlan.Binds[0];
-	InState.GraphicsHeapBinds += InPlan.Binds[1];
-	InState.GraphicsConstantBinds += InPlan.Binds[2];
-	InState.GraphicsTableBinds += InPlan.Binds[3];
-	InState.GraphicsPipelineBinds += InPlan.Binds[4];
-	InState.GraphicsGeometryBinds += InPlan.Binds[5];
-	InState.GraphicsDynamicBinds += InPlan.Binds[6];
-	HYP_PERF_PLOT(Rhi, GraphicsRootBinds, double(InPlan.Binds[0]));
-	HYP_PERF_PLOT(Rhi, GraphicsHeapBinds, double(InPlan.Binds[1]));
-	HYP_PERF_PLOT(Rhi, GraphicsConstantBinds, double(InPlan.Binds[2]));
-	HYP_PERF_PLOT(Rhi, GraphicsTableBinds, double(InPlan.Binds[3]));
-	HYP_PERF_PLOT(Rhi, GraphicsPipelineBinds, double(InPlan.Binds[4]));
-	HYP_PERF_PLOT(Rhi, GraphicsGeometryBinds, double(InPlan.Binds[5]));
-	HYP_PERF_PLOT(Rhi, GraphicsDynamicBinds, double(InPlan.Binds[6]));
+	InState.GraphicsRootBinds += InPlan.Binds.Root;
+	InState.GraphicsHeapBinds += InPlan.Binds.Heap;
+	InState.GraphicsConstantBinds += InPlan.Binds.Constant;
+	InState.GraphicsTableBinds += InPlan.Binds.Table;
+	InState.GraphicsPipelineBinds += InPlan.Binds.Pipeline;
+	InState.GraphicsGeometryBinds += InPlan.Binds.Geometry;
+	InState.GraphicsDynamicBinds += InPlan.Binds.Dynamic;
+	HYP_PERF_PLOT(Rhi, GraphicsRootBinds, double(InPlan.Binds.Root));
+	HYP_PERF_PLOT(Rhi, GraphicsHeapBinds, double(InPlan.Binds.Heap));
+	HYP_PERF_PLOT(Rhi, GraphicsConstantBinds, double(InPlan.Binds.Constant));
+	HYP_PERF_PLOT(Rhi, GraphicsTableBinds, double(InPlan.Binds.Table));
+	HYP_PERF_PLOT(Rhi, GraphicsPipelineBinds, double(InPlan.Binds.Pipeline));
+	HYP_PERF_PLOT(Rhi, GraphicsGeometryBinds, double(InPlan.Binds.Geometry));
+	HYP_PERF_PLOT(Rhi, GraphicsDynamicBinds, double(InPlan.Binds.Dynamic));
 }
 } // namespace Hyperion
