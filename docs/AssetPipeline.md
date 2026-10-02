@@ -37,8 +37,14 @@ AssetImport/Private/Adapters/GltfImport.cpp 封装锁定的 cgltf v1.15。根文
 
 FAssetImportService 注册 FAssetImporter{Id, Version, Type, Extensions, Convert}，将语义转换集中在格式适配器。LoadAsync<T> 用于源格式工具/测试；ImportAsync 负责增量判断、稳定身份和原生依赖发布。新增外部格式仍需适配器；新增原生数据类型只需反射描述符和注册，不需要修改通用 Assets 读写分派。同步 LoadGltfPrimitive 兼容入口也属于 AssetImport。
 
+模型材质转换由 AssetImport 私有纹理角色描述表统一关联源成员、texture/sampler/UV semantic 和颜色编码，目标 semantic 仍由 Materials 定义。描述行的声明位置不决定角色或编码；显式输出顺序保持 BaseColor、MetallicRoughness、Normal、Occlusion、Emissive，以及各角色内 texture、sampler、UV 的写入次序，避免描述重排改变原生内容 revision。重复成员、目标 semantic 和缺失或重复的输出序号会拒绝。
+
+源 sampler 的 Min/Mag filter 与 U/V wrap mode 使用显式枚举转换，不依赖枚举数值顺序。没有 mip 的 Min filter 保持 MaxLod 为 0，其余保持材质采样器默认上限。缺失纹理继续共享 Linear 白纹理，缺失 sampler 使用默认过滤；同一图片的 sRGB/Linear 解释分别生成产品，同解释继续共享。
+
 GPU 上传、材质准备与共享资源继续走 [RenderPrimitives.md](RenderPrimitives.md) 的 session/primitive 路径。RHI 0 创建和上传资源，上传 fence 完成后允许绘制；draw packet 保留资源到帧 fence 完成。GPU 句柄不持久化。独立材质/纹理资产、共享库、作者 shader 和场景局部覆盖见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。通用材质边界见 [Materials.md](Materials.md)。
 
 ## 验证
 
 async_gltf_import 保留源格式语义和取消/共享回归；native_asset_management、native_asset_publication 覆盖通用原生读写及发布。model_rendering 在拒绝源文件读取的后端上验证像素、上传和门控 IO；scene_navigation 覆盖编辑/保存/重载。automation_parity_regressions 检查模型资产预览、缺失资产和关闭失败路径。
+
+model_material_conversion 覆盖五种纹理角色、UV/颜色编码、合法采样器组合、非法来源、缺失资源回退和共享身份；独立固定内容指纹与描述行排列回归保护原生内容、产品顺序和 revision。

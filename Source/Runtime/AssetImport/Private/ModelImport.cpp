@@ -1,6 +1,6 @@
-#include "Hyperion/AssetImport/ModelImport.h"
 #include "Hyperion/Materials/PbrMaterial.h"
 #include "Hyperion/Materials/PbrParameters.h"
+#include "ModelImportInternal.h"
 #include <algorithm>
 #include <map>
 
@@ -8,16 +8,6 @@ namespace Hyperion
 {
 namespace
 {
-const std::array TextureSemantics{EPbrSemantic::BaseColorTexture, EPbrSemantic::MetallicRoughnessTexture,
-                                  EPbrSemantic::NormalTexture, EPbrSemantic::OcclusionTexture,
-                                  EPbrSemantic::EmissiveTexture};
-const std::array SamplerSemantics{EPbrSemantic::BaseColorSampler, EPbrSemantic::MetallicRoughnessSampler,
-                                  EPbrSemantic::NormalSampler, EPbrSemantic::OcclusionSampler,
-                                  EPbrSemantic::EmissiveSampler};
-const std::array UvSemantics{EHyperionMaterialV1Field::BaseColorUv, EHyperionMaterialV1Field::MetallicRoughnessUv,
-                             EHyperionMaterialV1Field::NormalUv, EHyperionMaterialV1Field::OcclusionUv,
-                             EHyperionMaterialV1Field::EmissiveUv};
-
 std::string MaterialParameterName(const FMaterialAsset& InAsset, FMaterialSemanticId InSemantic)
 {
 	const auto Found = std::find_if(InAsset.Parameters.begin(), InAsset.Parameters.end(),
@@ -32,22 +22,75 @@ std::string MaterialParameterName(const FMaterialAsset& InAsset, FMaterialSemant
 	return Found->Name;
 }
 
+EMaterialAddressMode MaterialAddress(EWrapMode InMode)
+{
+	switch (InMode)
+	{
+		case EWrapMode::Repeat:
+			return EMaterialAddressMode::Repeat;
+		case EWrapMode::Clamp:
+			return EMaterialAddressMode::Clamp;
+		case EWrapMode::Mirror:
+			return EMaterialAddressMode::Mirror;
+	}
+	throw std::invalid_argument("Invalid model sampler address mode");
+}
+
+bool MaterialMagLinear(ESamplerFilter InFilter)
+{
+	switch (InFilter)
+	{
+		case ESamplerFilter::Nearest:
+			return false;
+		case ESamplerFilter::Linear:
+			return true;
+		default:
+			throw std::invalid_argument("Invalid model sampler magnification filter");
+	}
+}
+
+void SetMaterialMinFilter(FMaterialSampler& OutSampler, ESamplerFilter InFilter)
+{
+	switch (InFilter)
+	{
+		case ESamplerFilter::Nearest:
+			OutSampler.bMinLinear = false;
+			OutSampler.bMipLinear = false;
+			OutSampler.MaxLod = 0;
+			break;
+		case ESamplerFilter::Linear:
+			OutSampler.bMinLinear = true;
+			OutSampler.bMipLinear = false;
+			OutSampler.MaxLod = 0;
+			break;
+		case ESamplerFilter::NearestMipNearest:
+			OutSampler.bMinLinear = false;
+			OutSampler.bMipLinear = false;
+			break;
+		case ESamplerFilter::LinearMipNearest:
+			OutSampler.bMinLinear = true;
+			OutSampler.bMipLinear = false;
+			break;
+		case ESamplerFilter::NearestMipLinear:
+			OutSampler.bMinLinear = false;
+			OutSampler.bMipLinear = true;
+			break;
+		case ESamplerFilter::LinearMipLinear:
+			OutSampler.bMinLinear = true;
+			OutSampler.bMipLinear = true;
+			break;
+		default:
+			throw std::invalid_argument("Invalid model sampler minification filter");
+	}
+}
+
 FMaterialSampler MaterialSampler(const FModelSampler& InSampler)
 {
-	const auto Address = [](EWrapMode InMode)
-	{
-		return InMode == EWrapMode::Clamp    ? EMaterialAddressMode::Clamp
-		       : InMode == EWrapMode::Mirror ? EMaterialAddressMode::Mirror
-		                                     : EMaterialAddressMode::Repeat;
-	};
 	FMaterialSampler Result;
-	Result.U = Address(InSampler.WrapU);
-	Result.V = Address(InSampler.WrapV);
-	Result.bMinLinear = InSampler.Min == ESamplerFilter::Linear || InSampler.Min == ESamplerFilter::LinearMipNearest ||
-	                    InSampler.Min == ESamplerFilter::LinearMipLinear;
-	Result.bMagLinear = InSampler.Mag == ESamplerFilter::Linear;
-	Result.bMipLinear = InSampler.Min >= ESamplerFilter::NearestMipLinear;
-	Result.MaxLod = InSampler.Min >= ESamplerFilter::NearestMipNearest ? Result.MaxLod : 0;
+	Result.U = MaterialAddress(InSampler.WrapU);
+	Result.V = MaterialAddress(InSampler.WrapV);
+	Result.bMagLinear = MaterialMagLinear(InSampler.Mag);
+	SetMaterialMinFilter(Result, InSampler.Min);
 	return Result;
 }
 
@@ -73,6 +116,7 @@ void SetFactors(FMaterialAsset& InAsset, const FModelMaterial& InMaterial)
 struct FModelSplitter
 {
 	const FModelSource& Source;
+	const Private::FModelTextureRoles& Roles;
 	FModelSourceAssets Result;
 	std::map<std::pair<std::int32_t, bool>, FAssetRef> Images;
 
@@ -110,19 +154,18 @@ struct FModelSplitter
 		                                                              : EMaterialQueue::Opaque;
 		auto Asset = MakePbrMaterialAsset(InMaterial.Name, Queue, InMaterial.bDoubleSided, InMaterial.bUnlit);
 		SetFactors(Asset, InMaterial);
-		const std::array Views{InMaterial.BaseColorTexture, InMaterial.MetallicRoughnessTexture,
-		                       InMaterial.NormalTexture, InMaterial.OcclusionTexture, InMaterial.EmissiveTexture};
-		for (std::size_t Slot = 0; Slot < Views.size(); ++Slot)
+		for (const auto& Role : Roles)
 		{
+			const auto& View = InMaterial.*Role.SourceMember;
 			FMaterialAssetValue Value;
 			Value.Type = FMaterialParameterType::Resource(EMaterialValueKind::Texture2D);
-			Value.Texture = Texture(Views[Slot].Image, Slot == 0 || Slot == 4);
-			Asset.Values.push_back({MaterialParameterName(Asset, TextureSemantics[Slot]), std::move(Value)});
-			const auto Sampler = Views[Slot].Sampler < 0 ? FModelSampler{} : Source.Samplers.at(Views[Slot].Sampler);
-			Asset.Values.push_back({MaterialParameterName(Asset, SamplerSemantics[Slot]),
+			Value.Texture = Texture(View.Image, Role.Encoding == EMaterialTextureEncoding::Srgb);
+			Asset.Values.push_back({MaterialParameterName(Asset, Role.TextureSemantic), std::move(Value)});
+			const auto Sampler = View.Sampler < 0 ? FModelSampler{} : Source.Samplers.at(View.Sampler);
+			Asset.Values.push_back({MaterialParameterName(Asset, Role.SamplerSemantic),
 			                        PersistMaterialValue(FMaterialValue::FromSampler(MaterialSampler(Sampler)))});
-			Asset.Values.push_back({MaterialParameterName(Asset, UvSemantics[Slot]),
-			                        PersistMaterialValue(FMaterialValue::Uint(Views[Slot].TexCoord))});
+			Asset.Values.push_back({MaterialParameterName(Asset, Role.UvSemantic),
+			                        PersistMaterialValue(FMaterialValue::Uint(View.TexCoord))});
 		}
 		ValidateMaterialAsset(Asset);
 		const auto Key = "material-" + std::to_string(InIndex);
@@ -133,10 +176,11 @@ struct FModelSplitter
 };
 } // namespace
 
-FModelSourceAssets SplitModelSource(const FModelSource& InSource)
+FModelSourceAssets Private::SplitModelSourceWithRoles(const FModelSource& InSource, FModelTextureRoles InRoles)
 {
 	ValidateModelSource(InSource);
-	FModelSplitter Splitter{InSource};
+	const auto Roles = OrderModelTextureRoles(std::move(InRoles));
+	FModelSplitter Splitter{InSource, Roles};
 	auto& Model = Splitter.Result.Model;
 	Model.Name = InSource.Name;
 	Model.Primitives = InSource.Primitives;
@@ -163,6 +207,11 @@ FModelSourceAssets SplitModelSource(const FModelSource& InSource)
 	AssignModelSubresourceIds(Model);
 	ValidateModel(Model);
 	return std::move(Splitter.Result);
+}
+
+FModelSourceAssets SplitModelSource(const FModelSource& InSource)
+{
+	return Private::SplitModelSourceWithRoles(InSource, Private::OrderedModelTextureRoles);
 }
 
 std::shared_ptr<FModelAsset> EmitModelSource(FAssetImportContext& InContext, const FModelSource& InSource)

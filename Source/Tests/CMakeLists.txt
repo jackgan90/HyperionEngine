@@ -114,6 +114,8 @@ hyp_test(asset_registry_tests native_asset_registry hyperion_assets Assets/Asset
 target_link_libraries(asset_registry_tests PRIVATE hyperion_core)
 target_link_libraries(native_asset_tests PRIVATE hyperion_core)
 hyp_test(import_tests async_gltf_import hyperion_asset_import Assets/ImportTests.cpp)
+hyp_test(model_import_tests model_material_conversion hyperion_asset_import Assets/ModelImportTests.cpp)
+target_sources(model_import_tests PRIVATE ../Runtime/AssetImport/Private/ModelImportRoleTests.cpp)
 hyp_test(import_workspace_tests asset_import_workspace hyperion_asset_import Assets/ImportWorkspaceTests.cpp)
 add_test(NAME editor_asset_import COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_asset_tool> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}/out/acceptance/Import")
@@ -399,6 +401,7 @@ hyp_test(shared_asset_publication_tests shared_asset_publication hyperion_asset_
 target_compile_definitions(shared_asset_publication_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(shared_asset_publication PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_dependencies(hyperion_check shared_asset_publication_tests)
+add_dependencies(hyperion_check model_import_tests)
 
 add_test(NAME native_publication_cli COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/NativePublication.py" $<TARGET_FILE:hyperion_asset_tool> "${PROJECT_SOURCE_DIR}/out/fixtures")
 set_tests_properties(native_publication_cli PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
