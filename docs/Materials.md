@@ -18,6 +18,10 @@
 
 独立资产的 shader/pass/类型化参数、共享加载与场景保存流程见 [SharedMaterialAssets.md](SharedMaterialAssets.md)。
 
+`FRenderView::Usage` 是开放的材质 pass 名称，只决定选中的材质用途。视图以值拥有的 `Policy` 独立控制 transient scene item 新增、按完整 primitive 句柄执行替换，以及 Main、Shadow、Uncounted 运行时统计分类。普通策略启用新增与替换并计入 Main；`FRenderViewPolicy::Shadow()` 禁止新增、保留替换并计入 Shadow，CSM 构造视图时显式使用它。自定义 Usage 也可以选择该策略，名为 `ShadowDepth` 的直接视图仍可显式选择普通策略。
+
+参与开关变化会重新验证视图准备；仅修改统计分类保留相同 draw/material 内容的缓存复用。分类随 owned view snapshot 发布，已构建图保持自己的策略与统计。Main 只汇总 Main 分类，CPU shadow benchmark 只汇总 Shadow，Uncounted 不进入这两组；session 的兼容统计仍汇总整个 family 的 draws/batches。分类不进入诊断 wire/schema，反序列化旧记录只得到默认 Main，不能恢复未传输的分类；GPU timing 仍按实际 pass stage 的名称统计。
+
 ## 声明、反射与按名称编辑
 
 shader 参数物理名称与逻辑参数、semantic 分别定义。例如下面的 HLSL 使用任意命名：

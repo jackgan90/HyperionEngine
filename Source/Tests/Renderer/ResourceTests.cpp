@@ -774,6 +774,7 @@ void CheckTransientMaterialReadiness(FTaskSystem& InTasks, FTestDevice& InDevice
 		    HYP_CHECK(Snapshot.Items.Size() == 1 && Snapshot.Items[0].Primitive.Scene == 0x7472616e7369656e);
 		    auto Shadows = Session.GetScene().Collect({});
 		    Shadows.View.Usage = "ShadowDepth";
+		    Shadows.View.Policy = FRenderViewPolicy::Shadow();
 		    AppendTransientSceneItems(Shadows, Pending);
 		    HYP_CHECK(Shadows.Items.IsEmpty());
 	    }));

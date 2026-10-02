@@ -55,7 +55,7 @@ std::vector<FGraphicsDrawBatch> FPreparedViewFamily::Prepare(const FRenderResour
 		Stats.Draws += Batch.Commands.GetDraws().size();
 	}
 	std::lock_guard Lock(Publication);
-	Views[InIndex] = {InSnapshot.View.Identity, InSnapshot.View.Usage, Stats};
+	Views[InIndex] = {InSnapshot.View.Identity, InSnapshot.View.Usage, Stats, InSnapshot.View.Policy.StatsCategory};
 	Times[InIndex] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Start).count();
 	Prepared[InIndex] = true;
 	Milliseconds = std::accumulate(Times.begin(), Times.end(), 0.0);

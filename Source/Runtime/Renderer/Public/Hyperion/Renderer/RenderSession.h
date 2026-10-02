@@ -12,6 +12,8 @@ struct FRenderViewStatistics
 	std::uint64_t Identity{};
 	std::string Usage;
 	FSceneVisibilityStats Visibility;
+	ERenderViewStatsCategory StatsCategory =
+	    ERenderViewStatsCategory::Main; // Runtime-only; not part of diagnostic wire.
 };
 
 struct FRenderViewFamilyStatistics
@@ -52,7 +54,7 @@ public:
 	FRenderPassTargets FrameTargets(std::optional<FVec4> InClear = {},
 	                                EDepthConvention InConvention = EDepthConvention::Standard) const;
 	std::size_t Build(FRenderGraph& InGraph, FRenderView InView, FRenderPassTargets InTargets);
-	// Optional viewport-owned source geometry joins ordinary view snapshots only; shadow views exclude it.
+	// Each view's owned policy independently controls transient additions, replacements and statistics.
 	std::size_t BuildViews(FRenderGraph& InGraph, std::span<const FRenderView> InViews,
 	                       std::span<const FRenderPassTargets> InTargets,
 	                       std::shared_ptr<const FMaterialFrameContext> InFrame = {}, std::uint64_t InFamily = 1,

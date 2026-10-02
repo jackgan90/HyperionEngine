@@ -9,7 +9,7 @@ FSceneVisibilityStats FForwardPipelineStatistics::MainView() const
 	bool bFirst = true;
 	for (const auto& View : Views)
 	{
-		if (View.Usage == "ShadowDepth")
+		if (View.StatsCategory != ERenderViewStatsCategory::Main)
 		{
 			continue;
 		}

@@ -7,6 +7,8 @@
 
 using namespace Hyperion;
 
+void RunViewPolicyOwnershipTests(FTaskSystem& InTasks, IRHIDevice& InDevice, IRHISwapchain& InSwapchain);
+
 namespace
 {
 struct FRelease
@@ -163,6 +165,7 @@ int main()
 		InstanceTests::FFixture Fixture;
 		CheckLimitPixels(Fixture);
 		CheckQueuedRemoval(Fixture);
+		RunViewPolicyOwnershipTests(Fixture.Tasks, *Fixture.Device, *Fixture.Swapchain);
 		std::cout << "Queued frame ownership and removal passed\n";
 	}
 	catch (const std::exception& Error)

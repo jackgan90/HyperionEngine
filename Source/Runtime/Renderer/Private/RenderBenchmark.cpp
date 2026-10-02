@@ -41,7 +41,7 @@ void WriteShadowBenchmark(std::ostream& InOutput, const FForwardPipelineStatisti
 	double ShadowPrepare{};
 	for (const auto& View : InPipeline.Views)
 	{
-		if (View.Usage == "ShadowDepth")
+		if (View.StatsCategory == ERenderViewStatsCategory::Shadow)
 		{
 			Items += View.Visibility.VisibleItems;
 			Draws += View.Visibility.Draws;

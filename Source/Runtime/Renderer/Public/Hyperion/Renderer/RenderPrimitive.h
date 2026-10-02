@@ -61,6 +61,26 @@ struct FRenderCamera
 	float Far = 500;
 };
 
+enum class ERenderViewStatsCategory
+{
+	Main,
+	Shadow,
+	Uncounted
+};
+
+// Participation is independent of the open material pass Usage selected by a view.
+struct FRenderViewPolicy
+{
+	bool bAddTransientSceneItems = true;
+	bool bApplyTransientReplacements = true;
+	ERenderViewStatsCategory StatsCategory = ERenderViewStatsCategory::Main;
+
+	static constexpr FRenderViewPolicy Shadow()
+	{
+		return {false, true, ERenderViewStatsCategory::Shadow};
+	}
+};
+
 struct FRenderView
 {
 	FMat4 ViewProjection = Hyperion::Identity();
@@ -81,6 +101,7 @@ struct FRenderView
 	bool bSkipMissingPass{};
 	std::vector<std::string> ExcludedPasses; // Materials with any listed usage belong to another route.
 	EDepthConvention DepthConvention = EDepthConvention::Standard;
+	FRenderViewPolicy Policy;
 };
 
 struct FRenderItem

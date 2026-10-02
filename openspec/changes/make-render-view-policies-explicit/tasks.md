@@ -5,11 +5,11 @@
 
 ## 2. M03A: Explicit participation and cache behavior
 
-- [ ] 2.1 Add owned view policy for independent transient additions/replacements and statistics category, with ordinary defaults and an explicit shadow policy; migrate built-in and test shadow producers.
-- [ ] 2.2 Migrate transient collection and cache-bypass decisions to the two flags while preserving deletion-only shadow behavior and persistent scene registration.
-- [ ] 2.3 Include effect-relevant policy in retained collection/preparation comparisons, preserve copy-on-write and static reuse, and copy classification into immediate/deferred runtime statistics.
-- [ ] 2.4 Migrate MainView and CPU shadow statistics from Usage branches without altering wire records, family-wide totals, CSV columns or separate GPU stage-name timing protocols.
-- [ ] 2.5 Test custom usages, inverse label/policy cases, all participation combinations, same-key policy changes, category-only changes, clearing/reuse and immutable old snapshots.
+- [x] 2.1 Add owned view policy for independent transient additions/replacements and statistics category, with ordinary defaults and an explicit shadow policy; migrate built-in and test shadow producers.
+- [x] 2.2 Migrate transient collection and cache-bypass decisions to the two flags while preserving deletion-only shadow behavior and persistent scene registration.
+- [x] 2.3 Include effect-relevant policy in retained collection/preparation comparisons, preserve copy-on-write and static reuse, and copy classification into immediate/deferred runtime statistics.
+- [x] 2.4 Migrate MainView and CPU shadow statistics from Usage branches without altering wire records, family-wide totals, CSV columns or separate GPU stage-name timing protocols.
+- [x] 2.5 Test custom usages, inverse label/policy cases, all participation combinations, same-key policy changes, category-only changes, clearing/reuse and immutable old snapshots.
 
 ## 3. M03B: Shared built-in route facts
 

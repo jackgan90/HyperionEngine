@@ -60,9 +60,12 @@ void FTransientGeometry::AddModelInstance(FRenderPrimitiveState InState,
 void AppendTransientSceneItems(FRenderSceneSnapshot& InSnapshot, const FTransientGeometry& InGeometry)
 {
 	std::set<std::tuple<std::uint64_t, std::uint32_t, std::uint64_t>> Replaced;
-	for (const auto& Handle : InGeometry.ReplacedPrimitives)
+	if (InSnapshot.View.Policy.bApplyTransientReplacements)
 	{
-		Replaced.emplace(Handle.Scene, Handle.Slot, Handle.Generation);
+		for (const auto& Handle : InGeometry.ReplacedPrimitives)
+		{
+			Replaced.emplace(Handle.Scene, Handle.Slot, Handle.Generation);
+		}
 	}
 	if (!Replaced.empty())
 	{
@@ -77,7 +80,7 @@ void AppendTransientSceneItems(FRenderSceneSnapshot& InSnapshot, const FTransien
 		}
 		InSnapshot.Items = std::move(Retained);
 	}
-	if (InSnapshot.View.Usage == "ShadowDepth")
+	if (!InSnapshot.View.Policy.bAddTransientSceneItems)
 	{
 		InSnapshot.Statistics.VisibleItems = InSnapshot.Items.Size();
 		return;

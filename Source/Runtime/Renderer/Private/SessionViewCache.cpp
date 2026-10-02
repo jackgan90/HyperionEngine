@@ -17,11 +17,17 @@ bool SameMatrix(const FMat4& InA, const FMat4& InB)
 	       std::bit_cast<std::array<std::uint32_t, 16>>(InB.Values);
 }
 
+bool SameTransientEffects(const FRenderView& InA, const FRenderView& InB)
+{
+	return InA.Policy.bAddTransientSceneItems == InB.Policy.bAddTransientSceneItems &&
+	       InA.Policy.bApplyTransientReplacements == InB.Policy.bApplyTransientReplacements;
+}
+
 bool SameCollectionView(const FRenderView& InA, const FRenderView& InB, bool bInDepthSorted)
 {
 	return InA.DepthConvention == InB.DepthConvention && InA.Usage == InB.Usage &&
 	       InA.ExcludedPasses == InB.ExcludedPasses && InA.bSkipMissingPass == InB.bSkipMissingPass &&
-	       InA.CullingMode == InB.CullingMode &&
+	       SameTransientEffects(InA, InB) && InA.CullingMode == InB.CullingMode &&
 	       (InA.CullingMode == ESceneCullingMode::None ||
 	        SameMatrix(InA.CullingViewProjection.value_or(InA.ViewProjection),
 	                   InB.CullingViewProjection.value_or(InB.ViewProjection))) &&
@@ -38,7 +44,7 @@ bool SamePassEnvironment(const FRenderView& InA, const FRenderView& InB)
 	return InA.DepthConvention == InB.DepthConvention && InA.Identity == InB.Identity && InA.Usage == InB.Usage &&
 	       InA.ExcludedPasses == InB.ExcludedPasses && InA.Width == InB.Width && InA.Height == InB.Height &&
 	       InA.Viewport.has_value() == InB.Viewport.has_value() && Viewport(InA) == Viewport(InB) &&
-	       InA.bInstanceBatching == InB.bInstanceBatching;
+	       InA.bInstanceBatching == InB.bInstanceBatching && SameTransientEffects(InA, InB);
 }
 
 bool SamePreparedView(const FRenderView& InA, const FRenderView& InB)
@@ -128,8 +134,9 @@ std::shared_ptr<const FRenderSceneSnapshot> FRenderSession::PrepareView(
 	HYP_PERF_SCOPE_C(Render, PrepareRetainedView);
 	FMaterialState::FPreparedView Uncached;
 	// Moving preview items never enter retained snapshots or invalidate persistent scene registrations.
-	const bool bTransient = InTransient && ((!InTransient->SceneItems.empty() && InView.Usage != "ShadowDepth") ||
-	                                        !InTransient->ReplacedPrimitives.empty());
+	const bool bTransient =
+	    InTransient && ((InView.Policy.bAddTransientSceneItems && !InTransient->SceneItems.empty()) ||
+	                    (InView.Policy.bApplyTransientReplacements && !InTransient->ReplacedPrimitives.empty()));
 	auto& Cached = bTransient || (MaterialState->PreparedViews.size() >= 64 &&
 	                              !MaterialState->PreparedViews.contains(InView.Identity))
 	                   ? Uncached

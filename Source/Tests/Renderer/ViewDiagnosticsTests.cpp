@@ -68,10 +68,10 @@ FForwardPipelineStatistics DiagnosticPipeline()
 	Result.SceneTargetBytes = 4096;
 	Result.FullscreenDraws = 5;
 	Result.Spatial = Visibility(40);
-	Result.Views = {{101, "ShadowDepth", Visibility(100)},
+	Result.Views = {{101, "ShadowDepth", Visibility(100), ERenderViewStatsCategory::Shadow},
 	                {1, "Forward", Visibility(10)},
 	                {2, "CustomShadowTest", Visibility(20)},
-	                {102, "ShadowDepth", Visibility(200)}};
+	                {102, "ShadowDepth", Visibility(200), ERenderViewStatsCategory::Shadow}};
 	Result.ShadowTextureBytes = 8192;
 	Result.bShadows = true;
 	Result.bContactShadows = true;
@@ -256,11 +256,62 @@ std::string CheckBenchmark(const FForwardPipelineStatistics& InPipeline)
 	}
 	return Header + '\n' + Row + '\n';
 }
+
+void CheckCategoryAggregation()
+{
+	FForwardPipelineStatistics Pipeline;
+	Pipeline.Views = {{1, "ShadowDepth", Visibility(10)},
+	                  {2, "CustomShadowTest", Visibility(20), ERenderViewStatsCategory::Shadow},
+	                  {3, "Forward", Visibility(900), ERenderViewStatsCategory::Uncounted},
+	                  {4, "OtherMain", Visibility(30)}};
+	const auto Main = Pipeline.MainView();
+	HYP_CHECK(Main.VisibleItems == 42 && Main.Draws == 44 && Main.Batches.SingleDraws == 46);
+	HYP_CHECK(Main.Groups == 11 && Main.QueryMilliseconds == 10.25 && Main.MaterialMilliseconds == 10.75);
+	const auto& Type = RecordType<FRenderViewStatistics>();
+	const auto OriginalWire = WriteJson(WriteRecordWire(Type, &Pipeline.Views[0]));
+	const auto Loaded = ReadRecordWire(Type, WriteRecordWire(Type, &Pipeline.Views[1]));
+	HYP_CHECK(static_cast<const FRenderViewStatistics*>(Loaded.get())->StatsCategory == ERenderViewStatsCategory::Main);
+	const std::array<std::string_view, 7> Fields{"shadow_items",        "shadow_draws",       "shadow_failed",
+	                                             "shadow_upload_bytes", "shadow_material_ms", "shadow_plan_ms",
+	                                             "shadow_prepare_ms"};
+	const std::array<std::array<std::string_view, 7>, 3> Expected{
+	    {{"21", "22", "24", "2000", "20.750000", "20.125000", "20.500000"},
+	     {"32", "34", "38", "3000", "31.500000", "30.250000", "31.000000"},
+	     {"21", "22", "24", "2000", "20.750000", "20.125000", "20.500000"}}};
+	const std::array Categories{ERenderViewStatsCategory::Main, ERenderViewStatsCategory::Shadow,
+	                            ERenderViewStatsCategory::Uncounted};
+	for (std::size_t Index = 0; Index < Categories.size(); ++Index)
+	{
+		Pipeline.Views[0].StatsCategory = Categories[Index];
+		const auto Current = Pipeline.MainView();
+		HYP_CHECK(Current.VisibleItems == (Index == 0 ? 42 : 31));
+		HYP_CHECK(Current.Groups == (Index == 0 ? 11 : 31));
+		HYP_CHECK(WriteJson(WriteRecordWire(Type, &Pipeline.Views[0])) == OriginalWire);
+		const auto Sample = BenchmarkSample(Pipeline);
+		const auto Path = std::filesystem::absolute("ViewPolicyDiagnosticsActual.csv");
+		WriteRenderBenchmark(Path, std::span(&Sample, 1));
+		std::ifstream Input(Path);
+		std::string Header;
+		std::string Row;
+		HYP_CHECK(std::getline(Input, Header) && std::getline(Input, Row));
+		HYP_CHECK(Header == BenchmarkHeader);
+		const auto Keys = CsvCells(Header);
+		const auto Values = CsvCells(Row);
+		HYP_CHECK(Keys.size() == 138 && Values.size() == 138);
+		for (std::size_t Field = 0; Field < Fields.size(); ++Field)
+		{
+			const auto Found = std::find(Keys.begin(), Keys.end(), Fields[Field]);
+			HYP_CHECK(Found != Keys.end());
+			HYP_CHECK(Values.at(static_cast<std::size_t>(Found - Keys.begin())) == Expected[Index][Field]);
+		}
+	}
+}
 } // namespace
 
 void RunViewDiagnosticsTests(const std::filesystem::path& InCaptureDirectory)
 {
 	CheckDiagnosticDescriptors();
+	CheckCategoryAggregation();
 	const auto Pipeline = DiagnosticPipeline();
 	CheckMainAggregation(Pipeline);
 	const auto Csv = CheckBenchmark(Pipeline);

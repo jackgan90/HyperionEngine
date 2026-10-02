@@ -89,6 +89,9 @@ void CheckDirectionsAndStability()
 		HYP_CHECK(InitialTargets[Index].DepthStencil->Source.Texture ==
 		          LaterTargets[Index].DepthStencil->Source.Texture);
 		HYP_CHECK(LaterViews[Index].Usage == "ShadowDepth" && LaterViews[Index].bSkipMissingPass);
+		HYP_CHECK(!LaterViews[Index].Policy.bAddTransientSceneItems);
+		HYP_CHECK(LaterViews[Index].Policy.bApplyTransientReplacements);
+		HYP_CHECK(LaterViews[Index].Policy.StatsCategory == ERenderViewStatsCategory::Shadow);
 	}
 	for (int Step = -20; Step <= 20; ++Step)
 	{
