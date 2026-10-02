@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Reflection/ArchiveNode.h"
 #include "Hyperion/Reflection/RecordCallback.h"
+#include <any>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -134,6 +135,43 @@ inline FRecordMemberOptions Inspect(std::string InLabel, std::optional<double> I
 	return {.Inspector = FPropertyPresentation{std::move(InLabel), {}, bInReadOnly, InMinimum, InMaximum}};
 }
 
+// Optional correspondence for direct member declarations; custom callback fields can leave it empty.
+class FRecordMemberAssociation
+{
+public:
+	FRecordMemberAssociation() = default;
+
+	template<class T, class M>
+	explicit FRecordMemberAssociation(M T::* InMember)
+	    : Pointer(InMember), Equal(
+	                             [](const std::any& InLeft, const std::any& InRight)
+	                             {
+		                             return std::any_cast<M T::*>(InLeft) == std::any_cast<M T::*>(InRight);
+	                             })
+	{
+		if (!InMember)
+		{
+			throw std::invalid_argument("Null reflected member association");
+		}
+	}
+
+	template<class T, class M> bool Matches(M T::* InMember) const
+	{
+		// any_cast checks the exact member-pointer type before C++ member equality is evaluated.
+		const auto* Stored = std::any_cast<M T::*>(&Pointer);
+		return Stored && InMember && *Stored == InMember;
+	}
+
+	bool operator==(const FRecordMemberAssociation& InOther) const
+	{
+		return Pointer.type() == InOther.Pointer.type() && (!Pointer.has_value() || Equal(Pointer, InOther.Pointer));
+	}
+
+private:
+	std::any Pointer;
+	bool (*Equal)(const std::any&, const std::any&){};
+};
+
 struct FRecordMember
 {
 	std::string Id;
@@ -142,6 +180,7 @@ struct FRecordMember
 	TRecordCallback<void(const void*, const FRecordVisitor&, std::string_view)> Visit;
 	FRecordMemberOptions Options;
 	const FRecordValueShape& (*Shape)(){};
+	FRecordMemberAssociation Association;
 };
 
 // CPU-only editing projection. Apply receives a detached source, edited view and original view.
@@ -173,6 +212,15 @@ struct FRecordDescriptor
 	// Copies retain their definition identity; independently built descriptors cannot replace a registered contract.
 	std::shared_ptr<const void> Definition = std::make_shared<const int>(0);
 	std::shared_ptr<const FRecordDisplayLayout> DisplayLayout;
+};
+
+struct FRecordMemberIdentity
+{
+	std::string TypeId;
+	std::string FieldId;
+	// Names own their storage. This token identifies the definition; it does not retain its Members vector.
+	std::shared_ptr<const void> Definition;
+	bool operator==(const FRecordMemberIdentity&) const = default;
 };
 
 template<class T> const FRecordDescriptor& RecordType();
@@ -213,6 +261,37 @@ template<class T> std::span<const T> RecordEnumValues()
 }
 
 void ValidateRecordDescriptor(const FRecordDescriptor& InType);
+
+template<class T, class M> FRecordMemberIdentity ResolveRecordMember(const FRecordDescriptor& InType, M T::* InMember)
+{
+	ValidateRecordDescriptor(InType);
+	if (InType.CppType != typeid(T))
+	{
+		throw std::invalid_argument("Reflected member owning type mismatch: " + InType.Id);
+	}
+	if (!InMember)
+	{
+		throw std::invalid_argument("Null reflected member lookup: " + InType.Id);
+	}
+	const FRecordMember* Match{};
+	for (const auto& Field : InType.Members)
+	{
+		if (Field.Association.Matches(InMember))
+		{
+			if (Match)
+			{
+				throw std::invalid_argument("Ambiguous reflected member: " + InType.Id);
+			}
+			Match = &Field;
+		}
+	}
+	if (!Match)
+	{
+		throw std::invalid_argument("Missing reflected member association: " + InType.Id);
+	}
+	return {InType.Id, Match->Id, InType.Definition};
+}
+
 FArchiveNode WriteRecord(const FRecordDescriptor& InType, const void* InObject);
 std::shared_ptr<void> ReadRecord(const FRecordDescriptor& InType, const FArchiveNode& InNode,
                                  const FRecordReadContext& InContext = {});

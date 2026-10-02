@@ -254,7 +254,7 @@ void CheckBindingIdentity()
 	const FBindingFixture Empty;
 	HYP_CHECK(ReadRecord(*Registry.Find(Type.Id), WriteRecord(Copy, &Empty)) != nullptr);
 	const auto Other = Member("value", &FBindingFixture::Second);
-	for (unsigned Case = 0; Case < 6; ++Case)
+	for (unsigned Case = 0; Case < 8; ++Case)
 	{
 		auto Conflict = Type;
 		switch (Case)
@@ -278,6 +278,16 @@ void CheckBindingIdentity()
 				Conflict.Migrations.erase(1);
 				Conflict.Migrations.emplace(3, Migration(30));
 				break;
+			case 6:
+				// Isolate the new comparison: every callback, shape and metadata entry remains the original copy.
+				Conflict.Members[0].Association = Other.Association;
+				HYP_CHECK(Conflict.Members[0].Read == Type.Members[0].Read &&
+				          Conflict.Members[0].Write == Type.Members[0].Write &&
+				          Conflict.Members[0].Visit == Type.Members[0].Visit);
+				break;
+			case 7:
+				Conflict.Members[0].Association = {};
+				break;
 		}
 		Reject(
 		    [&]
@@ -290,6 +300,156 @@ void CheckBindingIdentity()
 	const auto Restored =
 	    std::static_pointer_cast<FBindingFixture>(ReadRecord(*Registry.Find(Type.Id), WriteRecord(Type, &Original)));
 	HYP_CHECK(Restored->First == 10 && Restored->Second == 0);
+	auto Equivalent = Type;
+	Equivalent.Members[0].Association = FRecordMemberAssociation(&FBindingFixture::First);
+	Registry.Register(Equivalent);
+}
+
+struct FMemberFixture
+{
+	int First{};
+	int Second{};
+	int Missing{};
+	double Different{};
+};
+
+FRecordDescriptor MemberFixtureType()
+{
+	return MakeRecord<FMemberFixture>("test.member.identity",
+	                                  {Member("first", &FMemberFixture::First, {.Aliases = {"legacyFirst"}}),
+	                                   Member("second", &FMemberFixture::Second)});
+}
+
+void CheckMemberResolution()
+{
+	const auto Type = MemberFixtureType();
+	const auto First = ResolveRecordMember(Type, &FMemberFixture::First);
+	const auto Second = ResolveRecordMember(Type, &FMemberFixture::Second);
+	HYP_CHECK(First.TypeId == "test.member.identity" && First.FieldId == "first");
+	HYP_CHECK(Second.TypeId == First.TypeId && Second.FieldId == "second" && First != Second);
+	HYP_CHECK(First.Definition == Type.Definition && Second.Definition == Type.Definition);
+	HYP_CHECK(Type.Members[0].Association.Matches(&FMemberFixture::First));
+	HYP_CHECK(!Type.Members[0].Association.Matches(&FMemberFixture::Second));
+	HYP_CHECK(!Type.Members[0].Association.Matches(&FMemberFixture::Different));
+	HYP_CHECK(Type.Members[0].Association != FRecordMemberAssociation(&FMemberFixture::Different));
+	auto NoConstruction = Type;
+	NoConstruction.Create = []() -> std::shared_ptr<void>
+	{
+		throw std::logic_error("Typed member lookup must not construct or read an object");
+	};
+	HYP_CHECK(ResolveRecordMember(NoConstruction, &FMemberFixture::First) == First);
+	FRecordRegistry Registry;
+	Registry.Register(Type);
+	const auto Copy = Type;
+	Registry.Register(Copy);
+	HYP_CHECK(ResolveRecordMember(*Registry.Find(Type.Id), &FMemberFixture::Second) == Second);
+	HYP_CHECK(ResolveRecordMember(Copy, &FMemberFixture::First) == First);
+	const auto Independent = MemberFixtureType();
+	HYP_CHECK(ResolveRecordMember(Independent, &FMemberFixture::First) != First);
+	Reject(
+	    [&]
+	    {
+		    Registry.Register(Independent);
+	    },
+	    "Conflicting");
+}
+
+void CheckMemberResolutionFailures()
+{
+	struct FOtherOwner
+	{
+		int First{};
+	};
+
+	const auto Type = MemberFixtureType();
+	HYP_CHECK(!Type.Members[0].Association.Matches(&FOtherOwner::First));
+	Reject(
+	    [&]
+	    {
+		    ResolveRecordMember(Type, &FOtherOwner::First);
+	    },
+	    "owning type mismatch");
+	Reject(
+	    [&]
+	    {
+		    ResolveRecordMember(Type, &FMemberFixture::Missing);
+	    },
+	    "Missing reflected member");
+	int FMemberFixture::* Null{};
+	Reject(
+	    [&]
+	    {
+		    ResolveRecordMember(Type, Null);
+	    },
+	    "Null reflected member");
+	Reject(
+	    [&]
+	    {
+		    (void)FRecordMemberAssociation(Null);
+	    },
+	    "Null reflected member");
+	auto Ambiguous = Type;
+	Ambiguous.Members.push_back(Member("anotherFirst", &FMemberFixture::First));
+	ValidateRecordDescriptor(Ambiguous);
+	Reject(
+	    [&]
+	    {
+		    ResolveRecordMember(Ambiguous, &FMemberFixture::First);
+	    },
+	    "Ambiguous reflected member");
+}
+
+void CheckCustomMemberAssociation()
+{
+	const FRecordMember Custom{"custom",
+	                           [](const void* InObject)
+	                           {
+		                           return WriteValue(static_cast<const FMemberFixture*>(InObject)->First);
+	                           },
+	                           [](void* InObject, const FArchiveNode& InValue, const FRecordReadContext& InContext)
+	                           {
+		                           static_cast<FMemberFixture*>(InObject)->First = ReadValue<int>(InValue, InContext);
+	                           },
+	                           [](const void*, const FRecordVisitor&, std::string_view)
+	                           {
+	                           },
+	                           {},
+	                           &RecordValueShape<int>};
+	const auto Type = MakeRecord<FMemberFixture>("test.member.custom", {Custom});
+	FRecordRegistry Registry;
+	Registry.Register(Type);
+	Registry.Register(Type);
+	const FMemberFixture Object{37, 19};
+	const auto Archive = WriteRecord(Type, &Object);
+	const auto Restored = std::static_pointer_cast<FMemberFixture>(ReadRecord(*Registry.Find(Type.Id), Archive));
+	HYP_CHECK(Restored->First == 37 && Restored->Second == 0);
+	HYP_CHECK(!Custom.Association.Matches(&FMemberFixture::First));
+	Reject(
+	    [&]
+	    {
+		    ResolveRecordMember(Type, &FMemberFixture::First);
+	    },
+	    "Missing reflected member");
+}
+
+void CheckMemberIdentityLifetime()
+{
+	FRecordMemberIdentity Identity;
+	std::weak_ptr<const void> Definition;
+	{
+		auto Source = MemberFixtureType();
+		Definition = Source.Definition;
+		Identity = ResolveRecordMember(Source, &FMemberFixture::First);
+		auto Moved = std::move(Source);
+		HYP_CHECK(ResolveRecordMember(Moved, &FMemberFixture::First) == Identity);
+		Moved.Id = "changed.type";
+		Moved.Members[0].Id = "changed.field";
+		std::vector<FRecordMember>().swap(Moved.Members);
+	}
+	HYP_CHECK(!Definition.expired());
+	HYP_CHECK(Identity.TypeId == "test.member.identity" && Identity.FieldId == "first");
+	Identity = {};
+	HYP_CHECK(Definition.expired());
 }
 
 void CheckContextMigrationContract()
@@ -481,6 +641,10 @@ void CheckRecordEvolution()
 	CheckMismatch();
 	CheckRegistry();
 	CheckBindingIdentity();
+	CheckMemberResolution();
+	CheckMemberResolutionFailures();
+	CheckCustomMemberAssociation();
+	CheckMemberIdentityLifetime();
 	CheckContextMigrationContract();
 	CheckStrictUnknownFields();
 	CheckWire();

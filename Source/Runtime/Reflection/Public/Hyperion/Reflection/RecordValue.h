@@ -419,7 +419,8 @@ template<class T, class M> FRecordMember Member(std::string InId, M T::* InMembe
 		        VisitValue(static_cast<const T*>(InObject)->*InMember, InVisitor, InPath);
 	        },
 	        std::move(InOptions),
-	        &RecordValueShape<M>};
+	        &RecordValueShape<M>,
+	        FRecordMemberAssociation(InMember)};
 }
 
 template<class T>

@@ -99,46 +99,47 @@ FOperationInfo PropertyInfo(const std::string& InId, bool bInReadOnly, FAssetAut
 }
 
 template<auto Member>
-void RegisterField(FOperationCatalog& InCatalog, FAssetAutomation* InProvider, std::string InId, std::string InField,
+void RegisterField(FOperationCatalog& InCatalog, FAssetAutomation* InProvider, std::string InId,
                    bool bInWritable = true)
 {
 	using FSource = typename TAssetMember<decltype(Member)>::FSource;
 	using FValue = typename TAssetMember<decltype(Member)>::FValue;
 	using FResult = TAssetFieldValue<Member>;
 	using FRequest = TAssetFieldEdit<Member>;
-	const auto TypeId = RecordType<FSource>().Id;
+	const auto Field = ResolveRecordMember(RecordType<FSource>(), Member);
 	const auto& ResultType = FieldResult<Member>(InId);
 	const auto& RequestType = FieldRequest<Member>(InId);
 	auto Get = PropertyInfo(InId + ".get", true, InProvider);
 	const FAssetPropertyQuery Example{"document-from-open", 1};
 	Get.Example = WriteRecordWire(PropertyQueryType(), &Example);
-	InCatalog.Register({std::move(Get), &PropertyQueryType(), &ResultType, false,
-	                    [InProvider, TypeId, InField, Result = &ResultType](const void* InRequest)
-	                    {
-		                    const auto& Request = *static_cast<const FAssetPropertyQuery*>(InRequest);
-		                    if (InProvider->Info({Request.Document}).Generation != Request.Generation)
-		                    {
-			                    throw FAutomationError("stale_revision", "Asset changed; restart the property query");
-		                    }
-		                    if (!Request.Limit || Request.Limit > 100)
-		                    {
-			                    throw std::invalid_argument("Property page limit must be 1-100");
-		                    }
-		                    FResult Value{ReadValue<FValue>(InProvider->ReadField(Request.Document, TypeId, InField))};
-		                    if constexpr (requires { typename FValue::allocator_type; })
-		                    {
-			                    Value.Total = Value.Value.size();
-			                    const auto Begin = std::min(std::size_t(Request.Offset), Value.Value.size());
-			                    const auto End = std::min(Begin + Request.Limit, Value.Value.size());
-			                    FValue Page(Value.Value.begin() + Begin, Value.Value.begin() + End);
-			                    if (End < Value.Value.size())
-			                    {
-				                    Value.Next = static_cast<std::uint32_t>(End);
-			                    }
-			                    Value.Value = std::move(Page);
-		                    }
-		                    return FOperationTask{WriteRecordWire(*Result, &Value)};
-	                    }});
+	InCatalog.Register(
+	    {std::move(Get), &PropertyQueryType(), &ResultType, false,
+	     [InProvider, Field, Result = &ResultType](const void* InRequest)
+	     {
+		     const auto& Request = *static_cast<const FAssetPropertyQuery*>(InRequest);
+		     if (InProvider->Info({Request.Document}).Generation != Request.Generation)
+		     {
+			     throw FAutomationError("stale_revision", "Asset changed; restart the property query");
+		     }
+		     if (!Request.Limit || Request.Limit > 100)
+		     {
+			     throw std::invalid_argument("Property page limit must be 1-100");
+		     }
+		     FResult Value{ReadValue<FValue>(InProvider->ReadField(Request.Document, Field.TypeId, Field.FieldId))};
+		     if constexpr (requires { typename FValue::allocator_type; })
+		     {
+			     Value.Total = Value.Value.size();
+			     const auto Begin = std::min(std::size_t(Request.Offset), Value.Value.size());
+			     const auto End = std::min(Begin + Request.Limit, Value.Value.size());
+			     FValue Page(Value.Value.begin() + Begin, Value.Value.begin() + End);
+			     if (End < Value.Value.size())
+			     {
+				     Value.Next = static_cast<std::uint32_t>(End);
+			     }
+			     Value.Value = std::move(Page);
+		     }
+		     return FOperationTask{WriteRecordWire(*Result, &Value)};
+	     }});
 	if (!bInWritable)
 	{
 		return;
@@ -148,7 +149,7 @@ void RegisterField(FOperationCatalog& InCatalog, FAssetAutomation* InProvider, s
 	Set.Example = WriteRecordWire(RequestType, &SetExample);
 	InCatalog.Register(
 	    {std::move(Set), &RequestType, &RecordType<FAssetDocumentInfo>(), true,
-	     [InProvider, TypeId, InField](const void* InRequest)
+	     [InProvider, Field](const void* InRequest)
 	     {
 		     const auto& Request = *static_cast<const FRequest*>(InRequest);
 		     auto Value = Request.Value;
@@ -156,7 +157,8 @@ void RegisterField(FOperationCatalog& InCatalog, FAssetAutomation* InProvider, s
 		     {
 			     if constexpr (requires { typename FValue::allocator_type; })
 			     {
-				     auto Full = ReadValue<FValue>(InProvider->ReadField(Request.Document, TypeId, InField));
+				     auto Full =
+				         ReadValue<FValue>(InProvider->ReadField(Request.Document, Field.TypeId, Field.FieldId));
 				     if (*Request.Offset > Full.size() || Value.size() > Full.size() - *Request.Offset)
 				     {
 					     throw std::invalid_argument("Replacement range is outside the field");
@@ -169,8 +171,8 @@ void RegisterField(FOperationCatalog& InCatalog, FAssetAutomation* InProvider, s
 				     throw std::invalid_argument("Offset requires a sequence field");
 			     }
 		     }
-		     auto Pending =
-		         InProvider->SetField(Request.Document, Request.Generation, TypeId, InField, WriteValue(Value));
+		     auto Pending = InProvider->SetField(Request.Document, Request.Generation, Field.TypeId, Field.FieldId,
+		                                         WriteValue(Value));
 		     return FOperationTask{{},
 		                           [Poll = std::move(Pending.Poll)]() -> std::optional<FArchiveNode>
 		                           {
@@ -190,19 +192,19 @@ void RegisterAssetProperties(FOperationCatalog& InCatalog, FAssetAutomation* InP
 	RegisterModelProperties(InCatalog, InProvider);
 	RegisterMaterialNumeric(InCatalog, InProvider);
 	RegisterTextureSamples(InCatalog, InProvider);
-	RegisterField<&FModelAsset::Nodes>(InCatalog, InProvider, "model.nodes", "nodes");
-	RegisterField<&FModelAsset::MaterialSlots>(InCatalog, InProvider, "model.material_slots", "materialSlots");
-	RegisterField<&FMaterialAsset::Values>(InCatalog, InProvider, "material.values", "values");
-	RegisterField<&FMaterialAsset::Parameters>(InCatalog, InProvider, "material.parameters", "parameters", false);
-	RegisterField<&FMaterialAsset::Passes>(InCatalog, InProvider, "material.passes", "passes", false);
-	RegisterField<&FModelAsset::Roots>(InCatalog, InProvider, "model.roots", "roots", false);
-	RegisterField<&FSkyAsset::Radiance>(InCatalog, InProvider, "sky.radiance", "radiance", false);
-	RegisterField<&FSkyAsset::Specular>(InCatalog, InProvider, "sky.specular", "specular", false);
-	RegisterField<&FSkyAsset::Brdf>(InCatalog, InProvider, "sky.brdf", "brdf", false);
-	RegisterField<&FSkyAsset::Irradiance>(InCatalog, InProvider, "sky.irradiance", "irradiance", false);
-	RegisterField<&FSkyAsset::Convention>(InCatalog, InProvider, "sky.convention", "convention", false);
-	RegisterField<&FTextureAsset::Dimension>(InCatalog, InProvider, "texture.dimension", "dimension", false);
-	RegisterField<&FTextureAsset::Format>(InCatalog, InProvider, "texture.format", "format", false);
-	RegisterField<&FTextureAsset::Encoding>(InCatalog, InProvider, "texture.encoding", "encoding", false);
+	RegisterField<&FModelAsset::Nodes>(InCatalog, InProvider, "model.nodes");
+	RegisterField<&FModelAsset::MaterialSlots>(InCatalog, InProvider, "model.material_slots");
+	RegisterField<&FMaterialAsset::Values>(InCatalog, InProvider, "material.values");
+	RegisterField<&FMaterialAsset::Parameters>(InCatalog, InProvider, "material.parameters", false);
+	RegisterField<&FMaterialAsset::Passes>(InCatalog, InProvider, "material.passes", false);
+	RegisterField<&FModelAsset::Roots>(InCatalog, InProvider, "model.roots", false);
+	RegisterField<&FSkyAsset::Radiance>(InCatalog, InProvider, "sky.radiance", false);
+	RegisterField<&FSkyAsset::Specular>(InCatalog, InProvider, "sky.specular", false);
+	RegisterField<&FSkyAsset::Brdf>(InCatalog, InProvider, "sky.brdf", false);
+	RegisterField<&FSkyAsset::Irradiance>(InCatalog, InProvider, "sky.irradiance", false);
+	RegisterField<&FSkyAsset::Convention>(InCatalog, InProvider, "sky.convention", false);
+	RegisterField<&FTextureAsset::Dimension>(InCatalog, InProvider, "texture.dimension", false);
+	RegisterField<&FTextureAsset::Format>(InCatalog, InProvider, "texture.format", false);
+	RegisterField<&FTextureAsset::Encoding>(InCatalog, InProvider, "texture.encoding", false);
 }
 } // namespace Hyperion

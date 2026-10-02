@@ -154,6 +154,10 @@ Member 选项依次为 required、persistent、读别名。默认值来自对象
 
 支持 bool、有符号整数、完整 uint64、有限浮点、字符串、注册数值枚举、嵌套记录、vector、固定 array、optional、string-keyed map 和数值 bulk。枚举必须专门实现 RecordEnumValues<T>()，不接受未注册数值。类型注册检查 C++ 类型、模式、字段元数据及回调绑定身份冲突。TRecordCallback 保留 lambda 构造/调用方式，副本保持身份，替换成员读写、visitor、validator 或迁移回调会获得新身份；相同 callable 类型的不同捕获值也不能绕过冲突检查。所有读取先构造临时值并校验；ReadRecordFields 仅对可以 noexcept move assignment 的类型提交，其他类型用 ReadValue/ReadRecord 返回新值。
 
+`Member` 同时保存实际 C++ 成员指针的可选关联。`ResolveRecordMember(Descriptor, &Type::Member)` 检查所属 C++ 类型和唯一匹配，返回拥有 `TypeId`、规范 `FieldId` 与 definition identity 的 `FRecordMemberIdentity`；空指针、缺失关联和多重匹配均失败。关联先检查成员指针的精确类型，再使用 C++ 相等比较，不读取对象、不比较指针内存表示或推断偏移。持久化 alias 仍只是读取别名，查询返回声明的规范字段 ID。
+
+成员身份的字符串拥有独立存储，不借用描述符的 `Members` 元素；`Definition` token 只标识定义，不能维持该数组的生命周期。描述符副本保留定义及成员关联，重复注册仍验证原有回调和元数据，并拒绝仅改变关联的副本。自定义 callback 字段可以不提供关联，继续支持读写、schema 和注册；缺少关联时不能通过类型化成员查询取得身份。这些内部关联不改变字段顺序、版本、归档字节或 wire schema。
+
 配置和 GUI 的 FTypeDescriptor 继续沿用，不因原生资产引入第二套同用途配置格式。这里没有 C++ 反射代码生成、任意指针对象图或对象内存转储。
 
 ## 二进制格式与限额
