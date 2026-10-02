@@ -2,12 +2,12 @@
 
 - [x] 1.1 Read both native recording paths, cache admission and fenced ownership; resolve current targets and coordinate shared build/test files.
 - [x] 1.2 Add only benchmark state-switch fixtures, independent parameter/readback cases and minimal backend-private read-only plan metrics; obtain review that baseline preparation does not refactor production interpretation or execution.
-- [ ] 1.3 Build Release and serially capture at least three ordinary/owned trials for homogeneous/switching workloads at all six draw counts; freeze executable/runtime hashes and raw CSV, median/p95/variation and real command-storage/lifecycle evidence before production changes.
+- [x] 1.3 Build Release and serially capture at least three ordinary/owned trials for homogeneous/switching workloads at all six draw counts; freeze executable/runtime hashes and raw CSV, median/p95/variation and real command-storage/lifecycle evidence before production changes.
 
 ## 2. M08A: share native parameter construction
 
-- [ ] 2.1 Introduce focused private native geometry/dynamic/indexed-draw values and route ordinary recording and plan building through the same construction without adding cold-path command allocation or repeated resolution.
-- [ ] 2.2 Verify fixed independent parameters and native pixels for nondefault draw offsets/counts/stride/state, plus first-owned/ordinary equivalence; preserve state suppression and public RHI behavior.
+- [x] 2.1 Introduce focused private native geometry/dynamic/indexed-draw values and route ordinary recording and plan building through the same construction without adding cold-path command allocation or repeated resolution.
+- [x] 2.2 Verify fixed independent parameters and native pixels for nondefault draw offsets/counts/stride/state, plus first-owned/ordinary equivalence; preserve state suppression and public RHI behavior.
 
 ## 3. M08B: make cached payloads explicit
 

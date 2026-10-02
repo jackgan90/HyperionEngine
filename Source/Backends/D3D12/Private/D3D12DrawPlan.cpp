@@ -1,4 +1,5 @@
 #include "D3D12Bindings.h"
+#include "D3D12DrawArguments.h"
 #include "D3D12DrawPlanInspection.h"
 #include "D3D12Draws.h"
 #include "D3D12GraphicsState.h"
@@ -178,26 +179,29 @@ struct FPlanBuilder
 			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Topology, UINT(Topology)});
 			++Plan.Binds[5];
 		}
-		if (!Dynamic || Dynamic->StencilReference != InDraw.DynamicState.StencilReference)
+		const auto StencilReference = NativeStencilReference(InDraw.DynamicState);
+		if (!Dynamic || Dynamic->StencilReference != StencilReference)
 		{
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Stencil, InDraw.DynamicState.StencilReference});
+			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Stencil, StencilReference});
 			++Plan.Binds[6];
 		}
-		if (!Dynamic || Dynamic->BlendConstants != InDraw.DynamicState.BlendConstants)
+		const auto& BlendConstants = NativeBlendConstants(InDraw.DynamicState);
+		if (!Dynamic || Dynamic->BlendConstants != BlendConstants)
 		{
-			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Blend, 0, 0,
-			                         std::bit_cast<std::array<std::uint32_t, 4>>(InDraw.DynamicState.BlendConstants)});
+			Plan.Commands.push_back(
+			    {FD3D12DrawPlan::EOperation::Blend, 0, 0, std::bit_cast<std::array<std::uint32_t, 4>>(BlendConstants)});
 			++Plan.Binds[6];
 		}
 		if (!Dynamic || Scissor.Left != InDraw.Scissor.Left || Scissor.Top != InDraw.Scissor.Top ||
 		    Scissor.Right != InDraw.Scissor.Right || Scissor.Bottom != InDraw.Scissor.Bottom)
 		{
 			Scissor = InDraw.Scissor;
+			const auto NativeRect = NativeScissor(InDraw.Scissor);
 			Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Scissor,
 			                         0,
 			                         0,
-			                         {std::uint32_t(Scissor.Left), std::uint32_t(Scissor.Top),
-			                          std::uint32_t(Scissor.Right), std::uint32_t(Scissor.Bottom)}});
+			                         {std::uint32_t(NativeRect.left), std::uint32_t(NativeRect.top),
+			                          std::uint32_t(NativeRect.right), std::uint32_t(NativeRect.bottom)}});
 			++Plan.Binds[6];
 		}
 		Dynamic = InDraw.DynamicState;
@@ -207,8 +211,7 @@ struct FPlanBuilder
 	{
 		const auto& VertexBuffer = NativeResource<FD3D12Buffer>(InDraw.Vertices.Payload, &Device);
 		const auto& IndexBuffer = NativeResource<FD3D12Buffer>(InDraw.Indices.Payload, &Device);
-		const D3D12_VERTEX_BUFFER_VIEW NewVertices{VertexBuffer.Resource->GetGPUVirtualAddress(),
-		                                           UINT(VertexBuffer.Size), InDraw.VertexStride};
+		const auto NewVertices = NativeVertexBufferView(VertexBuffer, InDraw.VertexStride);
 		if (Vertices.BufferLocation != NewVertices.BufferLocation || Vertices.SizeInBytes != NewVertices.SizeInBytes ||
 		    Vertices.StrideInBytes != NewVertices.StrideInBytes)
 		{
@@ -219,9 +222,9 @@ struct FPlanBuilder
 			                         {Vertices.SizeInBytes, Vertices.StrideInBytes}});
 			++Plan.Binds[5];
 		}
-		const D3D12_INDEX_BUFFER_VIEW NewIndices{IndexBuffer.Resource->GetGPUVirtualAddress(), UINT(IndexBuffer.Size),
-		                                         DXGI_FORMAT_R32_UINT};
-		if (Indices.BufferLocation != NewIndices.BufferLocation || Indices.SizeInBytes != NewIndices.SizeInBytes)
+		const auto NewIndices = NativeIndexBufferView(IndexBuffer);
+		if (Indices.BufferLocation != NewIndices.BufferLocation || Indices.SizeInBytes != NewIndices.SizeInBytes ||
+		    Indices.Format != NewIndices.Format)
 		{
 			Indices = NewIndices;
 			Plan.Commands.push_back(
@@ -293,11 +296,12 @@ std::shared_ptr<const FD3D12DrawPlan> BuildPlan(const FD3D12DeviceState& InState
 		Builder.State(Draw, Pipeline);
 		Builder.Geometry(Draw);
 		Builder.Resources(Draw, Pipeline);
-		Builder.Plan.Commands.push_back(
-		    {FD3D12DrawPlan::EOperation::Draw,
-		     0,
-		     0,
-		     {Draw.IndexCount, Draw.InstanceCount, Draw.FirstIndex, std::bit_cast<std::uint32_t>(Draw.VertexOffset)}});
+		const auto Arguments = NativeIndexedDrawArguments(Draw);
+		Builder.Plan.Commands.push_back({FD3D12DrawPlan::EOperation::Draw,
+		                                 0,
+		                                 0,
+		                                 {Arguments.IndexCount, Arguments.InstanceCount, Arguments.FirstIndex,
+		                                  std::bit_cast<std::uint32_t>(Arguments.VertexOffset)}});
 	}
 	return std::make_shared<const FD3D12DrawPlan>(std::move(Builder.Plan));
 }
@@ -357,7 +361,8 @@ void ExecuteCommand(ID3D12GraphicsCommandList& InList, const FD3D12DrawPlan::FCo
 			InList.SetGraphicsRootDescriptorTable(InCommand.Slot, {InCommand.Value});
 			break;
 		case FD3D12DrawPlan::EOperation::Draw:
-			InList.DrawIndexedInstanced(Args[0], Args[1], Args[2], std::bit_cast<std::int32_t>(Args[3]), 0);
+			InList.DrawIndexedInstanced(Args[0], Args[1], Args[2], std::bit_cast<std::int32_t>(Args[3]),
+			                            FD3D12IndexedDrawArguments::FirstInstance);
 			break;
 	}
 }

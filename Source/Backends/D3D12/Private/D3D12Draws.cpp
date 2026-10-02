@@ -1,6 +1,7 @@
 #include "D3D12Draws.h"
 #include "D3D12Bindings.h"
 #include "D3D12Dispatch.h"
+#include "D3D12DrawArguments.h"
 #include "D3D12GraphicsState.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/RHI/RHIPipeline.h"
@@ -153,21 +154,23 @@ void BindDrawState(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw,
 		InState.Topology = Topology;
 		++InState.GeometryBinds;
 	}
-	if (!InState.bDynamic || InState.Dynamic.StencilReference != InDraw.DynamicState.StencilReference)
+	const auto StencilReference = NativeStencilReference(InDraw.DynamicState);
+	if (!InState.bDynamic || InState.Dynamic.StencilReference != StencilReference)
 	{
-		InList.OMSetStencilRef(InDraw.DynamicState.StencilReference);
+		InList.OMSetStencilRef(StencilReference);
 		++InState.DynamicBinds;
 	}
-	if (!InState.bDynamic || InState.Dynamic.BlendConstants != InDraw.DynamicState.BlendConstants)
+	const auto& BlendConstants = NativeBlendConstants(InDraw.DynamicState);
+	if (!InState.bDynamic || InState.Dynamic.BlendConstants != BlendConstants)
 	{
-		InList.OMSetBlendFactor(InDraw.DynamicState.BlendConstants.data());
+		InList.OMSetBlendFactor(BlendConstants.data());
 		++InState.DynamicBinds;
 	}
 	if (!InState.bDynamic || InState.Scissor.Left != InDraw.Scissor.Left || InState.Scissor.Top != InDraw.Scissor.Top ||
 	    InState.Scissor.Right != InDraw.Scissor.Right || InState.Scissor.Bottom != InDraw.Scissor.Bottom)
 	{
-		const D3D12_RECT Rect{InDraw.Scissor.Left, InDraw.Scissor.Top, InDraw.Scissor.Right, InDraw.Scissor.Bottom};
-		InList.RSSetScissorRects(1, &Rect);
+		const auto Scissor = NativeScissor(InDraw.Scissor);
+		InList.RSSetScissorRects(1, &Scissor);
 		++InState.DynamicBinds;
 	}
 	InState.Dynamic = InDraw.DynamicState;
@@ -178,8 +181,7 @@ void BindDrawState(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw,
 void BindGeometry(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw, const FDrawResources& InResources,
                   FDrawState& InState)
 {
-	const D3D12_VERTEX_BUFFER_VIEW Vertices{InResources.Vertices->Resource->GetGPUVirtualAddress(),
-	                                        static_cast<UINT>(InResources.Vertices->Size), InDraw.VertexStride};
+	const auto Vertices = NativeVertexBufferView(*InResources.Vertices, InDraw.VertexStride);
 	if (InState.Vertices.BufferLocation != Vertices.BufferLocation ||
 	    InState.Vertices.SizeInBytes != Vertices.SizeInBytes ||
 	    InState.Vertices.StrideInBytes != Vertices.StrideInBytes)
@@ -188,8 +190,7 @@ void BindGeometry(ID3D12GraphicsCommandList& InList, const FDrawPacket& InDraw, 
 		InState.Vertices = Vertices;
 		++InState.GeometryBinds;
 	}
-	const D3D12_INDEX_BUFFER_VIEW Indices{InResources.Indices->Resource->GetGPUVirtualAddress(),
-	                                      static_cast<UINT>(InResources.Indices->Size), DXGI_FORMAT_R32_UINT};
+	const auto Indices = NativeIndexBufferView(*InResources.Indices);
 	if (InState.Indices.BufferLocation != Indices.BufferLocation ||
 	    InState.Indices.SizeInBytes != Indices.SizeInBytes || InState.Indices.Format != Indices.Format)
 	{
@@ -239,7 +240,9 @@ void RecordDraws(ID3D12GraphicsCommandList& InList, const FPassCommands& InComma
 		BindDrawState(InList, Draw, Pipeline, State);
 		BindGeometry(InList, Draw, Resources, State);
 		RecordGraphicsBindings(InList, Draw, Pipeline, InState, Bindings);
-		InList.DrawIndexedInstanced(Draw.IndexCount, Draw.InstanceCount, Draw.FirstIndex, Draw.VertexOffset, 0);
+		const auto Arguments = NativeIndexedDrawArguments(Draw);
+		InList.DrawIndexedInstanced(Arguments.IndexCount, Arguments.InstanceCount, Arguments.FirstIndex,
+		                            Arguments.VertexOffset, FD3D12IndexedDrawArguments::FirstInstance);
 	}
 	InState.GraphicsRootBinds += Bindings.RootBinds;
 	InState.GraphicsHeapBinds += Bindings.HeapBinds;

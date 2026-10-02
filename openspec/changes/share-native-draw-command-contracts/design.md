@@ -24,6 +24,10 @@ Record `sizeof` of a native command, command count, vector capacity bytes, and a
 
 Add small private native values/helpers for vertex/index views, scissor/dynamic input and indexed-draw arguments. Helpers take already-resolved native resources or validated values and perform only deterministic construction. Both ordinary recorder and plan builder consume them, including index format comparison even while R32 remains the sole supported format. Preserve signed VertexOffset, nonzero FirstIndex, IndexCount, InstanceCount, buffer extent and vertex stride exactly; StartInstanceLocation stays zero.
 
+Construct vertex and index views separately at their original consumption sites. Finish the vertex-view comparison, emission and cache update before querying and constructing the index view. Shared construction must not combine the two views into a larger intermediate aggregate or evaluate the index resource address early.
+
+Identity-compatible dynamic inputs do not require an owning aggregate for every draw. Share stencil interpretation by scalar value and borrow the current stable packet's blend array only for synchronous use. Compare scissor state before constructing its native rectangle, so construction occurs only when a command must be emitted. The plan builder immediately copies borrowed blend values into its command payload; cached commands and caches must never retain references or views into a packet's dynamic inputs.
+
 Do not combine resource resolution, ownership validation or binding caches into the helper. Ordinary recording retains its local state suppression and direct native calls. Plan creation retains its own state suppression and uses the same interpreted values. Avoid allocating an intermediate command stream for every ordinary recording. This keeps the cold path cheap and reduces the duplicated contract without forcing identical execution machinery.
 
 ### M08B: typed trivial payloads and named statistics
