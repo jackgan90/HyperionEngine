@@ -129,6 +129,12 @@ HYP_TEXTURE_2D(float4, SurfaceCoverage, Pass)
 
 `HYP_UNIFORM_FLAT_BEGIN(Name)` 保留公共兼容块的平铺字段。`HYP_SHADER_VALUE(Type, Name, Scope)` 声明独立数值；texture/cube、sampler/comparison sampler 和可写 texture 分别使用 `HYP_TEXTURE_2D/HYP_TEXTURE_CUBE`、`HYP_SAMPLER/HYP_COMPARISON_SAMPLER`、`HYP_RW_TEXTURE_2D`。当前纹理契约接受浮点元素。`HYP_READ_BUFFER(ElementType, Name, Scope)` 引用 `HYP_STRUCTURED_BEGIN(ElementType)` / `HYP_STRUCTURED_FIELD(Type, Name)` / `HYP_STRUCTURED_END()` 声明的元素布局；scalar/vector structured profile 按四字节分量排列并独立推导 stride，不套用 cbuffer 的寄存器规则，实际 native 布局仍需反射兼容。
 
+直接上传的 CPU 光照记录另由 Materials 的 `ShaderWireLayout.h` 校验。`HYP_SHADER_WIRE_MEMBER(Record, Member)` 从同一个实际成员取得 C++ 类型、名称和 `offsetof`，描述保留所属记录类型；记录必须满足 standard-layout 和 trivially-copyable。校验将名称、scalar、行列数、offset、成员 extent 和总 stride 与上述声明产生的独立 GPU 契约逐项比较，不使用 C++ 布局反推 GPU 布局。目前只接受小端四字节 IEEE float、uint32 和已证明四个 float 分量位于 0/4/8/12 的 16 字节 `FVec4`；bool、矩阵、数组及未知同尺寸类型不能据逻辑参数映射直接上传。
+
+Renderer 在创建光照 buffer source 前按类型化资源语义校验一次并缓存 stride。cluster light/header/index 与附加方向光分别保持 64/8/4/32 字节；默认值、当前值和复用 source 的 view 都采用验证后的 stride。`FClusterHeader` 的 `Offset/Count` 使用显式适配，验证两个实际 uint32 成员位于 0/4、总大小为 8，再对应契约中的一个匿名 uint2；index 使用匿名 uint scalar 适配。HLSL 记录仍独立声明，并继续由各编译目标的完整反射校验。物理布局相符不能证明某个数值写入了正确语义槽位，因此实际 producer 的固定字节、字段读取和渲染行为仍分别验证。
+
+局部光的 inverse range、inner/outer cosine 和 0/1 spot flag 在 Renderer 私有 `LocalLightEncoding.h` 中表达为命名值，cluster record 与 light-volume `ConeRange` 从同一编码取得这些值。HLSL 将两种物理表示分别解码为同一组命名衰减字段；原有接收 float4 `ConeRange` 的调用继续可用。解码只解释已有分量，不增加输入校验、clamp 或浮点计算；距离与 cone 截止条件、spot 阈值、smoothstep、衰减计算顺序及亮度上限保持原规则。
+
 默认策略为 General、非 Scene 所有、无默认 Scene 输入、Default 编辑提示；`HYP_CONTRACT_POLICY(Group, SceneOwned, DefaultInput)` 修改后续声明的默认策略。`HYP_SEMANTIC_POLICY`、`HYP_SEMANTIC_WIRE`、`HYP_SEMANTIC_ALIAS`、`HYP_SEMANTIC_CONVENTION` 为紧邻的上一条字段/资源声明补充例外元数据，不重复类型或 scope；`HYP_UNIFORM_WIRE_NAMESPACE` / `HYP_RESOURCE_NAMESPACE` 设置名称前缀，`HYP_RESOURCE_SHADER_NAME` 保留不同的既有 shader 资源名。字段 enum 保留布尔成员的 `b` 拼写。需要固定历史 ABI 时，可显式使用 `HYP_UNIFORM_ABI_OFFSET` 指定下一字段的位置、`HYP_UNIFORM_ABI_SIZE` 保留 extent；普通内置声明无需这些数字。
 
 工厂提供 `Get<Domain>ShaderContracts()`，无需修改通用绑定层或全局枚举。布局在构造不可变契约集合时计算一次，数值赋值不重算。`HYP_SHADER_CONTRACT(Name, Version)` 声明版本，必要时新增版本化资源名并保留兼容别名；预期布局独立于 shader 反射，实际出现的资源仍按完整 native 布局校验。

@@ -12,6 +12,7 @@ void CheckComputeShaders(const std::filesystem::path& InRoot);
 void TestMountedShaders();
 void TestShaderSnapshots();
 void CheckMaterialShaderReflection(const std::filesystem::path& InRoot);
+void CheckLightingWireShaders();
 
 namespace Hyperion::ShadersPrivate
 {
@@ -252,6 +253,7 @@ int main()
 		CheckMaterialShaderReflection(Root);
 		CheckComputeShaders(Root);
 		CheckDeferredShaders();
+		CheckLightingWireShaders();
 		std::cout << "Shader target, reflection and cache checks passed\n";
 		return 0;
 	}

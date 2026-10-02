@@ -1,6 +1,8 @@
 #include "Hyperion/Renderer/ClusteredLights.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Materials/Lighting/ClusterParameters.h"
+#include "LightingWireContracts.h"
+#include "LocalLightEncoding.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -16,7 +18,6 @@ constexpr std::uint32_t DepthSlices = 24;
 constexpr std::size_t MaximumCells = 1024 * 1024;
 constexpr std::size_t MaximumReferences = 16 * 1024 * 1024;
 constexpr std::size_t MaximumLights = 65536;
-static_assert(sizeof(FClusterLightData) == 64 && sizeof(FClusterHeader) == 8);
 
 FMaterialValue BufferValue(const std::shared_ptr<const FMaterialReadBufferSource>& InSource, std::uint32_t InStride)
 {
@@ -230,6 +231,7 @@ FLists BuildLists(const FRenderView& InView, const FGrid& InGrid, std::span<cons
 
 FMaterialParameterValues DefaultClusterParameters()
 {
+	const auto& Strides = GetLightingWireStrides();
 	static const auto Light = Buffer<FClusterLightData>({});
 	static const auto Header = Buffer<FClusterHeader>({});
 	static const auto Indices = Buffer<std::uint32_t>({});
@@ -238,14 +240,15 @@ FMaterialParameterValues DefaultClusterParameters()
 	        {EClusterViewV1Field::ClusterCamera, FMaterialValue::Float(FVec4{})},
 	        {EClusterViewV1Field::ClusterForward, FMaterialValue::Float(FVec4{})},
 	        {EClusterViewV1Field::ClusterDepth, FMaterialValue::Float(FVec4{})},
-	        {EClusterSemantic::ClusterLights, BufferValue(Light, 64)},
-	        {EClusterSemantic::ClusterHeaders, BufferValue(Header, 8)},
-	        {EClusterSemantic::ClusterIndices, BufferValue(Indices, 4)}};
+	        {EClusterSemantic::ClusterLights, BufferValue(Light, Strides.ClusterLight)},
+	        {EClusterSemantic::ClusterHeaders, BufferValue(Header, Strides.ClusterHeader)},
+	        {EClusterSemantic::ClusterIndices, BufferValue(Indices, Strides.ClusterIndex)}};
 }
 
 FClusterLightFrame FClusteredLights::Build(const FRenderView& InView, std::span<const FLocalLight> InLights)
 {
 	HYP_PERF_SCOPE_C(Render, BuildLightClusters);
+	const auto& Strides = GetLightingWireStrides();
 	const auto Start = std::chrono::steady_clock::now();
 	if (InLights.empty())
 	{
@@ -266,10 +269,7 @@ FClusterLightFrame FClusteredLights::Build(const FRenderView& InView, std::span<
 		const auto& Bounds = Light.Bounds;
 		Key.insert(Key.end(), {Bounds.Minimum.X, Bounds.Minimum.Y, Bounds.Minimum.Z, Bounds.Maximum.X, Bounds.Maximum.Y,
 		                       Bounds.Maximum.Z});
-		NewAttributes.push_back({{Light.Position.X, Light.Position.Y, Light.Position.Z, 1.f / Light.Range},
-		                         {Light.Radiance.X, Light.Radiance.Y, Light.Radiance.Z, Light.bSpot ? 1.f : 0.f},
-		                         {Light.Direction.X, Light.Direction.Y, Light.Direction.Z, Light.InnerCos},
-		                         {Light.OuterCos, 0, 0, 0}});
+		NewAttributes.push_back(EncodeClusterLight(Light));
 	}
 	const bool bRebuild = !HeaderBuffer || AssignmentKey != Key;
 	if (bRebuild)
@@ -307,9 +307,9 @@ FClusterLightFrame FClusteredLights::Build(const FRenderView& InView, std::span<
 	     FMaterialValue::Float(FVec4{Layout.Forward.X, Layout.Forward.Y, Layout.Forward.Z, 0})},
 	    {EClusterViewV1Field::ClusterDepth,
 	     FMaterialValue::Float(FVec4{Layout.DepthScale, Layout.DepthBias, Layout.Near, Layout.Far})},
-	    {EClusterSemantic::ClusterLights, BufferValue(LightBuffer, 64)},
-	    {EClusterSemantic::ClusterHeaders, BufferValue(HeaderBuffer, 8)},
-	    {EClusterSemantic::ClusterIndices, BufferValue(IndexBuffer, 4)}};
+	    {EClusterSemantic::ClusterLights, BufferValue(LightBuffer, Strides.ClusterLight)},
+	    {EClusterSemantic::ClusterHeaders, BufferValue(HeaderBuffer, Strides.ClusterHeader)},
+	    {EClusterSemantic::ClusterIndices, BufferValue(IndexBuffer, Strides.ClusterIndex)}};
 	Result.Statistics = Statistics;
 	Result.Statistics.bRebuilt = bRebuild;
 	Result.Statistics.BufferBytes =

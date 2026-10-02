@@ -12,6 +12,12 @@
 #include <fstream>
 #include <iostream>
 
+namespace Hyperion::RendererPrivate
+{
+void CheckLightingWireReadback(FTaskSystem& InTasks, FRenderSession& InSession, IRHIDevice& InDevice,
+                               IRHISwapchain& InSwapchain, const std::shared_ptr<const void>& InScope);
+}
+
 namespace
 {
 using namespace Hyperion;
@@ -36,6 +42,8 @@ FDeviceStats CheckOutput(IRHIDevice& InDevice, FRenderSession& InSession,
 std::filesystem::path WriteComputeShaders()
 {
 	const auto Root = TestShaderRoot();
+	std::filesystem::copy_file(std::filesystem::path(HYP_SOURCE_DIR) / "Source/Tests/Shaders/LightingWireReadback.hlsl",
+	                           Root / "LightingWireReadback.hlsl", std::filesystem::copy_options::overwrite_existing);
 	std::ofstream(Root / "ComputeProducer.hlsl") << R"(
 cbuffer FrameInfo : register(b7, space1) { float Time; uint Index; };
 #define Value Time
@@ -311,6 +319,7 @@ void CheckComputeRenderer()
 	FRenderSession Session(Tasks, *Device, Compiler);
 	{
 		const auto Scope = Session.GetResources().CreateScopeLifetime();
+		RendererPrivate::CheckLightingWireReadback(Tasks, Session, *Device, *Swapchain, Scope);
 		CheckOptionalCompute(Tasks, Session, *Device, *Swapchain, Scope);
 		CheckComputeContractRejection(Tasks, Session, Scope);
 		CheckAuthoredFullscreen(Tasks, Session, Scope);

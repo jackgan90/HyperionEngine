@@ -5,6 +5,7 @@
 #include "Hyperion/Renderer/MaterialPipeline.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include "Hyperion/Renderer/ShaderParameters/DeferredLightingParameters.h"
+#include "LocalLightEncoding.h"
 #include "RenderResourcesInternal.h"
 
 namespace Hyperion
@@ -61,9 +62,7 @@ void SetLight(FMaterialInstance& InMaterial, const FLocalLight& InLight)
 	InMaterial.SetSemantic(ELocalLightV1Field::Position, FMaterialValue::Float(InLight.Position));
 	InMaterial.SetSemantic(ELocalLightV1Field::Radiance, FMaterialValue::Float(InLight.Radiance));
 	InMaterial.SetSemantic(ELocalLightV1Field::Direction, FMaterialValue::Float(InLight.Direction));
-	InMaterial.SetSemantic(ELocalLightV1Field::ConeRange,
-	                       FMaterialValue::Float(FVec4{1.f / InLight.Range, InLight.InnerCos, InLight.OuterCos,
-	                                                   InLight.bSpot ? 1.f : 0.f}));
+	InMaterial.SetSemantic(ELocalLightV1Field::ConeRange, FMaterialValue::Float(EncodeLightConeRange(InLight)));
 }
 } // namespace
 

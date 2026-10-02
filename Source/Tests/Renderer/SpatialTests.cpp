@@ -8,6 +8,12 @@
 
 void CheckClusteredLights();
 
+namespace Hyperion::RendererPrivate
+{
+void CheckLightingWireProducerBytes();
+void CheckLocalLightEncodingWords();
+} // namespace Hyperion::RendererPrivate
+
 namespace
 {
 using namespace Hyperion;
@@ -243,6 +249,8 @@ int main()
 		CheckCollection();
 		CheckLocalLightIndex();
 		CheckClusteredLights();
+		Hyperion::RendererPrivate::CheckLightingWireProducerBytes();
+		Hyperion::RendererPrivate::CheckLocalLightEncodingWords();
 		std::cout << "BVH differential, incremental updates, conservative early collection and view isolation passed\n";
 	}
 	catch (const std::exception& Error)

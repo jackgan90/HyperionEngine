@@ -5,6 +5,12 @@
 
 namespace Hyperion
 {
+struct FDirectionalLightData
+{
+	FVec4 Direction;
+	FVec4 Radiance;
+};
+
 inline constexpr auto DirectionalLightsSemantic = ESceneLightingSemantic::DirectionalLights;
 FMaterialValue DirectionalLightBuffer(const FSceneMetadata* InMetadata = nullptr,
                                       const FMaterialValue* InPrevious = nullptr);

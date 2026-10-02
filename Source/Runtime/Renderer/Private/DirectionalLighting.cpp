@@ -1,18 +1,13 @@
 #include "DirectionalLighting.h"
+#include "LightingWireContracts.h"
 #include <algorithm>
 
 namespace Hyperion
 {
 FMaterialValue DirectionalLightBuffer(const FSceneMetadata* InMetadata, const FMaterialValue* InPrevious)
 {
-	struct FLight
-	{
-		FVec4 Direction;
-		FVec4 Radiance;
-	};
-
-	static_assert(sizeof(FLight) == 32);
-	std::vector<FLight> Lights;
+	const auto& Strides = GetLightingWireStrides();
+	std::vector<FDirectionalLightData> Lights;
 	if (InMetadata)
 	{
 		for (const auto& [Handle, Entry] : InMetadata->DirectionalLights)
@@ -36,12 +31,13 @@ FMaterialValue DirectionalLightBuffer(const FSceneMetadata* InMetadata, const FM
 	const auto Bytes = std::as_bytes(std::span(Lights));
 	if (InPrevious && InPrevious->Buffer.Source && std::ranges::equal(Bytes, InPrevious->Buffer.Source->GetBytes()))
 	{
-		return *InPrevious;
+		return FMaterialValue::FromBuffer({InPrevious->Buffer.Source, EMaterialBufferViewKind::Structured, 0,
+		                                   Bytes.size(), Strides.DirectionalLight});
 	}
-	static const auto Empty = std::make_shared<const FMaterialReadBufferSource>(
-	    std::as_bytes(std::span<const FLight>(std::array<FLight, 1>{{{{0, 0, 1, 0}, {}}}})));
+	static const auto Empty = std::make_shared<const FMaterialReadBufferSource>(std::as_bytes(
+	    std::span<const FDirectionalLightData>(std::array<FDirectionalLightData, 1>{{{{0, 0, 1, 0}, {}}}})));
 	const auto Source = !InMetadata ? Empty : std::make_shared<const FMaterialReadBufferSource>(Bytes);
 	return FMaterialValue::FromBuffer(
-	    {Source, EMaterialBufferViewKind::Structured, 0, Source->GetBytes().size(), sizeof(FLight)});
+	    {Source, EMaterialBufferViewKind::Structured, 0, Source->GetBytes().size(), Strides.DirectionalLight});
 }
 } // namespace Hyperion

@@ -12,6 +12,16 @@ struct FClusterLight
 	float4 Outer;
 };
 
+FLocalLightAttenuation DecodeClusterLightAttenuation(FClusterLight InLight)
+{
+	FLocalLightAttenuation Result;
+	Result.InverseRange = InLight.PositionRange.w;
+	Result.InnerCos = InLight.DirectionInner.w;
+	Result.OuterCos = InLight.Outer.x;
+	Result.SpotFlag = InLight.RadianceType.w;
+	return Result;
+}
+
 HYP_UNIFORM_ClusterViewV1(b0, space3);
 
 StructuredBuffer<FClusterLight> ClusterLights : register(t0, space3);
@@ -40,9 +50,8 @@ float3 EvaluateClusteredLighting(FMaterialParameters InMaterial, float3 InWorld,
 	for (uint Light = 0; Light < Header.y; ++Light)
 	{
 		FClusterLight Data = ClusterLights[ClusterIndices[Header.x + Light]];
-		Color += EvaluateLocalLight(
-		    InMaterial, InWorld, InEye, Data.PositionRange.xyz, Data.RadianceType.xyz, Data.DirectionInner.xyz,
-		    float4(Data.PositionRange.w, Data.DirectionInner.w, Data.Outer.x, Data.RadianceType.w));
+		Color += EvaluateLocalLight(InMaterial, InWorld, InEye, Data.PositionRange.xyz, Data.RadianceType.xyz,
+		                            Data.DirectionInner.xyz, DecodeClusterLightAttenuation(Data));
 	}
 	return Color;
 }
