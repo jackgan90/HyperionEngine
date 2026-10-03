@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/Reflection/Wire.h"
+#include "Hyperion/Automation/Response.h"
 
 namespace Hyperion
 {
@@ -87,8 +87,6 @@ FOperationDescriptor MakeAsyncOperation(FOperationInfo InInfo, TFunction InFunct
 	        }};
 }
 
-FArchiveNode AutomationFailure(std::string InCode, std::string InMessage, std::string InPath = {},
-                               FArchiveNode InDetails = FArchiveNode(FArchiveNode::FObject{}));
 FArchiveNode CurrentAutomationFailure();
 // Random 128-bit namespace for ephemeral handles; not an authentication token.
 std::string CreateAutomationIdentity();

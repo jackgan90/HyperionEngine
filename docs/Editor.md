@@ -255,6 +255,8 @@ Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorV
 
 资产属性控件通过 AssetEditing 的成员策略取得编辑路由，校验、规范化与预览影响由共享文档领域处理。资产、节点和图元改名保留当前预览；变换、材质分配、实际材质值/引用及编码数据变化触发预览更新。自动化节点改名使用相同规则。相等提交仍保留文档事务，连续交互的 Undo/Redo/Cancel 按整个交互累计的影响处理；纹理编码历史恢复准确 mip 数据并共享未改变的 mip0 存储。
 
+预览形状和纹理通道的语义身份由 Runtime/AssetEditing 的 `AssetPreviewOptions` 定义，显式关联稳定数值、显示标签和模型路径或 RGBA 分量。Editor 内部保存类型化身份，GUI 位置只用于选择；GUI 与 automation 继续经过同一预览设置服务。天空预览用命名成员关联 Radiance、Specular、BRDF 的资产引用和缓存纹理；格式标签按 `ETextureFormat` 显式映射。重复选择不重建预览，这些设置不修改资产 generation、dirty 或历史。
+
 ```text
 Editor panels / scene selection / viewport input
           |                         |
@@ -284,6 +286,8 @@ Main 构建 UI 并路由相机输入，更新 Scene 后冻结场景帧；Render 
 - 界面使用内置 Roboto 字体和英文标签。字体 atlas 在启动时生成；中文字符显示与动态字体更新尚未加入。
 
 ## 验证入口
+
+`editor_asset_preview_contracts` 验证形状/通道固定映射、重排及改名后的 GUI 选择映射、天空产品对应关系、格式标签和通道转换的固定像素。`automation_asset_preview` 使用真实附着 MCP/JSONL 比较预览 schema 基线，逐项切换形状/通道，并检查非法值、类型不支持、重复设置、就绪状态和资产历史隔离。
 
 `editor_asset_editors` 覆盖各类资产预览、属性保存和独立历史，以及场景与资产原生窗口同时渲染、窗口内快捷键路由、缩放、资产最小化、主窗口整组最小化/恢复、关闭取消/丢弃/保存失败重试和窗口重建。`gui_docking` 补充两个 GUI context 的布局与 framebuffer 缩放隔离；`window_event_routing` 验证原生窗口事件路由。`window_ownership` 会短暂创建可见原生窗口，验证激活主窗口后的层级/焦点、非全局置顶、最小化/恢复、关闭隔离与重建。
 

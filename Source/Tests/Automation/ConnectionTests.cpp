@@ -10,6 +10,7 @@
 namespace Hyperion
 {
 void RunDiscoveryTests();
+void RunResponseConnectionTests();
 
 namespace
 {
@@ -350,6 +351,7 @@ int main()
 		Hyperion::Connections();
 		Hyperion::SaturatedDiscovery();
 		Hyperion::RunDiscoveryTests();
+		Hyperion::RunResponseConnectionTests();
 		Hyperion::Framing();
 		Hyperion::Admission();
 		Hyperion::DrainDisconnectedWork();

@@ -15,16 +15,6 @@ FAutomationError::FAutomationError(std::string InCode, std::string InMessage, st
 {
 }
 
-FArchiveNode AutomationFailure(std::string InCode, std::string InMessage, std::string InPath, FArchiveNode InDetails)
-{
-	return FArchiveNode(
-	    FArchiveNode::FObject{{"status", WriteValue(std::string("failed"))},
-	                          {"error", FArchiveNode(FArchiveNode::FObject{{"code", WriteValue(InCode)},
-	                                                                       {"message", WriteValue(InMessage)},
-	                                                                       {"path", WriteValue(InPath)},
-	                                                                       {"details", std::move(InDetails)}})}});
-}
-
 FArchiveNode CurrentAutomationFailure()
 {
 	try

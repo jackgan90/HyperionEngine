@@ -1,5 +1,4 @@
 #include "Hyperion/AssetImport/ImportSettings.h"
-#include <bit>
 
 namespace Hyperion
 {
@@ -17,33 +16,39 @@ void ValidateImportSettings(const FAssetConversionSettings& InSettings, std::str
 	}
 	if (InSettings.Sky)
 	{
-		const auto& Settings = *InSettings.Sky;
 		if ((InExtension != ".hdr" && InExtension != ".exr") ||
 		    (!InType.empty() && InType != RecordType<FSkyAsset>().Id))
 		{
 			throw std::invalid_argument("Sky bake settings apply only to HDR/EXR panoramas");
 		}
-		if (!std::has_single_bit(Settings.RadianceSize) || Settings.RadianceSize > 1024 ||
-		    !std::has_single_bit(Settings.SpecularSize) || Settings.SpecularSize > 256 ||
-		    Settings.SpecularSize > Settings.RadianceSize || !Settings.Samples || Settings.Samples > 1024)
+		if (!IsValidEnvironmentBakeSettings(*InSettings.Sky))
 		{
-			throw std::invalid_argument(
-			    "Sky sizes must be powers of two: radiance 1-1024, specular 1-256 and <= radiance; samples 1-1024");
+			throw std::invalid_argument("Sky sizes must be powers of two: radiance 1-" +
+			                            std::to_string(FEnvironmentBakeLimits::MaxRadianceSize) + ", specular 1-" +
+			                            std::to_string(FEnvironmentBakeLimits::MaxSpecularSize) +
+			                            " and <= radiance; samples 1-" +
+			                            std::to_string(FEnvironmentBakeLimits::MaxSamples));
 		}
 	}
 }
 
 template<> const FRecordDescriptor& RecordType<FEnvironmentBakeSettings>()
 {
+	const FEnvironmentBakeSettings Defaults;
 	static const auto Type = MakeRecord<FEnvironmentBakeSettings>(
 	    "asset.import.sky-settings",
 	    {Member("radianceSize", &FEnvironmentBakeSettings::RadianceSize,
-	            {.Description = "Cube face size; power of two from 1 to 1024. Default 256."}),
+	            {.Description = "Cube face size; power of two from 1 to " +
+	                            std::to_string(FEnvironmentBakeLimits::MaxRadianceSize) + ". Default " +
+	                            std::to_string(Defaults.RadianceSize) + "."}),
 	     Member("specularSize", &FEnvironmentBakeSettings::SpecularSize,
-	            {.Description =
-	                 "Prefiltered face size; power of two from 1 to 256, no larger than radianceSize. Default 64."}),
+	            {.Description = "Prefiltered face size; power of two from 1 to " +
+	                            std::to_string(FEnvironmentBakeLimits::MaxSpecularSize) +
+	                            ", no larger than radianceSize. Default " + std::to_string(Defaults.SpecularSize) +
+	                            "."}),
 	     Member("samples", &FEnvironmentBakeSettings::Samples,
-	            {.Description = "GGX samples from 1 to 1024. Default 256."})});
+	            {.Description = "GGX samples from 1 to " + std::to_string(FEnvironmentBakeLimits::MaxSamples) +
+	                            ". Default " + std::to_string(Defaults.Samples) + "."})});
 	return Type;
 }
 } // namespace Hyperion

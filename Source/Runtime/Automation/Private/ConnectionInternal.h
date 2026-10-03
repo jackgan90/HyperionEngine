@@ -19,12 +19,6 @@ inline constexpr std::uint32_t MinProbeTimeoutMs = 50;
 inline constexpr std::uint32_t MaxProbeTimeoutMs = 5000;
 inline constexpr std::uint32_t AutomationProtocolVersion = 1;
 
-inline FArchiveNode CompletedConnectionResult(FArchiveNode InResult)
-{
-	return FArchiveNode(
-	    FArchiveNode::FObject{{"status", WriteValue(std::string("completed"))}, {"result", std::move(InResult)}});
-}
-
 inline FArchiveNode CurrentConnectionFailure()
 {
 	try

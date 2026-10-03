@@ -25,6 +25,13 @@ struct FEnvironmentBakeSettings
 	std::uint32_t Samples = 256;
 };
 
+struct FEnvironmentBakeLimits
+{
+	static constexpr std::uint32_t MaxRadianceSize = 1024;
+	static constexpr std::uint32_t MaxSpecularSize = 256;
+	static constexpr std::uint32_t MaxSamples = 1024;
+};
+
 struct FBakedEnvironment
 {
 	FTextureAsset Radiance;
@@ -40,6 +47,9 @@ FVec3 SampleEnvironment(const FTextureAsset& InCube, FVec3 InDirection, float In
 std::array<float, 9> EnvironmentShBasis(FVec3 InDirection);
 FVec3 EvaluateEnvironmentSh(const FEnvironmentSh& InSh, FVec3 InNormal);
 FEnvironmentSh ProjectEnvironmentSh(const FTextureAsset& InCube);
+// Numeric admission only; image/texture validation remains with the actual bake entry points.
+bool IsValidEnvironmentBakeSettings(const FEnvironmentBakeSettings& InSettings);
+bool IsValidEnvironmentPrefilterSettings(std::uint32_t InSourceSize, std::uint32_t InSize, std::uint32_t InSamples);
 // Also accepts a renderer-captured cube for future reflection-probe baking.
 FTextureAsset PrefilterEnvironment(const FTextureAsset& InCube, std::uint32_t InSize = 64,
                                    std::uint32_t InSamples = 256);

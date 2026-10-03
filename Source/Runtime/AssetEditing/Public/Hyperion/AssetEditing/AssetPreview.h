@@ -5,6 +5,7 @@ namespace Hyperion
 {
 struct FAssetPreviewSettings
 {
+	// Shape/channel retain their reflected wire integers; internal preview state uses AssetPreviewOptions identities.
 	std::optional<FSceneCameraView> Camera;
 	std::optional<std::uint32_t> Shape;
 	std::optional<float> Exposure;

@@ -157,12 +157,24 @@ FTextureAsset Prefilter(const FTextureAsset& InSource, unsigned InSize, unsigned
 }
 } // namespace
 
+bool IsValidEnvironmentPrefilterSettings(std::uint32_t InSourceSize, std::uint32_t InSize, std::uint32_t InSamples)
+{
+	return std::has_single_bit(InSize) && InSize <= FEnvironmentBakeLimits::MaxSpecularSize && InSize <= InSourceSize &&
+	       InSamples > 0 && InSamples <= FEnvironmentBakeLimits::MaxSamples;
+}
+
+bool IsValidEnvironmentBakeSettings(const FEnvironmentBakeSettings& InSettings)
+{
+	return std::has_single_bit(InSettings.RadianceSize) &&
+	       InSettings.RadianceSize <= FEnvironmentBakeLimits::MaxRadianceSize &&
+	       IsValidEnvironmentPrefilterSettings(InSettings.RadianceSize, InSettings.SpecularSize, InSettings.Samples);
+}
+
 FTextureAsset PrefilterEnvironment(const FTextureAsset& InCube, std::uint32_t InSize, std::uint32_t InSamples)
 {
 	ValidateTextureAsset(InCube);
 	if (InCube.Dimension != ETextureDimension::Cube || InCube.Encoding != EMaterialTextureEncoding::Linear ||
-	    !std::has_single_bit(InSize) || InSize > 256 || InSize > InCube.Mips.front().Width || !InSamples ||
-	    InSamples > 1024)
+	    !IsValidEnvironmentPrefilterSettings(InCube.Mips.front().Width, InSize, InSamples))
 	{
 		throw std::invalid_argument("GGX prefilter requires a linear cube and bounded power-of-two output");
 	}
@@ -176,9 +188,7 @@ FBakedEnvironment BakeEnvironment(std::span<const float> InRgba, std::uint32_t I
 {
 	if (!InWidth || !InHeight || InWidth != 2ULL * InHeight || InWidth > 16384 ||
 	    InRgba.size() != std::uint64_t(InWidth) * InHeight * 4 || InRgba.size_bytes() > 512ULL * 1024 * 1024 ||
-	    !std::has_single_bit(InSettings.RadianceSize) || InSettings.RadianceSize > 1024 ||
-	    !std::has_single_bit(InSettings.SpecularSize) || InSettings.SpecularSize > 256 ||
-	    InSettings.SpecularSize > InSettings.RadianceSize || !InSettings.Samples || InSettings.Samples > 1024)
+	    !IsValidEnvironmentBakeSettings(InSettings))
 	{
 		throw std::invalid_argument("Sky requires a 2:1 HDR panorama and bounded power-of-two bake sizes");
 	}

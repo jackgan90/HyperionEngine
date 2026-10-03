@@ -13,7 +13,7 @@ FAssetPreviewSettings FAssetWorkspace::GetPreviewSettings(const FEntry& InEntry)
 	{
 		Result.Mip = static_cast<std::uint32_t>(InEntry.Texture.Mip);
 		Result.Face = static_cast<std::uint32_t>(InEntry.Texture.Face);
-		Result.Channel = static_cast<std::uint32_t>(InEntry.Texture.Channel);
+		Result.Channel = ToAssetPreviewChannelWireValue(InEntry.Texture.Channel);
 		if (ReadValue<EMaterialTextureEncoding>(InEntry.Document->Get("encoding")) == EMaterialTextureEncoding::Linear)
 		{
 			Result.ExposureEv = InEntry.Texture.Exposure;
@@ -29,7 +29,7 @@ FAssetPreviewSettings FAssetWorkspace::GetPreviewSettings(const FEntry& InEntry)
 		Result.Exposure = InEntry.Exposure;
 		if (Type == RecordType<FMaterialAsset>().Id)
 		{
-			Result.Shape = static_cast<std::uint32_t>(InEntry.Shape);
+			Result.Shape = ToAssetPreviewShapeWireValue(InEntry.Shape);
 		}
 		if (Type == RecordType<FSkyAsset>().Id)
 		{
@@ -121,21 +121,21 @@ void FAssetWorkspace::SetPreviewSettings(FEntry& InEntry, const FAssetPreviewSet
 	{
 		ValidateSceneCameraView(*InSettings.Camera);
 	}
-	if ((InSettings.Shape && *InSettings.Shape > 2) ||
-	    (InSettings.Exposure &&
+	const auto Shape = InSettings.Shape ? ParseAssetPreviewShape(*InSettings.Shape) : InEntry.Shape;
+	if ((InSettings.Exposure &&
 	     (!std::isfinite(*InSettings.Exposure) || *InSettings.Exposure < .05f || *InSettings.Exposure > 8)) ||
 	    (InSettings.Yaw && (!std::isfinite(*InSettings.Yaw) || std::abs(*InSettings.Yaw) > 180)))
 	{
-		throw std::invalid_argument("Shape must be 0-2, exposure 0.05-8, yaw -180 to 180 degrees");
+		throw std::invalid_argument("Exposure must be 0.05-8, yaw -180 to 180 degrees");
 	}
 	if (Supported.Mip)
 	{
 		SetTexturePreview(InEntry, InSettings);
 		return;
 	}
-	if (InSettings.Shape && *InSettings.Shape != InEntry.Shape)
+	if (Shape != InEntry.Shape)
 	{
-		InEntry.Shape = *InSettings.Shape;
+		InEntry.Shape = Shape;
 		InEntry.PreparedGeneration = InEntry.RequestedGeneration = 0;
 		InEntry.bCameraInitialized = false;
 		InEntry.PreviewModel.reset();
@@ -161,9 +161,9 @@ void FAssetWorkspace::SetTexturePreview(FEntry& InEntry, const FAssetPreviewSett
 {
 	const auto Texture =
 	    InEntry.Preview ? InEntry.Preview->As<FTextureAsset>() : InEntry.Document->Loaded().As<FTextureAsset>();
+	const auto Channel = InSettings.Channel ? ParseAssetPreviewChannel(*InSettings.Channel) : InEntry.Texture.Channel;
 	if ((InSettings.Mip && *InSettings.Mip >= Texture->Mips.size()) ||
 	    (InSettings.Face && *InSettings.Face >= (Texture->Dimension == ETextureDimension::Cube ? 6u : 1u)) ||
-	    (InSettings.Channel && *InSettings.Channel > 4) ||
 	    (InSettings.ExposureEv && (!std::isfinite(*InSettings.ExposureEv) || std::abs(*InSettings.ExposureEv) > 12)) ||
 	    (InSettings.Zoom && (!std::isfinite(*InSettings.Zoom) || *InSettings.Zoom < .01f || *InSettings.Zoom > 64)) ||
 	    (InSettings.Pan && (!std::isfinite(InSettings.Pan->X) || !std::isfinite(InSettings.Pan->Y))))
@@ -174,7 +174,7 @@ void FAssetWorkspace::SetTexturePreview(FEntry& InEntry, const FAssetPreviewSett
 	const auto Before = std::tuple(View.Mip, View.Face, View.Channel, View.Exposure, View.bChecker);
 	View.Mip = InSettings.Mip.value_or(static_cast<std::uint32_t>(View.Mip));
 	View.Face = InSettings.Face.value_or(static_cast<std::uint32_t>(View.Face));
-	View.Channel = InSettings.Channel.value_or(static_cast<std::uint32_t>(View.Channel));
+	View.Channel = Channel;
 	View.Exposure = InSettings.ExposureEv.value_or(View.Exposure);
 	View.Zoom = InSettings.Zoom.value_or(View.Zoom);
 	View.Pan = InSettings.Pan.value_or(View.Pan);

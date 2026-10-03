@@ -5,6 +5,8 @@
 #include <thread>
 
 void CheckJobStates();
+void CheckResponseContracts();
+void CheckMcpResponseContracts();
 
 namespace Hyperion
 {
@@ -421,6 +423,8 @@ int main()
 		CheckRecursiveSchema();
 		CheckCatalogAndJobs();
 		CheckJobStates();
+		CheckResponseContracts();
+		CheckMcpResponseContracts();
 		CheckResultLimits();
 		CheckMcp();
 		std::cout << "Automation contracts passed\n";

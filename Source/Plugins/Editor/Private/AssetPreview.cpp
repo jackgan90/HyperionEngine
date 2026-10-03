@@ -1,3 +1,4 @@
+#include "AssetPreviewPresentation.h"
 #include "AssetWorkspace.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Materials/PbrMaterial.h"
@@ -29,7 +30,7 @@ FAssetGraph DraftGraph(FAssetService& InAssets, FTaskSystem& InTasks, std::share
 }
 
 std::shared_ptr<const FSceneModelData> PreviewModel(FAssetService& InAssets, FTaskSystem& InTasks,
-                                                    FRenderResourceService& InResources, std::size_t InShape,
+                                                    FRenderResourceService& InResources, EAssetPreviewShape InShape,
                                                     std::shared_ptr<const FMaterialAssetData> InMaterial,
                                                     FCancellationToken InCancellation,
                                                     std::shared_ptr<const FSceneModelData> InExisting = {})
@@ -41,10 +42,7 @@ std::shared_ptr<const FSceneModelData> PreviewModel(FAssetService& InAssets, FTa
 		Data->MaterialSnapshots = {InResources.PrepareMaterialAsset(InMaterial)};
 		return Data;
 	}
-	constexpr std::array Names{"Sphere", "Plane", "Cube"};
-	const auto Geometry =
-	    InAssets.LoadAsync<FModelAsset>(std::string("/Engine/Models/Primitives/") + Names.at(InShape) + ".hasset")
-	        .Get(InTasks);
+	const auto Geometry = InAssets.LoadAsync<FModelAsset>(DescribeAssetPreviewShape(InShape).ModelPath).Get(InTasks);
 	InCancellation.Check();
 	auto Model = std::make_shared<FModelAsset>(*Geometry);
 	for (auto& Primitive : Model->Primitives)
@@ -98,7 +96,7 @@ std::shared_ptr<const FMaterialAssetData> ReferenceSurface(FAssetService& InAsse
 } // namespace
 
 FAssetWorkspace::FPrepared FAssetWorkspace::Prepare(const FLoadedAsset& InLoaded, FArchiveNode InDraft,
-                                                    std::size_t InShape, FCancellationToken InCancellation,
+                                                    EAssetPreviewShape InShape, FCancellationToken InCancellation,
                                                     std::shared_ptr<const FSceneModelData> InExisting)
 {
 	FPrepared Result;
@@ -160,17 +158,16 @@ FAssetWorkspace::FPrepared FAssetWorkspace::Prepare(const FLoadedAsset& InLoaded
 		else
 		{
 			const auto Sky = Root->As<FSkyAsset>();
-			const std::array References{Sky->Radiance, Sky->Specular, Sky->Brdf};
-			for (std::size_t Index = 0; Index < References.size(); ++Index)
+			for (const auto& Description : SkyPreviewProductDescriptions())
 			{
-				const auto Product = Assets.LoadReferenceAsync(References[Index], Root->Path).Get(Tasks);
-				Result.SkyProducts[Index] = Product->As<FTextureAsset>();
+				const auto Product = Assets.LoadReferenceAsync((*Sky).*Description.Reference, Root->Path).Get(Tasks);
+				Result.SkyProducts.*Description.Texture = Product->As<FTextureAsset>();
 				Result.Dependencies.insert(Product->Header.Id);
 			}
-			Result.Model =
-			    PreviewModel(Assets, Tasks, Resources, 0, ReferenceSurface(Assets, Tasks, false), InCancellation);
-			Result.SecondModel =
-			    PreviewModel(Assets, Tasks, Resources, 0, ReferenceSurface(Assets, Tasks, true), InCancellation);
+			Result.Model = PreviewModel(Assets, Tasks, Resources, EAssetPreviewShape::Sphere,
+			                            ReferenceSurface(Assets, Tasks, false), InCancellation);
+			Result.SecondModel = PreviewModel(Assets, Tasks, Resources, EAssetPreviewShape::Sphere,
+			                                  ReferenceSurface(Assets, Tasks, true), InCancellation);
 		}
 		InCancellation.Check();
 	}
@@ -289,12 +286,13 @@ void FAssetWorkspace::DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, s
 	}
 	if (InEntry.Document->Loaded().Header.TypeId == RecordType<FMaterialAsset>().Id)
 	{
-		const std::array<std::string, 3> Shapes{"Sphere", "Plane", "Cube"};
-		auto Shape = InEntry.Shape;
-		if (InGui.Combo("Preview mesh", Shapes, Shape))
+		const auto Shapes = AssetPreviewShapeOptions();
+		static const auto Labels = AssetPreviewOptionLabels(Shapes);
+		auto Shape = AssetPreviewOptionIndex(Shapes, InEntry.Shape);
+		if (InGui.Combo("Preview mesh", Labels, Shape))
 		{
 			FAssetPreviewSettings Settings;
-			Settings.Shape = static_cast<std::uint32_t>(Shape);
+			Settings.Shape = ToAssetPreviewShapeWireValue(AssetPreviewOptionIdentity(Shapes, Shape));
 			SetPreviewSettings(InEntry, Settings);
 		}
 	}

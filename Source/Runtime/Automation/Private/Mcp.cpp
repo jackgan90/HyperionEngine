@@ -27,8 +27,15 @@ FArchiveNode RpcFailure(const FArchiveNode& InId, int InCode, std::string InMess
 
 FArchiveNode ToolResult(FArchiveNode InResult)
 {
-	const auto& Fields = std::get<FArchiveNode::FObject>(InResult.Value);
-	const bool bFailed = Fields.contains("status") && ReadValue<std::string>(Fields.at("status")) == "failed";
+	bool bFailed{};
+	try
+	{
+		bFailed = ReadAutomationResponse(InResult).IsFailed();
+	}
+	catch (const FAutomationError& Error)
+	{
+		throw FRpcError(-32603, Error.what());
+	}
 	std::string Text;
 	try
 	{

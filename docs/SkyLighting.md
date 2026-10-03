@@ -35,6 +35,8 @@ Input is a 2:1 equirectangular Radiance `.hdr` or ordinary RGB OpenEXR image (op
 
 Radiance and specular face sizes must be powers of two, at most 1024 and 256 respectively; specular cannot exceed radiance. Samples must be 1–1024. Shipped defaults are 256/64 faces with 256 GGX samples, using 1K source images. Import processing is deterministic CPU work, bounded and offline. Increasing quality costs import time, storage and texture memory, with no per-frame convolution. Cancellation is checked around the bounded bake; it is not instantaneous within a bake loop.
 
+Runtime/Environment owns these numeric rules through `FEnvironmentBakeLimits`, `IsValidEnvironmentBakeSettings` and `IsValidEnvironmentPrefilterSettings`. Import preflight and the baker reuse the same policy. Import retains source-extension/type checks, and the actual bake retains image/storage/radiance validation. Standalone prefiltering can consume a larger captured cube: only its output size and sample budget use the shared subset, without imposing the panorama bake's radiance-size cap. Reflected import descriptions derive from the same limits and defaults.
+
 The three unmodified source images are CC0. Asset pages, original download URLs and SHA-256 checksums are recorded in `../HyperionAssets/.cache/Sources/Skies/License.md`（见 HyperionAssets 的 Metadata 与本地源缓存）. Poly Haven website code is not incorporated.
 
 ## Resource and shading contracts

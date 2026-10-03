@@ -1,4 +1,6 @@
+#include "AssetPreviewPresentation.h"
 #include "AssetPropertyWidgets.h"
+#include "AssetTextureDisplay.h"
 #include "AssetWorkspace.h"
 #include "Hyperion/Renderer/RenderSession.h"
 #include <algorithm>
@@ -7,54 +9,6 @@
 
 namespace Hyperion
 {
-namespace
-{
-float DisplayChannel(float InLinear)
-{
-	const float Value = std::clamp(InLinear, 0.f, 1.f);
-	return Value <= .0031308f ? Value * 12.92f : 1.055f * std::pow(Value, 1.f / 2.4f) - .055f;
-}
-
-FTextureAsset DisplayTexture(const FTextureAsset& InSource, std::size_t InMip, std::size_t InFace,
-                             std::size_t InChannel, float InExposure, bool bInChecker,
-                             FCancellationToken InCancellation)
-{
-	const auto& Mip = InSource.Mips.at(InMip);
-	FMaterialTextureMip Output{Mip.Width, Mip.Height};
-	Output.Bytes.resize(std::size_t(Mip.Width) * Mip.Height * 4);
-	for (std::uint32_t Y = 0; Y < Mip.Height; ++Y)
-	{
-		InCancellation.Check();
-		for (std::uint32_t X = 0; X < Mip.Width; ++X)
-		{
-			const auto Pixel = std::size_t(Y) * Mip.Width + X;
-			auto Value = ReadTexturePixel(Mip, InSource.Format, InFace * std::size_t(Mip.Width) * Mip.Height + Pixel);
-			const float Background = bInChecker ? (((X / 16 + Y / 16) & 1) ? .32f : .18f) : 0.f;
-			if (InChannel)
-			{
-				const float Component = std::clamp(Value.at(InChannel - 1), 0.f, 1.f);
-				Value = {Component, Component, Component, 1};
-			}
-			else
-			{
-				for (std::size_t C = 0; C < 3; ++C)
-				{
-					if (InSource.Encoding == EMaterialTextureEncoding::Linear)
-					{
-						Value[C] = DisplayChannel(Value[C] * std::exp2(InExposure));
-					}
-					Value[C] = std::clamp(Value[C], 0.f, 1.f) * std::clamp(Value[3], 0.f, 1.f) +
-					           Background * (1 - std::clamp(Value[3], 0.f, 1.f));
-				}
-				Value[3] = 1;
-			}
-			WriteTexturePixel(Output, ETextureFormat::Rgba8Unorm, Pixel, Value);
-		}
-	}
-	return BuildTextureAsset("Texture preview", EMaterialTextureEncoding::Srgb, std::move(Output));
-}
-} // namespace
-
 void FAssetWorkspace::DrawTexture(FGui& InGui, FEntry& InEntry, std::span<const FInputEvent> InEvents)
 {
 	if (!InEntry.Preview)
@@ -80,13 +34,14 @@ void FAssetWorkspace::DrawTextureControls(FGui& InGui, FEntry& InEntry, const FT
 	}
 	View.Mip = std::min(View.Mip, Mips.size() - 1);
 	auto Mip = View.Mip;
-	auto Channel = View.Channel;
+	const auto Channels = AssetPreviewChannelOptions();
+	static const auto ChannelLabels = AssetPreviewOptionLabels(Channels);
+	auto Channel = AssetPreviewOptionIndex(Channels, View.Channel);
 	auto Face = View.Face;
 	auto Exposure = View.Exposure;
 	bool bChecker = View.bChecker;
 	bool bChanged = AssetCombo(InGui, "Mip", Mips, Mip);
-	const std::array<std::string, 5> Channels{"RGBA", "R", "G", "B", "A"};
-	bChanged |= AssetCombo(InGui, "Channel", Channels, Channel);
+	bChanged |= AssetCombo(InGui, "Channel", ChannelLabels, Channel);
 	if (Texture->Dimension == ETextureDimension::Cube)
 	{
 		const std::array<std::string, 6> Faces{"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
@@ -120,7 +75,7 @@ void FAssetWorkspace::DrawTextureControls(FGui& InGui, FEntry& InEntry, const FT
 		FAssetPreviewSettings Settings;
 		Settings.Mip = static_cast<std::uint32_t>(Mip);
 		Settings.Face = static_cast<std::uint32_t>(Face);
-		Settings.Channel = static_cast<std::uint32_t>(Channel);
+		Settings.Channel = ToAssetPreviewChannelWireValue(AssetPreviewOptionIdentity(Channels, Channel));
 		Settings.Checker = bChecker;
 		if (Texture->Encoding == EMaterialTextureEncoding::Linear)
 		{
@@ -179,7 +134,7 @@ void FAssetWorkspace::PollTextureDisplay(FEntry& InEntry, const std::shared_ptr<
 			    [Texture, Mip = View.Mip, Face = View.Face, Channel = View.Channel, Exposure = View.Exposure,
 			     bChecker = View.bChecker, Token = InEntry.Cancellation]
 			    {
-				    return DisplayTexture(*Texture, Mip, Face, Channel, Exposure, bChecker, Token);
+				    return BuildAssetTextureDisplay(*Texture, Mip, Face, Channel, Exposure, bChecker, Token);
 			    },
 			    InEntry.Cancellation);
 		}
@@ -258,8 +213,7 @@ void FAssetWorkspace::DrawTextureProperties(FGui& InGui, FEntry& InEntry)
 	AssetInfo(InGui, "Dimension", Texture->Dimension == ETextureDimension::Cube ? "Cube (6 faces)" : "2D");
 	AssetInfo(InGui, "Size", std::to_string(Texture->Mips[0].Width) + " x " + std::to_string(Texture->Mips[0].Height));
 	AssetInfo(InGui, "Mip count", std::to_string(Texture->Mips.size()));
-	constexpr std::array Formats{"RGBA8 UNORM", "RGBA16 FLOAT", "RGBA32 FLOAT"};
-	AssetInfo(InGui, "Format", Formats.at(static_cast<std::size_t>(Texture->Format)));
+	AssetInfo(InGui, "Format", std::string(DescribeAssetPreviewFormat(Texture->Format).Label));
 	std::size_t Bytes{};
 	for (const auto& Mip : Texture->Mips)
 	{

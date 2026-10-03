@@ -81,7 +81,7 @@ FArchiveNode FAutomationServer::FImpl::Hello(FPeer& InPeer, const FArchiveNode& 
 		throw FAutomationError("protocol_mismatch", "Peer response budget is too small");
 	}
 	InPeer.bHello = true;
-	return CompletedConnectionResult(FArchiveNode(
+	return AutomationCompleted(FArchiveNode(
 	    FArchiveNode::FObject{{"protocol", WriteValue(AutomationProtocolVersion)},
 	                          {"target", WriteRecordWire(RecordType<FAutomationTarget>(), &Info)},
 	                          {"session", WriteValue(InPeer.Session.GetId())},

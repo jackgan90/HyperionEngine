@@ -15,6 +15,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorFraming.cpp
   Private/EditorCaptureService.cpp
   Private/AssetPreviewService.cpp
+  Private/AssetTextureDisplay.cpp
   Private/EditorSceneDocument.cpp
   Private/EditorApplication.cpp
   Private/EditorReport.cpp
@@ -140,6 +141,11 @@ if(BUILD_TESTING)
   add_test(NAME editor_asset_workspace COMMAND editor_asset_workspace_tests)
   set_tests_properties(editor_asset_workspace PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
     TIMEOUT 120 RUN_SERIAL TRUE LABELS "gpu")
+  add_executable(editor_asset_preview_contract_tests Private/AssetPreviewContractTests.cpp Private/AssetTextureDisplay.cpp)
+  hyp_executable(editor_asset_preview_contract_tests)
+  target_link_libraries(editor_asset_preview_contract_tests PRIVATE hyperion_asset_editing hyperion_environment hyperion_textures hyperion_tasks)
+  set_target_properties(editor_asset_preview_contract_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_asset_preview_contracts COMMAND editor_asset_preview_contract_tests)
   add_executable(editor_asset_document_tests Private/AssetDocumentTests.cpp)
   hyp_executable(editor_asset_document_tests)
   target_sources(editor_asset_document_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests/Assets/EditorAssetFixture.cpp")

@@ -10,13 +10,6 @@ namespace Hyperion
 {
 namespace
 {
-bool IsFailed(const FArchiveNode& InResult)
-{
-	const auto& Fields = std::get<FArchiveNode::FObject>(InResult.Value);
-	const auto It = Fields.find("status");
-	return It != Fields.end() && ReadValue<std::string>(It->second) == "failed";
-}
-
 class FAutomationStdioPlugin final : public FPlugin
 {
 public:
@@ -156,7 +149,15 @@ void FAutomationStdioPlugin::WriteJsonResult(const FArchiveNode& InId, FArchiveN
 {
 	const auto& Id = InId;
 	auto Result = std::move(InResult);
-	Status.bFailed |= IsFailed(Result);
+	try
+	{
+		Status.bFailed |= ReadAutomationResponse(Result).IsFailed();
+	}
+	catch (...)
+	{
+		Result = CurrentAutomationFailure();
+		Status.bFailed = true;
+	}
 	std::string Response;
 	try
 	{
@@ -229,21 +230,29 @@ void FAutomationStdioPlugin::Once()
 	}
 	OnceRequest.reset();
 	auto Result = std::move(*Completed);
-	const auto& Fields = std::get<FArchiveNode::FObject>(Result.Value);
-	if (Fields.contains("status") && ReadValue<std::string>(Fields.at("status")) == "running")
+	try
 	{
-		if (WaitingJob.empty())
+		const auto View = ReadAutomationResponse(Result);
+		if (View.Status == EAutomationStatus::Running)
 		{
-			WaitingJob = ReadValue<std::string>(Fields.at("job"));
+			if (WaitingJob.empty())
+			{
+				WaitingJob = View.Job->Id;
+			}
+			return;
 		}
-		return;
+		if (!WaitingJob.empty() && View.Job && View.Job->Outcome)
+		{
+			auto Outcome = *View.Job->Outcome;
+			Result = std::move(Outcome);
+		}
+		Status.bFailed |= ReadAutomationResponse(Result).IsFailed();
 	}
-	if (!WaitingJob.empty() && Fields.contains("outcome"))
+	catch (...)
 	{
-		auto Outcome = Fields.at("outcome");
-		Result = std::move(Outcome);
+		Result = CurrentAutomationFailure();
+		Status.bFailed = true;
 	}
-	Status.bFailed |= IsFailed(Result);
 	Write(WriteAutomationResponse(Result));
 	Control->RequestExit();
 }
@@ -260,12 +269,12 @@ bool FAutomationStdioPlugin::AttachReady()
 		return false;
 	}
 	AttachRequest.reset();
-	if (IsFailed(*Result))
+	const auto View = ReadAutomationResponse(*Result);
+	if (View.IsFailed())
 	{
 		throw std::runtime_error("Attach failed: " + WriteAutomationResponse(*Result));
 	}
-	const auto& Fields =
-	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Result->Value).at("result").Value);
+	const auto& Fields = std::get<FArchiveNode::FObject>(View.CompletedResult().Value);
 	Router->SetDefaultConnection(ReadValue<std::string>(Fields.at("connection")));
 	return true;
 }

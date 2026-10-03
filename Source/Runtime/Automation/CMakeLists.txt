@@ -1,4 +1,4 @@
-add_library(hyperion_automation STATIC Private/Operation.cpp Private/Catalog.cpp Private/Jobs.cpp Private/Endpoint.cpp Private/Mcp.cpp)
+add_library(hyperion_automation STATIC Private/Operation.cpp Private/Response.cpp Private/Catalog.cpp Private/Jobs.cpp Private/Endpoint.cpp Private/Mcp.cpp)
 hyp_module(hyperion_automation)
 target_link_libraries(hyperion_automation PRIVATE hyperion_core)
 target_sources(hyperion_automation PRIVATE Private/Channel.cpp Private/Targets.cpp Private/TargetTypes.cpp)

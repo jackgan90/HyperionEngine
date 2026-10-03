@@ -1,7 +1,9 @@
 #pragma once
+#include "AssetPreviewProducts.h"
 #include "Hyperion/AssetEditing/AssetDocument.h"
 #include "Hyperion/AssetEditing/AssetEditWorkflow.h"
 #include "Hyperion/AssetEditing/AssetPreview.h"
+#include "Hyperion/AssetEditing/AssetPreviewOptions.h"
 #include "Hyperion/AssetEditing/AssetWorkspace.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
@@ -80,7 +82,7 @@ private:
 		std::shared_ptr<const FSceneModelData> Model;
 		std::shared_ptr<const FSceneModelData> SecondModel;
 		std::set<std::string> Dependencies;
-		std::array<std::shared_ptr<const FTextureAsset>, 3> SkyProducts;
+		FSkyPreviewProducts SkyProducts;
 		std::string Error;
 	};
 
@@ -88,7 +90,7 @@ private:
 	{
 		std::size_t Mip{};
 		std::size_t Face{};
-		std::size_t Channel{};
+		EAssetPreviewChannel Channel = EAssetPreviewChannel::Rgba;
 		float Exposure{};
 		float Zoom = 1;
 		FVec2 Pan{};
@@ -124,7 +126,7 @@ private:
 		std::uint64_t RequestedGeneration{};
 		std::uint64_t PreparedGeneration{};
 		std::uint64_t TextureId{};
-		std::size_t Shape{};
+		EAssetPreviewShape Shape = EAssetPreviewShape::Sphere;
 		std::size_t SelectedNode{};
 		std::size_t SelectedPrimitive{};
 		bool bActivate = true;
@@ -138,7 +140,7 @@ private:
 		std::unique_ptr<FSceneRenderPipeline> Pipeline;
 		std::shared_ptr<const FLoadedAsset> Preview;
 		std::shared_ptr<const FSceneModelData> PreviewModel;
-		std::array<std::shared_ptr<const FTextureAsset>, 3> SkyProducts;
+		FSkyPreviewProducts SkyProducts;
 		std::set<std::string> Dependencies;
 		FSceneCameraView Camera;
 		FSceneCameraController Navigation;
@@ -157,7 +159,7 @@ private:
 		float YawDegrees{};
 	};
 
-	FPrepared Prepare(const FLoadedAsset& InLoaded, FArchiveNode InDraft, std::size_t InShape,
+	FPrepared Prepare(const FLoadedAsset& InLoaded, FArchiveNode InDraft, EAssetPreviewShape InShape,
 	                  FCancellationToken InCancellation, std::shared_ptr<const FSceneModelData> InExisting);
 	void PollEntry(FEntry& InEntry);
 	void PollEditWorkflow(FEntry& InEntry);

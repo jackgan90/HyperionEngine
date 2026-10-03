@@ -11,7 +11,9 @@ function(hyp_test target name module source)
 endfunction()
 hyp_test(automation_tests automation_contracts hyperion_automation Automation/AutomationTests.cpp)
 target_sources(automation_tests PRIVATE Automation/JobStateTests.cpp)
+target_sources(automation_tests PRIVATE Automation/ResponseTests.cpp Automation/McpResponseTests.cpp)
 hyp_test(automation_connection_tests automation_connections hyperion_automation Automation/ConnectionTests.cpp)
+target_sources(automation_connection_tests PRIVATE Automation/ResponseConnectionTests.cpp)
 target_sources(automation_connection_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Runtime/Automation/Private/TargetDiscoveryTests.cpp")
 hyp_discovery_test(NAME automation_transport COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AutomationAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:automation_asset_tests>)
@@ -255,6 +257,10 @@ hyp_discovery_test(NAME automation_capability_parity COMMAND "${Python3_EXECUTAB
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParity")
 set_tests_properties(automation_capability_parity PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+hyp_discovery_test(NAME automation_asset_preview COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AssetPreviewAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
+  $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AssetPreviewAcceptance")
+set_tests_properties(automation_asset_preview PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_discovery_test(NAME automation_selection_framing COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/SelectionFramingAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/SelectionFraming")
@@ -362,6 +368,7 @@ if(HYP_ENABLE_RENDERDOC)
 endif()
 add_dependencies(hyperion_check d3d12_frame_failure_tests)
 add_dependencies(hyperion_check hyperion_editor editor_preferences_tests gui_docking_tests gui_rendering_tests)
+add_dependencies(hyperion_check editor_asset_preview_contract_tests)
 add_dependencies(hyperion_check automation_scene_tests)
 add_dependencies(hyperion_check editor_content_tests folder_dialog_tests)
 add_dependencies(hyperion_check placement_tests)

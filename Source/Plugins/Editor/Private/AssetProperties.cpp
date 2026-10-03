@@ -1,4 +1,5 @@
 #include "Hyperion/AssetEditing/AssetProperties.h"
+#include "AssetPreviewPresentation.h"
 #include "AssetPropertyWidgets.h"
 #include "AssetWorkspace.h"
 #include "Hyperion/AssetEditing/ModelProperties.h"
@@ -346,16 +347,14 @@ void FAssetWorkspace::DrawSkyProperties(FGui& InGui, FEntry& InEntry)
 	AssetInfo(InGui, "Specular cube", Sky.Specular.Path);
 	AssetInfo(InGui, "BRDF LUT", Sky.Brdf.Path);
 	AssetInfo(InGui, "Bake convention", std::to_string(Sky.Convention));
-	constexpr std::array ProductNames{"Radiance", "Specular", "BRDF"};
-	constexpr std::array FormatNames{"RGBA8", "RGBA16F", "RGBA32F"};
-	for (std::size_t Index = 0; Index < InEntry.SkyProducts.size(); ++Index)
+	for (const auto& Description : SkyPreviewProductDescriptions())
 	{
-		if (const auto& Texture = InEntry.SkyProducts[Index])
+		if (const auto& Texture = InEntry.SkyProducts.*Description.Texture)
 		{
-			AssetInfo(InGui, ProductNames[Index],
+			AssetInfo(InGui, Description.Label.data(),
 			          std::to_string(Texture->Mips.front().Width) + " x " +
 			              std::to_string(Texture->Mips.front().Height) + ", " + std::to_string(Texture->Mips.size()) +
-			              " mips, " + FormatNames.at(static_cast<std::size_t>(Texture->Format)));
+			              " mips, " + std::string(DescribeAssetPreviewFormat(Texture->Format).CompactLabel));
 		}
 	}
 	InGui.TextWrapped("Baked products are read-only. Preview spheres show diffuse and reflective lighting.");

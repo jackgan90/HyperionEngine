@@ -1,0 +1,1737 @@
+{
+  "asset.preview.get": {
+    "asynchronous": false,
+    "available": true,
+    "completion": "Current Main snapshot.",
+    "description": "Null settings are unsupported by this asset type. Camera is a temporary 3D browsing camera. Shape: 0 sphere, 1 plane, 2 cube. Texture channel: 0 RGBA, 1 R, 2 G, 3 B, 4 A. Cube face: +X,-X,+Y,-Y,+Z,-Z. Preview readiness is separate from document readiness.",
+    "effects": "Reads temporary preview state.",
+    "example": {
+      "document": "document-from-open"
+    },
+    "executionDomain": "Main",
+    "id": "asset.preview.get",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "Opaque document ID returned by asset.open in this session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "type": "object",
+      "x-hyperion-type": "automation.asset.document",
+      "x-hyperion-version": 1
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "default": "",
+          "type": "string"
+        },
+        "error": {
+          "default": "",
+          "type": "string"
+        },
+        "generation": {
+          "default": "0",
+          "format": "uint64",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "type": "string"
+        },
+        "ready": {
+          "default": false,
+          "type": "boolean"
+        },
+        "settings": {
+          "additionalProperties": false,
+          "default": {
+            "camera": null,
+            "channel": null,
+            "checker": null,
+            "exposure": null,
+            "exposureEv": null,
+            "face": null,
+            "fit": null,
+            "mip": null,
+            "pan": null,
+            "shape": null,
+            "yaw": null,
+            "zoom": null
+          },
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "lens": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "far": {
+                          "default": 1000.0,
+                          "title": "Far plane",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "focusDistance": {
+                          "default": 12.0,
+                          "title": "Focus distance",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "near": {
+                          "default": 0.009999999776482582,
+                          "title": "Near plane",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "verticalRadians": {
+                          "default": 0.7292249798774719,
+                          "title": "Vertical field of view (radians)",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        }
+                      },
+                      "required": [],
+                      "type": "object",
+                      "x-hyperion-type": "hyperion.scenecamera",
+                      "x-hyperion-version": 1
+                    },
+                    "world": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "values": {
+                          "default": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                          ],
+                          "items": {
+                            "type": "number"
+                          },
+                          "maxItems": 16,
+                          "minItems": 16,
+                          "type": "array"
+                        }
+                      },
+                      "required": [],
+                      "type": "object",
+                      "x-hyperion-type": "hyperion.mat4",
+                      "x-hyperion-version": 1
+                    }
+                  },
+                  "required": [
+                    "lens",
+                    "world"
+                  ],
+                  "type": "object",
+                  "x-hyperion-type": "hyperion.sceneview",
+                  "x-hyperion-version": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "channel": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "checker": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "exposure": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "exposureEv": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "face": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "fit": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "mip": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "pan": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "default": 0.0,
+                      "type": "number"
+                    },
+                    "y": {
+                      "default": 0.0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [],
+                  "type": "object",
+                  "x-hyperion-type": "hyperion.vec2",
+                  "x-hyperion-version": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "shape": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "yaw": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "zoom": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [],
+          "type": "object",
+          "x-hyperion-type": "hyperion.asset.preview.settings",
+          "x-hyperion-version": 1
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-hyperion-type": "hyperion.asset.preview.state",
+      "x-hyperion-version": 1
+    },
+    "owner": "automation-assets",
+    "readOnly": true,
+    "summary": "Read the live asset tab preview state",
+    "unavailable": "",
+    "version": 1
+  },
+  "asset.preview.set": {
+    "asynchronous": false,
+    "available": true,
+    "completion": "Controls applied; query ready after resource preparation/rendering.",
+    "description": "Null settings are unsupported by this asset type. Camera is a temporary 3D browsing camera. Shape: 0 sphere, 1 plane, 2 cube. Texture channel: 0 RGBA, 1 R, 2 G, 3 B, 4 A. Cube face: +X,-X,+Y,-Y,+Z,-Z. Preview readiness is separate from document readiness. Patch only supported members. frame fits the view. Exposure is 0.05-8; yaw degrees -180 to 180; texture exposureEv -12 to 12, zoom 0.01-64, pan in canvas pixels. Turn fit off to set manual zoom.",
+    "effects": "Changes temporary tab presentation without document history, generation or save.",
+    "example": {
+      "document": "document-from-open",
+      "frame": false,
+      "generation": "1",
+      "settings": {
+        "camera": null,
+        "channel": null,
+        "checker": null,
+        "exposure": null,
+        "exposureEv": null,
+        "face": null,
+        "fit": null,
+        "mip": null,
+        "pan": null,
+        "shape": null,
+        "yaw": null,
+        "zoom": null
+      }
+    },
+    "executionDomain": "Main",
+    "id": "asset.preview.set",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "type": "string"
+        },
+        "frame": {
+          "default": false,
+          "type": "boolean"
+        },
+        "generation": {
+          "format": "uint64",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "type": "string"
+        },
+        "settings": {
+          "additionalProperties": false,
+          "default": {
+            "camera": null,
+            "channel": null,
+            "checker": null,
+            "exposure": null,
+            "exposureEv": null,
+            "face": null,
+            "fit": null,
+            "mip": null,
+            "pan": null,
+            "shape": null,
+            "yaw": null,
+            "zoom": null
+          },
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "lens": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "far": {
+                          "default": 1000.0,
+                          "title": "Far plane",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "focusDistance": {
+                          "default": 12.0,
+                          "title": "Focus distance",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "near": {
+                          "default": 0.009999999776482582,
+                          "title": "Near plane",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "verticalRadians": {
+                          "default": 0.7292249798774719,
+                          "title": "Vertical field of view (radians)",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        }
+                      },
+                      "required": [],
+                      "type": "object",
+                      "x-hyperion-type": "hyperion.scenecamera",
+                      "x-hyperion-version": 1
+                    },
+                    "world": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "values": {
+                          "default": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                          ],
+                          "items": {
+                            "type": "number"
+                          },
+                          "maxItems": 16,
+                          "minItems": 16,
+                          "type": "array"
+                        }
+                      },
+                      "required": [],
+                      "type": "object",
+                      "x-hyperion-type": "hyperion.mat4",
+                      "x-hyperion-version": 1
+                    }
+                  },
+                  "required": [
+                    "lens",
+                    "world"
+                  ],
+                  "type": "object",
+                  "x-hyperion-type": "hyperion.sceneview",
+                  "x-hyperion-version": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "channel": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "checker": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "exposure": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "exposureEv": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "face": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "fit": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "mip": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "pan": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "default": 0.0,
+                      "type": "number"
+                    },
+                    "y": {
+                      "default": 0.0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [],
+                  "type": "object",
+                  "x-hyperion-type": "hyperion.vec2",
+                  "x-hyperion-version": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "shape": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "yaw": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "zoom": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [],
+          "type": "object",
+          "x-hyperion-type": "hyperion.asset.preview.settings",
+          "x-hyperion-version": 1
+        }
+      },
+      "required": [
+        "document",
+        "generation"
+      ],
+      "type": "object",
+      "x-hyperion-type": "automation.asset.preview.edit",
+      "x-hyperion-version": 1
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "default": "",
+          "type": "string"
+        },
+        "error": {
+          "default": "",
+          "type": "string"
+        },
+        "generation": {
+          "default": "0",
+          "format": "uint64",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "type": "string"
+        },
+        "ready": {
+          "default": false,
+          "type": "boolean"
+        },
+        "settings": {
+          "additionalProperties": false,
+          "default": {
+            "camera": null,
+            "channel": null,
+            "checker": null,
+            "exposure": null,
+            "exposureEv": null,
+            "face": null,
+            "fit": null,
+            "mip": null,
+            "pan": null,
+            "shape": null,
+            "yaw": null,
+            "zoom": null
+          },
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "lens": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "far": {
+                          "default": 1000.0,
+                          "title": "Far plane",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "focusDistance": {
+                          "default": 12.0,
+                          "title": "Focus distance",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "near": {
+                          "default": 0.009999999776482582,
+                          "title": "Near plane",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        },
+                        "verticalRadians": {
+                          "default": 0.7292249798774719,
+                          "title": "Vertical field of view (radians)",
+                          "type": "number",
+                          "x-hyperion-inspector-readonly": false,
+                          "x-hyperion-unit": ""
+                        }
+                      },
+                      "required": [],
+                      "type": "object",
+                      "x-hyperion-type": "hyperion.scenecamera",
+                      "x-hyperion-version": 1
+                    },
+                    "world": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "values": {
+                          "default": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                          ],
+                          "items": {
+                            "type": "number"
+                          },
+                          "maxItems": 16,
+                          "minItems": 16,
+                          "type": "array"
+                        }
+                      },
+                      "required": [],
+                      "type": "object",
+                      "x-hyperion-type": "hyperion.mat4",
+                      "x-hyperion-version": 1
+                    }
+                  },
+                  "required": [
+                    "lens",
+                    "world"
+                  ],
+                  "type": "object",
+                  "x-hyperion-type": "hyperion.sceneview",
+                  "x-hyperion-version": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "channel": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "checker": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "exposure": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "exposureEv": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "face": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "fit": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "mip": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "pan": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "default": 0.0,
+                      "type": "number"
+                    },
+                    "y": {
+                      "default": 0.0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [],
+                  "type": "object",
+                  "x-hyperion-type": "hyperion.vec2",
+                  "x-hyperion-version": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "shape": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "yaw": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "zoom": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [],
+          "type": "object",
+          "x-hyperion-type": "hyperion.asset.preview.settings",
+          "x-hyperion-version": 1
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-hyperion-type": "hyperion.asset.preview.state",
+      "x-hyperion-version": 1
+    },
+    "owner": "automation-assets",
+    "readOnly": false,
+    "summary": "Edit the live asset tab preview controls",
+    "unavailable": "",
+    "version": 1
+  },
+  "automation.asset.preview.edit": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "document": {
+        "type": "string"
+      },
+      "frame": {
+        "default": false,
+        "type": "boolean"
+      },
+      "generation": {
+        "format": "uint64",
+        "pattern": "^(0|[1-9][0-9]*)$",
+        "type": "string"
+      },
+      "settings": {
+        "additionalProperties": false,
+        "default": {
+          "camera": null,
+          "channel": null,
+          "checker": null,
+          "exposure": null,
+          "exposureEv": null,
+          "face": null,
+          "fit": null,
+          "mip": null,
+          "pan": null,
+          "shape": null,
+          "yaw": null,
+          "zoom": null
+        },
+        "properties": {
+          "camera": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "lens": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "far": {
+                        "default": 1000.0,
+                        "title": "Far plane",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      },
+                      "focusDistance": {
+                        "default": 12.0,
+                        "title": "Focus distance",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      },
+                      "near": {
+                        "default": 0.009999999776482582,
+                        "title": "Near plane",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      },
+                      "verticalRadians": {
+                        "default": 0.7292249798774719,
+                        "title": "Vertical field of view (radians)",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      }
+                    },
+                    "required": [],
+                    "type": "object",
+                    "x-hyperion-type": "hyperion.scenecamera",
+                    "x-hyperion-version": 1
+                  },
+                  "world": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "values": {
+                        "default": [
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0
+                        ],
+                        "items": {
+                          "type": "number"
+                        },
+                        "maxItems": 16,
+                        "minItems": 16,
+                        "type": "array"
+                      }
+                    },
+                    "required": [],
+                    "type": "object",
+                    "x-hyperion-type": "hyperion.mat4",
+                    "x-hyperion-version": 1
+                  }
+                },
+                "required": [
+                  "lens",
+                  "world"
+                ],
+                "type": "object",
+                "x-hyperion-type": "hyperion.sceneview",
+                "x-hyperion-version": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "checker": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "exposure": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "exposureEv": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "face": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "mip": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "pan": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "x": {
+                    "default": 0.0,
+                    "type": "number"
+                  },
+                  "y": {
+                    "default": 0.0,
+                    "type": "number"
+                  }
+                },
+                "required": [],
+                "type": "object",
+                "x-hyperion-type": "hyperion.vec2",
+                "x-hyperion-version": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "shape": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "yaw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "zoom": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [],
+        "type": "object",
+        "x-hyperion-type": "hyperion.asset.preview.settings",
+        "x-hyperion-version": 1
+      }
+    },
+    "required": [
+      "document",
+      "generation"
+    ],
+    "type": "object",
+    "x-hyperion-type": "automation.asset.preview.edit",
+    "x-hyperion-version": 1
+  },
+  "hyperion.asset.preview.settings": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "camera": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "lens": {
+                "additionalProperties": false,
+                "properties": {
+                  "far": {
+                    "default": 1000.0,
+                    "title": "Far plane",
+                    "type": "number",
+                    "x-hyperion-inspector-readonly": false,
+                    "x-hyperion-unit": ""
+                  },
+                  "focusDistance": {
+                    "default": 12.0,
+                    "title": "Focus distance",
+                    "type": "number",
+                    "x-hyperion-inspector-readonly": false,
+                    "x-hyperion-unit": ""
+                  },
+                  "near": {
+                    "default": 0.009999999776482582,
+                    "title": "Near plane",
+                    "type": "number",
+                    "x-hyperion-inspector-readonly": false,
+                    "x-hyperion-unit": ""
+                  },
+                  "verticalRadians": {
+                    "default": 0.7292249798774719,
+                    "title": "Vertical field of view (radians)",
+                    "type": "number",
+                    "x-hyperion-inspector-readonly": false,
+                    "x-hyperion-unit": ""
+                  }
+                },
+                "required": [],
+                "type": "object",
+                "x-hyperion-type": "hyperion.scenecamera",
+                "x-hyperion-version": 1
+              },
+              "world": {
+                "additionalProperties": false,
+                "properties": {
+                  "values": {
+                    "default": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 16,
+                    "minItems": 16,
+                    "type": "array"
+                  }
+                },
+                "required": [],
+                "type": "object",
+                "x-hyperion-type": "hyperion.mat4",
+                "x-hyperion-version": 1
+              }
+            },
+            "required": [
+              "lens",
+              "world"
+            ],
+            "type": "object",
+            "x-hyperion-type": "hyperion.sceneview",
+            "x-hyperion-version": 1
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "channel": {
+        "anyOf": [
+          {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "checker": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "exposure": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "exposureEv": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "face": {
+        "anyOf": [
+          {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "fit": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "mip": {
+        "anyOf": [
+          {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "pan": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "x": {
+                "default": 0.0,
+                "type": "number"
+              },
+              "y": {
+                "default": 0.0,
+                "type": "number"
+              }
+            },
+            "required": [],
+            "type": "object",
+            "x-hyperion-type": "hyperion.vec2",
+            "x-hyperion-version": 1
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "shape": {
+        "anyOf": [
+          {
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "yaw": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "zoom": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [],
+    "type": "object",
+    "x-hyperion-type": "hyperion.asset.preview.settings",
+    "x-hyperion-version": 1
+  },
+  "hyperion.asset.preview.state": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "document": {
+        "default": "",
+        "type": "string"
+      },
+      "error": {
+        "default": "",
+        "type": "string"
+      },
+      "generation": {
+        "default": "0",
+        "format": "uint64",
+        "pattern": "^(0|[1-9][0-9]*)$",
+        "type": "string"
+      },
+      "ready": {
+        "default": false,
+        "type": "boolean"
+      },
+      "settings": {
+        "additionalProperties": false,
+        "default": {
+          "camera": null,
+          "channel": null,
+          "checker": null,
+          "exposure": null,
+          "exposureEv": null,
+          "face": null,
+          "fit": null,
+          "mip": null,
+          "pan": null,
+          "shape": null,
+          "yaw": null,
+          "zoom": null
+        },
+        "properties": {
+          "camera": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "lens": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "far": {
+                        "default": 1000.0,
+                        "title": "Far plane",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      },
+                      "focusDistance": {
+                        "default": 12.0,
+                        "title": "Focus distance",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      },
+                      "near": {
+                        "default": 0.009999999776482582,
+                        "title": "Near plane",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      },
+                      "verticalRadians": {
+                        "default": 0.7292249798774719,
+                        "title": "Vertical field of view (radians)",
+                        "type": "number",
+                        "x-hyperion-inspector-readonly": false,
+                        "x-hyperion-unit": ""
+                      }
+                    },
+                    "required": [],
+                    "type": "object",
+                    "x-hyperion-type": "hyperion.scenecamera",
+                    "x-hyperion-version": 1
+                  },
+                  "world": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "values": {
+                        "default": [
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0,
+                          0.0
+                        ],
+                        "items": {
+                          "type": "number"
+                        },
+                        "maxItems": 16,
+                        "minItems": 16,
+                        "type": "array"
+                      }
+                    },
+                    "required": [],
+                    "type": "object",
+                    "x-hyperion-type": "hyperion.mat4",
+                    "x-hyperion-version": 1
+                  }
+                },
+                "required": [
+                  "lens",
+                  "world"
+                ],
+                "type": "object",
+                "x-hyperion-type": "hyperion.sceneview",
+                "x-hyperion-version": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "checker": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "exposure": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "exposureEv": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "face": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "mip": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "pan": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "x": {
+                    "default": 0.0,
+                    "type": "number"
+                  },
+                  "y": {
+                    "default": 0.0,
+                    "type": "number"
+                  }
+                },
+                "required": [],
+                "type": "object",
+                "x-hyperion-type": "hyperion.vec2",
+                "x-hyperion-version": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "shape": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "yaw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "zoom": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [],
+        "type": "object",
+        "x-hyperion-type": "hyperion.asset.preview.settings",
+        "x-hyperion-version": 1
+      }
+    },
+    "required": [],
+    "type": "object",
+    "x-hyperion-type": "hyperion.asset.preview.state",
+    "x-hyperion-version": 1
+  }
+}

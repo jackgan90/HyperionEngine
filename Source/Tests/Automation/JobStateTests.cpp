@@ -145,10 +145,55 @@ void CheckStoppedAdmission()
 	Fixture.Completion = ECompletion::Success;
 	HYP_CHECK(Text(Session.GetJob(Job), "status") == "completed" && Session.PendingCount() == 0);
 }
+
+void CheckSnapshot(FArchiveNode InValue, std::string_view InExpected)
+{
+	// Only the ephemeral job identity is normalized; every other field is a fixed compatibility expectation.
+	auto& Fields = std::get<FArchiveNode::FObject>(InValue.Value);
+	if (Fields.contains("job"))
+	{
+		Fields.at("job") = WriteValue(std::string("<job>"));
+	}
+	HYP_CHECK(WriteJson(InValue) == WriteJson(ParseJson(InExpected)));
+}
+
+void CheckResponseSnapshots()
+{
+	CheckSnapshot(
+	    AutomationFailure("test_failure", "Controlled failure", "field", ParseJson(R"({"cause":1})")),
+	    R"({"status":"failed","error":{"code":"test_failure","message":"Controlled failure","path":"field","details":{"cause":1}}})");
+	FJobFixture Fixture;
+	FAutomationSession Session(Fixture.Catalog);
+	const auto Started = Fixture.Start(Session);
+	const auto Job = Text(Started, "job");
+	CheckSnapshot(
+	    Started,
+	    R"({"status":"running","job":"<job>","operation":"test.job-state","cancellable":false,"pollAfterMs":20})");
+	Fixture.Completion = ECompletion::Success;
+	const auto Completed = Session.GetJob(Job);
+	CheckSnapshot(Field(Completed, "outcome"), R"({"status":"completed","result":{"cancellable":false}})");
+	CheckSnapshot(
+	    Completed,
+	    R"({"status":"completed","job":"<job>","operation":"test.job-state","cancellable":false,"outcome":{"status":"completed","result":{"cancellable":false}}})");
+	const auto FailedJob = Text(Fixture.Start(Session), "job");
+	Fixture.Completion = ECompletion::Failure;
+	CheckSnapshot(
+	    Session.GetJob(FailedJob),
+	    R"({"status":"failed","job":"<job>","operation":"test.job-state","cancellable":false,"outcome":{"status":"failed","error":{"code":"test_failure","message":"Controlled failure","path":"","details":{}}}})");
+	Fixture.Completion = ECompletion::Pending;
+	const auto Cancellable = Fixture.Start(Session, true);
+	CheckSnapshot(
+	    Cancellable,
+	    R"({"status":"running","job":"<job>","operation":"test.job-state","cancellable":true,"pollAfterMs":20})");
+	CheckSnapshot(
+	    Session.CancelJob(Text(Cancellable, "job")),
+	    R"({"status":"cancelled","job":"<job>","operation":"test.job-state","cancellable":false,"outcome":{"status":"failed","error":{"code":"cancelled","message":"Operation cancelled; provider cleanup is still drained at shutdown","path":"","details":{}}}})");
+}
 } // namespace
 
 void CheckJobStates()
 {
 	CheckTerminalStates();
 	CheckStoppedAdmission();
+	CheckResponseSnapshots();
 }

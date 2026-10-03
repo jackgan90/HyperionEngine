@@ -42,7 +42,7 @@
 | 材质参数 | `material.parameters.get`、`material.passes.get`、`material.values.get/set` | 共享可编辑性、类型/维数、PBR clamp 和引用图校验；不允许修改系统/声明参数 |
 | 纹理 | `texture.dimension.get/format.get/encoding.get/sample`、`texture.set_encoding` | 编码修改与 GUI 使用同一个 AssetEditing 异步工作流，共用 snapshot、busy、generation 检查和历史提交。sample 返回 mip/face 信息与源像素 RGBA，不返回 bulk |
 | 天空属性 | `sky.radiance.get/specular.get/brdf.get/irradiance.get/convention.get` | GUI 中这些产品为只读；天空重新生成使用 import；名称使用 asset.rename |
-| 资产预览 | `asset.preview.get/set` | `IAssetPreviewWorkspace`；模型/材质/天空 camera、曝光、形状、yaw；纹理 mip/face/channel/EV/zoom/pan/fit/checker。临时预览不增加资产 generation/history |
+| 资产预览 | `asset.preview.get/set` | `IAssetPreviewWorkspace`；模型/材质/天空 camera、曝光、形状、yaw；纹理 mip/face/channel/EV/zoom/pan/fit/checker。shape 为 0=Sphere、1=Plane、2=Cube；channel 为 0=RGBA、1=R、2=G、3=B、4=A，由 AssetEditing 的类型化选项映射校验，独立于 GUI 顺序/标签；重复设置不重建，临时预览不增加资产 generation/history |
 | 渲染与配置 | `render.settings.get/set/save`、`render.shadows.get/set` | `IRenderSettings`；完整候选校验、revision 和原子保存；get/set version 2 的 activeReversedZ 表示已提交给后续场景/三维资产预览帧的实时值，完成不等待 GPU 呈现；save version 1 独立持久化；不修改场景/资产 history；shadow 参数为会话默认值，Priority 推导出的阴影方向光组件参数（若配置）优先 |
 | 灯光阴影属性 | `scene.component.hyperion.scenedirectionallight.get/set` | `shadowSettings` 可选嵌套组件字段；SceneEditing 验证、历史和原生保存；point/spot 尚不支持阴影 |
 | 渲染结果和诊断 | `render.statistics`、`render.component_diagnostics`、`render.screenshot` | 完成帧统计、分页 primitive 诊断和现有 readback。PNG 成功返回时文件已写入，返回目标本地路径、尺寸、frame 和 bytes |

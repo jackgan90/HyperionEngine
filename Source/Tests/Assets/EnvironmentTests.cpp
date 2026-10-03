@@ -101,6 +101,129 @@ void CheckNumerics()
 	}
 }
 
+template<class TAction> std::string InvalidMessage(TAction InAction)
+{
+	try
+	{
+		InAction();
+	}
+	catch (const std::invalid_argument& Error)
+	{
+		return Error.what();
+	}
+	throw std::runtime_error("Expected invalid_argument from environment admission");
+}
+
+void CheckBakeSettings()
+{
+	struct FCase
+	{
+		FEnvironmentBakeSettings Settings;
+		bool bValid;
+	};
+
+	const std::array Cases{FCase{{1, 1, 1}, true},
+	                       FCase{{1024, 256, 1024}, true},
+	                       FCase{{4, 4, 3}, true},
+	                       FCase{{256, 256, 1}, true},
+	                       FCase{{0, 1, 1}, false},
+	                       FCase{{3, 1, 1}, false},
+	                       FCase{{2048, 1, 1}, false},
+	                       FCase{{1024, 0, 1}, false},
+	                       FCase{{1024, 3, 1}, false},
+	                       FCase{{1024, 512, 1}, false},
+	                       FCase{{1, 2, 1}, false},
+	                       FCase{{1, 1, 0}, false},
+	                       FCase{{1, 1, 1025}, false},
+	                       FCase{{std::numeric_limits<std::uint32_t>::max(), 1, 1}, false},
+	                       FCase{{1, std::numeric_limits<std::uint32_t>::max(), 1}, false},
+	                       FCase{{1, 1, std::numeric_limits<std::uint32_t>::max()}, false}};
+	const std::array<float, 8> Pixels{1, 1, 1, 1, 1, 1, 1, 1};
+	for (const auto& Entry : Cases)
+	{
+		HYP_CHECK(IsValidEnvironmentBakeSettings(Entry.Settings) == Entry.bValid);
+		const FAssetConversionSettings Conversion{.Sky = Entry.Settings};
+		for (const auto Extension : {".hdr", ".exr"})
+		{
+			if (Entry.bValid)
+			{
+				ValidateImportSettings(Conversion, Extension, RecordType<FSkyAsset>().Id);
+			}
+			else
+			{
+				HYP_CHECK(
+				    InvalidMessage(
+				        [&]
+				        {
+					        ValidateImportSettings(Conversion, Extension, {});
+				        }) ==
+				    "Sky sizes must be powers of two: radiance 1-1024, specular 1-256 and <= radiance; samples 1-1024");
+			}
+		}
+		if (!Entry.bValid)
+		{
+			HYP_CHECK(InvalidMessage(
+			              [&]
+			              {
+				              (void)BakeEnvironment(Pixels, 2, 1, Entry.Settings);
+			              }) == "Sky requires a 2:1 HDR panorama and bounded power-of-two bake sizes");
+		}
+		else if (Entry.Settings.RadianceSize <= 4)
+		{
+			const auto Baked = BakeEnvironment(Pixels, 2, 1, Entry.Settings);
+			HYP_CHECK(Baked.Radiance.Mips.front().Width == Entry.Settings.RadianceSize);
+			HYP_CHECK(Baked.Specular.Mips.front().Width == Entry.Settings.SpecularSize);
+		}
+	}
+	HYP_CHECK(IsValidEnvironmentPrefilterSettings(2048, 256, 1024));
+	HYP_CHECK(IsValidEnvironmentPrefilterSettings(3, 2, 1));
+	HYP_CHECK(!IsValidEnvironmentPrefilterSettings(1, 2, 1));
+	HYP_CHECK(!IsValidEnvironmentPrefilterSettings(2048, 512, 1));
+	HYP_CHECK(!IsValidEnvironmentPrefilterSettings(2048, 3, 1));
+	HYP_CHECK(!IsValidEnvironmentPrefilterSettings(2048, 1, 0));
+	HYP_CHECK(!IsValidEnvironmentPrefilterSettings(2048, 1, 1025));
+}
+
+void CheckSettingsContract()
+{
+	const auto& Type = RecordType<FEnvironmentBakeSettings>();
+	HYP_CHECK(Type.Id == "asset.import.sky-settings" && Type.Version == 1 && Type.Members.size() == 3);
+	const FEnvironmentBakeSettings Defaults;
+	HYP_CHECK(Defaults.RadianceSize == 256 && Defaults.SpecularSize == 64 && Defaults.Samples == 256);
+	HYP_CHECK(Type.Members[0].Id == "radianceSize" &&
+	          Type.Members[0].Options.Description == "Cube face size; power of two from 1 to 1024. Default 256.");
+	HYP_CHECK(Type.Members[1].Id == "specularSize" &&
+	          Type.Members[1].Options.Description ==
+	              "Prefiltered face size; power of two from 1 to 256, no larger than radianceSize. Default 64.");
+	HYP_CHECK(Type.Members[2].Id == "samples" &&
+	          Type.Members[2].Options.Description == "GGX samples from 1 to 1024. Default 256.");
+	const FAssetConversionSettings Settings{.Sky = Defaults};
+	for (const auto Extension : {".png", ".gltf"})
+	{
+		HYP_CHECK(InvalidMessage(
+		              [&]
+		              {
+			              ValidateImportSettings(Settings, Extension, {});
+		              }) == "Sky bake settings apply only to HDR/EXR panoramas");
+	}
+	HYP_CHECK(InvalidMessage(
+	              [&]
+	              {
+		              ValidateImportSettings(Settings, ".hdr", RecordType<FTextureAsset>().Id);
+	              }) == "Sky bake settings apply only to HDR/EXR panoramas");
+	const std::array<float, 8> Pixels{1, 1, 1, 1, 1, 1, 1, 1};
+	HYP_CHECK(InvalidMessage(
+	              [&]
+	              {
+		              (void)BakeEnvironment(Pixels, 1, 2, {1, 1, 1});
+	              }) == "Sky requires a 2:1 HDR panorama and bounded power-of-two bake sizes");
+	HYP_CHECK(InvalidMessage(
+	              [&]
+	              {
+		              (void)BakeEnvironment({}, 2, 1, {1, 1, 1});
+	              }) == "Sky requires a 2:1 HDR panorama and bounded power-of-two bake sizes");
+}
+
 void CheckTextureStorage()
 {
 	for (const auto Format : {ETextureFormat::Rgba16Float, ETextureFormat::Rgba32Float})
@@ -208,6 +331,8 @@ int main()
 	try
 	{
 		CheckNumerics();
+		CheckBakeSettings();
+		CheckSettingsContract();
 		CheckTextureStorage();
 		CheckImports();
 		std::cout << "Environment preprocessing passed\n";

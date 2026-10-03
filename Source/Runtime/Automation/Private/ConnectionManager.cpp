@@ -107,6 +107,7 @@ void FRemoteConnection::Poll()
 			{
 				throw FAutomationError("protocol_error", "Unexpected response correlation ID");
 			}
+			(void)ReadAutomationResponse(Fields.at("result"));
 			Found->second->Result = Fields.at("result");
 			Requests.erase(Found);
 		}
@@ -130,30 +131,51 @@ void FRemoteConnection::Poll()
 	}
 }
 
+FAutomationTarget ReadHelloTarget(const FArchiveNode& InPayload)
+{
+	try
+	{
+		const auto& Fields = std::get<FArchiveNode::FObject>(InPayload.Value);
+		if (ReadValue<std::uint32_t>(Fields.at("protocol")) != AutomationProtocolVersion ||
+		    ReadValue<std::uint32_t>(Fields.at("maxFrame")) > AutomationResponseLimits.MaxBytes)
+		{
+			throw FAutomationError("protocol_mismatch", "Target selected an unsupported communication contract");
+		}
+		const auto Target = ReadRecordWire(RecordType<FAutomationTarget>(), Fields.at("target"));
+		return *static_cast<const FAutomationTarget*>(Target.get());
+	}
+	catch (const FAutomationError&)
+	{
+		throw;
+	}
+	catch (const std::bad_alloc&)
+	{
+		throw;
+	}
+	catch (const std::exception&)
+	{
+		throw FAutomationError("protocol_error", "Invalid target handshake payload", "result");
+	}
+}
+
 FArchiveNode FinishConnect(FRemoteConnection& InClient, const FArchiveNode& InHello)
 {
-	const auto& Fields = ConnectionFields(InHello);
-	if (Fields.contains("status") && ReadValue<std::string>(Fields.at("status")) == "failed")
+	const auto View = ReadAutomationResponse(InHello);
+	if (View.IsFailed() && !View.Job)
 	{
 		InClient.Close(InHello);
 		return InHello;
 	}
-	const auto& Result = ConnectionFields(Fields.at("result"));
-	if (ReadValue<std::uint32_t>(Result.at("protocol")) != AutomationProtocolVersion ||
-	    ReadValue<std::uint32_t>(Result.at("maxFrame")) > AutomationResponseLimits.MaxBytes)
-	{
-		throw FAutomationError("protocol_mismatch", "Target selected an unsupported communication contract");
-	}
-	const auto Target = ReadRecordWire(RecordType<FAutomationTarget>(), Result.at("target"));
-	const auto& Info = *static_cast<const FAutomationTarget*>(Target.get());
+	const auto& Result = View.CompletedResult();
+	const auto Info = ReadHelloTarget(Result);
 	if (!InClient.ExpectedInstance.empty() && InClient.ExpectedInstance != Info.Instance)
 	{
 		throw FAutomationError("stale_target", "Connected instance does not match the selected target");
 	}
 	InClient.bReady = true;
-	auto Response = Result;
+	auto Response = std::get<FArchiveNode::FObject>(Result.Value);
 	Response.emplace("connection", WriteValue(InClient.Id));
-	return CompletedConnectionResult(FArchiveNode(std::move(Response)));
+	return AutomationCompleted(FArchiveNode(std::move(Response)));
 }
 } // namespace
 
@@ -206,7 +228,7 @@ FArchiveNode FConnectionManager::List()
 	               WriteValue(std::string(
 	                   "Bounded advisory snapshot; known instances resolve independently. Connect verifies identity. "
 	                   "Domain paths belong to the target.")));
-	return CompletedConnectionResult(std::move(Result));
+	return AutomationCompleted(std::move(Result));
 }
 
 FEndpointRequest FConnectionManager::Connect(const FArchiveNode& InParameters)
@@ -262,12 +284,11 @@ FEndpointRequest FConnectionManager::BeginConnection(const FArchiveNode& InParam
 				        auto Response = FinishConnect(*Client, *Result);
 				        if (bInProbe)
 				        {
-					        auto& Fields = std::get<FArchiveNode::FObject>(Response.Value);
-					        if (Fields.contains("result"))
+					        const auto View = ReadAutomationResponse(Response);
+					        if (!View.IsFailed())
 					        {
-						        auto& Info = std::get<FArchiveNode::FObject>(Fields.at("result").Value);
-						        const auto Target = Info.at("target");
-						        Info = {{"target", Target}};
+						        const auto& Payload = ConnectionFields(View.CompletedResult());
+						        FArchiveNode::FObject Info{{"target", Payload.at("target")}};
 						        const auto CheckedAt = std::chrono::duration_cast<std::chrono::milliseconds>(
 						                                   std::chrono::system_clock::now().time_since_epoch())
 						                                   .count();
@@ -277,6 +298,7 @@ FEndpointRequest FConnectionManager::BeginConnection(const FArchiveNode& InParam
 						                     WriteValue(std::string(
 						                         "Advisory handshake snapshot only. Connect validates identity again; "
 						                         "timeout/failure is not proof that the process is dead.")));
+						        Response = AutomationCompleted(FArchiveNode(std::move(Info)));
 					        }
 					        Client->bReady = false;
 					        Client->Close(AutomationFailure("disconnected", "Probe completed"));
@@ -304,7 +326,7 @@ FArchiveNode FConnectionManager::Disconnect(const std::string& InConnection)
 	Found->second->Close(
 	    AutomationFailure("disconnected", "Connection explicitly closed; admitted work may finish on the target"));
 	Impl->Clients.erase(Found);
-	return CompletedConnectionResult(FArchiveNode(FArchiveNode::FObject{{"disconnected", WriteValue(true)}}));
+	return AutomationCompleted(FArchiveNode(FArchiveNode::FObject{{"disconnected", WriteValue(true)}}));
 }
 
 FEndpointRequest FConnectionManager::Request(const std::string& InConnection, std::string_view InMethod,

@@ -173,6 +173,10 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 
 同步操作成功返回 `{"status":"completed","result":{...}}`；失败返回 `{"status":"failed","error":{"code":"...","message":"...","path":"...","details":{...}}}`。异步任务有 `running/completed/failed/cancelled` 状态，终态的 `outcome` 使用同样结果封装。请求合法但操作失败在 MCP 中使用工具 `isError`；协议错误使用 JSON-RPC error。JSONL 的单次无效请求会得到错误并允许后续请求，过大的输入行或断开的输出流会终止进程并排空工作。
 
+响应外壳由 `Runtime/Automation/Response.h` 集中构造和读取：`EAutomationStatus` 是内部状态身份，Jobs、连接、stdio 和 MCP 共用 `ReadAutomationResponse` 的结构校验与借用视图。调用方须保持源节点存活且未修改；替换节点前先复制需要保留的 outcome。成功的 `engine.info`、`api.search/describe` 和 `types.describe` 仍返回未包装对象，业务 result 内部字段保持不透明。校验拒绝未知状态、缺失/错型字段、冲突的保留字段及不一致的任务终态；允许无关的附加元数据，outcome 只读取一层直接结果，不能嵌套任务。
+
+连接收到畸形响应时返回 `protocol_error`，关闭连接并使尚未完成的请求失败，不回退或重放；MCP 对立即/延迟的畸形内部结果均返回 `-32603`。合法响应保持既有语义：MCP 和 JSONL 按外层 `failed` 判断失败，因此 `cancelled` 任务的 MCP `isError` 为 false；一次性 CLI 等待异步任务后输出其 outcome，以该 outcome 判断退出结果。这里的结构校验不替代下述领域结果和传输编码预算。
+
 常见错误包括 `invalid_arguments`、`not_found`、`unavailable`、`busy`、`stale_revision`、`read_only`、`dirty_document`、`save_failed`、`not_cancellable`、`session_closed`、`root_unset`、`invalid_root`、`content_failed`。`result_unavailable` 表示处理器已经运行，但结果无法在领域结果预算内编码；操作可能已完成，客户端须核对当前状态，不能把它当作参数被拒绝。错误不意味着自动回滚已经完成的外部副作用，客户端不得自动重试非幂等调用。
 
 默认边界：输入 JSON 消息和未包装的领域结果各自最多 1 MiB、65,536 节点、48 层；反射类型投影最多 32 层；搜索默认 12 项，最多 50 项，query 最多 256 字节；会话最多 32 个运行任务，保留最多 128 个任务（满时淘汰最早的已结束任务）；独立资产适配器最多 64 个打开文档，附着 Editor 使用共享 workspace，文档列表分页最多 100 项。传输响应另有 **4 MiB + 64 KiB、65,792 节点、56 层**的上限，为 MCP text/structuredContent 双份结果、JSON 转义、原样回传请求 ID 及任务/状态封装留出空间；领域应继续分页、摘要化或返回资源引用。响应编码失败使用结果不可用或内部错误，不作为非法参数；JSONL 会保留请求 ID 并继续接收后续请求。
