@@ -21,7 +21,7 @@ void FEditorPlugin::DrawGizmoToolbar()
 			FinishInspectorEdit();
 			GizmoMode = Mode;
 		}
-		GizmoButtonBounds[Index] = Gui->LastItemBounds();
+		Acceptance.ObserveIndexedWidget(EEditorWidget::GizmoMode, Gui->LastItemBounds(), Index);
 	}
 }
 

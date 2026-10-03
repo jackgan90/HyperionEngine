@@ -10,7 +10,7 @@ void FEditorPlugin::EnsureAssetWindow()
 	}
 	auto Layout = Options.Layout;
 	Layout += ".assets.ini";
-	if (!Options.ExerciseAssets.empty() || !Options.ExerciseContent.empty())
+	if (!Acceptance.Policy().bPersistAssetLayout)
 	{
 		Layout.clear();
 	}
@@ -49,12 +49,12 @@ void FEditorPlugin::AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> I
 		const bool bMainDrawable = !Window->Minimized() && Window->PixelSize().Width && Window->PixelSize().Height;
 		AssetWindow->Advance(InDelta, std::move(InEvents), Gui->ApplicationScale(), IsAssetWindowBlocked(),
 		                     GetDepthConvention(Rendering.bReversedZ), InCapture,
-		                     !bMainDrawable && Options.ExerciseAssets.empty() && Options.Benchmark.empty());
+		                     !bMainDrawable && Acceptance.Policy().bAllowAssetWindowWait && Options.Benchmark.empty());
 		if (PendingImage && (PendingImage->Result || !PendingImage->Error.empty()))
 		{
 			PendingImage.reset();
 		}
-		Acceptance.CheckAssetWindow(*this);
+		Acceptance.CheckAssetWindow();
 	}
 }
 } // namespace Hyperion

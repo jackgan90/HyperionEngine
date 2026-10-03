@@ -160,7 +160,7 @@ void FEditorPlugin::DrawReparentRoot()
 	if (ReparentGesture && ReparentGesture->bDragging)
 	{
 		Gui->Selectable("Move to scene root##ReparentRoot", false);
-		InspectionBounds["hierarchy/root"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::HierarchyRoot, Gui->LastItemBounds());
 		DrawReparentTarget(std::nullopt);
 	}
 }

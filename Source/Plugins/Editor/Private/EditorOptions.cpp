@@ -1,5 +1,6 @@
-#include "EditorApplication.h"
+#include "EditorOptions.h"
 #include "EditorHostOptions.h"
+#include "Hyperion/IO/Path.h"
 #include <charconv>
 #include <cmath>
 
@@ -233,6 +234,11 @@ bool HasEditorAcceptanceRequest(const FEditorOptions& InOptions)
 {
 	return HasIsolatedEditorAcceptanceRequest(InOptions) || InOptions.bExerciseLog ||
 	       !InOptions.ExerciseContent.empty() || !InOptions.ExerciseImport.empty();
+}
+
+bool ShouldPersistEditorContentLayout(const FEditorOptions& InOptions)
+{
+	return ShouldPersistEditorGui(InOptions) && InOptions.ExerciseContent.empty() && InOptions.ExerciseImport.empty();
 }
 
 bool ShouldPersistEditorGui(const FEditorOptions& InOptions)

@@ -18,6 +18,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorSceneDocument.cpp
   Private/EditorApplication.cpp
   Private/EditorReport.cpp
+  Private/EditorAcceptanceReport.cpp
   Private/AssetEditorWindow.cpp
   Private/AssetEditorWindowGui.cpp
   Private/EditorAssetWindow.cpp
@@ -48,6 +49,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorSelectionInspector.cpp
   Private/EditorOptions.cpp
   Private/EditorPanels.cpp
+  Private/EditorOutliner.cpp
   Private/EditorPreferences.cpp
   Private/EditorCapture.cpp
   Private/EditorPlacement.cpp
@@ -71,6 +73,9 @@ if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
+  add_test(NAME editor_acceptance_boundary COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/EditorAcceptanceBoundary.py" "${PROJECT_BINARY_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}/EditorSources-$<CONFIG>.txt")
   add_executable(editor_document_transition_tests Private/EditorDocumentTransitionTests.cpp Private/EditorDocumentTransition.cpp)
   hyp_executable(editor_document_transition_tests)
   target_link_libraries(editor_document_transition_tests PRIVATE hyperion_content)
@@ -83,6 +88,9 @@ if(BUILD_TESTING)
   add_test(NAME editor_placement_preparation COMMAND editor_placement_preparation_tests)
   target_sources(hyperion_editor_plugin PRIVATE
     Private/EditorAcceptanceDriver.cpp
+    Private/EditorAcceptanceHarness.cpp
+    Private/EditorAcceptanceHooks.cpp
+    Private/EditorAcceptanceObservations.cpp
     Private/EditorLogAcceptance.cpp
     Private/EditorClipboardAcceptance.cpp
     Private/EditorImportAcceptance.cpp
@@ -184,3 +192,7 @@ if(NOT BUILD_TESTING)
   target_sources(hyperion_editor_plugin PRIVATE Private/EditorAcceptanceUnavailable.cpp)
 endif()
 target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_BUILD_TESTING=$<BOOL:${BUILD_TESTING}>)
+
+# Use the target's actual sources for boundary checks with every supported generator.
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/EditorSources-$<CONFIG>.txt"
+  CONTENT "$<JOIN:$<TARGET_GENEX_EVAL:hyperion_editor_plugin,$<TARGET_PROPERTY:hyperion_editor_plugin,SOURCES>>,\n>\n")

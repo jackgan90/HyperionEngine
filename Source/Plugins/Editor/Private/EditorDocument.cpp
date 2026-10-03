@@ -78,7 +78,7 @@ void FEditorPlugin::DrawDiscardDialog()
 		}
 		return;
 	}
-	DiscardTitleBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::DiscardTitle, Gui->LastItemBounds());
 	const auto* Imports = Context.Find<FAssetImportWorkspace>();
 	const bool bImportDirty = Imports && Imports->ContentRootState().bDirty;
 	if (bImportDirty)
@@ -125,19 +125,19 @@ void FEditorPlugin::DrawDiscardDialog()
 	}
 	if (bPendingRoot)
 	{
-		SaveSwitchBounds = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::SaveSwitch, Gui->LastItemBounds());
 	}
 	if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++, !PendingSave && !AssetWorkspace->IsSaving()))
 	{
 		ConfirmDiscardAction();
 	}
-	DiscardChangesBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::DiscardChanges, Gui->LastItemBounds());
 	if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex))
 	{
 		CancelDiscardAction();
 		Gui->ClosePopup();
 	}
-	CancelChangesBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::CancelChanges, Gui->LastItemBounds());
 	Gui->EndModal();
 }
 
@@ -289,7 +289,7 @@ void FEditorPlugin::DrawSaveDialog()
 		Gui->TextWrapped("Save the scene document. Shared model and material assets keep their references.");
 		// Save consumes the current draft even when the user clicks it without pressing Enter.
 		Gui->InputText("Scene path", SavePath, false, true);
-		InspectionBounds["document/save-path"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::SavePath, Gui->LastItemBounds());
 		if (Gui->Button("Save", !PendingSave && Scene->GetStatus().bReady))
 		{
 			try
@@ -315,7 +315,7 @@ void FEditorPlugin::DrawSaveDialog()
 				Error = Failure.what();
 			}
 		}
-		InspectionBounds["document/save-confirm"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::SaveConfirm, Gui->LastItemBounds());
 		Gui->SameLine();
 		if (Gui->Button("Cancel"))
 		{

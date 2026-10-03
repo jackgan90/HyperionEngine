@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 
 namespace Hyperion
@@ -28,28 +28,28 @@ template<class T> void Reject(const T& InOperation)
 }
 } // namespace
 
-void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 {
-	if (!Scene->GetStatus().Error.empty())
+	if (!Editor.Scene->GetStatus().Error.empty())
 	{
-		throw std::runtime_error(Scene->GetStatus().Error);
+		throw std::runtime_error(Editor.Scene->GetStatus().Error);
 	}
-	if (!Selection || !Scene->GetStatus().bReady || ReadyFrames < 8)
+	if (!Editor.Selection || !Editor.Scene->GetStatus().bReady || Editor.ReadyFrames < 8)
 	{
 		return;
 	}
 	const auto MeshType = RecordType<FSceneModelComponent>().Id;
-	switch (Acceptance.ExerciseStep)
+	switch (Scenario.ExerciseStep)
 	{
 		case 0:
-			Acceptance.ExerciseOriginal = *Scene->FindNode(*Selection);
-			if (InspectionBounds.contains(RecordType<FSceneModelSource>().Id + "/header"))
+			Scenario.ExerciseOriginal = *Editor.Scene->FindNode(*Editor.Selection);
+			if (Scenario.InspectionBounds.contains(RecordType<FSceneModelSource>().Id + "/header"))
 			{
-				ExerciseClick(InEvents, InspectionBounds.at(RecordType<FSceneModelSource>().Id + "/header"));
+				ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneModelSource>().Id + "/header"));
 			}
 			else
 			{
-				++Acceptance.ExerciseStep;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		case 1:
@@ -57,99 +57,103 @@ void FEditorPlugin::ExerciseDocumentInput(std::vector<FInputEvent>& InEvents)
 			{
 				break;
 			}
-			ExerciseClick(InEvents, InspectionBounds.at(RecordType<FSceneTransform>().Id + "/header"));
+			ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/header"));
 			break;
 		case 2:
-			ExerciseClick(InEvents, InspectionBounds.at(MeshType + "/visible"));
+			ExerciseClick(InEvents, Scenario.InspectionBounds.at(MeshType + "/visible"));
 			break;
 		case 3:
-			if (!IsDirty() || Scene->FindNode(*Selection)->Model()->bVisible)
+			if (!Editor.IsDirty() || Editor.Scene->FindNode(*Editor.Selection)->Model()->bVisible)
 			{
-				const auto Bounds = InspectionBounds.at(MeshType + "/visible");
+				const auto Bounds = Scenario.InspectionBounds.at(MeshType + "/visible");
 				throw std::runtime_error(
 				    "Inspector change was not applied immediately; target=" + std::to_string(Bounds.X) + "," +
 				    std::to_string(Bounds.Y) + "," + std::to_string(Bounds.Z) + "," + std::to_string(Bounds.W));
 			}
-			Check(HistoryCursor == 1 && History.size() == 1, "New editing did not truncate the redo branch");
-			++Acceptance.ExerciseStep;
+			Check(Editor.HistoryCursor == 1 && Editor.History.size() == 1,
+			      "New editing did not truncate the redo branch");
+			++Scenario.ExerciseStep;
 			break;
 		case 4:
 		{
-			Check(IsDirty() && !Scene->FindNode(*Selection)->Model()->bVisible,
+			Check(Editor.IsDirty() && !Editor.Scene->FindNode(*Editor.Selection)->Model()->bVisible,
 			      "Live inspector did not commit the component");
-			const auto Readback = Scene->GetComponentDiagnostics(*Selection, MeshType);
+			const auto Readback = Editor.Scene->GetComponentDiagnostics(*Editor.Selection, MeshType);
 			if (!Readback || !Readback->bApplied)
 			{
 				break;
 			}
 			Check(!Readback->Primitives.empty() && !Readback->Primitives.front().bAppliedVisible,
 			      "Rendering diagnostics did not observe the committed visibility");
-			Undo();
-			Check(!IsDirty() && Scene->FindNode(*Selection)->Model()->bVisible, "Undo lost the save point");
-			Redo();
-			auto Transformed = *Scene->FindNode(*Selection);
-			Transformed.Local() = Acceptance.ExerciseTransformResult;
-			CommitEdit(*Selection, std::move(Transformed), Scene->GetRevision());
-			SaveScene(Options.ExerciseDocument.string());
-			auto Candidate = *Scene->FindNode(*Selection);
+			Editor.Undo();
+			Check(!Editor.IsDirty() && Editor.Scene->FindNode(*Editor.Selection)->Model()->bVisible,
+			      "Undo lost the save point");
+			Editor.Redo();
+			auto Transformed = *Editor.Scene->FindNode(*Editor.Selection);
+			Transformed.Local() = Scenario.ExerciseTransformResult;
+			Editor.CommitEdit(*Editor.Selection, std::move(Transformed), Editor.Scene->GetRevision());
+			Editor.SaveScene(Editor.Options.ExerciseDocument.string());
+			auto Candidate = *Editor.Scene->FindNode(*Editor.Selection);
 			Candidate.Name += " unsaved";
-			CommitEdit(*Selection, std::move(Candidate), Scene->GetRevision());
-			++Acceptance.ExerciseStep;
+			Editor.CommitEdit(*Editor.Selection, std::move(Candidate), Editor.Scene->GetRevision());
+			++Scenario.ExerciseStep;
 			break;
 		}
 		case 5:
-			if (PendingSave)
+			if (Editor.PendingSave)
 			{
 				break;
 			}
-			Check(LastSaveMilliseconds > 0 && IsDirty(), "Save completion incorrectly cleared a later edit");
-			Undo();
-			Check(!IsDirty(), "Undo did not return to the captured save state");
-			OpenScene(Options.ExerciseDocument.string());
-			++Acceptance.ExerciseStep;
+			Check(Editor.LastSaveMilliseconds > 0 && Editor.IsDirty(),
+			      "Save completion incorrectly cleared a later edit");
+			Editor.Undo();
+			Check(!Editor.IsDirty(), "Undo did not return to the captured save state");
+			Editor.OpenScene(Editor.Options.ExerciseDocument.string());
+			++Scenario.ExerciseStep;
 			break;
 		case 6:
 		{
-			const auto Handle = Scene->FindHandle(Acceptance.ExerciseOriginal.Id);
-			const auto* Node = Scene->FindNode(Handle);
-			Check(Node && !Node->Model()->bVisible && Node->Name == Acceptance.ExerciseOriginal.Name,
+			const auto Handle = Editor.Scene->FindHandle(Scenario.ExerciseOriginal.Id);
+			const auto* Node = Editor.Scene->FindNode(Handle);
+			Check(Node && !Node->Model()->bVisible && Node->Name == Scenario.ExerciseOriginal.Name,
 			      "Saved component state did not survive reload");
-			Check(Node->Local().Values == Acceptance.ExerciseTransformResult.Values,
+			Check(Node->Local().Values == Scenario.ExerciseTransformResult.Values,
 			      "Transform display edit did not survive native scene save/reload");
-			const auto Revision = Scene->GetRevision();
+			const auto Revision = Editor.Scene->GetRevision();
 			auto Invalid = *Node;
 			Invalid.Local().Values[15] = 0;
 			Reject(
 			    [&]
 			    {
-				    CommitEdit(Handle, Invalid, Revision);
+				    Editor.CommitEdit(Handle, Invalid, Revision);
 			    });
 			Reject(
 			    [&]
 			    {
-				    CommitEdit(Handle, *Node, Revision - 1);
+				    Editor.CommitEdit(Handle, *Node, Revision - 1);
 			    });
-			const auto PreviousCamera = Viewport.ViewCamera;
-			DollySceneCamera(Viewport.ViewCamera, .9f);
-			Check(Scene->GetRevision() == Revision && !IsDirty(), "Viewport camera changed authored data");
-			Viewport.ViewCamera = PreviousCamera;
+			const auto PreviousCamera = Editor.Viewport.ViewCamera;
+			DollySceneCamera(Editor.Viewport.ViewCamera, .9f);
+			Check(Editor.Scene->GetRevision() == Revision && !Editor.IsDirty(),
+			      "Viewport camera changed authored data");
+			Editor.Viewport.ViewCamera = PreviousCamera;
 			auto Candidate = *Node;
 			Candidate.Name += " rejected save";
-			CommitEdit(Handle, std::move(Candidate), Revision);
-			SaveScene("/Engine/Scenes/ReadOnlySaveMustFail.hasset");
-			++Acceptance.ExerciseStep;
+			Editor.CommitEdit(Handle, std::move(Candidate), Revision);
+			Editor.SaveScene("/Engine/Scenes/ReadOnlySaveMustFail.hasset");
+			++Scenario.ExerciseStep;
 			break;
 		}
 		case 7:
-			if (PendingSave)
+			if (Editor.PendingSave)
 			{
 				break;
 			}
-			Check(IsDirty() && Error.starts_with("Save failed:"), "Failed save lost the dirty document");
-			Undo();
-			Check(!IsDirty(), "Failed save advanced the save point");
-			Error.clear();
-			Acceptance.bDocumentVerified = true;
+			Check(Editor.IsDirty() && Editor.Error.starts_with("Save failed:"), "Failed save lost the dirty document");
+			Editor.Undo();
+			Check(!Editor.IsDirty(), "Failed save advanced the save point");
+			Editor.Error.clear();
+			Scenario.bDocumentVerified = true;
 			break;
 	}
 }

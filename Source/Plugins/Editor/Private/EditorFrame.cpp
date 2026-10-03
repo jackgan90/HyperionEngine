@@ -58,6 +58,7 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	ResizeViewport();
 	const auto Size = Window->PixelSize();
 	const auto FrameSettings = Rendering;
+	const bool bVsync = FrameSettings.bVsync && Acceptance.Policy().bUseVsync && Options.Benchmark.empty();
 	const auto Request = Viewport.MakeViewRequest(FrameSettings, CullingMode, FrozenCullingView, bInstanceBatching);
 	const auto& Status = Scene->GetStatus();
 	const bool bRenderScene = Viewport.bViewportVisible && Status.Error.empty() && Status.PublicationError.empty();
@@ -76,14 +77,7 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	const auto Target = Viewport.ViewportTarget;
 	const auto Outline = MakeSelectionOutline(Seed);
 	const auto Preview = FreezePlacementPreview();
-	if (!Options.ExerciseModelPlacement.empty() && PlacementPublication && Preview)
-	{
-		const auto Primitives = Scene->ResolveRenderPrimitives(*PlacementPublication);
-		if (Primitives.empty() || Preview->ReplacedPrimitives != Primitives)
-		{
-			throw std::runtime_error("Model placement publication retained duplicate formal geometry");
-		}
-	}
+	Acceptance.ObservePlacement(Preview);
 	std::vector<FGuiTextureBinding> IconTextures;
 	for (const auto& [Id, Icon] : PlacementIcons)
 	{
@@ -93,15 +87,14 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 		}
 	}
 	FImage Capture;
-	const auto ExerciseCapture =
-	    Acceptance.OutlineCapture.empty() ? Acceptance.PlacementCapture : Acceptance.OutlineCapture;
+	const auto AuxiliaryCapture = Acceptance.MainCapture();
 	const bool bAgentCapture = PendingImage && PendingImage->Request.Window == "main";
-	const bool bCaptureFrame = bInCapture || !ExerciseCapture.empty() || bAgentCapture;
+	const bool bCaptureFrame = bInCapture || !AuxiliaryCapture.empty() || bAgentCapture;
 	const auto Surface = Window->Surface();
 	const bool bCaptureRdc = std::exchange(bCaptureRequested, false);
 	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
 	                          [&, Data = std::move(InGui), Preview, Outline, IconTextures = std::move(IconTextures),
-	                           Surface, bCaptureRdc, Request, FrameSettings]() mutable
+	                           Surface, bCaptureRdc, bVsync, Request, FrameSettings]() mutable
 	                          {
 		                          FRenderGraph Graph;
 		                          auto Textures = std::move(IconTextures);
@@ -119,14 +112,14 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 			                          Textures.push_back({2, Target});
 		                          }
 		                          GuiRenderer->BuildDeferred(Graph, std::move(Data), std::move(Textures), true);
-		                          Capture =
-		                              ExecuteEditorGraph(std::move(Graph), Size, bCaptureFrame, Surface, bCaptureRdc);
+		                          Capture = ExecuteEditorGraph(std::move(Graph), Size, bCaptureFrame, Surface,
+		                                                       bCaptureRdc, bVsync);
 		                          if (bRenderScene)
 		                          {
 			                          RenderStats = Pipeline->GetFrame().Statistics();
 		                          }
 	                          }));
-	CompleteFrameCapture(Capture, bInCapture, bAgentCapture, ExerciseCapture);
+	CompleteFrameCapture(Capture, bInCapture, bAgentCapture, AuxiliaryCapture);
 }
 
 std::shared_ptr<FSelectionOutlineRequest> FEditorPlugin::MakeSelectionOutline(
@@ -138,25 +131,15 @@ std::shared_ptr<FSelectionOutlineRequest> FEditorPlugin::MakeSelectionOutline(
 		Outline->Publication = InSeed->GetToken();
 	}
 	Outline->Settings = OutlineSettings;
-	if (!Acceptance.OutlineExerciseObjects.empty())
+	for (const auto Handle : Acceptance.OutlineSelection(Selection.All()))
 	{
-		for (const auto Object : Acceptance.OutlineExerciseObjects)
-		{
-			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Object));
-		}
-	}
-	else
-	{
-		for (const auto Handle : Selection.All())
-		{
-			Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Handle));
-		}
+		Outline->Objects.push_back(Scene->ResolveRenderPrimitives(Handle));
 	}
 	return Outline;
 }
 
 void FEditorPlugin::CompleteFrameCapture(const FImage& InImage, bool bInCapture, bool bInAgentCapture,
-                                         const std::filesystem::path& InExerciseCapture)
+                                         const std::filesystem::path& InAuxiliaryCapture)
 {
 	if (bInCapture)
 	{
@@ -171,12 +154,6 @@ void FEditorPlugin::CompleteFrameCapture(const FImage& InImage, bool bInCapture,
 		CompleteImageOutput(*PendingImage, InImage, FrameCount);
 		PendingImage.reset();
 	}
-	if (!InExerciseCapture.empty())
-	{
-		std::filesystem::create_directories(InExerciseCapture.parent_path());
-		SaveImage(InExerciseCapture, InImage);
-		Acceptance.PlacementCapture.clear();
-		Acceptance.OutlineCapture.clear();
-	}
+	Acceptance.CompleteCapture(InImage, InAuxiliaryCapture);
 }
 } // namespace Hyperion

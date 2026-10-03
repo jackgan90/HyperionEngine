@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Math/AffineTransform.h"
 #include <cmath>
@@ -26,52 +26,52 @@ void TypeValue(std::vector<FInputEvent>& InEvents, unsigned InPhase, const char*
 }
 } // namespace
 
-bool FEditorPlugin::ExerciseTransformInput(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseTransformInput(std::vector<FInputEvent>& InEvents)
 {
 	const auto Type = RecordType<FSceneTransform>().Id;
-	if (Acceptance.TransformExerciseStep < 15)
+	if (Scenario.TransformExerciseStep < 15)
 	{
-		const unsigned Field = Acceptance.TransformExerciseStep / 5;
-		const unsigned Phase = Acceptance.TransformExerciseStep % 5;
+		const unsigned Field = Scenario.TransformExerciseStep / 5;
+		const unsigned Phase = Scenario.TransformExerciseStep % 5;
 		const std::array Ids{"position/x", "rotation/z", "scale/y"};
 		const std::array Values{"2", "45", "1.25"};
 		if (Phase == 0)
 		{
-			const auto PreviousStep = Acceptance.ExerciseStep;
-			ExerciseClick(InEvents, InspectionBounds.at(Type + "/" + Ids[Field]));
-			if (PreviousStep != Acceptance.ExerciseStep)
+			const auto PreviousStep = Scenario.ExerciseStep;
+			ExerciseClick(InEvents, Scenario.InspectionBounds.at(Type + "/" + Ids[Field]));
+			if (PreviousStep != Scenario.ExerciseStep)
 			{
-				Acceptance.ExerciseStep = PreviousStep;
-				++Acceptance.TransformExerciseStep;
+				Scenario.ExerciseStep = PreviousStep;
+				++Scenario.TransformExerciseStep;
 			}
 		}
 		else
 		{
 			// ImGui may deliver the queued key release and text on separate frames.
-			if (Phase == 3 && Acceptance.ExerciseWait++ == 0)
+			if (Phase == 3 && Scenario.ExerciseWait++ == 0)
 			{
 				return false;
 			}
-			if (Phase == 3 && (!IsDirty() || HistoryCursor != Field + 1))
+			if (Phase == 3 && (!Editor.IsDirty() || Editor.HistoryCursor != Field + 1))
 			{
 				throw std::runtime_error("Inspector input was not live before Enter: field=" + std::to_string(Field) +
-				                         " history=" + std::to_string(HistoryCursor) +
-				                         " active=" + std::to_string(InspectorInteraction) + " error=" + Error);
+				                         " history=" + std::to_string(Editor.HistoryCursor) + " active=" +
+				                         std::to_string(Editor.InspectorInteraction) + " error=" + Editor.Error);
 			}
-			Acceptance.ExerciseWait = 0;
+			Scenario.ExerciseWait = 0;
 			TypeValue(InEvents, Phase, Values[Field]);
-			++Acceptance.TransformExerciseStep;
+			++Scenario.TransformExerciseStep;
 		}
 		return false;
 	}
 	return ExerciseTransformHistory(InEvents);
 }
 
-bool FEditorPlugin::ExerciseTransformHistory(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseTransformHistory(std::vector<FInputEvent>& InEvents)
 {
 	const auto CheckMatrix = [&](const FMat4& InExpected)
 	{
-		const auto Actual = Scene->FindNode(*Selection)->Local();
+		const auto Actual = Editor.Scene->FindNode(*Editor.Selection)->Local();
 		for (unsigned Index = 0; Index < 16; ++Index)
 		{
 			if (std::abs(Actual.Values[Index] - InExpected.Values[Index]) > 1e-5f)
@@ -80,18 +80,18 @@ bool FEditorPlugin::ExerciseTransformHistory(std::vector<FInputEvent>& InEvents)
 			}
 		}
 	};
-	if (Acceptance.TransformExerciseStep == 15)
+	if (Scenario.TransformExerciseStep == 15)
 	{
-		Acceptance.ExerciseTransformResult = Scene->FindNode(*Selection)->Local();
+		Scenario.ExerciseTransformResult = Editor.Scene->FindNode(*Editor.Selection)->Local();
 		CheckMatrix(ComposeAffine({{2, 0, 0}, {0, 0, std::numbers::pi_v<float> / 4}, {1, 1.25f, 1}}));
-		if (HistoryCursor != 3)
+		if (Editor.HistoryCursor != 3)
 		{
 			throw std::runtime_error("Transform gestures were not grouped per property");
 		}
 	}
-	if (Acceptance.TransformExerciseStep >= 16 && Acceptance.TransformExerciseStep < 34)
+	if (Scenario.TransformExerciseStep >= 16 && Scenario.TransformExerciseStep < 34)
 	{
-		const unsigned Offset = Acceptance.TransformExerciseStep - 16;
+		const unsigned Offset = Scenario.TransformExerciseStep - 16;
 		FInputEvent Key;
 		Key.Type = EEventType::Key;
 		Key.Key = Offset >= 6 && Offset < 12 ? EKey::Y : EKey::Z;
@@ -100,100 +100,100 @@ bool FEditorPlugin::ExerciseTransformHistory(std::vector<FInputEvent>& InEvents)
 		InEvents.push_back(Key);
 		if (Offset == 6 || Offset == 12)
 		{
-			CheckMatrix(Offset == 6 ? Acceptance.ExerciseOriginal.Local() : Acceptance.ExerciseTransformResult);
-			if (IsDirty() != (Offset == 12))
+			CheckMatrix(Offset == 6 ? Scenario.ExerciseOriginal.Local() : Scenario.ExerciseTransformResult);
+			if (Editor.IsDirty() != (Offset == 12))
 			{
 				throw std::runtime_error("Repeated Undo/Redo lost the document save point");
 			}
 		}
 	}
-	if (Acceptance.TransformExerciseStep == 34)
+	if (Scenario.TransformExerciseStep == 34)
 	{
-		CheckMatrix(Acceptance.ExerciseOriginal.Local());
-		if (IsDirty() || HistoryCursor)
+		CheckMatrix(Scenario.ExerciseOriginal.Local());
+		if (Editor.IsDirty() || Editor.HistoryCursor)
 		{
 			throw std::runtime_error("Repeated Ctrl+Z did not restore the initial document");
 		}
 	}
-	if (Acceptance.TransformExerciseStep >= 35)
+	if (Scenario.TransformExerciseStep >= 35)
 	{
 		return ExerciseUnchangedHistory(InEvents);
 	}
-	++Acceptance.TransformExerciseStep;
+	++Scenario.TransformExerciseStep;
 	return false;
 }
 
-bool FEditorPlugin::ExerciseUnchangedHistory(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseUnchangedHistory(std::vector<FInputEvent>& InEvents)
 {
-	if (Acceptance.TransformExerciseStep == 35)
+	if (Scenario.TransformExerciseStep == 35)
 	{
-		const auto PreviousStep = Acceptance.ExerciseStep;
-		ExerciseClick(InEvents, InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x"));
-		if (PreviousStep != Acceptance.ExerciseStep)
+		const auto PreviousStep = Scenario.ExerciseStep;
+		ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x"));
+		if (PreviousStep != Scenario.ExerciseStep)
 		{
-			Acceptance.ExerciseStep = PreviousStep;
-			++Acceptance.TransformExerciseStep;
+			Scenario.ExerciseStep = PreviousStep;
+			++Scenario.TransformExerciseStep;
 		}
 		return false;
 	}
-	if (Acceptance.TransformExerciseStep < 40)
+	if (Scenario.TransformExerciseStep < 40)
 	{
-		const unsigned Phase = Acceptance.TransformExerciseStep - 35;
+		const unsigned Phase = Scenario.TransformExerciseStep - 35;
 		TypeValue(InEvents, Phase <= 2 ? Phase : Phase - 2, Phase <= 2 ? "2" : "0");
 	}
-	if (Acceptance.TransformExerciseStep == 42 || Acceptance.TransformExerciseStep == 46)
+	if (Scenario.TransformExerciseStep == 42 || Scenario.TransformExerciseStep == 46)
 	{
-		if (!IsDirty() || HistoryCursor != 1 ||
-		    Scene->FindNode(*Selection)->Local().Values != Acceptance.ExerciseOriginal.Local().Values)
+		if (!Editor.IsDirty() || Editor.HistoryCursor != 1 ||
+		    Editor.Scene->FindNode(*Editor.Selection)->Local().Values != Scenario.ExerciseOriginal.Local().Values)
 		{
 			throw std::runtime_error("Returning to the original value removed an editing transaction");
 		}
 	}
-	if (Acceptance.TransformExerciseStep >= 42 && Acceptance.TransformExerciseStep < 48)
+	if (Scenario.TransformExerciseStep >= 42 && Scenario.TransformExerciseStep < 48)
 	{
 		FInputEvent Key;
 		Key.Type = EEventType::Key;
-		Key.Key = Acceptance.TransformExerciseStep == 44 || Acceptance.TransformExerciseStep == 45 ? EKey::Y : EKey::Z;
+		Key.Key = Scenario.TransformExerciseStep == 44 || Scenario.TransformExerciseStep == 45 ? EKey::Y : EKey::Z;
 		Key.Modifiers = InputModifiers::Control;
-		Key.bDown = Acceptance.TransformExerciseStep % 2 == 0;
+		Key.bDown = Scenario.TransformExerciseStep % 2 == 0;
 		InEvents.push_back(Key);
 	}
-	if (Acceptance.TransformExerciseStep == 44 || Acceptance.TransformExerciseStep == 48)
+	if (Scenario.TransformExerciseStep == 44 || Scenario.TransformExerciseStep == 48)
 	{
-		if (IsDirty() || HistoryCursor)
+		if (Editor.IsDirty() || Editor.HistoryCursor)
 		{
 			throw std::runtime_error("Undo of an unchanged-value gesture did not restore the save point");
 		}
 	}
-	if (Acceptance.TransformExerciseStep >= 48)
+	if (Scenario.TransformExerciseStep >= 48)
 	{
 		return ExerciseTransformDrag(InEvents);
 	}
-	++Acceptance.TransformExerciseStep;
+	++Scenario.TransformExerciseStep;
 	return false;
 }
 
-bool FEditorPlugin::ExerciseTransformDrag(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseTransformDrag(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Phase = Acceptance.TransformExerciseStep - 48;
+	const unsigned Phase = Scenario.TransformExerciseStep - 48;
 	if (Phase == 0)
 	{
 		// A fast Release run must start a new gesture, not double-click the preceding text edit.
-		if (!Acceptance.TransformDragReadyAt)
+		if (!Scenario.TransformDragReadyAt)
 		{
-			Acceptance.TransformDragReadyAt = ClockNanoseconds() + 500'000'000;
+			Scenario.TransformDragReadyAt = ClockNanoseconds() + 500'000'000;
 			FInputEvent Modifiers;
 			Modifiers.Type = EEventType::Key;
 			InEvents.push_back(Modifiers);
 		}
-		if (ClockNanoseconds() < Acceptance.TransformDragReadyAt)
+		if (ClockNanoseconds() < Scenario.TransformDragReadyAt)
 		{
 			return false;
 		}
 	}
 	if (Phase < 3)
 	{
-		const auto Bounds = InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x");
+		const auto Bounds = Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x");
 		FInputEvent Move;
 		Move.Type = EEventType::MouseMove;
 		Move.X = (Bounds.X + Bounds.Z) / 2 + (Phase == 0 ? 0 : Phase == 1 ? 40 : 20);
@@ -209,13 +209,14 @@ bool FEditorPlugin::ExerciseTransformDrag(std::vector<FInputEvent>& InEvents)
 	}
 	if (Phase == 4)
 	{
-		if (!IsDirty() || HistoryCursor != 1 || History.size() != 1 ||
-		    Scene->FindNode(*Selection)->Local().Values == Acceptance.ExerciseOriginal.Local().Values)
+		if (!Editor.IsDirty() || Editor.HistoryCursor != 1 || Editor.History.size() != 1 ||
+		    Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.ExerciseOriginal.Local().Values)
 		{
 			throw std::runtime_error("Numeric drag did not create exactly one live undo transaction: history=" +
-			                         std::to_string(HistoryCursor) + "/" + std::to_string(History.size()) +
-			                         " text=" + std::to_string(Gui->IsEditingText()) +
-			                         " interaction=" + std::to_string(InspectorInteraction));
+			                         std::to_string(Editor.HistoryCursor) + "/" +
+			                         std::to_string(Editor.History.size()) +
+			                         " text=" + std::to_string(Editor.Gui->IsEditingText()) +
+			                         " interaction=" + std::to_string(Editor.InspectorInteraction));
 		}
 	}
 	if (Phase == 5 || Phase == 6)
@@ -229,14 +230,14 @@ bool FEditorPlugin::ExerciseTransformDrag(std::vector<FInputEvent>& InEvents)
 	}
 	if (Phase == 7)
 	{
-		if (IsDirty() || HistoryCursor ||
-		    Scene->FindNode(*Selection)->Local().Values != Acceptance.ExerciseOriginal.Local().Values)
+		if (Editor.IsDirty() || Editor.HistoryCursor ||
+		    Editor.Scene->FindNode(*Editor.Selection)->Local().Values != Scenario.ExerciseOriginal.Local().Values)
 		{
 			throw std::runtime_error("Ctrl+Z did not restore the value before numeric dragging");
 		}
 		return true;
 	}
-	++Acceptance.TransformExerciseStep;
+	++Scenario.TransformExerciseStep;
 	return false;
 }
 } // namespace Hyperion

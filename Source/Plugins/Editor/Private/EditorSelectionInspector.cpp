@@ -89,17 +89,12 @@ void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
 	}
 	Gui->Indent();
 	Gui->BeginLiveEdit();
-	const bool bChanged = Gui->EditRecord(
-	    *Cached->Draft, Identity,
-	    [&](std::string_view InField, FVec4 InBounds)
-	    {
-		    InspectionBounds[InType.Id + "/" + std::string(InField)] = InBounds;
-	    },
-	    Cached->Blocked,
-	    [&](std::string_view InField, FPropertyPresentation& InOutPresentation)
-	    {
-		    InOutPresentation.bReadOnly |= IsSceneComponentFieldReadOnly(*InType.Record, InField);
-	    });
+	const bool bChanged =
+	    Gui->EditRecord(*Cached->Draft, Identity, Acceptance.PropertyObserver(InType.Id, true), Cached->Blocked,
+	                    [&](std::string_view InField, FPropertyPresentation& InOutPresentation)
+	                    {
+		                    InOutPresentation.bReadOnly |= IsSceneComponentFieldReadOnly(*InType.Record, InField);
+	                    });
 	const auto Edit = Gui->EndLiveEdit();
 	Gui->Unindent();
 	if (Edit.ActiveInteraction)
@@ -127,10 +122,7 @@ void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
 
 void FEditorPlugin::DrawSelectionInspector()
 {
-	if (Options.bExerciseMultiSelection)
-	{
-		InspectionBounds.clear();
-	}
+	Acceptance.BeginSurface(EEditorSurface::SelectionInspector);
 	const std::vector<FSceneHandle> Targets(Selection.All().rbegin(), Selection.All().rend());
 	const auto* Primary = Scene->FindNode(Targets.front());
 	if (!Primary)

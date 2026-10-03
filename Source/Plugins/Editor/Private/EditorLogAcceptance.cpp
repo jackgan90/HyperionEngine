@@ -1,54 +1,54 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include <iostream>
 
 namespace Hyperion
 {
-void FEditorPlugin::ExerciseLogInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseLogInput(std::vector<FInputEvent>& InEvents)
 {
-	if (FrameCount < 8)
+	if (Editor.FrameCount < 8)
 	{
 		return;
 	}
-	if (!Options.LogHistory)
+	if (!Editor.Options.LogHistory)
 	{
 		throw std::runtime_error("Editor Log acceptance requires process history");
 	}
-	switch (Acceptance.ExerciseStep)
+	switch (Scenario.ExerciseStep)
 	{
 		case 0:
-			if (bShowLog)
+			if (Editor.bShowLog)
 			{
 				throw std::runtime_error("Log must initially be hidden");
 			}
-			ExerciseClick(InEvents, InspectionBounds["placement/window-menu"]);
+			ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"]);
 			return;
 		case 2:
-			if (!bShowLog)
+			if (!Editor.bShowLog)
 			{
 				throw std::runtime_error("Log did not open");
 			}
-			ExerciseClick(InEvents, InspectionBounds["placement/window-menu"]);
+			ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"]);
 			return;
 		case 4:
-			if (bShowLog)
+			if (Editor.bShowLog)
 			{
 				throw std::runtime_error("Log did not close");
 			}
-			if (!Acceptance.ExerciseWait)
+			if (!Scenario.ExerciseWait)
 			{
 				Log(ELogLevel::Info, "Log records while its panel is closed");
 			}
-			ExerciseClick(InEvents, InspectionBounds["placement/window-menu"]);
+			ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"]);
 			return;
 		case 1:
 		case 3:
 		case 5:
-			ExerciseClick(InEvents, InspectionBounds["log/toggle"]);
+			ExerciseClick(InEvents, Scenario.InspectionBounds["log/toggle"]);
 			return;
 	}
-	if (Acceptance.ExerciseStep == 6 && ++Acceptance.ExerciseWait == 4)
+	if (Scenario.ExerciseStep == 6 && ++Scenario.ExerciseWait == 4)
 	{
-		if (!bShowLog)
+		if (!Editor.bShowLog)
 		{
 			throw std::runtime_error("Window > Log did not reopen the panel");
 		}
@@ -59,14 +59,14 @@ void FEditorPlugin::ExerciseLogInput(std::vector<FInputEvent>& InEvents)
 		std::cout << "Editor stdout captured\n";
 		std::cerr << "Editor stderr captured\n";
 	}
-	if (Acceptance.ExerciseStep == 6 && Acceptance.ExerciseWait > 12)
+	if (Scenario.ExerciseStep == 6 && Scenario.ExerciseWait > 12)
 	{
-		const auto First = Options.LogHistory->Read({0, 1});
+		const auto First = Editor.Options.LogHistory->Read({0, 1});
 		if (First.Entries.empty() || First.Entries.front().Message != "Hyperion Editor starting")
 		{
 			throw std::runtime_error("Editor Log lost startup history");
 		}
-		Acceptance.bLogVerified = true;
+		Scenario.bLogVerified = true;
 		Log(ELogLevel::Info, "Editor Log menu, reopening, startup replay and colors acceptance passed");
 	}
 }

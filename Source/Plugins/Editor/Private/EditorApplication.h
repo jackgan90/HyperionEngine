@@ -6,7 +6,8 @@
 #include "EditorAcceptanceDriver.h"
 #include "EditorDocumentTransition.h"
 #include "EditorInspectionCache.h"
-#include "EditorPreferences.h"
+#include "EditorInteraction.h"
+#include "EditorOptions.h"
 #include "EditorSelection.h"
 #include "EditorShortcuts.h"
 #include "EditorViewport.h"
@@ -43,64 +44,9 @@
 #include "Hyperion/SceneEditing/SceneDocument.h"
 #include "Hyperion/SceneEditing/SceneDocumentHost.h"
 #include "Hyperion/SceneEditing/ScenePlacement.h"
-#include <semaphore>
 
 namespace Hyperion
 {
-struct FEditorOptions
-{
-	FLogHistory* LogHistory{};
-	bool bExerciseLog{};
-	std::filesystem::path EngineContent;
-	std::optional<std::filesystem::path> AssetRoot;
-	bool bReadOnly{};
-	std::filesystem::path Layout;
-	std::filesystem::path UiPreferences;
-	std::filesystem::path PreferencesPath;
-	std::filesystem::path RenderSettingsPath;
-	FRenderSettings Rendering;
-	FEditorPreferences Preferences;
-	std::string PreferenceError;
-	std::string ExerciseCapture;
-	std::optional<float> ApplicationScale;
-	std::filesystem::path Capture;
-	std::filesystem::path Report;
-	std::filesystem::path Benchmark;
-	std::filesystem::path ExerciseDocument;
-	std::filesystem::path ExerciseViews;
-	std::filesystem::path ExerciseRenderControls;
-	std::filesystem::path ExercisePlacement;
-	std::filesystem::path ExerciseModelPlacement;
-	std::filesystem::path ExerciseReparent;
-	std::filesystem::path ExerciseOutlines;
-	std::filesystem::path ExerciseContent;
-	std::filesystem::path ExerciseImport;
-	std::filesystem::path ExerciseAssets;
-	std::string Scene;
-	std::uint32_t Frames{};
-	std::uint32_t BenchmarkWarmup = 120;
-	std::uint32_t BenchmarkSamples = 300;
-	bool bBenchmarkCamera{};
-	float BenchmarkCameraStep = .1f;
-	FProfilingOptions Profiling;
-	FSize BenchmarkViewport;
-	bool bBenchmarkLight{};
-	ESceneCullingMode CullingMode = ESceneCullingMode::Bvh;
-	bool bInstanceBatching = true;
-	bool bBenchmarkCollapsed{};
-	bool bHidden{};
-	bool bKernelOnly{};
-	std::vector<std::string> DisabledPlugins;
-	bool bExercise{};
-	bool bExerciseGizmo{};
-	bool bExercisePicking{};
-	bool bExerciseMultiSelection{};
-	bool bExerciseClipboard{};
-	bool bExerciseFraming{};
-	bool bExerciseSelectionShortcuts{};
-};
-
-FEditorOptions ParseEditorOptions(int InCount, char** InValues);
 
 class FEditorPlugin final : public FPlugin,
                             public IContentRootParticipant,
@@ -165,7 +111,7 @@ public:
 	FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) override;
 
 private:
-	friend class FEditorAcceptanceDriver;
+	friend class FEditorAcceptanceHarness;
 	FEditorAcceptanceDriver Acceptance;
 	FRenderSettings Rendering;
 	std::uint64_t RenderSettingsRevision = 1;
@@ -175,15 +121,6 @@ private:
 	std::uint32_t ProfilingCategories = 1;
 	FRenderDiagnostics HudDiagnostics;
 	std::uint64_t HudUpdated{};
-	void ExerciseRenderControlsInput(std::vector<FInputEvent>& InEvents);
-	bool ExerciseRasterOptions(std::vector<FInputEvent>& InEvents);
-	void CheckRasterOptionFrame() const;
-	void CheckAssetRasterOptions() const;
-	void BeginAssetRasterOptions();
-	bool ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEvents);
-	void CheckRenderControlsHud() const;
 	ESceneCullingMode CullingMode = ESceneCullingMode::Bvh;
 	std::optional<FMat4> FrozenCullingView;
 	bool bInstanceBatching = true;
@@ -197,6 +134,7 @@ private:
 	void DrawVisualizationControls();
 	std::string RenderSettingsError;
 	std::string ProfilingError;
+	FVec4 ProfilingOptionsAnchor;
 	double FrameIntervalMilliseconds{};
 	void DrawDebugBounds();
 	void StartSaveBeforeClose(const std::string& InPath);
@@ -220,30 +158,7 @@ private:
 	bool IsAssetWindowBlocked() const;
 	void AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> InEvents,
 	                        const std::filesystem::path& InCapture = {});
-	void ExerciseAssetInput(std::vector<FInputEvent>& InEvents);
-	bool ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents);
-	bool ExerciseAssetPreviewHistory(std::vector<FInputEvent>& InEvents);
 
-	void CheckAssetSaveShortcut();
-	void CheckPendingAssetEdit();
-	void ExerciseAssetWindowInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetWindowSizing(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetWindowSaving(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetOpening(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetNameInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetSaving(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetReferences(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetWorkspaceInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetDiscardInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetPanelInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath);
-	void ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseCustomMaterialReset(std::vector<FInputEvent>& InEvents);
-	std::string ContentRevealPath;
 	FGuiDrawData DrawMainWindow(float InDelta, std::span<const FInputEvent> InEvents, bool bInDrawable);
 	bool AdvanceFrame(float InDelta);
 	void InitializeContentBrowser();
@@ -258,13 +173,6 @@ private:
 	void ProcessContentRoot();
 	void CloseContentDocument();
 	void CancelContentRequests();
-	void ExerciseContentInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents);
-	void ExerciseContentSwitch(std::vector<FInputEvent>& InEvents);
-	void ExerciseContentBrowser(std::vector<FInputEvent>& InEvents);
-	void ExerciseContentFailures(std::vector<FInputEvent>& InEvents);
-	void ExerciseContentDismissal(std::vector<FInputEvent>& InEvents);
-	void ExerciseContentClose(std::vector<FInputEvent>& InEvents);
 	void PrepareContentRoot(const std::filesystem::path& InRequested);
 	void CompleteContentRoot(const FEditorRootCommit& InRequest);
 	FEditorSaveProgress DocumentSaveProgress() const;
@@ -286,11 +194,8 @@ private:
 	std::string CaptureStatus() const;
 	bool CanCapture() const;
 	void SavePreferences();
-	void ExerciseCaptureInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents);
 	void DrawWindowMenu();
 	void DrawLog();
-	void ExerciseLogInput(std::vector<FInputEvent>& InEvents);
 	bool bShowLog{};
 	bool bFocusLog{};
 	void DrawApplicationScale();
@@ -310,10 +215,6 @@ private:
 	FPlacementCandidate ResolvePlacementPayload(const FGuiDragPayload& InPayload);
 	void RoutePlacementPayload(const FGuiDragPayload& InPayload, const std::optional<FGuiDragPayload>& InDrop);
 	void RoutePlacement();
-	void ExerciseModelPlacement(std::vector<FInputEvent>& InEvents);
-	void ExerciseModelDrag(std::vector<FInputEvent>& InEvents);
-	void CompleteModelDrag(std::vector<FInputEvent>& InEvents, FVec2 InSource);
-	void ExerciseModelPlacementHistory();
 	void UpdatePlacementPreview(const FPlacementCandidate& InObject, const FSceneCameraView& InCamera, FVec2 InPointer);
 	void CancelPlacement();
 	void CommitPlacement(const FPlaceableObject& InObject, FVec3 InPosition);
@@ -334,54 +235,6 @@ private:
 	void DrawGizmoOverlay();
 	void UpdateGizmoDrag(const FGuiPointerState& InPointer);
 	void FinishGizmo(bool bInCancel = false);
-	void ExerciseGizmoInput(std::vector<FInputEvent>& InEvents);
-	void ExercisePickingInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseOutlines();
-	void PrepareOutlineExercise();
-	void ExercisePlacementInput(std::vector<FInputEvent>& InEvents);
-	bool ExercisePlacementMenu(std::vector<FInputEvent>& InEvents);
-	void ExercisePlacementDrag(std::vector<FInputEvent>& InEvents);
-	void ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents);
-	void ExercisePlacementCancel(std::vector<FInputEvent>& InEvents);
-	void ExercisePlacementHistory();
-	void ExercisePlacedSkyActivation();
-	void ExercisePlacementMarkers(std::vector<FInputEvent>& InEvents);
-	void CheckPlacementMarkerDraws(const FGuiDrawData& InData) const;
-	void ExercisePlacementDocument(std::vector<FInputEvent>& InEvents);
-	void PreparePickingExercise();
-	bool ExercisePickingScene(std::vector<FInputEvent>& InEvents);
-	void ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter, FVec2 InEmpty);
-	void ExerciseMultiSelection(std::vector<FInputEvent>& InEvents);
-	void PrepareSelectionShortcuts();
-	void ExerciseSelectionShortcuts(std::vector<FInputEvent>& InEvents);
-	void ExerciseSelectionRanges(std::vector<FInputEvent>& InEvents);
-	void ExerciseSelectionKeys(std::vector<FInputEvent>& InEvents);
-	void ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents);
-	void ExerciseSelectionTree(std::vector<FInputEvent>& InEvents);
-	bool ExerciseShortcutRouting(std::vector<FInputEvent>& InEvents);
-	void ExerciseShortcutFocus(std::vector<FInputEvent>& InEvents);
-	void ExerciseShortcutHistory(std::vector<FInputEvent>& InEvents);
-	void ExerciseShortcutText(std::vector<FInputEvent>& InEvents);
-	void ExerciseShortcutPopup(std::vector<FInputEvent>& InEvents);
-	void CheckShortcutSelection(std::initializer_list<unsigned> InIndices);
-	void ExerciseReparent(std::vector<FInputEvent>& InEvents);
-	void PrepareReparentExercise();
-	void ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents);
-	void ExerciseReparentSelection(std::vector<FInputEvent>& InEvents);
-	void ExerciseReparentDrag(std::vector<FInputEvent>& InEvents);
-	void ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents);
-	void VerifyReparentExercise();
-	void PrepareMultiSelection();
-	void ExerciseMultiSelectionClicks(std::vector<FInputEvent>& InEvents);
-	void ExerciseMultiDetails(std::vector<FInputEvent>& InEvents);
-	void ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents);
-	void ExerciseMultiHistory();
-	void ExerciseMultiCancellation();
-	void PrepareMultiSelectionMarkers();
-	void CheckMultiSelectionMarkerDraws(const FGuiDrawData& InData);
-	void ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec2 InCenter);
-	void CheckGizmoHistory(unsigned InPhase);
-	void ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 InEnd, std::vector<FInputEvent>& InEvents);
 	std::string StatusText() const;
 	FGuiDrawData DrawGui(float InDelta, std::span<const FInputEvent> InEvents);
 	void RouteCamera(float InDelta, std::span<const FInputEvent> InEvents);
@@ -389,38 +242,17 @@ private:
 	void RouteSelectAllShortcut(std::span<const FInputEvent> InEvents);
 	void ClickOutlinerObject(FSceneHandle InHandle, bool bInToggle, bool bInRange);
 	void DrawViewportOverlays();
-	void ExerciseFraming(std::vector<FInputEvent>& InEvents);
-	void PrepareFramingExercise();
-	void ExerciseFramingSelection(std::vector<FInputEvent>& InEvents);
-	void ExerciseFramingGuards(std::vector<FInputEvent>& InEvents);
-	void ExerciseFramingViewGuards(std::vector<FInputEvent>& InEvents);
-	void ExerciseFramingPopup(std::vector<FInputEvent>& InEvents);
-	void CheckFramingResult(FVec3 InCenter);
 	void Render(FGuiDrawData InGui, bool bInCapture);
 	std::shared_ptr<FSelectionOutlineRequest> MakeSelectionOutline(
 	    const std::shared_ptr<const FSceneFrameSeed>& InSeed) const;
 	void CompleteFrameCapture(const FImage& InImage, bool bInCapture, bool bInAgentCapture,
-	                          const std::filesystem::path& InExerciseCapture);
+	                          const std::filesystem::path& InAuxiliaryCapture);
 	FImage ExecuteEditorGraph(FRenderGraph InGraph, FSize InSize, bool bInScreenshot, FNativeSurface InSurface,
-	                          bool bInCaptureRdc);
+	                          bool bInCaptureRdc, bool bInVsync);
 	void ResizeViewport();
 	void RouteViewportPicking(std::span<const FInputEvent> InEvents);
 	std::optional<FSceneCameraView> PickingCamera() const;
 	void SaveLayout();
-	void ExerciseInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseImportInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseDocumentInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseViewInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseViewHistory();
-	void ExerciseViewPreview(std::vector<FInputEvent>& InEvents);
-	bool ExerciseTransformInput(std::vector<FInputEvent>& InEvents);
-	bool ExerciseTransformHistory(std::vector<FInputEvent>& InEvents);
-	bool ExerciseTransformDrag(std::vector<FInputEvent>& InEvents);
-	bool ExerciseUnchangedHistory(std::vector<FInputEvent>& InEvents);
-	void ExerciseCamera(std::vector<FInputEvent>& InEvents);
-	void ExerciseMovement(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX, float InY);
-	void ExerciseWheel(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose, float InX, float InY);
-	void ExerciseClick(std::vector<FInputEvent>& InEvents, FVec4 InBounds);
 	void WriteReport();
 	void BenchmarkCamera();
 	void RecordBenchmark();
@@ -449,14 +281,8 @@ private:
 	void RouteHistoryShortcuts(std::span<const FInputEvent> InEvents);
 	FEditorShortcutInteraction CaptureShortcutInteraction(std::span<const FInputEvent> InEvents) const;
 	void RouteClipboardShortcuts(std::span<const FInputEvent> InEvents);
-	void ExerciseClipboard(std::vector<FInputEvent>& InEvents);
-	void PrepareClipboardExercise();
-	void ExerciseClipboardHistory(std::vector<FInputEvent>& InEvents);
-	void ExerciseClipboardText(std::vector<FInputEvent>& InEvents);
 	void RouteDeleteShortcut(std::span<const FInputEvent> InEvents);
 	void CommitDelete();
-	bool ExerciseDeletionInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseDeletionHistory();
 	void Undo();
 	void Redo();
 	void SaveScene(const std::string& InDestination);
@@ -487,12 +313,6 @@ private:
 	bool bPreferencesDialog{};
 	bool bRequestPreferences{};
 	bool bCaptureRequested{};
-	FVec4 EditMenuBounds;
-	FVec4 PreferencesMenuBounds;
-	FVec4 CapturePreferenceBounds;
-	FVec4 CaptureHudPreferenceBounds;
-	FVec4 PreferencesCloseBounds;
-	FVec4 CaptureButtonBounds;
 #if HYP_ENABLE_RENDERDOC
 	FFrameCapture* FrameCapture{};
 #endif
@@ -579,7 +399,6 @@ private:
 
 	std::optional<FGizmoEdit> GizmoEdit;
 	bool bGizmoUsedMouse{};
-	std::array<FVec4, 3> GizmoButtonBounds;
 	FForwardPipelineStatistics RenderStats;
 	FDeviceStats DeviceStats;
 	std::vector<std::string> ScenePaths;
@@ -587,32 +406,7 @@ private:
 	FSelectionOutlineSettings OutlineSettings;
 	bool bSelectionInitialized{};
 
-	struct FViewportClick
-	{
-		FVec2 Start;
-		bool bToggle{};
-		FVec4 Bounds;
-		FSize Size;
-		FSceneCameraView Camera;
-		std::uint64_t Revision{};
-	};
-
 	std::optional<FViewportClick> ViewportClick;
-
-	struct FReparentGesture
-	{
-		std::string Token;
-		std::string Document;
-		std::uint64_t Revision{};
-		std::vector<FSceneHandle> Handles;
-		FSceneHandle Source;
-		FVec2 Start;
-		FVec4 Bounds;
-		bool bToggle{};
-		bool bRange{};
-		bool bDragging{};
-		bool bTargetPreview{};
-	};
 
 	std::optional<FReparentGesture> ReparentGesture;
 	FOutlinerSelectionState OutlinerSelection;
@@ -631,12 +425,6 @@ private:
 	bool bRequestAssetMessage{};
 	bool bRevealContentTree{};
 	bool bRequestRootDialog{};
-	FVec4 SaveSwitchBounds;
-	FVec4 DiscardChangesBounds;
-	FVec4 CancelChangesBounds;
-	FVec4 DiscardTitleBounds;
-	std::map<std::string, FVec4> ContentTileBounds;
-	FVec4 ContentClickBounds;
 	const std::string& CurrentPath = SceneDocument.GetState().Path;
 	std::string Error;
 	std::string Filter;
@@ -647,7 +435,6 @@ private:
 	bool bShowDetails = true;
 	std::unique_ptr<FAssetImportPanel> ImportPanel;
 	std::uint64_t ImportRevision{};
-	FVec4 ImportMenuBounds{};
 	bool bShowBrowser = true;
 	bool bOpenDialog{};
 	bool bRequestOpen{};
@@ -659,12 +446,6 @@ private:
 	std::uint32_t OpenCount{};
 	float Exposure = 2.5f;
 
-	// Actual widget bounds feed the same normalized event path as Platform input in acceptance mode.
-	FVec4 FileMenuBounds;
-	FVec4 OpenMenuBounds;
-	FVec4 SponzaBounds;
-	FVec4 OpenButtonBounds;
-	FVec4 CancelButtonBounds;
 	bool bLoadErrorObserved{};
 
 	FRenderBenchmarkSample BenchmarkFrame;
@@ -701,7 +482,5 @@ private:
 	double LastSaveMilliseconds{};
 	bool bSaveDialog{};
 	bool bRequestSaveDialog{};
-	std::map<std::string, FVec4> InspectionBounds;
-	bool ExerciseLiveDepth(std::vector<FInputEvent>& InEvents);
 };
 } // namespace Hyperion

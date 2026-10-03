@@ -14,10 +14,7 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	const auto RemoveTooltip = "Remove " + InComponent.Type->Label + " component";
 	const bool bOpen = Gui->Section((InComponent.Type->Label + "##" + Identity).c_str(), true,
 	                                InComponent.Type->bRequired ? nullptr : &bRemove, RemoveTooltip.c_str());
-	if (!Options.ExerciseDocument.empty() || !Options.ExerciseRenderControls.empty())
-	{
-		InspectionBounds[InComponent.Type->Id + "/header"] = Gui->LastItemBounds();
-	}
+	Acceptance.ObserveWidget(EEditorWidget::ComponentHeader, Gui->LastItemBounds(), InComponent.Type->Id);
 	if (bRemove)
 	{
 		auto Candidate = Node;
@@ -48,14 +45,13 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	}
 	auto& Record = InspectorDrafts.Single(InComponent);
 	Gui->BeginLiveEdit();
-	const bool bChanged = Gui->EditRecord(Record, Identity, (Options.ExerciseDocument.empty() && Options.ExerciseRenderControls.empty()) ?
-	    std::function<void(std::string_view, FVec4)>{} : [&](std::string_view InField, FVec4 InBounds)
-	    { InspectionBounds[InComponent.Type->Id + "/" + std::string(InField)] = InBounds; },
-	    [&](std::string_view InField, FPropertyPresentation& InOutPresentation)
-	    {
-		    InspectLightProperty(InView, InComponent, InField, InOutPresentation);
-		    InOutPresentation.bReadOnly |= IsSceneComponentFieldReadOnly(*InComponent.Type->Record, InField);
-	    });
+	const bool bChanged = Gui->EditRecord(Record, Identity, Acceptance.PropertyObserver(InComponent.Type->Id, false),
+	                                      [&](std::string_view InField, FPropertyPresentation& InOutPresentation)
+	                                      {
+		                                      InspectLightProperty(InView, InComponent, InField, InOutPresentation);
+		                                      InOutPresentation.bReadOnly |=
+		                                          IsSceneComponentFieldReadOnly(*InComponent.Type->Record, InField);
+	                                      });
 	const auto Edit = Gui->EndLiveEdit();
 	Gui->Unindent();
 	if (Edit.ActiveInteraction)
@@ -92,10 +88,7 @@ void FEditorPlugin::DrawObjectMetadata(const FSceneNodeView& InView)
 	Gui->BeginLiveEdit();
 	Gui->BeginPropertyRow("Object name");
 	const bool bNameChanged = Gui->InputText("##value", Name);
-	if (Options.bExerciseSelectionShortcuts)
-	{
-		InspectionBounds["shortcut/name"] = Gui->LastItemBounds();
-	}
+	Acceptance.ObserveWidget(EEditorWidget::ObjectName, Gui->LastItemBounds());
 	Gui->EndPropertyRow();
 	Gui->BeginPropertyRow("Object enabled", nullptr, "Disabling this object also disables its children.");
 	const bool bEnabledChanged = Gui->Checkbox("##value", bEnabled);
@@ -174,4 +167,60 @@ void FEditorPlugin::DrawComponentInspector(const FSceneNodeView& InView)
 		Gui->EndMenu();
 	}
 }
+
+void FEditorPlugin::DrawDetails()
+{
+	if (!bShowDetails)
+	{
+		InspectorDrafts.Clear();
+		return;
+	}
+	InspectorDrafts.Prepare(DocumentEpoch, Scene->GetRevision(), Selection.All());
+	if (Gui->BeginWindow("Details", bShowDetails))
+	{
+		FSceneNodeView View;
+		if (Selection && Scene->GetNodeView(*Selection, View))
+		{
+			try
+			{
+				if (Selection.All().size() > 1)
+				{
+					DrawSelectionInspector();
+				}
+				else
+				{
+					DrawComponentInspector(View);
+				}
+				// Commit after drawing so all widgets keep stable bounds during continuous editing.
+				if (PendingInspectorEdit)
+				{
+					auto Edit = std::move(*PendingInspectorEdit);
+					PendingInspectorEdit.reset();
+					if (!Edit.Edits.empty())
+					{
+						CommitEdits(std::move(Edit.Edits), Edit.Revision, Edit.Interaction);
+					}
+					else
+					{
+						CommitEdit(Edit.Handle, std::move(Edit.Candidate), Edit.Revision, Edit.Interaction);
+					}
+				}
+			}
+			catch (const std::exception& Failure)
+			{
+				Error = Failure.what();
+			}
+			if (!Error.empty())
+			{
+				Gui->TextWrapped(Error);
+			}
+		}
+		else
+		{
+			Gui->TextWrapped("Select an object in the Outliner to inspect its properties.");
+		}
+	}
+	Gui->EndWindow();
+}
+
 } // namespace Hyperion

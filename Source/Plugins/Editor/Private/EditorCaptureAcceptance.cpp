@@ -1,92 +1,92 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 
 namespace Hyperion
 {
-void FEditorPlugin::ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents)
 {
-	const auto Info = RenderCaptureHudInfo();
+	const auto Info = Editor.RenderCaptureHudInfo();
 	if (Info.Enabled && Info.Enabled != Info.Preference)
 	{
 		throw std::runtime_error("HUD effective visibility differs from preference");
 	}
-	switch (Acceptance.ExerciseStep)
+	switch (Scenario.ExerciseStep)
 	{
 		case 0:
-			ExerciseClick(InEvents, EditMenuBounds);
+			ExerciseClick(InEvents, Scenario.EditMenuBounds);
 			return;
 		case 1:
-			ExerciseClick(InEvents, PreferencesMenuBounds);
+			ExerciseClick(InEvents, Scenario.PreferencesMenuBounds);
 			return;
 		case 2:
-			ExerciseClick(InEvents, CaptureHudPreferenceBounds);
+			ExerciseClick(InEvents, Scenario.CaptureHudPreferenceBounds);
 			return;
 		case 3:
-			ExerciseClick(InEvents, PreferencesCloseBounds);
+			ExerciseClick(InEvents, Scenario.PreferencesCloseBounds);
 			return;
 	}
-	if (++Acceptance.ExerciseWait < 3)
+	if (++Scenario.ExerciseWait < 3)
 	{
 		return;
 	}
-	if (Info.Preference == Acceptance.bInitialCaptureHudPreference || bPreferencesDialog ||
-	    LoadEditorPreferences(Options.PreferencesPath).bRenderDocHud != Info.Preference ||
-	    Options.Preferences.bRenderDocCapture != Acceptance.bInitialCapturePreference)
+	if (Info.Preference == Scenario.bInitialCaptureHudPreference || Editor.bPreferencesDialog ||
+	    LoadEditorPreferences(Editor.Options.PreferencesPath).bRenderDocHud != Info.Preference ||
+	    Editor.Options.Preferences.bRenderDocCapture != Scenario.bInitialCapturePreference)
 	{
 		throw std::runtime_error("Editor HUD preference UI/persistence mismatch");
 	}
-	Log(ELogLevel::Info, "Editor capture acceptance passed: hud | " + CaptureStatus());
-	Window->RequestClose();
+	Log(ELogLevel::Info, "Editor capture acceptance passed: hud | " + Editor.CaptureStatus());
+	Editor.Window->RequestClose();
 }
 
-void FEditorPlugin::ExerciseCaptureInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseCaptureInput(std::vector<FInputEvent>& InEvents)
 {
-	if (FrameCount == 0 && Options.ExerciseCapture == "capture")
+	if (Editor.FrameCount == 0 && Editor.Options.ExerciseCapture == "capture")
 	{
 		// Fixed toolbar actions must remain reachable before the flexible view selector.
-		Window->Resize({600, 960});
+		Editor.Window->Resize({600, 960});
 	}
-	if (FrameCount < 8 || (Options.ExerciseCapture == "capture" && ReadyFrames < 8))
+	if (Editor.FrameCount < 8 || (Editor.Options.ExerciseCapture == "capture" && Editor.ReadyFrames < 8))
 	{
 		return;
 	}
-	if (Options.ExerciseCapture == "hud")
+	if (Editor.Options.ExerciseCapture == "hud")
 	{
 		ExerciseCaptureHudInput(InEvents);
 		return;
 	}
-	if (Options.ExerciseCapture == "toggle")
+	if (Editor.Options.ExerciseCapture == "toggle")
 	{
-		switch (Acceptance.ExerciseStep)
+		switch (Scenario.ExerciseStep)
 		{
 			case 0:
-				ExerciseClick(InEvents, EditMenuBounds);
+				ExerciseClick(InEvents, Scenario.EditMenuBounds);
 				return;
 			case 1:
-				ExerciseClick(InEvents, PreferencesMenuBounds);
+				ExerciseClick(InEvents, Scenario.PreferencesMenuBounds);
 				return;
 			case 2:
-				ExerciseClick(InEvents, CapturePreferenceBounds);
+				ExerciseClick(InEvents, Scenario.CapturePreferenceBounds);
 				return;
 			case 3:
-				ExerciseClick(InEvents, PreferencesCloseBounds);
+				ExerciseClick(InEvents, Scenario.PreferencesCloseBounds);
 				return;
 		}
-		if (++Acceptance.ExerciseWait < 3)
+		if (++Scenario.ExerciseWait < 3)
 		{
 			return;
 		}
-		const bool bEnabled = Options.Preferences.bRenderDocCapture;
-		const bool bVisible = CaptureButtonBounds.Z > CaptureButtonBounds.X;
-		if (bEnabled == Acceptance.bInitialCapturePreference || bVisible != bEnabled || bPreferencesDialog ||
-		    LoadEditorPreferences(Options.PreferencesPath).bRenderDocCapture != bEnabled)
+		const bool bEnabled = Editor.Options.Preferences.bRenderDocCapture;
+		const bool bVisible = Scenario.CaptureButtonBounds.Z > Scenario.CaptureButtonBounds.X;
+		if (bEnabled == Scenario.bInitialCapturePreference || bVisible != bEnabled || Editor.bPreferencesDialog ||
+		    LoadEditorPreferences(Editor.Options.PreferencesPath).bRenderDocCapture != bEnabled)
 		{
 			throw std::runtime_error("Editor capture preference UI/persistence mismatch");
 		}
 	}
-	else if (Options.ExerciseCapture == "unavailable")
+	else if (Editor.Options.ExerciseCapture == "unavailable")
 	{
-		if (CanCapture() || CaptureButtonBounds.Z <= CaptureButtonBounds.X)
+		if (Editor.CanCapture() || Scenario.CaptureButtonBounds.Z <= Scenario.CaptureButtonBounds.X)
 		{
 			throw std::runtime_error("Unavailable capture must show a disabled button");
 		}
@@ -94,34 +94,35 @@ void FEditorPlugin::ExerciseCaptureInput(std::vector<FInputEvent>& InEvents)
 	else
 	{
 #if HYP_ENABLE_RENDERDOC
-		if (Acceptance.ExerciseStep == 0)
+		if (Scenario.ExerciseStep == 0)
 		{
-			if (CaptureButtonBounds.X < Viewport.ViewportRegion.Bounds.X ||
-			    CaptureButtonBounds.Z > Viewport.ViewportRegion.Bounds.Z)
+			if (Scenario.CaptureButtonBounds.X < Editor.Viewport.ViewportRegion.Bounds.X ||
+			    Scenario.CaptureButtonBounds.Z > Editor.Viewport.ViewportRegion.Bounds.Z)
 			{
 				throw std::runtime_error("Capture button is clipped by the narrow viewport");
 			}
-			if (!CanCapture())
+			if (!Editor.CanCapture())
 			{
-				throw std::runtime_error(CaptureStatus());
+				throw std::runtime_error(Editor.CaptureStatus());
 			}
-			ExerciseClick(InEvents, CaptureButtonBounds);
+			ExerciseClick(InEvents, Scenario.CaptureButtonBounds);
 			return;
 		}
-		const auto Status = FrameCapture->Status();
-		if (FrameCapture->OverlayEnabled() != Options.Preferences.bRenderDocHud)
+		const auto Status = Editor.FrameCapture->Status();
+		if (Editor.FrameCapture->OverlayEnabled() != Editor.Options.Preferences.bRenderDocHud)
 		{
 			throw std::runtime_error("Capture changed HUD visibility");
 		}
-		if (Status.CompletedCaptures != 1 || !Status.ReplayProcessId || RenderStats.MainView().Draws == 0)
+		if (Status.CompletedCaptures != 1 || !Status.ReplayProcessId || Editor.RenderStats.MainView().Draws == 0)
 		{
-			throw std::runtime_error("Editor capture/replay failed: " + CaptureStatus());
+			throw std::runtime_error("Editor capture/replay failed: " + Editor.CaptureStatus());
 		}
 #else
 		throw std::runtime_error("Capture exercise requires RenderDoc support");
 #endif
 	}
-	Log(ELogLevel::Info, "Editor capture acceptance passed: " + Options.ExerciseCapture + " | " + CaptureStatus());
-	Window->RequestClose();
+	Log(ELogLevel::Info,
+	    "Editor capture acceptance passed: " + Editor.Options.ExerciseCapture + " | " + Editor.CaptureStatus());
+	Editor.Window->RequestClose();
 }
 } // namespace Hyperion

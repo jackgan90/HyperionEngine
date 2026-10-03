@@ -1,51 +1,51 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 
 namespace Hyperion
 {
-void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 {
-	auto* Imports = Context.Find<FAssetImportWorkspace>();
+	auto* Imports = Editor.Context.Find<FAssetImportWorkspace>();
 	if (!Imports)
 	{
 		throw std::runtime_error("Import GUI acceptance needs import services");
 	}
-	switch (Acceptance.ExerciseStep)
+	switch (Scenario.ExerciseStep)
 	{
 		case 0:
-			ExerciseClick(InEvents, FileMenuBounds);
+			ExerciseClick(InEvents, Scenario.FileMenuBounds);
 			break;
 		case 1:
-			ExerciseClick(InEvents, ImportMenuBounds);
+			ExerciseClick(InEvents, Scenario.ImportMenuBounds);
 			break;
 		case 2:
-			ExerciseClick(InEvents, ImportPanel->SourceBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->SourceBounds);
 			break;
 		case 3:
 		{
-			if (++Acceptance.ExerciseWait == 1)
+			if (++Scenario.ExerciseWait == 1)
 			{
 				FInputEvent Text;
 				Text.Type = EEventType::Text;
-				Text.Text = PathToUtf8(Options.ExerciseImport);
+				Text.Text = PathToUtf8(Editor.Options.ExerciseImport);
 				InEvents.push_back(std::move(Text));
 			}
-			if (Acceptance.ExerciseWait > 4)
+			if (Scenario.ExerciseWait > 4)
 			{
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		}
 		case 4:
 			// Exercise the same selection handler used by the native Browse dialog.
-			ImportPanel->SetOutputDirectory(Options.ExerciseImport.parent_path() / "Game/Destination");
-			ExerciseClick(InEvents, ImportPanel->OutputBounds);
+			Editor.ImportPanel->SetOutputDirectory(Editor.Options.ExerciseImport.parent_path() / "Game/Destination");
+			ExerciseClick(InEvents, Editor.ImportPanel->OutputBounds);
 			break;
 		case 5:
-			if (!ImportPanel->DraftId.empty())
+			if (!Editor.ImportPanel->DraftId.empty())
 			{
-				const auto Draft = Imports->Draft({ImportPanel->DraftId});
+				const auto Draft = Imports->Draft({Editor.ImportPanel->DraftId});
 				if (Draft.Status == EImportDraftState::Failed)
 				{
 					throw std::runtime_error(Draft.Error);
@@ -59,29 +59,29 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 						throw std::runtime_error(
 						    "GUI import texture metadata differs from the reflected draft contract");
 					}
-					if (ImportPanel->OutputFolder != "/Game/Destination/Color")
+					if (Editor.ImportPanel->OutputFolder != "/Game/Destination/Color")
 					{
 						throw std::runtime_error("Browse selection did not update the displayed import folder");
 					}
-					++Acceptance.ExerciseStep;
+					++Scenario.ExerciseStep;
 				}
 			}
 			break;
 		case 6:
-			ExerciseClick(InEvents, ImportPanel->PreviewNameBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->PreviewNameBounds);
 			break;
 		case 7:
 		{
-			++Acceptance.ExerciseWait;
-			if (Acceptance.ExerciseWait <= 2)
+			++Scenario.ExerciseWait;
+			if (Scenario.ExerciseWait <= 2)
 			{
 				FInputEvent Key;
 				Key.Type = EEventType::Key;
 				Key.Key = EKey::A;
-				Key.bDown = Acceptance.ExerciseWait == 1;
-				Key.Modifiers = Acceptance.ExerciseWait == 1 ? InputModifiers::Control : InputModifiers::None;
+				Key.bDown = Scenario.ExerciseWait == 1;
+				Key.Modifiers = Scenario.ExerciseWait == 1 ? InputModifiers::Control : InputModifiers::None;
 				InEvents.push_back(Key);
-				if (Acceptance.ExerciseWait == 2)
+				if (Scenario.ExerciseWait == 2)
 				{
 					FInputEvent Text;
 					Text.Type = EEventType::Text;
@@ -89,46 +89,47 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 					InEvents.push_back(std::move(Text));
 				}
 			}
-			if (Acceptance.ExerciseWait > 5)
+			if (Scenario.ExerciseWait > 5)
 			{
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		}
 		case 8:
-			ExerciseClick(InEvents, ImportPanel->UndoBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->UndoBounds);
 			break;
 		case 9:
-			if (Imports->Draft({ImportPanel->DraftId}).Name != "Color")
+			if (Imports->Draft({Editor.ImportPanel->DraftId}).Name != "Color")
 			{
 				throw std::runtime_error("Import preview undo failed");
 			}
-			++Acceptance.ExerciseStep;
+			++Scenario.ExerciseStep;
 			break;
 		case 10:
-			ExerciseClick(InEvents, ImportPanel->RedoBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->RedoBounds);
 			break;
 		case 11:
-			if (Imports->Draft({ImportPanel->DraftId}).Name != "GUI draft texture")
+			if (Imports->Draft({Editor.ImportPanel->DraftId}).Name != "GUI draft texture")
 			{
 				throw std::runtime_error("Import preview redo failed");
 			}
-			++Acceptance.ExerciseStep;
+			++Scenario.ExerciseStep;
 			break;
 		case 12:
-			ExerciseClick(InEvents, ImportPanel->ImportBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
 			break;
 		case 13:
-			if (ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
+			if (Editor.ImportPanel->ImportResultBounds.Z <= Editor.ImportPanel->ImportResultBounds.X)
 			{
 				break;
 			}
-			if (!Acceptance.ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			if (!Scenario.ExerciseWait &&
+			    Editor.ImportPanel->ImportResultBounds.Z > Editor.ImportPanel->ImportResultBounds.X)
 			{
-				Acceptance.PlacementCapture = Options.ExerciseImport.parent_path() / "ImportSuccess.png";
+				Scenario.PlacementCapture = Editor.Options.ExerciseImport.parent_path() / "ImportSuccess.png";
 			}
-			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
 			break;
 		case 14:
 		{
@@ -137,22 +138,22 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				break;
 			}
-			if (!ImportPanel->bOpen || State.Tasks.front().Status != EImportTaskState::Completed ||
+			if (!Editor.ImportPanel->bOpen || State.Tasks.front().Status != EImportTaskState::Completed ||
 			    State.Tasks.front().Result->WrittenAssets != 1)
 			{
 				throw std::runtime_error("GUI import failed: " + State.Tasks.front().Error);
 			}
-			++Acceptance.ExerciseStep;
+			++Scenario.ExerciseStep;
 			break;
 		}
 		case 15:
-			ExerciseClick(InEvents, FileMenuBounds);
+			ExerciseClick(InEvents, Scenario.FileMenuBounds);
 			break;
 		case 16:
-			ExerciseClick(InEvents, ImportMenuBounds);
+			ExerciseClick(InEvents, Scenario.ImportMenuBounds);
 			break;
 		case 17:
-			ExerciseClick(InEvents, ImportPanel->ImportBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
 			break;
 		case 18:
 		{
@@ -167,17 +168,17 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 				throw std::runtime_error("GUI reimport did not preserve zero-write freshness: " +
 				                         State.Tasks.front().Error);
 			}
-			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
 			break;
 		}
 		case 19:
 		{
-			if (ImportPanel->Request.Output != "/Game/Automatic.hasset")
+			if (Editor.ImportPanel->Request.Output != "/Game/Automatic.hasset")
 			{
-				ImportPanel->Request.Output = "/Game/Automatic.hasset";
+				Editor.ImportPanel->Request.Output = "/Game/Automatic.hasset";
 				break;
 			}
-			const auto Draft = Imports->Draft({ImportPanel->DraftId});
+			const auto Draft = Imports->Draft({Editor.ImportPanel->DraftId});
 			if (Draft.Status != EImportDraftState::Ready || Draft.Name != "Color")
 			{
 				break;
@@ -185,50 +186,50 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			FImportPropertyEdits Edits;
 			Edits.Name = "Keep these edits";
 			Imports->EditDraft({Draft.Draft, Draft.Generation, Edits});
-			ImportPanel->Request.Output = "/Game/Changed.hasset";
-			++Acceptance.ExerciseStep;
+			Editor.ImportPanel->Request.Output = "/Game/Changed.hasset";
+			++Scenario.ExerciseStep;
 			break;
 		}
 		case 20:
-			if (ImportPanel->RefreshCancelBounds.Z > ImportPanel->RefreshCancelBounds.X)
+			if (Editor.ImportPanel->RefreshCancelBounds.Z > Editor.ImportPanel->RefreshCancelBounds.X)
 			{
-				ExerciseClick(InEvents, ImportPanel->RefreshCancelBounds);
+				ExerciseClick(InEvents, Editor.ImportPanel->RefreshCancelBounds);
 			}
 			break;
 		case 21:
-			if (ImportPanel->Request.Output != "/Game/Automatic.hasset" ||
-			    Imports->Draft({ImportPanel->DraftId}).Name != "Keep these edits")
+			if (Editor.ImportPanel->Request.Output != "/Game/Automatic.hasset" ||
+			    Imports->Draft({Editor.ImportPanel->DraftId}).Name != "Keep these edits")
 			{
 				throw std::runtime_error("Cancelling automatic refresh lost settings or property edits");
 			}
-			ImportPanel->Request.Output = "/Game/Changed.hasset";
-			++Acceptance.ExerciseStep;
+			Editor.ImportPanel->Request.Output = "/Game/Changed.hasset";
+			++Scenario.ExerciseStep;
 			break;
 		case 22:
-			if (ImportPanel->RefreshApplyBounds.Z > ImportPanel->RefreshApplyBounds.X)
+			if (Editor.ImportPanel->RefreshApplyBounds.Z > Editor.ImportPanel->RefreshApplyBounds.X)
 			{
-				ExerciseClick(InEvents, ImportPanel->RefreshApplyBounds);
+				ExerciseClick(InEvents, Editor.ImportPanel->RefreshApplyBounds);
 			}
 			break;
 		case 23:
 		{
-			const auto Draft = Imports->Draft({ImportPanel->DraftId});
+			const auto Draft = Imports->Draft({Editor.ImportPanel->DraftId});
 			if (Draft.Status != EImportDraftState::Ready || Draft.Name != "Color")
 			{
 				break;
 			}
-			if (Draft.bDirty || ImportPanel->Request.Output != "/Game/Changed.hasset")
+			if (Draft.bDirty || Editor.ImportPanel->Request.Output != "/Game/Changed.hasset")
 			{
 				throw std::runtime_error("Confirmed automatic refresh did not apply the new settings");
 			}
-			auto Bytes = *IO.ReadAsync(Options.ExerciseImport).Get(IO.TaskSystem());
+			auto Bytes = *Editor.IO.ReadAsync(Editor.Options.ExerciseImport).Get(Editor.IO.TaskSystem());
 			Bytes.push_back(std::byte{});
-			IO.WriteAsync(Options.ExerciseImport, std::move(Bytes)).Get(IO.TaskSystem());
-			++Acceptance.ExerciseStep;
+			Editor.IO.WriteAsync(Editor.Options.ExerciseImport, std::move(Bytes)).Get(Editor.IO.TaskSystem());
+			++Scenario.ExerciseStep;
 			break;
 		}
 		case 24:
-			ExerciseClick(InEvents, ImportPanel->ImportBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
 			break;
 		case 25:
 		{
@@ -238,37 +239,38 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 				break;
 			}
 			if (State.Tasks.front().Status != EImportTaskState::Failed || State.Tasks.front().Error.empty() ||
-			    IO.FileSystem()->Exists("/Game/Changed.hasset"))
+			    Editor.IO.FileSystem()->Exists("/Game/Changed.hasset"))
 			{
 				throw std::runtime_error("Changed source was not rejected before publication");
 			}
-			if (ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
+			if (Editor.ImportPanel->ImportResultBounds.Z <= Editor.ImportPanel->ImportResultBounds.X)
 			{
 				break;
 			}
-			if (!Acceptance.ExerciseWait && ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			if (!Scenario.ExerciseWait &&
+			    Editor.ImportPanel->ImportResultBounds.Z > Editor.ImportPanel->ImportResultBounds.X)
 			{
-				Acceptance.PlacementCapture = Options.ExerciseImport.parent_path() / "ImportFailure.png";
+				Scenario.PlacementCapture = Editor.Options.ExerciseImport.parent_path() / "ImportFailure.png";
 			}
-			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
 			break;
 		}
 		case 26:
 		{
-			const auto Draft = Imports->Draft({ImportPanel->DraftId});
+			const auto Draft = Imports->Draft({Editor.ImportPanel->DraftId});
 			if (Draft.Status == EImportDraftState::Failed)
 			{
 				throw std::runtime_error("Source refresh after failed import failed: " + Draft.Error);
 			}
 			if (Draft.Status == EImportDraftState::Ready && Draft.Error.empty() &&
-			    ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
+			    Editor.ImportPanel->ImportResultBounds.Z <= Editor.ImportPanel->ImportResultBounds.X)
 			{
-				++Acceptance.ExerciseStep;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		}
 		case 27:
-			ExerciseClick(InEvents, ImportPanel->ImportBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
 			break;
 		case 28:
 		{
@@ -281,26 +283,26 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			{
 				throw std::runtime_error("Retry did not use the refreshed source: " + State.Tasks.front().Error);
 			}
-			if (ImportPanel->OutputFolder != PathToUtf8(PathFromUtf8(State.Tasks.front().Output).parent_path()))
+			if (Editor.ImportPanel->OutputFolder != PathToUtf8(PathFromUtf8(State.Tasks.front().Output).parent_path()))
 			{
 				throw std::runtime_error("Save as does not match the current completed request");
 			}
-			ExerciseClick(InEvents, ImportPanel->ImportResultBounds);
+			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
 			break;
 		}
 		case 29:
 		{
-			if (ImportPanel->ImportResultBounds.Z > ImportPanel->ImportResultBounds.X)
+			if (Editor.ImportPanel->ImportResultBounds.Z > Editor.ImportPanel->ImportResultBounds.X)
 			{
 				break;
 			}
-			auto Bytes = *IO.ReadAsync(Options.ExerciseImport).Get(IO.TaskSystem());
+			auto Bytes = *Editor.IO.ReadAsync(Editor.Options.ExerciseImport).Get(Editor.IO.TaskSystem());
 			Bytes.pop_back();
-			IO.WriteAsync(Options.ExerciseImport, std::move(Bytes)).Get(IO.TaskSystem());
-			Acceptance.PlacementCapture = Options.ExerciseImport.parent_path() / "ImportPanel.png";
-			Acceptance.bImportVerified = true;
+			Editor.IO.WriteAsync(Editor.Options.ExerciseImport, std::move(Bytes)).Get(Editor.IO.TaskSystem());
+			Scenario.PlacementCapture = Editor.Options.ExerciseImport.parent_path() / "ImportPanel.png";
+			Scenario.bImportVerified = true;
 			Log(ELogLevel::Info, "Import GUI acceptance passed");
-			++Acceptance.ExerciseStep;
+			++Scenario.ExerciseStep;
 			break;
 		}
 		default:

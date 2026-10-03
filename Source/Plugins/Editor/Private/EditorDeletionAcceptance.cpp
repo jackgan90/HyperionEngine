@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 
 namespace Hyperion
 {
@@ -13,107 +13,114 @@ void CheckDeletion(bool bInCondition, const char* InMessage)
 }
 } // namespace
 
-bool FEditorPlugin::ExerciseDeletionInput(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseDeletionInput(std::vector<FInputEvent>& InEvents)
 {
 	FInputEvent Key;
 	Key.Type = EEventType::Key;
 	Key.Key = EKey::Delete;
 	Key.bDown = true;
-	switch (Acceptance.DeletionExerciseStep++)
+	switch (Scenario.DeletionExerciseStep++)
 	{
 		case 0:
-			CheckDeletion(bool(Selection), "click did not select deletion target");
-			Acceptance.DeletionExerciseHandle = *Selection;
-			Acceptance.DeletionExerciseId = Scene->FindNode(*Selection)->Id;
+			CheckDeletion(bool(Editor.Selection), "click did not select deletion target");
+			Scenario.DeletionExerciseHandle = *Editor.Selection;
+			Scenario.DeletionExerciseId = Editor.Scene->FindNode(*Editor.Selection)->Id;
 			Key.bRepeat = true;
 			InEvents.push_back(Key);
 			break;
 		case 1:
-			CheckDeletion(Selection == Acceptance.DeletionExerciseHandle && !IsDirty(), "repeat deleted an object");
+			CheckDeletion(Editor.Selection == Scenario.DeletionExerciseHandle && !Editor.IsDirty(),
+			              "repeat deleted an object");
 			InEvents.push_back(Key);
 			break;
 		case 2:
-			CheckDeletion(!Selection && !Scene->FindNode(Acceptance.DeletionExerciseHandle) && IsDirty(),
+			CheckDeletion(!Editor.Selection && !Editor.Scene->FindNode(Scenario.DeletionExerciseHandle) &&
+			                  Editor.IsDirty(),
 			              "Del did not delete and clear selection");
-			CheckDeletion(HistoryCursor == 1, "delete was not one history entry");
+			CheckDeletion(Editor.HistoryCursor == 1, "delete was not one history entry");
 			break;
 		case 3:
-			CheckDeletion(!Selection, "Outliner automatically selected a replacement");
-			Undo();
-			CheckDeletion(!IsDirty() && Scene->FindHandle(Acceptance.DeletionExerciseId).Scene &&
-			                  Selection == Scene->FindHandle(Acceptance.DeletionExerciseId),
+			CheckDeletion(!Editor.Selection, "Outliner automatically selected a replacement");
+			Editor.Undo();
+			CheckDeletion(!Editor.IsDirty() && Editor.Scene->FindHandle(Scenario.DeletionExerciseId).Scene &&
+			                  Editor.Selection == Editor.Scene->FindHandle(Scenario.DeletionExerciseId),
 			              "undo did not restore the object, selection and save point");
-			Redo();
+			Editor.Redo();
 			break;
 		case 4:
-			CheckDeletion(!Selection && !Scene->FindHandle(Acceptance.DeletionExerciseId).Scene && IsDirty(),
+			CheckDeletion(!Editor.Selection && !Editor.Scene->FindHandle(Scenario.DeletionExerciseId).Scene &&
+			                  Editor.IsDirty(),
 			              "redo did not delete and clear selection");
-			Undo();
-			SelectObject(Scene->FindHandle(Acceptance.DeletionExerciseId));
-			ResetDocument();
-			Acceptance.DeletionExerciseStep = 0;
+			Editor.Undo();
+			Editor.SelectObject(Editor.Scene->FindHandle(Scenario.DeletionExerciseId));
+			Editor.ResetDocument();
+			Scenario.DeletionExerciseStep = 0;
 			return true;
 	}
 	return false;
 }
 
-void FEditorPlugin::ExerciseDeletionHistory()
+void FEditorAcceptanceHarness::ExerciseDeletionHistory()
 {
-	const auto PreviousSelection = Selection;
-	const auto Settings = Scene->GetSettings();
+	const auto PreviousSelection = Editor.Selection;
+	const auto Settings = Editor.Scene->GetSettings();
 	FSceneNode Parent;
 	Parent.Name = "Deletion parent";
-	const auto ParentHandle = CommitCreate(Parent);
-	const auto ParentId = Scene->FindNode(ParentHandle)->Id;
+	const auto ParentHandle = Editor.CommitCreate(Parent);
+	const auto ParentId = Editor.Scene->FindNode(ParentHandle)->Id;
 	auto Child = MakeSceneCameraNode({}, {0, 0, 10}, {});
 	Child.Parent() = ParentId;
-	const auto ChildHandle = CommitCreate(Child);
-	const auto ChildId = Scene->FindNode(ChildHandle)->Id;
-	auto Candidate = *Scene->FindNode(ChildHandle);
+	const auto ChildHandle = Editor.CommitCreate(Child);
+	const auto ChildId = Editor.Scene->FindNode(ChildHandle)->Id;
+	auto Candidate = *Editor.Scene->FindNode(ChildHandle);
 	Candidate.Name = "Edited child";
-	CommitEdit(ChildHandle, Candidate, Scene->GetRevision());
+	Editor.CommitEdit(ChildHandle, Candidate, Editor.Scene->GetRevision());
 	auto CameraSettings = Settings;
 	CameraSettings.DefaultCamera = ChildHandle;
-	CommitSettings(CameraSettings);
-	SetPreviewCamera(ChildHandle);
-	SelectObject(ParentHandle);
-	CommitDelete();
-	CheckDeletion(!Selection && !Viewport.PreviewCamera && !Scene->FindHandle(ChildId).Scene &&
-	                  !Scene->GetSettings().DefaultCamera,
+	Editor.CommitSettings(CameraSettings);
+	Editor.SetPreviewCamera(ChildHandle);
+	Editor.SelectObject(ParentHandle);
+	Editor.CommitDelete();
+	CheckDeletion(!Editor.Selection && !Editor.Viewport.PreviewCamera && !Editor.Scene->FindHandle(ChildId).Scene &&
+	                  !Editor.Scene->GetSettings().DefaultCamera,
 	              "subtree deletion left selection, preview or scene references");
 	for (unsigned Cycle = 0; Cycle < 2; ++Cycle)
 	{
-		Undo();
-		const auto RestoredChild = Scene->FindHandle(ChildId);
-		CheckDeletion(Selection == Scene->FindHandle(ParentId) && RestoredChild != ChildHandle &&
-		                  Scene->FindNode(RestoredChild)->Parent() == ParentId &&
-		                  *Scene->FindNode(RestoredChild) == Candidate &&
-		                  Scene->GetSettings().DefaultCamera == RestoredChild,
+		Editor.Undo();
+		const auto RestoredChild = Editor.Scene->FindHandle(ChildId);
+		CheckDeletion(Editor.Selection == Editor.Scene->FindHandle(ParentId) && RestoredChild != ChildHandle &&
+		                  Editor.Scene->FindNode(RestoredChild)->Parent() == ParentId &&
+		                  *Editor.Scene->FindNode(RestoredChild) == Candidate &&
+		                  Editor.Scene->GetSettings().DefaultCamera == RestoredChild,
 		              "subtree undo lost components, hierarchy or settings");
-		SelectObject(RestoredChild);
-		Redo();
-		CheckDeletion(!Selection && !Scene->FindHandle(ParentId).Scene, "subtree redo retained selection");
+		Editor.SelectObject(RestoredChild);
+		Editor.Redo();
+		CheckDeletion(!Editor.Selection && !Editor.Scene->FindHandle(ParentId).Scene,
+		              "subtree redo retained selection");
 	}
-	Undo();
-	Undo();
-	Undo();
-	CheckDeletion(Scene->FindNode(Scene->FindHandle(ChildId))->Name != Candidate.Name,
+	Editor.Undo();
+	Editor.Undo();
+	Editor.Undo();
+	CheckDeletion(Editor.Scene->FindNode(Editor.Scene->FindHandle(ChildId))->Name != Candidate.Name,
 	              "earlier child edit retained a stale handle");
-	Undo();
-	Undo();
-	CheckDeletion(!Scene->FindHandle(ParentId).Scene && !IsDirty(), "create undo failed after delete undo");
-	Redo();
-	Redo();
-	Redo();
-	Redo();
-	Redo();
-	CheckDeletion(!Selection && !Scene->FindHandle(ChildId).Scene, "mixed create/edit/delete redo failed");
+	Editor.Undo();
+	Editor.Undo();
+	CheckDeletion(!Editor.Scene->FindHandle(ParentId).Scene && !Editor.IsDirty(),
+	              "create undo failed after delete undo");
+	Editor.Redo();
+	Editor.Redo();
+	Editor.Redo();
+	Editor.Redo();
+	Editor.Redo();
+	CheckDeletion(!Editor.Selection && !Editor.Scene->FindHandle(ChildId).Scene,
+	              "mixed create/edit/delete redo failed");
 	for (unsigned Index = 0; Index < 5; ++Index)
 	{
-		Undo();
+		Editor.Undo();
 	}
-	CheckDeletion(Scene->GetSettings() == Settings && !IsDirty(), "history lost original settings/save point");
-	ResetDocument();
-	SetSelection(PreviousSelection);
+	CheckDeletion(Editor.Scene->GetSettings() == Settings && !Editor.IsDirty(),
+	              "history lost original settings/save point");
+	Editor.ResetDocument();
+	Editor.SetSelection(PreviousSelection);
 }
 } // namespace Hyperion

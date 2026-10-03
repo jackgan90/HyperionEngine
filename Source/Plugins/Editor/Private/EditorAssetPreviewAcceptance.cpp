@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 #include <cmath>
 
@@ -45,19 +45,19 @@ void CheckCanvas(FVec4 InBefore, FVec4 InAfter)
 }
 } // namespace
 
-bool FEditorPlugin::ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents)
 {
-	auto& Exercise = Acceptance.AssetPreviewExercise;
-	const auto* Document = AssetWorkspace->ActiveDocument();
-	Exercise.bSawReady |= AssetWorkspace->IsPreviewReady();
-	Exercise.bSawPreparing |= AssetWorkspace->ActiveStatus().find("0/1 models ready") != std::string::npos;
+	auto& Exercise = Scenario.AssetPreviewExercise;
+	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+	Exercise.bSawReady |= Editor.AssetWorkspace->IsPreviewReady();
+	Exercise.bSawPreparing |= Editor.AssetWorkspace->ActiveStatus().find("0/1 models ready") != std::string::npos;
 	if (Exercise.Step >= 4)
 	{
 		return ExerciseAssetPreviewHistory(InEvents);
 	}
 	if (Exercise.Step == 0)
 	{
-		AssetWorkspace->RevealProperty("node/position");
+		Editor.AssetWorkspace->RevealProperty("node/position");
 		Exercise.Before = HashArchive(Document->Get("nodes"));
 		++Exercise.Step;
 	}
@@ -67,9 +67,9 @@ bool FEditorPlugin::ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents
 		{
 			return false;
 		}
-		const auto Field = AssetWorkspace->ObservedBounds("node/position/x");
+		const auto Field = Editor.AssetWorkspace->ObservedBounds("node/position/x");
 		RequirePreview(Field.Z > Field.X && Field.W > Field.Y, "Model Position control is missing");
-		Exercise.Canvas = AssetWorkspace->ObservedBounds("canvas");
+		Exercise.Canvas = Editor.AssetWorkspace->ObservedBounds("canvas");
 		RequirePreview(Exercise.Canvas.W > Exercise.Canvas.Y, "Model preview canvas is missing");
 		Exercise.Pointer = {(Field.X + Field.Z) * .5f, (Field.Y + Field.W) * .5f};
 		PreviewPointer(InEvents, Exercise.Pointer);
@@ -83,7 +83,7 @@ bool FEditorPlugin::ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents
 	}
 	else
 	{
-		CheckCanvas(Exercise.Canvas, AssetWorkspace->ObservedBounds("canvas"));
+		CheckCanvas(Exercise.Canvas, Editor.AssetWorkspace->ObservedBounds("canvas"));
 		if (++Exercise.Frames <= 48)
 		{
 			Exercise.Pointer.X += 2;
@@ -99,12 +99,12 @@ bool FEditorPlugin::ExerciseAssetPreviewInput(std::vector<FInputEvent>& InEvents
 	return false;
 }
 
-bool FEditorPlugin::ExerciseAssetPreviewHistory(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseAssetPreviewHistory(std::vector<FInputEvent>& InEvents)
 {
-	auto& Exercise = Acceptance.AssetPreviewExercise;
-	const auto* Document = AssetWorkspace->ActiveDocument();
-	CheckCanvas(Exercise.Canvas, AssetWorkspace->ObservedBounds("canvas"));
-	if (++Exercise.Frames < 3 || !AssetWorkspace->IsPreviewReady())
+	auto& Exercise = Scenario.AssetPreviewExercise;
+	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+	CheckCanvas(Exercise.Canvas, Editor.AssetWorkspace->ObservedBounds("canvas"));
+	if (++Exercise.Frames < 3 || !Editor.AssetWorkspace->IsPreviewReady())
 	{
 		return false;
 	}

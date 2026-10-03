@@ -85,7 +85,7 @@ void FEditorPlugin::DrawViewControls()
 	{
 		Gui->OpenPopup("ViewportOptions");
 	}
-	InspectionBounds["view/options"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::ViewOptions, Gui->LastItemBounds());
 	DrawCaptureButton();
 	DrawHudButtons();
 	DrawVisualizationControls();
@@ -166,7 +166,7 @@ void FEditorPlugin::DrawViewOptions()
 	{
 		ViewOptions.OutlineMode = static_cast<std::uint32_t>(OutlineMode);
 	}
-	InspectionBounds["outline/mode"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::OutlineMode, Gui->LastItemBounds());
 	Gui->Tooltip("Union outlines the selected group. Per object preserves every object's outline through overlaps.");
 	Gui->Checkbox("Smooth outlines (2x)", *ViewOptions.SmoothOutlines);
 	try
@@ -177,7 +177,7 @@ void FEditorPlugin::DrawViewOptions()
 	{
 		Error = Failure.what();
 	}
-	InspectionBounds["outline/quality"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::OutlineQuality, Gui->LastItemBounds());
 	Gui->Separator();
 	try
 	{
@@ -188,7 +188,7 @@ void FEditorPlugin::DrawViewOptions()
 				SetPreviewCamera({});
 				Gui->ClosePopup();
 			}
-			InspectionBounds["view/return"] = Gui->LastItemBounds();
+			Acceptance.ObserveWidget(EEditorWidget::ReturnToEditorView, Gui->LastItemBounds());
 			Gui->TextWrapped(IsPreviewAvailable()
 			                     ? "Camera preview: edit the selected camera's properties to change this view."
 			                     : "Camera unavailable: disabled, removed, or missing its Camera component.");
@@ -200,13 +200,13 @@ void FEditorPlugin::DrawViewOptions()
 				SetInitialView();
 				Gui->ClosePopup();
 			}
-			InspectionBounds["view/initial"] = Gui->LastItemBounds();
+			Acceptance.ObserveWidget(EEditorWidget::InitialView, Gui->LastItemBounds());
 			if (Gui->Button("Create camera from view", Viewport.bViewportCameraInitialized))
 			{
 				CreateCameraFromView();
 				Gui->ClosePopup();
 			}
-			InspectionBounds["view/create"] = Gui->LastItemBounds();
+			Acceptance.ObserveWidget(EEditorWidget::CreateCamera, Gui->LastItemBounds());
 		}
 	}
 	catch (const std::exception& Failure)
@@ -222,12 +222,12 @@ void FEditorPlugin::DrawCameraActions(FSceneHandle InHandle)
 	{
 		SetPreviewCamera(InHandle);
 	}
-	InspectionBounds["view/preview"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::PreviewCamera, Gui->LastItemBounds());
 	Gui->SameLineIfFits("Apply editor view to camera");
 	if (Gui->Button("Apply editor view to camera", Viewport.bViewportCameraInitialized))
 	{
 		ApplyEditorView(InHandle);
 	}
-	InspectionBounds["view/apply"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::ApplyCamera, Gui->LastItemBounds());
 }
 } // namespace Hyperion

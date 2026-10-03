@@ -117,7 +117,7 @@ void FEditorPlugin::DrawPreferences()
 		{ /* SavePreferences retains the message displayed below. */
 		}
 	}
-	CapturePreferenceBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::CapturePreference, Gui->LastItemBounds());
 	bool bHudEnabled = Options.Preferences.bRenderDocHud;
 	if (Gui->Checkbox("Show RenderDoc HUD", bHudEnabled))
 	{
@@ -129,7 +129,7 @@ void FEditorPlugin::DrawPreferences()
 		{ /* The shared operation retains the persistence error displayed below. */
 		}
 	}
-	CaptureHudPreferenceBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::CaptureHudPreference, Gui->LastItemBounds());
 	if (!Options.PreferenceError.empty())
 	{
 		Gui->TextWrapped(Options.PreferenceError);
@@ -143,7 +143,7 @@ void FEditorPlugin::DrawPreferences()
 		Gui->ClosePopup();
 		bPreferencesDialog = false;
 	}
-	PreferencesCloseBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::PreferencesClose, Gui->LastItemBounds());
 	Gui->EndModal();
 }
 
@@ -160,22 +160,21 @@ void FEditorPlugin::DrawCaptureButton()
 	{
 		RequestRenderCapture();
 	}
-	CaptureButtonBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::CaptureButton, Gui->LastItemBounds());
 	Gui->EndDisabled();
 }
 
 FImage FEditorPlugin::ExecuteEditorGraph(FRenderGraph InGraph, FSize InSize, bool bInScreenshot,
-                                         FNativeSurface InSurface, bool bInCaptureRdc)
+                                         FNativeSurface InSurface, bool bInCaptureRdc, bool bInVsync)
 {
-	const bool bVsync = Rendering.bVsync && !Options.bExercise && Options.Benchmark.empty();
 #if HYP_ENABLE_RENDERDOC
 	FImage Result;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 	                          [&, Graph = std::move(InGraph), Capture = FrameCapture, InSurface, InSize, bInScreenshot,
-	                           bVsync, bInCaptureRdc]() mutable
+	                           bInVsync, bInCaptureRdc]() mutable
 	                          {
 		                          FFrameCaptureScope Scope(Tasks, Capture, InSurface, bInCaptureRdc);
-		                          Result = ExecuteGraphOnRhi(std::move(Graph), Tasks, *Swapchain, InSize, bVsync,
+		                          Result = ExecuteGraphOnRhi(std::move(Graph), Tasks, *Swapchain, InSize, bInVsync,
 		                                                     bInScreenshot);
 		                          Scope.Finish(true);
 	                          }));
@@ -183,7 +182,7 @@ FImage FEditorPlugin::ExecuteEditorGraph(FRenderGraph InGraph, FSize InSize, boo
 #else
 	(void)InSurface;
 	(void)bInCaptureRdc;
-	return ExecuteGraph(std::move(InGraph), Tasks, *Swapchain, InSize, bVsync, bInScreenshot);
+	return ExecuteGraph(std::move(InGraph), Tasks, *Swapchain, InSize, bInVsync, bInScreenshot);
 #endif
 }
 } // namespace Hyperion

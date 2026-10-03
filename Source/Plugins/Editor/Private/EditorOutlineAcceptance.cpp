@@ -1,25 +1,25 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 
 namespace Hyperion
 {
-void FEditorPlugin::PrepareOutlineExercise()
+void FEditorAcceptanceHarness::PrepareOutlineExercise()
 {
-	for (const auto Handle : Scene->GetNodes(ESceneNodeKind::Model))
+	for (const auto Handle : Editor.Scene->GetNodes(ESceneNodeKind::Model))
 	{
-		Scene->SetModelVisible(Handle, false);
+		Editor.Scene->SetModelVisible(Handle, false);
 	}
 	FSceneModel Model;
-	Model.Data = PlacementModels.at("Cube").Data;
+	Model.Data = Editor.PlacementModels.at("Cube").Data;
 	Model.Name = "Outline left";
 	Model.World = Translation({-.35f, 0, 0});
-	Acceptance.OutlineExerciseObjects.push_back(Scene->Add(Model));
+	Scenario.OutlineExerciseObjects.push_back(Editor.Scene->Add(Model));
 	Model.Name = "Outline right";
 	Model.World = Translation({.35f, .15f, -.4f});
-	Acceptance.OutlineExerciseObjects.push_back(Scene->Add(Model));
+	Scenario.OutlineExerciseObjects.push_back(Editor.Scene->Add(Model));
 	Model.Name = "Outline occluder";
 	Model.World = Multiply(Translation({0, 0, 1.5f}), Scale({3, 3, .2f}));
-	Acceptance.OutlineExerciseWall = Scene->Add(Model);
-	Scene->SetModelVisible(Acceptance.OutlineExerciseWall, false);
+	Scenario.OutlineExerciseWall = Editor.Scene->Add(Model);
+	Editor.Scene->SetModelVisible(Scenario.OutlineExerciseWall, false);
 	auto Light = MakeSceneDirectionalLightNode("outline-key");
 	Light.Local() = SceneCameraTransform({3, 4, 5}, {});
 	Light.DirectionalLight()->Intensity = 2;
@@ -28,63 +28,60 @@ void FEditorPlugin::PrepareOutlineExercise()
 	Environment.EnvironmentLight()->Intensity = .15f;
 	Environment.EnvironmentLight()->bVisible = false;
 	Environment.EnvironmentLight()->Priority = 10;
-	Scene->AddNode(std::move(Light));
-	Scene->AddNode(std::move(Environment));
-	Viewport.ViewCamera.World = SceneCameraTransform({2, 1.5f, 5}, {});
-	Viewport.PreviewCamera.reset();
-	Viewport.bViewportCameraInitialized = true;
-	bShowLightMarkers = false;
-	ResetDocument();
-	SelectObject(std::nullopt);
-	OutlineSettings = {};
-	++Acceptance.OutlineExerciseStep;
+	Editor.Scene->AddNode(std::move(Light));
+	Editor.Scene->AddNode(std::move(Environment));
+	Editor.Viewport.ViewCamera.World = SceneCameraTransform({2, 1.5f, 5}, {});
+	Editor.Viewport.PreviewCamera.reset();
+	Editor.Viewport.bViewportCameraInitialized = true;
+	Editor.bShowLightMarkers = false;
+	Editor.ResetDocument();
+	Editor.SelectObject(std::nullopt);
+	Editor.OutlineSettings = {};
+	++Scenario.OutlineExerciseStep;
 }
 
-void FEditorPlugin::ExerciseOutlines()
+void FEditorAcceptanceHarness::ExerciseOutlines()
 {
-	if (!Viewport.bViewportVisible || !Scene->GetStatus().bReady || Acceptance.bOutlinesVerified)
+	if (!Editor.Viewport.bViewportVisible || !Editor.Scene->GetStatus().bReady || Scenario.bOutlinesVerified)
 	{
 		return;
 	}
-	if (Acceptance.OutlineExerciseStep == 0)
+	if (Scenario.OutlineExerciseStep == 0)
 	{
-		const auto Found = PlacementModels.find("Cube");
-		if (Found == PlacementModels.end() || !Found->second.Data)
+		const auto Found = Editor.PlacementModels.find("Cube");
+		if (Found == Editor.PlacementModels.end() || !Found->second.Data)
 		{
 			return;
 		}
 		PrepareOutlineExercise();
 	}
-	if (Acceptance.OutlineExerciseWait++ == 0)
+	if (Scenario.OutlineExerciseWait++ == 0)
 	{
-		OutlineSettings.Overlap =
-		    Acceptance.OutlineExerciseStep == 2 ? EOutlineOverlapMode::PerObject : EOutlineOverlapMode::Union;
-		OutlineSettings.bSupersample = Acceptance.OutlineExerciseStep == 5;
-		Scene->SetModelVisible(Acceptance.OutlineExerciseWall, Acceptance.OutlineExerciseStep >= 4);
-		if (Acceptance.OutlineExerciseStep == 6)
+		Editor.OutlineSettings.Overlap =
+		    Scenario.OutlineExerciseStep == 2 ? EOutlineOverlapMode::PerObject : EOutlineOverlapMode::Union;
+		Editor.OutlineSettings.bSupersample = Scenario.OutlineExerciseStep == 5;
+		Editor.Scene->SetModelVisible(Scenario.OutlineExerciseWall, Scenario.OutlineExerciseStep >= 4);
+		if (Scenario.OutlineExerciseStep == 6)
 		{
-			Acceptance.OutlineExerciseObjects.clear();
-			SelectObject(std::nullopt);
+			Scenario.OutlineExerciseObjects.clear();
+			Editor.SelectObject(std::nullopt);
 		}
 		return;
 	}
-	const auto& Stats = RenderStats.SelectionOutline;
-	if (Acceptance.OutlineExerciseWait < 4 || Stats.PendingItems ||
-	    (Acceptance.OutlineExerciseStep < 6 && !Stats.Items))
+	const auto& Stats = Editor.RenderStats.SelectionOutline;
+	if (Scenario.OutlineExerciseWait < 4 || Stats.PendingItems || (Scenario.OutlineExerciseStep < 6 && !Stats.Items))
 	{
 		return;
 	}
-	const auto ExpectedPasses = Acceptance.OutlineExerciseStep == 6   ? 0u
-	                            : Acceptance.OutlineExerciseStep == 2 ? 2u
-	                                                                  : 1u;
-	if (Stats.MaskPasses != ExpectedPasses || IsDirty() || !History.empty())
+	const auto ExpectedPasses = Scenario.OutlineExerciseStep == 6 ? 0u : Scenario.OutlineExerciseStep == 2 ? 2u : 1u;
+	if (Stats.MaskPasses != ExpectedPasses || Editor.IsDirty() || !Editor.History.empty())
 	{
 		throw std::runtime_error("Outline modes changed document history or submitted incorrect mask passes");
 	}
 	const std::array Names{"Union.png", "PerObject.png", "UnionAgain.png", "Occluded.png", "Smooth.png", "Cleared.png"};
-	Acceptance.OutlineCapture = Options.ExerciseOutlines / Names.at(Acceptance.OutlineExerciseStep - 1);
-	Acceptance.bOutlinesVerified = Acceptance.OutlineExerciseStep == 6;
-	++Acceptance.OutlineExerciseStep;
-	Acceptance.OutlineExerciseWait = 0;
+	Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / Names.at(Scenario.OutlineExerciseStep - 1);
+	Scenario.bOutlinesVerified = Scenario.OutlineExerciseStep == 6;
+	++Scenario.OutlineExerciseStep;
+	Scenario.OutlineExerciseWait = 0;
 }
 } // namespace Hyperion

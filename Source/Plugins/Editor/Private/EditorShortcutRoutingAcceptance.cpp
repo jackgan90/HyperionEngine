@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include <filesystem>
 
 namespace Hyperion
@@ -47,24 +47,24 @@ void RoutingText(std::vector<FInputEvent>& InEvents, const char* InText)
 }
 } // namespace
 
-void FEditorPlugin::ExerciseShortcutFocus(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseShortcutFocus(std::vector<FInputEvent>& InEvents)
 {
-	switch (Acceptance.ShortcutStep)
+	switch (Scenario.ShortcutStep)
 	{
 		case 55:
 		case 57:
-			RoutingCheck(Gui->IsWindowFocused(Acceptance.ShortcutStep == 55 ? "Content Browser" : "Log"),
+			RoutingCheck(Editor.Gui->IsWindowFocused(Scenario.ShortcutStep == 55 ? "Content Browser" : "Log"),
 			             "unrelated Delete focus fixture failed");
 			RoutingKey(InEvents, EKey::Delete);
 			break;
 		case 56:
 			CheckShortcutSelection({0});
-			bShowLog = bFocusLog = true;
-			Gui->FocusWindow("Log");
+			Editor.bShowLog = Editor.bFocusLog = true;
+			Editor.Gui->FocusWindow("Log");
 			break;
 		case 58:
 			CheckShortcutSelection({0});
-			Gui->FocusWindow("Outliner");
+			Editor.Gui->FocusWindow("Outliner");
 			break;
 		case 59:
 		{
@@ -86,82 +86,85 @@ void FEditorPlugin::ExerciseShortcutFocus(std::vector<FInputEvent>& InEvents)
 		}
 		case 61:
 			// Newly activated search owns Delete during this same event batch.
-			RoutingClick(InEvents, InspectionBounds.at("clipboard/search"), true);
+			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), true);
 			RoutingKey(InEvents, EKey::Delete);
 			break;
 		case 62:
-			RoutingClick(InEvents, InspectionBounds.at("clipboard/search"), false);
+			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), false);
 			break;
 		case 63:
 			CheckShortcutSelection({0});
-			Gui->FinishEditing();
-			Gui->FocusWindow("Outliner");
+			Editor.Gui->FinishEditing();
+			Editor.Gui->FocusWindow("Outliner");
 			break;
 		case 64:
-			RoutingCheck(Gui->IsWindowFocused("Outliner"), "Outliner command focus fixture failed");
-			Acceptance.ShortcutObjectId = Scene->FindNode(Acceptance.ShortcutObjects[0])->Id;
+			RoutingCheck(Editor.Gui->IsWindowFocused("Outliner"), "Outliner command focus fixture failed");
+			Scenario.ShortcutObjectId = Editor.Scene->FindNode(Scenario.ShortcutObjects[0])->Id;
 			RoutingKey(InEvents, EKey::Delete);
 			break;
 		case 65:
-			RoutingCheck(!Scene->FindHandle(Acceptance.ShortcutObjectId).Scene && HistoryCursor == 1,
+			RoutingCheck(!Editor.Scene->FindHandle(Scenario.ShortcutObjectId).Scene && Editor.HistoryCursor == 1,
 			             "focused Outliner Delete was not one scene command");
-			Gui->FocusWindow("Content Browser");
+			Editor.Gui->FocusWindow("Content Browser");
 			break;
 		case 66:
-			RoutingCheck(Gui->IsWindowFocused("Content Browser"), "Content Browser command focus fixture failed");
+			RoutingCheck(Editor.Gui->IsWindowFocused("Content Browser"),
+			             "Content Browser command focus fixture failed");
 			RoutingKey(InEvents, EKey::Z, InputModifiers::Control);
 			break;
 		case 67:
-			RoutingCheck(Scene->FindHandle(Acceptance.ShortcutObjectId).Scene && HistoryCursor == 0 && !IsDirty(),
+			RoutingCheck(Editor.Scene->FindHandle(Scenario.ShortcutObjectId).Scene && Editor.HistoryCursor == 0 &&
+			                 !Editor.IsDirty(),
 			             "global Content Browser Undo failed");
-			Acceptance.ShortcutObjects[0] = Scene->FindHandle(Acceptance.ShortcutObjectId);
-			Gui->FocusWindow("Log");
+			Scenario.ShortcutObjects[0] = Editor.Scene->FindHandle(Scenario.ShortcutObjectId);
+			Editor.Gui->FocusWindow("Log");
 			break;
 	}
 }
 
-void FEditorPlugin::ExerciseShortcutHistory(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseShortcutHistory(std::vector<FInputEvent>& InEvents)
 {
-	switch (Acceptance.ShortcutStep)
+	switch (Scenario.ShortcutStep)
 	{
 		case 68:
-			RoutingCheck(Gui->IsWindowFocused("Log"), "Log command focus fixture failed");
+			RoutingCheck(Editor.Gui->IsWindowFocused("Log"), "Log command focus fixture failed");
 			RoutingKey(InEvents, EKey::Y, InputModifiers::Control, true);
 			break;
 		case 69:
-			RoutingCheck(!Scene->FindHandle(Acceptance.ShortcutObjectId).Scene && HistoryCursor == 1,
+			RoutingCheck(!Editor.Scene->FindHandle(Scenario.ShortcutObjectId).Scene && Editor.HistoryCursor == 1,
 			             "global repeated Log Redo failed");
 			RoutingKey(InEvents, EKey::Tab);
 			RoutingKey(InEvents, EKey::Z, InputModifiers::Control);
 			break;
 		case 70:
-			RoutingCheck(HistoryCursor == 1, "ownership-changing Tab batch undid scene history");
-			Gui->FinishEditing();
-			Gui->FocusWindow("Log");
+			RoutingCheck(Editor.HistoryCursor == 1, "ownership-changing Tab batch undid scene history");
+			Editor.Gui->FinishEditing();
+			Editor.Gui->FocusWindow("Log");
 			break;
 		case 71:
-			RoutingCheck(Gui->IsWindowFocused("Log"), "Log command focus fixture failed");
+			RoutingCheck(Editor.Gui->IsWindowFocused("Log"), "Log command focus fixture failed");
 			RoutingKey(InEvents, EKey::Z, InputModifiers::Control, true);
 			break;
 		case 72:
 		{
-			RoutingCheck(Scene->FindHandle(Acceptance.ShortcutObjectId).Scene && HistoryCursor == 0 && !IsDirty(),
+			RoutingCheck(Editor.Scene->FindHandle(Scenario.ShortcutObjectId).Scene && Editor.HistoryCursor == 0 &&
+			                 !Editor.IsDirty(),
 			             "global repeated Log Undo failed");
-			Acceptance.ShortcutObjects[0] = Scene->FindHandle(Acceptance.ShortcutObjectId);
-			ResetDocument();
+			Scenario.ShortcutObjects[0] = Editor.Scene->FindHandle(Scenario.ShortcutObjectId);
+			Editor.ResetDocument();
 			FSceneNode Sentinel;
 			Sentinel.Name = "Text undo sentinel";
-			CommitCreate(std::move(Sentinel));
-			SelectObject(Acceptance.ShortcutObjects[0]);
-			Filter = "Shortcut";
-			Gui->FocusWindow("Outliner");
+			Editor.CommitCreate(std::move(Sentinel));
+			Editor.SelectObject(Scenario.ShortcutObjects[0]);
+			Editor.Filter = "Shortcut";
+			Editor.Gui->FocusWindow("Outliner");
 			break;
 		}
 		case 73:
-			RoutingClick(InEvents, InspectionBounds.at("clipboard/search"), true);
+			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), true);
 			break;
 		case 74:
-			RoutingClick(InEvents, InspectionBounds.at("clipboard/search"), false);
+			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), false);
 			break;
 		case 75:
 			RoutingKey(InEvents, EKey::End);
@@ -170,33 +173,35 @@ void FEditorPlugin::ExerciseShortcutHistory(std::vector<FInputEvent>& InEvents)
 			RoutingText(InEvents, "x");
 			break;
 		case 77:
-			RoutingCheck(Filter == "Shortcutx" && Gui->IsTextInputOwnedThisFrame(), "search text fixture failed");
+			RoutingCheck(Editor.Filter == "Shortcutx" && Editor.Gui->IsTextInputOwnedThisFrame(),
+			             "search text fixture failed");
 			RoutingKey(InEvents, EKey::Z, InputModifiers::Control);
 			break;
 		case 78:
-			if (Filter != "Shortcut" || HistoryCursor != 1 || History.size() != 1)
+			if (Editor.Filter != "Shortcut" || Editor.HistoryCursor != 1 || Editor.History.size() != 1)
 			{
-				throw std::runtime_error("Shortcut routing native Undo: filter=" + Filter + " cursor=" +
-				                         std::to_string(HistoryCursor) + " entries=" + std::to_string(History.size()));
+				throw std::runtime_error("Shortcut routing native Undo: filter=" + Editor.Filter +
+				                         " cursor=" + std::to_string(Editor.HistoryCursor) +
+				                         " entries=" + std::to_string(Editor.History.size()));
 			}
-			Gui->FinishEditing();
-			Undo();
-			ResetDocument();
-			SelectObject(Acceptance.ShortcutObjects[0]);
-			Gui->FocusWindow("Details");
+			Editor.Gui->FinishEditing();
+			Editor.Undo();
+			Editor.ResetDocument();
+			Editor.SelectObject(Scenario.ShortcutObjects[0]);
+			Editor.Gui->FocusWindow("Details");
 			break;
 	}
 }
 
-void FEditorPlugin::ExerciseShortcutText(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseShortcutText(std::vector<FInputEvent>& InEvents)
 {
-	switch (Acceptance.ShortcutStep)
+	switch (Scenario.ShortcutStep)
 	{
 		case 79:
-			RoutingClick(InEvents, InspectionBounds.at("shortcut/name"), true);
+			RoutingClick(InEvents, Scenario.InspectionBounds.at("shortcut/name"), true);
 			break;
 		case 80:
-			RoutingClick(InEvents, InspectionBounds.at("shortcut/name"), false);
+			RoutingClick(InEvents, Scenario.InspectionBounds.at("shortcut/name"), false);
 			break;
 		case 81:
 			RoutingKey(InEvents, EKey::A, InputModifiers::Control);
@@ -205,57 +210,60 @@ void FEditorPlugin::ExerciseShortcutText(std::vector<FInputEvent>& InEvents)
 			RoutingText(InEvents, "Shortcut renamed");
 			break;
 		case 83:
-			RoutingCheck(Scene->FindNode(Acceptance.ShortcutObjects[0])->Name == "Shortcut renamed" &&
-			                 InspectorInteraction && HistoryCursor == 1,
+			RoutingCheck(Editor.Scene->FindNode(Scenario.ShortcutObjects[0])->Name == "Shortcut renamed" &&
+			                 Editor.InspectorInteraction && Editor.HistoryCursor == 1,
 			             "live inspector fixture failed");
 			RoutingKey(InEvents, EKey::Z, InputModifiers::Control);
 			break;
 		case 84:
-			RoutingCheck(Scene->FindNode(Acceptance.ShortcutObjects[0])->Name == "Shortcut A" &&
-			                 !InspectorTransaction && HistoryCursor == 0 && !IsDirty(),
+			RoutingCheck(Editor.Scene->FindNode(Scenario.ShortcutObjects[0])->Name == "Shortcut A" &&
+			                 !Editor.InspectorTransaction && Editor.HistoryCursor == 0 && !Editor.IsDirty(),
 			             "inspector Finish then Undo failed");
 			break;
 		case 85:
-			RoutingCheck(Scene->FindNode(Acceptance.ShortcutObjects[0])->Name == "Shortcut A",
+			RoutingCheck(Editor.Scene->FindNode(Scenario.ShortcutObjects[0])->Name == "Shortcut A",
 			             "native text history overwrote inspector scene Undo on the next frame");
-			ResetDocument();
-			Acceptance.ShortcutDocumentPath = CurrentPath;
-			SceneDocument.SetPath((Options.Report.parent_path() / "ShortcutSaved.hasset").string());
-			Gui->FocusWindow("Content Browser");
+			Editor.ResetDocument();
+			Scenario.ShortcutDocumentPath = Editor.CurrentPath;
+			Editor.SceneDocument.SetPath((Editor.Options.Report.parent_path() / "ShortcutSaved.hasset").string());
+			Editor.Gui->FocusWindow("Content Browser");
 			break;
 		case 86:
 			RoutingKey(InEvents, EKey::S, InputModifiers::Control, true);
 			break;
 		case 87:
-			RoutingCheck(Gui->IsWindowFocused("Content Browser"), "Content Browser command focus fixture failed");
-			RoutingCheck(!PendingSave && !std::filesystem::exists(CurrentPath), "repeated Save was admitted");
+			RoutingCheck(Editor.Gui->IsWindowFocused("Content Browser"),
+			             "Content Browser command focus fixture failed");
+			RoutingCheck(!Editor.PendingSave && !std::filesystem::exists(Editor.CurrentPath),
+			             "repeated Save was admitted");
 			RoutingKey(InEvents, EKey::S, InputModifiers::Control);
 			break;
 		case 88:
-			RoutingCheck(std::filesystem::exists(CurrentPath) && LastSaveMilliseconds > 0 && Error.empty(),
+			RoutingCheck(std::filesystem::exists(Editor.CurrentPath) && Editor.LastSaveMilliseconds > 0 &&
+			                 Editor.Error.empty(),
 			             "global Content Browser Save failed");
-			SceneDocument.SetPath(Acceptance.ShortcutDocumentPath);
-			ResetDocument();
-			Gui->FocusWindow("Outliner");
+			Editor.SceneDocument.SetPath(Scenario.ShortcutDocumentPath);
+			Editor.ResetDocument();
+			Editor.Gui->FocusWindow("Outliner");
 			break;
 	}
 }
 
-bool FEditorPlugin::ExerciseShortcutRouting(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseShortcutRouting(std::vector<FInputEvent>& InEvents)
 {
-	if (Acceptance.ShortcutStep == 88 && PendingSave)
+	if (Scenario.ShortcutStep == 88 && Editor.PendingSave)
 	{
 		return false;
 	}
-	if (Acceptance.ShortcutStep <= 67)
+	if (Scenario.ShortcutStep <= 67)
 	{
 		ExerciseShortcutFocus(InEvents);
 	}
-	else if (Acceptance.ShortcutStep <= 78)
+	else if (Scenario.ShortcutStep <= 78)
 	{
 		ExerciseShortcutHistory(InEvents);
 	}
-	else if (Acceptance.ShortcutStep <= 88)
+	else if (Scenario.ShortcutStep <= 88)
 	{
 		ExerciseShortcutText(InEvents);
 	}
@@ -266,44 +274,45 @@ bool FEditorPlugin::ExerciseShortcutRouting(std::vector<FInputEvent>& InEvents)
 	return true;
 }
 
-void FEditorPlugin::ExerciseShortcutPopup(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseShortcutPopup(std::vector<FInputEvent>& InEvents)
 {
-	switch (Acceptance.ShortcutStep)
+	switch (Scenario.ShortcutStep)
 	{
 		case 89:
-			RoutingCheck(Gui->IsWindowFocused("Outliner"), "popup focus fixture failed");
+			RoutingCheck(Editor.Gui->IsWindowFocused("Outliner"), "popup focus fixture failed");
 			break;
 		case 90:
 			RoutingKey(InEvents, EKey::Delete);
 			break;
 		case 91:
-			RoutingCheck(Gui->HasOpenPopup() && Scene->FindNode(Acceptance.ShortcutObjects[0]) && History.empty(),
+			RoutingCheck(Editor.Gui->HasOpenPopup() && Editor.Scene->FindNode(Scenario.ShortcutObjects[0]) &&
+			                 Editor.History.empty(),
 			             "ordinary popup admitted scene Delete");
-			Gui->ClosePopups();
+			Editor.Gui->ClosePopups();
 			break;
 		case 92:
-			Acceptance.bSelectionShortcutsVerified = true;
+			Scenario.bSelectionShortcutsVerified = true;
 			break;
 	}
 }
 
-void FEditorAcceptanceDriver::DrawPanels(FEditorPlugin& InEditor) const
+void FEditorAcceptanceHarness::DrawPanels() const
 {
 	constexpr unsigned PopupInputStep = 90;
 	constexpr unsigned PopupCheckStep = 91;
-	if (!InEditor.Options.bExerciseSelectionShortcuts || ShortcutStep < PopupInputStep + 1 ||
-	    ShortcutStep > PopupCheckStep)
+	if (!Editor.Options.bExerciseSelectionShortcuts || Scenario.ShortcutStep < PopupInputStep + 1 ||
+	    Scenario.ShortcutStep > PopupCheckStep)
 	{
 		return;
 	}
 	bool bOpen = true;
-	InEditor.Gui->BeginWindow("Shortcut popup fixture", bOpen);
-	InEditor.Gui->OpenPopup("Shortcut popup");
-	if (InEditor.Gui->BeginPopup("Shortcut popup"))
+	Editor.Gui->BeginWindow("Shortcut popup fixture", bOpen);
+	Editor.Gui->OpenPopup("Shortcut popup");
+	if (Editor.Gui->BeginPopup("Shortcut popup"))
 	{
-		InEditor.Gui->Text("Ordinary popup owns scene shortcuts");
-		InEditor.Gui->EndPopup();
+		Editor.Gui->Text("Ordinary popup owns scene shortcuts");
+		Editor.Gui->EndPopup();
 	}
-	InEditor.Gui->EndWindow();
+	Editor.Gui->EndWindow();
 }
 } // namespace Hyperion

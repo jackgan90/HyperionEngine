@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Reflection/Wire.h"
 
@@ -50,42 +50,42 @@ FRenderSettings ExpectedSettings(FRenderSettings InBefore, FOptionAction InActio
 }
 } // namespace
 
-void FEditorPlugin::CheckRasterOptionFrame() const
+void FEditorAcceptanceHarness::CheckRasterOptionFrame() const
 {
 	FScenePipelineSettings Actual;
-	Tasks.Wait(Tasks.Dispatch({EDomain::Render},
-	                          [&]
-	                          {
-		                          Actual = Pipeline->Configuration();
-	                          }));
-	const auto Expected = MakePipelineSettings(Rendering);
+	Editor.Tasks.Wait(Editor.Tasks.Dispatch({EDomain::Render},
+	                                        [&]
+	                                        {
+		                                        Actual = Editor.Pipeline->Configuration();
+	                                        }));
+	const auto Expected = MakePipelineSettings(Editor.Rendering);
 	if (Actual.Pipeline != Expected.Pipeline || Actual.GBuffer != Expected.GBuffer ||
 	    Actual.DebugMode != Expected.DebugMode || Actual.Exposure != Expected.Exposure ||
 	    Actual.bClusteredLighting != Expected.bClusteredLighting ||
-	    Scene->GetRevision() != Acceptance.RasterOptionExercise.SceneRevision ||
-	    HistoryCursor != Acceptance.RasterOptionExercise.History || IsDirty())
+	    Editor.Scene->GetRevision() != Scenario.RasterOptionExercise.SceneRevision ||
+	    Editor.HistoryCursor != Scenario.RasterOptionExercise.History || Editor.IsDirty())
 	{
 		throw std::runtime_error("Raster option GUI did not reach the main frame or changed scene history");
 	}
 }
 
-bool FEditorPlugin::ExerciseRasterOptions(std::vector<FInputEvent>& InEvents)
+bool FEditorAcceptanceHarness::ExerciseRasterOptions(std::vector<FInputEvent>& InEvents)
 {
-	auto& Exercise = Acceptance.RasterOptionExercise;
+	auto& Exercise = Scenario.RasterOptionExercise;
 	if (Exercise.Case > Actions.size())
 	{
 		return true;
 	}
 	if (Exercise.Case == Actions.size())
 	{
-		const auto Path = Options.ExerciseRenderControls / "RasterSettings.json";
-		SaveRenderSettings(Path);
-		if (SettingsWire(LoadRenderSettings(Path)) != SettingsWire(Rendering))
+		const auto Path = Editor.Options.ExerciseRenderControls / "RasterSettings.json";
+		Editor.SaveRenderSettings(Path);
+		if (SettingsWire(LoadRenderSettings(Path)) != SettingsWire(Editor.Rendering))
 		{
 			throw std::runtime_error("GUI raster choices did not survive settings save and reload");
 		}
-		SetRenderSettings(RenderSettingsRevision, Exercise.Initial);
-		bShowRenderSettings = true;
+		Editor.SetRenderSettings(Editor.RenderSettingsRevision, Exercise.Initial);
+		Editor.bShowRenderSettings = true;
 		++Exercise.Case;
 		Log(ELogLevel::Info,
 		    "Raster GUI choices, isolated VSync edits, latent Forward selection and persistence passed");
@@ -96,16 +96,16 @@ bool FEditorPlugin::ExerciseRasterOptions(std::vector<FInputEvent>& InEvents)
 	{
 		if (Exercise.Case == 0)
 		{
-			Exercise.Initial = Rendering;
-			Exercise.SceneRevision = Scene->GetRevision();
-			Exercise.History = HistoryCursor;
-			auto Initial = Rendering;
+			Exercise.Initial = Editor.Rendering;
+			Exercise.SceneRevision = Editor.Scene->GetRevision();
+			Exercise.History = Editor.HistoryCursor;
+			auto Initial = Editor.Rendering;
 			Initial.Pipeline = "deferred";
 			Initial.GBuffer = "compact";
-			SetRenderSettings(RenderSettingsRevision, Initial);
+			Editor.SetRenderSettings(Editor.RenderSettingsRevision, Initial);
 		}
-		bShowRenderSettings = Exercise.Case >= 7;
-		Exercise.Before = Rendering;
+		Editor.bShowRenderSettings = Exercise.Case >= 7;
+		Exercise.Before = Editor.Rendering;
 		Exercise.Step = 1;
 		return false;
 	}
@@ -113,21 +113,21 @@ bool FEditorPlugin::ExerciseRasterOptions(std::vector<FInputEvent>& InEvents)
 	{
 		const auto Key =
 		    Exercise.Step == 1 ? std::string(Action.Control) : std::string(Action.Control) + "/" + Action.Selection;
-		const auto Step = Acceptance.ExerciseStep;
-		ExerciseClick(InEvents, InspectionBounds[Key]);
-		if (Acceptance.ExerciseStep != Step)
+		const auto Step = Scenario.ExerciseStep;
+		ExerciseClick(InEvents, Scenario.InspectionBounds[Key]);
+		if (Scenario.ExerciseStep != Step)
 		{
 			Exercise.Step = Exercise.Step == 1 && Action.Selection[0] ? 2 : 3;
 		}
-		Acceptance.ExerciseStep = Step;
+		Scenario.ExerciseStep = Step;
 		return false;
 	}
-	if (++Acceptance.ExerciseWait < 2)
+	if (++Scenario.ExerciseWait < 2)
 	{
 		return false;
 	}
-	Acceptance.ExerciseWait = 0;
-	if (SettingsWire(Rendering) != SettingsWire(ExpectedSettings(Exercise.Before, Action)))
+	Scenario.ExerciseWait = 0;
+	if (SettingsWire(Editor.Rendering) != SettingsWire(ExpectedSettings(Exercise.Before, Action)))
 	{
 		throw std::runtime_error("Raster GUI choice changed an unrelated field: " + std::string(Action.Control) + "/" +
 		                         Action.Selection);

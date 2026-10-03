@@ -1,40 +1,18 @@
 #include "EditorApplication.h"
+#include "EditorTextFilter.h"
 #include "Hyperion/Gui/GuiContributions.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include "Hyperion/SceneEditing/SceneAuthoring.h"
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <vector>
 
 namespace Hyperion
 {
-namespace
-{
-bool Matches(std::string InText, std::string InFilter)
-{
-	const auto Lower = [](unsigned char InValue)
-	{
-		return static_cast<char>(std::tolower(InValue));
-	};
-	std::transform(InText.begin(), InText.end(), InText.begin(), Lower);
-	std::transform(InFilter.begin(), InFilter.end(), InFilter.begin(), Lower);
-	return InText.find(InFilter) != std::string::npos;
-}
-
-std::string KindName(ESceneNodeKind InKind)
-{
-	constexpr std::array Names{"Folder",    "Model",       "Camera",    "Directional Light",
-	                           "Sky Light", "Point Light", "Spot Light"};
-	return Names.at(static_cast<std::size_t>(InKind));
-}
-
-} // namespace
-
 void FEditorPlugin::ShowOpenScene()
 {
 	RefreshContent();
-	SponzaBounds = OpenButtonBounds = CancelButtonBounds = {};
+	Acceptance.BeginSurface(EEditorSurface::ScenePicker);
 	bRequestOpen = true;
 	bOpenDialog = true;
 	Camera.Reset();
@@ -111,7 +89,7 @@ void FEditorPlugin::DrawMenus()
 	if (Gui->BeginMenuBar())
 	{
 		const bool bFileOpen = Gui->BeginMenu("File");
-		FileMenuBounds = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::FileMenu, Gui->LastItemBounds());
 		if (bFileOpen)
 		{
 			Gui->BeginDisabled(AssetWorkspace->HasPendingEdits());
@@ -125,13 +103,13 @@ void FEditorPlugin::DrawMenus()
 			{
 				ImportPanel->Show();
 			}
-			ImportMenuBounds = Gui->LastItemBounds();
+			Acceptance.ObserveWidget(EEditorWidget::ImportMenu, Gui->LastItemBounds());
 			Gui->Separator();
 			if (Gui->MenuItem("Open Scene..."))
 			{
 				ShowOpenScene();
 			}
-			OpenMenuBounds = Gui->LastItemBounds();
+			Acceptance.ObserveWidget(EEditorWidget::OpenMenu, Gui->LastItemBounds());
 			Gui->BeginDisabled(CurrentPath.empty() || !Scene->GetStatus().bReady || PendingSave.has_value());
 			if (Gui->MenuItem("Save Scene", "Ctrl+S"))
 			{
@@ -148,7 +126,7 @@ void FEditorPlugin::DrawMenus()
 				SavePath = CurrentPath;
 				bSaveDialog = bRequestSaveDialog = true;
 			}
-			InspectionBounds["document/save-as"] = Gui->LastItemBounds();
+			Acceptance.ObserveWidget(EEditorWidget::SaveAs, Gui->LastItemBounds());
 			Gui->EndDisabled();
 			Gui->Separator();
 			if (Gui->MenuItem("Exit"))
@@ -189,7 +167,7 @@ void FEditorPlugin::DrawEditMenu()
 		}
 	};
 	const bool bOpen = Gui->BeginMenu("Edit");
-	EditMenuBounds = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::EditMenu, Gui->LastItemBounds());
 	if (bOpen)
 	{
 		Gui->BeginDisabled(HistoryCursor == 0);
@@ -217,12 +195,12 @@ void FEditorPlugin::DrawEditMenu()
 		{
 			bPreferencesDialog = bRequestPreferences = true;
 		}
-		PreferencesMenuBounds = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::PreferencesMenu, Gui->LastItemBounds());
 		if (Gui->MenuItem("Render settings", nullptr, bShowRenderSettings))
 		{
 			bShowRenderSettings = true;
 		}
-		InspectionBounds["render/settings-menu"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::RenderSettingsMenu, Gui->LastItemBounds());
 		Gui->EndMenu();
 	}
 }
@@ -230,7 +208,7 @@ void FEditorPlugin::DrawEditMenu()
 void FEditorPlugin::DrawWindowMenu()
 {
 	const bool bOpen = Gui->BeginMenu("Window");
-	InspectionBounds["placement/window-menu"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::WindowMenu, Gui->LastItemBounds());
 	if (!bOpen)
 	{
 		return;
@@ -254,7 +232,7 @@ void FEditorPlugin::DrawWindowMenu()
 		bShowPlacement = true;
 		bFocusPlacement = true;
 	}
-	InspectionBounds["placement/open-panel"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::PlacementOpen, Gui->LastItemBounds());
 	for (const auto& [Label, Visible] : {std::pair{"Viewport", &bShowViewport},
 	                                     {"Outliner", &bShowOutliner},
 	                                     {"Details", &bShowDetails},
@@ -270,7 +248,7 @@ void FEditorPlugin::DrawWindowMenu()
 		bShowLog = !bShowLog;
 		bFocusLog = bShowLog;
 	}
-	InspectionBounds["log/toggle"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::LogToggle, Gui->LastItemBounds());
 	Gui->Separator();
 	if (Gui->MenuItem("Reset Layout"))
 	{
@@ -292,193 +270,6 @@ void FEditorPlugin::DrawToolbar()
 		Gui->Text("  |  Scene Editor");
 	}
 	Gui->EndToolbar();
-}
-
-void FEditorPlugin::DrawNode(FSceneHandle InHandle)
-{
-	struct FNodeVisit
-	{
-		FSceneHandle Handle;
-		bool bEndTree{};
-	};
-
-	std::vector<FNodeVisit> Pending{{InHandle}};
-	while (!Pending.empty())
-	{
-		const FNodeVisit Visit = Pending.back();
-		Pending.pop_back();
-		if (Visit.bEndTree)
-		{
-			Gui->EndTree();
-			continue;
-		}
-		const auto* Node = Scene->FindNode(Visit.Handle);
-		if (!Node)
-		{
-			continue;
-		}
-		const auto Children = Scene->GetChildren(Visit.Handle);
-		OutlinerRows.push_back(Visit.Handle);
-		Gui->NextRow();
-		Gui->NextColumn();
-		bool bClicked{};
-		if (ReparentOpenNodes.erase(Node->Id))
-		{
-			Gui->OpenNextTreeItem();
-		}
-		const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(),
-		                                 Selection.Contains(Visit.Handle), bClicked, !Options.bBenchmarkCollapsed);
-		if (Options.bExercisePicking && Node->Id == "light-courtyard-3")
-		{
-			Acceptance.PickingLightBounds = Gui->LastItemBounds();
-		}
-		RouteReparentRow(Visit.Handle);
-		if (Options.bExerciseMultiSelection || Options.bExerciseFraming || Options.bExerciseSelectionShortcuts ||
-		    !Options.ExerciseReparent.empty())
-		{
-			Acceptance.MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
-		}
-		Gui->NextColumn();
-		Gui->Text(KindName(Node->GetKind()));
-		if (bOpen)
-		{
-			// Keep the parent tree scope open until its children have been visited in order.
-			Pending.push_back({Visit.Handle, true});
-			for (auto Child = Children.rbegin(); Child != Children.rend(); ++Child)
-			{
-				Pending.push_back({*Child});
-			}
-		}
-	}
-}
-
-void FEditorPlugin::DrawOutliner()
-{
-	OutlinerRows.clear();
-	if (!bShowOutliner)
-	{
-		return;
-	}
-	if (Gui->BeginWindow("Outliner", bShowOutliner))
-	{
-		if (!bSelectionInitialized && !Selection && Scene->GetStatus().bReady)
-		{
-			bSelectionInitialized = true;
-			const auto Models = Scene->GetNodes(ESceneNodeKind::Model);
-			if (!Models.empty())
-			{
-				Selection = Models.front();
-			}
-		}
-		Gui->Text("Search objects");
-		Gui->SetNextItemWidth(-1);
-		Gui->InputText("##SearchObjects", Filter, false);
-		if (OutlinerSelectionFilter != Filter)
-		{
-			OutlinerSelectionFilter = Filter;
-			OutlinerSelection.Reset();
-			CancelReparentGesture();
-		}
-		if (Options.bExerciseClipboard || Options.bExerciseFraming || Options.bExerciseSelectionShortcuts)
-		{
-			InspectionBounds["clipboard/search"] = Gui->LastItemBounds();
-		}
-		Gui->Text(std::to_string(Scene->GetStatus().Nodes) + " objects" +
-		          ("  |  " + std::to_string(Selection.All().size()) + " selected"));
-		DrawReparentRoot();
-		if (Gui->BeginTable("Objects", "Item Label", "Type"))
-		{
-			if (Filter.empty())
-			{
-				for (const auto Root : Scene->GetRoots())
-				{
-					DrawNode(Root);
-				}
-			}
-			else
-			{
-				for (const auto Handle : Scene->GetNodes())
-				{
-					const auto* Node = Scene->FindNode(Handle);
-					if (!Node || !Matches(Node->Name, Filter))
-					{
-						continue;
-					}
-					Gui->NextRow();
-					Gui->NextColumn();
-					OutlinerRows.push_back(Handle);
-					const bool bActivated =
-					    Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle));
-					RouteReparentRow(Handle, bActivated);
-					if (Options.bExerciseMultiSelection || Options.bExerciseFraming ||
-					    Options.bExerciseSelectionShortcuts || !Options.ExerciseReparent.empty())
-					{
-						Acceptance.MultiSelectionRows[Node->Id] = Gui->LastItemBounds();
-					}
-					Gui->NextColumn();
-					Gui->Text(KindName(Node->GetKind()));
-				}
-			}
-			Gui->ScrollDragTarget();
-			Gui->EndTable();
-		}
-	}
-	Gui->EndWindow();
-}
-
-void FEditorPlugin::DrawDetails()
-{
-	if (!bShowDetails)
-	{
-		InspectorDrafts.Clear();
-		return;
-	}
-	InspectorDrafts.Prepare(DocumentEpoch, Scene->GetRevision(), Selection.All());
-	if (Gui->BeginWindow("Details", bShowDetails))
-	{
-		FSceneNodeView View;
-		if (Selection && Scene->GetNodeView(*Selection, View))
-		{
-			try
-			{
-				if (Selection.All().size() > 1)
-				{
-					DrawSelectionInspector();
-				}
-				else
-				{
-					DrawComponentInspector(View);
-				}
-				// Commit after drawing so all widgets keep stable bounds during continuous editing.
-				if (PendingInspectorEdit)
-				{
-					auto Edit = std::move(*PendingInspectorEdit);
-					PendingInspectorEdit.reset();
-					if (!Edit.Edits.empty())
-					{
-						CommitEdits(std::move(Edit.Edits), Edit.Revision, Edit.Interaction);
-					}
-					else
-					{
-						CommitEdit(Edit.Handle, std::move(Edit.Candidate), Edit.Revision, Edit.Interaction);
-					}
-				}
-			}
-			catch (const std::exception& Failure)
-			{
-				Error = Failure.what();
-			}
-			if (!Error.empty())
-			{
-				Gui->TextWrapped(Error);
-			}
-		}
-		else
-		{
-			Gui->TextWrapped("Select an object in the Outliner to inspect its properties.");
-		}
-	}
-	Gui->EndWindow();
 }
 
 void FEditorPlugin::DrawOpenDialog()
@@ -503,7 +294,7 @@ void FEditorPlugin::DrawOpenDialog()
 		for (const auto& Path : ScenePaths)
 		{
 			const auto Label = ContentRelativePath(Path);
-			if (!Matches(Label, SceneFilter))
+			if (!MatchesEditorFilter(Label, SceneFilter))
 			{
 				continue;
 			}
@@ -513,10 +304,7 @@ void FEditorPlugin::DrawOpenDialog()
 				OpenPath = Path;
 				bOpenSelected = bDoubleClicked;
 			}
-			if (Path.ends_with("/Sponza.hasset"))
-			{
-				SponzaBounds = Gui->LastItemBounds();
-			}
+			Acceptance.ObserveWidget(EEditorWidget::SceneEntry, Gui->LastItemBounds(), Path);
 		}
 		if (ScenePaths.empty())
 		{
@@ -531,14 +319,14 @@ void FEditorPlugin::DrawOpenDialog()
 			bOpenDialog = false;
 			Gui->ClosePopup();
 		}
-		OpenButtonBounds = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::OpenScene, Gui->LastItemBounds());
 		Gui->SameLine();
 		if (Gui->Button("Cancel"))
 		{
 			bOpenDialog = false;
 			Gui->ClosePopup();
 		}
-		CancelButtonBounds = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::CancelOpenScene, Gui->LastItemBounds());
 		if (!CatalogError.empty())
 		{
 			Gui->TextWrapped(CatalogError);
@@ -567,7 +355,7 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 		DrawGizmo();
 		if (Options.Benchmark.empty())
 		{
-			RouteCamera(Options.bExercise ? 1.f / 60 : InDelta, InEvents);
+			RouteCamera(Acceptance.Policy().CameraDelta.value_or(InDelta), InEvents);
 		}
 		else
 		{
@@ -624,7 +412,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	bPlacementUsedMouse = false;
 	Gui->BeginDisabled(Transition.HasPendingRoot() || !Options.Benchmark.empty());
 	DrawMenus();
-	CaptureButtonBounds = {};
+	Acceptance.BeginSurface(EEditorSurface::Toolbar);
 	DrawToolbar();
 	DrawRenderSettings();
 	Gui->StatusBar(StatusText());
@@ -659,7 +447,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	DrawPreferences();
 	DrawAssetMessage();
 	Context.Publish(FGuiPanelEvent{*Gui});
-	Acceptance.DrawPanels(*this);
+	Acceptance.DrawPanels();
 	RouteDeleteShortcut(InEvents);
 	RouteClipboardShortcuts(InEvents);
 	RouteSelectAllShortcut(InEvents);

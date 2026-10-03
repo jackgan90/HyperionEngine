@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include <cmath>
 
 namespace Hyperion
@@ -25,70 +25,70 @@ void PointerEvent(std::vector<FInputEvent>& InEvents, FVec2 InPosition, bool bIn
 }
 } // namespace
 
-void FEditorPlugin::ExerciseGizmoInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseGizmoInput(std::vector<FInputEvent>& InEvents)
 {
-	if (ReadyFrames < 10 || !Selection)
+	if (Editor.ReadyFrames < 10 || !Editor.Selection)
 	{
 		return;
 	}
-	const unsigned Mode = Acceptance.GizmoExerciseStep / 16;
-	const unsigned Phase = Acceptance.GizmoExerciseStep % 16;
+	const unsigned Mode = Scenario.GizmoExerciseStep / 16;
+	const unsigned Phase = Scenario.GizmoExerciseStep % 16;
 	if (Mode >= 3)
 	{
-		Acceptance.bGizmoVerified = true;
+		Scenario.bGizmoVerified = true;
 		return;
 	}
-	const auto Bounds = Viewport.ViewportRegion.Bounds;
+	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
-	const float Size = 85 * Gui->ApplicationScale();
+	const float Size = 85 * Editor.Gui->ApplicationScale();
 	const float Diagonal = Size / std::sqrt(2.f);
 	const FVec2 Start = Mode == 1 ? FVec2{Center.X + Diagonal, Center.Y - Diagonal} : Center;
 	const FVec2 End = Mode == 1 ? FVec2{Center.X - Diagonal, Center.Y - Diagonal} : FVec2{Center.X + Size, Center.Y};
 	if (Phase == 0)
 	{
 		// Place the selected model origin at the center with a deterministic camera and local transform.
-		auto Candidate = *Scene->FindNode(*Selection);
+		auto Candidate = *Editor.Scene->FindNode(*Editor.Selection);
 		Candidate.Parent().clear();
 		Candidate.Local() = Mode == 2 ? Scale({0, -1, 1}) : Identity();
-		Scene->EditNode(*Selection, Candidate, Scene->GetRevision());
-		ResetDocument();
-		Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
-		Acceptance.GizmoExerciseCamera = Viewport.ViewCamera;
-		Acceptance.GizmoExerciseBefore = Candidate.Local();
+		Editor.Scene->EditNode(*Editor.Selection, Candidate, Editor.Scene->GetRevision());
+		Editor.ResetDocument();
+		Editor.Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
+		Scenario.GizmoExerciseCamera = Editor.Viewport.ViewCamera;
+		Scenario.GizmoExerciseBefore = Candidate.Local();
 	}
 	if (Phase == 1 || Phase == 2)
 	{
-		const auto ButtonBounds = GizmoButtonBounds[Mode];
+		const auto ButtonBounds = Scenario.GizmoButtonBounds[Mode];
 		const FVec2 Point{(ButtonBounds.X + ButtonBounds.Z) / 2, (ButtonBounds.Y + ButtonBounds.W) / 2};
 		PointerEvent(InEvents, Point, false, false);
 		PointerEvent(InEvents, Point, true, Phase == 1);
 	}
 	if (Phase == 3)
 	{
-		RequireGizmo(static_cast<unsigned>(GizmoMode) == Mode, "toolbar mode selection");
+		RequireGizmo(static_cast<unsigned>(Editor.GizmoMode) == Mode, "toolbar mode selection");
 		PointerEvent(InEvents, Start, false, false);
 		PointerEvent(InEvents, Start, true, true);
 	}
 	if (Phase == 4)
 	{
-		RequireGizmo(Gizmo.IsDragging(), "pointer did not capture the handle");
+		RequireGizmo(Editor.Gizmo.IsDragging(), "pointer did not capture the handle");
 		PointerEvent(InEvents, End, false, false);
 	}
 	if (Phase == 5)
 	{
-		if (Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseBefore.Values)
+		if (Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseBefore.Values)
 		{
 			throw std::runtime_error("Gizmo live preview unchanged: mode=" + std::to_string(Mode) +
-			                         " dragging=" + std::to_string(Gizmo.IsDragging()) + " error=" + Error +
-			                         " history=" + std::to_string(HistoryCursor));
+			                         " dragging=" + std::to_string(Editor.Gizmo.IsDragging()) +
+			                         " error=" + Editor.Error + " history=" + std::to_string(Editor.HistoryCursor));
 		}
-		RequireGizmo(HistoryCursor == 0 && IsDirty(), "preview must not create history entries");
+		RequireGizmo(Editor.HistoryCursor == 0 && Editor.IsDirty(), "preview must not create history entries");
 		if (Mode == 0)
 		{
 			// Resource/other property updates may advance the scene revision while a drag is active.
-			auto Updated = *Scene->FindNode(*Selection);
+			auto Updated = *Editor.Scene->FindNode(*Editor.Selection);
 			Updated.Name += " revised";
-			Scene->EditNode(*Selection, std::move(Updated), Scene->GetRevision());
+			Editor.Scene->EditNode(*Editor.Selection, std::move(Updated), Editor.Scene->GetRevision());
 		}
 		PointerEvent(InEvents, End, true, false);
 	}
@@ -112,39 +112,40 @@ void FEditorPlugin::ExerciseGizmoInput(std::vector<FInputEvent>& InEvents)
 	}
 	CheckGizmoHistory(Phase);
 	ExerciseGizmoFocus(Phase, Start, End, InEvents);
-	++Acceptance.GizmoExerciseStep;
+	++Scenario.GizmoExerciseStep;
 }
 
-void FEditorPlugin::ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 InEnd, std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 InEnd,
+                                                  std::vector<FInputEvent>& InEvents)
 {
 	if (InPhase == 12)
 	{
-		Undo();
+		Editor.Undo();
 		PointerEvent(InEvents, InStart, false, false);
 		PointerEvent(InEvents, InStart, true, true);
 	}
 	if (InPhase == 13)
 	{
-		RequireGizmo(Gizmo.IsDragging(), "focus-loss drag did not start");
+		RequireGizmo(Editor.Gizmo.IsDragging(), "focus-loss drag did not start");
 		PointerEvent(InEvents, InEnd, false, false);
 	}
 	if (InPhase == 14)
 	{
-		Acceptance.GizmoExerciseAfter = Scene->FindNode(*Selection)->Local();
-		RequireGizmo(Acceptance.GizmoExerciseAfter.Values != Acceptance.GizmoExerciseBefore.Values,
+		Scenario.GizmoExerciseAfter = Editor.Scene->FindNode(*Editor.Selection)->Local();
+		RequireGizmo(Scenario.GizmoExerciseAfter.Values != Scenario.GizmoExerciseBefore.Values,
 		             "focus-loss preview unchanged");
-		RequireGizmo(HistoryCursor == 0, "focus-loss preview created history");
+		RequireGizmo(Editor.HistoryCursor == 0, "focus-loss preview created history");
 	}
 	if (InPhase == 15)
 	{
-		RequireGizmo(!Gizmo.IsDragging() && HistoryCursor == 1, "focus loss must commit one command");
-		RequireGizmo(Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseAfter.Values,
+		RequireGizmo(!Editor.Gizmo.IsDragging() && Editor.HistoryCursor == 1, "focus loss must commit one command");
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseAfter.Values,
 		             "focus loss changed the last valid preview");
-		Undo();
-		RequireGizmo(Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseBefore.Values,
+		Editor.Undo();
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseBefore.Values,
 		             "focus-loss undo");
-		Redo();
-		RequireGizmo(Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseAfter.Values,
+		Editor.Redo();
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseAfter.Values,
 		             "focus-loss redo");
 	}
 	if (InPhase == 14 || InPhase == 15)
@@ -156,27 +157,30 @@ void FEditorPlugin::ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 In
 	}
 }
 
-void FEditorPlugin::CheckGizmoHistory(unsigned InPhase)
+void FEditorAcceptanceHarness::CheckGizmoHistory(unsigned InPhase)
 {
 	if (InPhase == 6)
 	{
-		RequireGizmo(!Gizmo.IsDragging() && HistoryCursor == 1, "release must commit one command");
-		RequireGizmo(Viewport.ViewCamera == Acceptance.GizmoExerciseCamera, "gizmo moved the viewport camera");
-		Acceptance.GizmoExerciseAfter = Scene->FindNode(*Selection)->Local();
-		Undo();
-		RequireGizmo(Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseBefore.Values, "undo");
-		RequireGizmo(Scene->FindNode(*Selection)->Name.ends_with(" revised"), "unrelated property was lost");
-		Redo();
-		RequireGizmo(Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseAfter.Values, "redo");
-		Undo();
+		RequireGizmo(!Editor.Gizmo.IsDragging() && Editor.HistoryCursor == 1, "release must commit one command");
+		RequireGizmo(Editor.Viewport.ViewCamera == Scenario.GizmoExerciseCamera, "gizmo moved the viewport camera");
+		Scenario.GizmoExerciseAfter = Editor.Scene->FindNode(*Editor.Selection)->Local();
+		Editor.Undo();
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseBefore.Values,
+		             "undo");
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Name.ends_with(" revised"),
+		             "unrelated property was lost");
+		Editor.Redo();
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseAfter.Values,
+		             "redo");
+		Editor.Undo();
 	}
 	if (InPhase == 11)
 	{
-		RequireGizmo(!Gizmo.IsDragging() && HistoryCursor == 0, "escape cancellation history");
-		RequireGizmo(Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseBefore.Values,
+		RequireGizmo(!Editor.Gizmo.IsDragging() && Editor.HistoryCursor == 0, "escape cancellation history");
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseBefore.Values,
 		             "escape baseline");
-		Redo();
-		RequireGizmo(Scene->FindNode(*Selection)->Local().Values == Acceptance.GizmoExerciseAfter.Values,
+		Editor.Redo();
+		RequireGizmo(Editor.Scene->FindNode(*Editor.Selection)->Local().Values == Scenario.GizmoExerciseAfter.Values,
 		             "cancel preserved redo");
 	}
 }

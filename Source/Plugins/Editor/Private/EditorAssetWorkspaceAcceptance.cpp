@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 #include <array>
 #include <cmath>
@@ -47,86 +47,87 @@ void WorkspaceKey(std::vector<FInputEvent>& InEvents, EKey InKey, bool bInDown, 
 }
 } // namespace
 
-void FEditorPlugin::ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath)
+void FEditorAcceptanceHarness::ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath)
 {
-	auto Bounds = AssetWorkspace->ObservedBounds("tab/" + InPath);
+	auto Bounds = Editor.AssetWorkspace->ObservedBounds("tab/" + InPath);
 	CheckWorkspace(Bounds.Z > Bounds.X, "Asset tab missing before close");
-	Bounds.X = Bounds.Z - Gui->Scale(28);
+	Bounds.X = Bounds.Z - Editor.Gui->Scale(28);
 	MovePointer(InEvents, {(Bounds.X + Bounds.Z) * .5f, (Bounds.Y + Bounds.W) * .5f});
-	if (Acceptance.ExerciseWait < 30)
+	if (Scenario.ExerciseWait < 30)
 	{
-		++Acceptance.ExerciseWait;
+		++Scenario.ExerciseWait;
 		return;
 	}
 	ExerciseClick(InEvents, Bounds);
 }
 
-void FEditorPlugin::ExerciseAssetWorkspaceInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseAssetWorkspaceInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Acceptance.ExerciseStep >= 173)
+	if (Scenario.ExerciseStep >= 173)
 	{
 		ExerciseAssetPanelInput(InEvents);
 		return;
 	}
-	if (Acceptance.ExerciseStep >= 165)
+	if (Scenario.ExerciseStep >= 165)
 	{
 		ExerciseAssetDiscardInput(InEvents);
 		return;
 	}
-	const auto Path = "/Game/" + std::string(CloseNames.at(Acceptance.AssetExerciseIndex)) + ".hasset";
-	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (Acceptance.ExerciseStep)
+	const auto Path = "/Game/" + std::string(CloseNames.at(Scenario.AssetExerciseIndex)) + ".hasset";
+	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+	switch (Scenario.ExerciseStep)
 	{
 		case 161:
-			AssetWorkspace->Open(Path);
-			++Acceptance.ExerciseStep;
+			Editor.AssetWorkspace->Open(Path);
+			++Scenario.ExerciseStep;
 			break;
 		case 162:
-			if (Document && Document->Loaded().Path == Path && AssetWorkspace->IsPreviewReady())
+			if (Document && Document->Loaded().Path == Path && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				CheckWorkspace(!Document->IsDirty(), "Clean close fixture is dirty");
-				++Acceptance.ExerciseStep;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		case 163:
 			ExerciseAssetTabClose(InEvents, Path);
 			break;
 		case 164:
-			CheckWorkspace(AssetWorkspace->ObservedBounds("tab/" + Path).Z == 0 && !Window->ShouldClose(),
+			CheckWorkspace(Editor.AssetWorkspace->ObservedBounds("tab/" + Path).Z == 0 && !Editor.Window->ShouldClose(),
 			               "Closing clean asset did not remove only its tab");
-			CheckWorkspace(IsDirty() && History.size() == 1, "Closing asset changed scene history");
+			CheckWorkspace(Editor.IsDirty() && Editor.History.size() == 1, "Closing asset changed scene history");
 			Log(ELogLevel::Info, "Clean asset tab close passed: " + Path);
-			Acceptance.ExerciseStep = ++Acceptance.AssetExerciseIndex < CloseNames.size() ? 161 : 165;
+			Scenario.ExerciseStep = ++Scenario.AssetExerciseIndex < CloseNames.size() ? 161 : 165;
 			break;
 	}
 }
 
-void FEditorPlugin::ExerciseAssetDiscardInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseAssetDiscardInput(std::vector<FInputEvent>& InEvents)
 {
-	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (Acceptance.ExerciseStep)
+	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+	switch (Scenario.ExerciseStep)
 	{
 		case 165:
-			AssetWorkspace->Open("/Game/Material.hasset");
-			++Acceptance.ExerciseStep;
+			Editor.AssetWorkspace->Open("/Game/Material.hasset");
+			++Scenario.ExerciseStep;
 			break;
 		case 166:
-			if (Document && Document->Loaded().Path == "/Game/Material.hasset" && AssetWorkspace->IsPreviewReady())
+			if (Document && Document->Loaded().Path == "/Game/Material.hasset" &&
+			    Editor.AssetWorkspace->IsPreviewReady())
 			{
-				Acceptance.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
-				AssetWorkspace->RevealProperty("field/name");
-				++Acceptance.ExerciseStep;
+				Scenario.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
+				Editor.AssetWorkspace->RevealProperty("field/name");
+				++Scenario.ExerciseStep;
 			}
 			break;
 		case 167:
-			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("field/name"));
+			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"));
 			break;
 		case 168:
-			if (++Acceptance.ExerciseWait == 1)
+			if (++Scenario.ExerciseWait == 1)
 			{
 				WorkspaceKey(InEvents, EKey::A, true, 1);
 			}
-			if (Acceptance.ExerciseWait == 2)
+			if (Scenario.ExerciseWait == 2)
 			{
 				WorkspaceKey(InEvents, EKey::A, false);
 				FInputEvent Text;
@@ -134,15 +135,15 @@ void FEditorPlugin::ExerciseAssetDiscardInput(std::vector<FInputEvent>& InEvents
 				Text.Text = "Discard this draft";
 				InEvents.push_back(Text);
 			}
-			if (Acceptance.ExerciseWait == 4)
+			if (Scenario.ExerciseWait == 4)
 			{
 				WorkspaceKey(InEvents, EKey::Enter, true);
 			}
-			if (Acceptance.ExerciseWait == 5)
+			if (Scenario.ExerciseWait == 5)
 			{
 				WorkspaceKey(InEvents, EKey::Enter, false);
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		case 169:
@@ -150,108 +151,111 @@ void FEditorPlugin::ExerciseAssetDiscardInput(std::vector<FInputEvent>& InEvents
 			ExerciseAssetTabClose(InEvents, "/Game/Material.hasset");
 			break;
 		case 170:
-			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("close/discard"));
+			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("close/discard"));
 			break;
 		case 171:
-			CheckWorkspace(AssetWorkspace->ObservedBounds("tab//Game/Material.hasset").Z == 0 && !Window->ShouldClose(),
+			CheckWorkspace(Editor.AssetWorkspace->ObservedBounds("tab//Game/Material.hasset").Z == 0 &&
+			                   !Editor.Window->ShouldClose(),
 			               "Discard did not remove only its asset tab");
-			AssetWorkspace->Open("/Game/Material.hasset");
-			++Acceptance.ExerciseStep;
+			Editor.AssetWorkspace->Open("/Game/Material.hasset");
+			++Scenario.ExerciseStep;
 			break;
 		case 172:
-			if (Document && Document->Loaded().Path == "/Game/Material.hasset" && AssetWorkspace->IsPreviewReady())
+			if (Document && Document->Loaded().Path == "/Game/Material.hasset" &&
+			    Editor.AssetWorkspace->IsPreviewReady())
 			{
-				CheckWorkspace(!Document->IsDirty() && ReadValue<std::string>(Document->Get("name")) ==
-				                                           Acceptance.AssetExerciseOriginalName,
+				CheckWorkspace(!Document->IsDirty() &&
+				                   ReadValue<std::string>(Document->Get("name")) == Scenario.AssetExerciseOriginalName,
 				               "Discard persisted an unsaved edit");
 				Log(ELogLevel::Info, "Dirty asset discard and reopen passed");
-				AssetWorkspace->Open("/Game/Texture.hasset");
-				AssetWorkspace->Open("/Game/Sky.hasset");
-				++Acceptance.ExerciseStep;
+				Editor.AssetWorkspace->Open("/Game/Texture.hasset");
+				Editor.AssetWorkspace->Open("/Game/Sky.hasset");
+				++Scenario.ExerciseStep;
 			}
 			break;
 	}
 }
 
-void FEditorPlugin::ExerciseAssetPanelInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseAssetPanelInput(std::vector<FInputEvent>& InEvents)
 {
-	switch (Acceptance.ExerciseStep)
+	switch (Scenario.ExerciseStep)
 	{
 		case 173:
-			if (const auto* Document = AssetWorkspace->ActiveDocument();
-			    Document && Document->Loaded().Path == "/Game/Sky.hasset" && AssetWorkspace->IsPreviewReady())
+			if (const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+			    Document && Document->Loaded().Path == "/Game/Sky.hasset" && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				// Reproduce the user's floating panel, retaining the rest of the workspace layout.
-				auto Layout = Gui->SaveLayout();
+				auto Layout = Editor.Gui->SaveLayout();
 				const auto Start = Layout.find("[Window][Place Object]");
 				const auto End = Layout.find("\n\n", Start);
 				CheckWorkspace(Start != std::string::npos && End != std::string::npos,
 				               "Place Object layout was not saved");
 				Layout.replace(Start, End - Start, "[Window][Place Object]\nPos=400,200\nSize=300,500\nCollapsed=0");
-				Gui->LoadLayout(Layout);
-				bFocusPlacement = true;
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				Editor.Gui->LoadLayout(Layout);
+				Editor.bFocusPlacement = true;
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		case 174:
 		{
-			const auto Bounds = InspectionBounds.at("placement/title");
-			Acceptance.AssetExercisePointer = {(Bounds.X + Bounds.Z) * .5f, (Bounds.Y + Bounds.W) * .5f};
-			MovePointer(InEvents, Acceptance.AssetExercisePointer);
-			if (++Acceptance.ExerciseWait == 3)
+			const auto Bounds = Scenario.InspectionBounds.at("placement/title");
+			Scenario.AssetExercisePointer = {(Bounds.X + Bounds.Z) * .5f, (Bounds.Y + Bounds.W) * .5f};
+			MovePointer(InEvents, Scenario.AssetExercisePointer);
+			if (++Scenario.ExerciseWait == 3)
 			{
-				PointerButton(InEvents, Acceptance.AssetExercisePointer, true);
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				PointerButton(InEvents, Scenario.AssetExercisePointer, true);
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		}
 		case 175:
 			// Observe sustained movement across multiple held-button frames.
-			++Acceptance.ExerciseWait;
-			if (Acceptance.ExerciseWait == 6)
+			++Scenario.ExerciseWait;
+			if (Scenario.ExerciseWait == 6)
 			{
-				Acceptance.AssetExercisePanelStart = InspectionBounds.at("placement/title");
+				Scenario.AssetExercisePanelStart = Scenario.InspectionBounds.at("placement/title");
 			}
-			if (Acceptance.ExerciseWait == 14)
+			if (Scenario.ExerciseWait == 14)
 			{
-				const auto Bounds = InspectionBounds.at("placement/title");
-				CheckWorkspace(std::abs(Bounds.X - Acceptance.AssetExercisePanelStart.X - 80) < 2 &&
-				                   std::abs(Bounds.Y - Acceptance.AssetExercisePanelStart.Y - 48) < 2,
+				const auto Bounds = Scenario.InspectionBounds.at("placement/title");
+				CheckWorkspace(std::abs(Bounds.X - Scenario.AssetExercisePanelStart.X - 80) < 2 &&
+				                   std::abs(Bounds.Y - Scenario.AssetExercisePanelStart.Y - 48) < 2,
 				               "Place Object window drag was interrupted while an asset tab was active");
-				PointerButton(InEvents, Acceptance.AssetExercisePointer, false);
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				PointerButton(InEvents, Scenario.AssetExercisePointer, false);
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 				break;
 			}
-			Acceptance.AssetExercisePointer.X += 10;
-			Acceptance.AssetExercisePointer.Y += 6;
-			MovePointer(InEvents, Acceptance.AssetExercisePointer);
+			Scenario.AssetExercisePointer.X += 10;
+			Scenario.AssetExercisePointer.Y += 6;
+			MovePointer(InEvents, Scenario.AssetExercisePointer);
 			break;
 		case 176:
 			// A docking request from release is applied at the next frame boundary.
-			if (++Acceptance.ExerciseWait < 3)
+			if (++Scenario.ExerciseWait < 3)
 			{
 				break;
 			}
-			CheckWorkspace(!Gui->PointerState().bDown, "Panel drag mouse release was not consumed");
-			Acceptance.AssetExercisePanelStart = InspectionBounds.at("placement/title");
-			MovePointer(InEvents, {Acceptance.AssetExercisePointer.X + 50, Acceptance.AssetExercisePointer.Y + 50});
-			++Acceptance.ExerciseStep;
+			CheckWorkspace(!Editor.Gui->PointerState().bDown, "Panel drag mouse release was not consumed");
+			Scenario.AssetExercisePanelStart = Scenario.InspectionBounds.at("placement/title");
+			MovePointer(InEvents, {Scenario.AssetExercisePointer.X + 50, Scenario.AssetExercisePointer.Y + 50});
+			++Scenario.ExerciseStep;
 			break;
 		case 177:
 		{
-			const auto Bounds = InspectionBounds.at("placement/title");
-			CheckWorkspace(Bounds.X == Acceptance.AssetExercisePanelStart.X &&
-			                   Bounds.Y == Acceptance.AssetExercisePanelStart.Y,
+			const auto Bounds = Scenario.InspectionBounds.at("placement/title");
+			CheckWorkspace(Bounds.X == Scenario.AssetExercisePanelStart.X &&
+			                   Bounds.Y == Scenario.AssetExercisePanelStart.Y,
 			               "Place Object window kept moving after mouse release");
-			CheckWorkspace(!Placement.IsActive() && IsDirty() && History.size() == 1, "Panel drag changed the scene");
+			CheckWorkspace(!Editor.Placement.IsActive() && Editor.IsDirty() && Editor.History.size() == 1,
+			               "Panel drag changed the scene");
 			Log(ELogLevel::Info, "Place Object panel held-button drag and release passed with three asset tabs");
-			Acceptance.AssetExerciseIndex = 4;
-			Acceptance.ExerciseWait = 0;
-			AssetWorkspace->RevealProperty("field/name");
-			Acceptance.ExerciseStep = 190;
+			Scenario.AssetExerciseIndex = 4;
+			Scenario.ExerciseWait = 0;
+			Editor.AssetWorkspace->RevealProperty("field/name");
+			Scenario.ExerciseStep = 190;
 			break;
 		}
 	}

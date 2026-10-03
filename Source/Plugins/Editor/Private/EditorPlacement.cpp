@@ -71,7 +71,7 @@ void FEditorPlugin::DrawPlacementPanel()
 	}
 	if (Gui->BeginWindow("Place Object", bShowPlacement))
 	{
-		InspectionBounds["placement/title"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::PlacementTitle, Gui->LastItemBounds());
 		if (bFocusPlacement)
 		{
 			Gui->FocusWindow("Place Object");
@@ -110,7 +110,7 @@ void FEditorPlugin::DrawPlacementPanel()
 				Gui->SameLine();
 			}
 			Gui->Selectable((Object->Label + "##Place" + Object->Id).c_str(), false);
-			InspectionBounds["placement/" + Object->Id] = Gui->LastItemBounds();
+			Acceptance.ObserveWidget(EEditorWidget::PlacementItem, Gui->LastItemBounds(), Object->Id);
 			Gui->DragSource(PlacementPayload, Object->Id, Object->Label.c_str());
 			Gui->EndDisabled();
 			Gui->Tooltip(Unavailable.empty() ? "Drag into the viewport to place" : Unavailable.c_str());

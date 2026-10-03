@@ -173,13 +173,13 @@ void FEditorPlugin::DrawHudButtons()
 	{
 		Patch.StatusHud = !bShowStatusHud;
 	}
-	InspectionBounds["hud/status-toggle"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::HudStatusToggle, Gui->LastItemBounds());
 	Gui->SameLineIfFits("Stats");
 	if (Gui->IconButton("##ProfilingHud", EGuiIcon::Statistics, "Toggle profiling HUD", bShowProfilingHud))
 	{
 		Patch.ProfilingHud = !bShowProfilingHud;
 	}
-	InspectionBounds["hud/profiling-toggle"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::HudProfilingToggle, Gui->LastItemBounds());
 	SetViewportOptions(Patch);
 }
 
@@ -194,25 +194,25 @@ void FEditorPlugin::DrawVisualizationControls()
 	auto Mode = RasterOptionIndex(Visualizers, DisplayedVisualizer(Rendering));
 	Gui->SetNextItemWidth(bCompact ? std::max(40.f, Width - 70) : 150);
 	Gui->BeginDisabled(!bDeferred);
-	if (Gui->Combo(
-	        "##Visualizer", Labels, Mode,
-	        [&](std::size_t InIndex, FVec4 InBounds)
-	        {
-		        InspectionBounds["hud/visualizer/" + std::to_string(ToVisualizerWireValue(Visualizers[InIndex].Id))] =
-		            InBounds;
-	        }))
+	if (Gui->Combo("##Visualizer", Labels, Mode,
+	               [&](std::size_t InIndex, FVec4 InBounds)
+	               {
+		               Acceptance.ObserveIndexedWidget(EEditorWidget::VisualizerItem, InBounds,
+		                                               ToVisualizerWireValue(Visualizers[InIndex].Id));
+	               }))
 	{
 		Patch.Visualizer = ToVisualizerWireValue(RasterOptionIdentity(Visualizers, Mode));
 	}
 	Gui->Tooltip(bDeferred ? "Viewport visualizer" : "GBuffer visualization requires Deferred");
-	InspectionBounds["hud/visualizer"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::Visualizer, Gui->LastItemBounds());
 	Gui->EndDisabled();
 	Gui->SameLineIfFits("Stats...");
 	if (Gui->Button("Stats..."))
 	{
 		Gui->OpenPopup("ProfilingOptions");
 	}
-	InspectionBounds["hud/categories"] = Gui->LastItemBounds();
+	ProfilingOptionsAnchor = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::ProfilingCategories, ProfilingOptionsAnchor);
 	Gui->SameLineIfFits("Exposure                         ");
 	Gui->SetNextItemWidth(std::clamp(Width - 65, 30.f, 100.f));
 	auto Value = Exposure;
@@ -220,7 +220,7 @@ void FEditorPlugin::DrawVisualizationControls()
 	{
 		Patch.Exposure = Value;
 	}
-	InspectionBounds["hud/exposure"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::Exposure, Gui->LastItemBounds());
 	if (!bCompact)
 	{
 		Gui->SameLineIfFits("Editor view                     ");
@@ -231,8 +231,8 @@ void FEditorPlugin::DrawVisualizationControls()
 
 void FEditorPlugin::DrawViewportHud()
 {
-	InspectionBounds["hud/status"] = {};
-	InspectionBounds["hud/profiling"] = {};
+	Acceptance.ObserveWidget(EEditorWidget::StatusHud, {});
+	Acceptance.ObserveWidget(EEditorWidget::ProfilingHud, {});
 	if (!bShowStatusHud && !bShowProfilingHud)
 	{
 		return;
@@ -263,12 +263,12 @@ void FEditorPlugin::DrawViewportHud()
 		    "Viewport: " + std::to_string(Viewport.ViewportSize.Width) + " x " +
 		        std::to_string(Viewport.ViewportSize.Height),
 		    HudDiagnostics.Adapter};
-		InspectionBounds["hud/status"] = Gui->DrawImageText(Left, Lines);
+		Acceptance.ObserveWidget(EEditorWidget::StatusHud, Gui->DrawImageText(Left, Lines));
 	}
 	if (bShowProfilingHud)
 	{
-		InspectionBounds["hud/profiling"] =
-		    Gui->DrawImageText(Right, ProfilingLines(HudDiagnostics, ProfilingCategories), true);
+		Acceptance.ObserveWidget(EEditorWidget::ProfilingHud,
+		                         Gui->DrawImageText(Right, ProfilingLines(HudDiagnostics, ProfilingCategories), true));
 	}
 }
 } // namespace Hyperion

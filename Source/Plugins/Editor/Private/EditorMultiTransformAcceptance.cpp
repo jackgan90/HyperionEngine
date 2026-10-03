@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include <cmath>
 #include <limits>
 
@@ -31,30 +31,30 @@ void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInButton, 
 }
 } // namespace
 
-void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Mode = (Acceptance.MultiSelectionStep - 30) / 8;
-	const unsigned Phase = (Acceptance.MultiSelectionStep - 30) % 8;
-	const auto Bounds = Viewport.ViewportRegion.Bounds;
+	const unsigned Mode = (Scenario.MultiSelectionStep - 30) / 8;
+	const unsigned Phase = (Scenario.MultiSelectionStep - 30) % 8;
+	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
-	const float Size = 85 * Gui->ApplicationScale();
+	const float Size = 85 * Editor.Gui->ApplicationScale();
 	const float Diagonal = Size / std::sqrt(2.f);
 	const auto Start = Mode == 1 ? FVec2{Center.X + Diagonal, Center.Y - Diagonal} : Center;
 	const auto End = Mode == 1 ? FVec2{Center.X - Diagonal, Center.Y - Diagonal} : FVec2{Center.X + Size, Center.Y};
 	if (Phase == 0)
 	{
-		FinishInspectorEdit();
-		GizmoMode = static_cast<ETransformGizmoMode>(Mode);
+		Editor.FinishInspectorEdit();
+		Editor.GizmoMode = static_cast<ETransformGizmoMode>(Mode);
 		std::vector<FSceneNodeEdit> Edits;
 		for (unsigned Index = 0; Index < 2; ++Index)
 		{
-			auto Node = *Scene->FindNode(Acceptance.MultiSelectionObjects[Index]);
+			auto Node = *Editor.Scene->FindNode(Scenario.MultiSelectionObjects[Index]);
 			Node.Local() = Translation({float(Index * 2), 0, 0});
-			Acceptance.MultiSelectionInitial[Index] = Node.Local();
-			Edits.push_back({Acceptance.MultiSelectionObjects[Index], std::move(Node)});
+			Scenario.MultiSelectionInitial[Index] = Node.Local();
+			Edits.push_back({Scenario.MultiSelectionObjects[Index], std::move(Node)});
 		}
-		Scene->EditNodes(std::move(Edits), Scene->GetRevision());
-		ResetDocument();
+		Editor.Scene->EditNodes(std::move(Edits), Editor.Scene->GetRevision());
+		Editor.ResetDocument();
 	}
 	if (Phase == 1 || Phase == 3)
 	{
@@ -62,18 +62,19 @@ void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 	}
 	if (Phase == 2)
 	{
-		RequireMulti(Gizmo.IsDragging(), "group handle capture");
+		RequireMulti(Editor.Gizmo.IsDragging(), "group handle capture");
 		Pointer(InEvents, End, false, false);
 	}
 	if (Phase == 4)
 	{
-		RequireMulti(HistoryCursor == 1 && !Gizmo.IsDragging(), "one group history entry");
+		RequireMulti(Editor.HistoryCursor == 1 && !Editor.Gizmo.IsDragging(), "one group history entry");
 		for (unsigned Index = 0; Index < 2; ++Index)
 		{
-			Acceptance.MultiSelectionFinal[Index] = Scene->FindNode(Acceptance.MultiSelectionObjects[Index])->Local();
+			Scenario.MultiSelectionFinal[Index] =
+			    Editor.Scene->FindNode(Scenario.MultiSelectionObjects[Index])->Local();
 		}
-		const auto& A = Acceptance.MultiSelectionFinal[0];
-		const auto& B = Acceptance.MultiSelectionFinal[1];
+		const auto& A = Scenario.MultiSelectionFinal[0];
+		const auto& B = Scenario.MultiSelectionFinal[1];
 		if (Mode == 0)
 		{
 			RequireMulti(A.Values[12] > 0 && std::abs(B.Values[12] - A.Values[12] - 2) < .0001f,
@@ -98,139 +99,143 @@ void FEditorPlugin::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 			RequireMulti(std::abs(B.Values[12] - 2 * Factor) < .0001f && std::abs(B.Values[0] - Factor) < .0001f,
 			             "group scale must change offset and shape");
 		}
-		Undo();
+		Editor.Undo();
 	}
 	if (Phase == 5 || Phase == 7)
 	{
 		for (unsigned Index = 0; Index < 2; ++Index)
 		{
 			const auto& Expected =
-			    Phase == 5 ? Acceptance.MultiSelectionInitial[Index] : Acceptance.MultiSelectionFinal[Index];
-			RequireMulti(Scene->FindNode(Acceptance.MultiSelectionObjects[Index])->Local().Values == Expected.Values,
+			    Phase == 5 ? Scenario.MultiSelectionInitial[Index] : Scenario.MultiSelectionFinal[Index];
+			RequireMulti(Editor.Scene->FindNode(Scenario.MultiSelectionObjects[Index])->Local().Values ==
+			                 Expected.Values,
 			             "group undo/redo exact matrices");
 		}
 	}
 	if (Phase == 6)
 	{
-		Redo();
+		Editor.Redo();
 	}
-	++Acceptance.MultiSelectionStep;
+	++Scenario.MultiSelectionStep;
 }
 
-void FEditorPlugin::ExerciseMultiHistory()
+void FEditorAcceptanceHarness::ExerciseMultiHistory()
 {
-	const auto A = Acceptance.MultiSelectionObjects[0];
-	const auto B = Acceptance.MultiSelectionObjects[1];
-	const auto AId = Scene->FindNode(A)->Id;
-	const auto BId = Scene->FindNode(B)->Id;
+	const auto A = Scenario.MultiSelectionObjects[0];
+	const auto B = Scenario.MultiSelectionObjects[1];
+	const auto AId = Editor.Scene->FindNode(A)->Id;
+	const auto BId = Editor.Scene->FindNode(B)->Id;
 	auto Child = MakeSceneCameraNode("multi-child");
 	Child.Name = "Multi Child";
 	Child.Parent() = AId;
 	Child.Local() = Translation({1, 0, 0});
-	const auto ChildHandle = Scene->AddNode(Child);
-	auto Settings = Scene->GetSettings();
+	const auto ChildHandle = Editor.Scene->AddNode(Child);
+	auto Settings = Editor.Scene->GetSettings();
 	Settings.DefaultCamera = ChildHandle;
-	Scene->SetSettings(Settings);
-	SelectObject(A);
-	ClickObject(B, true);
-	ClickObject(ChildHandle, true);
-	RequireMulti(SelectedRoots().size() == 2, "selected child must not be transformed twice");
-	ResetDocument();
+	Editor.Scene->SetSettings(Settings);
+	Editor.SelectObject(A);
+	Editor.ClickObject(B, true);
+	Editor.ClickObject(ChildHandle, true);
+	RequireMulti(Editor.SelectedRoots().size() == 2, "selected child must not be transformed twice");
+	Editor.ResetDocument();
 	FSceneNodeView Primary;
 	FSceneNodeView Parent;
-	Scene->GetNodeView(ChildHandle, Primary);
-	Scene->GetNodeView(A, Parent);
+	Editor.Scene->GetNodeView(ChildHandle, Primary);
+	Editor.Scene->GetNodeView(A, Parent);
 	const FVec3 Pivot{Primary.World.Values[12], Primary.World.Values[13], Primary.World.Values[14]};
-	Viewport.ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
-	GizmoMode = ETransformGizmoMode::Position;
-	const auto Bounds = Viewport.ViewportRegion.Bounds;
+	Editor.Viewport.ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
+	Editor.GizmoMode = ETransformGizmoMode::Position;
+	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
-	RequireMulti(Gizmo.Configure(Viewport.ViewCamera, Bounds, Primary.Node->Local(), Parent.World, GizmoMode) &&
-	                 Gizmo.Begin(Center),
+	RequireMulti(Editor.Gizmo.Configure(Editor.Viewport.ViewCamera, Bounds, Primary.Node->Local(), Parent.World,
+	                                    Editor.GizmoMode) &&
+	                 Editor.Gizmo.Begin(Center),
 	             "hierarchy primary gizmo");
-	BeginGizmoEdit(Primary, Bounds);
+	Editor.BeginGizmoEdit(Primary, Bounds);
 	FMat4 Local;
-	RequireMulti(Gizmo.Drag({Center.X + 40, Center.Y}, Local), "hierarchy translation input");
+	RequireMulti(Editor.Gizmo.Drag({Center.X + 40, Center.Y}, Local), "hierarchy translation input");
 	const auto Expected = Multiply(Parent.World, Local);
-	PreviewGizmoEdit(Local);
-	FinishGizmo();
-	Scene->GetNodeView(ChildHandle, Primary);
+	Editor.PreviewGizmoEdit(Local);
+	Editor.FinishGizmo();
+	Editor.Scene->GetNodeView(ChildHandle, Primary);
 	RequireMulti(std::abs(Primary.World.Values[12] - Expected.Values[12]) < .0001f &&
 	                 Primary.Node->Local().Values == Child.Local().Values,
 	             "child world moved twice");
-	const auto Revision = Scene->GetRevision();
-	const auto Cursor = HistoryCursor;
-	auto Valid = *Scene->FindNode(A);
-	auto Invalid = *Scene->FindNode(B);
+	const auto Revision = Editor.Scene->GetRevision();
+	const auto Cursor = Editor.HistoryCursor;
+	auto Valid = *Editor.Scene->FindNode(A);
+	auto Invalid = *Editor.Scene->FindNode(B);
 	Valid.Name = "Must not commit";
 	Invalid.Local().Values[0] = std::numeric_limits<float>::infinity();
 	bool bRejected{};
 	try
 	{
-		CommitEdits({{A, Valid}, {B, Invalid}}, Revision);
+		Editor.CommitEdits({{A, Valid}, {B, Invalid}}, Revision);
 	}
 	catch (const std::exception&)
 	{
 		bRejected = true;
 	}
-	RequireMulti(bRejected && Scene->GetRevision() == Revision && HistoryCursor == Cursor &&
-	                 Scene->FindNode(A)->Name != Valid.Name,
+	RequireMulti(bRejected && Editor.Scene->GetRevision() == Revision && Editor.HistoryCursor == Cursor &&
+	                 Editor.Scene->FindNode(A)->Name != Valid.Name,
 	             "failed batch partially committed");
-	CommitDelete();
-	RequireMulti(!Selection && !Scene->FindNode(A) && !Scene->FindNode(B) && !Scene->FindNode(ChildHandle),
+	Editor.CommitDelete();
+	RequireMulti(!Editor.Selection && !Editor.Scene->FindNode(A) && !Editor.Scene->FindNode(B) &&
+	                 !Editor.Scene->FindNode(ChildHandle),
 	             "multi-delete");
-	Undo();
-	const auto RestoredChild = Scene->FindHandle(Child.Id);
-	RequireMulti(Selection.All().size() == 3 && Selection == RestoredChild && RestoredChild != ChildHandle &&
-	                 Scene->GetSettings().DefaultCamera == RestoredChild,
+	Editor.Undo();
+	const auto RestoredChild = Editor.Scene->FindHandle(Child.Id);
+	RequireMulti(Editor.Selection.All().size() == 3 && Editor.Selection == RestoredChild &&
+	                 RestoredChild != ChildHandle && Editor.Scene->GetSettings().DefaultCamera == RestoredChild,
 	             "delete undo selection/reference remap");
-	Undo();
-	Redo();
-	Redo();
-	RequireMulti(!Selection && !Scene->FindHandle(AId).Scene && !Scene->FindHandle(BId).Scene,
+	Editor.Undo();
+	Editor.Redo();
+	Editor.Redo();
+	RequireMulti(!Editor.Selection && !Editor.Scene->FindHandle(AId).Scene && !Editor.Scene->FindHandle(BId).Scene,
 	             "remapped redo deletion");
-	Undo();
+	Editor.Undo();
 }
 
-void FEditorPlugin::ExerciseMultiCancellation()
+void FEditorAcceptanceHarness::ExerciseMultiCancellation()
 {
-	const auto A = Scene->FindHandle("multi-child");
-	const auto BeforeSelection = Selection;
-	ClickObject(A, true);
-	RequireMulti(Selection.All().size() == 2 && Selection.Primary() == BeforeSelection.All()[1],
+	const auto A = Editor.Scene->FindHandle("multi-child");
+	const auto BeforeSelection = Editor.Selection;
+	Editor.ClickObject(A, true);
+	RequireMulti(Editor.Selection.All().size() == 2 && Editor.Selection.Primary() == BeforeSelection.All()[1],
 	             "removing the primary must choose the last remaining target");
-	ClickObject(std::nullopt, true);
-	RequireMulti(Selection.All().size() == 2, "Ctrl miss must preserve selection");
-	SetSelection(BeforeSelection);
-	Undo();
-	const auto Cursor = HistoryCursor;
-	const auto Count = History.size();
-	const auto State = DocumentState;
+	Editor.ClickObject(std::nullopt, true);
+	RequireMulti(Editor.Selection.All().size() == 2, "Ctrl miss must preserve selection");
+	Editor.SetSelection(BeforeSelection);
+	Editor.Undo();
+	const auto Cursor = Editor.HistoryCursor;
+	const auto Count = Editor.History.size();
+	const auto State = Editor.DocumentState;
 	FSceneNodeView Primary;
 	FSceneNodeView Parent;
-	Scene->GetNodeView(A, Primary);
-	Scene->GetNodeView(Scene->FindHandle(Primary.Node->Parent()), Parent);
+	Editor.Scene->GetNodeView(A, Primary);
+	Editor.Scene->GetNodeView(Editor.Scene->FindHandle(Primary.Node->Parent()), Parent);
 	const FVec3 Pivot{Primary.World.Values[12], Primary.World.Values[13], Primary.World.Values[14]};
-	Viewport.ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
-	const auto Bounds = Viewport.ViewportRegion.Bounds;
+	Editor.Viewport.ViewCamera.World = SceneCameraTransform(Add(Pivot, {0, 0, 10}), Pivot);
+	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
-	RequireMulti(Gizmo.Configure(Viewport.ViewCamera, Bounds, Primary.Node->Local(), Parent.World,
-	                             ETransformGizmoMode::Position) &&
-	                 Gizmo.Begin(Center),
+	RequireMulti(Editor.Gizmo.Configure(Editor.Viewport.ViewCamera, Bounds, Primary.Node->Local(), Parent.World,
+	                                    ETransformGizmoMode::Position) &&
+	                 Editor.Gizmo.Begin(Center),
 	             "cancel group capture");
-	BeginGizmoEdit(Primary, Bounds);
-	const auto Targets = GizmoEdit->Targets;
+	Editor.BeginGizmoEdit(Primary, Bounds);
+	const auto Targets = Editor.GizmoEdit->Targets;
 	FMat4 Local;
-	RequireMulti(Gizmo.Drag({Center.X + 40, Center.Y}, Local), "cancel group preview");
-	PreviewGizmoEdit(Local);
-	FinishGizmo(true);
+	RequireMulti(Editor.Gizmo.Drag({Center.X + 40, Center.Y}, Local), "cancel group preview");
+	Editor.PreviewGizmoEdit(Local);
+	Editor.FinishGizmo(true);
 	for (const auto& Target : Targets)
 	{
-		RequireMulti(Scene->FindNode(Target.Handle)->Local().Values == Target.Initial.Values, "cancel exact matrices");
+		RequireMulti(Editor.Scene->FindNode(Target.Handle)->Local().Values == Target.Initial.Values,
+		             "cancel exact matrices");
 	}
-	RequireMulti(HistoryCursor == Cursor && History.size() == Count && DocumentState == State &&
-	                 Selection == BeforeSelection,
+	RequireMulti(Editor.HistoryCursor == Cursor && Editor.History.size() == Count && Editor.DocumentState == State &&
+	                 Editor.Selection == BeforeSelection,
 	             "cancel must preserve redo branch and selection");
-	Redo();
+	Editor.Redo();
 }
 } // namespace Hyperion

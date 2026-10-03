@@ -61,8 +61,7 @@ void RegisterEditorServices(FPluginRegistry& InRegistry, const FEditorOptions& I
 	RegisterGraphicsServices(InRegistry, {std::move(InBackends), "d3d12",
 	                                      std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache",
 	                                      InOptions.Rendering.bReversedZ});
-	const bool bPersistContentLayout =
-	    ShouldPersistEditorGui(InOptions) && InOptions.ExerciseContent.empty() && InOptions.ExerciseImport.empty();
+	const bool bPersistContentLayout = ShouldPersistEditorContentLayout(InOptions);
 	RegisterGuiServices(InRegistry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
 	                                 bPersistContentLayout ? InOptions.Layout : std::filesystem::path{},
 	                                 bPersistContentLayout ? InOptions.UiPreferences : std::filesystem::path{},

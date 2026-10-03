@@ -30,7 +30,7 @@ void FEditorPlugin::DrawProfilingCollection()
 			const auto Bit = ProfileCategoryMask(EProfileCategory::Gpu);
 			Mask = bGpu ? Mask | Bit : Mask & ~Bit;
 		}
-		InspectionBounds["hud/collect-gpu"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::ProfilingGpuCollection, Gui->LastItemBounds());
 		if (Mask != Profiling.Mask)
 		{
 			ChangeProfiling(Mask, {});
@@ -65,12 +65,12 @@ void FEditorPlugin::DrawProfilingCollection()
 
 void FEditorPlugin::DrawProfilingOptions()
 {
-	if (!Gui->BeginPopup("ProfilingOptions", InspectionBounds.at("hud/categories")))
+	if (!Gui->BeginPopup("ProfilingOptions", ProfilingOptionsAnchor))
 	{
 		return;
 	}
 	Gui->Text("Profiling HUD categories");
-	InspectionBounds["hud/menu-title"] = Gui->LastItemBounds();
+	Acceptance.ObserveWidget(EEditorWidget::ProfilingMenuTitle, Gui->LastItemBounds());
 	const std::array<const char*, 8> Labels{"Overview",     "Tasks",          "GPU passes", "Device counters",
 	                                        "Render views", "Lighting / HZB", "Visibility", "Batching"};
 	auto ViewOptions = ViewportState().Options;
@@ -85,7 +85,7 @@ void FEditorPlugin::DrawProfilingOptions()
 			    bSelected ? (*ViewOptions.ProfilingCategories | Bit) : (*ViewOptions.ProfilingCategories & ~Bit);
 			bChanged = true;
 		}
-		InspectionBounds["hud/category/" + std::to_string(Index)] = Gui->LastItemBounds();
+		Acceptance.ObserveIndexedWidget(EEditorWidget::ProfilingCategory, Gui->LastItemBounds(), Index);
 	}
 	if (bChanged)
 	{

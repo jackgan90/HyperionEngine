@@ -243,7 +243,7 @@ Camera 组件用于用户明确创作的场景相机。在视口选项菜单点�
 
 ## 模块与帧顺序
 
-Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorViewport` 拥有浏览相机、视口目标、尺寸和区域，执行初始化、resize、取景和导航重置。验收状态、输入窗口选择与完成/超时检查由 `FEditorAcceptanceDriver` 处理，仅在 BUILD_TESTING 中编入；禁用测试的构建收到验收参数时给出受控不可用诊断，正常 report 输出仍可用。
+Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorViewport` 拥有浏览相机、视口目标、尺寸和区域，执行初始化、resize、取景和导航重置。`FEditorAcceptanceDriver` 是不暴露场景状态的私有边界：只有 BUILD_TESTING 启用且请求验收时，才创建 `FEditorAcceptanceHarness`，由它拥有场景方法、步骤、控件快照、夹具判断和完成/超时检查。生产 GUI 提供带类型的控件观察，帧路径使用明确的执行策略及截图/选择钩子；实际 GUI 弹出位置由生产代码自身持有。禁用测试的构建不包含场景实现或状态，收到验收参数时给出受控不可用诊断；普通有限帧运行、截图及 report 仍可用，已有 JSON 字段和类型保持不变。`editor_acceptance_boundary` 检查生产头文件依赖和实际编译源选择。
 
 私有 `FEditorDocumentTransition` 区分文档转换目标与推进阶段，独立拥有请求、保存后继续、失败恢复、丢弃和取消规则。宿主提供当前 dirty、保存和待编辑快照，通过语义操作推进；GUI 和输入消费者只读取查询，不直接修改待换根、待打开或关闭状态。窗口关闭可以与待换根决策重叠，丢弃按关闭、换根、打开的顺序选择目标。弹窗请求与可见性单独建模，标题栏关闭和 Cancel 共用取消操作；取消仅撤销后续换根/退出意图，已接收的保存仍完成到原文档。
 

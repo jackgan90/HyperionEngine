@@ -22,10 +22,10 @@ void FEditorPlugin::DrawRenderSettings()
 		bool bChanged = Gui->Combo("##Pipeline", PipelineLabels, PipelineIndex,
 		                           [&](std::size_t InIndex, FVec4 InBounds)
 		                           {
-			                           InspectionBounds["render/pipeline/" + std::string(Pipelines[InIndex].Token)] =
-			                               InBounds;
+			                           Acceptance.ObserveWidget(EEditorWidget::RenderPipelineItem, InBounds,
+			                                                    Pipelines[InIndex].Token);
 		                           });
-		InspectionBounds["render/pipeline"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::RenderPipeline, Gui->LastItemBounds());
 		Gui->EndPropertyRow();
 		if (bChanged)
 		{
@@ -36,20 +36,20 @@ void FEditorPlugin::DrawRenderSettings()
 		if (Gui->Combo("##GBuffer", FormatLabels, FormatIndex,
 		               [&](std::size_t InIndex, FVec4 InBounds)
 		               {
-			               InspectionBounds["render/gbuffer/" + std::string(Formats[InIndex].Token)] = InBounds;
+			               Acceptance.ObserveWidget(EEditorWidget::GBufferFormatItem, InBounds, Formats[InIndex].Token);
 		               }))
 		{
 			Candidate.GBuffer = ToGBufferPresetToken(RasterOptionIdentity(Formats, FormatIndex));
 			bChanged = true;
 		}
-		InspectionBounds["render/gbuffer"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::GBufferFormat, Gui->LastItemBounds());
 		Gui->EndDisabled();
 		Gui->EndPropertyRow();
 		bChanged |= Gui->Checkbox("Clustered lighting", Candidate.bClusteredLighting);
 		bChanged |= Gui->Checkbox("VSync", Candidate.bVsync);
-		InspectionBounds["render/vsync"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::Vsync, Gui->LastItemBounds());
 		bChanged |= Gui->Checkbox("Reversed Z", Candidate.bReversedZ);
-		InspectionBounds["render/reversed-z"] = Gui->LastItemBounds();
+		Acceptance.ObserveWidget(EEditorWidget::ReversedZ, Gui->LastItemBounds());
 		Gui->TextWrapped("Changes apply to subsequent frames. Save settings to restore them on the next launch.");
 		try
 		{

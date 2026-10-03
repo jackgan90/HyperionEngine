@@ -65,8 +65,7 @@ void FEditorPlugin::Initialize()
 	                                                  {
 		                                                  SavePreferences();
 	                                                  });
-	Acceptance.bInitialCapturePreference = Options.Preferences.bRenderDocCapture;
-	Acceptance.bInitialCaptureHudPreference = Options.Preferences.bRenderDocHud;
+	Acceptance.Initialize(*this);
 #if HYP_ENABLE_RENDERDOC
 	FrameCapture = Context.Find<FFrameCapture>();
 #endif
@@ -236,7 +235,7 @@ FGuiDrawData FEditorPlugin::DrawMainWindow(float InDelta, std::span<const FInput
 			Viewport.bCameraDragging = false;
 		}
 	}
-	Acceptance.CheckGui(*this, Data);
+	Acceptance.CheckGui(Data);
 	return Data;
 }
 
@@ -271,23 +270,21 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 		const auto NativeEvents = AssetWindow->NativeWindow().Events();
 		AssetEvents.assign(NativeEvents.begin(), NativeEvents.end());
 	}
-	Acceptance.CollectInput(*this, Events, AssetEvents);
-	// Synthetic clicks use a fixed GUI clock: hidden swapchains can run fast enough
-	// to merge separate double-click sequences after the content grid scrolls.
-	const float GuiDelta =
-	    Options.ExerciseAssets.empty() && Options.ExerciseReparent.empty() && Options.ExerciseModelPlacement.empty()
-	        ? InDelta
-	        : 1.f / 60;
+	Acceptance.CollectInput(Events, AssetEvents);
+	const float GuiDelta = Acceptance.Policy().GuiDelta.value_or(InDelta);
 	auto Data = DrawMainWindow(GuiDelta, Events, bMainDrawable);
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
 		Scene->Tick();
 	}
 	// Async scene readiness is independent of render frame rate.
-	const bool bExerciseComplete = Acceptance.IsComplete(*this);
-	const bool bCapture = Acceptance.ShouldCapture(*this);
-	const auto AssetCapture =
-	    !Options.ExerciseAssets.empty() ? std::exchange(Acceptance.PlacementCapture, {}) : std::filesystem::path{};
+	const bool bExerciseComplete = Acceptance.IsComplete();
+	const bool bCapture =
+	    !Options.Capture.empty() &&
+	    (Acceptance.ShouldCapture() ||
+	     (Acceptance.Policy().bUseFrameLimit && Options.Frames && FrameCount + 1 == Options.Frames) ||
+	     (!Options.Benchmark.empty() && bBenchmarkTiming && BenchmarkSamples.size() + 1 == Options.BenchmarkSamples));
+	const auto AssetCapture = Acceptance.TakeAssetCapture();
 	{
 		HYP_PERF_SCOPE_C(Frame, EditorRenderWait);
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.RenderMilliseconds);
@@ -368,12 +365,12 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 	{
 		return;
 	}
-	if (PollClose() || (!Options.bExercise && Options.Frames && FrameCount >= Options.Frames))
+	if (PollClose() || (Acceptance.Policy().bUseFrameLimit && Options.Frames && FrameCount >= Options.Frames))
 	{
 		Finish();
 		return;
 	}
-	Acceptance.CheckTimeout(*this, InUpdate.ElapsedSeconds);
+	Acceptance.CheckTimeout(InUpdate.ElapsedSeconds);
 	if (AdvanceFrame(InUpdate.DeltaSeconds))
 	{
 		Finish();
@@ -384,7 +381,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
-	Acceptance.CheckCompletion(*this);
+	Acceptance.CheckCompletion();
 	bFinished = true;
 	SaveBenchmark();
 	if (Options.Benchmark.empty())

@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 #include <chrono>
 #include <thread>
@@ -26,42 +26,42 @@ std::vector<FInputEvent> SaveShortcut()
 }
 } // namespace
 
-void FEditorPlugin::CheckAssetSaveShortcut()
+void FEditorAcceptanceHarness::CheckAssetSaveShortcut()
 {
-	const auto State = DocumentState;
-	const auto AssetDraft = HashArchive(AssetWorkspace->ActiveDocument()->Snapshot());
+	const auto State = Editor.DocumentState;
+	const auto AssetDraft = HashArchive(Editor.AssetWorkspace->ActiveDocument()->Snapshot());
 	const auto SendSave = [&]
 	{
 		auto Events = SaveShortcut();
-		RouteHistoryShortcuts(Events);
-		RequireAudit(!PendingSave, "Unavailable scene shortcut admitted a save");
+		Editor.RouteHistoryShortcuts(Events);
+		RequireAudit(!Editor.PendingSave, "Unavailable scene shortcut admitted a save");
 	};
-	for (bool* bModal : {&bOpenDialog, &bSaveDialog, &bAssetMessage, &bPreferencesDialog})
+	for (bool* bModal : {&Editor.bOpenDialog, &Editor.bSaveDialog, &Editor.bAssetMessage, &Editor.bPreferencesDialog})
 	{
 		*bModal = true;
 		SendSave();
 		*bModal = false;
 	}
-	RequireAudit(!Transition.RequestWindowClose({.bSceneDirty = true}), "Dirty close skipped its decision");
+	RequireAudit(!Editor.Transition.RequestWindowClose({.bSceneDirty = true}), "Dirty close skipped its decision");
 	SendSave();
-	Transition.Cancel();
-	Transition.BeginSave(EEditorTransitionTarget::Close);
-	Transition.SaveAdmitted(EEditorTransitionTarget::Close, false);
+	Editor.Transition.Cancel();
+	Editor.Transition.BeginSave(EEditorTransitionTarget::Close);
+	Editor.Transition.SaveAdmitted(EEditorTransitionTarget::Close, false);
 	SendSave();
-	Transition.Cancel();
+	Editor.Transition.Cancel();
 	{
-		FRenderSession TemporarySession(Tasks, Session->GetResources(), Device->GetCapabilities());
-		auto TemporaryScene = std::make_unique<FSceneInstance>(TemporarySession, Tasks, Assets, true);
-		auto PreviousScene = std::move(Scene);
-		Scene = std::move(TemporaryScene);
+		FRenderSession TemporarySession(Editor.Tasks, Editor.Session->GetResources(), Editor.Device->GetCapabilities());
+		auto TemporaryScene = std::make_unique<FSceneInstance>(TemporarySession, Editor.Tasks, Editor.Assets, true);
+		auto PreviousScene = std::move(Editor.Scene);
+		Editor.Scene = std::move(TemporaryScene);
 		try
 		{
-			Scene->Load("/Game/MissingSaveShortcutFixture.hasset");
+			Editor.Scene->Load("/Game/MissingSaveShortcutFixture.hasset");
 			SendSave();
 			const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-			while (Scene->GetStatus().Error.empty())
+			while (Editor.Scene->GetStatus().Error.empty())
 			{
-				Scene->Tick();
+				Editor.Scene->Tick();
 				RequireAudit(std::chrono::steady_clock::now() < Deadline,
 				             "Missing scene did not report a load failure");
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -70,50 +70,52 @@ void FEditorPlugin::CheckAssetSaveShortcut()
 		}
 		catch (...)
 		{
-			Scene = std::move(PreviousScene);
+			Editor.Scene = std::move(PreviousScene);
 			throw;
 		}
-		Scene = std::move(PreviousScene);
+		Editor.Scene = std::move(PreviousScene);
 	}
 	// A ready scene can still reject persistence. The shortcut must contain Snapshot's exception.
-	RequireAudit(Scene->GetStatus().bReady, "Save shortcut fixture scene is not ready");
+	RequireAudit(Editor.Scene->GetStatus().bReady, "Save shortcut fixture scene is not ready");
 	FSceneNode Transient;
 	Transient.Name = "Unsavable audit fixture";
 	Transient.Model() = FSceneModelComponent{};
-	const auto Handle = Scene->AddNode(std::move(Transient));
+	const auto Handle = Editor.Scene->AddNode(std::move(Transient));
 	SendSave();
-	RequireAudit(Error.find("Cannot persist source-less model") != std::string::npos,
+	RequireAudit(Editor.Error.find("Cannot persist source-less model") != std::string::npos,
 	             "Scene shortcut did not report the snapshot error");
-	Scene->RemoveSubtree(Handle);
-	Error.clear();
-	RequireAudit(DocumentState == State && HashArchive(AssetWorkspace->ActiveDocument()->Snapshot()) == AssetDraft,
+	Editor.Scene->RemoveSubtree(Handle);
+	Editor.Error.clear();
+	RequireAudit(Editor.DocumentState == State &&
+	                 HashArchive(Editor.AssetWorkspace->ActiveDocument()->Snapshot()) == AssetDraft,
 	             "Failed scene save modified a document");
 	Log(ELogLevel::Info, "Scene save shortcuts preserve documents during loading, modal state and snapshot failure");
 }
 
-void FEditorPlugin::CheckPendingAssetEdit()
+void FEditorAcceptanceHarness::CheckPendingAssetEdit()
 {
-	RequireAudit(AssetWorkspace->IsDirty(), "Pending texture edit was treated as a clean workspace");
-	RequireAudit(!AssetWorkspace->CanUndo() && !AssetWorkspace->CanRedo(),
+	RequireAudit(Editor.AssetWorkspace->IsDirty(), "Pending texture edit was treated as a clean workspace");
+	RequireAudit(!Editor.AssetWorkspace->CanUndo() && !Editor.AssetWorkspace->CanRedo(),
 	             "Pending texture edit allowed another history transaction");
-	AssetWorkspace->SaveAll();
-	RequireAudit(!AssetWorkspace->ActiveDocument()->IsSaving(), "Pending encoding saved the old texture draft");
+	Editor.AssetWorkspace->SaveAll();
+	RequireAudit(!Editor.AssetWorkspace->ActiveDocument()->IsSaving(), "Pending encoding saved the old texture draft");
 	{
-		FAssetEditorWindow Host(Tasks, *Device, *Compiler, *Session, *AssetWorkspace, Control, {});
-		Host.Initialize(*Window, IO, Gui->ApplicationScale(), true);
+		FAssetEditorWindow Host(Editor.Tasks, *Editor.Device, *Editor.Compiler, *Editor.Session, *Editor.AssetWorkspace,
+		                        Editor.Control, {});
+		Host.Initialize(*Editor.Window, Editor.IO, Editor.Gui->ApplicationScale(), true);
 		Host.NativeWindow().RequestClose();
 		Host.Poll(false);
 		RequireAudit(!Host.ShouldClose(), "Pending texture edit bypassed the native window close prompt");
 	}
-	const auto PreviousSavedState = SavedState;
-	SceneDocument.MarkSaved(DocumentEpoch, DocumentState);
-	RequireAudit(!IsDirty(), "Pending edit exit fixture must have a clean scene");
-	Window->RequestClose();
-	RequireAudit(!PollClose() && Transition.IsDecisionVisible(),
+	const auto PreviousSavedState = Editor.SavedState;
+	Editor.SceneDocument.MarkSaved(Editor.DocumentEpoch, Editor.DocumentState);
+	RequireAudit(!Editor.IsDirty(), "Pending edit exit fixture must have a clean scene");
+	Editor.Window->RequestClose();
+	RequireAudit(!Editor.PollClose() && Editor.Transition.IsDecisionVisible(),
 	             "Pending texture edit bypassed application exit protection");
-	SceneDocument.MarkSaved(DocumentEpoch, PreviousSavedState);
-	CancelDiscardAction();
-	Acceptance.bPendingAssetEditChecked = true;
+	Editor.SceneDocument.MarkSaved(Editor.DocumentEpoch, PreviousSavedState);
+	Editor.CancelDiscardAction();
+	Scenario.bPendingAssetEditChecked = true;
 	Log(ELogLevel::Info, "Pending texture edit blocks stale saves and protects native-window/application closure");
 }
 } // namespace Hyperion

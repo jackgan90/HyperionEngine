@@ -1,4 +1,4 @@
-#include "EditorApplication.h"
+#include "EditorAcceptanceHarness.h"
 #include "Hyperion/Core/Core.h"
 #include <array>
 
@@ -30,51 +30,51 @@ void Shortcut(std::vector<FInputEvent>& InEvents, EKey InKey)
 constexpr std::array Names{"Texture", "Model", "Sky", "Material", "CustomMaterial"};
 } // namespace
 
-void FEditorPlugin::ExerciseAssetInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseAssetInput(std::vector<FInputEvent>& InEvents)
 {
-	if (!Scene->GetStatus().Error.empty())
+	if (!Editor.Scene->GetStatus().Error.empty())
 	{
-		throw std::runtime_error(Scene->GetStatus().Error);
+		throw std::runtime_error(Editor.Scene->GetStatus().Error);
 	}
-	for (const auto& Asset : Scene->GetAssets())
+	for (const auto& Asset : Editor.Scene->GetAssets())
 	{
 		if (!Asset.Error.empty())
 		{
 			throw std::runtime_error(Asset.Error);
 		}
 	}
-	for (const auto Handle : Scene->GetHandles())
+	for (const auto Handle : Editor.Scene->GetHandles())
 	{
-		if (!Scene->GetError(Handle).empty())
+		if (!Editor.Scene->GetError(Handle).empty())
 		{
-			throw std::runtime_error(Scene->GetError(Handle));
+			throw std::runtime_error(Editor.Scene->GetError(Handle));
 		}
 	}
-	if (!Scene->GetStatus().AssetRefreshError.empty())
+	if (!Editor.Scene->GetStatus().AssetRefreshError.empty())
 	{
-		throw std::runtime_error(Scene->GetStatus().AssetRefreshError);
+		throw std::runtime_error(Editor.Scene->GetStatus().AssetRefreshError);
 	}
-	if (Acceptance.ExerciseStep >= 190)
+	if (Scenario.ExerciseStep >= 190)
 	{
 		ExerciseAssetWindowInput(InEvents);
 		return;
 	}
-	if (Acceptance.ExerciseStep >= 100)
+	if (Scenario.ExerciseStep >= 100)
 	{
 		ExerciseAssetPropertyInput(InEvents);
 		return;
 	}
-	const auto Name = std::string(Names.at(Acceptance.AssetExerciseIndex));
-	if (Acceptance.AssetExerciseLoggedStep != static_cast<int>(Acceptance.ExerciseStep))
+	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
+	if (Scenario.AssetExerciseLoggedStep != static_cast<int>(Scenario.ExerciseStep))
 	{
-		Acceptance.AssetExerciseLoggedStep = static_cast<int>(Acceptance.ExerciseStep);
-		Log(ELogLevel::Info, "Asset acceptance " + Name + " step " + std::to_string(Acceptance.ExerciseStep));
+		Scenario.AssetExerciseLoggedStep = static_cast<int>(Scenario.ExerciseStep);
+		Log(ELogLevel::Info, "Asset acceptance " + Name + " step " + std::to_string(Scenario.ExerciseStep));
 	}
-	if (Acceptance.ExerciseStep <= 12)
+	if (Scenario.ExerciseStep <= 12)
 	{
 		ExerciseAssetOpening(InEvents);
 	}
-	else if (Acceptance.ExerciseStep <= 18)
+	else if (Scenario.ExerciseStep <= 18)
 	{
 		ExerciseAssetNameInput(InEvents);
 	}
@@ -84,61 +84,61 @@ void FEditorPlugin::ExerciseAssetInput(std::vector<FInputEvent>& InEvents)
 	}
 }
 
-void FEditorPlugin::ExerciseAssetOpening(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseAssetOpening(std::vector<FInputEvent>& InEvents)
 {
-	const auto Name = std::string(Names.at(Acceptance.AssetExerciseIndex));
+	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
 	const auto Path = "/Game/" + Name + ".hasset";
-	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (Acceptance.ExerciseStep)
+	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+	switch (Scenario.ExerciseStep)
 	{
 		case 0:
-			QueueContentRoot(Options.ExerciseAssets);
-			++Acceptance.ExerciseStep;
+			Editor.QueueContentRoot(Editor.Options.ExerciseAssets);
+			++Scenario.ExerciseStep;
 			break;
 		case 1:
-			RequestOpenAsset("/Game/Scene.hasset");
-			++Acceptance.ExerciseStep;
+			Editor.RequestOpenAsset("/Game/Scene.hasset");
+			++Scenario.ExerciseStep;
 			break;
 		case 2:
-			if (Scene->GetStatus().bReady && ReadyFrames > 8)
+			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8)
 			{
-				const auto Handle = Scene->FindHandle("model");
-				auto Node = *Scene->FindNode(Handle);
+				const auto Handle = Editor.Scene->FindHandle("model");
+				auto Node = *Editor.Scene->FindNode(Handle);
 				Node.Name = "Unsaved scene edit";
 				Node.Model()->Material.Roughness = .73f;
-				CommitEdit(Handle, Node, Scene->GetRevision());
-				Selection = Handle;
-				Acceptance.ExerciseStep = 9;
+				Editor.CommitEdit(Handle, Node, Editor.Scene->GetRevision());
+				Editor.Selection = Handle;
+				Scenario.ExerciseStep = 9;
 			}
 			break;
 		case 9:
-			ContentRevealPath = Path;
-			++Acceptance.ExerciseStep;
+			Scenario.ContentRevealPath = Path;
+			++Scenario.ExerciseStep;
 			break;
 		case 10:
 		case 11:
-			if (ContentTileBounds.contains(Path))
+			if (Scenario.ContentTileBounds.contains(Path))
 			{
-				ExerciseClick(InEvents, ContentTileBounds.at(Path));
+				ExerciseClick(InEvents, Scenario.ContentTileBounds.at(Path));
 			}
 			break;
 		case 12:
-			if (++Acceptance.ExerciseWait == 120)
+			if (++Scenario.ExerciseWait == 120)
 			{
-				Log(ELogLevel::Info, "Waiting for " + Path + ": " + AssetWorkspace->ActiveStatus());
+				Log(ELogLevel::Info, "Waiting for " + Path + ": " + Editor.AssetWorkspace->ActiveStatus());
 				Log(ELogLevel::Info,
-				    "Content selection: " + Browser->SelectedFile + "; open request: " + AssetOpenPath);
-				Acceptance.PlacementCapture =
-				    Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + "-Waiting.png");
-				Acceptance.OutlineCapture =
-				    Options.ExerciseAssets.parent_path() / ("AssetWindow-" + Name + "-Waiting.png");
+				    "Content selection: " + Editor.Browser->SelectedFile + "; open request: " + Editor.AssetOpenPath);
+				Scenario.PlacementCapture =
+				    Editor.Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + "-Waiting.png");
+				Scenario.OutlineCapture =
+				    Editor.Options.ExerciseAssets.parent_path() / ("AssetWindow-" + Name + "-Waiting.png");
 			}
-			if (Document && PathToUtf8(Document->Loaded().Path) == Path && AssetWorkspace->IsPreviewReady())
+			if (Document && PathToUtf8(Document->Loaded().Path) == Path && Editor.AssetWorkspace->IsPreviewReady())
 			{
-				Acceptance.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
+				Scenario.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
 				CheckAsset(!Document->IsDirty(), "Opening an asset marked it dirty");
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		default:
@@ -146,27 +146,27 @@ void FEditorPlugin::ExerciseAssetOpening(std::vector<FInputEvent>& InEvents)
 	}
 }
 
-void FEditorPlugin::ExerciseAssetNameInput(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseAssetNameInput(std::vector<FInputEvent>& InEvents)
 {
-	const auto Name = std::string(Names.at(Acceptance.AssetExerciseIndex));
-	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (Acceptance.ExerciseStep)
+	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
+	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+	switch (Scenario.ExerciseStep)
 	{
 		case 13:
-			ExerciseClick(InEvents, AssetWorkspace->ObservedBounds("field/name"));
+			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"));
 			break;
 		case 14:
 		{
-			++Acceptance.ExerciseWait;
-			if (Acceptance.ExerciseWait <= 2)
+			++Scenario.ExerciseWait;
+			if (Scenario.ExerciseWait <= 2)
 			{
 				FInputEvent Key;
 				Key.Type = EEventType::Key;
 				Key.Key = EKey::A;
-				Key.bDown = Acceptance.ExerciseWait == 1;
+				Key.bDown = Scenario.ExerciseWait == 1;
 				Key.Modifiers = Key.bDown ? 1 : 0;
 				InEvents.push_back(Key);
-				if (Acceptance.ExerciseWait == 2)
+				if (Scenario.ExerciseWait == 2)
 				{
 					FInputEvent Text;
 					Text.Type = EEventType::Text;
@@ -174,101 +174,105 @@ void FEditorPlugin::ExerciseAssetNameInput(std::vector<FInputEvent>& InEvents)
 					InEvents.push_back(Text);
 				}
 			}
-			if (Acceptance.ExerciseWait == 4)
+			if (Scenario.ExerciseWait == 4)
 			{
-				Acceptance.ExerciseWait = 0;
-				++Acceptance.ExerciseStep;
+				Scenario.ExerciseWait = 0;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		}
 		case 15:
-			CheckAsset(AssetWorkspace->HasActiveInteraction(), "Name input lost its active live-edit interaction");
-			Acceptance.PlacementCapture = Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + "-Input.png");
-			++Acceptance.ExerciseStep;
+			CheckAsset(Editor.AssetWorkspace->HasActiveInteraction(),
+			           "Name input lost its active live-edit interaction");
+			Scenario.PlacementCapture =
+			    Editor.Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + "-Input.png");
+			++Scenario.ExerciseStep;
 			break;
 		case 16:
 			CheckAsset(Document && Document->IsDirty() &&
 			               ReadValue<std::string>(Document->Get("name")) == "Edited " + Name,
 			           "Asset name input did not edit the document");
 			Shortcut(InEvents, EKey::Z);
-			++Acceptance.ExerciseStep;
+			++Scenario.ExerciseStep;
 			break;
 		case 17:
 			CheckAsset(Document && !Document->IsDirty() &&
-			               ReadValue<std::string>(Document->Get("name")) == Acceptance.AssetExerciseOriginalName,
+			               ReadValue<std::string>(Document->Get("name")) == Scenario.AssetExerciseOriginalName,
 			           "Asset Undo did not restore baseline");
 			Shortcut(InEvents, EKey::Y);
-			++Acceptance.ExerciseStep;
+			++Scenario.ExerciseStep;
 			break;
 		case 18:
 			CheckAsset(Document && Document->IsDirty(), "Asset Redo did not restore the edit");
 			Shortcut(InEvents, EKey::S);
-			++Acceptance.ExerciseStep;
+			++Scenario.ExerciseStep;
 			break;
 		default:
 			break;
 	}
 }
 
-void FEditorPlugin::ExerciseAssetSaving(std::vector<FInputEvent>& InEvents)
+void FEditorAcceptanceHarness::ExerciseAssetSaving(std::vector<FInputEvent>& InEvents)
 {
-	const auto Name = std::string(Names.at(Acceptance.AssetExerciseIndex));
+	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
 	const auto Path = "/Game/" + Name + ".hasset";
-	const auto* Document = AssetWorkspace->ActiveDocument();
-	switch (Acceptance.ExerciseStep)
+	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
+	switch (Scenario.ExerciseStep)
 	{
 		case 19:
-			if (Document && !Document->IsSaving() && !Document->IsDirty() && AssetWorkspace->IsPreviewReady())
+			if (Document && !Document->IsSaving() && !Document->IsDirty() && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				CheckAsset(Document->Error.empty(), "Asset save failed");
-				const auto Saved = Assets.LoadAsync(Path).Get(Tasks);
+				const auto Saved = Editor.Assets.LoadAsync(Path).Get(Editor.Tasks);
 				const auto Node = WriteRecord(*Saved->Type, Saved->Object.get());
 				const auto& Fields =
 				    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Node.Value).at("fields").Value);
 				CheckAsset(ReadValue<std::string>(Fields.at("name")) == "Edited " + Name,
 				           "Saved asset did not retain property edit");
-				CheckAsset(IsDirty() && History.size() == 1 &&
-				               Scene->FindNode(Scene->FindHandle("model"))->Name == "Unsaved scene edit",
+				CheckAsset(Editor.IsDirty() && Editor.History.size() == 1 &&
+				               Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Name == "Unsaved scene edit",
 				           "Asset save discarded scene edits or history");
-				Acceptance.PlacementCapture = Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + ".png");
+				Scenario.PlacementCapture =
+				    Editor.Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + ".png");
 				if (Name == "Material")
 				{
-					Acceptance.OutlineCapture = Options.ExerciseAssets.parent_path() / "AssetWindow-Scene.png";
+					Scenario.OutlineCapture = Editor.Options.ExerciseAssets.parent_path() / "AssetWindow-Scene.png";
 				}
-				++Acceptance.ExerciseStep;
+				++Scenario.ExerciseStep;
 			}
 			break;
 		case 20:
-			if (++Acceptance.AssetExerciseIndex < Names.size())
+			if (++Scenario.AssetExerciseIndex < Names.size())
 			{
-				Acceptance.ExerciseStep = 9;
+				Scenario.ExerciseStep = 9;
 			}
 			else
 			{
-				Acceptance.AssetExerciseIndex = Names.size() - 1;
-				Acceptance.ExerciseStep = 100;
+				Scenario.AssetExerciseIndex = Names.size() - 1;
+				Scenario.ExerciseStep = 100;
 			}
 			break;
 		case 21:
-			Undo();
-			CheckAsset(!IsDirty(), "Scene undo baseline was lost after asset saves");
-			Redo();
-			CheckAsset(IsDirty() && Scene->FindNode(Scene->FindHandle("model"))->Name == "Unsaved scene edit",
+			Editor.Undo();
+			CheckAsset(!Editor.IsDirty(), "Scene undo baseline was lost after asset saves");
+			Editor.Redo();
+			CheckAsset(Editor.IsDirty() &&
+			               Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Name == "Unsaved scene edit",
 			           "Scene redo was lost after asset saves");
-			Window->RequestClose();
-			++Acceptance.ExerciseStep;
+			Editor.Window->RequestClose();
+			++Scenario.ExerciseStep;
 			break;
 		case 22:
-			ExerciseClick(InEvents, CancelChangesBounds);
+			ExerciseClick(InEvents, Scenario.CancelChangesBounds);
 			break;
 		case 23:
-			CheckAsset(!Window->ShouldClose() && IsDirty(), "Cancel close lost workspace changes");
-			Acceptance.bAssetsVerified = true;
+			CheckAsset(!Editor.Window->ShouldClose() && Editor.IsDirty(), "Cancel close lost workspace changes");
+			Scenario.bAssetsVerified = true;
 			Log(ELogLevel::Info, "Asset editors: five previews, native save, undo/redo, scene preservation and close "
 			                     "cancellation passed");
-			ResetDocument();
-			Window->RequestClose();
-			++Acceptance.ExerciseStep;
+			Editor.ResetDocument();
+			Editor.Window->RequestClose();
+			++Scenario.ExerciseStep;
 			break;
 		default:
 			break;

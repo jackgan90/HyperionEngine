@@ -204,15 +204,10 @@ void FEditorPlugin::DrawContentGrid()
 			// Typed reference properties accept this path when the indexed asset type is compatible.
 			Gui->DragSource(AssetPathPayloadType, Path, Name.c_str());
 		}
-		if (!Options.ExerciseContent.empty() || !Options.ExerciseAssets.empty() ||
-		    !Options.ExerciseModelPlacement.empty())
-		{
-			ContentTileBounds[Path] = Gui->LastItemBounds();
-		}
-		if (ContentRevealPath == Path)
+		Acceptance.ObserveWidget(EEditorWidget::ContentTile, Gui->LastItemBounds(), Path);
+		if (Acceptance.RevealContent(Path))
 		{
 			Gui->RevealLastItem();
-			ContentRevealPath.clear();
 		}
 	}
 	Gui->EndTable();
@@ -220,7 +215,7 @@ void FEditorPlugin::DrawContentGrid()
 
 void FEditorPlugin::DrawSceneBrowser()
 {
-	ContentTileBounds.clear();
+	Acceptance.BeginSurface(EEditorSurface::ContentBrowser);
 	if (!bShowBrowser)
 	{
 		return;
