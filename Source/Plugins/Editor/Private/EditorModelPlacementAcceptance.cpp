@@ -78,7 +78,7 @@ void FEditorPlugin::ExerciseModelPlacement(std::vector<FInputEvent>& InEvents)
 		--Acceptance.ExerciseWait;
 		return;
 	}
-	if (Transition.PendingRoot || Browser->IsScanning() || FrameCount < 12 || !Viewport.bViewportVisible ||
+	if (Transition.HasPendingRoot() || Browser->IsScanning() || FrameCount < 12 || !Viewport.bViewportVisible ||
 	    !Scene->GetStatus().bReady)
 	{
 		return;

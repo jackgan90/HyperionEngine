@@ -243,7 +243,11 @@ Camera 组件用于用户明确创作的场景相机。在视口选项菜单点�
 
 ## 模块与帧顺序
 
-Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorViewport` 拥有浏览相机、视口目标、尺寸和区域，执行初始化、resize、取景和导航重置；`FEditorDocumentTransition` 维护场景打开、内容根切换和关闭/discard 的待执行状态。验收状态、输入窗口选择与完成/超时检查由 `FEditorAcceptanceDriver` 处理，仅在 BUILD_TESTING 中编入；禁用测试的构建收到验收参数时给出受控不可用诊断，正常 report 输出仍可用。
+Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorViewport` 拥有浏览相机、视口目标、尺寸和区域，执行初始化、resize、取景和导航重置。验收状态、输入窗口选择与完成/超时检查由 `FEditorAcceptanceDriver` 处理，仅在 BUILD_TESTING 中编入；禁用测试的构建收到验收参数时给出受控不可用诊断，正常 report 输出仍可用。
+
+私有 `FEditorDocumentTransition` 区分文档转换目标与推进阶段，独立拥有请求、保存后继续、失败恢复、丢弃和取消规则。宿主提供当前 dirty、保存和待编辑快照，通过语义操作推进；GUI 和输入消费者只读取查询，不直接修改待换根、待打开或关闭状态。窗口关闭可以与待换根决策重叠，丢弃按关闭、换根、打开的顺序选择目标。弹窗请求与可见性单独建模，标题栏关闭和 Cancel 共用取消操作；取消仅撤销后续换根/退出意图，已接收的保存仍完成到原文档。
+
+文件保存、场景加载、窗口动作和 root prepare/commit 仍由 Editor 宿主执行；`ContentRootService` 保留最终 dirty/busy/generation 检查与旧内容退休。`application.close.request/status` 与 GUI 共用这些关闭规则，状态投影仍为 idle/saving/failed/closing；接受关闭请求不表示进程已经退出。`editor_document_transitions` 验证无 GUI 的规则推进，真实保存、换根和关闭由 GUI 与附着自动化回归覆盖。
 
 放置通过私有 `FPlacementService` 聚合场景、模型加载/上传、预览材质和图标加载/上传的准备结果。GUI、automation 轮询与最终提交共用 Ready/Pending/Failed 准入规则，错误信息和显示文案独立；CPU 加载完成不代表 GPU 已就绪。原材质尚未就绪的模型分部仍使用临时预览材质。`editor_placement_preparation` 验证阶段聚合、空错误和前缀碰撞，真实交互由 `editor_placement`、`editor_model_placement` 覆盖。
 

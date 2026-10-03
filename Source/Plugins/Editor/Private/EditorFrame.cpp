@@ -22,8 +22,8 @@ void FEditorPlugin::RouteCamera(float InDelta, std::span<const FInputEvent> InEv
 {
 	if (ReparentGesture || Placement.IsActive() || bPlacementUsedMouse || Gizmo.IsDragging() || bGizmoUsedMouse ||
 	    Viewport.PreviewCamera || !Viewport.bViewportCameraInitialized || !Viewport.bViewportVisible || bOpenDialog ||
-	    bSaveDialog || bAssetMessage || Transition.PendingRoot || Transition.bDiscardDialog || bPreferencesDialog ||
-	    Gui->IsEditingText() || !Viewport.ViewportRegion.bFocused)
+	    bSaveDialog || bAssetMessage || Transition.HasPendingRoot() || Transition.IsDecisionVisible() ||
+	    bPreferencesDialog || Gui->IsEditingText() || !Viewport.ViewportRegion.bFocused)
 	{
 		// Focus recovery still reaches the controller while GUI navigation is blocked.
 		Camera.SuspendInput(InEvents);

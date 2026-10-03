@@ -79,8 +79,8 @@ bool FEditorPlugin::IsDocumentInteractionBusy() const
 {
 	return !Options.Benchmark.empty() || GizmoEdit.has_value() || InspectorInteraction || PendingInspectorEdit ||
 	       ReparentGesture.has_value() || Placement.IsActive() || Gui->DragPayload() || Gui->IsEditingText() ||
-	       bOpenDialog || bSaveDialog || Transition.bDiscardDialog || bAssetMessage || Transition.PendingRoot ||
-	       bPreferencesDialog || bFinished;
+	       bOpenDialog || bSaveDialog || Transition.IsDecisionVisible() || bAssetMessage ||
+	       Transition.HasPendingRoot() || bPreferencesDialog || bFinished;
 }
 
 void FEditorPlugin::UpdateDocumentInteraction()

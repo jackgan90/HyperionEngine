@@ -34,7 +34,7 @@ void FEditorPlugin::RouteViewportPicking(std::span<const FInputEvent> InEvents)
 	const auto ActiveCamera = PickingCamera();
 	if (Gui->DragPayload() || Placement.IsActive() || bPlacementUsedMouse || bInputInterrupted || !ActiveCamera ||
 	    !Viewport.bViewportVisible || !Viewport.ViewportRegion.bFocused || !Viewport.ViewportRegion.bHovered ||
-	    bOpenDialog || bSaveDialog || bAssetMessage || Transition.PendingRoot || Transition.bDiscardDialog ||
+	    bOpenDialog || bSaveDialog || bAssetMessage || Transition.HasPendingRoot() || Transition.IsDecisionVisible() ||
 	    bPreferencesDialog || Gui->IsEditingText() || !Pointer.bPositionValid || Pointer.bCancel ||
 	    Pointer.bRightDown || Viewport.bCameraDragging || bGizmoUsedMouse || Gizmo.IsDragging())
 	{

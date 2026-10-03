@@ -70,7 +70,7 @@ void FEditorPlugin::PollContent()
 
 void FEditorPlugin::RequestOpenAsset(const std::string& InPath)
 {
-	if (PendingAssetOpen || Transition.PendingRoot)
+	if (PendingAssetOpen || Transition.HasPendingRoot())
 	{
 		return;
 	}

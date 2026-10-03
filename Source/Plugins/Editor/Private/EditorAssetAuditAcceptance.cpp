@@ -36,13 +36,19 @@ void FEditorPlugin::CheckAssetSaveShortcut()
 		RouteHistoryShortcuts(Events);
 		RequireAudit(!PendingSave, "Unavailable scene shortcut admitted a save");
 	};
-	for (bool* bModal : {&bOpenDialog, &bSaveDialog, &Transition.bDiscardDialog, &bAssetMessage, &bPreferencesDialog,
-	                     &Transition.bSaveThenClose})
+	for (bool* bModal : {&bOpenDialog, &bSaveDialog, &bAssetMessage, &bPreferencesDialog})
 	{
 		*bModal = true;
 		SendSave();
 		*bModal = false;
 	}
+	RequireAudit(!Transition.RequestWindowClose({.bSceneDirty = true}), "Dirty close skipped its decision");
+	SendSave();
+	Transition.Cancel();
+	Transition.BeginSave(EEditorTransitionTarget::Close);
+	Transition.SaveAdmitted(EEditorTransitionTarget::Close, false);
+	SendSave();
+	Transition.Cancel();
 	{
 		FRenderSession TemporarySession(Tasks, Session->GetResources(), Device->GetCapabilities());
 		auto TemporaryScene = std::make_unique<FSceneInstance>(TemporarySession, Tasks, Assets, true);
@@ -103,11 +109,10 @@ void FEditorPlugin::CheckPendingAssetEdit()
 	SceneDocument.MarkSaved(DocumentEpoch, DocumentState);
 	RequireAudit(!IsDirty(), "Pending edit exit fixture must have a clean scene");
 	Window->RequestClose();
-	RequireAudit(!PollClose() && Transition.bDiscardDialog,
+	RequireAudit(!PollClose() && Transition.IsDecisionVisible(),
 	             "Pending texture edit bypassed application exit protection");
 	SceneDocument.MarkSaved(DocumentEpoch, PreviousSavedState);
 	CancelDiscardAction();
-	Transition.bRequestDiscard = false;
 	Acceptance.bPendingAssetEditChecked = true;
 	Log(ELogLevel::Info, "Pending texture edit blocks stale saves and protects native-window/application closure");
 }

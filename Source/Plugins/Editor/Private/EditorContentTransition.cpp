@@ -26,9 +26,8 @@ void FEditorPlugin::ContentRootChanged()
 	InitializePlacement();
 	Browser->SelectedDirectory = "/Game";
 	Browser->SelectedFile.clear();
-	bOpenDialog = bSaveDialog = Transition.bDiscardDialog = bRequestOpen = bRequestSaveDialog =
-	    Transition.bRequestDiscard = false;
-	Transition.bSaveThenSwitch = false;
+	bOpenDialog = bSaveDialog = bRequestOpen = bRequestSaveDialog = false;
+	Transition.ContentRootChanged();
 	bAssetMessage = bRequestAssetMessage = false;
 	Error.clear();
 	RefreshContent();
@@ -87,7 +86,7 @@ void FEditorPlugin::CloseContentDocument()
 	ViewportClick.reset();
 	SceneDocument.SetPath({});
 	OpenPath.clear();
-	Transition.PendingOpen.clear();
+	Transition.ContentDocumentClosed();
 	SavePath.clear();
 	ScenePaths.clear();
 	bReadyLogged = false;
@@ -109,12 +108,11 @@ void FEditorPlugin::CloseContentDocument()
 	Session->ResetContent();
 }
 
-void FEditorPlugin::PrepareContentRoot()
+void FEditorPlugin::PrepareContentRoot(const std::filesystem::path& InRequested)
 {
 	auto& Content = Context.Require<FContentRootService>();
-	const auto Requested = std::exchange(Transition.RequestedRoot, {});
 	std::error_code PathError;
-	const auto Canonical = std::filesystem::canonical(Requested, PathError);
+	const auto Canonical = std::filesystem::canonical(InRequested, PathError);
 	if (PathError)
 	{
 		if (PathError == std::errc::no_such_file_or_directory || PathError == std::errc::not_a_directory)
@@ -122,44 +120,35 @@ void FEditorPlugin::PrepareContentRoot()
 			const auto Removed = std::erase_if(Options.Preferences.RecentRoots,
 			                                   [&](const auto& InRoot)
 			                                   {
-				                                   return SameAssetRoot(InRoot, Requested);
+				                                   return SameAssetRoot(InRoot, InRequested);
 			                                   });
 			if (Removed > 0)
 			{
 				SavePreferences();
 			}
 		}
-		throw std::filesystem::filesystem_error("canonical", Requested, PathError);
+		throw std::filesystem::filesystem_error("canonical", InRequested, PathError);
 	}
 	if (SameAssetRoot(Canonical, Content.Directory()))
 	{
 		RememberAssetRoot(Options.Preferences, Canonical);
 		SavePreferences();
+		Transition.FinishRootRequest();
 		return;
 	}
-	Transition.PendingRoot.emplace(Content.Prepare(Canonical));
-	Transition.bDiscardRoot = false;
+	auto Prepared = Content.Prepare(Canonical);
 	FinishGizmo();
 	FinishInspectorEdit();
-	if (ApplicationCloseState().bDirty || PendingSave || AssetWorkspace->IsSaving())
-	{
-		Transition.bDiscardDialog = Transition.bRequestDiscard = true;
-	}
-	else
-	{
-		Transition.bCommitRoot = true;
-	}
+	Transition.AcceptRootCandidate(std::move(Prepared), DocumentSaveProgress());
 }
 
-void FEditorPlugin::CompleteContentRoot()
+void FEditorPlugin::CompleteContentRoot(const FEditorRootCommit& InRequest)
 {
 	auto& Content = Context.Require<FContentRootService>();
-	auto Prepared = Content.Prepare(Transition.PendingRoot->GetDirectory());
-	Transition.PendingRoot.reset();
-	Transition.bCommitRoot = false;
+	auto Prepared = Content.Prepare(InRequest.Directory);
 	try
 	{
-		Content.Commit(std::move(Prepared), Transition.bDiscardRoot);
+		Content.Commit(std::move(Prepared), InRequest.bDiscard);
 	}
 	catch (const FContentRootError& Failure)
 	{
@@ -187,39 +176,30 @@ void FEditorPlugin::ProcessContentRoot()
 				QueueContentRoot(*Selected);
 			}
 		}
-		if (!Transition.RequestedRoot.empty())
+		if (const auto Requested = Transition.TakeRootRequest())
 		{
-			PrepareContentRoot();
+			PrepareContentRoot(*Requested);
 		}
-		if (Transition.bSaveThenSwitch && !bSaveDialog && !PendingSave && !AssetWorkspace->IsSaving())
+		if (!Transition.HasPendingRoot())
 		{
-			Transition.bSaveThenSwitch = false;
-			Transition.bCommitRoot = !IsDirty() && !AssetWorkspace->IsDirty();
-			Transition.bDiscardDialog = Transition.bRequestDiscard = !Transition.bCommitRoot;
-			if (Transition.bCommitRoot)
-			{
-				Gui->ClosePopups();
-			}
-		}
-		if (!Transition.bCommitRoot || !Transition.PendingRoot || PendingSave || AssetWorkspace->IsSaving() ||
-		    AssetWorkspace->HasPendingEdits())
-		{
-			if (Transition.PendingRoot && !Transition.bDiscardDialog && !bSaveDialog && !Transition.bSaveThenSwitch &&
-			    !Transition.bCommitRoot)
-			{
-				Transition.PendingRoot.reset();
-			}
 			return;
 		}
-		CompleteContentRoot();
+		const auto Progress = DocumentSaveProgress();
+		if (Transition.AdvanceRootSave(Progress))
+		{
+			Gui->ClosePopups();
+		}
+		if (const auto Commit = Transition.TakeRootCommit(Progress))
+		{
+			CompleteContentRoot(*Commit);
+		}
 	}
 	catch (const std::exception& Failure)
 	{
 		Error = "Could not change asset root: " + std::string(Failure.what());
 		AssetMessage = Error;
 		bAssetMessage = bRequestAssetMessage = true;
-		Transition.PendingRoot.reset();
-		Transition.bCommitRoot = Transition.bSaveThenSwitch = false;
+		Transition.FinishRootRequest();
 	}
 }
 } // namespace Hyperion

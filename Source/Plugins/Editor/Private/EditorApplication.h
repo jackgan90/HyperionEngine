@@ -265,8 +265,9 @@ private:
 	void ExerciseContentFailures(std::vector<FInputEvent>& InEvents);
 	void ExerciseContentDismissal(std::vector<FInputEvent>& InEvents);
 	void ExerciseContentClose(std::vector<FInputEvent>& InEvents);
-	void PrepareContentRoot();
-	void CompleteContentRoot();
+	void PrepareContentRoot(const std::filesystem::path& InRequested);
+	void CompleteContentRoot(const FEditorRootCommit& InRequest);
+	FEditorSaveProgress DocumentSaveProgress() const;
 	void DrawRootMenu();
 	void Shutdown();
 	void OpenScene(const std::string& InPath);

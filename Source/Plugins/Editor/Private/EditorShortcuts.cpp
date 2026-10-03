@@ -14,8 +14,9 @@ FEditorShortcutInteraction FEditorPlugin::CaptureShortcutInteraction(std::span<c
 	Result.bGesture = ReparentGesture || Placement.IsActive() || Gui->DragPayload() || Gizmo.IsDragging() ||
 	                  bGizmoUsedMouse || bPlacementUsedMouse || Viewport.bCameraDragging || Pointer.bRightDown ||
 	                  Pointer.bDown || Pointer.bCancel;
-	Result.bBusy = !Options.Benchmark.empty() || bOpenDialog || bSaveDialog || Transition.bDiscardDialog ||
-	               bAssetMessage || Transition.PendingRoot || bPreferencesDialog || bFinished || IsAssetWindowBlocked();
+	Result.bBusy = !Options.Benchmark.empty() || bOpenDialog || bSaveDialog || Transition.IsDecisionVisible() ||
+	               bAssetMessage || Transition.HasPendingRoot() || bPreferencesDialog || bFinished ||
+	               IsAssetWindowBlocked();
 	Result.bInspector = InspectorInteraction != 0 || InspectorTransaction.has_value();
 	Result.bReady = Scene->GetStatus().bReady;
 	for (const auto& Event : InEvents)

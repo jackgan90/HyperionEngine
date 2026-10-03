@@ -33,8 +33,8 @@ void FEditorPlugin::CloseAssetWindow()
 
 bool FEditorPlugin::IsAssetWindowBlocked() const
 {
-	return Transition.PendingRoot.has_value() || Transition.bDiscardDialog || bSaveDialog || bOpenDialog ||
-	       bAssetMessage || bPreferencesDialog || Transition.bSaveThenClose;
+	return Transition.HasPendingRoot() || Transition.IsDecisionVisible() || bSaveDialog || bOpenDialog ||
+	       bAssetMessage || bPreferencesDialog || Transition.IsSavingClose();
 }
 
 void FEditorPlugin::AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> InEvents,

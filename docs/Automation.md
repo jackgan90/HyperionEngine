@@ -103,6 +103,8 @@ flowchart TD
 - `Plugins/Automation`：注册资产/场景适配器，管理 session、stdio 和应用监听生命周期；附着适配器使用应用发布的文档实例。stdio 原生 API 限于 `Private/Adapters`。
 - `Applications/Automation`：解析启动参数、选择插件和资产提供方。通用 Application 宿主仍只负责 Tasks、Main pump、时间和退出。
 
+Editor 的 `FEditorDocumentTransition` 私有领域对象集中拥有待打开、换根和关闭的目标/阶段及保存、失败、取消规则；宿主实现现有 `ISceneDocumentHost` 和应用关闭服务并执行副作用，适配器继续消费这些共享契约。取消退出或换根不会取消已接收的保存，迟到的完成也不能恢复已取消的转换。内容根最终校验仍由 `FContentRootService` 执行；不为内部状态增加 transport 分支或新 operation/schema。
+
 `automation-catalog` 提供目录；适配器依赖该插件并声明 `Before={"automation-session"}`。`automation-session` 封闭目录、提供会话和 endpoint；`automation-stdio` 依赖会话。**服务 Requires 描述服务需求，Dependencies 才负责选择必需插件**。可选资产服务只影响资产分支。
 
 所有操作调用、任务 Poll/Cancel、文档提交在 Main。工作线程只能处理拥有自身数据的快照，通过完成结果回到 Main。停机顺序为：关闭入口 → 会话停止接收 → Main pump/Poll 到已接收任务结束 → provider 排空自己的工作 → 释放文档、IO、Tasks。provider 不得关闭别的插件拥有的共享资产服务。

@@ -211,7 +211,7 @@ void FEditorPlugin::RoutePlacementPayload(const FGuiDragPayload& InPayload,
 	const auto CameraView = PickingCamera();
 	const auto Pointer = Gui->PointerState();
 	if (!CameraView || !Viewport.bViewportVisible || bOpenDialog || bSaveDialog || bAssetMessage ||
-	    Transition.PendingRoot || Transition.bDiscardDialog || bPreferencesDialog || bViewOptionsOpen ||
+	    Transition.HasPendingRoot() || Transition.IsDecisionVisible() || bPreferencesDialog || bViewOptionsOpen ||
 	    Pointer.bCancel || Pointer.bRightDown || Gizmo.IsDragging())
 	{
 		CancelPlacement();

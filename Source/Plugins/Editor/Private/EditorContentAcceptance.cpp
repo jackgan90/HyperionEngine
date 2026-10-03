@@ -76,7 +76,7 @@ void FEditorPlugin::ExerciseContentInput(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, CancelChangesBounds);
 			break;
 		case 6:
-			CheckContent(!Transition.PendingRoot && IsDirty() && CurrentPath == "/Game/Scene.hasset",
+			CheckContent(!Transition.HasPendingRoot() && IsDirty() && CurrentPath == "/Game/Scene.hasset",
 			             "Cancel lost document changes");
 			QueueContentRoot(Options.ExerciseContent / "B");
 			++Acceptance.ExerciseStep;
@@ -165,7 +165,7 @@ void FEditorPlugin::ExerciseContentSwitch(std::vector<FInputEvent>& InEvents)
 	switch (Acceptance.ExerciseStep)
 	{
 		case 8:
-			if (!Transition.PendingRoot && !PendingSave)
+			if (!Transition.HasPendingRoot() && !PendingSave)
 			{
 				CheckContent(CurrentPath.empty() && !IsDirty() && History.empty(),
 				             "Saved root transition retained document");
@@ -189,7 +189,7 @@ void FEditorPlugin::ExerciseContentSwitch(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, DiscardChangesBounds);
 			break;
 		case 11:
-			if (!Transition.PendingRoot)
+			if (!Transition.HasPendingRoot())
 			{
 				RequestOpenAsset("/Game/Scene.hasset");
 				++Acceptance.ExerciseStep;
@@ -277,7 +277,7 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, SaveSwitchBounds);
 			break;
 		case 22:
-			if (!PendingSave && !Transition.PendingRoot)
+			if (!PendingSave && !Transition.HasPendingRoot())
 			{
 				std::filesystem::permissions(OldScene, std::filesystem::perms::owner_all);
 				CheckContent(IsDirty() && bAssetMessage && AssetMessage.find("Save failed") != std::string::npos,
@@ -313,7 +313,7 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, DiscardChangesBounds);
 			break;
 		case 25:
-			if (!Transition.PendingRoot)
+			if (!Transition.HasPendingRoot())
 			{
 				OpenScene("/Game/Scene.hasset");
 				QueueContentRoot(Options.ExerciseContent / "A");
@@ -321,7 +321,7 @@ void FEditorPlugin::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 			}
 			break;
 		case 26:
-			if (!Transition.PendingRoot && !Browser->IsScanning())
+			if (!Transition.HasPendingRoot() && !Browser->IsScanning())
 			{
 				CheckContent(CurrentPath.empty() && History.empty() && !Selection &&
 				                 SameAssetRoot(Context.Require<FContentRootService>().Directory(),
@@ -353,8 +353,7 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 			}
 			break;
 		case 28:
-			CheckContent(Transition.PendingRoot.has_value() && Transition.bDiscardDialog,
-			             "Root prompt was not prepared");
+			CheckContent(Transition.HasPendingRoot() && Transition.IsDecisionVisible(), "Root prompt was not prepared");
 			// Keep the real save queued until the title-bar click has been processed. The timeout
 			// permits orderly shutdown even if an earlier assertion interrupts the exercise.
 			Acceptance.ContentSaveGate = std::make_shared<std::binary_semaphore>(0);
@@ -370,7 +369,7 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 			break;
 		case 30:
 		{
-			CheckContent(PendingSave && !PendingSave->Result.Ready() && Transition.bSaveThenSwitch,
+			CheckContent(PendingSave && !PendingSave->Result.Ready() && Transition.IsSavingRoot(),
 			             "Save was not held pending during dismissal");
 			// BeginModal leaves the title bar as the last item; its rightmost square contains X.
 			auto CloseBounds = DiscardTitleBounds;
@@ -379,8 +378,9 @@ void FEditorPlugin::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 			break;
 		}
 		case 31:
-			CheckContent(PendingSave && !PendingSave->Result.Ready() && !Transition.PendingRoot &&
-			                 !Transition.bDiscardDialog && !Transition.bSaveThenSwitch && !Transition.bCommitRoot,
+			CheckContent(PendingSave && !PendingSave->Result.Ready() && !Transition.HasPendingRoot() &&
+			                 !Transition.IsDecisionVisible() && !Transition.IsSavingRoot() &&
+			                 Transition.RootPhase() != EEditorTransitionPhase::Ready,
 			             "Title-bar dismissal retained the root transition");
 			Acceptance.ContentSaveGate->release();
 			Acceptance.ContentSaveGate.reset();
@@ -419,7 +419,7 @@ void FEditorPlugin::ExerciseContentClose(std::vector<FInputEvent>& InEvents)
 	switch (Acceptance.ExerciseStep)
 	{
 		case 33:
-			CheckContent(Transition.PendingRoot.has_value() && Transition.bDiscardDialog,
+			CheckContent(Transition.HasPendingRoot() && Transition.IsDecisionVisible(),
 			             "Close overlap lacked a root prompt");
 			CancelDiscardAction();
 			Gui->ClosePopups();
@@ -429,11 +429,11 @@ void FEditorPlugin::ExerciseContentClose(std::vector<FInputEvent>& InEvents)
 			++Acceptance.ExerciseStep;
 			break;
 		case 34:
-			if (Transition.CloseState == "failed" && !PendingSave)
+			if (Transition.CloseStatus() == "failed" && !PendingSave)
 			{
 				std::filesystem::permissions(Options.ExerciseContent / "A/Scene.hasset",
 				                             std::filesystem::perms::owner_all);
-				CheckContent(Transition.bPendingClose && Transition.bDiscardDialog && IsDirty() &&
+				CheckContent(Transition.HasPendingClose() && Transition.IsDecisionVisible() && IsDirty() &&
 				                 !Window->ShouldClose(),
 				             "Failed API save-close lost GUI exit intent or dirty work");
 				++Acceptance.ExerciseStep;
@@ -443,20 +443,20 @@ void FEditorPlugin::ExerciseContentClose(std::vector<FInputEvent>& InEvents)
 			ExerciseClick(InEvents, CancelChangesBounds);
 			break;
 		case 36:
-			CheckContent(Transition.CloseState == "idle" && !Transition.bPendingClose && !Transition.bDiscardDialog &&
-			                 IsDirty(),
+			CheckContent(Transition.CloseStatus() == "idle" && !Transition.HasPendingClose() &&
+			                 !Transition.IsDecisionVisible() && IsDirty(),
 			             "GUI cancel after API save-close failure lost work or retained exit intent");
 			QueueContentRoot(Options.ExerciseContent / "B");
 			++Acceptance.ExerciseStep;
 			break;
 		case 37:
-			CheckContent(Transition.PendingRoot.has_value() && Transition.bDiscardDialog,
+			CheckContent(Transition.HasPendingRoot() && Transition.IsDecisionVisible(),
 			             "Close overlap lacked a root prompt");
 			Window->RequestClose();
 			++Acceptance.ExerciseStep;
 			break;
 		case 38:
-			CheckContent(Transition.bPendingClose && Transition.PendingRoot && IsDirty(),
+			CheckContent(Transition.HasPendingClose() && Transition.HasPendingRoot() && IsDirty(),
 			             "Close overlap was not exercised");
 			ExerciseClick(InEvents, DiscardChangesBounds);
 			if (Acceptance.ExerciseStep == 39)
