@@ -155,7 +155,8 @@ private:
 	void UpdateDocumentInteraction();
 	void EnsureAssetWindow();
 	void CloseAssetWindow();
-	bool IsAssetWindowBlocked() const;
+	bool IsAuxiliaryWindowBlocked() const;
+	void SynchronizeWindowGroup();
 	void AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> InEvents,
 	                        const std::filesystem::path& InCapture = {});
 
@@ -324,6 +325,7 @@ private:
 	FIOService& IO;
 	FAssetService& Assets;
 	FWindow* Window{};
+	std::unique_ptr<FWindowGroup> WindowGroup;
 	IRHIDevice* Device{};
 	IRHISwapchain* Swapchain{};
 	FShaderCompiler* Compiler{};

@@ -16,7 +16,7 @@ void FEditorPlugin::EnsureAssetWindow()
 	}
 	auto Host = std::make_unique<FAssetEditorWindow>(Tasks, *Device, *Compiler, *Session, *AssetWorkspace, Control,
 	                                                 std::move(Layout));
-	Host->Initialize(*Window, IO, Gui->ApplicationScale(), Options.bHidden);
+	Host->Initialize(*Window, *WindowGroup, IO, Gui->ApplicationScale(), Options.bHidden);
 	AssetWindow = std::move(Host);
 }
 
@@ -31,10 +31,16 @@ void FEditorPlugin::CloseAssetWindow()
 	AssetWindow.reset();
 }
 
-bool FEditorPlugin::IsAssetWindowBlocked() const
+bool FEditorPlugin::IsAuxiliaryWindowBlocked() const
 {
 	return Transition.HasPendingRoot() || Transition.IsDecisionVisible() || bSaveDialog || bOpenDialog ||
 	       bAssetMessage || bPreferencesDialog || Transition.IsSavingClose();
+}
+
+void FEditorPlugin::SynchronizeWindowGroup()
+{
+	WindowGroup->SetModalActive(IsAuxiliaryWindowBlocked());
+	WindowGroup->Synchronize();
 }
 
 void FEditorPlugin::AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> InEvents,
@@ -47,7 +53,7 @@ void FEditorPlugin::AdvanceAssetWindow(float InDelta, std::vector<FInputEvent> I
 	if (AssetWindow)
 	{
 		const bool bMainDrawable = !Window->Minimized() && Window->PixelSize().Width && Window->PixelSize().Height;
-		AssetWindow->Advance(InDelta, std::move(InEvents), Gui->ApplicationScale(), IsAssetWindowBlocked(),
+		AssetWindow->Advance(InDelta, std::move(InEvents), Gui->ApplicationScale(), IsAuxiliaryWindowBlocked(),
 		                     GetDepthConvention(Rendering.bReversedZ), InCapture,
 		                     !bMainDrawable && Acceptance.Policy().bAllowAssetWindowWait && Options.Benchmark.empty());
 		if (PendingImage && (PendingImage->Result || !PendingImage->Error.empty()))

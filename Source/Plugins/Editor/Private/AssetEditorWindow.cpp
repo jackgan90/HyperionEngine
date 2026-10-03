@@ -25,12 +25,14 @@ FAssetEditorWindow::~FAssetEditorWindow()
 	}
 }
 
-void FAssetEditorWindow::Initialize(FWindow& InOwner, FIOService& InIO, float InScale, bool bInHidden)
+void FAssetEditorWindow::Initialize(FWindow& InOwner, FWindowGroup& InGroup, FIOService& InIO, float InScale,
+                                    bool bInHidden)
 {
 	Owner = &InOwner;
 	bHidden = bInHidden;
 	Window = std::make_unique<FWindow>("Hyperion Asset Editor", FSize{1280, 800}, bHidden);
 	Window->SetOwner(Owner);
+	Registration = InGroup.Register(*Window);
 	(void)Window->SetDarkTitleBar(true);
 	Gui = std::make_unique<FGui>(Window.get());
 	Gui->UseEditorStyle();
@@ -56,6 +58,14 @@ void FAssetEditorWindow::Initialize(FWindow& InOwner, FIOService& InIO, float In
 
 void FAssetEditorWindow::Activate()
 {
+	if (Registration.IsInputBlocked())
+	{
+		if (!bHidden)
+		{
+			Owner->Raise();
+		}
+		return;
+	}
 	if (!bHidden)
 	{
 		if (Owner->Minimized())
@@ -115,6 +125,7 @@ void FAssetEditorWindow::Stop()
 			                          Retired->WaitIdle();
 		                          }));
 	}
+	Registration.Reset();
 	Window.reset();
 }
 

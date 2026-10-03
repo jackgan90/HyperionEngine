@@ -102,7 +102,7 @@ void FEditorAcceptanceHarness::CheckPendingAssetEdit()
 	{
 		FAssetEditorWindow Host(Editor.Tasks, *Editor.Device, *Editor.Compiler, *Editor.Session, *Editor.AssetWorkspace,
 		                        Editor.Control, {});
-		Host.Initialize(*Editor.Window, Editor.IO, Editor.Gui->ApplicationScale(), true);
+		Host.Initialize(*Editor.Window, *Editor.WindowGroup, Editor.IO, Editor.Gui->ApplicationScale(), true);
 		Host.NativeWindow().RequestClose();
 		Host.Poll(false);
 		RequireAudit(!Host.ShouldClose(), "Pending texture edit bypassed the native window close prompt");

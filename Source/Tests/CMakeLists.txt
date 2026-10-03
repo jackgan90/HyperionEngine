@@ -271,6 +271,11 @@ hyp_discovery_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTA
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParityRegressions")
 set_tests_properties(automation_parity_regressions PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+if(WIN32)
+  hyp_discovery_test(NAME editor_close_modal COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/CloseModalAcceptance.py"
+    $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_BINARY_DIR}/EditorCloseModal")
+  set_tests_properties(editor_close_modal PROPERTIES TIMEOUT 120 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+endif()
 hyp_discovery_test(NAME editor_capture_ui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorCaptureAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
 set_tests_properties(editor_capture_ui PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_discovery_test(NAME automation_renderdoc_hud COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/RenderDocHudAcceptance.py"

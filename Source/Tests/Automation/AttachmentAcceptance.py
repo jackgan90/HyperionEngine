@@ -30,13 +30,13 @@ class AttachedSession(Session):
 
 
 class Application:
-    def __init__(self, executable, output, name, scene, asset_root, disabled=False, frames=2400, extra=()):
+    def __init__(self, executable, output, name, scene, asset_root, disabled=False, frames=2400, extra=(), hidden=True):
         ensure_isolated_discovery()
         self.path = output / (name + ".log")
         self.log = self.path.open("w", encoding="utf-8")
         self.instance = None
         self.process = None
-        args = [str(executable), "--hidden", "--frames", str(frames),
+        args = [str(executable), *(["--hidden"] if hidden else []), "--frames", str(frames),
                 "--asset-root", str(asset_root), "--scene", str(scene)]
         args += ["--layout", str(output / (name + "-layout.ini")),
                  "--ui-preferences", str(output / (name + "-scale.ini")),

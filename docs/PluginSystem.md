@@ -40,6 +40,10 @@ Editor 的可执行入口位于 `Applications`，只选择 D3D12 provider 并调
 
 Editor 的独立资产窗口由 `editor` 插件中的私有窗口宿主管理，复用已声明的 Tasks、Device、ShaderCompiler、RenderSession 和资产服务；其原生窗口、GUI context/renderer 与 Swapchain 在插件停止前清理。通过 Platform 的非模态 owner 关系保持资产窗口位于主窗口上方；主窗口最小化时暂停两者绘制，轮询、加载和保存继续。销毁顺序保证资产窗口先于原生 owner 释放。主窗口服务不变，Runtime/Application 不参与子窗口编排。两个窗口分别轮询输入和提交渲染，资产窗口关闭只影响资产文档；GPU 对象按既有 RHI 线程及 fence 约束释放，最终设备校验仍归 `graphics`。
 
+Editor 在 Platform `FWindowGroup` 集中同步现有主窗口模态状态。附加宿主创建窗口、设置主窗口 owner 后调用 `Register`，持有 move-only `FWindowRegistration`，并在原生窗口销毁前释放；后续工具窗口复用此接入，无需增加逐窗口模态分支。组、窗口、注册及清理都在 Main 线程，注册期间 owner/enabled 归组独占管理，不得从其他原生入口改写；重复或跨组注册、非直接 owner、注册期间 `SetOwner` 被拒绝。组应先于主窗口销毁，过期 token 安全失效。
+
+主窗口模态期间，Platform 私有 Windows 适配器临时清除附加窗口的 HWND owner 并禁用其输入、调整到主窗口后方，始终保留 SDL ownership 树和主窗口 owner，不使用全局 topmost。组在输入接纳前、主 GUI 操作后及 Update 结束同步，即使主窗口不绘制也处理最小化显隐；受阻窗口 `Raise` 转交 Main。退出或注销恢复捕获的 owner/enabled 和显隐状态；主窗口仍最小化时可延后解除原生阻塞，避免取消后提前显示附加窗口。注销或组析构后仍存活窗口的待恢复显隐由 Platform 保留，在 `FWindow::Poll` 中完成，窗口销毁时撤销，重新进入 modal 时接管。原先隐藏、最小化、最大化或禁用的状态不得被强制归一化。原生平台不支持窗口组时显式报错。该协调只影响呈现与输入，保存、丢弃及关闭仍由原有共享领域服务和 automation 操作处理。
+
 ## 生命周期和线程
 
 `assets` 发布 Main-only `FAssetImportWorkspace`，GUI 与 automation 适配器消费同一实例。工作区作为作用域内容根参与者注册；运行任务阻止换根，成功发布更新索引和 revision，Editor 据此刷新 Content Browser。任务在 assets Update 中推进，Quiesce 排空，在 IO/Assets 释放前销毁。禁用 automation 不影响 GUI 导入；Runtime/Assets 不依赖源转换模块。

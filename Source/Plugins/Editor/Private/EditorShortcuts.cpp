@@ -16,7 +16,7 @@ FEditorShortcutInteraction FEditorPlugin::CaptureShortcutInteraction(std::span<c
 	                  Pointer.bDown || Pointer.bCancel;
 	Result.bBusy = !Options.Benchmark.empty() || bOpenDialog || bSaveDialog || Transition.IsDecisionVisible() ||
 	               bAssetMessage || Transition.HasPendingRoot() || bPreferencesDialog || bFinished ||
-	               IsAssetWindowBlocked();
+	               IsAuxiliaryWindowBlocked();
 	Result.bInspector = InspectorInteraction != 0 || InspectorTransaction.has_value();
 	Result.bReady = Scene->GetStatus().bReady;
 	for (const auto& Event : InEvents)

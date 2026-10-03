@@ -47,6 +47,7 @@ void FEditorPlugin::Initialize()
 	CullingMode = Options.CullingMode;
 	InitializeContentBrowser();
 	Window = &Context.Require<FWindow>();
+	WindowGroup = std::make_unique<FWindowGroup>(*Window);
 	Device = &Context.Require<IRHIDevice>();
 	Swapchain = &Context.Require<IRHISwapchain>();
 	Compiler = &Context.Require<FShaderCompiler>();
@@ -183,6 +184,7 @@ void FEditorPlugin::Shutdown()
 		CloseAssetWindow();
 	}
 	AssetWorkspace.reset();
+	WindowGroup.reset();
 	SceneDocument.Detach(Tasks);
 	SceneTarget.reset();
 	Scene.reset();
@@ -273,6 +275,7 @@ bool FEditorPlugin::AdvanceFrame(float InDelta)
 	Acceptance.CollectInput(Events, AssetEvents);
 	const float GuiDelta = Acceptance.Policy().GuiDelta.value_or(InDelta);
 	auto Data = DrawMainWindow(GuiDelta, Events, bMainDrawable);
+	SynchronizeWindowGroup();
 	{
 		FMeasurementScope Measurement(!Options.Benchmark.empty(), BenchmarkFrame.SceneMilliseconds);
 		Scene->Tick();
@@ -351,10 +354,11 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		RefreshContent();
 	}
 	ImportPanel->Process(Window->Surface());
+	SynchronizeWindowGroup();
 	if (AssetWindow)
 	{
-		AssetWindow->Poll(IsAssetWindowBlocked());
-		if (AssetWindow->ShouldClose() && !IsAssetWindowBlocked())
+		AssetWindow->Poll(IsAuxiliaryWindowBlocked());
+		if (AssetWindow->ShouldClose() && !IsAuxiliaryWindowBlocked())
 		{
 			CloseAssetWindow();
 		}
@@ -376,7 +380,8 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		Finish();
 	}
 	UpdateDocumentInteraction();
-	AssetWorkspace->SetHostBlocked(IsAssetWindowBlocked() || bFinished);
+	SynchronizeWindowGroup();
+	AssetWorkspace->SetHostBlocked(IsAuxiliaryWindowBlocked() || bFinished);
 }
 
 void FEditorPlugin::Finish()

@@ -26,15 +26,16 @@ void WindowShortcut(std::vector<FInputEvent>& InEvents, EKey InKey)
 	InEvents.push_back(Event);
 }
 
-void CheckFailedAssetWindow(FWindow& InOwner, FTaskSystem& InTasks, IRHIDevice& InDevice, FShaderCompiler& InCompiler,
-                            FRenderSession& InSession, FAssetWorkspace& InWorkspace, FApplicationControl& InControl)
+void CheckFailedAssetWindow(FWindow& InOwner, FWindowGroup& InGroup, FTaskSystem& InTasks, IRHIDevice& InDevice,
+                            FShaderCompiler& InCompiler, FRenderSession& InSession, FAssetWorkspace& InWorkspace,
+                            FApplicationControl& InControl)
 {
 	FIOService MissingContent(InTasks, std::make_shared<FMemoryFileSystem>());
 	bool bFailed = false;
 	try
 	{
 		FAssetEditorWindow Host(InTasks, InDevice, InCompiler, InSession, InWorkspace, InControl, {});
-		Host.Initialize(InOwner, MissingContent, 1.25f, true);
+		Host.Initialize(InOwner, InGroup, MissingContent, 1.25f, true);
 	}
 	catch (const FFileNotFound&)
 	{
@@ -71,8 +72,8 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowInput(std::vector<FInputEvent>
 	{
 		case 200:
 			CheckAssetSaveShortcut();
-			CheckFailedAssetWindow(*Editor.Window, Editor.Tasks, *Editor.Device, *Editor.Compiler, *Editor.Session,
-			                       *Editor.AssetWorkspace, Editor.Control);
+			CheckFailedAssetWindow(*Editor.Window, *Editor.WindowGroup, Editor.Tasks, *Editor.Device, *Editor.Compiler,
+			                       *Editor.Session, *Editor.AssetWorkspace, Editor.Control);
 			CheckAssetWindow(Editor.AssetWindow && Editor.Viewport.bViewportVisible &&
 			                     Editor.AssetWindow->RenderedFrames() > 5 &&
 			                     Editor.AssetWindow->NativeWindow().Surface().Handle != Editor.Window->Surface().Handle,

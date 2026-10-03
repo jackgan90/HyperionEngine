@@ -1,4 +1,5 @@
 add_library(hyperion_platform STATIC Private/Adapters/SDLWindow.cpp)
+target_sources(hyperion_platform PRIVATE Private/WindowGroup.cpp Private/Adapters/WindowModality.cpp)
 target_sources(hyperion_platform PRIVATE Private/Adapters/FileDialog.cpp)
 target_sources(hyperion_platform PRIVATE Private/Adapters/Clipboard.cpp)
 target_sources(hyperion_platform PRIVATE Private/Adapters/ProcessOutput.cpp)

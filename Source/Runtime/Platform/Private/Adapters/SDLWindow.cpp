@@ -1,4 +1,6 @@
+#include "../WindowGroupHooks.h"
 #include "Clipboard.h"
+#include "WindowModality.h"
 #include <Hyperion/Platform/Window.h>
 #include <SDL3/SDL.h>
 #include <map>
@@ -229,7 +231,11 @@ FWindow::FWindow(std::string InTitle, FSize InSize, bool bInHidden) : Impl(std::
 	FImpl::Windows.emplace(SDL_GetWindowID(Impl->Window), Impl.get());
 }
 
-FWindow::~FWindow() = default;
+FWindow::~FWindow()
+{
+	RemoveWindowFromGroup(*this);
+	ForgetRetiredWindowVisibility(Impl->Surface);
+}
 
 void FWindow::SetMouseCursor(EMouseCursor InCursor)
 {
@@ -289,12 +295,18 @@ void FWindow::SetMouseCursor(EMouseCursor InCursor)
 void FWindow::Raise()
 {
 	Impl->RequireOwner();
+	if (auto* Main = GetWindowGroupInputOwner(*this))
+	{
+		Main->Raise();
+		return;
+	}
 	SDL_RaiseWindow(Impl->Window);
 }
 
 void FWindow::SetOwner(FWindow* InOwner)
 {
 	Impl->RequireOwner();
+	CheckWindowGroupOwnership(*this);
 	if (InOwner)
 	{
 		InOwner->Impl->RequireOwner();
@@ -307,11 +319,13 @@ void FWindow::SetOwner(FWindow* InOwner)
 		}
 	}
 	Check(SDL_SetWindowParent(Impl->Window, InOwner ? InOwner->Impl->Window : nullptr));
+	ReparentRetiredWindowVisibility(Surface(), InOwner ? InOwner->Surface() : FNativeSurface{});
 }
 
 void FWindow::Poll()
 {
 	Impl->RequireOwner();
+	SynchronizeRetiredWindowVisibility();
 	Impl->Events.clear();
 	SDL_Event Native;
 	while (SDL_PollEvent(&Native))

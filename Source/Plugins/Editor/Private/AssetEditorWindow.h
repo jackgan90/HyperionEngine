@@ -1,6 +1,7 @@
 #pragma once
 #include "AssetWorkspace.h"
 #include "Hyperion/Application/ApplicationHost.h"
+#include "Hyperion/Platform/WindowGroup.h"
 #include "Hyperion/RHI/RHISwapchain.h"
 #include "Hyperion/Renderer/RenderOutput.h"
 
@@ -14,7 +15,7 @@ public:
 	                   FRenderSession& InSession, FAssetWorkspace& InWorkspace, FApplicationControl& InControl,
 	                   std::filesystem::path InLayout);
 	~FAssetEditorWindow();
-	void Initialize(FWindow& InOwner, FIOService& InIO, float InScale, bool bInHidden);
+	void Initialize(FWindow& InOwner, FWindowGroup& InGroup, FIOService& InIO, float InScale, bool bInHidden);
 	void Activate();
 	void Poll(bool bInBlocked);
 	bool ShouldClose() const;
@@ -47,6 +48,7 @@ private:
 	std::filesystem::path Layout;
 	FWindow* Owner{};
 	std::unique_ptr<FWindow> Window;
+	FWindowRegistration Registration;
 	std::unique_ptr<FGui> Gui;
 	std::unique_ptr<FGuiRenderer> Renderer;
 	std::unique_ptr<IRHISwapchain> Swapchain;
