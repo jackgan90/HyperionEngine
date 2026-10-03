@@ -33,6 +33,14 @@ function(hyp_module target)
   endforeach()
   source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${absolute_sources})
 endfunction()
+
+# The application and every frontend in an acceptance command inherit one fresh discovery root.
+function(hyp_discovery_test)
+  cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME" "COMMAND")
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME ${arg_NAME} COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/Source/Tests/Automation/DiscoveryEnvironment.py" ${arg_COMMAND})
+endfunction()
 function(hyp_executable target)
   hyp_module(${target})
   # Keep complete PDBs and optimized linking independently of optional Tracy support.

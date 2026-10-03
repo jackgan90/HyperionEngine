@@ -9,6 +9,7 @@ import tempfile
 import time
 
 from AutomationAcceptance import Session, completed
+from DiscoveryEnvironment import ensure_isolated_discovery
 
 
 class AttachedSession(Session):
@@ -30,6 +31,7 @@ class AttachedSession(Session):
 
 class Application:
     def __init__(self, executable, output, name, scene, asset_root, disabled=False, frames=2400, extra=()):
+        ensure_isolated_discovery()
         self.path = output / (name + ".log")
         self.log = self.path.open("w", encoding="utf-8")
         self.instance = None

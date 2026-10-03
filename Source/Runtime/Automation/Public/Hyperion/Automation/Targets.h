@@ -17,19 +17,41 @@ struct FAutomationTarget
 template<> const FRecordDescriptor& RecordType<FTransportAddress>();
 template<> const FRecordDescriptor& RecordType<FAutomationTarget>();
 
+enum class ETargetListStopReason
+{
+	Complete = 0,
+	ResultLimit = 1,
+	ScanLimit = 2
+};
+
+struct FTargetDiscoverySnapshot
+{
+	std::vector<FAutomationTarget> Targets;
+	std::uint32_t Examined{};
+	std::uint32_t StaleSkipped{};
+	std::uint32_t UnknownOwnership{};
+	ETargetListStopReason StopReason = ETargetListStopReason::Complete;
+};
+
+template<> std::span<const TRecordEnumEntry<ETargetListStopReason>> RecordEnumEntries<ETargetListStopReason>();
+template<> const FRecordDescriptor& RecordType<FTargetDiscoverySnapshot>();
+
 class ITargetDiscovery
 {
 public:
 	virtual ~ITargetDiscovery() = default;
 	// Advisory, bounded snapshots. A connection handshake establishes actual identity/availability.
-	virtual std::vector<FAutomationTarget> List() = 0;
+	virtual FTargetDiscoverySnapshot List() = 0;
+	// Exact lookup must not depend on enumeration budgets.
+	virtual std::optional<FAutomationTarget> Find(const std::string& InInstance) = 0;
 };
 
 class FLocalTargetDiscovery final : public ITargetDiscovery
 {
 public:
 	explicit FLocalTargetDiscovery(std::filesystem::path InDirectory = {});
-	std::vector<FAutomationTarget> List() override;
+	FTargetDiscoverySnapshot List() override;
+	std::optional<FAutomationTarget> Find(const std::string& InInstance) override;
 	void Publish(const FAutomationTarget& InTarget);
 	void Withdraw(const std::string& InInstance) noexcept;
 

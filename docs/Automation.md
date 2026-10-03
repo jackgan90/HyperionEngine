@@ -197,7 +197,7 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 | 渲染与工具 | 共享渲染配置、实时深度约定、阴影、culling/batching/bounds、统计、组件诊断、PNG、RenderDoc、GUI scale、profiling | 深度切换共用 IRenderSettings，影响后续场景和三维资产预览帧，保存独立；可选 provider/build/startup 限制可查询；PNG 完成表示文件写入完成，路径属于目标 |
 | 导入、发布 | GUI/agent 共用 AssetImport workspace，支持 glTF/GLB、独立 PNG/JPEG、HDR/EXR 天空 | 提供能力/校验/共享任务查询；textureEncoding、sky 与 createFolder 为可选参数；createFolder 与 Editor 默认分组规则一致，按来源命名目录并跨会话复用，相同内容零写入；天空烘焙仅接受 HDR/EXR；不接受 `.hasset` 原生资产或自有资产 JSON 导入；发布接收后不可取消 |
 | 导入属性预览 | `asset.import.draft.*` 与 `asset.import.drafts` 共用未发布快照、分页查询、受限编辑及 Undo/Redo/Reset | mutation 使用草稿 generation；纹理尺寸、dimension 和 pixelBytes 为共享反射字段，details 保留展示兼容；submit 保留 provenance 与来源校验；脏草稿参与换根/关闭保护 |
-| 应用附着 | 默认本机发现、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |
+| 应用附着 | 默认本机发现、独立精确 ID 查找、列表截断信息、保守失效记录回收、显式连接、多连接共享目标状态、同用户准入、可禁用 | macOS/Linux provider、远端认证/发现、事件订阅、会话恢复仍是后续范围 |
 | 进程日志 | `application.log.read` 分页读取 Editor 当前进程日志，与 Log 面板共用 Core history | 含启动、隐藏面板期间与 stdout/stderr 记录；无 history provider 时 unavailable；窗口显隐、大小和停靠属于呈现，不模拟输入 |
 | 底层与维护工具 | 现有 AssetTool 离线维护 CLI 保留 | 不逐个 RPC Public C++ 方法；库迁移、Engine 内容生成、性能测量及导出 envelope 不作为 Editor 交互任务扩展 |
 

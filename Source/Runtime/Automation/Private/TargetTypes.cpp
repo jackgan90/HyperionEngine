@@ -2,6 +2,26 @@
 
 namespace Hyperion
 {
+template<> std::span<const TRecordEnumEntry<ETargetListStopReason>> RecordEnumEntries<ETargetListStopReason>()
+{
+	static constexpr TRecordEnumEntry<ETargetListStopReason> Entries[] = {
+	    {ETargetListStopReason::Complete, "complete"},
+	    {ETargetListStopReason::ResultLimit, "result_limit"},
+	    {ETargetListStopReason::ScanLimit, "scan_limit"}};
+	return Entries;
+}
+
+template<> const FRecordDescriptor& RecordType<FTargetDiscoverySnapshot>()
+{
+	static const auto Type = MakeRecord<FTargetDiscoverySnapshot>(
+	    "automation.targets.snapshot",
+	    {Member("targets", &FTargetDiscoverySnapshot::Targets), Member("examined", &FTargetDiscoverySnapshot::Examined),
+	     Member("staleSkipped", &FTargetDiscoverySnapshot::StaleSkipped),
+	     Member("unknownOwnership", &FTargetDiscoverySnapshot::UnknownOwnership),
+	     Member("stopReason", &FTargetDiscoverySnapshot::StopReason)});
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FTransportAddress>()
 {
 	static const auto Type = MakeRecord<FTransportAddress>(

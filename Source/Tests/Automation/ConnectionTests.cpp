@@ -1,12 +1,16 @@
 #include "Hyperion/Automation/Connections.h"
 #include "Hyperion/Transport/MemoryTransport.h"
 #include "Support/TestSupport.h"
+#include <algorithm>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <thread>
 
 namespace Hyperion
 {
+void RunDiscoveryTests();
+
 namespace
 {
 const FArchiveNode::FObject& Fields(const FArchiveNode& InValue)
@@ -19,9 +23,21 @@ class FDiscovery final : public ITargetDiscovery
 public:
 	std::vector<FAutomationTarget> Targets;
 
-	std::vector<FAutomationTarget> List() override
+	FTargetDiscoverySnapshot List() override
 	{
-		return Targets;
+		return {Targets};
+	}
+
+	std::optional<FAutomationTarget> Find(const std::string& InInstance) override
+	{
+		for (const auto& Target : Targets)
+		{
+			if (Target.Instance == InInstance)
+			{
+				return Target;
+			}
+		}
+		return {};
 	}
 };
 
@@ -100,6 +116,54 @@ void Connections()
 	HYP_CHECK(ReadValue<std::string>(Fields(Lost).at("status")) == "failed");
 	const auto Local = Router.Begin("engine.info", ParseJson("{}")).Poll();
 	HYP_CHECK(Local && ReadValue<std::string>(Fields(*Local).at("session")) == LocalSession.GetId());
+}
+
+void SaturatedDiscovery()
+{
+	const auto Directory = std::filesystem::temp_directory_path() / ("HyperionDiscovery-" + CreateAutomationIdentity());
+	FLocalTargetDiscovery Discovery(Directory);
+	std::filesystem::create_directories(Directory);
+	std::vector<FAutomationTarget> Published;
+	for (unsigned Index = 0; Index < 160; ++Index)
+	{
+		FAutomationTarget Target{CreateAutomationIdentity(), "Test", "test-build", {"memory", "saturated"}};
+		std::ofstream(Directory / (Target.Instance + ".json"))
+		    << WriteJson(WriteRecordWire(RecordType<FAutomationTarget>(), &Target));
+		Published.push_back(Target);
+	}
+	const auto Listed = Discovery.List().Targets;
+	HYP_CHECK(Listed.size() == 128);
+	const auto Missing = std::find_if(Published.begin(), Published.end(),
+	                                  [&](const auto& InTarget)
+	                                  {
+		                                  return std::none_of(Listed.begin(), Listed.end(),
+		                                                      [&](const auto& InListed)
+		                                                      {
+			                                                      return InTarget.Instance == InListed.Instance;
+		                                                      });
+	                                  });
+	HYP_CHECK(Missing != Published.end());
+	FTransportRegistry Transports;
+	Transports.Register(MakeMemoryTransport(128, 3));
+	FOperationCatalog Catalog;
+	Catalog.Seal();
+	FCurrentUserAccessPolicy Access;
+	FAutomationServer Server(Catalog, *Missing, Transports.Listen(Missing->Address), Access);
+	FConnectionManager Manager(Transports, Discovery, Access);
+	try
+	{
+		const auto Parameters = ParseJson("{\"instance\":\"" + Missing->Instance + "\"}");
+		const auto Probed = Await(Manager.Probe(Parameters), Manager, Server);
+		HYP_CHECK(ReadValue<bool>(Fields(Fields(Probed).at("result")).at("reachable")));
+		const auto Connected = Await(Manager.Connect(Parameters), Manager, Server);
+		HYP_CHECK(ReadValue<std::string>(Fields(Connected).at("status")) == "completed");
+	}
+	catch (...)
+	{
+		std::filesystem::remove_all(Directory);
+		throw;
+	}
+	std::filesystem::remove_all(Directory);
 }
 
 void Framing()
@@ -284,6 +348,8 @@ int main()
 	try
 	{
 		Hyperion::Connections();
+		Hyperion::SaturatedDiscovery();
+		Hyperion::RunDiscoveryTests();
 		Hyperion::Framing();
 		Hyperion::Admission();
 		Hyperion::DrainDisconnectedWork();

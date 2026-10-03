@@ -55,7 +55,7 @@ void CheckExitAdmission()
 	FLocalTargetDiscovery Discovery;
 	FCurrentUserAccessPolicy Access;
 	FConnectionManager Client(Transports, Discovery, Access);
-	const auto Targets = Discovery.List();
+	const auto Targets = Discovery.List().Targets;
 	const auto Found = std::find_if(Targets.begin(), Targets.end(),
 	                                [&](const FAutomationTarget& InTarget)
 	                                {
@@ -73,7 +73,7 @@ void CheckExitAdmission()
 	Host.GetServices().Require<FApplicationControl>().RequestExit();
 	const auto Rejected = Await(std::move(Pending), Client, Host);
 	Check(ReadValue<std::string>(Field(Rejected, "status")) == "failed");
-	const auto Remaining = Discovery.List();
+	const auto Remaining = Discovery.List().Targets;
 	Check(std::none_of(Remaining.begin(), Remaining.end(),
 	                   [&](const FAutomationTarget& InTarget)
 	                   {

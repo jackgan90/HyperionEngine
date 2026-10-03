@@ -8,6 +8,7 @@ import tempfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "Automation"))
 from AutomationAcceptance import completed
 from AttachmentAcceptance import Application, AttachedSession, ready
+from DiscoveryEnvironment import ensure_isolated_discovery
 
 
 def check_automation(cli, editor, output, mcp):
@@ -59,6 +60,7 @@ def check_automation(cli, editor, output, mcp):
 
 
 def main():
+    ensure_isolated_discovery()
     editor, cli, root = [pathlib.Path(argument).resolve() for argument in sys.argv[1:]]
     parent = root / "out" / "editor-tests"
     parent.mkdir(parents=True, exist_ok=True)

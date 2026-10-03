@@ -178,12 +178,9 @@ FTransportAddress FConnectionManager::FImpl::Resolve(const FArchiveNode::FObject
 		throw FAutomationError("invalid_arguments", "Specify an instance or a transport address");
 	}
 	const auto Instance = ReadValue<std::string>(InFields.at("instance"));
-	for (const auto& Target : Discovery.List())
+	if (const auto Target = Discovery.Find(Instance))
 	{
-		if (Target.Instance == Instance)
-		{
-			return Target.Address;
-		}
+		return Target->Address;
 	}
 	throw FAutomationError("not_found", "Target was not discovered; an explicit address can also be supplied");
 }
@@ -201,15 +198,15 @@ FConnectionManager::~FConnectionManager()
 
 FArchiveNode FConnectionManager::List()
 {
-	FArchiveNode::FArray Targets;
-	for (const auto& Target : Impl->Discovery.List())
-	{
-		Targets.push_back(WriteRecordWire(RecordType<FAutomationTarget>(), &Target));
-	}
-	return CompletedConnectionResult(FArchiveNode(FArchiveNode::FObject{
-	    {"targets", FArchiveNode(std::move(Targets))},
-	    {"contract", WriteValue(std::string(
-	                     "Candidates may be stale; connect verifies identity. Domain paths belong to the target."))}}));
+	const auto Snapshot = Impl->Discovery.List();
+	auto Result = WriteRecordWire(RecordType<FTargetDiscoverySnapshot>(), &Snapshot);
+	auto& Fields = std::get<FArchiveNode::FObject>(Result.Value);
+	Fields.emplace("truncated", WriteValue(Snapshot.StopReason != ETargetListStopReason::Complete));
+	Fields.emplace("contract",
+	               WriteValue(std::string(
+	                   "Bounded advisory snapshot; known instances resolve independently. Connect verifies identity. "
+	                   "Domain paths belong to the target.")));
+	return CompletedConnectionResult(std::move(Result));
 }
 
 FEndpointRequest FConnectionManager::Connect(const FArchiveNode& InParameters)

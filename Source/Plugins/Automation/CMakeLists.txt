@@ -42,7 +42,7 @@ if(BUILD_TESTING)
   add_executable(automation_local_tests Private/LocalPluginTests.cpp)
   hyp_executable(automation_local_tests)
   target_link_libraries(automation_local_tests PRIVATE hyperion_automation_plugin hyperion_application)
-  add_test(NAME automation_local_lifecycle COMMAND automation_local_tests)
+  hyp_discovery_test(NAME automation_local_lifecycle COMMAND $<TARGET_FILE:automation_local_tests>)
   set_tests_properties(automation_local_lifecycle PROPERTIES TIMEOUT 30)
   add_executable(automation_scene_tests Private/SceneOperationTests.cpp Private/SceneClipboardTests.cpp
     Private/SceneRegistrationTests.cpp Private/RenderOptionOperationTests.cpp)

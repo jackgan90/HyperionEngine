@@ -51,6 +51,16 @@ ctest --preset debug --output-on-failure -R 'automation_|editor_content|native_p
 
 CTest 不代替构建。Visual Studio 使用 `ctest --test-dir out/build/vs2022 -C Debug`；实际目录随生成器选择变化。GPU、窗口和截图验收需要可用的 D3D12 设备与桌面会话。RenderDoc 回放需要编入支持并安装兼容运行库；Tracy trace 验收需要对应构建与工具，见 [RenderDoc.md](RenderDoc.md)、[Profiling.md](Profiling.md)。
 
+启动应用/自动化前端的验收 CTest 使用 `hyp_discovery_test`，由 `DiscoveryEnvironment.py` 在 `out/discovery-tests/run-*` 下创建每轮独立的 `LOCALAPPDATA`，Editor、CLI 和 MCP 子进程共享该环境。强制结束留下的记录只保留在该轮目录，不发布到交互用户的发现目录，也不清理用户的历史记录。测试可显式覆盖子进程环境以验证注册失败；脚本不修改用户或系统环境变量。
+
+直接调用共享 `Application` / `Session` 的 Python 验收也会按进程创建或继承该环境。独立运行其他 Editor 验收脚本或 C++ `automation_local_tests` 时，使用同一包装入口：
+
+```powershell
+python Source/Tests/Automation/DiscoveryEnvironment.py out/build/debug/bin/automation_local_tests.exe
+```
+
+`automation_discovery` 使用真实 Editor、CLI 和 MCP 验证两个枚举上限下的精确附着、原生进程失效检查、超时/连接失败不误删、正常撤销和强制结束后的回收；`automation_connections` 覆盖枚举计数、旧格式、未知所有者、PID 复用、非法记录与删除时的并发修改保护。
+
 ## 有限帧截图
 
 ```powershell

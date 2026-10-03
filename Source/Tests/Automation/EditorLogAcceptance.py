@@ -7,9 +7,11 @@ import tempfile
 
 from AttachmentAcceptance import Application, AttachedSession
 from AutomationAcceptance import completed
+from DiscoveryEnvironment import ensure_isolated_discovery
 
 
 def main():
+    ensure_isolated_discovery()
     editor, cli, root = (pathlib.Path(value).resolve() for value in sys.argv[1:])
     parent = root / 'out' / 'log-tests'
     parent.mkdir(parents=True, exist_ok=True)

@@ -149,7 +149,7 @@ if(BUILD_TESTING)
   set_target_properties(editor_asset_document_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_asset_documents COMMAND editor_asset_document_tests)
   set_tests_properties(editor_asset_documents PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}" FIXTURES_SETUP editor_asset_fixture)
-  add_test(NAME editor_asset_editors COMMAND hyperion_editor
+  hyp_discovery_test(NAME editor_asset_editors COMMAND $<TARGET_FILE:hyperion_editor>
     --exercise-assets "${PROJECT_BINARY_DIR}/editor-asset-tests"
     --editor-preferences "${PROJECT_BINARY_DIR}/editor-asset-tests/EditorPreferences.ini"
     --layout "${PROJECT_BINARY_DIR}/editor-asset-tests/Layout.ini" --hidden)
@@ -162,14 +162,14 @@ if(BUILD_TESTING)
   set_target_properties(editor_content_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_content COMMAND editor_content_tests)
   set_tests_properties(editor_content PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}" FIXTURES_SETUP editor_content_fixture)
-  add_test(NAME editor_content_transition COMMAND hyperion_editor
+  hyp_discovery_test(NAME editor_content_transition COMMAND $<TARGET_FILE:hyperion_editor>
     --exercise-content "${PROJECT_BINARY_DIR}/editor-content-tests"
     --editor-preferences "${PROJECT_BINARY_DIR}/editor-content-tests/EditorPreferences.ini"
     --layout "${PROJECT_BINARY_DIR}/editor-content-tests/Layout.ini"
     --capture "${PROJECT_BINARY_DIR}/editor-content-tests/Browser.png" --hidden)
   set_tests_properties(editor_content_transition PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     FIXTURES_REQUIRED editor_content_fixture TIMEOUT 120 RUN_SERIAL TRUE LABELS "gpu;desktop")
-  add_test(NAME editor_content_startup COMMAND "${Python3_EXECUTABLE}"
+  hyp_discovery_test(NAME editor_content_startup COMMAND "${Python3_EXECUTABLE}"
     "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/ContentRootAcceptance.py" $<TARGET_FILE:hyperion_editor>
     "${PROJECT_SOURCE_DIR}" "${PROJECT_BINARY_DIR}/editor-content-tests")
   set_tests_properties(editor_content_startup PROPERTIES FIXTURES_REQUIRED editor_content_fixture TIMEOUT 150 RUN_SERIAL TRUE LABELS "gpu;desktop")

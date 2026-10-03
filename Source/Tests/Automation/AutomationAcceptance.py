@@ -8,9 +8,12 @@ import tempfile
 import threading
 import time
 
+from DiscoveryEnvironment import ensure_isolated_discovery
+
 
 class Session:
     def __init__(self, executable, asset_root=None, mcp=False):
+        ensure_isolated_discovery()
         self.mcp = mcp
         self.serial = 0
         self.messages = queue.Queue()

@@ -12,6 +12,22 @@ Editor 的普通启动组合默认启用 `automation-local`。同一个 Windows 
 
 探测超时可能是宿主 Main 忙，不能据此判定进程已经退出。随后 connect 仍再次校验身份。列表不会自动轮询全部候选或删除历史记录。其他平台和远端继续实现原有 transport/discovery 抽象，不向连接管理层加入平台进程检查。
 
+`targets.list` 最多返回 128 个候选、检查 1024 个目录条目。结果保留 `targets`、`contract`，并增加以下字段；计数描述本次枚举，目录变化时不构成全局原子快照：
+
+| 字段 | 含义 |
+| --- | --- |
+| `stopReason` | 反射枚举：0 = complete，1 = result_limit，2 = scan_limit；两种限制同时满足时报告 scan_limit |
+| `truncated` | 从 stopReason 派生；表示还有未检查的目录条目，不保证这些条目包含有效目标 |
+| `examined` | 已检查条目数，包括无效记录和其他扩展名 |
+| `staleSkipped` | 已确认原所属进程退出或 PID 被复用而跳过的记录数 |
+| `unknownOwnership` | 已返回候选中无法确认所属进程的记录数，包括旧格式记录 |
+
+已知 `instance` 的 probe、connect 和 `--attach` 直接读取对应记录，不受列表的两个上限影响。ID 必须是 32 位小写十六进制；查找仍检查文件类型、大小、JSON 限制和文件名/记录身份一致性。连接继续验证同用户准入、协议和预期实例，不会回退到其他目标。直接 address 连接仍不需要本地记录或 PID。
+
+新的本地注册文件使用私有 version 1 envelope，包含原 target、进程 ID 和进程创建时间（64 位十进制字符串）。target 描述与握手字段不变。新前端兼容旧的裸 target 文件；旧前端不能读取新 envelope，因此须与宿主同步升级。无法读取进程信息时保留候选，交由握手确认；不会从访问失败、端点缺失或超时推断进程已退出。
+
+宿主发布注册时最多检查 1024 个条目，尝试回收已确认失效的新格式记录。删除前锁定文件的写入/替换权限并核对原始内容，仅删除同一已核对文件；变化、占用、未知所有者、旧格式、无效或不支持版本的记录均保留。维护失败不阻止正常发布，普通退出仍由插件撤销自身注册，不增加逐帧清理。旧记录较多时列表仍可能截断，可直接使用启动日志中的准确 instance。
+
 ## 发现、连接与选择目标
 
 ```powershell
@@ -88,7 +104,7 @@ flowchart LR
 - `Runtime/Transport` 的 `ITransportConnection` 提供有序双向字节流、非阻塞 Poll、有限写入容量、EOF/错误和已验证的 peer 身份事实；不解释 JSON、operation、session 或“本机应用”。Send 成功仅表示数据被 provider 接收，Receive 不保留原生消息边界。缓冲区由 provider 拥有；Close 在释放缓冲区前取消/收割原生 pending IO。
 - `ITransportListener` 非阻塞接受已连接、已完成底层身份验证的连接；`ITransportProvider` 按 scheme 注册 Connect/Listen。客户端 Connect 可以返回 Connecting，通过 Poll 进入 Connected，之后才进行准入验证与应用握手。
 - `Runtime/Automation` 负责统一帧协议、握手、请求关联、超时、连接和 target session。握手协商协议版本与消息预算，并返回实际 instance/build/session/catalog 标识；当前协议版本 1，不支持 session resume。前端超时为 10 秒；异步领域工作用立即返回的 job 和后续查询表达。
-- `ITargetDiscovery` 返回有界候选快照。候选记录不等于可连接/可信身份；最终依赖 provider 验证和握手。当前只实现本机目录发现；可以增加设备列表、显式配置或组合 discovery，而无需修改调用路由。
+- `ITargetDiscovery` 提供带完成信息的有界 `List` 和独立的 `Find(instance)`。候选记录不等于可连接/可信身份；最终依赖 provider 验证和握手。当前只实现本机目录发现；可以增加设备列表、显式配置或组合 discovery，而无需修改调用路由。
 - `IAutomationAccessPolicy` 独立于传输。当前 `FCurrentUserAccessPolicy` 要求 provider 证明 authenticated/local/currentUser；未来远端 provider 可报告认证机制、principal 和加密事实，再由对应策略检查配对身份。不能信任 JSON 握手自己声明的身份。
 
 Windows provider 的名字限制在本机 Hyperion 管道命名空间，拒绝远端 pipe client；私有 DACL 只允许当前用户。客户端核对 pipe server 所属用户。每次应用启动生成新 instance，发现记录位于 `%LOCALAPPDATA%/Hyperion/Automation/<user SID>/`，正常停止撤销记录。崩溃遗留记录可能仍出现在候选列表，连接时会失败，不能被当作仍然运行的实例；不依赖 PID 判断身份。

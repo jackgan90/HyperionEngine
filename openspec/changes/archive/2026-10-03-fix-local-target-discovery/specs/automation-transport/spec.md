@@ -1,18 +1,4 @@
-# automation-transport Specification
-
-## Purpose
-Define portable, bounded byte transports, target discovery, identity verification and admission policies for automation connections without coupling domain operations to a platform or device topology.
-## Requirements
-### Requirement: Replaceable asynchronous byte transports
-The engine SHALL expose native-independent connection, listener and provider interfaces for reliable ordered full-duplex bytes. Implementations SHALL support bounded asynchronous progress, partial reads/writes, EOF/errors and close without blocking Main or borrowing ephemeral request buffers. A provider registry SHALL select explicitly registered schemes without domain branches.
-
-#### Scenario: Substitute transport
-- **WHEN** equivalent byte sequences arrive through Windows pipes or the memory test provider with different fragment boundaries
-- **THEN** the shared protocol produces equivalent requests and results without provider-specific dispatch
-
-#### Scenario: Close pending IO
-- **WHEN** a connection or listener closes while native IO is pending
-- **THEN** admission stops and pending state is cancelled or completed before its storage is destroyed
+## MODIFIED Requirements
 
 ### Requirement: Independent target discovery and identity
 Discovery SHALL return advisory target descriptors with boot-specific instance identity and transport addresses. Direct address connection SHALL not require local discovery or a local PID. The handshake SHALL verify expected identity and compatible communication versions before accepting calls. Lookup of an exact known instance SHALL be independent of enumeration result and scan limits. Bounded enumeration SHALL report typed completion or limit reason, derived truncation and examined/stale-skipped/unknown-ownership counts without deleting registrations.
@@ -33,19 +19,7 @@ Discovery SHALL return advisory target descriptors with boot-specific instance i
 - **WHEN** enumeration stops with unexamined entries because a budget was reached
 - **THEN** its result reports truncation and the corresponding limit reason rather than implying completeness
 
-### Requirement: Bounded portable communication protocol
-All production transports SHALL share bounded length framing, UTF-8 JSON encoding, request correlation and version negotiation. Framing SHALL not depend on native message boundaries or C++ ABI. Queue, connection, input and output limits SHALL prevent an unresponsive peer from blocking Main or allocating unbounded memory.
-
-#### Scenario: Fragmentation and malformed length
-- **WHEN** frames are fragmented/coalesced or contain an excessive length
-- **THEN** valid frames are reconstructed and excessive frames are rejected before allocating the advertised payload
-
-### Requirement: Explicit local admission and future authentication boundary
-The Windows provider SHALL restrict attachment to the current local user and reject remote pipe clients. Verified peer facts and connection admission policy SHALL be separate from self-reported target metadata. This release SHALL not open a TCP/UDP listener or advertise unimplemented remote support.
-
-#### Scenario: Disabled or unauthorized attachment
-- **WHEN** local automation is disabled or a peer fails the access policy
-- **THEN** no automation session is admitted and ordinary application behavior remains usable
+## ADDED Requirements
 
 ### Requirement: Conservative local registration ownership
 New local registrations SHALL contain private versioned process ID and process creation identity metadata without changing public target or handshake schemas. Readers SHALL accept legacy target records as unknown ownership. Alive, dead and unknown ownership SHALL be distinct; only a proven dead or replaced process identity permits filtering and opportunistic cleanup. Access/query errors, absent transport endpoints and handshake timeouts SHALL NOT prove death. Invalid, unsupported, legacy or changed records SHALL NOT be automatically deleted. Cleanup SHALL be bounded and SHALL delete only the unchanged file instance checked for removal.

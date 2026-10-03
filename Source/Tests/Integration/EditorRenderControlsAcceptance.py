@@ -10,6 +10,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "Automation"))
 from AutomationAcceptance import completed
 from AttachmentAcceptance import Application, AttachedSession, ready
+from DiscoveryEnvironment import ensure_isolated_discovery
 
 
 LIGHT = "hyperion.scenedirectionallight"
@@ -187,6 +188,7 @@ def gui(editor, root, output):
 
 
 if __name__ == "__main__":
+    ensure_isolated_discovery()
     cli, editor, root = [pathlib.Path(value).resolve() for value in sys.argv[1:]]
     parent = root / "out" / "editor-render-controls"
     parent.mkdir(parents=True, exist_ok=True)

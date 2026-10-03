@@ -12,7 +12,8 @@ endfunction()
 hyp_test(automation_tests automation_contracts hyperion_automation Automation/AutomationTests.cpp)
 target_sources(automation_tests PRIVATE Automation/JobStateTests.cpp)
 hyp_test(automation_connection_tests automation_connections hyperion_automation Automation/ConnectionTests.cpp)
-add_test(NAME automation_transport COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AutomationAcceptance.py"
+target_sources(automation_connection_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Runtime/Automation/Private/TargetDiscoveryTests.cpp")
+hyp_discovery_test(NAME automation_transport COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AutomationAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:automation_asset_tests>)
 set_tests_properties(automation_transport PROPERTIES TIMEOUT 120)
 add_test(NAME graphics_shutdown_validation COMMAND d3d12_frame_failure_tests --graphics-shutdown)
@@ -26,9 +27,9 @@ hyp_executable(process_output_tests)
 target_include_directories(process_output_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(process_output_tests PRIVATE hyperion_platform hyperion_core)
 target_link_options(process_output_tests PRIVATE /ENTRY:mainCRTStartup)
-add_test(NAME process_output COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ProcessOutputAcceptance.py" $<TARGET_FILE:process_output_tests> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME process_output COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ProcessOutputAcceptance.py" $<TARGET_FILE:process_output_tests> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(process_output PROPERTIES TIMEOUT 90)
-add_test(NAME editor_log COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/EditorLogAcceptance.py" $<TARGET_FILE:hyperion_editor> $<TARGET_FILE:hyperion_automation_cli> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_log COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/EditorLogAcceptance.py" $<TARGET_FILE:hyperion_editor> $<TARGET_FILE:hyperion_automation_cli> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_log PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_test(profiling_tests profiling_contracts hyperion_core Core/ProfilingTests.cpp)
 if(HYP_ENABLE_DEBUG_UI)
@@ -127,10 +128,10 @@ hyp_test(model_import_tests model_material_conversion hyperion_asset_import Asse
 target_sources(model_import_tests PRIVATE ../Runtime/AssetImport/Private/ModelImportRoleTests.cpp)
 hyp_test(import_workspace_tests asset_import_workspace hyperion_asset_import Assets/ImportWorkspaceTests.cpp)
 target_sources(import_workspace_tests PRIVATE Assets/ImportStateTests.cpp)
-add_test(NAME editor_asset_import COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportAcceptance.py"
+hyp_discovery_test(NAME editor_asset_import COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_asset_tool> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}/out/acceptance/Import")
 set_tests_properties(editor_asset_import PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME import_draft_automation COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportDraftAcceptance.py"
+hyp_discovery_test(NAME import_draft_automation COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportDraftAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_asset_tool> "${PROJECT_SOURCE_DIR}/out/acceptance/Import")
 set_tests_properties(import_draft_automation PROPERTIES TIMEOUT 180)
 target_compile_definitions(import_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
@@ -140,7 +141,7 @@ set_tests_properties(async_gltf_import PROPERTIES FIXTURES_REQUIRED model_data)
 hyp_test(config_tests configuration_plugins hyperion_config Config/ConfigTests.cpp)
 target_sources(config_tests PRIVATE Config/RasterOptionSettingsTests.cpp)
 hyp_test(plugin_tests plugin_runtime hyperion_application Plugins/PluginTests.cpp)
-add_test(NAME plugin_applications COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/PluginAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME plugin_applications COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/PluginAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(plugin_applications PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_test(asset_tests assets_math hyperion_assets Assets/AssetTests.cpp)
 hyp_test(environment_tests environment_preprocessing hyperion_asset_import Assets/EnvironmentTests.cpp)
@@ -243,43 +244,46 @@ hyp_test(gui_rendering_tests gui_texture_rendering hyperion_gui_renderer Gui/Gui
 target_link_libraries(gui_rendering_tests PRIVATE hyperion_rhi_d3d12)
 target_compile_definitions(gui_rendering_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(gui_texture_rendering PROPERTIES LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
-add_test(NAME automation_attachment COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AttachmentAcceptance.py"
+hyp_discovery_test(NAME editor_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME automation_attachment COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AttachmentAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(automation_attachment PROPERTIES TIMEOUT 300 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME automation_capability_parity COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/CapabilityAcceptance.py"
+hyp_discovery_test(NAME automation_discovery COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/DiscoveryAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+set_tests_properties(automation_discovery PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+hyp_discovery_test(NAME automation_capability_parity COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/CapabilityAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParity")
 set_tests_properties(automation_capability_parity PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME automation_selection_framing COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/SelectionFramingAcceptance.py"
+hyp_discovery_test(NAME automation_selection_framing COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/SelectionFramingAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/SelectionFraming")
 set_tests_properties(automation_selection_framing PROPERTIES TIMEOUT 120 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ParityRegressionAcceptance.py"
+hyp_discovery_test(NAME automation_parity_regressions COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ParityRegressionAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParityRegressions")
 set_tests_properties(automation_parity_regressions PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_capture_ui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorCaptureAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
+hyp_discovery_test(NAME editor_capture_ui COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorCaptureAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
 set_tests_properties(editor_capture_ui PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME automation_renderdoc_hud COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/RenderDocHudAcceptance.py"
+hyp_discovery_test(NAME automation_renderdoc_hud COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/RenderDocHudAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" "$<BOOL:${HYP_ENABLE_RENDERDOC}>")
 set_tests_properties(automation_renderdoc_hud PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_outlines COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OutlineAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_outlines COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OutlineAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_outlines PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_multiselect COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/MultiSelectionAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
-add_test(NAME editor_selection_shortcuts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/SelectionShortcutsAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_multiselect COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/MultiSelectionAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_selection_shortcuts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/SelectionShortcutsAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_selection_shortcuts PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_clipboard COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ClipboardAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_clipboard COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ClipboardAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_clipboard PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_reparent COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ReparentAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_reparent COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ReparentAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_reparent PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 set_tests_properties(editor_multiselect PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_placement COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/PlacementAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_placement COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/PlacementAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_placement PROPERTIES TIMEOUT 150 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_model_placement COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ModelPlacementAcceptance.py" $<TARGET_FILE:hyperion_editor> $<TARGET_FILE:hyperion_automation_cli> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME editor_model_placement COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ModelPlacementAcceptance.py" $<TARGET_FILE:hyperion_editor> $<TARGET_FILE:hyperion_automation_cli> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_model_placement PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 set_tests_properties(editor_acceptance PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME gui_scale_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/GuiScaleAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
+hyp_discovery_test(NAME gui_scale_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/GuiScaleAcceptance.py" $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(gui_scale_acceptance PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 if(HYP_ENABLE_DEBUG_UI)
   hyp_test(capture_controls_tests capture_controls hyperion_debug_ui Gui/CaptureControlsTests.cpp)
@@ -315,18 +319,18 @@ target_compile_definitions(d3d12_device_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_
 target_compile_definitions(shader_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 add_test(NAME dependency_boundaries COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/CheckBoundaries.py")
 add_test(NAME code_style_paths COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/CheckStyle.py" --paths-only)
-add_test(NAME editor_render_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorRenderAcceptance.py"
+hyp_discovery_test(NAME editor_render_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorRenderAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_render_acceptance PROPERTIES TIMEOUT 300 LABELS "gpu;desktop" RUN_SERIAL TRUE)
-add_test(NAME editor_render_controls COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorRenderControlsAcceptance.py"
+hyp_discovery_test(NAME editor_render_controls COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorRenderControlsAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_render_controls PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 set_tests_properties(d3d12_device_ownership PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 if(NOT HYP_ENABLE_TRACY)
-  add_test(NAME offline_startup COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OfflineStartup.py" $<TARGET_FILE:hyperion_editor>)
+  hyp_discovery_test(NAME offline_startup COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/OfflineStartup.py" $<TARGET_FILE:hyperion_editor>)
   set_tests_properties(offline_startup PROPERTIES TIMEOUT 45 LABELS "gpu;desktop;network" RUN_SERIAL TRUE)
 else()
-  add_test(NAME profiling_trace_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ProfilingAcceptance.py"
+  hyp_discovery_test(NAME profiling_trace_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/ProfilingAcceptance.py"
     $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}" $<TARGET_FILE:profiling_tests> $<TARGET_FILE:d3d12_frame_failure_tests>)
   set_tests_properties(profiling_trace_acceptance PROPERTIES TIMEOUT 180 SKIP_RETURN_CODE 77 LABELS "gpu;desktop;profiling" RUN_SERIAL TRUE)
 endif()
