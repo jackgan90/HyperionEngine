@@ -21,6 +21,16 @@ git diff --check
 
 C++/HLSL 变更的完整格式和语义命名检查见 [CodingStyle.md](CodingStyle.md)。纯文档修改检查描述与源码一致性、相对链接和差异即可。
 
+## 规范审查与工具覆盖
+
+现有自动检查各有范围：
+
+- `CheckStyle.py --paths-only` 检查自有文件命名和 include 路径等路径约定；CTest 的 `code_style_paths` 使用这一模式。
+- `CheckStyle.py` 在路径检查之外执行 C++/HLSL 格式检查；`--naming` 另外使用 clang-tidy/clang-query 检查 C++ 语义命名和单变量声明等已配置规则，需要编译数据库和 LLVM。`--format` 会修改文件，不能当作只读检查。
+- `CheckBoundaries.py` 检查已编码的模块依赖、include、CMake 声明和第三方隔离规则；它不能证明全部运行时所有权或生命周期契约。
+
+当前工具不检查函数 100 行或非测试 C++ 文件 500 行，也不自动判定显示文本参与逻辑、重复权威定义、隐含位置关系、策略耦合或缓存依赖是否完整。代码审查应按 [代码规模与拆分](CodingStyle.md#代码规模与拆分) 核实行数、例外与拆分边界，并逐项检查 [可维护性与语义表达](CodingStyle.md#可维护性与语义表达) 中的五条规则。通过格式、命名和边界检查只能证明这些工具覆盖的项目通过，不能替代语义审查及相关行为验证。
+
 ## 查询与选择测试
 
 ```powershell
