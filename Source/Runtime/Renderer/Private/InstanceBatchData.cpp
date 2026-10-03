@@ -35,7 +35,7 @@ std::shared_ptr<const FInstanceBatchData> PackInstanceBatch(const FRenderSceneSn
 	Result->InstanceCount = static_cast<std::uint32_t>(InItems.size());
 	const auto& First = InSnapshot.Items.At(InItems.front());
 	const auto Program = GetInstanceProgram(First);
-	const auto& Pass = Program->GetPass(InSnapshot.View.Usage, "Instance");
+	const auto& Pass = Program->GetInstancePass(InSnapshot.View.Usage);
 	for (std::uint32_t Slot = 0; Slot < Pass.Bindings.size(); ++Slot)
 	{
 		const auto& Binding = Pass.Bindings[Slot];
@@ -55,7 +55,7 @@ std::shared_ptr<const FInstanceBatchData> PackInstanceBatch(const FRenderSceneSn
 		{
 			const auto& Item = InSnapshot.Items.At(Index);
 			const auto ItemProgram = GetInstanceProgram(Item);
-			const auto& ItemPass = ItemProgram->GetPass(InSnapshot.View.Usage, "Instance");
+			const auto& ItemPass = ItemProgram->GetInstancePass(InSnapshot.View.Usage);
 			const auto& ItemBinding = ItemPass.Bindings.at(Slot);
 			if (ItemProgram != Program &&
 			    !Layout.Matches(DescribeInstanceRecordLayout(*ItemProgram, ItemPass, ItemBinding)))

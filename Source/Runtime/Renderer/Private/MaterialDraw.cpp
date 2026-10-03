@@ -54,7 +54,7 @@ void FRenderResourceCoordinator::CollectPreparedDraws()
 }
 
 FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, const FRenderView& InView,
-                                                     FGraphicsTarget InTarget, bool bInInstance)
+                                                     FGraphicsTarget InTarget, EMaterialExecutionMode InMode)
 {
 	HYP_PERF_SCOPE_C(Detail, DrawMaterial);
 	const auto& GeometryRecord = *InItem.State.Resource->Record;
@@ -65,7 +65,8 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 		throw std::invalid_argument("Unready or foreign geometry/material resource");
 	}
 	const auto& Compiled = *MaterialRecord.Compiled;
-	const auto& Program = Compiled.GetPass(InView.Usage, bInInstance ? "Instance" : "Default");
+	const auto& Program = Compiled.GetDrawPass(InView.Usage, InMode);
+	const bool bInstance = Program.ExecutionMode == EMaterialExecutionMode::Instanced;
 	const auto& Snapshot = InItem.State.Surface->GetSnapshot();
 	const auto& Pass = Snapshot->Definition->GetPass(InView.Usage);
 	const auto Resolved = InItem.ResolvedParameters
@@ -80,7 +81,7 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	const std::shared_ptr<const void> ResourceIdentity =
 	    Resolved->ResourceIdentity ? Resolved->ResourceIdentity : Resolved;
 	const FDrawKey Key{ResourceIdentity.get(), InItem.State.Resource.get(), InItem.State.Section, InView.Usage,
-	                   bInInstance};
+	                   Program.ExecutionMode};
 	const auto Existing = PreparedDraws.find(Key);
 	if (Existing != PreparedDraws.end())
 	{
@@ -95,7 +96,7 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 			if (!bSameParameters)
 			{
 				Cached.Packet.ConstantBindings = MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program,
-				                                                                 Values, Cached.Constants, bInInstance);
+				                                                                 Values, Cached.Constants, bInstance);
 				Cached.Parameters = Resolved;
 				Cached.Shared = InItem.SharedParameters;
 			}
@@ -132,7 +133,7 @@ FDrawPacket FRenderResourceCoordinator::DrawMaterial(const FRenderItem& InItem, 
 	Result.Bindings = Bindings.Set;
 	FMaterialConstantState Constants;
 	Result.ConstantBindings =
-	    MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program, Values, Constants, bInInstance);
+	    MaterialConstants->BindPrepared(MaterialRecord.Compiled, Program, Values, Constants, bInstance);
 	Result = FinalizeDraw(std::move(Result), InItem, InView, Pass);
 	std::vector<std::shared_ptr<const FMaterialValue>> ResourceValues;
 	for (const auto& Binding : Program.Bindings)

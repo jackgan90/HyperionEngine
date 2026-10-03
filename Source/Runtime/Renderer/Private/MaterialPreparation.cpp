@@ -1,10 +1,6 @@
 #include "Hyperion/Renderer/MaterialPreparation.h"
-#include "EnvironmentParameters.h"
 #include "Hyperion/Materials/ShaderParameters.h"
-#include "Hyperion/Renderer/CascadedShadowMap.h"
-#include "Hyperion/Renderer/ClusteredLights.h"
-#include "Hyperion/Renderer/MaterialBlocks.h"
-#include "Hyperion/Renderer/MaterialInputValues.h"
+#include "MaterialInterfaceBuilder.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -13,326 +9,24 @@ namespace Hyperion
 {
 namespace
 {
-void CompleteEngineDefaults(FMaterialParameterDeclaration& InParameter)
+std::string_view ExecutionModeKey(EMaterialExecutionMode InMode)
 {
-	if (InParameter.Source != EMaterialParameterSource::Semantic || InParameter.Default ||
-	    !InParameter.Semantic.IsBuiltin())
+	switch (InMode)
 	{
-		return;
-	}
-	static const FMaterialInputValues Defaults = []
-	{
-		auto Values = DefaultShadowParameters();
-		for (const auto& Inputs : {DefaultClusterParameters(), EnvironmentParameters()})
-		{
-			Values.insert(Values.end(), Inputs.begin(), Inputs.end());
-		}
-		return FMaterialInputValues(std::move(Values));
-	}();
-	if (const auto* Value = Defaults.Find(InParameter.Semantic))
-	{
-		InParameter.Default = *Value;
-	}
-}
-
-FShaderMember NestArrayLayout(const FMaterialParameterType& InType, const FShaderMember& InLeaf,
-                              std::uint32_t InLeafStride)
-{
-	if (InType.Kind != EMaterialValueKind::Array)
-	{
-		return InLeaf;
-	}
-	FShaderMember Result;
-	Result.Kind = EShaderValueKind::Array;
-	Result.ArrayCount = InType.ArrayCount;
-	Result.Members.push_back(NestArrayLayout(InType.Members.front(), InLeaf, InLeafStride));
-	const auto& Element = Result.Members.front();
-	const std::uint64_t Stride = Element.Kind == EShaderValueKind::Array
-	                                 ? std::uint64_t(Element.ArrayStride) * Element.ArrayCount
-	                                 : InLeafStride;
-	const std::uint64_t Size = (Result.ArrayCount - 1) * Stride + Element.Size;
-	if (Stride > 65536 || Size > 65536)
-	{
-		throw std::invalid_argument("Material nested array exceeds constant buffer range");
-	}
-	Result.ArrayStride = static_cast<std::uint32_t>(Stride);
-	Result.Size = static_cast<std::uint32_t>(Size);
-	return Result;
-}
-
-FShaderMember MatchAuthoredArrayLayout(FShaderMember InLayout, const FMaterialParameterType& InType)
-{
-	if (InType.Kind == EMaterialValueKind::Structure && InLayout.Kind == EShaderValueKind::Structure &&
-	    InType.Members.size() == InLayout.Members.size())
-	{
-		for (std::size_t Index = 0; Index < InLayout.Members.size(); ++Index)
-		{
-			if (InType.MemberNames[Index] != InLayout.Members[Index].Name)
-			{
-				return InLayout;
-			}
-			InLayout.Members[Index] =
-			    MatchAuthoredArrayLayout(std::move(InLayout.Members[Index]), InType.Members[Index]);
-		}
-	}
-	if (InType.Kind != EMaterialValueKind::Array || InLayout.Kind != EShaderValueKind::Array ||
-	    InLayout.Members.size() != 1)
-	{
-		return InLayout;
-	}
-	if (InLayout.Members.front().Kind == EShaderValueKind::Array ||
-	    InType.Members.front().Kind != EMaterialValueKind::Array)
-	{
-		InLayout.Members.front() =
-		    MatchAuthoredArrayLayout(std::move(InLayout.Members.front()), InType.Members.front());
-		return InLayout;
-	}
-	const auto* LeafType = &InType;
-	std::uint64_t Count = 1;
-	while (LeafType->Kind == EMaterialValueKind::Array)
-	{
-		Count *= LeafType->ArrayCount;
-		if (Count > 65536)
-		{
-			throw std::invalid_argument("Material nested array element count exceeds supported range");
-		}
-		LeafType = &LeafType->Members.front();
-	}
-	const auto Leaf = MatchAuthoredArrayLayout(InLayout.Members.front(), *LeafType);
-	if (Count != InLayout.ArrayCount || GetMaterialParameterType(Leaf) != *LeafType)
-	{
-		return InLayout; // Bind reports the complete type conflict; byte size alone is never sufficient.
-	}
-	// DXIL exposes total element count. The author supplies dimensions; preserve every native leaf address.
-	auto Result = NestArrayLayout(InType, Leaf, InLayout.ArrayStride);
-	if (Result.Size > InLayout.Size)
-	{
-		throw std::invalid_argument("Material nested array layout exceeds reflected extent");
-	}
-	Result.Name = InLayout.Name;
-	Result.Offset = InLayout.Offset;
-	Result.Size = InLayout.Size;
-	Result.bActive = InLayout.bActive;
-	return Result;
-}
-
-struct FInterfaceBuilder
-{
-	std::vector<FMaterialParameterDeclaration> Parameters;
-	std::vector<FMaterialTargetMapping> Mappings;
-	std::string Usage;
-	std::string Variant;
-	const FMaterialSemanticRegistry* Semantics{};
-	std::span<const std::shared_ptr<const FShaderParameterContractSet>> Contracts;
-	EMaterialEngineBindingMode EngineMode = EMaterialEngineBindingMode::Automatic;
-
-	void AddEngineParameter(FMaterialParameterDeclaration InParameter)
-	{
-		const auto Existing =
-		    std::find_if(Parameters.begin(), Parameters.end(),
-		                 [&](const auto& InExisting)
-		                 {
-			                 return InExisting.Name == InParameter.Name && InExisting.Semantic == InParameter.Semantic;
-		                 });
-		if (Existing != Parameters.end())
-		{
-			Existing->Targets.insert(Existing->Targets.end(), InParameter.Targets.begin(), InParameter.Targets.end());
-			return;
-		}
-		if (EngineMode == EMaterialEngineBindingMode::Explicit)
-		{
-			InParameter.Source = EMaterialParameterSource::Manual;
-			InParameter.OverridePolicy = EMaterialOverridePolicy::AllowOverride;
-		}
-		CompleteEngineDefaults(InParameter);
-		InParameter.bActive = false;
-		Parameters.push_back(std::move(InParameter));
-	}
-
-	std::optional<std::size_t> Find(const std::string& InPath) const
-	{
-		std::optional<std::size_t> Result;
-		const std::string Unqualified = InPath.substr(InPath.find(':') + 1);
-		const std::string Leaf = InPath.substr(InPath.find_last_of(".:") + 1);
-		for (std::size_t Index = 0; Index < Parameters.size(); ++Index)
-		{
-			const FMaterialParameterDeclaration& Parameter = Parameters[Index];
-			const bool bMatches =
-			    Parameter.Name == InPath ||
-			    (Parameter.Targets.empty() && (Parameter.Name == Unqualified || Parameter.Name == Leaf)) ||
-			    std::any_of(Parameter.Targets.begin(), Parameter.Targets.end(),
-			                [&](const std::string& InTarget)
-			                {
-				                return InTarget == InPath || InTarget == Unqualified;
-			                });
-			if (bMatches)
-			{
-				if (Result)
-				{
-					throw std::invalid_argument("Ambiguous material schema target: " + InPath);
-				}
-				Result = Index;
-			}
-		}
-		return Result;
-	}
-
-	std::size_t Bind(const std::string& InPath, FMaterialParameterType InType, bool bInActive)
-	{
-		std::optional<std::size_t> Index = Find(InPath);
-		if (!Index)
-		{
-			FMaterialParameterDeclaration Parameter;
-			Parameter.Name = InPath;
-			Parameter.Type = std::move(InType);
-			Parameter.bActive = false;
-			Index = Parameters.size();
-			Parameters.push_back(std::move(Parameter));
-		}
-		else if (Parameters[*Index].Type != InType)
-		{
-			throw std::invalid_argument("Material schema/variant type conflict: " + InPath);
-		}
-		Parameters[*Index].bActive |= bInActive;
-		Mappings.push_back({Usage, Variant, InPath, *Index, bInActive});
-		return *Index;
-	}
-
-	void BindMember(FMaterialProgramBinding& InBinding, const FShaderMember& InMember, const std::string& InParent,
-	                std::uint32_t InOffset = 0, bool bInParentActive = true)
-	{
-		const std::string Path = InParent + "." + InMember.Name;
-		const bool bActive = bInParentActive && InMember.bActive;
-		const std::optional<std::size_t> Existing = Find(Path);
-		if (InMember.Kind == EShaderValueKind::Structure && !Existing)
-		{
-			for (const FShaderMember& Member : InMember.Members)
-			{
-				BindMember(InBinding, Member, Path, InOffset + InMember.Offset, bActive);
-			}
-			return;
-		}
-		if (!bActive && !Existing)
-		{
-			return;
-		}
-		FShaderMember Layout = Existing ? MatchAuthoredArrayLayout(InMember, Parameters[*Existing].Type) : InMember;
-		const std::size_t Index = Bind(Path, GetMaterialParameterType(Layout), bActive);
-		if (bActive)
-		{
-			Layout.Offset += InOffset;
-			InBinding.Members.push_back({std::move(Layout), Index});
-		}
-	}
-};
-
-FMaterialParameterType ResourceType(const FShaderBinding& InBinding)
-{
-	EMaterialValueKind Kind;
-	switch (InBinding.Kind)
-	{
-		case EBindingKind::Texture:
-			if ((InBinding.Dimension != EShaderResourceDimension::Texture2D &&
-			     InBinding.Dimension != EShaderResourceDimension::TextureCube) ||
-			    InBinding.ResourceScalar != EShaderScalar::Float)
-			{
-				throw std::invalid_argument("Unsupported material texture dimension or component type: " +
-				                            InBinding.Name);
-			}
-			Kind = InBinding.Dimension == EShaderResourceDimension::TextureCube ? EMaterialValueKind::TextureCube
-			                                                                    : EMaterialValueKind::Texture2D;
-			break;
-		case EBindingKind::StructuredBuffer:
-		case EBindingKind::RawBuffer:
-			Kind = EMaterialValueKind::ReadBuffer;
-			break;
-		case EBindingKind::Sampler:
-			Kind = EMaterialValueKind::Sampler;
-			break;
+		case EMaterialExecutionMode::Ordinary:
+			return "ordinary";
+		case EMaterialExecutionMode::Instanced:
+			return "instanced";
 		default:
-			throw std::invalid_argument("Unsupported material resource kind: " + InBinding.Name);
+			throw std::invalid_argument("Invalid material execution mode");
 	}
-	FMaterialParameterType Result = FMaterialParameterType::Resource(Kind);
-	if (InBinding.Count > 1)
-	{
-		Result = FMaterialParameterType::Array(std::move(Result), InBinding.Count);
-	}
-	return Result;
 }
 
-void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, const FShaderArtifact& InArtifact,
-               const FMaterialPass& InDescription)
+void AppendVariantKey(std::string& OutKey, const FCompiledMaterialPass& InPass)
 {
-	const std::string Stage = InArtifact.Stage == EShaderStage::Vertex ? "Vertex:" : "Pixel:";
-	for (const FShaderBinding& NativeResource : InArtifact.Bindings)
-	{
-		FMaterialProgramBinding Binding;
-		auto Resource = InPass.Variant == "Instance"
-		                    ? PrepareMaterialInstanceBinding(NativeResource, InDescription, Binding)
-		                    : NativeResource;
-		if (NormalizeStandardMaterialBlock(Resource, InBuilder.Contracts))
-		{
-			for (auto Parameter :
-			     GetStandardMaterialBlockParameters(Resource.Name, *InBuilder.Semantics, InBuilder.Contracts))
-			{
-				const auto& Contract = GetStandardMaterialBlock(Resource.Name, InBuilder.Contracts);
-				const auto Member = std::find_if(Contract.Members.begin(), Contract.Members.end(),
-				                                 [&](const auto& InMember)
-				                                 {
-					                                 return InMember.Semantic == Parameter.Semantic;
-				                                 });
-				if (Member == Contract.Members.end() || std::none_of(Resource.Members.begin(), Resource.Members.end(),
-				                                                     [&](const auto& InMember)
-				                                                     {
-					                                                     return InMember.Name == Member->Name;
-				                                                     }))
-				{
-					continue;
-				}
-				if (!InBuilder.Find(Stage + Parameter.Targets.front()))
-				{
-					InBuilder.AddEngineParameter(std::move(Parameter));
-				}
-			}
-		}
-		if (!Binding.InstanceStride)
-		{
-			const auto Contract = ValidateEngineMaterialResource(Resource, InBuilder.Contracts);
-			if (!Contract.Semantic.IsEmpty() && !InBuilder.Find(Stage + Resource.Name))
-			{
-				auto Parameter = DeclareMaterialSemantic(std::string(Contract.Semantic.GetName()), Contract.Semantic,
-				                                         *InBuilder.Semantics);
-				Parameter.Targets = {Resource.Name};
-				InBuilder.AddEngineParameter(std::move(Parameter));
-			}
-			Binding.Resource = Resource;
-		}
-		Binding.Stages = ShaderStageMask(InArtifact.Stage);
-		if (Resource.Kind == EBindingKind::UniformBuffer)
-		{
-			if (Resource.Count != 1 || Resource.ByteSize == 0 || Resource.ByteSize > 65536)
-			{
-				throw std::invalid_argument("Unsupported material constant buffer count or extent: " + Resource.Name);
-			}
-			for (const FShaderMember& Member : Resource.Members)
-			{
-				InBuilder.BindMember(Binding, Member, Stage + Resource.Name);
-			}
-		}
-		else
-		{
-			Binding.ResourceParameter = InBuilder.Bind(Stage + Resource.Name, ResourceType(Resource), true);
-		}
-		for (const FMaterialBindingMember& Member : Binding.Members)
-		{
-			InPass.ActiveParameters.push_back(Member.ParameterIndex);
-		}
-		if (Binding.ResourceParameter)
-		{
-			InPass.ActiveParameters.push_back(*Binding.ResourceParameter);
-		}
-		InPass.Bindings.push_back(std::move(Binding));
-	}
+	OutKey += "/" + std::to_string(InPass.Usage.size()) + ":" + InPass.Usage + std::to_string(InPass.Variant.size()) +
+	          ":" + InPass.Variant + "/" + std::string(ExecutionModeKey(InPass.ExecutionMode)) + "/" +
+	          InPass.Vertex.CacheKey + "/" + InPass.Pixel.CacheKey;
 }
 
 FShaderCompileOptions CompileOptions(const FMaterialShader& InShader, const FMaterialVariantRequest& InVariant,
@@ -353,50 +47,50 @@ FShaderCompileOptions CompileOptions(const FMaterialShader& InShader, const FMat
 	              {
 		              return InDefine.Name == "HYP_ENABLE_INSTANCE";
 	              });
-	Result.Defines.push_back({"HYP_ENABLE_INSTANCE", InVariant.Name == "Instance" ? "1" : "0"});
+	Result.Defines.push_back(
+	    {"HYP_ENABLE_INSTANCE", InVariant.ExecutionMode == EMaterialExecutionMode::Instanced ? "1" : "0"});
 	return Result;
 }
 
 FCompiledMaterialPass CompileVariant(FShaderCompiler& InCompiler, const FMaterialDefinition& InDefinition,
                                      EShaderFormat InFormat, const FMaterialVariantRequest& InVariant,
-                                     const FShaderSourceSnapshot& InSources, FInterfaceBuilder& InBuilder)
+                                     const FShaderSourceSnapshot& InSources, FMaterialInterfaceBuilder& InBuilder)
 {
 	const FMaterialPass& Pass = InDefinition.GetPass(InVariant.Usage);
-	InBuilder.Usage = InVariant.Usage;
-	InBuilder.Variant = InVariant.Name;
 	FCompiledMaterialPass Compiled;
 	Compiled.Usage = InVariant.Usage;
 	Compiled.Variant = InVariant.Name;
 	Compiled.VariantDefines = InVariant.Defines;
+	Compiled.ExecutionMode = InVariant.ExecutionMode;
 	Compiled.Vertex = InCompiler.Compile(Pass.Vertex.Path, Pass.Vertex.Entry, EShaderStage::Vertex, InFormat,
-	                                     CompileOptions(Pass.Vertex, InVariant, InBuilder.Contracts), InSources);
-	BindStage(InBuilder, Compiled, Compiled.Vertex, Pass);
+	                                     CompileOptions(Pass.Vertex, InVariant, InBuilder.GetContracts()), InSources);
+	InBuilder.BindStage(Compiled, Compiled.Vertex, Pass);
 	if (!Pass.Pixel.Path.empty())
 	{
 		Compiled.Pixel = InCompiler.Compile(Pass.Pixel.Path, Pass.Pixel.Entry, EShaderStage::Pixel, InFormat,
-		                                    CompileOptions(Pass.Pixel, InVariant, InBuilder.Contracts), InSources);
-		BindStage(InBuilder, Compiled, Compiled.Pixel, Pass);
+		                                    CompileOptions(Pass.Pixel, InVariant, InBuilder.GetContracts()), InSources);
+		InBuilder.BindStage(Compiled, Compiled.Pixel, Pass);
 	}
 	Compiled.Bindings = MergeMaterialBindings(std::move(Compiled.Bindings));
-	Compiled.InstanceCapacity = InVariant.Name != "Instance" ? 1 : UINT32_MAX;
-	for (const auto& Array : InVariant.Name == "Instance" ? Pass.InstanceArrays : std::vector<FMaterialInstanceArray>{})
-	{
-		const auto Binding = std::find_if(Compiled.Bindings.begin(), Compiled.Bindings.end(),
-		                                  [&](const auto& InBinding)
-		                                  {
-			                                  return InBinding.Resource.Name == Array.Block;
-		                                  });
-		if (Binding == Compiled.Bindings.end() || !Binding->InstanceStride)
-		{
-			throw std::invalid_argument("Missing material instance block: " + Array.Block);
-		}
-		Compiled.InstanceCapacity = std::min(Compiled.InstanceCapacity, Binding->InstanceCapacity);
-	}
 	std::sort(Compiled.ActiveParameters.begin(), Compiled.ActiveParameters.end());
 	Compiled.ActiveParameters.erase(std::unique(Compiled.ActiveParameters.begin(), Compiled.ActiveParameters.end()),
 	                                Compiled.ActiveParameters.end());
-	if (InVariant.Name == "Instance")
+	if (InVariant.ExecutionMode == EMaterialExecutionMode::Instanced)
 	{
+		Compiled.InstanceCapacity = UINT32_MAX;
+		for (const auto& Array : Pass.InstanceArrays)
+		{
+			const auto Binding = std::find_if(Compiled.Bindings.begin(), Compiled.Bindings.end(),
+			                                  [&](const auto& InBinding)
+			                                  {
+				                                  return InBinding.Resource.Name == Array.Block;
+			                                  });
+			if (Binding == Compiled.Bindings.end() || !Binding->InstanceStride)
+			{
+				throw std::invalid_argument("Missing material instance block: " + Array.Block);
+			}
+			Compiled.InstanceCapacity = std::min(Compiled.InstanceCapacity, Binding->InstanceCapacity);
+		}
 		const bool bInstanceId =
 		    std::any_of(Compiled.Vertex.Reflection.Inputs.begin(), Compiled.Vertex.Reflection.Inputs.end(),
 		                [](const auto& InInput)
@@ -414,13 +108,14 @@ FCompiledMaterialPass CompileVariant(FShaderCompiler& InCompiler, const FMateria
 
 void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefinition& InDefinition,
                               EShaderFormat InFormat, const FShaderSourceSnapshot& InSources,
-                              FInterfaceBuilder& InBuilder, FCompiledMaterialDefinition& OutResult)
+                              FMaterialInterfaceBuilder& InBuilder, FCompiledMaterialDefinition& OutResult)
 {
 	const auto Count = OutResult.Passes.size();
 	for (std::size_t Index = 0; Index < Count; ++Index)
 	{
 		const auto& Default = OutResult.Passes[Index];
-		if (Default.Variant != "Default" || OutResult.FindInstancePass(Default.Usage))
+		if (Default.Variant != "Default" || Default.ExecutionMode != EMaterialExecutionMode::Ordinary ||
+		    OutResult.FindInstancePass(Default.Usage))
 		{
 			continue;
 		}
@@ -432,14 +127,24 @@ void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefini
 		auto Trial = InBuilder;
 		try
 		{
-			auto Instance = CompileVariant(InCompiler, InDefinition, InFormat,
-			                               {Default.Usage, "Instance", Default.VariantDefines}, InSources, Trial);
+			if (std::any_of(OutResult.Passes.begin(), OutResult.Passes.end(),
+			                [&](const auto& InPass)
+			                {
+				                return InPass.Usage == Default.Usage && InPass.Variant == "Instance";
+			                }))
+			{
+				throw std::invalid_argument("Optional instance variant identity is already occupied");
+			}
+			auto Instance =
+			    CompileVariant(InCompiler, InDefinition, InFormat,
+			                   {Default.Usage, "Instance", Default.VariantDefines, EMaterialExecutionMode::Instanced},
+			                   InSources, Trial);
 			if (!std::includes(Default.ActiveParameters.begin(), Default.ActiveParameters.end(),
 			                   Instance.ActiveParameters.begin(), Instance.ActiveParameters.end()))
 			{
 				throw std::invalid_argument("Instance permutation requires inputs unavailable to the ordinary pass");
 			}
-			OutResult.Key += "/instance/" + Instance.Vertex.CacheKey + "/" + Instance.Pixel.CacheKey;
+			AppendVariantKey(OutResult.Key, Instance);
 			OutResult.Passes.push_back(std::move(Instance));
 			InBuilder = std::move(Trial);
 		}
@@ -474,12 +179,18 @@ FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompile
 		          return std::tie(InA.Usage, InA.Name) < std::tie(InB.Usage, InB.Name);
 	          });
 	std::set<std::pair<std::string, std::string>> Variants;
+	std::set<std::string> InstanceUsages;
 	std::vector<std::filesystem::path> SourcePaths;
 	for (const FMaterialVariantRequest& Variant : InVariants)
 	{
+		(void)ExecutionModeKey(Variant.ExecutionMode);
 		if (Variant.Name.empty() || !Variants.emplace(Variant.Usage, Variant.Name).second)
 		{
 			throw std::invalid_argument("Duplicate or empty material variant");
+		}
+		if (Variant.ExecutionMode == EMaterialExecutionMode::Instanced && !InstanceUsages.insert(Variant.Usage).second)
+		{
+			throw std::invalid_argument("Ambiguous material instance candidate");
 		}
 		const auto& Pass = InDefinition->GetPass(Variant.Usage);
 		SourcePaths.push_back(Pass.Vertex.Path);
@@ -489,43 +200,20 @@ FCompiledMaterialDefinition CompileMaterialDefinition(FShaderCompiler& InCompile
 		}
 	}
 	const auto Sources = InCompiler.CaptureSources(SourcePaths);
-	FInterfaceBuilder Builder;
-	Builder.Semantics = &InDefinition->GetSemantics();
-	Builder.Contracts = InDefinition->GetDescription().ShaderContracts;
-	Builder.EngineMode = InEngineMode;
-	Builder.Parameters = InDefinition->GetSchema()->GetParameters();
-	for (FMaterialParameterDeclaration& Parameter : Builder.Parameters)
-	{
-		CompleteEngineDefaults(Parameter);
-		Parameter.bActive = false;
-	}
+	FMaterialInterfaceBuilder Builder(InDefinition, InEngineMode);
 	FCompiledMaterialDefinition Result;
-	Result.Interface.Definition = InDefinition;
-	Result.Key = "material-v2/contract" + std::to_string(GetEngineSemanticContractVersion()) + "/" +
+	Result.Key = "material-v3/contract" + std::to_string(GetEngineSemanticContractVersion()) + "/" +
 	             std::to_string(static_cast<unsigned>(InEngineMode)) + "/" +
 	             std::to_string(InDefinition->GetIdentity()) + "/" +
 	             std::to_string(InDefinition->GetDescription().Version);
 	for (const FMaterialVariantRequest& Variant : InVariants)
 	{
 		auto Compiled = CompileVariant(InCompiler, *InDefinition, InFormat, Variant, Sources, Builder);
-		Result.Key += "/" + std::to_string(Variant.Usage.size()) + ":" + Variant.Usage +
-		              std::to_string(Variant.Name.size()) + ":" + Variant.Name + "/" + Compiled.Vertex.CacheKey + "/" +
-		              Compiled.Pixel.CacheKey;
+		AppendVariantKey(Result.Key, Compiled);
 		Result.Passes.push_back(std::move(Compiled));
 	}
 	CompileOptionalInstances(InCompiler, *InDefinition, InFormat, Sources, Builder, Result);
-	// Register reflected aliases only after binding all stages/variants: authored targets drive matching.
-	for (const auto& Mapping : Builder.Mappings)
-	{
-		auto& Targets = Builder.Parameters[Mapping.ParameterIndex].Targets;
-		if (std::find(Targets.begin(), Targets.end(), Mapping.Target) == Targets.end())
-		{
-			Targets.push_back(Mapping.Target);
-		}
-	}
-	Result.Interface.Schema = std::make_shared<const FMaterialParameterSchema>(std::move(Builder.Parameters),
-	                                                                           InDefinition->GetDescription().Version);
-	Result.Interface.Mappings = std::move(Builder.Mappings);
+	Result.Interface = Builder.Finish();
 	return Result;
 }
 

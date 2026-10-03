@@ -130,6 +130,7 @@ hyp_test(model_import_tests model_material_conversion hyperion_asset_import Asse
 target_sources(model_import_tests PRIVATE ../Runtime/AssetImport/Private/ModelImportRoleTests.cpp)
 hyp_test(import_workspace_tests asset_import_workspace hyperion_asset_import Assets/ImportWorkspaceTests.cpp)
 target_sources(import_workspace_tests PRIVATE Assets/ImportStateTests.cpp)
+target_sources(import_workspace_tests PRIVATE Assets/ImportValidationTests.cpp)
 hyp_discovery_test(NAME editor_asset_import COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_asset_tool> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}/out/acceptance/Import")
 set_tests_properties(editor_asset_import PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
@@ -207,6 +208,7 @@ hyp_test(primitive_tests render_primitives hyperion_render Renderer/PrimitiveTes
 hyp_test(instance_batch_tests instance_batching hyperion_render Renderer/InstanceBatchTests.cpp)
 target_link_libraries(instance_batch_tests PRIVATE hyperion_rhi_d3d12)
 target_sources(instance_batch_tests PRIVATE Renderer/InstanceBatchSupport.cpp Renderer/InstanceContractTests.cpp Renderer/InstanceCacheTests.cpp Renderer/InstanceFailureTests.cpp Renderer/InstancePlanningTests.cpp Renderer/InstanceResourceTests.cpp)
+target_sources(instance_batch_tests PRIVATE Renderer/MaterialExecutionTests.cpp Renderer/MaterialExecutionGpuTests.cpp)
 target_compile_definitions(instance_batch_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(instance_batching PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 add_executable(batch_planning_benchmark Renderer/BatchPlanningBenchmark.cpp Renderer/InstanceBatchSupport.cpp)

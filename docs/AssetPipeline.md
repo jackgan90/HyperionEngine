@@ -37,6 +37,10 @@ AssetImport/Private/Adapters/GltfImport.cpp 封装锁定的 cgltf v1.15。根文
 
 FAssetImportService 注册 FAssetImporter{Id, Version, Type, Extensions, Convert}，将语义转换集中在格式适配器。LoadAsync<T> 用于源格式工具/测试；ImportAsync 负责增量判断、稳定身份和原生依赖发布。新增外部格式仍需适配器；新增原生数据类型只需反射描述符和注册，不需要修改通用 Assets 读写分派。同步 LoadGltfPrimitive 兼容入口也属于 AssetImport。
 
+Workspace 预检和独立 ImportAsync 发布共用 AssetImport 私有 ImportRules：输出扩展名必须为 `.hasset`（忽略大小写），规范化输出不能与源文件相同，省略 library 时使用规范化输出的父目录；sourceRoot/sourceId 必须同时提供或同时省略，sourceId 不允许冒号、反斜杠、前导斜杠或任意 `..` 子串。路径规范化仍由文件系统负责，规则检查与入口错误诊断分离。
+
+Workspace 另外负责 Main、generation、当前可写 `/Game`、字符串边界和导入类型准入，GUI 与 automation 继续调用同一 Workspace。分组导入在 Workspace 中不接受显式 library；底层服务允许显式 library 等于输出父目录。ImportAsync 的输出检查同步执行，来源标识错误通过异步结果返回。PrepareAsync 共用默认 library 推导并保持只读准备；直接调用者不能将准备成功视为通过全部发布准入。
+
 模型材质转换由 AssetImport 私有纹理角色描述表统一关联源成员、texture/sampler/UV semantic 和颜色编码，目标 semantic 仍由 Materials 定义。描述行的声明位置不决定角色或编码；显式输出顺序保持 BaseColor、MetallicRoughness、Normal、Occlusion、Emissive，以及各角色内 texture、sampler、UV 的写入次序，避免描述重排改变原生内容 revision。重复成员、目标 semantic 和缺失或重复的输出序号会拒绝。
 
 源 sampler 的 Min/Mag filter 与 U/V wrap mode 使用显式枚举转换，不依赖枚举数值顺序。没有 mip 的 Min filter 保持 MaxLod 为 0，其余保持材质采样器默认上限。缺失纹理继续共享 Linear 白纹理，缺失 sampler 使用默认过滤；同一图片的 sRGB/Linear 解释分别生成产品，同解释继续共享。

@@ -29,11 +29,13 @@ int main()
 	{
 		FFixture Fixture;
 		RunInstanceContractTests(Fixture.Compiler);
+		RunMaterialExecutionTests(Fixture.Compiler);
 		CheckPixels(Fixture);
 		RunInstancePlanningTests(Fixture);
 		RunInstanceResourceTests(Fixture);
 		RunInstanceCacheTests(Fixture);
 		RunInstanceFailureTests(Fixture);
+		RunMaterialExecutionGpuTests(Fixture);
 		HYP_CHECK(Fixture.Device->Statistics().ValidationErrors == 0);
 		std::cout << "PASS: instance permutations, typed records, batching, cache, coverage and GPU validation\n";
 		return 0;

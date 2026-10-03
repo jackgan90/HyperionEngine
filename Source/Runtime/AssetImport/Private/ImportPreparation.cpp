@@ -1,5 +1,6 @@
 #include "AssetPublicationInternal.h"
 #include "Hyperion/Scene/Model.h"
+#include "ImportRules.h"
 
 namespace Hyperion
 {
@@ -9,8 +10,7 @@ TAsyncResult<FPreparedImport> FAssetImportService::PrepareAsync(std::filesystem:
 {
 	const auto Source = ImportPath(InSource);
 	const auto Output = Impl->IO.FileSystem()->Normalize(InOutput);
-	InOptions.Library =
-	    Impl->IO.FileSystem()->Normalize(InOptions.Library.empty() ? Output.parent_path() : InOptions.Library);
+	InOptions.Library = NormalizeImportLibrary(*Impl->IO.FileSystem(), Output, InOptions.Library);
 	std::lock_guard Lock(Impl->Mutex);
 	if (Impl->bClosing)
 	{

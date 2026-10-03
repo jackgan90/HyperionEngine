@@ -100,7 +100,8 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 		EDepthConvention DepthConvention = EDepthConvention::Standard;
 	};
 
-	using FDrawKey = std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string, bool>;
+	using FDrawKey =
+	    std::tuple<const void*, const FRenderResource*, std::uint32_t, std::string, EMaterialExecutionMode>;
 	std::map<FDrawKey, FPreparedDraw> PreparedDraws;
 
 	struct FPreparedViewDraw
@@ -189,7 +190,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	void Upload(FRenderResourceRecord& InRecord);
 	bool Process(FEntry& InEntry);
 	FDrawPacket DrawMaterial(const FRenderItem& InItem, const FRenderView& InView, FGraphicsTarget InTarget,
-	                         bool bInInstance = false);
+	                         EMaterialExecutionMode InMode = EMaterialExecutionMode::Ordinary);
 	void ValidateDrawItem(const FRenderItem& InItem, const FRenderView& InView);
 	void BindInstances(FDrawPacket& InPacket, std::shared_ptr<const FInstanceBatchData> InData);
 };

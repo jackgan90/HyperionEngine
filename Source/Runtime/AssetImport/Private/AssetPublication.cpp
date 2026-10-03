@@ -2,6 +2,7 @@
 #include "AssetPublicationInternal.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
+#include "ImportRules.h"
 
 namespace Hyperion
 {
@@ -17,12 +18,11 @@ TAsyncResult<FAssetImportResult> FAssetImportService::ImportAsync(std::filesyste
 	{
 		throw std::invalid_argument("Grouped imports cannot use a separate dependency library");
 	}
-	if (Impl->IO.FileSystem()->Normalize(Source) == Output || ImportExtension(Output) != ".hasset")
+	if (!IsSeparateImportOutput(*Impl->IO.FileSystem(), Source, Output))
 	{
 		throw std::invalid_argument("Import output must be a separate .hasset file");
 	}
-	InOptions.Library =
-	    Impl->IO.FileSystem()->Normalize(InOptions.Library.empty() ? Output.parent_path() : InOptions.Library);
+	InOptions.Library = NormalizeImportLibrary(*Impl->IO.FileSystem(), Output, InOptions.Library);
 	std::lock_guard Lock(Impl->Mutex);
 	if (Impl->bClosing)
 	{
@@ -90,12 +90,12 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 	Publication.FolderKey = InOptions.FolderKey;
 	Publication.SourceRoot = InOptions.SourceRoot.empty() ? std::filesystem::path{} : ImportPath(InOptions.SourceRoot);
 	Publication.SourceId = InOptions.SourceId;
-	if (Publication.SourceRoot.empty() != Publication.SourceId.empty())
+	const auto IdentityError = CheckImportSourceIdentity(!Publication.SourceRoot.empty(), Publication.SourceId);
+	if (IdentityError == EImportSourceIdentityError::Incomplete)
 	{
 		throw std::invalid_argument("Source root and source ID must be supplied together");
 	}
-	if (Publication.SourceId.find(':') != std::string::npos || Publication.SourceId.find('\\') != std::string::npos ||
-	    Publication.SourceId.starts_with('/') || Publication.SourceId.find("..") != std::string::npos)
+	if (IdentityError == EImportSourceIdentityError::NonPortable)
 	{
 		throw std::invalid_argument("Source ID must be a portable logical name");
 	}

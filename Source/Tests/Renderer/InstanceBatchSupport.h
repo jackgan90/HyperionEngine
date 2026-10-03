@@ -59,6 +59,8 @@ std::size_t InstanceCount(const std::vector<FPassCommands>& InPasses);
 void RunInstanceCacheTests(FFixture& InFixture);
 void RunInstanceFailureTests(FFixture& InFixture);
 void RunInstanceContractTests(FShaderCompiler& InCompiler);
+void RunMaterialExecutionTests(FShaderCompiler& InCompiler);
+void RunMaterialExecutionGpuTests(FFixture& InFixture);
 FRenderSceneSnapshot Snapshot(FFixture& InFixture, std::size_t InCount);
 std::vector<FPassCommands> Prepare(FFixture& InFixture, FRenderBatchSystem& InBatches, FRenderSceneSnapshot InSnapshot);
 void RunInstancePlanningTests(FFixture& InFixture);

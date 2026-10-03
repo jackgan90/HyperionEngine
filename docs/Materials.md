@@ -66,7 +66,13 @@ auto Surface = Session.GetResources().RequestMaterial(Instance->Freeze());
 
 反射保留目标实际的 offset、array/matrix stride、matrix major、结构树、resource shape、stage、space/register 和 stage signature。跨 stage 同名但不同接口不能强行合并；必要时使用 stage 限定的路径。编译 variant 的参数类型必须一致，修改 include、defines 或缓存格式会改变编译 key。普通数值写入不重编译 shader 或创建 PSO。
 
-`FRenderMaterialDesc.Compiled` 显式选择一份不可变的预编译程序，必须与 Surface 的 definition 及设备 shader format 相符。同一 definition 的不同预编译对象分别保留；同一程序的数值 revision 仍共享静态资源。未传 Compiled 的自动编译路径单独按 definition 缓存，不受之前的显式程序影响。程序记录及其强持的编译结果随最后材质用户退休，不能只因 definition 相同而覆盖不同宏生成的程序。当前 session 按 Usage 使用该程序的 `Default` variant；准备接口可检查其他命名 variant，但不提供运行时非 Default variant 选择器。
+`FRenderMaterialDesc.Compiled` 显式选择一份不可变的预编译程序，必须与 Surface 的 definition 及设备 shader format 相符。同一 definition 的不同预编译对象分别保留；同一程序的数值 revision 仍共享静态资源。未传 Compiled 的自动编译路径单独按 definition 缓存，不受之前的显式程序影响。程序记录及其强持的编译结果随最后材质用户退休，不能只因 definition 相同而覆盖不同宏生成的程序。当前 session 普通绘制按 Usage 使用该程序的 `Default` variant；准备接口可检查其他命名 variant，但不提供运行时非 Default 普通 variant 选择器。
+
+变体的开放名称与执行方式分别由 `FMaterialVariantRequest.Name` 和 `ExecutionMode` 表达。`EMaterialExecutionMode::Ordinary` 是默认值；实例变体必须显式选择 `Instanced`，例如 `{"Forward", "Crowd", {}, EMaterialExecutionMode::Instanced}`。名称 `Instance` 本身不会启用实例化，已有直接 C++ 请求需要显式补充模式。编译结果保留模式，模式决定 `HYP_ENABLE_INSTANCE`、实例数组反射、容量和 `SV_InstanceID` 校验，并纳入材质编译 key；更名保留 shader 编译输入，却仍改变变体身份。资产字段、shader ABI 和 automation schema 不变。
+
+每个 Usage 可以有多个普通命名变体，但最多有一个实例候选；重复 Usage/Name、非法模式或多个实例候选在准备时拒绝。`GetPass(Usage)` 选择并检查 Ordinary `Default`，`GetPass(Usage, Name)` 查询准确身份，`FindInstancePass` / `GetInstancePass` 按显式模式查询实例候选。批处理、缓存记录打包和 draw 使用同一候选；原生实例准备失败仍可回退普通绘制。
+
+未显式提供实例候选时，准备器从 Ordinary `Default` 及其 defines 尝试生成名为 `Instance`、模式为 Instanced 的可选变体。缺少支持或反射校验失败保留普通程序和诊断。若 `Instance` 名称已被普通变体占用，记录可选身份冲突，不覆盖其模式或内容。实例候选的 GPU 布局保持延迟准备，已有普通材质不会因可选布局不受设备支持而整体失败。
 
 DXIL 原生反射会将直接多维数组展平为总元素数，自动 schema 如实使用该布局；SPIR-V/MSL 保留各层数组维度。需要跨目标一致的逻辑形状时，显式声明嵌套数组 schema。准备阶段检查完整叶类型和总元素数，以 DXIL 原生 leaf stride 重建嵌套地址，保留实际 offset、extent 及矩阵/struct 内部布局。原生信息无法区分 `[2][3]` 与 `[3][2]`，维度顺序由作者负责，不能把兼容性检查当作原 HLSL 维度恢复。当前 DXC 对直接多维矩阵数组生成 SPIR-V 会报告缺少 MatrixStride decoration；因此这类数组的实际 GPU 验收限于 DXIL，SPIR-V/MSL 的多维测试覆盖 float/bool/struct。编译器错误正常向上报告，不绕过其验证或修改依赖代码。
 

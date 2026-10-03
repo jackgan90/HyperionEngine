@@ -228,7 +228,8 @@ void PrepareBatchedDraws(FRenderResourceCoordinator& InOwner, const FRenderScene
 		{
 			const auto Index = Items.front();
 			auto Packet = InOwner.DrawMaterial(InSnapshot.Items[Index], InSnapshot.View,
-			                                   InSnapshot.Targets.GraphicsTarget(OutPrepared.Srgb[Index]), true);
+			                                   InSnapshot.Targets.GraphicsTarget(OutPrepared.Srgb[Index]),
+			                                   EMaterialExecutionMode::Instanced);
 			const auto Data = Items == Batch.Items ? Batch.Instances : PackInstanceBatch(InSnapshot, Items);
 			if (Items != Batch.Items)
 			{

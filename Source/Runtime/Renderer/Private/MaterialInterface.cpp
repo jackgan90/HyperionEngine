@@ -142,14 +142,54 @@ std::vector<FMaterialProgramBinding> MergeMaterialBindings(std::vector<FMaterial
 
 const FCompiledMaterialPass* FCompiledMaterialDefinition::FindInstancePass(std::string_view InUsage) const
 {
+	const FCompiledMaterialPass* Result = nullptr;
 	for (const auto& Pass : Passes)
 	{
-		if (Pass.Usage == InUsage && Pass.Variant == "Instance")
+		if (Pass.Usage == InUsage && Pass.ExecutionMode == EMaterialExecutionMode::Instanced)
 		{
-			return &Pass;
+			if (Result)
+			{
+				throw std::invalid_argument("Ambiguous material instance candidate");
+			}
+			Result = &Pass;
 		}
 	}
-	return nullptr;
+	return Result;
+}
+
+const FCompiledMaterialPass& FCompiledMaterialDefinition::GetInstancePass(std::string_view InUsage) const
+{
+	if (const auto* Pass = FindInstancePass(InUsage))
+	{
+		return *Pass;
+	}
+	throw std::invalid_argument("Compiled material instance candidate is unavailable");
+}
+
+const FCompiledMaterialPass& FCompiledMaterialDefinition::GetDrawPass(std::string_view InUsage,
+                                                                      EMaterialExecutionMode InMode) const
+{
+	switch (InMode)
+	{
+		case EMaterialExecutionMode::Ordinary:
+		{
+			const auto& Pass = GetPass(InUsage, "Default");
+			if (Pass.ExecutionMode != EMaterialExecutionMode::Ordinary)
+			{
+				throw std::invalid_argument("Default material draw variant must use ordinary execution");
+			}
+			return Pass;
+		}
+		case EMaterialExecutionMode::Instanced:
+			return GetInstancePass(InUsage);
+		default:
+			throw std::invalid_argument("Invalid material execution mode");
+	}
+}
+
+const FCompiledMaterialPass& FCompiledMaterialDefinition::GetPass(std::string_view InUsage) const
+{
+	return GetDrawPass(InUsage, EMaterialExecutionMode::Ordinary);
 }
 
 const FCompiledMaterialPass& FCompiledMaterialDefinition::GetPass(std::string_view InUsage,

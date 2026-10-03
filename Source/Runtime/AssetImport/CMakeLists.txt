@@ -3,6 +3,7 @@ add_library(hyperion_asset_import STATIC
   Private/ImportPreparation.cpp Private/ImportDraftProperties.cpp Private/ImportDraftTypes.cpp
   Private/ImportDraftWorkspace.cpp Private/ImportDraftInspection.cpp
   Private/ImportWorkspace.cpp Private/ImportWorkspaceTypes.cpp Private/ImportValidation.cpp
+  Private/ImportRules.cpp Private/ImportRules.h
   Private/AssetImportService.cpp Private/ImportDestinations.cpp
   Private/AssetImportProducts.cpp
   Private/ModelImport.cpp Private/ModelImportInternal.h Private/AssetPublication.cpp

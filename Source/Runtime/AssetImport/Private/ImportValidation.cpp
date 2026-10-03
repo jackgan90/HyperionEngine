@@ -4,6 +4,7 @@
 #include "Hyperion/Scene/Model.h"
 #include "Hyperion/Scene/ModelSource.h"
 #include "Hyperion/Scene/SceneManifest.h"
+#include "ImportRules.h"
 #include <algorithm>
 
 namespace Hyperion
@@ -78,9 +79,8 @@ void FAssetImportWorkspace::ValidateOutput(const FImportRequest& InRequest) cons
 	{
 		auto& Files = *IO.FileSystem();
 		const auto Output = Files.Normalize(PathFromUtf8(InRequest.Output));
-		const auto Library =
-		    Files.Normalize(InRequest.Library.empty() ? Output.parent_path() : PathFromUtf8(InRequest.Library));
-		if (ImportExtension(Output) != ".hasset")
+		const auto Library = NormalizeImportLibrary(Files, Output, PathFromUtf8(InRequest.Library));
+		if (!IsImportAssetOutput(Output))
 		{
 			throw FAssetImportError("invalid_arguments", "Output filename must end with .hasset");
 		}
@@ -122,9 +122,8 @@ FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InReques
 	auto& Files = *IO.FileSystem();
 	const auto Source = ImportPath(PathFromUtf8(InRequest.Source));
 	const auto Output = Files.Normalize(PathFromUtf8(InRequest.Output));
-	const auto Library =
-	    Files.Normalize(InRequest.Library.empty() ? Output.parent_path() : PathFromUtf8(InRequest.Library));
-	if (Files.Normalize(Source) == Output || ImportExtension(Output) != ".hasset")
+	const auto Library = NormalizeImportLibrary(Files, Output, PathFromUtf8(InRequest.Library));
+	if (!IsSeparateImportOutput(Files, Source, Output))
 	{
 		throw FAssetImportError("invalid_arguments", "Output must be a separate .hasset file");
 	}
@@ -136,9 +135,8 @@ FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InReques
 	{
 		throw FAssetImportError("invalid_arguments", "Scene wrapping requires a model or scene source");
 	}
-	if (InRequest.SourceRoot.empty() != InRequest.SourceId.empty() ||
-	    InRequest.SourceId.find_first_of(":\\") != std::string::npos || InRequest.SourceId.starts_with('/') ||
-	    InRequest.SourceId.find("..") != std::string::npos)
+	if (CheckImportSourceIdentity(!InRequest.SourceRoot.empty(), InRequest.SourceId) !=
+	    EImportSourceIdentityError::None)
 	{
 		throw FAssetImportError("invalid_arguments", "Supply sourceRoot and a portable sourceId together");
 	}

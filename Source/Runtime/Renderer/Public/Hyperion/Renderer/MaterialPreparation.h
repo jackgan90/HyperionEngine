@@ -11,11 +11,18 @@ enum class EMaterialEngineBindingMode
 	Explicit
 };
 
+enum class EMaterialExecutionMode
+{
+	Ordinary,
+	Instanced
+};
+
 struct FMaterialVariantRequest
 {
 	std::string Usage = "Forward";
 	std::string Name = "Default";
 	std::vector<FShaderDefine> Defines;
+	EMaterialExecutionMode ExecutionMode = EMaterialExecutionMode::Ordinary;
 };
 
 struct FMaterialBindingMember
@@ -45,6 +52,7 @@ struct FCompiledMaterialPass
 	std::vector<FMaterialProgramBinding> Bindings;
 	std::vector<std::size_t> ActiveParameters;
 	std::uint32_t InstanceCapacity = 1;
+	EMaterialExecutionMode ExecutionMode = EMaterialExecutionMode::Ordinary;
 };
 
 struct FCompiledMaterialDefinition
@@ -53,9 +61,13 @@ struct FCompiledMaterialDefinition
 	std::vector<FCompiledMaterialPass> Passes;
 	std::string Key;
 	std::vector<std::string> InstanceDiagnostics;
+	// Each usage has at most one instance candidate, regardless of its name.
 	const FCompiledMaterialPass* FindInstancePass(std::string_view InUsage = "Forward") const;
-	const FCompiledMaterialPass& GetPass(std::string_view InUsage = "Forward",
-	                                     std::string_view InVariant = "Default") const;
+	const FCompiledMaterialPass& GetInstancePass(std::string_view InUsage = "Forward") const;
+	const FCompiledMaterialPass& GetDrawPass(std::string_view InUsage, EMaterialExecutionMode InMode) const;
+	// Session consumers select the ordinary Default pass; explicit names remain available for inspection.
+	const FCompiledMaterialPass& GetPass(std::string_view InUsage = "Forward") const;
+	const FCompiledMaterialPass& GetPass(std::string_view InUsage, std::string_view InVariant) const;
 };
 
 FMaterialParameterType GetMaterialParameterType(const FShaderMember& InMember);

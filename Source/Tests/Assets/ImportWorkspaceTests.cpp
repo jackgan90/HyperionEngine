@@ -11,6 +11,8 @@
 #include <thread>
 
 void CheckImportStates();
+void CheckImportValidation(Hyperion::FIOService& InIO, Hyperion::FAssetImportWorkspace& InWorkspace,
+                           Hyperion::FImportRequest InRequest);
 
 namespace
 {
@@ -722,6 +724,7 @@ int main()
 	{
 		FFixture Fixture;
 		CheckImportStates();
+		CheckImportValidation(*Fixture.IO, *Fixture.Imports, Fixture.Request("Color.png", "Rules/Identity.hasset"));
 		CheckImage(Fixture);
 		CheckSky(Fixture);
 		CheckFailedImport(Fixture);

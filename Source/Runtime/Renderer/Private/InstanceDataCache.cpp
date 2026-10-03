@@ -318,7 +318,7 @@ std::shared_ptr<const FInstanceBatchData> FInstanceDataCache::Pack(const FRender
 	Result->InstanceCount = static_cast<std::uint32_t>(InItems.size());
 	const auto& First = InSnapshot.Items.At(InItems.front());
 	const auto Program = GetInstanceProgram(First);
-	const auto& Pass = Program->GetPass(InSnapshot.View.Usage, "Instance");
+	const auto& Pass = Program->GetInstancePass(InSnapshot.View.Usage);
 	bool bStable = true;
 	for (const auto Index : InItems)
 	{
@@ -349,7 +349,7 @@ std::shared_ptr<const FInstanceBatchData> FInstanceDataCache::Pack(const FRender
 				Records.push_back(Impl->Record(Item, Binding, *Layout, OutStats));
 				continue;
 			}
-			const auto& ItemPass = ItemProgram->GetPass(InSnapshot.View.Usage, "Instance");
+			const auto& ItemPass = ItemProgram->GetInstancePass(InSnapshot.View.Usage);
 			const auto ItemLayout = Impl->Layout(ItemProgram, ItemPass, Slot);
 			if (ItemLayout != Layout && !ItemLayout->Contract.Matches(Layout->Contract))
 			{
