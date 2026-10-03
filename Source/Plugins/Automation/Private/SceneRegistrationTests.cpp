@@ -41,6 +41,14 @@ void SceneMetadata()
 	FOperationCatalog Catalog;
 	RegisterSceneOperations(Catalog, nullptr);
 	Catalog.Seal();
+	CheckSchemas(Catalog, "scene.component.hyperion.staticmesh.set", SceneComponentRequestType<FSceneModelComponent>(),
+	             RecordType<FSceneDocumentInfo>(), false,
+	             "Main state committed; does not wait for rendering or write disk.");
+	const auto ModelSchema = RecordWireSchema(RecordType<FSceneModelComponent>());
+	for (const auto* Id : {"asset", "sourceNode", "sourcePrimitive"})
+	{
+		Check(ReadValue<bool>(Field(Field(Field(ModelSchema, "properties"), Id), "x-hyperion-inspector-readonly")));
+	}
 	CheckSchemas(Catalog, "scene.nodes.list", RecordType<FSceneListRequest>(), RecordType<FSceneNodePage>(), true,
 	             "Main state updated; renderer publication occurs on a subsequent frame. No disk write unless "
 	             "explicitly saving.");

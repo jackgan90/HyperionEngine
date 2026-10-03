@@ -77,7 +77,7 @@ std::shared_ptr<const FImportTask> FAssetImportWorkspace::StartPrepared(
 		const auto Oldest = std::find_if(Tasks.begin(), Tasks.end(),
 		                                 [](const auto& InTask)
 		                                 {
-			                                 return InTask->Info.Status != "running";
+			                                 return InTask->Info.Status != EImportTaskState::Running;
 		                                 });
 		if (Oldest == Tasks.end())
 		{
@@ -130,12 +130,12 @@ void FAssetImportWorkspace::Complete(FImportTask& InTask)
 		}
 		InTask.Info.Result = std::move(Outcome);
 		InTask.Info.Output = PathToUtf8(Result->Output);
-		InTask.Info.Status = "completed";
+		InTask.Info.Status = EImportTaskState::Completed;
 		++ContentRevision;
 	}
 	catch (const std::exception& Failure)
 	{
-		InTask.Info.Status = "failed";
+		InTask.Info.Status = EImportTaskState::Failed;
 		InTask.Info.Error = Failure.what();
 		InTask.Info.Error.resize(std::min<std::size_t>(InTask.Info.Error.size(), 8192));
 	}
@@ -164,7 +164,7 @@ void FAssetImportWorkspace::Update()
 	RequireMain();
 	for (const auto& Task : Tasks)
 	{
-		if (Task->Info.Status == "running" && Task->Pending.Ready())
+		if (Task->Info.Status == EImportTaskState::Running && Task->Pending.Ready())
 		{
 			Complete(*Task);
 		}
@@ -196,18 +196,18 @@ FContentRootParticipantState FAssetImportWorkspace::ContentRootState() const
 	    std::any_of(Drafts.begin(), Drafts.end(),
 	                [](const auto& InDraft)
 	                {
-		                return InDraft->Status == "ready" &&
+		                return InDraft->Status == EImportDraftState::Ready &&
 		                       ImportPropertiesKey(InDraft->History[InDraft->Cursor]) != InDraft->SavedKey;
 	                });
 	const bool bPreparing = std::any_of(Drafts.begin(), Drafts.end(),
 	                                    [](const auto& InDraft)
 	                                    {
-		                                    return InDraft->Status == "preparing";
+		                                    return InDraft->Status == EImportDraftState::Preparing;
 	                                    });
 	return {bDirty, bPreparing || std::any_of(Tasks.begin(), Tasks.end(),
 	                                          [](const auto& InTask)
 	                                          {
-		                                          return InTask->Info.Status == "running";
+		                                          return InTask->Info.Status == EImportTaskState::Running;
 	                                          })};
 }
 

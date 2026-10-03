@@ -279,7 +279,7 @@ FRenderResourceDesc Geometry(bool bInTexture = false)
 		Binding.Resource.Dimension = EShaderResourceDimension::Texture2D;
 		Binding.Resource.Count = 1;
 		Binding.ResourceParameter = 0;
-		Binding.Stages = 2;
+		Binding.Stages = EShaderStageMask::Pixel;
 		Compiled.Bindings.push_back(Binding);
 		Compiled.ActiveParameters.push_back(0);
 	}

@@ -46,11 +46,11 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 			if (!ImportPanel->DraftId.empty())
 			{
 				const auto Draft = Imports->Draft({ImportPanel->DraftId});
-				if (Draft.Status == "failed")
+				if (Draft.Status == EImportDraftState::Failed)
 				{
 					throw std::runtime_error(Draft.Error);
 				}
-				if (Draft.Status == "ready")
+				if (Draft.Status == EImportDraftState::Ready)
 				{
 					if (Draft.Dimension != ETextureDimension::Texture2D || Draft.Width != 8 || Draft.Height != 8 ||
 					    Draft.PixelBytes != 340 ||
@@ -133,11 +133,11 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 		case 14:
 		{
 			const auto State = Imports->List();
-			if (State.Tasks.empty() || State.Tasks.front().Status == "running")
+			if (State.Tasks.empty() || State.Tasks.front().Status == EImportTaskState::Running)
 			{
 				break;
 			}
-			if (!ImportPanel->bOpen || State.Tasks.front().Status != "completed" ||
+			if (!ImportPanel->bOpen || State.Tasks.front().Status != EImportTaskState::Completed ||
 			    State.Tasks.front().Result->WrittenAssets != 1)
 			{
 				throw std::runtime_error("GUI import failed: " + State.Tasks.front().Error);
@@ -157,7 +157,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 		case 18:
 		{
 			const auto State = Imports->List();
-			if (State.Tasks.size() < 2 || State.Tasks.front().Status == "running")
+			if (State.Tasks.size() < 2 || State.Tasks.front().Status == EImportTaskState::Running)
 			{
 				break;
 			}
@@ -178,7 +178,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 				break;
 			}
 			const auto Draft = Imports->Draft({ImportPanel->DraftId});
-			if (Draft.Status != "ready" || Draft.Name != "Color")
+			if (Draft.Status != EImportDraftState::Ready || Draft.Name != "Color")
 			{
 				break;
 			}
@@ -213,7 +213,7 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 		case 23:
 		{
 			const auto Draft = Imports->Draft({ImportPanel->DraftId});
-			if (Draft.Status != "ready" || Draft.Name != "Color")
+			if (Draft.Status != EImportDraftState::Ready || Draft.Name != "Color")
 			{
 				break;
 			}
@@ -233,11 +233,11 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 		case 25:
 		{
 			const auto State = Imports->List();
-			if (State.Tasks.size() < 3 || State.Tasks.front().Status == "running")
+			if (State.Tasks.size() < 3 || State.Tasks.front().Status == EImportTaskState::Running)
 			{
 				break;
 			}
-			if (State.Tasks.front().Status != "failed" || State.Tasks.front().Error.empty() ||
+			if (State.Tasks.front().Status != EImportTaskState::Failed || State.Tasks.front().Error.empty() ||
 			    IO.FileSystem()->Exists("/Game/Changed.hasset"))
 			{
 				throw std::runtime_error("Changed source was not rejected before publication");
@@ -256,11 +256,11 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 		case 26:
 		{
 			const auto Draft = Imports->Draft({ImportPanel->DraftId});
-			if (Draft.Status == "failed")
+			if (Draft.Status == EImportDraftState::Failed)
 			{
 				throw std::runtime_error("Source refresh after failed import failed: " + Draft.Error);
 			}
-			if (Draft.Status == "ready" && Draft.Error.empty() &&
+			if (Draft.Status == EImportDraftState::Ready && Draft.Error.empty() &&
 			    ImportPanel->ImportResultBounds.Z <= ImportPanel->ImportResultBounds.X)
 			{
 				++Acceptance.ExerciseStep;
@@ -273,11 +273,11 @@ void FEditorPlugin::ExerciseImportInput(std::vector<FInputEvent>& InEvents)
 		case 28:
 		{
 			const auto State = Imports->List();
-			if (State.Tasks.size() < 4 || State.Tasks.front().Status == "running")
+			if (State.Tasks.size() < 4 || State.Tasks.front().Status == EImportTaskState::Running)
 			{
 				break;
 			}
-			if (State.Tasks.front().Status != "completed")
+			if (State.Tasks.front().Status != EImportTaskState::Completed)
 			{
 				throw std::runtime_error("Retry did not use the refreshed source: " + State.Tasks.front().Error);
 			}

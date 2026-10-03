@@ -44,7 +44,7 @@ void FAutomationSession::MakeRoom()
 		const auto It = std::find_if(Jobs.begin(), Jobs.end(),
 		                             [](const auto& InEntry)
 		                             {
-			                             return InEntry.second.State != "running";
+			                             return InEntry.second.State != EJobState::Running;
 		                             });
 		if (It != Jobs.end())
 		{
@@ -121,7 +121,7 @@ void FAutomationSession::Poll()
 	bInvoking = true;
 	for (auto& [Key, Job] : Jobs)
 	{
-		if (Job.State != "running")
+		if (Job.State != EJobState::Running)
 		{
 			continue;
 		}
@@ -133,12 +133,12 @@ void FAutomationSession::Poll()
 				continue;
 			}
 			Job.Outcome = Complete(*Result);
-			Job.State = "completed";
+			Job.State = EJobState::Completed;
 		}
 		catch (...)
 		{
 			Job.Outcome = CurrentAutomationFailure();
-			Job.State = "failed";
+			Job.State = EJobState::Failed;
 		}
 		Job.Task = {};
 	}
@@ -158,13 +158,30 @@ FAutomationSession::FJob& FAutomationSession::FindJob(std::string_view InId)
 	throw FAutomationError("not_found", "Unknown, expired or foreign-session job", "job");
 }
 
+std::string_view FAutomationSession::JobStateName(EJobState InState)
+{
+	switch (InState)
+	{
+		case EJobState::Running:
+			return "running";
+		case EJobState::Completed:
+			return "completed";
+		case EJobState::Failed:
+			return "failed";
+		case EJobState::Cancelled:
+			return "cancelled";
+	}
+	throw std::invalid_argument("Invalid automation job state");
+}
+
 FArchiveNode FAutomationSession::DescribeJob(const FJob& InJob) const
 {
-	FArchiveNode::FObject Result{{"status", WriteValue(InJob.State)},
-	                             {"job", WriteValue(InJob.Id)},
-	                             {"operation", WriteValue(InJob.Operation)},
-	                             {"cancellable", WriteValue(InJob.State == "running" && bool(InJob.Task.Cancel))}};
-	if (InJob.State == "running")
+	FArchiveNode::FObject Result{
+	    {"status", WriteValue(std::string(JobStateName(InJob.State)))},
+	    {"job", WriteValue(InJob.Id)},
+	    {"operation", WriteValue(InJob.Operation)},
+	    {"cancellable", WriteValue(InJob.State == EJobState::Running && bool(InJob.Task.Cancel))}};
+	if (InJob.State == EJobState::Running)
 	{
 		Result.emplace("pollAfterMs", WriteValue(std::uint32_t(20)));
 	}
@@ -185,7 +202,7 @@ FArchiveNode FAutomationSession::CancelJob(std::string_view InId)
 {
 	Poll();
 	auto& Job = FindJob(InId);
-	if (Job.State != "running")
+	if (Job.State != EJobState::Running)
 	{
 		return DescribeJob(Job);
 	}
@@ -194,7 +211,7 @@ FArchiveNode FAutomationSession::CancelJob(std::string_view InId)
 		throw FAutomationError("not_cancellable", "This operation cannot be cancelled after admission", "job");
 	}
 	Job.Task.Cancel();
-	Job.State = "cancelled";
+	Job.State = EJobState::Cancelled;
 	Job.Outcome = AutomationFailure("cancelled", "Operation cancelled; provider cleanup is still drained at shutdown");
 	Job.Task = {};
 	return DescribeJob(Job);
@@ -212,7 +229,7 @@ std::size_t FAutomationSession::PendingCount() const
 	return std::count_if(Jobs.begin(), Jobs.end(),
 	                     [](const auto& InEntry)
 	                     {
-		                     return InEntry.second.State == "running";
+		                     return InEntry.second.State == EJobState::Running;
 	                     });
 }
 

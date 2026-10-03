@@ -10,6 +10,8 @@
 #include <iostream>
 #include <thread>
 
+void CheckImportStates();
+
 namespace
 {
 using namespace Hyperion;
@@ -80,13 +82,13 @@ struct FFixture
 	FImportResult Wait(const std::shared_ptr<const FImportTask>& InTask)
 	{
 		const auto End = std::chrono::steady_clock::now() + std::chrono::seconds(20);
-		while (InTask->Info.Status == "running" && std::chrono::steady_clock::now() < End)
+		while (InTask->Info.Status == EImportTaskState::Running && std::chrono::steady_clock::now() < End)
 		{
 			Imports->Update();
 			Tasks.PumpMain();
 			std::this_thread::yield();
 		}
-		if (InTask->Info.Status != "completed")
+		if (InTask->Info.Status != EImportTaskState::Completed)
 		{
 			throw std::runtime_error("Import did not complete: " + InTask->Info.Error);
 		}
@@ -261,7 +263,7 @@ void CheckFailedImport(FFixture& InFixture)
 	    {
 		    InFixture.Wait(Task);
 	    });
-	HYP_CHECK(Task->Info.Status == "failed" && !Task->Info.Error.empty());
+	HYP_CHECK(Task->Info.Status == EImportTaskState::Failed && !Task->Info.Error.empty());
 	HYP_CHECK(!InFixture.Imports->ContentRootState().bBusy);
 	HYP_CHECK(!InFixture.Files->Exists("/Game/Broken.hasset"));
 	HYP_CHECK(Logs.Count(ELogLevel::Error,
@@ -287,7 +289,7 @@ FImportDraftInfo WaitDraft(FFixture& InFixture, const std::string& InId)
 		InFixture.Imports->Update();
 		InFixture.Tasks.PumpMain();
 		auto State = InFixture.Imports->Draft({InId});
-		if (State.Status != "preparing" && State.Status != "publishing")
+		if (State.Status != EImportDraftState::Preparing && State.Status != EImportDraftState::Publishing)
 		{
 			return State;
 		}
@@ -304,7 +306,7 @@ void CheckGroupedImports(FFixture& InFixture)
 	const auto BeforePreview = InFixture.IO->Statistics().Writes.load();
 	HYP_CHECK(InFixture.Imports->Validate(Request).Folder == "/Game/Grouped/Color");
 	const auto Preview = WaitDraft(InFixture, InFixture.Imports->PrepareDraft(Request).Draft);
-	HYP_CHECK(Preview.Status == "ready");
+	HYP_CHECK(Preview.Status == EImportDraftState::Ready);
 	HYP_CHECK(InFixture.IO->Statistics().Writes.load() == BeforePreview);
 	HYP_CHECK(!InFixture.Files->Exists("/Game/Grouped"));
 	InFixture.Imports->DiscardDraft({Preview.Draft, Preview.Generation, true});
@@ -463,7 +465,7 @@ void CheckPanoramaDimensions(FFixture& InFixture)
 		const auto Request = InFixture.Request(Source, "RejectedSky.hasset");
 		const auto Before = InFixture.IO->Statistics().Writes.load();
 		const auto State = WaitDraft(InFixture, InFixture.Imports->PrepareDraft(Request).Draft);
-		HYP_CHECK(State.Status == "failed");
+		HYP_CHECK(State.Status == EImportDraftState::Failed);
 		HYP_CHECK(State.Error.find("2 x 2") != std::string::npos && State.Error.find("2:1") != std::string::npos);
 		HYP_CHECK(InFixture.IO->Statistics().Writes.load() == Before);
 		HYP_CHECK(!InFixture.Files->Exists("/Game/RejectedSky.hasset"));
@@ -545,9 +547,10 @@ void CheckDraftEditing(FFixture& InFixture)
 	const auto Request = InFixture.Request("Color.png", "Draft.hasset");
 	const auto Before = InFixture.IO->Statistics().Writes.load();
 	auto State = InFixture.Imports->PrepareDraft(Request);
+	HYP_CHECK(State.Status == EImportDraftState::Preparing);
 	HYP_CHECK(InFixture.Imports->ContentRootState().bBusy);
 	State = WaitDraft(InFixture, State.Draft);
-	HYP_CHECK(State.Status == "ready" && State.Width == 2 && State.Mips == 2);
+	HYP_CHECK(State.Status == EImportDraftState::Ready && State.Width == 2 && State.Mips == 2);
 	HYP_CHECK(State.Height == 2 && State.Dimension == ETextureDimension::Texture2D && State.PixelBytes == 20);
 	HYP_CHECK(State.Details == std::vector<std::string>{"Texture2D | pixel bytes: 20"});
 	const auto Wire = WriteRecordWire(RecordType<FImportDraftInfo>(), &State);
@@ -584,9 +587,11 @@ void CheckDraftEditing(FFixture& InFixture)
 	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation, "redo"});
 	HYP_CHECK(State.Name == "Draft texture");
 	const auto Task = InFixture.Imports->SubmitDraft({State.Draft, State.Generation});
+	HYP_CHECK(Task.Status == EImportTaskState::Running);
+	HYP_CHECK(InFixture.Imports->Draft({State.Draft}).Status == EImportDraftState::Publishing);
 	State = WaitDraft(InFixture, State.Draft);
 	HYP_CHECK(State.Error.empty() && !State.bDirty);
-	HYP_CHECK(InFixture.Imports->Get({Task.Task}).Status == "completed");
+	HYP_CHECK(InFixture.Imports->Get({Task.Task}).Status == EImportTaskState::Completed);
 	const auto Texture = InFixture.Assets->LoadAsync<FTextureAsset>("/Game/Draft.hasset").Get(InFixture.Tasks);
 	HYP_CHECK(Texture->Name == "Draft texture");
 	const auto Header = DecodeAsset(InFixture.IO->ReadAsync("/Game/Draft.hasset").Get(InFixture.Tasks)).Header;
@@ -602,7 +607,7 @@ void CheckDraftEditing(FFixture& InFixture)
 		    InFixture.Imports->EditDraft({State.Draft, State.Generation, Edits});
 	    });
 	HYP_CHECK(InFixture.Imports->Draft({State.Draft}).Generation == State.Generation);
-	InFixture.Imports->DiscardDraft({State.Draft, State.Generation});
+	HYP_CHECK(InFixture.Imports->DiscardDraft({State.Draft, State.Generation}).Status == EImportDraftState::Discarded);
 }
 
 void CheckDraftFreshness(FFixture& InFixture)
@@ -611,14 +616,28 @@ void CheckDraftFreshness(FFixture& InFixture)
 	Request.Sky = FEnvironmentBakeSettings{8, 4, 8};
 	Request.bForce = true;
 	auto State = WaitDraft(InFixture, InFixture.Imports->PrepareDraft(Request).Draft);
-	HYP_CHECK(State.Status == "ready" && State.TotalProducts == 2);
+	HYP_CHECK(State.Status == EImportDraftState::Ready && State.TotalProducts == 2);
+	FImportPropertyEdits Edits;
+	Edits.Name = "Prepared sky";
+	State = InFixture.Imports->EditDraft({State.Draft, State.Generation, Edits});
+	HYP_CHECK(State.bDirty && State.bCanUndo && !State.bCanRedo);
 	const auto Original = InFixture.IO->ReadAsync(InFixture.Root / "Sky.hdr").Get(InFixture.Tasks);
 	auto Changed = *Original;
 	Changed.back() = std::byte{130};
 	InFixture.IO->WriteAsync(InFixture.Root / "Sky.hdr", std::move(Changed)).Get(InFixture.Tasks);
 	const auto Task = InFixture.Imports->SubmitDraft({State.Draft, State.Generation});
 	State = WaitDraft(InFixture, State.Draft);
-	HYP_CHECK(!State.Error.empty() && InFixture.Imports->Get({Task.Task}).Status == "failed");
+	HYP_CHECK(!State.Error.empty() && InFixture.Imports->Get({Task.Task}).Status == EImportTaskState::Failed);
+	HYP_CHECK(State.Status == EImportDraftState::Ready && !InFixture.Imports->ContentRootState().bBusy);
+	HYP_CHECK(State.bDirty && State.bCanUndo && !State.bCanRedo && State.Name == "Prepared sky");
+	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation, "undo"});
+	HYP_CHECK(!State.bDirty && !State.bCanUndo && State.bCanRedo);
+	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation, "redo"});
+	HYP_CHECK(State.bDirty && State.Name == "Prepared sky");
+	const auto FailedGeneration = State.Generation;
+	Edits.Name = "Retry sky";
+	State = InFixture.Imports->EditDraft({State.Draft, State.Generation, Edits});
+	HYP_CHECK(State.Generation > FailedGeneration && State.Status == EImportDraftState::Ready && State.Error.empty());
 	HYP_CHECK(!InFixture.Files->Exists("/Game/DraftSky.hasset"));
 	InFixture.IO->WriteAsync(InFixture.Root / "Sky.hdr", *Original).Get(InFixture.Tasks);
 	InFixture.Imports->DiscardDraft({State.Draft, State.Generation, true});
@@ -688,7 +707,7 @@ void CheckLifecycle(FFixture& InFixture)
 	Request.Generation = InFixture.Content->Info().Generation;
 	const auto Task = InFixture.Imports->Start(Request);
 	InFixture.Imports->Drain();
-	HYP_CHECK(Task->Info.Status == "completed" && !InFixture.Imports->ContentRootState().bBusy);
+	HYP_CHECK(Task->Info.Status == EImportTaskState::Completed && !InFixture.Imports->ContentRootState().bBusy);
 	Reject(
 	    [&]
 	    {
@@ -702,6 +721,7 @@ int main()
 	try
 	{
 		FFixture Fixture;
+		CheckImportStates();
 		CheckImage(Fixture);
 		CheckSky(Fixture);
 		CheckFailedImport(Fixture);

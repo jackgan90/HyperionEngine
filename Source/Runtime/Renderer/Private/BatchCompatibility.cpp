@@ -169,7 +169,14 @@ FRenderBatchDecision FInstanceBatchStrategy::Evaluate(const FRenderBatchCandidat
 		return {0, ERenderBatchFallback::Order};
 	}
 	auto Capacity = InCandidate.Pass->InstanceCapacity;
-	std::array<std::uint32_t, 2> Constants{};
+
+	struct FStageConstants
+	{
+		EShaderStage Stage;
+		std::uint32_t Count{};
+	};
+
+	std::array Constants{FStageConstants{EShaderStage::Vertex}, FStageConstants{EShaderStage::Pixel}};
 	for (const auto& Binding : InCandidate.Pass->Bindings)
 	{
 		if (Binding.Resource.Kind == EBindingKind::UniformBuffer)
@@ -178,10 +185,10 @@ FRenderBatchDecision FInstanceBatchStrategy::Evaluate(const FRenderBatchCandidat
 			{
 				return {0, ERenderBatchFallback::Device};
 			}
-			for (std::size_t Stage = 0; Stage < Constants.size(); ++Stage)
+			for (auto& Stage : Constants)
 			{
-				Constants[Stage] += (Binding.Stages & (1U << Stage)) ? Binding.Resource.Count : 0;
-				if (Constants[Stage] > InCapabilities.MaxConstantBuffers)
+				Stage.Count += HasShaderStage(Binding.Stages, Stage.Stage) ? Binding.Resource.Count : 0;
+				if (Stage.Count > InCapabilities.MaxConstantBuffers)
 				{
 					return {0, ERenderBatchFallback::Device};
 				}

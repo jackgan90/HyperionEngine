@@ -72,7 +72,7 @@ struct FImportTaskInfo
 	std::uint64_t Generation{};
 	std::string Source;
 	std::string Output;
-	std::string Status = "running";
+	EImportTaskState Status = EImportTaskState::Running;
 	std::optional<FImportResult> Result;
 	std::string Error;
 };
@@ -106,7 +106,7 @@ struct FImportDraft
 	std::string Id;
 	std::uint64_t Generation = 1;
 	FImportRequest Request;
-	std::string Status = "preparing";
+	EImportDraftState Status = EImportDraftState::Preparing;
 	std::string Error;
 	TAsyncResult<FPreparedImport> Pending;
 	std::shared_ptr<const FPreparedImport> Prepared;

@@ -1,5 +1,6 @@
 #include "D3D12RHIDevice.h"
 #include "D3D12Resources.h"
+#include "Hyperion/RHI/RHIBindingContracts.h"
 #include <array>
 
 namespace Hyperion
@@ -41,7 +42,14 @@ std::uint32_t RegisterClass(ERHIBindingKind InKind)
 
 void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabilities& InCaps)
 {
-	std::array<std::array<std::uint32_t, 4>, 3> Counts{};
+	struct FStageResourceCounts
+	{
+		EShaderStage Stage;
+		std::array<std::uint32_t, 4> Resources{};
+	};
+
+	std::array Counts{FStageResourceCounts{EShaderStage::Vertex}, FStageResourceCounts{EShaderStage::Pixel},
+	                  FStageResourceCounts{EShaderStage::Compute}};
 	for (std::size_t Index = 0; Index < InDesc.Slots.size(); ++Index)
 	{
 		const FResourceBindingSlot& Slot = InDesc.Slots[Index];
@@ -72,11 +80,11 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 		{
 			throw std::invalid_argument("Storage bindings require compute visibility");
 		}
-		for (std::size_t Stage = 0; Stage < Counts.size(); ++Stage)
+		for (auto& Stage : Counts)
 		{
-			if ((static_cast<unsigned>(Slot.Visibility) & (1U << Stage)) != 0)
+			if (HasShaderStage(ShaderStages(Slot.Visibility), Stage.Stage))
 			{
-				Counts[Stage][Class] += Slot.Count;
+				Stage.Resources[Class] += Slot.Count;
 			}
 		}
 		for (std::size_t Previous = 0; Previous < Index; ++Previous)
@@ -88,7 +96,7 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 				throw std::invalid_argument("Compute and graphics require separate binding layouts");
 			}
 			if (Slot.Space == Other.Space && Class == RegisterClass(Other.Kind) &&
-			    (static_cast<unsigned>(Slot.Visibility) & static_cast<unsigned>(Other.Visibility)) != 0 &&
+			    HasAnyShaderStage(ShaderStages(Slot.Visibility), ShaderStages(Other.Visibility)) &&
 			    Slot.Register < Other.Register + Other.Count && Other.Register < Slot.Register + Slot.Count)
 			{
 				throw std::invalid_argument("Overlapping RHI binding registers and stages");
@@ -97,8 +105,8 @@ void ValidateLayout(const FResourceBindingLayoutDesc& InDesc, const FRHICapabili
 	}
 	for (const auto& Stage : Counts)
 	{
-		if (Stage[0] > InCaps.MaxConstantBuffers || Stage[1] > InCaps.MaxSampledTextures ||
-		    Stage[2] > InCaps.MaxSamplers || Stage[3] > InCaps.MaxStorageResources)
+		if (Stage.Resources[0] > InCaps.MaxConstantBuffers || Stage.Resources[1] > InCaps.MaxSampledTextures ||
+		    Stage.Resources[2] > InCaps.MaxSamplers || Stage.Resources[3] > InCaps.MaxStorageResources)
 		{
 			throw std::invalid_argument("Graphics binding layout exceeds per-stage resource limits");
 		}

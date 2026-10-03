@@ -4,6 +4,8 @@
 #include <iostream>
 #include <thread>
 
+void CheckJobStates();
+
 namespace Hyperion
 {
 enum class ETestMode : std::uint8_t
@@ -418,6 +420,7 @@ int main()
 		CheckPartialEnumMetadata();
 		CheckRecursiveSchema();
 		CheckCatalogAndJobs();
+		CheckJobStates();
 		CheckResultLimits();
 		CheckMcp();
 		std::cout << "Automation contracts passed\n";

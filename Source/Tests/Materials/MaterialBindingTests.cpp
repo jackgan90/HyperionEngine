@@ -94,7 +94,8 @@ float4 PSMain() : SV_Target0 { return Tint * Strength; }
 	Description.Parameters.push_back(Inactive);
 	Definition = std::make_shared<const FMaterialDefinition>(Description);
 	const auto Merged = PrepareMaterialDefinition(Tasks, Compiler, Definition, EShaderFormat::Dxil).Get(Tasks);
-	HYP_CHECK(Merged->GetPass().Bindings.size() == 2 && Merged->GetPass().Bindings[0].Stages == 3);
+	HYP_CHECK(Merged->GetPass().Bindings.size() == 2 &&
+	          Merged->GetPass().Bindings[0].Stages == EShaderStageMask::Graphics);
 	FMaterialInstance Named(Merged->Interface);
 	HYP_CHECK(Named.Find("Color").Index == Named.Find("Vertex:Shared.Tint").Index);
 	HYP_CHECK(Named.Find("Color").Index == Named.Find("Pixel:Shared.Tint").Index);
@@ -166,23 +167,36 @@ void CheckBindingConflicts()
 	A.Resource.Kind = EBindingKind::Texture;
 	A.Resource.Name = "A";
 	A.Resource.Count = 2;
-	A.Stages = 1;
+	A.Stages = EShaderStageMask::Vertex;
 	A.ResourceParameter = 0;
+	for (const auto Invalid :
+	     {EShaderStageMask::None, EShaderStageMask::Compute, EShaderStageMask::Graphics | EShaderStageMask::Compute,
+	      static_cast<EShaderStageMask>(16)})
+	{
+		auto Bad = A;
+		Bad.Stages = Invalid;
+		ExpectError(
+		    [&]
+		    {
+			    MergeMaterialBindings({Bad});
+		    },
+		    "visibility");
+	}
 	FMaterialProgramBinding B = A;
 	B.Resource.Name = "B";
-	B.Stages = 2;
+	B.Stages = EShaderStageMask::Pixel;
 	B.ResourceParameter = 1;
 	HYP_CHECK(MergeMaterialBindings({A, B}).size() == 2);
-	B.Stages = 1;
+	B.Stages = EShaderStageMask::Vertex;
 	ExpectError(
 	    [&]
 	    {
 		    MergeMaterialBindings({A, B});
 	    },
 	    "Overlapping");
-	B.Stages = 2;
+	B.Stages = EShaderStageMask::Pixel;
 	FMaterialProgramBinding Both = A;
-	Both.Stages = 3;
+	Both.Stages = EShaderStageMask::Graphics;
 	ExpectError(
 	    [&]
 	    {

@@ -14,6 +14,7 @@ add_library(hyperion_asset_import STATIC
   Private/Adapters/GltfAccessors.cpp Private/Adapters/GltfMaterials.cpp
   Private/Adapters/GltfPrimitives.cpp)
 hyp_module(hyperion_asset_import)
+target_sources(hyperion_asset_import PRIVATE Private/ImportStateReflection.cpp)
 target_link_libraries(hyperion_asset_import PUBLIC hyperion_content)
 target_link_libraries(hyperion_asset_import PUBLIC hyperion_asset_editing)
 target_link_libraries(hyperion_asset_import PUBLIC hyperion_assets hyperion_scene hyperion_materials hyperion_textures hyperion_environment PRIVATE nlohmann_json::nlohmann_json hyperion_core hyperion_io hyperion_reflection)

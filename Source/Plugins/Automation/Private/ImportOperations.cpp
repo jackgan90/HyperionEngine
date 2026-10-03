@@ -64,11 +64,11 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 		    return TPendingOperation<FImportResult>{[InProvider, Task]() -> std::optional<FImportResult>
 		                                            {
 			                                            InProvider->Update();
-			                                            if (Task->Info.Status == "running")
+			                                            if (Task->Info.Status == EImportTaskState::Running)
 			                                            {
 				                                            return {};
 			                                            }
-			                                            if (Task->Info.Status == "failed")
+			                                            if (Task->Info.Status == EImportTaskState::Failed)
 			                                            {
 				                                            throw FAutomationError("operation_failed",
 				                                                                   Task->Info.Error);

@@ -176,7 +176,8 @@ public:
 	                const std::function<void(std::string_view, FPropertyPresentation&)>& InPresent = {});
 	bool EditRecord(FRecordSelectionDraft& InDraft, std::string_view InIdentity,
 	                const std::function<void(std::string_view, FVec4)>& InObserve = {},
-	                std::span<const std::string> InReadOnlyFields = {});
+	                std::span<const std::string> InReadOnlyFields = {},
+	                const std::function<void(std::string_view, FPropertyPresentation&)>& InPresent = {});
 	bool EditMixedScalar(FArchiveNode& InValue, const FRecordValueShape& InShape,
 	                     const FPropertyPresentation& InPresentation, bool bInMixed);
 	void SetAssetReferenceProvider(FGuiAssetReferenceProvider InProvider);

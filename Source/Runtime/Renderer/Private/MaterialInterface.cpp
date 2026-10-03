@@ -103,7 +103,7 @@ std::vector<FMaterialProgramBinding> MergeMaterialBindings(std::vector<FMaterial
 	std::vector<FMaterialProgramBinding> Result;
 	for (FMaterialProgramBinding& Binding : InBindings)
 	{
-		if (Binding.Stages == 0 || (Binding.Stages & ~3U) != 0 || Binding.Resource.Count == 0)
+		if (!IsGraphicsShaderStages(Binding.Stages) || Binding.Resource.Count == 0)
 		{
 			throw std::invalid_argument("Invalid material binding visibility or count");
 		}
@@ -122,7 +122,7 @@ std::vector<FMaterialProgramBinding> MergeMaterialBindings(std::vector<FMaterial
 				MergeTarget = &Existing;
 				continue;
 			}
-			if ((Existing.Stages & Binding.Stages) != 0)
+			if (HasAnyShaderStage(Existing.Stages, Binding.Stages))
 			{
 				throw std::invalid_argument("Overlapping incompatible material binding: " + Existing.Resource.Name +
 				                            " / " + Binding.Resource.Name);

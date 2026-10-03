@@ -1,4 +1,5 @@
 #include "Hyperion/AssetImport/ImportDraft.h"
+#include "ImportStateReflection.h"
 
 namespace Hyperion
 {
@@ -88,7 +89,7 @@ template<> const FRecordDescriptor& RecordType<FImportDraftInfo>()
 	    "asset.import.draft-info",
 	    {Member("draft", &FImportDraftInfo::Draft),
 	     Member("generation", &FImportDraftInfo::Generation),
-	     Member("status", &FImportDraftInfo::Status),
+	     ImportDraftStateMember(),
 	     Member("error", &FImportDraftInfo::Error),
 	     Member("type", &FImportDraftInfo::Type),
 	     Member("name", &FImportDraftInfo::Name),

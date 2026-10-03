@@ -53,7 +53,7 @@ void FEditorPlugin::DiscardBeforeClose()
 		for (const auto& Id : Imports->DraftList().Drafts)
 		{
 			const auto Draft = Imports->Draft({Id});
-			if (Draft.Status != "preparing" && Draft.Status != "publishing")
+			if (Draft.Status != EImportDraftState::Preparing && Draft.Status != EImportDraftState::Publishing)
 			{
 				Imports->DiscardDraft({Id, Draft.Generation, true});
 			}

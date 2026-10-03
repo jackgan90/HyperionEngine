@@ -1,5 +1,6 @@
 #include "EditorApplication.h"
 #include "Hyperion/SceneEditing/SceneAuthoring.h"
+#include "Hyperion/SceneEditing/SceneComponentEditPolicy.h"
 #include <algorithm>
 
 namespace Hyperion
@@ -53,6 +54,7 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 	    [&](std::string_view InField, FPropertyPresentation& InOutPresentation)
 	    {
 		    InspectLightProperty(InView, InComponent, InField, InOutPresentation);
+		    InOutPresentation.bReadOnly |= IsSceneComponentFieldReadOnly(*InComponent.Type->Record, InField);
 	    });
 	const auto Edit = Gui->EndLiveEdit();
 	Gui->Unindent();
@@ -67,7 +69,9 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 		try
 		{
 			auto Candidate = Node;
-			Edited->ApplyToCandidate(Candidate.Components.Find(InComponent.Id)->Edit());
+			auto* Value = Candidate.Components.Find(InComponent.Id)->Edit();
+			Edited->ApplyToCandidate(Value);
+			ValidateSceneComponentEdit(*InComponent.Type->Record, InComponent.Get(), Value);
 			PendingInspectorEdit =
 			    FPendingInspectorEdit{InView.Handle, std::move(Candidate), InRevision, Edit.ChangedInteraction};
 		}

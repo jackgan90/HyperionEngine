@@ -35,11 +35,11 @@ void FAssetImportPanel::ProcessImportResult()
 	try
 	{
 		const auto Task = Imports->Get({ImportTask});
-		if (Task.Status == "running")
+		if (Task.Status == EImportTaskState::Running)
 		{
 			return;
 		}
-		if (Task.Status == "completed")
+		if (Task.Status == EImportTaskState::Completed)
 		{
 			ValidatedOutputKey.clear();
 			const auto Warning = Task.Result ? Task.Result->Warning : std::string{};
@@ -108,7 +108,8 @@ void FAssetImportPanel::ProcessDraft()
 				DraftId.clear();
 				PreviewInfo = {};
 			}
-			if (PreviewInfo.Status == "preparing" || PreviewInfo.Status == "publishing")
+			if (PreviewInfo.Status == EImportDraftState::Preparing ||
+			    PreviewInfo.Status == EImportDraftState::Publishing)
 			{
 				return;
 			}
@@ -178,7 +179,7 @@ void FAssetImportPanel::DrawImportProperties(FGui& InGui)
 	{
 		InGui.Text("Select a source file to load its properties.");
 	}
-	else if (PreviewInfo.Status == "preparing")
+	else if (PreviewInfo.Status == EImportDraftState::Preparing)
 	{
 		InGui.Text("Loading properties...");
 	}
@@ -189,7 +190,7 @@ void FAssetImportPanel::DrawImportProperties(FGui& InGui)
 		{
 			InGui.TextWrapped("Updating properties for the selected source and settings...");
 		}
-		InGui.BeginDisabled(PreviewInfo.Status != "ready" || bStale);
+		InGui.BeginDisabled(PreviewInfo.Status != EImportDraftState::Ready || bStale);
 		try
 		{
 			DrawDraftProperties(InGui, PreviewInfo);

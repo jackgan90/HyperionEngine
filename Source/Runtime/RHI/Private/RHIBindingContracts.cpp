@@ -1,11 +1,42 @@
-#include "D3D12GraphicsState.h"
+#include "Hyperion/RHI/RHIBindingContracts.h"
 #include <algorithm>
 
 namespace Hyperion
 {
-namespace
+ERHIShaderVisibility RHIShaderVisibility(EShaderStageMask InStages)
 {
-ERHIBindingKind BindingKind(const FShaderBinding& InBinding)
+	switch (InStages)
+	{
+		case EShaderStageMask::Vertex:
+			return ERHIShaderVisibility::Vertex;
+		case EShaderStageMask::Pixel:
+			return ERHIShaderVisibility::Pixel;
+		case EShaderStageMask::Graphics:
+			return ERHIShaderVisibility::Graphics;
+		case EShaderStageMask::Compute:
+			return ERHIShaderVisibility::Compute;
+		default:
+			throw std::invalid_argument("Unsupported material shader stage");
+	}
+}
+
+EShaderStageMask ShaderStages(ERHIShaderVisibility InVisibility)
+{
+	switch (InVisibility)
+	{
+		case ERHIShaderVisibility::Vertex:
+			return EShaderStageMask::Vertex;
+		case ERHIShaderVisibility::Pixel:
+			return EShaderStageMask::Pixel;
+		case ERHIShaderVisibility::Graphics:
+			return EShaderStageMask::Graphics;
+		case ERHIShaderVisibility::Compute:
+			return EShaderStageMask::Compute;
+	}
+	throw std::invalid_argument("Invalid graphics binding visibility");
+}
+
+ERHIBindingKind GetShaderBindingKind(const FShaderBinding& InBinding)
 {
 	switch (InBinding.Kind)
 	{
@@ -43,18 +74,19 @@ ERHIBindingKind BindingKind(const FShaderBinding& InBinding)
 	throw std::invalid_argument("Unsupported graphics shader resource: " + InBinding.Name);
 }
 
+namespace
+{
 void ValidateStage(const FShaderArtifact& InShader, const FResourceBindingLayoutDesc& InLayout)
 {
-	const unsigned Stage =
-	    InShader.Stage == EShaderStage::Vertex ? 1U : (InShader.Stage == EShaderStage::Pixel ? 2U : 4U);
+	const auto Stage = ShaderStageMask(InShader.Stage);
 	for (const auto& Binding : InShader.Bindings)
 	{
-		const auto Kind = BindingKind(Binding);
+		const auto Kind = GetShaderBindingKind(Binding);
 		const auto Slot =
 		    std::find_if(InLayout.Slots.begin(), InLayout.Slots.end(),
 		                 [&](const FResourceBindingSlot& InSlot)
 		                 {
-			                 return InSlot.Kind == Kind && (static_cast<unsigned>(InSlot.Visibility) & Stage) != 0 &&
+			                 return InSlot.Kind == Kind && HasAnyShaderStage(ShaderStages(InSlot.Visibility), Stage) &&
 			                        InSlot.Space == Binding.Space && InSlot.Register <= Binding.Register &&
 			                        static_cast<std::uint64_t>(InSlot.Register) + InSlot.Count >=
 			                            static_cast<std::uint64_t>(Binding.Register) + Binding.Count;

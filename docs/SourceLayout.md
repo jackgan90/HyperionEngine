@@ -77,6 +77,8 @@ Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Con
 
 `Runtime/RHI` 定义 `IRHIBackend`、`IRHIDevice`、`IRHISwapchain` 和资源契约，不链接 D3D12。`Backends/D3D12/Private` 实现 `FD3D12RHIDevice`、`FD3D12RHISwapchain` 以及原生资源；它的唯一公共入口负责向注册表注册 provider，不暴露 Windows/D3D12 头文件。
 
+Shaders 拥有类型化 shader stage 集合；RHI 的 `RHIBindingContracts` 显式转换 visibility、解释反射资源种类并验证 shader/layout 覆盖、stride 和实例布局。Renderer 与 native provider 复用这些公共事实，后端继续拥有原生 descriptor、root signature 和设备限制校验。
+
 加入 Vulkan 时新增 `Source/Backends/Vulkan`，实现同一组接口，在应用组合层中注册 provider 并链接该 target。Renderer 和算法插件保持使用公共 RHI。后端实现按自身语义实现队列、同步、descriptor 与 shader 接口映射，不应在公共 RHI 中添加 API 分支。当前 Vulkan/Metal 只有后端标识，尚未实现；选择它们会明确报错。
 
 在 Visual Studio 中，解决方案按 `Hyperion/Runtime`、`Hyperion/Backends`、`Hyperion/Plugins`、`Hyperion/Applications`、`Hyperion/Tests` 分组，每个模块内部显示 Public/Private 筛选器。生成和测试命令仍见 [VisualStudio.md](VisualStudio.md)。

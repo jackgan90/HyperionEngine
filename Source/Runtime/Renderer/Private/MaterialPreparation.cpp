@@ -307,7 +307,7 @@ void BindStage(FInterfaceBuilder& InBuilder, FCompiledMaterialPass& InPass, cons
 			}
 			Binding.Resource = Resource;
 		}
-		Binding.Stages = InArtifact.Stage == EShaderStage::Vertex ? 1U : 2U;
+		Binding.Stages = ShaderStageMask(InArtifact.Stage);
 		if (Resource.Kind == EBindingKind::UniformBuffer)
 		{
 			if (Resource.Count != 1 || Resource.ByteSize == 0 || Resource.ByteSize > 65536)

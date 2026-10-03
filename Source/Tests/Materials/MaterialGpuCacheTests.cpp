@@ -69,7 +69,7 @@ void CheckReadBufferViews(IRHIDevice& InDevice)
 	Binding.Resource.Dimension = EShaderResourceDimension::Buffer;
 	Binding.Resource.Register = 5;
 	Binding.Resource.Space = 1;
-	Binding.Stages = 2;
+	Binding.Stages = EShaderStageMask::Pixel;
 	Binding.ResourceParameter = 0;
 	Program.Bindings.push_back(Binding);
 	std::vector<std::optional<FMaterialValue>> Values{
@@ -111,7 +111,7 @@ void CheckResourceArrayOrder(IRHIDevice& InDevice)
 	FMaterialProgramBinding Binding;
 	Binding.Resource.Kind = EBindingKind::Sampler;
 	Binding.Resource.Count = 2;
-	Binding.Stages = 2;
+	Binding.Stages = EShaderStageMask::Pixel;
 	Binding.ResourceParameter = 0;
 	Program.Bindings.push_back(Binding);
 	FMaterialSampler Clamp;
@@ -143,7 +143,7 @@ void CheckSharedOwners(IRHIDevice& InDevice)
 	FCompiledMaterialPass Program;
 	FMaterialProgramBinding Binding;
 	Binding.Resource.Kind = EBindingKind::Sampler;
-	Binding.Stages = 2;
+	Binding.Stages = EShaderStageMask::Pixel;
 	Binding.ResourceParameter = 0;
 	Program.Bindings.push_back(Binding);
 	const std::array<std::optional<FMaterialValue>, 1> Values{FMaterialValue::FromSampler({})};

@@ -28,16 +28,25 @@ public:
 	const FOperationCatalog& GetCatalog() const;
 
 private:
+	enum class EJobState
+	{
+		Running,
+		Completed,
+		Failed,
+		Cancelled
+	};
+
 	struct FJob
 	{
 		std::string Id;
 		std::string Operation;
-		std::string State = "running";
+		EJobState State = EJobState::Running;
 		FOperationTask Task;
 		FArchiveNode Outcome;
 	};
 
 	FJob& FindJob(std::string_view InId);
+	static std::string_view JobStateName(EJobState InState);
 	FArchiveNode DescribeJob(const FJob& InJob) const;
 	void MakeRoom();
 	const FOperationCatalog& Catalog;

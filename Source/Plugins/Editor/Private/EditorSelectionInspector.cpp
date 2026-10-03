@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/SceneEditing/SceneComponentEditPolicy.h"
 #include <algorithm>
 
 namespace Hyperion
@@ -94,7 +95,11 @@ void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
 	    {
 		    InspectionBounds[InType.Id + "/" + std::string(InField)] = InBounds;
 	    },
-	    Cached->Blocked);
+	    Cached->Blocked,
+	    [&](std::string_view InField, FPropertyPresentation& InOutPresentation)
+	    {
+		    InOutPresentation.bReadOnly |= IsSceneComponentFieldReadOnly(*InType.Record, InField);
+	    });
 	const auto Edit = Gui->EndLiveEdit();
 	Gui->Unindent();
 	if (Edit.ActiveInteraction)
@@ -110,7 +115,10 @@ void FEditorPlugin::DrawSharedComponent(std::span<const FSceneHandle> InTargets,
 		for (std::size_t Index = 0; Index < InTargets.size(); ++Index)
 		{
 			auto Candidate = *Scene->FindNode(InTargets[Index]);
-			Edited->ApplyToCandidate(Index, Candidate.Components.Find(Cached->Components[Index])->Edit());
+			const auto* Original = Scene->FindNode(InTargets[Index])->Components.Find(Cached->Components[Index]);
+			auto* Value = Candidate.Components.Find(Cached->Components[Index])->Edit();
+			Edited->ApplyToCandidate(Index, Value);
+			ValidateSceneComponentEdit(*InType.Record, Original->Get(), Value);
 			Pending.Edits.push_back({InTargets[Index], std::move(Candidate)});
 		}
 		PendingInspectorEdit = std::move(Pending);

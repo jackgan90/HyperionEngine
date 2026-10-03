@@ -23,7 +23,7 @@ std::shared_ptr<FImportDraft> FAssetImportWorkspace::MutableDraft(const std::str
                                                                   std::uint64_t InGeneration) const
 {
 	auto Entry = FindDraft(InId);
-	if (bClosing || Entry->Status == "preparing" || Entry->Status == "publishing")
+	if (bClosing || Entry->Status == EImportDraftState::Preparing || Entry->Status == EImportDraftState::Publishing)
 	{
 		throw FAssetImportError("busy", "Wait for import draft work to finish");
 	}
@@ -74,21 +74,21 @@ void FAssetImportWorkspace::UpdateDrafts()
 {
 	for (const auto& Entry : Drafts)
 	{
-		if (Entry->Status == "publishing")
+		if (Entry->Status == EImportDraftState::Publishing)
 		{
 			const auto& Task = Entry->Task->Info;
-			if (Task.Status != "running")
+			if (Task.Status != EImportTaskState::Running)
 			{
-				Entry->Status = "ready";
+				Entry->Status = EImportDraftState::Ready;
 				Entry->Error = Task.Error;
-				if (Task.Status == "completed")
+				if (Task.Status == EImportTaskState::Completed)
 				{
 					Entry->SavedKey = ImportPropertiesKey(Entry->History[Entry->Cursor]);
 				}
 				++Entry->Generation;
 			}
 		}
-		if (Entry->Status != "preparing" || !Entry->Pending.Ready())
+		if (Entry->Status != EImportDraftState::Preparing || !Entry->Pending.Ready())
 		{
 			continue;
 		}
@@ -97,13 +97,13 @@ void FAssetImportWorkspace::UpdateDrafts()
 			auto Candidate = *Entry;
 			Candidate.Prepared = Entry->Pending.GetReady();
 			Candidate.Edited = Candidate.Prepared->Root;
-			Candidate.Status = "ready";
+			Candidate.Status = EImportDraftState::Ready;
 			Candidate.Pending = {};
 			(void)CommitDraft(Entry, std::move(Candidate));
 		}
 		catch (const std::exception& Failure)
 		{
-			Entry->Status = "failed";
+			Entry->Status = EImportDraftState::Failed;
 			Entry->Error = std::string(Failure.what()).substr(0, 8192);
 			++Entry->Generation;
 			Log(ELogLevel::Error, "Import draft preparation failed; draft='" + Entry->Id + "'; source='" +
@@ -178,7 +178,7 @@ FImportTaskInfo FAssetImportWorkspace::SubmitDraft(const FImportDraftMutation& I
 	Snapshot->Root = Entry->Edited;
 	const auto Task = StartPrepared(Entry->Request, Snapshot, ImportPropertiesKey(Entry->History[Entry->Cursor]));
 	Entry->Task = Task;
-	Entry->Status = "publishing";
+	Entry->Status = EImportDraftState::Publishing;
 	++Entry->Generation;
 	return Task->Info;
 }
@@ -194,7 +194,7 @@ FImportDraftInfo FAssetImportWorkspace::DiscardDraft(const FImportDraftDiscard& 
 	FImportDraftInfo Result;
 	Result.Draft = Entry->Id;
 	Result.Generation = Entry->Generation + 1;
-	Result.Status = "discarded";
+	Result.Status = EImportDraftState::Discarded;
 	return Result;
 }
 } // namespace Hyperion

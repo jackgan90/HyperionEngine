@@ -1,20 +1,8 @@
 #include "Hyperion/SceneEditing/SceneComponentEditing.h"
+#include "Hyperion/SceneEditing/SceneComponentEditPolicy.h"
 
 namespace Hyperion
 {
-namespace
-{
-bool IsImmutableModelBinding(const FRecordDescriptor& InType, std::string_view InMember)
-{
-	if (InType.CppType == typeid(FSceneModelSource))
-	{
-		return true;
-	}
-	return InType.CppType == typeid(FSceneModelComponent) &&
-	       (InMember == "asset" || InMember == "sourceNode" || InMember == "sourcePrimitive");
-}
-} // namespace
-
 const FSceneComponent& GetSceneComponent(const FSceneEditDocument& InDocument, const FSceneComponentRequest& InRequest)
 {
 	InDocument.RequireCurrent(InRequest.Document, InRequest.Revision);
@@ -83,6 +71,7 @@ static FSceneNodeEdit PrepareCurrentSceneComponentEdit(const FSceneEditDocument&
 	{
 		throw std::invalid_argument("Component type does not match the operation");
 	}
+	ValidateSceneComponentEdit(InType, Source.Get(), InValue);
 	auto Node = Original;
 	auto* Value = Node.Components.Find(InRequest.Component)->Edit();
 	for (const auto& Member : InType.Members)
@@ -92,10 +81,6 @@ static FSceneNodeEdit PrepareCurrentSceneComponentEdit(const FSceneEditDocument&
 			continue;
 		}
 		const auto Candidate = Member.Write(InValue);
-		if (IsImmutableModelBinding(InType, Member.Id) && !EqualInspectionValue(Candidate, Member.Write(Source.Get())))
-		{
-			throw FSceneEditError("read_only", "Immutable component field: " + Member.Id);
-		}
 		Member.Read(Value, Candidate, {Member.Id});
 	}
 	if (InType.Validate)

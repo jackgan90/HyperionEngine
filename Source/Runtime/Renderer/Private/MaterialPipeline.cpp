@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/MaterialPipeline.h"
+#include "Hyperion/RHI/RHIBindingContracts.h"
 #include "Hyperion/RHI/RHIPipeline.h"
 #include <limits>
 #include <stdexcept>
@@ -226,54 +227,8 @@ FResourceBindingLayoutDesc DescribeShaderLayout(std::span<const FMaterialProgram
 	for (const auto& Binding : InBindings)
 	{
 		FResourceBindingSlot Slot;
-		switch (Binding.Resource.Kind)
-		{
-			case EBindingKind::UniformBuffer:
-				Slot.Kind = ERHIBindingKind::ConstantBuffer;
-				break;
-			case EBindingKind::Texture:
-				Slot.Kind = Binding.Resource.Dimension == EShaderResourceDimension::TextureCube
-				                ? ERHIBindingKind::TextureCube
-				                : ERHIBindingKind::Texture2D;
-				break;
-			case EBindingKind::Sampler:
-				Slot.Kind = ERHIBindingKind::Sampler;
-				break;
-			case EBindingKind::StructuredBuffer:
-				Slot.Kind = ERHIBindingKind::StructuredBuffer;
-				break;
-			case EBindingKind::RawBuffer:
-				Slot.Kind = ERHIBindingKind::RawBuffer;
-				break;
-			case EBindingKind::Unsupported:
-				throw std::invalid_argument("Unsupported material binding");
-			case EBindingKind::StorageTexture:
-				Slot.Kind = ERHIBindingKind::StorageTexture2D;
-				break;
-			case EBindingKind::StorageStructuredBuffer:
-				Slot.Kind = ERHIBindingKind::StorageStructuredBuffer;
-				break;
-			case EBindingKind::StorageRawBuffer:
-				Slot.Kind = ERHIBindingKind::StorageRawBuffer;
-				break;
-		}
-		switch (Binding.Stages)
-		{
-			case 1:
-				Slot.Visibility = ERHIShaderVisibility::Vertex;
-				break;
-			case 2:
-				Slot.Visibility = ERHIShaderVisibility::Pixel;
-				break;
-			case 3:
-				Slot.Visibility = ERHIShaderVisibility::Graphics;
-				break;
-			case 4:
-				Slot.Visibility = ERHIShaderVisibility::Compute;
-				break;
-			default:
-				throw std::invalid_argument("Unsupported material shader stage");
-		}
+		Slot.Kind = GetShaderBindingKind(Binding.Resource);
+		Slot.Visibility = RHIShaderVisibility(Binding.Stages);
 		Slot.Register = Binding.Resource.Register;
 		Slot.Space = Binding.Resource.Space;
 		Slot.Count = Binding.Resource.Count;

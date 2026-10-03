@@ -28,7 +28,7 @@ struct FMaterialBindingMember
 struct FMaterialProgramBinding
 {
 	FShaderBinding Resource;
-	std::uint32_t Stages{}; // Bit 0: VS, bit 1: PS.
+	EShaderStageMask Stages = EShaderStageMask::None;
 	std::vector<FMaterialBindingMember> Members;
 	std::optional<std::size_t> ResourceParameter;
 	std::uint32_t InstanceStride{};

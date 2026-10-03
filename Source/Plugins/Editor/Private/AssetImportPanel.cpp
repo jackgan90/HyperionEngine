@@ -64,8 +64,8 @@ void FAssetImportPanel::Show()
 {
 	bOpen = bFocus = true;
 	ValidatedOutputKey.clear();
-	bAutoPrepare |=
-	    PreviewInfo.Status == "failed" || !PreviewInfo.Error.empty() || !Message.empty() || !OutputError.empty();
+	bAutoPrepare |= PreviewInfo.Status == EImportDraftState::Failed || !PreviewInfo.Error.empty() || !Message.empty() ||
+	                !OutputError.empty();
 }
 
 void FAssetImportPanel::UpdateSource()
@@ -347,7 +347,7 @@ std::string FAssetImportPanel::ImportMessage() const
 	{
 		return OutputError;
 	}
-	if (!bSourceEditing && PreparedKey == RequestKey() && PreviewInfo.Status == "failed")
+	if (!bSourceEditing && PreparedKey == RequestKey() && PreviewInfo.Status == EImportDraftState::Failed)
 	{
 		return PreviewInfo.Error;
 	}
@@ -357,8 +357,8 @@ std::string FAssetImportPanel::ImportMessage() const
 void FAssetImportPanel::DrawImportAction(FGui& InGui, const std::string& InMessage)
 {
 	const bool bWritable = OutputError.empty() && ValidatedOutputKey == RequestKey();
-	const bool bReady = !DraftId.empty() && PreviewInfo.Status == "ready" && PreparedKey == RequestKey() &&
-	                    ImportTask.empty() && !bImportResultOpen;
+	const bool bReady = !DraftId.empty() && PreviewInfo.Status == EImportDraftState::Ready &&
+	                    PreparedKey == RequestKey() && ImportTask.empty() && !bImportResultOpen;
 	const bool bSubmit = InGui.EndActionLayout("Import", InMessage, bWritable && Imports && bReady);
 	ImportBounds = InGui.LastItemBounds();
 	if (bSubmit)

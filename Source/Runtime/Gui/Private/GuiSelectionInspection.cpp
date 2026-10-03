@@ -219,7 +219,8 @@ bool EditSelectionValue(FGui& InGui, FRecordSelectionDraft& InDraft, const FInsp
 } // namespace
 
 bool FGui::EditRecord(FRecordSelectionDraft& InDraft, std::string_view InIdentity, const FObserver& InObserve,
-                      std::span<const std::string> InReadOnlyFields)
+                      std::span<const std::string> InReadOnlyFields,
+                      const std::function<void(std::string_view, FPropertyPresentation&)>& InPresent)
 {
 	bool bChanged{};
 	for (const auto& Member : InDraft.GetType().Members)
@@ -227,6 +228,10 @@ bool FGui::EditRecord(FRecordSelectionDraft& InDraft, std::string_view InIdentit
 		if (Member.Options.Inspector && IsVisible(InDraft, *Member.Options.Inspector))
 		{
 			auto Presentation = *Member.Options.Inspector;
+			if (InPresent)
+			{
+				InPresent(Member.Id, Presentation);
+			}
 			const bool bBlocked = std::ranges::find(InReadOnlyFields, Member.Id) != InReadOnlyFields.end();
 			if (bBlocked)
 			{

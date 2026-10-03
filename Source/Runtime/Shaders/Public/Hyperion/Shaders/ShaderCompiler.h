@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Shaders/ShaderRegisterMapping.h"
+#include "Hyperion/Shaders/ShaderStages.h"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -10,12 +11,6 @@
 
 namespace Hyperion
 {
-enum class EShaderStage
-{
-	Vertex,
-	Pixel,
-	Compute
-};
 enum class EShaderFormat
 {
 	Dxil,

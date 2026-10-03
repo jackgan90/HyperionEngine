@@ -44,7 +44,7 @@ FComputeResources::FProgram& FComputeResources::GetProgram(FShaderCompiler& InCo
 		ValidateEngineMaterialResource(Validated, InPass.Shader.Contracts);
 		FMaterialProgramBinding Binding;
 		Binding.Resource = Validated;
-		Binding.Stages = 4;
+		Binding.Stages = EShaderStageMask::Compute;
 		if (Resource.Kind == EBindingKind::UniformBuffer)
 		{
 			for (const auto& Member : Validated.Members)

@@ -98,6 +98,8 @@ flowchart TD
 - `Runtime/Content`：共享 root 状态、反射请求/结果、候选索引和内容消费者切换契约；不依赖图形或插件。
 - `Runtime/AssetEditing`：`FAssetEditDocument` 的草稿、历史、generation、保存状态和纹理重建。Editor 与自动化适配器共享这一实现。它与 `Assets/NativeAsset.h` 中保存文件解码结果的 `FAssetDocument` 是不同概念。
 - `Runtime/SceneEditing`：共享 live scene 文档、事务、历史、选择、save point 与反射请求/结果；通过 `ISceneEditTarget` 连接 Renderer，CPU 模块不反向依赖图形。
+- 组件字段编辑由 `SceneComponentEditPolicy` 按反射成员的 C++ 关联定义权限；单选/多选 Inspector 的只读展示与自动化、GUI 候选值校验共用该规则。原有 Inspector 元数据继续保留其 schema 表示，不充当领域授权；通用文档恢复与历史操作不受组件编辑入口规则替代。
+- 导入任务、导入草稿和自动化 job 分别使用所属领域的状态枚举；内部和 GUI 不依据协议文本分支。导入 `status` 的反射成员与 job 响应边界显式生成既有字符串，保留 schema、轮询和取消契约。草稿发布失败后仍回到可编辑的 Ready 状态并保留错误，不把它等同于准备失败。
 - `Plugins/Automation`：注册资产/场景适配器，管理 session、stdio 和应用监听生命周期；附着适配器使用应用发布的文档实例。stdio 原生 API 限于 `Private/Adapters`。
 - `Applications/Automation`：解析启动参数、选择插件和资产提供方。通用 Application 宿主仍只负责 Tasks、Main pump、时间和退出。
 

@@ -46,7 +46,7 @@ if(BUILD_TESTING)
   set_tests_properties(automation_local_lifecycle PROPERTIES TIMEOUT 30)
   add_executable(automation_scene_tests Private/SceneOperationTests.cpp Private/SceneClipboardTests.cpp
     Private/SceneRegistrationTests.cpp Private/RenderOptionOperationTests.cpp)
-  target_sources(automation_scene_tests PRIVATE Private/SceneComponentChangeTests.cpp)
+  target_sources(automation_scene_tests PRIVATE Private/SceneComponentChangeTests.cpp Private/SceneComponentPolicyTests.cpp)
   hyp_executable(automation_scene_tests)
   target_sources(automation_scene_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests/Scene/SceneComponentDomainTests.cpp")
   target_include_directories(automation_scene_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")

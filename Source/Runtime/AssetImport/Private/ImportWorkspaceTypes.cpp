@@ -1,4 +1,5 @@
 #include "Hyperion/AssetImport/ImportWorkspace.h"
+#include "ImportStateReflection.h"
 
 namespace Hyperion
 {
@@ -110,8 +111,8 @@ template<> const FRecordDescriptor& RecordType<FImportTaskInfo>()
 	    "asset.import.task-info",
 	    {Member("task", &FImportTaskInfo::Task), Member("generation", &FImportTaskInfo::Generation),
 	     Member("source", &FImportTaskInfo::Source), Member("output", &FImportTaskInfo::Output),
-	     Member("status", &FImportTaskInfo::Status,
-	            {.Description = "running, completed or failed. Accepted publication is not cancellable."}),
+	     ImportTaskStateMember(
+	         {.Description = "running, completed or failed. Accepted publication is not cancellable."}),
 	     Member("result", &FImportTaskInfo::Result), Member("error", &FImportTaskInfo::Error)});
 	return Type;
 }

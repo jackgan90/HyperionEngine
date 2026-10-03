@@ -2,6 +2,7 @@
 #include "Hyperion/AssetEditing/MaterialNumeric.h"
 #include "Hyperion/AssetEditing/ModelProperties.h"
 #include "Hyperion/AssetImport/AssetImportService.h"
+#include "Hyperion/AssetImport/ImportState.h"
 #include "Hyperion/Scene/Model.h"
 #include "Hyperion/Textures/TextureAsset.h"
 
@@ -85,7 +86,7 @@ struct FImportDraftInfo
 {
 	std::string Draft;
 	std::uint64_t Generation{};
-	std::string Status;
+	EImportDraftState Status = EImportDraftState::None;
 	std::string Error;
 	std::string Type;
 	std::string Name;
