@@ -130,12 +130,12 @@ void FArchiveReader::Header()
 FArchiveNode FArchiveReader::Bulk()
 {
 	FBulkData Data;
-	Data.Element = String();
-	const std::array<std::string_view, 10> Elements{"u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64"};
-	if (std::find(Elements.begin(), Elements.end(), Data.Element) == Elements.end())
+	const auto Element = ParseBulkElement(String());
+	if (!Element)
 	{
 		throw std::runtime_error("Invalid bulk element type");
 	}
+	Data.Element = *Element;
 	std::size_t Offset{};
 	std::size_t Size{};
 	if (bLegacy)
@@ -154,7 +154,7 @@ FArchiveNode FArchiveReader::Bulk()
 		Offset = Blocks[Index].first;
 		Size = Blocks[Index].second;
 	}
-	const auto ElementBytes = static_cast<std::size_t>(std::stoul(Data.Element.substr(1))) / 8;
+	const auto ElementBytes = GetBulkElementInfo(Data.Element).ByteSize;
 	if (Size % ElementBytes)
 	{
 		throw std::runtime_error("Invalid bulk element alignment");

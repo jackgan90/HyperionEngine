@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Reflection/BulkElement.h"
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -13,7 +14,7 @@ namespace Hyperion
 {
 struct FBulkData
 {
-	std::string Element;
+	EBulkElement Element{};
 	std::vector<std::byte> Bytes;
 	std::shared_ptr<const std::vector<std::byte>> Storage;
 	std::size_t Offset{};

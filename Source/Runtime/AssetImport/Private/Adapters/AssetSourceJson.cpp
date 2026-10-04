@@ -8,60 +8,15 @@ namespace
 {
 using FJson = nlohmann::json;
 
-template<class T> FJson BulkJson(const FArchiveNode& InNode)
-{
-	return ReadBulk<std::vector<T>>(InNode);
-}
-
 FJson EncodeBulk(const FArchiveNode& InNode)
 {
-	const auto& Element = std::get<FBulkData>(InNode.Value).Element;
-	FJson Data;
-	if (Element == "u8")
-	{
-		Data = BulkJson<std::uint8_t>(InNode);
-	}
-	else if (Element == "i8")
-	{
-		Data = BulkJson<std::int8_t>(InNode);
-	}
-	else if (Element == "u16")
-	{
-		Data = BulkJson<std::uint16_t>(InNode);
-	}
-	else if (Element == "i16")
-	{
-		Data = BulkJson<std::int16_t>(InNode);
-	}
-	else if (Element == "u32")
-	{
-		Data = BulkJson<std::uint32_t>(InNode);
-	}
-	else if (Element == "i32")
-	{
-		Data = BulkJson<std::int32_t>(InNode);
-	}
-	else if (Element == "u64")
-	{
-		Data = BulkJson<std::uint64_t>(InNode);
-	}
-	else if (Element == "i64")
-	{
-		Data = BulkJson<std::int64_t>(InNode);
-	}
-	else if (Element == "f32")
-	{
-		Data = BulkJson<float>(InNode);
-	}
-	else if (Element == "f64")
-	{
-		Data = BulkJson<double>(InNode);
-	}
-	else
-	{
-		throw std::invalid_argument("Unsupported bulk element: " + Element);
-	}
-	return FJson{{"$bulk", Element}, {"data", std::move(Data)}};
+	const auto Element = std::get<FBulkData>(InNode.Value).Element;
+	auto Data = VisitBulkElement(Element,
+	                             [&]<class T>() -> FJson
+	                             {
+		                             return ReadBulk<std::vector<T>>(InNode);
+	                             });
+	return FJson{{"$bulk", GetBulkElementInfo(Element).WireName}, {"data", std::move(Data)}};
 }
 
 FJson EncodeNode(const FArchiveNode& InNode)

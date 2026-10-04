@@ -24,7 +24,7 @@ void FArchiveWriter::String(const std::string& InValue)
 void FArchiveWriter::Bulk(const FBulkData& InData)
 {
 	Tag(EArchiveTag::Bulk);
-	String(InData.Element);
+	String(std::string(GetBulkElementInfo(InData.Element).WireName));
 	Scalar(static_cast<std::uint32_t>(Blocks.size()));
 	Blocks.push_back(InData.Data());
 }

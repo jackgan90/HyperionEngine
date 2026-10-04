@@ -68,7 +68,7 @@ void CheckKnownMetadata()
 {
 	const auto Bytes = KnownBulkArchive();
 	const auto Value = FArchiveNode(
-	    FArchiveNode::FArray{FArchiveNode(true), FArchiveNode(FBulkData{"u16", FixtureBytes("01020304")})});
+	    FArchiveNode::FArray{FArchiveNode(true), FArchiveNode(FBulkData{EBulkElement::U16, FixtureBytes("01020304")})});
 	HYP_CHECK(EncodeArchive(Value) == Bytes);
 	HYP_CHECK(HashArchive(Value) == "0146b51f717ebf8442dc6594f9ac918448d609f44789654ea8a9995489901796");
 	HYP_CHECK(EncodeArchive(DecodeArchive(Bytes)) == Bytes);
@@ -181,8 +181,9 @@ void CheckBulkMetadataBoundaries()
 	    {
 		    DecodeArchiveMetadata(std::span(Unaligned).first(59), 62);
 	    });
-	const auto TwoBlocks = EncodeArchive(FArchiveNode(FArchiveNode::FArray{
-	    FArchiveNode(FBulkData{"u8", FixtureBytes("01")}), FArchiveNode(FBulkData{"u8", FixtureBytes("02")})}));
+	const auto TwoBlocks = EncodeArchive(
+	    FArchiveNode(FArchiveNode::FArray{FArchiveNode(FBulkData{EBulkElement::U8, FixtureBytes("01")}),
+	                                      FArchiveNode(FBulkData{EBulkElement::U8, FixtureBytes("02")})}));
 	HYP_CHECK(TwoBlocks.size() == 85 && ReadFixtureInteger(TwoBlocks, 8, 8) == 27);
 	HYP_CHECK(ProbeArchiveMetadataSize(std::span(TwoBlocks).first(24), 85) == 83);
 	(void)DecodeArchiveMetadata(std::span(TwoBlocks).first(83), 85);

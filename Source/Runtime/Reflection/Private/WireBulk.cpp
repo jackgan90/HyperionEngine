@@ -34,10 +34,18 @@ template<class T> FBulkData PackTyped(const FArchiveNode::FArray& InValues)
 	return std::get<FBulkData>(WriteBulk(Values).Value);
 }
 
-template<class T> bool Matches(const FRecordValueShape& InShape)
+ERecordValueKind RecordKind(EBulkElementKind InKind)
 {
-	const auto& Shape = RecordValueShape<T>();
-	return InShape.Kind == Shape.Kind && InShape.ElementBytes == Shape.ElementBytes;
+	switch (InKind)
+	{
+		case EBulkElementKind::SignedInteger:
+			return ERecordValueKind::Integer;
+		case EBulkElementKind::UnsignedInteger:
+			return ERecordValueKind::UnsignedInteger;
+		case EBulkElementKind::FloatingPoint:
+			return ERecordValueKind::Number;
+	}
+	throw std::invalid_argument("Unsupported bulk numeric kind");
 }
 } // namespace
 
@@ -48,43 +56,26 @@ bool IsBulk(const FRecordValueShape& InShape)
 
 FArchiveNode::FArray Unpack(const FBulkData& InBulk)
 {
-#define HYP_UNPACK(Type)                                                                                               \
-	if (InBulk.Element == BulkElement<Type>())                                                                         \
-	{                                                                                                                  \
-		return UnpackTyped<Type>(InBulk);                                                                              \
-	}
-	HYP_UNPACK(std::int8_t)
-	HYP_UNPACK(std::uint8_t)
-	HYP_UNPACK(std::int16_t)
-	HYP_UNPACK(std::uint16_t)
-	HYP_UNPACK(std::int32_t)
-	HYP_UNPACK(std::uint32_t)
-	HYP_UNPACK(std::int64_t)
-	HYP_UNPACK(std::uint64_t)
-	HYP_UNPACK(float)
-	HYP_UNPACK(double)
-#undef HYP_UNPACK
-	throw std::invalid_argument("Unsupported archive bulk element: " + InBulk.Element);
+	return VisitBulkElement(InBulk.Element,
+	                        [&]<class T>()
+	                        {
+		                        return UnpackTyped<T>(InBulk);
+	                        });
 }
 
 FBulkData Pack(const FRecordValueShape& InShape, const FArchiveNode::FArray& InValues)
 {
-#define HYP_PACK(Type)                                                                                                 \
-	if (Matches<Type>(InShape))                                                                                        \
-	{                                                                                                                  \
-		return PackTyped<Type>(InValues);                                                                              \
+	for (const auto& Info : BulkElements)
+	{
+		if (InShape.Kind == RecordKind(Info.Kind) && InShape.ElementBytes == Info.ByteSize)
+		{
+			return VisitBulkElement(Info.Element,
+			                        [&]<class T>()
+			                        {
+				                        return PackTyped<T>(InValues);
+			                        });
+		}
 	}
-	HYP_PACK(std::int8_t)
-	HYP_PACK(std::uint8_t)
-	HYP_PACK(std::int16_t)
-	HYP_PACK(std::uint16_t)
-	HYP_PACK(std::int32_t)
-	HYP_PACK(std::uint32_t)
-	HYP_PACK(std::int64_t)
-	HYP_PACK(std::uint64_t)
-	HYP_PACK(float)
-	HYP_PACK(double)
-#undef HYP_PACK
 	throw std::invalid_argument("Unsupported wire bulk element");
 }
 } // namespace Hyperion::WirePrivate

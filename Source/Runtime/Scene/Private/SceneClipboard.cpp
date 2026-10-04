@@ -18,7 +18,7 @@ std::size_t ArchiveBytes(const FArchiveNode& InArchive)
 		}
 		else if (const auto Bulk = std::get_if<FBulkData>(&Value))
 		{
-			Bytes += Bulk->Data().size() + Bulk->Element.size();
+			Bytes += Bulk->Data().size() + GetBulkElementInfo(Bulk->Element).WireName.size();
 		}
 		else if (const auto Array = std::get_if<FArchiveNode::FArray>(&Value))
 		{

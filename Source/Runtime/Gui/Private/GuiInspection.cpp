@@ -106,49 +106,17 @@ bool EditBulk(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InSha
 bool EditBulkValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InShape, const std::string& InId,
                    unsigned InDepth)
 {
-	const auto& Element = std::get<FBulkData>(InValue.Value).Element;
-	if (Element == "f32")
+	const auto Element = std::get<FBulkData>(InValue.Value).Element;
+	if (!FindBulkElementInfo(Element))
 	{
-		return EditBulk<float>(InGui, InValue, InShape, InId, InDepth);
+		InGui.Text("Unsupported bulk element");
+		return false;
 	}
-	if (Element == "f64")
-	{
-		return EditBulk<double>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "i32")
-	{
-		return EditBulk<std::int32_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "u32")
-	{
-		return EditBulk<std::uint32_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "i64")
-	{
-		return EditBulk<std::int64_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "u64")
-	{
-		return EditBulk<std::uint64_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "i16")
-	{
-		return EditBulk<std::int16_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "u16")
-	{
-		return EditBulk<std::uint16_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "i8")
-	{
-		return EditBulk<std::int8_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	if (Element == "u8")
-	{
-		return EditBulk<std::uint8_t>(InGui, InValue, InShape, InId, InDepth);
-	}
-	InGui.Text("Unsupported bulk element: " + Element);
-	return false;
+	return VisitBulkElement(Element,
+	                        [&]<class T>()
+	                        {
+		                        return EditBulk<T>(InGui, InValue, InShape, InId, InDepth);
+	                        });
 }
 
 bool EditRecordValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InShape,

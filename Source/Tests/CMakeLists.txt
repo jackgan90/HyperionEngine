@@ -53,6 +53,9 @@ endif()
 hyp_test(io_tests async_io hyperion_io IO/IOTests.cpp)
 target_sources(io_tests PRIVATE IO/MountedFileSystemTests.cpp)
 hyp_test(archive_tests reflected_archives hyperion_serialization Serialization/ArchiveTests.cpp)
+hyp_test(bulk_element_tests bulk_element_contracts hyperion_asset_import Serialization/BulkElementTests.cpp)
+target_sources(bulk_element_tests PRIVATE Gui/GuiBulkTests.cpp)
+target_link_libraries(bulk_element_tests PRIVATE hyperion_gui)
 target_sources(archive_tests PRIVATE Serialization/RecordTests.cpp)
 target_sources(archive_tests PRIVATE Serialization/DisplayLayoutTests.cpp)
 target_sources(archive_tests PRIVATE Serialization/InspectionTests.cpp)
@@ -372,6 +375,7 @@ add_custom_target(hyperion_check
   DEPENDS core_tests profiling_tests task_tests io_tests archive_tests model_tests import_tests config_tests asset_tests shader_tests graph_tests model_render_tests lifecycle_tests gui_tests rhi_contract_tests d3d12_device_tests hyperion_editor
   USES_TERMINAL
   COMMENT "Running Hyperion CTest suite")
+add_dependencies(hyperion_check bulk_element_tests)
 add_dependencies(hyperion_check plugin_tests render_control_tests)
 add_dependencies(hyperion_check raster_option_tests render_cache_key_tests editor_material_choices_tests)
 add_dependencies(hyperion_check gbuffer_layout_tests)

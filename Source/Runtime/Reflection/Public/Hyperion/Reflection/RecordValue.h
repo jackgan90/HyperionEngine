@@ -10,14 +10,6 @@
 
 namespace Hyperion
 {
-template<class T> std::string BulkElement()
-{
-	return std::string(std::is_floating_point_v<T> ? "f"
-	                   : std::is_signed_v<T>       ? "i"
-	                                               : "u") +
-	       std::to_string(sizeof(T) * 8);
-}
-
 template<class T> void ValidateRecordEnum(T InValue)
 {
 	const auto Values = RecordEnumValues<T>();
