@@ -1,6 +1,7 @@
 #include "AssetPropertyWidgets.h"
 #include "AssetWorkspace.h"
 #include "Hyperion/AssetEditing/AssetProperties.h"
+#include "MaterialChoices.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -78,15 +79,10 @@ FMaterialAssetValue MakeEditableValue(const FMaterialParameterType& InType)
 bool EditSampler(FGui& InGui, const std::string& InId, FMaterialSampler& InSampler)
 {
 	bool bChanged{};
-	const std::array<std::string, 5> Modes{"Repeat", "Clamp", "Mirror", "Border", "Mirror once"};
+	static const auto Modes = MaterialChoices<EMaterialAddressMode>();
 	for (const auto& [Name, Mode] : {std::pair{"U", &InSampler.U}, {"V", &InSampler.V}, {"W", &InSampler.W}})
 	{
-		std::size_t Index = static_cast<std::size_t>(*Mode);
-		if (AssetCombo(InGui, (std::string("Address ") + Name + "##" + InId).c_str(), Modes, Index))
-		{
-			*Mode = static_cast<EMaterialAddressMode>(Index);
-			bChanged = true;
-		}
+		bChanged |= AssetEnumCombo(InGui, (std::string("Address ") + Name + "##" + InId).c_str(), Modes, *Mode);
 	}
 	for (const auto& [Name, Value] : {std::pair{"Min linear", &InSampler.bMinLinear},
 	                                  {"Mag linear", &InSampler.bMagLinear},
@@ -114,14 +110,8 @@ bool EditSampler(FGui& InGui, const std::string& InId, FMaterialSampler& InSampl
 	bChanged |= AssetFloat(InGui, ("Min LOD##" + InId).c_str(), InSampler.MinLod);
 	bChanged |= AssetFloat(InGui, ("Max LOD##" + InId).c_str(), InSampler.MaxLod);
 	InSampler.MipLodBias = std::clamp(InSampler.MipLodBias, -16.f, 15.99f);
-	const std::array<std::string, 8> Compares{"Never",   "Less",      "Equal",         "Less equal",
-	                                          "Greater", "Not equal", "Greater equal", "Always"};
-	std::size_t Compare = static_cast<std::size_t>(InSampler.Compare);
-	if (AssetCombo(InGui, ("Compare##" + InId).c_str(), Compares, Compare))
-	{
-		InSampler.Compare = static_cast<EMaterialSamplerCompare>(Compare);
-		bChanged = true;
-	}
+	static const auto Compares = MaterialChoices<EMaterialSamplerCompare>();
+	bChanged |= AssetEnumCombo(InGui, ("Compare##" + InId).c_str(), Compares, InSampler.Compare);
 	for (std::size_t I = 0; I < 4; ++I)
 	{
 		bChanged |= AssetFloat(InGui, ("Border " + std::to_string(I) + "##" + InId).c_str(), InSampler.BorderColor[I]);
@@ -178,14 +168,45 @@ bool CanEdit(const FMaterialAssetParameter& InParameter)
 
 std::string MaterialTypeLabel(const FMaterialParameterType& InType)
 {
-	constexpr std::array Kinds{"Numeric", "Structure", "Array", "Texture 2D", "Buffer", "Sampler", "Texture cube"};
-	constexpr std::array Scalars{"bool", "int", "uint", "float"};
 	if (InType.Kind == EMaterialValueKind::Numeric)
 	{
-		return std::string(Scalars.at(static_cast<std::size_t>(InType.Scalar))) + " " + std::to_string(InType.Rows) +
-		       " x " + std::to_string(InType.Columns);
+		std::string Scalar;
+		switch (InType.Scalar)
+		{
+			case EMaterialScalar::Bool:
+				Scalar = "bool";
+				break;
+			case EMaterialScalar::Int:
+				Scalar = "int";
+				break;
+			case EMaterialScalar::Uint:
+				Scalar = "uint";
+				break;
+			case EMaterialScalar::Float:
+				Scalar = "float";
+				break;
+			default:
+				throw std::invalid_argument("Unknown material scalar");
+		}
+		return Scalar + " " + std::to_string(InType.Rows) + " x " + std::to_string(InType.Columns);
 	}
-	return Kinds.at(static_cast<std::size_t>(InType.Kind));
+	switch (InType.Kind)
+	{
+		case EMaterialValueKind::Structure:
+			return "Structure";
+		case EMaterialValueKind::Array:
+			return "Array";
+		case EMaterialValueKind::Texture2D:
+			return "Texture 2D";
+		case EMaterialValueKind::ReadBuffer:
+			return "Buffer";
+		case EMaterialValueKind::Sampler:
+			return "Sampler";
+		case EMaterialValueKind::TextureCube:
+			return "Texture cube";
+		default:
+			throw std::invalid_argument("Unknown material value kind");
+	}
 }
 
 } // namespace

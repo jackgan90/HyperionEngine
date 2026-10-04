@@ -28,27 +28,24 @@ template<class T> bool IsIntegerWithinRange(T InValue, const FPropertyPresentati
 			return false;
 		}
 	}
-	return InPresentation.Choices.empty() ||
-	       (std::cmp_greater_equal(InValue, 0) && std::cmp_less(InValue, InPresentation.Choices.size()));
+	return true;
 }
 
 void ValidateScalar(const FArchiveNode& InValue, const FPropertyPresentation& InPresentation, const std::string& InPath)
 {
-	bool bValid = true;
+	bool bValid = InPresentation.Choices.empty() || PropertyChoiceIndex(InPresentation.Choices, InValue).has_value();
 	if (const auto* Value = std::get_if<double>(&InValue.Value))
 	{
-		bValid = std::isfinite(*Value) && !(InPresentation.Minimum && *Value < *InPresentation.Minimum) &&
-		         !(InPresentation.Maximum && *Value > *InPresentation.Maximum) &&
-		         (InPresentation.Choices.empty() ||
-		          (*Value >= 0 && *Value < static_cast<double>(InPresentation.Choices.size())));
+		bValid &= std::isfinite(*Value) && !(InPresentation.Minimum && *Value < *InPresentation.Minimum) &&
+		          !(InPresentation.Maximum && *Value > *InPresentation.Maximum);
 	}
 	if (const auto* Value = std::get_if<std::int64_t>(&InValue.Value))
 	{
-		bValid = IsIntegerWithinRange(*Value, InPresentation);
+		bValid &= IsIntegerWithinRange(*Value, InPresentation);
 	}
 	if (const auto* Value = std::get_if<std::uint64_t>(&InValue.Value))
 	{
-		bValid = IsIntegerWithinRange(*Value, InPresentation);
+		bValid &= IsIntegerWithinRange(*Value, InPresentation);
 	}
 	if (!bValid)
 	{

@@ -24,6 +24,8 @@ Interactive startup restores `out/editor/RenderSettings.json`; **Save render set
 
 The profiling HUD and `render.statistics` expose GPU pass timings, per-view visibility/batching and device counters. `profiling.get/set` and the Stats popup share Core profiling controls. Optional Tracy must be compiled for collection edits; connection and system sampling availability remain explicit. Contact shadows require Deferred and the contact-shadows feature; disabled features leave authored component data intact and skip the unavailable effect. RenderDoc uses the existing Editor preference, capture and exact replay path described in [RenderDoc](RenderDoc.md).
 
+Shadow preview identities are defined in CPU-only `RasterOptions/ShadowPreviewOptions.h`. Scene inspectors, validation, Config and Renderer use its value/label mappings and explicit cascade query. The persisted and automation `debugMode` fields remain unsigned 32-bit integers: directional 0 Lit, 1 Cascade colors, 2–5 Cascade 0–3 depth; contact 0 Lit, 1 Visibility mask, 2 HZB depth. Unknown values are rejected, and changing presentation order does not change these values or the record versions.
+
 ## Repeatable measurements
 
 ```powershell

@@ -197,14 +197,15 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		ClearTargets(InGraph, Clear);
 	}
 	const bool bDeferred = Settings.Pipeline == ESceneRenderPipeline::Deferred;
-	LastStatistics.LocalLights.bActive = (bDeferred || Settings.bClusteredLighting) && !InShadows.DebugMode;
+	const bool bLit = ParseDirectionalShadowPreview(InShadows.DebugMode) == EDirectionalShadowPreview::Lit;
+	LastStatistics.LocalLights.bActive = (bDeferred || Settings.bClusteredLighting) && bLit;
 	LastStatistics.LocalLights.bClustered = Settings.bClusteredLighting;
 	if (const auto& Metadata = InFrame->GetSceneMetadata())
 	{
 		LastStatistics.LocalLights.Points = Metadata->PointLights.size();
 		LastStatistics.LocalLights.Spots = Metadata->SpotLights.size();
 	}
-	PrepareClusters(InMain, *InFrame, Settings.bClusteredLighting && !InShadows.DebugMode);
+	PrepareClusters(InMain, *InFrame, Settings.bClusteredLighting && bLit);
 	auto Family = MakeViews(InMain, Clear);
 	Session.BuildViews(
 	    InGraph, Family.Views, Family.Targets, InFrame, 1, true, bInDeferPreparation,
@@ -218,7 +219,7 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		    {
 			    BuildFeatures(ERenderFeatureStage::BeforeLighting, FeatureContext);
 			    AddFullscreenPass(Session, InGraph, Lighting(InMain, *InFrame, Clear), bInDeferPreparation);
-			    if (!InShadows.DebugMode && !Settings.bClusteredLighting)
+			    if (bLit && !Settings.bClusteredLighting)
 			    {
 				    AddLocalLights(InGraph, InMain, *InFrame, bInDeferPreparation);
 			    }
@@ -239,14 +240,15 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	{
 		AddFullscreenPass(Session, InGraph, Debug(InMain), bInDeferPreparation);
 	}
-	if (LastStatistics.bShadows && InShadows.DebugMode >= 2 && InShadows.DebugMode <= 5)
+	if (const auto Cascade = ShadowPreviewCascade(ParseDirectionalShadowPreview(InShadows.DebugMode));
+	    LastStatistics.bShadows && Cascade)
 	{
 		const float Size = std::min({320.f, float(InMain.Width), float(InMain.Height)});
-		Session.AppendDepthPreview(
-		    InGraph, Family.Targets[Family.TransparentIndex].Reads.at(InShadows.DebugMode - 2).Texture, ShadowLifetime,
-		    InShadows.PreviewViewport.value_or(
-		        FViewport{float(InMain.Width) - Size, float(InMain.Height) - Size, Size, Size}),
-		    bInDeferPreparation, OutputTarget);
+		Session.AppendDepthPreview(InGraph, Family.Targets[Family.TransparentIndex].Reads.at(*Cascade).Texture,
+		                           ShadowLifetime,
+		                           InShadows.PreviewViewport.value_or(
+		                               FViewport{float(InMain.Width) - Size, float(InMain.Height) - Size, Size, Size}),
+		                           bInDeferPreparation, OutputTarget);
 	}
 	BuildFeatures(ERenderFeatureStage::AfterTonemap, FeatureContext);
 	for (const auto& Feature : Features)

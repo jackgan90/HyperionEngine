@@ -35,3 +35,14 @@ Delivery SHALL demonstrate the effect on the current ready Editor Sponza scene w
 #### Scenario: Accepted scene run
 - **WHEN** Sponza assets and material bindings are ready and contact is toggled under a fixed camera/light
 - **THEN** captures show localized directional contact detail, no invalid-resource errors occur, and activation/timing evidence identifies the actual generated work
+
+### Requirement: Explicit contact preview interpretation
+Contact shadow consumers SHALL use validated typed identities for lit, visibility-mask and HZB-depth preview. Existing disabled-feature, absent-light, pipeline and mip behavior SHALL remain unchanged.
+
+#### Scenario: HZB preview
+- **WHEN** HZB-depth preview is selected
+- **THEN** the previous depth request and mip preview occur independently of the visibility-mask branch
+
+#### Scenario: Invalid contact mode
+- **WHEN** a value outside the supported contact preview contract is provided
+- **THEN** shared settings validation rejects it without changing the active settings

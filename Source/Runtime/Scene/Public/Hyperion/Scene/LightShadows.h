@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RasterOptions/ShadowPreviewOptions.h"
 #include "Hyperion/Reflection/RecordValue.h"
 
 namespace Hyperion

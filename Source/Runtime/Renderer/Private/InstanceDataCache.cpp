@@ -1,6 +1,7 @@
 #include "InstanceDataCache.h"
 #include "Hyperion/Renderer/MaterialInputValues.h"
 #include "InstancePacking.h"
+#include "RenderCacheKeys.h"
 #include <algorithm>
 #include <list>
 #include <map>
@@ -24,22 +25,7 @@ struct FPackedRecord
 	std::shared_ptr<const std::vector<std::byte>> Data;
 };
 
-using FRecordKey = std::tuple<std::uint64_t, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t>;
 using FBlockKey = std::pair<std::uint64_t, std::vector<std::uint64_t>>;
-
-struct FRecordKeyHash
-{
-	std::size_t operator()(const FRecordKey& InKey) const
-	{
-		std::size_t Hash{};
-		for (const auto Word : {std::get<0>(InKey), std::get<1>(InKey), std::uint64_t(std::get<2>(InKey)),
-		                        std::get<3>(InKey), std::get<4>(InKey)})
-		{
-			Hash = Hash * 16777619U ^ std::hash<std::uint64_t>{}(Word);
-		}
-		return Hash;
-	}
-};
 
 struct FBlockKeyHash
 {
@@ -75,7 +61,7 @@ struct FInstanceDataCache::FImpl
 		std::vector<std::shared_ptr<const FMaterialValue>> Values;
 		std::weak_ptr<const void> Owner;
 		std::size_t Bytes{};
-		std::list<FRecordKey>::iterator Recent;
+		std::list<FInstanceRecordKey>::iterator Recent;
 		std::array<std::weak_ptr<const FLocalMaterialItem>, 8> LocalPreparations;
 
 		bool MatchesLocal(const FRenderItem& InItem) const
@@ -123,9 +109,9 @@ struct FInstanceDataCache::FImpl
 	FRenderBatchLimits Limits;
 	std::uint64_t NextIdentity{};
 	std::map<std::pair<const FCompiledMaterialDefinition*, const FMaterialProgramBinding*>, FProgramLayout> Layouts;
-	using FRecords = std::unordered_map<FRecordKey, FRecord, FRecordKeyHash>;
+	using FRecords = std::unordered_map<FInstanceRecordKey, FRecord, FInstanceRecordKeyHash>;
 	FRecords Records;
-	std::list<FRecordKey> RecentRecords;
+	std::list<FInstanceRecordKey> RecentRecords;
 	using FBlocks = std::unordered_map<FBlockKey, FBlock, FBlockKeyHash>;
 	FBlocks Blocks;
 	std::list<FBlockKey> RecentBlocks;
@@ -186,8 +172,11 @@ struct FInstanceDataCache::FImpl
 	FPackedRecord Record(const FRenderItem& InItem, const FMaterialProgramBinding& InBinding,
 	                     const FRecordLayout& InLayout, FRenderBatchStats& OutStats)
 	{
-		const FRecordKey Key{InLayout.Identity, InItem.Primitive.Scene, InItem.Primitive.Slot,
-		                     InItem.Primitive.Generation, InItem.LocalItemId.value_or(InItem.Ordinal)};
+		const FInstanceRecordKey Key{.Layout = InLayout.Identity,
+		                             .Scene = InItem.Primitive.Scene,
+		                             .Slot = InItem.Primitive.Slot,
+		                             .Generation = InItem.Primitive.Generation,
+		                             .LocalItem = InItem.LocalItemId.value_or(InItem.Ordinal)};
 		const bool bStable = InItem.LocalItemId.has_value() && bool(InItem.Lifetime);
 		const auto Existing = Records.find(Key);
 		if (bStable && Existing != Records.end() && Existing->second.MatchesLocal(InItem))

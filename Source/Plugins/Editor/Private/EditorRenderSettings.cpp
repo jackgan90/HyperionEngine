@@ -15,7 +15,9 @@ void FEditorPlugin::SetRenderSettings(std::uint64_t InRevision, const FRenderSet
 		throw FSceneEditError("stale_revision", "Render settings changed; query the current values");
 	}
 	ValidateRenderSettings(InSettings);
-	if (InSettings.Contact != Rendering.Contact && (InSettings.Contact.bEnabled || InSettings.Contact.DebugMode) &&
+	if (InSettings.Contact != Rendering.Contact &&
+	    (InSettings.Contact.bEnabled ||
+	     ParseContactShadowPreview(InSettings.Contact.DebugMode) != EContactShadowPreview::Lit) &&
 	    !Context.Require<FRenderFeatureRegistry>().Contains("contact-shadows"))
 	{
 		throw FSceneEditError("unavailable", "Contact shadow feature is disabled in this session");

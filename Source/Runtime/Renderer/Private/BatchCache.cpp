@@ -77,9 +77,13 @@ void FRenderBatchSystem::FImpl::CanonicalizeStructure(FRenderBatchSignature& InS
 
 FBatchItemKey BatchItemKey(const FRenderSceneSnapshot& InSnapshot, const FRenderItem& InItem)
 {
-	return {InSnapshot.View.Identity,       InSnapshot.View.Usage,       InItem.Primitive.Scene,
-	        InItem.Primitive.Slot,          InItem.Primitive.Generation, InItem.LocalItemId.value_or(InItem.Ordinal),
-	        InSnapshot.View.DepthConvention};
+	return {.View = InSnapshot.View.Identity,
+	        .Usage = InSnapshot.View.Usage,
+	        .Scene = InItem.Primitive.Scene,
+	        .Slot = InItem.Primitive.Slot,
+	        .Generation = InItem.Primitive.Generation,
+	        .LocalItem = InItem.LocalItemId.value_or(InItem.Ordinal),
+	        .DepthConvention = InSnapshot.View.DepthConvention};
 }
 
 std::shared_ptr<const FRenderBatchCandidate> FRenderBatchSystem::FImpl::Describe(const FRenderSceneSnapshot& InSnapshot,
@@ -331,10 +335,9 @@ void FRenderBatchSystem::FImpl::Retire(const FRenderSceneSnapshot& InSnapshot)
 		RetiredCollection = InSnapshot.CollectionKey;
 	}
 	// Only the current view's small chunk range needs visibility retirement after each build.
-	const FBatchItemKey First{InSnapshot.View.Identity, InSnapshot.View.Usage, 0, 0, 0, 0, EDepthConvention::Standard};
-	for (auto It = Chunks.lower_bound(First); It != Chunks.end() &&
-	                                          std::get<0>(It->first) == InSnapshot.View.Identity &&
-	                                          std::get<1>(It->first) == InSnapshot.View.Usage;)
+	const auto First = FBatchItemKey::ViewBegin(InSnapshot.View.Identity, InSnapshot.View.Usage);
+	for (auto It = Chunks.lower_bound(First);
+	     It != Chunks.end() && It->first.MatchesView(InSnapshot.View.Identity, InSnapshot.View.Usage);)
 	{
 		if (It->second.Access != Access || !It->second.Data->IsLive())
 		{

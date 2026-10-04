@@ -2,6 +2,7 @@
 #include "Hyperion/Renderer/RenderBatch.h"
 #include "IncrementalBatchHistory.h"
 #include "InstanceDataCache.h"
+#include "RenderCacheKeys.h"
 #include <list>
 #include <map>
 #include <tuple>
@@ -9,24 +10,7 @@
 
 namespace Hyperion
 {
-using FBatchItemKey = std::tuple<std::uint64_t, std::string, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t,
-                                 EDepthConvention>;
-
 FBatchItemKey BatchItemKey(const FRenderSceneSnapshot& InSnapshot, const FRenderItem& InItem);
-
-struct FBatchItemKeyHash
-{
-	std::size_t operator()(const FBatchItemKey& InKey) const
-	{
-		std::size_t Hash = std::hash<std::string>{}(std::get<1>(InKey));
-		for (const auto Word : {std::get<0>(InKey), std::get<2>(InKey), std::uint64_t(std::get<3>(InKey)),
-		                        std::get<4>(InKey), std::get<5>(InKey), std::uint64_t(std::get<6>(InKey))})
-		{
-			Hash = Hash * 16777619U ^ std::hash<std::uint64_t>{}(Word);
-		}
-		return Hash;
-	}
-};
 
 template<typename TValue>
 bool SameBatchOwner(const std::weak_ptr<const TValue>& InWeak, const std::shared_ptr<const TValue>& InStrong)

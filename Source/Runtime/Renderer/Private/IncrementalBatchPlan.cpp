@@ -64,9 +64,13 @@ std::shared_ptr<FRenderBatchPlan> FRenderBatchSystem::FImpl::PublishIncremental(
 			if (!Block.bDirty && Block.Chunk)
 			{
 				const auto& [Scene, Slot, Generation, LocalId] = *Block.Chunk;
-				const FBatchItemKey Key{
-				    InSnapshot.View.Identity,       InSnapshot.View.Usage, Scene, Slot, Generation, LocalId,
-				    InSnapshot.View.DepthConvention};
+				const FBatchItemKey Key{.View = InSnapshot.View.Identity,
+				                        .Usage = InSnapshot.View.Usage,
+				                        .Scene = Scene,
+				                        .Slot = Slot,
+				                        .Generation = Generation,
+				                        .LocalItem = LocalId,
+				                        .DepthConvention = InSnapshot.View.DepthConvention};
 				if (const auto Found = Chunks.find(Key); Found != Chunks.end() && Found->second.Data->IsLive())
 				{
 					Batch.Instances = Found->second.Data;

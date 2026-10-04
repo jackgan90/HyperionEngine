@@ -3,6 +3,7 @@
 #include "FullscreenPass.h"
 #include "Hyperion/Renderer/RenderResources.h"
 #include "LightVolumeResources.h"
+#include "RenderCacheKeys.h"
 #include <atomic>
 #include <map>
 #include <mutex>
@@ -69,7 +70,6 @@ struct FRenderResourceRecord
 
 struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResourceCoordinator>
 {
-	using FKey = std::tuple<const void*, std::uint64_t, std::string, std::uint64_t>;
 	// A null prepared selection denotes the device's automatic definition compilation.
 	using FProgramKey = std::pair<std::uint64_t, std::shared_ptr<const FCompiledMaterialDefinition>>;
 
@@ -158,7 +158,7 @@ struct FRenderResourceCoordinator : std::enable_shared_from_this<FRenderResource
 	void TrackScope(const std::shared_ptr<const void>& InScope);
 	void ReleaseScope(FScopeLifetime* InScope);
 	FTaskHandle Progress;
-	std::map<FKey, FEntry> Entries;
+	std::map<FResourceRequestKey, FEntry> Entries;
 	std::map<FProgramKey, std::shared_ptr<FMaterialProgramRecord>> Programs;
 	std::vector<FMaterialEntry> MaterialEntries;
 	std::unique_ptr<FMaterialGpuCache> MaterialGpu;

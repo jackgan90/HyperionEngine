@@ -73,12 +73,12 @@ std::shared_ptr<const FRenderResource> FRenderResourceService::Request(std::shar
 			throw std::logic_error("Render resource service is closed");
 		}
 		++Owner.Stats.Requests;
-		FRenderResourceCoordinator::FKey RetryKey{InIdentity.get(), InVersion, std::move(InConfiguration), 0};
+		FResourceRequestKey RetryKey{
+		    .Asset = InIdentity.get(), .Version = InVersion, .Configuration = std::move(InConfiguration)};
 		for (auto It = Owner.Entries.lower_bound(RetryKey); It != Owner.Entries.end(); ++It)
 		{
 			const auto& Key = It->first;
-			if (std::get<0>(Key) != std::get<0>(RetryKey) || std::get<1>(Key) != std::get<1>(RetryKey) ||
-			    std::get<2>(Key) != std::get<2>(RetryKey))
+			if (!Key.SameRequest(RetryKey))
 			{
 				break;
 			}
@@ -86,7 +86,7 @@ std::shared_ptr<const FRenderResource> FRenderResourceService::Request(std::shar
 			{
 				return Owner.MakeLease(It->second);
 			}
-			std::get<3>(RetryKey) = std::get<3>(Key) + 1;
+			RetryKey.Attempt = Key.Attempt + 1;
 		}
 		static std::atomic_uint64_t NextIdentity{1};
 		auto Record = std::make_shared<FRenderResourceRecord>(Owner.Tasks);

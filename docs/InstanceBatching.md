@@ -2,6 +2,8 @@
 
 `FRenderSession` 默认在 Render 线程将兼容的可见 render item 合成 instance 批次；RHI 0 创建实际 draw packet 和常量数据切片。Scene 模块不依赖这条渲染路径。Editor 视口选项 的 **Instance batching** 复选框可实时切换，`--no-instance-batching` 强制使用普通绘制，适用于同一个可执行文件的 A/B 对照。CLI 指定初始关闭值；后续 GUI 和 agent 可经同一服务切换。
 
+Renderer 私有缓存键使用具名字段：`FBatchItemKey` 标识 view、usage、primitive 和 local item，`FInstanceRecordKey` 标识布局及实例记录，`FResourceRequestKey` 区分资产请求和重试次数。排序、哈希混合顺序、逐视图清理范围与失败重试顺序保持既有契约；键类型不拥有资源，失效和释放仍由缓存原有的弱引用、版本和 fence 规则控制。
+
 ## Shader 宏契约
 
 引擎为普通版传入 `HYP_ENABLE_INSTANCE=0`，为可选的 `Instance` permutation 传入 `HYP_ENABLE_INSTANCE=1`。当前没有引入 shader metadata system，也不按文件名或源码字符串判断支持情况。shader 应采用可被编译参数覆盖的默认值：

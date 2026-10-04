@@ -94,6 +94,16 @@ struct FPropertyTooltipLine
 	bool operator==(const FPropertyTooltipLine&) const = default;
 };
 
+struct FPropertyChoice
+{
+	FArchiveNode Value;
+	std::string Label;
+	bool operator==(const FPropertyChoice& InOther) const;
+};
+
+std::optional<std::size_t> PropertyChoiceIndex(std::span<const FPropertyChoice> InChoices, const FArchiveNode& InValue);
+std::vector<std::string> PropertyChoiceLabels(std::span<const FPropertyChoice> InChoices);
+
 // Presentation is independent of persistence. Absence hides a top-level member from inspection.
 struct FPropertyPresentation
 {
@@ -102,7 +112,7 @@ struct FPropertyPresentation
 	bool bReadOnly{};
 	std::optional<double> Minimum;
 	std::optional<double> Maximum;
-	std::vector<std::string> Choices;
+	std::vector<FPropertyChoice> Choices;
 	std::string ReferenceType;
 	bool bAllowResize = true;
 	EPropertyWidget Widget = EPropertyWidget::Default;

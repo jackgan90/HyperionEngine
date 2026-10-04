@@ -1,3 +1,4 @@
+#include "Hyperion/RasterOptions/ShadowPreviewOptions.h"
 #include <Hyperion/Config/AppSettings.h>
 #include <type_traits>
 
@@ -101,7 +102,12 @@ const FTypeDescriptor& SettingsType()
 	     Field("contact_shadow_thickness", "Contact thickness (world)", &FAppSettings::ContactShadowThickness, .001, 1),
 	     Field("contact_shadow_bias", "Contact bias (world)", &FAppSettings::ContactShadowBias, 0, .01),
 	     Field("contact_shadow_steps", "Contact traversal budget", &FAppSettings::ContactShadowSteps, 8, 512),
-	     Field("contact_shadow_debug", "Contact debug", &FAppSettings::ContactShadowDebug, 0, 2),
+	     Field("contact_shadow_debug", "Contact debug", &FAppSettings::ContactShadowDebug,
+	           ContactShadowPreviewMinimum(), ContactShadowPreviewMaximum(),
+	           [](const FValue& InValue)
+	           {
+		           (void)ParseAppContactShadowPreview(std::get<std::int64_t>(InValue));
+	           }),
 	     Field("hierarchical_depth_mip", "HZB preview mip", &FAppSettings::HierarchicalDepthMip, 0, 16),
 	     Field("reversed_z", "Reversed Z (restart)", &FAppSettings::bReversedZ),
 	     Field("gbuffer_layout", "GBuffer layout", &FAppSettings::GBufferLayout, 0, 0, ValidatePreset),

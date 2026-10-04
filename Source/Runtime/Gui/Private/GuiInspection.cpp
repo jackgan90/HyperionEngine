@@ -54,11 +54,10 @@ bool EditScalar(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InS
 	const std::string Name = "##value";
 	if (!InPresentation.Choices.empty())
 	{
-		auto Index = ReadInteger<std::size_t>(InValue);
-		if (InGui.Combo(Name.c_str(), InPresentation.Choices, Index))
+		auto Index = PropertyChoiceIndex(InPresentation.Choices, InValue).value_or(InPresentation.Choices.size());
+		if (InGui.Combo(Name.c_str(), PropertyChoiceLabels(InPresentation.Choices), Index))
 		{
-			InValue = InShape.Kind == ERecordValueKind::Integer ? WriteValue(static_cast<std::int64_t>(Index))
-			                                                    : WriteValue(static_cast<std::uint64_t>(Index));
+			InValue = InPresentation.Choices.at(Index).Value;
 			return true;
 		}
 		return false;

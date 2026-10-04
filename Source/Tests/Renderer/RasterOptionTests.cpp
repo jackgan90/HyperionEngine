@@ -6,6 +6,8 @@
 #include <limits>
 #include <vector>
 
+void CheckShadowPreviews();
+
 namespace
 {
 using namespace Hyperion;
@@ -168,6 +170,7 @@ int main()
 	try
 	{
 		FixedProtocol();
+		CheckShadowPreviews();
 		Presentation(SceneRenderPipelineOptions());
 		Presentation(GBufferPresetOptions());
 		Presentation(GBufferVisualizerOptions());

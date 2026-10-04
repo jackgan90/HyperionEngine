@@ -11,26 +11,16 @@ bool FGui::EditMixedScalar(FArchiveNode& InValue, const FRecordValueShape& InSha
 	const char* Label = "##value";
 	if (!InPresentation.Choices.empty())
 	{
-		auto Index = ReadInteger<std::size_t>(InValue);
-		const auto Id = ImGui::GetID(Label);
-		const char* Preview = bInMixed ? "Multiple Values" : InPresentation.Choices.at(Index).c_str();
-		const bool bOpen = ImGui::BeginCombo(Label, Preview);
-		const bool bActivated = ImGui::IsItemActivated();
-		bool bChanged{};
-		if (bOpen)
+		auto Index = bInMixed
+		                 ? InPresentation.Choices.size()
+		                 : PropertyChoiceIndex(InPresentation.Choices, InValue).value_or(InPresentation.Choices.size());
+		if (Combo(Label, PropertyChoiceLabels(InPresentation.Choices), Index, {},
+		          bInMixed ? "Multiple Values" : nullptr))
 		{
-			for (std::size_t Choice = 0; Choice < InPresentation.Choices.size(); ++Choice)
-			{
-				if (ImGui::Selectable(InPresentation.Choices[Choice].c_str(), !bInMixed && Choice == Index))
-				{
-					InValue = InShape.Kind == ERecordValueKind::Integer ? WriteValue(std::int64_t(Choice))
-					                                                    : WriteValue(std::uint64_t(Choice));
-					bChanged = true;
-				}
-			}
-			ImGui::EndCombo();
+			InValue = InPresentation.Choices.at(Index).Value;
+			return true;
 		}
-		return Impl->TrackEdit(Id, bOpen && !bChanged, bActivated, bChanged);
+		return false;
 	}
 	switch (InShape.Kind)
 	{

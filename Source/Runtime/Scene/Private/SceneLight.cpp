@@ -144,7 +144,11 @@ std::vector<FRecordMember> EnvironmentLightMembers()
 	                                                   .VisibleWhen = Constant}}),
 	        Member("intensity", &FSceneEnvironmentLight::Intensity, Inspect("Intensity", 0, {})),
 	        Member("source", &FSceneEnvironmentLight::Source,
-	               {.Inspector = FPropertyPresentation{.Label = "Source", .Choices = {"Constant color", "Sky asset"}}}),
+	               {.Inspector =
+	                    FPropertyPresentation{
+	                        .Label = "Source",
+	                        .Choices = {{WriteValue(ESceneEnvironmentSource::ConstantColor), "Constant color"},
+	                                    {WriteValue(ESceneEnvironmentSource::SkyAsset), "Sky asset"}}}}),
 	        Member("sky", &FSceneEnvironmentLight::Sky,
 	               {.Inspector = FPropertyPresentation{.Label = "Sky asset",
 	                                                   .ReferenceType = RecordType<FSkyAsset>().Id,

@@ -57,3 +57,12 @@ target_sources(hyperion_render PRIVATE Private/ContactShadows.cpp Private/SceneP
 target_link_libraries(hyperion_render PUBLIC hyperion_platform hyperion_rhi hyperion_tasks hyperion_plugins hyperion_config hyperion_scene hyperion_math hyperion_materials hyperion_shaders hyperion_reflection PRIVATE hyperion_core hyperion_assets hyperion_io)
 
 target_sources(hyperion_render PRIVATE Private/RenderFeatures.cpp)
+
+if(BUILD_TESTING)
+  add_executable(render_cache_key_tests Private/RenderCacheKeyTests.cpp)
+  hyp_executable(render_cache_key_tests)
+  target_link_libraries(render_cache_key_tests PRIVATE hyperion_math)
+  target_include_directories(render_cache_key_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
+  set_target_properties(render_cache_key_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME render_cache_keys COMMAND render_cache_key_tests)
+endif()

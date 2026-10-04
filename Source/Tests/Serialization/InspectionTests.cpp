@@ -19,7 +19,8 @@ void CheckInspection(T InValue, std::optional<double> InMinimum, std::optional<d
 	auto Options = Inspect("Value", InMinimum, InMaximum);
 	if (bInChoices)
 	{
-		Options.Inspector->Choices = {"First", "Second", "Third"};
+		Options.Inspector->Choices = {
+		    {FArchiveNode(T{0}), "First"}, {FArchiveNode(T{1}), "Second"}, {FArchiveNode(T{2}), "Third"}};
 	}
 	const auto Type = MakeRecord<FFixture>("test.inspection", {Member("value", &FFixture::Value, Options)});
 	const FFixture Source;
@@ -184,6 +185,42 @@ void CheckVisibilityConditions()
 }
 } // namespace
 
+void CheckExplicitInspectionChoices()
+{
+	using namespace Hyperion;
+
+	struct FFixture
+	{
+		std::int64_t Value = 42;
+	};
+
+	auto Options = Inspect("Choice");
+	Options.Inspector->Choices = {{WriteValue(std::int64_t{300}), "Same label"},
+	                              {WriteValue(std::int64_t{-7}), "Same label"},
+	                              {WriteValue(std::int64_t{42}), "Answer"}};
+	const auto Type = MakeRecord<FFixture>("test.sparse-choice", {Member("value", &FFixture::Value, Options)});
+	const FFixture Source;
+	for (const std::int64_t Value : {-7, 0, 1, 2, 42, 300})
+	{
+		FRecordDraft Draft(Type, &Source);
+		Draft.GetValues().at("value") = WriteValue(Value);
+		FFixture Candidate;
+		bool bRejected{};
+		try
+		{
+			Draft.ApplyToCandidate(&Candidate);
+		}
+		catch (const std::invalid_argument&)
+		{
+			bRejected = true;
+		}
+		const bool bAllowed = Value == -7 || Value == 42 || Value == 300;
+		HYP_CHECK(bRejected != bAllowed && Candidate.Value == (bAllowed ? Value : Source.Value));
+	}
+	HYP_CHECK(PropertyChoiceIndex(Options.Inspector->Choices, WriteValue(std::int64_t{-7})) == 1);
+	HYP_CHECK(!PropertyChoiceIndex(Options.Inspector->Choices, WriteValue(std::uint64_t{42})));
+}
+
 void CheckInspectionRanges()
 {
 	CheckPositiveIntegerInspection<std::int64_t>();
@@ -191,4 +228,5 @@ void CheckInspectionRanges()
 	CheckNegativeIntegerInspection();
 	CheckFloatingInspection();
 	CheckVisibilityConditions();
+	CheckExplicitInspectionChoices();
 }

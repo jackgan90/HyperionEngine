@@ -10,6 +10,7 @@ void CheckDragControls();
 void CheckApplicationScale();
 void CheckObjectDrag();
 void CheckMixedControls();
+void CheckChoiceControls();
 void CheckPathDisplay();
 void CheckContentTiles();
 void CheckSectionControls();
@@ -243,6 +244,7 @@ int main()
 		CheckDragControls();
 		CheckObjectDrag();
 		CheckMixedControls();
+		CheckChoiceControls();
 		CheckPathDisplay();
 		CheckContentTiles();
 		CheckSectionControls();

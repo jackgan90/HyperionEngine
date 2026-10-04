@@ -96,6 +96,18 @@ inline bool AssetCombo(FGui& InGui, const char* InLabel, std::span<const std::st
 	                     });
 }
 
+template<class T>
+bool AssetEnumCombo(FGui& InGui, const char* InLabel, std::span<const FPropertyChoice> InChoices, T& InOutValue)
+{
+	auto Index = PropertyChoiceIndex(InChoices, WriteValue(InOutValue)).value_or(InChoices.size());
+	if (!AssetCombo(InGui, InLabel, PropertyChoiceLabels(InChoices), Index))
+	{
+		return false;
+	}
+	InOutValue = ReadValue<T>(InChoices[Index].Value);
+	return true;
+}
+
 inline void AssetInfo(FGui& InGui, const char* InLabel, const std::string& InValue)
 {
 	InGui.BeginPropertyRow(InLabel);

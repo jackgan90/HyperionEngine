@@ -1,2 +1,3 @@
 add_library(hyperion_raster_options STATIC Private/RasterOptions.cpp)
 hyp_module(hyperion_raster_options)
+target_sources(hyperion_raster_options PRIVATE Private/ShadowPreviewOptions.cpp)

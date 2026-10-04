@@ -110,6 +110,10 @@ void CheckConfigSaveRejection(const char* InField, const FValue& InInvalid)
 	{
 		Settings.GBufferLayout = std::get<std::string>(InInvalid);
 	}
+	else if (std::string_view(InField) == "contact_shadow_debug")
+	{
+		Settings.ContactShadowDebug = static_cast<int>(std::get<std::int64_t>(InInvalid));
+	}
 	else
 	{
 		Settings.GBufferDebug = static_cast<int>(std::get<std::int64_t>(InInvalid));
@@ -217,5 +221,7 @@ void CheckRasterOptionSettings()
 	CheckConfigRejection("gbuffer_layout", std::string("unknown"));
 	CheckConfigRejection("gbuffer_debug", std::int64_t(-1));
 	CheckConfigRejection("gbuffer_debug", std::int64_t(7));
+	CheckConfigRejection("contact_shadow_debug", std::int64_t(-1));
+	CheckConfigRejection("contact_shadow_debug", std::int64_t(3));
 	CheckPurePreflight();
 }

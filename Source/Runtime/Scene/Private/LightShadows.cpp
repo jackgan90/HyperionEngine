@@ -3,15 +3,29 @@
 
 namespace Hyperion
 {
+namespace
+{
+template<class T> std::vector<FPropertyChoice> PreviewChoices(std::span<const T> InOptions)
+{
+	std::vector<FPropertyChoice> Result;
+	for (const auto& Option : InOptions)
+	{
+		Result.push_back({WriteValue(Option.WireValue), std::string(Option.Label)});
+	}
+	return Result;
+}
+} // namespace
+
 void ValidateDirectionalShadowSettings(const FDirectionalShadowSettings& InSettings)
 {
-	if ((InSettings.Resolution != 1024 && InSettings.Resolution != 2048) || InSettings.DebugMode > 5 ||
-	    !std::isfinite(InSettings.Distance) || InSettings.Distance <= 0 || !std::isfinite(InSettings.SplitLambda) ||
-	    InSettings.SplitLambda < 0 || InSettings.SplitLambda > 1 || !std::isfinite(InSettings.NormalOffset) ||
-	    InSettings.NormalOffset < 0 || InSettings.NormalOffset > 2 || !std::isfinite(InSettings.ReceiverBias) ||
-	    InSettings.ReceiverBias < 0 || InSettings.ReceiverBias > 2 || !std::isfinite(InSettings.BlendFraction) ||
-	    InSettings.BlendFraction < .01f || InSettings.BlendFraction > .25f || !std::isfinite(InSettings.FadeFraction) ||
-	    InSettings.FadeFraction < .01f || InSettings.FadeFraction > .5f)
+	(void)ParseDirectionalShadowPreview(InSettings.DebugMode);
+	if ((InSettings.Resolution != 1024 && InSettings.Resolution != 2048) || !std::isfinite(InSettings.Distance) ||
+	    InSettings.Distance <= 0 || !std::isfinite(InSettings.SplitLambda) || InSettings.SplitLambda < 0 ||
+	    InSettings.SplitLambda > 1 || !std::isfinite(InSettings.NormalOffset) || InSettings.NormalOffset < 0 ||
+	    InSettings.NormalOffset > 2 || !std::isfinite(InSettings.ReceiverBias) || InSettings.ReceiverBias < 0 ||
+	    InSettings.ReceiverBias > 2 || !std::isfinite(InSettings.BlendFraction) || InSettings.BlendFraction < .01f ||
+	    InSettings.BlendFraction > .25f || !std::isfinite(InSettings.FadeFraction) || InSettings.FadeFraction < .01f ||
+	    InSettings.FadeFraction > .5f)
 	{
 		throw std::invalid_argument("Directional shadow settings exceed supported ranges");
 	}
@@ -19,9 +33,10 @@ void ValidateDirectionalShadowSettings(const FDirectionalShadowSettings& InSetti
 
 void FContactShadowSettings::Validate() const
 {
+	(void)ParseContactShadowPreview(DebugMode);
 	if (!std::isfinite(Length) || Length <= 0 || Length > 100 || !std::isfinite(Thickness) || Thickness <= 0 ||
 	    Thickness > 10 || !std::isfinite(Bias) || Bias < 0 || Bias > Length || Steps < 8 || Steps > 512 ||
-	    DebugMode > 2 || PreviewMip > 16)
+	    PreviewMip > 16)
 	{
 		throw std::invalid_argument("Invalid contact shadow length, thickness, bias, steps or preview");
 	}
@@ -46,10 +61,8 @@ template<> const FRecordDescriptor& RecordType<FDirectionalShadowSettings>()
 	     Member("blendFraction", &FDirectionalShadowSettings::BlendFraction, Inspect("Cascade blend")),
 	     Member("fadeFraction", &FDirectionalShadowSettings::FadeFraction, Inspect("Distance fade")),
 	     Member("debugMode", &FDirectionalShadowSettings::DebugMode,
-	            {.Inspector =
-	                 FPropertyPresentation{.Label = "Preview",
-	                                       .Choices = {"Lit", "Cascade colors", "Cascade 0 depth", "Cascade 1 depth",
-	                                                   "Cascade 2 depth", "Cascade 3 depth"}}})},
+	            {.Inspector = FPropertyPresentation{.Label = "Preview",
+	                                                .Choices = PreviewChoices(DirectionalShadowPreviewOptions())}})},
 	    1, ValidateDirectionalShadowSettings);
 	return Type;
 }
@@ -64,8 +77,8 @@ template<> const FRecordDescriptor& RecordType<FContactShadowSettings>()
 	     Member("bias", &FContactShadowSettings::Bias, Inspect("Bias")),
 	     Member("steps", &FContactShadowSettings::Steps, Inspect("Steps", 8, 512)),
 	     Member("debugMode", &FContactShadowSettings::DebugMode,
-	            {.Inspector =
-	                 FPropertyPresentation{.Label = "Preview", .Choices = {"Lit", "Visibility mask", "HZB depth"}}}),
+	            {.Inspector = FPropertyPresentation{.Label = "Preview",
+	                                                .Choices = PreviewChoices(ContactShadowPreviewOptions())}}),
 	     Member("previewMip", &FContactShadowSettings::PreviewMip, Inspect("HZB mip", 0, 16))},
 	    1,
 	    [](const FContactShadowSettings& InSettings)
