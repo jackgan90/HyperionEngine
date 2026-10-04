@@ -1,5 +1,6 @@
 #include "AssetImportInternal.h"
 #include "AssetPublicationInternal.h"
+#include "Hyperion/AssetImport/ImageImport.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "ImportRules.h"
@@ -136,7 +137,7 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 		Model->Name = InOptions.Name;
 		Converted.Object = std::move(Model);
 	}
-	if (!InOptions.Prepared && !InOptions.Name.empty() && Converted.Importer == "hyperion.image")
+	if (!InOptions.Prepared && !InOptions.Name.empty() && Converted.Importer == ImageImporterId)
 	{
 		auto Texture =
 		    std::make_shared<FTextureAsset>(*std::static_pointer_cast<const FTextureAsset>(Converted.Object));

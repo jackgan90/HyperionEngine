@@ -3,6 +3,7 @@
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Scene/SceneManifest.h"
+#include "Hyperion/Textures/TextureAsset.h"
 #include <set>
 
 namespace Hyperion
@@ -197,7 +198,7 @@ struct FNativeMigration
 				Header.Import->ImporterVersion = 1;
 				Header.Import->OutputIds = ProductIds.at(Id);
 			}
-			if (Header.Import && Header.TypeId == "hyperion.textureasset")
+			if (Header.Import && Header.TypeId == RecordType<FTextureAsset>().Id)
 			{
 				auto Record = WriteRecord(*Asset->Type, Object.get());
 				RecordFields(Record)["name"] = WriteValue(std::string{});

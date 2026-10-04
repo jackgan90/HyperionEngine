@@ -1,4 +1,5 @@
 #include "Hyperion/Scene/ModelSource.h"
+#include "Hyperion/Materials/MaterialAsset.h"
 
 namespace Hyperion
 {
@@ -20,7 +21,8 @@ void ValidateModelSource(const FModelSource& InModel)
 	Geometry.Primitives = InModel.Primitives;
 	Geometry.Nodes = InModel.Nodes;
 	Geometry.Roots = InModel.Roots;
-	Geometry.MaterialSlots.resize(InModel.Materials.size() + 1, {"", "source-material", "hyperion.materialasset", ""});
+	Geometry.MaterialSlots.resize(InModel.Materials.size() + 1,
+	                              {"", "source-material", RecordType<FMaterialAsset>().Id, ""});
 	for (auto& Primitive : Geometry.Primitives)
 	{
 		Require(Primitive.Material >= -1 &&

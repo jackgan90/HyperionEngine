@@ -1,4 +1,5 @@
 #include "Hyperion/Scene/Model.h"
+#include "Hyperion/Materials/MaterialAsset.h"
 #include <algorithm>
 #include <functional>
 #include <set>
@@ -112,7 +113,7 @@ void ValidateModel(const FModelAsset& InModel)
 	for (const auto& Reference : InModel.MaterialSlots)
 	{
 		ValidateAssetRef(Reference);
-		Require(Reference.TypeId == "hyperion.materialasset", "Model slot requires a material asset reference");
+		Require(Reference.TypeId == RecordType<FMaterialAsset>().Id, "Model slot requires a material asset reference");
 	}
 	ValidateNodeHierarchy(InModel.Nodes);
 	std::vector<bool> Parents(InModel.Nodes.size());

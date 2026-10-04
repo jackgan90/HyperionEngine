@@ -124,7 +124,7 @@ bool EditRecordValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape
 {
 	const auto& Type = InShape.Record();
 	auto& Fields = RecordFields(InValue);
-	if (Type.Id == "hyperion.mat4")
+	if (Type.CppType == typeid(FMat4))
 	{
 		FMat4 Matrix{ReadValue<std::array<float, 16>>(Fields.at("values"))};
 		if (InGui.InputMatrix(Label(InPresentation, InId).c_str(), Matrix))

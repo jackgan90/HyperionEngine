@@ -1,3 +1,4 @@
+#include "Hyperion/Scene/Model.h"
 #include "Hyperion/Scene/SceneClipboard.h"
 #include "Hyperion/Scene/SceneNode.h"
 
@@ -58,8 +59,9 @@ template<> const FRecordDescriptor& RecordType<FSceneModelComponent>()
 {
 	static const auto Type = MakeRecord<FSceneModelComponent>(
 	    "hyperion.staticmesh",
-	    {Member("asset", &FSceneModelComponent::Asset,
-	            {.Inspector = FPropertyPresentation{"Model asset", {}, true, {}, {}, {}, "hyperion.modelasset"}}),
+	    {Member(
+	         "asset", &FSceneModelComponent::Asset,
+	         {.Inspector = FPropertyPresentation{"Model asset", {}, true, {}, {}, {}, RecordType<FModelAsset>().Id}}),
 	     Member("visible", &FSceneModelComponent::bVisible, {.Inspector = FPropertyPresentation{"Visible"}}),
 	     Member("sourceNode", &FSceneModelComponent::SourceNode, Inspect("Source node", {}, {}, true)),
 	     Member("sourcePrimitive", &FSceneModelComponent::SourcePrimitive, Inspect("Source primitive", {}, {}, true)),

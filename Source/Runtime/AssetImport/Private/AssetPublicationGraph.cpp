@@ -2,6 +2,7 @@
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Materials/MaterialAsset.h"
+#include "Hyperion/Textures/TextureAsset.h"
 
 namespace Hyperion
 {
@@ -128,7 +129,7 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 	auto Destination = bInRoot ? Output : ProductDestination(Id, InAsset);
 	Rewrite(Object.get(), *InAsset.Type, InAsset.ProductRoot.empty() ? InSource : InAsset.ProductRoot, Destination);
 	std::string TextureContent;
-	if (!bInRoot && InAsset.Type->Id == "hyperion.textureasset")
+	if (!bInRoot && InAsset.Type->Id == RecordType<FTextureAsset>().Id)
 	{
 		auto Record = WriteRecord(*InAsset.Type, Object.get());
 		RecordFields(Record)["name"] = WriteValue(std::string{});

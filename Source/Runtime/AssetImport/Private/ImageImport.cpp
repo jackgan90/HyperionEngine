@@ -6,7 +6,7 @@ namespace Hyperion
 {
 void RegisterImageImporter(FAssetImportService& InImports)
 {
-	InImports.Register({"hyperion.image",
+	InImports.Register({ImageImporterId,
 	                    1,
 	                    &RecordType<FTextureAsset>(),
 	                    {".png", ".jpg", ".jpeg"},

@@ -4,6 +4,7 @@
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
+#include "Hyperion/Textures/TextureAsset.h"
 
 namespace Hyperion
 {
@@ -103,7 +104,7 @@ void FPublication::LoadLibrary()
 		ExistingAssets.emplace(Entry.Header.Id, FPublishedAsset{{Entry.Header.Id, ImportPathString(Entry.Path),
 		                                                         Entry.Header.TypeId, Entry.Header.Revision},
 		                                                        Entry.Path});
-		if (Entry.Header.Import && Entry.Header.TypeId == "hyperion.textureasset")
+		if (Entry.Header.Import && Entry.Header.TypeId == RecordType<FTextureAsset>().Id)
 		{
 			if (const auto It = Entry.Header.Import->Settings.find("texture_content");
 			    It != Entry.Header.Import->Settings.end() && !It->second.empty())

@@ -1,6 +1,7 @@
 #include "ContentBrowser.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/Path.h"
+#include "Hyperion/Scene/SceneManifest.h"
 #include <algorithm>
 #include <cctype>
 
@@ -119,7 +120,7 @@ FContentScenes DiscoverContentScenes(FIOService& InIO, FCancellationToken InCanc
 				const auto Header = ReadContentHeader(InIO, Entry.Path, InCancellation);
 				Result.Assets.push_back(
 				    {Header.Id, PathToUtf8(InIO.FileSystem()->Normalize(Entry.Path)), Header.TypeId, {}});
-				if (Header.TypeId == "hyperion.scene")
+				if (Header.TypeId == RecordType<FSceneManifest>().Id)
 				{
 					Result.Paths.push_back(PathToUtf8(Entry.Path));
 				}

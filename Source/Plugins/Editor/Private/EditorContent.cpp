@@ -1,6 +1,7 @@
 #include "EditorApplication.h"
 #include "Hyperion/Environment/SkyAsset.h"
 #include "Hyperion/IO/Path.h"
+#include "Hyperion/Scene/SceneManifest.h"
 #include <algorithm>
 
 namespace Hyperion
@@ -48,7 +49,7 @@ void FEditorPlugin::PollContent()
 		try
 		{
 			const auto Header = PendingAssetOpen->GetReady();
-			if (Header->TypeId == "hyperion.scene")
+			if (Header->TypeId == RecordType<FSceneManifest>().Id)
 			{
 				OpenScene(AssetOpenPath);
 			}

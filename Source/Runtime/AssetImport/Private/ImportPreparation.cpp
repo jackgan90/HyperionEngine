@@ -1,4 +1,5 @@
 #include "AssetPublicationInternal.h"
+#include "Hyperion/AssetImport/ImageImport.h"
 #include "Hyperion/Scene/Model.h"
 #include "ImportRules.h"
 
@@ -66,7 +67,7 @@ FPreparedImport FAssetImportService::FImpl::Prepare(const std::filesystem::path&
 	Publication.LoadLibrary();
 	Result.Root = Convert(InSource, Publication.SourceType, InOptions.Conversion);
 	if (!InOptions.Name.empty() && ((!InOptions.bScene && Result.Root.Type->CppType == typeid(FModelAsset)) ||
-	                                Result.Root.Importer == "hyperion.image"))
+	                                Result.Root.Importer == ImageImporterId))
 	{
 		auto Record = WriteRecord(*Result.Root.Type, Result.Root.Object.get());
 		auto& Fields = RecordFields(Record);

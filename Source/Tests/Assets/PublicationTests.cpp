@@ -10,6 +10,7 @@
 
 void CheckSceneSources();
 void CheckModelReferences();
+void CheckImageImportIdentity();
 
 namespace Hyperion
 {
@@ -580,6 +581,7 @@ int main()
 		std::filesystem::create_directories(Work);
 		std::filesystem::current_path(Work);
 		CheckSceneSources();
+		CheckImageImportIdentity();
 		CheckPublication();
 		CheckExternalPublicationChanges();
 		CheckExternalPublicationCache();

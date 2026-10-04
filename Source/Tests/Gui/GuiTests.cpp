@@ -16,6 +16,7 @@ void CheckContentTiles();
 void CheckSectionControls();
 void CheckAssetReferenceControls();
 void CheckVisibilityControls();
+void CheckRecordIdentityControls();
 
 namespace
 {
@@ -250,6 +251,7 @@ int main()
 		CheckSectionControls();
 		CheckAssetReferenceControls();
 		CheckVisibilityControls();
+		CheckRecordIdentityControls();
 		CheckApplicationScale();
 		CheckActionLayout();
 		CheckAnchoredPopup();
