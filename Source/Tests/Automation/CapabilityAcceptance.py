@@ -23,6 +23,31 @@ def referenced_types(value):
             yield from referenced_types(child)
 
 
+def check_screenshot_rejections(sessions, output):
+    destination = output / "RejectedWindow.png"
+    assert not destination.exists(), destination
+    for agent in sessions:
+        schema = agent.request("api.describe", {"operation": "render.screenshot"})["inputSchema"]
+        assert schema["properties"]["window"]["type"] == "string", schema
+        assert schema["properties"]["window"]["default"] == "main", schema
+        assert "enum" not in schema["properties"]["window"], schema
+        before = ready(agent)
+        for window in ("", "other", "Main", " assets", "main\0suffix"):
+            for path in (str(destination), str(output / "RejectedWindow.txt")):
+                result = agent.wait(agent.call("render.screenshot", window=window, path=path))
+                assert result["error"] == {"code": "invalid_arguments", "message": "Window must be main or assets", "details": {}, "path": ""}, result
+        result = agent.wait(agent.call("render.screenshot", window="assets", path=""))
+        assert result["error"] == {"code": "busy", "message": "Open a drawable asset window", "details": {}, "path": ""}, result
+        result = agent.wait(agent.call("render.screenshot", window="main", path=""))
+        assert result["error"] == {"code": "invalid_arguments", "message": "Screenshot requires a target-local .png destination", "details": {}, "path": ""}, result
+        for window in (None, 1, False):
+            result = agent.wait(agent.call("render.screenshot", window=window, path=str(destination)))
+            assert result["error"]["code"] == "invalid_arguments", result
+        assert ready(agent) == before
+        assert not destination.exists()
+        assert not (output / "RejectedWindow.txt").exists()
+
+
 def authoring(cli, editor, assets, output):
     app = Application(editor, output, "capabilities", "", assets, frames=0)
     sessions = []
@@ -110,6 +135,7 @@ def authoring(cli, editor, assets, output):
         completed(agent.wait(agent.call("scene.save", document=info["document"], revision=info["revision"], path=str(output / "AuthoringRender.hasset"))))
         info = ready(agent)
         completed(agent.call("scene.undo", document=info["document"], revision=info["revision"]))
+        check_screenshot_rejections(sessions, output)
         artifact = completed(agent.wait(agent.call("render.screenshot", path=str(output / "Main.png"), overwrite=True)))
         assert artifact["width"] > 0 and int(artifact["bytes"]) > 0
         assert pathlib.Path(artifact["path"]).is_file()

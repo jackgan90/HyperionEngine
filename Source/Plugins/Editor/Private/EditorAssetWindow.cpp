@@ -22,7 +22,7 @@ void FEditorPlugin::EnsureAssetWindow()
 
 void FEditorPlugin::CloseAssetWindow()
 {
-	if (PendingImage && PendingImage->Request.Window == "assets")
+	if (PendingImage && PendingImage->Request.Window.Kind() == EImageOutputWindow::Assets)
 	{
 		PendingImage->Error = "Asset window closed before capture";
 		PendingImage.reset();

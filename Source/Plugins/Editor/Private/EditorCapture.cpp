@@ -13,16 +13,17 @@ std::shared_ptr<FPendingImageOutput> FEditorPlugin::RequestImage(const FImageOut
 	{
 		throw FSceneEditError("busy", "Wait for the pending screenshot and a drawable application");
 	}
-	if (InRequest.Window != "main" && InRequest.Window != "assets")
+	const auto TargetWindow = InRequest.Window.Kind();
+	if (!TargetWindow)
 	{
 		throw std::invalid_argument("Window must be main or assets");
 	}
-	if (InRequest.Window == "assets" && (!AssetWindow || !AssetWindow->IsDrawable()))
+	if (TargetWindow == EImageOutputWindow::Assets && (!AssetWindow || !AssetWindow->IsDrawable()))
 	{
 		throw FSceneEditError("busy", "Open a drawable asset window");
 	}
 	PendingImage = PrepareImageOutput(InRequest);
-	if (InRequest.Window == "assets")
+	if (TargetWindow == EImageOutputWindow::Assets)
 	{
 		AssetWindow->RequestImage(PendingImage);
 	}
@@ -35,7 +36,7 @@ std::optional<FImageArtifact> FEditorPlugin::PollImage(const std::shared_ptr<FPe
 	{
 		throw FSceneEditError("capture_failed", InPending->Error);
 	}
-	if (!InPending->Result && InPending->Request.Window == "assets" && !AssetWindow)
+	if (!InPending->Result && InPending->Request.Window.Kind() == EImageOutputWindow::Assets && !AssetWindow)
 	{
 		throw FSceneEditError("unavailable", "Asset window closed before capture");
 	}

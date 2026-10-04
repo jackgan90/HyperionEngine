@@ -85,7 +85,7 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	}
 	FImage Capture;
 	const auto AuxiliaryCapture = Acceptance.MainCapture();
-	const bool bAgentCapture = PendingImage && PendingImage->Request.Window == "main";
+	const bool bAgentCapture = PendingImage && PendingImage->Request.Window.Kind() == EImageOutputWindow::Main;
 	const bool bCaptureFrame = bInCapture || !AuxiliaryCapture.empty() || bAgentCapture;
 	const auto Surface = Window->Surface();
 	const bool bCaptureRdc = std::exchange(bCaptureRequested, false);

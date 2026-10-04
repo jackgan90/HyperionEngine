@@ -166,6 +166,8 @@ Editor 与独立资产适配器在打开时共用 AssetEditing 的 `SupportsAsse
 
 `scene.lighting.get` 与 Editor 灯光 Inspector 共用 Renderer 诊断快照。原生诊断以 `ESceneLightDiagnosticKind` 表达已知种类，`FSceneLightDiagnosticType` 在反射边界保留既有开放字符串：`directional`、`sky`、默认空串及未知 token 均无损往返。对外 schema 不增加 enum 约束；Inspector 按组件反射成员关联识别 Priority 和 Sky 属性。
 
+`render.screenshot` 的 window 在原生请求中以 `FImageOutputWindow` 保存已知 `EImageOutputWindow` 或未知协议 token；对外仍为默认 `main` 的开放字符串，支持 `main` / `assets`。未知 token 在共享服务中按原有顺序拒绝；请求准备、PNG 完成、窗口关闭和错误优先级保持同一条处理路径。
+
 新增能力应验证类型引用可解析、枚举语义可读、示例有效、非法参数无副作用、修改响应与查询一致，以及 GUI 共用事务的历史和保存行为；不向 CLI/MCP 添加领域分支。
 
 视口 `culling` 和 `outlineMode` 保留现有可空 uint32 wire 字段：前者为 0 None、1 Linear、2 BVH，后者为 0 Union、1 Per object。Renderer 的 `ViewportChoices` 定义稳定身份与数值映射；GUI 标签顺序不决定选项语义，GUI 与 `view.set` 继续共用视口服务的校验和提交。非法值在修改前拒绝，这两类临时选项不改变场景 revision、历史、dirty 状态或渲染设置 revision。`render_controls` 覆盖映射与重排，`editor_render_controls` 覆盖实际 GUI 选择、自动化等价和拒绝后的状态保持。

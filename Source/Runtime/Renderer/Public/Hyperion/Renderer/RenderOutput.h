@@ -4,13 +4,34 @@
 #include "Hyperion/Reflection/RecordValue.h"
 #include <memory>
 #include <optional>
+#include <variant>
 
 namespace Hyperion
 {
+enum class EImageOutputWindow
+{
+	Main,
+	Assets
+};
+
+// Keep opaque protocol tokens without allowing them to masquerade as a native window kind.
+class FImageOutputWindow
+{
+public:
+	FImageOutputWindow() = default;
+	explicit FImageOutputWindow(EImageOutputWindow InKind);
+	static FImageOutputWindow FromWire(std::string InName);
+	std::optional<EImageOutputWindow> Kind() const;
+	std::string_view WireName() const;
+
+private:
+	std::variant<EImageOutputWindow, std::string> Value = EImageOutputWindow::Main;
+};
+
 struct FImageOutputRequest
 {
 	std::string Path;
-	std::string Window = "main";
+	FImageOutputWindow Window;
 	bool bOverwrite{};
 };
 
