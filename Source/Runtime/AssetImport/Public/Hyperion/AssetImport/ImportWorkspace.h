@@ -134,6 +134,7 @@ public:
 	FImportDraftList DraftList() const;
 	FImportDraftInfo Draft(const FImportDraftQuery& InRequest) const;
 	FImportDraftInfo EditDraft(const FImportDraftEdit& InRequest);
+	FImportDraftInfo DraftHistory(const FImportDraftMutation& InRequest, EImportDraftHistoryAction InAction);
 	FImportDraftInfo DraftHistory(const FImportDraftHistory& InRequest);
 	FImportTaskInfo SubmitDraft(const FImportDraftMutation& InRequest);
 	FImportDraftInfo DiscardDraft(const FImportDraftDiscard& InRequest);

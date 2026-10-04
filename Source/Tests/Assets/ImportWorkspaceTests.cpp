@@ -12,6 +12,8 @@
 
 void CheckImportStates();
 void CheckContentPathContracts();
+void CheckImportDraftHistory(Hyperion::FTaskSystem& InTasks, Hyperion::FIOService& InIO,
+                             Hyperion::FAssetImportWorkspace& InImports, const Hyperion::FImportRequest& InRequest);
 void CheckImportValidation(Hyperion::FIOService& InIO, Hyperion::FAssetImportWorkspace& InWorkspace,
                            Hyperion::FImportRequest InRequest);
 
@@ -585,9 +587,9 @@ void CheckDraftEditing(FFixture& InFixture)
 	    {
 		    InFixture.Content->Clear({Request.Generation, false});
 	    });
-	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation, "undo"});
+	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation}, EImportDraftHistoryAction::Undo);
 	HYP_CHECK(State.Name == "Color" && !State.bDirty && State.bCanRedo);
-	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation, "redo"});
+	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation}, EImportDraftHistoryAction::Redo);
 	HYP_CHECK(State.Name == "Draft texture");
 	const auto Task = InFixture.Imports->SubmitDraft({State.Draft, State.Generation});
 	HYP_CHECK(Task.Status == EImportTaskState::Running);
@@ -633,9 +635,9 @@ void CheckDraftFreshness(FFixture& InFixture)
 	HYP_CHECK(!State.Error.empty() && InFixture.Imports->Get({Task.Task}).Status == EImportTaskState::Failed);
 	HYP_CHECK(State.Status == EImportDraftState::Ready && !InFixture.Imports->ContentRootState().bBusy);
 	HYP_CHECK(State.bDirty && State.bCanUndo && !State.bCanRedo && State.Name == "Prepared sky");
-	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation, "undo"});
+	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation}, EImportDraftHistoryAction::Undo);
 	HYP_CHECK(!State.bDirty && !State.bCanUndo && State.bCanRedo);
-	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation, "redo"});
+	State = InFixture.Imports->DraftHistory({State.Draft, State.Generation}, EImportDraftHistoryAction::Redo);
 	HYP_CHECK(State.bDirty && State.Name == "Prepared sky");
 	const auto FailedGeneration = State.Generation;
 	Edits.Name = "Retry sky";
@@ -726,6 +728,8 @@ int main()
 		FFixture Fixture;
 		CheckImportStates();
 		CheckContentPathContracts();
+		CheckImportDraftHistory(Fixture.Tasks, *Fixture.IO, *Fixture.Imports,
+		                        Fixture.Request("Color.png", "History.hasset"));
 		CheckImportValidation(*Fixture.IO, *Fixture.Imports, Fixture.Request("Color.png", "Rules/Identity.hasset"));
 		CheckImage(Fixture);
 		CheckSky(Fixture);

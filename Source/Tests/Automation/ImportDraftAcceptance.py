@@ -39,6 +39,31 @@ def discard(session, state):
                            generation=state["generation"], discard=True))
 
 
+def check_history_rejections(session, state):
+    history_error = "History requires available undo, redo or reset"
+    cases = [({"action": action}, "invalid_arguments", history_error)
+             for action in ("", "unknown", "UNDO", " undo", "undo", "redo")]
+    cases.extend([
+        ({}, "invalid_arguments", history_error),
+        ({"action": "unknown", "draft": "missing"}, "not_found",
+         "Import draft was discarded or belongs to another root"),
+        ({"action": "unknown", "generation": str(int(state["generation"]) - 1)}, "stale_revision",
+         "Import draft changed before the operation"),
+    ])
+    tasks = completed(session.call("asset.import.tasks"))
+    for overrides, code, message in cases:
+        request = {"draft": state["draft"], "generation": state["generation"]} | overrides
+        rejected = session.call("asset.import.draft.history", **request)
+        assert rejected["status"] == "failed" and rejected["error"]["code"] == code, rejected
+        assert rejected["error"]["message"] == message, rejected
+        assert completed(session.call("asset.import.draft.get", draft=state["draft"])) == state
+    rejected = session.call("asset.import.draft.history", draft=state["draft"],
+                            generation=state["generation"], action=1)
+    assert rejected["status"] == "failed" and rejected["error"]["code"] == "invalid_arguments", rejected
+    assert completed(session.call("asset.import.draft.get", draft=state["draft"])) == state
+    assert completed(session.call("asset.import.tasks")) == tasks
+
+
 def check_inspection_failure(session, state):
     edits = []
     for node in state["nodes"]:
@@ -88,6 +113,7 @@ def workflow(cli, tool, directory, mcp):
         assert {"asset.import.drafts", *("asset.import.draft." + action for action in
                 ("prepare", "get", "edit", "history", "submit", "discard"))} <= {item["id"] for item in discovered["items"]}
         state = wait_draft(session, completed(session.call("asset.import.draft.prepare", **request)))
+        check_history_rejections(session, state)
         description = session.request("api.describe", {"operation": "asset.import.draft.get"})
         metadata = description["outputSchema"]["properties"]
         assert metadata["pixelBytes"]["type"] == "string"

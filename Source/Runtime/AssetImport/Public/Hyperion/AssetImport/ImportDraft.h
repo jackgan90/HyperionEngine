@@ -58,6 +58,15 @@ struct FImportDraftEdit
 	FImportPropertyEdits Properties;
 };
 
+enum class EImportDraftHistoryAction
+{
+	Invalid,
+	Reset,
+	Undo,
+	Redo
+};
+
+// Protocol request: preserve unknown strings until the domain's ordered validation.
 struct FImportDraftHistory
 {
 	std::string Draft;

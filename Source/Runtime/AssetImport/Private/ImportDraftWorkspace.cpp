@@ -6,6 +6,26 @@
 
 namespace Hyperion
 {
+namespace
+{
+EImportDraftHistoryAction ParseHistoryAction(std::string_view InAction)
+{
+	if (InAction == "reset")
+	{
+		return EImportDraftHistoryAction::Reset;
+	}
+	if (InAction == "undo")
+	{
+		return EImportDraftHistoryAction::Undo;
+	}
+	if (InAction == "redo")
+	{
+		return EImportDraftHistoryAction::Redo;
+	}
+	return EImportDraftHistoryAction::Invalid;
+}
+} // namespace
+
 std::shared_ptr<FImportDraft> FAssetImportWorkspace::FindDraft(const std::string& InId) const
 {
 	RequireMain();
@@ -142,17 +162,23 @@ FImportDraftInfo FAssetImportWorkspace::EditDraft(const FImportDraftEdit& InRequ
 
 FImportDraftInfo FAssetImportWorkspace::DraftHistory(const FImportDraftHistory& InRequest)
 {
+	return DraftHistory({InRequest.Draft, InRequest.Generation}, ParseHistoryAction(InRequest.Action));
+}
+
+FImportDraftInfo FAssetImportWorkspace::DraftHistory(const FImportDraftMutation& InRequest,
+                                                     EImportDraftHistoryAction InAction)
+{
 	auto Entry = MutableDraft(InRequest.Draft, InRequest.Generation);
-	if (InRequest.Action == "reset")
+	if (InAction == EImportDraftHistoryAction::Reset)
 	{
 		return EditDraft({Entry->Id, Entry->Generation, {}});
 	}
 	auto Cursor = Entry->Cursor;
-	if (InRequest.Action == "undo" && Cursor)
+	if (InAction == EImportDraftHistoryAction::Undo && Cursor)
 	{
 		--Cursor;
 	}
-	else if (InRequest.Action == "redo" && Cursor + 1 < Entry->History.size())
+	else if (InAction == EImportDraftHistoryAction::Redo && Cursor + 1 < Entry->History.size())
 	{
 		++Cursor;
 	}

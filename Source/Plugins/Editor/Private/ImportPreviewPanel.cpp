@@ -210,21 +210,21 @@ void FAssetImportPanel::DrawPropertyHistory(FGui& InGui)
 {
 	if (InGui.Button("Undo", PreviewInfo.bCanUndo))
 	{
-		Imports->DraftHistory({DraftId, PreviewInfo.Generation, "undo"});
+		Imports->DraftHistory({DraftId, PreviewInfo.Generation}, EImportDraftHistoryAction::Undo);
 		PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 	}
 	UndoBounds = InGui.LastItemBounds();
 	InGui.SameLine();
 	if (InGui.Button("Redo", PreviewInfo.bCanRedo))
 	{
-		Imports->DraftHistory({DraftId, PreviewInfo.Generation, "redo"});
+		Imports->DraftHistory({DraftId, PreviewInfo.Generation}, EImportDraftHistoryAction::Redo);
 		PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 	}
 	RedoBounds = InGui.LastItemBounds();
 	InGui.SameLine();
 	if (InGui.Button("Reset to source"))
 	{
-		Imports->DraftHistory({DraftId, PreviewInfo.Generation, "reset"});
+		Imports->DraftHistory({DraftId, PreviewInfo.Generation}, EImportDraftHistoryAction::Reset);
 		PreviewInfo = Imports->Draft({DraftId, PreviewOffset, ImportDraftPreviewPageLimit});
 	}
 }
