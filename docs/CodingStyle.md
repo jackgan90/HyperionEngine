@@ -59,7 +59,13 @@ private:
 
 拆分应形成可命名的职责、数据所有权或执行阶段，保持模块 Public/Private 边界、接口契约和对象生命周期。不要机械地按行数切块、压缩排版、堆入含义不明的 Utils 文件，或借助 include 片段隐藏同一实现的长度。
 
-新增文件和新增或实质修改的函数遵循以上规范。已有超限代码在对应模块实质修改时评估并逐步拆分；局部修复不应顺带扩展为无关的大规模重构，暂未处理的超限文件须在审查记录中说明范围和后续拆分事项。当前行数规范由人工审查执行，现有检查工具不提供 100/500 行自动检查；这不减免规范本身的要求。
+新增文件和新增或实质修改的函数遵循以上规范。已有超限代码在对应模块实质修改时评估并逐步拆分；局部修复不应顺带扩展为无关的大规模重构，暂未处理的超限文件须在审查记录中说明范围和后续拆分事项。
+
+`python tools/CheckStyle.py --sizes-only` 自动检查 `Source` 下的 `.cpp/.h/.inl` 物理文件行数，不依赖 LLVM 或已配置的构建目录，也不受当前构建开关影响。LF 和 CRLF 均按物理行计数，末尾没有换行的最后一行也计入；函数长度及紧耦合例外仍由人工审查。
+
+`tools/SourceSizePolicy.json` 的 `legacy_files` 记录已有超限文件的实际行数和待拆分职责。文件增长会失败；缩短后需同步降低记录，达到 500 行后移除记录，删除或改名后清理旧路径。不得通过抬高记录或新增超限生产文件记录绕过限制；纯改名经审查可以转移原有记录，但不能增加原有上限。
+
+测试、生成或第三方源码若位于 `Source` 内且需要豁免，使用 `exclusions` 逐文件记录 `kind`、用途 `reason` 和构建归属、生成器或第三方来源 `evidence`，不使用目录或文件名通配规则。未分类文件一律检查，较短测试无需提前登记。检查器验证记录结构、精确路径、重复和冲突，实际用途及构建归属由审查确认；用途或归属变化时同步复核记录。被测试目标复用的生产实现仍受文件限制。`out/deps` 和构建目录生成物位于扫描范围外。
 
 ## 可维护性与语义表达
 
@@ -98,10 +104,13 @@ shader 的 `HyperionUniforms.generated.hlsli` 及拥有者的 `<Domain>Parameter
 需要 Python 3.10+ 和 与仓库格式配置兼容的 LLVM（格式基线为 22.1.1）的 `clang-format` / `clang-tidy` / `clang-query`。脚本先检查 PATH，也会查找 Windows 默认 LLVM 安装目录。普通构建不强制安装 LLVM。
 
 ```powershell
-# 检查文件名、头文件路径大小写与 C++/HLSL 排版
+# 仅检查 C++ 文件行数和现有超限基线，无需 LLVM
+python tools/CheckStyle.py --sizes-only
+
+# 检查文件名、头文件路径大小写、C++ 文件尺寸与 C++/HLSL 排版
 python tools/CheckStyle.py
 
-# 按配置格式化所有自有 C++/HLSL 文件
+# 按配置格式化所有自有 C++/HLSL 文件，并检查写回后的 C++ 文件尺寸
 python tools/CheckStyle.py --format
 
 # 生成 Ninja 编译数据库后，检查所有自有 C++ 翻译单元的语义命名
@@ -113,6 +122,6 @@ python tools/CheckStyle.py --naming --build-dir out/build/debug
 
 `.clang-tidy` 允许 `b` / `bIn` / `bOut` 前缀，`--naming` 同时用 clang-query 的类型信息检查布尔变量、布尔引用和 `std::atomic<bool>`，包括推导为布尔值的普通 `auto` 变量；也会拒绝非布尔变量借此前缀绕过普通命名规则。生成的字段 enum 镜像布尔成员的 `b` 拼写；HLSL 类型 token 查找宏的明确例外保留 `float4/uint/bool` 等语言拼写。泛型模板的实例化不会把通用参数误判为布尔专用参数；布尔集合和查询函数仍遵循普通命名。
 
-CTest 的 `code_style_paths` 检查自有文件名和 include 路径的准确大小写，不需要 LLVM；完整格式/命名检查由上述命令显式运行。
+CTest 的 `code_style_paths` 检查自有文件名和 include 路径的准确大小写，`code_style_sizes` 检查 C++ 文件行数和基线，`source_size_checker` 验证检查器的边界和失败路径；这些检查不需要 LLVM。常规 `CheckStyle.py` 也执行尺寸检查，完整格式/命名检查由上述命令显式运行。`--sizes-only` 与 `--paths-only`、`--format`、`--naming` 是互斥模式。
 
 clang-tidy 尚无独立的类模板前缀配置，仓库通过 [`.clang-tidy`](../.clang-tidy) 中的精确命名例外保留类模板的 T 前缀；例外清单以该配置为准，不在文档另行维护。其他普通类型仍强制 F/I 前缀；新增模板也需按本规范审阅。上述代码规模和语义表达规则的人工审查范围见 [构建与验证指南](Verification.md#规范审查与工具覆盖)。

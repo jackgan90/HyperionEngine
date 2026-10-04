@@ -337,6 +337,9 @@ target_compile_definitions(d3d12_device_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_
 target_compile_definitions(shader_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 add_test(NAME dependency_boundaries COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/CheckBoundaries.py")
 add_test(NAME code_style_paths COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/CheckStyle.py" --paths-only)
+add_test(NAME code_style_sizes COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/CheckStyle.py" --sizes-only)
+add_test(NAME source_size_checker COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Tools/SourceSizeTests.py")
+set_tests_properties(code_style_sizes source_size_checker PROPERTIES TIMEOUT 30)
 hyp_discovery_test(NAME editor_render_acceptance COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Integration/EditorRenderAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor> "${PROJECT_SOURCE_DIR}")
 set_tests_properties(editor_render_acceptance PROPERTIES TIMEOUT 300 LABELS "gpu;desktop" RUN_SERIAL TRUE)

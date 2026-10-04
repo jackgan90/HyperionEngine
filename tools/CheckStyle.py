@@ -1,4 +1,4 @@
-"""Check owned source filenames, include casing, formatting, and optional C++ naming."""
+"""Check owned source paths, C++ file sizes, formatting, and optional C++ naming."""
 import argparse
 import concurrent.futures
 import json
@@ -7,6 +7,8 @@ import pathlib
 import re
 import shutil
 import subprocess
+
+from SourceSize import check_source_sizes
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE_DIRS = ('Source', 'Content/Shaders')
@@ -156,14 +158,22 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--format', action='store_true', help='Apply clang-format to owned C++ and HLSL files')
     mode.add_argument('--paths-only', action='store_true', help='Check filenames/includes without LLVM')
+    mode.add_argument('--sizes-only', action='store_true', help='Check C++ file sizes without LLVM or a build')
     mode.add_argument('--naming', action='store_true', help='Also run clang-tidy with a Ninja compile database')
     parser.add_argument('--build-dir', type=pathlib.Path, default=ROOT / 'out/build/debug')
     args = parser.parse_args()
+    if args.sizes_only:
+        check_source_sizes(ROOT)
+        return
     sources = owned_files()
     check_paths(sources)
     if args.paths_only:
         return
+    if not args.format:
+        check_source_sizes(ROOT)
     check_formatting(sources, args.format)
+    if args.format:
+        check_source_sizes(ROOT)
     if args.naming:
         check_naming(args.build_dir.resolve(), sources)
 

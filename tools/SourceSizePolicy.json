@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "legacy_files": {
+    "Source/Backends/D3D12/Private/D3D12Bindings.cpp": {
+      "lines": 536,
+      "split": "Separate descriptor preparation and native binding operations."
+    },
+    "Source/Backends/D3D12/Private/D3D12DrawPlan.cpp": {
+      "lines": 562,
+      "split": "Separate draw-plan preparation and native command recording without changing retention."
+    },
+    "Source/Backends/D3D12/Private/D3D12RHISwapchain.cpp": {
+      "lines": 538,
+      "split": "Separate swapchain lifecycle and frame/present recovery while preserving fence ownership."
+    },
+    "Source/Plugins/Editor/Private/AssetWorkspace.cpp": {
+      "lines": 603,
+      "split": "Separate preview observations and tab/close presentation while retaining entry lifetime ownership."
+    },
+    "Source/Runtime/Gui/Private/Adapters/Gui.cpp": {
+      "lines": 605,
+      "split": "Separate GUI context/frame lifecycle from window and panel operations."
+    },
+    "Source/Runtime/Gui/Private/Adapters/GuiWidgets.cpp": {
+      "lines": 543,
+      "split": "Group widgets by input, selection and presentation responsibilities."
+    },
+    "Source/Runtime/Materials/Private/MaterialParameters.cpp": {
+      "lines": 512,
+      "split": "Separate parameter validation, layout construction and schema queries."
+    },
+    "Source/Runtime/Renderer/Private/MaterialConstantCache.cpp": {
+      "lines": 742,
+      "split": "Separate constant resolution/packing from cache publication and retirement."
+    },
+    "Source/Runtime/Scene/Private/Scene.cpp": {
+      "lines": 540,
+      "split": "Separate public scene queries and mutation entry points while retaining storage invariants."
+    },
+    "Source/Runtime/Shaders/Private/Adapters/ShaderCompiler.cpp": {
+      "lines": 627,
+      "split": "Separate target invocation, source preparation and compilation/cache orchestration."
+    },
+    "Source/Runtime/Tasks/Private/Adapters/TaskSystem.cpp": {
+      "lines": 573,
+      "split": "Separate submission/dispatch and completion/queue processing while preserving shutdown ordering."
+    }
+  },
+  "exclusions": {
+    "Source/Backends/D3D12/Private/D3D12FrameFailureTests.cpp": {
+      "kind": "test",
+      "reason": "D3D12 present failure and shutdown fault-injection tests.",
+      "evidence": "Source/Backends/D3D12/CMakeLists.txt: d3d12_frame_failure_tests"
+    },
+    "Source/Plugins/Automation/Private/AssetOperationTests.cpp": {
+      "kind": "test",
+      "reason": "Asset automation discovery and invocation tests.",
+      "evidence": "Source/Plugins/Automation/CMakeLists.txt: automation_asset_tests"
+    },
+    "Source/Plugins/Automation/Private/AssetWorkflowTests.cpp": {
+      "kind": "test",
+      "reason": "Asset workflow asynchronous mutation and error tests.",
+      "evidence": "Source/Plugins/Automation/CMakeLists.txt: automation_asset_tests"
+    },
+    "Source/Plugins/Automation/Private/SceneOperationTests.cpp": {
+      "kind": "test",
+      "reason": "Scene automation operation and history tests.",
+      "evidence": "Source/Plugins/Automation/CMakeLists.txt: automation_scene_tests"
+    },
+    "Source/Tests/Assets/ImportWorkspaceTests.cpp": {
+      "kind": "test",
+      "reason": "Import workspace lifecycle and draft contract tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: import_workspace_tests"
+    },
+    "Source/Tests/Assets/NativeAssetTests.cpp": {
+      "kind": "test",
+      "reason": "Native asset read/write and validation tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: native_asset_tests"
+    },
+    "Source/Tests/Assets/PublicationTests.cpp": {
+      "kind": "test",
+      "reason": "Asset publication and dependency transaction tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: publication_tests"
+    },
+    "Source/Tests/Materials/MaterialSessionTests.cpp": {
+      "kind": "test",
+      "reason": "Material session and GPU resource lifetime tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: material_gpu_tests"
+    },
+    "Source/Tests/Plugins/PluginTests.cpp": {
+      "kind": "test",
+      "reason": "Plugin activation, service and shutdown contract tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: plugin_tests"
+    },
+    "Source/Tests/Private/Adapters/WindowOwnershipTests.cpp": {
+      "kind": "test",
+      "reason": "Native window ownership and modal coordination tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: window_ownership_tests"
+    },
+    "Source/Tests/Renderer/DeferredRenderTests.cpp": {
+      "kind": "test",
+      "reason": "Deferred rendering and framebuffer verification tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: deferred_render_tests"
+    },
+    "Source/Tests/Renderer/GraphTests.cpp": {
+      "kind": "test",
+      "reason": "Render graph compilation and execution contract tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: graph_tests"
+    },
+    "Source/Tests/Renderer/ResourceTests.cpp": {
+      "kind": "test",
+      "reason": "Render resource acquisition, publication and retirement tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: resource_tests"
+    },
+    "Source/Tests/Renderer/SceneInstanceTests.cpp": {
+      "kind": "test",
+      "reason": "Scene instance loading and mutation integration tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: scene_instance_tests"
+    },
+    "Source/Tests/Renderer/SceneNavigationTests.cpp": {
+      "kind": "test",
+      "reason": "Scene viewport and camera navigation tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: scene_navigation_tests"
+    },
+    "Source/Tests/Renderer/SceneRenderTests.cpp": {
+      "kind": "test",
+      "reason": "Scene rendering integration and readback tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: scene_render_tests"
+    },
+    "Source/Tests/Renderer/SelectionOutlineTests.cpp": {
+      "kind": "test",
+      "reason": "Selection outline material and rendering tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: selection_outline_tests"
+    },
+    "Source/Tests/Renderer/ShadowRenderTests.cpp": {
+      "kind": "test",
+      "reason": "Cascaded shadow rendering tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: shadow_render_tests"
+    },
+    "Source/Tests/Renderer/SharedAssetGpuTests.cpp": {
+      "kind": "test",
+      "reason": "Shared asset GPU publication and reuse tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: shared_asset_gpu_tests"
+    },
+    "Source/Tests/Renderer/SkyRenderTests.cpp": {
+      "kind": "test",
+      "reason": "Sky rendering and resource preparation tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: sky_render_tests"
+    },
+    "Source/Tests/RHI/RHIContractTests.cpp": {
+      "kind": "test",
+      "reason": "RHI backend and resource contract tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: rhi_contract_tests"
+    },
+    "Source/Tests/Scene/SceneNodeTests.cpp": {
+      "kind": "test",
+      "reason": "Scene node hierarchy and mutation tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: scene_tests"
+    },
+    "Source/Tests/Serialization/RecordTests.cpp": {
+      "kind": "test",
+      "reason": "Reflected record serialization and rejection tests.",
+      "evidence": "Source/Tests/CMakeLists.txt: archive_tests"
+    }
+  }
+}

@@ -30,7 +30,8 @@ context: |
     clang-format/clang-tidy configurations; never restyle third-party sources.
     Follow docs/CodingStyle.md for the 100-line function principle, the 500-line
     non-test C++ file limit, counting and migration rules, and the five semantic
-    maintainability rules. These require review beyond the current style tools.
+    maintainability rules. File sizes are checked automatically; function-length
+    exceptions and semantic maintainability require review beyond style tools.
 
 # Project context (optional)
 # This is shown to AI when creating artifacts.

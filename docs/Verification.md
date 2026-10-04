@@ -8,6 +8,7 @@
 
 ```powershell
 python tools/CheckStyle.py --paths-only
+python tools/CheckStyle.py --sizes-only
 python tools/CheckBoundaries.py
 git diff --check
 
@@ -26,10 +27,13 @@ C++/HLSL 变更的完整格式和语义命名检查见 [CodingStyle.md](CodingSt
 现有自动检查各有范围：
 
 - `CheckStyle.py --paths-only` 检查自有文件命名和 include 路径等路径约定；CTest 的 `code_style_paths` 使用这一模式。
-- `CheckStyle.py` 在路径检查之外执行 C++/HLSL 格式检查；`--naming` 另外使用 clang-tidy/clang-query 检查 C++ 语义命名和单变量声明等已配置规则，需要编译数据库和 LLVM。`--format` 会修改文件，不能当作只读检查。
+- `CheckStyle.py --sizes-only` 检查 `Source` 下所有配置的 C++ 文件物理行数和 `tools/SourceSizePolicy.json`；只需 Python，CTest 的 `code_style_sizes` 使用这一模式。`source_size_checker` 运行隔离夹具回归，也可直接运行 `python Source/Tests/Tools/SourceSizeTests.py`。
+- `CheckStyle.py` 在路径和文件尺寸检查之外执行 C++/HLSL 格式检查；`--naming` 另外使用 clang-tidy/clang-query 检查 C++ 语义命名和单变量声明等已配置规则，需要编译数据库和 LLVM。`--format` 会修改文件并检查写回后的尺寸，不能当作只读检查。
 - `CheckBoundaries.py` 检查已编码的模块依赖、include、CMake 声明和第三方隔离规则；它不能证明全部运行时所有权或生命周期契约。
 
-当前工具不检查函数 100 行或非测试 C++ 文件 500 行，也不自动判定显示文本参与逻辑、重复权威定义、隐含位置关系、策略耦合或缓存依赖是否完整。代码审查应按 [代码规模与拆分](CodingStyle.md#代码规模与拆分) 核实行数、例外与拆分边界，并逐项检查 [可维护性与语义表达](CodingStyle.md#可维护性与语义表达) 中的五条规则。通过格式、命名和边界检查只能证明这些工具覆盖的项目通过，不能替代语义审查及相关行为验证。
+文件尺寸检查拒绝新增超限和历史超限增长，并要求缩短文件时降低或移除旧记录。策略文件的豁免用途、构建归属和改名映射仍须人工核实，不得为了使检查通过抬高基线。测试名称或目录名不会自动取得豁免。
+
+当前工具不检查函数 100 行规则，也不自动判定显示文本参与逻辑、重复权威定义、隐含位置关系、策略耦合或缓存依赖是否完整。代码审查应按 [代码规模与拆分](CodingStyle.md#代码规模与拆分) 核实函数长度、例外与拆分边界，并逐项检查 [可维护性与语义表达](CodingStyle.md#可维护性与语义表达) 中的五条规则。通过格式、尺寸、命名和边界检查只能证明这些工具覆盖的项目通过，不能替代语义审查及相关行为验证。
 
 ## 查询与选择测试
 
