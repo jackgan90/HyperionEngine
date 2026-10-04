@@ -47,11 +47,10 @@ void SetView(FMaterialInstance& InMaterial, const FLightVolumePassDesc& InPass)
 	Parameters.DepthRange = {Port.MinDepth, 1.f / (Port.MaxDepth - Port.MinDepth)};
 	Parameters.Eye = View.Eye;
 	InMaterial.SetParameters(MakeShaderParameters(Parameters));
-	for (std::size_t Index = 0; Index < 3; ++Index)
+	for (const auto Role : {EGBufferRole::BaseMetallic, EGBufferRole::Normals, EGBufferRole::Surface})
 	{
-		InMaterial.SetSemantic(std::array{EDeferredLightingSemantic::GBuffer0, EDeferredLightingSemantic::GBuffer1,
-		                                  EDeferredLightingSemantic::GBuffer2}[Index],
-		                       FMaterialValue::FromTexture(InPass.GBuffer[Index]));
+		InMaterial.SetSemantic(DescribeGBufferAttachment(Role).Semantic,
+		                       FMaterialValue::FromTexture(GBufferAttachment(InPass.GBuffer, Role)));
 	}
 	InMaterial.SetSemantic(EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(InPass.Depth));
 }

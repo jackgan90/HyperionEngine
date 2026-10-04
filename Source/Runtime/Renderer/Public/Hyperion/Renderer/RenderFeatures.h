@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Renderer/ContactShadows.h"
+#include "Hyperion/Renderer/GBufferLayout.h"
 #include "Hyperion/Renderer/RenderPipelineFrame.h"
 
 namespace Hyperion
@@ -19,7 +20,7 @@ struct FRenderFeatureResources
 {
 	FRenderTargetSource Depth;
 	FRenderTargetSource Color;
-	std::array<FRenderTargetSource, 4> GBuffer;
+	std::array<FRenderTargetSource, GBufferAttachmentCount> GBuffer;
 	FRenderTargetSource Output;
 	// Optional lighting input. The producer supplies the exact source and its retention token.
 	FRenderTargetSource DirectionalVisibility;

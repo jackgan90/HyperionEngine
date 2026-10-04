@@ -81,8 +81,8 @@ void FContactShadowFeature::AddShadows(FRenderFeatureContext& InContext)
 		}
 		FContactShadowInputs Inputs;
 		Inputs.Depth = Depth;
-		Inputs.Normals = InContext.Resources.GBuffer[1];
-		Inputs.Surface = InContext.Resources.GBuffer[2];
+		Inputs.Normals = GBufferAttachment(InContext.Resources.GBuffer, EGBufferRole::Normals);
+		Inputs.Surface = GBufferAttachment(InContext.Resources.GBuffer, EGBufferRole::Surface);
 		Inputs.Mask = Mask;
 		Inputs.View = InContext.View;
 		Inputs.LightDirection = {std::bit_cast<float>(Direction->Words[0]), std::bit_cast<float>(Direction->Words[1]),

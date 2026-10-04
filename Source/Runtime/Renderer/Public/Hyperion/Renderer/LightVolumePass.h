@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Renderer/GBufferLayout.h"
 #include "Hyperion/Renderer/LocalLights.h"
 #include "Hyperion/Renderer/RenderPrimitive.h"
 
@@ -8,7 +9,7 @@ struct FLightVolumePassDesc
 {
 	FRenderView View;
 	std::vector<FLocalLight> Lights;
-	std::array<std::shared_ptr<const FMaterialTextureSource>, 4> GBuffer;
+	std::array<std::shared_ptr<const FMaterialTextureSource>, GBufferAttachmentCount> GBuffer;
 	std::shared_ptr<const FMaterialTextureSource> Depth;
 	FRenderPassTargets Targets;
 	std::shared_ptr<const void> Lifetime;

@@ -23,7 +23,7 @@ void CheckRegistry()
 	              {
 		              return FSceneNode{};
 	              }});
-	HYP_CHECK(Registry.Search("All", {}).size() == 1);
+	HYP_CHECK(Registry.Search(std::nullopt, {}).size() == 1);
 	HYP_CHECK(Registry.Search("Basic", "CuB").size() == 1);
 	HYP_CHECK(Registry.Search("Shapes", {}).size() == 1);
 	HYP_CHECK(Registry.Search("Lights", {}).empty());
@@ -37,9 +37,31 @@ void CheckRegistry()
 	{
 		bRejected = true;
 	}
-	HYP_CHECK(bRejected && Registry.Search("All", {}).size() == 1);
+	HYP_CHECK(bRejected && Registry.Search(std::nullopt, {}).size() == 1);
 	Registry.Remove("cube");
-	HYP_CHECK(!Registry.Find("cube") && Registry.Search("All", {}).empty());
+	HYP_CHECK(!Registry.Find("cube") && Registry.Search(std::nullopt, {}).empty());
+}
+
+void CheckExplicitCategories()
+{
+	FObjectPlacementRegistry Registry;
+	Registry.AddCategory("All");
+	Registry.AddCategory("Custom");
+	const auto Create = []
+	{
+		return FSceneNode{};
+	};
+	Registry.Add({"first", "One", {"Custom"}, {}, {}, Create});
+	Registry.Add({"second", "Two", {"All", "Custom"}, {}, {}, Create});
+	const auto All = Registry.Search(std::nullopt, {});
+	HYP_CHECK(All.size() == 2 && All[0]->Id == "first" && All[1]->Id == "second");
+	const auto NamedAll = Registry.Search("All", {});
+	HYP_CHECK(NamedAll.size() == 1 && NamedAll.front()->Id == "second");
+	HYP_CHECK(Registry.Search("Custom", {}).size() == 2);
+	HYP_CHECK(Registry.Search("", {}).empty());
+	HYP_CHECK(Registry.Search("Unknown", {}).empty());
+	HYP_CHECK(Registry.Search(std::nullopt, "tWo").front()->Id == "second");
+	HYP_CHECK(Registry.Search("All", "FIRST").empty());
 }
 
 void CheckShapes()
@@ -119,6 +141,7 @@ int main()
 	try
 	{
 		CheckRegistry();
+		CheckExplicitCategories();
 		CheckShapes();
 		CheckPlacement();
 		std::cout << "PASS: placement registry, primitive geometry and viewport placement\n";

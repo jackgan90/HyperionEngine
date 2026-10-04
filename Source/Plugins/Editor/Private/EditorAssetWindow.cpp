@@ -33,8 +33,7 @@ void FEditorPlugin::CloseAssetWindow()
 
 bool FEditorPlugin::IsAuxiliaryWindowBlocked() const
 {
-	return Transition.HasPendingRoot() || Transition.IsDecisionVisible() || bSaveDialog || bOpenDialog ||
-	       bAssetMessage || bPreferencesDialog || Transition.IsSavingClose();
+	return CaptureInteractionPolicy().BlocksAuxiliaryWindows();
 }
 
 void FEditorPlugin::SynchronizeWindowGroup()

@@ -23,7 +23,9 @@ public:
 	void Add(FPlaceableObject InObject);
 	void Remove(std::string_view InId);
 	const FPlaceableObject* Find(std::string_view InId) const;
-	std::vector<const FPlaceableObject*> Search(std::string_view InCategory, std::string_view InFilter) const;
+	// An absent category means all objects; a supplied ID is always an exact category filter.
+	std::vector<const FPlaceableObject*> Search(std::optional<std::string_view> InCategory,
+	                                            std::string_view InFilter) const;
 	const std::vector<std::string>& GetCategories() const;
 
 private:

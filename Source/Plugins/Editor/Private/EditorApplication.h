@@ -7,6 +7,7 @@
 #include "EditorDocumentTransition.h"
 #include "EditorInspectionCache.h"
 #include "EditorInteraction.h"
+#include "EditorInteractionPolicy.h"
 #include "EditorOptions.h"
 #include "EditorSelection.h"
 #include "EditorShortcuts.h"
@@ -151,6 +152,7 @@ private:
 	void Initialize();
 	void LoadSceneDocument(const std::string& InPath, bool bInDiscard);
 	bool IsDocumentInteractionBusy() const;
+	FEditorInteractionPolicy CaptureInteractionPolicy() const;
 	void InitializeSceneDocument();
 	void UpdateDocumentInteraction();
 	void EnsureAssetWindow();
@@ -346,7 +348,7 @@ private:
 	FObjectPlacementRegistry PlacementRegistry;
 	FViewportPlacementSession Placement;
 	std::string PlacementFilter;
-	std::string PlacementCategory = "All";
+	std::optional<std::string> PlacementCategory;
 	bool bShowPlacement = true;
 	bool bFocusPlacement{};
 	bool bShowLightMarkers = true;

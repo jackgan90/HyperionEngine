@@ -50,7 +50,7 @@ void FEditorPlugin::DrawApplicationScale()
 
 void FEditorPlugin::DrawRootMenu()
 {
-	Gui->BeginDisabled(Transition.HasPendingRoot() || !Options.Benchmark.empty());
+	Gui->BeginDisabled(!CaptureInteractionPolicy().AllowsScenePanels());
 	if (Gui->MenuItem("Open..."))
 	{
 		bRequestRootDialog = true;
@@ -410,7 +410,7 @@ FGuiDrawData FEditorPlugin::DrawGui(float InDelta, std::span<const FInputEvent> 
 	RouteHistoryShortcuts(InEvents);
 	bGizmoUsedMouse = false;
 	bPlacementUsedMouse = false;
-	Gui->BeginDisabled(Transition.HasPendingRoot() || !Options.Benchmark.empty());
+	Gui->BeginDisabled(!CaptureInteractionPolicy().AllowsScenePanels());
 	DrawMenus();
 	Acceptance.BeginSurface(EEditorSurface::Toolbar);
 	DrawToolbar();

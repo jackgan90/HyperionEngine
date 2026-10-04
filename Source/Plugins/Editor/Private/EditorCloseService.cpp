@@ -9,8 +9,7 @@ FApplicationCloseState FEditorPlugin::ApplicationCloseState() const
 	return {std::string(Transition.CloseStatus()), Transition.CloseError(),
 	        IsDirty() || AssetWorkspace->IsDirty() || ImportState.bDirty,
 	        bool(PendingSave) || AssetWorkspace->IsSaving() || AssetWorkspace->HasPendingEdits() ||
-	            GizmoEdit.has_value() || InspectorInteraction || PendingInspectorEdit.has_value() ||
-	            Placement.IsActive() || ImportState.bBusy,
+	            CaptureInteractionPolicy().HasCloseInteraction() || ImportState.bBusy,
 	        CurrentPath};
 }
 
@@ -80,7 +79,7 @@ FApplicationCloseState FEditorPlugin::RequestApplicationClose(const FApplication
 		return ApplicationCloseState();
 	}
 	const auto State = ApplicationCloseState();
-	if (bFinished || State.bBusy || bOpenDialog || bSaveDialog || Transition.HasPendingRoot() || bPreferencesDialog)
+	if (State.bBusy || !CaptureInteractionPolicy().AllowsCloseRequest())
 	{
 		throw FSceneEditError("busy", "Finish active edits, transitions and saves before closing");
 	}

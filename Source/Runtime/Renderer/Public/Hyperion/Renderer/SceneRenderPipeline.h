@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/CascadedShadowMap.h"
 #include "Hyperion/Renderer/ClusteredLights.h"
 #include "Hyperion/Renderer/FullscreenPass.h"
+#include "Hyperion/Renderer/GBufferLayout.h"
 #include "Hyperion/Renderer/RenderFeatures.h"
 #include "Hyperion/Renderer/RenderPipelineFrame.h"
 #include "Hyperion/Scene/SceneQuery.h"
@@ -11,16 +12,6 @@ namespace Hyperion
 {
 // CPU query policy for the pipeline's scheduled color passes, including legacy exclusions.
 FSceneRayOptions MakeSceneRayOptions(ESceneRenderPipeline InPipeline);
-
-struct FGBufferLayout
-{
-	std::array<EMaterialColorFormat, 4> Formats{EMaterialColorFormat::Rgba8Unorm, EMaterialColorFormat::Rgba16Float,
-	                                            EMaterialColorFormat::Rgba8Unorm, EMaterialColorFormat::Rgba16Float};
-	static FGBufferLayout HighPrecision();
-	void Validate(const FRHICapabilities& InCapabilities) const;
-	std::uint32_t BytesPerPixel() const;
-	bool operator==(const FGBufferLayout&) const = default;
-};
 
 struct FScenePipelineSettings
 {
@@ -103,7 +94,7 @@ private:
 	EDepthConvention ShadowDepthConvention = EDepthConvention::Standard;
 	std::shared_ptr<const FMaterialTextureSource> SceneColor;
 	std::shared_ptr<const FMaterialTextureSource> SceneDepth;
-	std::array<std::shared_ptr<const FMaterialTextureSource>, 4> GBuffer;
+	std::array<std::shared_ptr<const FMaterialTextureSource>, GBufferAttachmentCount> GBuffer;
 	std::uint32_t Width{};
 	std::uint32_t Height{};
 	EDepthConvention DepthConvention = EDepthConvention::Standard;

@@ -42,6 +42,24 @@ void WaitForSave(FAssetEditDocument& InDocument, FTaskSystem& InTasks)
 	}
 }
 
+void CheckDocumentSupport()
+{
+	Check(SupportsAssetDocument(RecordType<FModelAsset>()));
+	Check(SupportsAssetDocument(RecordType<FMaterialAsset>()));
+	Check(SupportsAssetDocument(RecordType<FTextureAsset>()));
+	Check(SupportsAssetDocument(RecordType<FSkyAsset>()));
+	Check(!SupportsAssetDocument(RecordType<FSceneManifest>()));
+	auto Type = RecordType<FTextureAsset>();
+	Type.Id = "test.unknown.asset";
+	Check(!SupportsAssetDocument(Type));
+	Type = RecordType<FTextureAsset>();
+	Type.CppType = typeid(FSceneManifest);
+	Check(!SupportsAssetDocument(Type));
+	// Descriptor identity is semantic, not pointer identity.
+	Type = RecordType<FTextureAsset>();
+	Check(SupportsAssetDocument(Type));
+}
+
 void RebuildEncoding(FTaskSystem& InTasks, const std::shared_ptr<FAssetEditDocument>& InDocument,
                      EMaterialTextureEncoding InEncoding)
 {
@@ -445,6 +463,7 @@ int main()
 		auto Files = std::make_shared<FMemoryFileSystem>();
 		FIOService IO(Tasks, Files);
 		FAssetService Assets(IO);
+		CheckDocumentSupport();
 		CheckDocuments(Assets, Tasks, *Files);
 		CheckModelEdits(Assets, Tasks, *Files);
 		CheckEqualAndCoalescedHistory(Assets, Tasks);

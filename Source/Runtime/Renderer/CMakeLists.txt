@@ -23,6 +23,7 @@ hyp_module(hyperion_render)
 target_sources(hyperion_render PRIVATE Private/MaterialInterfaceBuilder.cpp)
 target_link_libraries(hyperion_render PUBLIC hyperion_raster_options)
 target_sources(hyperion_render PRIVATE Private/GBufferVisualizerDefines.cpp)
+target_sources(hyperion_render PRIVATE Private/GBufferLayout.cpp)
 
 target_sources(hyperion_render PRIVATE Private/SceneMaterialRoutes.cpp)
 target_sources(hyperion_render PRIVATE Private/DirectionalLighting.cpp)

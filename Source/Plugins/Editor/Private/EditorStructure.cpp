@@ -17,9 +17,7 @@ bool ContainsPoint(FVec4 InBounds, FVec2 InPoint)
 void FEditorPlugin::BeginReparentGesture(FSceneHandle InHandle, FVec4 InBounds)
 {
 	const auto Pointer = Gui->PointerState();
-	if (!Scene->GetStatus().bReady || Gui->DragPayload() || Pointer.bRightDown || bOpenDialog || bSaveDialog ||
-	    bAssetMessage || Transition.HasPendingRoot() || Transition.IsDecisionVisible() || bPreferencesDialog ||
-	    Placement.IsActive())
+	if (!CaptureInteractionPolicy().AllowsReparentBegin())
 	{
 		return;
 	}
@@ -63,11 +61,9 @@ void FEditorPlugin::UpdateReparentGesture(std::span<const FInputEvent> InEvents)
 		                                    return InEvent.Type == EEventType::Focus && !InEvent.bDown;
 	                                    });
 	const auto& Gesture = *ReparentGesture;
-	if (bLostFocus || Pointer.bCancel || Pointer.bRightDown || !Pointer.bPositionValid || !bShowOutliner ||
+	if (bLostFocus || !CaptureInteractionPolicy().AllowsReparentContinue() || !bShowOutliner ||
 	    Gesture.Document != SceneDocument.Id() || Gesture.Revision != Scene->GetRevision() ||
-	    Gesture.Handles != Selection.All() || bOpenDialog || bSaveDialog || bAssetMessage ||
-	    Transition.HasPendingRoot() || Transition.IsDecisionVisible() || bPreferencesDialog ||
-	    !Scene->GetStatus().bReady)
+	    Gesture.Handles != Selection.All())
 	{
 		CancelReparentGesture();
 		return;

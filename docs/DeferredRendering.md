@@ -45,6 +45,8 @@ Stable main view IDs are 1 (primary), 2 (compatibility), 3 (transparent) and 4 (
 
 `FGBufferLayout` validates backend capabilities and packing version 1. `Content/Shaders/Deferred/GBuffer.hlsli` owns matching encode/decode. Formats can change without changing semantic channel assignments.
 
+Renderer's `GBufferLayout.h` exposes named `EGBufferRole` identities. `GBufferAttachments()` is the authoritative mapping to physical slots, `EDeferredLightingSemantic` bindings, default formats and storage constraints. `GBufferAttachment(values, role)` resolves role-specific access without relying on enum ordinals. Allocation, fullscreen/debug bindings, local-light inputs and contact-shadow inputs consume this contract; ordered arrays still represent the physical MRT ABI. Shader names `GBuffer0..3`, `SV_Target0..3` and channel encoding remain unchanged.
+
 | Attachment | Contents | Compact | High precision |
 |---|---|---|---|
 | 0 | Base RGB, metallic A | RGBA8 UNORM | RGBA16 float |
@@ -56,7 +58,7 @@ Stable main view IDs are 1 (primary), 2 (compatibility), 3 (transparent) and 4 (
 
 Compact GBuffer costs 24 bytes/pixel; high precision costs 32. D32 plus SceneColor adds 12 bytes/pixel. Logical payloads exclude CSM, swapchain/frame depth, allocator alignment and other resources; CSV also records actual device allocations.
 
-C++ clients may override individual entries with supported `EMaterialColorFormat`, including RGBA32 float. Normals and emissive require floating-point storage. Unsupported layouts fail before allocation. A new packing or shading-model protocol requires a new shader contract. The reserved channel is not a material/shading-model ID; future stencil dispatch belongs at the lighting boundary.
+C++ clients may override individual entries with supported `EMaterialColorFormat`, including RGBA32 float. All attachments require RGBA storage; normals and emissive require floating-point storage. Single-channel formats and unavailable sampled render-target formats fail layout validation before allocation. A new packing or shading-model protocol requires a new shader contract. The reserved channel is not a material/shading-model ID; future stencil dispatch belongs at the lighting boundary.
 
 Descriptions are immutable. Size/layout/pipeline changes publish complete generations and discard structural view history; old queued/submitted users retain old resources. Stable frames reuse sources, shader programs, bindings/PSOs and scene/instance plans. Shadow allocation scope changes independently.
 

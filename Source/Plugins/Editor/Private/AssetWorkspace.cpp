@@ -425,11 +425,9 @@ void FAssetWorkspace::PollEntry(FEntry& InEntry)
 		{
 			const auto Loaded = InEntry.Load.GetReady();
 			InEntry.Identity = Loaded->Header.Id;
-			const auto& Type = Loaded->Header.TypeId;
-			if (Type != "hyperion.textureasset" && Type != "hyperion.modelasset" && Type != "hyperion.materialasset" &&
-			    Type != "hyperion.skyasset")
+			if (!SupportsAssetDocument(*Loaded->Type))
 			{
-				throw std::runtime_error("Unsupported asset type: " + Type);
+				throw std::runtime_error("Unsupported asset type: " + Loaded->Header.TypeId);
 			}
 			InEntry.Initialization = DispatchAsync<std::shared_ptr<FAssetEditDocument>>(
 			    Tasks, {EDomain::Worker},

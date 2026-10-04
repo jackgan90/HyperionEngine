@@ -21,7 +21,7 @@ std::string Lower(std::string_view InText)
 
 void FObjectPlacementRegistry::AddCategory(std::string InId)
 {
-	if (InId.empty() || InId == "All" || std::find(Categories.begin(), Categories.end(), InId) != Categories.end())
+	if (InId.empty() || std::find(Categories.begin(), Categories.end(), InId) != Categories.end())
 	{
 		throw std::invalid_argument("Invalid or duplicate placement category: " + InId);
 	}
@@ -71,15 +71,15 @@ const FPlaceableObject* FObjectPlacementRegistry::Find(std::string_view InId) co
 	return It == Objects.end() ? nullptr : &*It;
 }
 
-std::vector<const FPlaceableObject*> FObjectPlacementRegistry::Search(std::string_view InCategory,
+std::vector<const FPlaceableObject*> FObjectPlacementRegistry::Search(std::optional<std::string_view> InCategory,
                                                                       std::string_view InFilter) const
 {
 	std::vector<const FPlaceableObject*> Result;
 	const auto Filter = Lower(InFilter);
 	for (const auto& Object : Objects)
 	{
-		if ((InCategory.empty() || InCategory == "All" ||
-		     std::find(Object.Categories.begin(), Object.Categories.end(), InCategory) != Object.Categories.end()) &&
+		if ((!InCategory ||
+		     std::find(Object.Categories.begin(), Object.Categories.end(), *InCategory) != Object.Categories.end()) &&
 		    (Lower(Object.Label).find(Filter) != std::string::npos ||
 		     Lower(Object.Id).find(Filter) != std::string::npos))
 		{

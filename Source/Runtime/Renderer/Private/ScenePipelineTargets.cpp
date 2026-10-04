@@ -4,55 +4,6 @@
 
 namespace Hyperion
 {
-FGBufferLayout FGBufferLayout::HighPrecision()
-{
-	FGBufferLayout Result;
-	Result.Formats.fill(EMaterialColorFormat::Rgba16Float);
-	return Result;
-}
-
-void FGBufferLayout::Validate(const FRHICapabilities& InCapabilities) const
-{
-	if (InCapabilities.MaxColorTargets < Formats.size() || !InCapabilities.bSampledDepthTargets)
-	{
-		throw std::invalid_argument("Deferred requires four color targets and sampled D32 depth");
-	}
-	for (const auto Format : Formats)
-	{
-		if (!InCapabilities.SampledColorTargets.at(static_cast<std::size_t>(GetRenderColorFormat(Format))))
-		{
-			throw std::invalid_argument("GBuffer format lacks sampled render-target support");
-		}
-	}
-	if (Formats[1] == EMaterialColorFormat::Rgba8Unorm || Formats[3] == EMaterialColorFormat::Rgba8Unorm)
-	{
-		throw std::invalid_argument("GBuffer normals and HDR emissive require floating-point storage");
-	}
-}
-
-std::uint32_t FGBufferLayout::BytesPerPixel() const
-{
-	std::uint32_t Result{};
-	for (const auto Format : Formats)
-	{
-		switch (Format)
-		{
-			case EMaterialColorFormat::Rgba8Unorm:
-				Result += 4;
-				break;
-			case EMaterialColorFormat::Rgba16Float:
-				Result += 8;
-				break;
-			case EMaterialColorFormat::Rgba32Float:
-				Result += 16;
-				break;
-			default:
-				throw std::invalid_argument("Unknown GBuffer format");
-		}
-	}
-	return Result;
-}
-
 FSceneRenderPipeline::FSceneRenderPipeline(FRenderSession& InSession, FRHICapabilities InCapabilities,
                                            FScenePipelineSettings InSettings, FRenderFeatureList InFeatures)
     : Session(InSession), Capabilities(std::move(InCapabilities)), Settings(std::move(InSettings)),
@@ -110,10 +61,10 @@ void FSceneRenderPipeline::Resize(std::uint32_t InWidth, std::uint32_t InHeight,
 	decltype(GBuffer) NewGBuffer;
 	if (Settings.Pipeline == ESceneRenderPipeline::Deferred)
 	{
-		for (std::size_t Index = 0; Index < NewGBuffer.size(); ++Index)
+		for (const auto& Attachment : GBufferAttachments())
 		{
-			NewGBuffer[Index] = std::make_shared<const FMaterialTextureSource>(
-			    FMaterialColorTexture{InWidth, InHeight, Settings.GBuffer.Formats[Index]});
+			GBufferAttachment(NewGBuffer, Attachment.Role) = std::make_shared<const FMaterialTextureSource>(
+			    FMaterialColorTexture{InWidth, InHeight, GBufferAttachment(Settings.GBuffer.Formats, Attachment.Role)});
 		}
 	}
 	Lifetime = std::move(NewLifetime);

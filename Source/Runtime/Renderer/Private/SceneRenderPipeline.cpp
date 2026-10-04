@@ -144,9 +144,10 @@ FRenderFeatureContext FSceneRenderPipeline::BeginFeatures(FRenderGraph& InGraph,
 	FeatureResources.Depth = {ERenderTargetKind::Texture, SceneDepth, Lifetime, false};
 	FeatureResources.Color = {ERenderTargetKind::Texture, SceneColor, Lifetime, false};
 	FeatureResources.Output = OutputTarget;
-	for (std::size_t Index = 0; Index < GBuffer.size(); ++Index)
+	for (const auto& Attachment : GBufferAttachments())
 	{
-		FeatureResources.GBuffer[Index] = {ERenderTargetKind::Texture, GBuffer[Index], Lifetime, false};
+		GBufferAttachment(FeatureResources.GBuffer, Attachment.Role) = {
+		    ERenderTargetKind::Texture, GBufferAttachment(GBuffer, Attachment.Role), Lifetime, false};
 	}
 	FRenderFeatureContext FeatureContext{Session,
 	                                     InGraph,

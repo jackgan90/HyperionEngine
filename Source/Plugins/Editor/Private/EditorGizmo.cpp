@@ -28,9 +28,7 @@ void FEditorPlugin::DrawGizmoToolbar()
 void FEditorPlugin::DrawGizmo()
 {
 	FSceneNodeView View;
-	if ((ReparentGesture && ReparentGesture->bDragging) || Placement.IsActive() || bPlacementUsedMouse || !Selection ||
-	    !Scene->GetNodeView(*Selection, View) || !Viewport.bViewportCameraInitialized || bOpenDialog || bSaveDialog ||
-	    bAssetMessage || Transition.HasPendingRoot() || Transition.IsDecisionVisible() || Viewport.PreviewCamera)
+	if (!CaptureInteractionPolicy().AllowsGizmo() || !Selection || !Scene->GetNodeView(*Selection, View))
 	{
 		FinishGizmo();
 		return;
@@ -92,9 +90,7 @@ void FEditorPlugin::DrawGizmo()
 void FEditorPlugin::DrawGizmoOverlay()
 {
 	FSceneNodeView View;
-	if (!Selection || !Scene->GetNodeView(*Selection, View) || !Viewport.bViewportCameraInitialized ||
-	    Viewport.PreviewCamera || bOpenDialog || bSaveDialog || bAssetMessage || Transition.HasPendingRoot() ||
-	    Transition.IsDecisionVisible())
+	if (!Selection || !Scene->GetNodeView(*Selection, View) || !CaptureInteractionPolicy().AllowsGizmoOverlay())
 	{
 		return;
 	}

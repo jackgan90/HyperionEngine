@@ -137,7 +137,7 @@ void FEditorPlugin::PollPlacementResources()
 	{
 		return;
 	}
-	for (const auto* Object : PlacementRegistry.Search("All", {}))
+	for (const auto* Object : PlacementRegistry.Search(std::nullopt, {}))
 	{
 		if (bShowPlacement && Object->Model && !PlacementModels.contains(Object->Id))
 		{

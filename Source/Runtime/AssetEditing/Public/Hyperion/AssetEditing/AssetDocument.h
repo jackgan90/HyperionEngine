@@ -6,6 +6,9 @@ namespace Hyperion
 {
 struct FModelPrimitiveInfo;
 
+// Base open support only; preview availability and field edit permissions have separate owners.
+bool SupportsAssetDocument(const FRecordDescriptor& InType);
+
 // Only the edited fields enter history; bulk payloads are immutable and shared.
 class FAssetEditDocument
 {

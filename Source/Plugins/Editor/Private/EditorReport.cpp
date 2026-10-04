@@ -20,7 +20,7 @@ void FEditorPlugin::WriteReport()
 	{
 		std::filesystem::create_directories(Options.Report.parent_path());
 	}
-	const auto Objects = PlacementRegistry.Search("All", {});
+	const auto Objects = PlacementRegistry.Search(std::nullopt, {});
 	const auto Unavailable =
 	    std::count_if(Objects.begin(), Objects.end(),
 	                  [&](const auto* InObject)

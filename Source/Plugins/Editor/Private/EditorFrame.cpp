@@ -20,10 +20,7 @@ void FEditorPlugin::ResizeViewport()
 
 void FEditorPlugin::RouteCamera(float InDelta, std::span<const FInputEvent> InEvents)
 {
-	if (ReparentGesture || Placement.IsActive() || bPlacementUsedMouse || Gizmo.IsDragging() || bGizmoUsedMouse ||
-	    Viewport.PreviewCamera || !Viewport.bViewportCameraInitialized || !Viewport.bViewportVisible || bOpenDialog ||
-	    bSaveDialog || bAssetMessage || Transition.HasPendingRoot() || Transition.IsDecisionVisible() ||
-	    bPreferencesDialog || Gui->IsEditingText() || !Viewport.ViewportRegion.bFocused)
+	if (!CaptureInteractionPolicy().AllowsCameraNavigation())
 	{
 		// Focus recovery still reaches the controller while GUI navigation is blocked.
 		Camera.SuspendInput(InEvents);

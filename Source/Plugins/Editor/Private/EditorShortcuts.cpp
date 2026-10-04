@@ -4,21 +4,7 @@ namespace Hyperion
 {
 FEditorShortcutInteraction FEditorPlugin::CaptureShortcutInteraction(std::span<const FInputEvent> InEvents) const
 {
-	FEditorShortcutInteraction Result;
-	Result.bSceneFocus = (Viewport.bViewportVisible && Gui->IsWindowFocused("Viewport")) ||
-	                     (bShowOutliner && Gui->IsWindowFocused("Outliner"));
-	Result.bDetailsFocus = Gui->IsWindowFocused("Details");
-	Result.bText = Gui->IsTextInputOwnedThisFrame();
-	Result.bPopup = Gui->HasOpenPopup();
-	const auto Pointer = Gui->PointerState();
-	Result.bGesture = ReparentGesture || Placement.IsActive() || Gui->DragPayload() || Gizmo.IsDragging() ||
-	                  bGizmoUsedMouse || bPlacementUsedMouse || Viewport.bCameraDragging || Pointer.bRightDown ||
-	                  Pointer.bDown || Pointer.bCancel;
-	Result.bBusy = !Options.Benchmark.empty() || bOpenDialog || bSaveDialog || Transition.IsDecisionVisible() ||
-	               bAssetMessage || Transition.HasPendingRoot() || bPreferencesDialog || bFinished ||
-	               IsAuxiliaryWindowBlocked();
-	Result.bInspector = InspectorInteraction != 0 || InspectorTransaction.has_value();
-	Result.bReady = Scene->GetStatus().bReady;
+	auto Result = CaptureInteractionPolicy().Shortcuts();
 	for (const auto& Event : InEvents)
 	{
 		Result.bFocusLost |= Event.Type == EEventType::Focus && !Event.bDown;

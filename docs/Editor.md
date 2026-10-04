@@ -243,6 +243,10 @@ Camera 组件用于用户明确创作的场景相机。在视口选项菜单点�
 
 ## 模块与帧顺序
 
+Editor 私有 `FEditorInteractionFacts` 集中采集当前模态、过渡、手势、文本和视口事实，`FEditorInteractionPolicy` 分别决定导航、拾取、放置、Gizmo、层级手势、快捷键、文档和附加窗口的准入。各入口即时查询，能看到同帧稍早发生的状态变化；不缓存成一个全局 busy。普通 popup 阻断快捷键但自身不构成文档 busy；等待层级点击/拖拽判定会阻断导航，只有已经开始的层级拖拽阻断 Gizmo；保存关闭继续阻断附加窗口。各入口保留自己的取消、焦点恢复和事务收尾，SceneEditing 的 document/revision/idle 校验仍为最终修改依据。
+
+放置目录用可选分类 ID 表达过滤：无值表示全部，有值精确匹配开放字符串类别。面板的 **All** 只是无过滤按钮的标签，真实类别可以拥有同样文字，控件身份分别定义。关键词搜索和多类别对象的唯一返回、注册顺序保持一致。
+
 Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorViewport` 拥有浏览相机、视口目标、尺寸和区域，执行初始化、resize、取景和导航重置。`FEditorAcceptanceDriver` 是不暴露场景状态的私有边界：只有 BUILD_TESTING 启用且请求验收时，才创建 `FEditorAcceptanceHarness`，由它拥有场景方法、步骤、控件快照、夹具判断和完成/超时检查。生产 GUI 提供带类型的控件观察，帧路径使用明确的执行策略及截图/选择钩子；实际 GUI 弹出位置由生产代码自身持有。禁用测试的构建不包含场景实现或状态，收到验收参数时给出受控不可用诊断；普通有限帧运行、截图及 report 仍可用，已有 JSON 字段和类型保持不变。`editor_acceptance_boundary` 检查生产头文件依赖和实际编译源选择。
 
 私有 `FEditorDocumentTransition` 区分文档转换目标与推进阶段，独立拥有请求、保存后继续、失败恢复、丢弃和取消规则。宿主提供当前 dirty、保存和待编辑快照，通过语义操作推进；GUI 和输入消费者只读取查询，不直接修改待换根、待打开或关闭状态。窗口关闭可以与待换根决策重叠，丢弃按关闭、换根、打开的顺序选择目标。弹窗请求与可见性单独建模，标题栏关闭和 Cancel 共用取消操作；取消仅撤销后续换根/退出意图，已接收的保存仍完成到原文档。
@@ -252,6 +256,8 @@ Editor 插件保留功能生命周期与 typed service 注册。私有 `FEditorV
 放置通过私有 `FPlacementService` 聚合场景、模型加载/上传、预览材质和图标加载/上传的准备结果。GUI、automation 轮询与最终提交共用 Ready/Pending/Failed 准入规则，错误信息和显示文案独立；CPU 加载完成不代表 GPU 已就绪。原材质尚未就绪的模型分部仍使用临时预览材质。`editor_placement_preparation` 验证阶段聚合、空错误和前缀碰撞，真实交互由 `editor_placement`、`editor_model_placement` 覆盖。
 
 纹理编码和引用编辑使用 Runtime/AssetEditing 的 `FAssetEditWorkflow`，与 automation 共用 snapshot、busy admission、文档/资产身份及 generation 校验和单次历史提交。Worker 只准备拥有数据的快照，Main 提交文档；关闭或退出前 Drain 汇合任务，销毁路径不提交准备结果。资产窗口继续管理预览和页签，保存仍显式执行。
+
+基础资产文档支持由 AssetEditing 的 `SupportsAssetDocument` 根据规范反射类型身份判断，Editor workspace 与独立 automation 共用 model/material/texture/sky 规则。此查询不决定预览能力或字段权限，Editor 仍保留加载/失败页签及自身预览诊断，scene 文档继续使用场景工作流。
 
 资产属性控件通过 AssetEditing 的成员策略取得编辑路由，校验、规范化与预览影响由共享文档领域处理。资产、节点和图元改名保留当前预览；变换、材质分配、实际材质值/引用及编码数据变化触发预览更新。自动化节点改名使用相同规则。相等提交仍保留文档事务，连续交互的 Undo/Redo/Cancel 按整个交互累计的影响处理；纹理编码历史恢复准确 mip 数据并共享未改变的 mip0 存储。
 

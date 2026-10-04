@@ -5,7 +5,7 @@ namespace Hyperion
 FPlacementCatalog FEditorPlugin::PlacementCatalog() const
 {
 	FPlacementCatalog Result;
-	for (const auto* Object : PlacementRegistry.Search("All", {}))
+	for (const auto* Object : PlacementRegistry.Search(std::nullopt, {}))
 	{
 		Result.Items.push_back({Object->Id, Object->Label, Object->Categories,
 		                        FormatPlacementPreparation(GetPlacementPreparation(*Object))});
@@ -81,22 +81,21 @@ void FEditorPlugin::DrawPlacementPanel()
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##SearchPlaceable", PlacementFilter, false);
 		Gui->Tooltip("Search objects");
-		std::vector<std::string> Categories{"All"};
-		Categories.insert(Categories.end(), PlacementRegistry.GetCategories().begin(),
-		                  PlacementRegistry.GetCategories().end());
+		if (Gui->Button("All##UnrestrictedPlacementCategory"))
+		{
+			PlacementCategory.reset();
+		}
+		const auto& Categories = PlacementRegistry.GetCategories();
 		for (const auto& Category : Categories)
 		{
-			if (Gui->Button(Category.c_str()))
+			Gui->SameLineIfFits(Category.c_str());
+			if (Gui->Button((Category + "##PlacementCategory" + Category).c_str()))
 			{
 				PlacementCategory = Category;
 			}
-			if (Category != Categories.back())
-			{
-				Gui->SameLineIfFits(Categories.back().c_str());
-			}
 		}
 		Gui->Separator();
-		Gui->Text(PlacementCategory);
+		Gui->Text(PlacementCategory.value_or("All"));
 		for (const auto* Object : PlacementRegistry.Search(PlacementCategory, PlacementFilter))
 		{
 			const auto Preparation = GetPlacementPreparation(*Object);
@@ -210,9 +209,7 @@ void FEditorPlugin::RoutePlacementPayload(const FGuiDragPayload& InPayload,
 	Viewport.bCameraDragging = false;
 	const auto CameraView = PickingCamera();
 	const auto Pointer = Gui->PointerState();
-	if (!CameraView || !Viewport.bViewportVisible || bOpenDialog || bSaveDialog || bAssetMessage ||
-	    Transition.HasPendingRoot() || Transition.IsDecisionVisible() || bPreferencesDialog || bViewOptionsOpen ||
-	    Pointer.bCancel || Pointer.bRightDown || Gizmo.IsDragging())
+	if (!CameraView || !CaptureInteractionPolicy().AllowsPlacement())
 	{
 		CancelPlacement();
 		return;

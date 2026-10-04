@@ -159,6 +159,8 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 
 `asset.workspace.policy` 返回 shared、retainsFailed、retainsLoading、activation。Editor 保留失败/加载中页签；standalone 只列出 ready CPU 草稿，失败打开经 job outcome 报错后移除。修改响应与随后 asset.info 的 workspace active、dirty、generation 应一致；不同模式不必拥有相同页签生命周期。
 
+Editor 与独立资产适配器在打开时共用 AssetEditing 的 `SupportsAssetDocument`，基础支持限于规范的 model/material/texture/sky 反射类型。预览能力与字段编辑权限分别判断，基础支持不承诺 GPU 预览成功；scene 仍由现有 `scene.open` 工作流处理。
+
 `application.health` 返回简洁的 frame、ready、error。ready=false 且 error 为空可能正在加载；ready 不保证所有资源已绘制。详情再用 scene.status、render.component_diagnostics 或 render.statistics。Editor 的概要与完整诊断共用状态来源，概要不读取 GPU 统计；无诊断服务时明确 unavailable。
 
 新增能力应验证类型引用可解析、枚举语义可读、示例有效、非法参数无副作用、修改响应与查询一致，以及 GUI 共用事务的历史和保存行为；不向 CLI/MCP 添加领域分支。

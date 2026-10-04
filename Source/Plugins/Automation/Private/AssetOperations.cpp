@@ -1,9 +1,6 @@
 #include "AssetOperations.h"
 #include "Hyperion/AssetEditing/AssetProperties.h"
-#include "Hyperion/Environment/SkyAsset.h"
 #include "Hyperion/IO/Path.h"
-#include "Hyperion/Materials/MaterialAsset.h"
-#include "Hyperion/Scene/Model.h"
 #include <algorithm>
 #include <chrono>
 #include <thread>
@@ -210,9 +207,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 			        try
 			        {
 				        auto Loaded = Load.GetReady();
-				        const auto Type = Loaded->Type->CppType;
-				        if (Type != typeid(FModelAsset) && Type != typeid(FMaterialAsset) &&
-				            Type != typeid(FTextureAsset) && Type != typeid(FSkyAsset))
+				        if (!SupportsAssetDocument(*Loaded->Type))
 				        {
 					        throw FAutomationError("unsupported_type",
 					                               "This adapter opens model, material, texture and sky documents; "

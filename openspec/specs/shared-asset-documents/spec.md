@@ -50,3 +50,18 @@ Editor and automation SHALL use one CPU domain workflow for asynchronous texture
 #### Scenario: Close and shutdown with pending work
 - **WHEN** an asset workspace closes, an automation session ends or its plugin quiesces with admitted asynchronous editing
 - **THEN** existing busy/close policies are enforced and work is drained before captured state is destroyed, with no late commit into a replacement document
+
+### Requirement: Shared base asset document support
+AssetEditing SHALL own the base document support decision for canonical model, material, texture and sky record types. Editor and standalone automation open adapters SHALL consume that decision instead of maintaining separate type lists. Preview capabilities and field editing policies SHALL remain independently owned, and scene documents SHALL keep their existing scene workflow.
+
+#### Scenario: Supported and unsupported assets
+- **WHEN** either adapter opens a canonical model, material, texture or sky asset, or encounters a scene or unknown record type
+- **THEN** both agree on base support while retaining their existing errors, asynchronous completion and workspace entry lifecycle
+
+#### Scenario: Preview capability remains independent
+- **WHEN** an asset is accepted as a CPU document but its preview cannot be prepared
+- **THEN** the adapter retains its existing preview failure behavior without changing the shared support rule, history or persistence
+
+#### Scenario: Automation and GUI compatibility
+- **WHEN** existing asset operations are discovered and invoked or the same document is opened through GUI
+- **THEN** operation IDs, schemas, revision checks, dirty state, history, saves and close/drain behavior remain compatible

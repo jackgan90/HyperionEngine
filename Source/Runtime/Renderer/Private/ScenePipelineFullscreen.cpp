@@ -65,6 +65,18 @@ void SetLightingParameters(FFullscreenPassDesc& InPass, FRenderSession& InSessio
 	Parameters.Ambient = SceneVector(EHyperionSceneV1Field::AmbientColor);
 	AppendShaderParameters(InPass.Parameters, Parameters);
 }
+
+void BindGBuffer(FFullscreenPassDesc& InPass,
+                 const std::array<std::shared_ptr<const FMaterialTextureSource>, GBufferAttachmentCount>& InTextures,
+                 const std::shared_ptr<const void>& InLifetime)
+{
+	for (const auto& Attachment : GBufferAttachments())
+	{
+		const auto& Texture = GBufferAttachment(InTextures, Attachment.Role);
+		InPass.Targets.Reads.push_back({ERenderTargetKind::Texture, Texture, InLifetime, false});
+		InPass.Parameters.push_back({Attachment.Semantic, FMaterialValue::FromTexture(Texture)});
+	}
+}
 } // namespace
 
 FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, const FMaterialFrameContext& InFrame,
@@ -132,14 +144,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 			}
 		}
 	}
-	for (std::size_t Index = 0; Index < GBuffer.size(); ++Index)
-	{
-		Result.Targets.Reads.push_back({ERenderTargetKind::Texture, GBuffer[Index], Lifetime, false});
-		Result.Parameters.push_back(
-		    {std::array{EDeferredLightingSemantic::GBuffer0, EDeferredLightingSemantic::GBuffer1,
-		                EDeferredLightingSemantic::GBuffer2, EDeferredLightingSemantic::GBuffer3}[Index],
-		     FMaterialValue::FromTexture(GBuffer[Index])});
-	}
+	BindGBuffer(Result, GBuffer, Lifetime);
 	Result.Targets.Reads.push_back({ERenderTargetKind::Texture, SceneDepth, Lifetime, false});
 	Result.Parameters.push_back({EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(SceneDepth)});
 	SetLightingParameters(Result, Session, InFrame, InMain, bNoDirectional);
@@ -157,14 +162,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 	Result.Viewport = Viewport(InMain);
 	Result.Targets = OutputTargets();
 	Result.Targets.Name = "Deferred/GBuffer debug";
-	for (std::size_t Index = 0; Index < GBuffer.size(); ++Index)
-	{
-		Result.Targets.Reads.push_back({ERenderTargetKind::Texture, GBuffer[Index], Lifetime, false});
-		Result.Parameters.push_back(
-		    {std::array{EDeferredLightingSemantic::GBuffer0, EDeferredLightingSemantic::GBuffer1,
-		                EDeferredLightingSemantic::GBuffer2, EDeferredLightingSemantic::GBuffer3}[Index],
-		     FMaterialValue::FromTexture(GBuffer[Index])});
-	}
+	BindGBuffer(Result, GBuffer, Lifetime);
 	Result.Targets.Reads.push_back({ERenderTargetKind::Texture, SceneDepth, Lifetime, false});
 	Result.Parameters.push_back({EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(SceneDepth)});
 	AppendShaderParameters(Result.Parameters, FGBufferDebugV1Parameters{

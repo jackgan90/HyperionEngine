@@ -43,6 +43,8 @@ add_library(hyperion_editor_plugin STATIC
   Private/EditorGizmoTransaction.cpp
   Private/EditorHistory.cpp
   Private/EditorShortcuts.cpp
+  Private/EditorInteractionPolicy.cpp
+  Private/EditorInteractionPolicyCapture.cpp
   Private/EditorSelection.cpp
   Private/EditorBatchHistory.cpp
   Private/EditorHost.cpp
@@ -74,6 +76,11 @@ if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
+  add_executable(editor_interaction_policy_tests Private/EditorInteractionPolicyTests.cpp Private/EditorInteractionPolicy.cpp)
+  hyp_executable(editor_interaction_policy_tests)
+  target_link_libraries(editor_interaction_policy_tests PRIVATE hyperion_platform)
+  set_target_properties(editor_interaction_policy_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_interaction_policies COMMAND editor_interaction_policy_tests)
   add_test(NAME editor_acceptance_boundary COMMAND "${Python3_EXECUTABLE}"
     "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/EditorAcceptanceBoundary.py" "${PROJECT_BINARY_DIR}"
     "${CMAKE_CURRENT_BINARY_DIR}/EditorSources-$<CONFIG>.txt")
