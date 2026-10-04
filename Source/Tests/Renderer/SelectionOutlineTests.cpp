@@ -1,3 +1,4 @@
+#include "Hyperion/Assets/NativeAsset.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/MaterialPreparation.h"
 #include "Hyperion/Renderer/SceneBridge.h"
@@ -320,8 +321,11 @@ float PSMask(FOutput InInput) : SV_Target0
 	Pass.Pixel = {Path, "PSMain"};
 	Pass.State.Cull = EMaterialCull::None;
 	Pass.bRequiresConservativeBounds = bInUnbounded;
+	// An explicit mask wins even if fallback was declared on the ordinary pass.
+	Pass.SilhouettePolicy = EMaterialSilhouettePolicy::ModelShader;
 	Description.Passes.push_back(Pass);
 	Pass.Usage = "SilhouetteMask";
+	Pass.SilhouettePolicy = EMaterialSilhouettePolicy::Disabled;
 	Pass.Pixel.Entry = "PSMask";
 	Description.Passes.push_back(Pass);
 	return std::make_shared<const FMaterialDefinition>(std::move(Description));
@@ -445,6 +449,80 @@ std::shared_ptr<const FMaterialSnapshot> ScissorMaterial(FFixture& InFixture, bo
 	return Instance.Freeze();
 }
 
+void TestPolicyChanges(FFixture& InFixture)
+{
+	const auto Data = Quad();
+	auto Asset = *Data->Materials[0]->Asset;
+	// A renamed Model-compatible shader exercises declared capability without the legacy filename predicate.
+	std::filesystem::copy_file(TestShaderRoot() / "Model.hlsl", TestShaderRoot() / "DeclaredCoverage.hlsl",
+	                           std::filesystem::copy_options::overwrite_existing);
+	const auto Object = InFixture.Add(Data);
+	const std::array Objects{Object};
+	std::size_t ExpectedOrange{};
+	const std::array Policies{true, false, true, true, false, true};
+	for (std::size_t Index = 0; Index < Policies.size(); ++Index)
+	{
+		const bool bEnabled = Policies[Index];
+		for (auto& Pass : Asset.Passes)
+		{
+			// ShadowDepth retains its authored Disabled policy; only color passes participate in fallback.
+			if (Pass.Usage != MaterialUsages::ShadowDepth)
+			{
+				Pass.SilhouettePolicy =
+				    bEnabled ? EMaterialSilhouettePolicy::ModelShader : EMaterialSilhouettePolicy::Disabled;
+			}
+		}
+		const auto Bytes = EncodeAsset(RecordType<FMaterialAsset>(), &Asset);
+		const auto Document = DecodeAsset(std::make_shared<const std::vector<std::byte>>(Bytes.Bytes));
+		auto MaterialData = std::make_shared<FMaterialAssetData>(*Data->Materials[0]);
+		MaterialData->Asset = std::make_shared<const FMaterialAsset>(ReadValue<FMaterialAsset>(Document.Object));
+		auto Replacement = std::make_shared<FSceneModelData>(*Data);
+		Replacement->Materials[0] = std::move(MaterialData);
+		Replacement->MaterialSnapshots.clear();
+		auto Model = *InFixture.Scene.Find(Object);
+		Model.Data = std::move(Replacement);
+		InFixture.Scene.Update(Object, Model);
+		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+		FImage Image;
+		do
+		{
+			Image = InFixture.Frame(Objects);
+		} while (
+		    (!(InFixture.Statistics.SelectionOutline.Items + InFixture.Statistics.SelectionOutline.UnsupportedItems) ||
+		     InFixture.Statistics.SelectionOutline.PendingItems) &&
+		    std::chrono::steady_clock::now() < Deadline);
+		HYP_CHECK(!InFixture.Statistics.SelectionOutline.PendingItems);
+		if (bEnabled)
+		{
+			HYP_CHECK(Orange(Image) > 100);
+			HYP_CHECK(InFixture.Statistics.SelectionOutline.UnsupportedItems == 0);
+			if (ExpectedOrange)
+			{
+				HYP_CHECK(Orange(Image) == ExpectedOrange);
+			}
+			ExpectedOrange = Orange(Image);
+		}
+		else
+		{
+			HYP_CHECK(Orange(Image) == 0);
+			HYP_CHECK(InFixture.Statistics.SelectionOutline.UnsupportedItems == 1);
+		}
+		// Each filename independently exercises an enable/disable/enable publication sequence.
+		if (Index == 2)
+		{
+			for (auto& Pass : Asset.Passes)
+			{
+				Pass.Vertex.Path = "DeclaredCoverage.hlsl";
+				if (!Pass.Pixel.Path.empty())
+				{
+					Pass.Pixel.Path = "DeclaredCoverage.hlsl";
+				}
+			}
+		}
+	}
+	InFixture.Scene.Remove(Object);
+}
+
 void TestScissorEquivalence(FFixture& InFixture)
 {
 	const auto Bounded = ScissorMaterial(InFixture, false);
@@ -529,6 +607,7 @@ int main()
 		TestOverlap(Fixture);
 		TestCoverage(Fixture);
 		TestCustomCoverage(Fixture);
+		TestPolicyChanges(Fixture);
 		TestScissorEquivalence(Fixture);
 		TestDisplacedBounds(Fixture);
 		TestLifecycle(Fixture);

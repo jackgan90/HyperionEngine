@@ -354,7 +354,7 @@ void CheckRejectedOptions(FFixture& InFixture)
 			    }
 			    else
 			    {
-				    Invalid.DebugMode = Case == 1 ? 7 : 0xffffffffu;
+				    Invalid.DebugMode = static_cast<EGBufferVisualizer>(Case == 1 ? 7 : 0xffffffffu);
 			    }
 			    Rejects(
 			        [&]
@@ -404,12 +404,12 @@ void CheckVisualizerPixels(FFixture& InFixture)
 	for (const auto Layout : {FGBufferLayout{}, FGBufferLayout::HighPrecision()})
 	{
 		InFixture.Settings.GBuffer = Layout;
-		InFixture.Settings.DebugMode = 0;
+		InFixture.Settings.DebugMode = EGBufferVisualizer::Lit;
 		const auto Lit = InFixture.Frame();
 		Similar(Lit, InFixture.Frame(ESceneRenderPipeline::Forward), .02f);
 		for (std::uint32_t Raw = 1; Raw <= 6; ++Raw)
 		{
-			InFixture.Settings.DebugMode = Raw;
+			InFixture.Settings.DebugMode = ParseGBufferVisualizer(Raw);
 			const auto Image = InFixture.Frame();
 			const auto Value = Expected[Raw - 1];
 			const std::array Channels{Value.X, Value.Y, Value.Z};
@@ -418,11 +418,11 @@ void CheckVisualizerPixels(FFixture& InFixture)
 				HYP_CHECK(std::abs(Pixel(Image, 192, 144, Channel) - ExpectedSrgb(Channels[Channel])) < .012f);
 			}
 			const auto Index = RasterOptionIndex(Presentation, ParseGBufferVisualizer(Raw));
-			InFixture.Settings.DebugMode = ToVisualizerWireValue(RasterOptionIdentity(Presentation, Index));
+			InFixture.Settings.DebugMode = RasterOptionIdentity(Presentation, Index);
 			Similar(Image, InFixture.Frame(), .0041f);
 		}
 		CheckRejectedOptions(InFixture);
-		InFixture.Settings.DebugMode = 0;
+		InFixture.Settings.DebugMode = EGBufferVisualizer::Lit;
 		Similar(Lit, InFixture.Frame(), .0041f);
 	}
 	Surface.Remove();
@@ -1536,11 +1536,11 @@ void CheckReplacementAndRecovery(FFixture& InFixture)
 	HYP_CHECK(InFixture.DeviceStats.PipelinesCreated == Before.PipelinesCreated);
 	HYP_CHECK(InFixture.DeviceStats.DescriptorAllocations == Before.DescriptorAllocations);
 	HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes <= Before.GpuAllocationBytes + 1024 * 1024);
-	InFixture.Settings.DebugMode = 2;
-	InFixture.Shadows.DebugMode = 2;
+	InFixture.Settings.DebugMode = EGBufferVisualizer::ShadingNormal;
+	InFixture.Shadows.DebugMode = EDirectionalShadowPreview::Cascade0Depth;
 	InFixture.Frame();
-	InFixture.Settings.DebugMode = 0;
-	InFixture.Shadows.DebugMode = 0;
+	InFixture.Settings.DebugMode = EGBufferVisualizer::Lit;
+	InFixture.Shadows.DebugMode = EDirectionalShadowPreview::Lit;
 	Model.Remove();
 	InFixture.Shadows.bEnabled = false;
 }
@@ -1580,14 +1580,14 @@ void CheckContactRoutes(FFixture& InFixture)
 	InFixture.Frame(ESceneRenderPipeline::Forward);
 	HYP_CHECK(!InFixture.Statistics.bContactShadows && InFixture.Statistics.HierarchicalDepth.Dispatches == 0);
 	InFixture.Settings.ContactShadows.bEnabled = false;
-	InFixture.Settings.ContactShadows.DebugMode = 2;
+	InFixture.Settings.ContactShadows.DebugMode = EContactShadowPreview::HierarchicalDepth;
 	InFixture.Frame();
 	HYP_CHECK(!InFixture.Statistics.bContactShadows && InFixture.Statistics.HierarchicalDepth.Consumers == 1);
 	InFixture.Settings.ContactShadows.bEnabled = true;
 	InFixture.Frame();
 	HYP_CHECK(InFixture.Statistics.HierarchicalDepth.Consumers == 2 &&
 	          InFixture.Statistics.HierarchicalDepth.Products == 1);
-	InFixture.Settings.ContactShadows.DebugMode = 0;
+	InFixture.Settings.ContactShadows.DebugMode = EContactShadowPreview::Lit;
 	InFixture.View.Viewport = FViewport{32, 24, 320, 240, .2f, .8f};
 	InFixture.Frame();
 	InFixture.View.Viewport.reset();

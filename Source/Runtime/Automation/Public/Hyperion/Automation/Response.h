@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Automation/AutomationErrors.h"
 #include "Hyperion/Reflection/Wire.h"
 
 namespace Hyperion
@@ -42,7 +43,7 @@ struct FAutomationResponseView
 };
 
 FArchiveNode AutomationCompleted(FArchiveNode InResult);
-FArchiveNode AutomationFailure(std::string InCode, std::string InMessage, std::string InPath = {},
+FArchiveNode AutomationFailure(FErrorCode InCode, std::string InMessage, std::string InPath = {},
                                FArchiveNode InDetails = FArchiveNode(FArchiveNode::FObject{}));
 FArchiveNode AutomationJobResponse(EAutomationStatus InStatus, std::string_view InJob, std::string_view InOperation,
                                    bool bInCancellable, const FArchiveNode& InOutcome = {});

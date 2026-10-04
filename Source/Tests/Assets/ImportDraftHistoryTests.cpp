@@ -23,7 +23,7 @@ std::string Snapshot(const FImportDraftInfo& InState)
 	return WriteJson(WriteRecordWire(RecordType<FImportDraftInfo>(), &InState));
 }
 
-template<class TAction> void CheckHistoryError(TAction InAction, std::string_view InCode, std::string_view InMessage)
+template<class TAction> void CheckHistoryError(TAction InAction, FErrorCodeId InCode, std::string_view InMessage)
 {
 	bool bRejected{};
 	try
@@ -92,7 +92,7 @@ void CheckRejectedHistory(FAssetImportWorkspace& InImports, const FImportDraftIn
 		    {
 			    (void)InImports.DraftHistory({InState.Draft, InState.Generation, Action});
 		    },
-		    "invalid_arguments", "History requires available undo, redo or reset");
+		    AssetImportErrors::InvalidArguments, "History requires available undo, redo or reset");
 		HYP_CHECK(Snapshot(InImports.Draft({InState.Draft})) == Before);
 	}
 	CheckHistoryError(
@@ -100,13 +100,13 @@ void CheckRejectedHistory(FAssetImportWorkspace& InImports, const FImportDraftIn
 	    {
 		    (void)InImports.DraftHistory({InState.Draft, InState.Generation - 1, "unknown"});
 	    },
-	    "stale_revision", "Import draft changed before the operation");
+	    AssetImportErrors::StaleRevision, "Import draft changed before the operation");
 	CheckHistoryError(
 	    [&]
 	    {
 		    (void)InImports.DraftHistory({"missing", 0, "unknown"});
 	    },
-	    "not_found", "Import draft was discarded or belongs to another root");
+	    AssetImportErrors::NotFound, "Import draft was discarded or belongs to another root");
 	for (const auto Action : {EImportDraftHistoryAction::Invalid, static_cast<EImportDraftHistoryAction>(999),
 	                          EImportDraftHistoryAction::Undo, EImportDraftHistoryAction::Redo})
 	{
@@ -115,7 +115,7 @@ void CheckRejectedHistory(FAssetImportWorkspace& InImports, const FImportDraftIn
 		    {
 			    (void)InImports.DraftHistory({InState.Draft, InState.Generation}, Action);
 		    },
-		    "invalid_arguments", "History requires available undo, redo or reset");
+		    AssetImportErrors::InvalidArguments, "History requires available undo, redo or reset");
 	}
 	HYP_CHECK(Snapshot(InImports.Draft({InState.Draft})) == Before);
 }
@@ -164,7 +164,7 @@ void CheckImportDraftHistory(Hyperion::FTaskSystem& InTasks, Hyperion::FIOServic
 	    {
 		    (void)InImports.DraftHistory({Typed.Draft, Typed.Generation - 1, "unknown"});
 	    },
-	    "busy", "Wait for import draft work to finish");
+	    AssetImportErrors::Busy, "Wait for import draft work to finish");
 	HYP_CHECK(Snapshot(InImports.Draft({Typed.Draft})) == Preparing);
 	Typed = WaitDraft(InTasks, InImports, std::move(Typed));
 	CheckRejectedHistory(InImports, Typed);

@@ -170,16 +170,16 @@ void CheckSettingsCompatibility()
 	HYP_CHECK(Legacy.Properties[20].Kind == EPropertyKind::Integer);
 	HYP_CHECK(Legacy.Properties[20].Minimum == 0 && Legacy.Properties[20].Maximum == 6);
 	FAppSettings Settings;
-	HYP_CHECK(Settings.RenderPipeline == "deferred" && Settings.GBufferLayout == "compact" &&
-	          Settings.GBufferDebug == 0);
+	HYP_CHECK(Settings.RenderPipeline == ESceneRenderPipeline::Deferred &&
+	          Settings.GBufferLayout == EGBufferPreset::Compact && Settings.GBufferDebug == EGBufferVisualizer::Lit);
 	FArchiveNode::FObject Examples;
 	for (const std::string Pipeline : {"deferred", "forward"})
 	{
 		for (const std::string Preset : {"compact", "high"})
 		{
-			Settings.RenderPipeline = Pipeline;
-			Settings.GBufferLayout = Preset;
-			Settings.GBufferDebug = 6;
+			Settings.RenderPipeline = ParseSceneRenderPipeline(Pipeline);
+			Settings.GBufferLayout = ParseGBufferPreset(Preset);
+			Settings.GBufferDebug = EGBufferVisualizer::GeometryNormal;
 			const auto Wire = WriteRecordWire(Record, &Settings);
 			const auto Loaded = std::static_pointer_cast<FAppSettings>(ReadRecordWire(Record, Wire));
 			HYP_CHECK(EqualAppSettings(Settings, *Loaded));

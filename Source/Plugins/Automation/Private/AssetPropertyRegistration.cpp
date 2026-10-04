@@ -117,7 +117,8 @@ template<auto Member> void RegisterField(FOperationCatalog& InCatalog, FAssetAut
 		                    const auto& Request = *static_cast<const FAssetPropertyQuery*>(InRequest);
 		                    if (InProvider->Info({Request.Document}).Generation != Request.Generation)
 		                    {
-			                    throw FAutomationError("stale_revision", "Asset changed; restart the property query");
+			                    throw FAutomationError(AutomationErrors::StaleRevision,
+			                                           "Asset changed; restart the property query");
 		                    }
 		                    if (!Request.Limit || Request.Limit > 100)
 		                    {

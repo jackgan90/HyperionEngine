@@ -17,6 +17,7 @@
 #include "Hyperion/Core/Logging/LogHistory.h"
 #include "Hyperion/Core/ProfilingControl.h"
 #include "Hyperion/Core/ProfilingSession.h"
+#include "Hyperion/Renderer/ProfilingHud.h"
 #include "Hyperion/Renderer/RenderBenchmark.h"
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneLightControls.h"
@@ -119,7 +120,7 @@ private:
 	bool bShowRenderSettings{};
 	bool bShowStatusHud{};
 	bool bShowProfilingHud{};
-	std::uint32_t ProfilingCategories = 1;
+	EProfilingHudCategory ProfilingCategories = EProfilingHudCategory::Overview;
 	FRenderDiagnostics HudDiagnostics;
 	std::uint64_t HudUpdated{};
 	ESceneCullingMode CullingMode = ESceneCullingMode::Bvh;

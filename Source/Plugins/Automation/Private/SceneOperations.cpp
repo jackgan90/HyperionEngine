@@ -69,7 +69,7 @@ void RegisterSceneSave(FOperationCatalog& InCatalog, FSceneEditDocument* InDocum
 	    std::move(Info),
 	    [InDocument](const FSceneSaveRequest& InRequest)
 	    {
-		    return InvokeSceneOperation(
+		    return InvokeAutomation(
 		        [&]() -> TPendingOperation<FSceneDocumentInfo>
 		        {
 			        InDocument->RequireIdle(InRequest.Document, InRequest.Revision);
@@ -90,7 +90,7 @@ void RegisterSceneSave(FOperationCatalog& InCatalog, FSceneEditDocument* InDocum
 				                }
 				                catch (const std::exception& Error)
 				                {
-					                throw FAutomationError("save_failed", Error.what());
+					                throw FAutomationError(AutomationErrors::SaveFailed, Error.what());
 				                }
 				                return DescribeSceneDocument(*InDocument);
 			                }};

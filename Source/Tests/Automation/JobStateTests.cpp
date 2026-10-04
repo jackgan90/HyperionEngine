@@ -59,7 +59,7 @@ struct FJobFixture
 				    ++Polls;
 				    if (Completion == ECompletion::Failure)
 				    {
-					    throw FAutomationError("test_failure", "Controlled failure");
+					    throw FAutomationError(FErrorCode::FromExternal("test_failure"), "Controlled failure");
 				    }
 				    return Completion == ECompletion::Success ? std::optional(FJobStateTestValue{}) : std::nullopt;
 			    };
@@ -113,7 +113,7 @@ void CheckTerminalStates()
 	}
 	catch (const FAutomationError& Error)
 	{
-		bExpired = Error.Code == "not_found";
+		bExpired = Error.Code == AutomationErrors::NotFound;
 	}
 	HYP_CHECK(bExpired && Text(Session.GetJob(Second), "status") == "failed");
 	const auto Cancelled = Session.CancelJob(Third);
@@ -137,7 +137,7 @@ void CheckStoppedAdmission()
 	}
 	catch (const FAutomationError& Error)
 	{
-		bRejected = Error.Code == "not_cancellable";
+		bRejected = Error.Code == AutomationErrors::NotCancellable;
 	}
 	HYP_CHECK(bRejected && Session.PendingCount() == 1);
 	Session.StopAdmission();
@@ -160,7 +160,8 @@ void CheckSnapshot(FArchiveNode InValue, std::string_view InExpected)
 void CheckResponseSnapshots()
 {
 	CheckSnapshot(
-	    AutomationFailure("test_failure", "Controlled failure", "field", ParseJson(R"({"cause":1})")),
+	    AutomationFailure(FErrorCode::FromExternal("test_failure"), "Controlled failure", "field",
+	                      ParseJson(R"({"cause":1})")),
 	    R"({"status":"failed","error":{"code":"test_failure","message":"Controlled failure","path":"field","details":{"cause":1}}})");
 	FJobFixture Fixture;
 	FAutomationSession Session(Fixture.Catalog);

@@ -69,7 +69,7 @@ void FSceneEditDocument::RestoreDeletedSubtree(std::size_t InIndex)
 			const auto* Current = Target().FindNode(Edit.Handle);
 			if (!Current)
 			{
-				throw FSceneEditError("stale_handle", "Child no longer exists");
+				throw FSceneEditError(SceneEditErrors::StaleHandle, "Child no longer exists");
 			}
 			auto Child = *Current;
 			Child.Parent() = Edit.Before.Parent();
@@ -107,7 +107,7 @@ void FSceneEditDocument::RestoreHistory(std::size_t InIndex, bool bInAfter)
 		}
 		else if (!Scene.RemoveNodeKeepChildren(Entry.Handle))
 		{
-			throw FSceneEditError("stale_handle", "Delete target no longer exists");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "Delete target no longer exists");
 		}
 		else if (Selected.Contains(Entry.Handle))
 		{
@@ -128,7 +128,7 @@ void FSceneEditDocument::RestoreHistory(std::size_t InIndex, bool bInAfter)
 		}
 		if (!Scene.EditNodes(std::move(Edits), Scene.Revision()))
 		{
-			throw FSceneEditError("stale_handle", "History targets no longer exist");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "History targets no longer exist");
 		}
 	}
 	else if (!Entry.DeletedSubtree.empty() && !bInAfter)
@@ -142,7 +142,7 @@ void FSceneEditDocument::RestoreHistory(std::size_t InIndex, bool bInAfter)
 			const auto Roots = Entry.DeletedRoots.empty() ? std::vector{Entry.Handle} : Entry.DeletedRoots;
 			if (!Scene.RemoveSubtrees(Roots))
 			{
-				throw FSceneEditError("stale_handle", "Undo target no longer exists");
+				throw FSceneEditError(SceneEditErrors::StaleHandle, "Undo target no longer exists");
 			}
 			if (!Entry.DeletedSubtree.empty())
 			{
@@ -169,7 +169,7 @@ void FSceneEditDocument::RestoreHistory(std::size_t InIndex, bool bInAfter)
 		}
 		else if (!Scene.EditNodes({{Entry.Handle, *Node}}, Scene.Revision()))
 		{
-			throw FSceneEditError("stale_handle", "History target no longer exists");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "History target no longer exists");
 		}
 	}
 	Scene.SetSettings(bInAfter ? Entry.AfterSettings : Entry.BeforeSettings);
@@ -183,7 +183,7 @@ void FSceneEditDocument::Undo()
 {
 	if (!bHistory)
 	{
-		throw FSceneEditError("unavailable", "This host does not provide scene history");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "This host does not provide scene history");
 	}
 	FinishInteraction();
 	if (!State.HistoryCursor)
@@ -204,7 +204,7 @@ void FSceneEditDocument::Redo()
 {
 	if (!bHistory)
 	{
-		throw FSceneEditError("unavailable", "This host does not provide scene history");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "This host does not provide scene history");
 	}
 	FinishInteraction();
 	if (State.HistoryCursor == State.History.size())

@@ -102,13 +102,13 @@ void FAutomationStdioPlugin::ReceiveJsonLine(std::string_view InMessage)
 		const auto* Fields = std::get_if<FArchiveNode::FObject>(&Request.Value);
 		if (!Fields || !Fields->contains("method"))
 		{
-			throw FAutomationError("invalid_request", "Expected {id?, method, params?}");
+			throw FAutomationError(AutomationErrors::InvalidRequest, "Expected {id?, method, params?}");
 		}
 		for (const auto& [Key, Value] : *Fields)
 		{
 			if (Key != "id" && Key != "method" && Key != "params")
 			{
-				throw FAutomationError("invalid_request", "Unknown request field", Key);
+				throw FAutomationError(AutomationErrors::InvalidRequest, "Unknown request field", Key);
 			}
 		}
 		if (const auto It = Fields->find("id"); It != Fields->end())
@@ -117,13 +117,13 @@ void FAutomationStdioPlugin::ReceiveJsonLine(std::string_view InMessage)
 			    !std::holds_alternative<std::uint64_t>(It->second.Value) &&
 			    !std::holds_alternative<std::int64_t>(It->second.Value))
 			{
-				throw FAutomationError("invalid_request", "id must be a string or integer", "id");
+				throw FAutomationError(AutomationErrors::InvalidRequest, "id must be a string or integer", "id");
 			}
 			Id = It->second;
 		}
 		if (Replies.size() >= 32)
 		{
-			throw FAutomationError("busy", "Too many pending stream requests");
+			throw FAutomationError(AutomationErrors::Busy, "Too many pending stream requests");
 		}
 		auto RequestState =
 		    Router->Begin(ReadValue<std::string>(Fields->at("method")),
@@ -170,7 +170,7 @@ void FAutomationStdioPlugin::WriteJsonResult(const FArchiveNode& InId, FArchiveN
 		Response = WriteAutomationResponse(FArchiveNode(FArchiveNode::FObject{
 		    {"id", Id},
 		    {"result",
-		     AutomationFailure("result_unavailable",
+		     AutomationFailure(AutomationErrors::ResultUnavailable,
 		                       std::string("Response encoding failed after execution; inspect current state before any "
 		                                   "retry: ") +
 		                           Error.what())}}));

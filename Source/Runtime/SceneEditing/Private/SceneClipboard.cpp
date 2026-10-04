@@ -50,7 +50,7 @@ FSceneClipboardSnapshot CaptureClipboard(const FSceneEditDocument& InDocument)
 	{
 		if (!InDocument.Target().FindNode(Handle))
 		{
-			throw FSceneEditError("stale_handle", "A selected object no longer exists");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "A selected object no longer exists");
 		}
 	}
 	Result.Roots = InDocument.SelectedRoots();
@@ -71,20 +71,21 @@ FSceneClipboardSnapshot CaptureClipboard(const FSceneEditDocument& InDocument)
 	}
 	for (auto& [Handle, Node] : Result.Nodes)
 	{
-		VisitSceneClipboardReferences(
-		    Node,
-		    [&](std::string& InId)
-		    {
-			    if (!InId.empty() && !Ids.contains(InId))
-			    {
-				    const auto Reference = InDocument.Target().FindHandle(InId);
-				    if (!Reference.Scene)
-				    {
-					    throw FSceneEditError("stale_handle", "Clipboard refers to a missing scene object: " + InId);
-				    }
-				    Result.External.emplace(InId, Reference);
-			    }
-		    });
+		VisitSceneClipboardReferences(Node,
+		                              [&](std::string& InId)
+		                              {
+			                              if (!InId.empty() && !Ids.contains(InId))
+			                              {
+				                              const auto Reference = InDocument.Target().FindHandle(InId);
+				                              if (!Reference.Scene)
+				                              {
+					                              throw FSceneEditError(SceneEditErrors::StaleHandle,
+					                                                    "Clipboard refers to a missing scene object: " +
+					                                                        InId);
+				                              }
+				                              Result.External.emplace(InId, Reference);
+			                              }
+		                              });
 	}
 	return Result;
 }
@@ -117,7 +118,7 @@ FSceneClipboardInfo FSceneEditDocument::ClipboardInfo() const
 	}
 	catch (const std::exception& Error)
 	{
-		throw FSceneEditError("clipboard_error", Error.what());
+		throw FSceneEditError(SceneEditErrors::ClipboardError, Error.what());
 	}
 	if (!ClipboardSnapshot || ClipboardSnapshot->Document != Id() || Token.empty() || Token != ClipboardSnapshot->Token)
 	{
@@ -148,7 +149,7 @@ FSceneClipboardInfo FSceneEditDocument::CopySelection(const std::string& InDocum
 	RequireIdle(InDocument, InRevision);
 	if (!HasClipboardProvider())
 	{
-		throw FSceneEditError("unavailable", "This host has no scene clipboard provider");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "This host has no scene clipboard provider");
 	}
 	if (!Selected)
 	{
@@ -171,7 +172,7 @@ FSceneClipboardInfo FSceneEditDocument::CopySelection(const std::string& InDocum
 	}
 	catch (const std::exception& Error)
 	{
-		throw FSceneEditError("clipboard_error", Error.what());
+		throw FSceneEditError(SceneEditErrors::ClipboardError, Error.what());
 	}
 	ClipboardSnapshot = std::move(Snapshot);
 	return {true,
@@ -231,7 +232,8 @@ void FSceneEditDocument::PasteClipboard(const std::string& InDocument, std::uint
 	const auto Info = ClipboardInfo();
 	if (!Info.bCanPaste)
 	{
-		throw FSceneEditError(Info.bAvailable ? "clipboard_unavailable" : "unavailable", Info.Reason);
+		throw FSceneEditError(Info.bAvailable ? SceneEditErrors::ClipboardUnavailable : SceneEditErrors::Unavailable,
+		                      Info.Reason);
 	}
 	auto Nodes = PrepareClipboardPaste();
 	RequireIdle(InDocument, InRevision);

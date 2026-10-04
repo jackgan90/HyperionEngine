@@ -50,7 +50,7 @@ void FSceneEditDocument::RestoreCreatedBatch(std::size_t InIndex, bool bInAfter)
 		auto BeforeSelection = Entry.BeforeSelection;
 		if (!Target().RemoveSubtrees(Entry.CreatedRoots))
 		{
-			throw FSceneEditError("stale_handle", "Pasted objects no longer exist");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "Pasted objects no longer exist");
 		}
 		Selected = std::move(BeforeSelection);
 		return;

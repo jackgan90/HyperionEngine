@@ -97,7 +97,8 @@ std::shared_ptr<FPendingImageOutput> PrepareImageOutput(const FImageOutputReques
 	}
 	if (!InRequest.bOverwrite && std::filesystem::exists(Path))
 	{
-		throw FSceneEditError("conflict", "Screenshot exists; choose another path or explicitly enable overwrite");
+		throw FSceneEditError(SceneEditErrors::Conflict,
+		                      "Screenshot exists; choose another path or explicitly enable overwrite");
 	}
 	auto Pending = std::make_shared<FPendingImageOutput>();
 	Pending->Request = InRequest;

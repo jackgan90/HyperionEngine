@@ -5,7 +5,7 @@ namespace Hyperion
 {
 void IRenderCaptureControl::SetRenderCapturePreference(bool)
 {
-	throw FSceneEditError("unavailable", "This host configures RenderDoc through startup settings");
+	throw FSceneEditError(SceneEditErrors::Unavailable, "This host configures RenderDoc through startup settings");
 }
 
 FRenderCaptureHudInfo IRenderCaptureControl::RenderCaptureHudInfo() const
@@ -15,7 +15,7 @@ FRenderCaptureHudInfo IRenderCaptureControl::RenderCaptureHudInfo() const
 
 void IRenderCaptureControl::SetRenderCaptureHudPreference(bool)
 {
-	throw FSceneEditError("unavailable", "This host does not provide a RenderDoc HUD preference");
+	throw FSceneEditError(SceneEditErrors::Unavailable, "This host does not provide a RenderDoc HUD preference");
 }
 
 template<> const FRecordDescriptor& RecordType<FRenderCaptureHudInfo>()

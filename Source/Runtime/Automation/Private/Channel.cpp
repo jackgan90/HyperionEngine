@@ -36,7 +36,7 @@ void FAutomationChannel::ValidatePrefix() const
 {
 	if (Input.size() >= ChannelFramePrefixBytes && (!FrameSize(Input) || FrameSize(Input) > MaxFrame))
 	{
-		throw FTransportError("protocol_error", "Frame length exceeds channel limits");
+		throw FTransportError(TransportErrors::ProtocolError, "Frame length exceeds channel limits");
 	}
 }
 
@@ -46,7 +46,7 @@ void FAutomationChannel::Poll(bool bInSend)
 	auto Bytes = Connection->Receive();
 	if (Bytes.size() > MaxBufferedChannelFrames * (MaxFrame + ChannelFramePrefixBytes) - Input.size())
 	{
-		throw FTransportError("protocol_error", "Buffered input limit exceeded");
+		throw FTransportError(TransportErrors::ProtocolError, "Buffered input limit exceeded");
 	}
 	Input.insert(Input.end(), Bytes.begin(), Bytes.end());
 	ValidatePrefix();
@@ -73,13 +73,13 @@ void FAutomationChannel::Send(std::string_view InMessage)
 {
 	if (InMessage.empty() || InMessage.size() > MaxFrame)
 	{
-		throw FTransportError("protocol_error", "Output frame exceeds channel limits");
+		throw FTransportError(TransportErrors::ProtocolError, "Output frame exceeds channel limits");
 	}
 	if (Output.size() >= MaxQueuedChannelFrames ||
 	    InMessage.size() + ChannelFramePrefixBytes >
 	        MaxBufferedChannelFrames * (MaxFrame + ChannelFramePrefixBytes) - OutputBytes)
 	{
-		throw FTransportError("backpressure", "Peer output queue is full");
+		throw FTransportError(TransportErrors::Backpressure, "Peer output queue is full");
 	}
 	FTransportBytes Bytes(ChannelFramePrefixBytes + InMessage.size());
 	for (std::size_t Index = 0; Index < ChannelFramePrefixBytes; ++Index)

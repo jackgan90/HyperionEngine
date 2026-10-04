@@ -95,4 +95,5 @@ template<> std::span<const TRecordEnumEntry<EMaterialStencilOp>> RecordEnumEntri
 template<> std::span<const TRecordEnumEntry<EMaterialBlendFactor>> RecordEnumEntries<EMaterialBlendFactor>();
 template<> std::span<const TRecordEnumEntry<EMaterialBlendOp>> RecordEnumEntries<EMaterialBlendOp>();
 template<> std::span<const TRecordEnumEntry<EMaterialQueue>> RecordEnumEntries<EMaterialQueue>();
+template<> std::span<const TRecordEnumEntry<EMaterialSilhouettePolicy>> RecordEnumEntries<EMaterialSilhouettePolicy>();
 } // namespace Hyperion

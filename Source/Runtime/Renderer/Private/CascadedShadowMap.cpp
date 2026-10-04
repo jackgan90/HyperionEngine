@@ -283,7 +283,7 @@ std::vector<FRenderView> FCascadedShadowMap::Views(const FRenderView& InMain) co
 			View.Eye = Data[Index].Eye;
 			View.Width = Settings.Resolution;
 			View.Height = Settings.Resolution;
-			View.Usage = "ShadowDepth";
+			View.Usage = MaterialUsages::ShadowDepth;
 			View.Policy = FRenderViewPolicy::Shadow();
 			View.bSkipMissingPass = true;
 			View.bInstanceBatching = InMain.bInstanceBatching;

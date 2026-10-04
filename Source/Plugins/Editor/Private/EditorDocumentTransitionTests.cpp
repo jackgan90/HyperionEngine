@@ -40,7 +40,7 @@ void PrepareRoot(FEditorDocumentTransition& InTransition, bool bInNeedsDecision 
 void CheckOpenAndCancel()
 {
 	FEditorDocumentTransition Transition;
-	Check(Transition.CloseStatus() == "idle" && Transition.CloseError().empty());
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Idle && Transition.CloseError().empty());
 	Check(!Transition.TakeDecisionRequest() && !Transition.TakeRootRequest());
 	Rejects(
 	    [&]
@@ -77,6 +77,7 @@ void CheckDirtyAndBusyAdmission()
 		FEditorDocumentTransition Transition;
 		Check(!Transition.RequestWindowClose(Progress));
 		Check(Transition.HasPendingClose() && Transition.IsDecisionVisible());
+		Check(Transition.ClosePhase() == EEditorTransitionPhase::AwaitingDecision);
 		Transition.Cancel();
 		Transition.QueueRoot("Root-B");
 		Check(Transition.TakeRootRequest().has_value());
@@ -84,12 +85,13 @@ void CheckDirtyAndBusyAdmission()
 		Check(Transition.IsDecisionVisible() && !Transition.TakeRootCommit({}));
 	}
 	FEditorDocumentTransition Clean;
-	Check(Clean.RequestWindowClose({}) && Clean.CloseStatus() == "closing");
+	Check(Clean.RequestWindowClose({}) && Clean.ClosePhase() == EEditorTransitionPhase::Ready);
 	Check(!Clean.RequestWindowClose({.bSceneDirty = true}));
-	Check(Clean.HasPendingClose() && Clean.IsDecisionVisible() && Clean.CloseStatus() == "closing");
+	Check(Clean.HasPendingClose() && Clean.IsDecisionVisible() &&
+	      Clean.ClosePhase() == EEditorTransitionPhase::Reconfirming);
 	Check(Clean.ConfirmDiscard().Target == EEditorTransitionTarget::Close);
 	Clean.Cancel();
-	Check(!Clean.HasCloseRequest() && Clean.CloseStatus() == "idle");
+	Check(!Clean.HasCloseRequest() && Clean.ClosePhase() == EEditorTransitionPhase::Idle);
 }
 
 void CheckRootAdmissionAndDiscard()
@@ -174,9 +176,9 @@ void CheckCancellationDuringSaves()
 	Check(!Transition.SceneSaveFailed("late failure") && !Transition.TakeDecisionRequest());
 	Transition.BeginSave(EEditorTransitionTarget::Close);
 	Transition.SaveAdmitted(EEditorTransitionTarget::Close, true);
-	Check(Transition.CloseStatus() == "saving");
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Saving);
 	Transition.Cancel();
-	Check(!Transition.AdvanceCloseSave({}) && Transition.CloseStatus() == "idle");
+	Check(!Transition.AdvanceCloseSave({}) && Transition.ClosePhase() == EEditorTransitionPhase::Idle);
 	Check(!Transition.SceneSaveFailed("late failure") && Transition.CloseError().empty());
 	for (const auto Target : {EEditorTransitionTarget::Root, EEditorTransitionTarget::Close})
 	{
@@ -185,6 +187,8 @@ void CheckCancellationDuringSaves()
 			PrepareRoot(Transition);
 		}
 		Transition.AwaitSavePath(Target);
+		const auto Phase = Target == EEditorTransitionTarget::Root ? Transition.RootPhase() : Transition.ClosePhase();
+		Check(Phase == EEditorTransitionPhase::AwaitingSavePath);
 		Check(!Transition.IsDecisionVisible());
 		Check(!Transition.AdvanceRootSave({}) && !Transition.AdvanceCloseSave({}));
 		Transition.CancelSaveDialog();
@@ -197,32 +201,33 @@ void CheckCloseFailureAndCompletion()
 {
 	FEditorDocumentTransition Transition;
 	Check(!Transition.RequestWindowClose({.bSceneDirty = true}));
-	Check(Transition.HasPendingClose() && Transition.CloseStatus() == "idle");
+	Check(Transition.HasPendingClose() && Transition.ClosePhase() == EEditorTransitionPhase::AwaitingDecision);
 	Transition.BeginSave(EEditorTransitionTarget::Close);
 	Transition.SaveRejected(EEditorTransitionTarget::Close, "admission failure");
-	Check(Transition.CloseStatus() == "failed" && Transition.CloseError() == "admission failure");
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Failed && Transition.CloseError() == "admission failure");
 	Check(Transition.HasPendingClose() && !Transition.AdvanceCloseSave({}));
 	Transition.BeginSave(EEditorTransitionTarget::Close);
 	Transition.SaveAdmitted(EEditorTransitionTarget::Close, true);
-	Check(Transition.CloseStatus() == "saving" && Transition.CloseError().empty());
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Saving && Transition.CloseError().empty());
 	Check(!Transition.IsDecisionVisible());
 	Check(!Transition.AdvanceCloseSave({.bSceneSaving = true}));
 	Check(!Transition.AdvanceCloseSave({.bAssetsSaving = true}));
 	Check(!Transition.AdvanceCloseSave({.bPendingAssetEdits = true}));
 	Check(!Transition.AdvanceCloseSave({.bSaveDialog = true}));
 	Check(!Transition.SceneSaveFailed("disk failure"));
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Saving && Transition.CloseError() == "disk failure");
 	Check(!Transition.AdvanceCloseSave({.bSceneDirty = true}));
-	Check(Transition.CloseStatus() == "failed" && Transition.CloseError() == "disk failure");
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Failed && Transition.CloseError() == "disk failure");
 	Check(Transition.HasPendingClose() && Transition.IsDecisionVisible() && Transition.TakeDecisionRequest());
 	Transition.Cancel();
-	Check(Transition.CloseStatus() == "idle" && !Transition.HasCloseRequest());
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Idle && !Transition.HasCloseRequest());
 	Transition.BeginSave(EEditorTransitionTarget::Close);
 	Transition.SaveAdmitted(EEditorTransitionTarget::Close, false);
 	Check(!Transition.AdvanceCloseSave({.bAssetsDirty = true}));
-	Check(Transition.CloseStatus() == "failed" && !Transition.CloseError().empty());
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Failed && !Transition.CloseError().empty());
 	Transition.BeginSave(EEditorTransitionTarget::Close);
 	Transition.SaveAdmitted(EEditorTransitionTarget::Close, false);
-	Check(Transition.AdvanceCloseSave({}) && Transition.CloseStatus() == "closing");
+	Check(Transition.AdvanceCloseSave({}) && Transition.ClosePhase() == EEditorTransitionPhase::Ready);
 	Check(!Transition.HasPendingClose() && !Transition.IsDecisionVisible());
 	Check(!Transition.AdvanceCloseSave({}));
 }
@@ -236,7 +241,7 @@ void CheckOverlappingTargets()
 	Check(Transition.HasPendingRoot() && Transition.HasPendingClose());
 	Check(Transition.ConfirmDiscard().Target == EEditorTransitionTarget::Close);
 	Transition.CompleteClose();
-	Check(Transition.CloseStatus() == "closing" && !Transition.HasPendingRoot());
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Ready && !Transition.HasPendingRoot());
 	Check(!Transition.TakeRootCommit({}) && !Transition.TakeDecisionRequest());
 	Transition.Cancel();
 	Transition.QueueOpen("/Game/Next.hasset");
@@ -253,7 +258,7 @@ void CheckOverlappingTargets()
 	Check(!Transition.HasPendingRoot());
 	Check(!Transition.SceneSaveFailed("close save failure"));
 	Check(!Transition.AdvanceCloseSave({.bSceneDirty = true}));
-	Check(Transition.HasPendingClose() && Transition.CloseStatus() == "failed");
+	Check(Transition.HasPendingClose() && Transition.ClosePhase() == EEditorTransitionPhase::Failed);
 	Check(Transition.ConfirmDiscard().Target == EEditorTransitionTarget::Close);
 	Transition.Cancel();
 	PrepareRoot(Transition);
@@ -263,6 +268,26 @@ void CheckOverlappingTargets()
 	Transition.Cancel();
 	Check(!Transition.AdvanceCloseSave({}) && !Transition.TakeRootCommit({}));
 	Check(!Transition.HasPendingClose() && !Transition.HasPendingRoot());
+}
+
+void CheckCloseStatusProjection()
+{
+	FEditorDocumentTransition Transition;
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Idle && Transition.CloseStatus() == "idle");
+	Check(!Transition.RequestWindowClose({.bSceneDirty = true}));
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::AwaitingDecision && Transition.CloseStatus() == "idle");
+	Transition.AwaitSavePath(EEditorTransitionTarget::Close);
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::AwaitingSavePath && Transition.CloseStatus() == "idle");
+	Transition.BeginSave(EEditorTransitionTarget::Close);
+	Transition.SaveAdmitted(EEditorTransitionTarget::Close, true);
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Saving && Transition.CloseStatus() == "saving");
+	Check(!Transition.AdvanceCloseSave({.bSceneDirty = true}));
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Failed && Transition.CloseStatus() == "failed");
+	Check(Transition.ConfirmDiscard().Target == EEditorTransitionTarget::Close);
+	Transition.CompleteClose();
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Ready && Transition.CloseStatus() == "closing");
+	Check(!Transition.RequestWindowClose({.bSceneDirty = true}));
+	Check(Transition.ClosePhase() == EEditorTransitionPhase::Reconfirming && Transition.CloseStatus() == "closing");
 }
 } // namespace
 
@@ -275,4 +300,5 @@ int main()
 	CheckCancellationDuringSaves();
 	CheckCloseFailureAndCompletion();
 	CheckOverlappingTargets();
+	CheckCloseStatusProjection();
 }

@@ -65,6 +65,20 @@ void WriteFixture(const std::filesystem::path& InRoot, const std::string& InName
 
 void CheckBrowser(FIOService& InIO)
 {
+	for (const auto* Name : {".git", ".GIT", ".Cache", ".publish-library", ".PUBLISH-arbitrary"})
+	{
+		FDirectoryEntry Entry;
+		Entry.Path = Name;
+		Entry.bDirectory = true;
+		Check(!IsBrowserEntry(Entry));
+	}
+	for (const auto* Name : {".assets", "Ordinary", ".publish"})
+	{
+		FDirectoryEntry Entry;
+		Entry.Path = Name;
+		Entry.bDirectory = true;
+		Check(IsBrowserEntry(Entry));
+	}
 	const auto Listing = ReadContentDirectory(*InIO.FileSystem(), "/Game");
 	Check(Listing.Error.empty());
 	Check(Listing.Entries.size() == 7);

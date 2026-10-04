@@ -70,27 +70,21 @@ void AddView(FOperationCatalog& InCatalog, ISceneViewport* InView, FSceneEditDoc
 	    Info,
 	    [InView, InDocument, InFunction, bInAuthoring](const TRequest& InRequest)
 	    {
-		    try
+		    if (bInAuthoring)
 		    {
-			    if (bInAuthoring)
-			    {
-				    InDocument->RequireIdle(InRequest.Document, InRequest.Revision);
-			    }
-			    else if (InDocument)
-			    {
-				    ListSceneNodes(*InDocument, {InRequest.Document, InRequest.Revision, 0, 1});
-			    }
-			    else if (!InRequest.Document.empty() || InRequest.Revision != 0)
-			    {
-				    throw FSceneEditError("stale_document", "This viewport requires an empty document and revision 0");
-			    }
-			    InFunction(*InView, InRequest);
-			    return InView->ViewportState();
+			    InDocument->RequireIdle(InRequest.Document, InRequest.Revision);
 		    }
-		    catch (const FSceneEditError& Error)
+		    else if (InDocument)
 		    {
-			    throw FAutomationError(Error.Code, Error.what());
+			    ListSceneNodes(*InDocument, {InRequest.Document, InRequest.Revision, 0, 1});
 		    }
+		    else if (!InRequest.Document.empty() || InRequest.Revision != 0)
+		    {
+			    throw FSceneEditError(SceneEditErrors::StaleDocument,
+			                          "This viewport requires an empty document and revision 0");
+		    }
+		    InFunction(*InView, InRequest);
+		    return InView->ViewportState();
 	    }));
 }
 } // namespace

@@ -29,7 +29,7 @@ template<class TFunction> void CheckWorkspaceError(TFunction InAction, std::stri
 	}
 	catch (const FAssetImportError& Failure)
 	{
-		bRejected = Failure.Code == "invalid_arguments" && Failure.what() == InMessage;
+		bRejected = Failure.Code == AssetImportErrors::InvalidArguments && Failure.what() == InMessage;
 	}
 	HYP_CHECK(bRejected);
 }

@@ -1,4 +1,5 @@
 add_library(hyperion_content STATIC Private/ContentRootService.cpp Private/ContentRootTypes.cpp Private/ContentQueries.cpp Private/ContentDirectory.cpp)
 hyp_module(hyperion_content)
+target_link_libraries(hyperion_content PUBLIC hyperion_core)
 target_sources(hyperion_content PRIVATE Private/ContentPaths.cpp)
-target_link_libraries(hyperion_content PUBLIC hyperion_assets hyperion_io hyperion_reflection PRIVATE hyperion_core hyperion_tasks)
+target_link_libraries(hyperion_content PUBLIC hyperion_assets hyperion_io hyperion_reflection PRIVATE hyperion_tasks)

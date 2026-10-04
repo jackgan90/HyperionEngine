@@ -36,7 +36,7 @@ std::shared_ptr<FImportDraft> FAssetImportWorkspace::FindDraft(const std::string
 			return Entry;
 		}
 	}
-	throw FAssetImportError("not_found", "Import draft was discarded or belongs to another root");
+	throw FAssetImportError(AssetImportErrors::NotFound, "Import draft was discarded or belongs to another root");
 }
 
 std::shared_ptr<FImportDraft> FAssetImportWorkspace::MutableDraft(const std::string& InId,
@@ -45,11 +45,11 @@ std::shared_ptr<FImportDraft> FAssetImportWorkspace::MutableDraft(const std::str
 	auto Entry = FindDraft(InId);
 	if (bClosing || Entry->Status == EImportDraftState::Preparing || Entry->Status == EImportDraftState::Publishing)
 	{
-		throw FAssetImportError("busy", "Wait for import draft work to finish");
+		throw FAssetImportError(AssetImportErrors::Busy, "Wait for import draft work to finish");
 	}
 	if (Entry->Generation != InGeneration)
 	{
-		throw FAssetImportError("stale_revision", "Import draft changed before the operation");
+		throw FAssetImportError(AssetImportErrors::StaleRevision, "Import draft changed before the operation");
 	}
 	return Entry;
 }
@@ -70,7 +70,8 @@ FImportDraftInfo FAssetImportWorkspace::PrepareDraft(const FImportRequest& InReq
 	RequireMain();
 	if (bClosing || Drafts.size() >= 4)
 	{
-		throw FAssetImportError("busy", "Discard an import draft before preparing more (maximum four)");
+		throw FAssetImportError(AssetImportErrors::Busy,
+		                        "Discard an import draft before preparing more (maximum four)");
 	}
 	const auto Validated = Validate(InRequest);
 	auto Entry = std::make_shared<FImportDraft>();
@@ -139,7 +140,7 @@ FImportDraftInfo FAssetImportWorkspace::EditDraft(const FImportDraftEdit& InRequ
 	auto Entry = MutableDraft(InRequest.Draft, InRequest.Generation);
 	if (!Entry->Prepared)
 	{
-		throw FAssetImportError("unavailable", "Draft preparation failed; refresh it");
+		throw FAssetImportError(AssetImportErrors::Unavailable, "Draft preparation failed; refresh it");
 	}
 	const auto Key = ImportPropertiesKey(InRequest.Properties);
 	if (Key == ImportPropertiesKey(Entry->History[Entry->Cursor]))
@@ -184,7 +185,7 @@ FImportDraftInfo FAssetImportWorkspace::DraftHistory(const FImportDraftMutation&
 	}
 	else
 	{
-		throw FAssetImportError("invalid_arguments", "History requires available undo, redo or reset");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, "History requires available undo, redo or reset");
 	}
 	auto Edited = ApplyImportProperties(Entry->Prepared->Root, Entry->History[Cursor]);
 	auto Candidate = *Entry;
@@ -198,7 +199,7 @@ FImportTaskInfo FAssetImportWorkspace::SubmitDraft(const FImportDraftMutation& I
 	auto Entry = MutableDraft(InRequest.Draft, InRequest.Generation);
 	if (!Entry->Prepared)
 	{
-		throw FAssetImportError("unavailable", "Cannot submit a failed preparation");
+		throw FAssetImportError(AssetImportErrors::Unavailable, "Cannot submit a failed preparation");
 	}
 	auto Snapshot = std::make_shared<FPreparedImport>(*Entry->Prepared);
 	Snapshot->Root = Entry->Edited;
@@ -214,7 +215,7 @@ FImportDraftInfo FAssetImportWorkspace::DiscardDraft(const FImportDraftDiscard& 
 	auto Entry = MutableDraft(InRequest.Draft, InRequest.Generation);
 	if (!InRequest.bDiscard && ImportPropertiesKey(Entry->History[Entry->Cursor]) != Entry->SavedKey)
 	{
-		throw FAssetImportError("dirty", "Explicitly discard the modified import draft");
+		throw FAssetImportError(AssetImportErrors::Dirty, "Explicitly discard the modified import draft");
 	}
 	std::erase(Drafts, Entry);
 	FImportDraftInfo Result;

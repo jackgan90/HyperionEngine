@@ -52,7 +52,7 @@ std::optional<FSceneNodeInfo> FEditorPlugin::PollPlacement(const FPlacementCandi
 	}
 	if (Preparation.State == EPlacementPreparationState::Failed)
 	{
-		throw FSceneEditError("load_failed", FormatPlacementPreparation(Preparation));
+		throw FSceneEditError(SceneEditErrors::LoadFailed, FormatPlacementPreparation(Preparation));
 	}
 	CommitPlacement(InCandidate, InPosition);
 	return DescribeSceneNode(SceneDocument, {SceneDocument.Id(), *SceneDocument.Selection().Primary()});

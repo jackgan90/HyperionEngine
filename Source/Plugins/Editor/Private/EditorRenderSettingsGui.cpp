@@ -16,8 +16,8 @@ void FEditorPlugin::DrawRenderSettings()
 		const auto Formats = GBufferPresetOptions();
 		static const auto PipelineLabels = RasterOptionLabels(Pipelines);
 		static const auto FormatLabels = RasterOptionLabels(Formats);
-		auto PipelineIndex = RasterOptionIndex(Pipelines, ParseSceneRenderPipeline(Candidate.Pipeline));
-		auto FormatIndex = RasterOptionIndex(Formats, ParseGBufferPreset(Candidate.GBuffer));
+		auto PipelineIndex = RasterOptionIndex(Pipelines, Candidate.Pipeline);
+		auto FormatIndex = RasterOptionIndex(Formats, Candidate.GBuffer);
 		Gui->BeginPropertyRow("Pipeline");
 		bool bChanged = Gui->Combo("##Pipeline", PipelineLabels, PipelineIndex,
 		                           [&](std::size_t InIndex, FVec4 InBounds)
@@ -29,17 +29,17 @@ void FEditorPlugin::DrawRenderSettings()
 		Gui->EndPropertyRow();
 		if (bChanged)
 		{
-			Candidate.Pipeline = ToSceneRenderPipelineToken(RasterOptionIdentity(Pipelines, PipelineIndex));
+			Candidate.Pipeline = RasterOptionIdentity(Pipelines, PipelineIndex);
 		}
 		Gui->BeginPropertyRow("GBuffer layout");
-		Gui->BeginDisabled(ParseSceneRenderPipeline(Candidate.Pipeline) != ESceneRenderPipeline::Deferred);
+		Gui->BeginDisabled(Candidate.Pipeline != ESceneRenderPipeline::Deferred);
 		if (Gui->Combo("##GBuffer", FormatLabels, FormatIndex,
 		               [&](std::size_t InIndex, FVec4 InBounds)
 		               {
 			               Acceptance.ObserveWidget(EEditorWidget::GBufferFormatItem, InBounds, Formats[InIndex].Token);
 		               }))
 		{
-			Candidate.GBuffer = ToGBufferPresetToken(RasterOptionIdentity(Formats, FormatIndex));
+			Candidate.GBuffer = RasterOptionIdentity(Formats, FormatIndex);
 			bChanged = true;
 		}
 		Acceptance.ObserveWidget(EEditorWidget::GBufferFormat, Gui->LastItemBounds());

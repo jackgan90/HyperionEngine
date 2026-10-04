@@ -24,14 +24,7 @@ void RegisterContentQueries(FOperationCatalog& InCatalog, FAssetService* InAsset
 	    Info,
 	    [InAssets, InRoots](const FContentAssetQuery& InRequest)
 	    {
-		    try
-		    {
-			    return QueryContentAssets(*InAssets, *InRoots, InRequest);
-		    }
-		    catch (const FContentRootError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+		    return QueryContentAssets(*InAssets, *InRoots, InRequest);
 	    }));
 	Info.Id = "content.directory.list";
 	Info.Summary = "Discover mounted directories and files, including unindexed native assets";
@@ -47,14 +40,7 @@ void RegisterContentQueries(FOperationCatalog& InCatalog, FAssetService* InAsset
 	    Info,
 	    [InAssets, InRoots](const auto& InRequest)
 	    {
-		    try
-		    {
-			    return QueryContentDirectory(*InAssets, *InRoots, InRequest);
-		    }
-		    catch (const FContentRootError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+		    return QueryContentDirectory(*InAssets, *InRoots, InRequest);
 	    }));
 }
 
@@ -94,13 +80,13 @@ void RegisterRoot(FOperationCatalog& InCatalog, FContentRootService* InRoots, co
 		    {
 			    return Function(*InRoots, InRequest);
 		    }
-		    catch (const FContentRootError& Failure)
+		    catch (const FCodedError&)
 		    {
-			    throw FAutomationError(Failure.Code, Failure.what());
+			    throw;
 		    }
 		    catch (const std::exception& Failure)
 		    {
-			    throw FAutomationError("invalid_root", Failure.what(), "directory");
+			    throw FAutomationError(AutomationErrors::InvalidRoot, Failure.what(), "directory");
 		    }
 	    }));
 }

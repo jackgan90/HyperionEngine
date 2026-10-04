@@ -32,9 +32,11 @@ owned primitive groups -> coverage mask(s), without depth
 
 ## 材质覆盖
 
-标准 `Model.hlsl` 材质通过运行时缓存的辅助定义使用 `SilhouetteMask` permutation，复用 `ClipModelAlpha`，保留 UV、纹理、alpha cutoff、对象 override、实例化与剔除设置。不会修改材质资产。透明混合材质目前使用几何剪影，alpha mask 使用原裁剪规则。
+内建 PBR 在普通颜色 pass 上显式声明 `EMaterialSilhouettePolicy::ModelShader`，通过运行时缓存的辅助定义使用 `SilhouetteMask` permutation，复用 `ClipModelAlpha`，保留 UV、纹理、alpha cutoff、对象 override、实例化与剔除设置。该策略将顶点和像素宏集合替换为 `HYP_SILHOUETTE_MASK=1`；声明者须保证 shader 兼容这份覆盖契约；Materials 在创建定义及资产校验时拒绝缺少像素 shader 的 ModelShader 声明。不会修改材质资产。透明混合材质目前使用几何剪影，alpha mask 使用原裁剪规则。
 
-自定义材质可显式提供 `SilhouetteMask` usage，覆盖样本输出 `1`，未覆盖样本裁剪，形成二值剪影，并负责自己的顶点变形和裁剪。模块保留源编译接口中的完整参数及覆盖值，由剪影 pass 的编译结果决定实际使用的参数；同时强制实心、单通道、不写深度及不测试深度。不支持的 shader family 会被跳过并输出诊断。首次使用辅助材质时异步准备，未就绪部分暂不产生轮廓。
+自定义材质可显式提供 `SilhouetteMask` usage，覆盖样本输出 `1`，未覆盖样本裁剪，形成二值剪影，并负责自己的顶点变形和裁剪。显式 mask 优先于回退策略。模块保留源编译接口中的完整参数及覆盖值，由剪影 pass 的编译结果决定实际使用的参数；同时强制实心、单通道、不写深度及不测试深度。没有显式 mask 且所有 pass 都关闭回退时，跳过覆盖并输出诊断。首次使用辅助材质时异步准备，未就绪部分暂不产生轮廓。
+
+新建 pass 的 `SilhouettePolicy` 默认为 `Disabled`，Renderer 只读取不可变定义中的已解析策略，不检查文件名或入口名。原生 `hyperion.materialpass` 记录使用版本 2；版本 1 在读入时按原规则迁移：顶点路径为 `Model.hlsl` 或 `/Engine/Shaders/Model.hlsl`，顶点入口 `VSMain`，像素路径相同且入口 `PSMain`，顶点宏为空。像素宏不影响旧资格。旧 wire 输入省略或置空该可选字段时，在构造不可变材质定义时完成同样的解析；新 C++ pass 则始终采用显式默认值。仅改变策略也会生成新的定义身份，触发正常材质发布和轮廓缓存更新。外层资产格式不变，新版 pass 记录需要新版读取器，不批量回写旧资产。
 
 ## 对比与验证
 

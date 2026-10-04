@@ -74,7 +74,7 @@ void MemoryLimits()
 	}
 	catch (const FTransportError& Error)
 	{
-		bRejected = Error.GetCode() == "unsupported_transport";
+		bRejected = Error.Code == TransportErrors::UnsupportedTransport;
 	}
 	Check(bRejected);
 }

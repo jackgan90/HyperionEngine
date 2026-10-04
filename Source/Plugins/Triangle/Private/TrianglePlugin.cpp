@@ -26,9 +26,9 @@ FRenderResourceDesc PrepareTriangle(FShaderCompiler& InCompiler, EShaderFormat I
 	Pass.State.bViewRelativeDepth = true;
 	Description.Passes.push_back(Pass);
 	Pass.Pixel.Defines = {{"HYP_HDR_DISPLAY", "1"}};
-	Pass.Usage = "HdrForwardOpaque";
+	Pass.Usage = MaterialUsages::HdrForwardOpaque;
 	Description.Passes.push_back(Pass);
-	Pass.Usage = "HdrCompatibility";
+	Pass.Usage = MaterialUsages::HdrCompatibility;
 	Description.Passes.push_back(Pass);
 	Description.Parameters =
 	    GetStandardMaterialBlockParameters(EObjectUniform::DrawConstants, *GetStandardMaterialSemantics());

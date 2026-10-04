@@ -70,15 +70,8 @@ void RegisterRenderSettings(FOperationCatalog& InCatalog, IRenderSettings* InSet
 	    Info,
 	    [InSettings](const auto& InRequest)
 	    {
-		    try
-		    {
-			    InSettings->SetRenderSettings(InRequest.Revision, InRequest.Values);
-			    return InSettings->RenderSettings();
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+		    InSettings->SetRenderSettings(InRequest.Revision, InRequest.Values);
+		    return InSettings->RenderSettings();
 	    }));
 	Info.Id = "render.settings.save";
 	Info.Version = 1;
@@ -94,7 +87,7 @@ void RegisterRenderSettings(FOperationCatalog& InCatalog, IRenderSettings* InSet
 	    {
 		    if (InSettings->RenderSettings().Revision != InRequest.Revision)
 		    {
-			    throw FAutomationError("stale_revision", "Render settings changed");
+			    throw FAutomationError(AutomationErrors::StaleRevision, "Render settings changed");
 		    }
 		    InSettings->SaveRenderSettings(PathFromUtf8(InRequest.Path));
 		    return InSettings->RenderSettings();

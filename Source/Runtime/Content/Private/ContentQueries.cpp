@@ -10,7 +10,7 @@ FContentAssetPage QueryContentAssets(const FAssetService& InAssets, const FConte
 	const auto Generation = InRoots.Info().Generation;
 	if (InRequest.Generation != Generation)
 	{
-		throw FContentRootError("stale_revision",
+		throw FContentRootError(ContentRootErrors::StaleRevision,
 		                        "Content root changed; restart discovery with its current generation");
 	}
 	if (!InRequest.Limit || InRequest.Limit > 100 || InRequest.Query.size() > 256)

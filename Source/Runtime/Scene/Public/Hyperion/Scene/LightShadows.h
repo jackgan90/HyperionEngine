@@ -15,7 +15,7 @@ struct FDirectionalShadowSettings
 	float ReceiverBias = .15f;
 	float BlendFraction = .1f;
 	float FadeFraction = .1f;
-	std::uint32_t DebugMode{};
+	EDirectionalShadowPreview DebugMode = EDirectionalShadowPreview::Lit;
 	bool operator==(const FDirectionalShadowSettings&) const = default;
 };
 
@@ -26,7 +26,7 @@ struct FContactShadowSettings
 	float Thickness = .05f;
 	float Bias = .003f;
 	std::uint32_t Steps = 96;
-	std::uint32_t DebugMode{};
+	EContactShadowPreview DebugMode = EContactShadowPreview::Lit;
 	std::uint32_t PreviewMip = 4;
 	void Validate() const;
 	bool operator==(const FContactShadowSettings&) const = default;

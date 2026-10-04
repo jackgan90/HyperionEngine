@@ -345,7 +345,7 @@ void DocumentFailureSequenceBaseline()
 	}
 	catch (const FSceneEditError& Error)
 	{
-		bRejected = Error.Code == "stale_handle";
+		bRejected = Error.Code == SceneEditErrors::StaleHandle;
 	}
 	// Failed history restoration also ends the current interaction, without moving its committed cursor.
 	Check(bRejected && !Document.GetState().Interaction && Document.GetState().HistoryCursor == 2);
@@ -910,7 +910,7 @@ void ValidationAndRootCosts()
 	}
 	catch (const FSceneEditError& Failure)
 	{
-		Check(Failure.Code == "stale_handle");
+		Check(Failure.Code == SceneEditErrors::StaleHandle);
 	}
 	Check(Target.Revision() == Revision && Document.GetState().HistoryCursor == History);
 	Check(*static_cast<const FScenePointLight*>(Target.FindNode(Batch.front())->Components.Find(Component)->Get()) ==

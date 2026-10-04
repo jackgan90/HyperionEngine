@@ -11,7 +11,7 @@ std::shared_ptr<FPendingImageOutput> FEditorPlugin::RequestImage(const FImageOut
 {
 	if (PendingImage || bFinished || Window->Minimized())
 	{
-		throw FSceneEditError("busy", "Wait for the pending screenshot and a drawable application");
+		throw FSceneEditError(SceneEditErrors::Busy, "Wait for the pending screenshot and a drawable application");
 	}
 	const auto TargetWindow = InRequest.Window.Kind();
 	if (!TargetWindow)
@@ -20,7 +20,7 @@ std::shared_ptr<FPendingImageOutput> FEditorPlugin::RequestImage(const FImageOut
 	}
 	if (TargetWindow == EImageOutputWindow::Assets && (!AssetWindow || !AssetWindow->IsDrawable()))
 	{
-		throw FSceneEditError("busy", "Open a drawable asset window");
+		throw FSceneEditError(SceneEditErrors::Busy, "Open a drawable asset window");
 	}
 	PendingImage = PrepareImageOutput(InRequest);
 	if (TargetWindow == EImageOutputWindow::Assets)
@@ -34,15 +34,15 @@ std::optional<FImageArtifact> FEditorPlugin::PollImage(const std::shared_ptr<FPe
 {
 	if (!InPending->Error.empty())
 	{
-		throw FSceneEditError("capture_failed", InPending->Error);
+		throw FSceneEditError(SceneEditErrors::CaptureFailed, InPending->Error);
 	}
 	if (!InPending->Result && InPending->Request.Window.Kind() == EImageOutputWindow::Assets && !AssetWindow)
 	{
-		throw FSceneEditError("unavailable", "Asset window closed before capture");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "Asset window closed before capture");
 	}
 	if (!InPending->Result && (bFinished || bStopped))
 	{
-		throw FSceneEditError("unavailable", "Application stopped before capture");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "Application stopped before capture");
 	}
 	return InPending->Result;
 }

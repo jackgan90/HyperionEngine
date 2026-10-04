@@ -33,7 +33,7 @@ bool FEditorPlugin::DrawComponent(const FSceneNodeView& InView, const FSceneComp
 		{
 			Gui->TextWrapped("Contact shadows are unavailable in this session. Light properties can still be saved.");
 		}
-		else if (ParseSceneRenderPipeline(Rendering.Pipeline) != ESceneRenderPipeline::Deferred)
+		else if (Rendering.Pipeline != ESceneRenderPipeline::Deferred)
 		{
 			Gui->TextWrapped("Contact shadows require the Deferred pipeline.");
 		}

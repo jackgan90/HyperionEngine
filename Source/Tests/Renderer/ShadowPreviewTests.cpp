@@ -28,7 +28,7 @@ template<class T> void CheckAuthoring(std::uint32_t InMode, std::string_view InT
 	const auto& Type = RecordType<T>();
 	HYP_CHECK(Type.Id == InTypeId && Type.Version == 1);
 	T Settings;
-	Settings.DebugMode = InMode;
+	Settings.DebugMode = static_cast<decltype(Settings.DebugMode)>(InMode);
 	HYP_CHECK(ReadValue<T>(WriteValue(Settings)) == Settings);
 	const auto Wire = WriteRecordWire(Type, &Settings);
 	HYP_CHECK(ReadValue<std::uint32_t>(std::get<FArchiveNode::FObject>(Wire.Value).at("debugMode")) == InMode);

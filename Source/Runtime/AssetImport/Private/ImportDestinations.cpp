@@ -1,4 +1,5 @@
 #include "AssetImportInternal.h"
+#include "Hyperion/Assets/AssetEntryNames.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include <set>
@@ -103,7 +104,8 @@ FAssetImportResult FAssetImportService::FImpl::PublishGrouped(const std::filesys
                                                               const FAssetImportOptions& InOptions)
 {
 	const auto ParentLease =
-	    IO.AcquireWriteLeaseAsync(InOutput.parent_path() / ".publish-library", Cancellation).Get(IO.TaskSystem());
+	    IO.AcquireWriteLeaseAsync(InOutput.parent_path() / AssetPublicationLeaseName(), Cancellation)
+	        .Get(IO.TaskSystem());
 	const auto Output = SelectImportFolderOutput(IO, InSource, InOutput);
 	auto Options = InOptions;
 	Options.bCreateFolder = false;

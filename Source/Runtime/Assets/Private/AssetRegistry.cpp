@@ -1,4 +1,5 @@
 #include "Hyperion/Assets/AssetRegistry.h"
+#include "Hyperion/Assets/AssetEntryNames.h"
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Assets/NativeAsset.h"
 #include "Hyperion/IO/MountedFileSystem.h"
@@ -57,7 +58,7 @@ FAssetDiscovery DiscoverAssets(IFileSystem& InFiles, const std::filesystem::path
 		for (const auto& Entry : InFiles.ListDirectory(Directory))
 		{
 			const auto Name = PathToUtf8(Entry.Path.filename());
-			if (Name == ".git" || Name == ".cache" || Name.starts_with(".publish-"))
+			if (IsReservedAssetEntry(Name))
 			{
 				continue;
 			}

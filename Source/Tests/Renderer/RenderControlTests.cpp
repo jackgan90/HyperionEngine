@@ -34,8 +34,8 @@ template<class F> void Rejects(F InAction)
 void Settings()
 {
 	FRenderSettings Values;
-	Values.Pipeline = "forward";
-	Values.GBuffer = "high";
+	Values.Pipeline = ESceneRenderPipeline::Forward;
+	Values.GBuffer = EGBufferPreset::HighPrecision;
 	Values.bReversedZ = false;
 	Values.Shadows.Distance = 80;
 	Values.Contact.bEnabled = true;
@@ -64,7 +64,7 @@ void Settings()
 		    ValidateRenderSettings(Values);
 	    });
 	Values = Loaded;
-	Values.Pipeline = "unknown";
+	Values.Pipeline = ESceneRenderPipeline::Count;
 	Rejects(
 	    [&]
 	    {
@@ -83,7 +83,8 @@ void SettingsCompatibility()
 		HYP_CHECK(Type.Members[Index].Id == Keys[Index] && !Type.Members[Index].Options.bRequired);
 	}
 	const FRenderSettings Defaults;
-	HYP_CHECK(Defaults.Pipeline == "deferred" && Defaults.GBuffer == "compact" && Defaults.DebugMode == 0);
+	HYP_CHECK(Defaults.Pipeline == ESceneRenderPipeline::Deferred && Defaults.GBuffer == EGBufferPreset::Compact &&
+	          Defaults.DebugMode == EGBufferVisualizer::Lit);
 	HYP_CHECK(Defaults.Exposure == 1 && Defaults.bVsync && Defaults.bReversedZ);
 	HYP_CHECK(Type.Members[0].Shape().Kind == ERecordValueKind::String);
 	HYP_CHECK(Type.Members[1].Shape().Kind == ERecordValueKind::String);
@@ -95,9 +96,9 @@ void SettingsCompatibility()
 		for (const std::string Preset : {"compact", "high"})
 		{
 			FRenderSettings Values;
-			Values.Pipeline = Pipeline;
-			Values.GBuffer = Preset;
-			Values.DebugMode = 6;
+			Values.Pipeline = ParseSceneRenderPipeline(Pipeline);
+			Values.GBuffer = ParseGBufferPreset(Preset);
+			Values.DebugMode = EGBufferVisualizer::GeometryNormal;
 			Values.Exposure = .05f;
 			const auto Wire = WriteRecordWire(Type, &Values);
 			const auto Loaded = ReadRecordWire(Type, Wire);
@@ -121,9 +122,9 @@ void StrictOptionConversions()
 		for (const auto* Preset : {"compact", "high"})
 		{
 			FRenderSettings Values;
-			Values.Pipeline = Pipeline;
-			Values.GBuffer = Preset;
-			Values.DebugMode = 6;
+			Values.Pipeline = ParseSceneRenderPipeline(Pipeline);
+			Values.GBuffer = ParseGBufferPreset(Preset);
+			Values.DebugMode = EGBufferVisualizer::GeometryNormal;
 			Values.Exposure = 1.75f;
 			const auto Before = WriteRecordWire(RecordType<FRenderSettings>(), &Values);
 			Values.bVsync = !Values.bVsync;
@@ -134,18 +135,19 @@ void StrictOptionConversions()
 			HYP_CHECK(Converted.Pipeline == ParseSceneRenderPipeline(Pipeline));
 			HYP_CHECK(Converted.GBuffer ==
 			          (std::string_view(Preset) == "high" ? FGBufferLayout::HighPrecision() : FGBufferLayout{}));
-			HYP_CHECK(Converted.DebugMode == 6 && Converted.Exposure == Values.Exposure);
+			HYP_CHECK(Converted.DebugMode == EGBufferVisualizer::GeometryNormal &&
+			          Converted.Exposure == Values.Exposure);
 		}
 	}
 	FRenderSettings Invalid;
-	Invalid.Pipeline = "unknown";
+	Invalid.Pipeline = ESceneRenderPipeline::Count;
 	Rejects(
 	    [&]
 	    {
 		    (void)MakePipelineSettings(Invalid);
 	    });
 	Invalid = {};
-	Invalid.GBuffer = "unknown";
+	Invalid.GBuffer = EGBufferPreset::Count;
 	Rejects(
 	    [&]
 	    {
@@ -154,7 +156,7 @@ void StrictOptionConversions()
 	Invalid = {};
 	for (const auto Mode : {7u, std::numeric_limits<std::uint32_t>::max()})
 	{
-		Invalid.DebugMode = Mode;
+		Invalid.DebugMode = static_cast<EGBufferVisualizer>(Mode);
 		Rejects(
 		    [&]
 		    {

@@ -35,14 +35,7 @@ void RegisterPlacementOperations(FOperationCatalog& InCatalog, IScenePlacement* 
 	    {
 		    return TPendingOperation<FSceneNodeInfo>{[InPlacement, InRequest]()
 		                                             {
-			                                             try
-			                                             {
-				                                             return InPlacement->PlaceObject(InRequest);
-			                                             }
-			                                             catch (const FSceneEditError& Error)
-			                                             {
-				                                             throw FAutomationError(Error.Code, Error.what());
-			                                             }
+			                                             return InPlacement->PlaceObject(InRequest);
 		                                             }};
 	    }));
 	Info.Id = "scene.placement.place_model";
@@ -60,14 +53,7 @@ void RegisterPlacementOperations(FOperationCatalog& InCatalog, IScenePlacement* 
 	    {
 		    return TPendingOperation<FSceneNodeInfo>{[InPlacement, InRequest]()
 		                                             {
-			                                             try
-			                                             {
-				                                             return InPlacement->PlaceModel(InRequest);
-			                                             }
-			                                             catch (const FSceneEditError& Error)
-			                                             {
-				                                             throw FAutomationError(Error.Code, Error.what());
-			                                             }
+			                                             return InPlacement->PlaceModel(InRequest);
 		                                             }};
 	    }));
 }

@@ -39,7 +39,7 @@ FEndpointRequest FAutomationRouter::Begin(std::string_view InMethod, const FArch
 		const auto Connection = Found == Fields.end() ? DefaultConnection : ReadValue<std::string>(Found->second);
 		if (Found != Fields.end() && Connection.empty())
 		{
-			throw FAutomationError("invalid_arguments", "Explicit connection cannot be empty");
+			throw FAutomationError(AutomationErrors::InvalidArguments, "Explicit connection cannot be empty");
 		}
 		Fields.erase("connection");
 		const FArchiveNode Parameters(std::move(Fields));
@@ -48,7 +48,7 @@ FEndpointRequest FAutomationRouter::Begin(std::string_view InMethod, const FArch
 	}
 	catch (...)
 	{
-		return ReadyAutomationRequest(CurrentConnectionFailure());
+		return ReadyAutomationRequest(CurrentAutomationFailure());
 	}
 }
 

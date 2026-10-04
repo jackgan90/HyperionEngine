@@ -1,5 +1,6 @@
 #include "Hyperion/Materials/Material.h"
 #include "MaterialIdentity.h"
+#include "MaterialPassPolicy.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -45,6 +46,7 @@ void NormalizeShader(FMaterialShader& InShader, bool bInRequired)
 
 void ValidatePass(FMaterialPass& InPass)
 {
+	MaterialsPrivate::NormalizeSilhouettePolicy(InPass);
 	NormalizeShader(InPass.Vertex, true);
 	NormalizeShader(InPass.Pixel, false);
 	InPass.State = NormalizeMaterialState(InPass.State);

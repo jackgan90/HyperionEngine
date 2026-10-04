@@ -29,24 +29,22 @@ void DrawPipelineControls(FGui& InGui, FAppSettings& InSettings, const FDebugMet
 	static const auto PipelineLabels = RasterOptionLabels(Pipelines);
 	static const auto PresetLabels = RasterOptionLabels(Presets);
 	static const auto VisualizerLabels = RasterOptionLabels(Visualizers);
-	auto Pipeline = RasterOptionIndex(Pipelines, ParseSceneRenderPipeline(InSettings.RenderPipeline));
+	auto Pipeline = RasterOptionIndex(Pipelines, InSettings.RenderPipeline);
 	if (InGui.Combo("Pipeline", PipelineLabels, Pipeline))
 	{
-		InSettings.RenderPipeline = ToSceneRenderPipelineToken(RasterOptionIdentity(Pipelines, Pipeline));
+		InSettings.RenderPipeline = RasterOptionIdentity(Pipelines, Pipeline);
 	}
-	auto Preset = RasterOptionIndex(Presets, ParseGBufferPreset(InSettings.GBufferLayout));
+	auto Preset = RasterOptionIndex(Presets, InSettings.GBufferLayout);
 	if (InGui.Combo("GBuffer", PresetLabels, Preset))
 	{
-		InSettings.GBufferLayout = ToGBufferPresetToken(RasterOptionIdentity(Presets, Preset));
+		InSettings.GBufferLayout = RasterOptionIdentity(Presets, Preset);
 	}
-	const bool bDeferred = ParseSceneRenderPipeline(InSettings.RenderPipeline) == ESceneRenderPipeline::Deferred;
-	auto Visualizer = RasterOptionIndex(Visualizers, bDeferred ? ParseAppGBufferVisualizer(InSettings.GBufferDebug)
-	                                                           : EGBufferVisualizer::Lit);
+	const bool bDeferred = InSettings.RenderPipeline == ESceneRenderPipeline::Deferred;
+	auto Visualizer = RasterOptionIndex(Visualizers, bDeferred ? InSettings.GBufferDebug : EGBufferVisualizer::Lit);
 	InGui.BeginDisabled(!bDeferred);
 	if (InGui.Combo("Visualizer", VisualizerLabels, Visualizer))
 	{
-		InSettings.GBufferDebug =
-		    static_cast<int>(ToVisualizerWireValue(RasterOptionIdentity(Visualizers, Visualizer)));
+		InSettings.GBufferDebug = RasterOptionIdentity(Visualizers, Visualizer);
 	}
 	InGui.EndDisabled();
 	constexpr std::array<std::string_view, 3> PipelineIds{"clustered_lighting", "reversed_z", "exposure"};

@@ -141,7 +141,7 @@ void CheckFallbackFraming(FSceneInstance& InScene)
 	}
 	catch (const FSceneEditError& Error)
 	{
-		bRejected = Error.Code == "stale_handle";
+		bRejected = Error.Code == SceneEditErrors::StaleHandle;
 	}
 	HYP_CHECK(bRejected);
 	InScene.RemoveSubtree(Nodes[1]);
@@ -164,7 +164,7 @@ void CheckPreparingFraming(FSceneInstance& InScene)
 	}
 	catch (const FSceneEditError& Error)
 	{
-		bRejected = Error.Code == "busy";
+		bRejected = Error.Code == SceneEditErrors::Busy;
 	}
 	HYP_CHECK(bRejected && InScene.GetRevision() == Revision);
 	HYP_CHECK(InScene.RemoveSubtree(Loading));

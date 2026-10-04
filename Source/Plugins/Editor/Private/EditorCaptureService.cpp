@@ -30,7 +30,7 @@ void FEditorPlugin::RequestRenderCapture()
 {
 	if (!CanCapture() || bFinished || Window->Minimized())
 	{
-		throw FSceneEditError("unavailable", CaptureStatus());
+		throw FSceneEditError(SceneEditErrors::Unavailable, CaptureStatus());
 	}
 	bCaptureRequested = true;
 }
@@ -43,7 +43,7 @@ void FEditorPlugin::OpenRenderCapture()
 		return;
 	}
 #endif
-	throw FSceneEditError("unavailable", CaptureStatus());
+	throw FSceneEditError(SceneEditErrors::Unavailable, CaptureStatus());
 }
 
 FRenderCaptureHudInfo FEditorPlugin::RenderCaptureHudInfo() const
@@ -70,7 +70,7 @@ void FEditorPlugin::SetRenderCaptureHudPreference(bool bInEnabled)
 	catch (const std::exception& Error)
 	{
 		Options.PreferenceError = "Could not save editor preferences: " + std::string(Error.what());
-		throw FSceneEditError("save_failed", Options.PreferenceError);
+		throw FSceneEditError(SceneEditErrors::SaveFailed, Options.PreferenceError);
 	}
 	Options.Preferences = std::move(Preferences);
 	Options.PreferenceError.clear();
@@ -86,14 +86,15 @@ void FEditorPlugin::SetRenderCapturePreference(bool bInEnabled)
 {
 	if (RenderCaptureInfo().bBusy)
 	{
-		throw FSceneEditError("busy", "Wait for the accepted capture before changing capture preferences");
+		throw FSceneEditError(SceneEditErrors::Busy,
+		                      "Wait for the accepted capture before changing capture preferences");
 	}
 	Options.Preferences.bRenderDocCapture = bInEnabled;
 	bCaptureRequested = false;
 	SavePreferences();
 	if (!Options.PreferenceError.empty())
 	{
-		throw FSceneEditError("save_failed", Options.PreferenceError);
+		throw FSceneEditError(SceneEditErrors::SaveFailed, Options.PreferenceError);
 	}
 }
 } // namespace Hyperion

@@ -12,15 +12,14 @@ void FEditorPlugin::SetRenderSettings(std::uint64_t InRevision, const FRenderSet
 {
 	if (InRevision != RenderSettingsRevision)
 	{
-		throw FSceneEditError("stale_revision", "Render settings changed; query the current values");
+		throw FSceneEditError(SceneEditErrors::StaleRevision, "Render settings changed; query the current values");
 	}
 	ValidateRenderSettings(InSettings);
 	if (InSettings.Contact != Rendering.Contact &&
-	    (InSettings.Contact.bEnabled ||
-	     ParseContactShadowPreview(InSettings.Contact.DebugMode) != EContactShadowPreview::Lit) &&
+	    (InSettings.Contact.bEnabled || InSettings.Contact.DebugMode != EContactShadowPreview::Lit) &&
 	    !Context.Require<FRenderFeatureRegistry>().Contains("contact-shadows"))
 	{
-		throw FSceneEditError("unavailable", "Contact shadow feature is disabled in this session");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "Contact shadow feature is disabled in this session");
 	}
 	MakePipelineSettings(InSettings).GBuffer.Validate(Device->GetCapabilities());
 	if (InSettings.bReversedZ != Rendering.bReversedZ && FrozenCullingView)
@@ -59,7 +58,7 @@ void FEditorPlugin::ChangeProfiling(std::optional<std::uint32_t> InMask, std::op
 {
 	if (!GetProfilingStatus().bCompiled)
 	{
-		throw FSceneEditError("unavailable", "Profiling is not compiled in this build");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "Profiling is not compiled in this build");
 	}
 	if (InMask && (*InMask & ~ProfileAllMask))
 	{

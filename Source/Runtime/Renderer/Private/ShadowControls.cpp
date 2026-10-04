@@ -1,4 +1,5 @@
 #include "Hyperion/Renderer/ShadowControls.h"
+#include "Hyperion/Reflection/MappedMember.h"
 #include <cmath>
 
 namespace Hyperion
@@ -39,7 +40,12 @@ template<> const FRecordDescriptor& RecordType<FCascadedShadowSettings>()
 		     Member("receiverBias", &FCascadedShadowSettings::ReceiverBias, {.bRequired = true}),
 		     Member("blendFraction", &FCascadedShadowSettings::BlendFraction, {.bRequired = true}),
 		     Member("fadeFraction", &FCascadedShadowSettings::FadeFraction, {.bRequired = true}),
-		     Member("debugMode", &FCascadedShadowSettings::DebugMode, {.bRequired = true})},
+		     MappedMember<std::uint32_t>("debugMode", &FCascadedShadowSettings::DebugMode,
+		                                 [](EDirectionalShadowPreview InValue)
+		                                 {
+			                                 return ToShadowPreviewWireValue(InValue);
+		                                 },
+		                                 ParseDirectionalShadowPreview, {.bRequired = true})},
 		    1, ValidateShadowSettings);
 		for (auto& Field : Result.Members)
 		{

@@ -17,7 +17,8 @@ void FEditorPlugin::StartSaveBeforeClose(const std::string& InPath)
 {
 	if (const auto* Imports = Context.Find<FAssetImportWorkspace>(); Imports && Imports->ContentRootState().bDirty)
 	{
-		throw FSceneEditError("dirty_document", "Publish or explicitly discard import drafts before Save and Close");
+		throw FSceneEditError(SceneEditErrors::DirtyDocument,
+		                      "Publish or explicitly discard import drafts before Save and Close");
 	}
 	if (IsDirty() && InPath.empty())
 	{
@@ -81,7 +82,7 @@ FApplicationCloseState FEditorPlugin::RequestApplicationClose(const FApplication
 	const auto State = ApplicationCloseState();
 	if (State.bBusy || !CaptureInteractionPolicy().AllowsCloseRequest())
 	{
-		throw FSceneEditError("busy", "Finish active edits, transitions and saves before closing");
+		throw FSceneEditError(SceneEditErrors::Busy, "Finish active edits, transitions and saves before closing");
 	}
 	switch (InRequest.Action)
 	{
@@ -94,7 +95,8 @@ FApplicationCloseState FEditorPlugin::RequestApplicationClose(const FApplication
 		case EApplicationCloseAction::RejectDirty:
 			if (State.bDirty)
 			{
-				throw FSceneEditError("dirty_document", "Save first or explicitly choose save/discard close action");
+				throw FSceneEditError(SceneEditErrors::DirtyDocument,
+				                      "Save first or explicitly choose save/discard close action");
 			}
 			Transition.CompleteClose();
 			Window->RequestClose();

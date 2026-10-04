@@ -11,20 +11,17 @@ std::shared_ptr<const FMaterialDefinition> MaskDefinition(const FCompiledMateria
 	const auto& Source = *InProgram.Interface.Definition;
 	auto Description = Source.GetDescription();
 	FMaterialPass Pass;
-	if (Source.HasPass("SilhouetteMask"))
+	if (Source.HasPass(MaterialUsages::SilhouetteMask))
 	{
-		Pass = Source.GetPass("SilhouetteMask");
+		Pass = Source.GetPass(MaterialUsages::SilhouetteMask);
 	}
 	else
 	{
-		const auto Found = std::find_if(
-		    Description.Passes.begin(), Description.Passes.end(),
-		    [](const auto& InPass)
-		    {
-			    return (InPass.Vertex.Path == "Model.hlsl" || InPass.Vertex.Path == "/Engine/Shaders/Model.hlsl") &&
-			           InPass.Vertex.Entry == "VSMain" && InPass.Pixel.Path == InPass.Vertex.Path &&
-			           InPass.Pixel.Entry == "PSMain" && InPass.Vertex.Defines.empty();
-		    });
+		const auto Found = std::find_if(Description.Passes.begin(), Description.Passes.end(),
+		                                [](const auto& InPass)
+		                                {
+			                                return InPass.SilhouettePolicy == EMaterialSilhouettePolicy::ModelShader;
+		                                });
 		if (Found == Description.Passes.end())
 		{
 			return {};
@@ -33,7 +30,7 @@ std::shared_ptr<const FMaterialDefinition> MaskDefinition(const FCompiledMateria
 		Pass.Vertex.Defines = {{"HYP_SILHOUETTE_MASK", "1"}};
 		Pass.Pixel.Defines = Pass.Vertex.Defines;
 	}
-	Pass.Usage = "SilhouetteMask";
+	Pass.Usage = MaterialUsages::SilhouetteMask;
 	Pass.Queue = EMaterialQueue::Opaque;
 	Pass.bSrgbTarget = false;
 	Pass.bAllowBatchReordering = true;

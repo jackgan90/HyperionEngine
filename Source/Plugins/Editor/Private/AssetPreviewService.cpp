@@ -47,7 +47,7 @@ FAssetPreviewState FAssetWorkspace::PreviewState(std::string_view InDocument) co
 		{
 			if (!Entry->Document)
 			{
-				throw FSceneEditError("busy", "Wait for the asset document to load");
+				throw FSceneEditError(SceneEditErrors::Busy, "Wait for the asset document to load");
 			}
 			const bool bReady = Entry->Preview && !Entry->Pending && Entry->Error.empty() &&
 			                    Entry->PreparedGeneration == Entry->Document->PreviewGeneration() &&
@@ -57,7 +57,7 @@ FAssetPreviewState FAssetWorkspace::PreviewState(std::string_view InDocument) co
 			return {Entry->DocumentId, Entry->Document->Generation(), GetPreviewSettings(*Entry), bReady, Entry->Error};
 		}
 	}
-	throw FSceneEditError("not_found", "Unknown workspace document");
+	throw FSceneEditError(SceneEditErrors::NotFound, "Unknown workspace document");
 }
 
 void FAssetWorkspace::FramePreview(FEntry& InEntry)
@@ -79,11 +79,11 @@ FAssetPreviewState FAssetWorkspace::EditPreview(std::string_view InDocument, std
 	const auto State = PreviewState(InDocument);
 	if (State.Generation != InGeneration)
 	{
-		throw FSceneEditError("stale_revision", "Asset changed before preview update");
+		throw FSceneEditError(SceneEditErrors::StaleRevision, "Asset changed before preview update");
 	}
 	if (IsBlocked() || !State.bReady)
 	{
-		throw FSceneEditError("busy", "Wait for preview readiness and finish modal operations");
+		throw FSceneEditError(SceneEditErrors::Busy, "Wait for preview readiness and finish modal operations");
 	}
 	for (const auto& Entry : Entries)
 	{
@@ -91,7 +91,8 @@ FAssetPreviewState FAssetWorkspace::EditPreview(std::string_view InDocument, std
 		{
 			if (Entry->GuiInteraction != 0 || Entry->HasPendingEdit())
 			{
-				throw FSceneEditError("busy", "Finish the active asset interaction before changing its preview");
+				throw FSceneEditError(SceneEditErrors::Busy,
+				                      "Finish the active asset interaction before changing its preview");
 			}
 			SetPreviewSettings(*Entry, InSettings);
 			if (bInFrame)
@@ -101,7 +102,7 @@ FAssetPreviewState FAssetWorkspace::EditPreview(std::string_view InDocument, std
 			return PreviewState(InDocument);
 		}
 	}
-	throw FSceneEditError("not_found", "Unknown workspace document");
+	throw FSceneEditError(SceneEditErrors::NotFound, "Unknown workspace document");
 }
 
 void FAssetWorkspace::SetPreviewSettings(FEntry& InEntry, const FAssetPreviewSettings& InSettings)

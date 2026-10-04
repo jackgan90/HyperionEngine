@@ -98,8 +98,7 @@ void FForwardRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView In
 	Views.push_back(std::move(InMain));
 	Session.BuildViews(InGraph, Views, Targets, std::move(InFrame), 1, true, bInDeferPreparation);
 	bPending = bInDeferPreparation;
-	if (const auto Cascade = ShadowPreviewCascade(ParseDirectionalShadowPreview(InShadows.DebugMode));
-	    LastStatistics.bShadows && Cascade)
+	if (const auto Cascade = ShadowPreviewCascade(InShadows.DebugMode); LastStatistics.bShadows && Cascade)
 	{
 		const auto& Main = Views.back();
 		const float Size = std::min({320.f, float(Main.Width), float(Main.Height)});

@@ -129,14 +129,9 @@ void RegisterRenderDiagnostics(FOperationCatalog& InCatalog, IRenderDiagnostics*
 		    }
 		    FDiagnosticsPage Page;
 		    FSceneComponentDiagnostics Value;
-		    try
-		    {
-			    Value = InDiagnostics->ComponentDiagnostics(InRequest.Handle, InRequest.Component);
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+
+		    Value = InDiagnostics->ComponentDiagnostics(InRequest.Handle, InRequest.Component);
+
 		    Page.Scene = Value.Publication.LogicalSceneIdentity;
 		    Page.Epoch = Value.Publication.AttachmentEpoch;
 		    Page.Publication = Value.Publication.PublicationSerial;
@@ -173,25 +168,11 @@ void RegisterRenderOutput(FOperationCatalog& InCatalog, IRenderOutput* InOutput)
 	    Info,
 	    [InOutput](const auto& InRequest)
 	    {
-		    try
-		    {
-			    auto Pending = InOutput->RequestImage(InRequest);
-			    return TPendingOperation<FImageArtifact>{[InOutput, Pending]()
-			                                             {
-				                                             try
-				                                             {
-					                                             return InOutput->PollImage(Pending);
-				                                             }
-				                                             catch (const FSceneEditError& Error)
-				                                             {
-					                                             throw FAutomationError(Error.Code, Error.what());
-				                                             }
-			                                             }};
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+		    auto Pending = InOutput->RequestImage(InRequest);
+		    return TPendingOperation<FImageArtifact>{[InOutput, Pending]()
+		                                             {
+			                                             return InOutput->PollImage(Pending);
+		                                             }};
 	    }));
 }
 } // namespace Hyperion

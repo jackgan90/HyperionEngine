@@ -56,7 +56,7 @@ void RequireFramingBusy(ISceneViewport& InViewport, const FSceneMutationRequest&
 	}
 	catch (const FSceneEditError& Failure)
 	{
-		bRejected = Failure.Code == "busy";
+		bRejected = Failure.Code == SceneEditErrors::Busy;
 	}
 	RequireFraming(bRejected && InViewport.ViewportState().Camera == Before,
 	               "shared service admitted framing during active interaction");
@@ -270,7 +270,7 @@ void FEditorAcceptanceHarness::ExerciseFramingGuards(std::vector<FInputEvent>& I
 			}
 			catch (const FSceneEditError& Failure)
 			{
-				bRejected = Failure.Code == "busy";
+				bRejected = Failure.Code == SceneEditErrors::Busy;
 			}
 			RequireFraming(bRejected, "shared service admitted framing during a modal operation");
 			FramingKey(InEvents);

@@ -32,15 +32,15 @@ FRenderSettings ExpectedSettings(FRenderSettings InBefore, FOptionAction InActio
 	const std::string_view Control(InAction.Control);
 	if (Control == "hud/visualizer")
 	{
-		InBefore.DebugMode = static_cast<std::uint32_t>(std::stoul(InAction.Selection));
+		InBefore.DebugMode = ParseGBufferVisualizer(static_cast<std::uint32_t>(std::stoul(InAction.Selection)));
 	}
 	else if (Control == "render/pipeline")
 	{
-		InBefore.Pipeline = InAction.Selection;
+		InBefore.Pipeline = ParseSceneRenderPipeline(InAction.Selection);
 	}
 	else if (Control == "render/gbuffer")
 	{
-		InBefore.GBuffer = InAction.Selection;
+		InBefore.GBuffer = ParseGBufferPreset(InAction.Selection);
 	}
 	else
 	{
@@ -100,8 +100,8 @@ bool FEditorAcceptanceHarness::ExerciseRasterOptions(std::vector<FInputEvent>& I
 			Exercise.SceneRevision = Editor.Scene->GetRevision();
 			Exercise.History = Editor.HistoryCursor;
 			auto Initial = Editor.Rendering;
-			Initial.Pipeline = "deferred";
-			Initial.GBuffer = "compact";
+			Initial.Pipeline = ESceneRenderPipeline::Deferred;
+			Initial.GBuffer = EGBufferPreset::Compact;
 			Editor.SetRenderSettings(Editor.RenderSettingsRevision, Initial);
 		}
 		Editor.bShowRenderSettings = Exercise.Case >= 7;

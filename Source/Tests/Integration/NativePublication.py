@@ -246,6 +246,25 @@ class PublicationChecks:
             self.run(*args, mount + '/Missing', error='')
             asset.unlink()
 
+    def check_migration_entries(self):
+        source = self.root / 'MigrationEntries'
+        output = self.root / 'MigrationOutput'
+        source.mkdir()
+        for name in ('.git', '.cache', '.publish-work', '.assets'):
+            directory = source / name
+            directory.mkdir()
+            (directory / 'Invalid.hasset').write_bytes(b'excluded entry')
+        for name in ('Catalog.hasset', '.asset-library.hasset'):
+            (source / name).write_bytes(b'legacy migration-only exclusion')
+        # Unlike the browser, migration preserves case-sensitive exclusions.
+        visible = source / '.PUBLISH-visible'
+        visible.mkdir()
+        (visible / 'Texture.hasset').write_bytes(self.texture_path().read_bytes())
+        text = self.run('--asset-root', source, 'migrate-library', '/Game', output)
+        assert 'Staged 1 current native assets' in text
+        assert [path.relative_to(output).as_posix() for path in output.rglob('*.hasset')] == [
+            '.PUBLISH-visible/Texture.hasset']
+
 
 def main():
     tool = pathlib.Path(sys.argv[1]).resolve()
@@ -261,6 +280,7 @@ def main():
         checks.check_rename()
         checks.check_root_permissions()
         checks.check_library_subtrees()
+        checks.check_migration_entries()
     print('Native publication conflicts, staged texture reuse and renamed dependency tools passed')
 
 

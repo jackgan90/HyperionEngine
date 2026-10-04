@@ -1,3 +1,4 @@
+#include "Hyperion/Assets/AssetEntryNames.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Core/ContentHash.h"
@@ -90,6 +91,7 @@ void CheckMetadata()
 	Files.WriteAtomic(Root / "Bulk.hasset", Encoded.Bytes);
 	Files.WriteAtomic(Root / ".cache/Duplicate.hasset", Encoded.Bytes);
 	Files.WriteAtomic(Root / ".git/Duplicate.hasset", Encoded.Bytes);
+	Files.WriteAtomic(Root / ".publish-fixture/Duplicate.hasset", Encoded.Bytes);
 	const auto Found = DiscoverAssets(Files, Root);
 	HYP_CHECK(Found.Errors.empty() && Found.Entries.size() == 1);
 	HYP_CHECK(Serialize(Found.Entries.front().Header) == Serialize(Encoded.Header));
@@ -118,6 +120,39 @@ void CheckMetadata()
 		    DecodeAsset(Encoded.Bytes);
 	    });
 	std::filesystem::remove_all(Root);
+}
+
+void CheckReservedEntryNames()
+{
+	for (const auto* Name : {".git", ".cache", ".publish-", ".publish-library", ".publish-arbitrary"})
+	{
+		HYP_CHECK(IsReservedAssetEntry(Name));
+	}
+	for (const auto* Name : {"", ".GIT", ".Cache", ".PUBLISH-library", ".assets", "Catalog.hasset",
+	                         ".asset-library.hasset", ".publish", "Public.publish-lock"})
+	{
+		HYP_CHECK(!IsReservedAssetEntry(Name));
+	}
+	HYP_CHECK(AssetPublicationLeaseName() == ".publish-library");
+	HYP_CHECK(IsReservedAssetEntry(AssetPublicationLeaseName()));
+}
+
+void CheckDiscoveryEntryPolicy()
+{
+	FMemoryFileSystem Files;
+	const auto Root = std::filesystem::absolute("registry-entry-policy");
+	// Memory paths preserve case independently of the host filesystem.
+	for (const auto* Name : {".git", ".cache", ".publish-work", ".GIT", ".Cache", ".PUBLISH-work", ".assets"})
+	{
+		const FRegistryFixture Fixture{Name};
+		Files.WriteAtomic(Root / Name / "Entry.hasset", EncodeAsset(RecordType<FRegistryFixture>(), &Fixture).Bytes);
+	}
+	const auto Found = DiscoverAssets(Files, Root);
+	HYP_CHECK(Found.Errors.empty() && Found.Entries.size() == 4);
+	for (const auto& Entry : Found.Entries)
+	{
+		HYP_CHECK(!IsReservedAssetEntry(Entry.Path.parent_path().filename().string()));
+	}
 }
 
 class FFixtureFiles final : public IFileSystem
@@ -349,6 +384,8 @@ int main()
 {
 	try
 	{
+		CheckReservedEntryNames();
+		CheckDiscoveryEntryPolicy();
 		CheckMetadata();
 		CheckMalformedDiscovery();
 		CheckShortDiscoveryReads();

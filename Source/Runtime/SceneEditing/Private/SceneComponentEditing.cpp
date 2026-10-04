@@ -9,7 +9,7 @@ const FSceneComponent& GetSceneComponent(const FSceneEditDocument& InDocument, c
 	const auto* Component = InDocument.RequireNode(InRequest.Handle).Components.Find(InRequest.Component);
 	if (!Component || !Component->Get())
 	{
-		throw FSceneEditError("not_found", "Node does not contain the requested component");
+		throw FSceneEditError(SceneEditErrors::NotFound, "Node does not contain the requested component");
 	}
 	return *Component;
 }
@@ -64,7 +64,7 @@ static FSceneNodeEdit PrepareCurrentSceneComponentEdit(const FSceneEditDocument&
 	const auto* Found = Original.Components.Find(InRequest.Component);
 	if (!Found || !Found->Get())
 	{
-		throw FSceneEditError("not_found", "Node does not contain the requested component");
+		throw FSceneEditError(SceneEditErrors::NotFound, "Node does not contain the requested component");
 	}
 	const auto& Source = *Found;
 	if (Source.Type->Record != &InType)

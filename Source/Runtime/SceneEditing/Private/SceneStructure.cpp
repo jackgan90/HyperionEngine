@@ -26,7 +26,7 @@ FSceneHandle FSceneEditDocument::CommitDuplicate(FSceneHandle InHandle)
 	auto& Scene = Target();
 	if (!Scene.FindNode(InHandle))
 	{
-		throw FSceneEditError("stale_handle", "Duplicate target no longer exists");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Duplicate target no longer exists");
 	}
 	FSceneHistoryEntry Entry;
 	Entry.BeforeSettings = Entry.AfterSettings = Scene.Settings();
@@ -60,7 +60,7 @@ void FSceneEditDocument::CommitRemoveKeepChildren(FSceneHandle InHandle)
 	const auto* Node = Scene.FindNode(InHandle);
 	if (!Node)
 	{
-		throw FSceneEditError("stale_handle", "Delete target no longer exists");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Delete target no longer exists");
 	}
 	FSceneHistoryEntry Entry{InHandle, {}, {}, Scene.Settings(), {}, State.State, State.NextState + 1};
 	Entry.bKeepChildren = true;
@@ -73,7 +73,7 @@ void FSceneEditDocument::CommitRemoveKeepChildren(FSceneHandle InHandle)
 	State.History.reserve(State.HistoryCursor + 1);
 	if (!Scene.RemoveNodeKeepChildren(InHandle))
 	{
-		throw FSceneEditError("stale_handle", "Delete target no longer exists");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Delete target no longer exists");
 	}
 	Entry.AfterSettings = Scene.Settings();
 	FinishInteraction();
@@ -94,7 +94,7 @@ void FSceneEditDocument::CommitReparent(FSceneHandle InHandle, std::optional<FSc
 	FSceneNodeView Parent;
 	if (!Scene.NodeView(InHandle, View) || (InParent && !Scene.NodeView(*InParent, Parent)))
 	{
-		throw FSceneEditError("stale_handle", "Reparent requires current node and parent handles");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Reparent requires current node and parent handles");
 	}
 	if (InMode != ESceneReparentMode::KeepLocal && InMode != ESceneReparentMode::KeepWorld)
 	{
@@ -128,7 +128,7 @@ std::vector<FSceneNodeEdit> FSceneEditDocument::PrepareReparent(std::span<const 
 	{
 		if (!Scene.FindNode(Handle))
 		{
-			throw FSceneEditError("stale_handle", "A reparent source no longer exists in this scene");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "A reparent source no longer exists in this scene");
 		}
 		if (!Handles.insert(Handle).second)
 		{
@@ -138,7 +138,7 @@ std::vector<FSceneNodeEdit> FSceneEditDocument::PrepareReparent(std::span<const 
 	FSceneNodeView Parent;
 	if (InParent && !Scene.NodeView(*InParent, Parent))
 	{
-		throw FSceneEditError("stale_handle", "The target parent no longer exists in this scene");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "The target parent no longer exists in this scene");
 	}
 	for (auto Ancestor = InParent; Ancestor;)
 	{

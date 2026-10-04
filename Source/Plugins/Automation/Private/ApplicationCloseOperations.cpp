@@ -33,14 +33,7 @@ void RegisterApplicationClose(FOperationCatalog& InCatalog, IApplicationClose* I
 	    Info,
 	    [InHost](const auto& InRequest)
 	    {
-		    try
-		    {
-			    return InHost->RequestApplicationClose(InRequest);
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+		    return InHost->RequestApplicationClose(InRequest);
 	    }));
 }
 } // namespace Hyperion

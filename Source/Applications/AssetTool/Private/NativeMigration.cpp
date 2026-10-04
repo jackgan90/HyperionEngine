@@ -1,5 +1,6 @@
 #include "NativeMigration.h"
 #include "Hyperion/Assets/AssetAuthoring.h"
+#include "Hyperion/Assets/AssetEntryNames.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -32,7 +33,7 @@ std::vector<std::filesystem::path> PublicRoots(IFileSystem& InFiles, const std::
 		for (const auto& Entry : InFiles.ListDirectory(Directory))
 		{
 			const auto Name = PathToUtf8(Entry.Path.filename());
-			if (Name == ".assets" || Name == ".cache" || Name == ".git" || Name.starts_with(".publish-"))
+			if (Name == ".assets" || IsReservedAssetEntry(Name))
 			{
 				continue;
 			}

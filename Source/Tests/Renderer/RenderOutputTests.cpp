@@ -106,7 +106,7 @@ void CheckPreparationAndCompletion(const std::filesystem::path& InDirectory)
 	catch (const FSceneEditError& Error)
 	{
 		bConflict =
-		    Error.Code == "conflict" &&
+		    Error.Code == SceneEditErrors::Conflict &&
 		    std::string_view(Error.what()) == "Screenshot exists; choose another path or explicitly enable overwrite";
 	}
 	HYP_CHECK(bConflict);

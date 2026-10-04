@@ -21,7 +21,7 @@ struct FContentDirectoryErrorCase
 };
 
 template<class TError, class TAction>
-void CheckRootError(TAction InAction, std::string_view InCode, std::string_view InMessage)
+void CheckRootError(TAction InAction, FErrorCodeId InCode, std::string_view InMessage)
 {
 	bool bRejected{};
 	try
@@ -71,14 +71,14 @@ void CheckDirectoryErrors(FAssetService& InAssets, FContentRootService& InRoots)
 		    {
 			    (void)QueryContentDirectory(InAssets, InRoots, {0, Path});
 		    },
-		    "root_unset", "Select Game content with content.root.set");
+		    ContentRootErrors::RootUnset, "Select Game content with content.root.set");
 	}
 	CheckRootError<FContentRootError>(
 	    [&]
 	    {
 		    (void)QueryContentDirectory(InAssets, InRoots, {1, "/Game/../Engine", 0, 0});
 	    },
-	    "stale_revision", "Content root changed; query content.root.get");
+	    ContentRootErrors::StaleRevision, "Content root changed; query content.root.get");
 
 	const FContentDirectoryErrorCase Cases[]{
 	    {{0, "/Game", 0, 0}, "Directory page limit must be 1-100"},
@@ -114,14 +114,14 @@ void CheckImportRootErrors(FAssetImportWorkspace& InImports, FContentRootService
 	    {
 		    InImports.ValidateOutput(Request);
 	    },
-	    "stale_revision", "Content root changed before import");
+	    AssetImportErrors::StaleRevision, "Content root changed before import");
 	Request.Generation = 0;
 	CheckRootError<FAssetImportError>(
 	    [&]
 	    {
 		    InImports.ValidateOutput(Request);
 	    },
-	    "root_unset", "Select a Game asset root through File > Open before choosing an output");
+	    ContentRootErrors::RootUnset, "Select a Game asset root through File > Open before choosing an output");
 	HYP_CHECK(InImports.List().Total == 0);
 	InRoots.Change(InGame, true);
 	Request.Generation = InRoots.Info().Generation;
@@ -130,7 +130,7 @@ void CheckImportRootErrors(FAssetImportWorkspace& InImports, FContentRootService
 	    {
 		    InImports.ValidateOutput(Request);
 	    },
-	    "read_only", "Game content is read-only");
+	    AssetImportErrors::ReadOnly, "Game content is read-only");
 	HYP_CHECK(InImports.List().Total == 0);
 }
 } // namespace

@@ -9,8 +9,8 @@ FSceneEditDocument::FSceneEditDocument() : Identity(CreateEphemeralIdentity())
 {
 }
 
-FSceneEditError::FSceneEditError(std::string InCode, std::string InMessage)
-    : std::runtime_error(std::move(InMessage)), Code(std::move(InCode))
+FSceneEditError::FSceneEditError(FErrorCode InCode, std::string InMessage)
+    : FCodedError(std::move(InCode), std::move(InMessage))
 {
 }
 
@@ -50,7 +50,7 @@ ISceneEditTarget& FSceneEditDocument::Target() const
 {
 	if (!EditTarget)
 	{
-		throw FSceneEditError("unavailable", "No scene editing target is attached");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "No scene editing target is attached");
 	}
 	return *EditTarget;
 }
@@ -100,15 +100,16 @@ void FSceneEditDocument::RequireCurrent(const std::string& InDocument, std::uint
 {
 	if (InDocument != Id())
 	{
-		throw FSceneEditError("stale_document", "Query the current scene document before accessing nodes");
+		throw FSceneEditError(SceneEditErrors::StaleDocument,
+		                      "Query the current scene document before accessing nodes");
 	}
 	if (!Target().IsLoaded())
 	{
-		throw FSceneEditError("unavailable", "Scene has not loaded");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "Scene has not loaded");
 	}
 	if (InRevision != Target().Revision())
 	{
-		throw FSceneEditError("stale_revision", "Scene changed; query current values before editing");
+		throw FSceneEditError(SceneEditErrors::StaleRevision, "Scene changed; query current values before editing");
 	}
 }
 
@@ -117,7 +118,7 @@ const FSceneNode& FSceneEditDocument::RequireNode(FSceneHandle InHandle) const
 	const auto* Node = Target().FindNode(InHandle);
 	if (!Node)
 	{
-		throw FSceneEditError("stale_handle", "Node no longer exists in this document");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Node no longer exists in this document");
 	}
 	return *Node;
 }
@@ -126,19 +127,20 @@ void FSceneEditDocument::RequireIdle(const std::string& InDocument, std::uint64_
 {
 	if (InDocument != Id())
 	{
-		throw FSceneEditError("stale_document", "Scene document was replaced; query the current scene");
+		throw FSceneEditError(SceneEditErrors::StaleDocument, "Scene document was replaced; query the current scene");
 	}
 	if (!Target().IsLoaded())
 	{
-		throw FSceneEditError("unavailable", "The scene has not loaded");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "The scene has not loaded");
 	}
 	if (IsBusy() || Target().IsPreparing())
 	{
-		throw FSceneEditError("busy", "Scene preparation, an interaction or a modal operation is active");
+		throw FSceneEditError(SceneEditErrors::Busy,
+		                      "Scene preparation, an interaction or a modal operation is active");
 	}
 	if (InRevision != Target().Revision())
 	{
-		throw FSceneEditError("stale_revision", "Scene changed; query current values before editing");
+		throw FSceneEditError(SceneEditErrors::StaleRevision, "Scene changed; query current values before editing");
 	}
 }
 
@@ -202,7 +204,8 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 	auto& Scene = Target();
 	if (Scene.Revision() != InExpectedRevision)
 	{
-		throw FSceneEditError("stale_revision", "The objects changed while editing. Query their current values.");
+		throw FSceneEditError(SceneEditErrors::StaleRevision,
+		                      "The objects changed while editing. Query their current values.");
 	}
 	FSceneHistoryEntry Entry;
 	Entry.BeforeSettings = Scene.Settings();
@@ -214,7 +217,7 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 		const auto* Before = Scene.FindNode(Handle);
 		if (!Before)
 		{
-			throw FSceneEditError("stale_handle", "An edit target is no longer current");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "An edit target is no longer current");
 		}
 		bChanged |= *Before != Candidate;
 		Targets.push_back(Handle);
@@ -232,7 +235,7 @@ void FSceneEditDocument::CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::u
 	State.History.reserve(State.HistoryCursor + 1);
 	if (!Scene.EditNodes(std::move(InEdits), InExpectedRevision))
 	{
-		throw FSceneEditError("stale_handle", "The edit targets are no longer current");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "The edit targets are no longer current");
 	}
 	Entry.AfterSettings = Scene.Settings();
 	Entry.AfterState = ++State.NextState;
@@ -316,7 +319,7 @@ void FSceneEditDocument::CommitDelete()
 	State.History.reserve(State.HistoryCursor + 1);
 	if (!Scene.RemoveSubtrees(Entry.DeletedRoots))
 	{
-		throw FSceneEditError("stale_handle", "Delete target no longer exists");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Delete target no longer exists");
 	}
 	Entry.AfterSettings = Scene.Settings();
 	Selected.Clear();

@@ -10,12 +10,12 @@ FSceneComponentDiagnostics FEditorPlugin::ComponentDiagnostics(FSceneHandle InHa
 {
 	if (!Scene->FindNode(InHandle))
 	{
-		throw FSceneEditError("stale_handle", "Object is no longer in this scene");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Object is no longer in this scene");
 	}
 	const auto Value = Scene->GetComponentDiagnostics(InHandle, InComponent);
 	if (!Value)
 	{
-		throw FSceneEditError("not_found", "Component has no published rendering diagnostics");
+		throw FSceneEditError(SceneEditErrors::NotFound, "Component has no published rendering diagnostics");
 	}
 	return *Value;
 }
@@ -58,8 +58,8 @@ FSceneViewportState FEditorPlugin::ViewportState() const
 	ViewOptions.LightBounds = bLightBounds;
 	ViewOptions.StatusHud = bShowStatusHud;
 	ViewOptions.ProfilingHud = bShowProfilingHud;
-	ViewOptions.ProfilingCategories = ProfilingCategories;
-	ViewOptions.Visualizer = Rendering.DebugMode;
+	ViewOptions.ProfilingCategories = ToProfilingHudWireValue(ProfilingCategories);
+	ViewOptions.Visualizer = ToVisualizerWireValue(Rendering.DebugMode);
 	return {Viewport.ViewCamera,
 	        Viewport.PreviewCamera,
 	        ViewOptions,
@@ -87,15 +87,17 @@ void FEditorPlugin::FrameSelection(const FSceneMutationRequest& InRequest)
 	SceneDocument.RequireIdle(InRequest.Document, InRequest.Revision);
 	if (Viewport.PreviewCamera)
 	{
-		throw FSceneEditError("unavailable", "Selection framing requires the editor browsing view");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "Selection framing requires the editor browsing view");
 	}
 	if (Viewport.bCameraDragging || Gui->PointerState().bRightDown || Gui->HasOpenPopup())
 	{
-		throw FSceneEditError("busy", "Selection framing is blocked by camera navigation or popup interaction");
+		throw FSceneEditError(SceneEditErrors::Busy,
+		                      "Selection framing is blocked by camera navigation or popup interaction");
 	}
 	if (!Viewport.bViewportCameraInitialized || !Viewport.ViewportSize.Width || !Viewport.ViewportSize.Height)
 	{
-		throw FSceneEditError("busy", "Selection framing requires a ready scene and initialized viewport");
+		throw FSceneEditError(SceneEditErrors::Busy,
+		                      "Selection framing requires a ready scene and initialized viewport");
 	}
 	if (!Selection)
 	{
@@ -106,7 +108,7 @@ void FEditorPlugin::FrameSelection(const FSceneMutationRequest& InRequest)
 	{
 		if (!Scene->FindNode(Handle))
 		{
-			throw FSceneEditError("stale_handle", "Selected object is no longer in this scene");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "Selected object is no longer in this scene");
 		}
 	}
 	const auto Bounds = SceneSelectionBounds(*Scene, SelectedRoots());
@@ -124,17 +126,18 @@ void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 {
 	ValidateViewportOptions(InOptions, ViewportState().Options);
 	if (InOptions.Visualizer && ParseGBufferVisualizer(*InOptions.Visualizer) != EGBufferVisualizer::Lit &&
-	    InOptions.Visualizer != Rendering.DebugMode &&
-	    ParseSceneRenderPipeline(Rendering.Pipeline) != ESceneRenderPipeline::Deferred)
+	    *InOptions.Visualizer != ToVisualizerWireValue(Rendering.DebugMode) &&
+	    Rendering.Pipeline != ESceneRenderPipeline::Deferred)
 	{
-		throw FSceneEditError("unavailable", "GBuffer visualizers require the Deferred pipeline");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "GBuffer visualizers require the Deferred pipeline");
 	}
 	if (InOptions.Frozen.value_or(false) && !FrozenCullingView)
 	{
 		const auto CameraView = PickingCamera();
 		if (!CameraView || !Viewport.bViewportCameraInitialized || !Viewport.ViewportSize.Height)
 		{
-			throw FSceneEditError("unavailable", "A ready viewport camera is required before freezing culling");
+			throw FSceneEditError(SceneEditErrors::Unavailable,
+			                      "A ready viewport camera is required before freezing culling");
 		}
 		FrozenCullingView = SceneCameraViewProjection(ExtractScenePose(CameraView->World), CameraView->Lens,
 		                                              float(Viewport.ViewportSize.Width) / Viewport.ViewportSize.Height,
@@ -150,15 +153,17 @@ void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 	bLightBounds = InOptions.LightBounds.value_or(bLightBounds);
 	bShowStatusHud = InOptions.StatusHud.value_or(bShowStatusHud);
 	bShowProfilingHud = InOptions.ProfilingHud.value_or(bShowProfilingHud);
-	ProfilingCategories = InOptions.ProfilingCategories.value_or(ProfilingCategories);
+	ProfilingCategories = ParseProfilingHudCategories(
+	    InOptions.ProfilingCategories.value_or(ToProfilingHudWireValue(ProfilingCategories)));
 	if ((InOptions.Exposure && *InOptions.Exposure != Exposure) ||
-	    (InOptions.Visualizer && *InOptions.Visualizer != Rendering.DebugMode))
+	    (InOptions.Visualizer && *InOptions.Visualizer != ToVisualizerWireValue(Rendering.DebugMode)))
 	{
 		++RenderSettingsRevision;
 	}
 	Exposure = InOptions.Exposure.value_or(Exposure);
 	Rendering.Exposure = Exposure;
-	Rendering.DebugMode = InOptions.Visualizer.value_or(Rendering.DebugMode);
+	Rendering.DebugMode =
+	    ParseGBufferVisualizer(InOptions.Visualizer.value_or(ToVisualizerWireValue(Rendering.DebugMode)));
 	bShowLightMarkers = InOptions.LightMarkers.value_or(bShowLightMarkers);
 	OutlineSettings.Overlap =
 	    ParseOutlineOverlapMode(InOptions.OutlineMode.value_or(ToOutlineWireValue(OutlineSettings.Overlap)));
@@ -177,7 +182,8 @@ void FEditorPlugin::PreviewSceneCamera(std::optional<FSceneHandle> InHandle)
 		FSceneNodeView View;
 		if (!Scene->GetNodeView(*InHandle, View) || !View.bEffectiveEnabled || !View.Node->Camera())
 		{
-			throw FSceneEditError("invalid_arguments", "Preview requires an enabled camera in the current scene");
+			throw FSceneEditError(SceneEditErrors::InvalidArguments,
+			                      "Preview requires an enabled camera in the current scene");
 		}
 	}
 	SetPreviewCamera(InHandle);

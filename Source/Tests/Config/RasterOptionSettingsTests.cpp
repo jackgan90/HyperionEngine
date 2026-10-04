@@ -104,19 +104,19 @@ void CheckConfigSaveRejection(const char* InField, const FValue& InInvalid)
 	const auto Bytes = ReadBytes("preserved-raster-options.json");
 	if (std::string_view(InField) == "render_pipeline")
 	{
-		Settings.RenderPipeline = std::get<std::string>(InInvalid);
+		Settings.RenderPipeline = ESceneRenderPipeline::Count;
 	}
 	else if (std::string_view(InField) == "gbuffer_layout")
 	{
-		Settings.GBufferLayout = std::get<std::string>(InInvalid);
+		Settings.GBufferLayout = EGBufferPreset::Count;
 	}
 	else if (std::string_view(InField) == "contact_shadow_debug")
 	{
-		Settings.ContactShadowDebug = static_cast<int>(std::get<std::int64_t>(InInvalid));
+		Settings.ContactShadowDebug = static_cast<EContactShadowPreview>(std::get<std::int64_t>(InInvalid));
 	}
 	else
 	{
-		Settings.GBufferDebug = static_cast<int>(std::get<std::int64_t>(InInvalid));
+		Settings.GBufferDebug = static_cast<EGBufferVisualizer>(std::get<std::int64_t>(InInvalid));
 	}
 	Rejects(
 	    [&]

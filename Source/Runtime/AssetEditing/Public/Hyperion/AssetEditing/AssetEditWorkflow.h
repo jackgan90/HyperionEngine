@@ -1,19 +1,17 @@
 #pragma once
 #include "Hyperion/AssetEditing/AssetProperties.h"
+#include "Hyperion/AssetEditing/AssetWorkflowErrors.h"
 
 namespace Hyperion
 {
 struct FPreparedAssetField;
 
-class FAssetWorkflowError : public std::runtime_error
+class FAssetWorkflowError : public FCodedError
 {
 public:
-	FAssetWorkflowError(std::string InCode, std::string InMessage)
-	    : std::runtime_error(std::move(InMessage)), Code(std::move(InCode))
+	FAssetWorkflowError(FErrorCode InCode, std::string InMessage) : FCodedError(std::move(InCode), std::move(InMessage))
 	{
 	}
-
-	std::string Code;
 };
 
 // Main-owned operation. Workers hold only owned snapshots; the owner drains before releasing Tasks/Assets.

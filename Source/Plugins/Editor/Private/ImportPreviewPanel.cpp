@@ -102,7 +102,7 @@ void FAssetImportPanel::ProcessDraft()
 			}
 			catch (const FAssetImportError& Failure)
 			{
-				if (Failure.Code != "not_found")
+				if (Failure.Code != AssetImportErrors::NotFound)
 				{
 					throw;
 				}

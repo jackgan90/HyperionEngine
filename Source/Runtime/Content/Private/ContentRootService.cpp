@@ -36,7 +36,7 @@ void RequireGameContentRoot(const FContentRootInfo& InRoot, std::string_view InM
 {
 	if (InRoot.Directory.empty())
 	{
-		throw FContentRootError("root_unset", std::string(InMessage));
+		throw FContentRootError(ContentRootErrors::RootUnset, std::string(InMessage));
 	}
 }
 
@@ -63,12 +63,12 @@ void FContentRootService::RequireReady() const
 	Tasks.Require({EDomain::Main});
 	if (bFailed)
 	{
-		throw FContentRootError("content_failed",
+		throw FContentRootError(ContentRootErrors::ContentFailed,
 		                        "Content transition failed during consumer retirement; restart the host");
 	}
 	if (bChanging)
 	{
-		throw FContentRootError("busy", "Content root transition is already running");
+		throw FContentRootError(ContentRootErrors::Busy, "Content root transition is already running");
 	}
 }
 
@@ -77,7 +77,7 @@ FContentRootInfo FContentRootService::Info() const
 	Tasks.Require({EDomain::Main});
 	if (bFailed)
 	{
-		throw FContentRootError("content_failed", "Content transition failed; restart the host");
+		throw FContentRootError(ContentRootErrors::ContentFailed, "Content transition failed; restart the host");
 	}
 	FContentRootInfo Result{{}, Generation, false};
 	for (const auto& Mount : Files.GetMounts())
@@ -107,7 +107,7 @@ FContentRootCandidate FContentRootService::Prepare(const std::filesystem::path& 
 	{
 		if (!std::filesystem::is_directory(InDirectory))
 		{
-			throw FContentRootError("invalid_root", "Asset root must be an existing directory");
+			throw FContentRootError(ContentRootErrors::InvalidRoot, "Asset root must be an existing directory");
 		}
 		Result.Directory = std::filesystem::canonical(InDirectory);
 	}
@@ -137,7 +137,7 @@ void FContentRootService::Commit(FContentRootCandidate InCandidate, bool bInDisc
 	RequireGeneration(InCandidate.Generation);
 	if (InCandidate.Owner != this || !InCandidate.Files || !InCandidate.Assets)
 	{
-		throw FContentRootError("invalid_root", "Invalid content root candidate");
+		throw FContentRootError(ContentRootErrors::InvalidRoot, "Invalid content root candidate");
 	}
 	const auto Current = Info();
 	std::error_code Error;
@@ -154,11 +154,12 @@ void FContentRootService::Commit(FContentRootCandidate InCandidate, bool bInDisc
 		const auto State = Participant->ContentRootState();
 		if (State.bBusy)
 		{
-			throw FContentRootError("busy", "Wait for pending content edits and saves before changing the root");
+			throw FContentRootError(ContentRootErrors::Busy,
+			                        "Wait for pending content edits and saves before changing the root");
 		}
 		if (State.bDirty && !bInDiscard)
 		{
-			throw FContentRootError("dirty_document",
+			throw FContentRootError(ContentRootErrors::DirtyDocument,
 			                        "Save modified documents or explicitly discard before changing the root");
 		}
 	}
@@ -201,7 +202,7 @@ void FContentRootService::Commit(FContentRootCandidate InCandidate, bool bInDisc
 		Log(ELogLevel::Error, "Content root transition failed; previous='" + Current.Directory + "'; target='" +
 		                          PathToUtf8(InCandidate.Directory) + "'; stage=" + Stage +
 		                          "; host requires restart; reason=" + Reason);
-		throw FContentRootError("content_failed",
+		throw FContentRootError(ContentRootErrors::ContentFailed,
 		                        "Content consumer retirement or reinitialization failed; restart the host");
 	}
 	Log(ELogLevel::Info, "Content root changed; previous='" + Current.Directory + "'; current='" +
@@ -220,7 +221,7 @@ void FContentRootService::RequireGeneration(std::uint64_t InGeneration) const
 	RequireReady();
 	if (InGeneration != Generation)
 	{
-		throw FContentRootError("stale_revision",
+		throw FContentRootError(ContentRootErrors::StaleRevision,
 		                        "Content root changed; query content.root.get and retry with its generation");
 	}
 }
@@ -230,7 +231,8 @@ FContentRootInfo FContentRootService::Set(const FContentRootRequest& InRequest)
 	RequireGeneration(InRequest.Generation);
 	if (InRequest.Directory.empty())
 	{
-		throw FContentRootError("invalid_root", "Specify a directory; use content.root.clear to unmount Game");
+		throw FContentRootError(ContentRootErrors::InvalidRoot,
+		                        "Specify a directory; use content.root.clear to unmount Game");
 	}
 	Change(PathFromUtf8(InRequest.Directory), InRequest.bReadOnly, InRequest.bDiscard);
 	return Info();

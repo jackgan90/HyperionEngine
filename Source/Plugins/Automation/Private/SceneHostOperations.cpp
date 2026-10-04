@@ -24,25 +24,20 @@ void RegisterSceneHostOperations(FOperationCatalog& InCatalog, ISceneDocumentHos
 	    std::move(Info),
 	    [InHost](const FSceneOpenRequest& InRequest) -> TPendingOperation<FSceneHostStatus>
 	    {
-		    try
-		    {
-			    InHost->OpenDocument(InRequest);
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+		    InHost->OpenDocument(InRequest);
+
 		    const auto Document = InHost->DocumentStatus().Scene.Document;
 		    return {[InHost, Document]() -> std::optional<FSceneHostStatus>
 		            {
 			            auto Status = InHost->PollDocument();
 			            if (Status.Scene.Document != Document)
 			            {
-				            throw FAutomationError("stale_document", "Another transition replaced the requested scene");
+				            throw FAutomationError(AutomationErrors::StaleDocument,
+				                                   "Another transition replaced the requested scene");
 			            }
 			            if (!Status.Error.empty())
 			            {
-				            throw FAutomationError("load_failed", Status.Error);
+				            throw FAutomationError(AutomationErrors::LoadFailed, Status.Error);
 			            }
 			            return Status.Scene.bReady ? std::optional(std::move(Status)) : std::nullopt;
 		            }};

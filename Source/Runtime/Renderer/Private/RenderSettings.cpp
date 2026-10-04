@@ -1,6 +1,7 @@
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/IO/IOService.h"
 #include "Hyperion/Reflection/Json.h"
+#include "Hyperion/Reflection/MappedMember.h"
 #include <cmath>
 
 namespace Hyperion
@@ -37,11 +38,13 @@ FGBufferLayout PresetLayout(EGBufferPreset InPreset)
 
 FScenePipelineSettings MakePipelineSettings(const FRenderSettings& InSettings)
 {
+	(void)DescribeSceneRenderPipeline(InSettings.Pipeline);
+	(void)DescribeGBufferVisualizer(InSettings.DebugMode);
 	FScenePipelineSettings Result;
-	Result.Pipeline = ParseSceneRenderPipeline(InSettings.Pipeline);
-	Result.GBuffer = PresetLayout(ParseGBufferPreset(InSettings.GBuffer));
+	Result.Pipeline = InSettings.Pipeline;
+	Result.GBuffer = PresetLayout(InSettings.GBuffer);
 	Result.Exposure = InSettings.Exposure;
-	Result.DebugMode = ToVisualizerWireValue(ParseGBufferVisualizer(InSettings.DebugMode));
+	Result.DebugMode = InSettings.DebugMode;
 	Result.bClusteredLighting = InSettings.bClusteredLighting;
 	Result.ContactShadows = InSettings.Contact;
 	return Result;
@@ -49,9 +52,9 @@ FScenePipelineSettings MakePipelineSettings(const FRenderSettings& InSettings)
 
 void ValidateRenderSettings(const FRenderSettings& InSettings)
 {
-	(void)ParseSceneRenderPipeline(InSettings.Pipeline);
-	(void)ParseGBufferPreset(InSettings.GBuffer);
-	(void)ParseGBufferVisualizer(InSettings.DebugMode);
+	(void)DescribeSceneRenderPipeline(InSettings.Pipeline);
+	(void)DescribeGBufferPreset(InSettings.GBuffer);
+	(void)DescribeGBufferVisualizer(InSettings.DebugMode);
 	if (!std::isfinite(InSettings.Exposure) || InSettings.Exposure < .05f || InSettings.Exposure > 8)
 	{
 		throw std::invalid_argument("Exposure must be 0.05-8");
@@ -64,14 +67,17 @@ template<> const FRecordDescriptor& RecordType<FRenderSettings>()
 {
 	static const auto Type = MakeRecord<FRenderSettings>(
 	    "hyperion.render.settings",
-	    {Member("pipeline", &FRenderSettings::Pipeline,
-	            Inspect("Pipeline: " + OptionTokens(SceneRenderPipelineOptions()))),
-	     Member("gbuffer", &FRenderSettings::GBuffer, Inspect("GBuffer: " + OptionTokens(GBufferPresetOptions()))),
+	    {MappedMember<std::string>("pipeline", &FRenderSettings::Pipeline, ToSceneRenderPipelineToken,
+	                               ParseSceneRenderPipeline,
+	                               Inspect("Pipeline: " + OptionTokens(SceneRenderPipelineOptions()))),
+	     MappedMember<std::string>("gbuffer", &FRenderSettings::GBuffer, ToGBufferPresetToken, ParseGBufferPreset,
+	                               Inspect("GBuffer: " + OptionTokens(GBufferPresetOptions()))),
 	     Member("exposure", &FRenderSettings::Exposure, Inspect("Exposure", .05, 8)),
-	     Member("debugMode", &FRenderSettings::DebugMode,
-	            Inspect("GBuffer debug (" + std::to_string(GBufferVisualizerMinimum()) + "-" +
-	                        std::to_string(GBufferVisualizerMaximum()) + ")",
-	                    GBufferVisualizerMinimum(), GBufferVisualizerMaximum())),
+	     MappedMember<std::uint32_t>("debugMode", &FRenderSettings::DebugMode, ToVisualizerWireValue,
+	                                 ParseGBufferVisualizer,
+	                                 Inspect("GBuffer debug (" + std::to_string(GBufferVisualizerMinimum()) + "-" +
+	                                             std::to_string(GBufferVisualizerMaximum()) + ")",
+	                                         GBufferVisualizerMinimum(), GBufferVisualizerMaximum())),
 	     Member("clusteredLighting", &FRenderSettings::bClusteredLighting, Inspect("Clustered lighting")),
 	     Member("contact", &FRenderSettings::Contact, Inspect("Contact shadows")),
 	     Member("shadows", &FRenderSettings::Shadows, Inspect("Directional shadows")),

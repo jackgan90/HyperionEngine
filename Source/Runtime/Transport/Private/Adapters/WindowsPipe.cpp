@@ -19,7 +19,7 @@ struct FPipeOperation
 	{
 		if (!Event.Value)
 		{
-			throw FTransportError("transport_failed", "Could not create pipe IO event");
+			throw FTransportError(TransportErrors::TransportFailed, "Could not create pipe IO event");
 		}
 		Overlapped.hEvent = Event.Value;
 	}
@@ -235,7 +235,7 @@ bool FPipeConnection::Send(FTransportBytes InBytes)
 {
 	if (CurrentState != ETransportState::Connected)
 	{
-		throw FTransportError("disconnected", "Pipe connection is closed");
+		throw FTransportError(TransportErrors::Disconnected, "Pipe connection is closed");
 	}
 	if (InBytes.size() > MaxQueuedBytes - QueuedBytes || Writes.size() >= 128)
 	{
@@ -307,7 +307,8 @@ void FPipeListener::Begin(bool bInFirst)
 	    &Security.Attributes);
 	if (Pipe.Value == INVALID_HANDLE_VALUE)
 	{
-		throw FTransportError("listen_failed", "Could not create local pipe: " + std::to_string(GetLastError()));
+		throw FTransportError(TransportErrors::ListenFailed,
+		                      "Could not create local pipe: " + std::to_string(GetLastError()));
 	}
 	AcceptOperation.Reset();
 	if (!ConnectNamedPipe(Pipe.Value, &AcceptOperation.Overlapped))
@@ -319,7 +320,7 @@ void FPipeListener::Begin(bool bInFirst)
 		}
 		else if (ErrorCode != ERROR_PIPE_CONNECTED)
 		{
-			throw FTransportError("listen_failed", "Could not accept pipe connection");
+			throw FTransportError(TransportErrors::ListenFailed, "Could not accept pipe connection");
 		}
 	}
 }
@@ -364,7 +365,8 @@ public:
 		                             FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, nullptr));
 		if (Pipe.Value == INVALID_HANDLE_VALUE)
 		{
-			throw FTransportError("connection_failed", "Local target unavailable: " + std::to_string(GetLastError()));
+			throw FTransportError(TransportErrors::ConnectionFailed,
+			                      "Local target unavailable: " + std::to_string(GetLastError()));
 		}
 		VerifyPipeServerUser(Pipe.Value);
 		return std::make_unique<FPipeConnection>(std::move(Pipe));

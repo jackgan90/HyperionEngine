@@ -3,7 +3,6 @@
 ## Purpose
 Define reusable silhouette outlines for selected geometry, with editor activation, depth-independent coverage, configurable union or per-object overlap, and safe frame and material ownership.
 ## Requirements
-
 ### Requirement: Exterior outlines independent of scene occlusion
 The renderer SHALL derive an orange exterior outline from selected geometry coverage without testing against scene depth. Internal mesh edges, surface normals and material boundaries MUST NOT create outlines. All sections belonging to one requested object SHALL share its silhouette.
 
@@ -30,7 +29,7 @@ Main SHALL resolve scene selection to generation-safe primitive groups and an ex
 - **THEN** an old request never highlights a different object and the next valid frame reflects the current selection
 
 ### Requirement: Material coverage and display composition
-Standard PBR masked geometry SHALL reuse its effective alpha texture, UV and cutoff inputs. Blended geometry SHALL use geometric coverage. Custom materials SHALL provide a compatible SilhouetteMask pass or report unsupported coverage. Composition SHALL follow tonemapping, use correct color encoding, preserve output alpha and remain below GUI overlays.
+Standard PBR masked geometry SHALL reuse its effective alpha texture, UV and cutoff inputs. Blended geometry SHALL use geometric coverage. Custom materials SHALL provide a compatible SilhouetteMask pass or report unsupported coverage. Fallback mask construction SHALL use the immutable material's resolved declared coverage policy rather than infer capability from shader paths or entry names. Legacy eligibility SHALL be resolved at material ingestion so existing assets retain coverage. Composition SHALL follow tonemapping, use correct color encoding, preserve output alpha and remain below GUI overlays.
 
 #### Scenario: Masked surface
 - **WHEN** a selected standard PBR surface has transparent cutouts and material overrides
@@ -43,6 +42,10 @@ Standard PBR masked geometry SHALL reuse its effective alpha texture, UV and cut
 #### Scenario: Exposure and resize
 - **WHEN** exposure, viewport dimensions or depth convention changes
 - **THEN** orange display color and pixel width remain stable, targets match the viewport, and no stale outline is retained
+
+#### Scenario: Explicit fallback policy
+- **WHEN** an otherwise identical pass enables or disables fallback, or supplies an explicit mask pass
+- **THEN** coverage follows the declared policy or explicit mask and does not change solely because a source filename happens to match a built-in shader
 
 ### Requirement: Editor activation and comparison
 Editor SHALL activate the reusable Renderer feature for existing Outliner and viewport selection and expose an immediate Union / PerObject viewport option. Selection and mode changes MUST NOT dirty the document. Independent default pipelines SHALL not activate outlines automatically. A multi-target comparison exercise SHALL demonstrate both modes without requiring multi-selection UI.

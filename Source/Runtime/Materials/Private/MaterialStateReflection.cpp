@@ -1,7 +1,27 @@
 #include "Hyperion/Materials/MaterialAsset.h"
+#include "MaterialPassPolicy.h"
 
 namespace Hyperion
 {
+namespace
+{
+void MigratePass(FArchiveNode::FObject& InFields)
+{
+	FMaterialPass Pass;
+	Pass.SilhouettePolicy.reset();
+	if (const auto Vertex = InFields.find("vertex"); Vertex != InFields.end())
+	{
+		Pass.Vertex = ReadValue<FMaterialShader>(Vertex->second);
+	}
+	if (const auto Pixel = InFields.find("pixel"); Pixel != InFields.end())
+	{
+		Pass.Pixel = ReadValue<FMaterialShader>(Pixel->second);
+	}
+	MaterialsPrivate::NormalizeSilhouettePolicy(Pass);
+	InFields.insert_or_assign("silhouettePolicy", WriteValue(Pass.SilhouettePolicy));
+}
+} // namespace
+
 template<> const FRecordDescriptor& RecordType<FMaterialStencilFace>()
 {
 	static const auto Type = MakeRecord<FMaterialStencilFace>(
@@ -77,16 +97,29 @@ template<> const FRecordDescriptor& RecordType<FMaterialInstanceArray>()
 
 template<> const FRecordDescriptor& RecordType<FMaterialPass>()
 {
-	static const auto Type = MakeRecord<FMaterialPass>(
-	    "hyperion.materialpass",
-	    {Member("usage", &FMaterialPass::Usage), Member("vertex", &FMaterialPass::Vertex),
-	     Member("pixel", &FMaterialPass::Pixel), Member("state", &FMaterialPass::State),
-	     Member("dynamicState", &FMaterialPass::DynamicState), Member("queue", &FMaterialPass::Queue),
-	     Member("srgbTarget", &FMaterialPass::bSrgbTarget), Member("alphaClip", &FMaterialPass::bAlphaClip),
-	     Member("requiresConservativeBounds", &FMaterialPass::bRequiresConservativeBounds),
-	     Member("allowDynamicOverrides", &FMaterialPass::bAllowDynamicOverrides),
-	     Member("instanceArrays", &FMaterialPass::InstanceArrays),
-	     Member("allowBatchReordering", &FMaterialPass::bAllowBatchReordering)});
+	static const auto Type = []
+	{
+		auto Result = MakeRecord<FMaterialPass>(
+		    "hyperion.materialpass",
+		    {Member("usage", &FMaterialPass::Usage), Member("vertex", &FMaterialPass::Vertex),
+		     Member("pixel", &FMaterialPass::Pixel), Member("state", &FMaterialPass::State),
+		     Member("dynamicState", &FMaterialPass::DynamicState), Member("queue", &FMaterialPass::Queue),
+		     Member("srgbTarget", &FMaterialPass::bSrgbTarget), Member("alphaClip", &FMaterialPass::bAlphaClip),
+		     Member("requiresConservativeBounds", &FMaterialPass::bRequiresConservativeBounds),
+		     Member("allowDynamicOverrides", &FMaterialPass::bAllowDynamicOverrides),
+		     Member("instanceArrays", &FMaterialPass::InstanceArrays),
+		     Member("allowBatchReordering", &FMaterialPass::bAllowBatchReordering),
+		     Member("silhouettePolicy", &FMaterialPass::SilhouettePolicy)},
+		    2);
+		Result.Create = []
+		{
+			auto Pass = std::make_shared<FMaterialPass>();
+			Pass->SilhouettePolicy.reset();
+			return Pass;
+		};
+		Result.Migrations.emplace(1, MigratePass);
+		return Result;
+	}();
 	return Type;
 }
 } // namespace Hyperion

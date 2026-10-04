@@ -82,26 +82,26 @@ std::shared_ptr<FAssetAutomation::FEntry> FAssetAutomation::Find(std::string_vie
 		const auto Found = Workspace->FindDocument(InId);
 		if (!Found)
 		{
-			throw FAutomationError("not_found", "Unknown or closed workspace document");
+			throw FAutomationError(AutomationErrors::NotFound, "Unknown or closed workspace document");
 		}
 		if (!Found->Error.empty())
 		{
-			throw FAutomationError("load_failed", Found->Error);
+			throw FAutomationError(AutomationErrors::LoadFailed, Found->Error);
 		}
 		if (!Found->Document)
 		{
-			throw FAutomationError("busy", "Workspace document is still opening");
+			throw FAutomationError(AutomationErrors::Busy, "Workspace document is still opening");
 		}
 		return std::make_shared<FEntry>(Found->Id, Found->Path, Found->Document, Found->bEditing);
 	}
 	const auto It = Documents.find(InId);
 	if (It == Documents.end())
 	{
-		throw FAutomationError("not_found", "Unknown, closed or foreign-session document", "document");
+		throw FAutomationError(AutomationErrors::NotFound, "Unknown, closed or foreign-session document", "document");
 	}
 	if (!It->second->Document)
 	{
-		throw FAutomationError("busy", "Document is still opening", "document");
+		throw FAutomationError(AutomationErrors::Busy, "Document is still opening", "document");
 	}
 	return It->second;
 }
@@ -111,16 +111,16 @@ std::shared_ptr<FAssetAutomation::FEntry> FAssetAutomation::Edit(std::string_vie
 	auto Entry = Find(InId);
 	if (Entry->Document->Generation() != InGeneration)
 	{
-		throw FAutomationError("stale_revision", "Document changed; query asset.info and retry with its generation",
-		                       "generation");
+		throw FAutomationError(AutomationErrors::StaleRevision,
+		                       "Document changed; query asset.info and retry with its generation", "generation");
 	}
 	if (Entry->bEditing || Entry->Document->IsEditing())
 	{
-		throw FAutomationError("busy", "Texture edit is still running");
+		throw FAutomationError(AutomationErrors::Busy, "Texture edit is still running");
 	}
 	if (IsAssetPathReadOnly(Assets, Entry->Path))
 	{
-		throw FAutomationError("read_only", "Asset mount is read-only");
+		throw FAutomationError(AutomationErrors::ReadOnly, "Asset mount is read-only");
 	}
 	return Entry;
 }
@@ -165,15 +165,12 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 		const auto Root = Roots->Info();
 		if (IsGameContentPath(InRequest.Path))
 		{
-			try
-			{
-				RequireGameContentRoot(Root,
-				                       "Select an asset directory with content.root.set before opening Game assets");
-			}
-			catch (const FContentRootError& Failure)
-			{
-				throw FAutomationError(Failure.Code, Failure.what());
-			}
+			InvokeAutomation(
+			    [&]
+			    {
+				    RequireGameContentRoot(
+				        Root, "Select an asset directory with content.root.set before opening Game assets");
+			    });
 		}
 	}
 	const auto Path = Assets.NormalizePath(PathFromUtf8(InRequest.Path));
@@ -183,7 +180,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 		{
 			if (!Existing->Document)
 			{
-				throw FAutomationError("busy", "Asset is already opening");
+				throw FAutomationError(AutomationErrors::Busy, "Asset is already opening");
 			}
 			return {[this, Existing]
 			        {
@@ -193,7 +190,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 	}
 	if (Documents.size() >= 64)
 	{
-		throw FAutomationError("busy", "Close a document before opening another (limit 64)");
+		throw FAutomationError(AutomationErrors::Busy, "Close a document before opening another (limit 64)");
 	}
 	auto Entry = std::make_shared<FEntry>();
 	Entry->Id = Identity + "/document/" + std::to_string(++NextDocument);
@@ -221,7 +218,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 				        auto Loaded = Load.GetReady();
 				        if (!SupportsAssetDocument(*Loaded->Type))
 				        {
-					        throw FAutomationError("unsupported_type",
+					        throw FAutomationError(AutomationErrors::UnsupportedType,
 					                               "This adapter opens model, material, texture and sky documents; "
 					                               "scene documents use the attached scene.open workflow");
 				        }
@@ -249,7 +246,7 @@ FAssetDocumentInfo FAssetAutomation::Info(const FAssetDocumentRequest& InRequest
 		const auto Entry = Workspace->FindDocument(InRequest.Document);
 		if (!Entry)
 		{
-			throw FAutomationError("not_found", "Unknown or closed workspace entry");
+			throw FAutomationError(AutomationErrors::NotFound, "Unknown or closed workspace entry");
 		}
 		return DescribeWorkspace(*Entry);
 	}
@@ -317,7 +314,7 @@ FAssetDocumentInfo FAssetAutomation::Activate(const FAssetDocumentRequest& InReq
 	{
 		if (Workspace->IsBlocked())
 		{
-			throw FAutomationError("busy", "Finish the current workspace modal operation");
+			throw FAutomationError(AutomationErrors::Busy, "Finish the current workspace modal operation");
 		}
 		Workspace->ActivateDocument(InRequest.Document);
 	}
@@ -351,7 +348,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Save(const FAssetMutatio
 	auto Entry = Edit(InRequest.Document, InRequest.Generation);
 	if (Entry->Document->IsSaving())
 	{
-		throw FAutomationError("busy", "A save is already running");
+		throw FAutomationError(AutomationErrors::Busy, "A save is already running");
 	}
 	Entry->Document->Save(Assets);
 	return {[this, Entry]() -> std::optional<FAssetDocumentInfo>
@@ -370,7 +367,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Save(const FAssetMutatio
 		        }
 		        if (!Entry->Document->Error.empty())
 		        {
-			        throw FAutomationError("save_failed", Entry->Document->Error);
+			        throw FAutomationError(AutomationErrors::SaveFailed, Entry->Document->Error);
 		        }
 		        return Describe(*Entry);
 	        }};
@@ -389,16 +386,14 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::PendingEdit(const std::s
 	        {
 		        const auto Current =
 		            Workspace ? Workspace->FindDocument(Entry->Id) : std::optional<FAssetWorkspaceEntry>{};
-		        try
+		        const bool bCompleted = InvokeAutomation(
+		            [&]
+		            {
+			            return Workflow->Poll(Workspace ? (Current ? Current->Document : nullptr) : Entry->Document);
+		            });
+		        if (!bCompleted)
 		        {
-			        if (!Workflow->Poll(Workspace ? (Current ? Current->Document : nullptr) : Entry->Document))
-			        {
-				        return {};
-			        }
-		        }
-		        catch (const FAssetWorkflowError& Failure)
-		        {
-			        throw FAutomationError(Failure.Code, Failure.what());
+			        return {};
 		        }
 		        return Describe(*Entry);
 	        }};
@@ -407,15 +402,12 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::PendingEdit(const std::s
 TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetEncoding(const FAssetEncodingRequest& InRequest)
 {
 	auto Entry = Edit(InRequest.Document, InRequest.Generation);
-	try
-	{
-		return PendingEdit(
-		    Entry, FAssetEditWorkflow::Encoding(Tasks, Entry->Document, InRequest.Generation, InRequest.Encoding));
-	}
-	catch (const FAssetWorkflowError& Failure)
-	{
-		throw FAutomationError(Failure.Code, Failure.what());
-	}
+	return InvokeAutomation(
+	    [&]
+	    {
+		    return PendingEdit(
+		        Entry, FAssetEditWorkflow::Encoding(Tasks, Entry->Document, InRequest.Generation, InRequest.Encoding));
+	    });
 }
 
 FAssetCloseResult FAssetAutomation::Close(const FAssetCloseRequest& InRequest)
@@ -425,17 +417,18 @@ FAssetCloseResult FAssetAutomation::Close(const FAssetCloseRequest& InRequest)
 		const auto Entry = Workspace->FindDocument(InRequest.Document);
 		if (!Entry)
 		{
-			throw FAutomationError("not_found", "Unknown or closed workspace entry");
+			throw FAutomationError(AutomationErrors::NotFound, "Unknown or closed workspace entry");
 		}
 		if (!Entry->Document)
 		{
 			if (InRequest.Generation != 0)
 			{
-				throw FAutomationError("stale_revision", "Non-ready workspace entries have generation 0");
+				throw FAutomationError(AutomationErrors::StaleRevision,
+				                       "Non-ready workspace entries have generation 0");
 			}
 			if (Workspace->IsBlocked() || Entry->bEditing)
 			{
-				throw FAutomationError("busy", "Finish pending workspace operations before closing");
+				throw FAutomationError(AutomationErrors::Busy, "Finish pending workspace operations before closing");
 			}
 			Workspace->CloseDocument(Entry->Id);
 			return {true};
@@ -444,15 +437,15 @@ FAssetCloseResult FAssetAutomation::Close(const FAssetCloseRequest& InRequest)
 	auto Entry = Find(InRequest.Document);
 	if (Entry->Document->Generation() != InRequest.Generation)
 	{
-		throw FAutomationError("stale_revision", "Document changed", "generation");
+		throw FAutomationError(AutomationErrors::StaleRevision, "Document changed", "generation");
 	}
 	if (Entry->bEditing || Entry->Document->IsEditing() || Entry->Document->IsSaving())
 	{
-		throw FAutomationError("busy", "Wait for pending edits and saves before closing");
+		throw FAutomationError(AutomationErrors::Busy, "Wait for pending edits and saves before closing");
 	}
 	if (Entry->Document->IsDirty() && !InRequest.bDiscard)
 	{
-		throw FAutomationError("dirty_document", "Save first or explicitly set discard=true");
+		throw FAutomationError(AutomationErrors::DirtyDocument, "Save first or explicitly set discard=true");
 	}
 	Documents.erase(Entry->Id);
 	if (Workspace)
@@ -466,7 +459,7 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::OpenWorkspace(const FAss
 {
 	if (Workspace->IsBlocked())
 	{
-		throw FAutomationError("busy", "Finish the current workspace modal operation");
+		throw FAutomationError(AutomationErrors::Busy, "Finish the current workspace modal operation");
 	}
 	const auto Id = Workspace->OpenDocument(PathFromUtf8(InRequest.Path));
 	return {[this, Id]() -> std::optional<FAssetDocumentInfo>
@@ -475,11 +468,11 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::OpenWorkspace(const FAss
 		        const auto Entry = Workspace->FindDocument(Id);
 		        if (!Entry)
 		        {
-			        throw FAutomationError("stale_document", "Workspace document closed while opening");
+			        throw FAutomationError(AutomationErrors::StaleDocument, "Workspace document closed while opening");
 		        }
 		        if (!Entry->Error.empty())
 		        {
-			        throw FAutomationError("load_failed", Entry->Error);
+			        throw FAutomationError(AutomationErrors::LoadFailed, Entry->Error);
 		        }
 		        return Entry->Document ? std::optional(Info({Id})) : std::nullopt;
 	        }};

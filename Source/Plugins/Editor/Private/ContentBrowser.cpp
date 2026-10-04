@@ -1,4 +1,5 @@
 #include "ContentBrowser.h"
+#include "Hyperion/Assets/AssetEntryNames.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -23,7 +24,7 @@ std::string FoldName(std::string InName)
 bool IsBrowserEntry(const FDirectoryEntry& InEntry)
 {
 	const auto Name = FoldName(PathToUtf8(InEntry.Path.filename()));
-	if (Name == ".git" || Name == ".cache" || Name.starts_with(".publish-"))
+	if (IsReservedAssetEntry(Name))
 	{
 		return false;
 	}

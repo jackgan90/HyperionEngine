@@ -165,8 +165,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Debug(const FRenderView& InMain) const
 	BindGBuffer(Result, GBuffer, Lifetime);
 	Result.Targets.Reads.push_back({ERenderTargetKind::Texture, SceneDepth, Lifetime, false});
 	Result.Parameters.push_back({EDeferredLightingSemantic::SceneDepth, FMaterialValue::FromTexture(SceneDepth)});
-	AppendShaderParameters(Result.Parameters, FGBufferDebugV1Parameters{
-	                                              ToVisualizerShaderCode(ParseGBufferVisualizer(Settings.DebugMode))});
+	AppendShaderParameters(Result.Parameters, FGBufferDebugV1Parameters{ToVisualizerShaderCode(Settings.DebugMode)});
 	return Result;
 }
 

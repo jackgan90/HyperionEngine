@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Materials/MaterialNames.h"
 #include "Hyperion/Math/BoundsBvh.h"
 #include "Hyperion/Math/StaticBoundsBvh.h"
 #include "Hyperion/Scene/SceneNode.h"
@@ -25,7 +26,7 @@ enum class ESceneRayStatus
 struct FSceneRayOptions
 {
 	bool bTwoSided{};
-	std::vector<std::string> MaterialUsages{"Forward"};
+	std::vector<std::string> MaterialUsages{Hyperion::MaterialUsages::Forward};
 	// A usage is ineligible when the material defines any of its excluded usages.
 	std::map<std::string, std::vector<std::string>> MaterialUsageExclusions;
 };

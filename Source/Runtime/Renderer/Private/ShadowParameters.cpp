@@ -70,11 +70,8 @@ void FCascadedShadowMap::Bind(FRenderView& InMain, FRenderPassTargets& InTargets
 		    FMaterialValue::Float(FVec4{Settings.ReceiverBias * GetDepthDirection(DepthConvention),
 		                                Settings.NormalOffset, Settings.BlendFraction, Settings.FadeFraction}));
 		Set(EShadowViewV1Field::ShadowControl,
-		    FMaterialValue::Float(FVec4{
-		        1,
-		        ParseDirectionalShadowPreview(Settings.DebugMode) == EDirectionalShadowPreview::CascadeColors ? 1.f
-		                                                                                                      : 0.f,
-		        1.f / Settings.Resolution, Settings.Distance}));
+		    FMaterialValue::Float(FVec4{1, Settings.DebugMode == EDirectionalShadowPreview::CascadeColors ? 1.f : 0.f,
+		                                1.f / Settings.Resolution, Settings.Distance}));
 		for (std::size_t Index = 0; Index < Data.size(); ++Index)
 		{
 			Set(MatrixSemantics[Index], FMaterialValue::Matrix(Data[Index].ViewProjection));

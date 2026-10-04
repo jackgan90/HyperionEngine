@@ -188,6 +188,12 @@ Editor 与独立资产适配器在打开时共用 AssetEditing 的 `SupportsAsse
 
 常见错误包括 `invalid_arguments`、`not_found`、`unavailable`、`busy`、`stale_revision`、`read_only`、`dirty_document`、`save_failed`、`not_cancellable`、`session_closed`、`root_unset`、`invalid_root`、`content_failed`。`result_unavailable` 表示处理器已经运行，但结果无法在领域结果预算内编码；操作可能已完成，客户端须核对当前状态，不能把它当作参数被拒绝。错误不意味着自动回滚已经完成的外部副作用，客户端不得自动重试非幂等调用。
 
+原生代码使用各领域公开的 `SceneEditErrors`、`AssetWorkflowErrors`、`AssetImportErrors`、`ContentRootErrors`、`TransportErrors` 和 `AutomationErrors` 标识；这些目录各自拥有稳定拼写。Core 的 `FErrorCodeId` / `FErrorCode` 和 `FCodedError` 仅表达身份、持有编码和异常，不枚举领域错误。内部抛出与判断使用类型化标识；接入外部未知编码时显式使用 `FErrorCode::FromExternal`，转译不得改写或丢弃未知值。
+
+渲染设置请求若同时有多个非法语义字段，类型化转换可能改变首条诊断所指的字段；仍在调用 provider 前整体拒绝，保留 `invalid_arguments`、path/details 及状态。调用方应修正所有非法值，不依赖多个错误之间的 message 选择顺序。
+
+`MakeOperation`、`MakeAsyncOperation` 的提交与 Poll、自定义场景绑定和资产工作流适配共用 `InvokeAutomation`。它保留 `FAutomationError` 的 path/details，并将其他 `FCodedError` 转为同码自动化异常。最终响应由 `CurrentAutomationFailure` 生成；Reflection 的 `FWireError` 保留字段路径，通用参数错误、运行错误仍分别映射为 `invalid_arguments`、`operation_failed`。操作特有的分类、路径或清理留在所属适配器，传输层不增加领域分支。
+
 默认边界：输入 JSON 消息和未包装的领域结果各自最多 1 MiB、65,536 节点、48 层；反射类型投影最多 32 层；搜索默认 12 项，最多 50 项，query 最多 256 字节；会话最多 32 个运行任务，保留最多 128 个任务（满时淘汰最早的已结束任务）；独立资产适配器最多 64 个打开文档，附着 Editor 使用共享 workspace，文档列表分页最多 100 项。传输响应另有 **4 MiB + 64 KiB、65,792 节点、56 层**的上限，为 MCP text/structuredContent 双份结果、JSON 转义、原样回传请求 ID 及任务/状态封装留出空间；领域应继续分页、摘要化或返回资源引用。响应编码失败使用结果不可用或内部错误，不作为非法参数；JSONL 会保留请求 ID 并继续接收后续请求。
 
 独立资产 document 与 job ID 属于会话；附着的场景及 Editor 资产 document 属于应用，多个连接共享，同一连接的 job 不能跨 session 查询。关闭文档/重启使旧 ID 失效；它们不是稳定资产 ID 或安全认证凭据。前端使用 stdio，附着使用当前用户的 Windows Named Pipe，无 TCP 监听。独立会话 EOF 等待已接收任务完成；附着断连由目标继续排空已接收任务，不隐式保存脏草稿。取消不表示撤销，当前保存操作不支持接收后取消。强杀进程不属于正常排空路径。
@@ -201,6 +207,7 @@ Editor 与独立资产适配器在打开时共用 AssetEditing 的 `SupportsAsse
 | 发现与执行 | 搜索、描述、严格调用、任务与错误；CLI/JSONL/MCP 共用 | 仍使用固定 bootstrap tools，按需查询具体 schema |
 | 非场景资产文档 | 模型/材质/纹理/天空的打开、列表、激活、改名、history、save/close | Editor 附着使用实际页签文档；独立模式 使用 CPU 草稿 |
 | 模型与材质 | 模型节点变换/名称、primitive 名称/材质槽、材质参数与纹理引用 | 固定拓扑和资源身份保持不变；引用完成校验后提交一个事务 |
+| 材质 pass 编写 | `material.passes.get` 可查询 pass 与可选 `silhouettePolicy`；C++ 作者接口支持显式策略 | GUI 与 automation 的 pass setter 均暂缓：需共享 pass 编辑工作流，涵盖 shader 准备、校验、历史、持久化与预览失效；不通过原始字段 set 绕过只读策略 |
 | 纹理与天空 | 编码/mip 重建、元信息与单像素查询；天空产品/SH/convention 查询 | 天空烘焙走导入；浮点/cube 编码不可改，与 GUI 一致 |
 | 场景编辑 | ordered selection、全选、节点创建/删除/重父级、metadata、组件增删读写、设置、放置、保存 | select_all 与 Ctrl+A 共用全部逻辑节点选择，返回 count/primary 摘要；范围手势转换为显式集合，共用 set 校验；set 不受 128 编辑批次限制，仍受传输预算约束。Editor 共享历史；scene.nodes.reparent 与拖拽共用固定 KeepWorld 批量事务，保留选中节点内部层级；单节点旧接口兼容；复制与保留子节点删除同样支持历史 |
 | 原生模型放置 | `scene.placement.place_model` 按模型引用与世界坐标创建一个节点 | 与 Content Browser 拖入视口共用资源准备/提交；保留内部实例和材质，异步加载，当前 document/revision 与 idle 校验，显式 save；不包含原始文件导入 |
@@ -224,7 +231,7 @@ RenderDoc HUD 的 `renderdoc.hud.get/set` 与 Editor preference 共用领域操�
 
 GUI、独立和附着 automation 共用字段校验、规范化、引用图准备与文档提交。调用方不选择预览影响：`model.nodes.set` 仅修改节点名称时与 GUI 一样保留预览，修改 Local 时使预览失效；材质值规范化后未变、相同引用及相同编码数据也不重复使预览失效。上述提交仍保留原有 generation、dirty、Undo/Redo 和保存语义。直接领域提交拒绝需要异步验证的引用，编码的完整草稿替换保持在专用工作流内部。
 
-Automation 插件的私有场景 registration adapter 只共享类型化反射编解码和 `FSceneEditError` 转换。每个 operation family 继续声明 owner、效果、完成语义、可用性、示例和关键词；组件模板保留显式请求 descriptor。Runtime transport 不解释场景类型或执行领域分支。
+Automation 插件的私有场景 registration adapter 共享类型化反射编解码，并调用统一的 `InvokeAutomation` 错误边界。每个 operation family 继续声明 owner、效果、完成语义、可用性、示例和关键词；组件模板保留显式请求 descriptor。Runtime transport 不解释场景类型或执行领域分支。
 
 目标是持续扩大人类任务的等价能力，不是一比一 RPC 每个 C++ 方法。独立资产模式拥有自己的草稿，通过保存时的 digest/identity 检查防止覆盖外部修改；附着模式直接操作目标应用的同一场景服务实例。
 

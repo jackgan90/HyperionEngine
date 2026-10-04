@@ -122,7 +122,7 @@ const FOperationDescriptor& FOperationCatalog::Find(std::string_view InId) const
 	const auto It = Operations.find(InId);
 	if (It == Operations.end())
 	{
-		throw FAutomationError("not_found", "Unknown operation: " + std::string(InId), "operation");
+		throw FAutomationError(AutomationErrors::NotFound, "Unknown operation: " + std::string(InId), "operation");
 	}
 	return It->second;
 }
@@ -132,7 +132,8 @@ FArchiveNode FOperationCatalog::Search(std::string_view InQuery, std::size_t InO
 	RequireOwner();
 	if (!InLimit || InLimit > 50 || InQuery.size() > 256)
 	{
-		throw FAutomationError("invalid_arguments", "Search limit must be 1..50 and query at most 256 bytes");
+		throw FAutomationError(AutomationErrors::InvalidArguments,
+		                       "Search limit must be 1..50 and query at most 256 bytes");
 	}
 	FArchiveNode::FArray Items;
 	std::size_t Matched{};
@@ -193,7 +194,7 @@ FArchiveNode FOperationCatalog::DescribeType(std::string_view InId) const
 	}
 	catch (const std::runtime_error&)
 	{
-		throw FAutomationError("not_found", "Unknown reflected type: " + std::string(InId), "type");
+		throw FAutomationError(AutomationErrors::NotFound, "Unknown reflected type: " + std::string(InId), "type");
 	}
 	return RecordWireSchema(*Type);
 }

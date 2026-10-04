@@ -1,6 +1,8 @@
 #pragma once
+#include "Hyperion/Materials/MaterialNames.h"
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -69,6 +71,13 @@ enum class EMaterialQueue : std::uint8_t
 	Masked,
 	Transparent,
 	Overlay
+};
+
+enum class EMaterialSilhouettePolicy : std::uint8_t
+{
+	Disabled,
+	// Rebuild the shader's defines with HYP_SILHOUETTE_MASK=1, using the Model shader coverage contract.
+	ModelShader
 };
 
 struct FMaterialStencilFace
@@ -145,7 +154,7 @@ struct FMaterialInstanceArray
 
 struct FMaterialPass
 {
-	std::string Usage = "Forward";
+	std::string Usage = MaterialUsages::Forward;
 	FMaterialShader Vertex;
 	FMaterialShader Pixel;
 	FMaterialState State;
@@ -157,6 +166,8 @@ struct FMaterialPass
 	bool bAllowDynamicOverrides{};
 	std::vector<FMaterialInstanceArray> InstanceArrays;
 	bool bAllowBatchReordering{};
+	// Null is a legacy decode input; immutable material definitions always contain a resolved policy.
+	std::optional<EMaterialSilhouettePolicy> SilhouettePolicy = EMaterialSilhouettePolicy::Disabled;
 };
 
 enum class EMaterialAvailability : std::uint8_t

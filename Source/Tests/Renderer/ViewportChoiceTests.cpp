@@ -1,4 +1,5 @@
 #include "Hyperion/RasterOptions/RasterOptions.h"
+#include "Hyperion/Renderer/ProfilingHud.h"
 #include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/Renderer/ViewportChoices.h"
 #include "Support/TestSupport.h"
@@ -39,6 +40,63 @@ void FixedWireMeanings()
 	HYP_CHECK(RasterOptionLabels(SceneCullingOptions()) ==
 	          (std::vector<std::string>{"None", "Linear frustum", "BVH frustum"}));
 	HYP_CHECK(RasterOptionLabels(OutlineOverlapOptions()) == (std::vector<std::string>{"Union", "Per object"}));
+}
+
+void ProfilingCategories()
+{
+	const std::array Expected{EProfilingHudCategory::Overview,    EProfilingHudCategory::Tasks,
+	                          EProfilingHudCategory::GpuPasses,   EProfilingHudCategory::DeviceCounters,
+	                          EProfilingHudCategory::RenderViews, EProfilingHudCategory::LightingHzb,
+	                          EProfilingHudCategory::Visibility,  EProfilingHudCategory::Batching};
+	HYP_CHECK(ProfilingHudOptions().size() == Expected.size());
+	for (std::size_t Index = 0; Index < Expected.size(); ++Index)
+	{
+		HYP_CHECK(ToProfilingHudWireValue(Expected[Index]) == (1u << Index));
+	}
+	std::vector<FProfilingHudOption> Presentation(ProfilingHudOptions().begin(), ProfilingHudOptions().end());
+	std::reverse(Presentation.begin(), Presentation.end());
+	Presentation.front().Label = "Changed presentation";
+	auto Categories = EProfilingHudCategory::None;
+	for (const auto& Option : Presentation)
+	{
+		Categories = WithProfilingHudCategory(Categories, Option.Id, true);
+	}
+	HYP_CHECK(ToProfilingHudWireValue(Categories) == 255);
+	Categories = WithProfilingHudCategory(Categories, EProfilingHudCategory::Tasks, false);
+	HYP_CHECK(ToProfilingHudWireValue(Categories) == 253);
+	HYP_CHECK(!HasProfilingHudCategory(Categories, EProfilingHudCategory::Tasks));
+	HYP_CHECK(HasProfilingHudCategory(Categories, EProfilingHudCategory::Batching));
+	HYP_CHECK(ParseProfilingHudCategories(0) == EProfilingHudCategory::None);
+	for (const auto Value : {256u, std::numeric_limits<std::uint32_t>::max()})
+	{
+		Rejects(
+		    [&]
+		    {
+			    (void)ParseProfilingHudCategories(Value);
+		    });
+		Rejects(
+		    [&]
+		    {
+			    (void)ToProfilingHudWireValue(static_cast<EProfilingHudCategory>(Value));
+		    });
+		FSceneViewportOptions Patch;
+		Patch.ProfilingCategories = Value;
+		Rejects(
+		    [&]
+		    {
+			    ValidateViewportOptions(Patch, Patch);
+		    });
+		bool bUnavailable{};
+		try
+		{
+			ValidateViewportOptions(Patch, {});
+		}
+		catch (const FSceneEditError& Error)
+		{
+			bUnavailable = Error.Code == SceneEditErrors::Unavailable;
+		}
+		HYP_CHECK(bUnavailable);
+	}
 }
 
 template<class TOption, class TParse, class TEncode>
@@ -157,7 +215,7 @@ void ViewportPreflight()
 	}
 	catch (const FSceneEditError& Error)
 	{
-		bUnavailable = Error.Code == "unavailable";
+		bUnavailable = Error.Code == SceneEditErrors::Unavailable;
 	}
 	HYP_CHECK(bUnavailable);
 }
@@ -166,6 +224,7 @@ void ViewportPreflight()
 void RunViewportChoiceTests()
 {
 	FixedWireMeanings();
+	ProfilingCategories();
 	Presentation(SceneCullingOptions(), ParseSceneCullingMode, ToCullingWireValue);
 	Presentation(OutlineOverlapOptions(), ParseOutlineOverlapMode, ToOutlineWireValue);
 	InvalidChoices();

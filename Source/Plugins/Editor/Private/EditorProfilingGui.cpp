@@ -71,21 +71,22 @@ void FEditorPlugin::DrawProfilingOptions()
 	}
 	Gui->Text("Profiling HUD categories");
 	Acceptance.ObserveWidget(EEditorWidget::ProfilingMenuTitle, Gui->LastItemBounds());
-	const std::array<const char*, 8> Labels{"Overview",     "Tasks",          "GPU passes", "Device counters",
-	                                        "Render views", "Lighting / HZB", "Visibility", "Batching"};
+	const auto Categories = ProfilingHudOptions();
 	auto ViewOptions = ViewportState().Options;
 	bool bChanged = Gui->Checkbox("Show profiling HUD", *ViewOptions.ProfilingHud);
-	for (std::uint32_t Index = 0; Index < Labels.size(); ++Index)
+	for (std::uint32_t Index = 0; Index < Categories.size(); ++Index)
 	{
-		const auto Bit = 1u << Index;
-		bool bSelected = (*ViewOptions.ProfilingCategories & Bit) != 0;
-		if (Gui->Checkbox(Labels[Index], bSelected))
+		const auto Category = Categories[Index].Id;
+		auto Selected = ParseProfilingHudCategories(*ViewOptions.ProfilingCategories);
+		bool bSelected = HasProfilingHudCategory(Selected, Category);
+		if (Gui->Checkbox(std::string(Categories[Index].Label).c_str(), bSelected))
 		{
 			ViewOptions.ProfilingCategories =
-			    bSelected ? (*ViewOptions.ProfilingCategories | Bit) : (*ViewOptions.ProfilingCategories & ~Bit);
+			    ToProfilingHudWireValue(WithProfilingHudCategory(Selected, Category, bSelected));
 			bChanged = true;
 		}
-		Acceptance.ObserveIndexedWidget(EEditorWidget::ProfilingCategory, Gui->LastItemBounds(), Index);
+		Acceptance.ObserveIndexedWidget(EEditorWidget::ProfilingCategory, Gui->LastItemBounds(),
+		                                ToProfilingHudWireValue(Category));
 	}
 	if (bChanged)
 	{

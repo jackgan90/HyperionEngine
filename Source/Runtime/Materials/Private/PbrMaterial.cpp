@@ -10,6 +10,7 @@ namespace
 FMaterialPass PbrPass(EMaterialQueue InQueue, bool bInDoubleSided)
 {
 	FMaterialPass Pass;
+	Pass.SilhouettePolicy = EMaterialSilhouettePolicy::ModelShader;
 	Pass.Vertex = {"Model.hlsl", "VSMain"};
 	Pass.Pixel = {"Model.hlsl", "PSMain"};
 	Pass.InstanceArrays = {MakeEngineInstanceArray(EObjectUniform::HyperionObjectV1),
@@ -32,7 +33,8 @@ FMaterialPass PbrPass(EMaterialQueue InQueue, bool bInDoubleSided)
 FMaterialPass ShadowPass(EMaterialQueue InQueue, bool bInDoubleSided)
 {
 	auto Pass = PbrPass(InQueue, bInDoubleSided);
-	Pass.Usage = "ShadowDepth";
+	Pass.SilhouettePolicy = EMaterialSilhouettePolicy::Disabled;
+	Pass.Usage = MaterialUsages::ShadowDepth;
 	Pass.bSrgbTarget = false;
 	Pass.State.ColorWriteMask = 0;
 	Pass.State.DepthBias = 1;
@@ -80,19 +82,20 @@ FMaterialAsset MakePbrMaterialAsset(std::string InName, EMaterialQueue InQueue, 
 	auto Hdr = PbrPass(InQueue, bInDoubleSided);
 	Hdr.bSrgbTarget = false;
 	Hdr.Pixel.Defines = {{"HYP_FORWARD_HDR", "1"}};
-	Hdr.Usage = InQueue == EMaterialQueue::Transparent ? "HdrTransparent" : "HdrForwardOpaque";
+	Hdr.Usage =
+	    InQueue == EMaterialQueue::Transparent ? MaterialUsages::HdrTransparent : MaterialUsages::HdrForwardOpaque;
 	Description.Passes.push_back(Hdr);
 	if (InQueue != EMaterialQueue::Transparent)
 	{
 		if (bInUnlit)
 		{
-			Hdr.Usage = "HdrCompatibility";
+			Hdr.Usage = MaterialUsages::HdrCompatibility;
 			Description.Passes.push_back(Hdr);
 		}
 		else
 		{
 			auto Base = PbrPass(InQueue, bInDoubleSided);
-			Base.Usage = "DeferredBase";
+			Base.Usage = MaterialUsages::DeferredBase;
 			Base.bSrgbTarget = false;
 			Base.Pixel.Defines = {{"HYP_DEFERRED_BASE", "1"}};
 			Description.Passes.push_back(std::move(Base));

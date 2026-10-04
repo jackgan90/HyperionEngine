@@ -8,15 +8,15 @@ void FEditorPlugin::OpenDocument(const FSceneOpenRequest& InRequest)
 	const auto Current = DescribeSceneDocument(SceneDocument);
 	if (InRequest.Document != Current.Document)
 	{
-		throw FSceneEditError("stale_document", "Query the current document before opening a scene");
+		throw FSceneEditError(SceneEditErrors::StaleDocument, "Query the current document before opening a scene");
 	}
 	if (InRequest.Revision != Current.Revision)
 	{
-		throw FSceneEditError("stale_revision", "Scene changed before document replacement");
+		throw FSceneEditError(SceneEditErrors::StaleRevision, "Scene changed before document replacement");
 	}
 	if (Current.bBusy || Current.bSaving || (Current.bLoaded && SceneTarget->IsPreparing()))
 	{
-		throw FSceneEditError("busy", "Wait for the active interaction, save or scene preparation");
+		throw FSceneEditError(SceneEditErrors::Busy, "Wait for the active interaction, save or scene preparation");
 	}
 	LoadSceneDocument(InRequest.Path, InRequest.bDiscard);
 }

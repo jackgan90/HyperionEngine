@@ -40,6 +40,7 @@
 | 非场景资产页签 | `asset.open/info/documents.list/activate/close/save/undo/redo/rename` | Editor 发布 `IAssetWorkspace`，GUI 和多个 agent 使用同一草稿、历史与 busy 状态；其他宿主可使用独立 CPU 文档 |
 | 模型属性 | `model.nodes.get/set`、`model.material_slots.get/set`、`model.primitives.get/set`、`model.roots.get` | AssetEditing 共享校验；节点/primitive 身份、几何和拓扑固定；引用先加载校验再提交 |
 | 材质参数 | `material.parameters.get`、`material.passes.get`、`material.values.get/set` | 共享可编辑性、类型/维数、PBR clamp 和引用图校验；不允许修改系统/声明参数 |
+| 材质 pass 编写（暂缓适配） | `material.passes.get` 查询，包括可选 `silhouettePolicy` | 当前 GUI 与 automation 均无 pass setter；后续须接入同一 shader 准备、校验、事务/历史、保存与预览失效工作流。C++ 新 pass 默认 Disabled，内建 PBR 显式 ModelShader；旧 wire 的省略/null 在不可变定义中解析 |
 | 纹理 | `texture.dimension.get/format.get/encoding.get/sample`、`texture.set_encoding` | 编码修改与 GUI 使用同一个 AssetEditing 异步工作流，共用 snapshot、busy、generation 检查和历史提交。sample 返回 mip/face 信息与源像素 RGBA，不返回 bulk |
 | 天空属性 | `sky.radiance.get/specular.get/brdf.get/irradiance.get/convention.get` | GUI 中这些产品为只读；天空重新生成使用 import；名称使用 asset.rename |
 | 资产预览 | `asset.preview.get/set` | `IAssetPreviewWorkspace`；模型/材质/天空 camera、曝光、形状、yaw；纹理 mip/face/channel/EV/zoom/pan/fit/checker。shape 为 0=Sphere、1=Plane、2=Cube；channel 为 0=RGBA、1=R、2=G、3=B、4=A，由 AssetEditing 的类型化选项映射校验，独立于 GUI 顺序/标签；重复设置不重建，临时预览不增加资产 generation/history |

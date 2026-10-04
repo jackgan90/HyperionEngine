@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Assets/AssetService.h"
+#include "Hyperion/Content/ContentRootErrors.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include <string_view>
 
@@ -35,15 +36,12 @@ template<> const FRecordDescriptor& RecordType<FContentRootInfo>();
 template<> const FRecordDescriptor& RecordType<FContentRootRequest>();
 template<> const FRecordDescriptor& RecordType<FContentRootClearRequest>();
 
-class FContentRootError : public std::runtime_error
+class FContentRootError : public FCodedError
 {
 public:
-	FContentRootError(std::string InCode, std::string InMessage)
-	    : std::runtime_error(std::move(InMessage)), Code(std::move(InCode))
+	FContentRootError(FErrorCode InCode, std::string InMessage) : FCodedError(std::move(InCode), std::move(InMessage))
 	{
 	}
-
-	std::string Code;
 };
 
 // Checks an already acquired root snapshot; callers preserve their contextual diagnostic and error adapter.

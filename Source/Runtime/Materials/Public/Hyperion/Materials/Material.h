@@ -28,7 +28,7 @@ public:
 	const FMaterialSemanticRegistry& GetSemantics() const;
 	const std::shared_ptr<const FMaterialParameterSchema>& GetSchema() const;
 	bool HasPass(std::string_view InUsage) const;
-	const FMaterialPass& GetPass(std::string_view InUsage = "Forward") const;
+	const FMaterialPass& GetPass(std::string_view InUsage = MaterialUsages::Forward) const;
 
 private:
 	std::uint64_t Identity;

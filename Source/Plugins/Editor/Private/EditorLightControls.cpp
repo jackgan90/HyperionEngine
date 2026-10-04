@@ -6,7 +6,7 @@ FSceneLightingInfo FEditorPlugin::LightingInfo()
 {
 	if (!Scene)
 	{
-		throw FSceneEditError("unavailable", "No scene is open");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "No scene is open");
 	}
 	return Scene->GetLightingInfo();
 }

@@ -173,7 +173,7 @@ const FCompiledMaterialPass& FCompiledMaterialDefinition::GetDrawPass(std::strin
 	{
 		case EMaterialExecutionMode::Ordinary:
 		{
-			const auto& Pass = GetPass(InUsage, "Default");
+			const auto& Pass = GetPass(InUsage, MaterialVariants::Default);
 			if (Pass.ExecutionMode != EMaterialExecutionMode::Ordinary)
 			{
 				throw std::invalid_argument("Default material draw variant must use ordinary execution");

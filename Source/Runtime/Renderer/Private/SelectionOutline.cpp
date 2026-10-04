@@ -130,7 +130,7 @@ bool FSelectionOutlineFeature::AddObject(FRenderFeatureContext& InContext, const
 {
 	auto View = InContext.View;
 	View.Identity = 0x6f75746c696e65;
-	View.Usage = "SilhouetteMask";
+	View.Usage = MaterialUsages::SilhouetteMask;
 	View.ExcludedPasses.clear();
 	View.CullingMode = ESceneCullingMode::None; // Raster clipping is sufficient; selected occluded geometry survives.
 	View.Width *= Scale;

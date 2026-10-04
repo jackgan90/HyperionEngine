@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/AssetImport/AssetImportErrors.h"
 #include "Hyperion/AssetImport/AssetImportService.h"
 #include "Hyperion/AssetImport/ImportDraft.h"
 #include "Hyperion/Content/ContentRootService.h"
@@ -83,15 +84,12 @@ struct FImportTaskList
 	std::uint32_t Total{};
 };
 
-class FAssetImportError : public std::runtime_error
+class FAssetImportError : public FCodedError
 {
 public:
-	FAssetImportError(std::string InCode, std::string InMessage)
-	    : std::runtime_error(std::move(InMessage)), Code(std::move(InCode))
+	FAssetImportError(FErrorCode InCode, std::string InMessage) : FCodedError(std::move(InCode), std::move(InMessage))
 	{
 	}
-
-	std::string Code;
 };
 
 // Main-only records; shared ownership keeps automation polls valid when history is pruned.

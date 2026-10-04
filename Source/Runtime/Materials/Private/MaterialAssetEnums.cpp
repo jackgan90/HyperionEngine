@@ -135,6 +135,14 @@ template<> std::span<const TRecordEnumEntry<EMaterialBlendOp>> RecordEnumEntries
 	return Values;
 }
 
+template<> std::span<const TRecordEnumEntry<EMaterialSilhouettePolicy>> RecordEnumEntries<EMaterialSilhouettePolicy>()
+{
+	static constexpr TRecordEnumEntry<EMaterialSilhouettePolicy> Values[] = {
+	    {EMaterialSilhouettePolicy::Disabled, "Disabled", ""},
+	    {EMaterialSilhouettePolicy::ModelShader, "ModelShader", ""}};
+	return Values;
+}
+
 template<> std::span<const TRecordEnumEntry<EMaterialQueue>> RecordEnumEntries<EMaterialQueue>()
 {
 	static constexpr TRecordEnumEntry<EMaterialQueue> Values[] = {{EMaterialQueue::Opaque, "Opaque", ""},

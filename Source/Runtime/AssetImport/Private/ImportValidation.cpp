@@ -28,7 +28,8 @@ std::string ImportType(const FImportRequest& InRequest, const std::string& InExt
 	{
 		return InRequest.Type;
 	}
-	throw FAssetImportError("invalid_arguments", "No matching source importer for the selected type and extension");
+	throw FAssetImportError(AssetImportErrors::InvalidArguments,
+	                        "No matching source importer for the selected type and extension");
 }
 
 void CheckWritePath(FMountedFileSystem& InFiles, const std::filesystem::path& InPath, const FContentRootInfo& InRoot)
@@ -36,7 +37,7 @@ void CheckWritePath(FMountedFileSystem& InFiles, const std::filesystem::path& In
 	const auto Text = PathToUtf8(InPath);
 	if (!IsGameContentPath(Text))
 	{
-		throw FAssetImportError("invalid_arguments",
+		throw FAssetImportError(AssetImportErrors::InvalidArguments,
 		                        "Save the asset and its dependencies inside the current /Game root");
 	}
 	const auto Physical = std::filesystem::weakly_canonical(InFiles.Resolve(InPath, true));
@@ -44,7 +45,8 @@ void CheckWritePath(FMountedFileSystem& InFiles, const std::filesystem::path& In
 	if (Relative.empty() || Relative.is_absolute() ||
 	    std::find(Relative.begin(), Relative.end(), std::filesystem::path("..")) != Relative.end())
 	{
-		throw FAssetImportError("invalid_arguments", "Output directory resolves outside the current /Game root");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments,
+		                        "Output directory resolves outside the current /Game root");
 	}
 }
 } // namespace
@@ -55,7 +57,7 @@ void FAssetImportWorkspace::ValidateOutput(const FImportRequest& InRequest) cons
 	const auto Root = Roots.Info();
 	if (InRequest.Generation != Root.Generation)
 	{
-		throw FAssetImportError("stale_revision", "Content root changed before import");
+		throw FAssetImportError(AssetImportErrors::StaleRevision, "Content root changed before import");
 	}
 	try
 	{
@@ -67,18 +69,19 @@ void FAssetImportWorkspace::ValidateOutput(const FImportRequest& InRequest) cons
 	}
 	if (Root.bReadOnly)
 	{
-		throw FAssetImportError("read_only", "Game content is read-only");
+		throw FAssetImportError(AssetImportErrors::ReadOnly, "Game content is read-only");
 	}
 	for (const auto* Text : {&InRequest.Output, &InRequest.Library})
 	{
 		if (Text->size() > 4096 || Text->find('\0') != std::string::npos)
 		{
-			throw FAssetImportError("invalid_arguments", "Output paths must be at most 4096 bytes without NUL");
+			throw FAssetImportError(AssetImportErrors::InvalidArguments,
+			                        "Output paths must be at most 4096 bytes without NUL");
 		}
 	}
 	if (InRequest.Output.empty())
 	{
-		throw FAssetImportError("invalid_arguments", "Enter an output .hasset path under /Game");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, "Enter an output .hasset path under /Game");
 	}
 	try
 	{
@@ -87,7 +90,7 @@ void FAssetImportWorkspace::ValidateOutput(const FImportRequest& InRequest) cons
 		const auto Library = NormalizeImportLibrary(Files, Output, PathFromUtf8(InRequest.Library));
 		if (!IsImportAssetOutput(Output))
 		{
-			throw FAssetImportError("invalid_arguments", "Output filename must end with .hasset");
+			throw FAssetImportError(AssetImportErrors::InvalidArguments, "Output filename must end with .hasset");
 		}
 		if (auto* Mounted = dynamic_cast<FMountedFileSystem*>(&Files))
 		{
@@ -101,7 +104,7 @@ void FAssetImportWorkspace::ValidateOutput(const FImportRequest& InRequest) cons
 	}
 	catch (const std::exception& Failure)
 	{
-		throw FAssetImportError("invalid_arguments", Failure.what());
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, Failure.what());
 	}
 }
 
@@ -110,19 +113,21 @@ FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InReques
 	ValidateOutput(InRequest);
 	if (InRequest.bCreateFolder && !InRequest.Library.empty())
 	{
-		throw FAssetImportError("invalid_arguments", "Grouped imports cannot specify a dependency library");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments,
+		                        "Grouped imports cannot specify a dependency library");
 	}
 	for (const auto* Text : {&InRequest.Source, &InRequest.Output, &InRequest.Library, &InRequest.Name, &InRequest.Type,
 	                         &InRequest.SourceRoot, &InRequest.SourceId, &InRequest.RootId})
 	{
 		if (Text->size() > 4096 || Text->find('\0') != std::string::npos)
 		{
-			throw FAssetImportError("invalid_arguments", "Import strings must be at most 4096 bytes without NUL");
+			throw FAssetImportError(AssetImportErrors::InvalidArguments,
+			                        "Import strings must be at most 4096 bytes without NUL");
 		}
 	}
 	if (InRequest.Source.empty() || InRequest.Output.empty())
 	{
-		throw FAssetImportError("invalid_arguments", "Source and output are required");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, "Source and output are required");
 	}
 	auto& Files = *IO.FileSystem();
 	const auto Source = ImportPath(PathFromUtf8(InRequest.Source));
@@ -130,7 +135,7 @@ FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InReques
 	const auto Library = NormalizeImportLibrary(Files, Output, PathFromUtf8(InRequest.Library));
 	if (!IsSeparateImportOutput(Files, Source, Output))
 	{
-		throw FAssetImportError("invalid_arguments", "Output must be a separate .hasset file");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, "Output must be a separate .hasset file");
 	}
 	const auto Extension = ImportExtension(Source);
 	const auto Type = ImportType(InRequest, Extension);
@@ -138,20 +143,22 @@ FImportValidation FAssetImportWorkspace::Validate(const FImportRequest& InReques
 	if (InRequest.bScene && !Type.empty() && Type != RecordType<FModelAsset>().Id &&
 	    Type != RecordType<FSceneManifest>().Id)
 	{
-		throw FAssetImportError("invalid_arguments", "Scene wrapping requires a model or scene source");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, "Scene wrapping requires a model or scene source");
 	}
 	if (CheckImportSourceIdentity(!InRequest.SourceRoot.empty(), InRequest.SourceId) !=
 	    EImportSourceIdentityError::None)
 	{
-		throw FAssetImportError("invalid_arguments", "Supply sourceRoot and a portable sourceId together");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments,
+		                        "Supply sourceRoot and a portable sourceId together");
 	}
 	if (!InRequest.RootId.empty() && !IsAssetIdentifier(InRequest.RootId))
 	{
-		throw FAssetImportError("invalid_arguments", "Root ID must be 32 lowercase hexadecimal characters");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments,
+		                        "Root ID must be 32 lowercase hexadecimal characters");
 	}
 	if (!Files.Exists(Source))
 	{
-		throw FAssetImportError("not_found", "Import source does not exist");
+		throw FAssetImportError(AssetImportErrors::NotFound, "Import source does not exist");
 	}
 	const auto Destination = InRequest.bCreateFolder ? SelectImportFolderOutput(IO, Source, Output) : Output;
 	return {PathToUtf8(Source), PathToUtf8(Output), PathToUtf8(Library), Type, PathToUtf8(Destination.parent_path())};

@@ -41,7 +41,7 @@ void ValidateTargetInstance(const std::string& InInstance)
 {
 	if (InInstance.size() != 32 || InInstance.find_first_not_of("0123456789abcdef") != std::string::npos)
 	{
-		throw FAutomationError("invalid_arguments", "Invalid target instance identity");
+		throw FAutomationError(AutomationErrors::InvalidArguments, "Invalid target instance identity");
 	}
 }
 

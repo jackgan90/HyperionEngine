@@ -9,11 +9,11 @@ FAssetEditWorkflow::FAssetEditWorkflow(FTaskSystem& InTasks, std::shared_ptr<FAs
 {
 	if (Document->Generation() != Generation)
 	{
-		throw FAssetWorkflowError("stale_revision", "Asset changed; query the current generation");
+		throw FAssetWorkflowError(AssetWorkflowErrors::StaleRevision, "Asset changed; query the current generation");
 	}
 	if (Document->IsEditing())
 	{
-		throw FAssetWorkflowError("busy", "An asset edit is already preparing");
+		throw FAssetWorkflowError(AssetWorkflowErrors::Busy, "An asset edit is already preparing");
 	}
 	Document->bEditing = true;
 }
@@ -26,7 +26,8 @@ std::shared_ptr<FAssetEditWorkflow> FAssetEditWorkflow::Encoding(FTaskSystem& In
 	if (InDocument->Loaded().Type->CppType != typeid(FTextureAsset) ||
 	    !CanEditTextureEncoding(*InDocument->Loaded().As<FTextureAsset>()))
 	{
-		throw FAssetWorkflowError("unsupported_type", "Encoding requires an editable RGBA8 2D texture");
+		throw FAssetWorkflowError(AssetWorkflowErrors::UnsupportedType,
+		                          "Encoding requires an editable RGBA8 2D texture");
 	}
 	auto Result = std::shared_ptr<FAssetEditWorkflow>(new FAssetEditWorkflow(InTasks, InDocument, InGeneration));
 	Result->FieldIdentity = ResolveAssetFieldPolicy(*InDocument->Loaded().Type, &FTextureAsset::Encoding).Field();
@@ -100,11 +101,11 @@ bool FAssetEditWorkflow::Poll(const std::shared_ptr<FAssetEditDocument>& InCurre
 	Release(); // All completion paths release admission before publishing or reporting an error.
 	if (InCurrent != Document || Document->Loaded().Header.Id != AssetId)
 	{
-		throw FAssetWorkflowError("stale_document", "The edited document was closed or replaced");
+		throw FAssetWorkflowError(AssetWorkflowErrors::StaleDocument, "The edited document was closed or replaced");
 	}
 	if (Document->Generation() != Generation)
 	{
-		throw FAssetWorkflowError("stale_revision", "Asset changed while preparing the edit");
+		throw FAssetWorkflowError(AssetWorkflowErrors::StaleRevision, "Asset changed while preparing the edit");
 	}
 	if (EncodingResult)
 	{

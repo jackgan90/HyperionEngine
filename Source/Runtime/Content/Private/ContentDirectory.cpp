@@ -10,7 +10,7 @@ FContentDirectoryPage QueryContentDirectory(const FAssetService& InAssets, const
 	const auto Root = InRoots.Info();
 	if (InRequest.Generation != Root.Generation)
 	{
-		throw FContentRootError("stale_revision", "Content root changed; query content.root.get");
+		throw FContentRootError(ContentRootErrors::StaleRevision, "Content root changed; query content.root.get");
 	}
 	if (!InRequest.Limit || InRequest.Limit > 100)
 	{

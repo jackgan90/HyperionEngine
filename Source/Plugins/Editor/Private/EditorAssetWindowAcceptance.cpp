@@ -160,7 +160,7 @@ void FEditorAcceptanceHarness::CheckAssetRasterOptions() const
 	CheckAssetWindow(View && Actual && View->DepthConvention == GetDepthConvention(Editor.Rendering.bReversedZ),
 	                 "Asset preview did not retain the shared depth convention");
 	CheckAssetWindow(Actual->Pipeline == ESceneRenderPipeline::Deferred && Actual->GBuffer == FGBufferLayout{} &&
-	                     Actual->DebugMode == 0 && !Editor.AssetWindow->LastFrameVsync(),
+	                     Actual->DebugMode == EGBufferVisualizer::Lit && !Editor.AssetWindow->LastFrameVsync(),
 	                 "Main settings replaced preview defaults or the exercise-mode window VSync policy");
 	bool bCheckedExposure{};
 	for (const auto& Document : Editor.AssetWorkspace->Documents())
@@ -195,9 +195,9 @@ void FEditorAcceptanceHarness::BeginAssetRasterOptions()
 	}
 	auto Candidate = Editor.Rendering;
 	Candidate.bReversedZ = !Editor.Options.Rendering.bReversedZ;
-	Candidate.Pipeline = "forward";
-	Candidate.GBuffer = "high";
-	Candidate.DebugMode = 6;
+	Candidate.Pipeline = ESceneRenderPipeline::Forward;
+	Candidate.GBuffer = EGBufferPreset::HighPrecision;
+	Candidate.DebugMode = EGBufferVisualizer::GeometryNormal;
 	Candidate.Exposure = 2.25f;
 	Candidate.bVsync = !Candidate.bVsync;
 	Editor.SetRenderSettings(Editor.RenderSettingsRevision, Candidate);
@@ -249,7 +249,7 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSizing(std::vector<FInputEvent
 			                 "Minimized asset window rendered or stopped the scene viewport");
 			auto Candidate = Editor.Rendering;
 			Candidate.bReversedZ = Editor.Options.Rendering.bReversedZ;
-			Candidate.Pipeline = "deferred";
+			Candidate.Pipeline = ESceneRenderPipeline::Deferred;
 			Candidate.bVsync = !Candidate.bVsync;
 			Editor.SetRenderSettings(Editor.RenderSettingsRevision, Candidate);
 			Editor.AssetWindow->NativeWindow().Restore();

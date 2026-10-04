@@ -17,14 +17,15 @@ FBounds NodeFramingBounds(const FSceneInstance& InScene, FSceneHandle InHandle, 
 				const auto World = TransformBounds(Local, InView.World);
 				if (!IsUsable(World))
 				{
-					throw FSceneEditError("invalid_arguments", "Selected model has invalid framing bounds");
+					throw FSceneEditError(SceneEditErrors::InvalidArguments,
+					                      "Selected model has invalid framing bounds");
 				}
 				return World;
 			}
 		}
 		else if (InScene.GetError(InHandle).empty())
 		{
-			throw FSceneEditError("busy", "Selected model geometry is still loading");
+			throw FSceneEditError(SceneEditErrors::Busy, "Selected model geometry is still loading");
 		}
 	}
 	const FVec3 Center{InView.World.Values[12], InView.World.Values[13], InView.World.Values[14]};
@@ -32,7 +33,7 @@ FBounds NodeFramingBounds(const FSceneInstance& InScene, FSceneHandle InHandle, 
 	const FBounds Bounds{Subtract(Center, Extent), Add(Center, Extent), true};
 	if (!IsUsable(Bounds))
 	{
-		throw FSceneEditError("invalid_arguments", "Selected object has invalid framing bounds");
+		throw FSceneEditError(SceneEditErrors::InvalidArguments, "Selected object has invalid framing bounds");
 	}
 	return Bounds;
 }
@@ -44,7 +45,7 @@ FBounds SceneSelectionBounds(const FSceneInstance& InScene, std::span<const FSce
 	{
 		if (!InScene.FindNode(Handle))
 		{
-			throw FSceneEditError("stale_handle", "Selected object is no longer in this scene");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "Selected object is no longer in this scene");
 		}
 	}
 	std::vector<FSceneHandle> Pending(InHandles.begin(), InHandles.end());
@@ -61,7 +62,7 @@ FBounds SceneSelectionBounds(const FSceneInstance& InScene, std::span<const FSce
 		FSceneNodeView View;
 		if (!InScene.GetNodeView(Handle, View))
 		{
-			throw FSceneEditError("stale_handle", "Selected subtree is no longer in this scene");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "Selected subtree is no longer in this scene");
 		}
 		const auto Children = InScene.GetChildren(Handle);
 		Pending.insert(Pending.end(), Children.begin(), Children.end());

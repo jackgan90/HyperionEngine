@@ -91,7 +91,7 @@ struct FRenderView
 	std::optional<FMat4> CullingViewProjection;
 	std::uint64_t Identity = 1;
 	std::uint64_t Revision = 1;
-	std::string Usage = "Forward";
+	std::string Usage = MaterialUsages::Forward;
 	std::optional<FViewport> Viewport;
 	FMaterialParameterValues Parameters;
 	FMaterialParameterValues PassParameters;

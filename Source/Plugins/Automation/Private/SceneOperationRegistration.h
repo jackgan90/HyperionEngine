@@ -3,19 +3,7 @@
 
 namespace Hyperion
 {
-template<class TFunction> auto InvokeSceneOperation(TFunction InFunction)
-{
-	try
-	{
-		return InFunction();
-	}
-	catch (const FSceneEditError& Error)
-	{
-		throw FAutomationError(Error.Code, Error.what());
-	}
-}
-
-// Metadata stays with each operation family; only typed wire adaptation and error conversion are shared.
+// Metadata stays with each operation family; typed wire adaptation uses the common automation error boundary.
 template<class TRequest, class TResult, class TFunction>
 void RegisterSceneOperation(FOperationCatalog& InCatalog, FOperationInfo InInfo, const FRecordDescriptor& InRequestType,
                             const FRecordDescriptor& InResultType, const TRequest& InExample, TFunction InFunction)
@@ -24,7 +12,7 @@ void RegisterSceneOperation(FOperationCatalog& InCatalog, FOperationInfo InInfo,
 	InCatalog.Register({std::move(InInfo), &InRequestType, &InResultType, false,
 	                    [Function = std::move(InFunction), ResultType = &InResultType](const void* InRequest)
 	                    {
-		                    return InvokeSceneOperation(
+		                    return InvokeAutomation(
 		                        [&]() -> FOperationTask
 		                        {
 			                        const TResult Result = Function(*static_cast<const TRequest*>(InRequest));

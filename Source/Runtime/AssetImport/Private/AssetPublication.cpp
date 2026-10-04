@@ -1,6 +1,7 @@
 #include "AssetImportInternal.h"
 #include "AssetPublicationInternal.h"
 #include "Hyperion/AssetImport/ImageImport.h"
+#include "Hyperion/Assets/AssetEntryNames.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "ImportRules.h"
@@ -101,7 +102,7 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 		throw std::invalid_argument("Source ID must be a portable logical name");
 	}
 	const auto LibraryLease =
-	    IO.AcquireWriteLeaseAsync(Publication.Library / ".publish-library", Cancellation).Get(IO.TaskSystem());
+	    IO.AcquireWriteLeaseAsync(Publication.Library / AssetPublicationLeaseName(), Cancellation).Get(IO.TaskSystem());
 	Publication.Prepare(InOptions);
 	if (InOptions.Prepared)
 	{

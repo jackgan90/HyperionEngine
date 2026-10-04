@@ -37,7 +37,7 @@ void ValidateSceneComponentEdit(const FRecordDescriptor& InType, const void* InO
 		if (Member.Options.bPersistent && IsReadOnly(InType, Member) &&
 		    !EqualInspectionValue(Member.Write(InOriginal), Member.Write(InCandidate)))
 		{
-			throw FSceneEditError("read_only", "Immutable component field: " + Member.Id);
+			throw FSceneEditError(SceneEditErrors::ReadOnly, "Immutable component field: " + Member.Id);
 		}
 	}
 }

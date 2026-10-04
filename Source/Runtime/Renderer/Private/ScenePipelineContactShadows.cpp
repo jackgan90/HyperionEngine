@@ -93,7 +93,7 @@ void FContactShadowFeature::AddShadows(FRenderFeatureContext& InContext)
 		AddFullscreenPass(Session, InContext.Graph, std::move(Pass), InContext.bDeferPreparation);
 		InContext.Resources.DirectionalVisibility = Mask;
 	}
-	if (ParseContactShadowPreview(Settings.DebugMode) == EContactShadowPreview::HierarchicalDepth)
+	if (Settings.DebugMode == EContactShadowPreview::HierarchicalDepth)
 	{
 		Depth = HierarchicalDepth.Request(Session, InContext.Graph, Request, InContext.bDeferPreparation);
 	}
@@ -102,7 +102,7 @@ void FContactShadowFeature::AddShadows(FRenderFeatureContext& InContext)
 void FContactShadowFeature::AddDebug(FRenderFeatureContext& InContext)
 {
 	const auto& Settings = InContext.Settings.ContactShadows;
-	const auto Preview = ParseContactShadowPreview(Settings.DebugMode);
+	const auto Preview = Settings.DebugMode;
 	const bool bDepth = Preview == EContactShadowPreview::HierarchicalDepth;
 	if ((!bDepth && (Preview == EContactShadowPreview::Lit || !bActive)) || (bDepth && !Depth.Texture))
 	{

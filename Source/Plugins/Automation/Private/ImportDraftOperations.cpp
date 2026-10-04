@@ -32,14 +32,7 @@ void RegisterDraftOperation(FOperationCatalog& InCatalog, FAssetImportWorkspace*
 	InCatalog.Register(MakeOperation<TRequest, TResult>(Info,
 	                                                    [InProvider, InFunction](const TRequest& InRequest)
 	                                                    {
-		                                                    try
-		                                                    {
-			                                                    return InFunction(*InProvider, InRequest);
-		                                                    }
-		                                                    catch (const FAssetImportError& Failure)
-		                                                    {
-			                                                    throw FAutomationError(Failure.Code, Failure.what());
-		                                                    }
+		                                                    return InFunction(*InProvider, InRequest);
 	                                                    }));
 }
 } // namespace

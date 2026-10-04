@@ -8,10 +8,8 @@ std::string CreateAutomationIdentity()
 	return CreateEphemeralIdentity();
 }
 
-FAutomationError::FAutomationError(std::string InCode, std::string InMessage, std::string InPath,
-                                   FArchiveNode InDetails)
-    : std::runtime_error(std::move(InMessage)), Code(std::move(InCode)), Path(std::move(InPath)),
-      Details(std::move(InDetails))
+FAutomationError::FAutomationError(FErrorCode InCode, std::string InMessage, std::string InPath, FArchiveNode InDetails)
+    : FCodedError(std::move(InCode), std::move(InMessage)), Path(std::move(InPath)), Details(std::move(InDetails))
 {
 }
 
@@ -27,19 +25,23 @@ FArchiveNode CurrentAutomationFailure()
 	}
 	catch (const FWireError& Error)
 	{
-		return AutomationFailure("invalid_arguments", Error.what(), Error.Path);
+		return AutomationFailure(AutomationErrors::InvalidArguments, Error.what(), Error.Path);
+	}
+	catch (const FCodedError& Error)
+	{
+		return AutomationFailure(Error.Code, Error.what());
 	}
 	catch (const std::invalid_argument& Error)
 	{
-		return AutomationFailure("invalid_arguments", Error.what());
+		return AutomationFailure(AutomationErrors::InvalidArguments, Error.what());
 	}
 	catch (const std::exception& Error)
 	{
-		return AutomationFailure("operation_failed", Error.what());
+		return AutomationFailure(AutomationErrors::OperationFailed, Error.what());
 	}
 	catch (...)
 	{
-		return AutomationFailure("internal_error", "Unknown operation failure");
+		return AutomationFailure(AutomationErrors::InternalError, "Unknown operation failure");
 	}
 }
 } // namespace Hyperion

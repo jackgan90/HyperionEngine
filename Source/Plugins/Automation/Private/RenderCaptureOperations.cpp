@@ -71,14 +71,9 @@ void RegisterCaptureActions(FOperationCatalog& InCatalog, IRenderCaptureControl*
 	    [InCapture](const auto&)
 	    {
 		    const auto Before = InCapture->RenderCaptureInfo().Completed;
-		    try
-		    {
-			    InCapture->RequestRenderCapture();
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+
+		    InCapture->RequestRenderCapture();
+
 		    return TPendingOperation<FRenderCaptureInfo>{
 		        [InCapture, Before]() -> std::optional<FRenderCaptureInfo>
 		        {
@@ -89,7 +84,7 @@ void RegisterCaptureActions(FOperationCatalog& InCatalog, IRenderCaptureControl*
 			        }
 			        if (Status.bFailed || !Status.bRunning || (!Status.bBusy && !Status.bAvailable))
 			        {
-				        throw FAutomationError("capture_failed", Status.Message);
+				        throw FAutomationError(AutomationErrors::CaptureFailed, Status.Message);
 			        }
 			        return {};
 		        }};
@@ -97,20 +92,12 @@ void RegisterCaptureActions(FOperationCatalog& InCatalog, IRenderCaptureControl*
 	Info =
 	    ControlInfo("renderdoc.open", "Open the last completed capture in the configured RenderDoc replay application.",
 	                false, InCapture);
-	InCatalog.Register(
-	    MakeOperation<FSceneInfoRequest, FRenderCaptureInfo>(Info,
-	                                                         [InCapture](const auto&)
-	                                                         {
-		                                                         try
-		                                                         {
-			                                                         InCapture->OpenRenderCapture();
-			                                                         return InCapture->RenderCaptureInfo();
-		                                                         }
-		                                                         catch (const FSceneEditError& Error)
-		                                                         {
-			                                                         throw FAutomationError(Error.Code, Error.what());
-		                                                         }
-	                                                         }));
+	InCatalog.Register(MakeOperation<FSceneInfoRequest, FRenderCaptureInfo>(Info,
+	                                                                        [InCapture](const auto&)
+	                                                                        {
+		                                                                        InCapture->OpenRenderCapture();
+		                                                                        return InCapture->RenderCaptureInfo();
+	                                                                        }));
 }
 
 void RegisterCapturePreference(FOperationCatalog& InCatalog, IRenderCaptureControl* InCapture)
@@ -122,20 +109,13 @@ void RegisterCapturePreference(FOperationCatalog& InCatalog, IRenderCaptureContr
 	                false, InCapture && InCapture->RenderCaptureInfo().Preference.has_value());
 	const FCapturePreference Preference{true};
 	Info.Example = WriteRecordWire(RecordType<FCapturePreference>(), &Preference);
-	InCatalog.Register(MakeOperation<FCapturePreference, FRenderCaptureInfo>(
-	    Info,
-	    [InCapture](const auto& InRequest)
-	    {
-		    try
-		    {
-			    InCapture->SetRenderCapturePreference(InRequest.bEnabled);
-			    return InCapture->RenderCaptureInfo();
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
-	    }));
+	InCatalog.Register(MakeOperation<FCapturePreference, FRenderCaptureInfo>(Info,
+	                                                                         [InCapture](const auto& InRequest)
+	                                                                         {
+		                                                                         InCapture->SetRenderCapturePreference(
+		                                                                             InRequest.bEnabled);
+		                                                                         return InCapture->RenderCaptureInfo();
+	                                                                         }));
 }
 
 void RegisterCaptureHud(FOperationCatalog& InCatalog, IRenderCaptureControl* InCapture)
@@ -163,15 +143,8 @@ void RegisterCaptureHud(FOperationCatalog& InCatalog, IRenderCaptureControl* InC
 	    Info,
 	    [InCapture](const auto& InRequest)
 	    {
-		    try
-		    {
-			    InCapture->SetRenderCaptureHudPreference(InRequest.bEnabled);
-			    return InCapture->RenderCaptureHudInfo();
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
+		    InCapture->SetRenderCaptureHudPreference(InRequest.bEnabled);
+		    return InCapture->RenderCaptureHudInfo();
 	    }));
 }
 

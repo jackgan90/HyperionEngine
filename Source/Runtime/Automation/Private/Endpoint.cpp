@@ -49,12 +49,12 @@ const FArchiveNode::FObject& CheckParameters(std::string_view InMethod, const FA
 	                             });
 	if (It == std::end(Bootstrap))
 	{
-		throw FAutomationError("not_found", "Unknown bootstrap method: " + std::string(InMethod));
+		throw FAutomationError(AutomationErrors::NotFound, "Unknown bootstrap method: " + std::string(InMethod));
 	}
 	const auto* Fields = std::get_if<FArchiveNode::FObject>(&InParameters.Value);
 	if (!Fields)
 	{
-		throw FAutomationError("invalid_arguments", "Parameters must be an object");
+		throw FAutomationError(AutomationErrors::InvalidArguments, "Parameters must be an object");
 	}
 	const auto Schema = ParseJson(It->Schema);
 	const auto& Definition = std::get<FArchiveNode::FObject>(Schema.Value);
@@ -65,7 +65,7 @@ const FArchiveNode::FObject& CheckParameters(std::string_view InMethod, const FA
 	{
 		if (!Properties.contains(Key))
 		{
-			throw FAutomationError("invalid_arguments", "Unknown parameter", Key);
+			throw FAutomationError(AutomationErrors::InvalidArguments, "Unknown parameter", Key);
 		}
 		const auto& Property = std::get<FArchiveNode::FObject>(Properties.at(Key).Value);
 		const auto Type = ReadValue<std::string>(Property.at("type"));
@@ -75,7 +75,7 @@ const FArchiveNode::FObject& CheckParameters(std::string_view InMethod, const FA
 		                                             std::holds_alternative<std::int64_t>(Value.Value);
 		if (!bValid)
 		{
-			throw FAutomationError("invalid_arguments", "Incorrect parameter type", Key);
+			throw FAutomationError(AutomationErrors::InvalidArguments, "Incorrect parameter type", Key);
 		}
 	}
 	if (Definition.contains("required"))
@@ -85,7 +85,7 @@ const FArchiveNode::FObject& CheckParameters(std::string_view InMethod, const FA
 			const auto Key = ReadValue<std::string>(Value);
 			if (!Fields->contains(Key))
 			{
-				throw FAutomationError("invalid_arguments", "Missing required parameter", Key);
+				throw FAutomationError(AutomationErrors::InvalidArguments, "Missing required parameter", Key);
 			}
 		}
 	}

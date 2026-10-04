@@ -50,11 +50,12 @@ FMaterialNumericInfo FAssetAutomation::MaterialNumeric(const FAssetMutationReque
 	const auto Entry = Find(InRequest.Document);
 	if (Entry->Document->Loaded().Type->CppType != typeid(FMaterialAsset))
 	{
-		throw FAutomationError("unsupported_type", "Numeric parameter operations require a material document");
+		throw FAutomationError(AutomationErrors::UnsupportedType,
+		                       "Numeric parameter operations require a material document");
 	}
 	if (Entry->Document->Generation() != InRequest.Generation)
 	{
-		throw FAutomationError("stale_revision", "Asset changed; query asset.info");
+		throw FAutomationError(AutomationErrors::StaleRevision, "Asset changed; query asset.info");
 	}
 	return DescribeMaterialNumeric(ReadValue<FMaterialAsset>(Entry->Document->Snapshot()), InName);
 }
@@ -65,7 +66,8 @@ FAssetDocumentInfo FAssetAutomation::SetMaterialNumeric(const FAssetMutationRequ
 	const auto Entry = Edit(InRequest.Document, InRequest.Generation);
 	if (Entry->Document->Loaded().Type->CppType != typeid(FMaterialAsset))
 	{
-		throw FAutomationError("unsupported_type", "Numeric parameter operations require a material document");
+		throw FAutomationError(AutomationErrors::UnsupportedType,
+		                       "Numeric parameter operations require a material document");
 	}
 	const auto Values = PrepareMaterialNumeric(ReadValue<FMaterialAsset>(Entry->Document->Snapshot()), InEdits);
 	CommitAssetField(*Entry->Document,

@@ -24,7 +24,7 @@ template<class T> void CheckReadOnly(const FRecordDescriptor& InType, const T& I
 	}
 	catch (const FSceneEditError& Error)
 	{
-		bRejected = Error.Code == "read_only";
+		bRejected = Error.Code == SceneEditErrors::ReadOnly;
 	}
 	Check(bRejected);
 }
@@ -128,7 +128,7 @@ void CheckDocumentAdmission()
 	}
 	catch (const FSceneEditError& Error)
 	{
-		bRejected = Error.Code == "read_only";
+		bRejected = Error.Code == SceneEditErrors::ReadOnly;
 	}
 	Check(bRejected && Target.Revision() == Revision && !Document.IsDirty());
 	Check(Document.GetState().History.empty() && Target.FindNode(Handles[0])->Model()->bVisible);

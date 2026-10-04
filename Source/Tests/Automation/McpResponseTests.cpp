@@ -64,17 +64,18 @@ void CheckMcpResults(bool bInDeferred)
 		bool bFailed;
 	};
 
-	const auto Failure = AutomationFailure("specific", "message", "/path", ParseJson(R"({"detail":42})"));
+	const auto Failure =
+	    AutomationFailure(FErrorCode::FromExternal("specific"), "message", "/path", ParseJson(R"({"detail":42})"));
 	const auto Success = AutomationCompleted(ParseJson(R"({"value":42})"));
-	const FCase Cases[] = {
-	    {ParseJson(R"({"session":"s"})"), false},
-	    {Success, false},
-	    {Failure, true},
-	    {AutomationJobResponse(EAutomationStatus::Running, "j", "op", false), false},
-	    {AutomationJobResponse(EAutomationStatus::Completed, "j", "op", false, Success), false},
-	    {AutomationJobResponse(EAutomationStatus::Failed, "j", "op", false, Failure), true},
-	    {AutomationJobResponse(EAutomationStatus::Cancelled, "j", "op", false, AutomationFailure("cancelled", "stop")),
-	     false}};
+	const FCase Cases[] = {{ParseJson(R"({"session":"s"})"), false},
+	                       {Success, false},
+	                       {Failure, true},
+	                       {AutomationJobResponse(EAutomationStatus::Running, "j", "op", false), false},
+	                       {AutomationJobResponse(EAutomationStatus::Completed, "j", "op", false, Success), false},
+	                       {AutomationJobResponse(EAutomationStatus::Failed, "j", "op", false, Failure), true},
+	                       {AutomationJobResponse(EAutomationStatus::Cancelled, "j", "op", false,
+	                                              AutomationFailure(AutomationErrors::Cancelled, "stop")),
+	                        false}};
 	for (const auto& Case : Cases)
 	{
 		FResponseEndpoint Endpoint;

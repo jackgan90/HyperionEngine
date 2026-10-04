@@ -1,4 +1,5 @@
 #include "AssetOperations.h"
+#include "Hyperion/Automation/Session.h"
 #include "Hyperion/IO/Path.h"
 #include <bit>
 #include <chrono>
@@ -15,6 +16,35 @@ void Require(bool bInValue)
 	{
 		throw std::runtime_error("Material numeric automation contract failed");
 	}
+}
+
+void CheckMaterialPassQuery(FOperationCatalog& InCatalog, const FAssetDocumentInfo& InDocument)
+{
+	const auto Description = InCatalog.Describe("material.passes.get");
+	const auto& Output = std::get<FArchiveNode::FObject>(Description.Value).at("outputSchema");
+	const auto& Properties =
+	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Output.Value).at("properties").Value);
+	const auto& Pass = std::get<FArchiveNode::FObject>(
+	    std::get<FArchiveNode::FObject>(Properties.at("value").Value).at("items").Value);
+	Require(ReadValue<unsigned>(Pass.at("x-hyperion-version")) == 2);
+	const auto& Policy = std::get<FArchiveNode::FObject>(Pass.at("properties").Value).at("silhouettePolicy");
+	const auto& Choices =
+	    std::get<FArchiveNode::FArray>(std::get<FArchiveNode::FObject>(Policy.Value).at("anyOf").Value);
+	Require(Choices.size() == 2);
+	const auto& Allowed =
+	    std::get<FArchiveNode::FArray>(std::get<FArchiveNode::FObject>(Choices[0].Value).at("enum").Value);
+	Require(Allowed.size() == 2 && ReadValue<unsigned>(Allowed[0]) == 0 && ReadValue<unsigned>(Allowed[1]) == 1);
+	FAutomationSession Session(InCatalog);
+	const auto Result = Session.Call(
+	    "material.passes.get",
+	    FArchiveNode(FArchiveNode::FObject{{"document", WriteValue(InDocument.Document)},
+	                                       {"generation", WriteValue(std::to_string(InDocument.Generation))}}));
+	const auto& Envelope = std::get<FArchiveNode::FObject>(Result.Value);
+	Require(ReadValue<std::string>(Envelope.at("status")) == "completed");
+	const auto& Values =
+	    std::get<FArchiveNode::FArray>(std::get<FArchiveNode::FObject>(Envelope.at("result").Value).at("value").Value);
+	Require(Values.size() == 1);
+	Require(ReadValue<unsigned>(std::get<FArchiveNode::FObject>(Values[0].Value).at("silhouettePolicy")) == 0);
 }
 } // namespace
 
@@ -92,5 +122,7 @@ void CheckMaterialNumericAutomation(FTaskSystem& InTasks, FAssetService& InAsset
 	FOperationCatalog Catalog;
 	RegisterAssetOperations(Catalog, &Provider);
 	Require(WriteJson(Catalog.DescribeType("hyperion.materialparametertype")).find("Float") != std::string::npos);
+	Catalog.Seal();
+	CheckMaterialPassQuery(Catalog, Changed);
 }
 } // namespace Hyperion

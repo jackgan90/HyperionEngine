@@ -115,11 +115,11 @@ void FEditorPlugin::LoadSceneDocument(const std::string& InPath, bool bInDiscard
 {
 	if (PendingSave)
 	{
-		throw FSceneEditError("busy", "Wait for the scene save to complete");
+		throw FSceneEditError(SceneEditErrors::Busy, "Wait for the scene save to complete");
 	}
 	if (IsDirty() && !bInDiscard)
 	{
-		throw FSceneEditError("dirty_document",
+		throw FSceneEditError(SceneEditErrors::DirtyDocument,
 		                      "Save the scene or explicitly discard changes before opening another scene");
 	}
 	Viewport.ResetNavigation();

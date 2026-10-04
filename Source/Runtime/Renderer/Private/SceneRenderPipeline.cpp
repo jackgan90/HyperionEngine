@@ -198,7 +198,7 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 		ClearTargets(InGraph, Clear);
 	}
 	const bool bDeferred = Settings.Pipeline == ESceneRenderPipeline::Deferred;
-	const bool bLit = ParseDirectionalShadowPreview(InShadows.DebugMode) == EDirectionalShadowPreview::Lit;
+	const bool bLit = InShadows.DebugMode == EDirectionalShadowPreview::Lit;
 	LastStatistics.LocalLights.bActive = (bDeferred || Settings.bClusteredLighting) && bLit;
 	LastStatistics.LocalLights.bClustered = Settings.bClusteredLighting;
 	if (const auto& Metadata = InFrame->GetSceneMetadata())
@@ -237,12 +237,11 @@ void FSceneRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView InMa
 	    },
 	    TransientGeometry.get());
 	bPending = bInDeferPreparation;
-	if (bDeferred && ParseGBufferVisualizer(Settings.DebugMode) != EGBufferVisualizer::Lit)
+	if (bDeferred && Settings.DebugMode != EGBufferVisualizer::Lit)
 	{
 		AddFullscreenPass(Session, InGraph, Debug(InMain), bInDeferPreparation);
 	}
-	if (const auto Cascade = ShadowPreviewCascade(ParseDirectionalShadowPreview(InShadows.DebugMode));
-	    LastStatistics.bShadows && Cascade)
+	if (const auto Cascade = ShadowPreviewCascade(InShadows.DebugMode); LastStatistics.bShadows && Cascade)
 	{
 		const float Size = std::min({320.f, float(InMain.Width), float(InMain.Height)});
 		Session.AppendDepthPreview(InGraph, Family.Targets[Family.TransparentIndex].Reads.at(*Cascade).Texture,

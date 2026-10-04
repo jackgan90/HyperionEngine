@@ -235,6 +235,8 @@ Object token 和参数解析缓存各自以 64 条为上限，插入压力下按
 
 definition 可声明多个 `Usage`，`HasPass("Shadow")` 仅表示存在该 pass。`ResolveMaterialPass` 结合实际目标、sample count、depth/stencil 和是否调度该用途返回 Available/Unsupported/Incompatible 及原因。完整描述中的 A2C 标志不等于当前单采样窗口能够执行 A2C。
 
+`Materials/MaterialNames.h` 的 `MaterialUsages` / `MaterialVariants` 提供内建用途及变体的共同拼写，`Usage` 和变体名仍允许自定义字符串。pass 的 `SilhouettePolicy` 独立声明轮廓回退能力，默认 Disabled，内建 PBR 显式选择 ModelShader；详细契约及版本迁移见 [选中物体轮廓](SelectionOutlines.md#材质覆盖)。
+
 Renderer 的私有内置路线表统一场景绘制与 ray picking 的 Usage 和资格。Deferred 按 `DeferredBase`、`HdrCompatibility`、`HdrTransparent`、`Forward` 的顺序选择，Forward 按 `HdrForwardOpaque`、`HdrTransparent`、`Forward` 选择；GBuffer、阴影绑定、透明与最终输出的资源构建阶段仍显式维护。多个有效 HDR pass 可以各贡献一次绘制。Legacy `Forward` 仅接纳不含任一 `HdrForwardOpaque`、`DeferredBase`、`HdrCompatibility`、`HdrTransparent` 的材质，排除集合不随当前 pipeline 缩小。`ShadowDepth`、fullscreen 与任意 custom-only pass 不自动进入场景 picking；自定义 Usage 仍可通过直接视图或显式 ray options 选择。
 
 固定状态包括 raster、depth/stencil、blend、color mask、sample 等，动态 stencil reference/blend constants 位于 pass 描述中；pass 启用 `bAllowDynamicOverrides` 时，`FRenderItem.DynamicState` 可以覆盖它们。geometry 提供 vertex layout、stride、topology，session/graph 提供目标、viewport、load/clear；它们与 material 合成最终 pipeline。合法无 PS pass 支持深度用途，不能隐式向颜色目标写入。每个活跃资源必须有合法绑定或明确 fallback。

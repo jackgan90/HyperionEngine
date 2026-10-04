@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/RasterOptions/RasterOptions.h"
+#include "Hyperion/Renderer/ProfilingHud.h"
 #include "Hyperion/Renderer/ViewportChoices.h"
 #include <cmath>
 
@@ -23,7 +24,7 @@ std::string VisualizerDescription()
 
 void Unsupported()
 {
-	throw FSceneEditError("unavailable", "This viewport does not support the requested control");
+	throw FSceneEditError(SceneEditErrors::Unavailable, "This viewport does not support the requested control");
 }
 
 template<class T> void RequireSupported(const std::optional<T>& InPatch, const std::optional<T>& InSupported)
@@ -89,7 +90,7 @@ void ValidateViewportOptions(const FSceneViewportOptions& InPatch, const FSceneV
 	     (!std::isfinite(*InPatch.Exposure) || *InPatch.Exposure < .05f || *InPatch.Exposure > 8)) ||
 	    (InPatch.OutlineMode && !IsOutlineOverlapWireValue(*InPatch.OutlineMode)) ||
 	    (InPatch.Culling && !IsSceneCullingWireValue(*InPatch.Culling)) ||
-	    (InPatch.ProfilingCategories && (*InPatch.ProfilingCategories & ~255u)))
+	    (InPatch.ProfilingCategories && !IsProfilingHudWireValue(*InPatch.ProfilingCategories)))
 	{
 		throw std::invalid_argument("Exposure must be 0.05-8; outlineMode 0-1; culling 0-2; profiling mask 0-255");
 	}

@@ -16,7 +16,7 @@ void FSceneRenderPipeline::Configure(FScenePipelineSettings InSettings)
 {
 	InSettings.ContactShadows.Validate();
 	(void)DescribeSceneRenderPipeline(InSettings.Pipeline);
-	(void)ParseGBufferVisualizer(InSettings.DebugMode);
+	(void)DescribeGBufferVisualizer(InSettings.DebugMode);
 	if (!std::isfinite(InSettings.Exposure) || InSettings.Exposure <= 0 ||
 	    !Capabilities.SampledColorTargets.at(static_cast<std::size_t>(ERHIColorFormat::Rgba16Float)))
 	{

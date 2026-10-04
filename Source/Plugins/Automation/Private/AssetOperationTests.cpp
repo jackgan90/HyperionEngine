@@ -129,7 +129,7 @@ void CheckPropertyContracts()
 	                              {"model.material_slots", true, "array", "hyperion.assetref"},
 	                              {"material.values", true, "array", "hyperion.materialassetentry"},
 	                              {"material.parameters", false, "array", "hyperion.materialassetparameter"},
-	                              {"material.passes", false, "array", "hyperion.materialpass"},
+	                              {"material.passes", false, "array", "hyperion.materialpass", 2},
 	                              {"model.roots", false, "array", ""},
 	                              {"sky.radiance", false, "object", "hyperion.assetref"},
 	                              {"sky.specular", false, "object", "hyperion.assetref"},
@@ -332,7 +332,7 @@ void CheckWorkflowCompletion(FAssetService& InAssets, FTaskSystem& InTasks)
 	}
 	catch (const FAssetWorkflowError& Error)
 	{
-		Check(Error.Code == "busy");
+		Check(Error.Code == AssetWorkflowErrors::Busy);
 	}
 	while (!Work->Poll(Document))
 	{
@@ -355,7 +355,7 @@ void CheckWorkflowCompletion(FAssetService& InAssets, FTaskSystem& InTasks)
 	}
 	catch (const FAssetWorkflowError& Error)
 	{
-		Check(Error.Code == "stale_revision");
+		Check(Error.Code == AssetWorkflowErrors::StaleRevision);
 	}
 	Check(!Document->IsEditing() && EqualInspectionValue(Document->Snapshot(), Changed));
 	Work = FAssetEditWorkflow::Encoding(InTasks, Document, Document->Generation(), EMaterialTextureEncoding::Linear);
@@ -370,7 +370,7 @@ void CheckWorkflowCompletion(FAssetService& InAssets, FTaskSystem& InTasks)
 	}
 	catch (const FAssetWorkflowError& Error)
 	{
-		Check(Error.Code == "stale_document");
+		Check(Error.Code == AssetWorkflowErrors::StaleDocument);
 	}
 	Check(!Document->IsEditing() && EqualInspectionValue(Document->Snapshot(), Changed));
 	Work = FAssetEditWorkflow::Encoding(InTasks, Document, Document->Generation(), EMaterialTextureEncoding::Linear);
@@ -571,7 +571,7 @@ void CheckUnsetRootOperations(FAssetAutomation& InProvider, FAutomationSession& 
 		}
 		catch (const FAutomationError& Error)
 		{
-			bRejected = Error.Code == "root_unset" &&
+			bRejected = Error.Code == ContentRootErrors::RootUnset &&
 			            std::string_view(Error.what()) ==
 			                "Select an asset directory with content.root.set before opening Game assets";
 		}
@@ -667,7 +667,7 @@ void CheckRootOperations(FTaskSystem& InTasks)
 		}
 		catch (const FContentRootError& Error)
 		{
-			bStaleRejected = Error.Code == "stale_revision";
+			bStaleRejected = Error.Code == ContentRootErrors::StaleRevision;
 		}
 		Check(bStaleRejected);
 		Document = Info(Wait(Session, InTasks, Call(Session, "asset.open", FAssetOpenRequest{"/Game/Texture.hasset"})));

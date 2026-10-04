@@ -19,15 +19,7 @@ void RegisterSceneLightControls(FOperationCatalog& InCatalog, ISceneLightControl
 	InCatalog.Register(MakeOperation<FSceneInfoRequest, FSceneLightingInfo>(Info,
 	                                                                        [InLights](const auto&)
 	                                                                        {
-		                                                                        try
-		                                                                        {
-			                                                                        return InLights->LightingInfo();
-		                                                                        }
-		                                                                        catch (const FSceneEditError& Error)
-		                                                                        {
-			                                                                        throw FAutomationError(
-			                                                                            Error.Code, Error.what());
-		                                                                        }
+		                                                                        return InLights->LightingInfo();
 	                                                                        }));
 }
 } // namespace Hyperion

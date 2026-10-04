@@ -6,6 +6,11 @@
 
 using namespace Hyperion;
 
+void CheckLegacyMaterialPasses();
+void CheckMaterialPolicies();
+void CheckLegacyMaterialWire();
+void CheckPixelLessSilhouettePolicy();
+
 namespace
 {
 void Reject(const std::function<void()>& InAction)
@@ -209,6 +214,10 @@ int main()
 	try
 	{
 		CheckTextures();
+		CheckLegacyMaterialPasses();
+		CheckMaterialPolicies();
+		CheckLegacyMaterialWire();
+		CheckPixelLessSilhouettePolicy();
 		CheckMaterials();
 		CheckCubeMaterial();
 		std::cout << "PASS: reflected material/texture assets, typed values, shader state and resource boundaries\n";

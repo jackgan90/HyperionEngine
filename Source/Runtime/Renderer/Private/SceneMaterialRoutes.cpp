@@ -1,4 +1,5 @@
 #include "SceneMaterialRoutes.h"
+#include "Hyperion/Materials/MaterialNames.h"
 #include <algorithm>
 #include <array>
 #include <stdexcept>
@@ -9,11 +10,11 @@ namespace
 {
 // Filtering preserves both existing ordered pick lists and the complete HDR exclusion order.
 constexpr std::array Routes{
-    FSceneMaterialRoute{ESceneMaterialRoute::ForwardOpaque, "HdrForwardOpaque", false, true, true, true},
-    FSceneMaterialRoute{ESceneMaterialRoute::DeferredBase, "DeferredBase", true, false, true, true},
-    FSceneMaterialRoute{ESceneMaterialRoute::Compatibility, "HdrCompatibility", true, false, true, true},
-    FSceneMaterialRoute{ESceneMaterialRoute::Transparent, "HdrTransparent", true, true, true, true},
-    FSceneMaterialRoute{ESceneMaterialRoute::Legacy, "Forward", true, true, true, false}};
+    FSceneMaterialRoute{ESceneMaterialRoute::ForwardOpaque, MaterialUsages::HdrForwardOpaque, false, true, true, true},
+    FSceneMaterialRoute{ESceneMaterialRoute::DeferredBase, MaterialUsages::DeferredBase, true, false, true, true},
+    FSceneMaterialRoute{ESceneMaterialRoute::Compatibility, MaterialUsages::HdrCompatibility, true, false, true, true},
+    FSceneMaterialRoute{ESceneMaterialRoute::Transparent, MaterialUsages::HdrTransparent, true, true, true, true},
+    FSceneMaterialRoute{ESceneMaterialRoute::Legacy, MaterialUsages::Forward, true, true, true, false}};
 } // namespace
 
 bool FSceneMaterialRoute::Supports(ESceneRenderPipeline InPipeline) const

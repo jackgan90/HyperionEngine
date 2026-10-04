@@ -49,7 +49,7 @@ void FLocalTargetDiscovery::Publish(const FAutomationTarget& InTarget)
 		File.flush();
 		if (!File)
 		{
-			throw FAutomationError("discovery_unavailable", "Could not publish local target record");
+			throw FAutomationError(AutomationErrors::DiscoveryUnavailable, "Could not publish local target record");
 		}
 	}
 	std::filesystem::rename(Temporary, Directory / (InTarget.Instance + ".json"));

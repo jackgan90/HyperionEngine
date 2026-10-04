@@ -13,7 +13,7 @@ FArchiveNode Complete(FArchiveNode InValue)
 	catch (const std::exception& Error)
 	{
 		throw FAutomationError(
-		    "result_unavailable",
+		    AutomationErrors::ResultUnavailable,
 		    std::string("Operation ran but its result cannot be encoded; inspect current state before "
 		                "any retry: ") +
 		        Error.what());
@@ -36,7 +36,7 @@ void FAutomationSession::MakeRoom()
 {
 	if (PendingCount() >= Limits.MaxRunningJobs)
 	{
-		throw FAutomationError("busy", "Running job limit reached; wait for a job before retrying");
+		throw FAutomationError(AutomationErrors::Busy, "Running job limit reached; wait for a job before retrying");
 	}
 	if (Jobs.size() >= Limits.MaxRetainedJobs)
 	{
@@ -57,18 +57,18 @@ FArchiveNode FAutomationSession::Call(std::string_view InOperation, const FArchi
 	Catalog.RequireOwner();
 	if (bInvoking)
 	{
-		return AutomationFailure("busy", "Reentrant operation invocation is not supported");
+		return AutomationFailure(AutomationErrors::Busy, "Reentrant operation invocation is not supported");
 	}
 	try
 	{
 		if (bStopped)
 		{
-			throw FAutomationError("session_closed", "Session no longer accepts operations");
+			throw FAutomationError(AutomationErrors::SessionClosed, "Session no longer accepts operations");
 		}
 		const auto& Operation = Catalog.Find(InOperation);
 		if (!Operation.Info.Unavailable.empty())
 		{
-			throw FAutomationError("unavailable", Operation.Info.Unavailable);
+			throw FAutomationError(AutomationErrors::Unavailable, Operation.Info.Unavailable);
 		}
 		const auto Request = ReadRecordWire(*Operation.Request, InArguments);
 		std::optional<std::uint64_t> JobKey;
@@ -154,7 +154,7 @@ FAutomationSession::FJob& FAutomationSession::FindJob(std::string_view InId)
 			return Job;
 		}
 	}
-	throw FAutomationError("not_found", "Unknown, expired or foreign-session job", "job");
+	throw FAutomationError(AutomationErrors::NotFound, "Unknown, expired or foreign-session job", "job");
 }
 
 FArchiveNode FAutomationSession::DescribeJob(const FJob& InJob) const
@@ -178,11 +178,13 @@ FArchiveNode FAutomationSession::CancelJob(std::string_view InId)
 	}
 	if (!Job.Task.Cancel)
 	{
-		throw FAutomationError("not_cancellable", "This operation cannot be cancelled after admission", "job");
+		throw FAutomationError(AutomationErrors::NotCancellable, "This operation cannot be cancelled after admission",
+		                       "job");
 	}
 	Job.Task.Cancel();
 	Job.State = EAutomationStatus::Cancelled;
-	Job.Outcome = AutomationFailure("cancelled", "Operation cancelled; provider cleanup is still drained at shutdown");
+	Job.Outcome = AutomationFailure(AutomationErrors::Cancelled,
+	                                "Operation cancelled; provider cleanup is still drained at shutdown");
 	Job.Task = {};
 	return DescribeJob(Job);
 }

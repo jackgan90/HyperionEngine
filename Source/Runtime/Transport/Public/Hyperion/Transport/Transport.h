@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Transport/TransportErrors.h"
 #include <cstddef>
 #include <filesystem>
 #include <map>
@@ -37,14 +38,11 @@ enum class ETransportState
 	Failed
 };
 
-class FTransportError : public std::runtime_error
+class FTransportError : public FCodedError
 {
 public:
-	FTransportError(std::string InCode, std::string InMessage);
+	FTransportError(FErrorCode InCode, std::string InMessage);
 	const std::string& GetCode() const noexcept;
-
-private:
-	std::string Code;
 };
 
 // Owner-thread, nonblocking progress API. Native pending IO only borrows provider-owned buffers.

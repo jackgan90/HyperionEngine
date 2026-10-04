@@ -214,7 +214,7 @@ void CheckContentFailureDiagnostic()
 	}
 	catch (const FContentRootError& Failure)
 	{
-		bFailed = Failure.Code == "content_failed";
+		bFailed = Failure.Code == ContentRootErrors::ContentFailed;
 	}
 	Fixture.Content->UnregisterParticipant(Participant);
 	HYP_CHECK(bFailed);
@@ -672,7 +672,7 @@ void CheckOutputValidation(FFixture& InFixture)
 	}
 	catch (const FAssetImportError& Failure)
 	{
-		HYP_CHECK(Failure.Code == "root_unset");
+		HYP_CHECK(Failure.Code == ContentRootErrors::RootUnset);
 	}
 	InFixture.Content->Change(InFixture.Root / "Game");
 }

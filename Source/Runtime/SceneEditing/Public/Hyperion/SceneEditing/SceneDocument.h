@@ -1,15 +1,15 @@
 #pragma once
 #include "Hyperion/SceneEditing/SceneClipboard.h"
+#include "Hyperion/SceneEditing/SceneEditErrors.h"
 #include "Hyperion/SceneEditing/SceneEditTarget.h"
 #include "Hyperion/SceneEditing/SceneHistory.h"
 
 namespace Hyperion
 {
-class FSceneEditError : public std::runtime_error
+class FSceneEditError : public FCodedError
 {
 public:
-	FSceneEditError(std::string InCode, std::string InMessage);
-	std::string Code;
+	FSceneEditError(FErrorCode InCode, std::string InMessage);
 };
 
 struct FSceneInspectorTransaction

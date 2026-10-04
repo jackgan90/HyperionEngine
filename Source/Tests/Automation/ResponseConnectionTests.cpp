@@ -130,7 +130,8 @@ void CheckBadHandshakes()
 	}
 	FReplyFixture Fixture;
 	const auto Request = Fixture.Receive();
-	const auto Failure = AutomationFailure("access_denied", "peer reason", "/peer", ParseJson(R"({"fact":true})"));
+	const auto Failure =
+	    AutomationFailure(AutomationErrors::AccessDenied, "peer reason", "/peer", ParseJson(R"({"fact":true})"));
 	Fixture.Reply(Request, Failure);
 	HYP_CHECK(WriteJson(Fixture.Await(Fixture.Hello)) == WriteJson(Failure));
 }
@@ -170,7 +171,7 @@ void CheckBadRoutedReply()
 	}
 	catch (const FAutomationError& Error)
 	{
-		bRejected = Error.Code == "disconnected";
+		bRejected = Error.Code == AutomationErrors::Disconnected;
 	}
 	HYP_CHECK(bRejected && !Fixture.Peer->Receive() && !Fixture.Listener->Accept());
 }

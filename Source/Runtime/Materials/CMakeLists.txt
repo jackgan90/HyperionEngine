@@ -10,6 +10,7 @@ add_library(hyperion_materials STATIC
   Private/MaterialAssetEnums.cpp
   Private/MaterialAssetReflection.cpp
   Private/MaterialStateReflection.cpp
+  Private/MaterialPassPolicy.cpp
   Private/MaterialResources.cpp
   Private/MaterialParameters.cpp
   Private/MaterialSemantics.cpp

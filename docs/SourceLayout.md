@@ -69,6 +69,8 @@ Source/Runtime/Assets/
 
 `RasterOptions` 仅依赖标准库，拥有 scene pipeline、GBuffer preset 和 visualizer 的稳定类型、token、显示标签及严格转换。Config 与 Renderer 分别消费此模块，Config 不反向依赖 Renderer；完整 GBuffer 格式布局和设备能力校验仍由 Renderer 拥有。旧 `FProperty` 的可选纯值校验由 Config 注入，Reflection 在通用读写预检中调用，不识别领域字段，也不依赖 RasterOptions。GUI 的展示顺序与保存值、shader 编码相互独立。
 
+`FAppSettings`、`FRenderSettings`、scene pipeline 与 Scene 的阴影设置直接持有这些枚举。Config 的 mapped field 与 Reflection 的 `MappedMember` 在读写边界保留原字符串/整数形状、位宽和 member association；运行时不再反复解析已验证的 token。`FSceneViewportOptions` 是可选数值协议 DTO，在共享服务入口解析并保留 unavailable 优先于无效值的校验顺序。RHI backend 仍是启动时的 provider 选择输入，由 RHI registry 解析。
+
 `Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection、AssetTypes、Materials、Environment，保存模型数据、拥有组件的逻辑对象、Transform 层级、相机/光源与 v7 清单，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 的 Model 桥接将 CPU 数据注册为 Render primitives，共享资源服务管理 GPU 资源，由 session 统一收集和提交场景 pass。组件契约见 [SceneComponents.md](SceneComponents.md)，线程/所有权契约见 [RenderPrimitives.md](RenderPrimitives.md)。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
 
 Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Containers/`；仅供某个模块使用的工具留在该模块 `Private`，避免把所有辅助代码集中进一个无边界的 Utils 模块。当前 Core 接口数量少，后续增长时再按这些概念拆分。

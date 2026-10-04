@@ -194,7 +194,7 @@ void FEditorAcceptanceHarness::CompleteModelDrag(std::vector<FInputEvent>& InEve
 		}
 		catch (const FSceneEditError& Failure)
 		{
-			bBusyRejected = Failure.Code == "busy";
+			bBusyRejected = Failure.Code == SceneEditErrors::Busy;
 		}
 		CheckModelPlacement(bBusyRejected, "Automation did not reject placement during a GUI gesture");
 		if (Scenario.ModelPlacementCase == 3)

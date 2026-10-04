@@ -66,19 +66,29 @@ FProperty Field(std::string InId, std::string InLabel, M FAppSettings::* InMembe
 	return P;
 }
 
-void ValidatePipeline(const FValue& InValue)
+template<class W, class M, class TEncode, class TDecode>
+FProperty MappedField(std::string InId, std::string InLabel, M FAppSettings::* InMember, TEncode InEncode,
+                      TDecode InDecode, double InMinimum = 0, double InMaximum = 0)
 {
-	(void)ParseSceneRenderPipeline(std::get<std::string>(InValue));
-}
-
-void ValidatePreset(const FValue& InValue)
-{
-	(void)ParseGBufferPreset(std::get<std::string>(InValue));
-}
-
-void ValidateVisualizer(const FValue& InValue)
-{
-	(void)ParseAppGBufferVisualizer(std::get<std::int64_t>(InValue));
+	FProperty Result;
+	Result.Id = std::move(InId);
+	Result.Label = std::move(InLabel);
+	Result.Kind = std::is_same_v<W, std::string> ? EPropertyKind::String : EPropertyKind::Integer;
+	Result.Minimum = InMinimum;
+	Result.Maximum = InMaximum;
+	Result.Get = [InMember, InEncode](const void* InObject) -> FValue
+	{
+		return W(InEncode(static_cast<const FAppSettings*>(InObject)->*InMember));
+	};
+	Result.Set = [InMember, InDecode](void* InObject, const FValue& InValue)
+	{
+		static_cast<FAppSettings*>(InObject)->*InMember = InDecode(std::get<W>(InValue));
+	};
+	Result.Validate = [InDecode](const FValue& InValue)
+	{
+		(void)InDecode(std::get<W>(InValue));
+	};
+	return Result;
 }
 } // namespace
 
@@ -95,25 +105,28 @@ const FTypeDescriptor& SettingsType()
 	     Field("main_render_lead", "Main to Render lead (restart)", &FAppSettings::MainRenderLead, 0, 16),
 	     Field("render_rhi_lead", "Render to RHI lead (restart)", &FAppSettings::RenderRhiLead, 0, 16),
 	     Field("rhi_backend", "RHI backend (restart)", &FAppSettings::RHIBackend),
-	     Field("render_pipeline", "Render pipeline", &FAppSettings::RenderPipeline, 0, 0, ValidatePipeline),
+	     MappedField<std::string>("render_pipeline", "Render pipeline", &FAppSettings::RenderPipeline,
+	                              ToSceneRenderPipelineToken, ParseSceneRenderPipeline),
 	     Field("clustered_lighting", "Clustered local lighting", &FAppSettings::bClusteredLighting),
 	     Field("contact_shadows", "Contact shadows", &FAppSettings::bContactShadows),
 	     Field("contact_shadow_length", "Contact ray length (world)", &FAppSettings::ContactShadowLength, .01, 5),
 	     Field("contact_shadow_thickness", "Contact thickness (world)", &FAppSettings::ContactShadowThickness, .001, 1),
 	     Field("contact_shadow_bias", "Contact bias (world)", &FAppSettings::ContactShadowBias, 0, .01),
 	     Field("contact_shadow_steps", "Contact traversal budget", &FAppSettings::ContactShadowSteps, 8, 512),
-	     Field("contact_shadow_debug", "Contact debug", &FAppSettings::ContactShadowDebug,
-	           ContactShadowPreviewMinimum(), ContactShadowPreviewMaximum(),
-	           [](const FValue& InValue)
-	           {
-		           (void)ParseAppContactShadowPreview(std::get<std::int64_t>(InValue));
-	           }),
+	     MappedField<std::int64_t>(
+	         "contact_shadow_debug", "Contact debug", &FAppSettings::ContactShadowDebug,
+	         [](EContactShadowPreview InValue)
+	         {
+		         return ToShadowPreviewWireValue(InValue);
+	         },
+	         ParseAppContactShadowPreview, ContactShadowPreviewMinimum(), ContactShadowPreviewMaximum()),
 	     Field("hierarchical_depth_mip", "HZB preview mip", &FAppSettings::HierarchicalDepthMip, 0, 16),
 	     Field("reversed_z", "Reversed Z (restart)", &FAppSettings::bReversedZ),
-	     Field("gbuffer_layout", "GBuffer layout", &FAppSettings::GBufferLayout, 0, 0, ValidatePreset),
+	     MappedField<std::string>("gbuffer_layout", "GBuffer layout", &FAppSettings::GBufferLayout,
+	                              ToGBufferPresetToken, ParseGBufferPreset),
 	     Field("exposure", "Exposure", &FAppSettings::Exposure, .01, 16),
-	     Field("gbuffer_debug", "GBuffer debug", &FAppSettings::GBufferDebug, GBufferVisualizerMinimum(),
-	           GBufferVisualizerMaximum(), ValidateVisualizer),
+	     MappedField<std::int64_t>("gbuffer_debug", "GBuffer debug", &FAppSettings::GBufferDebug, ToVisualizerWireValue,
+	                               ParseAppGBufferVisualizer, GBufferVisualizerMinimum(), GBufferVisualizerMaximum()),
 	     Field("vsync", "Vertical sync", &FAppSettings::bVsync),
 	     Field("show_gui", "Show debug UI", &FAppSettings::bShowGui),
 	     Field("renderdoc_library", "RenderDoc DLL path (restart)", &FAppSettings::RenderDocLibrary),

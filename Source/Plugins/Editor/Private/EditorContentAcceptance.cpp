@@ -440,7 +440,7 @@ void FEditorAcceptanceHarness::ExerciseContentClose(std::vector<FInputEvent>& In
 			++Scenario.ExerciseStep;
 			break;
 		case 34:
-			if (Editor.Transition.CloseStatus() == "failed" && !Editor.PendingSave)
+			if (Editor.Transition.ClosePhase() == EEditorTransitionPhase::Failed && !Editor.PendingSave)
 			{
 				std::filesystem::permissions(Editor.Options.ExerciseContent / "A/Scene.hasset",
 				                             std::filesystem::perms::owner_all);
@@ -454,8 +454,9 @@ void FEditorAcceptanceHarness::ExerciseContentClose(std::vector<FInputEvent>& In
 			ExerciseClick(InEvents, Scenario.CancelChangesBounds);
 			break;
 		case 36:
-			CheckContent(Editor.Transition.CloseStatus() == "idle" && !Editor.Transition.HasPendingClose() &&
-			                 !Editor.Transition.IsDecisionVisible() && Editor.IsDirty(),
+			CheckContent(Editor.Transition.ClosePhase() == EEditorTransitionPhase::Idle &&
+			                 !Editor.Transition.HasPendingClose() && !Editor.Transition.IsDecisionVisible() &&
+			                 Editor.IsDirty(),
 			             "GUI cancel after API save-close failure lost work or retained exit intent");
 			Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
 			++Scenario.ExerciseStep;

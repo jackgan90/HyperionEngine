@@ -44,7 +44,7 @@ FTargetProcessIdentity CurrentTargetProcess()
 	const auto Created = ProcessCreationTime(GetCurrentProcess());
 	if (!Created || !*Created)
 	{
-		throw FAutomationError("discovery_unavailable", "Could not identify local registration owner");
+		throw FAutomationError(AutomationErrors::DiscoveryUnavailable, "Could not identify local registration owner");
 	}
 	return {GetCurrentProcessId(), *Created};
 }

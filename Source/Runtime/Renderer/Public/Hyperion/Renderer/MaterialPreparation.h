@@ -19,8 +19,8 @@ enum class EMaterialExecutionMode
 
 struct FMaterialVariantRequest
 {
-	std::string Usage = "Forward";
-	std::string Name = "Default";
+	std::string Usage = MaterialUsages::Forward;
+	std::string Name = MaterialVariants::Default;
 	std::vector<FShaderDefine> Defines;
 	EMaterialExecutionMode ExecutionMode = EMaterialExecutionMode::Ordinary;
 };
@@ -62,11 +62,11 @@ struct FCompiledMaterialDefinition
 	std::string Key;
 	std::vector<std::string> InstanceDiagnostics;
 	// Each usage has at most one instance candidate, regardless of its name.
-	const FCompiledMaterialPass* FindInstancePass(std::string_view InUsage = "Forward") const;
-	const FCompiledMaterialPass& GetInstancePass(std::string_view InUsage = "Forward") const;
+	const FCompiledMaterialPass* FindInstancePass(std::string_view InUsage = MaterialUsages::Forward) const;
+	const FCompiledMaterialPass& GetInstancePass(std::string_view InUsage = MaterialUsages::Forward) const;
 	const FCompiledMaterialPass& GetDrawPass(std::string_view InUsage, EMaterialExecutionMode InMode) const;
 	// Session consumers select the ordinary Default pass; explicit names remain available for inspection.
-	const FCompiledMaterialPass& GetPass(std::string_view InUsage = "Forward") const;
+	const FCompiledMaterialPass& GetPass(std::string_view InUsage = MaterialUsages::Forward) const;
 	const FCompiledMaterialPass& GetPass(std::string_view InUsage, std::string_view InVariant) const;
 };
 

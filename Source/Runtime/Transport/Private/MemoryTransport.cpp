@@ -36,7 +36,7 @@ public:
 	{
 		if (Stream->Closed[0] || Stream->Closed[1])
 		{
-			throw FTransportError("disconnected", "Memory stream is closed");
+			throw FTransportError(TransportErrors::Disconnected, "Memory stream is closed");
 		}
 		auto& Buffer = Stream->Buffers[1 - Side];
 		if (InBytes.size() > Stream->Capacity - Buffer.size())
@@ -159,7 +159,7 @@ public:
 		const auto Acceptor = Acceptors[InAddress].lock();
 		if (!Acceptor || Acceptor->bClosed || Acceptor->Pending.size() >= 32)
 		{
-			throw FTransportError("connection_failed", "Memory listener unavailable");
+			throw FTransportError(TransportErrors::ConnectionFailed, "Memory listener unavailable");
 		}
 		auto Stream = std::make_shared<FMemoryStream>();
 		Stream->Capacity = Capacity;
@@ -172,7 +172,7 @@ public:
 	{
 		if (auto Existing = Acceptors[InAddress].lock(); Existing && !Existing->bClosed)
 		{
-			throw FTransportError("address_in_use", "Memory listener already exists");
+			throw FTransportError(TransportErrors::AddressInUse, "Memory listener already exists");
 		}
 		auto Acceptor = std::make_shared<FMemoryAcceptor>();
 		Acceptors[InAddress] = Acceptor;

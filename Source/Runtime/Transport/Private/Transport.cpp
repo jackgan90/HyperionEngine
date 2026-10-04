@@ -2,14 +2,14 @@
 
 namespace Hyperion
 {
-FTransportError::FTransportError(std::string InCode, std::string InMessage)
-    : std::runtime_error(std::move(InMessage)), Code(std::move(InCode))
+FTransportError::FTransportError(FErrorCode InCode, std::string InMessage)
+    : FCodedError(std::move(InCode), std::move(InMessage))
 {
 }
 
 const std::string& FTransportError::GetCode() const noexcept
 {
-	return Code;
+	return Code.GetName();
 }
 
 void FTransportRegistry::Register(std::unique_ptr<ITransportProvider> InProvider)
@@ -31,7 +31,7 @@ ITransportProvider& FTransportRegistry::Find(const std::string& InScheme) const
 	const auto Found = Providers.find(InScheme);
 	if (Found == Providers.end())
 	{
-		throw FTransportError("unsupported_transport", "Transport provider is unavailable: " + InScheme);
+		throw FTransportError(TransportErrors::UnsupportedTransport, "Transport provider is unavailable: " + InScheme);
 	}
 	return *Found->second;
 }

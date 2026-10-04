@@ -9,7 +9,7 @@ TAsyncResult<bool> FSceneEditDocument::Save(std::string InDestination)
 {
 	if (State.Save)
 	{
-		throw FSceneEditError("busy", "A scene save is already in progress");
+		throw FSceneEditError(SceneEditErrors::Busy, "A scene save is already in progress");
 	}
 	if (InDestination.empty() || PathFromUtf8(InDestination).extension() != ".hasset")
 	{

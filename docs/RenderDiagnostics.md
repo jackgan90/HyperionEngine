@@ -26,6 +26,8 @@ The profiling HUD and `render.statistics` expose GPU pass timings, per-view visi
 
 Shadow preview identities are defined in CPU-only `RasterOptions/ShadowPreviewOptions.h`. Scene inspectors, validation, Config and Renderer use its value/label mappings and explicit cascade query. The persisted and automation `debugMode` fields remain unsigned 32-bit integers: directional 0 Lit, 1 Cascade colors, 2–5 Cascade 0–3 depth; contact 0 Lit, 1 Visibility mask, 2 HZB depth. Unknown values are rejected, and changing presentation order does not change these values or the record versions.
 
+Runtime render and shadow settings store typed identities. `Renderer/ProfilingHud.h` owns the HUD category flags and their presentation table; GUI selection and HUD content use those flags, while the viewport protocol keeps its numeric mask. These categories are independent of Core profiling collection flags. Reordering or relabeling the HUD menu does not change bit meanings or enable trace collection.
+
 ## Repeatable measurements
 
 ```powershell

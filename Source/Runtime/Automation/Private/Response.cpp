@@ -21,7 +21,8 @@ constexpr std::array<std::string_view, 8> EnvelopeKeys{"status",    "result",   
 
 [[noreturn]] void InvalidResponse(std::string_view InPath)
 {
-	throw FAutomationError("protocol_error", "Invalid automation response envelope", std::string(InPath));
+	throw FAutomationError(AutomationErrors::ProtocolError, "Invalid automation response envelope",
+	                       std::string(InPath));
 }
 
 const FArchiveNode::FObject& Fields(const FArchiveNode& InValue)
@@ -209,11 +210,11 @@ FArchiveNode AutomationCompleted(FArchiveNode InResult)
 	    FArchiveNode::FObject{{"status", WriteStatus(EAutomationStatus::Completed)}, {"result", std::move(InResult)}});
 }
 
-FArchiveNode AutomationFailure(std::string InCode, std::string InMessage, std::string InPath, FArchiveNode InDetails)
+FArchiveNode AutomationFailure(FErrorCode InCode, std::string InMessage, std::string InPath, FArchiveNode InDetails)
 {
 	return FArchiveNode(
 	    FArchiveNode::FObject{{"status", WriteStatus(EAutomationStatus::Failed)},
-	                          {"error", FArchiveNode(FArchiveNode::FObject{{"code", WriteValue(InCode)},
+	                          {"error", FArchiveNode(FArchiveNode::FObject{{"code", WriteValue(InCode.GetName())},
 	                                                                       {"message", WriteValue(InMessage)},
 	                                                                       {"path", WriteValue(InPath)},
 	                                                                       {"details", std::move(InDetails)}})}});

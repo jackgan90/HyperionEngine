@@ -37,11 +37,12 @@ FEndpointRequest FRemoteConnection::Begin(std::string_view InMethod, const FArch
 {
 	if (bClosed)
 	{
-		throw FAutomationError("disconnected", "Target connection is closed; no fallback or retry was performed");
+		throw FAutomationError(AutomationErrors::Disconnected,
+		                       "Target connection is closed; no fallback or retry was performed");
 	}
 	if (Requests.size() >= MaxRemoteConnectionRequests)
 	{
-		throw FAutomationError("busy", "Connection request limit reached");
+		throw FAutomationError(AutomationErrors::Busy, "Connection request limit reached");
 	}
 	const auto RequestId = std::to_string(++NextRequest);
 	const auto Message = WriteJson(FArchiveNode(FArchiveNode::FObject{
@@ -87,7 +88,8 @@ void FRemoteConnection::Poll()
 		{
 			if (!Access.Admit(Channel.Peer()))
 			{
-				throw FAutomationError("access_denied", "Transport peer failed the configured admission policy");
+				throw FAutomationError(AutomationErrors::AccessDenied,
+				                       "Transport peer failed the configured admission policy");
 			}
 			bAdmitted = true;
 		}
@@ -105,7 +107,7 @@ void FRemoteConnection::Poll()
 			const auto Found = Requests.find(ReadValue<std::string>(Fields.at("id")));
 			if (Found == Requests.end())
 			{
-				throw FAutomationError("protocol_error", "Unexpected response correlation ID");
+				throw FAutomationError(AutomationErrors::ProtocolError, "Unexpected response correlation ID");
 			}
 			(void)ReadAutomationResponse(Fields.at("result"));
 			Found->second->Result = Fields.at("result");
@@ -113,21 +115,22 @@ void FRemoteConnection::Poll()
 		}
 		if (Channel.State() == ETransportState::Closed || Channel.State() == ETransportState::Failed)
 		{
-			throw FAutomationError("disconnected", "Target disconnected; transmitted mutations may have completed");
+			throw FAutomationError(AutomationErrors::Disconnected,
+			                       "Target disconnected; transmitted mutations may have completed");
 		}
 		const auto Now = FConnectionClock::now();
 		for (const auto& [RequestId, Request] : Requests)
 		{
 			if (Now > Request->Deadline)
 			{
-				throw FAutomationError("timeout",
+				throw FAutomationError(AutomationErrors::Timeout,
 				                       "Reply timed out; outcome may be unknown. Re-query, do not replay mutations");
 			}
 		}
 	}
 	catch (...)
 	{
-		Close(CurrentConnectionFailure());
+		Close(CurrentAutomationFailure());
 	}
 }
 
@@ -139,7 +142,8 @@ FAutomationTarget ReadHelloTarget(const FArchiveNode& InPayload)
 		if (ReadValue<std::uint32_t>(Fields.at("protocol")) != AutomationProtocolVersion ||
 		    ReadValue<std::uint32_t>(Fields.at("maxFrame")) > AutomationResponseLimits.MaxBytes)
 		{
-			throw FAutomationError("protocol_mismatch", "Target selected an unsupported communication contract");
+			throw FAutomationError(AutomationErrors::ProtocolMismatch,
+			                       "Target selected an unsupported communication contract");
 		}
 		const auto Target = ReadRecordWire(RecordType<FAutomationTarget>(), Fields.at("target"));
 		return *static_cast<const FAutomationTarget*>(Target.get());
@@ -154,7 +158,7 @@ FAutomationTarget ReadHelloTarget(const FArchiveNode& InPayload)
 	}
 	catch (const std::exception&)
 	{
-		throw FAutomationError("protocol_error", "Invalid target handshake payload", "result");
+		throw FAutomationError(AutomationErrors::ProtocolError, "Invalid target handshake payload", "result");
 	}
 }
 
@@ -170,7 +174,7 @@ FArchiveNode FinishConnect(FRemoteConnection& InClient, const FArchiveNode& InHe
 	const auto Info = ReadHelloTarget(Result);
 	if (!InClient.ExpectedInstance.empty() && InClient.ExpectedInstance != Info.Instance)
 	{
-		throw FAutomationError("stale_target", "Connected instance does not match the selected target");
+		throw FAutomationError(AutomationErrors::StaleTarget, "Connected instance does not match the selected target");
 	}
 	InClient.bReady = true;
 	auto Response = std::get<FArchiveNode::FObject>(Result.Value);
@@ -197,14 +201,15 @@ FTransportAddress FConnectionManager::FImpl::Resolve(const FArchiveNode::FObject
 	}
 	if (!InFields.contains("instance"))
 	{
-		throw FAutomationError("invalid_arguments", "Specify an instance or a transport address");
+		throw FAutomationError(AutomationErrors::InvalidArguments, "Specify an instance or a transport address");
 	}
 	const auto Instance = ReadValue<std::string>(InFields.at("instance"));
 	if (const auto Target = Discovery.Find(Instance))
 	{
 		return Target->Address;
 	}
-	throw FAutomationError("not_found", "Target was not discovered; an explicit address can also be supplied");
+	throw FAutomationError(AutomationErrors::NotFound,
+	                       "Target was not discovered; an explicit address can also be supplied");
 }
 
 FConnectionManager::FConnectionManager(FTransportRegistry& InTransports, ITargetDiscovery& InDiscovery,
@@ -246,7 +251,7 @@ FEndpointRequest FConnectionManager::Probe(const FArchiveNode& InParameters)
 	    Fields.contains("timeoutMs") ? ReadValue<std::uint32_t>(Fields.at("timeoutMs")) : DefaultProbeTimeoutMs;
 	if (Timeout < MinProbeTimeoutMs || Timeout > MaxProbeTimeoutMs)
 	{
-		throw FAutomationError("invalid_arguments", "Probe timeoutMs must be 50-5000");
+		throw FAutomationError(AutomationErrors::InvalidArguments, "Probe timeoutMs must be 50-5000");
 	}
 	Fields.erase("timeoutMs");
 	return BeginConnection(FArchiveNode(std::move(Fields)), true, Timeout);
@@ -259,7 +264,7 @@ FEndpointRequest FConnectionManager::BeginConnection(const FArchiveNode& InParam
 	CheckConnectionKeys(Fields, {"instance", "address"});
 	if (Impl->Clients.size() >= MaxRemoteConnections)
 	{
-		throw FAutomationError("busy", "Disconnect an existing target before opening more connections");
+		throw FAutomationError(AutomationErrors::Busy, "Disconnect an existing target before opening more connections");
 	}
 	const auto Address = Impl->Resolve(Fields);
 	auto Connection = Impl->Transports.Connect(Address);
@@ -301,13 +306,13 @@ FEndpointRequest FConnectionManager::BeginConnection(const FArchiveNode& InParam
 						        Response = AutomationCompleted(FArchiveNode(std::move(Info)));
 					        }
 					        Client->bReady = false;
-					        Client->Close(AutomationFailure("disconnected", "Probe completed"));
+					        Client->Close(AutomationFailure(AutomationErrors::Disconnected, "Probe completed"));
 				        }
 				        return Response;
 			        }
 			        catch (...)
 			        {
-				        auto Failure = CurrentConnectionFailure();
+				        auto Failure = CurrentAutomationFailure();
 				        Client->Close(Failure);
 				        return Failure;
 			        }
@@ -321,10 +326,10 @@ FArchiveNode FConnectionManager::Disconnect(const std::string& InConnection)
 	const auto Found = Impl->Clients.find(InConnection);
 	if (Found == Impl->Clients.end())
 	{
-		throw FAutomationError("not_found", "Unknown connection");
+		throw FAutomationError(AutomationErrors::NotFound, "Unknown connection");
 	}
-	Found->second->Close(
-	    AutomationFailure("disconnected", "Connection explicitly closed; admitted work may finish on the target"));
+	Found->second->Close(AutomationFailure(AutomationErrors::Disconnected,
+	                                       "Connection explicitly closed; admitted work may finish on the target"));
 	Impl->Clients.erase(Found);
 	return AutomationCompleted(FArchiveNode(FArchiveNode::FObject{{"disconnected", WriteValue(true)}}));
 }
@@ -335,11 +340,11 @@ FEndpointRequest FConnectionManager::Request(const std::string& InConnection, st
 	const auto Found = Impl->Clients.find(InConnection);
 	if (Found == Impl->Clients.end())
 	{
-		throw FAutomationError("disconnected", "Unknown connection; no target fallback was performed");
+		throw FAutomationError(AutomationErrors::Disconnected, "Unknown connection; no target fallback was performed");
 	}
 	if (!Found->second->bReady && !Found->second->bClosed)
 	{
-		throw FAutomationError("busy", "Target handshake has not completed");
+		throw FAutomationError(AutomationErrors::Busy, "Target handshake has not completed");
 	}
 	return Found->second->Begin(InMethod, InParameters);
 }
@@ -362,7 +367,8 @@ void FConnectionManager::Close()
 {
 	for (auto& [Id, Client] : Impl->Clients)
 	{
-		Client->Close(AutomationFailure("disconnected", "Frontend is shutting down; admitted target work may finish"));
+		Client->Close(AutomationFailure(AutomationErrors::Disconnected,
+		                                "Frontend is shutting down; admitted target work may finish"));
 	}
 	Impl->Clients.clear();
 }

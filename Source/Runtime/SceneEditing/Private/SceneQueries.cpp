@@ -9,11 +9,12 @@ void RequireDocument(const FSceneEditDocument& InDocument, const std::string& In
 {
 	if (InDocument.Id() != InId)
 	{
-		throw FSceneEditError("stale_document", "Query the current scene document before accessing nodes");
+		throw FSceneEditError(SceneEditErrors::StaleDocument,
+		                      "Query the current scene document before accessing nodes");
 	}
 	if (!InDocument.Target().IsLoaded())
 	{
-		throw FSceneEditError("unavailable", "Scene has not loaded");
+		throw FSceneEditError(SceneEditErrors::Unavailable, "Scene has not loaded");
 	}
 }
 } // namespace
@@ -43,7 +44,7 @@ FSceneNodeInfo DescribeSceneNode(const FSceneEditDocument& InDocument, const FSc
 	FSceneNodeView View;
 	if (!InDocument.Target().NodeView(InRequest.Handle, View))
 	{
-		throw FSceneEditError("stale_handle", "Node handle is no longer valid in this document");
+		throw FSceneEditError(SceneEditErrors::StaleHandle, "Node handle is no longer valid in this document");
 	}
 	const auto& Node = *View.Node;
 	return {InDocument.Id(),
@@ -64,7 +65,8 @@ FSceneNodePage ListSceneNodes(const FSceneEditDocument& InDocument, const FScene
 	RequireDocument(InDocument, InRequest.Document);
 	if (InRequest.Revision != InDocument.Target().Revision())
 	{
-		throw FSceneEditError("stale_revision", "Scene changed during pagination; query scene.info and restart");
+		throw FSceneEditError(SceneEditErrors::StaleRevision,
+		                      "Scene changed during pagination; query scene.info and restart");
 	}
 	if (!InRequest.Limit || InRequest.Limit > 100)
 	{
@@ -97,7 +99,7 @@ FSceneDocumentInfo SetSceneTransforms(FSceneEditDocument& InDocument, const FSce
 		const auto* Source = InDocument.Target().FindNode(Transform.Handle);
 		if (!Source)
 		{
-			throw FSceneEditError("stale_handle", "One or more transform targets no longer exist");
+			throw FSceneEditError(SceneEditErrors::StaleHandle, "One or more transform targets no longer exist");
 		}
 		auto Node = *Source;
 		Node.Local() = Transform.Local;

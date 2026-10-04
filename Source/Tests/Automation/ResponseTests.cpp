@@ -16,7 +16,8 @@ void CheckValidResponses()
 	HYP_CHECK(View.Status == EAutomationStatus::Completed && !View.Job && !View.Error);
 	HYP_CHECK(&View.CompletedResult() == &std::get<FArchiveNode::FObject>(Completed.Value).at("result"));
 	HYP_CHECK(WriteJson(Completed) == R"({"result":{"job":17,"status":"user-defined"},"status":"completed"})");
-	const auto Failure = AutomationFailure("specific", "message", "/a~1b", ParseJson(R"([null,{"extra":42}])"));
+	const auto Failure = AutomationFailure(FErrorCode::FromExternal("specific"), "message", "/a~1b",
+	                                       ParseJson(R"([null,{"extra":42}])"));
 	const auto Error = ReadAutomationResponse(Failure);
 	HYP_CHECK(Error.IsFailed() && Error.Error->Code == "specific" && Error.Error->Message == "message");
 	HYP_CHECK(Error.Error->Path == "/a~1b" && WriteJson(*Error.Error->Details) == R"([null,{"extra":42}])");
@@ -34,7 +35,7 @@ void CheckValidResponses()
 	const auto Failed = AutomationJobResponse(EAutomationStatus::Failed, "j", "op", false, Failure);
 	HYP_CHECK(ReadAutomationResponse(Failed).IsFailed());
 	const auto Cancelled = AutomationJobResponse(EAutomationStatus::Cancelled, "j", "op", false,
-	                                             AutomationFailure("cancelled", "cancelled"));
+	                                             AutomationFailure(AutomationErrors::Cancelled, "cancelled"));
 	const auto CancelView = ReadAutomationResponse(Cancelled);
 	HYP_CHECK(!CancelView.IsFailed() && ReadAutomationResponse(*CancelView.Job->Outcome).IsFailed());
 	for (const auto* NonDirect : {&Raw, &Running, &Done, &Failure})
@@ -46,7 +47,7 @@ void CheckValidResponses()
 		}
 		catch (const FAutomationError& Exception)
 		{
-			bRejected = Exception.Code == "protocol_error";
+			bRejected = Exception.Code == AutomationErrors::ProtocolError;
 		}
 		HYP_CHECK(bRejected);
 	}
@@ -92,7 +93,7 @@ void CheckMalformedResponses()
 		}
 		catch (const FAutomationError& Error)
 		{
-			bRejected = Error.Code == "protocol_error" && !Error.Path.empty();
+			bRejected = Error.Code == AutomationErrors::ProtocolError && !Error.Path.empty();
 		}
 		HYP_CHECK(bRejected);
 	}

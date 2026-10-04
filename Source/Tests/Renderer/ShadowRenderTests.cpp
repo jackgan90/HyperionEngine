@@ -381,7 +381,7 @@ void CheckResolutionAndPreview(FShadowFixture& InFixture)
 		          << " current bytes=" << InFixture.DeviceStats.GpuAllocationBytes << "\n";
 		HYP_CHECK(InFixture.DeviceStats.GpuAllocationBytes <= Small + 8 * 1024 * 1024);
 	}
-	InFixture.Settings.DebugMode = 2;
+	InFixture.Settings.DebugMode = EDirectionalShadowPreview::Cascade0Depth;
 	const auto Preview = InFixture.Frame(true);
 	// The pane displays raw depth, including the convention's far clear value.
 	HYP_CHECK(std::abs(Preview.Rgba.at((280 * Preview.Width + 380) * 4) -
@@ -389,7 +389,7 @@ void CheckResolutionAndPreview(FShadowFixture& InFixture)
 	const auto Before = InFixture.DeviceStats.DescriptorAllocations;
 	InFixture.Frame(true);
 	HYP_CHECK(InFixture.DeviceStats.DescriptorAllocations == Before);
-	InFixture.Settings.DebugMode = 0;
+	InFixture.Settings.DebugMode = EDirectionalShadowPreview::Lit;
 }
 
 void CheckIdleAfterMotion(FShadowFixture& InFixture)
@@ -414,9 +414,9 @@ void CheckHiddenPreviewRetirement(FShadowFixture& InFixture)
 {
 	for (const auto Resolution : {2048u, 1024u})
 	{
-		InFixture.Settings.DebugMode = 2;
+		InFixture.Settings.DebugMode = EDirectionalShadowPreview::Cascade0Depth;
 		InFixture.Frame(true);
-		InFixture.Settings.DebugMode = 0;
+		InFixture.Settings.DebugMode = EDirectionalShadowPreview::Lit;
 		InFixture.Settings.Resolution = Resolution;
 		CheckIdleAfterMotion(InFixture);
 	}

@@ -301,10 +301,12 @@ void FEditorAcceptanceHarness::ExerciseProfilingHudInput(std::vector<FInputEvent
 			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/categories"]);
 			return;
 		case 13:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/1"]);
+			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/2"]);
 			return;
 		case 14:
-			if (Editor.ProfilingCategories != 3 || Editor.IsDirty() || Profiling.Mask)
+			if (Editor.ProfilingCategories !=
+			        WithProfilingHudCategory(EProfilingHudCategory::Overview, EProfilingHudCategory::Tasks, true) ||
+			    Editor.IsDirty() || Profiling.Mask)
 			{
 				throw std::runtime_error("Profiling category GUI changed collection or document state");
 			}
@@ -377,14 +379,15 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 			{
 				throw std::runtime_error("Stats menu did not expand from the button's bottom-left corner");
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/6"]);
+			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/64"]);
 			return;
 		}
 		case 24:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/7"]);
+			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/128"]);
 			return;
 		case 21:
-			if (Editor.ProfilingCategories != 64 || Editor.IsDirty() || GetProfilingStatus().Mask)
+			if (Editor.ProfilingCategories != EProfilingHudCategory::Visibility || Editor.IsDirty() ||
+			    GetProfilingStatus().Mask)
 			{
 				throw std::runtime_error("Visibility category GUI did not update only the HUD state");
 			}
@@ -394,7 +397,8 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 			++Scenario.ExerciseStep;
 			return;
 	}
-	if (Editor.ProfilingCategories != 128 || Editor.IsDirty() || GetProfilingStatus().Mask ||
+	if (Editor.ProfilingCategories != EProfilingHudCategory::Batching || Editor.IsDirty() ||
+	    GetProfilingStatus().Mask ||
 	    !Editor.RenderStats.MainView().Batches.Fallbacks[static_cast<std::size_t>(ERenderBatchFallback::Disabled)])
 	{
 		throw std::runtime_error("Batching HUD requires the selected category and disabled-batching fallback data");

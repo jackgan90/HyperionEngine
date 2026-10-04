@@ -1,4 +1,5 @@
 #include "Hyperion/Scene/LightShadows.h"
+#include "Hyperion/Reflection/MappedMember.h"
 #include <cmath>
 
 namespace Hyperion
@@ -18,7 +19,7 @@ template<class T> std::vector<FPropertyChoice> PreviewChoices(std::span<const T>
 
 void ValidateDirectionalShadowSettings(const FDirectionalShadowSettings& InSettings)
 {
-	(void)ParseDirectionalShadowPreview(InSettings.DebugMode);
+	(void)DescribeShadowPreview(InSettings.DebugMode);
 	if ((InSettings.Resolution != 1024 && InSettings.Resolution != 2048) || !std::isfinite(InSettings.Distance) ||
 	    InSettings.Distance <= 0 || !std::isfinite(InSettings.SplitLambda) || InSettings.SplitLambda < 0 ||
 	    InSettings.SplitLambda > 1 || !std::isfinite(InSettings.NormalOffset) || InSettings.NormalOffset < 0 ||
@@ -33,7 +34,7 @@ void ValidateDirectionalShadowSettings(const FDirectionalShadowSettings& InSetti
 
 void FContactShadowSettings::Validate() const
 {
-	(void)ParseContactShadowPreview(DebugMode);
+	(void)DescribeShadowPreview(DebugMode);
 	if (!std::isfinite(Length) || Length <= 0 || Length > 100 || !std::isfinite(Thickness) || Thickness <= 0 ||
 	    Thickness > 10 || !std::isfinite(Bias) || Bias < 0 || Bias > Length || Steps < 8 || Steps > 512 ||
 	    PreviewMip > 16)
@@ -60,9 +61,15 @@ template<> const FRecordDescriptor& RecordType<FDirectionalShadowSettings>()
 	     Member("receiverBias", &FDirectionalShadowSettings::ReceiverBias, Inspect("Receiver bias", 0, 2)),
 	     Member("blendFraction", &FDirectionalShadowSettings::BlendFraction, Inspect("Cascade blend")),
 	     Member("fadeFraction", &FDirectionalShadowSettings::FadeFraction, Inspect("Distance fade")),
-	     Member("debugMode", &FDirectionalShadowSettings::DebugMode,
-	            {.Inspector = FPropertyPresentation{.Label = "Preview",
-	                                                .Choices = PreviewChoices(DirectionalShadowPreviewOptions())}})},
+	     MappedMember<std::uint32_t>(
+	         "debugMode", &FDirectionalShadowSettings::DebugMode,
+	         [](EDirectionalShadowPreview InValue)
+	         {
+		         return ToShadowPreviewWireValue(InValue);
+	         },
+	         ParseDirectionalShadowPreview,
+	         {.Inspector = FPropertyPresentation{.Label = "Preview",
+	                                             .Choices = PreviewChoices(DirectionalShadowPreviewOptions())}})},
 	    1, ValidateDirectionalShadowSettings);
 	return Type;
 }
@@ -76,9 +83,15 @@ template<> const FRecordDescriptor& RecordType<FContactShadowSettings>()
 	     Member("thickness", &FContactShadowSettings::Thickness, Inspect("Thickness")),
 	     Member("bias", &FContactShadowSettings::Bias, Inspect("Bias")),
 	     Member("steps", &FContactShadowSettings::Steps, Inspect("Steps", 8, 512)),
-	     Member("debugMode", &FContactShadowSettings::DebugMode,
-	            {.Inspector = FPropertyPresentation{.Label = "Preview",
-	                                                .Choices = PreviewChoices(ContactShadowPreviewOptions())}}),
+	     MappedMember<std::uint32_t>(
+	         "debugMode", &FContactShadowSettings::DebugMode,
+	         [](EContactShadowPreview InValue)
+	         {
+		         return ToShadowPreviewWireValue(InValue);
+	         },
+	         ParseContactShadowPreview,
+	         {.Inspector =
+	              FPropertyPresentation{.Label = "Preview", .Choices = PreviewChoices(ContactShadowPreviewOptions())}}),
 	     Member("previewMip", &FContactShadowSettings::PreviewMip, Inspect("HZB mip", 0, 16))},
 	    1,
 	    [](const FContactShadowSettings& InSettings)

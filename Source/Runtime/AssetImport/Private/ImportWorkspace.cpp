@@ -69,7 +69,7 @@ std::shared_ptr<const FImportTask> FAssetImportWorkspace::StartPrepared(
 	RequireMain();
 	if (bClosing)
 	{
-		throw FAssetImportError("unavailable", "Import workspace is closing");
+		throw FAssetImportError(AssetImportErrors::Unavailable, "Import workspace is closing");
 	}
 	const auto Validated = Validate(InRequest);
 	if (Tasks.size() >= 128)
@@ -81,7 +81,8 @@ std::shared_ptr<const FImportTask> FAssetImportWorkspace::StartPrepared(
 		                                 });
 		if (Oldest == Tasks.end())
 		{
-			throw FAssetImportError("busy", "Import task capacity reached; wait for a task to complete");
+			throw FAssetImportError(AssetImportErrors::Busy,
+			                        "Import task capacity reached; wait for a task to complete");
 		}
 		Tasks.erase(Oldest);
 	}
@@ -235,7 +236,7 @@ FImportTaskInfo FAssetImportWorkspace::Get(const FImportTaskQuery& InRequest) co
 			return Task->Info;
 		}
 	}
-	throw FAssetImportError("not_found", "Import task expired or belongs to another workspace/root");
+	throw FAssetImportError(AssetImportErrors::NotFound, "Import task expired or belongs to another workspace/root");
 }
 
 FImportTaskList FAssetImportWorkspace::List(const FImportTaskListRequest& InRequest) const
@@ -243,7 +244,7 @@ FImportTaskList FAssetImportWorkspace::List(const FImportTaskListRequest& InRequ
 	RequireMain();
 	if (!InRequest.Limit || InRequest.Limit > 32)
 	{
-		throw FAssetImportError("invalid_arguments", "Import task page limit must be 1-32");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, "Import task page limit must be 1-32");
 	}
 	FImportTaskList Result;
 	Result.Total = static_cast<std::uint32_t>(Tasks.size());

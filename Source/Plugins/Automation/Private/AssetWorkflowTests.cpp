@@ -700,7 +700,7 @@ void CheckEncodingParity()
 	}
 	catch (const FAutomationError& Error)
 	{
-		Check(Error.Code == "busy");
+		Check(Error.Code == AutomationErrors::Busy);
 	}
 	Check(Workspace.Closed == 0);
 	Wait(F.Tasks,
@@ -843,7 +843,7 @@ void CheckAttachedRetirementAndSession()
 	}
 	catch (const FAutomationError& Error)
 	{
-		Check(Error.Code == "stale_document");
+		Check(Error.Code == AutomationErrors::StaleDocument);
 	}
 	Check(!Old->IsEditing() && !Old->IsDirty() && !Replacement->IsDirty());
 	Check(EqualInspectionValue(Old->Snapshot(), Before) && EqualInspectionValue(Replacement->Snapshot(), Before));

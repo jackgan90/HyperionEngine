@@ -153,7 +153,7 @@ void FEditorPlugin::CompleteContentRoot(const FEditorRootCommit& InRequest)
 	}
 	catch (const FContentRootError& Failure)
 	{
-		if (Failure.Code == "content_failed")
+		if (Failure.Code == ContentRootErrors::ContentFailed)
 		{
 			Control.ReportFailure(std::current_exception());
 			Control.RequestExit();

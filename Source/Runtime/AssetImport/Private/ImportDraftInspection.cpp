@@ -154,7 +154,7 @@ FImportDraftInfo FAssetImportWorkspace::Draft(const FImportDraftQuery& InRequest
 {
 	if (!InRequest.Limit || InRequest.Limit > ImportDraftMaxPageLimit)
 	{
-		throw FAssetImportError("invalid_arguments", "Draft property page limit must be 1-64");
+		throw FAssetImportError(AssetImportErrors::InvalidArguments, "Draft property page limit must be 1-64");
 	}
 	const auto Entry = FindDraft(InRequest.Draft);
 	if (Entry->Inspection && Entry->Inspection->Generation == Entry->Generation &&

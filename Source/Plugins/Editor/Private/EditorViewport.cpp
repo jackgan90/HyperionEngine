@@ -57,7 +57,7 @@ void FEditorViewport::FrameScene(const FSceneInstance& InScene)
 {
 	if (!InScene.GetStatus().bReady || PreviewCamera)
 	{
-		throw FSceneEditError("busy", "Frame scene requires a ready scene and the editor browsing view");
+		throw FSceneEditError(SceneEditErrors::Busy, "Frame scene requires a ready scene and the editor browsing view");
 	}
 	auto Candidate = ViewCamera;
 	FitSceneCamera(Candidate, InScene, ViewportSize.Height ? float(ViewportSize.Width) / ViewportSize.Height : 1, true);

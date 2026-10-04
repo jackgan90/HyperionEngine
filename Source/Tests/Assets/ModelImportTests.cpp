@@ -335,6 +335,30 @@ void CheckRejections(const FModelSource& InSource)
 	Rejects(Source);
 }
 
+FArchiveNode HistoricalProductRecord(const FAssetImportProduct& InEntry)
+{
+	auto Record = WriteRecord(*InEntry.Type, InEntry.Object.get());
+	if (InEntry.Type->CppType == typeid(FMaterialAsset))
+	{
+		auto& Fields =
+		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value);
+		for (auto& Pass : std::get<FArchiveNode::FArray>(Fields.at("passes").Value))
+		{
+			HYP_CHECK(RecordTypeId(Pass) == "hyperion.materialpass" && RecordVersion(Pass) == 2);
+			auto& Envelope = std::get<FArchiveNode::FObject>(Pass.Value);
+			auto& PassFields = std::get<FArchiveNode::FObject>(Envelope.at("fields").Value);
+			const auto Policy = ReadValue<EMaterialSilhouettePolicy>(PassFields.at("silhouettePolicy"));
+			HYP_CHECK(Policy == (ReadValue<std::string>(PassFields.at("usage")) == "ShadowDepth"
+			                         ? EMaterialSilhouettePolicy::Disabled
+			                         : EMaterialSilhouettePolicy::ModelShader));
+			// Only the explicit coverage field and nested schema version differ from the fixed v1 baseline.
+			PassFields.erase("silhouettePolicy");
+			Envelope.at("version") = WriteValue(1U);
+		}
+	}
+	return Record;
+}
+
 void CheckHistoricalOutput(const FModelSource& InSource)
 {
 	const auto Split = SplitModelSource(InSource);
@@ -353,7 +377,7 @@ void CheckHistoricalOutput(const FModelSource& InSource)
 	{
 		const auto& Entry = Split.Products[Index];
 		HYP_CHECK(Entry.Key == Expected[Index].first);
-		HYP_CHECK(HashArchive(WriteRecord(*Entry.Type, Entry.Object.get())) == Expected[Index].second);
+		HYP_CHECK(HashArchive(HistoricalProductRecord(Entry)) == Expected[Index].second);
 	}
 }
 } // namespace

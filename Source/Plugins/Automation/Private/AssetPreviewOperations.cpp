@@ -40,19 +40,12 @@ void RegisterAssetPreviews(FOperationCatalog& InCatalog, IAssetPreviewWorkspace*
 	const FAssetDocumentRequest QueryExample{"document-from-open"};
 	Info.Example = WriteRecordWire(RecordType<FAssetDocumentRequest>(), &QueryExample);
 	Info.Unavailable = InWorkspace ? "" : "This target has no asset preview workspace.";
-	InCatalog.Register(MakeOperation<FAssetDocumentRequest, FAssetPreviewState>(
-	    Info,
-	    [InWorkspace](const auto& InRequest)
-	    {
-		    try
-		    {
-			    return InWorkspace->PreviewState(InRequest.Document);
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
-	    }));
+	InCatalog.Register(MakeOperation<FAssetDocumentRequest, FAssetPreviewState>(Info,
+	                                                                            [InWorkspace](const auto& InRequest)
+	                                                                            {
+		                                                                            return InWorkspace->PreviewState(
+		                                                                                InRequest.Document);
+	                                                                            }));
 	Info.Id = "asset.preview.set";
 	Info.Summary = "Edit the live asset tab preview controls";
 	Info.bReadOnly = false;
@@ -63,19 +56,12 @@ void RegisterAssetPreviews(FOperationCatalog& InCatalog, IAssetPreviewWorkspace*
 	Info.Completion = "Controls applied; query ready after resource preparation/rendering.";
 	const FPreviewEdit Example{"document-from-open", 1};
 	Info.Example = WriteRecordWire(RecordType<FPreviewEdit>(), &Example);
-	InCatalog.Register(MakeOperation<FPreviewEdit, FAssetPreviewState>(
-	    Info,
-	    [InWorkspace](const auto& InRequest)
-	    {
-		    try
-		    {
-			    return InWorkspace->EditPreview(InRequest.Document, InRequest.Generation, InRequest.Settings,
-			                                    InRequest.bFrame);
-		    }
-		    catch (const FSceneEditError& Error)
-		    {
-			    throw FAutomationError(Error.Code, Error.what());
-		    }
-	    }));
+	InCatalog.Register(MakeOperation<FPreviewEdit, FAssetPreviewState>(Info,
+	                                                                   [InWorkspace](const auto& InRequest)
+	                                                                   {
+		                                                                   return InWorkspace->EditPreview(
+		                                                                       InRequest.Document, InRequest.Generation,
+		                                                                       InRequest.Settings, InRequest.bFrame);
+	                                                                   }));
 }
 } // namespace Hyperion

@@ -4,18 +4,6 @@ namespace Hyperion
 {
 namespace
 {
-template<class TFunction> auto ImportCall(TFunction InFunction)
-{
-	try
-	{
-		return InFunction();
-	}
-	catch (const FAssetImportError& Failure)
-	{
-		throw FAutomationError(Failure.Code, Failure.what());
-	}
-}
-
 FOperationInfo ImportInfo(std::string InId, std::string InSummary, std::string InDescription, FArchiveNode InExample,
                           bool bInReadOnly, const FAssetImportWorkspace* InProvider)
 {
@@ -56,11 +44,7 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 	        Example(Request), false, InProvider),
 	    [InProvider](const FImportRequest& InRequest)
 	    {
-		    const auto Task = ImportCall(
-		        [&]
-		        {
-			        return InProvider->Start(InRequest);
-		        });
+		    const auto Task = InProvider->Start(InRequest);
 		    return TPendingOperation<FImportResult>{[InProvider, Task]() -> std::optional<FImportResult>
 		                                            {
 			                                            InProvider->Update();
@@ -70,7 +54,7 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 			                                            }
 			                                            if (Task->Info.Status == EImportTaskState::Failed)
 			                                            {
-				                                            throw FAutomationError("operation_failed",
+				                                            throw FAutomationError(AutomationErrors::OperationFailed,
 				                                                                   Task->Info.Error);
 			                                            }
 			                                            return Task->Info.Result;
@@ -93,11 +77,7 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 	               Example(Request), true, InProvider),
 	    [InProvider](const FImportRequest& InRequest)
 	    {
-		    return ImportCall(
-		        [&]
-		        {
-			        return InProvider->Validate(InRequest);
-		        });
+		    return InProvider->Validate(InRequest);
 	    }));
 	InCatalog.Register(MakeOperation<FImportTaskListRequest, FImportTaskList>(
 	    ImportInfo("asset.import.tasks", "List GUI and agent import tasks",
@@ -106,11 +86,7 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 	               Example(FImportTaskListRequest{}), true, InProvider),
 	    [InProvider](const FImportTaskListRequest& InRequest)
 	    {
-		    return ImportCall(
-		        [&]
-		        {
-			        return InProvider->List(InRequest);
-		        });
+		    return InProvider->List(InRequest);
 	    }));
 	InCatalog.Register(MakeOperation<FImportTaskQuery, FImportTaskInfo>(
 	    ImportInfo("asset.import.task", "Inspect a shared import task",
@@ -119,11 +95,7 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 	               Example(FImportTaskQuery{"task-from-asset.import.tasks"}), true, InProvider),
 	    [InProvider](const FImportTaskQuery& InRequest)
 	    {
-		    return ImportCall(
-		        [&]
-		        {
-			        return InProvider->Get(InRequest);
-		        });
+		    return InProvider->Get(InRequest);
 	    }));
 }
 } // namespace Hyperion

@@ -23,7 +23,7 @@ struct FSceneViewRequest
 	std::uint32_t Width = 1;
 	std::uint32_t Height = 1;
 	std::uint64_t Identity = 1;
-	std::string Usage = "Forward";
+	std::string Usage = MaterialUsages::Forward;
 	std::optional<FViewport> Viewport;
 	EDepthConvention DepthConvention = EDepthConvention::Standard;
 	ESceneCullingMode CullingMode = ESceneCullingMode::Bvh;

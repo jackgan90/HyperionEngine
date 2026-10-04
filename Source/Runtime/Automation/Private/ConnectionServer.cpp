@@ -69,16 +69,17 @@ FArchiveNode FAutomationServer::FImpl::Hello(FPeer& InPeer, const FArchiveNode& 
 	CheckConnectionKeys(Fields, {"protocol", "instance", "maxFrame"});
 	if (ReadValue<std::uint32_t>(Fields.at("protocol")) != AutomationProtocolVersion)
 	{
-		throw FAutomationError("protocol_mismatch", "Unsupported automation communication version");
+		throw FAutomationError(AutomationErrors::ProtocolMismatch, "Unsupported automation communication version");
 	}
 	const auto Expected = ReadValue<std::string>(Fields.at("instance"));
 	if (!Expected.empty() && Expected != Info.Instance)
 	{
-		throw FAutomationError("stale_target", "Target instance changed; discover and select it explicitly");
+		throw FAutomationError(AutomationErrors::StaleTarget,
+		                       "Target instance changed; discover and select it explicitly");
 	}
 	if (ReadValue<std::uint32_t>(Fields.at("maxFrame")) < AutomationResponseLimits.MaxBytes)
 	{
-		throw FAutomationError("protocol_mismatch", "Peer response budget is too small");
+		throw FAutomationError(AutomationErrors::ProtocolMismatch, "Peer response budget is too small");
 	}
 	InPeer.bHello = true;
 	return AutomationCompleted(FArchiveNode(
@@ -103,14 +104,14 @@ void FAutomationServer::FImpl::Message(FPeer& InPeer, const std::string& InMessa
 		Id = ReadValue<std::string>(Fields.at("id"));
 		if (Id.empty() || Id.size() > MaxCorrelationIdBytes)
 		{
-			throw FAutomationError("protocol_error", "Invalid request correlation ID");
+			throw FAutomationError(AutomationErrors::ProtocolError, "Invalid request correlation ID");
 		}
 		const auto Method = ReadValue<std::string>(Fields.at("method"));
 		if (!InPeer.bHello)
 		{
 			if (Method != "hello" || InMessage.size() > MaxHandshakeBytes)
 			{
-				throw FAutomationError("protocol_error", "A bounded hello must precede requests");
+				throw FAutomationError(AutomationErrors::ProtocolError, "A bounded hello must precede requests");
 			}
 			Result = Hello(InPeer, Fields.at("params"));
 		}
@@ -126,7 +127,7 @@ void FAutomationServer::FImpl::Message(FPeer& InPeer, const std::string& InMessa
 	}
 	catch (...)
 	{
-		Result = CurrentConnectionFailure();
+		Result = CurrentAutomationFailure();
 		InPeer.bClosing = !InPeer.bHello;
 	}
 	InPeer.Channel.Send(WriteAutomationResponse(

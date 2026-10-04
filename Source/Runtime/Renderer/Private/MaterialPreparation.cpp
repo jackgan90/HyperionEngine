@@ -114,7 +114,7 @@ void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefini
 	for (std::size_t Index = 0; Index < Count; ++Index)
 	{
 		const auto& Default = OutResult.Passes[Index];
-		if (Default.Variant != "Default" || Default.ExecutionMode != EMaterialExecutionMode::Ordinary ||
+		if (Default.Variant != MaterialVariants::Default || Default.ExecutionMode != EMaterialExecutionMode::Ordinary ||
 		    OutResult.FindInstancePass(Default.Usage))
 		{
 			continue;
@@ -130,15 +130,15 @@ void CompileOptionalInstances(FShaderCompiler& InCompiler, const FMaterialDefini
 			if (std::any_of(OutResult.Passes.begin(), OutResult.Passes.end(),
 			                [&](const auto& InPass)
 			                {
-				                return InPass.Usage == Default.Usage && InPass.Variant == "Instance";
+				                return InPass.Usage == Default.Usage && InPass.Variant == MaterialVariants::Instance;
 			                }))
 			{
 				throw std::invalid_argument("Optional instance variant identity is already occupied");
 			}
-			auto Instance =
-			    CompileVariant(InCompiler, InDefinition, InFormat,
-			                   {Default.Usage, "Instance", Default.VariantDefines, EMaterialExecutionMode::Instanced},
-			                   InSources, Trial);
+			auto Instance = CompileVariant(
+			    InCompiler, InDefinition, InFormat,
+			    {Default.Usage, MaterialVariants::Instance, Default.VariantDefines, EMaterialExecutionMode::Instanced},
+			    InSources, Trial);
 			if (!std::includes(Default.ActiveParameters.begin(), Default.ActiveParameters.end(),
 			                   Instance.ActiveParameters.begin(), Instance.ActiveParameters.end()))
 			{

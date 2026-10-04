@@ -9,7 +9,8 @@ FArchiveNode FAssetAutomation::ReadField(const std::string& InDocument, std::str
 	const auto Entry = Find(InDocument);
 	if (Entry->Document->Loaded().Header.TypeId != InType)
 	{
-		throw FAutomationError("unsupported_type", "Operation requires a " + std::string(InType) + " document");
+		throw FAutomationError(AutomationErrors::UnsupportedType,
+		                       "Operation requires a " + std::string(InType) + " document");
 	}
 	return Entry->Document->Get(InField);
 }
@@ -29,7 +30,8 @@ FArchiveNode FAssetAutomation::ReadField(const std::string& InDocument, const FR
 	const auto Entry = Find(InDocument);
 	if (Entry->Document->Loaded().Header.TypeId != InField.TypeId)
 	{
-		throw FAutomationError("unsupported_type", "Operation requires a " + InField.TypeId + " document");
+		throw FAutomationError(AutomationErrors::UnsupportedType,
+		                       "Operation requires a " + InField.TypeId + " document");
 	}
 	const auto Policy = ResolveAssetFieldPolicy(*Entry->Document->Loaded().Type, InField);
 	return Entry->Document->Get(Policy.Field().FieldId);
@@ -42,15 +44,12 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::SetField(const std::stri
 {
 	const auto Entry = Edit(InDocument, InGeneration);
 	(void)ReadField(InDocument, InField);
-	try
-	{
-		return PendingEdit(Entry, FAssetEditWorkflow::Field(Tasks, Assets, Entry->Document, InGeneration, InField,
-		                                                    std::move(InValue)));
-	}
-	catch (const FAssetWorkflowError& Failure)
-	{
-		throw FAutomationError(Failure.Code, Failure.what());
-	}
+	return InvokeAutomation(
+	    [&]
+	    {
+		    return PendingEdit(Entry, FAssetEditWorkflow::Field(Tasks, Assets, Entry->Document, InGeneration, InField,
+		                                                        std::move(InValue)));
+	    });
 }
 
 std::vector<FModelPrimitiveInfo> FAssetAutomation::ModelPrimitives(const FAssetMutationRequest& InRequest)
@@ -58,7 +57,7 @@ std::vector<FModelPrimitiveInfo> FAssetAutomation::ModelPrimitives(const FAssetM
 	const auto Entry = Find(InRequest.Document);
 	if (Entry->Document->Generation() != InRequest.Generation)
 	{
-		throw FAutomationError("stale_revision", "Asset changed; restart the property query");
+		throw FAutomationError(AutomationErrors::StaleRevision, "Asset changed; restart the property query");
 	}
 	return DescribeModelPrimitives(*Entry->Document);
 }

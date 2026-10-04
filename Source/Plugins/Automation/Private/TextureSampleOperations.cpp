@@ -29,11 +29,11 @@ FTextureSample FAssetAutomation::TextureSample(const FTextureSampleRequest& InRe
 	const auto Entry = Find(InRequest.Document);
 	if (Entry->Document->Generation() != InRequest.Generation)
 	{
-		throw FAutomationError("stale_revision", "Texture changed; query current generation");
+		throw FAutomationError(AutomationErrors::StaleRevision, "Texture changed; query current generation");
 	}
 	if (Entry->Document->Loaded().Header.TypeId != RecordType<FTextureAsset>().Id)
 	{
-		throw FAutomationError("unsupported_type", "A texture document is required");
+		throw FAutomationError(AutomationErrors::UnsupportedType, "A texture document is required");
 	}
 	const auto& Mips = std::get<FArchiveNode::FArray>(Entry->Document->Get("mips").Value);
 	if (InRequest.Mip >= Mips.size())

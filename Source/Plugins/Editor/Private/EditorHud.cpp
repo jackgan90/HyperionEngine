@@ -11,9 +11,7 @@ namespace
 {
 EGBufferVisualizer DisplayedVisualizer(const FRenderSettings& InSettings)
 {
-	return ParseSceneRenderPipeline(InSettings.Pipeline) == ESceneRenderPipeline::Deferred
-	           ? ParseGBufferVisualizer(InSettings.DebugMode)
-	           : EGBufferVisualizer::Lit;
+	return InSettings.Pipeline == ESceneRenderPipeline::Deferred ? InSettings.DebugMode : EGBufferVisualizer::Lit;
 }
 
 std::string Number(double InValue)
@@ -93,10 +91,10 @@ void AddBatchLines(std::vector<std::string>& InLines, const FRenderBatchStats& I
 	}
 }
 
-std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, std::uint32_t InMask)
+std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, EProfilingHudCategory InMask)
 {
 	std::vector<std::string> Lines;
-	if (InMask & 1)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::Overview))
 	{
 		const auto Time = InData.FrameIntervalMilliseconds;
 		Lines = {"OVERVIEW", Number(Time) + " ms  |  " + Number(Time > 0 ? 1000 / Time : 0) + " FPS",
@@ -104,7 +102,7 @@ std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, std::u
 		         "CPU tracked " + Number(double(InData.TrackedCpuBytes) / 1048576) + " MiB",
 		         "Scene targets " + Number(double(InData.Pipeline.SceneTargetBytes) / 1048576) + " MiB"};
 	}
-	if (InMask & 2)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::Tasks))
 	{
 		Lines.push_back("TASKS");
 		for (const auto& [Name, Count] : InData.ExecutedTasks)
@@ -112,7 +110,7 @@ std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, std::u
 			Lines.push_back(Name + ": " + std::to_string(Count));
 		}
 	}
-	if (InMask & 4)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::GpuPasses))
 	{
 		Lines.push_back("GPU PASSES");
 		if (InData.GpuPassMilliseconds.empty())
@@ -124,7 +122,7 @@ std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, std::u
 			Lines.push_back(Name + ": " + Number(Time) + " ms");
 		}
 	}
-	if (InMask & 8)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::DeviceCounters))
 	{
 		Lines.push_back("DEVICE");
 		for (const auto& [Name, Count] : InData.Device)
@@ -132,11 +130,11 @@ std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, std::u
 			Lines.push_back(Name + ": " + std::to_string(Count));
 		}
 	}
-	if (InMask & 16)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::RenderViews))
 	{
 		AddViewLines(Lines, InData);
 	}
-	if (InMask & 32)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::LightingHzb))
 	{
 		const auto& Depth = InData.Pipeline.HierarchicalDepth;
 		const auto& Lights = InData.Pipeline.LocalLights;
@@ -149,11 +147,11 @@ std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, std::u
 		Lines.push_back("Cluster references " + std::to_string(Lights.ClusterReferences));
 		Lines.push_back("Cluster bytes " + std::to_string(Lights.ClusterBytes));
 	}
-	if (InMask & 64)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::Visibility))
 	{
 		AddVisibilityLines(Lines, InData.Pipeline.MainView());
 	}
-	if (InMask & 128)
+	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::Batching))
 	{
 		AddBatchLines(Lines, InData.Pipeline.MainView().Batches);
 	}
@@ -190,7 +188,7 @@ void FEditorPlugin::DrawVisualizationControls()
 	const bool bCompact = Width < 300;
 	const auto Visualizers = GBufferVisualizerOptions();
 	static const auto Labels = RasterOptionLabels(Visualizers);
-	const bool bDeferred = ParseSceneRenderPipeline(Rendering.Pipeline) == ESceneRenderPipeline::Deferred;
+	const bool bDeferred = Rendering.Pipeline == ESceneRenderPipeline::Deferred;
 	auto Mode = RasterOptionIndex(Visualizers, DisplayedVisualizer(Rendering));
 	Gui->SetNextItemWidth(bCompact ? std::max(40.f, Width - 70) : 150);
 	Gui->BeginDisabled(!bDeferred);
@@ -251,18 +249,18 @@ void FEditorPlugin::DrawViewportHud()
 	}
 	if (bShowStatusHud)
 	{
-		std::vector<std::string> Lines{
-		    "RENDER STATUS",
-		    "Pipeline: " + Rendering.Pipeline,
-		    "GBuffer: " + (ParseSceneRenderPipeline(Rendering.Pipeline) == ESceneRenderPipeline::Deferred
-		                       ? Rendering.GBuffer
-		                       : std::string("not used")),
-		    Rendering.bReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z",
-		    "Visualizer: " + std::string(DescribeGBufferVisualizer(DisplayedVisualizer(Rendering)).Label),
-		    "Exposure: " + Number(Exposure),
-		    "Viewport: " + std::to_string(Viewport.ViewportSize.Width) + " x " +
-		        std::to_string(Viewport.ViewportSize.Height),
-		    HudDiagnostics.Adapter};
+		std::vector<std::string> Lines{"RENDER STATUS",
+		                               "Pipeline: " + std::string(ToSceneRenderPipelineToken(Rendering.Pipeline)),
+		                               "GBuffer: " + (Rendering.Pipeline == ESceneRenderPipeline::Deferred
+		                                                  ? std::string(ToGBufferPresetToken(Rendering.GBuffer))
+		                                                  : std::string("not used")),
+		                               Rendering.bReversedZ ? "Active depth: Reversed Z" : "Active depth: Standard Z",
+		                               "Visualizer: " +
+		                                   std::string(DescribeGBufferVisualizer(DisplayedVisualizer(Rendering)).Label),
+		                               "Exposure: " + Number(Exposure),
+		                               "Viewport: " + std::to_string(Viewport.ViewportSize.Width) + " x " +
+		                                   std::to_string(Viewport.ViewportSize.Height),
+		                               HudDiagnostics.Adapter};
 		Acceptance.ObserveWidget(EEditorWidget::StatusHud, Gui->DrawImageText(Left, Lines));
 	}
 	if (bShowProfilingHud)
