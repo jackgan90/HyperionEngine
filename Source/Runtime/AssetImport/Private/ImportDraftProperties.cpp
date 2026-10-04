@@ -86,7 +86,7 @@ FConvertedAsset ApplyImportProperties(const FConvertedAsset& InSource, const FIm
 		throw std::invalid_argument("Numeric material edits require a material root");
 	}
 	auto Record = WriteRecord(*InSource.Type, InSource.Object.get());
-	auto& Fields = std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value);
+	auto& Fields = RecordFields(Record);
 	if (InEdits.Name)
 	{
 		CheckName(*InEdits.Name);

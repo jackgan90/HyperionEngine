@@ -40,8 +40,7 @@ FTextureSample FAssetAutomation::TextureSample(const FTextureSampleRequest& InRe
 	{
 		throw std::invalid_argument("Mip out of range");
 	}
-	const auto& Mip =
-	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Mips[InRequest.Mip].Value).at("fields").Value);
+	const auto& Mip = RecordFields(Mips[InRequest.Mip]);
 	FTextureSample Result;
 	Result.Width = ReadValue<std::uint32_t>(Mip.at("width"));
 	Result.Height = ReadValue<std::uint32_t>(Mip.at("height"));

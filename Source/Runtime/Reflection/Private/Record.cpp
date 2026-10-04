@@ -110,9 +110,7 @@ FArchiveNode WriteRecord(const FRecordDescriptor& InType, const void* InObject)
 			Fields.emplace(Field.Id, Field.Write(InObject));
 		}
 	}
-	return FArchiveNode(FArchiveNode::FObject{{"type", FArchiveNode(InType.Id)},
-	                                          {"version", WriteValue(InType.Version)},
-	                                          {"fields", FArchiveNode(std::move(Fields))}});
+	return MakeRecordEnvelope(InType.Id, InType.Version, std::move(Fields));
 }
 
 namespace
@@ -179,15 +177,13 @@ std::shared_ptr<void> ReadRecord(const FRecordDescriptor& InType, const FArchive
 	const FRecordReadContext Context{InContext.Path.empty() ? InType.Id : InContext.Path, InContext.Diagnostics};
 	try
 	{
-		const auto& Object = std::get<FArchiveNode::FObject>(InNode.Value);
-		auto Version = ReadValue<std::uint32_t>(Object.at("version"));
-		if (ReadValue<std::string>(Object.at("type")) != InType.Id || Version < InType.MinimumVersion ||
-		    Version > InType.Version)
+		auto Version = RecordVersion(InNode);
+		if (RecordTypeId(InNode) != InType.Id || Version < InType.MinimumVersion || Version > InType.Version)
 		{
 			throw std::runtime_error("type or schema version mismatch (file " + std::to_string(Version) + ", current " +
 			                         std::to_string(InType.Version) + ")");
 		}
-		const auto& Fields = std::get<FArchiveNode::FObject>(Object.at("fields").Value);
+		const auto& Fields = RecordFields(InNode);
 		auto Result = InType.Create();
 		if (Version == InType.Version)
 		{

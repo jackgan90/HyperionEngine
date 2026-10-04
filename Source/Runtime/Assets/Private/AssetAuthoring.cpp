@@ -7,8 +7,7 @@ namespace Hyperion
 std::string AssetProductName(const FRecordDescriptor& InType, const void* InObject)
 {
 	const auto Record = WriteRecord(InType, InObject);
-	const auto& Fields =
-	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value);
+	const auto& Fields = RecordFields(Record);
 	std::string Name = "Asset";
 	if (const auto It = Fields.find("name");
 	    It != Fields.end() && std::holds_alternative<std::string>(It->second.Value))

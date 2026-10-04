@@ -131,8 +131,7 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 	if (!bInRoot && InAsset.Type->Id == "hyperion.textureasset")
 	{
 		auto Record = WriteRecord(*InAsset.Type, Object.get());
-		std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value)["name"] =
-		    WriteValue(std::string{});
+		RecordFields(Record)["name"] = WriteValue(std::string{});
 		TextureContent = HashArchive(Record);
 		if (!ExistingAssets.contains(Id))
 		{

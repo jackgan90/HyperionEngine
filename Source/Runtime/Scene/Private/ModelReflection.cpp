@@ -115,8 +115,7 @@ template<> const FRecordDescriptor& RecordType<FModelAsset>()
 				    auto& Values = std::get<FArchiveNode::FArray>(InFields.at(Field).Value);
 				    for (std::size_t Index = 0; Index < Values.size(); ++Index)
 				    {
-					    auto& Record = std::get<FArchiveNode::FObject>(Values[Index].Value);
-					    auto& Fields = std::get<FArchiveNode::FObject>(Record.at("fields").Value);
+					    auto& Fields = RecordFields(Values[Index]);
 					    if (!Fields.contains("id") || ReadValue<std::string>(Fields.at("id")).empty())
 					    {
 						    Fields["id"] = WriteValue(std::string(Prefix) + std::to_string(Index));

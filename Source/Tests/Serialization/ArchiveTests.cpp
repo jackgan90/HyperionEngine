@@ -37,6 +37,7 @@ template<> const FRecordDescriptor& RecordType<FArchiveFixture>()
 } // namespace Hyperion
 
 void CheckRecordEvolution();
+void CheckRecordEnvelope();
 
 namespace
 {
@@ -250,6 +251,7 @@ int main()
 		CheckBulkMetadataBoundaries();
 		CheckMetadataBudgets();
 		CheckRecordEvolution();
+		CheckRecordEnvelope();
 		FArchiveFixture Original{{{"mesh", {1, 2, 3}}}, 42};
 		Original.Slots[1].Name = "fixed element";
 		auto Bytes = Serialize(Original);

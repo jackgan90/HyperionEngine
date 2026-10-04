@@ -1,6 +1,6 @@
 #pragma once
-#include "Hyperion/Reflection/ArchiveNode.h"
 #include "Hyperion/Reflection/RecordCallback.h"
+#include "Hyperion/Reflection/RecordEnvelope.h"
 #include <any>
 #include <functional>
 #include <mutex>

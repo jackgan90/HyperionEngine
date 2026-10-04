@@ -14,8 +14,7 @@ std::optional<FPublishedAsset> FPublication::ReuseTexture(const std::string& InC
 	                           ? DecodeAsset(StagedAsset->second.Bytes)
 	                           : DecodeAsset(IO.ReadAsync(Reused->second.Path, Cancellation).Get(IO.TaskSystem()));
 	auto Record = Candidate.Object;
-	std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value)["name"] =
-	    WriteValue(std::string{});
+	RecordFields(Record)["name"] = WriteValue(std::string{});
 	if (Candidate.Header.Id != Reused->second.Reference.Id || HashArchive(Record) != InContent)
 	{
 		if (StagedAsset == Staged.end())

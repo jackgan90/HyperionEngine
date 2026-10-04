@@ -13,11 +13,6 @@ namespace Hyperion
 {
 namespace
 {
-FArchiveNode::FObject& Fields(FArchiveNode& InNode)
-{
-	return std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InNode.Value).at("fields").Value);
-}
-
 std::string VectorText(FVec3 InValue)
 {
 	std::ostringstream Text;
@@ -294,13 +289,13 @@ void FAssetWorkspace::DrawModelPrimitives(FGui& InGui, FEntry& InEntry, const FM
 		std::vector<std::string> Names;
 		for (auto& Primitive : Array)
 		{
-			const auto& Values = Fields(Primitive);
+			const auto& Values = RecordFields(Primitive);
 			Names.push_back(ReadValue<std::string>(Values.at("name")) + " [" + ReadValue<std::string>(Values.at("id")) +
 			                "]");
 		}
 		InEntry.SelectedPrimitive = std::min(InEntry.SelectedPrimitive, Names.size() - 1);
 		AssetCombo(InGui, "Selected primitive", Names, InEntry.SelectedPrimitive);
-		auto& Primitive = Fields(Array.at(InEntry.SelectedPrimitive));
+		auto& Primitive = RecordFields(Array.at(InEntry.SelectedPrimitive));
 		auto Name = ReadValue<std::string>(Primitive.at("name"));
 		EditField(
 		    InGui, InEntry, ResolveAssetFieldPolicy(*Document.Loaded().Type, &FModelAsset::Primitives),

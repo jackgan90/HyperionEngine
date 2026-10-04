@@ -35,18 +35,14 @@ void CollectStoredReferences(const FArchiveNode& InNode, std::string_view InPath
 {
 	if (const auto* Object = std::get_if<FArchiveNode::FObject>(&InNode.Value))
 	{
-		const auto Type = Object->find("type");
-		const auto Fields = Object->find("fields");
-		if (Type != Object->end() && Fields != Object->end() && Object->contains("version") &&
-		    std::holds_alternative<std::string>(Type->second.Value) &&
-		    std::holds_alternative<FArchiveNode::FObject>(Fields->second.Value))
+		if (HasRecordEnvelopeShape(InNode))
 		{
-			if (ReadValue<std::string>(Type->second) == RecordType<FAssetRef>().Id)
+			if (RecordTypeId(InNode) == RecordType<FAssetRef>().Id)
 			{
 				OutDependencies.push_back({std::string(InPath), ReadValue<FAssetRef>(InNode)});
 				return;
 			}
-			for (const auto& [Name, Value] : std::get<FArchiveNode::FObject>(Fields->second.Value))
+			for (const auto& [Name, Value] : RecordFields(InNode))
 			{
 				CollectStoredReferences(Value, FRecordReadContext{std::string(InPath)}.Child(Name).Path,
 				                        OutDependencies);
@@ -72,9 +68,8 @@ void CollectStoredReferences(const FArchiveNode& InNode, std::string_view InPath
 
 void ValidateDocument(const FAssetDocument& InDocument, FArchiveLimits InLimits)
 {
-	const auto& Root = std::get<FArchiveNode::FObject>(InDocument.Object.Value);
-	if (ReadValue<std::string>(Root.at("type")) != InDocument.Header.TypeId ||
-	    ReadValue<std::uint32_t>(Root.at("version")) != InDocument.Header.SchemaVersion)
+	if (RecordTypeId(InDocument.Object) != InDocument.Header.TypeId ||
+	    RecordVersion(InDocument.Object) != InDocument.Header.SchemaVersion)
 	{
 		throw std::runtime_error("Native asset header/body type or schema mismatch");
 	}
@@ -97,9 +92,8 @@ FAssetDocument ReadLegacy(std::shared_ptr<const std::vector<std::byte>> InBytes,
 	Result.Object = DecodeArchive(InBytes, 0, InLimits);
 	Result.bLegacy = true;
 	Result.StoredBytes = InBytes->size();
-	const auto& Root = std::get<FArchiveNode::FObject>(Result.Object.Value);
-	Result.Header.TypeId = ReadValue<std::string>(Root.at("type"));
-	Result.Header.SchemaVersion = ReadValue<std::uint32_t>(Root.at("version"));
+	Result.Header.TypeId = RecordTypeId(Result.Object);
+	Result.Header.SchemaVersion = RecordVersion(Result.Object);
 	Result.Header.Revision = HashArchive(Result.Object, InLimits);
 	Result.Header.Id = ContentHash(*InBytes).substr(0, 32);
 	CollectStoredReferences(Result.Object, {}, Result.Header.Dependencies);

@@ -110,9 +110,7 @@ FArchiveNode DecodeRecord(const FRecordDescriptor& InType, const FArchiveNode& I
 			throw FWireError(InPath + "." + Member.Id, "Missing required field");
 		}
 	}
-	return FArchiveNode(FArchiveNode::FObject{{"type", WriteValue(InType.Id)},
-	                                          {"version", WriteValue(InType.Version)},
-	                                          {"fields", FArchiveNode(std::move(Fields))}});
+	return MakeRecordEnvelope(InType.Id, InType.Version, std::move(Fields));
 }
 } // namespace
 
@@ -184,8 +182,7 @@ FArchiveNode Encode(const FRecordValueShape& InShape, const FArchiveNode& InValu
 	}
 	if (InShape.Kind == ERecordValueKind::Record)
 	{
-		const auto& Fields =
-		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InValue.Value).at("fields").Value);
+		const auto& Fields = RecordFields(InValue);
 		FArchiveNode::FObject Result;
 		for (const auto& Member : InShape.Record().Members)
 		{
@@ -246,8 +243,7 @@ FArchiveNode WriteRecordWire(const FRecordDescriptor& InType, const void* InObje
 {
 	// The record callback cannot capture a descriptor; project fields directly.
 	const auto Archive = WriteRecord(InType, InObject);
-	const auto& Fields =
-	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Archive.Value).at("fields").Value);
+	const auto& Fields = RecordFields(Archive);
 	FArchiveNode::FObject Result;
 	for (const auto& Member : InType.Members)
 	{

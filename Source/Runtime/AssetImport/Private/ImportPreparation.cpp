@@ -69,8 +69,7 @@ FPreparedImport FAssetImportService::FImpl::Prepare(const std::filesystem::path&
 	                                Result.Root.Importer == "hyperion.image"))
 	{
 		auto Record = WriteRecord(*Result.Root.Type, Result.Root.Object.get());
-		auto& Fields =
-		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Record.Value).at("fields").Value);
+		auto& Fields = RecordFields(Record);
 		Fields.at("name") = WriteValue(InOptions.Name);
 		Result.Root.Object = ReadRecord(*Result.Root.Type, Record);
 	}

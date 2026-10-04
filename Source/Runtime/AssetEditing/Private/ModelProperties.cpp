@@ -4,14 +4,6 @@
 
 namespace Hyperion
 {
-namespace
-{
-FArchiveNode::FObject& PrimitiveFields(FArchiveNode& InNode)
-{
-	return std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InNode.Value).at("fields").Value);
-}
-} // namespace
-
 std::vector<FModelPrimitiveInfo> DescribeModelPrimitives(const FAssetEditDocument& InDocument)
 {
 	if (InDocument.Loaded().Type->CppType != typeid(FModelAsset))
@@ -24,8 +16,7 @@ std::vector<FModelPrimitiveInfo> DescribeModelPrimitives(const FAssetEditDocumen
 	const auto Model = InDocument.Loaded().As<FModelAsset>();
 	for (std::size_t Index = 0; Index < Primitives.size(); ++Index)
 	{
-		const auto& Fields = std::get<FArchiveNode::FObject>(
-		    std::get<FArchiveNode::FObject>(Primitives[Index].Value).at("fields").Value);
+		const auto& Fields = RecordFields(Primitives[Index]);
 		Result.push_back({ReadValue<std::string>(Fields.at("id")), ReadValue<std::string>(Fields.at("name")),
 		                  ReadValue<std::int32_t>(Fields.at("material")),
 		                  Model->Primitives.at(Index).Positions.size() / 3,
@@ -57,7 +48,7 @@ void SetModelPrimitives(FAssetEditDocument& InDocument, const std::vector<FModel
 			throw std::invalid_argument(
 			    "Primitive identity/geometry is immutable; material must select an existing slot or -1");
 		}
-		auto& Fields = PrimitiveFields(Array[Index]);
+		auto& Fields = RecordFields(Array[Index]);
 		Fields.at("name") = WriteValue(Value.Name);
 		Fields.at("material") = WriteValue(Value.Material);
 	}
@@ -75,8 +66,7 @@ void CommitModelPrimitiveFields(FAssetEditDocument& InDocument, const FArchiveNo
 	}
 	for (std::size_t Index = 0; Index < Array.size(); ++Index)
 	{
-		const auto& Fields =
-		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Array[Index].Value).at("fields").Value);
+		const auto& Fields = RecordFields(Array[Index]);
 		Values[Index].Name = ReadValue<std::string>(Fields.at("name"));
 		Values[Index].Material = ReadValue<std::int32_t>(Fields.at("material"));
 	}

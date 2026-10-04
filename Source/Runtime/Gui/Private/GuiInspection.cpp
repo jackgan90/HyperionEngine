@@ -22,7 +22,7 @@ bool IsTypedAssetReference(const FRecordValueShape& InShape, const FPropertyPres
 bool EditVectorValue(FGui& InGui, FArchiveNode& InValue, const FPropertyPresentation& InPresentation,
                      const std::string& InId, std::array<FVec4, 3>& OutBounds)
 {
-	auto& Fields = std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InValue.Value).at("fields").Value);
+	auto& Fields = RecordFields(InValue);
 	FVec3 Vector{ReadValue<float>(Fields.at("x")), ReadValue<float>(Fields.at("y")), ReadValue<float>(Fields.at("z"))};
 	if (InGui.InputVectorRow(Label(InPresentation, InId).c_str(), Vector, InPresentation.Unit, InPresentation.Tooltip,
 	                         OutBounds) &&
@@ -123,7 +123,7 @@ bool EditRecordValue(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape
                      const FPropertyPresentation& InPresentation, const std::string& InId, unsigned InDepth)
 {
 	const auto& Type = InShape.Record();
-	auto& Fields = std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InValue.Value).at("fields").Value);
+	auto& Fields = RecordFields(InValue);
 	if (Type.Id == "hyperion.mat4")
 	{
 		FMat4 Matrix{ReadValue<std::array<float, 16>>(Fields.at("values"))};

@@ -25,7 +25,7 @@ std::string PathId(const FInspectionPath& InPath)
 	std::string Result;
 	for (const auto& Part : InPath)
 	{
-		if (Part != "fields")
+		if (Part != RecordFieldsKey)
 		{
 			Result += (Result.empty() ? "" : "/") + Part;
 		}
@@ -49,7 +49,7 @@ bool EditSelectionVector(FGui& InGui, FRecordSelectionDraft& InDraft, const FIns
 	for (unsigned Axis = 0; Axis < 3; ++Axis)
 	{
 		Paths[Axis] = InPath;
-		Paths[Axis].insert(Paths[Axis].end(), {"fields", std::string(1, char('x' + Axis))});
+		Paths[Axis].insert(Paths[Axis].end(), {RecordFieldsKey, std::string(1, char('x' + Axis))});
 		Mixed[Axis] = InDraft.IsMixed(Paths[Axis]);
 	}
 	const bool bChanged = InPresentation.Widget == EPropertyWidget::Color3
@@ -85,7 +85,7 @@ bool EditSelectionChildren(FGui& InGui, FRecordSelectionDraft& InDraft, const FI
 				continue;
 			}
 			auto Path = InPath;
-			Path.push_back("fields");
+			Path.push_back(RecordFieldsKey);
 			const auto Presentation = Member.Options.Inspector.value_or(FPropertyPresentation{Member.Id});
 			if (!IsVisible(InDraft, Presentation, Path))
 			{

@@ -539,12 +539,15 @@ void CheckMountedNativeAssets()
 	Tasks.Shutdown();
 }
 
+void CheckNativeEnvelope();
+
 int main()
 {
 	try
 	{
 		CheckMountedNativeAssets();
 		CheckContainer();
+		CheckNativeEnvelope();
 		CheckNativeProbe();
 		CheckNativeSizeBudget();
 		CheckCustomArchiveLimits();

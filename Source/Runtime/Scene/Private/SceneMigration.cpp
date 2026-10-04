@@ -76,7 +76,6 @@ void MigrateSceneNodes(FArchiveNode::FObject& InFields, const FRecordReadContext
 	Legacy.Near = LegacyField(InFields, "near", Legacy.Near, InContext);
 	Legacy.Far = LegacyField(InFields, "far", Legacy.Far, InContext);
 	auto Archive = WriteValue(UpgradeLegacyScene(Legacy));
-	auto& Object = std::get<FArchiveNode::FObject>(Archive.Value);
-	InFields = std::move(std::get<FArchiveNode::FObject>(Object.at("fields").Value));
+	InFields = std::move(RecordFields(Archive));
 }
 } // namespace Hyperion

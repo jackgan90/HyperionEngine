@@ -218,8 +218,7 @@ bool PrimitiveMaterialsChanged(const FArchiveNode& InBefore, const FArchiveNode&
 	{
 		const auto Get = [&](const FArchiveNode& InNode) -> const FArchiveNode&
 		{
-			return std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InNode.Value).at("fields").Value)
-			    .at(Material.FieldId);
+			return RecordFields(InNode).at(Material.FieldId);
 		};
 		if (!EqualInspectionValue(Get(Before[Index]), Get(After.at(Index))))
 		{

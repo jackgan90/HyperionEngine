@@ -168,7 +168,7 @@ bool FRecordSelectionDraft::EvaluateCollection(const FInspectionPath& InPath,
 			else
 			{
 				auto Path = InPath;
-				Path.insert(Path.end(), {std::to_string(Index), "fields", InPresentation.ElementIdentity});
+				Path.insert(Path.end(), {std::to_string(Index), RecordFieldsKey, InPresentation.ElementIdentity});
 				if (!EqualInspectionValue(GetValue(Path), GetValue(Path, Target)))
 				{
 					return false;

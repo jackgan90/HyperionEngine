@@ -316,9 +316,7 @@ template<class T> FArchiveNode DefaultInspectionValue()
 				Fields.emplace(Field.Id, Field.Write(Value.get()));
 			}
 		}
-		return FArchiveNode(FArchiveNode::FObject{{"type", WriteValue(Type.Id)},
-		                                          {"version", WriteValue(Type.Version)},
-		                                          {"fields", FArchiveNode(std::move(Fields))}});
+		return MakeRecordEnvelope(Type.Id, Type.Version, std::move(Fields));
 	}
 }
 

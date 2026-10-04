@@ -191,8 +191,7 @@ void CheckTextureHistorySharing(FAssetService& InAssets, FTaskSystem& InTasks, F
 	const auto BaseStorage = [&]()
 	{
 		const auto& Mip = std::get<FArchiveNode::FArray>(Document.Get("mips").Value).front();
-		const auto& Fields =
-		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Mip.Value).at("fields").Value);
+		const auto& Fields = RecordFields(Mip);
 		return std::get<FBulkData>(Fields.at("bytes").Value).Storage;
 	};
 	const auto Original = BaseStorage();

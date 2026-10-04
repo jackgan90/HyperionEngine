@@ -9,8 +9,7 @@ namespace
 {
 FArchiveNode& DocumentField(FArchiveNode& InDraft, std::string_view InField)
 {
-	return std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InDraft.Value).at("fields").Value)
-	    .at(std::string(InField));
+	return RecordFields(InDraft).at(std::string(InField));
 }
 } // namespace
 
@@ -37,8 +36,7 @@ bool CanEditTextureEncoding(const FTextureAsset& InTexture)
 
 FArchiveNode RebuildTextureEncodingDraft(const FArchiveNode& InDraft, EMaterialTextureEncoding InEncoding)
 {
-	const auto& Fields =
-	    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InDraft.Value).at("fields").Value);
+	const auto& Fields = RecordFields(InDraft);
 	FTextureAsset Kind;
 	Kind.Dimension = ReadValue<ETextureDimension>(Fields.at("dimension"));
 	Kind.Format = ReadValue<ETextureFormat>(Fields.at("format"));
@@ -87,8 +85,7 @@ FAssetEditDocument::FAssetEditDocument(std::shared_ptr<const FLoadedAsset> InAss
 
 const FArchiveNode& FAssetEditDocument::Get(std::string_view InField) const
 {
-	return std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Draft.Value).at("fields").Value)
-	    .at(std::string(InField));
+	return RecordFields(Draft).at(std::string(InField));
 }
 
 void FAssetEditDocument::Set(std::string InField, FArchiveNode InValue, std::uint64_t InInteraction)

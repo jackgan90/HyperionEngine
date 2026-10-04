@@ -225,8 +225,7 @@ void FEditorAcceptanceHarness::ExerciseAssetSaving(std::vector<FInputEvent>& InE
 				CheckAsset(Document->Error.empty(), "Asset save failed");
 				const auto Saved = Editor.Assets.LoadAsync(Path).Get(Editor.Tasks);
 				const auto Node = WriteRecord(*Saved->Type, Saved->Object.get());
-				const auto& Fields =
-				    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Node.Value).at("fields").Value);
+				const auto& Fields = RecordFields(Node);
 				CheckAsset(ReadValue<std::string>(Fields.at("name")) == "Edited " + Name,
 				           "Saved asset did not retain property edit");
 				CheckAsset(Editor.IsDirty() && Editor.History.size() == 1 &&

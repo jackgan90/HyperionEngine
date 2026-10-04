@@ -174,6 +174,8 @@ Member 选项依次为 required、persistent、读别名。默认值来自对象
 
 HYPA v2 以 little endian 写入 24 字节前缀：magic、u32 版本、u64 metadata 大小、u32 bulk 数量、u32 保留位。随后是每块 u64 offset/u64 size 的目录、metadata 和连续 bulk 数据。wire tag 固定为 bool=0、signed=1、double=2、string=3、bulk=4、array=5、object=6、null=7、unsigned=8。数值数组与图像像素存为带元素类型的数据块；不使用 variant 下标或原生结构体布局作为协议。
 
+Reflection 的 `RecordEnvelope.h` 统一构造和访问 Record 的 `type / version / fields` 封装。`RecordFields` 返回原字段对象的 const 或 mutable 引用，`RecordTypeId` / `RecordVersion` 只读取对应元数据；业务名称仍由资产领域解释。构造不执行业务校验，完整校验与迁移继续由 `ReadRecord` 等既有边界负责。`HasRecordEnvelopeShape` 仅识别结构，不验证版本值或类型注册，用于保持未知 Record 的依赖遍历规则；inspection 路径复用 `RecordFieldsKey` 并保持原有路径格式。
+
 Reflection 的 `BulkElement.h` 统一声明 bulk 元素的 `EBulkElement` 身份、C++ 类型、wire 名称和字节宽度；`FBulkData` 在内存中保存该身份，Serialization 只在边界解析或写出原有的 `u8/i8/u16/i16/u32/i32/u64/i64/f32/f64` 名称。GUI 检查器、资产 JSON 导出和 Reflection wire 转换复用同一类型分派；`std::byte` 与兼容算术别名按数值类别和宽度映射。枚举序号不写入文件，归档版本、规范字节与哈希保持兼容。
 
 读取检查 magic、版本、完整性、范围、计数、重复 key、块索引、元素对齐、有限数值和多余数据。默认单文件 512 MiB（含 80 字节 HAST 头）、复杂度 100 万节点/64 层、保守累计分配预算 1 GiB。底层 EncodeAsset/DecodeAsset 可传入 FArchiveLimits；编码会先为 HAST 头保留字节，拒绝写出超过完整文件限额的内容。拥有原始字节的解码保留 bulk 视图直到类型构造，规范内容哈希也按块计算，不为哈希复制完整 bulk。公开 span 解码拥有必要副本，输入在调用后释放仍安全。预算不包含整个进程、图形驱动或任意自定义验证器的分配。

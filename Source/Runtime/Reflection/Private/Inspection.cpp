@@ -67,12 +67,10 @@ FArchiveNode PrepareValue(FArchiveNode InValue, const FArchiveNode& InCurrent, c
 	ValidateScalar(InValue, InPresentation, InPath);
 	if (InShape.Kind == ERecordValueKind::Record)
 	{
-		auto& Fields =
-		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(InValue.Value).at("fields").Value);
+		auto& Fields = RecordFields(InValue);
 		const auto Current =
 		    std::holds_alternative<std::monostate>(InCurrent.Value) ? InShape.DefaultValue() : InCurrent;
-		const auto& CurrentFields =
-		    std::get<FArchiveNode::FObject>(std::get<FArchiveNode::FObject>(Current.Value).at("fields").Value);
+		const auto& CurrentFields = RecordFields(Current);
 		for (const auto& Member : InShape.Record().Members)
 		{
 			if (Member.Shape && Fields.contains(Member.Id) && CurrentFields.contains(Member.Id))
