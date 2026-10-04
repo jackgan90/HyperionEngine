@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Scene/Scene.h"
+#include <variant>
 
 namespace Hyperion
 {
@@ -23,11 +24,31 @@ std::string_view SceneSkyStateName(ESceneSkyState InState);
 std::string FormatSceneSkyStatus(const FSceneSkyStatus& InStatus);
 template<> std::span<const ESceneSkyState> RecordEnumValues<ESceneSkyState>();
 
+enum class ESceneLightDiagnosticKind
+{
+	Directional,
+	Sky
+};
+
+// Known native identities and opaque legacy wire tokens share one authoritative value.
+class FSceneLightDiagnosticType
+{
+public:
+	FSceneLightDiagnosticType() = default;
+	explicit FSceneLightDiagnosticType(ESceneLightDiagnosticKind InKind);
+	static FSceneLightDiagnosticType FromWire(std::string InName);
+	std::optional<ESceneLightDiagnosticKind> Kind() const;
+	std::string_view WireName() const;
+
+private:
+	std::variant<std::string, ESceneLightDiagnosticKind> Value;
+};
+
 struct FSceneLightDiagnostic
 {
 	FSceneHandle Handle;
 	std::string Id;
-	std::string Type;
+	FSceneLightDiagnosticType Type;
 	std::int32_t Priority{};
 	bool bEnabled{};
 	bool bSelected{};

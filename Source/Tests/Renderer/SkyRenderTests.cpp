@@ -675,6 +675,7 @@ void CheckStateFailures(FSkyFixture& InFixture, const FAssetRef& InValid)
 		HYP_CHECK(Scene.GetStatus().PendingSkies == 0);
 		const auto Info = Scene.GetLightingInfo();
 		HYP_CHECK(Info.Lights.back().Asset.State == ESceneSkyState::Failed);
+		HYP_CHECK(Info.Lights.back().Type.Kind() == ESceneLightDiagnosticKind::Sky);
 		auto Light = *Scene.FindNode(Handle)->EnvironmentLight();
 		Light.Source = ESceneEnvironmentSource::ConstantColor;
 		Scene.SetEnvironmentLight(Handle, Light);
@@ -708,6 +709,7 @@ void CheckPriorityIsolation(FSkyFixture& InFixture, const FAssetRef& InReference
 		                                     return InLight.Handle == Handle;
 	                                     });
 	HYP_CHECK(Diagnostic != Info.Lights.end() && Diagnostic->bSelected && Diagnostic->Asset.Error == Error.Error);
+	HYP_CHECK(Diagnostic->Type.Kind() == ESceneLightDiagnosticKind::Sky);
 	// A valid lower priority sky must not appear when the winner has never loaded.
 	const auto Failed = InFixture.Frame();
 	HYP_CHECK(Pixel(Failed, 128, 96) < .001f && Pixel(Failed, 128, 96, 2) < .001f);

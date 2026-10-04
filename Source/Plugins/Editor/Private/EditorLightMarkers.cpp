@@ -1,5 +1,5 @@
 #include "EditorApplication.h"
-#include "Hyperion/Scene/LightSelection.h"
+#include "LightInspection.h"
 #include <algorithm>
 #include <cmath>
 
@@ -145,55 +145,9 @@ std::optional<FSceneHandle> FEditorPlugin::PickLightMarker(FVec2 InPoint) const
 void FEditorPlugin::InspectLightProperty(const FSceneNodeView& InView, const FSceneComponent& InComponent,
                                          std::string_view InField, FPropertyPresentation& InOutPresentation) const
 {
-	const bool bSky = InComponent.Type->CppType == typeid(FSceneEnvironmentLight);
-	if ((!bSky && InComponent.Type->CppType != typeid(FSceneDirectionalLight)) ||
-	    (InField != "priority" && InField != "sky"))
+	if (const auto Property = FindLightDiagnosticProperty(*InComponent.Type->Record, InField))
 	{
-		return;
-	}
-	for (const auto& Entry : Scene->GetLightingInfo().Lights)
-	{
-		if (Entry.Handle != InView.Handle || Entry.Type != (bSky ? "sky" : "directional"))
-		{
-			continue;
-		}
-		if (InField == "priority")
-		{
-			const bool bEligible =
-			    Entry.bEnabled && (bSky || CanCastDirectionalShadows(*InView.Node->DirectionalLight()));
-			const auto Tone = !bEligible        ? EPropertyTooltipTone::Default
-			                  : Entry.bSelected ? EPropertyTooltipTone::Positive
-			                                    : EPropertyTooltipTone::Negative;
-			InOutPresentation.TooltipLines.push_back({Entry.Message, Tone});
-			if (bEligible && !Entry.bSelected)
-			{
-				if (!bSky)
-				{
-					InOutPresentation.TooltipLines.push_back({"This light still contributes direct lighting."});
-				}
-				InOutPresentation.TooltipLines.push_back(
-				    {bSky ? "Increase Priority above the other sky lights to make this sky light effective."
-				          : "Increase Priority above the other shadow-casting directional lights to make this light "
-				            "the shadow source."});
-			}
-			if (Entry.bTied)
-			{
-				InOutPresentation.WarningTooltip =
-				    bSky ? "Multiple enabled Sky Lights share the highest Priority."
-				         : "Multiple Directional Lights eligible to cast shadows share the highest Priority.";
-			}
-		}
-		else if (Entry.Asset.State == ESceneSkyState::Failed)
-		{
-			InOutPresentation.Label += " [!]";
-			InOutPresentation.Tooltip = Entry.Asset.Error;
-		}
-		else if (Entry.Asset.State != ESceneSkyState::None && Entry.Asset.State != ESceneSkyState::Ready)
-		{
-			InOutPresentation.Label += " [...]";
-			InOutPresentation.Tooltip = "Sky asset: " + std::string(SceneSkyStateName(Entry.Asset.State));
-		}
-		return;
+		InspectLightDiagnostic(InView, *Property, Scene->GetLightingInfo(), InOutPresentation);
 	}
 }
 } // namespace Hyperion

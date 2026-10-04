@@ -297,11 +297,15 @@ def render_controls(cli, editor, assets, output):
         request = dict(document=info["document"], revision=info["revision"], handles=[sun], component=light_type, value=light)
         completed(agent.call(f"scene.component.{light_type}.set", **request))
         lighting_schema = agent.request("api.describe", {"operation": "scene.lighting.get"})["outputSchema"]
+        light_schema = lighting_schema["properties"]["lights"]["items"]["properties"]
+        assert light_schema["type"] == {"type": "string", "default": ""}, light_schema
         sky_schema = lighting_schema["properties"]["lights"]["items"]["properties"]["asset"]["properties"]
         assert sky_schema["state"] == {"type": "string", "default": ""}, sky_schema
         assert sky_schema["error"] == {"type": "string", "default": ""}, sky_schema
         lighting = completed(agent.call("scene.lighting.get"))
         assert lighting["shadowDirectionalLight"] == sun
+        assert next(item for item in lighting["lights"] if item["handle"] == sun)["type"] == "directional", lighting
+        assert all(item["type"] in ("directional", "sky") for item in lighting["lights"]), lighting
         assert all(isinstance(item["asset"]["state"], str) for item in lighting["lights"]), lighting
         assert agent.call(f"scene.component.{light_type}.set", **request)["error"]["code"] == "stale_revision"
         info = ready(agent)

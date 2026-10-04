@@ -59,6 +59,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/PlacementService.cpp
   Private/EditorPlacementResources.cpp
   Private/EditorLightMarkers.cpp
+  Private/LightInspection.cpp
   Private/EditorViews.cpp
   Private/EditorPicking.cpp
 )
@@ -94,6 +95,11 @@ if(BUILD_TESTING)
   target_link_libraries(editor_placement_preparation_tests PRIVATE hyperion_editor_plugin hyperion_render hyperion_scene_editing)
   set_target_properties(editor_placement_preparation_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_placement_preparation COMMAND editor_placement_preparation_tests)
+  add_executable(editor_light_inspection_tests Private/LightInspectionTests.cpp Private/LightInspection.cpp)
+  hyp_executable(editor_light_inspection_tests)
+  target_link_libraries(editor_light_inspection_tests PRIVATE hyperion_render)
+  set_target_properties(editor_light_inspection_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_light_inspection COMMAND editor_light_inspection_tests)
   target_sources(hyperion_editor_plugin PRIVATE
     Private/EditorAcceptanceDriver.cpp
     Private/EditorAcceptanceHarness.cpp
