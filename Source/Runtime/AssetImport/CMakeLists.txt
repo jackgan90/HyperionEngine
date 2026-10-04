@@ -6,6 +6,7 @@ add_library(hyperion_asset_import STATIC
   Private/ImportRules.cpp Private/ImportRules.h
   Private/AssetImportService.cpp Private/ImportDestinations.cpp
   Private/AssetImportProducts.cpp
+  Private/ImportProductKey.cpp Private/ImportProductKey.h
   Private/ModelImport.cpp Private/ModelImportInternal.h Private/AssetPublication.cpp
   Private/AssetLibrary.cpp
   Private/AssetPublicationProducts.cpp

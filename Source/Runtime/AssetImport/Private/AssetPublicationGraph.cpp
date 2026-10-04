@@ -3,6 +3,7 @@
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Materials/MaterialAsset.h"
 #include "Hyperion/Textures/TextureAsset.h"
+#include "ImportProductKey.h"
 
 namespace Hyperion
 {
@@ -121,10 +122,11 @@ FPublishedAsset FPublication::Build(const std::filesystem::path& InSource, const
 		throw std::runtime_error("Import graph exceeds 1 GiB retained data budget");
 	}
 	auto Object = ReadRecord(*InAsset.Type, WriteRecord(*InAsset.Type, InAsset.Object.get()));
-	const auto IdentityKey = bInRoot ? "$root"
-	                         : !InAsset.StableKey.empty()
-	                             ? InAsset.StableKey
-	                             : "source/" + StableSourceKey(InSource) + "|" + InAsset.Type->Id;
+	const auto IdentityKey =
+	    bInRoot ? Private::RootImportProductKey
+	    : !InAsset.StableKey.empty()
+	        ? InAsset.StableKey
+	        : Private::FormatImportProductKey(Private::FSourceProductKey{StableSourceKey(InSource), InAsset.Type->Id});
 	auto Id = SelectId(IdentityKey, bInRoot);
 	auto Destination = bInRoot ? Output : ProductDestination(Id, InAsset);
 	Rewrite(Object.get(), *InAsset.Type, InAsset.ProductRoot.empty() ? InSource : InAsset.ProductRoot, Destination);

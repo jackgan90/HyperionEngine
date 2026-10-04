@@ -449,6 +449,8 @@ hyp_test(publication_tests native_asset_publication hyperion_asset_import Assets
 target_sources(publication_tests PRIVATE Assets/SceneSourceTests.cpp)
 target_sources(publication_tests PRIVATE Assets/ModelReferenceTests.cpp)
 target_sources(publication_tests PRIVATE Assets/ImageImportIdentityTests.cpp)
+target_sources(publication_tests PRIVATE Assets/ImportProductIdentityTests.cpp)
+target_sources(publication_tests PRIVATE ../Runtime/AssetImport/Private/ImportProductKeyTests.cpp)
 target_compile_definitions(publication_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(native_asset_publication PROPERTIES FIXTURES_REQUIRED model_data TIMEOUT 120)
 

@@ -114,6 +114,8 @@ Editor 导入默认按来源文件名创建文件夹：例如 `Clear.hdr` 在 Br
 
 导入身份从现存文件及其可选 Import.OutputIds 重建，不需要 `.asset-library.hasset`。未找到目标的历史映射不使用。同一输出重导入保留根及存活产品 ID；显式新输出有独立根 ID。默认逻辑来源空间基于根 ID，源位置以相对路径记录；可用 `--source-root`/`--source-id` 指定跨根共享的逻辑来源空间。物理路径只用于本次读取，不能作为持久化来源 ID。相同原生纹理数据及颜色/格式/mip 解释可复用；不同可编辑材质来源保持独立身份。
 
+导入身份有两层：importer 提供产物 Key 和可选 SharedKey，发布器再加上来源及原生类型形成 OutputIds 的 key。AssetImport 私有的 `ImportProductKey` 统一内建图像 shared key 的 source/encoding/recipe 格式与解析，以及外层 source/product/shared 格式、根标记和纹理内容设置键。自定义 SharedKey 仍是开放字符串，沿用现有路径转换与可移植性校验；不把它限制为内建图像结构，也不修改既有字节或持久化版本。
+
 一次发布中，如果多个来源要求同一个现存 AssetId 保存不同内容，导入会在写入前报告冲突，保留原生文件。当前不会自动拆分共享身份；需要统一这些来源的内容，或显式导入到独立库建立独立资源。纹理复用必须匹配实际暂存内容，不能复用已被本次导入更新的旧指纹。
 
 增量检查、跨挂载原生引用以及 AssetTool 的 inspect/validate/export-json 都使用发现索引。文件只改名且 ID 不变时，有效依赖继续解析，来源未变的重导入保持零写入。通过 `--asset-root <directory>` 选择完整 Game 根；单文件工具同时扫描输入文件所在的本地目录，引用该目录之外已改名的资源时应选择包含它们的资产根。Engine 目录独立配置。

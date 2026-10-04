@@ -11,6 +11,12 @@
 void CheckSceneSources();
 void CheckModelReferences();
 void CheckImageImportIdentity();
+void CheckImportProductIdentity();
+
+namespace Hyperion::Private
+{
+void CheckImportProductKeys();
+}
 
 namespace Hyperion
 {
@@ -582,6 +588,8 @@ int main()
 		std::filesystem::current_path(Work);
 		CheckSceneSources();
 		CheckImageImportIdentity();
+		CheckImportProductIdentity();
+		Hyperion::Private::CheckImportProductKeys();
 		CheckPublication();
 		CheckExternalPublicationChanges();
 		CheckExternalPublicationCache();

@@ -5,6 +5,7 @@
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include "Hyperion/Textures/TextureAsset.h"
+#include "ImportProductKey.h"
 
 namespace Hyperion
 {
@@ -20,15 +21,10 @@ std::string FPublication::StableSourceKey(const std::filesystem::path& InPath) c
 
 std::string FPublication::PortableKey(std::string InKey) const
 {
-	if (InKey.starts_with("image/"))
+	if (auto Image = Private::ParseSharedImageKey(InKey))
 	{
-		const auto Srgb = InKey.rfind("/srgb/");
-		const auto Linear = InKey.rfind("/linear/");
-		const auto End = Srgb == std::string::npos ? Linear : Srgb;
-		if (End != std::string::npos)
-		{
-			return "image/" + StableSourceKey(PathFromUtf8(InKey.substr(6, End - 6))) + InKey.substr(End);
-		}
+		Image->Source = StableSourceKey(PathFromUtf8(Image->Source));
+		return Private::FormatSharedImageKey(*Image);
 	}
 	if (!SourceRoot.empty())
 	{
@@ -106,7 +102,7 @@ void FPublication::LoadLibrary()
 		                                                        Entry.Path});
 		if (Entry.Header.Import && Entry.Header.TypeId == RecordType<FTextureAsset>().Id)
 		{
-			if (const auto It = Entry.Header.Import->Settings.find("texture_content");
+			if (const auto It = Entry.Header.Import->Settings.find(Private::TextureContentSetting);
 			    It != Entry.Header.Import->Settings.end() && !It->second.empty())
 			{
 				TextureContents.emplace(Entry.Header.Id, It->second);
@@ -119,7 +115,7 @@ void FPublication::LoadLibrary()
 		{
 			continue;
 		}
-		if (const auto It = Entry.Header.Import->Settings.find("texture_content");
+		if (const auto It = Entry.Header.Import->Settings.find(Private::TextureContentSetting);
 		    It != Entry.Header.Import->Settings.end())
 		{
 			TextureProducts.try_emplace(It->second, ExistingAssets.at(Entry.Header.Id));
@@ -127,7 +123,7 @@ void FPublication::LoadLibrary()
 		for (const auto& [Key, Id] : Entry.Header.Import->OutputIds)
 		{
 			const auto Target = ExistingAssets.find(Id);
-			if (Key == "$root" || Target == ExistingAssets.end())
+			if (Key == Private::RootImportProductKey || Target == ExistingAssets.end())
 			{
 				continue;
 			}
@@ -247,8 +243,10 @@ void FPublication::AddProducts(const std::filesystem::path& InSource, const FCon
 		ConvertedProduct.ProductRoot = InSource;
 		ConvertedProduct.StableKey =
 		    Product.SharedKey.empty()
-		        ? "product/" + StableSourceKey(InSource) + "/" + Product.Key + "|" + Product.Type->Id
-		        : "shared/" + PortableKey(Product.SharedKey) + "|" + Product.Type->Id;
+		        ? Private::FormatImportProductKey(
+		              Private::FNamedProductKey{StableSourceKey(InSource), Product.Key, Product.Type->Id})
+		        : Private::FormatImportProductKey(
+		              Private::FSharedProductKey{PortableKey(Product.SharedKey), Product.Type->Id});
 		if (!Converted.emplace(std::make_pair(Path, Product.Type->Id), std::move(ConvertedProduct)).second)
 		{
 			throw std::runtime_error("Duplicate named product path during publication: " + ImportPathString(Path));

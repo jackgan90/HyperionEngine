@@ -1,4 +1,5 @@
 #include "AssetPublicationInternal.h"
+#include "ImportProductKey.h"
 
 namespace Hyperion
 {
@@ -67,7 +68,7 @@ FAssetHeader FPublication::MakeHeader(const std::string& InId, const std::string
 	}
 	if (!InTextureContent.empty())
 	{
-		Header.Import->Settings["texture_content"] = InTextureContent;
+		Header.Import->Settings[Private::TextureContentSetting] = InTextureContent;
 	}
 	return Header;
 }

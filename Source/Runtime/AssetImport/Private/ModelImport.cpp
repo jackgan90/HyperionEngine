@@ -1,5 +1,6 @@
 #include "Hyperion/Materials/PbrMaterial.h"
 #include "Hyperion/Materials/PbrParameters.h"
+#include "ImportProductKey.h"
 #include "ModelImportInternal.h"
 #include <algorithm>
 #include <map>
@@ -133,10 +134,11 @@ struct FModelSplitter
 		auto Asset = BuildTextureAsset(Image.Name,
 		                               Key.second ? EMaterialTextureEncoding::Srgb : EMaterialTextureEncoding::Linear,
 		                               {Image.Width, Image.Height, Image.Rgba});
-		std::string SharedKey = InImage < 0 ? "builtin/white-rgba8-v1" : "";
+		std::string SharedKey = InImage < 0 ? Private::BuiltinWhiteSharedKey : "";
 		if (!Image.Source.empty())
 		{
-			SharedKey = "image/" + Image.Source + (bInSrgb ? "/srgb" : "/linear") + "/rgba8-full-mips-v1";
+			SharedKey = Private::FormatSharedImageKey(
+			    {Image.Source, bInSrgb ? EMaterialTextureEncoding::Srgb : EMaterialTextureEncoding::Linear});
 			// External source identity must not depend on the importing model's display name.
 			Asset.Name = Image.Source.substr(Image.Source.find_last_of("/\\") + 1);
 		}
