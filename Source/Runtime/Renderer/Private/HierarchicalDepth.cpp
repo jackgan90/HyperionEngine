@@ -39,6 +39,7 @@ void Generate(FRenderSession& InSession, FRenderGraph& InGraph, const FHierarchi
 	{
 		const auto Size = InProduct.MipSizes[Mip];
 		FComputePassDesc Pass;
+		Pass.Timing = {ERenderPassTimingCategory::HierarchicalDepth, Mip};
 		Pass.Name = "HZB/" + std::to_string(InRequest.View.Identity) + "/" +
 		            std::to_string(InRequest.Depth.Texture->GetIdentity()) + "/" +
 		            (InRequest.Reduction == EDepthReduction::Nearest ? "Nearest/" : "Farthest/") + std::to_string(Mip);

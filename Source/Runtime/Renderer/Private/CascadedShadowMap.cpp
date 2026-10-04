@@ -302,6 +302,7 @@ std::vector<FRenderPassTargets> FCascadedShadowMap::Targets(std::shared_ptr<cons
 		{
 			FRenderPassTargets Pass;
 			Pass.Name = "Shadow cascade " + std::to_string(Index);
+			Pass.Timing = {ERenderPassTimingCategory::Shadow, static_cast<std::uint32_t>(Index)};
 			Pass.DepthStencil = FRenderDepthTarget{{ERenderTargetKind::Texture, Textures[Index], InLifetime, false},
 			                                       ERHIDepthFormat::D32,
 			                                       FAttachmentActions{EAttachmentLoad::Clear},

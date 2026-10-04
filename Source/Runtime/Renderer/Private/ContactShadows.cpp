@@ -47,6 +47,7 @@ FFullscreenPassDesc MakeContactShadowPass(const FRenderGraph& InGraph, const FCo
 	Pass.Viewport =
 	    InInputs.View.Viewport.value_or(FViewport{0, 0, float(InInputs.View.Width), float(InInputs.View.Height)});
 	Pass.Targets.Name = "Deferred/ContactShadowMask";
+	Pass.Targets.Timing.Category = ERenderPassTimingCategory::ContactShadow;
 	Pass.Targets.Color =
 	    FRenderColorTarget{InInputs.Mask, {EAttachmentLoad::Clear}, {1, 1, 1, 1}, EGraphColorView::Linear};
 	Pass.Targets.Reads = {{ERenderTargetKind::Texture, InInputs.Depth.Texture, InInputs.Depth.Lifetime, false},

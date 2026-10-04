@@ -168,28 +168,46 @@ FRenderBenchmarkSample BenchmarkSample(const FForwardPipelineStatistics& InPipel
 	Result.VisibleItems = 32;
 	Result.Batches = InPipeline.MainView().Batches;
 	Result.Device.GpuTiming.Frame = 88;
-	Result.Device.GpuTiming.Passes = {{"Shadow cascade 0/0", 1},
-	                                  {"Shadow cascade 0/1", .5},
-	                                  {"Shadow cascade 1/0", 2},
-	                                  {"Shadow cascade 2/0", 3},
-	                                  {"Shadow cascade 3/0", 4},
-	                                  {"Forward/HDR/0", 5.25},
-	                                  {"Deferred/BasePass/0", 11},
-	                                  {"Deferred/Lighting/0", 12},
-	                                  {"Deferred/Compatibility/0", 13},
-	                                  {"Scene/Transparent/0", 14},
-	                                  {"Output/Tonemap/0", 15},
-	                                  {"Scene/Sky/0", 16},
-	                                  {"HZB/0", 17},
-	                                  {"Deferred/ContactShadowMask/0", 18},
-	                                  {"Deferred/LocalLights/0", 19},
-	                                  {"Deferred/LightingClustered/0", 20},
-	                                  {"Deferred/ClusterLighting/0", 21},
-	                                  {"ShadowDepth/0", 901},
-	                                  {"Forwardish/0", 902}};
+	Result.Device.GpuTiming.Passes = {
+	    {"Shadow cascade 0/0", 1, EncodeRenderPassTiming({ERenderPassTimingCategory::Shadow, 0})},
+	    {"Shadow cascade 0/1", .5, EncodeRenderPassTiming({ERenderPassTimingCategory::Shadow, 0})},
+	    {"Shadow cascade 1/0", 2, EncodeRenderPassTiming({ERenderPassTimingCategory::Shadow, 1})},
+	    {"Shadow cascade 2/0", 3, EncodeRenderPassTiming({ERenderPassTimingCategory::Shadow, 2})},
+	    {"Shadow cascade 3/0", 4, EncodeRenderPassTiming({ERenderPassTimingCategory::Shadow, 3})},
+	    {"Forward/HDR/0", 5.25, EncodeRenderPassTiming({ERenderPassTimingCategory::Forward})},
+	    {"Deferred/BasePass/0", 11, EncodeRenderPassTiming({ERenderPassTimingCategory::DeferredBase})},
+	    {"Deferred/Lighting/0", 12, EncodeRenderPassTiming({ERenderPassTimingCategory::Lighting})},
+	    {"Deferred/Compatibility/0", 13, EncodeRenderPassTiming({ERenderPassTimingCategory::Compatibility})},
+	    {"Scene/Transparent/0", 14, EncodeRenderPassTiming({ERenderPassTimingCategory::Transparent})},
+	    {"Output/Tonemap/0", 15, EncodeRenderPassTiming({ERenderPassTimingCategory::Tonemap})},
+	    {"Scene/Sky/0", 16, EncodeRenderPassTiming({ERenderPassTimingCategory::Sky})},
+	    {"HZB/0", 17, EncodeRenderPassTiming({ERenderPassTimingCategory::HierarchicalDepth})},
+	    {"Deferred/ContactShadowMask/0", 18, EncodeRenderPassTiming({ERenderPassTimingCategory::ContactShadow})},
+	    {"Deferred/LocalLights/0", 19, EncodeRenderPassTiming({ERenderPassTimingCategory::LocalLights})},
+	    {"Deferred/LightingClustered/0", 20, EncodeRenderPassTiming({ERenderPassTimingCategory::Lighting})},
+	    {"Deferred/ClusterLighting/0", 21, EncodeRenderPassTiming({ERenderPassTimingCategory::Lighting})},
+	    {"ShadowDepth/0", 901},
+	    {"Forwardish/0", 902}};
 	Result.Viewport = {320, 240};
 	Result.CaptureViewport = {4, 8, 160, 120};
 	return Result;
+}
+
+void CheckRenamedBenchmark(const FRenderBenchmarkSample& InSample, const std::filesystem::path& InPath)
+{
+	const auto Original = ReadBytes(InPath);
+	auto Renamed = InSample;
+	for (std::size_t Index = 0; Index < Renamed.Device.GpuTiming.Passes.size(); ++Index)
+	{
+		auto& Pass = Renamed.Device.GpuTiming.Passes[Index];
+		Pass.Name = "Renamed pass " + std::to_string(Index);
+		if (!DecodeRenderPassTiming(Pass.Tag))
+		{
+			Pass.Name = "Shadow cascade 0/Forward/" + std::to_string(Index);
+		}
+	}
+	WriteRenderBenchmark(InPath, std::span(&Renamed, 1));
+	HYP_CHECK(ReadBytes(InPath) == Original);
 }
 
 std::vector<std::string> CsvCells(const std::string& InLine)
@@ -254,6 +272,8 @@ std::string CheckBenchmark(const FForwardPipelineStatistics& InPipeline)
 		HYP_CHECK(Found != Keys.end());
 		HYP_CHECK(Values.at(static_cast<std::size_t>(Found - Keys.begin())) == Entry.second);
 	}
+	Input.close();
+	CheckRenamedBenchmark(Sample, Path);
 	return Header + '\n' + Row + '\n';
 }
 

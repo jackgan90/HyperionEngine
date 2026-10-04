@@ -47,6 +47,7 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 	{
 		FRenderPassTargets Base;
 		Base.Name = "Deferred/BasePass";
+		Base.Timing.Category = ERenderPassTimingCategory::DeferredBase;
 		Base.DepthStencil = DepthTarget(MainLoad);
 		for (const auto& Texture : GBuffer)
 		{
@@ -58,6 +59,7 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 	{
 		InMain.Parameters.insert(InMain.Parameters.end(), ClusterParameters.begin(), ClusterParameters.end());
 		auto Forward = ColorTargets("Forward/HDR", MainLoad, InClear);
+		Forward.Timing.Category = ERenderPassTimingCategory::Forward;
 		Forward.DepthStencil = DepthTarget(MainLoad);
 		ShadowMaps.Bind(InMain, Forward, ShadowLifetime);
 		AddView(Views, Targets, InMain, ESceneMaterialRoute::ForwardOpaque, std::move(Forward), 1, Settings.Pipeline);
@@ -65,12 +67,14 @@ FSceneRenderPipeline::FViewFamily FSceneRenderPipeline::MakeViews(FRenderView In
 	if (bDeferred)
 	{
 		auto Compatibility = ColorTargets("Deferred/Compatibility", EAttachmentLoad::Load);
+		Compatibility.Timing.Category = ERenderPassTimingCategory::Compatibility;
 		Compatibility.DepthStencil = DepthTarget(EAttachmentLoad::Load);
 		ShadowMaps.Bind(InMain, Compatibility, ShadowLifetime);
 		AddView(Views, Targets, InMain, ESceneMaterialRoute::Compatibility, std::move(Compatibility), 2,
 		        Settings.Pipeline);
 	}
 	auto Transparent = ColorTargets("Scene/Transparent", EAttachmentLoad::Load);
+	Transparent.Timing.Category = ERenderPassTimingCategory::Transparent;
 	if (bDeferred)
 	{
 		InMain.Parameters.insert(InMain.Parameters.end(), ClusterParameters.begin(), ClusterParameters.end());

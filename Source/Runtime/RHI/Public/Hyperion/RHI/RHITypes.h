@@ -295,6 +295,14 @@ struct FDrawCommands
 	}
 };
 
+// Caller-defined value identity. RHI transports both words without interpreting them.
+struct FGpuTimingTag
+{
+	std::uint64_t Domain{};
+	std::uint64_t Value{};
+	bool operator==(const FGpuTimingTag&) const = default;
+};
+
 struct FPassCommands : FDrawCommands
 {
 	std::string Name;
@@ -309,6 +317,7 @@ struct FPassCommands : FDrawCommands
 	std::vector<FDispatchPacket> Dispatches;
 	std::vector<FTextureAccess> TextureAccesses;
 	std::vector<FBufferAccess> BufferAccesses;
+	FGpuTimingTag TimingTag;
 
 	std::span<const FColorAttachment> GetColors() const
 	{
@@ -370,6 +379,7 @@ struct FGpuPassTiming
 {
 	std::string Name;
 	double Milliseconds{};
+	FGpuTimingTag Tag;
 };
 
 struct FGpuFrameTiming

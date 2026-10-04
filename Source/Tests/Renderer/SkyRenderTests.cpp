@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/SceneInstance.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/PassTimingSupport.h"
 #include "Support/ShaderSourceSupport.h"
 #include "Support/TestSupport.h"
 #include <algorithm>
@@ -104,6 +105,7 @@ struct FSkyFixture
 			                          Device = Registry.CreateDevice(ERHIBackend::D3D12);
 			                          Swapchain = Device->CreateSwapchain(
 			                              {Surface, {256, 192}, ERHIDepthFormat::D32, GetDepthClearValue(Convention)});
+			                          Swapchain->SetGpuTimingEnabled(true);
 		                          }));
 		RegisterSceneAssetTypes(Assets.Types());
 		Session = std::make_unique<FRenderSession>(Tasks, *Device, Compiler);
@@ -236,6 +238,8 @@ struct FSkyFixture
 		                          [&]
 		                          {
 			                          HYP_CHECK(Device->Statistics().ValidationErrors == 0);
+			                          Device->WaitIdle();
+			                          CheckBuiltinPassTiming(Device->Statistics().GpuTiming);
 		                          }));
 		return Image;
 	}

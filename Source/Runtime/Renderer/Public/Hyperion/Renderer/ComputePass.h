@@ -105,6 +105,7 @@ struct FComputePassDesc
 	std::shared_ptr<const void> Lifetime;
 	std::vector<std::size_t> After;
 	std::shared_ptr<FComputePassStats> Statistics;
+	FRenderPassTiming Timing;
 };
 
 class FRenderSession;

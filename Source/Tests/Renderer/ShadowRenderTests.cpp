@@ -556,6 +556,13 @@ void CheckTimingCapture(FShadowFixture& InFixture)
 				    HYP_CHECK(Capture.Frames[Index].Frame == First + Index);
 				    HYP_CHECK(Capture.Frames[Index].Passes.size() == 6);
 				    HYP_CHECK(Capture.Frames[Index].Swapchain == Capture.Frames.front().Swapchain);
+				    for (std::uint32_t Cascade = 0; Cascade < 4; ++Cascade)
+				    {
+					    const FRenderPassTiming Expected{ERenderPassTimingCategory::Shadow, Cascade};
+					    HYP_CHECK(DecodeRenderPassTiming(Capture.Frames[Index].Passes[Cascade].Tag) == Expected);
+				    }
+				    const FRenderPassTiming Forward{ERenderPassTimingCategory::Forward};
+				    HYP_CHECK(DecodeRenderPassTiming(Capture.Frames[Index].Passes[4].Tag) == Forward);
 			    }
 			    HYP_CHECK(InFixture.Device->EndGpuTimingCapture().Frames.empty());
 		    }));

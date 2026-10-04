@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/SceneBridge.h"
 #include "Hyperion/Renderer/SceneRenderPipeline.h"
 #include "Support/ModelAssetSupport.h"
+#include "Support/PassTimingSupport.h"
 #include "Support/RecordedDrawSupport.h"
 #include "Support/SceneRouteTestSupport.h"
 #include "Support/ShaderSourceSupport.h"
@@ -216,6 +217,13 @@ struct FFixture
 				        Device->CollectCompletedResources();
 				        DeviceStats = Device->Statistics();
 				        HYP_CHECK(DeviceStats.ValidationErrors == 0);
+				        if (bInCapture)
+				        {
+					        // Screenshot readback precedes the final submission fence; timing collection needs that
+					        // fence.
+					        Device->WaitIdle();
+					        CheckBuiltinPassTiming(Device->Statistics().GpuTiming);
+				        }
 			        }));
 		    }));
 		return Result;

@@ -171,6 +171,7 @@ hyp_test(frame_pipeline_tests cpu_frame_pipeline hyperion_render Renderer/FrameP
 hyp_test(graph_tests render_graph hyperion_render Renderer/GraphTests.cpp)
 target_sources(graph_tests PRIVATE Renderer/ComputeGraphTests.cpp)
 target_sources(graph_tests PRIVATE Renderer/GraphBufferUsageTests.cpp)
+target_sources(graph_tests PRIVATE Renderer/RenderPassTimingTests.cpp)
 hyp_test(compute_renderer_tests compute_rendering hyperion_render Renderer/ComputeRendererTests.cpp)
 target_sources(compute_renderer_tests PRIVATE ../Runtime/Renderer/Private/LightingWireProducerTests.cpp)
 target_link_libraries(compute_renderer_tests PRIVATE hyperion_rhi_d3d12)

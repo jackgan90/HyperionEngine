@@ -198,6 +198,7 @@ void SubmitCompute(IRHISwapchain& InSwapchain, FSize InSize, const FPassCommands
 	CheckInvalidDispatches(InSwapchain, InCommands);
 	FPassCommands Finish;
 	Finish.Name = "Compute export";
+	Finish.TimingTag = {InCommands.TimingTag.Domain, InCommands.TimingTag.Value + 24};
 	Finish.Transitions = InCommands.Transitions;
 	for (auto& Barrier : Finish.Transitions)
 	{
@@ -216,6 +217,7 @@ void SubmitCompute(IRHISwapchain& InSwapchain, FSize InSize, const FPassCommands
 	{
 		auto Next = InCommands;
 		Next.Name = "Dependent compute " + std::to_string(Index);
+		Next.TimingTag.Value += Index;
 		for (auto& Barrier : Next.Transitions)
 		{
 			Barrier.Before = EResourceState::ShaderWrite;
@@ -234,6 +236,27 @@ void SubmitCompute(IRHISwapchain& InSwapchain, FSize InSize, const FPassCommands
 		    InSwapchain.EndFrame(InvalidLists, false);
 	    });
 	InSwapchain.EndFrame(Lists, false);
+}
+
+void CheckComputeTimings(IRHIDevice& InDevice, FGpuTimingTag InFirst, bool bInBatch)
+{
+	InDevice.WaitIdle();
+	const auto Capture = InDevice.EndGpuTimingCapture();
+	HYP_CHECK(Capture.DroppedFrames == 0 && Capture.Frames.size() == 1);
+	const auto& Frame = Capture.Frames.front();
+	// This fixture acquires and cancels a frame before submission; acquisition IDs are not submit counts.
+	HYP_CHECK(Frame.Frame && Frame.Swapchain && Frame.Frame == InDevice.Statistics().GpuTiming.Frame);
+	HYP_CHECK(Frame.Passes.size() == (bInBatch ? 25 : 2));
+	for (std::size_t Index = 0; Index < Frame.Passes.size(); ++Index)
+	{
+		const auto Offset = Index + 1 == Frame.Passes.size() ? 24 : Index;
+		const FGpuTimingTag Expected{InFirst.Domain, InFirst.Value + Offset};
+		HYP_CHECK(Frame.Passes[Index].Tag == Expected);
+		HYP_CHECK(Frame.Passes[Index].Milliseconds >= 0);
+	}
+	HYP_CHECK(Frame.Passes.front().Name == "Compute validation");
+	HYP_CHECK(Frame.Passes.back().Name == "Compute export");
+	HYP_CHECK(InDevice.EndGpuTimingCapture().Frames.empty());
 }
 
 void RunCompute()
@@ -276,6 +299,7 @@ void RunCompute()
 		const auto Constants = Device->PublishConstantSlice(Page, 0, std::as_bytes(std::span(&Parameters, 1)));
 		FPassCommands Commands;
 		Commands.Name = "Compute validation";
+		Commands.TimingTag = {0xfedcba9876543210, std::uint64_t(Frame) << 32};
 		Commands.bCompute = true;
 		Commands.Dispatches = {{Pipeline,
 		                        Bindings,
@@ -291,7 +315,9 @@ void RunCompute()
 		{
 			CheckRetainedComputeOwnership(*Device, *Swapchain, Window.PixelSize(), Commands);
 		}
+		Device->BeginGpuTimingCapture(1);
 		SubmitCompute(*Swapchain, Window.PixelSize(), Commands, Frame != 0);
+		CheckComputeTimings(*Device, Commands.TimingTag, Frame != 0);
 		const std::array Results{Device->ReadTexture(View, EResourceState::ShaderRead),
 		                         Device->ReadBuffer(ValueView, EResourceState::ShaderRead),
 		                         Device->ReadBuffer(RawView, EResourceState::ShaderRead)};

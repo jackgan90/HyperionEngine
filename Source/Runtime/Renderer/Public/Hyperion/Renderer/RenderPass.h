@@ -52,6 +52,7 @@ struct FRenderPassTargets
 	std::vector<FRenderTargetSource> Reads;
 	std::vector<FRenderColorTarget> Colors;
 	std::vector<FRenderBufferRead> BufferReads;
+	FRenderPassTiming Timing;
 	std::span<const FRenderColorTarget> GetColors() const;
 	FGraphicsTarget GraphicsTarget(bool bInSrgb = false) const;
 	static FRenderPassTargets Frame(ERHIDepthFormat InDepth, std::optional<FVec4> InClear = {},

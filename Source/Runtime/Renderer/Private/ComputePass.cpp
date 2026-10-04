@@ -149,6 +149,7 @@ FComputePass FRenderResourcePreparation::DeclareCompute(FRenderGraph& InGraph,
 	}();
 	FComputePass Pass;
 	Pass.Name = InPass.Name;
+	Pass.Timing = InPass.Timing;
 	Pass.After = InPass.After;
 	for (const auto& Parameter : InPass.Textures)
 	{

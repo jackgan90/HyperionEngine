@@ -20,11 +20,15 @@ Graph.Add(std::move(Clear));
 
 A pass owns draw batches or one callback returning batches. Attachments and dependencies must exist beforehand. Empty draw lists retain attachment operations. Multiple batches load only on the first and store only on the last; intermediate batches load/store existing contents. Compilation rejects declaration mutation/re-entry on the graph being consumed, including copy/move operations involving an active graph. Moving an idle graph transfers its handles and gives the moved-from graph a fresh identity. Compilation and mutation are not thread-safe.
 
+`FGraphicsPass`, `FComputePass`, `FRenderPassTargets` and `FComputePassDesc` carry `FRenderPassTiming`: an explicit `ERenderPassTimingCategory` and category-local `Instance` (shadow cascade or HZB mip). Every expanded batch inherits that identity. Names remain diagnostic labels and must still satisfy graph name validation; they do not select a timing category. Unclassified is the default. Custom passes opt in with, for example, `Pass.Timing = {ERenderPassTimingCategory::Shadow, CascadeIndex}` instead of choosing a reserved name prefix.
+
 ## Compilation and execution
 
 Declared accesses generate RAW/WAR/WAW edges. Stable topological sorting combines them with `After` without a universal predecessor edge. Before native resolvers or draw callbacks run, the compiler validates handles, names, topology, formats/aspects, dimensions, sampled/write conflicts and content lifetime. Clear initializes a region; discard invalidates it; draws do not prove complete coverage. Region unions can prove whole-resource initialization. Content regions use the same floor/ceil pixel rectangles as D3D12 clear/discard. Unknown frame dimensions cannot prove full initialization from a partial viewport.
 
 Resource state is independent of content validity. The compiler emits explicit transitions and `FPassCommands` attachments/read lists. D3D12 resolves frame targets, checks native/pipeline compatibility, records barriers, binds RTV/DSV and executes clear/discard by aspect. Existing submission fences, shared draw ownership and failed-Present recovery retain native resources safely.
+
+Graph compilation encodes timing identity into `FPassCommands::TimingTag`. RHI transports the opaque `FGpuTimingTag` value without Renderer dependencies; D3D12 copies it from retained immutable commands into `FGpuPassTiming::Tag` after fence completion. Tags do not change draw caches, resource transitions, timing enablement, capture epochs or submission matching.
 
 `ExecuteGraph` resolves/prepares on RHI 0 before frame acquisition, then uses the existing frame coordinator and failure cleanup. Direct Compile on Renderer resource callbacks also requires RHI 0. `Compile` materializes draw storage without consuming the original; `CompileAndConsume` preserves shared immutable draw storage.
 

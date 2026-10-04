@@ -54,6 +54,7 @@ void FSceneRenderPipeline::AddSky(FRenderGraph& InGraph, const FRenderView& InVi
 	Pass.Statistics = FullscreenStatistics;
 	Pass.Viewport = InView.Viewport.value_or(FViewport{0, 0, float(InView.Width), float(InView.Height)});
 	Pass.Targets = ColorTargets("Scene/Sky", EAttachmentLoad::Load);
+	Pass.Targets.Timing.Category = ERenderPassTimingCategory::Sky;
 	Pass.Targets.DepthStencil = DepthTarget(EAttachmentLoad::Load);
 	const auto View = Pass.Viewport;
 	const auto& Camera = InView.Camera.value();

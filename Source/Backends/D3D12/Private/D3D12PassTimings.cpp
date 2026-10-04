@@ -90,7 +90,8 @@ void CollectPassTimings(FD3D12DeviceState& InDevice, std::span<const FRecordedLi
 			{
 				Result.Frame = Native->Frame;
 				Result.Swapchain = Native->Owner;
-				Result.Passes.push_back({Native->Name, (Times[1] - Times[0]) * Queries->MillisecondsPerTick});
+				Result.Passes.push_back(
+				    {Native->Name, (Times[1] - Times[0]) * Queries->MillisecondsPerTick, Native->Commands->TimingTag});
 			}
 			D3D12_RANGE Written{};
 			Queries->Readback->Unmap(0, &Written);

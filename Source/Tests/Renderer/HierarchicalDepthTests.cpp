@@ -106,6 +106,25 @@ void CheckProductGeneration(const FHierarchicalDepthProduct& InProduct, const FR
 	}
 }
 
+void CheckHierarchyTimings(IRHIDevice& InDevice, std::size_t InMips)
+{
+	InDevice.WaitIdle();
+	std::vector<unsigned> Counts(InMips);
+	for (const auto& Pass : InDevice.Statistics().GpuTiming.Passes)
+	{
+		const auto Timing = DecodeRenderPassTiming(Pass.Tag);
+		if (Timing && Timing->Category == ERenderPassTimingCategory::HierarchicalDepth)
+		{
+			HYP_CHECK(Timing->Instance < Counts.size());
+			++Counts[Timing->Instance];
+		}
+	}
+	for (const auto Count : Counts)
+	{
+		HYP_CHECK(Count == 2);
+	}
+}
+
 void RunCase(FTaskSystem& InTasks, IRHIDevice& InDevice, IRHISwapchain& InSwapchain, FRenderSession& InSession,
              const std::shared_ptr<const FMaterialDefinition>& InMaterial, FSize InSize, EDepthConvention InConvention)
 {
@@ -175,6 +194,7 @@ void RunCase(FTaskSystem& InTasks, IRHIDevice& InDevice, IRHISwapchain& InSwapch
 		                              }
 		                              CheckProduct(InDevice, Preparation, Nearest, Expected);
 		                              CheckProduct(InDevice, Preparation, Farthest, Expected);
+		                              CheckHierarchyTimings(InDevice, Nearest.MipSizes.size());
 		                              HYP_CHECK(InDevice.Statistics().ValidationErrors == 0);
 	                              }));
 	InTasks.Wait(InTasks.Dispatch({EDomain::Render},

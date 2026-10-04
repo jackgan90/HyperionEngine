@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/RHI/RHIDevice.h"
+#include "Hyperion/Renderer/RenderPassTiming.h"
 #include "Hyperion/Tasks/TaskSystem.h"
 #include <functional>
 
@@ -70,6 +71,7 @@ struct FComputePass
 	std::vector<std::size_t> After;
 	std::vector<FDispatchPacket> Dispatches;
 	std::function<std::vector<FDispatchPacket>()> Prepare;
+	FRenderPassTiming Timing;
 };
 
 enum class EGraphColorView
@@ -120,6 +122,7 @@ struct FGraphicsPass
 	std::vector<FGraphBufferAccess> Buffers;
 	std::vector<FDispatchPacket> Dispatches;
 	std::function<std::vector<FDispatchPacket>()> PrepareCompute;
+	FRenderPassTiming Timing;
 
 	std::span<const FGraphColorAttachment> GetColors() const
 	{

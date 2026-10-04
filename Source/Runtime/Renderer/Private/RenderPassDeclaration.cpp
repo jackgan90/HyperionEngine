@@ -181,6 +181,7 @@ FGraphicsPass FRenderResourcePreparation::DeclarePass(FRenderGraph& InGraph, con
 	                                       std::to_string(InSnapshot.View.Identity) + "/" + InSnapshot.View.Usage
 	                                 : Targets.Name;
 	Pass.Viewport = InSnapshot.View.Viewport;
+	Pass.Timing = Targets.Timing;
 	for (const auto& Color : Targets.GetColors())
 	{
 		const auto* Texture = Color.Source.Texture ? Color.Source.Texture->GetColorTarget() : nullptr;

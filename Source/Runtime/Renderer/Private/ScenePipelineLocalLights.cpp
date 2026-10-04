@@ -24,6 +24,7 @@ void FSceneRenderPipeline::AddLocalLights(FRenderGraph& InGraph, const FRenderVi
 	Pass.Depth = SceneDepth;
 	Pass.Lifetime = Lifetime;
 	Pass.Targets = ColorTargets("Deferred/LocalLights", EAttachmentLoad::Load);
+	Pass.Targets.Timing.Category = ERenderPassTimingCategory::LocalLights;
 	for (const auto& Texture : GBuffer)
 	{
 		Pass.Targets.Reads.push_back({ERenderTargetKind::Texture, Texture, Lifetime, false});

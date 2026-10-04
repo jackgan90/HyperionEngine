@@ -9,29 +9,8 @@ namespace Hyperion
 namespace
 {
 void WriteShadowBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline,
-                          const FDeviceStats& InDevice)
+                          const FDeviceStats& InDevice, const FRenderGpuTimings& InGpu)
 {
-	double ShadowGpu{};
-	double ForwardGpu{};
-	std::array<double, 4> Cascades{};
-	for (const auto& Pass : InDevice.GpuTiming.Passes)
-	{
-		if (Pass.Name.starts_with("Shadow cascade "))
-		{
-			ShadowGpu += Pass.Milliseconds;
-			for (unsigned Index = 0; Index < Cascades.size(); ++Index)
-			{
-				if (Pass.Name.starts_with("Shadow cascade " + std::to_string(Index) + "/"))
-				{
-					Cascades[Index] += Pass.Milliseconds;
-				}
-			}
-		}
-		if (Pass.Name.starts_with("Forward/"))
-		{
-			ForwardGpu += Pass.Milliseconds;
-		}
-	}
 	std::size_t Items{};
 	std::size_t Draws{};
 	std::size_t Failed{};
@@ -54,9 +33,9 @@ void WriteShadowBenchmark(std::ostream& InOutput, const FForwardPipelineStatisti
 	}
 	InOutput << ',' << InPipeline.bShadows << ',' << InPipeline.PreparationMilliseconds << ','
 	         << InPipeline.ShadowSetupMilliseconds << ',' << Items << ',' << Draws << ',' << Failed << ',' << Uploads
-	         << ',' << InPipeline.ShadowTextureBytes << ',' << InDevice.GpuTiming.Frame << ',' << ShadowGpu << ','
-	         << ForwardGpu;
-	for (const auto Time : Cascades)
+	         << ',' << InPipeline.ShadowTextureBytes << ',' << InDevice.GpuTiming.Frame << ',' << InGpu.Shadow << ','
+	         << InGpu.Forward;
+	for (const auto Time : InGpu.Cascades)
 	{
 		InOutput << ',' << Time;
 	}
@@ -66,46 +45,15 @@ void WriteShadowBenchmark(std::ostream& InOutput, const FForwardPipelineStatisti
 }
 
 void WriteScenePipelineBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline,
-                                 const FDeviceStats& InDevice)
+                                 const FRenderGpuTimings& InGpu)
 {
-	std::array<double, 7> Times{};
-	double HierarchicalDepthGpu{};
-	double ContactShadowGpu{};
-	constexpr std::array<std::string_view, 6> Prefixes{"Deferred/BasePass/",      "Deferred/Lighting/",
-	                                                   "Deferred/Compatibility/", "Scene/Transparent/",
-	                                                   "Output/Tonemap/",         "Scene/Sky/"};
-	for (const auto& Pass : InDevice.GpuTiming.Passes)
-	{
-		Times.back() += Pass.Milliseconds;
-		if (Pass.Name.starts_with("HZB/"))
-		{
-			HierarchicalDepthGpu += Pass.Milliseconds;
-		}
-		if (Pass.Name.starts_with("Deferred/ContactShadowMask/"))
-		{
-			ContactShadowGpu += Pass.Milliseconds;
-		}
-		if (Pass.Name.starts_with("Deferred/LightingClustered/") || Pass.Name.starts_with("Deferred/ClusterLighting/"))
-		{
-			Times[1] += Pass.Milliseconds;
-		}
-		for (std::size_t Index = 0; Index < Prefixes.size(); ++Index)
-		{
-			if (Pass.Name.starts_with(Prefixes[Index]))
-			{
-				Times[Index] += Pass.Milliseconds;
-			}
-		}
-	}
-	for (const auto Time : Times)
-	{
-		InOutput << ',' << Time;
-	}
+	InOutput << ',' << InGpu.DeferredBase << ',' << InGpu.Lighting << ',' << InGpu.Compatibility << ','
+	         << InGpu.Transparent << ',' << InGpu.Tonemap << ',' << InGpu.Sky << ',' << InGpu.Total;
 	InOutput << ',' << InPipeline.SceneTargetBytes << ',' << InPipeline.FullscreenDraws << ','
 	         << InPipeline.FullscreenPreparationMilliseconds;
 	InOutput << ',' << InPipeline.bContactShadows << ',' << InPipeline.HierarchicalDepth.Consumers << ','
 	         << InPipeline.HierarchicalDepth.Dispatches << ',' << InPipeline.HierarchicalDepth.Bytes << ','
-	         << HierarchicalDepthGpu << ',' << ContactShadowGpu;
+	         << InGpu.HierarchicalDepth << ',' << InGpu.ContactShadow;
 }
 
 void WritePreparationBenchmark(std::ostream& InOutput, const FForwardPipelineStatistics& InPipeline)
@@ -244,7 +192,8 @@ void WriteRenderBenchmark(const std::filesystem::path& InPath, std::span<const F
 		{
 			Output << ',' << Count;
 		}
-		WriteShadowBenchmark(Output, Frame.Pipeline, Frame.Device);
+		const auto Gpu = AggregateRenderGpuTimings(Frame.Device.GpuTiming);
+		WriteShadowBenchmark(Output, Frame.Pipeline, Frame.Device, Gpu);
 		double MaterialTime{};
 		for (const auto& View : Frame.Pipeline.Views)
 		{
@@ -256,21 +205,13 @@ void WriteRenderBenchmark(const std::filesystem::path& InPath, std::span<const F
 		       << Frame.Device.GraphicsDynamicBinds;
 		WritePreparationBenchmark(Output, Frame.Pipeline);
 		Output << ',' << Frame.CpuLatencyMilliseconds << ',' << Frame.MainRenderLead << ',' << Frame.RenderRhiLead;
-		WriteScenePipelineBenchmark(Output, Frame.Pipeline, Frame.Device);
+		WriteScenePipelineBenchmark(Output, Frame.Pipeline, Gpu);
 		Output << ',' << Frame.Pipeline.Spatial.IndexRebuilds << ',' << Frame.Pipeline.Spatial.IndexRefits;
 		const auto& Lights = Frame.Pipeline.LocalLights;
-		double LocalGpu{};
-		for (const auto& Pass : Frame.Device.GpuTiming.Passes)
-		{
-			if (Pass.Name.starts_with("Deferred/LocalLights/"))
-			{
-				LocalGpu += Pass.Milliseconds;
-			}
-		}
 		Output << ',' << Lights.bActive << ',' << Lights.Points << ',' << Lights.Spots << ','
 		       << Lights.VisiblePoints + Lights.VisibleSpots << ',' << Lights.Draws << ','
 		       << Lights.Spatial.QueryMilliseconds << ',' << Lights.Spatial.IndexRebuilds << ','
-		       << Lights.Spatial.IndexRefits << ',' << LocalGpu << ',' << Lights.bClustered << ','
+		       << Lights.Spatial.IndexRefits << ',' << Gpu.LocalLights << ',' << Lights.bClustered << ','
 		       << Lights.ClusterCells << ',' << Lights.ClusterOccupied << ',' << Lights.ClusterReferences << ','
 		       << Lights.ClusterMaximum << ',' << Lights.ClusterBytes << ',' << Lights.ClusterBuildMilliseconds << ','
 		       << Lights.bClusterRebuilt << ',' << Frame.Nodes << ',' << Frame.SceneMilliseconds << ','

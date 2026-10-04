@@ -558,12 +558,19 @@ void CheckTimingCaptureBoundary(FFrameFixture& InFixture, const FRenderGraph& In
 		    auto& State = *InFixture.State;
 		    Device.WaitIdle();
 		    Swapchain.SetGpuTimingEnabled(true);
-		    const auto Commands = InGraph.Compile();
+		    auto Commands = InGraph.Compile();
+		    std::uint64_t TimingSequence{};
 		    const auto Submit = [&]
 		    {
+			    Commands[0].TimingTag = {UINT64_MAX, ++TimingSequence};
+			    Commands[1].TimingTag = {UINT64_MAX, ++TimingSequence};
+			    const std::array Expected{Commands[0].TimingTag, Commands[1].TimingTag};
 			    Swapchain.BeginFrame({64, 64});
 			    const std::array Lists{Swapchain.Record(0, Commands[0]), Swapchain.Record(1, Commands[1])};
 			    Swapchain.EndFrame(Lists, false, false);
+			    Commands[0].TimingTag = {};
+			    Commands[1].TimingTag = {};
+			    return Expected;
 		    };
 		    for (const bool bPreviousCapture : {false, true})
 		    {
@@ -584,7 +591,7 @@ void CheckTimingCaptureBoundary(FFrameFixture& InFixture, const FRenderGraph& In
 			    {
 				    Device.BeginGpuTimingCapture(2);
 			    }
-			    Submit();
+			    const auto Expected = Submit();
 			    CheckCondition(State.Fence->GetCompletedValue() < State.Submissions.back().FenceValue);
 			    if (bPreviousCapture)
 			    {
@@ -596,12 +603,16 @@ void CheckTimingCaptureBoundary(FFrameFixture& InFixture, const FRenderGraph& In
 			    const auto Empty = Device.EndGpuTimingCapture();
 			    CheckCondition(Empty.Frames.empty() && Empty.DroppedFrames == 0);
 			    CheckCondition(State.LastGpuTiming.Passes.size() == 2);
+			    CheckCondition(State.LastGpuTiming.Passes[0].Tag == Expected[0]);
+			    CheckCondition(State.LastGpuTiming.Passes[1].Tag == Expected[1]);
 		    }
 		    Device.BeginGpuTimingCapture(2);
-		    Submit();
+		    const auto Expected = Submit();
 		    Device.WaitIdle();
 		    const auto Current = Device.EndGpuTimingCapture();
 		    CheckCondition(Current.Frames.size() == 1 && Current.Frames[0].Passes.size() == 2);
+		    CheckCondition(Current.Frames[0].Passes[0].Tag == Expected[0]);
+		    CheckCondition(Current.Frames[0].Passes[1].Tag == Expected[1]);
 		    Swapchain.SetGpuTimingEnabled(false);
 	    }));
 }

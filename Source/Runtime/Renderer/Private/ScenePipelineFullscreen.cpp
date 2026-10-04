@@ -105,6 +105,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Lighting(const FRenderView& InMain, co
 	Result.Viewport = Viewport(InMain);
 	Result.Targets =
 	    ColorTargets("Deferred/Lighting", InMain.Viewport ? EAttachmentLoad::Load : EAttachmentLoad::Clear, InClear);
+	Result.Targets.Timing.Category = ERenderPassTimingCategory::Lighting;
 	if (FeatureResources.DirectionalVisibility.Texture && !bNoDirectional)
 	{
 		Result.Targets.Reads.push_back(FeatureResources.DirectionalVisibility);
@@ -185,6 +186,7 @@ FFullscreenPassDesc FSceneRenderPipeline::Tonemap(const FRenderView& InMain) con
 	Result.Viewport = {0, 0, float(InMain.Width), float(InMain.Height)};
 	Result.Targets = OutputTargets(FVec4{});
 	Result.Targets.Name = "Output/Tonemap";
+	Result.Targets.Timing.Category = ERenderPassTimingCategory::Tonemap;
 	Result.Targets.Reads = {{ERenderTargetKind::Texture, SceneColor, Lifetime, false}};
 	Result.Parameters = {{EOutputSemantic::SceneColor, FMaterialValue::FromTexture(SceneColor)}};
 	AppendShaderParameters(Result.Parameters, FOutputV1Parameters{Settings.Exposure});

@@ -28,6 +28,7 @@ bool SameImport(const FGraphTextureImport& InA, const FGraphTextureImport& InB)
 
 std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCommands)
 {
+	InCommands.TimingTag = EncodeRenderPassTiming(InPass.Timing);
 	if (InPass.bCompute)
 	{
 		InCommands.Name = InPass.Name;
@@ -231,6 +232,7 @@ std::size_t FRenderGraph::AddCompute(FComputePass InPass)
 {
 	FGraphicsPass Pass;
 	Pass.Name = std::move(InPass.Name);
+	Pass.Timing = InPass.Timing;
 	Pass.bCompute = true;
 	Pass.Reads = std::move(InPass.Reads);
 	Pass.ComputeWrites = std::move(InPass.Writes);

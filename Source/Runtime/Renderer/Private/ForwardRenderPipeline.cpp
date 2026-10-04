@@ -92,6 +92,7 @@ void FForwardRenderPipeline::BuildResolved(FRenderGraph& InGraph, FRenderView In
 	MainTargets.Color->Actions.Load = EAttachmentLoad::Clear;
 	MainTargets.Color->Clear = InClear;
 	MainTargets.Name = "Forward";
+	MainTargets.Timing.Category = ERenderPassTimingCategory::Forward;
 	ShadowMaps.Bind(InMain, MainTargets, Lifetime);
 	Targets.push_back(std::move(MainTargets));
 	Views.push_back(std::move(InMain));
