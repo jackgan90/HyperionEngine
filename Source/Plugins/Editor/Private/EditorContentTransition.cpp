@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Platform/FileDialog.h"
 
 namespace Hyperion
@@ -24,7 +25,7 @@ void FEditorPlugin::ContentRootChanged()
 	Pipeline = std::make_unique<FSceneRenderPipeline>(*Session, Device->GetCapabilities(), FScenePipelineSettings{},
 	                                                  std::move(Features));
 	InitializePlacement();
-	Browser->SelectedDirectory = "/Game";
+	Browser->SelectedDirectory = GameContentRoot;
 	Browser->SelectedFile.clear();
 	bOpenDialog = bSaveDialog = bRequestOpen = bRequestSaveDialog = false;
 	Transition.ContentRootChanged();

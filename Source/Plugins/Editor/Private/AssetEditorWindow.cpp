@@ -1,4 +1,5 @@
 #include "AssetEditorWindow.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include <fstream>
@@ -37,7 +38,7 @@ void FAssetEditorWindow::Initialize(FWindow& InOwner, FWindowGroup& InGroup, FIO
 	Gui = std::make_unique<FGui>(Window.get());
 	Gui->UseEditorStyle();
 	Gui->SetApplicationScale(InScale);
-	Gui->SetPathDisplayRoot("/Game");
+	Gui->SetPathDisplayRoot(GameContentRoot);
 	const auto Font = InIO.ReadAsync("/Engine/Fonts/RobotoMedium.ttf").Get(Tasks);
 	Gui->LoadFont(*Font, 15);
 	std::ifstream Stream(Layout, std::ios::binary);

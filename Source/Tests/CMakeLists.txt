@@ -136,6 +136,7 @@ hyp_test(import_tests async_gltf_import hyperion_asset_import Assets/ImportTests
 hyp_test(model_import_tests model_material_conversion hyperion_asset_import Assets/ModelImportTests.cpp)
 target_sources(model_import_tests PRIVATE ../Runtime/AssetImport/Private/ModelImportRoleTests.cpp)
 hyp_test(import_workspace_tests asset_import_workspace hyperion_asset_import Assets/ImportWorkspaceTests.cpp)
+target_sources(import_workspace_tests PRIVATE Assets/ContentPathTests.cpp)
 target_sources(import_workspace_tests PRIVATE Assets/ImportStateTests.cpp)
 target_sources(import_workspace_tests PRIVATE Assets/ImportValidationTests.cpp)
 hyp_discovery_test(NAME editor_asset_import COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/ImportAcceptance.py"

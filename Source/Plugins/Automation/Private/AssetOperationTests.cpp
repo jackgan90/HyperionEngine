@@ -560,6 +560,36 @@ void CheckRootPluginLifetime(const std::filesystem::path& InRoot)
 	Assets.Drain();
 }
 
+void CheckUnsetRootOperations(FAssetAutomation& InProvider, FAutomationSession& InSession, FContentRootService& InRoots)
+{
+	for (const auto* Path : {"/Game", "/Game/", "/Game/Texture.hasset", "/Game/../Engine/Texture.hasset"})
+	{
+		bool bRejected{};
+		try
+		{
+			(void)InProvider.Open({Path});
+		}
+		catch (const FAutomationError& Error)
+		{
+			bRejected = Error.Code == "root_unset" &&
+			            std::string_view(Error.what()) ==
+			                "Select an asset directory with content.root.set before opening Game assets";
+		}
+		Check(bRejected);
+		const auto Result = Call(InSession, "asset.open", FAssetOpenRequest{Path});
+		Failure(Result, "root_unset");
+		Check(Text(Field(Result, "error"), "message") ==
+		      "Select an asset directory with content.root.set before opening Game assets");
+	}
+	const auto Listing = Call(InSession, "content.directory.list", FContentDirectoryQuery{});
+	Failure(Listing, "root_unset");
+	Check(Text(Field(Listing, "error"), "message") == "Select Game content with content.root.set");
+	Check(Text(Call(InSession, "content.directory.list", FContentDirectoryQuery{0, "/Engine"}), "status") ==
+	      "completed");
+	Check(InProvider.List({}).Documents.empty());
+	Check(InRoots.Info().Generation == 0 && InRoots.Info().Directory.empty());
+}
+
 void CheckRootOperations(FTaskSystem& InTasks)
 {
 	const auto Root = std::filesystem::temp_directory_path() / ("HyperionRoots-" + CreateAutomationIdentity());
@@ -582,7 +612,7 @@ void CheckRootOperations(FTaskSystem& InTasks)
 		Catalog.Seal();
 		FAutomationSession Session(Catalog);
 		Check(Roots.Info().Directory.empty() && Roots.Info().Generation == 0);
-		Failure(Call(Session, "asset.open", FAssetOpenRequest{"/Game/Texture.hasset"}), "root_unset");
+		CheckUnsetRootOperations(Provider, Session, Roots);
 		Roots.Set({PathToUtf8(Root / "Game"), 0});
 		std::ofstream(Root / "Game/Broken.hasset") << "invalid header";
 		std::filesystem::create_directories(Root / "Game/Empty");

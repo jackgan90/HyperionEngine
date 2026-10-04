@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Assets/NativeAsset.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/IO/IOService.h"
 #include <map>
 #include <string_view>
@@ -19,7 +20,6 @@ struct FContentScenes
 	std::string Error;
 };
 
-std::string ContentRelativePath(std::string_view InPath);
 bool IsBrowserEntry(const FDirectoryEntry& InEntry);
 FContentDirectory ReadContentDirectory(IFileSystem& InFiles, const std::filesystem::path& InPath);
 FContentScenes DiscoverContentScenes(FIOService& InIO, FCancellationToken InCancellation = {});
@@ -45,7 +45,7 @@ public:
 		return Scenes.has_value();
 	}
 
-	std::string SelectedDirectory = "/Game";
+	std::string SelectedDirectory = GameContentRoot;
 	std::string SelectedFile;
 
 private:

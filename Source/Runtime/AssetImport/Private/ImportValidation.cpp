@@ -1,5 +1,6 @@
 #include "AssetImportInternal.h"
 #include "Hyperion/AssetImport/ImportWorkspace.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/Model.h"
 #include "Hyperion/Scene/ModelSource.h"
@@ -33,7 +34,7 @@ std::string ImportType(const FImportRequest& InRequest, const std::string& InExt
 void CheckWritePath(FMountedFileSystem& InFiles, const std::filesystem::path& InPath, const FContentRootInfo& InRoot)
 {
 	const auto Text = PathToUtf8(InPath);
-	if (Text != "/Game" && !Text.starts_with("/Game/"))
+	if (!IsGameContentPath(Text))
 	{
 		throw FAssetImportError("invalid_arguments",
 		                        "Save the asset and its dependencies inside the current /Game root");
@@ -56,9 +57,13 @@ void FAssetImportWorkspace::ValidateOutput(const FImportRequest& InRequest) cons
 	{
 		throw FAssetImportError("stale_revision", "Content root changed before import");
 	}
-	if (Root.Directory.empty())
+	try
 	{
-		throw FAssetImportError("root_unset", "Select a Game asset root through File > Open before choosing an output");
+		RequireGameContentRoot(Root, "Select a Game asset root through File > Open before choosing an output");
+	}
+	catch (const FContentRootError& Failure)
+	{
+		throw FAssetImportError(Failure.Code, Failure.what());
 	}
 	if (Root.bReadOnly)
 	{

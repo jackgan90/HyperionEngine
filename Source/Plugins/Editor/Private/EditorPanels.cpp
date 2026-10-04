@@ -1,6 +1,8 @@
 #include "EditorApplication.h"
 #include "EditorTextFilter.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Gui/GuiContributions.h"
+#include "Hyperion/Gui/PathDisplay.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include "Hyperion/SceneEditing/SceneAuthoring.h"
 #include <algorithm>
@@ -293,7 +295,7 @@ void FEditorPlugin::DrawOpenDialog()
 		Gui->BeginScrollRegion("SceneList", 250);
 		for (const auto& Path : ScenePaths)
 		{
-			const auto Label = ContentRelativePath(Path);
+			const auto Label = FGuiPathDisplay{GameContentRoot}.Value(Path);
 			if (!MatchesEditorFilter(Label, SceneFilter))
 			{
 				continue;

@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Core/Core.h"
 
 namespace Hyperion
@@ -154,7 +155,7 @@ void FEditorPlugin::SaveBeforeRootSwitch()
 		}
 		else if (CurrentPath.empty())
 		{
-			SavePath = "/Game/Scenes/Untitled.hasset";
+			SavePath = std::string(GameContentRoot) + "/Scenes/Untitled.hasset";
 			bSaveDialog = bRequestSaveDialog = true;
 			Transition.AwaitSavePath(EEditorTransitionTarget::Root);
 			Gui->ClosePopup();
@@ -338,7 +339,7 @@ void FEditorPlugin::SaveBeforeClose()
 		if (IsDirty() && CurrentPath.empty())
 		{
 			Transition.AwaitSavePath(EEditorTransitionTarget::Close);
-			SavePath = "/Game/Scenes/Untitled.hasset";
+			SavePath = std::string(GameContentRoot) + "/Scenes/Untitled.hasset";
 			bSaveDialog = bRequestSaveDialog = true;
 			Gui->ClosePopup();
 			return;

@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/IO/MountedFileSystem.h"
+#include <string_view>
 
 namespace Hyperion
 {
@@ -44,6 +45,9 @@ public:
 
 	std::string Code;
 };
+
+// Checks an already acquired root snapshot; callers preserve their contextual diagnostic and error adapter.
+void RequireGameContentRoot(const FContentRootInfo& InRoot, std::string_view InMessage);
 
 struct FContentRootParticipantState
 {

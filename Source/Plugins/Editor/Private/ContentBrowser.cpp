@@ -20,15 +20,6 @@ std::string FoldName(std::string InName)
 }
 } // namespace
 
-std::string ContentRelativePath(std::string_view InPath)
-{
-	if (InPath == "/Game")
-	{
-		return {};
-	}
-	return std::string(InPath.starts_with("/Game/") ? InPath.substr(6) : InPath);
-}
-
 bool IsBrowserEntry(const FDirectoryEntry& InEntry)
 {
 	const auto Name = FoldName(PathToUtf8(InEntry.Path.filename()));
@@ -89,7 +80,7 @@ FAssetHeader ReadContentHeader(FIOService& InIO, const std::filesystem::path& In
 FContentScenes DiscoverContentScenes(FIOService& InIO, FCancellationToken InCancellation)
 {
 	FContentScenes Result;
-	std::vector<std::filesystem::path> Pending{"/Game"};
+	std::vector<std::filesystem::path> Pending{GameContentRoot};
 	while (!Pending.empty())
 	{
 		InCancellation.Check();

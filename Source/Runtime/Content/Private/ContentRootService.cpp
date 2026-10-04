@@ -1,5 +1,6 @@
 #include "Hyperion/Content/ContentRootService.h"
 #include "Hyperion/Assets/AssetRegistry.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Core/Core.h"
 #include <algorithm>
 
@@ -31,6 +32,14 @@ void IndexContent(FTaskSystem& InTasks, FMountedFileSystem& InFiles, FAssetServi
 }
 } // namespace
 
+void RequireGameContentRoot(const FContentRootInfo& InRoot, std::string_view InMessage)
+{
+	if (InRoot.Directory.empty())
+	{
+		throw FContentRootError("root_unset", std::string(InMessage));
+	}
+}
+
 std::shared_ptr<FMountedFileSystem> CreateContentFileSystem(const std::filesystem::path& InEngineDirectory,
                                                             bool bInAuthoring)
 {
@@ -39,7 +48,7 @@ std::shared_ptr<FMountedFileSystem> CreateContentFileSystem(const std::filesyste
 		throw std::invalid_argument("Engine content must be an existing directory");
 	}
 	return std::make_shared<FMountedFileSystem>(
-	    std::vector<FContentMount>{{"/Engine", InEngineDirectory, !bInAuthoring}});
+	    std::vector<FContentMount>{{EngineContentRoot, InEngineDirectory, !bInAuthoring}});
 }
 
 FContentRootService::FContentRootService(FTaskSystem& InTasks, FMountedFileSystem& InFiles, FAssetService& InAssets)
@@ -73,7 +82,7 @@ FContentRootInfo FContentRootService::Info() const
 	FContentRootInfo Result{{}, Generation, false};
 	for (const auto& Mount : Files.GetMounts())
 	{
-		if (Mount.Root == "/Game")
+		if (Mount.Root == GameContentRoot)
 		{
 			Result.Directory = PathToUtf8(Mount.Directory);
 			Result.bReadOnly = Mount.bReadOnly;
@@ -106,16 +115,16 @@ FContentRootCandidate FContentRootService::Prepare(const std::filesystem::path& 
 	std::erase_if(Mounts,
 	              [](const auto& InMount)
 	              {
-		              return InMount.Root == "/Game";
+		              return InMount.Root == GameContentRoot;
 	              });
 	if (!Result.Directory.empty())
 	{
-		Mounts.push_back({"/Game", Result.Directory, Result.bReadOnly});
+		Mounts.push_back({GameContentRoot, Result.Directory, Result.bReadOnly});
 	}
 	Result.Files = std::make_shared<FMountedFileSystem>(std::move(Mounts));
 	if (!Result.Directory.empty())
 	{
-		(void)Result.Files->ListDirectory("/Game");
+		(void)Result.Files->ListDirectory(GameContentRoot);
 	}
 	Result.IO = std::make_unique<FIOService>(Tasks, Result.Files);
 	Result.Assets = std::make_unique<FAssetService>(*Result.IO);

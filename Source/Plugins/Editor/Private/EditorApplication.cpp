@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Core/Profiling/Measurement.h"
@@ -53,7 +54,7 @@ void FEditorPlugin::Initialize()
 	Compiler = &Context.Require<FShaderCompiler>();
 	Session = &Context.Require<FRenderSession>();
 	Gui = &Context.Require<FGui>();
-	Gui->SetPathDisplayRoot("/Game");
+	Gui->SetPathDisplayRoot(GameContentRoot);
 	Gui->SetAssetReferenceProvider(
 	    [this](std::string_view InTypeId)
 	    {

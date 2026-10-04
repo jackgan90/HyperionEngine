@@ -17,8 +17,7 @@ FContentDirectoryPage QueryContentDirectory(const FAssetService& InAssets, const
 		throw std::invalid_argument("Directory page limit must be 1-100");
 	}
 	const auto& Path = InRequest.Directory;
-	if (!(Path == "/Game" || Path.starts_with("/Game/") || Path == "/Engine" || Path.starts_with("/Engine/")) ||
-	    Path.find('\\') != std::string::npos)
+	if (!(IsGameContentPath(Path) || IsEngineContentPath(Path)) || Path.find('\\') != std::string::npos)
 	{
 		throw std::invalid_argument("Directory must be an absolute /Game or /Engine package path");
 	}
@@ -30,9 +29,9 @@ FContentDirectoryPage QueryContentDirectory(const FAssetService& InAssets, const
 			throw std::invalid_argument("Parent traversal is not allowed");
 		}
 	}
-	if (Root.Directory.empty() && (Path == "/Game" || Path.starts_with("/Game/")))
+	if (IsGameContentPath(Path))
 	{
-		throw FContentRootError("root_unset", "Select Game content with content.root.set");
+		RequireGameContentRoot(Root, "Select Game content with content.root.set");
 	}
 	auto Entries = InAssets.FileSystem()->ListDirectory(Directory);
 	std::sort(Entries.begin(), Entries.end(),

@@ -1,5 +1,6 @@
 #include "AssetOperations.h"
 #include "Hyperion/AssetEditing/AssetProperties.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/IO/Path.h"
 #include <algorithm>
 #include <chrono>
@@ -159,10 +160,21 @@ TPendingOperation<FAssetDocumentInfo> FAssetAutomation::Open(const FAssetOpenReq
 	{
 		return OpenWorkspace(InRequest);
 	}
-	if (Roots && Roots->Info().Directory.empty() && (InRequest.Path == "/Game" || InRequest.Path.starts_with("/Game/")))
+	if (Roots)
 	{
-		throw FAutomationError("root_unset",
-		                       "Select an asset directory with content.root.set before opening Game assets");
+		const auto Root = Roots->Info();
+		if (IsGameContentPath(InRequest.Path))
+		{
+			try
+			{
+				RequireGameContentRoot(Root,
+				                       "Select an asset directory with content.root.set before opening Game assets");
+			}
+			catch (const FContentRootError& Failure)
+			{
+				throw FAutomationError(Failure.Code, Failure.what());
+			}
+		}
 	}
 	const auto Path = Assets.NormalizePath(PathFromUtf8(InRequest.Path));
 	for (const auto& [Id, Existing] : Documents)

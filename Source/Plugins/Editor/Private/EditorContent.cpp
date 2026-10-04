@@ -1,5 +1,7 @@
 #include "EditorApplication.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Environment/SkyAsset.h"
+#include "Hyperion/Gui/PathDisplay.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include <algorithm>
@@ -29,7 +31,7 @@ void FEditorPlugin::PollContent()
 			std::erase_if(Index,
 			              [](const auto& InReference)
 			              {
-				              return InReference.Path.starts_with("/Game/");
+				              return InReference.Path != GameContentRoot && IsGameContentPath(InReference.Path);
 			              });
 			Index.insert(Index.end(), Result->Assets.begin(), Result->Assets.end());
 			Assets.SetAssetIndex(Index, {});
@@ -113,9 +115,9 @@ void FEditorPlugin::DrawContentTree(const std::string& InPath)
 		Gui->SetNextTreeOpen(true);
 	}
 	bool bClicked{};
-	const auto Label = InPath == "/Game" ? "All" : PathToUtf8(PathFromUtf8(InPath).filename());
+	const auto Label = InPath == GameContentRoot ? "All" : PathToUtf8(PathFromUtf8(InPath).filename());
 	const bool bOpen = Gui->TreeItem(InPath.c_str(), Label.c_str(), false, Browser->SelectedDirectory == InPath,
-	                                 bClicked, InPath == "/Game");
+	                                 bClicked, InPath == GameContentRoot);
 	if (bClicked)
 	{
 		Browser->Navigate(InPath);
@@ -234,14 +236,14 @@ void FEditorPlugin::DrawSceneBrowser()
 		}
 		else
 		{
-			const auto RelativePath = ContentRelativePath(Browser->SelectedDirectory);
+			const auto RelativePath = FGuiPathDisplay{GameContentRoot}.Value(Browser->SelectedDirectory);
 			Gui->Text(RelativePath.empty() ? "All" : "All/" + RelativePath);
 			Gui->Tooltip(PathToUtf8(Root).c_str());
 			if (Gui->BeginSplitPane("ContentSplit"))
 			{
 				Gui->NextColumn();
 				Gui->BeginScrollRegion("DirectoryTree", 0);
-				DrawContentTree("/Game");
+				DrawContentTree(GameContentRoot);
 				bRevealContentTree = false;
 				Gui->EndScrollRegion();
 				Gui->NextColumn();

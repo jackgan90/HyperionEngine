@@ -1,4 +1,5 @@
 #include "AssetImportPanel.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Platform/FileDialog.h"
 #include "ImportChoices.h"
@@ -76,7 +77,7 @@ void FAssetImportPanel::UpdateSource()
 	}
 	const auto Directory =
 	    RelativeOutputDirectory(Preferences.ImportOutputDirectory, PathFromUtf8(Roots.Info().Directory));
-	const auto Suggested = PathToUtf8((PathFromUtf8("/Game") / Directory.value_or(std::filesystem::path{}) /
+	const auto Suggested = PathToUtf8((PathFromUtf8(GameContentRoot) / Directory.value_or(std::filesystem::path{}) /
 	                                   (PathToUtf8(PathFromUtf8(Request.Source).stem()) + ".hasset"))
 	                                      .lexically_normal());
 	Request.Output = Suggested;
@@ -181,7 +182,7 @@ void FAssetImportPanel::SetOutputDirectory(const std::filesystem::path& InDirect
 	{
 		Filename = "Untitled.hasset";
 	}
-	Request.Output = PathToUtf8((PathFromUtf8("/Game") / *Relative / Filename).lexically_normal());
+	Request.Output = PathToUtf8((PathFromUtf8(GameContentRoot) / *Relative / Filename).lexically_normal());
 	Preferences.ImportOutputDirectory = InDirectory;
 	SavePreferences();
 	Message.clear();
@@ -400,7 +401,7 @@ void FAssetImportPanel::Draw(FGui& InGui)
 			DrawOutput(InGui);
 			DrawImportAction(InGui, FooterMessage);
 			DrawRefreshConfirmation(InGui);
-			InGui.SetPathDisplayRoot("/Game");
+			InGui.SetPathDisplayRoot(GameContentRoot);
 		}
 		InGui.EndWindow();
 	}

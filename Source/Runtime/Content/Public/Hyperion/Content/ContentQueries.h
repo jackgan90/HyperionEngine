@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Content/ContentRootService.h"
 
 namespace Hyperion
@@ -6,7 +7,7 @@ namespace Hyperion
 struct FContentDirectoryQuery
 {
 	std::uint64_t Generation{};
-	std::string Directory = "/Game";
+	std::string Directory = GameContentRoot;
 	std::uint32_t Offset{};
 	std::uint32_t Limit = 50;
 };

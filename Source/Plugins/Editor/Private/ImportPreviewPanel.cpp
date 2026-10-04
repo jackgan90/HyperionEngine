@@ -1,4 +1,5 @@
 #include "AssetImportPanel.h"
+#include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Reflection/Wire.h"
 #include <algorithm>
@@ -232,7 +233,7 @@ void FAssetImportPanel::RestorePreparedRequest()
 {
 	Request = PreparedRequest;
 	PreviousSource = Request.Source;
-	const auto Directory = PathFromUtf8(Request.Output).parent_path().lexically_relative("/Game");
+	const auto Directory = PathFromUtf8(Request.Output).parent_path().lexically_relative(GameContentRoot);
 	Preferences.ImportOutputDirectory = (PathFromUtf8(Roots.Info().Directory) / Directory).lexically_normal();
 	SavePreferences();
 	ValidatedOutputKey.clear();

@@ -30,6 +30,8 @@ Triangle、Model 和 Scene 示例都使用 Game 内容，包括三角形演示�
 
 ## API 与模块
 
+`Content/ContentPaths.h` 统一定义 `GameContentRoot`、`EngineContentRoot` 和 `IsGameContentPath` / `IsEngineContentPath`。归属查询仅按大小写敏感的根名与 `/` 分隔边界匹配，包含根自身，不规范化路径，也不证明访问有效；遍历、挂载、物理边界和权限仍由现有 IO 与领域入口检查。`RequireGameContentRoot` 检查已获取的 root snapshot，导入和 automation 保留各自的错误类型与上下文提示。Editor 通过通用 `FGuiPathDisplay` 显示相对路径，文档和请求仍保存绝对包路径。
+
 `Runtime/IO` 的 `FMountedFileSystem` 实现 `IFileSystem`，提供 Normalize、Resolve、Read、ReadRange、ReadTree、WriteAtomic、Remove、Exists、Enumerate、ListDirectory 和 AcquireWriteLease。ListDirectory 返回直接子文件、目录及逐项诊断，保留空目录并阻止跟随挂载内链接。ReadTree 将递归枚举、扩展名筛选和读取合并，返回文件路径与字节；每个文件独立受读取大小上限约束。目录和链接检查在本次操作内完成，不跨请求缓存文件内容或校验结果，不承诺多个文件的原子快照。`FIOService` 保留 IO 域调度、统计、取消和原子发布能力。实际文件访问在本地后端完成，内存文件系统仍用于独立测试。
 
 `FAssetService` 在缓存、写入顺序、失效和依赖图处理中使用同一规范路径；启动和换根从文件头重建已挂载根的索引，重复 ID 报错，不需要持久化 Catalog。引用检查 ID 和类型；作者保存/导入的引用不固定 Revision。旧相对引用可读；新资产的发布和场景保存使用包路径，搬迁后重新选择目录即可。
