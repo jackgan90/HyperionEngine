@@ -63,7 +63,7 @@ void FEditorAcceptanceHarness::CollectInput(std::vector<FInputEvent>& InEvents, 
 	{
 		ExerciseRenderControlsInput(InEvents);
 	}
-	if (!Editor.Options.ExerciseCapture.empty())
+	if (Editor.Options.ExerciseCapture)
 	{
 		ExerciseCaptureInput(InEvents);
 	}
@@ -136,9 +136,9 @@ bool FEditorAcceptanceHarness::ShouldCapture() const
 	const bool bExerciseComplete = IsComplete();
 	return !Editor.Options.Capture.empty() &&
 	       (bExerciseComplete ||
-	        (Editor.Options.ExerciseCapture == "toggle" && Editor.bPreferencesDialog && Scenario.ExerciseStep == 2 &&
-	         Scenario.ExerciseWait == 2) ||
-	        (Editor.Options.ExerciseCapture == "capture" && Scenario.ExerciseStep == 1));
+	        (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Toggle && Editor.bPreferencesDialog &&
+	         Scenario.ExerciseStep == 2 && Scenario.ExerciseWait == 2) ||
+	        (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Capture && Scenario.ExerciseStep == 1));
 }
 
 void FEditorAcceptanceHarness::CheckCompletion() const
@@ -227,7 +227,7 @@ void FEditorAcceptanceHarness::CheckTimeout(double InElapsed) const
 	     Editor.Options.bExerciseSelectionShortcuts || !Editor.Options.ExerciseDocument.empty() ||
 	     !Editor.Options.ExerciseViews.empty() || !Editor.Options.ExercisePlacement.empty() ||
 	     !Editor.Options.ExerciseModelPlacement.empty() || !Editor.Options.ExerciseOutlines.empty() ||
-	     !Editor.Options.ExerciseCapture.empty() || !Editor.Options.ExerciseContent.empty() ||
+	     Editor.Options.ExerciseCapture.has_value() || !Editor.Options.ExerciseContent.empty() ||
 	     !Editor.Options.ExerciseAssets.empty() || !Editor.Options.ExerciseRenderControls.empty() ||
 	     !Editor.Options.ExerciseImport.empty() || !Editor.Options.ExerciseReparent.empty()) &&
 	    InElapsed > 90)

@@ -6,9 +6,22 @@
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneSpatialIndex.h"
 #include "Hyperion/Scene/Scene.h"
+#include <optional>
+#include <string_view>
 
 namespace Hyperion
 {
+enum class EEditorCaptureExercise
+{
+	Toggle,
+	Capture,
+	Unavailable,
+	Hud
+};
+
+EEditorCaptureExercise ParseEditorCaptureExercise(std::string_view InName);
+std::string_view EditorCaptureExerciseName(EEditorCaptureExercise InExercise);
+
 struct FEditorOptions
 {
 	FLogHistory* LogHistory{};
@@ -23,7 +36,7 @@ struct FEditorOptions
 	FRenderSettings Rendering;
 	FEditorPreferences Preferences;
 	std::string PreferenceError;
-	std::string ExerciseCapture;
+	std::optional<EEditorCaptureExercise> ExerciseCapture;
 	std::optional<float> ApplicationScale;
 	std::filesystem::path Capture;
 	std::filesystem::path Report;

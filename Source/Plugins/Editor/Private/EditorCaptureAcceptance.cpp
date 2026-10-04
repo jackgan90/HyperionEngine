@@ -35,27 +35,30 @@ void FEditorAcceptanceHarness::ExerciseCaptureHudInput(std::vector<FInputEvent>&
 	{
 		throw std::runtime_error("Editor HUD preference UI/persistence mismatch");
 	}
-	Log(ELogLevel::Info, "Editor capture acceptance passed: hud | " + Editor.CaptureStatus());
+	Log(ELogLevel::Info,
+	    "Editor capture acceptance passed: " + std::string(EditorCaptureExerciseName(EEditorCaptureExercise::Hud)) +
+	        " | " + Editor.CaptureStatus());
 	Editor.Window->RequestClose();
 }
 
 void FEditorAcceptanceHarness::ExerciseCaptureInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Editor.FrameCount == 0 && Editor.Options.ExerciseCapture == "capture")
+	if (Editor.FrameCount == 0 && Editor.Options.ExerciseCapture == EEditorCaptureExercise::Capture)
 	{
 		// Fixed toolbar actions must remain reachable before the flexible view selector.
 		Editor.Window->Resize({600, 960});
 	}
-	if (Editor.FrameCount < 8 || (Editor.Options.ExerciseCapture == "capture" && Editor.ReadyFrames < 8))
+	if (Editor.FrameCount < 8 ||
+	    (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Capture && Editor.ReadyFrames < 8))
 	{
 		return;
 	}
-	if (Editor.Options.ExerciseCapture == "hud")
+	if (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Hud)
 	{
 		ExerciseCaptureHudInput(InEvents);
 		return;
 	}
-	if (Editor.Options.ExerciseCapture == "toggle")
+	if (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Toggle)
 	{
 		switch (Scenario.ExerciseStep)
 		{
@@ -84,7 +87,7 @@ void FEditorAcceptanceHarness::ExerciseCaptureInput(std::vector<FInputEvent>& In
 			throw std::runtime_error("Editor capture preference UI/persistence mismatch");
 		}
 	}
-	else if (Editor.Options.ExerciseCapture == "unavailable")
+	else if (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Unavailable)
 	{
 		if (Editor.CanCapture() || Scenario.CaptureButtonBounds.Z <= Scenario.CaptureButtonBounds.X)
 		{
@@ -122,7 +125,8 @@ void FEditorAcceptanceHarness::ExerciseCaptureInput(std::vector<FInputEvent>& In
 #endif
 	}
 	Log(ELogLevel::Info,
-	    "Editor capture acceptance passed: " + Editor.Options.ExerciseCapture + " | " + Editor.CaptureStatus());
+	    "Editor capture acceptance passed: " + std::string(EditorCaptureExerciseName(*Editor.Options.ExerciseCapture)) +
+	        " | " + Editor.CaptureStatus());
 	Editor.Window->RequestClose();
 }
 } // namespace Hyperion

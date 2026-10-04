@@ -1,6 +1,7 @@
 #include "EditorOptions.h"
 #include "EditorHostOptions.h"
 #include "Hyperion/IO/Path.h"
+#include <array>
 #include <charconv>
 #include <cmath>
 
@@ -8,13 +9,24 @@ namespace Hyperion
 {
 namespace
 {
+struct FCaptureExerciseName
+{
+	EEditorCaptureExercise Exercise;
+	std::string_view Name;
+};
+
+constexpr std::array CaptureExercises{FCaptureExerciseName{EEditorCaptureExercise::Toggle, "toggle"},
+                                      FCaptureExerciseName{EEditorCaptureExercise::Capture, "capture"},
+                                      FCaptureExerciseName{EEditorCaptureExercise::Unavailable, "unavailable"},
+                                      FCaptureExerciseName{EEditorCaptureExercise::Hud, "hud"}};
+
 bool HasIsolatedEditorAcceptanceRequest(const FEditorOptions& InOptions)
 {
 	return !InOptions.ExerciseAssets.empty() || InOptions.bExercise || InOptions.bExerciseGizmo ||
 	       InOptions.bExercisePicking || InOptions.bExerciseMultiSelection || InOptions.bExerciseClipboard ||
 	       InOptions.bExerciseFraming || InOptions.bExerciseSelectionShortcuts || !InOptions.ExerciseDocument.empty() ||
 	       !InOptions.ExerciseViews.empty() || !InOptions.ExercisePlacement.empty() ||
-	       !InOptions.ExerciseOutlines.empty() || !InOptions.ExerciseCapture.empty() ||
+	       !InOptions.ExerciseOutlines.empty() || InOptions.ExerciseCapture.has_value() ||
 	       !InOptions.ExerciseRenderControls.empty() || !InOptions.ExerciseReparent.empty() ||
 	       !InOptions.ExerciseModelPlacement.empty();
 }
@@ -217,11 +229,7 @@ void ParseValue(FEditorOptions& InOptions, std::string_view InArgument, const st
 	}
 	else if (InArgument == "--exercise-capture")
 	{
-		if (InValue != "toggle" && InValue != "capture" && InValue != "unavailable" && InValue != "hud")
-		{
-			throw std::invalid_argument("--exercise-capture expects toggle, capture, unavailable or hud");
-		}
-		InOptions.ExerciseCapture = InValue;
+		InOptions.ExerciseCapture = ParseEditorCaptureExercise(InValue);
 	}
 	else
 	{
@@ -229,6 +237,30 @@ void ParseValue(FEditorOptions& InOptions, std::string_view InArgument, const st
 	}
 }
 } // namespace
+
+EEditorCaptureExercise ParseEditorCaptureExercise(std::string_view InName)
+{
+	for (const auto& Entry : CaptureExercises)
+	{
+		if (Entry.Name == InName)
+		{
+			return Entry.Exercise;
+		}
+	}
+	throw std::invalid_argument("--exercise-capture expects toggle, capture, unavailable or hud");
+}
+
+std::string_view EditorCaptureExerciseName(EEditorCaptureExercise InExercise)
+{
+	for (const auto& Entry : CaptureExercises)
+	{
+		if (Entry.Exercise == InExercise)
+		{
+			return Entry.Name;
+		}
+	}
+	throw std::invalid_argument("Unknown Editor capture exercise");
+}
 
 bool HasEditorAcceptanceRequest(const FEditorOptions& InOptions)
 {
@@ -281,7 +313,7 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		throw std::invalid_argument(
 		    "Editor benchmark requires a scene and positive sample count; exercise is separate");
 	}
-	if (!Result.ExerciseCapture.empty() && Result.PreferencesPath == Root / "out/editor/Preferences.ini")
+	if (Result.ExerciseCapture && Result.PreferencesPath == Root / "out/editor/Preferences.ini")
 	{
 		throw std::invalid_argument("Capture acceptance requires an isolated --editor-preferences path");
 	}
