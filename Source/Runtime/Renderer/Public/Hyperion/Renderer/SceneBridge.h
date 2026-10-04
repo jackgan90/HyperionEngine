@@ -7,6 +7,13 @@ namespace Hyperion
 {
 class FRenderSession;
 
+struct FSceneBridgeStatusRevision
+{
+	std::uint64_t BridgeStatus{};
+	std::uint64_t ResourcePublication{};
+	bool operator==(const FSceneBridgeStatusRevision&) const = default;
+};
+
 // Main-only attachment. Destroy before its session and logical scene.
 class FSceneRenderBridge
 {
@@ -28,18 +35,45 @@ public:
 	std::vector<FRenderPrimitiveHandle> ResolveRenderPrimitives(FSceneHandle InHandle) const;
 	std::shared_ptr<const FSceneComponentDiagnostics> GetComponentDiagnostics(FSceneHandle InHandle,
 	                                                                          std::string_view InComponent) const;
-	std::pair<std::uint64_t, std::uint64_t> GetStatusRevision() const;
-	std::pair<std::uint64_t, std::uint64_t> GetModelStatusRevision() const;
+	FSceneBridgeStatusRevision GetStatusRevision() const;
+	FSceneBridgeStatusRevision GetModelStatusRevision() const;
 
 private:
+	struct FMaterialSnapshotRevision
+	{
+		std::uint64_t Identity{};
+		std::uint64_t Revision{};
+		bool operator==(const FMaterialSnapshotRevision&) const = default;
+	};
+
+	struct FSectionMaterialRevision
+	{
+		std::uint32_t SectionIndex{};
+		FMaterialSnapshotRevision Snapshot;
+		bool operator==(const FSectionMaterialRevision&) const = default;
+	};
+
+	struct FMaterialSelectionRevisions
+	{
+		FMaterialSnapshotRevision Surface;
+		std::vector<FSectionMaterialRevision> Sections;
+		bool operator==(const FMaterialSelectionRevisions&) const = default;
+	};
+
+	struct FEditableMaterialRevision
+	{
+		std::shared_ptr<FMaterialInstance> Instance;
+		std::uint64_t Revision{};
+	};
+
 	struct FAttachment
 	{
 		std::shared_ptr<const FSceneModelData> Data;
 		std::unique_ptr<FModel> Model;
 		std::string Error;
 		std::uint64_t Revision{};
-		std::vector<std::pair<std::uint64_t, std::uint64_t>> MaterialVersions;
-		std::vector<std::pair<std::shared_ptr<FMaterialInstance>, std::uint64_t>> EditableMaterials;
+		FMaterialSelectionRevisions MaterialRevisions;
+		std::vector<FEditableMaterialRevision> EditableMaterials;
 	};
 
 	struct FReceipt
@@ -55,8 +89,8 @@ private:
 		std::unique_ptr<FModel> NewModel;
 		FModel* Model{};
 		FModel::FPreparedUpdate Update;
-		std::vector<std::pair<std::uint64_t, std::uint64_t>> Versions;
-		std::vector<std::pair<std::shared_ptr<FMaterialInstance>, std::uint64_t>> EditableMaterials;
+		FMaterialSelectionRevisions MaterialRevisions;
+		std::vector<FEditableMaterialRevision> EditableMaterials;
 	};
 
 	std::vector<FPending> PrepareChanges(const std::vector<FSceneChange>& InChanges,

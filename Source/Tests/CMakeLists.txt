@@ -224,6 +224,7 @@ hyp_test(resource_tests render_resources hyperion_render Renderer/ResourceTests.
 target_sources(resource_tests PRIVATE Renderer/ViewParticipationTests.cpp)
 target_compile_definitions(resource_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 hyp_test(scene_render_tests scene_rendering hyperion_render Renderer/SceneRenderTests.cpp)
+target_sources(scene_render_tests PRIVATE Renderer/SceneBridgeStateTests.cpp)
 target_link_libraries(scene_render_tests PRIVATE hyperion_rhi_d3d12)
 target_compile_definitions(scene_render_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(scene_rendering PROPERTIES TIMEOUT 90 LABELS "gpu;desktop" RUN_SERIAL TRUE)

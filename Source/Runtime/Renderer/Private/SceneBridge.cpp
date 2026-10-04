@@ -106,9 +106,9 @@ std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(con
 	}
 	for (const auto Handle : EditableModels)
 	{
-		for (const auto& [Material, Revision] : Attachments.at(Handle).EditableMaterials)
+		for (const auto& Material : Attachments.at(Handle).EditableMaterials)
 		{
-			if (Material->GetRevision() != Revision)
+			if (Material.Instance->GetRevision() != Material.Revision)
 			{
 				OutAffected.insert(Handle);
 				break;
@@ -126,26 +126,26 @@ std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(con
 			continue;
 		}
 		const auto& State = *ModelState;
-		std::vector<std::pair<std::uint64_t, std::uint64_t>> Versions;
-		std::vector<std::pair<std::shared_ptr<FMaterialInstance>, std::uint64_t>> EditableMaterials;
-		const auto Freeze = [&](const FSceneMaterialSelection& InSelection)
+		FMaterialSelectionRevisions MaterialRevisions;
+		std::vector<FEditableMaterialRevision> EditableMaterials;
+		const auto Freeze = [&](const FSceneMaterialSelection& InSelection) -> FMaterialSnapshotRevision
 		{
 			const auto Snapshot = FModel::FreezeSelection(InSelection, Frozen);
-			Versions.emplace_back(Snapshot ? Snapshot->Identity : 0, Snapshot ? Snapshot->Revision : 0);
 			if (InSelection.Instance)
 			{
-				EditableMaterials.emplace_back(InSelection.Instance, InSelection.Instance->GetRevision());
+				EditableMaterials.push_back(
+				    {.Instance = InSelection.Instance, .Revision = InSelection.Instance->GetRevision()});
 			}
+			return {.Identity = Snapshot ? Snapshot->Identity : 0, .Revision = Snapshot ? Snapshot->Revision : 0};
 		};
-		Freeze(State.Surface);
+		MaterialRevisions.Surface = Freeze(State.Surface);
 		for (const auto& [Section, Selection] : State.SectionSurfaces)
 		{
-			Versions.emplace_back(Section, 0);
-			Freeze(Selection);
+			MaterialRevisions.Sections.push_back({.SectionIndex = Section, .Snapshot = Freeze(Selection)});
 		}
 		auto Entry = Attachments.find(Handle);
 		if (Entry != Attachments.end() && Entry->second.Data == State.Data && !Changed.contains(Handle) &&
-		    Entry->second.MaterialVersions == Versions)
+		    Entry->second.MaterialRevisions == MaterialRevisions)
 		{
 			continue;
 		}
@@ -165,7 +165,7 @@ std::vector<FSceneRenderBridge::FPending> FSceneRenderBridge::PrepareChanges(con
 		}
 		++ModelPreparationCount;
 		Work.Update = Work.Model->PrepareState(State, Frozen);
-		Work.Versions = std::move(Versions);
+		Work.MaterialRevisions = std::move(MaterialRevisions);
 		Work.EditableMaterials = std::move(EditableMaterials);
 		Pending.push_back(std::move(Work));
 	}
@@ -256,7 +256,7 @@ void FSceneRenderBridge::CommitChanges(std::vector<FPending>& InPending, FRender
 			Entry.Data = Work.Update.State.Data;
 		}
 		Entry.Model->CommitState(std::move(Work.Update));
-		Entry.MaterialVersions = std::move(Work.Versions);
+		Entry.MaterialRevisions = std::move(Work.MaterialRevisions);
 		Entry.EditableMaterials = std::move(Work.EditableMaterials);
 		if (Entry.EditableMaterials.empty())
 		{
@@ -319,16 +319,17 @@ bool FSceneRenderBridge::IsReady(FSceneHandle InHandle) const
 	return It != Attachments.end() && It->second.Error.empty() && It->second.Model->IsReady();
 }
 
-std::pair<std::uint64_t, std::uint64_t> FSceneRenderBridge::GetStatusRevision() const
+FSceneBridgeStatusRevision FSceneRenderBridge::GetStatusRevision() const
 {
 	Tasks.Require({EDomain::Main});
-	return {StatusRevision, Session.GetResources().GetPublicationRevision()};
+	return {.BridgeStatus = StatusRevision, .ResourcePublication = Session.GetResources().GetPublicationRevision()};
 }
 
-std::pair<std::uint64_t, std::uint64_t> FSceneRenderBridge::GetModelStatusRevision() const
+FSceneBridgeStatusRevision FSceneRenderBridge::GetModelStatusRevision() const
 {
 	Tasks.Require({EDomain::Main});
-	return {ModelStatusRevision, Session.GetResources().GetPublicationRevision()};
+	return {.BridgeStatus = ModelStatusRevision,
+	        .ResourcePublication = Session.GetResources().GetPublicationRevision()};
 }
 
 std::uint64_t FSceneRenderBridge::GetModelPreparationCount() const

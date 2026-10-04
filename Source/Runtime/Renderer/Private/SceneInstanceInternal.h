@@ -87,7 +87,7 @@ struct FSceneInstance::FImpl
 	std::map<std::string, FLoad> Loads;
 	std::vector<FSceneInstanceModel> Models;
 	FSceneInstanceStatus Status;
-	std::pair<std::uint64_t, std::uint64_t> ModelStatusRevision;
+	FSceneBridgeStatusRevision ModelStatusRevision;
 	bool bModelStatusDirty = true;
 	void BeginManifest();
 	void PollModels();

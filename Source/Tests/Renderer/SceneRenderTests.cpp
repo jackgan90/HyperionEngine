@@ -15,6 +15,8 @@
 #include <source_location>
 #include <thread>
 
+void RunSceneBridgeStateTests(Hyperion::FTaskSystem& InTasks, Hyperion::FRenderSession& InSession);
+
 namespace Hyperion
 {
 struct FRenderMetadataComponent
@@ -1714,6 +1716,8 @@ int main()
 	try
 	{
 		FSceneFixture Fixture;
+		RunSceneBridgeStateTests(Fixture.Tasks, *Fixture.Session);
+		Fixture.AwaitRetirement();
 		CheckSharedModels(Fixture);
 		CheckSceneDepth(Fixture);
 		CheckGlobalBlend(Fixture);
