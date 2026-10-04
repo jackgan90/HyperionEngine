@@ -32,7 +32,7 @@ target_sources(hyperion_render PRIVATE Private/SceneLightingInfo.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderSettings.cpp
   Private/RenderBenchmark.cpp Private/RenderPassTiming.cpp)
 target_sources(hyperion_render PRIVATE Private/DebugGeometry.cpp)
-target_sources(hyperion_render PRIVATE Private/SceneViewport.cpp)
+target_sources(hyperion_render PRIVATE Private/SceneViewport.cpp Private/ViewportChoices.cpp)
 target_sources(hyperion_render PRIVATE Private/SceneFraming.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderOutput.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderCaptureControl.cpp)

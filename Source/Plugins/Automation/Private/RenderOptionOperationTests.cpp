@@ -52,14 +52,18 @@ void CheckViewportSchema(const FArchiveNode& InSchema)
 	Check(std::get<FArchiveNode::FArray>(Field(InSchema, "required").Value).empty());
 	const auto& Properties = Field(InSchema, "properties");
 	Check(std::get<FArchiveNode::FObject>(Properties.Value).size() == 14);
-	const auto& Visualizer = Field(Properties, "visualizer");
-	Check(std::holds_alternative<std::monostate>(Field(Visualizer, "default").Value));
-	const auto& Alternatives = std::get<FArchiveNode::FArray>(Field(Visualizer, "anyOf").Value);
-	Check(Alternatives.size() == 2);
-	Check(ReadValue<std::string>(Field(Alternatives[0], "type")) == "integer");
-	Check(ReadValue<double>(Field(Alternatives[0], "minimum")) == 0);
-	Check(ReadValue<double>(Field(Alternatives[0], "maximum")) == 4294967295.0);
-	Check(ReadValue<std::string>(Field(Alternatives[1], "type")) == "null");
+	for (const auto* Key : {"visualizer", "culling", "outlineMode"})
+	{
+		const auto& Property = Field(Properties, Key);
+		Check(std::holds_alternative<std::monostate>(Field(Property, "default").Value));
+		const auto& Alternatives = std::get<FArchiveNode::FArray>(Field(Property, "anyOf").Value);
+		Check(Alternatives.size() == 2);
+		Check(ReadValue<std::string>(Field(Alternatives[0], "type")) == "integer");
+		Check(ReadValue<double>(Field(Alternatives[0], "minimum")) == 0);
+		Check(ReadValue<double>(Field(Alternatives[0], "maximum")) == 4294967295.0);
+		Check(!std::get<FArchiveNode::FObject>(Alternatives[0].Value).contains("enum"));
+		Check(ReadValue<std::string>(Field(Alternatives[1], "type")) == "null");
+	}
 }
 
 void CheckDiscovery()

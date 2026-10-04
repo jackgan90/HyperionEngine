@@ -1,5 +1,6 @@
 #include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/RasterOptions/RasterOptions.h"
+#include "Hyperion/Renderer/ViewportChoices.h"
 #include <cmath>
 
 namespace Hyperion
@@ -86,7 +87,8 @@ void ValidateViewportOptions(const FSceneViewportOptions& InPatch, const FSceneV
 	}
 	if ((InPatch.Exposure &&
 	     (!std::isfinite(*InPatch.Exposure) || *InPatch.Exposure < .05f || *InPatch.Exposure > 8)) ||
-	    (InPatch.OutlineMode && *InPatch.OutlineMode > 1) || (InPatch.Culling && *InPatch.Culling > 2) ||
+	    (InPatch.OutlineMode && !IsOutlineOverlapWireValue(*InPatch.OutlineMode)) ||
+	    (InPatch.Culling && !IsSceneCullingWireValue(*InPatch.Culling)) ||
 	    (InPatch.ProfilingCategories && (*InPatch.ProfilingCategories & ~255u)))
 	{
 		throw std::invalid_argument("Exposure must be 0.05-8; outlineMode 0-1; culling 0-2; profiling mask 0-255");

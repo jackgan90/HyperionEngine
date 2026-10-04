@@ -58,6 +58,7 @@ constexpr FWidgetKey Keys[]{
     {EEditorWidget::StatusHud, "hud/status"},
     {EEditorWidget::ProfilingHud, "hud/profiling"},
     {EEditorWidget::ViewOptions, "view/options"},
+    {EEditorWidget::CullingMode, "view/culling"},
     {EEditorWidget::OutlineMode, "outline/mode"},
     {EEditorWidget::OutlineQuality, "outline/quality"},
     {EEditorWidget::ReturnToEditorView, "view/return"},
@@ -187,6 +188,12 @@ void FEditorAcceptanceHarness::ObserveIndexedWidget(EEditorWidget InWidget, FVec
 			break;
 		case EEditorWidget::VisualizerItem:
 			Scenario.InspectionBounds["hud/visualizer/" + std::to_string(InIndex)] = InBounds;
+			break;
+		case EEditorWidget::CullingModeItem:
+			Scenario.InspectionBounds["view/culling/" + std::to_string(InIndex)] = InBounds;
+			break;
+		case EEditorWidget::OutlineModeItem:
+			Scenario.InspectionBounds["outline/mode/" + std::to_string(InIndex)] = InBounds;
 			break;
 		default:
 			break;

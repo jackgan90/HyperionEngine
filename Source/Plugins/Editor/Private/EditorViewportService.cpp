@@ -1,5 +1,6 @@
 #include "EditorApplication.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
+#include "Hyperion/Renderer/ViewportChoices.h"
 #include "Hyperion/Renderer/ViewportRay.h"
 #include <algorithm>
 
@@ -48,9 +49,9 @@ FSceneViewportState FEditorPlugin::ViewportState() const
 	FSceneViewportOptions ViewOptions;
 	ViewOptions.Exposure = Exposure;
 	ViewOptions.LightMarkers = bShowLightMarkers;
-	ViewOptions.OutlineMode = static_cast<std::uint32_t>(OutlineSettings.Overlap);
+	ViewOptions.OutlineMode = ToOutlineWireValue(OutlineSettings.Overlap);
 	ViewOptions.SmoothOutlines = OutlineSettings.bSupersample;
-	ViewOptions.Culling = static_cast<std::uint32_t>(CullingMode);
+	ViewOptions.Culling = ToCullingWireValue(CullingMode);
 	ViewOptions.Frozen = FrozenCullingView.has_value();
 	ViewOptions.InstanceBatching = bInstanceBatching;
 	ViewOptions.ModelBounds = bModelBounds;
@@ -143,7 +144,7 @@ void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 	{
 		FrozenCullingView.reset();
 	}
-	CullingMode = static_cast<ESceneCullingMode>(InOptions.Culling.value_or(static_cast<std::uint32_t>(CullingMode)));
+	CullingMode = ParseSceneCullingMode(InOptions.Culling.value_or(ToCullingWireValue(CullingMode)));
 	bInstanceBatching = InOptions.InstanceBatching.value_or(bInstanceBatching);
 	bModelBounds = InOptions.ModelBounds.value_or(bModelBounds);
 	bLightBounds = InOptions.LightBounds.value_or(bLightBounds);
@@ -159,8 +160,8 @@ void FEditorPlugin::SetViewportOptions(const FSceneViewportOptions& InOptions)
 	Rendering.Exposure = Exposure;
 	Rendering.DebugMode = InOptions.Visualizer.value_or(Rendering.DebugMode);
 	bShowLightMarkers = InOptions.LightMarkers.value_or(bShowLightMarkers);
-	OutlineSettings.Overlap = static_cast<EOutlineOverlapMode>(
-	    InOptions.OutlineMode.value_or(static_cast<std::uint32_t>(OutlineSettings.Overlap)));
+	OutlineSettings.Overlap =
+	    ParseOutlineOverlapMode(InOptions.OutlineMode.value_or(ToOutlineWireValue(OutlineSettings.Overlap)));
 	OutlineSettings.bSupersample = InOptions.SmoothOutlines.value_or(OutlineSettings.bSupersample);
 }
 

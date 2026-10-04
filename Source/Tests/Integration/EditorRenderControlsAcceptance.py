@@ -43,8 +43,39 @@ def wait_contact(agent, expected, shadow_bytes=None):
         time.sleep(.02)
 
 
+def discrete_viewport_choices(agent):
+    original = completed(agent.call("view.get"))
+    document = version(agent)
+    rendering = completed(agent.call("render.settings.get"))
+    for key, values in (("culling", (0, 1, 2)), ("outlineMode", (1, 0))):
+        for value in values:
+            before = completed(agent.call("view.get"))
+            expected = copy.deepcopy(before)
+            expected["options"][key] = value
+            changed = completed(agent.call("view.set", **document, options={key: value}))
+            assert changed == expected and completed(agent.call("view.get")) == expected
+            assert version(agent) == document and not ready(agent)["dirty"]
+            assert completed(agent.call("render.settings.get")) == rendering
+    for options in ({"culling": None, "outlineMode": None}, {}):
+        before = completed(agent.call("view.get"))
+        assert completed(agent.call("view.set", **document, options=options)) == before
+    for options in ({"culling": 3, "outlineMode": 1, "exposure": 2},
+                    {"culling": 256}, {"culling": 4294967295}, {"culling": -1},
+                    {"outlineMode": 2, "culling": 1, "exposure": 2},
+                    {"outlineMode": 256}, {"outlineMode": 4294967295}, {"outlineMode": -1}):
+        before = completed(agent.call("view.get"))
+        failure = agent.call("view.set", **document, options=options)
+        assert failure["error"]["code"] == "invalid_arguments", failure
+        assert completed(agent.call("view.get")) == before
+        assert completed(agent.call("render.settings.get")) == rendering
+        assert version(agent) == document and not ready(agent)["dirty"]
+    restored = completed(agent.call("view.set", **document, options=original["options"]))
+    assert restored == original
+
+
 def viewport_controls(agent):
     original = ready(agent)
+    discrete_viewport_choices(agent)
     for mode in range(7):
         state = completed(agent.call("view.set", **version(agent),
                                     options={"statusHud": True, "profilingHud": True,

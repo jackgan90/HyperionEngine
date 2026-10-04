@@ -1,10 +1,51 @@
 #include "EditorApplication.h"
+#include "Hyperion/RasterOptions/RasterOptions.h"
+#include "Hyperion/Renderer/ViewportChoices.h"
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
 
 namespace Hyperion
 {
+namespace
+{
+void DrawCullingChoice(FGui& InGui, FEditorAcceptanceDriver& InAcceptance, FSceneViewportOptions& OutOptions)
+{
+	const auto Options = SceneCullingOptions();
+	static const auto Labels = RasterOptionLabels(Options);
+	auto Index = RasterOptionIndex(Options, ParseSceneCullingMode(*OutOptions.Culling));
+	if (InGui.Combo("Culling", Labels, Index,
+	                [&](std::size_t InIndex, FVec4 InBounds)
+	                {
+		                InAcceptance.ObserveIndexedWidget(EEditorWidget::CullingModeItem, InBounds,
+		                                                  ToCullingWireValue(Options[InIndex].Id));
+	                }))
+	{
+		OutOptions.Culling = ToCullingWireValue(RasterOptionIdentity(Options, Index));
+	}
+	InAcceptance.ObserveWidget(EEditorWidget::CullingMode, InGui.LastItemBounds());
+}
+
+void DrawOutlineChoice(FGui& InGui, FEditorAcceptanceDriver& InAcceptance, FSceneViewportOptions& OutOptions)
+{
+	const auto Options = OutlineOverlapOptions();
+	static const auto Labels = RasterOptionLabels(Options);
+	auto Index = RasterOptionIndex(Options, ParseOutlineOverlapMode(*OutOptions.OutlineMode));
+	InGui.SetNextItemWidth(180);
+	if (InGui.Combo("Selection outline", Labels, Index,
+	                [&](std::size_t InIndex, FVec4 InBounds)
+	                {
+		                InAcceptance.ObserveIndexedWidget(EEditorWidget::OutlineModeItem, InBounds,
+		                                                  ToOutlineWireValue(Options[InIndex].Id));
+	                }))
+	{
+		OutOptions.OutlineMode = ToOutlineWireValue(RasterOptionIdentity(Options, Index));
+	}
+	InAcceptance.ObserveWidget(EEditorWidget::OutlineMode, InGui.LastItemBounds());
+	InGui.Tooltip("Union outlines the selected group. Per object preserves every object's outline through overlaps.");
+}
+} // namespace
+
 void FEditorPlugin::SetPreviewCamera(std::optional<FSceneHandle> InHandle)
 {
 	CancelPlacement();
@@ -149,25 +190,12 @@ void FEditorPlugin::DrawViewOptions()
 	Gui->Tooltip("Hold right mouse and scroll to adjust movement speed");
 	auto ViewOptions = ViewportState().Options;
 	Gui->Checkbox("Show light icons", *ViewOptions.LightMarkers);
-	const std::array<std::string, 3> CullingNames{"None", "Linear frustum", "BVH frustum"};
-	std::size_t Culling = *ViewOptions.Culling;
-	if (Gui->Combo("Culling", CullingNames, Culling))
-	{
-		ViewOptions.Culling = static_cast<std::uint32_t>(Culling);
-	}
+	DrawCullingChoice(*Gui, Acceptance, ViewOptions);
 	Gui->Checkbox("Freeze culling view", *ViewOptions.Frozen);
 	Gui->Checkbox("Instance batching", *ViewOptions.InstanceBatching);
 	Gui->Checkbox("Model bounds", *ViewOptions.ModelBounds);
 	Gui->Checkbox("Light influence", *ViewOptions.LightBounds);
-	const std::array<std::string, 2> OutlineModes{"Union", "Per object"};
-	std::size_t OutlineMode = static_cast<std::size_t>(OutlineSettings.Overlap);
-	Gui->SetNextItemWidth(180);
-	if (Gui->Combo("Selection outline", OutlineModes, OutlineMode))
-	{
-		ViewOptions.OutlineMode = static_cast<std::uint32_t>(OutlineMode);
-	}
-	Acceptance.ObserveWidget(EEditorWidget::OutlineMode, Gui->LastItemBounds());
-	Gui->Tooltip("Union outlines the selected group. Per object preserves every object's outline through overlaps.");
+	DrawOutlineChoice(*Gui, Acceptance, ViewOptions);
 	Gui->Checkbox("Smooth outlines (2x)", *ViewOptions.SmoothOutlines);
 	try
 	{

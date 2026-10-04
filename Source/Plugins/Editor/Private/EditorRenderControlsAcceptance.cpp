@@ -87,6 +87,10 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 			return;
 		case 6:
 			Editor.bShowRenderSettings = false;
+			if (!ExerciseViewportChoices(InEvents))
+			{
+				return;
+			}
 			Editor.SceneDocument.ReplaceSelection(
 			    FSceneSelection(Editor.Scene->GetLightingSelection().Directional.Handle));
 			++Scenario.ExerciseStep;

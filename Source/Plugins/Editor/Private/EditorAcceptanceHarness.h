@@ -57,6 +57,7 @@ private:
 	void CheckPendingAssetEdit();
 	void CheckPlacementMarkerDraws(const FGuiDrawData& InData) const;
 	void CheckRasterOptionFrame() const;
+	void CheckViewportChoice() const;
 	void CheckRenderControlsHud() const;
 	void CheckShortcutSelection(std::initializer_list<unsigned> InIndices);
 	void CompleteModelDrag(std::vector<FInputEvent>& InEvents, FVec2 InSource);
@@ -136,6 +137,7 @@ private:
 	void ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents);
 	bool ExerciseRasterOptions(std::vector<FInputEvent>& InEvents);
+	bool ExerciseViewportChoices(std::vector<FInputEvent>& InEvents);
 	void ExerciseRenderControlsInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparent(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentDrag(std::vector<FInputEvent>& InEvents);

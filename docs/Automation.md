@@ -165,6 +165,8 @@ Editor 与独立资产适配器在打开时共用 AssetEditing 的 `SupportsAsse
 
 新增能力应验证类型引用可解析、枚举语义可读、示例有效、非法参数无副作用、修改响应与查询一致，以及 GUI 共用事务的历史和保存行为；不向 CLI/MCP 添加领域分支。
 
+视口 `culling` 和 `outlineMode` 保留现有可空 uint32 wire 字段：前者为 0 None、1 Linear、2 BVH，后者为 0 Union、1 Per object。Renderer 的 `ViewportChoices` 定义稳定身份与数值映射；GUI 标签顺序不决定选项语义，GUI 与 `view.set` 继续共用视口服务的校验和提交。非法值在修改前拒绝，这两类临时选项不改变场景 revision、历史、dirty 状态或渲染设置 revision。`render_controls` 覆盖映射与重排，`editor_render_controls` 覆盖实际 GUI 选择、自动化等价和拒绝后的状态保持。
+
 ## 值、结果与限制
 
 请求采用自然对象，不要求客户端理解内部 `{type,version,fields}` envelope 或 bulk。支持嵌套记录、optional/null、字符串键 map、序列、固定数组、合法枚举和数值范围。拒绝未知字段、持久化 alias、缺失必填字段、非法 enum、越界及重复 JSON 键。API DTO 使用 `bPersistent=true` 字段；不应把 API 专属可见性绑定到 GUI 展示策略。

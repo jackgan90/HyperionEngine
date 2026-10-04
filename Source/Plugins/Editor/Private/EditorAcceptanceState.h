@@ -6,6 +6,7 @@
 #include "Hyperion/Gui/Gui.h"
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneCameraController.h"
+#include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/Scene/Scene.h"
 #include <filesystem>
 #include <semaphore>
@@ -37,6 +38,21 @@ struct FEditorAcceptanceState
 	};
 
 	FRasterOptionExercise RasterOptionExercise;
+
+	struct FViewportChoiceExercise
+	{
+		unsigned Case{};
+		unsigned Step{};
+		unsigned Wait{};
+		FSceneViewportOptions Initial;
+		FSceneViewportOptions Before;
+		std::uint64_t SceneRevision{};
+		std::uint64_t RenderRevision{};
+		std::size_t HistoryCursor{};
+		std::size_t HistorySize{};
+	};
+
+	FViewportChoiceExercise ViewportChoiceExercise;
 
 	std::uint32_t PlacementMenuStep{};
 	std::uint32_t PlacementCancelCase{};

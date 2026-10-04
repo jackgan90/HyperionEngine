@@ -13,6 +13,7 @@
 using namespace Hyperion;
 
 void RunViewDiagnosticsTests(const std::filesystem::path& InCaptureDirectory);
+void RunViewportChoiceTests();
 
 namespace
 {
@@ -330,6 +331,7 @@ int main(int InCount, char** InArguments)
 		StrictOptionConversions();
 		LightShadowProperties();
 		HudOptionsAndExposure();
+		RunViewportChoiceTests();
 		ClipLines();
 		TimingIdentity();
 		RunViewDiagnosticsTests({});

@@ -105,6 +105,7 @@ if(BUILD_TESTING)
     Private/EditorReparentAcceptance.cpp
     Private/EditorRenderControlsAcceptance.cpp
     Private/EditorRasterOptionsAcceptance.cpp
+    Private/EditorViewportChoicesAcceptance.cpp
     Private/EditorFramingAcceptance.cpp
     Private/EditorAcceptance.cpp
     Private/EditorAssetAcceptance.cpp
