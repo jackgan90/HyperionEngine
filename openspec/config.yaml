@@ -28,10 +28,14 @@ context: |
     boolean parameters use bIn/bOut, while query functions remain PascalCase.
     Preserve SDK/STL required spellings and serialized IDs. Use the checked-in
     clang-format/clang-tidy configurations; never restyle third-party sources.
-    Follow docs/CodingStyle.md for the 100-line function principle, the 500-line
-    non-test C++ file limit, counting and migration rules, and the five semantic
-    maintainability rules. File sizes are checked automatically; function-length
-    exceptions and semantic maintainability require review beyond style tools.
+    Follow docs/CodingStyle.md for the recommended 100-line function and 1000-line
+    non-test C++ file sizes, counting and migration guidance, and the five semantic
+    maintainability rules. Exceed these recommendations only when the logic is
+    extremely cohesive and meaningful decomposition is difficult. Repository-wide
+    compliance at all times is not required; automated file-size reports are
+    advisory and have no legacy growth ceilings. Cohesion exceptions and semantic
+    maintainability require review beyond style tools; tests remain exempt from
+    the file-size recommendation, but not the function-length principle.
 
 # Project context (optional)
 # This is shown to AI when creating artifacts.

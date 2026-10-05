@@ -1,51 +1,5 @@
 {
-  "version": 1,
-  "legacy_files": {
-    "Source/Backends/D3D12/Private/D3D12Bindings.cpp": {
-      "lines": 536,
-      "split": "Separate descriptor preparation and native binding operations."
-    },
-    "Source/Backends/D3D12/Private/D3D12DrawPlan.cpp": {
-      "lines": 562,
-      "split": "Separate draw-plan preparation and native command recording without changing retention."
-    },
-    "Source/Backends/D3D12/Private/D3D12RHISwapchain.cpp": {
-      "lines": 538,
-      "split": "Separate swapchain lifecycle and frame/present recovery while preserving fence ownership."
-    },
-    "Source/Plugins/Editor/Private/AssetWorkspace.cpp": {
-      "lines": 603,
-      "split": "Separate preview observations and tab/close presentation while retaining entry lifetime ownership."
-    },
-    "Source/Runtime/Gui/Private/Adapters/Gui.cpp": {
-      "lines": 575,
-      "split": "Separate GUI context/frame lifecycle from window and panel operations."
-    },
-    "Source/Runtime/Gui/Private/Adapters/GuiWidgets.cpp": {
-      "lines": 543,
-      "split": "Group widgets by input, selection and presentation responsibilities."
-    },
-    "Source/Runtime/Materials/Private/MaterialParameters.cpp": {
-      "lines": 512,
-      "split": "Separate parameter validation, layout construction and schema queries."
-    },
-    "Source/Runtime/Renderer/Private/MaterialConstantCache.cpp": {
-      "lines": 742,
-      "split": "Separate constant resolution/packing from cache publication and retirement."
-    },
-    "Source/Runtime/Scene/Private/Scene.cpp": {
-      "lines": 540,
-      "split": "Separate public scene queries and mutation entry points while retaining storage invariants."
-    },
-    "Source/Runtime/Shaders/Private/Adapters/ShaderCompiler.cpp": {
-      "lines": 627,
-      "split": "Separate target invocation, source preparation and compilation/cache orchestration."
-    },
-    "Source/Runtime/Tasks/Private/Adapters/TaskSystem.cpp": {
-      "lines": 573,
-      "split": "Separate submission/dispatch and completion/queue processing while preserving shutdown ordering."
-    }
-  },
+  "version": 2,
   "exclusions": {
     "Source/Backends/D3D12/Private/D3D12FrameFailureTests.cpp": {
       "kind": "test",

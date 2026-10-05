@@ -11,23 +11,24 @@ Owned C++ and HLSL SHALL use the documented Unreal-inspired conventions: PascalC
 - **THEN** the applicable naming, file layout and formatting rules are available with examples and checked-in formatter/naming configurations
 
 ### Requirement: Repeatable style verification
-The repository SHALL provide commands for checking formatting and semantic C++ naming without modifying third-party sources. Checks SHALL return failure on violations and document their tooling prerequisites.
+The repository SHALL provide commands for checking formatting and semantic C++ naming without modifying third-party sources. Formatting and naming checks SHALL return failure on violations and document their tooling prerequisites.
 
-The repository SHALL also provide a read-only, Python-only physical file size check through the standard style command and a dedicated size-only mode, and SHALL register that check with CTest. Size checking SHALL require neither LLVM nor a configured C++ build. The existing paths-only mode SHALL retain its path-checking scope.
+The repository SHALL also provide a read-only, Python-only physical file size report through the standard style command and a dedicated size-only mode, and SHALL register that scan with CTest. File size findings SHALL be advisory and SHALL NOT cause failure solely because a file exceeds the recommendation or grows. Invalid exclusion policies and file read errors SHALL still cause failure. Size reporting SHALL require neither LLVM nor a configured C++ build. The existing paths-only mode SHALL retain its path-checking scope.
 
-Repository guidance SHALL distinguish tool coverage from manual review. Automatic file size checking does not check the 100-line function principle or establish compliance with the semantic maintainability rules; those rules SHALL be reviewed independently of tool success.
+Repository guidance SHALL distinguish tool coverage from manual review. Automatic file size reporting does not check the 100-line function recommendation, establish cohesion exceptions for functions or files, or establish compliance with the semantic maintainability rules; those matters SHALL be reviewed independently of tool success.
 
-#### Scenario: A style violation is introduced
-- **WHEN** a contributor runs the relevant style check with its required tools installed
+#### Scenario: A formatting or naming violation is introduced
+- **WHEN** a contributor runs the relevant formatting or naming check with its required tools installed
 - **THEN** the offending owned source is reported and the command returns nonzero
 
-#### Scenario: Check file size without native tooling
+#### Scenario: Report file size without native tooling
 - **WHEN** a contributor runs the size-only command with Python available and LLVM and a C++ build absent
-- **THEN** all owned source paths are checked against the file size policy without modifying source or policy
+- **THEN** all owned source paths are scanned against the file size recommendation and reviewed exclusions without modifying source or policy
+- **AND** files exceeding the recommendation are reported without causing a nonzero exit status
 
 #### Scenario: Formatting changes physical file size
 - **WHEN** the formatting mode writes formatted source files
-- **THEN** it checks the resulting physical file sizes and returns nonzero for any size policy violation without changing the policy
+- **THEN** it reports the resulting physical file size advisories without changing the exclusion policy or failing solely because of file size
 
 ### Requirement: Migration preserves runtime contracts
 Style refactoring SHALL update source and build references consistently and preserve existing serialized keys, plugin identifiers, CLI behavior and other external contracts unless an explicitly authorized behavior change provides the necessary migration.
@@ -37,45 +38,49 @@ Style refactoring SHALL update source and build references consistently and pres
 - **THEN** affected build references are updated and relevant builds and behavior tests verify that existing contracts remain unchanged
 
 ### Requirement: Focused function length
-Repository guidance SHALL state that a single function normally does not exceed 100 lines and longer functions are split at logical boundaries. Counting SHALL cover the complete definition from the first signature line through the closing brace, including blank lines, comments, internal lambdas and constructor definitions. An exception SHALL be allowed when the logic is so tightly coupled that meaningful decomposition is difficult. Comments may clarify non-obvious coupling, but a dedicated justification comment SHALL NOT be required solely because a function exceeds 100 lines.
+Repository guidance SHALL recommend that a single function stay within 100 lines and that longer functions be split at logical boundaries. Counting SHALL cover the complete definition from the first signature line through the closing brace, including blank lines, comments, internal lambdas and constructor definitions. Exceeding the recommendation SHALL be allowed only when the logic is extremely cohesive and meaningful decomposition is difficult. Repository-wide compliance at all times SHALL NOT be required. Comments may clarify non-obvious cohesion, but a dedicated justification comment SHALL NOT be required solely because a function exceeds 100 lines.
 
 #### Scenario: Review an oversized function
 - **WHEN** a new or materially changed function exceeds 100 lines including its complete definition
-- **THEN** it is split by responsibility or review establishes that tightly coupled logic makes meaningful decomposition difficult
+- **THEN** splitting by responsibility is recommended, with an exception allowed only when review establishes that extremely cohesive logic makes meaningful decomposition difficult
 
 #### Scenario: Split a function
 - **WHEN** a function is decomposed to satisfy the length principle
 - **THEN** the split follows responsibility, data ownership or execution stages, preserves behavior, and does not hide the length through formatting compression or internal lambdas
 
-### Requirement: Bounded non-test C++ files
-Owned non-test C++ files SHALL contain no more than 500 physical lines, including includes, blank lines and comments. This covers `.cpp`, `.h` and C++ `.inl` files; third-party and automatically generated files are excluded. Test-file status SHALL be determined by actual purpose and build ownership, not naming alone. Test functions SHALL still follow the function-length principle, and its tightly coupled logic exception SHALL NOT exempt a file from the file limit.
+### Requirement: Recommended non-test C++ file size
+Repository guidance SHALL recommend that owned non-test C++ files stay within 1000 physical lines, including includes, blank lines and comments, and that larger files be split at logical boundaries. Exceeding the recommendation SHALL be allowed only when the file's logic is extremely cohesive and meaningful decomposition is difficult. This covers `.cpp`, `.h` and C++ `.inl` files; third-party and automatically generated files are excluded. Test-file status SHALL be determined by actual purpose and build ownership, not naming alone. Test files SHALL be exempt from the file-size recommendation, but their functions SHALL still follow the function-length principle. A function-level cohesion exception SHALL NOT automatically establish a file-level exception.
 
-New files SHALL meet the limit. Existing oversized files SHALL be assessed during material changes to the owning module and split incrementally; a local fix need not expand into an unrelated large refactor, but deferred oversized files SHALL have their scope and follow-up splitting work recorded in review.
+Repository-wide compliance at all times SHALL NOT be required. Reviews of new files and material changes SHALL assess cohesion and meaningful decomposition. Existing larger files SHOULD be assessed during material changes to the owning module and split incrementally; a local fix need not expand into an unrelated large refactor. Tool success SHALL NOT establish that an oversized file meets the cohesion exception.
 
-The automatic check SHALL scan C++ sources under `Source` independent of the selected build configuration, count LF/CRLF physical lines including an unterminated final line, and apply the limit unless an exact reviewed policy entry applies. Test, generated-source and third-party exclusions SHALL record their purpose and ownership evidence; directory names and filename suffixes SHALL NOT grant exclusions. Policy review SHALL verify those facts against actual purpose and build ownership.
+The automatic scan SHALL inspect C++ sources under `Source` independent of the selected build configuration, count LF/CRLF physical lines including an unterminated final line, and report a path, line count and review advisory for files exceeding 1000 lines unless an exact reviewed exclusion applies. Test, generated-source and third-party exclusions SHALL record their purpose and ownership evidence; directory names and filename suffixes SHALL NOT grant exclusions. Policy review SHALL verify those facts against actual purpose and build ownership.
 
-Existing oversized production files SHALL have a reviewed baseline recording their current line count and follow-up splitting responsibility. The check SHALL reject growth, require reducing a baseline count when its file shrinks, and require removing an entry once its file meets the limit. Invalid, duplicate, overlapping and missing-source policy entries SHALL fail the check. Policy updates SHALL NOT raise ceilings or add new oversized production files to bypass the limit; reviewed renames SHALL preserve or reduce the existing debt.
+The repository SHALL NOT maintain a legacy oversized-production-file inventory, line-count baseline or growth ceilings for this recommendation. File growth, reduction, deletion or rename SHALL NOT require size baseline updates. Invalid, duplicate and missing-source exclusion entries SHALL fail the scan; reviewed exclusion paths SHALL be updated or removed after deletion or rename.
 
 #### Scenario: Split an oversized implementation
-- **WHEN** a non-test owned C++ file exceeds 500 lines
-- **THEN** it is split along logical responsibilities while preserving module Public/Private boundaries, interfaces and lifetimes, subject to the documented existing-code migration rule
+- **WHEN** a non-test owned C++ file exceeds 1000 lines and review finds meaningful decomposition possible
+- **THEN** splitting along logical responsibilities is recommended while preserving module Public/Private boundaries, interfaces and lifetimes, subject to the documented existing-code migration guidance
 - **AND** mechanical chunks, compressed formatting or include fragments do not substitute for meaningful decomposition
 
 #### Scenario: Introduce an oversized unclassified file
-- **WHEN** a file without a reviewed exclusion or baseline contains 501 physical lines
-- **THEN** the check reports its path and line count and fails, including when its name or directory suggests a test
+- **WHEN** a file without a reviewed exclusion contains 1001 physical lines
+- **THEN** the scan reports its path, line count and cohesion review advisory without failing, including when its name or directory suggests a test
 
-#### Scenario: Grow a legacy file
-- **WHEN** an existing oversized production file exceeds its recorded count
-- **THEN** the check fails and reports the recorded ceiling without updating it
+#### Scenario: Keep an extremely cohesive implementation together
+- **WHEN** review establishes that an oversized function or file has extremely cohesive logic and meaningful decomposition is difficult
+- **THEN** exceeding the respective recommendation is allowed, without requiring a line-count baseline
 
-#### Scenario: Reduce or retire legacy debt
-- **WHEN** a baseline file shrinks or is deleted or renamed
-- **THEN** the check requires updating or removing its stale entry and a reviewed rename retains the existing ceiling or a lower one
+#### Scenario: Resize or retire a production file
+- **WHEN** an existing production file grows, shrinks, is deleted or renamed
+- **THEN** the scan evaluates the current files and reports applicable advisories without failing because of size or requiring baseline maintenance
 
 #### Scenario: Exclude a reviewed test implementation
 - **WHEN** a test implementation has an exact exclusion with purpose and build ownership evidence
-- **THEN** it is excluded from the file limit while unrelated production files, including production code also linked into tests, remain checked
+- **THEN** it is excluded from the file-size advisories while unrelated production files, including production code also linked into tests, remain scanned
+
+#### Scenario: Reject invalid exclusion data
+- **WHEN** an exclusion has an invalid record, duplicate key or path that does not exactly match an existing source file
+- **THEN** the scan fails and reports the invalid policy data
 
 ### Requirement: Stable semantic identity
 Behavior SHALL use stable typed identities or explicit states independently of display text and presentation order. String representations SHALL be parsed and validated at input, persistence or protocol boundaries; unknown values SHALL be rejected according to the contract, and existing external identifiers SHALL remain stable unless explicitly migrated.

@@ -1,4 +1,4 @@
-"""Check owned source paths, C++ file sizes, formatting, and optional C++ naming."""
+"""Check owned paths, formatting and optional naming; report advisory C++ sizes."""
 import argparse
 import concurrent.futures
 import json
@@ -158,7 +158,8 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--format', action='store_true', help='Apply clang-format to owned C++ and HLSL files')
     mode.add_argument('--paths-only', action='store_true', help='Check filenames/includes without LLVM')
-    mode.add_argument('--sizes-only', action='store_true', help='Check C++ file sizes without LLVM or a build')
+    mode.add_argument('--sizes-only', action='store_true',
+                      help='Report advisory C++ file sizes and validate exclusions without LLVM or a build')
     mode.add_argument('--naming', action='store_true', help='Also run clang-tidy with a Ninja compile database')
     parser.add_argument('--build-dir', type=pathlib.Path, default=ROOT / 'out/build/debug')
     args = parser.parse_args()
