@@ -33,7 +33,8 @@ try {
     if ($Tracy -and $NoTracy) { throw 'Use either -Tracy or -NoTracy.' }
     if ($Tracy) { $CaptureArguments += '-DHYP_ENABLE_TRACY=ON' }
     if ($NoTracy) { $CaptureArguments += '-DHYP_ENABLE_TRACY=OFF' }
-    & $Cmake --preset $Preset "-DCMAKE_MAKE_PROGRAM=$Ninja" "-DPython3_EXECUTABLE=$PythonExecutable" @CaptureArguments
+    $BuildDirectory = Join-Path $ProjectRoot "out/build/$Preset"
+    & python tools/TargetGraph.py --cmake $Cmake --build-dir $BuildDirectory -- --preset $Preset "-DCMAKE_MAKE_PROGRAM=$Ninja" "-DPython3_EXECUTABLE=$PythonExecutable" @CaptureArguments
     if ($LASTEXITCODE) { throw 'CMake configure failed.' }
     $Arguments = @('--build', '--preset', $Preset, '--parallel', '8')
     if ($Target) { $Arguments += @('--target', $Target) }

@@ -214,10 +214,9 @@ bool FEditorPlugin::IsDirty() const
 
 void FEditorPlugin::ResetDocument()
 {
-	CancelReparentGesture();
+	Reparent.Reset(Gui);
 	OutlinerSelection.Reset();
 	OutlinerRows.clear();
-	ReparentOpenNodes.clear();
 	SetPreviewCamera({});
 	FinishInspectorEdit();
 	SceneDocument.Reset();

@@ -39,6 +39,7 @@ FSceneHostStatus FEditorPlugin::PollDocument()
 
 void FEditorPlugin::InitializeSceneDocument()
 {
+	Reparent.Reset(Gui);
 	SceneDocument.Detach(Tasks);
 	SceneTarget.reset();
 	Scene = std::make_unique<FSceneInstance>(*Session, Tasks, Assets, true);

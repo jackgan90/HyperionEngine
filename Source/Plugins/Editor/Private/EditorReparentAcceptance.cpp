@@ -1,4 +1,5 @@
 #include "EditorAcceptanceHarness.h"
+#include "Hyperion/SceneEditing/SceneAuthoring.h"
 #include <cmath>
 
 namespace Hyperion
@@ -120,8 +121,8 @@ void FEditorAcceptanceHarness::ExerciseReparentKeyboard(std::vector<FInputEvent>
 		RequireReparent(Editor.Selection == Scenario.ReparentExerciseNodes[1] && Editor.Selection.All().size() == 1,
 		                "keyboard activation of filtered Outliner row did not select object: " +
 		                    (Editor.Selection ? Editor.Scene->FindNode(*Editor.Selection)->Id : "none") +
-		                    " gesture=" + std::to_string(Editor.ReparentGesture.has_value()));
-		RequireReparent(!Editor.ReparentGesture && !Editor.Gui->DragPayload() &&
+		                    " gesture=" + std::to_string(Editor.Reparent.GetGesture().has_value()));
+		RequireReparent(!Editor.Reparent.GetGesture() && !Editor.Gui->DragPayload() &&
 		                    Editor.HistoryCursor == Scenario.ReparentExerciseHistory,
 		                "keyboard selection created a drag or history entry");
 	}
@@ -164,7 +165,7 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 	}
 	else if (Phase == 5 || Phase == 6 || Phase == 7)
 	{
-		RequireReparent(!Editor.ReparentGesture && !Editor.Gui->DragPayload(),
+		RequireReparent(!Editor.Reparent.GetGesture() && !Editor.Gui->DragPayload(),
 		                "viewport must not start hierarchy drag");
 		if (Phase == 5)
 		{
@@ -205,8 +206,8 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 	}
 	else if (Phase == 11)
 	{
-		RequireReparent(Editor.ReparentGesture.has_value(), "Outliner did not use viewport selection");
-		MoveReparent(InEvents, {Editor.ReparentGesture->Start.X + 20, Editor.ReparentGesture->Start.Y});
+		RequireReparent(Editor.Reparent.GetGesture().has_value(), "Outliner did not use viewport selection");
+		MoveReparent(InEvents, {Editor.Reparent.GetGesture()->Start.X + 20, Editor.Reparent.GetGesture()->Start.Y});
 	}
 	else if (Phase == 12)
 	{
@@ -214,7 +215,7 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 	}
 	else if (Phase == 13)
 	{
-		RequireReparent(Editor.ReparentGesture && Editor.ReparentGesture->bTargetPreview,
+		RequireReparent(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bTargetPreview,
 		                "Outliner target did not preview");
 		ReparentButton(InEvents, false);
 	}
@@ -232,7 +233,7 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 void FEditorAcceptanceHarness::ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents)
 {
 	const auto Case = Scenario.ReparentExerciseCase;
-	RequireReparent(Case == 7 || (Editor.ReparentGesture && Editor.ReparentGesture->bTargetPreview),
+	RequireReparent(Case == 7 || (Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bTargetPreview),
 	                "target did not preview case " + std::to_string(Case));
 	if (Case == 5 || Case == 6 || Case == 11)
 	{
@@ -298,13 +299,13 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 	}
 	else if (Scenario.ReparentExerciseStep == 3)
 	{
-		RequireReparent(Editor.ReparentGesture.has_value(),
+		RequireReparent(Editor.Reparent.GetGesture().has_value(),
 		                "press did not prepare source case " + std::to_string(Case));
-		MoveReparent(InEvents, {Editor.ReparentGesture->Start.X + 20, Editor.ReparentGesture->Start.Y});
+		MoveReparent(InEvents, {Editor.Reparent.GetGesture()->Start.X + 20, Editor.Reparent.GetGesture()->Start.Y});
 	}
 	else if (Scenario.ReparentExerciseStep == 4)
 	{
-		RequireReparent(Editor.ReparentGesture && Editor.ReparentGesture->bDragging, "drag did not start");
+		RequireReparent(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bDragging, "drag did not start");
 		RequireReparent(Editor.Selection.All().size() == (Case == 9    ? 1u
 		                                                  : Case == 10 ? 2u
 		                                                               : 3u),
@@ -351,7 +352,8 @@ void FEditorAcceptanceHarness::VerifyReparentExercise()
 {
 	const auto Case = Scenario.ReparentExerciseCase;
 	const bool bChanged = Case == 0 || Case == 1 || Case == 9 || Case == 10;
-	RequireReparent(!Editor.ReparentGesture && !Editor.Gui->DragPayload(), "gesture survived delivery/cancellation");
+	RequireReparent(!Editor.Reparent.GetGesture() && !Editor.Gui->DragPayload(),
+	                "gesture survived delivery/cancellation");
 	RequireReparent(Editor.HistoryCursor == Scenario.ReparentExerciseHistory + (bChanged ? 1 : 0),
 	                "unexpected history case " + std::to_string(Case) + " actual " +
 	                    std::to_string(Editor.HistoryCursor) + ": " + Editor.Error);
@@ -425,7 +427,11 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 		Editor.OpenScene(Editor.Options.ExerciseReparent.generic_string());
 		++Scenario.ReparentExerciseStep;
 	}
-	else if (Scenario.ReparentExerciseStep == 3)
+	else if (Scenario.ReparentExerciseStep >= 4 && Scenario.ReparentExerciseStep <= 6)
+	{
+		ExerciseReparentReplacement(InEvents);
+	}
+	else if (Scenario.ReparentExerciseStep == 3 || Scenario.ReparentExerciseStep == 7)
 	{
 		for (std::size_t Index = 0; Index < Scenario.ReparentExerciseIds.size(); ++Index)
 		{
@@ -443,7 +449,61 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 				                "saved world changed");
 			}
 		}
-		Scenario.bReparentVerified = true;
+		if (Scenario.ReparentExerciseStep == 3)
+		{
+			++Scenario.ReparentExerciseStep;
+		}
+		else
+		{
+			Scenario.bReparentVerified = true;
+		}
 	}
+}
+
+void FEditorAcceptanceHarness::ExerciseReparentReplacement(std::vector<FInputEvent>& InEvents)
+{
+	if (Scenario.ReparentExerciseStep == 4)
+	{
+		const auto Handle = Editor.Scene->FindHandle(Scenario.ReparentExerciseIds[0]);
+		const auto Name = Editor.Scene->FindNode(Handle)->Name + " replacement probe";
+		SetSceneMetadata(Editor.SceneDocument,
+		                 {Editor.SceneDocument.Id(), Editor.Scene->GetRevision(), {{Handle, Name, std::nullopt}}});
+		RequireReparent(Editor.HistoryCursor > 0 && Editor.IsDirty(), "replacement fixture needs real history");
+		Editor.SetSelection(FSceneSelection(Handle));
+		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[0])));
+		ReparentButton(InEvents, true);
+	}
+	else if (Scenario.ReparentExerciseStep == 5)
+	{
+		RequireReparent(Editor.Reparent.HasGesture(), "replacement fixture did not prepare a gesture");
+		const auto Start = Editor.Reparent.GetGesture()->Start;
+		MoveReparent(InEvents, {Start.X + 20, Start.Y});
+	}
+	else
+	{
+		RequireReparent(Editor.Reparent.IsDragging() && Editor.Gui->DragPayload(),
+		                "replacement fixture did not start a drag");
+		const auto History = Editor.HistoryCursor;
+		const auto HistorySize = Editor.History.size();
+		const auto Document = Editor.SceneDocument.Id();
+		bool bRejected = false;
+		try
+		{
+			Editor.LoadSceneDocument("/ReparentMissing/Invalid.hasset", true);
+		}
+		catch (const std::exception&)
+		{
+			bRejected = true;
+		}
+		RequireReparent(bRejected, "invalid scene mount did not fail synchronously");
+		RequireReparent(!Editor.Reparent.HasGesture() && !Editor.Gui->DragPayload(),
+		                "failed scene replacement retained the old gesture/payload");
+		RequireReparent(Editor.HistoryCursor == History && Editor.History.size() == HistorySize &&
+		                    Editor.SceneDocument.Id() == Document && Editor.IsDirty(),
+		                "failed load cleared domain history prematurely");
+		Editor.LoadSceneDocument(Editor.Options.ExerciseReparent.generic_string(), true);
+		ReparentButton(InEvents, false);
+	}
+	++Scenario.ReparentExerciseStep;
 }
 } // namespace Hyperion

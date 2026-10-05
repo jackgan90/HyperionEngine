@@ -11,6 +11,7 @@
 - [运行应用附着：连接、live scene、平台与设备扩展](AutomationConnections.md)
 - [静态插件、生命周期与扩展](PluginSystem.md)（应用组合、插件与功能接入的必读契约）
 - [代码规范](CodingStyle.md)、[源码组织](SourceLayout.md)、[架构契约](Architecture.md)
+- [当前架构所有者与配置依赖验证](ArchitectureOwnership.md)
 - [锁定依赖](Dependencies.md)、[功能范围与扩展边界](Roadmap.md)
 - [性能分析工具](Profiling.md)、[RenderDoc 抓帧](RenderDoc.md)
 

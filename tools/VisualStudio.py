@@ -136,7 +136,8 @@ def main():
         configure.append("-DHYP_ENABLE_TRACY=" + ("ON" if args.tracy else "OFF"))
     if args.fresh:
         configure.append("--fresh")
-    run(configure, environment)
+    run([sys.executable, ROOT / "tools/TargetGraph.py", "--cmake", cmake,
+         "--build-dir", directory, "--", *configure[1:]], environment)
     if not solution.is_file():
         raise RuntimeError(f"CMake did not produce the expected solution: {solution}")
     if args.build or args.test:

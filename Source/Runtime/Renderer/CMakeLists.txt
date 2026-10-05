@@ -55,7 +55,7 @@ target_sources(hyperion_render PRIVATE Private/RenderGraphBuffers.cpp)
 target_sources(hyperion_render PRIVATE Private/ComputePass.cpp Private/ComputeResources.cpp)
 target_sources(hyperion_render PRIVATE Private/HierarchicalDepth.cpp)
 target_sources(hyperion_render PRIVATE Private/ContactShadows.cpp Private/ScenePipelineContactShadows.cpp)
-target_link_libraries(hyperion_render PUBLIC hyperion_platform hyperion_rhi hyperion_tasks hyperion_plugins hyperion_config hyperion_scene hyperion_math hyperion_materials hyperion_shaders hyperion_reflection PRIVATE hyperion_core hyperion_assets hyperion_io)
+target_link_libraries(hyperion_render PUBLIC hyperion_platform hyperion_rhi hyperion_tasks hyperion_plugins hyperion_config hyperion_scene hyperion_math hyperion_materials hyperion_shaders hyperion_reflection hyperion_assets PRIVATE hyperion_core hyperion_io)
 
 target_sources(hyperion_render PRIVATE Private/RenderFeatures.cpp Private/ProfilingHud.cpp)
 

@@ -140,6 +140,7 @@ private:
 	bool ExerciseViewportChoices(std::vector<FInputEvent>& InEvents);
 	void ExerciseRenderControlsInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparent(std::vector<FInputEvent>& InEvents);
+	void ExerciseReparentReplacement(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentDrag(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents);

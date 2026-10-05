@@ -9,6 +9,7 @@
 #include "EditorInteraction.h"
 #include "EditorInteractionPolicy.h"
 #include "EditorOptions.h"
+#include "EditorReparentController.h"
 #include "EditorSelection.h"
 #include "EditorShortcuts.h"
 #include "EditorViewport.h"
@@ -62,7 +63,8 @@ class FEditorPlugin final : public FPlugin,
                             public IShadowControls,
                             public ISceneLightControls,
                             public IProfilingControl,
-                            public IApplicationClose
+                            public IApplicationClose,
+                            private IEditorReparentActions
 {
 public:
 	FEditorPlugin(FEditorOptions InOptions, FPluginContext& InContext);
@@ -157,7 +159,7 @@ private:
 	bool IsDocumentInteractionBusy() const;
 	FEditorInteractionPolicy CaptureInteractionPolicy() const;
 	void InitializeSceneDocument();
-	void UpdateDocumentInteraction();
+	void UpdateDocumentInteraction() override;
 	void EnsureAssetWindow();
 	void CloseAssetWindow();
 	bool IsAuxiliaryWindowBlocked() const;
@@ -188,10 +190,9 @@ private:
 	void ShowOpenScene();
 	void DrawMenus();
 	void DrawEditMenu();
-	void BeginReparentGesture(FSceneHandle InHandle, FVec4 InBounds);
+	void BeginReparentDrag() override;
 	void UpdateReparentGesture(std::span<const FInputEvent> InEvents);
 	void CancelReparentGesture();
-	void DrawReparentTarget(std::optional<FSceneHandle> InParent);
 	void DrawReparentRoot();
 	void FinishReparentGesture();
 	void RouteReparentRow(FSceneHandle InHandle, bool bInActivated = false);
@@ -246,7 +247,7 @@ private:
 	void RouteCamera(float InDelta, std::span<const FInputEvent> InEvents);
 	void RouteFrameSelectionShortcut(std::span<const FInputEvent> InEvents);
 	void RouteSelectAllShortcut(std::span<const FInputEvent> InEvents);
-	void ClickOutlinerObject(FSceneHandle InHandle, bool bInToggle, bool bInRange);
+	void ClickOutlinerObject(FSceneHandle InHandle, bool bInToggle, bool bInRange) override;
 	void DrawViewportOverlays();
 	void Render(FGuiDrawData InGui, bool bInCapture);
 	std::shared_ptr<FSelectionOutlineRequest> MakeSelectionOutline(
@@ -283,7 +284,7 @@ private:
 	bool DrawComponent(const FSceneNodeView& InView, const FSceneComponent& InComponent, std::uint64_t InRevision);
 	void CommitEdit(FSceneHandle InHandle, FSceneNode InCandidate, std::uint64_t InExpectedRevision,
 	                std::uint64_t InInteraction = 0);
-	void FinishInspectorEdit();
+	void FinishInspectorEdit() override;
 	void RouteHistoryShortcuts(std::span<const FInputEvent> InEvents);
 	FEditorShortcutInteraction CaptureShortcutInteraction(std::span<const FInputEvent> InEvents) const;
 	void RouteClipboardShortcuts(std::span<const FInputEvent> InEvents);
@@ -302,10 +303,10 @@ private:
 	void BeginBenchmarkTiming();
 	void FinishFrameTiming(std::uint64_t InStarted, bool bInSceneReady);
 	void CancelDiscardAction();
-	void SelectObject(std::optional<FSceneHandle> InHandle);
+	void SelectObject(std::optional<FSceneHandle> InHandle) override;
 	void CommitEdits(std::vector<FSceneNodeEdit> InEdits, std::uint64_t InExpectedRevision,
 	                 std::uint64_t InInteraction = 0);
-	void SetSelection(FEditorSelection InSelection);
+	void SetSelection(FEditorSelection InSelection) override;
 	void ClickObject(std::optional<FSceneHandle> InHandle, bool bInToggle);
 	void DrawSelectionMarkers();
 	void PruneSelection();
@@ -415,13 +416,10 @@ private:
 
 	std::optional<FViewportClick> ViewportClick;
 
-	std::optional<FReparentGesture> ReparentGesture;
+	FEditorReparentController Reparent;
 	FOutlinerSelectionState OutlinerSelection;
 	std::vector<FSceneHandle> OutlinerRows;
 	std::string OutlinerSelectionFilter;
-	std::optional<std::optional<FSceneHandle>> ReparentDrop;
-	std::unordered_set<std::string> ReparentOpenNodes;
-	std::uint64_t ReparentSerial{};
 	std::string OpenPath;
 	std::unique_ptr<FContentBrowser> Browser;
 	std::optional<TAsyncResult<FAssetHeader>> PendingAssetOpen;

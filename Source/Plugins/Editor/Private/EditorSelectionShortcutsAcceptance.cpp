@@ -312,7 +312,7 @@ void FEditorAcceptanceHarness::ExerciseSelectionTree(std::vector<FInputEvent>& I
 			ShortcutMouse(InEvents, Miss, true);
 			break;
 		case 52:
-			RequireShortcut(Editor.ReparentGesture && Editor.ReparentGesture->bDragging,
+			RequireShortcut(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bDragging,
 			                "Shift gesture did not enter drag arbitration");
 			ShortcutKey(InEvents, EKey::Escape);
 			ShortcutKey(InEvents, EKey::Delete);
@@ -323,8 +323,9 @@ void FEditorAcceptanceHarness::ExerciseSelectionTree(std::vector<FInputEvent>& I
 			break;
 		case 54:
 			CheckShortcutSelection({0, 1, 3});
-			RequireShortcut(!Editor.ReparentGesture && Editor.Scene->FindNode(Scenario.ShortcutObjects[2])->Parent() ==
-			                                               Editor.Scene->FindNode(Scenario.ShortcutObjects[1])->Id,
+			RequireShortcut(!Editor.Reparent.GetGesture() &&
+			                    Editor.Scene->FindNode(Scenario.ShortcutObjects[2])->Parent() ==
+			                        Editor.Scene->FindNode(Scenario.ShortcutObjects[1])->Id,
 			                "cancelled Shift gesture reparented nodes");
 			Editor.SelectObject(Scenario.ShortcutObjects[0]);
 			Editor.Gui->FocusWindow("Content Browser");

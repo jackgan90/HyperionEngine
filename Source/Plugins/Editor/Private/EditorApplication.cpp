@@ -122,6 +122,7 @@ void FEditorPlugin::LoadSceneDocument(const std::string& InPath, bool bInDiscard
 		throw FSceneEditError(SceneEditErrors::DirtyDocument,
 		                      "Save the scene or explicitly discard changes before opening another scene");
 	}
+	Reparent.Reset(Gui);
 	Viewport.ResetNavigation();
 	FrozenCullingView.reset();
 	Selection.Clear();
@@ -174,6 +175,7 @@ void FEditorPlugin::Shutdown()
 	{
 		return;
 	}
+	Reparent.Reset(Gui);
 	CancelContentRequests();
 	if (Gui)
 	{

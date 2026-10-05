@@ -4,6 +4,7 @@ add_library(hyperion_editor_plugin STATIC
   Private/AssetImportPanel.cpp
   Private/ImportPreviewPanel.cpp Private/ImportPreviewProperties.cpp
   Private/EditorStructure.cpp
+  Private/EditorReparentController.cpp
   Private/EditorRenderSettings.cpp
   Private/EditorLightControls.cpp
   Private/EditorRenderSettingsGui.cpp
@@ -77,6 +78,12 @@ if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
+  add_executable(editor_reparent_controller_tests Private/EditorReparentControllerTests.cpp Private/EditorReparentController.cpp)
+  hyp_executable(editor_reparent_controller_tests)
+  target_include_directories(editor_reparent_controller_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
+  target_link_libraries(editor_reparent_controller_tests PRIVATE hyperion_gui hyperion_scene_editing)
+  set_target_properties(editor_reparent_controller_tests PROPERTIES FOLDER "Hyperion/Tests")
+  add_test(NAME editor_reparent_controller COMMAND editor_reparent_controller_tests)
   add_executable(editor_capture_options_tests Private/CaptureExerciseTests.cpp)
   hyp_executable(editor_capture_options_tests)
   target_link_libraries(editor_capture_options_tests PRIVATE hyperion_editor_plugin hyperion_render hyperion_platform)

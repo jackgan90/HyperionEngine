@@ -14,8 +14,8 @@ FEditorInteractionPolicy FEditorPlugin::CaptureInteractionPolicy() const
 	Facts.bSavingClose = Transition.IsSavingClose();
 	Facts.bBenchmark = !Options.Benchmark.empty();
 	Facts.bFinished = bFinished;
-	Facts.bReparentPending = ReparentGesture.has_value();
-	Facts.bReparentDragging = ReparentGesture && ReparentGesture->bDragging;
+	Facts.bReparentPending = Reparent.HasGesture();
+	Facts.bReparentDragging = Reparent.IsDragging();
 	Facts.bPlacement = Placement.IsActive();
 	Facts.bPlacementUsedMouse = bPlacementUsedMouse;
 	Facts.bGizmoDragging = Gizmo.IsDragging();

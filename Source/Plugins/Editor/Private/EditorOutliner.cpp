@@ -43,7 +43,7 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 		Gui->NextRow();
 		Gui->NextColumn();
 		bool bClicked{};
-		if (ReparentOpenNodes.erase(Node->Id))
+		if (Reparent.ConsumeExpansion(Node->Id))
 		{
 			Gui->OpenNextTreeItem();
 		}
