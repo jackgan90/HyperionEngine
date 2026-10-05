@@ -36,7 +36,7 @@ target_sources(hyperion_render PRIVATE Private/SceneViewport.cpp Private/Viewpor
 target_sources(hyperion_render PRIVATE Private/SceneFraming.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderOutput.cpp)
 target_sources(hyperion_render PRIVATE Private/RenderCaptureControl.cpp)
-target_sources(hyperion_render PRIVATE Private/RenderDiagnostics.cpp)
+target_sources(hyperion_render PRIVATE Private/RenderDiagnostics.cpp Private/FrameTiming.cpp)
 target_sources(hyperion_render PRIVATE Private/ShadowControls.cpp)
 target_sources(hyperion_render PRIVATE Private/SceneLightControls.cpp)
 target_sources(hyperion_render PRIVATE Private/SceneEditTarget.cpp)

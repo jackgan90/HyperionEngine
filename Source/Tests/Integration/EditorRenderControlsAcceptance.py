@@ -1,6 +1,7 @@
 """Rendering HUD GUI parity and scene-owned light shadow persistence."""
 import copy
 import json
+import math
 import pathlib
 import subprocess
 import sys
@@ -112,6 +113,47 @@ def viewport_controls(agent):
     assert ready(agent)["revision"] == original["revision"] and not ready(agent)["dirty"]
 
 
+def frame_interval_statistics(agent, output):
+    definition = agent.request("api.describe", {"operation": "render.statistics"})
+    properties = definition["outputSchema"]["properties"]
+    assert "frameIntervalMilliseconds" in properties and "frameIntervalStatistics" in properties
+    schema = agent.request("types.describe", {"type": "hyperion.diagnostics.frameintervalstatistics"})
+    assert set(schema["properties"]) == {
+        "targetWindowMilliseconds", "coveredMilliseconds", "sampleCount", "averageMilliseconds",
+        "framesPerSecond", "lastMilliseconds", "p95Milliseconds", "maxMilliseconds",
+        "longFrameThresholdMilliseconds", "longFrameCount", "capacityLimited"}, schema
+    original = completed(agent.call("view.get"))
+    document = version(agent)
+    profiling = completed(agent.call("profiling.get"))
+    snapshots = []
+    for visible in (False, True):
+        completed(agent.call("view.set", **document,
+                             options={"profilingHud": visible, "profilingCategories": 1}))
+        # Wait with no statistics polling, including a full window while the HUD is closed.
+        time.sleep(1.1)
+        observed = completed(agent.call("application.health"))
+        time.sleep(.25)
+        stats = completed(agent.call("render.statistics"))
+        timing = stats["frameIntervalStatistics"]
+        count = int(timing["sampleCount"])
+        assert count > 1 and timing["targetWindowMilliseconds"] == 1000, timing
+        assert count >= int(stats["frame"]) - int(observed["frame"]), stats
+        assert timing["coveredMilliseconds"] >= 1000 and not timing["capacityLimited"], timing
+        assert math.isclose(timing["averageMilliseconds"] * count, timing["coveredMilliseconds"]), timing
+        assert math.isclose(timing["framesPerSecond"] * timing["averageMilliseconds"], 1000), timing
+        assert timing["lastMilliseconds"] == stats["frameIntervalMilliseconds"], stats
+        assert 0 < timing["p95Milliseconds"] <= timing["maxMilliseconds"], timing
+        assert 0 < timing["lastMilliseconds"] <= timing["maxMilliseconds"], timing
+        assert 0 <= int(timing["longFrameCount"]) <= count, timing
+        assert math.isclose(timing["longFrameThresholdMilliseconds"], 1000 / 60), timing
+        assert version(agent) == document and not ready(agent)["dirty"]
+        assert completed(agent.call("profiling.get"))["mask"] == profiling["mask"]
+        snapshots.append({"hudVisible": visible, "statistics": stats})
+    completed(agent.call("view.set", **document, options=original["options"]))
+    assert completed(agent.call("view.get")) == original
+    (output / "FrameTiming.json").write_text(json.dumps(snapshots, indent=2), encoding="utf-8")
+
+
 def author_shadows(agent, output):
     schema = agent.request("types.describe", {"type": LIGHT})
     assert "shadowSettings" in schema["properties"], schema
@@ -176,6 +218,7 @@ def automation(cli, editor, root, output):
     try:
         agent = AttachedSession(cli, app.target(), True)
         viewport_controls(agent)
+        frame_interval_statistics(agent, output)
         path, expected = author_shadows(agent, output)
         completed(agent.call("application.close.request"))
         app.finish()

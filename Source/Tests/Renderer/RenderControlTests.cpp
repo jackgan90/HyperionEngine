@@ -14,6 +14,7 @@ using namespace Hyperion;
 
 void RunViewDiagnosticsTests(const std::filesystem::path& InCaptureDirectory);
 void RunViewportChoiceTests();
+void RunFrameTimingTests();
 
 namespace
 {
@@ -336,6 +337,7 @@ int main(int InCount, char** InArguments)
 		RunViewportChoiceTests();
 		ClipLines();
 		TimingIdentity();
+		RunFrameTimingTests();
 		RunViewDiagnosticsTests({});
 		std::cout << "Render settings, clipped diagnostics and timing identity passed\n";
 	}

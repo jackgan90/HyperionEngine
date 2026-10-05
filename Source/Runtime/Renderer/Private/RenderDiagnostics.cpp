@@ -196,6 +196,7 @@ template<> const FRecordDescriptor& RecordType<FRenderDiagnostics>()
 	     Member("gpuPassMilliseconds", &FRenderDiagnostics::GpuPassMilliseconds),
 	     Member("gpuTimingFrame", &FRenderDiagnostics::GpuTimingFrame),
 	     Member("frameIntervalMilliseconds", &FRenderDiagnostics::FrameIntervalMilliseconds),
+	     Member("frameIntervalStatistics", &FRenderDiagnostics::FrameIntervalStatistics),
 	     Member("trackedCpuBytes", &FRenderDiagnostics::TrackedCpuBytes),
 	     Member("executedTasks", &FRenderDiagnostics::ExecutedTasks)});
 	return Type;

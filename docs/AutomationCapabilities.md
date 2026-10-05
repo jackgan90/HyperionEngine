@@ -106,7 +106,7 @@
 - `application.close.status/request` 由 Editor 发布正常关闭服务。action 为 0（默认：拒绝未保存内容）、1（保存后退出）、2（明确丢弃后退出）、3（取消退出，不取消已接收保存）。Editor 未命名脏场景保存退出须提供 scenePath。
 - 未发布导入属性修改参与 close 的 dirty 与内容根保护；action=1 拒绝 dirty 导入草稿，须先 submit 或显式 discard，action=2 明确丢弃。准备/发布中的草稿参与 busy；正常退出按插件生命周期排空工作。
 - close.request 返回的是接受状态，不是进程已经退出；保存期间状态为 saving，失败为 failed 并保留应用。成功后目标正常排空、撤回发现记录并断开连接。关闭时最多排空应答 2 秒；断连/强杀不保证远端收到应答，不应自动重试破坏性请求。
-- `render.statistics` 同时返回帧间隔、CPU hooked bytes 和按执行域累计任务数，GUI 使用同一快照；这些是诊断计数，不代表操作耗时或进程全部内存。
+- `render.statistics` 同时返回帧间隔、CPU hooked bytes 和按执行域累计任务数，GUI 使用同一快照；这些是诊断计数，不代表操作耗时或进程全部内存。`frameIntervalMilliseconds` 保留原始最近一帧间隔；新增反射结果 `frameIntervalStatistics` 与 HUD Overview 共用逐帧采集的约 1 秒窗口，包含目标/实际覆盖时间、样本数、平均 ms、吞吐 FPS、Last/P95/Max、超过明确阈值 1000/60 ms 的帧数及容量受限标记。HUD 关闭或 Tracy 未编入时仍采集，不修改场景历史；窗口与测量边界见 [渲染诊断](RenderDiagnostics.md)。
 
 ## 新功能维护方式
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Reflection/RecordValue.h"
+#include "Hyperion/Renderer/FrameTiming.h"
 #include "Hyperion/Renderer/RenderPipelineFrame.h"
 #include "Hyperion/Renderer/SceneDiagnostics.h"
 
@@ -25,6 +26,7 @@ struct FRenderDiagnostics
 	std::map<std::string, double> GpuPassMilliseconds;
 	std::uint64_t GpuTimingFrame{};
 	double FrameIntervalMilliseconds{};
+	FFrameIntervalStatistics FrameIntervalStatistics;
 	std::uint64_t TrackedCpuBytes{};
 	std::map<std::string, std::uint64_t> ExecutedTasks;
 };

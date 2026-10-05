@@ -96,8 +96,14 @@ std::vector<std::string> ProfilingLines(const FRenderDiagnostics& InData, EProfi
 	std::vector<std::string> Lines;
 	if (HasProfilingHudCategory(InMask, EProfilingHudCategory::Overview))
 	{
-		const auto Time = InData.FrameIntervalMilliseconds;
-		Lines = {"OVERVIEW", Number(Time) + " ms  |  " + Number(Time > 0 ? 1000 / Time : 0) + " FPS",
+		const auto& Timing = InData.FrameIntervalStatistics;
+		Lines = {"OVERVIEW",
+		         "Avg " + Number(Timing.AverageMilliseconds) + " ms  |  " + Number(Timing.FramesPerSecond) + " FPS",
+		         "Window " + Number(Timing.CoveredMilliseconds / 1000.0) + " s / " +
+		             std::to_string(Timing.SampleCount) + " frames" + (Timing.bCapacityLimited ? " (capacity)" : ""),
+		         "Last " + Number(Timing.LastMilliseconds) + " ms  |  P95 " + Number(Timing.P95Milliseconds) + " ms",
+		         "Max " + Number(Timing.MaxMilliseconds) + " ms  |  >" + Number(Timing.LongFrameThresholdMilliseconds) +
+		             " ms: " + std::to_string(Timing.LongFrameCount),
 		         "Frame " + std::to_string(InData.Frame) + " / GPU " + std::to_string(InData.GpuTimingFrame),
 		         "CPU tracked " + Number(double(InData.TrackedCpuBytes) / 1048576) + " MiB",
 		         "Scene targets " + Number(double(InData.Pipeline.SceneTargetBytes) / 1048576) + " MiB"};

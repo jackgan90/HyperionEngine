@@ -138,6 +138,8 @@ private:
 	std::string ProfilingError;
 	FVec4 ProfilingOptionsAnchor;
 	double FrameIntervalMilliseconds{};
+	FFrameTimingWindow FrameTiming;
+	bool bHasFrameInterval{};
 	void DrawDebugBounds();
 	void StartSaveBeforeClose(const std::string& InPath);
 	void DiscardBeforeClose();

@@ -106,7 +106,9 @@ void RegisterRenderDiagnostics(FOperationCatalog& InCatalog, IRenderDiagnostics*
 	Info.Summary = "Read completed rendering and device statistics";
 	Info.Description =
 	    "Detailed completed pipeline snapshots: views, culling, batches, lighting, allocations and GPU timing. Prefer "
-	    "application.health for readiness/errors. GPU timing may lag; gpuTimingFrame identifies its sample.";
+	    "application.health for readiness/errors. GPU timing may lag; gpuTimingFrame identifies its sample. "
+	    "frameIntervalMilliseconds is the last update-start interval; frameIntervalStatistics contains the rolling "
+	    "one-second mean/throughput, actual coverage, P95, maximum and count above its explicit long-frame threshold.";
 	InCatalog.Register(
 	    MakeOperation<FSceneInfoRequest, FRenderDiagnostics>(Info,
 	                                                         [InDiagnostics](const auto&)

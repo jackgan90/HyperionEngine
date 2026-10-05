@@ -245,6 +245,11 @@ FGuiDrawData FEditorPlugin::DrawMainWindow(float InDelta, std::span<const FInput
 bool FEditorPlugin::AdvanceFrame(float InDelta)
 {
 	FrameIntervalMilliseconds = InDelta * 1000.0;
+	if (bHasFrameInterval)
+	{
+		FrameTiming.Record(FrameIntervalMilliseconds);
+	}
+	bHasFrameInterval = true;
 	const bool bMainDrawable = !Window->Minimized() && Window->PixelSize().Width && Window->PixelSize().Height;
 	const bool bSceneReady = Scene->GetStatus().bReady;
 	const auto ProfileFrameIndex = Options.Benchmark.empty() ? FrameCount : ReadyFrames;

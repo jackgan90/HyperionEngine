@@ -33,6 +33,7 @@ FRenderDiagnostics FEditorPlugin::RenderDiagnostics()
 	Result.bReady = Health.bReady;
 	Result.SceneError = Health.Error;
 	Result.Pipeline = RenderStats;
+	Result.FrameIntervalStatistics = FrameTiming.Snapshot();
 	FDeviceStats Snapshot;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 	                          [&]
