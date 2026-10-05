@@ -897,8 +897,11 @@ void CheckPluginPendingEditShutdown()
 }
 } // namespace
 
+void CheckAssetFieldSubmissions();
+
 void CheckAssetWorkflowAdapters()
 {
+	CheckAssetFieldSubmissions();
 	CheckFieldEffectBaseline();
 	CheckReferencePolicyFailures();
 	CheckReferenceEffects();

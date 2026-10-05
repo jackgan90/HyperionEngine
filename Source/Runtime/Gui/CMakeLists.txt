@@ -1,6 +1,7 @@
 add_library(hyperion_gui STATIC Private/Adapters/Gui.cpp Private/Adapters/GuiDocking.cpp Private/Adapters/GuiWidgets.cpp Private/GuiInspection.cpp)
 hyp_module(hyperion_gui)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiTextRows.cpp)
+target_sources(hyperion_gui PRIVATE Private/Adapters/GuiCombo.cpp)
 target_sources(hyperion_gui PRIVATE Private/Adapters/GuiImageText.cpp)
 target_sources(hyperion_gui PRIVATE Private/PathDisplay.cpp)
 target_sources(hyperion_gui PRIVATE Private/GuiSelectionInspection.cpp Private/Adapters/GuiMixed.cpp)

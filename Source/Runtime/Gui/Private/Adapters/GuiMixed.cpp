@@ -14,8 +14,7 @@ bool FGui::EditMixedScalar(FArchiveNode& InValue, const FRecordValueShape& InSha
 		auto Index = bInMixed
 		                 ? InPresentation.Choices.size()
 		                 : PropertyChoiceIndex(InPresentation.Choices, InValue).value_or(InPresentation.Choices.size());
-		if (Combo(Label, PropertyChoiceLabels(InPresentation.Choices), Index, {},
-		          bInMixed ? "Multiple Values" : nullptr))
+		if (Combo(Label, InPresentation.Choices, Index, {}, bInMixed ? "Multiple Values" : nullptr))
 		{
 			InValue = InPresentation.Choices.at(Index).Value;
 			return true;

@@ -53,9 +53,11 @@ void ModelTree(FGui& InGui, const std::vector<FModelNode>& InNodes, std::uint32_
 void FAssetWorkspace::EditField(FGui& InGui, FEntry& InEntry, const FAssetFieldPolicy& InPolicy,
                                 const std::function<bool()>& InWidget, const std::function<FArchiveNode()>& InValue)
 {
+	InGui.BeginDisabled(InEntry.HasPendingEdit());
 	FAssetLiveEditScope Editing(InGui);
 	const bool bChanged = InWidget();
 	const auto Interaction = Editing.Finish();
+	InGui.EndDisabled();
 	if (Interaction.ActiveInteraction)
 	{
 		InEntry.GuiInteraction = Interaction.ActiveInteraction;
@@ -68,7 +70,7 @@ void FAssetWorkspace::EditField(FGui& InGui, FEntry& InEntry, const FAssetFieldP
 		}
 		else
 		{
-			CommitAssetField(*InEntry.Document, InPolicy.Field(), InValue(), Interaction.ChangedInteraction);
+			SubmitFieldEdit(InEntry, InPolicy.Field(), InValue(), Interaction.ChangedInteraction);
 		}
 	}
 }
@@ -99,7 +101,9 @@ void FAssetWorkspace::DrawProperties(FGui& InGui)
 	auto& Document = *Entry.Document;
 	const auto& Header = Document.Loaded().Header;
 	const auto PreviousInteraction = std::exchange(Entry.GuiInteraction, 0);
-	InGui.BeginDisabled(Entry.bReadOnly || Entry.HasPendingEdit());
+	const bool bContinue =
+	    Entry.EditWorkflow && Entry.EditWorkflow->CanContinueInteraction() && !Entry.EditingParameter.empty();
+	InGui.BeginDisabled(Entry.bReadOnly || (Entry.HasPendingEdit() && !bContinue));
 	try
 	{
 		InGui.Text("Asset properties");
@@ -172,11 +176,7 @@ void FAssetWorkspace::DrawProperties(FGui& InGui)
 	{
 		InGui.Text("Preparing asset edit...");
 	}
-	if (PreviousInteraction && InGui.PointerState().bCancel)
-	{
-		Document.CancelInteraction(PreviousInteraction);
-		InGui.FinishEditing();
-	}
+	UpdateFieldInteraction(InGui, Entry, PreviousInteraction);
 	if (!Document.Error.empty())
 	{
 		InGui.TextWrapped(Document.Error);
@@ -209,9 +209,9 @@ void FAssetWorkspace::DrawModelProperties(FGui& InGui, FEntry& InEntry)
 		{
 			if (EditReference(InGui, ("Slot " + std::to_string(I)).c_str(), Slots[I], RecordType<FMaterialAsset>().Id))
 			{
-				CommitReferenceEdit(
-				    InEntry, ResolveAssetFieldPolicy(*Document.Loaded().Type, &FModelAsset::MaterialSlots).Field(),
-				    WriteValue(Slots));
+				SubmitFieldEdit(InEntry,
+				                ResolveAssetFieldPolicy(*Document.Loaded().Type, &FModelAsset::MaterialSlots).Field(),
+				                WriteValue(Slots));
 			}
 		}
 	}

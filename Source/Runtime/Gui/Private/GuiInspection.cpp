@@ -55,7 +55,7 @@ bool EditScalar(FGui& InGui, FArchiveNode& InValue, const FRecordValueShape& InS
 	if (!InPresentation.Choices.empty())
 	{
 		auto Index = PropertyChoiceIndex(InPresentation.Choices, InValue).value_or(InPresentation.Choices.size());
-		if (InGui.Combo(Name.c_str(), PropertyChoiceLabels(InPresentation.Choices), Index))
+		if (InGui.Combo(Name.c_str(), InPresentation.Choices, Index))
 		{
 			InValue = InPresentation.Choices.at(Index).Value;
 			return true;

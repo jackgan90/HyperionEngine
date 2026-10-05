@@ -120,6 +120,7 @@ private:
 		std::optional<FReferenceSelection> ReferenceEdit;
 		bool bSaveRequested{};
 		std::uint64_t GuiInteraction{};
+		std::string EditingParameter;
 		bool bReadOnly{};
 		std::optional<TAsyncResult<FPrepared>> Pending;
 		FCancellationToken Cancellation;
@@ -163,7 +164,9 @@ private:
 	                  FCancellationToken InCancellation, std::shared_ptr<const FSceneModelData> InExisting);
 	void PollEntry(FEntry& InEntry);
 	void PollEditWorkflow(FEntry& InEntry);
-	void CommitReferenceEdit(FEntry& InEntry, const FRecordMemberIdentity& InField, FArchiveNode InCandidate);
+	void SubmitFieldEdit(FEntry& InEntry, const FRecordMemberIdentity& InField, FArchiveNode InCandidate,
+	                     std::uint64_t InInteraction = 0);
+	void UpdateFieldInteraction(FGui& InGui, FEntry& InEntry, std::uint64_t InPreviousInteraction);
 	void Publish(FEntry& InEntry, const FPrepared& InPrepared);
 	void Close(FEntry& InEntry);
 	void DrawPreview(FGui& InGui, FEntry& InEntry, float InDelta, std::span<const FInputEvent> InEvents);

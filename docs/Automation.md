@@ -227,6 +227,10 @@ RenderDoc HUD 的 `renderdoc.hud.get/set` 与 Editor preference 共用领域操�
 
 纹理编码和资产引用异步编辑由 Runtime/AssetEditing 的 `FAssetEditWorkflow` 统一 admission、准备快照、busy 状态和 Main 事务提交；Editor workspace 和独立/附着 automation 使用同一工作流。完成时重新核对文档身份、资产身份和 generation，失败或过期结果不修改草稿、历史或磁盘。关闭和 quiesce 在释放捕获状态前汇合任务，Drain 不提交准备结果；成功编辑仍需显式 `asset.save`。
 
+Editor 的字段提交使用 `SubmitField`，由共享字段准备结果决定同步提交或异步引用图校验；首次复制含纹理的复合默认值也必须校验引用。异步提交携带 GUI interaction，保留同一手势的历史合并，并在手势结束后关闭合并；取消会回滚该手势已提交的编辑并丢弃迟到结果。自动化字段 setter 继续使用 `Field` 的异步 job 契约，操作 ID、schema 和 generation 不变。
+
+准备期间，同一字段和 interaction 可通过 `UpdateField` 更新已校验的候选值，但引用要求必须保持相同；在途图加载不会被替换。Editor 借用候选值保持原材质参数的 live 输入，其他字段、引用选择和 reset 保持 busy。候选不属于文档 authority，图校验完成后才提交最新值；取消、失败和关闭均不发布候选。
+
 资产属性的 `RegisterField<Member>` 从同一个实际 C++ 成员推导值 schema，并通过 AssetEditing 的 `ResolveAssetFieldPolicy` 取得规范类型/字段身份与访问路由，回调按值保存身份。只有普通字段策略注册泛型 set；图元和纹理编码保持专用操作，其余字段只读。注册不另收字段目标字符串或可写布尔值。外部 operation stem 仍显式声明，例如 `model.material_slots` 对应持久化字段 `materialSlots`；operation ID、schema、分页和 generation 契约保持稳定。
 
 GUI、独立和附着 automation 共用字段校验、规范化、引用图准备与文档提交。调用方不选择预览影响：`model.nodes.set` 仅修改节点名称时与 GUI 一样保留预览，修改 Local 时使预览失效；材质值规范化后未变、相同引用及相同编码数据也不重复使预览失效。上述提交仍保留原有 generation、dirty、Undo/Redo 和保存语义。直接领域提交拒绝需要异步验证的引用，编码的完整草稿替换保持在专用工作流内部。

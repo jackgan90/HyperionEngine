@@ -53,7 +53,7 @@ if(BUILD_TESTING)
   target_link_libraries(automation_scene_tests PRIVATE hyperion_automation_plugin hyperion_scene_editing hyperion_render)
   add_test(NAME automation_scene COMMAND automation_scene_tests)
   add_executable(automation_asset_tests Private/AssetOperationTests.cpp Private/MaterialNumericTests.cpp
-    Private/AssetWorkflowTests.cpp)
+    Private/AssetWorkflowTests.cpp Private/AssetFieldSubmissionTests.cpp)
   hyp_executable(automation_asset_tests)
   target_link_libraries(automation_asset_tests PRIVATE hyperion_automation_plugin hyperion_asset_editing hyperion_application
     hyperion_assets hyperion_content hyperion_scene hyperion_io hyperion_textures)

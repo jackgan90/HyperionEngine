@@ -36,6 +36,7 @@ void FSceneStorage::FMutation::StageNode(std::uint32_t InSlot, FSceneNode InNode
 	{
 		Mask |= ESceneChangeMask::Enabled;
 	}
+	ComponentCandidates.insert(InSlot);
 	Edit(InSlot).Node = std::move(InNode);
 	if (bParentChanged)
 	{

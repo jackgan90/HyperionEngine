@@ -153,7 +153,7 @@ if(BUILD_TESTING)
   target_link_libraries(editor_import_choices_tests PRIVATE hyperion_asset_import hyperion_platform)
   set_target_properties(editor_import_choices_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_import_choices COMMAND editor_import_choices_tests)
-  add_executable(editor_asset_workspace_tests Private/AssetWorkspaceTests.cpp)
+  add_executable(editor_asset_workspace_tests Private/AssetWorkspaceTests.cpp Private/AssetMaterialInteractionTests.cpp)
   hyp_executable(editor_asset_workspace_tests)
   target_sources(editor_asset_workspace_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/Source/Tests/Renderer/AssetWorkspaceTests.cpp"

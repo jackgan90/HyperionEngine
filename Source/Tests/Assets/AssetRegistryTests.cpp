@@ -56,6 +56,7 @@ class FRangeFiles final : public IFileSystem
 public:
 	FLocalFileSystem Local;
 	std::size_t RangeBytes{};
+	std::size_t RangeCalls{};
 	std::size_t RangeLimit{};
 
 	FBytes Read(const std::filesystem::path&, std::size_t) override
@@ -67,6 +68,7 @@ public:
 	{
 		HYP_CHECK(InOffset <= RangeLimit && InSize <= RangeLimit - InOffset);
 		RangeBytes += InSize;
+		++RangeCalls;
 		return Local.ReadRange(InPath, InOffset, InSize);
 	}
 
@@ -96,6 +98,7 @@ void CheckMetadata()
 	HYP_CHECK(Found.Errors.empty() && Found.Entries.size() == 1);
 	HYP_CHECK(Serialize(Found.Entries.front().Header) == Serialize(Encoded.Header));
 	HYP_CHECK(Files.RangeBytes < 16u * 1024u);
+	HYP_CHECK(Files.RangeCalls == 2);
 	Encoded.Bytes.back() ^= std::byte{1};
 	Files.WriteAtomic(Root / "Bulk.hasset", Encoded.Bytes);
 	HYP_CHECK(DiscoverAssets(Files, Root).Entries.size() == 1);
@@ -160,6 +163,7 @@ class FFixtureFiles final : public IFileSystem
 public:
 	FBytes Bytes;
 	std::size_t LargestRead{};
+	std::size_t RangeCalls{};
 	std::size_t ReadLimit = 64u * 1024u;
 	std::optional<std::size_t> ShortOffset;
 	std::optional<std::size_t> ShortSize;
@@ -173,6 +177,7 @@ public:
 	FBytes ReadRange(const std::filesystem::path&, std::size_t InOffset, std::size_t InSize) override
 	{
 		LargestRead = std::max(LargestRead, InSize);
+		++RangeCalls;
 		HYP_CHECK(InSize <= ReadLimit);
 		if (InOffset > Bytes.size() || InSize > Bytes.size() - InOffset)
 		{
@@ -255,7 +260,7 @@ void CheckShortDiscoveryReads()
 {
 	const FRegistryFixture Value{"short", {}, {1, 2, 3, 4}};
 	const auto Bytes = EncodeAsset(RecordType<FRegistryFixture>(), &Value).Bytes;
-	for (const auto Range : {std::pair{std::size_t{0}, std::size_t{80}}, std::pair{std::size_t{80}, std::size_t{24}},
+	for (const auto Range : {std::pair{std::size_t{0}, GetNativeAssetMetadataPrefixSize()},
 	                         std::pair{std::size_t{80}, FixtureMetadataEnd(Bytes) - 80}})
 	{
 		for (const auto Removed : {std::size_t{1}, Range.second})
@@ -288,7 +293,8 @@ void CheckDiscoveryRangeBudget()
 		const auto Found = DiscoverAssets(Files, "registry-metadata-budget");
 		HYP_CHECK(Found.Entries.empty() && Found.Errors.size() == 1);
 		// The exact boundary reaches the unavailable range; one extra byte is rejected before requesting it.
-		HYP_CHECK(Files.LargestRead == (Extent == MetadataLimit ? MetadataLimit : 80));
+		HYP_CHECK(Files.LargestRead == (Extent == MetadataLimit ? MetadataLimit : GetNativeAssetMetadataPrefixSize()));
+		HYP_CHECK(Files.RangeCalls == (Extent == MetadataLimit ? 2u : 1u));
 	}
 }
 

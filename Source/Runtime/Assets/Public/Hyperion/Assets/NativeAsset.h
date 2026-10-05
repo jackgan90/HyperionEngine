@@ -24,9 +24,19 @@ struct FNativeAssetPayloadRange
 	std::size_t Size{};
 };
 
+struct FNativeAssetMetadataRange
+{
+	FNativeAssetPayloadRange Payload;
+	std::size_t Size{};
+};
+
 std::size_t GetNativeAssetPrefixSize();
 // Validates a current native prefix and its declared file budget; does not verify payload availability or integrity.
 FNativeAssetPayloadRange ProbeNativeAssetPayload(std::span<const std::byte> InPrefix, FArchiveLimits InLimits = {});
+
+std::size_t GetNativeAssetMetadataPrefixSize();
+// Composes the native container and archive probes without reading bulk data or checking its digest.
+FNativeAssetMetadataRange ProbeNativeAssetMetadata(std::span<const std::byte> InPrefix, FArchiveLimits InLimits = {});
 
 FEncodedAsset EncodeAsset(const FRecordDescriptor& InType, const void* InObject, FAssetHeader InHeader = {},
                           FArchiveLimits InLimits = {});

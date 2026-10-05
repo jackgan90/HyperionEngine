@@ -25,21 +25,14 @@ FBytes ReadDiscoveryRange(IFileSystem& InFiles, const std::filesystem::path& InP
 FAssetHeader ReadAssetHeader(IFileSystem& InFiles, const std::filesystem::path& InPath)
 {
 	constexpr std::size_t MetadataLimit = 32u * 1024u * 1024u;
-	const auto Prefix = ReadDiscoveryRange(InFiles, InPath, 0, GetNativeAssetPrefixSize());
-	const auto Payload = ProbeNativeAssetPayload(Prefix);
-	const auto ArchivePrefixSize = GetArchiveMetadataPrefixSize();
-	if (ArchivePrefixSize > Payload.Size)
-	{
-		throw std::runtime_error("Native payload is too small for metadata: " + PathToUtf8(InPath));
-	}
-	const auto ArchivePrefix = ReadDiscoveryRange(InFiles, InPath, Payload.Offset, ArchivePrefixSize);
-	const auto Size = ProbeArchiveMetadataSize(ArchivePrefix, Payload.Size);
-	if (Size > MetadataLimit)
+	const auto Prefix = ReadDiscoveryRange(InFiles, InPath, 0, GetNativeAssetMetadataPrefixSize());
+	const auto Metadata = ProbeNativeAssetMetadata(Prefix);
+	if (Metadata.Size > MetadataLimit)
 	{
 		throw std::runtime_error("Native metadata exceeds discovery limits");
 	}
-	const auto Bytes = ReadDiscoveryRange(InFiles, InPath, Payload.Offset, Size);
-	const auto Envelope = DecodeArchiveMetadata(Bytes, Payload.Size);
+	const auto Bytes = ReadDiscoveryRange(InFiles, InPath, Metadata.Payload.Offset, Metadata.Size);
+	const auto Envelope = DecodeArchiveMetadata(Bytes, Metadata.Payload.Size);
 	const auto& Fields = std::get<FArchiveNode::FObject>(Envelope.Value);
 	auto Header = ReadValue<FAssetHeader>(Fields.at("header"));
 	ValidateAssetHeader(Header);

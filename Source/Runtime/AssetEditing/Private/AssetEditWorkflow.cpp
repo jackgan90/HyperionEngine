@@ -3,18 +3,26 @@
 
 namespace Hyperion
 {
+namespace
+{
+void ValidateAdmission(const FAssetEditDocument& InDocument, std::uint64_t InGeneration)
+{
+	if (InDocument.Generation() != InGeneration)
+	{
+		throw FAssetWorkflowError(AssetWorkflowErrors::StaleRevision, "Asset changed; query the current generation");
+	}
+	if (InDocument.IsEditing())
+	{
+		throw FAssetWorkflowError(AssetWorkflowErrors::Busy, "An asset edit is already preparing");
+	}
+}
+} // namespace
+
 FAssetEditWorkflow::FAssetEditWorkflow(FTaskSystem& InTasks, std::shared_ptr<FAssetEditDocument> InDocument,
                                        std::uint64_t InGeneration)
     : Tasks(InTasks), Document(std::move(InDocument)), Generation(InGeneration), AssetId(Document->Loaded().Header.Id)
 {
-	if (Document->Generation() != Generation)
-	{
-		throw FAssetWorkflowError(AssetWorkflowErrors::StaleRevision, "Asset changed; query the current generation");
-	}
-	if (Document->IsEditing())
-	{
-		throw FAssetWorkflowError(AssetWorkflowErrors::Busy, "An asset edit is already preparing");
-	}
+	ValidateAdmission(*Document, Generation);
 	Document->bEditing = true;
 }
 
@@ -54,10 +62,37 @@ std::shared_ptr<FAssetEditWorkflow> FAssetEditWorkflow::Field(FTaskSystem& InTas
                                                               const FRecordMemberIdentity& InField,
                                                               FArchiveNode InValue)
 {
+	return PrepareField(InTasks, InAssets, std::move(InDocument), InGeneration, InField, std::move(InValue), 0, true);
+}
+
+std::shared_ptr<FAssetEditWorkflow> FAssetEditWorkflow::SubmitField(FTaskSystem& InTasks, FAssetService& InAssets,
+                                                                    std::shared_ptr<FAssetEditDocument> InDocument,
+                                                                    std::uint64_t InGeneration,
+                                                                    const FRecordMemberIdentity& InField,
+                                                                    FArchiveNode InValue, std::uint64_t InInteraction)
+{
+	return PrepareField(InTasks, InAssets, std::move(InDocument), InGeneration, InField, std::move(InValue),
+	                    InInteraction, false);
+}
+
+std::shared_ptr<FAssetEditWorkflow> FAssetEditWorkflow::PrepareField(FTaskSystem& InTasks, FAssetService& InAssets,
+                                                                     std::shared_ptr<FAssetEditDocument> InDocument,
+                                                                     std::uint64_t InGeneration,
+                                                                     const FRecordMemberIdentity& InField,
+                                                                     FArchiveNode InValue, std::uint64_t InInteraction,
+                                                                     bool bInDeferCommit)
+{
+	ValidateAdmission(*InDocument, InGeneration);
+	auto PreparedField = PrepareAssetField(*InDocument, InField, std::move(InValue));
+	if (!bInDeferCommit && PreparedField.References.empty())
+	{
+		InDocument->Apply(InField, std::move(PreparedField.Value), InInteraction);
+		return {};
+	}
 	auto Result = std::shared_ptr<FAssetEditWorkflow>(new FAssetEditWorkflow(InTasks, InDocument, InGeneration));
 	Result->FieldIdentity = InField;
-	Result->Prepared = std::make_unique<FPreparedAssetField>(
-	    PrepareAssetField(*InDocument, Result->FieldIdentity, std::move(InValue)));
+	Result->InteractionId = InInteraction;
+	Result->Prepared = std::make_unique<FPreparedAssetField>(std::move(PreparedField));
 	for (const auto& Reference : Result->Prepared->References)
 	{
 		Result->Graphs.push_back(InAssets.LoadGraphAsync(Reference.Reference, InDocument->Loaded().Path));
@@ -84,6 +119,54 @@ bool FAssetEditWorkflow::IsPending() const
 	return bPending;
 }
 
+std::uint64_t FAssetEditWorkflow::Interaction() const
+{
+	return InteractionId;
+}
+
+bool FAssetEditWorkflow::CanContinueInteraction() const
+{
+	return bPending && Prepared && InteractionId && !bInteractionFinished && !bCancelled;
+}
+
+const FArchiveNode* FAssetEditWorkflow::PreparedField(const FRecordMemberIdentity& InField) const
+{
+	return bPending && Prepared && !bCancelled && FieldIdentity == InField ? &Prepared->Value : nullptr;
+}
+
+void FAssetEditWorkflow::UpdateField(const FRecordMemberIdentity& InField, FArchiveNode InValue,
+                                     std::uint64_t InInteraction)
+{
+	if (!CanContinueInteraction() || FieldIdentity != InField || InteractionId != InInteraction)
+	{
+		throw FAssetWorkflowError(AssetWorkflowErrors::Busy, "An asset edit is already preparing");
+	}
+	if (Document->Generation() != Generation)
+	{
+		throw FAssetWorkflowError(AssetWorkflowErrors::StaleRevision, "Asset changed while preparing the edit");
+	}
+	auto Candidate = PrepareAssetField(*Document, InField, std::move(InValue));
+	if (Candidate.References != Prepared->References)
+	{
+		throw FAssetWorkflowError(AssetWorkflowErrors::Busy, "References cannot change while preparing a live edit");
+	}
+	Prepared->Value = std::move(Candidate.Value);
+}
+
+void FAssetEditWorkflow::FinishInteraction()
+{
+	bInteractionFinished = true;
+}
+
+void FAssetEditWorkflow::CancelInteraction(std::uint64_t InInteraction)
+{
+	if (InInteraction && InInteraction == InteractionId)
+	{
+		bCancelled = true;
+		Document->CancelInteraction(InInteraction);
+	}
+}
+
 bool FAssetEditWorkflow::Poll(const std::shared_ptr<FAssetEditDocument>& InCurrent)
 {
 	if (!bPending)
@@ -99,6 +182,10 @@ bool FAssetEditWorkflow::Poll(const std::shared_ptr<FAssetEditDocument>& InCurre
 		return false;
 	}
 	Release(); // All completion paths release admission before publishing or reporting an error.
+	if (bCancelled)
+	{
+		return true;
+	}
 	if (InCurrent != Document || Document->Loaded().Header.Id != AssetId)
 	{
 		throw FAssetWorkflowError(AssetWorkflowErrors::StaleDocument, "The edited document was closed or replaced");
@@ -118,7 +205,11 @@ bool FAssetEditWorkflow::Poll(const std::shared_ptr<FAssetEditDocument>& InCurre
 			const auto& Reference = Prepared->References[Index];
 			ValidateAssetReferenceGraph(*Graphs[Index].GetReady(), Reference.Reference.TypeId, Reference.Dimension);
 		}
-		Document->Apply(FieldIdentity, std::move(Prepared->Value), 0);
+		Document->Apply(FieldIdentity, std::move(Prepared->Value), InteractionId);
+		if (InteractionId && bInteractionFinished)
+		{
+			Document->FinishInteraction();
+		}
 	}
 	return true;
 }

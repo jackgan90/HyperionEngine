@@ -56,6 +56,7 @@ void FSceneStorage::FMutation::Unlink(std::uint32_t InSlot)
 
 void FSceneStorage::FMutation::Link(std::uint32_t InSlot, std::uint32_t InParent)
 {
+	ComponentCandidates.insert(InSlot);
 	auto& Entry = Edit(InSlot);
 	Entry.Parent = InParent;
 	Entry.Node->Parent() = InParent == InvalidSlot ? std::string{} : Read(InParent).Node->Id;
@@ -171,6 +172,7 @@ void FSceneStorage::FMutation::Derive(std::uint32_t InRoot)
 
 void FSceneStorage::FMutation::Remove(std::uint32_t InSlot)
 {
+	ComponentCandidates.insert(InSlot);
 	auto& Entry = Edit(InSlot);
 	const FSceneHandle Handle{Storage.Identity, InSlot, Entry.Generation};
 	if (Settings.DefaultCamera == Handle)
@@ -207,7 +209,11 @@ std::map<FSceneHandle, FSceneChange> FSceneStorage::FMutation::PrepareChanges(st
 		                             Storage.Slots[Index]->Generation == Entry.Generation
 		                         ? &*Storage.Slots[Index]->Node
 		                         : nullptr;
-		auto Difference = BuildSceneComponentDifference(Before, Entry.Node ? &*Entry.Node : nullptr, bInitialSync);
+		FSceneComponentDifference Difference;
+		if (bInitialSync || ComponentCandidates.contains(Index) || !Before || !Entry.Node)
+		{
+			Difference = BuildSceneComponentDifference(Before, Entry.Node ? &*Entry.Node : nullptr, bInitialSync);
+		}
 		Mask |= Difference.Effects;
 		if (Entry.Node && Entry.Node->Model())
 		{

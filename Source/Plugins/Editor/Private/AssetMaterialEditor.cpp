@@ -287,6 +287,14 @@ bool FAssetWorkspace::EditMaterialValue(FGui& InGui, const std::string& InId, FM
 void FAssetWorkspace::DrawMaterialProperties(FGui& InGui, FEntry& InEntry)
 {
 	auto Material = ReadValue<FMaterialAsset>(InEntry.Document->Snapshot());
+	if (InEntry.EditWorkflow)
+	{
+		const auto Policy = ResolveAssetFieldPolicy(*InEntry.Document->Loaded().Type, &FMaterialAsset::Values);
+		if (const auto* Candidate = InEntry.EditWorkflow->PreparedField(Policy.Field()))
+		{
+			Material.Values = ReadValue<FMaterialAssetValues>(*Candidate);
+		}
+	}
 	AssetInfo(InGui, "Definition version", std::to_string(Material.Version));
 	if (InGui.Section("Shader passes (read-only)", false))
 	{
@@ -349,7 +357,9 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 	{
 		Value = MakeEditableValue(InParameter.Type);
 	}
-	InGui.BeginDisabled(!bEditable);
+	const bool bContinue = InEntry.EditWorkflow && InEntry.EditWorkflow->CanContinueInteraction() &&
+	                       InEntry.EditingParameter == InParameter.Name;
+	InGui.BeginDisabled(!bEditable || (InEntry.HasPendingEdit() && !bContinue));
 	FAssetLiveEditScope Editing(InGui);
 	const bool bChanged = EditMaterialValue(
 	    InGui, InParameter.Name, Value, GetEngineSemanticPolicy(FMaterialSemanticId(InParameter.Semantic)).EditHint);
@@ -357,10 +367,13 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 	if (Interaction.ActiveInteraction)
 	{
 		InEntry.GuiInteraction = Interaction.ActiveInteraction;
+		InEntry.EditingParameter = InParameter.Name;
 	}
+	InGui.BeginDisabled(InEntry.HasPendingEdit());
 	const bool bReset = InGui.Button(("Reset to default##" + InParameter.Name).c_str(),
 	                                 bOverridden && (InParameter.Default || !InParameter.bRequired));
 	ObserveProperty(InGui, "reset/" + InParameter.Name);
+	InGui.EndDisabled();
 	InGui.EndDisabled();
 	if ((bChanged || bReset) && bEditable)
 	{
@@ -377,15 +390,7 @@ void FAssetWorkspace::DrawMaterialParameter(FGui& InGui, FEntry& InEntry, FMater
 			InMaterial.Values.push_back({InParameter.Name, std::move(Value)});
 		}
 		const auto Policy = ResolveAssetFieldPolicy(*InEntry.Document->Loaded().Type, &FMaterialAsset::Values);
-		if (InEntry.ReferenceEdit)
-		{
-			CommitReferenceEdit(InEntry, Policy.Field(), WriteValue(InMaterial.Values));
-		}
-		else
-		{
-			CommitAssetField(*InEntry.Document, Policy.Field(), WriteValue(InMaterial.Values),
-			                 Interaction.ChangedInteraction);
-		}
+		SubmitFieldEdit(InEntry, Policy.Field(), WriteValue(InMaterial.Values), Interaction.ChangedInteraction);
 	}
 }
 } // namespace Hyperion

@@ -7,6 +7,7 @@ struct FAssetReferenceRequirement
 {
 	FAssetRef Reference;
 	std::optional<ETextureDimension> Dimension;
+	bool operator==(const FAssetReferenceRequirement&) const = default;
 };
 
 struct FPreparedAssetField

@@ -24,6 +24,7 @@ bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef&
 		}
 		const auto Current = Choices.Indices.find(InReference.Id);
 		std::size_t Selected = Current == Choices.Indices.end() ? Choices.References.size() : Current->second;
+		InGui.BeginDisabled(Active->HasPendingEdit());
 		const bool bChanged = AssetCombo(
 		    InGui, InLabel, Choices.Labels, Selected,
 		    [&](std::size_t InIndex, FVec4)
@@ -31,6 +32,7 @@ bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef&
 			    ObserveProperty(InGui, "choice/" + std::string(InLabel) + Choices.Labels[InIndex]);
 		    },
 		    InReference.Path.empty() ? "None" : InReference.Path.c_str());
+		InGui.EndDisabled();
 		ObserveProperty(InGui, InLabel);
 		if (!bChanged || Active->HasPendingEdit())
 		{
@@ -49,23 +51,60 @@ bool FAssetWorkspace::EditReference(FGui& InGui, const char* InLabel, FAssetRef&
 	}
 }
 
-void FAssetWorkspace::CommitReferenceEdit(FEntry& InEntry, const FRecordMemberIdentity& InField,
-                                          FArchiveNode InCandidate)
+void FAssetWorkspace::SubmitFieldEdit(FEntry& InEntry, const FRecordMemberIdentity& InField, FArchiveNode InCandidate,
+                                      std::uint64_t InInteraction)
 {
-	if (!InEntry.ReferenceEdit)
-	{
-		return;
-	}
-	const auto Generation = InEntry.ReferenceEdit->Generation;
+	const auto Generation = InEntry.ReferenceEdit ? InEntry.ReferenceEdit->Generation : InEntry.Document->Generation();
 	InEntry.ReferenceEdit.reset();
 	try
 	{
-		InEntry.EditWorkflow =
-		    FAssetEditWorkflow::Field(Tasks, Assets, InEntry.Document, Generation, InField, std::move(InCandidate));
+		if (InEntry.EditWorkflow)
+		{
+			InEntry.EditWorkflow->UpdateField(InField, std::move(InCandidate), InInteraction);
+		}
+		else
+		{
+			InEntry.EditWorkflow = FAssetEditWorkflow::SubmitField(Tasks, Assets, InEntry.Document, Generation, InField,
+			                                                       std::move(InCandidate), InInteraction);
+		}
 	}
 	catch (const std::exception& Failure)
 	{
 		InEntry.Document->Error = Failure.what();
+	}
+}
+
+void FAssetWorkspace::UpdateFieldInteraction(FGui& InGui, FEntry& InEntry, std::uint64_t InPreviousInteraction)
+{
+	const auto PendingInteraction = InEntry.EditWorkflow ? InEntry.EditWorkflow->Interaction() : 0;
+	const auto Interaction = PendingInteraction ? PendingInteraction : InPreviousInteraction;
+	const auto Pointer = InGui.PointerState();
+	if (Interaction && Pointer.bCancel)
+	{
+		if (PendingInteraction)
+		{
+			InEntry.EditWorkflow->CancelInteraction(Interaction);
+		}
+		else
+		{
+			InEntry.Document->CancelInteraction(Interaction);
+		}
+		InEntry.GuiInteraction = 0;
+		InEntry.EditingParameter.clear();
+		InGui.FinishEditing();
+	}
+	else if (PendingInteraction)
+	{
+		if (InEntry.GuiInteraction != PendingInteraction)
+		{
+			InEntry.EditWorkflow->FinishInteraction();
+			InEntry.EditingParameter.clear();
+		}
+	}
+	else if (InPreviousInteraction && !InEntry.GuiInteraction)
+	{
+		InEntry.Document->FinishInteraction();
+		InEntry.EditingParameter.clear();
 	}
 }
 

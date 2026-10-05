@@ -122,6 +122,24 @@ FNativeAssetPayloadRange ProbeNativeAssetPayload(std::span<const std::byte> InPr
 	return {HeaderSize, static_cast<std::size_t>(Size)};
 }
 
+std::size_t GetNativeAssetMetadataPrefixSize()
+{
+	return HeaderSize + GetArchiveMetadataPrefixSize();
+}
+
+FNativeAssetMetadataRange ProbeNativeAssetMetadata(std::span<const std::byte> InPrefix, FArchiveLimits InLimits)
+{
+	const auto Payload = ProbeNativeAssetPayload(InPrefix, InLimits);
+	const auto ArchivePrefixSize = GetArchiveMetadataPrefixSize();
+	if (ArchivePrefixSize > Payload.Size || InPrefix.size() < Payload.Offset ||
+	    ArchivePrefixSize > InPrefix.size() - Payload.Offset)
+	{
+		throw std::runtime_error("Native payload is too small for metadata");
+	}
+	return {Payload,
+	        ProbeArchiveMetadataSize(InPrefix.subspan(Payload.Offset, ArchivePrefixSize), Payload.Size, InLimits)};
+}
+
 FEncodedAsset EncodeAsset(const FRecordDescriptor& InType, const void* InObject, FAssetHeader InHeader,
                           FArchiveLimits InLimits)
 {

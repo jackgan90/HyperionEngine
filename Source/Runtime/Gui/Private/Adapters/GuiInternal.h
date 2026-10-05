@@ -50,6 +50,9 @@ struct FGui::FImpl
 	bool DragComponents(const char* InLabel, float* InValues, int InCount);
 	bool TrackEdit(bool bInChanged);
 	bool TrackEdit(ImGuiID InId, bool bInActive, bool bInActivated, bool bInChanged);
+	template<class T>
+	bool Combo(FGui& InGui, const char* InLabel, std::span<const T> InChoices, std::size_t& InIndex,
+	           const std::function<void(std::size_t, FVec4)>& InObserve, const char* InPreview);
 
 	void Select()
 	{

@@ -11,7 +11,7 @@ struct FChoiceFixture
 	std::int64_t Value = 42;
 };
 
-void CheckChoice(bool bInMixed, bool bInReversed, bool bInReadOnly)
+void CheckChoice(bool bInMixed, bool bInReversed, bool bInReadOnly, bool bInUnknown = false)
 {
 	std::vector<FPropertyChoice> Choices{{WriteValue(std::int64_t{-7}), "Negative"},
 	                                     {WriteValue(std::int64_t{42}), "Answer"},
@@ -20,11 +20,19 @@ void CheckChoice(bool bInMixed, bool bInReversed, bool bInReadOnly)
 	{
 		std::reverse(Choices.begin(), Choices.end());
 	}
+	if (bInUnknown)
+	{
+		for (auto& Choice : Choices)
+		{
+			Choice.Label.append(256, 'x');
+		}
+	}
 	auto Options = Inspect("Choice");
 	Options.Inspector->Choices = Choices;
 	Options.Inspector->bReadOnly = bInReadOnly;
 	const auto Type = MakeRecord<FChoiceFixture>("test.gui-choice", {Member("value", &FChoiceFixture::Value, Options)});
 	FChoiceFixture Source;
+	Source.Value = bInUnknown ? 12345 : 42;
 	FRecordDraft Draft(Type, &Source);
 	FGui Gui;
 	Gui.FontImage();
@@ -75,14 +83,14 @@ void CheckChoice(bool bInMixed, bool bInReversed, bool bInReadOnly)
 	const auto Closed = Bounds;
 	Click((Closed.X + Closed.Z) / 2, (Closed.Y + Closed.W) / 2);
 	Frame({});
-	HYP_CHECK(Changes == 0 && ReadValue<std::int64_t>(Draft.GetValues().at("value")) == 42);
+	HYP_CHECK(Changes == 0 && ReadValue<std::int64_t>(Draft.GetValues().at("value")) == Source.Value);
 	// The default GUI style has 16 pixels of vertical popup padding before the first row.
 	Click((Closed.X + Closed.Z) / 2, Closed.W + 24);
 	Frame({});
-	FChoiceFixture Candidate;
+	auto Candidate = Source;
 	Draft.ApplyToCandidate(&Candidate);
 	HYP_CHECK(Changes == (bInReadOnly ? 0u : 1u));
-	HYP_CHECK(Candidate.Value == (bInReadOnly ? 42 : ReadValue<std::int64_t>(Choices.front().Value)));
+	HYP_CHECK(Candidate.Value == (bInReadOnly ? Source.Value : ReadValue<std::int64_t>(Choices.front().Value)));
 }
 } // namespace
 
@@ -94,6 +102,8 @@ void CheckChoiceControls()
 		{
 			CheckChoice(bMixed, bReversed, false);
 			CheckChoice(bMixed, bReversed, true);
+			CheckChoice(bMixed, bReversed, false, true);
+			CheckChoice(bMixed, bReversed, true, true);
 		}
 	}
 }

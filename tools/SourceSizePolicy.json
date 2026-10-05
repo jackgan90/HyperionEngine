@@ -18,7 +18,7 @@
       "split": "Separate preview observations and tab/close presentation while retaining entry lifetime ownership."
     },
     "Source/Runtime/Gui/Private/Adapters/Gui.cpp": {
-      "lines": 605,
+      "lines": 575,
       "split": "Separate GUI context/frame lifecycle from window and panel operations."
     },
     "Source/Runtime/Gui/Private/Adapters/GuiWidgets.cpp": {

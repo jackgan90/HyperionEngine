@@ -28,6 +28,7 @@ public:
 		FSceneStorage& Storage;
 		std::map<std::uint32_t, std::unique_ptr<FSlot>> Slots;
 		std::map<std::uint32_t, ESceneChangeMask> Masks;
+		std::set<std::uint32_t> ComponentCandidates;
 		std::optional<std::vector<std::uint32_t>> Roots;
 		std::optional<std::vector<std::uint32_t>> Order;
 		std::optional<std::vector<std::uint32_t>> Free;

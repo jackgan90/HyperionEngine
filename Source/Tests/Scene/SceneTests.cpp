@@ -10,6 +10,7 @@ void CheckSceneNodes();
 void CheckSceneComponents();
 void CheckSceneComponentChanges();
 void CheckSceneComponentFailures();
+void CheckSceneComponentCosts();
 void CheckSceneExpansion();
 
 namespace
@@ -246,6 +247,7 @@ int main()
 		CheckSceneComponents();
 		CheckSceneComponentChanges();
 		CheckSceneComponentFailures();
+		CheckSceneComponentCosts();
 		CheckTransformInspection();
 		CheckInitialViews();
 		CheckSceneBatches();

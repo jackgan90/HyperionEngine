@@ -96,11 +96,21 @@ inline bool AssetCombo(FGui& InGui, const char* InLabel, std::span<const std::st
 	                     });
 }
 
+inline bool AssetCombo(FGui& InGui, const char* InLabel, std::span<const FPropertyChoice> InChoices,
+                       std::size_t& InIndex)
+{
+	return AssetProperty(InGui, InLabel,
+	                     [&]
+	                     {
+		                     return InGui.Combo("##value", InChoices, InIndex);
+	                     });
+}
+
 template<class T>
 bool AssetEnumCombo(FGui& InGui, const char* InLabel, std::span<const FPropertyChoice> InChoices, T& InOutValue)
 {
 	auto Index = PropertyChoiceIndex(InChoices, WriteValue(InOutValue)).value_or(InChoices.size());
-	if (!AssetCombo(InGui, InLabel, PropertyChoiceLabels(InChoices), Index))
+	if (!AssetCombo(InGui, InLabel, InChoices, Index))
 	{
 		return false;
 	}

@@ -359,36 +359,6 @@ bool FGui::Selectable(const char* InLabel, bool bInSelected, unsigned InDepth, b
 	return bSelected;
 }
 
-bool FGui::Combo(const char* InLabel, std::span<const std::string> InChoices, std::size_t& InIndex,
-                 const std::function<void(std::size_t, FVec4)>& InObserve, const char* InPreview)
-{
-	Impl->Select();
-	bool bChanged = false;
-	const char* Preview = InPreview ? InPreview : InIndex < InChoices.size() ? InChoices[InIndex].c_str() : "None";
-	const ImGuiID Id = ImGui::GetID(InLabel);
-	const bool bOpen = ImGui::BeginCombo(InLabel, Preview);
-	const bool bActivated = ImGui::IsItemActivated();
-	if (bOpen)
-	{
-		for (std::size_t Index = 0; Index < InChoices.size(); ++Index)
-		{
-			ImGui::PushID(static_cast<int>(Index));
-			if (ImGui::Selectable(InChoices[Index].c_str(), Index == InIndex))
-			{
-				InIndex = Index;
-				bChanged = true;
-			}
-			ImGui::PopID();
-			if (InObserve)
-			{
-				InObserve(Index, LastItemBounds());
-			}
-		}
-		ImGui::EndCombo();
-	}
-	return Impl->TrackEdit(Id, bOpen && !bChanged, bActivated, bChanged);
-}
-
 void FGui::SetPathDisplayRoot(std::string InRoot)
 {
 	Impl->Select();
