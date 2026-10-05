@@ -1,13 +1,9 @@
 #pragma once
+#include "Hyperion/RenderControls/ViewportChoices.h"
 #include "Hyperion/Renderer/RenderFeatures.h"
 
 namespace Hyperion
 {
-enum class EOutlineOverlapMode : std::uint8_t
-{
-	Union,
-	PerObject
-};
 
 struct FSelectionOutlineSettings
 {

@@ -11,7 +11,7 @@ VENDORS = re.compile(r'(?:renderdoc_app|spdlog/|mimalloc|tracy/|oneapi/|tbb/|SDL
 CPU_DOMAINS = {'Core', 'Math', 'Reflection', 'Tasks', 'Plugins', 'Config', 'RasterOptions',
                'Platform', 'IO', 'Serialization', 'AssetTypes', 'Assets', 'AssetEditing',
                'Automation', 'Transport', 'Content', 'Materials', 'Textures', 'Scene',
-               'SceneEditing', 'Environment', 'Animation', 'AssetImport'}
+               'SceneEditing', 'Environment', 'Animation', 'AssetImport', 'ImageData', 'RenderControls'}
 
 
 def edge_text(source, edge):
@@ -80,6 +80,22 @@ def graph_errors(root, targets):
     if 'hyperion_raster_options' in production:
         errors.extend(f'{edge_text("hyperion_raster_options", edge)}: RasterOptions must be independent'
                       for edge in production['hyperion_raster_options']['links'])
+    if 'hyperion_image_data' in production:
+        errors.extend(f'{edge_text("hyperion_image_data", edge)}: ImageData must be independent'
+                      for edge in production['hyperion_image_data']['links'])
+    if 'hyperion_rhi' in production:
+        pending = [('hyperion_rhi', [])]
+        visited = set()
+        while pending:
+            current, chain = pending.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            if (root / production[current]['directory']) == root / 'Source/Runtime/Assets':
+                errors.append('RHI reaches Assets services: ' + ' / '.join(chain))
+                continue
+            pending.extend((edge['target'], [*chain, edge_text(current, edge)])
+                           for edge in production[current]['links'] if edge['target'] in production)
     return errors
 
 
@@ -151,6 +167,36 @@ def include_lines(path, options):
             yield line, text, include[1], active
 
 
+def source_assignments(root, targets, modules, includes):
+    """Track explicit sources and local header consumption without crossing public interfaces."""
+    assignments = {}
+    for name, target in targets.items():
+        pending = [(root / path).resolve() for path in target['sources']]
+        visited = set()
+        while pending:
+            path = pending.pop()
+            if path in visited or path not in includes:
+                continue
+            visited.add(path)
+            assignments.setdefault(path, set()).add(name)
+            owner = next((module for module in reversed(modules) if path.is_relative_to(module)), None)
+            if owner and path.is_relative_to(owner / 'Public'):
+                continue
+            for _, text, include, active in includes[path]:
+                if not active or include.startswith('Hyperion/') or '"' not in text:
+                    continue
+                resolved = (path.parent / include).resolve()
+                if resolved not in includes:
+                    if target['test'] or path.is_relative_to(root / 'Source/Tests') or (
+                            owner and path.is_relative_to(owner / 'Tests')):
+                        resolved = (root / 'Source/Tests' / include).resolve()
+                # Public headers belong to their exporting module, not to downstream includers.
+                if (resolved in includes and resolved.suffix != '.cpp'
+                        and not any(resolved.is_relative_to(module / 'Public') for module in modules)):
+                    pending.append(resolved)
+    return assignments
+
+
 def check(root, targets, options=None):
     options = options or {}
     source = root / 'Source'
@@ -166,34 +212,35 @@ def check(root, targets, options=None):
                 errors.append(f'{path.relative_to(root)}: duplicate public include {name}')
             headers[name] = module
     module_targets = {}
-    compiled = {}
     for name, target in targets.items():
         if not target['test']:
             module_targets.setdefault(root / target['directory'], set()).add(name)
-        for path in target['sources']:
-            if pathlib.Path(path).suffix == '.cpp':
-                compiled.setdefault(root / path, set()).add(name)
+    includes = {path: list(include_lines(path, options)) for path in source.rglob('*') if path.suffix in SUFFIXES}
+    consumed = source_assignments(root, targets, modules, includes)
     count = 0
     uncompiled = []
-    for path in source.rglob('*'):
-        if path.suffix not in SUFFIXES:
-            continue
+    for path in includes:
         count += 1
         owner = next((module for module in reversed(modules) if path.is_relative_to(module)), None)
-        assignments = compiled.get(path, set())
-        test = path.is_relative_to(source / 'Tests') or (assignments and all(targets[name]['test'] for name in assignments))
+        assignments = consumed.get(path, set())
+        public = bool(owner and path.is_relative_to(owner / 'Public'))
+        test = not public and (path.is_relative_to(source / 'Tests') or (owner and path.is_relative_to(owner / 'Tests'))
+                               or (assignments and all(targets[name]['test'] for name in assignments)))
         if not owner and not test:
             errors.append(f'{path.relative_to(root)}: source has no module owner')
             continue
         if path.suffix == '.cpp' and not assignments:
             uncompiled.append(path.relative_to(root).as_posix())
         consumers = {name for name in assignments if not targets[name]['test']}
-        if path.suffix != '.cpp' and not test:
+        if public:
+            consumers = module_targets.get(owner, set())
+        elif path.suffix != '.cpp' and not test and not assignments:
+            # Unselected headers retain source-isolation and module contract coverage.
             consumers = module_targets.get(owner, set())
         adapter = (owner and (path.is_relative_to(owner / 'Private/Adapters') or
                                (owner.is_relative_to(source / 'Backends') and path.is_relative_to(owner / 'Private'))))
         adapter = adapter or (test and path.is_relative_to(source / 'Tests/Private/Adapters'))
-        for line, text, name, active in include_lines(path, options):
+        for line, text, name, active in includes[path]:
             prefix = f'{path.relative_to(root).as_posix()}:{line}'
             if VENDORS.search(name) and not adapter:
                 errors.append(f'{prefix}: native/vendor include outside private wrapper: {name}')
@@ -206,17 +253,21 @@ def check(root, targets, options=None):
                     errors.append(f'{prefix}: included module has no configured production target: {name}')
                 for consumer in consumers if active else ():
                     error = direct_error(consumer, targets[consumer], module_targets.get(dependency, set()),
-                                         prefix, path.is_relative_to(owner / 'Public'))
+                                         prefix, public)
                     if error:
                         errors.append(error)
             elif '"' in text:
                 resolved = (path.parent / name).resolve()
                 support = (source / 'Tests' / name).resolve()
                 source_only = path.suffix == '.cpp' and not assignments
-                if (test or source_only) and support.is_file() and support.is_relative_to(source / 'Tests'):
+                if ((test or source_only) and support.is_file() and support.is_relative_to(source / 'Tests')
+                        and (not resolved.is_file() or resolved == support)):
                     continue
-                if (not owner or not resolved.is_relative_to(owner / 'Private') or not resolved.is_file()
-                        or path.is_relative_to(owner / 'Public')):
+                local_private = owner and resolved.is_relative_to(owner / 'Private')
+                local_tests = (owner and path.is_relative_to(owner / 'Tests')
+                               and resolved.is_relative_to(owner / 'Tests'))
+                if (not (local_private or local_tests) or not resolved.is_file()
+                        or public):
                     errors.append(f'{prefix}: private header crosses a module boundary: {name}')
     omitted = [module.relative_to(root).as_posix() for module in modules if module not in module_targets]
     return errors, count, omitted, uncompiled

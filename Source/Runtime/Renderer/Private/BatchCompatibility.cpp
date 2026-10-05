@@ -207,10 +207,4 @@ bool FInstanceBatchStrategy::CanCombine(const FRenderBatchCandidate& InA, const 
 	return InA.Signature == InB.Signature;
 }
 
-std::string_view GetRenderBatchFallbackName(ERenderBatchFallback InReason)
-{
-	constexpr std::array Names{"disabled", "shader", "device", "ordering", "singleton", "preparation"};
-	const auto Index = static_cast<std::size_t>(InReason);
-	return Index < Names.size() ? Names[Index] : "unknown";
-}
 } // namespace Hyperion

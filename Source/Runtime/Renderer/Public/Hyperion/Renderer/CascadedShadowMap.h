@@ -1,12 +1,9 @@
 #pragma once
+#include "Hyperion/RenderControls/ShadowControls.h"
 #include "Hyperion/Renderer/RenderScene.h"
 
 namespace Hyperion
 {
-struct FCascadedShadowSettings : FDirectionalShadowSettings
-{
-	std::optional<FViewport> PreviewViewport; // Host may reserve space beside its UI; pixel coordinates.
-};
 
 struct FShadowCascade
 {

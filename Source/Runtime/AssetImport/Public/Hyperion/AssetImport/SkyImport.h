@@ -5,4 +5,5 @@
 namespace Hyperion
 {
 void RegisterSkyImporter(FAssetImportService& InImports);
+FAssetImporter MakeSkyImporter();
 } // namespace Hyperion

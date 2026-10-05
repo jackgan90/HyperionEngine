@@ -1,4 +1,5 @@
 #include "AssetPublicationInternal.h"
+#include "Hyperion/AssetImport/ImporterRegistry.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -28,24 +29,20 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	for (const auto& Importer : Importers)
 	{
 		Provenance.Settings["importer:" + Importer.Id] = std::to_string(Importer.Version);
-		if (SourceType.empty() &&
-		    std::find(Importer.Extensions.begin(), Importer.Extensions.end(), Extension) != Importer.Extensions.end())
+	}
+	if (SourceType.empty())
+	{
+		if (const auto* Inferred = FindAssetImporter(Importers, Extension))
 		{
-			SourceType = Importer.Type->Id;
+			SourceType = Inferred->Type->Id;
 		}
 	}
 	if (SourceType.empty())
 	{
 		throw std::invalid_argument("Unsupported import source format: " + Extension);
 	}
-	const auto Importer = std::find_if(Importers.begin(), Importers.end(),
-	                                   [&](const FAssetImporter& InImporter)
-	                                   {
-		                                   return InImporter.Type->Id == SourceType &&
-		                                          std::find(InImporter.Extensions.begin(), InImporter.Extensions.end(),
-		                                                    Extension) != InImporter.Extensions.end();
-	                                   });
-	if (Importer == Importers.end())
+	const auto* Importer = FindAssetImporter(Importers, Extension, SourceType);
+	if (!Importer)
 	{
 		throw std::invalid_argument("No matching source importer");
 	}
@@ -58,7 +55,7 @@ void FPublication::Prepare(const FAssetImportOptions& InOptions)
 	{
 		Provenance.Settings["property_overrides_v1"] = InOptions.PropertyOverrides;
 	}
-	ValidateImportSettings(InOptions.Conversion, Extension, SourceType);
+	ValidateImportSettings(InOptions.Conversion, Importer);
 	if (InOptions.Conversion.TextureEncoding)
 	{
 		Provenance.Settings["texture_encoding"] =

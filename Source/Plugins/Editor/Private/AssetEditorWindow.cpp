@@ -1,4 +1,5 @@
 #include "AssetEditorWindow.h"
+#include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Content/ContentPaths.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Renderer/RenderGraph.h"

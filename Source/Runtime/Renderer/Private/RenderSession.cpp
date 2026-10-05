@@ -1,5 +1,6 @@
 #include "Hyperion/Core/Profiling.h"
 #include "Hyperion/Materials/Lighting/SceneLightingParameters.h"
+#include "RenderShutdownFailure.h"
 #include "SessionMaterialsInternal.h"
 #include <chrono>
 #include <mutex>
@@ -140,7 +141,14 @@ void FRenderSession::InitializeMaterialScopes()
 
 FRenderSession::~FRenderSession()
 {
-	Close();
+	try
+	{
+		Close();
+	}
+	catch (...)
+	{
+		ExitAfterRenderShutdownFailure("RenderSession", std::current_exception());
+	}
 }
 
 FRenderSceneClient& FRenderSession::GetScene()

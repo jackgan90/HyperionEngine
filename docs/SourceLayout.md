@@ -17,12 +17,13 @@ Source/
     Transport/     # 有界双向字节流、provider 基类和私有平台通信实现
     Automation/    # 类型化目录、schema、Main 会话任务、目标发现/连接与协议 endpoint
     Serialization/ # 反射记录的原生二进制内存 Archive
-    RasterOptions/ # 无引擎依赖的光栅管线、GBuffer preset 和 visualizer 稳定身份
+    RasterOptions/ # 无引擎依赖的光栅管线、GBuffer/visualizer 身份和数值 viewport
     Config/        # 应用/实验配置，依赖 Reflection
     Plugins/       # 静态规划、类型化服务、作用域事件和生命周期
     Application/   # 仅 Tasks、Main 消息泵、帧时钟及退出控制
     Platform/      # 窗口、输入与 SDL wrapper
     AssetTypes/    # 轻量引用、头部和来源记录
+    ImageData/     # 仅标准库的 CPU 图像尺寸、RGBA 存储与颜色编码
     Assets/        # 原生异步加载/保存、依赖解析、缓存和图片 wrapper
     AssetEditing/  # GUI/agent 共用 CPU 资产草稿、历史、保存和异步编辑工作流
     Content/       # Engine 资源定位、Game 根状态、索引候选和切换参与者
@@ -34,6 +35,7 @@ Source/
     AssetImport/   # glTF/GLB、PNG/JPEG、HDR/EXR 转换、草稿、增量导入和完整依赖发布
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
     RHI/           # 公共图形契约、能力查询、后端注册表
+    RenderControls/# CPU 控制接口、反射 DTO、统计值与纯校验；不依赖 Renderer/RHI
     Renderer/      # render session / primitive / resources / SceneInstance / Model 桥接 / RenderGraph
     Gui/           # ImGui / ImPlot wrapper 和引擎绘制数据
     GuiRenderer/   # 通用 GUI RHI 绘制、字体及保留纹理绑定
@@ -72,6 +74,10 @@ Source/Runtime/Assets/
 `FAppSettings`、`FRenderSettings`、scene pipeline 与 Scene 的阴影设置直接持有这些枚举。Config 的 mapped field 与 Reflection 的 `MappedMember` 在读写边界保留原字符串/整数形状、位宽和 member association；运行时不再反复解析已验证的 token。`FSceneViewportOptions` 是可选数值协议 DTO，在共享服务入口解析并保留 unavailable 优先于无效值的校验顺序。RHI backend 仍是启动时的 provider 选择输入，由 RHI registry 解析。
 
 `Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection、AssetTypes、Materials、Environment，保存模型数据、拥有组件的逻辑对象、Transform 层级、相机/光源与 v7 清单，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 的 Model 桥接将 CPU 数据注册为 Render primitives，共享资源服务管理 GPU 资源，由 session 统一收集和提交场景 pass。组件契约见 [SceneComponents.md](SceneComponents.md)，线程/所有权契约见 [RenderPrimitives.md](RenderPrimitives.md)。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
+
+Editor 自有验收实现和场景状态放在 `Source/Plugins/Editor/Tests/Acceptance`，单元测试入口与专用 support 放在 `Tests/Unit`。生产 `Private` 保留 acceptance driver 契约、observations、report 和 unavailable 实现；生产 include 闭包不能到达 Tests。BUILD_TESTING 只选择实际验收实现或 unavailable 实现，边界检查同时核对 target sources 与编译输入。
+
+私有和测试辅助头的依赖归属由配置 target 的显式 sources 与本地 include 闭包确定，测试独有依赖不会自动归到生产模块。被多个生产 target 消费的头分别检查各自的直接依赖；Public 头仍检查模块导出的 PUBLIC/INTERFACE 契约，未选中的非测试头保留模块契约检查。模块内 Tests 头也始终接受私有头和第三方隔离检查。
 
 Core 中的工具应按职责继续细分，例如 `Memory/`、`Logging/`、`Containers/`；仅供某个模块使用的工具留在该模块 `Private`，避免把所有辅助代码集中进一个无边界的 Utils 模块。当前 Core 接口数量少，后续增长时再按这些概念拆分。
 

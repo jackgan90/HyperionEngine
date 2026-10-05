@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RenderControls/RenderStatistics.h"
 #include "Hyperion/Renderer/ScenePublication.h"
 #include "Hyperion/Renderer/SceneSpatialIndex.h"
 #include <map>
@@ -17,25 +18,6 @@ struct FLocalLight
 	bool bSpot{};
 	FMat4 VolumeWorld = Identity();
 	FBounds Bounds;
-};
-
-struct FLocalLightStatistics
-{
-	std::size_t Points{};
-	std::size_t Spots{};
-	std::size_t VisiblePoints{};
-	std::size_t VisibleSpots{};
-	std::size_t Draws{};
-	bool bActive{};
-	bool bClustered{};
-	std::size_t ClusterCells{};
-	std::size_t ClusterOccupied{};
-	std::size_t ClusterReferences{};
-	std::size_t ClusterMaximum{};
-	std::size_t ClusterBytes{};
-	double ClusterBuildMilliseconds{};
-	bool bClusterRebuilt{};
-	FSceneVisibilityStats Spatial;
 };
 
 // Render-owned index, independent of geometry and shadow caster membership.

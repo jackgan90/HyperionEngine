@@ -28,12 +28,11 @@ std::vector<std::size_t> FRenderGraph::Order() const
 		const auto& Pass = Passes[Index];
 		ValidateGraphPass(Pass, Resources, Identity);
 		ValidateGraphBuffers(Pass, Buffers, Identity);
-		if (Pass.Name.empty() || !Names.insert(Pass.Name).second || (Pass.Prepare && !Pass.Batches.empty()) ||
-		    (Pass.PrepareCompute && !Pass.Dispatches.empty()))
+		if (Pass.Common.Name.empty() || !Names.insert(Pass.Common.Name).second || Pass.HasMixedPreparation())
 		{
 			throw std::invalid_argument("Invalid graph pass identity or mixed draw preparation");
 		}
-		for (const auto After : Pass.After)
+		for (const auto After : Pass.Common.After)
 		{
 			if (After >= Passes.size())
 			{
@@ -43,11 +42,11 @@ std::vector<std::size_t> FRenderGraph::Order() const
 		}
 		std::vector<std::size_t> Reads;
 		std::vector<std::size_t> Writes;
-		for (const auto Read : Pass.Reads)
+		for (const auto Read : Pass.Common.Reads)
 		{
 			Reads.push_back(ResourceIndex(Read));
 		}
-		for (const auto& Access : Pass.Buffers)
+		for (const auto& Access : Pass.GetBuffers())
 		{
 			(Access.State == EResourceState::ShaderRead ? Reads : Writes)
 			    .push_back(Resources.size() + Access.Buffer.Index);
@@ -65,13 +64,13 @@ std::vector<std::size_t> FRenderGraph::Order() const
 		{
 			Writes.push_back(ResourceIndex(Color.Texture));
 		}
-		for (const auto& Write : Pass.ComputeWrites)
+		for (const auto& Write : Pass.GetComputeWrites())
 		{
 			Writes.push_back(ResourceIndex(Write.Texture));
 		}
-		if (Pass.DepthStencil)
+		if (Pass.GetDepthStencil())
 		{
-			Writes.push_back(ResourceIndex(Pass.DepthStencil->Texture));
+			Writes.push_back(ResourceIndex(Pass.GetDepthStencil()->Texture));
 		}
 		for (const auto Write : Writes)
 		{

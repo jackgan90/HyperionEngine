@@ -98,7 +98,7 @@ private:
 	std::uint32_t Width{};
 	std::uint32_t Height{};
 	EDepthConvention DepthConvention = EDepthConvention::Standard;
-	FForwardPipelineStatistics LastStatistics;
+	FRenderFrameStatistics LastStatistics;
 	std::shared_ptr<FFullscreenPreparationStatistics> FullscreenStatistics;
 	bool bPending{};
 	void ClearTargets(FRenderGraph& InGraph, FVec4 InClear) const;

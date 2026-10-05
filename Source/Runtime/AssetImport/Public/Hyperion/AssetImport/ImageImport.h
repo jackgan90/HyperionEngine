@@ -6,4 +6,5 @@ namespace Hyperion
 inline constexpr char ImageImporterId[] = "hyperion.image";
 
 void RegisterImageImporter(FAssetImportService& InImports);
+FAssetImporter MakeImageImporter();
 } // namespace Hyperion

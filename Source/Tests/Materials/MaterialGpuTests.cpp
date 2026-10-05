@@ -2,6 +2,7 @@
 #include "Support/TestSupport.h"
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <iostream>
 
 using namespace Hyperion;

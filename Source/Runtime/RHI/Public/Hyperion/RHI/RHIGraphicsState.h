@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RasterOptions/Viewport.h"
 #include <array>
 #include <cstdint>
 
@@ -149,14 +150,4 @@ struct FGraphicsDynamicState
 	bool operator==(const FGraphicsDynamicState&) const = default;
 };
 
-struct FViewport
-{
-	float X{};
-	float Y{};
-	float Width{};
-	float Height{};
-	float MinDepth{};
-	float MaxDepth = 1;
-	bool operator==(const FViewport&) const = default;
-};
 } // namespace Hyperion

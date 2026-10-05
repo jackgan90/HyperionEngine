@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/Renderer/RenderGraph.h"
+#include "RenderGraphPass.h"
 
 namespace Hyperion
 {
@@ -11,10 +11,10 @@ struct FGraphBufferState
 };
 
 void ValidateGraphBufferState(const FGraphBufferImport& InImport, EResourceState InState);
-void ValidateGraphBuffers(const FGraphicsPass& InPass, std::span<const FGraphBufferImport> InBuffers,
+void ValidateGraphBuffers(const FAcceptedGraphPass& InPass, std::span<const FGraphBufferImport> InBuffers,
                           std::uint64_t InGraph);
 std::vector<FGraphBufferState> ResolveGraphBuffers(std::span<const FGraphBufferImport> InBuffers, bool bInResolve);
-void ApplyGraphBuffers(const FGraphicsPass& InPass, std::span<const FGraphBufferImport> InBuffers,
+void ApplyGraphBuffers(const FAcceptedGraphPass& InPass, std::span<const FGraphBufferImport> InBuffers,
                        std::vector<FGraphBufferState>& InStates, FPassCommands& OutCommands);
 void TransitionGraphBuffer(FGraphBufferState& InBuffer, EResourceState InState, FPassCommands& OutCommands);
 } // namespace Hyperion

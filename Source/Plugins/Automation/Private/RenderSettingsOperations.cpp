@@ -1,5 +1,5 @@
 #include "Hyperion/IO/Path.h"
-#include "Hyperion/Renderer/RenderSettings.h"
+#include "Hyperion/RenderControls/RenderSettings.h"
 #include "SceneOperations.h"
 
 namespace Hyperion

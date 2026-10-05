@@ -21,11 +21,11 @@ void Actions(const FAttachmentActions& InActions)
 	}
 }
 
-void Region(const FGraphicsPass& InPass, const FGraphTextureImport& InResource)
+void Region(const FAcceptedGraphPass& InPass, const FGraphTextureImport& InResource)
 {
-	if (InPass.Viewport && InResource.Size.Width && InResource.Size.Height)
+	if (InPass.GetViewport() && InResource.Size.Width && InResource.Size.Height)
 	{
-		ValidateViewport(*InPass.Viewport, InResource.Size);
+		ValidateViewport(*InPass.GetViewport(), InResource.Size);
 	}
 }
 } // namespace
@@ -94,13 +94,13 @@ void ValidateGraphImport(const FGraphTextureImport& InResource)
 	ValidateGraphState(InResource, InResource.InitialState);
 }
 
-void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+void ValidateGraphPass(const FAcceptedGraphPass& InPass, std::span<const FGraphTextureImport> InResources,
                        std::uint64_t InGraph)
 {
-	if (InPass.Viewport)
+	if (InPass.GetViewport())
 	{
 		constexpr auto Limit = std::numeric_limits<std::uint32_t>::max();
-		ValidateViewport(*InPass.Viewport, {Limit, Limit});
+		ValidateViewport(*InPass.GetViewport(), {Limit, Limit});
 	}
 	const auto Resource = [&](FGraphTexture InTexture) -> const FGraphTextureImport&
 	{
@@ -111,12 +111,6 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 		return InResources[InTexture.Index];
 	};
 	const auto Colors = InPass.GetColors();
-	if ((InPass.bCompute &&
-	     (!Colors.empty() || InPass.DepthStencil || InPass.Viewport || InPass.Prepare || !InPass.Batches.empty())) ||
-	    (!InPass.bCompute && (!InPass.ComputeWrites.empty() || InPass.PrepareCompute || !InPass.Dispatches.empty())))
-	{
-		throw std::invalid_argument("Invalid mixed graph compute and graphics declarations");
-	}
 	if (Colors.size() > MaximumColorTargets)
 	{
 		throw std::invalid_argument("Graph exceeds color attachment capacity");
@@ -150,9 +144,9 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 		Actions(Attachment.Actions);
 		Region(InPass, Color);
 	}
-	if (InPass.DepthStencil)
+	if (InPass.GetDepthStencil())
 	{
-		const auto& Attachment = *InPass.DepthStencil;
+		const auto& Attachment = *InPass.GetDepthStencil();
 		const auto& Depth = Resource(Attachment.Texture);
 		if (Depth.DepthFormat == ERHIDepthFormat::None || Depth.MipLevel ||
 		    (!Attachment.Depth && !Attachment.Stencil) ||
@@ -178,17 +172,17 @@ void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextur
 			}
 		}
 	}
-	for (const auto& Write : InPass.ComputeWrites)
+	for (const auto& Write : InPass.GetComputeWrites())
 	{
 		if (!Resource(Write.Texture).bStorage || !ColorIndices.insert(Write.Texture.Index).second)
 		{
 			throw std::invalid_argument("Compute write requires unique storage mip");
 		}
 	}
-	for (const auto Read : InPass.Reads)
+	for (const auto Read : InPass.Common.Reads)
 	{
 		if (Resource(Read).Target.Kind != ERenderTargetKind::Texture || ColorIndices.contains(Read.Index) ||
-		    (InPass.DepthStencil && InPass.DepthStencil->Texture == Read))
+		    (InPass.GetDepthStencil() && InPass.GetDepthStencil()->Texture == Read))
 		{
 			throw std::invalid_argument("Invalid or simultaneously writable graph sampled texture");
 		}

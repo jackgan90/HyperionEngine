@@ -259,17 +259,33 @@ FModelPrimitive Private::ConvertGltfPrimitive(FAssetImportContext& InContext, st
 	return FGltfImport(InContext).Primitive(InMesh, InPrimitive);
 }
 
+FAssetImporter MakeGltfImporter()
+{
+	return {"hyperion.gltf",
+	        5,
+	        &RecordType<FModelAsset>(),
+	        {".gltf", ".glb"},
+	        Import,
+	        EAssetImporterExposure::Workspace,
+	        "Static model with generated material/texture assets; optional scene wrapper."};
+}
+
+FAssetImporter MakeGltfSourceImporter()
+{
+	return {"hyperion.gltf-source",
+	        1,
+	        &RecordType<FModelSource>(),
+	        {".gltf", ".glb"},
+	        [](FAssetImportContext& InContext) -> std::shared_ptr<void>
+	        {
+		        return FGltfImport(InContext).Run();
+	        }};
+}
+
 void RegisterGltfImporter(FAssetImportService& InImports)
 {
 	RegisterImageImporter(InImports);
-	InImports.Register({"hyperion.gltf", 5, &RecordType<FModelAsset>(), {".gltf", ".glb"}, Import});
-	InImports.Register({"hyperion.gltf-source",
-	                    1,
-	                    &RecordType<FModelSource>(),
-	                    {".gltf", ".glb"},
-	                    [](FAssetImportContext& InContext) -> std::shared_ptr<void>
-	                    {
-		                    return FGltfImport(InContext).Run();
-	                    }});
+	InImports.Register(MakeGltfImporter());
+	InImports.Register(MakeGltfSourceImporter());
 }
 } // namespace Hyperion

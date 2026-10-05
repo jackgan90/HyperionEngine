@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RenderControls/RenderStatistics.h"
 #include "Hyperion/Renderer/ComputePass.h"
 #include "Hyperion/Renderer/RenderPrimitive.h"
 
@@ -34,14 +35,6 @@ struct FHierarchicalDepthProduct
 	FViewport Viewport;
 
 	void Validate(const FRenderGraph& InGraph, const FRenderView& InView) const;
-};
-
-struct FHierarchicalDepthStats
-{
-	std::uint32_t Consumers{};
-	std::uint32_t Products{};
-	std::uint32_t Dispatches{};
-	std::uint64_t Bytes{};
 };
 
 // Render-owned demand producer. No effect switches or persistent consumer counters live here.

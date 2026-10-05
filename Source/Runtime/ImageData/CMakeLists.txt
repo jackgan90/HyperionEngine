@@ -1,0 +1,5 @@
+add_library(hyperion_image_data INTERFACE Public/Hyperion/ImageData/ImageData.h)
+target_include_directories(hyperion_image_data INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/Public")
+target_compile_features(hyperion_image_data INTERFACE cxx_std_20)
+set_target_properties(hyperion_image_data PROPERTIES FOLDER "Hyperion/Runtime/ImageData" HYP_OWNED TRUE)
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES Public/Hyperion/ImageData/ImageData.h)

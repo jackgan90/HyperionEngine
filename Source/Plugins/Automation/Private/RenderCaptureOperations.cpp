@@ -1,5 +1,5 @@
 #include "Hyperion/Gui/Gui.h"
-#include "Hyperion/Renderer/RenderCaptureControl.h"
+#include "Hyperion/RenderControls/RenderCaptureControl.h"
 #include "SceneOperations.h"
 
 namespace Hyperion

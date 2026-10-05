@@ -1,6 +1,6 @@
 #include "AssetImportInternal.h"
 #include "AssetPublicationInternal.h"
-#include "Hyperion/AssetImport/ImageImport.h"
+#include "Hyperion/AssetImport/ImporterRegistry.h"
 #include "Hyperion/Assets/AssetEntryNames.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Scene/SceneManifest.h"
@@ -13,7 +13,9 @@ TAsyncResult<FAssetImportResult> FAssetImportService::ImportAsync(std::filesyste
                                                                   FAssetImportOptions InOptions)
 {
 	const auto Source = ImportPath(InSource);
-	ValidateImportSettings(InOptions.Conversion, ImportExtension(Source), InOptions.TypeId);
+	const auto Importers = ImporterDescriptors();
+	ValidateImportSettings(InOptions.Conversion,
+	                       FindAssetImporter(Importers, ImportExtension(Source), InOptions.TypeId));
 	const auto Output = Impl->IO.FileSystem()->Normalize(InOutput);
 	if (InOptions.bCreateFolder && !InOptions.Library.empty() &&
 	    Impl->IO.FileSystem()->Normalize(InOptions.Library) != Output.parent_path())
@@ -132,18 +134,9 @@ FAssetImportResult FAssetImportService::FImpl::Publish(const std::filesystem::pa
 		Converted.Type = std::make_shared<const FRecordDescriptor>(RecordType<FSceneManifest>());
 		Converted.Object = std::make_shared<const FSceneManifest>(std::move(Scene));
 	}
-	if (!InOptions.Prepared && !InOptions.Name.empty() && Converted.Type->CppType == typeid(FModelAsset))
+	if (!InOptions.Prepared)
 	{
-		auto Model = std::make_shared<FModelAsset>(*std::static_pointer_cast<const FModelAsset>(Converted.Object));
-		Model->Name = InOptions.Name;
-		Converted.Object = std::move(Model);
-	}
-	if (!InOptions.Prepared && !InOptions.Name.empty() && Converted.Importer == ImageImporterId)
-	{
-		auto Texture =
-		    std::make_shared<FTextureAsset>(*std::static_pointer_cast<const FTextureAsset>(Converted.Object));
-		Texture->Name = InOptions.Name;
-		Converted.Object = std::move(Texture);
+		ApplyRequestedImportName(Converted, InOptions.Name, InOptions.bScene);
 	}
 	Publication.Build(InSource, Converted, true);
 	Publication.Commit();

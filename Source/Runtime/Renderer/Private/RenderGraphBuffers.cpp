@@ -70,15 +70,15 @@ void FRenderGraph::Export(FGraphBuffer InBuffer, EResourceState InState)
 	BufferExports.emplace_back(InBuffer, InState);
 }
 
-void ValidateGraphBuffers(const FGraphicsPass& InPass, std::span<const FGraphBufferImport> InBuffers,
+void ValidateGraphBuffers(const FAcceptedGraphPass& InPass, std::span<const FGraphBufferImport> InBuffers,
                           std::uint64_t InGraph)
 {
 	std::set<std::size_t> Seen;
-	for (const auto& Access : InPass.Buffers)
+	for (const auto& Access : InPass.GetBuffers())
 	{
 		if (Access.Buffer.Graph != InGraph || Access.Buffer.Index >= InBuffers.size() ||
 		    !Seen.insert(Access.Buffer.Index).second ||
-		    (!InPass.bCompute && Access.State == EResourceState::ShaderWrite) ||
+		    (!InPass.IsCompute() && Access.State == EResourceState::ShaderWrite) ||
 		    (Access.State == EResourceState::ShaderRead && Access.bFullOverwrite))
 		{
 			throw std::invalid_argument("Invalid graph buffer access or conflicting SRV/UAV uses");
@@ -117,10 +117,10 @@ void TransitionGraphBuffer(FGraphBufferState& InBuffer, EResourceState InState, 
 	}
 }
 
-void ApplyGraphBuffers(const FGraphicsPass& InPass, std::span<const FGraphBufferImport> InBuffers,
+void ApplyGraphBuffers(const FAcceptedGraphPass& InPass, std::span<const FGraphBufferImport> InBuffers,
                        std::vector<FGraphBufferState>& InStates, FPassCommands& OutCommands)
 {
-	for (const auto& Access : InPass.Buffers)
+	for (const auto& Access : InPass.GetBuffers())
 	{
 		auto& State = InStates[Access.Buffer.Index];
 		if (!State.bInitialized && !Access.bFullOverwrite)

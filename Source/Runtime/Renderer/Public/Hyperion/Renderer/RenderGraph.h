@@ -6,6 +6,8 @@
 
 namespace Hyperion
 {
+struct FAcceptedGraphPass;
+
 struct FGraphTexture
 {
 	std::uint64_t Graph{};
@@ -116,12 +118,8 @@ struct FGraphicsPass
 	// Only draw batches are deferred. Attachments and resource accesses are already declared.
 	std::function<std::vector<FGraphicsDrawBatch>()> Prepare;
 	std::vector<FGraphColorAttachment> Colors;
-	// Internal common graph storage; clients declare computation with FComputePass.
-	bool bCompute{};
-	std::vector<FGraphTextureWrite> ComputeWrites;
+	// Graphics passes may read declared buffers; compute accesses belong to FComputePass.
 	std::vector<FGraphBufferAccess> Buffers;
-	std::vector<FDispatchPacket> Dispatches;
-	std::function<std::vector<FDispatchPacket>()> PrepareCompute;
 	FRenderPassTiming Timing;
 
 	std::span<const FGraphColorAttachment> GetColors() const
@@ -139,6 +137,7 @@ class FRenderGraph
 {
 public:
 	FRenderGraph();
+	~FRenderGraph();
 
 	std::uint64_t GetIdentity() const noexcept
 	{
@@ -166,7 +165,7 @@ private:
 	std::uint64_t Identity;
 	std::vector<FGraphTextureImport> Resources;
 	std::vector<std::pair<FGraphTexture, EResourceState>> Exports;
-	std::vector<FGraphicsPass> Passes;
+	std::vector<FAcceptedGraphPass> Passes;
 	std::vector<FGraphBufferImport> Buffers;
 	std::vector<std::pair<FGraphBuffer, EResourceState>> BufferExports;
 	std::size_t ResourceIndex(FGraphTexture InTexture) const;

@@ -1,5 +1,6 @@
 #pragma once
-#include "Hyperion/Assets/Assets.h"
+#include "Hyperion/ImageData/ImageData.h"
+#include "Hyperion/Math/Math.h"
 #include "Hyperion/RHI/RHIBindings.h"
 #include "Hyperion/RHI/RHIGraphicsState.h"
 #include "Hyperion/RHI/RHIResources.h"

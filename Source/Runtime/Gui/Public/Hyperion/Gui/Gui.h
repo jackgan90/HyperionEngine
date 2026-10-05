@@ -1,8 +1,10 @@
 #pragma once
 #include "Hyperion/AssetTypes/AssetTypes.h"
-#include "Hyperion/Assets/Assets.h"
+#include "Hyperion/ImageData/ImageData.h"
+#include "Hyperion/Math/Math.h"
 #include "Hyperion/Platform/Window.h"
 #include "Hyperion/Reflection/Record.h"
+#include "Hyperion/Reflection/Reflection.h"
 #include <span>
 
 namespace Hyperion

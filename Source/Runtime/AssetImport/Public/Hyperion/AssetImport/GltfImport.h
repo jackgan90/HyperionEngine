@@ -7,4 +7,6 @@ namespace Hyperion
 {
 FMesh LoadGltfPrimitive(const std::filesystem::path& InPath, std::size_t InMesh = 0, std::size_t InPrimitive = 0);
 void RegisterGltfImporter(FAssetImportService& InImports);
+FAssetImporter MakeGltfImporter();
+FAssetImporter MakeGltfSourceImporter();
 } // namespace Hyperion

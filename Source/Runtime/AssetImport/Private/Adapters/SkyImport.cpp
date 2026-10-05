@@ -46,8 +46,20 @@ std::shared_ptr<void> ImportSky(FAssetImportContext& InContext)
 }
 } // namespace
 
+FAssetImporter MakeSkyImporter()
+{
+	return {"hyperion.sky-environment",
+	        1,
+	        &RecordType<FSkyAsset>(),
+	        {".hdr", ".exr"},
+	        ImportSky,
+	        EAssetImporterExposure::Workspace,
+	        "2:1 HDR/EXR panorama with sky bake settings.",
+	        {false, true}};
+}
+
 void RegisterSkyImporter(FAssetImportService& InImports)
 {
-	InImports.Register({"hyperion.sky-environment", 1, &RecordType<FSkyAsset>(), {".hdr", ".exr"}, ImportSky});
+	InImports.Register(MakeSkyImporter());
 }
 } // namespace Hyperion

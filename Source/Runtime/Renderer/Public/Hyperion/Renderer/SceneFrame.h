@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RenderControls/RenderStatistics.h"
 #include "Hyperion/Renderer/RenderPrimitive.h"
 
 namespace Hyperion
@@ -34,14 +35,6 @@ struct FSceneViewRequest
 	std::optional<FSceneCameraView> CameraOverride;
 	// Tools previewing an explicit camera can require that exact target to remain available.
 	bool bAllowCameraFallback = true;
-};
-
-enum class ESceneCameraStatus : std::uint8_t
-{
-	Active,
-	DefaultFallback,
-	NoActiveCamera,
-	EmptyViewport
 };
 
 struct FResolvedSceneFrame

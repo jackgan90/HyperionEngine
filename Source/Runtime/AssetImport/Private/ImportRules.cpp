@@ -1,5 +1,7 @@
 #include "ImportRules.h"
 #include "AssetImportInternal.h"
+#include "Hyperion/Scene/Model.h"
+#include "Hyperion/Textures/TextureAsset.h"
 
 namespace Hyperion
 {
@@ -32,5 +34,25 @@ EImportSourceIdentityError CheckImportSourceIdentity(bool bInHasSourceRoot, std:
 		return EImportSourceIdentityError::NonPortable;
 	}
 	return EImportSourceIdentityError::None;
+}
+
+void ApplyRequestedImportName(FConvertedAsset& InAsset, std::string_view InName, bool bInScene)
+{
+	if (InName.empty())
+	{
+		return;
+	}
+	if (!bInScene && InAsset.Type->CppType == typeid(FModelAsset))
+	{
+		auto Model = std::make_shared<FModelAsset>(*std::static_pointer_cast<const FModelAsset>(InAsset.Object));
+		Model->Name = InName;
+		InAsset.Object = std::move(Model);
+	}
+	else if (InAsset.Type->CppType == typeid(FTextureAsset))
+	{
+		auto Texture = std::make_shared<FTextureAsset>(*std::static_pointer_cast<const FTextureAsset>(InAsset.Object));
+		Texture->Name = InName;
+		InAsset.Object = std::move(Texture);
+	}
 }
 } // namespace Hyperion

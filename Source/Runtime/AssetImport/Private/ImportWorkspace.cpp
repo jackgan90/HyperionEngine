@@ -1,6 +1,5 @@
 #include "Hyperion/AssetImport/ImportWorkspace.h"
-#include "Hyperion/AssetImport/GltfImport.h"
-#include "Hyperion/AssetImport/SkyImport.h"
+#include "AssetImportInternal.h"
 #include "Hyperion/Assets/AssetRegistry.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/Core/Core.h"
@@ -9,11 +8,15 @@
 
 namespace Hyperion
 {
-FAssetImportWorkspace::FAssetImportWorkspace(FIOService& InIO, FAssetService& InAssets, FContentRootService& InRoots)
+FAssetImportWorkspace::FAssetImportWorkspace(FIOService& InIO, FAssetService& InAssets, FContentRootService& InRoots,
+                                             std::vector<FAssetImporter> InImporters)
     : IO(InIO), Assets(InAssets), Roots(InRoots), Imports(InIO)
 {
-	RegisterGltfImporter(Imports);
-	RegisterSkyImporter(Imports);
+	for (auto& Importer : InImporters)
+	{
+		Imports.Register(std::move(Importer));
+	}
+	Imports.FreezeImporters();
 }
 
 FAssetImportWorkspace::~FAssetImportWorkspace()
@@ -29,16 +32,58 @@ void FAssetImportWorkspace::RequireMain() const
 	}
 }
 
+FImportCapabilities ProjectImportCapabilities(std::span<const FAssetImporter> InImporters)
+{
+	FImportCapabilities Result;
+	for (const auto& Importer : InImporters)
+	{
+		if (Importer.Exposure != EAssetImporterExposure::Workspace)
+		{
+			continue;
+		}
+		const auto Found = std::find_if(Result.Formats.begin(), Result.Formats.end(),
+		                                [&](const auto& InFormat)
+		                                {
+			                                return InFormat.Type == Importer.Type->Id;
+		                                });
+		if (Found == Result.Formats.end())
+		{
+			Result.Formats.push_back({Importer.Type->Id, Importer.Extensions, Importer.Description});
+		}
+		else
+		{
+			Found->Extensions.insert(Found->Extensions.end(), Importer.Extensions.begin(), Importer.Extensions.end());
+			if (Found->Description != Importer.Description)
+			{
+				Found->Description += " " + Importer.Description;
+			}
+		}
+	}
+	return Result;
+}
+
 FImportCapabilities FAssetImportWorkspace::Capabilities()
 {
-	return {{{RecordType<FModelAsset>().Id,
-	          {".gltf", ".glb"},
-	          "Static model with generated material/texture assets; optional scene wrapper."},
-	         {RecordType<FTextureAsset>().Id,
-	          {".png", ".jpg", ".jpeg"},
-	          "Standalone PNG/JPEG to RGBA8 with full mips; optional textureEncoding."},
-	         {RecordType<FSkyAsset>().Id, {".hdr", ".exr"}, "2:1 HDR/EXR panorama with sky bake settings."}},
-	        false};
+	return ProjectImportCapabilities(DefaultAssetImporters());
+}
+
+FImportCapabilities FAssetImportWorkspace::GetCapabilities() const
+{
+	RequireMain();
+	return ProjectImportCapabilities(Imports.ImporterDescriptors());
+}
+
+FImportSourceSelection SelectImportSource(std::span<const FAssetImporter> InImporters, std::string_view InSource,
+                                          std::string_view InType)
+{
+	const auto* Importer = FindAssetImporter(InImporters, ImportExtension(PathFromUtf8(InSource)), InType, true);
+	return Importer ? FImportSourceSelection{Importer->Type->Id, Importer->Settings} : FImportSourceSelection{};
+}
+
+FImportSourceSelection FAssetImportWorkspace::SelectSource(std::string_view InSource, std::string_view InType) const
+{
+	RequireMain();
+	return SelectImportSource(Imports.ImporterDescriptors(), InSource, InType);
 }
 
 std::shared_ptr<const FImportTask> FAssetImportWorkspace::Start(const FImportRequest& InRequest)
@@ -51,7 +96,7 @@ FAssetImportOptions FAssetImportWorkspace::Options(const FImportRequest& InReque
 	const auto Validated = Validate(InRequest);
 	FAssetImportOptions Result;
 	Result.Name = InRequest.Name;
-	Result.TypeId = InRequest.Type;
+	Result.TypeId = Validated.Type;
 	Result.Library = PathFromUtf8(Validated.Library);
 	Result.SourceRoot = PathFromUtf8(InRequest.SourceRoot);
 	Result.SourceId = InRequest.SourceId;

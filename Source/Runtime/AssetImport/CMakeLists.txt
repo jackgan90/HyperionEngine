@@ -1,5 +1,5 @@
 add_library(hyperion_asset_import STATIC
-  Private/ImportSettings.cpp Private/ImageImport.cpp
+  Private/ImportSettings.cpp Private/ImageImport.cpp Private/ImporterRegistry.cpp
   Private/ImportPreparation.cpp Private/ImportDraftProperties.cpp Private/ImportDraftTypes.cpp
   Private/ImportDraftWorkspace.cpp Private/ImportDraftInspection.cpp
   Private/ImportWorkspace.cpp Private/ImportWorkspaceTypes.cpp Private/ImportValidation.cpp

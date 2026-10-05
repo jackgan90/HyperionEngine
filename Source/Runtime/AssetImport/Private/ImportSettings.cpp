@@ -1,23 +1,28 @@
 #include "Hyperion/AssetImport/ImportSettings.h"
+#include "Hyperion/AssetImport/ImporterRegistry.h"
 
 namespace Hyperion
 {
 void ValidateImportSettings(const FAssetConversionSettings& InSettings, std::string_view InExtension,
                             std::string_view InType)
 {
+	const auto Importers = DefaultAssetImporters();
+	ValidateImportSettings(InSettings, FindAssetImporter(Importers, InExtension, InType));
+}
+
+void ValidateImportSettings(const FAssetConversionSettings& InSettings, const FAssetImporter* InImporter)
+{
 	if (InSettings.TextureEncoding)
 	{
-		if (*InSettings.TextureEncoding > EMaterialTextureEncoding::Srgb ||
-		    (InExtension != ".png" && InExtension != ".jpg" && InExtension != ".jpeg") ||
-		    (!InType.empty() && InType != RecordType<FTextureAsset>().Id))
+		if (*InSettings.TextureEncoding > EMaterialTextureEncoding::Srgb || !InImporter ||
+		    !InImporter->Settings.bTextureEncoding)
 		{
 			throw std::invalid_argument("Texture encoding applies only to standalone PNG/JPEG imports");
 		}
 	}
 	if (InSettings.Sky)
 	{
-		if ((InExtension != ".hdr" && InExtension != ".exr") ||
-		    (!InType.empty() && InType != RecordType<FSkyAsset>().Id))
+		if (!InImporter || !InImporter->Settings.bSkyBake)
 		{
 			throw std::invalid_argument("Sky bake settings apply only to HDR/EXR panoramas");
 		}

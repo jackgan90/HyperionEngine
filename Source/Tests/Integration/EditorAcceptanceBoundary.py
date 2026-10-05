@@ -12,11 +12,14 @@ def require(condition, message):
 
 
 def check_sources(private):
+    tests = (private.parent / "Tests").resolve()
+    public_roots = {private.parent / "Public"}
+    source_root = next((parent for parent in private.parents if parent.name == "Source"), None)
+    if source_root:
+        public_roots.update(source_root.glob("*/*/Public"))
     scenario_headers = {"EditorAcceptanceHarness.h", "EditorAcceptanceState.h"}
-    production = [
-        path for path in private.glob("Editor*.cpp")
-        if "Acceptance" not in path.name and "Tests" not in path.name
-    ]
+    production = list(private.rglob("*.cpp"))
+    production.extend((private.parent / "Public").rglob("*.h"))
     production.extend(private / name for name in (
         "EditorApplication.h", "EditorAcceptanceDriver.h", "EditorOptions.h",
         "EditorAcceptanceUnavailable.cpp", "EditorAcceptanceReport.cpp"))
@@ -38,31 +41,35 @@ def check_sources(private):
             if header in visited:
                 continue
             visited.add(header)
+            require(not header.resolve().is_relative_to(tests),
+                    f"{path.name} includes test implementation through {header}")
             require(header.name not in scenario_headers,
                     f"{path.name} includes scenario state through {header.name}")
             header_source = header.read_text(encoding="utf-8")
-            for include in re.findall(r'^#include "([^"]+)"', header_source, re.M):
-                candidate = header.parent / include
-                if candidate.is_file():
-                    pending.append(candidate)
-    for path in private.glob("Editor*Acceptance*.cpp"):
+            for include in re.findall(r'^\s*#\s*include ["<]([^">]+)[">]', header_source, re.M):
+                candidates = [header.parent / include, *(root / include for root in public_roots)]
+                for candidate in candidates:
+                    if candidate.is_file():
+                        pending.append(candidate.resolve())
+    for path in (tests / "Acceptance").rglob("*.cpp"):
         source = path.read_text(encoding="utf-8")
         require(not re.search(r"FEditorPlugin::(?:Exercise|Prepare|Check)", source),
                 f"Scenario method still belongs to Editor in {path.name}")
 
 
-def check_selection(private, selected, enabled, origin):
-    common = {"EditorAcceptanceReport.cpp"}
-    disabled = {"EditorAcceptanceUnavailable.cpp"}
-    for path in private.glob("Editor*Acceptance*.cpp"):
-        if path.name in common:
-            expected = True
-        elif path.name in disabled:
-            expected = not enabled
-        else:
-            expected = enabled
+def check_selection(private, selected, enabled, origin, plugin=True):
+    tests = (private.parent / "Tests").resolve()
+    acceptance = set((tests / "Acceptance").rglob("*.cpp"))
+    report = private / "EditorAcceptanceReport.cpp"
+    unavailable = private / "EditorAcceptanceUnavailable.cpp"
+    for path in acceptance | {report, unavailable}:
+        expected = path == report or (not enabled if path == unavailable else enabled)
         require((path.resolve() in selected) == expected,
                 f"Wrong BUILD_TESTING selection for {path.name} in {origin}")
+    selected_tests = {path for path in selected if path.is_relative_to(tests)}
+    require(enabled or not selected_tests, f"Tests source compiled with BUILD_TESTING=OFF in {origin}")
+    require(not plugin or selected_tests <= acceptance,
+            f"Non-acceptance Tests source compiled into production plugin in {origin}")
 
 
 def check_build(private, build, source_list):
@@ -77,7 +84,7 @@ def check_build(private, build, source_list):
     if database.is_file():
         commands = json.loads(database.read_text(encoding="utf-8"))
         compiled = {Path(entry["file"]).resolve() for entry in commands}
-        check_selection(private, compiled, enabled, database)
+        check_selection(private, compiled, enabled, database, plugin=False)
     print(f"Editor acceptance boundary passed (BUILD_TESTING={'ON' if enabled else 'OFF'})")
 
 

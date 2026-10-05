@@ -407,7 +407,7 @@ private:
 
 	std::optional<FGizmoEdit> GizmoEdit;
 	bool bGizmoUsedMouse{};
-	FForwardPipelineStatistics RenderStats;
+	FRenderFrameStatistics RenderStats;
 	FDeviceStats DeviceStats;
 	std::vector<std::string> ScenePaths;
 	FEditorSelection& Selection = SceneDocument.Selection();

@@ -88,8 +88,9 @@ void FAssetImportPanel::UpdateSource()
 
 FImportRequest FAssetImportPanel::Snapshot() const
 {
-	auto Result = ImportSettingsSnapshot(Request, ImportTypeChoices(FAssetImportWorkspace::Capabilities()),
-	                                     static_cast<EMaterialTextureEncoding>(EncodingIndex), Bake);
+	auto Result = ImportSettingsSnapshot(
+	    Request, Imports ? Imports->SelectSource(Request.Source, Request.Type) : FImportSourceSelection{},
+	    static_cast<EMaterialTextureEncoding>(EncodingIndex), Bake);
 	Result.bCreateFolder = true;
 	return Result;
 }
@@ -128,8 +129,8 @@ void FAssetImportPanel::Process(FNativeSurface InOwner)
 	}
 	try
 	{
-		const auto Filters =
-		    ImportSourceFilters(ImportTypeChoices(FAssetImportWorkspace::Capabilities()), Request.Type);
+		const auto Filters = ImportSourceFilters(
+		    ImportTypeChoices((Imports ? Imports->GetCapabilities() : FImportCapabilities{})), Request.Type);
 		if (const auto Selected = SelectFile(InOwner, PathFromUtf8(Request.Source), Filters))
 		{
 			Request.Source = PathToUtf8(*Selected);
@@ -191,7 +192,7 @@ void FAssetImportPanel::SetOutputDirectory(const std::filesystem::path& InDirect
 
 void FAssetImportPanel::DrawSource(FGui& InGui)
 {
-	const auto Choices = ImportTypeChoices(FAssetImportWorkspace::Capabilities());
+	const auto Choices = ImportTypeChoices((Imports ? Imports->GetCapabilities() : FImportCapabilities{}));
 	std::vector<std::string> Types{"Auto detect"};
 	std::size_t TypeIndex{};
 	for (const auto& Choice : Choices)
@@ -227,10 +228,9 @@ void FAssetImportPanel::DrawSource(FGui& InGui)
 void FAssetImportPanel::DrawSettings(FGui& InGui)
 {
 	const auto Settings = Snapshot();
-	const auto Choices = ImportTypeChoices(FAssetImportWorkspace::Capabilities());
-	const auto* Choice = ResolveImportChoice(Choices, Request.Type, Request.Source);
+	const auto Selection = Imports ? Imports->SelectSource(Request.Source, Request.Type) : FImportSourceSelection{};
 	const bool bImage = Settings.TextureEncoding.has_value();
-	const bool bModel = Choice && Choice->Type == RecordType<FModelAsset>().Id;
+	const bool bModel = Selection.Type == RecordType<FModelAsset>().Id;
 	const bool bSky = Settings.Sky.has_value();
 	if (!bModel && !bImage && !bSky)
 	{

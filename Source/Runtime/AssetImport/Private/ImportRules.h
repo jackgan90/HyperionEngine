@@ -5,6 +5,7 @@
 namespace Hyperion
 {
 class IFileSystem;
+struct FConvertedAsset;
 
 enum class EImportSourceIdentityError
 {
@@ -20,4 +21,5 @@ bool IsImportAssetOutput(const std::filesystem::path& InOutput);
 bool IsSeparateImportOutput(IFileSystem& InFiles, const std::filesystem::path& InSource,
                             const std::filesystem::path& InOutput);
 EImportSourceIdentityError CheckImportSourceIdentity(bool bInHasSourceRoot, std::string_view InSourceId);
+void ApplyRequestedImportName(FConvertedAsset& InAsset, std::string_view InName, bool bInScene);
 } // namespace Hyperion

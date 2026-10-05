@@ -1,3 +1,4 @@
+#include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Assets/NativeAsset.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/MaterialPreparation.h"

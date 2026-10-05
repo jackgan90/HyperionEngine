@@ -110,6 +110,10 @@
 
 ## 新功能维护方式
 
+导入格式由 `FAssetImporter` 的输出反射类型、extensions、converter、选项支持和 Workspace/ToolingOnly 曝光共同定义。Workspace 在构造时选择描述符并冻结；`asset.import.capabilities`、请求校验和 GUI 格式/文件筛选读取该实例集合。默认能力仍为 Model、Texture、Sky，显式 glTF source record 转换为 ToolingOnly。新增测试或工具格式先注册描述符，无需在这些消费者中追加扩展名分支；新输出类型的专用 GUI/属性/Renderer 适配仍由其所属功能另行提供。注册保留不可变反射描述符副本；converter 捕获的 provider 必须活到已接收工作排空，运行时不支持增加或撤回 importer。
+
+新组件由所属功能通过 AutomationHost 的 `RegisterSceneComponentOperations<T>` 显式注册 owner 和读写范围，继续使用本表的 typed component 操作及共享 SceneEditing。CPU 反射注册本身不自动提供 RPC。尚未提供的外部组件专用 Inspector 呈现、Renderer 资源消费或渲染诊断适配由组件所属功能后续接入；通用值编辑和存档沿现有领域契约工作。
+
 - CPU 事务和校验放 SceneEditing / AssetEditing；纹理编码与引用异步编辑由 FAssetEditWorkflow 统一 admission、准备、身份/generation 检查和历史提交，workspace/automation 负责 polling 与关闭排空。Renderer 提供渲染、相机、capture/readiness 的 engine-owned 接口；宿主发布当前实例的 typed service。不要为 agent 新建第二份 Editor 文档。
 - 新属性优先复用反射成员；新组件注册类型与 typed operation。临时状态、保存状态和 generation/revision 的语义必须写进说明。
 - GUI 的候选值和 agent 的候选值最终调用同一领域方法。Inspector 提示不是授权依据；不可变身份由业务规则保证。

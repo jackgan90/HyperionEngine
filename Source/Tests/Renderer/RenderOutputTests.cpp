@@ -1,3 +1,4 @@
+#include "Hyperion/Assets/Assets.h"
 #include "Hyperion/IO/Path.h"
 #include "Hyperion/Reflection/Json.h"
 #include "Hyperion/Reflection/Wire.h"

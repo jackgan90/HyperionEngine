@@ -11,6 +11,7 @@
 #include <thread>
 
 void CheckImportStates();
+void CheckImporterRegistry();
 void CheckContentPathContracts();
 void CheckImportDraftHistory(Hyperion::FTaskSystem& InTasks, Hyperion::FIOService& InIO,
                              Hyperion::FAssetImportWorkspace& InImports, const Hyperion::FImportRequest& InRequest);
@@ -727,6 +728,7 @@ int main()
 	{
 		FFixture Fixture;
 		CheckImportStates();
+		CheckImporterRegistry();
 		CheckContentPathContracts();
 		CheckImportDraftHistory(Fixture.Tasks, *Fixture.IO, *Fixture.Imports,
 		                        Fixture.Request("Color.png", "History.hasset"));

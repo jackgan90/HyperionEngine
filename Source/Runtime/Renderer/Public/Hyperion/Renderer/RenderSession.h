@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/RenderControls/RenderStatistics.h"
 #include "Hyperion/Renderer/RenderBatch.h"
 #include "Hyperion/Renderer/RenderResources.h"
 #include "Hyperion/Renderer/RenderScene.h"
@@ -7,21 +8,6 @@
 
 namespace Hyperion
 {
-struct FRenderViewStatistics
-{
-	std::uint64_t Identity{};
-	std::string Usage;
-	FSceneVisibilityStats Visibility;
-	ERenderViewStatsCategory StatsCategory =
-	    ERenderViewStatsCategory::Main; // Runtime-only; not part of diagnostic wire.
-};
-
-struct FRenderViewFamilyStatistics
-{
-	std::vector<FRenderViewStatistics> Views;
-	FSceneVisibilityStats Spatial;
-	double Milliseconds{};
-};
 
 struct FPreparedViewFamily;
 struct FTransientGeometry;

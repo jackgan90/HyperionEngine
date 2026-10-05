@@ -78,18 +78,18 @@ if(HYP_ENABLE_RENDERDOC)
   target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_renderdoc hyperion_capture)
 endif()
 if(BUILD_TESTING)
-  add_executable(editor_reparent_controller_tests Private/EditorReparentControllerTests.cpp Private/EditorReparentController.cpp)
+  add_executable(editor_reparent_controller_tests Tests/Unit/EditorReparentControllerTests.cpp Private/EditorReparentController.cpp)
   hyp_executable(editor_reparent_controller_tests)
   target_include_directories(editor_reparent_controller_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
   target_link_libraries(editor_reparent_controller_tests PRIVATE hyperion_gui hyperion_scene_editing)
   set_target_properties(editor_reparent_controller_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_reparent_controller COMMAND editor_reparent_controller_tests)
-  add_executable(editor_capture_options_tests Private/CaptureExerciseTests.cpp)
+  add_executable(editor_capture_options_tests Tests/Unit/CaptureExerciseTests.cpp)
   hyp_executable(editor_capture_options_tests)
   target_link_libraries(editor_capture_options_tests PRIVATE hyperion_editor_plugin hyperion_render hyperion_platform)
   set_target_properties(editor_capture_options_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_capture_options COMMAND editor_capture_options_tests)
-  add_executable(editor_interaction_policy_tests Private/EditorInteractionPolicyTests.cpp Private/EditorInteractionPolicy.cpp)
+  add_executable(editor_interaction_policy_tests Tests/Unit/EditorInteractionPolicyTests.cpp Private/EditorInteractionPolicy.cpp)
   hyp_executable(editor_interaction_policy_tests)
   target_link_libraries(editor_interaction_policy_tests PRIVATE hyperion_platform)
   set_target_properties(editor_interaction_policy_tests PROPERTIES FOLDER "Hyperion/Tests")
@@ -97,60 +97,60 @@ if(BUILD_TESTING)
   add_test(NAME editor_acceptance_boundary COMMAND "${Python3_EXECUTABLE}"
     "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/EditorAcceptanceBoundary.py" "${PROJECT_BINARY_DIR}"
     "${CMAKE_CURRENT_BINARY_DIR}/EditorSources-$<CONFIG>.txt")
-  add_executable(editor_document_transition_tests Private/EditorDocumentTransitionTests.cpp Private/EditorDocumentTransition.cpp)
+  add_executable(editor_document_transition_tests Tests/Unit/EditorDocumentTransitionTests.cpp Private/EditorDocumentTransition.cpp)
   hyp_executable(editor_document_transition_tests)
   target_link_libraries(editor_document_transition_tests PRIVATE hyperion_content)
   set_target_properties(editor_document_transition_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_document_transitions COMMAND editor_document_transition_tests)
-  add_executable(editor_placement_preparation_tests Private/PlacementPreparationTests.cpp)
+  add_executable(editor_placement_preparation_tests Tests/Unit/PlacementPreparationTests.cpp)
   hyp_executable(editor_placement_preparation_tests)
   target_link_libraries(editor_placement_preparation_tests PRIVATE hyperion_editor_plugin hyperion_render hyperion_scene_editing)
   set_target_properties(editor_placement_preparation_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_placement_preparation COMMAND editor_placement_preparation_tests)
-  add_executable(editor_light_inspection_tests Private/LightInspectionTests.cpp Private/LightInspection.cpp)
+  add_executable(editor_light_inspection_tests Tests/Unit/LightInspectionTests.cpp Private/LightInspection.cpp)
   hyp_executable(editor_light_inspection_tests)
   target_link_libraries(editor_light_inspection_tests PRIVATE hyperion_render)
   set_target_properties(editor_light_inspection_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_light_inspection COMMAND editor_light_inspection_tests)
   target_sources(hyperion_editor_plugin PRIVATE
-    Private/EditorAcceptanceDriver.cpp
-    Private/EditorAcceptanceHarness.cpp
-    Private/EditorAcceptanceHooks.cpp
-    Private/EditorAcceptanceObservations.cpp
-    Private/EditorLogAcceptance.cpp
-    Private/EditorClipboardAcceptance.cpp
-    Private/EditorImportAcceptance.cpp
-    Private/EditorReparentAcceptance.cpp
-    Private/EditorRenderControlsAcceptance.cpp
-    Private/EditorRasterOptionsAcceptance.cpp
-    Private/EditorViewportChoicesAcceptance.cpp
-    Private/EditorFramingAcceptance.cpp
-    Private/EditorAcceptance.cpp
-    Private/EditorAssetAcceptance.cpp
-    Private/EditorAssetPropertyAcceptance.cpp
-    Private/EditorAssetWorkspaceAcceptance.cpp
-    Private/EditorAssetWindowAcceptance.cpp
-    Private/EditorAssetAuditAcceptance.cpp
-    Private/EditorAssetPreviewAcceptance.cpp
-    Private/EditorContentAcceptance.cpp
-    Private/EditorDeletionAcceptance.cpp
-    Private/EditorDocumentAcceptance.cpp
-    Private/EditorGizmoAcceptance.cpp
-    Private/EditorMultiSelectionAcceptance.cpp
-    Private/EditorMultiTransformAcceptance.cpp
-    Private/EditorSelectionShortcutsAcceptance.cpp
-    Private/EditorShortcutRoutingAcceptance.cpp
-    Private/EditorOutlineAcceptance.cpp
-    Private/EditorCaptureAcceptance.cpp
-    Private/EditorPlacementAcceptance.cpp
-    Private/EditorModelPlacementAcceptance.cpp
-    Private/EditorLightMarkerAcceptance.cpp
-    Private/EditorTransformAcceptance.cpp
-    Private/EditorViewAcceptance.cpp
-    Private/EditorPickingAcceptance.cpp
+    Tests/Acceptance/EditorAcceptanceDriver.cpp
+    Tests/Acceptance/EditorAcceptanceHarness.cpp
+    Tests/Acceptance/EditorAcceptanceHooks.cpp
+    Tests/Acceptance/EditorAcceptanceObservations.cpp
+    Tests/Acceptance/EditorLogAcceptance.cpp
+    Tests/Acceptance/EditorClipboardAcceptance.cpp
+    Tests/Acceptance/EditorImportAcceptance.cpp
+    Tests/Acceptance/EditorReparentAcceptance.cpp
+    Tests/Acceptance/EditorRenderControlsAcceptance.cpp
+    Tests/Acceptance/EditorRasterOptionsAcceptance.cpp
+    Tests/Acceptance/EditorViewportChoicesAcceptance.cpp
+    Tests/Acceptance/EditorFramingAcceptance.cpp
+    Tests/Acceptance/EditorAcceptance.cpp
+    Tests/Acceptance/EditorAssetAcceptance.cpp
+    Tests/Acceptance/EditorAssetPropertyAcceptance.cpp
+    Tests/Acceptance/EditorAssetWorkspaceAcceptance.cpp
+    Tests/Acceptance/EditorAssetWindowAcceptance.cpp
+    Tests/Acceptance/EditorAssetAuditAcceptance.cpp
+    Tests/Acceptance/EditorAssetPreviewAcceptance.cpp
+    Tests/Acceptance/EditorContentAcceptance.cpp
+    Tests/Acceptance/EditorDeletionAcceptance.cpp
+    Tests/Acceptance/EditorDocumentAcceptance.cpp
+    Tests/Acceptance/EditorGizmoAcceptance.cpp
+    Tests/Acceptance/EditorMultiSelectionAcceptance.cpp
+    Tests/Acceptance/EditorMultiTransformAcceptance.cpp
+    Tests/Acceptance/EditorSelectionShortcutsAcceptance.cpp
+    Tests/Acceptance/EditorShortcutRoutingAcceptance.cpp
+    Tests/Acceptance/EditorOutlineAcceptance.cpp
+    Tests/Acceptance/EditorCaptureAcceptance.cpp
+    Tests/Acceptance/EditorPlacementAcceptance.cpp
+    Tests/Acceptance/EditorModelPlacementAcceptance.cpp
+    Tests/Acceptance/EditorLightMarkerAcceptance.cpp
+    Tests/Acceptance/EditorTransformAcceptance.cpp
+    Tests/Acceptance/EditorViewAcceptance.cpp
+    Tests/Acceptance/EditorPickingAcceptance.cpp
   )
-  add_executable(editor_import_choices_tests Private/ImportChoicesTests.cpp)
-  add_executable(editor_material_choices_tests Private/MaterialChoiceTests.cpp)
+  add_executable(editor_import_choices_tests Tests/Unit/ImportChoicesTests.cpp)
+  add_executable(editor_material_choices_tests Tests/Unit/MaterialChoiceTests.cpp)
   hyp_executable(editor_material_choices_tests)
   target_link_libraries(editor_material_choices_tests PRIVATE hyperion_materials)
   target_include_directories(editor_material_choices_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
@@ -160,7 +160,7 @@ if(BUILD_TESTING)
   target_link_libraries(editor_import_choices_tests PRIVATE hyperion_asset_import hyperion_platform)
   set_target_properties(editor_import_choices_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_import_choices COMMAND editor_import_choices_tests)
-  add_executable(editor_asset_workspace_tests Private/AssetWorkspaceTests.cpp Private/AssetMaterialInteractionTests.cpp)
+  add_executable(editor_asset_workspace_tests Tests/Unit/AssetWorkspaceTests.cpp Tests/Unit/AssetMaterialInteractionTests.cpp)
   hyp_executable(editor_asset_workspace_tests)
   target_sources(editor_asset_workspace_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/Source/Tests/Renderer/AssetWorkspaceTests.cpp"
@@ -173,12 +173,12 @@ if(BUILD_TESTING)
   add_test(NAME editor_asset_workspace COMMAND editor_asset_workspace_tests)
   set_tests_properties(editor_asset_workspace PROPERTIES WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
     TIMEOUT 120 RUN_SERIAL TRUE LABELS "gpu")
-  add_executable(editor_asset_preview_contract_tests Private/AssetPreviewContractTests.cpp Private/AssetTextureDisplay.cpp)
+  add_executable(editor_asset_preview_contract_tests Tests/Unit/AssetPreviewContractTests.cpp Private/AssetTextureDisplay.cpp)
   hyp_executable(editor_asset_preview_contract_tests)
   target_link_libraries(editor_asset_preview_contract_tests PRIVATE hyperion_asset_editing hyperion_environment hyperion_textures hyperion_tasks)
   set_target_properties(editor_asset_preview_contract_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_asset_preview_contracts COMMAND editor_asset_preview_contract_tests)
-  add_executable(editor_asset_document_tests Private/AssetDocumentTests.cpp)
+  add_executable(editor_asset_document_tests Tests/Unit/AssetDocumentTests.cpp)
   hyp_executable(editor_asset_document_tests)
   target_sources(editor_asset_document_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests/Assets/EditorAssetFixture.cpp")
   target_link_libraries(editor_asset_document_tests PRIVATE hyperion_asset_editing hyperion_assets hyperion_textures hyperion_scene hyperion_environment hyperion_materials)
@@ -193,7 +193,7 @@ if(BUILD_TESTING)
     --layout "${PROJECT_BINARY_DIR}/editor-asset-tests/Layout.ini" --hidden)
   set_tests_properties(editor_asset_editors PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     FIXTURES_REQUIRED editor_asset_fixture TIMEOUT 150 RUN_SERIAL TRUE LABELS "gpu;desktop")
-  add_executable(editor_content_tests Private/ContentBrowserTests.cpp Private/ContentBrowser.cpp Private/EditorPreferences.cpp)
+  add_executable(editor_content_tests Tests/Unit/ContentBrowserTests.cpp Private/ContentBrowser.cpp Private/EditorPreferences.cpp)
   hyp_executable(editor_content_tests)
   target_compile_definitions(editor_content_tests PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   target_link_libraries(editor_content_tests PRIVATE hyperion_application_services hyperion_assets hyperion_content hyperion_io hyperion_scene hyperion_textures hyperion_tasks)
@@ -211,12 +211,12 @@ if(BUILD_TESTING)
     "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/ContentRootAcceptance.py" $<TARGET_FILE:hyperion_editor>
     "${PROJECT_SOURCE_DIR}" "${PROJECT_BINARY_DIR}/editor-content-tests")
   set_tests_properties(editor_content_startup PROPERTIES FIXTURES_REQUIRED editor_content_fixture TIMEOUT 150 RUN_SERIAL TRUE LABELS "gpu;desktop")
-  add_executable(editor_state_tests Private/EditorStateTests.cpp)
+  add_executable(editor_state_tests Tests/Unit/EditorStateTests.cpp)
   hyp_executable(editor_state_tests)
   target_link_libraries(editor_state_tests PRIVATE hyperion_scene_editing)
   set_target_properties(editor_state_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_state COMMAND editor_state_tests)
-  add_executable(editor_preferences_tests Private/EditorPreferencesTests.cpp Private/EditorPreferences.cpp)
+  add_executable(editor_preferences_tests Tests/Unit/EditorPreferencesTests.cpp Private/EditorPreferences.cpp)
   hyp_executable(editor_preferences_tests)
   target_link_libraries(editor_preferences_tests PRIVATE hyperion_io)
   set_target_properties(editor_preferences_tests PROPERTIES FOLDER "Hyperion/Tests")

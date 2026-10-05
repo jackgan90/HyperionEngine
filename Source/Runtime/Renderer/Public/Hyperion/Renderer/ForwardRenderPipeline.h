@@ -17,7 +17,7 @@ public:
 	           const std::function<void(FRenderGraph&)>& InExtensions = {}, bool bInDeferPreparation = false);
 	FForwardFrame GetFrame() const; // Render, before building the next frame.
 	void Complete();                // Render, after executing a deferred graph.
-	const FForwardPipelineStatistics& Statistics() const;
+	const FRenderFrameStatistics& Statistics() const;
 	const FCascadedShadowMap& Shadows() const;
 
 private:
@@ -29,7 +29,7 @@ private:
 	std::shared_ptr<const void> Lifetime;
 	std::uint64_t AllocatedShadowBytes{};
 	EDepthConvention ShadowDepthConvention = EDepthConvention::Standard;
-	FForwardPipelineStatistics LastStatistics;
+	FRenderFrameStatistics LastStatistics;
 	bool bPending{};
 };
 } // namespace Hyperion

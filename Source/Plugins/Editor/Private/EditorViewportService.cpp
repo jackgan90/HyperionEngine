@@ -32,7 +32,7 @@ FRenderDiagnostics FEditorPlugin::RenderDiagnostics()
 	Result.Frame = Health.Frame;
 	Result.bReady = Health.bReady;
 	Result.SceneError = Health.Error;
-	Result.Pipeline = RenderStats;
+	Result.Pipeline = static_cast<const FForwardPipelineStatistics&>(RenderStats);
 	Result.FrameIntervalStatistics = FrameTiming.Snapshot();
 	FDeviceStats Snapshot;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},

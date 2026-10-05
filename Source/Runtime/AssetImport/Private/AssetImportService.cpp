@@ -1,4 +1,5 @@
 #include "AssetImportInternal.h"
+#include "Hyperion/AssetImport/ImporterRegistry.h"
 #include "Hyperion/Core/ContentHash.h"
 #include "Hyperion/IO/Path.h"
 #include <algorithm>
@@ -77,24 +78,20 @@ FAssetImportService::~FAssetImportService()
 void FAssetImportService::Register(FAssetImporter InImporter)
 {
 	std::lock_guard Lock(Impl->Mutex);
-	if (Impl->bStarted || Impl->bClosing || InImporter.Id.empty() || !InImporter.Version || !InImporter.Type ||
-	    !InImporter.Convert || InImporter.Extensions.empty())
+	if (Impl->bStarted || Impl->bClosing || Impl->bImportersFrozen)
 	{
 		throw std::logic_error("Register valid source importers before conversion");
 	}
-	ValidateRecordDescriptor(*InImporter.Type);
-	for (auto& Extension : InImporter.Extensions)
+	InImporter = NormalizeAssetImporter(std::move(InImporter));
+	FRecordRegistry Types;
+	for (const auto& Existing : Impl->Importers)
 	{
-		std::transform(Extension.begin(), Extension.end(), Extension.begin(),
-		               [](unsigned char InCharacter)
-		               {
-			               return static_cast<char>(std::tolower(InCharacter));
-		               });
-		if (Extension == ".hasset")
+		Types.Register(*Existing.Type);
+		if (Existing.Id == InImporter.Id)
 		{
-			throw std::invalid_argument("Native assets are not import sources");
+			throw std::logic_error("Duplicate source importer identity");
 		}
-		for (const auto& Existing : Impl->Importers)
+		for (const auto& Extension : InImporter.Extensions)
 		{
 			if (Existing.Type->Id == InImporter.Type->Id &&
 			    std::find(Existing.Extensions.begin(), Existing.Extensions.end(), Extension) !=
@@ -104,21 +101,28 @@ void FAssetImportService::Register(FAssetImporter InImporter)
 			}
 		}
 	}
+	Types.Register(*InImporter.Type);
 	Impl->Importers.push_back(std::move(InImporter));
+}
+
+void FAssetImportService::FreezeImporters()
+{
+	std::lock_guard Lock(Impl->Mutex);
+	Impl->bImportersFrozen = true;
+}
+
+std::vector<FAssetImporter> FAssetImportService::ImporterDescriptors() const
+{
+	std::lock_guard Lock(Impl->Mutex);
+	return Impl->Importers;
 }
 
 FConvertedAsset FAssetImportService::FImpl::Convert(const std::filesystem::path& InPath, std::string_view InType,
                                                     const FAssetConversionSettings& InSettings)
 {
 	const auto Extension = ImportExtension(InPath);
-	const auto Importer = std::find_if(Importers.begin(), Importers.end(),
-	                                   [&](const FAssetImporter& InImporter)
-	                                   {
-		                                   return InImporter.Type->Id == InType &&
-		                                          std::find(InImporter.Extensions.begin(), InImporter.Extensions.end(),
-		                                                    Extension) != InImporter.Extensions.end();
-	                                   });
-	if (Importer == Importers.end())
+	const auto* Importer = FindAssetImporter(Importers, Extension, InType);
+	if (!Importer)
 	{
 		throw std::runtime_error("No source importer for " + Extension + " and " + std::string(InType));
 	}

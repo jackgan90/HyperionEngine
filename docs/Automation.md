@@ -170,7 +170,7 @@ Editor 与独立资产适配器在打开时共用 AssetEditing 的 `SupportsAsse
 
 新增能力应验证类型引用可解析、枚举语义可读、示例有效、非法参数无副作用、修改响应与查询一致，以及 GUI 共用事务的历史和保存行为；不向 CLI/MCP 添加领域分支。
 
-视口 `culling` 和 `outlineMode` 保留现有可空 uint32 wire 字段：前者为 0 None、1 Linear、2 BVH，后者为 0 Union、1 Per object。Renderer 的 `ViewportChoices` 定义稳定身份与数值映射；GUI 标签顺序不决定选项语义，GUI 与 `view.set` 继续共用视口服务的校验和提交。非法值在修改前拒绝，这两类临时选项不改变场景 revision、历史、dirty 状态或渲染设置 revision。`render_controls` 覆盖映射与重排，`editor_render_controls` 覆盖实际 GUI 选择、自动化等价和拒绝后的状态保持。
+视口 `culling` 和 `outlineMode` 保留现有可空 uint32 wire 字段：前者为 0 None、1 Linear、2 BVH，后者为 0 Union、1 Per object。RenderControls 的 `ViewportChoices` 定义稳定身份与数值映射；Renderer 头仅兼容导出；GUI 标签顺序不决定选项语义，GUI 与 `view.set` 继续共用视口服务的校验和提交。非法值在修改前拒绝，这两类临时选项不改变场景 revision、历史、dirty 状态或渲染设置 revision。`render_controls` 覆盖映射与重排，`editor_render_controls` 覆盖实际 GUI 选择、自动化等价和拒绝后的状态保持。
 
 ## 值、结果与限制
 
@@ -235,7 +235,11 @@ Editor 的字段提交使用 `SubmitField`，由共享字段准备结果决定�
 
 GUI、独立和附着 automation 共用字段校验、规范化、引用图准备与文档提交。调用方不选择预览影响：`model.nodes.set` 仅修改节点名称时与 GUI 一样保留预览，修改 Local 时使预览失效；材质值规范化后未变、相同引用及相同编码数据也不重复使预览失效。上述提交仍保留原有 generation、dirty、Undo/Redo 和保存语义。直接领域提交拒绝需要异步验证的引用，编码的完整草稿替换保持在专用工作流内部。
 
-Automation 插件的私有场景 registration adapter 共享类型化反射编解码，并调用统一的 `InvokeAutomation` 错误边界。每个 operation family 继续声明 owner、效果、完成语义、可用性、示例和关键词；组件模板保留显式请求 descriptor。Runtime transport 不解释场景类型或执行领域分支。
+AutomationHost 的公共 `OperationRegistration.h` 共享类型化反射编解码和 `InvokeAutomation` 错误边界。每个 operation family 继续声明 owner、效果、完成语义、可用性、示例和关键词；组件模板保留显式请求 descriptor。Runtime transport 不解释场景类型或执行领域分支。
+
+组件所属功能可包含 `Hyperion/AutomationHost/SceneComponentOperations.h`，在 Main 启动阶段先注册 CPU `FSceneComponentDescriptor`，再调用 `RegisterSceneComponentOperations<T>(Catalog, Document, Options, Example)`。`Options.Owner` 必填，默认只暴露 get；set/set_batch 需要显式设置 `bExposeWrite`。组件的合法默认值不能由 `T{}` 提供时，应传入合法 Example。注册使用既有 `scene.component.<type>.get/set/set_batch` ID 和 SceneEditing 请求描述符，不需要修改内置组件列表或传输。
+
+注册必须早于 Catalog Seal；未知或不一致的组件、重复 ID、非法示例或类型冲突在发布操作前拒绝。缺失 Document 时保留 unavailable 声明。Document 和反射描述符必须活到所有调用结束，所属插件安装 scoped cleanup，在释放 provider 前调用 `Catalog.UnregisterOwner(Options.Owner)`；撤回可在 Seal 后执行。写操作仍经过共享字段策略、revision/idle 检查、候选校验、原子批次和历史，不因曝光选项而绕过领域校验或传输授权。外部组件的渲染和专用 GUI 消费适配由所属功能另行提供。
 
 目标是持续扩大人类任务的等价能力，不是一比一 RPC 每个 C++ 方法。独立资产模式拥有自己的草稿，通过保存时的 digest/identity 检查防止覆盖外部修改；附着模式直接操作目标应用的同一场景服务实例。
 

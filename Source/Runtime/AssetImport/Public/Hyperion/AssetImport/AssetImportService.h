@@ -36,6 +36,18 @@ struct FAssetImportContext
 	}
 };
 
+enum class EAssetImporterExposure
+{
+	ToolingOnly,
+	Workspace
+};
+
+struct FAssetImporterSettings
+{
+	bool bTextureEncoding{};
+	bool bSkyBake{};
+};
+
 struct FAssetImporter
 {
 	std::string Id;
@@ -43,6 +55,11 @@ struct FAssetImporter
 	const FRecordDescriptor* Type{};
 	std::vector<std::string> Extensions;
 	std::function<std::shared_ptr<void>(FAssetImportContext&)> Convert;
+	EAssetImporterExposure Exposure = EAssetImporterExposure::ToolingOnly;
+	std::string Description;
+	FAssetImporterSettings Settings;
+	// Registration retains reflection metadata; callbacks and any providers they borrow must outlive work.
+	std::shared_ptr<const FRecordDescriptor> OwnedType;
 };
 
 struct FConvertedAsset
@@ -145,6 +162,8 @@ public:
 	explicit FAssetImportService(FIOService& InIO);
 	~FAssetImportService();
 	void Register(FAssetImporter InImporter);
+	void FreezeImporters();
+	std::vector<FAssetImporter> ImporterDescriptors() const;
 
 	template<class T> TImportRequest<T> LoadAsync(const std::filesystem::path& InPath)
 	{

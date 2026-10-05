@@ -1,5 +1,6 @@
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
+#include "Hyperion/Core/Logging/LogHistory.h"
 #include "Hyperion/GuiRenderer/GuiRenderer.h"
 #include "Hyperion/RHI/RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
@@ -9,6 +10,8 @@
 #include "Support/TestSupport.h"
 #include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <thread>
 #include <type_traits>
@@ -119,6 +122,20 @@ public:
 	std::uint32_t Cancelled{};
 };
 
+class FShutdownRetention final : public IRHIResource
+{
+public:
+	~FShutdownRetention() override
+	{
+		std::fputs("UNSAFE_RETAINED_RESOURCE_DESTRUCTION\n", stderr);
+	}
+
+	const void* GetDeviceIdentity() const noexcept override
+	{
+		return this;
+	}
+};
+
 class FTestDevice final : public IRHIDevice
 {
 public:
@@ -173,6 +190,10 @@ public:
 
 	void WaitIdle() override
 	{
+		if (OnWaitIdle)
+		{
+			OnWaitIdle();
+		}
 		if (bFailNextIdle)
 		{
 			bFailNextIdle = false;
@@ -185,8 +206,19 @@ public:
 		return {};
 	}
 
+	void CollectCompletedResources() override
+	{
+		if (OnCollect)
+		{
+			OnCollect();
+		}
+	}
+
 	bool bFailNextIdle{};
+	std::function<void()> OnWaitIdle;
+	std::function<void()> OnCollect;
 	std::function<void()> OnDestroy;
+	std::shared_ptr<IRHIResource> RetainedForShutdown;
 
 private:
 	FRHICapabilities Capabilities;
@@ -392,6 +424,99 @@ void CheckSessionCloseRetry()
 	Session->Close();
 	Session->Close();
 	Session.reset();
+	FRenderResourceService Resources(Tasks, Device, Compiler);
+	Device.bFailNextIdle = true;
+	Rejects(
+	    [&]
+	    {
+		    Resources.Close();
+	    });
+	Resources.Close();
+	Resources.Close();
+}
+
+void ConfigurePersistentShutdown(FTestDevice& InDevice, FTaskSystem& InTasks, std::string_view InMode,
+                                 unsigned& OutCalls)
+{
+	InDevice.RetainedForShutdown = std::make_shared<FShutdownRetention>();
+	InDevice.OnDestroy = []
+	{
+		std::fputs("UNSAFE_DEVICE_DESTRUCTION\n", stderr);
+	};
+	auto Failure = [&InTasks, &OutCalls, bCollection = InMode.find("collection") != std::string_view::npos,
+	                bUnknown = InMode.find("unknown") != std::string_view::npos]
+	{
+		InTasks.Require({EDomain::Rhi, 0});
+		std::fprintf(stderr, "SHUTDOWN_FAULT call=%u domain=Rhi0\n", ++OutCalls);
+		if (bUnknown)
+		{
+			throw 7;
+		}
+		throw std::runtime_error(bCollection ? "persistent collection failure" : "persistent idle failure");
+	};
+	if (InMode.find("collection") != std::string_view::npos)
+	{
+		InDevice.OnCollect = std::move(Failure);
+	}
+	else
+	{
+		InDevice.OnWaitIdle = std::move(Failure);
+	}
+}
+
+void CheckPersistentShutdown(std::string_view InMode)
+{
+	std::set_terminate(
+	    []
+	    {
+		    std::fputs("UNEXPECTED_TERMINATE\n", stderr);
+		    std::fflush(stderr);
+		    std::_Exit(86);
+	    });
+	if (InMode.find("log-failure") != std::string_view::npos)
+	{
+		InitializeEditorLog("shutdown-fallback.log", {},
+		                    [](std::string_view, bool)
+		                    {
+			                    throw std::runtime_error("injected log failure");
+		                    });
+	}
+	FTaskSystem Tasks(1, 1);
+	FTestDevice Device;
+	FShaderCompiler Compiler(TestShaderRoot(), "persistent-shutdown-shader-cache");
+	unsigned Calls{};
+	ConfigurePersistentShutdown(Device, Tasks, InMode, Calls);
+	const auto ObserveFailure = [](auto& InOwner)
+	{
+		bool bFailed{};
+		try
+		{
+			InOwner.Close();
+		}
+		catch (...)
+		{
+			bFailed = true;
+		}
+		HYP_CHECK(bFailed);
+	};
+	if (InMode.starts_with("resource"))
+	{
+		auto Resources = std::make_unique<FRenderResourceService>(Tasks, Device, Compiler);
+		if (InMode.find("direct") == std::string_view::npos)
+		{
+			ObserveFailure(*Resources);
+			std::fputs("EXPLICIT_CLOSE_FAILURE_OBSERVED\n", stderr);
+		}
+		Resources.reset();
+	}
+	else
+	{
+		auto Session = std::make_unique<FRenderSession>(Tasks, Device, Compiler);
+		ObserveFailure(*Session);
+		std::fputs("EXPLICIT_CLOSE_FAILURE_OBSERVED\n", stderr);
+		Session.reset();
+	}
+	throw std::runtime_error("Persistent shutdown incorrectly continued");
 }
 
 void CheckDeferredGuiOwner(bool bInDestroy)
@@ -422,7 +547,7 @@ void CheckDeferredGuiOwner(bool bInDestroy)
 	HYP_CHECK(Swapchain.Begun == 0);
 }
 
-void CheckGraphicsShutdownWaitFailure()
+void CheckGraphicsShutdownWaitFailure(bool bInPersistent = false)
 {
 	std::vector<std::pair<char, std::thread::id>> Destroyed;
 	Destroyed.reserve(2);
@@ -456,7 +581,19 @@ void CheckGraphicsShutdownWaitFailure()
 		Destroyed.emplace_back('s', std::this_thread::get_id());
 	};
 	// Close the session first so the injected failure belongs to the graphics owner's final wait.
-	Host.GetServices().Require<FRenderSession>().Close();
+	if (!bInPersistent)
+	{
+		Host.GetServices().Require<FRenderSession>().Close();
+	}
+	unsigned Calls{};
+	if (bInPersistent)
+	{
+		ConfigurePersistentShutdown(Device, Tasks, "idle", Calls);
+		Swapchain.OnDestroy = []
+		{
+			std::fputs("UNSAFE_SWAPCHAIN_DESTRUCTION\n", stderr);
+		};
+	}
 	std::thread::id RhiThread;
 	Tasks.Wait(Tasks.Dispatch({EDomain::Rhi, 0},
 	                          [&]
@@ -486,6 +623,31 @@ int main(int InArgc, char** InArgv)
 {
 	try
 	{
+		if (InArgc == 3 && std::string_view(InArgv[1]) == "--persistent-shutdown")
+		{
+			HYP_CHECK(std::atexit(
+			              []
+			              {
+				              std::fputs("UNSAFE_ATEXIT_EXECUTION\n", stderr);
+				              std::fflush(stderr);
+			              }) == 0);
+			if (std::string_view(InArgv[2]) == "graphics-idle")
+			{
+				std::set_terminate(
+				    []
+				    {
+					    std::fputs("UNEXPECTED_TERMINATE\n", stderr);
+					    std::fflush(stderr);
+					    std::_Exit(86);
+				    });
+				CheckGraphicsShutdownWaitFailure(true);
+			}
+			else
+			{
+				CheckPersistentShutdown(InArgv[2]);
+			}
+			return 2;
+		}
 		if (InArgc == 2 && std::string_view(InArgv[1]) == "--graphics-shutdown-wait")
 		{
 			CheckGraphicsShutdownWaitFailure();

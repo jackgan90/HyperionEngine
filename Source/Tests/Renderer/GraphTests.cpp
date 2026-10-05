@@ -4,6 +4,7 @@
 
 using namespace Hyperion;
 void CheckComputeGraph();
+void CheckGraphStages();
 void CheckGraphBufferUsage();
 void CheckRenderPassTiming();
 
@@ -410,12 +411,12 @@ void CheckColorTargets()
 	Conflicting = Graph;
 	Base.Reads.clear();
 	Base.Color = Base.Colors.front();
-	Conflicting.Add(Base);
 	Rejects(
 	    [&]
 	    {
-		    Conflicting.Compile();
+		    Conflicting.Add(Base);
 	    });
+	HYP_CHECK(Conflicting.Compile().size() == Compiled.size());
 	Conflicting = {};
 	const auto Undefined = Conflicting.Import({"undefined",
 	                                           FRenderTarget::FromTexture({std::make_shared<FColorTexture>()}),
@@ -581,6 +582,7 @@ int main()
 	{
 		CheckPacketOwnership();
 		CheckComputeGraph();
+		CheckGraphStages();
 		CheckGraphBufferUsage();
 		CheckRenderPassTiming();
 		CheckDeferredPreparation();

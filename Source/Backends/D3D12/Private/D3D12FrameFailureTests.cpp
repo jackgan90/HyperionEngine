@@ -2,6 +2,7 @@
 #include "D3D12Resources.h"
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
+#include "Hyperion/Assets/Assets.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
 #include "Hyperion/Renderer/RenderGraph.h"
 #include "Hyperion/Renderer/RenderSession.h"

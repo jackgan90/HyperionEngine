@@ -47,7 +47,8 @@ public:
 		InContext.Provide(*IO);
 		InContext.Provide(*Assets);
 		InContext.Provide(*Content);
-		Imports = std::make_unique<FAssetImportWorkspace>(*IO, *Assets, *Content);
+		Imports = std::make_unique<FAssetImportWorkspace>(
+		    *IO, *Assets, *Content, Options.Importers ? *Options.Importers : DefaultAssetImporters());
 		InContext.Defer(
 		    [this]
 		    {
@@ -95,6 +96,18 @@ private:
 
 void RegisterAssetServices(FPluginRegistry& InRegistry, FAssetServiceOptions InOptions)
 {
+	if (InOptions.Importers)
+	{
+		for (auto& Importer : *InOptions.Importers)
+		{
+			if (Importer.Type)
+			{
+				// Retain configuration metadata now; validation still belongs to plugin startup.
+				Importer.OwnedType = std::make_shared<const FRecordDescriptor>(*Importer.Type);
+				Importer.Type = Importer.OwnedType.get();
+			}
+		}
+	}
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "assets";
 	Descriptor.Requires = {typeid(FTaskSystem)};

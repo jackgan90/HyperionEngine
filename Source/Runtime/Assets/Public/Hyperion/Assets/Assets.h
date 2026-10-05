@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/ImageData/ImageData.h"
 #include "Hyperion/Math/Math.h"
 #include "Hyperion/Reflection/Reflection.h"
 #include <cstdint>
@@ -21,20 +22,6 @@ struct FMesh
 	std::vector<std::uint32_t> Indices;
 };
 
-enum class EColorSpace
-{
-	Linear,
-	Srgb
-};
-
-struct FImage
-{
-	std::uint32_t Width{};
-	std::uint32_t Height{};
-	EColorSpace Encoding = EColorSpace::Linear;
-	std::vector<float> Rgba;
-};
-
 // PNG values remain sRGB encoded; EXR values remain linear. PNG writing quantizes to 8 bits.
 FImage LoadImageFile(const std::filesystem::path& InPath);
 void SaveImage(const std::filesystem::path& InPath, const FImage& InImage);
@@ -46,13 +33,6 @@ struct FAssetReference
 };
 
 const FTypeDescriptor& AssetReferenceType();
-
-struct FImagePixels
-{
-	std::uint32_t Width{};
-	std::uint32_t Height{};
-	std::vector<std::uint8_t> Rgba;
-};
 
 FImagePixels DecodeImage(std::span<const std::byte> InBytes);
 // Bounded linear RGB/RGBA Radiance HDR or single-part EXR decoded from tracked IO bytes.

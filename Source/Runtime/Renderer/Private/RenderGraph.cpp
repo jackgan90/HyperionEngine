@@ -26,19 +26,19 @@ bool SameImport(const FGraphTextureImport& InA, const FGraphTextureImport& InB)
 	       InA.bStorage == InB.bStorage && InA.bSampledOnly == InB.bSampledOnly;
 }
 
-std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCommands)
+std::vector<FPassCommands> PreparePass(FAcceptedGraphPass& InPass, FPassCommands InCommands)
 {
-	InCommands.TimingTag = EncodeRenderPassTiming(InPass.Timing);
-	if (InPass.bCompute)
+	InCommands.TimingTag = EncodeRenderPassTiming(InPass.Common.Timing);
+	if (auto* Compute = std::get_if<FGraphComputePayload>(&InPass.Payload))
 	{
-		InCommands.Name = InPass.Name;
-		InCommands.Dispatches = InPass.PrepareCompute ? InPass.PrepareCompute() : std::move(InPass.Dispatches);
+		InCommands.Name = InPass.Common.Name;
+		InCommands.Dispatches = Compute->Prepare ? Compute->Prepare() : std::move(Compute->Dispatches);
 		if (InCommands.Dispatches.empty() &&
-		    (!InPass.ComputeWrites.empty() || std::any_of(InPass.Buffers.begin(), InPass.Buffers.end(),
-		                                                  [](const auto& InAccess)
-		                                                  {
-			                                                  return InAccess.State == EResourceState::ShaderWrite;
-		                                                  })))
+		    (!Compute->Writes.empty() || std::any_of(Compute->Buffers.begin(), Compute->Buffers.end(),
+		                                             [](const auto& InAccess)
+		                                             {
+			                                             return InAccess.State == EResourceState::ShaderWrite;
+		                                             })))
 		{
 			throw std::invalid_argument("Empty compute work cannot fulfill a declared write");
 		}
@@ -51,7 +51,8 @@ std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCo
 		}
 		return {std::move(InCommands)};
 	}
-	auto Batches = InPass.Prepare ? InPass.Prepare() : std::move(InPass.Batches);
+	auto& Graphics = std::get<FGraphGraphicsPayload>(InPass.Payload);
+	auto Batches = Graphics.Prepare ? Graphics.Prepare() : std::move(Graphics.Batches);
 	if (Batches.empty())
 	{
 		Batches.push_back({}); // Clear/store and resource dependencies survive an empty draw list.
@@ -66,7 +67,7 @@ std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCo
 	for (std::size_t Index = 0; Index < Batches.size(); ++Index)
 	{
 		auto Commands = InCommands;
-		Commands.Name = InPass.Name + "/" + std::to_string(Index);
+		Commands.Name = InPass.Common.Name + "/" + std::to_string(Index);
 		static_cast<FDrawCommands&>(Commands) = std::move(Batches[Index].Commands);
 		const auto Attachments = InPass.GetColors();
 		auto Colors = Commands.Color ? std::span<FColorAttachment>(&*Commands.Color, 1)
@@ -113,6 +114,8 @@ std::vector<FPassCommands> PreparePass(FGraphicsPass& InPass, FPassCommands InCo
 FRenderGraph::FRenderGraph() : Identity(NextGraphIdentity())
 {
 }
+
+FRenderGraph::~FRenderGraph() = default;
 
 FRenderGraph::FRenderGraph(const FRenderGraph& InOther) : FRenderGraph()
 {
@@ -224,23 +227,15 @@ void FRenderGraph::Export(FGraphTexture InTexture, EResourceState InState)
 std::size_t FRenderGraph::Add(FGraphicsPass InPass)
 {
 	CheckMutable();
-	Passes.push_back(std::move(InPass));
+	Passes.push_back(AcceptGraphPass(std::move(InPass)));
 	return Passes.size() - 1;
 }
 
 std::size_t FRenderGraph::AddCompute(FComputePass InPass)
 {
-	FGraphicsPass Pass;
-	Pass.Name = std::move(InPass.Name);
-	Pass.Timing = InPass.Timing;
-	Pass.bCompute = true;
-	Pass.Reads = std::move(InPass.Reads);
-	Pass.ComputeWrites = std::move(InPass.Writes);
-	Pass.Buffers = std::move(InPass.Buffers);
-	Pass.After = std::move(InPass.After);
-	Pass.Dispatches = std::move(InPass.Dispatches);
-	Pass.PrepareCompute = std::move(InPass.Prepare);
-	return Add(std::move(Pass));
+	CheckMutable();
+	Passes.push_back(AcceptGraphPass(std::move(InPass)));
+	return Passes.size() - 1;
 }
 
 std::vector<FPassCommands> FRenderGraph::Compile() const

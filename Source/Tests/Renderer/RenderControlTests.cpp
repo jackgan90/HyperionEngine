@@ -4,6 +4,7 @@
 #include "Hyperion/Renderer/RenderBenchmark.h"
 #include "Hyperion/Renderer/RenderSettings.h"
 #include "Hyperion/Renderer/SceneViewport.h"
+#include "Hyperion/Renderer/ShadowControls.h"
 #include "Hyperion/Scene/Scene.h"
 #include "Support/TestSupport.h"
 #include <fstream>

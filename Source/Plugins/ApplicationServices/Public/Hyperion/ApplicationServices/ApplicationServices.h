@@ -1,4 +1,5 @@
 #pragma once
+#include "Hyperion/AssetImport/AssetImportService.h"
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/Plugins/PluginRuntime.h"
@@ -16,6 +17,10 @@ struct FAssetServiceOptions
 	std::optional<std::filesystem::path> AssetRoot;
 	bool bReadOnly{};
 	bool bRecoverInvalidRoot{};
+	// Unset selects built-ins; an explicit empty set disables all source importers.
+	// Registration retains type metadata before delayed plugin startup.
+	// Converter callbacks and borrowed providers must outlive admitted plugin work.
+	std::optional<std::vector<FAssetImporter>> Importers;
 };
 
 struct FWindowServiceOptions

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 
 
@@ -32,6 +33,11 @@ def location(root, entry):
 
 def expanded_items(args):
     return [item for arg in args for item in arg.split(';') if item]
+
+
+def references_owned(args, targets):
+    return any(token in targets or token.startswith('hyperion_')
+               for arg in args for token in re.findall(r'[A-Za-z_][A-Za-z0-9_-]*', arg))
 
 
 def collect(root, trace):
@@ -80,8 +86,14 @@ def collect(root, trace):
         if command in ('set_property', 'set_target_properties'):
             graph_properties = any(item in ('SOURCES', 'INTERFACE_SOURCES') or
                                    ('LINK' in item and 'LIBRARIES' in item) for item in args)
-            if graph_properties and (any(target in args for target in targets) or 'DIRECTORY' in args):
+            if graph_properties and (references_owned(args, targets) or 'DIRECTORY' in args):
                 raise ValueError(f'{location(root, entry)}: unsupported graph property mutation')
+        if command == 'target_link_libraries':
+            if args[0] == 'hyperion_image_data' and any(
+                    item not in ('PUBLIC', 'PRIVATE', 'INTERFACE') for item in args[1:]):
+                raise ValueError(f'{location(root, entry)}: ImageData must be independent; links {args[1:]}')
+            if args[0] not in targets and references_owned(args[1:], targets):
+                raise ValueError(f'{location(root, entry)}: non-owned target {args[0]} links owned targets: {args[1:]}')
         if args[0] not in targets:
             continue
         target = targets[args[0]]

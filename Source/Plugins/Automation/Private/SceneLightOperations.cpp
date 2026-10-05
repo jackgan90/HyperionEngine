@@ -1,4 +1,4 @@
-#include "Hyperion/Renderer/SceneLightControls.h"
+#include "Hyperion/RenderControls/SceneLightControls.h"
 #include "SceneOperations.h"
 
 namespace Hyperion

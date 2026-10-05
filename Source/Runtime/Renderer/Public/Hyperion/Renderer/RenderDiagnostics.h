@@ -1,60 +1,10 @@
 #pragma once
-#include "Hyperion/Reflection/RecordValue.h"
-#include "Hyperion/Renderer/FrameTiming.h"
-#include "Hyperion/Renderer/RenderPipelineFrame.h"
-#include "Hyperion/Renderer/SceneDiagnostics.h"
+#include "Hyperion/RHI/RHIDevice.h"
+#include "Hyperion/RenderControls/RenderDiagnostics.h"
+#include "Hyperion/Tasks/TaskSystem.h"
 
 namespace Hyperion
 {
-struct FRenderHealth
-{
-	std::uint64_t Frame{};
-	bool bReady{};
-	std::string Error;
-};
-
-template<> const FRecordDescriptor& RecordType<FRenderHealth>();
-
-struct FRenderDiagnostics
-{
-	std::uint64_t Frame{};
-	bool bReady{};
-	std::string SceneError;
-	FForwardPipelineStatistics Pipeline;
-	std::string Adapter;
-	std::map<std::string, std::uint64_t> Device;
-	std::map<std::string, double> GpuPassMilliseconds;
-	std::uint64_t GpuTimingFrame{};
-	double FrameIntervalMilliseconds{};
-	FFrameIntervalStatistics FrameIntervalStatistics;
-	std::uint64_t TrackedCpuBytes{};
-	std::map<std::string, std::uint64_t> ExecutedTasks;
-};
-
-class IRenderDiagnostics
-{
-public:
-	virtual ~IRenderDiagnostics() = default;
-	virtual FRenderDiagnostics RenderDiagnostics() = 0;
-
-	virtual FRenderHealth RenderHealth()
-	{
-		const auto State = RenderDiagnostics();
-		return {State.Frame, State.bReady, State.SceneError};
-	}
-
-	virtual FSceneComponentDiagnostics ComponentDiagnostics(FSceneHandle InHandle, std::string_view InComponent) = 0;
-};
-
 void SetExecutionDiagnostics(FRenderDiagnostics& InResult, const FTaskSystem& InTasks, double InFrameMilliseconds);
 void SetDeviceDiagnostics(FRenderDiagnostics& InResult, const FDeviceStats& InDevice);
-template<> std::span<const TRecordEnumEntry<ESceneCameraStatus>> RecordEnumEntries<ESceneCameraStatus>();
-template<> const FRecordDescriptor& RecordType<FRenderBatchStats>();
-template<> const FRecordDescriptor& RecordType<FSceneVisibilityStats>();
-template<> const FRecordDescriptor& RecordType<FLocalLightStatistics>();
-template<> const FRecordDescriptor& RecordType<FSelectionOutlineStatistics>();
-template<> const FRecordDescriptor& RecordType<FHierarchicalDepthStats>();
-template<> const FRecordDescriptor& RecordType<FRenderViewStatistics>();
-template<> const FRecordDescriptor& RecordType<FForwardPipelineStatistics>();
-template<> const FRecordDescriptor& RecordType<FRenderDiagnostics>();
 } // namespace Hyperion

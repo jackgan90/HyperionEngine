@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Materials/MaterialParameters.h"
 #include "Hyperion/RHI/RHIGraphicsState.h"
+#include "Hyperion/RenderControls/RenderStatistics.h"
 #include "Hyperion/Renderer/MaterialFrame.h"
 #include "Hyperion/Renderer/RenderItemList.h"
 #include "Hyperion/Renderer/RenderPass.h"
@@ -59,13 +60,6 @@ struct FRenderCamera
 	float VerticalRadians = 1;
 	float Near = .05f;
 	float Far = 500;
-};
-
-enum class ERenderViewStatsCategory
-{
-	Main,
-	Shadow,
-	Uncounted
 };
 
 // Participation is independent of the open material pass Usage selected by a view.

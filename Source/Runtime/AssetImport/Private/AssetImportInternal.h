@@ -22,6 +22,7 @@ struct FAssetImportService::FImpl
 	FIOService& IO;
 	std::mutex Mutex;
 	bool bStarted{};
+	bool bImportersFrozen{};
 	bool bClosing{};
 	FCancellationToken Cancellation;
 	std::vector<FAssetImporter> Importers;

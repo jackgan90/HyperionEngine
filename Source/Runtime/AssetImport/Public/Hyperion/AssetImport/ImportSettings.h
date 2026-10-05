@@ -3,6 +3,10 @@
 
 namespace Hyperion
 {
+struct FAssetImporter;
+struct FAssetConversionSettings;
+void ValidateImportSettings(const FAssetConversionSettings& InSettings, const FAssetImporter* InImporter);
+
 struct FAssetConversionSettings
 {
 	std::optional<EMaterialTextureEncoding> TextureEncoding;

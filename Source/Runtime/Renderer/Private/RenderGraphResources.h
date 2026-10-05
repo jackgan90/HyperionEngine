@@ -1,5 +1,5 @@
 #pragma once
-#include "Hyperion/Renderer/RenderGraph.h"
+#include "RenderGraphPass.h"
 
 namespace Hyperion
 {
@@ -24,13 +24,13 @@ struct FGraphResourceState
 };
 
 void ValidateGraphImport(const FGraphTextureImport& InResource);
-void ValidateGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+void ValidateGraphPass(const FAcceptedGraphPass& InPass, std::span<const FGraphTextureImport> InResources,
                        std::uint64_t InGraph);
 void ValidateGraphState(const FGraphTextureImport& InResource, EResourceState InState);
 std::vector<FGraphResourceState> ResolveGraphResources(std::span<const FGraphTextureImport> InResources);
-void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+void ApplyGraphPass(const FAcceptedGraphPass& InPass, std::span<const FGraphTextureImport> InResources,
                     std::vector<FGraphResourceState>& InStates, FPassCommands& OutCommands);
-void FinishGraphAttachments(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+void FinishGraphAttachments(const FAcceptedGraphPass& InPass, std::span<const FGraphTextureImport> InResources,
                             std::vector<FGraphResourceState>& InStates);
 void TransitionGraphResource(FGraphResourceState& InResource, EResourceState InState, FPassCommands& OutCommands);
 } // namespace Hyperion

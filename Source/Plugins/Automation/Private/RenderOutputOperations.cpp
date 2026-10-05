@@ -1,6 +1,6 @@
-#include "Hyperion/Renderer/RenderDiagnostics.h"
-#include "Hyperion/Renderer/RenderOutput.h"
-#include "Hyperion/Renderer/ShadowControls.h"
+#include "Hyperion/RenderControls/RenderDiagnostics.h"
+#include "Hyperion/RenderControls/RenderOutput.h"
+#include "Hyperion/RenderControls/ShadowControls.h"
 #include "SceneOperations.h"
 
 namespace Hyperion

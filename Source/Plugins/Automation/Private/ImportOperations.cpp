@@ -66,9 +66,9 @@ void RegisterImportOperations(FOperationCatalog& InCatalog, FAssetImportWorkspac
 	               "accepted "
 	               "task cancellation.",
 	               Example(FContentRootQuery{}), true, InProvider),
-	    [](const FContentRootQuery&)
+	    [InProvider](const FContentRootQuery&)
 	    {
-		    return FAssetImportWorkspace::Capabilities();
+		    return InProvider->GetCapabilities();
 	    }));
 	InCatalog.Register(MakeOperation<FImportRequest, FImportValidation>(
 	    ImportInfo("asset.import.validate", "Validate an import request without publication",

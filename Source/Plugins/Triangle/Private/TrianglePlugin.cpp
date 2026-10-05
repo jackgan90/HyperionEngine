@@ -1,4 +1,5 @@
 #include "Hyperion/Triangle/TrianglePlugin.h"
+#include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Materials/ObjectParameters.h"
 #include "Hyperion/Materials/ShaderParameters.h"
 #include "Hyperion/Renderer/RenderSession.h"

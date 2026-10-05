@@ -55,6 +55,8 @@ D3D12 上传批次由上传 fence 保活；成功提交的录制列表进入设�
 
 关闭顺序：停止 Main 生产者及插件；关闭 scene admission 并等待所有 Render 控制/帧工作，销毁 proxy；关闭资源 admission，join 所有 preparation 和进度任务；在 RHI 0 drain GPU、回收 native 句柄；然后销毁 swapchain/device，最后关闭 Tasks。调用 `Close` 前必须释放调用者保留的 raw draw packets；否则关闭会报告错误，不能强制清除仍被借用的资源。CPU 资源租约可在关闭后存活并查询 `Retired`。
 
+显式 `Close` 的异常继续传给调用者，瞬时 native 清理失败可重试，成功关闭保持幂等。Session 或 resource service 析构中的 `Close` 仍失败时，统一记录 owner、destructor-close 阶段、原始原因和 immediate-process-exit 结果，然后以 `EXIT_FAILURE` 立即退出进程；日志自身抛异常时使用 stderr 兜底。此路径不执行 C++ 成员或 atexit 清理，不伪造 GPU 完成或成功退休，在途 native 状态交由进程/驱动退出处理。
+
 只允许 Main 等待 Render/RHI、Render 等待 RHI。RHI 不等待 Render 或 Main。Tasks 的同专用队列等待检查保留；跨队列循环是禁止的调用模式，不新增通用死锁检测器。
 
 ## 场景绘制与扩展

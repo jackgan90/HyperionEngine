@@ -1,4 +1,5 @@
 #include "EditorApplication.h"
+#include "Hyperion/Assets/Assets.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Renderer/SceneNavigation.h"
 #include <algorithm>

@@ -37,6 +37,8 @@ AssetImport/Private/Adapters/GltfImport.cpp 封装锁定的 cgltf v1.15。根文
 
 FAssetImportService 注册 FAssetImporter{Id, Version, Type, Extensions, Convert}，将语义转换集中在格式适配器。LoadAsync<T> 用于源格式工具/测试；ImportAsync 负责增量判断、稳定身份和原生依赖发布。新增外部格式仍需适配器；新增原生数据类型只需反射描述符和注册，不需要修改通用 Assets 读写分派。同步 LoadGltfPrimitive 兼容入口也属于 AssetImport。
 
+应用在 `RegisterAssetServices` 的 `FAssetServiceOptions.Importers` 中选择启动期 importer 集合。未设置时使用内置集合，显式空集合禁用来源转换，非空集合替换默认集合；workspace 发布前校验并冻结描述符，GUI 与 automation 从该实例发现能力。转换回调借用的 provider 必须存活到插件已接收工作 drain 完成。纹理与非 scene 模型的请求名称按输出资产类型统一应用于直接导入和草稿准备，不依赖 importer ID；空名称保留转换器默认值，发布草稿保留其编辑结果。
+
 Workspace 预检和独立 ImportAsync 发布共用 AssetImport 私有 ImportRules：输出扩展名必须为 `.hasset`（忽略大小写），规范化输出不能与源文件相同，省略 library 时使用规范化输出的父目录；sourceRoot/sourceId 必须同时提供或同时省略，sourceId 不允许冒号、反斜杠、前导斜杠或任意 `..` 子串。路径规范化仍由文件系统负责，规则检查与入口错误诊断分离。
 
 Workspace 另外负责 Main、generation、当前可写 `/Game`、字符串边界和导入类型准入，GUI 与 automation 继续调用同一 Workspace。分组导入在 Workspace 中不接受显式 library；底层服务允许显式 library 等于输出父目录。ImportAsync 的输出检查同步执行，来源标识错误通过异步结果返回。PrepareAsync 共用默认 library 推导并保持只读准备；直接调用者不能将准备成功视为通过全部发布准入。

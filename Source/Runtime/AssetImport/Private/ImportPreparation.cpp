@@ -1,6 +1,4 @@
 #include "AssetPublicationInternal.h"
-#include "Hyperion/AssetImport/ImageImport.h"
-#include "Hyperion/Scene/Model.h"
 #include "ImportRules.h"
 
 namespace Hyperion
@@ -66,14 +64,7 @@ FPreparedImport FAssetImportService::FImpl::Prepare(const std::filesystem::path&
 	Publication.Prepare(InOptions);
 	Publication.LoadLibrary();
 	Result.Root = Convert(InSource, Publication.SourceType, InOptions.Conversion);
-	if (!InOptions.Name.empty() && ((!InOptions.bScene && Result.Root.Type->CppType == typeid(FModelAsset)) ||
-	                                Result.Root.Importer == ImageImporterId))
-	{
-		auto Record = WriteRecord(*Result.Root.Type, Result.Root.Object.get());
-		auto& Fields = RecordFields(Record);
-		Fields.at("name") = WriteValue(InOptions.Name);
-		Result.Root.Object = ReadRecord(*Result.Root.Type, Record);
-	}
+	ApplyRequestedImportName(Result.Root, InOptions.Name, InOptions.bScene);
 	// Dry traversal exercises the real dependency rules and fingerprints, but never commits staged bytes.
 	Publication.Build(InSource, Result.Root, true);
 	Publication.CheckSources();

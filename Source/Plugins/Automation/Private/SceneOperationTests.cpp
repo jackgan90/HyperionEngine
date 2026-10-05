@@ -948,6 +948,7 @@ void PlacementWithoutProvider()
 void CheckSceneClipboardOperations();
 void CheckSceneComponentDomainChanges();
 void CheckSceneRegistrationOperations();
+void CheckOwnedComponentRegistration();
 void CheckRenderOptionOperations();
 
 int main()
@@ -963,6 +964,7 @@ int main()
 		PlacementWithoutProvider();
 		CheckSceneClipboardOperations();
 		CheckSceneRegistrationOperations();
+		CheckOwnedComponentRegistration();
 		CheckRenderOptionOperations();
 		NoHistory();
 		Authoring();

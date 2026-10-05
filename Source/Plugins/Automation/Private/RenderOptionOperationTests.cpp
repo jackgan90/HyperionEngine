@@ -1,6 +1,6 @@
 #include "Hyperion/Automation/Endpoint.h"
-#include "Hyperion/Renderer/RenderSettings.h"
-#include "Hyperion/Renderer/SceneViewport.h"
+#include "Hyperion/RenderControls/RenderSettings.h"
+#include "Hyperion/RenderControls/SceneViewport.h"
 #include "SceneOperations.h"
 #include <array>
 #include <fstream>

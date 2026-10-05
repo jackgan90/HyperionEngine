@@ -9,6 +9,7 @@ add_library(hyperion_automation_plugin STATIC
   Private/ApplicationCloseOperations.cpp
   Private/SceneAuthoringOperations.cpp
   Private/SceneComponentOperations.cpp
+  Private/SceneComponentRegistration.cpp
   Private/SceneHostOperations.cpp
   Private/ViewportOperations.cpp
   Private/PlacementOperations.cpp
@@ -35,9 +36,9 @@ hyp_module(hyperion_automation_plugin)
 target_link_libraries(hyperion_automation_plugin PRIVATE hyperion_core)
 string(TIMESTAMP AUTOMATION_BUILD_UTC "%Y%m%dT%H%M%SZ" UTC)
 target_compile_definitions(hyperion_automation_plugin PRIVATE HYP_AUTOMATION_BUILD="${PROJECT_VERSION}/${CMAKE_BUILD_TYPE}/${AUTOMATION_BUILD_UTC}")
-target_link_libraries(hyperion_automation_plugin PUBLIC hyperion_automation hyperion_plugins
+target_link_libraries(hyperion_automation_plugin PUBLIC hyperion_automation hyperion_plugins hyperion_scene hyperion_scene_editing
   PRIVATE hyperion_application hyperion_content hyperion_asset_editing hyperion_assets hyperion_tasks hyperion_io
-  hyperion_scene hyperion_scene_editing hyperion_materials hyperion_textures hyperion_environment hyperion_render hyperion_asset_import hyperion_gui hyperion_config)
+  hyperion_materials hyperion_textures hyperion_environment hyperion_render_controls hyperion_asset_import hyperion_gui hyperion_config)
 if(BUILD_TESTING)
   add_executable(automation_local_tests Private/LocalPluginTests.cpp)
   hyp_executable(automation_local_tests)
@@ -45,12 +46,12 @@ if(BUILD_TESTING)
   hyp_discovery_test(NAME automation_local_lifecycle COMMAND $<TARGET_FILE:automation_local_tests>)
   set_tests_properties(automation_local_lifecycle PROPERTIES TIMEOUT 30)
   add_executable(automation_scene_tests Private/SceneOperationTests.cpp Private/SceneClipboardTests.cpp
-    Private/SceneRegistrationTests.cpp Private/RenderOptionOperationTests.cpp)
+    Private/SceneRegistrationTests.cpp Private/OwnedComponentRegistrationTests.cpp Private/RenderOptionOperationTests.cpp)
   target_sources(automation_scene_tests PRIVATE Private/SceneComponentChangeTests.cpp Private/SceneComponentPolicyTests.cpp)
   hyp_executable(automation_scene_tests)
   target_sources(automation_scene_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests/Scene/SceneComponentDomainTests.cpp")
   target_include_directories(automation_scene_tests PRIVATE "${PROJECT_SOURCE_DIR}/Source/Tests")
-  target_link_libraries(automation_scene_tests PRIVATE hyperion_automation_plugin hyperion_scene_editing hyperion_render)
+  target_link_libraries(automation_scene_tests PRIVATE hyperion_automation_plugin hyperion_scene_editing hyperion_render hyperion_serialization)
   add_test(NAME automation_scene COMMAND automation_scene_tests)
   add_executable(automation_asset_tests Private/AssetOperationTests.cpp Private/MaterialNumericTests.cpp
     Private/AssetWorkflowTests.cpp Private/AssetFieldSubmissionTests.cpp)

@@ -139,7 +139,7 @@ void FForwardRenderPipeline::Complete()
 	}
 }
 
-const FForwardPipelineStatistics& FForwardRenderPipeline::Statistics() const
+const FRenderFrameStatistics& FForwardRenderPipeline::Statistics() const
 {
 	return LastStatistics;
 }

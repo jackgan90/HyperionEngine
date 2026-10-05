@@ -2,6 +2,7 @@
 #include "Hyperion/AssetImport/AssetImportErrors.h"
 #include "Hyperion/AssetImport/AssetImportService.h"
 #include "Hyperion/AssetImport/ImportDraft.h"
+#include "Hyperion/AssetImport/ImporterRegistry.h"
 #include "Hyperion/Content/ContentRootService.h"
 #include <thread>
 
@@ -55,6 +56,17 @@ struct FImportCapabilities
 	std::vector<FImportCapability> Formats;
 	bool bCancellable{};
 };
+
+FImportCapabilities ProjectImportCapabilities(std::span<const FAssetImporter> InImporters);
+
+struct FImportSourceSelection
+{
+	std::string Type;
+	FAssetImporterSettings Settings;
+};
+
+FImportSourceSelection SelectImportSource(std::span<const FAssetImporter> InImporters, std::string_view InSource,
+                                          std::string_view InType = {});
 
 struct FImportTaskQuery
 {
@@ -120,9 +132,12 @@ struct FImportDraft
 class FAssetImportWorkspace final : public IContentRootParticipant
 {
 public:
-	FAssetImportWorkspace(FIOService& InIO, FAssetService& InAssets, FContentRootService& InRoots);
+	FAssetImportWorkspace(FIOService& InIO, FAssetService& InAssets, FContentRootService& InRoots,
+	                      std::vector<FAssetImporter> InImporters = DefaultAssetImporters());
 	~FAssetImportWorkspace();
 	static FImportCapabilities Capabilities();
+	FImportCapabilities GetCapabilities() const;
+	FImportSourceSelection SelectSource(std::string_view InSource, std::string_view InType = {}) const;
 	FImportValidation Validate(const FImportRequest& InRequest) const;
 	void ValidateOutput(const FImportRequest& InRequest) const;
 	std::shared_ptr<const FImportTask> Start(const FImportRequest& InRequest);

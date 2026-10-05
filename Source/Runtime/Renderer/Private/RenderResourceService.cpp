@@ -1,5 +1,6 @@
 #include "ModelMaterials.h"
 #include "RenderResourcesInternal.h"
+#include "RenderShutdownFailure.h"
 #include <atomic>
 #include <stdexcept>
 
@@ -14,7 +15,14 @@ FRenderResourceService::FRenderResourceService(FTaskSystem& InTasks, IRHIDevice&
 
 FRenderResourceService::~FRenderResourceService()
 {
-	Close();
+	try
+	{
+		Close();
+	}
+	catch (...)
+	{
+		ExitAfterRenderShutdownFailure("RenderResourceService", std::current_exception());
+	}
 }
 
 FRenderResourcePreparation FRenderResourceService::GetPreparation() const

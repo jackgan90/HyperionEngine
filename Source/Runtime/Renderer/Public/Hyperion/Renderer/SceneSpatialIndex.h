@@ -1,5 +1,7 @@
 #pragma once
 #include "Hyperion/Math/BoundsBvh.h"
+#include "Hyperion/RenderControls/RenderStatistics.h"
+#include "Hyperion/RenderControls/ViewportChoices.h"
 #include "Hyperion/Renderer/RenderBatchStats.h"
 #include <cstdint>
 #include <memory>
@@ -7,47 +9,6 @@
 
 namespace Hyperion
 {
-enum class ESceneCullingMode
-{
-	None,
-	Linear,
-	Bvh
-};
-
-struct FSceneVisibilityStats
-{
-	std::size_t Groups{};
-	std::size_t UnboundedGroups{};
-	std::size_t Primitives{};
-	std::size_t VisitedNodes{};
-	std::size_t GroupTests{};
-	std::size_t CandidateGroups{};
-	std::size_t CandidatePrimitives{};
-	std::size_t CollectedPrimitives{};
-	std::size_t EmittedItems{};
-	std::size_t VisibleItems{};
-	std::size_t Draws{};
-	std::size_t IndexRebuilds{};
-	std::size_t IndexRefits{};
-	std::size_t MembershipReuses{};
-	std::size_t MembershipAdded{};
-	std::size_t MembershipRemoved{};
-	std::size_t ContainedItemTests{};
-	std::size_t CollectionReuses{};
-	std::size_t PreparationReuses{};
-	std::size_t PacketReuses{};
-	std::size_t ItemPreparationReuses{};
-	std::size_t ItemStorageReuses{};
-	std::size_t SharedMaterialUpdates{};
-	std::size_t SharedMaterialGroups{};
-	std::size_t RetainedMaterialItems{};
-	std::size_t RetainedSceneItems{};
-	std::size_t RetainedItemRestores{};
-	double UpdateMilliseconds{};
-	double QueryMilliseconds{};
-	double MaterialMilliseconds{};
-	FRenderBatchStats Batches;
-};
 
 // CPU conservative candidate test. Future GPU stages are separate RenderGraph work.
 class ISceneVisibility : public IBoundsVisibility

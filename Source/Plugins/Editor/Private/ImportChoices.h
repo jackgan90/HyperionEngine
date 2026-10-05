@@ -83,22 +83,19 @@ inline std::vector<FFileDialogFilter> ImportSourceFilters(const std::vector<FImp
 	return Filters;
 }
 
-inline FImportRequest ImportSettingsSnapshot(FImportRequest InRequest, const std::vector<FImportTypeChoice>& InChoices,
+inline FImportRequest ImportSettingsSnapshot(FImportRequest InRequest, const FImportSourceSelection& InSelection,
                                              EMaterialTextureEncoding InEncoding,
                                              const FEnvironmentBakeSettings& InBake)
 {
-	const auto* Choice = ResolveImportChoice(InChoices, InRequest.Type, InRequest.Source);
-	const bool bModel = Choice && Choice->Type == RecordType<FModelAsset>().Id;
-	const bool bTexture =
-	    Choice && Choice->Type == RecordType<FTextureAsset>().Id && Choice->SupportsSource(InRequest.Source);
-	const bool bSky = Choice && Choice->Type == RecordType<FSkyAsset>().Id && Choice->SupportsSource(InRequest.Source);
+	const bool bModel = InSelection.Type == RecordType<FModelAsset>().Id;
+	const bool bTexture = InSelection.Type == RecordType<FTextureAsset>().Id;
 	InRequest.bScene &= bModel;
 	if (!bModel && !bTexture)
 	{
 		InRequest.Name.clear();
 	}
-	InRequest.TextureEncoding = bTexture ? std::optional(InEncoding) : std::nullopt;
-	InRequest.Sky = bSky ? std::optional(InBake) : std::nullopt;
+	InRequest.TextureEncoding = InSelection.Settings.bTextureEncoding ? std::optional(InEncoding) : std::nullopt;
+	InRequest.Sky = InSelection.Settings.bSkyBake ? std::optional(InBake) : std::nullopt;
 	return InRequest;
 }
 } // namespace Hyperion

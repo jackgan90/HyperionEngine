@@ -79,12 +79,12 @@ void TransitionGraphResource(FGraphResourceState& InResource, EResourceState InS
 	}
 }
 
-void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+void ApplyGraphPass(const FAcceptedGraphPass& InPass, std::span<const FGraphTextureImport> InResources,
                     std::vector<FGraphResourceState>& InStates, FPassCommands& OutCommands)
 {
-	OutCommands.Viewport = InPass.Viewport;
-	OutCommands.bCompute = InPass.bCompute;
-	const auto Region = AttachmentRegion(InPass.Viewport);
+	OutCommands.Viewport = InPass.GetViewport();
+	OutCommands.bCompute = InPass.IsCompute();
+	const auto Region = AttachmentRegion(InPass.GetViewport());
 	for (const auto& Attachment : InPass.GetColors())
 	{
 		auto& State = InStates[Attachment.Texture.Index];
@@ -93,7 +93,7 @@ void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureIm
 		TransitionGraphResource(State, EResourceState::RenderTarget, OutCommands);
 		FColorAttachment Color{State.Target, Attachment.Actions, Attachment.Clear,
 		                       Attachment.View == EGraphColorView::Srgb, Resource.ColorFormat};
-		if (InPass.Color)
+		if (std::get<FGraphGraphicsPayload>(InPass.Payload).ColorLayout == EGraphColorCommandLayout::Single)
 		{
 			OutCommands.Color = Color;
 		}
@@ -102,9 +102,9 @@ void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureIm
 			OutCommands.Colors.push_back(Color);
 		}
 	}
-	if (InPass.DepthStencil)
+	if (InPass.GetDepthStencil())
 	{
-		const auto& Attachment = *InPass.DepthStencil;
+		const auto& Attachment = *InPass.GetDepthStencil();
 		const auto& Resource = InResources[Attachment.Texture.Index];
 		auto& State = InStates[Attachment.Texture.Index];
 		if (Attachment.Depth)
@@ -120,7 +120,7 @@ void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureIm
 		    FDepthStencilAttachment{State.Target,       Resource.DepthFormat,  Attachment.Depth,
 		                            Attachment.Stencil, Attachment.ClearDepth, Attachment.ClearStencil};
 	}
-	for (const auto Read : InPass.Reads)
+	for (const auto Read : InPass.Common.Reads)
 	{
 		auto& State = InStates[Read.Index];
 		const auto& Content = InResources[Read.Index].DepthFormat == ERHIDepthFormat::None ? State.Color : State.Depth;
@@ -132,7 +132,7 @@ void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureIm
 		OutCommands.SampledTextures.push_back(State.Target.Texture);
 		OutCommands.TextureAccesses.push_back({{State.Target.Texture, State.MipLevel, 1}, EResourceState::ShaderRead});
 	}
-	for (const auto& Write : InPass.ComputeWrites)
+	for (const auto& Write : InPass.GetComputeWrites())
 	{
 		auto& State = InStates[Write.Texture.Index];
 		if (!Write.bFullOverwrite && !State.Color.bFull)
@@ -148,18 +148,18 @@ void ApplyGraphPass(const FGraphicsPass& InPass, std::span<const FGraphTextureIm
 	}
 }
 
-void FinishGraphAttachments(const FGraphicsPass& InPass, std::span<const FGraphTextureImport> InResources,
+void FinishGraphAttachments(const FAcceptedGraphPass& InPass, std::span<const FGraphTextureImport> InResources,
                             std::vector<FGraphResourceState>& InStates)
 {
-	const auto Region = AttachmentRegion(InPass.Viewport);
+	const auto Region = AttachmentRegion(InPass.GetViewport());
 	for (const auto& Color : InPass.GetColors())
 	{
 		const auto Index = Color.Texture.Index;
 		InStates[Index].Color.Store(Color.Actions.Store, Region, InResources[Index].Size);
 	}
-	if (InPass.DepthStencil)
+	if (InPass.GetDepthStencil())
 	{
-		const auto& Attachment = *InPass.DepthStencil;
+		const auto& Attachment = *InPass.GetDepthStencil();
 		const auto Index = Attachment.Texture.Index;
 		if (Attachment.Depth)
 		{

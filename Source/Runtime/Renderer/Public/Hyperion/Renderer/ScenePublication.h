@@ -1,17 +1,10 @@
 #pragma once
+#include "Hyperion/RenderControls/ScenePublicationToken.h"
 #include "Hyperion/Scene/LightSelection.h"
 #include "Hyperion/Scene/SceneNode.h"
 
 namespace Hyperion
 {
-struct FScenePublicationToken
-{
-	std::uint64_t LogicalSceneIdentity{};
-	std::uint64_t AttachmentEpoch{};
-	std::uint64_t PublicationSerial{};
-	std::uint64_t LogicalRevision{};
-	bool operator==(const FScenePublicationToken&) const = default;
-};
 
 struct FPublishedSceneCamera
 {
