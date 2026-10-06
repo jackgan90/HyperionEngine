@@ -1,4 +1,3 @@
-set(HYP_DEPS "${PROJECT_SOURCE_DIR}/out/deps" CACHE PATH "Locked dependency sources")
 file(READ "${PROJECT_SOURCE_DIR}/dependencies.lock.json" HYP_LOCK)
 set(hyp_required_dependencies spdlog mimalloc tracy onetbb sdl json glm cgltf stb tinyexr spirv-cross d3d12ma imgui implot dxc)
 if(HYP_ENABLE_RENDERDOC)

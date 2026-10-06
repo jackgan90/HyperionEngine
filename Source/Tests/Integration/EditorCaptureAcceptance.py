@@ -9,11 +9,15 @@ import xml.etree.ElementTree as ET
 from RdcValidation import verify_capture
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def main():
     editor = pathlib.Path(sys.argv[1]).resolve()
     root = pathlib.Path(sys.argv[2]).resolve()
     compiled = sys.argv[3] == '1'
-    parent = root / 'out' / 'editor-capture-tests'
+    parent = test_output_root() / 'editor-capture-tests'
     parent.mkdir(parents=True, exist_ok=True)
     work = pathlib.Path(tempfile.mkdtemp(dir=parent))
     preferences = work / 'Preferences.ini'

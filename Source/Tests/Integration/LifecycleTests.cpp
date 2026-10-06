@@ -51,7 +51,7 @@ void CheckAssetRetry(FTaskSystem& InTasks)
 
 	const auto Root = std::filesystem::absolute("lifecycle-assets").lexically_normal();
 	FLocalFileSystem Local;
-	const auto FixtureRoot = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/native";
+	const auto FixtureRoot = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/native";
 	const auto Gltf = Local.Read(FixtureRoot / "Showcase-gltf.hasset", 1024 * 1024);
 	Files->WriteAtomic(Root / "Showcase-gltf.hasset", std::span(Gltf).first(16));
 	auto Failed = Assets.LoadAsync<FModelAsset>(Root / "Showcase-gltf.hasset");

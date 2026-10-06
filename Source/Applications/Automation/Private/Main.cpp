@@ -1,7 +1,9 @@
 #include "Hyperion/Application/ApplicationHost.h"
 #include "Hyperion/ApplicationServices/ApplicationServices.h"
 #include "Hyperion/AutomationHost/AutomationPlugin.h"
+#include "Hyperion/Config/StorageSettings.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/IO/ApplicationPaths.h"
 #include "Hyperion/IO/Path.h"
 #include <fstream>
 #include <iostream>
@@ -14,14 +16,15 @@ struct FOptions
 {
 	FAutomationStreamOptions Stream;
 	FAssetServiceOptions Assets;
-	FPluginSelection Selection{{"assets", "automation-assets", "automation-stdio"}};
+	FPluginSelection Selection{{"assets", "automation-assets", "automation-storage", "automation-stdio"}};
 };
 
 FOptions ParseOptions(int InCount, char** InValues)
 {
 	FOptions Options;
-	const auto Root = std::filesystem::path(HYP_SOURCE_DIR);
-	Options.Assets.EngineContent = Root / "Content";
+	const FStorageSettings Storage(ParseStorageLaunchOptions(InCount, InValues, "Editor"));
+	Options.Stream.DiscoveryRoot = PathFromUtf8(Storage.Get().SettingsFile).parent_path() / "Discovery";
+	Options.Assets.EngineContent = DefaultEngineContent(HYP_DEVELOPMENT_CONTENT);
 	bool bMode{};
 	bool bParameters{};
 	bool bStandaloneOptions{};
@@ -37,7 +40,14 @@ FOptions ParseOptions(int InCount, char** InValues)
 			}
 			return InValues[Index];
 		};
-		if (Argument == "--attach")
+		if (IsStorageValueArgument(Argument))
+		{
+			(void)Value();
+		}
+		else if (IsStorageFlagArgument(Argument))
+		{
+		}
+		else if (Argument == "--attach")
 		{
 			if (bAttach)
 			{
@@ -140,6 +150,7 @@ int Run(int InCount, char** InValues)
 	RegisterAssetServices(Registry, Options.Assets);
 	RegisterAutomationServices(Registry);
 	RegisterAssetAutomation(Registry);
+	RegisterStorageAutomation(Registry);
 	RegisterAutomationStdio(Registry, Options.Stream);
 	Host.Start(Registry, Options.Selection);
 	if (!Host.GetPlugins().IsActive("automation-stdio"))

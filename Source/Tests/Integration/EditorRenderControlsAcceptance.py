@@ -17,6 +17,10 @@ from DiscoveryEnvironment import ensure_isolated_discovery
 LIGHT = "hyperion.scenedirectionallight"
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def version(agent):
     info = ready(agent)
     return {key: info[key] for key in ("document", "revision")}
@@ -264,7 +268,7 @@ def gui(editor, root, output):
 if __name__ == "__main__":
     ensure_isolated_discovery()
     cli, editor, root = [pathlib.Path(value).resolve() for value in sys.argv[1:]]
-    parent = root / "out" / "editor-render-controls"
+    parent = test_output_root() / "editor-render-controls"
     parent.mkdir(parents=True, exist_ok=True)
     output = pathlib.Path(tempfile.mkdtemp(prefix="acceptance-", dir=parent))
     print(f"Render controls evidence: {output}", flush=True)

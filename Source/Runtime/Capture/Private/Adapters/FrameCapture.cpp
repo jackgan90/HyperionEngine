@@ -124,7 +124,7 @@ void FFrameCapture::Initialize()
 		}
 		if (P.Settings.OutputDirectory.empty())
 		{
-			P.Settings.OutputDirectory = "out/captures/renderdoc";
+			throw std::invalid_argument("Capture output directory must be supplied by application storage");
 		}
 		P.Settings.OutputDirectory = std::filesystem::absolute(P.Settings.OutputDirectory).lexically_normal();
 		if (P.Settings.Prefix.empty() || P.Settings.Prefix.find_first_of("/\\:*?\"<>|") != std::string::npos)

@@ -1,6 +1,7 @@
 #pragma once
 #include "Hyperion/Automation/Endpoint.h"
 #include "Hyperion/Plugins/PluginRuntime.h"
+#include <filesystem>
 
 namespace Hyperion
 {
@@ -17,6 +18,7 @@ struct FAutomationStreamOptions
 	std::string Method;
 	std::string Attach;
 	FArchiveNode Parameters = FArchiveNode(FArchiveNode::FObject{});
+	std::filesystem::path DiscoveryRoot;
 };
 
 struct FAutomationStreamStatus
@@ -28,9 +30,10 @@ struct FAutomationStreamStatus
 // Their state must outlive session Quiesce, which drains every admitted job.
 void RegisterAutomationServices(FPluginRegistry& InRegistry);
 void RegisterAutomationLocal(FPluginRegistry& InRegistry, std::string InApplication, std::string InMode = {},
-                             std::string InLabel = {});
+                             std::string InLabel = {}, std::filesystem::path InDiscoveryRoot = {});
 void RegisterAssetAutomation(FPluginRegistry& InRegistry);
 void RegisterSceneAutomation(FPluginRegistry& InRegistry);
 void RegisterLogAutomation(FPluginRegistry& InRegistry);
+void RegisterStorageAutomation(FPluginRegistry& InRegistry);
 void RegisterAutomationStdio(FPluginRegistry& InRegistry, FAutomationStreamOptions InOptions);
 } // namespace Hyperion

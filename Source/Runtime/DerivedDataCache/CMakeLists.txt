@@ -1,0 +1,3 @@
+add_library(hyperion_derived_data_cache STATIC Private/DerivedDataCache.cpp Private/CacheMaintenance.cpp Private/Adapters/Digest.cpp)
+hyp_module(hyperion_derived_data_cache)
+target_link_libraries(hyperion_derived_data_cache PUBLIC hyperion_io PRIVATE hyperion_core bcrypt)

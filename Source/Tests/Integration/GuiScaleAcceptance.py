@@ -5,10 +5,14 @@ import sys
 import tempfile
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def main():
     executable = pathlib.Path(sys.argv[1]).resolve()
     root = pathlib.Path(sys.argv[2]).resolve()
-    parent = root / 'out' / 'editor-tests'
+    parent = test_output_root() / 'editor-tests'
     parent.mkdir(parents=True, exist_ok=True)
     output = pathlib.Path(tempfile.mkdtemp(prefix='gui-scale-', dir=parent))
     preference = output / 'UiScale.ini'

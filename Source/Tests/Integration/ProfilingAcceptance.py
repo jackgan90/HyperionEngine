@@ -9,6 +9,10 @@ import sys
 import time
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def rows(path):
     with path.open(newline="", encoding="utf-8") as stream:
         return list(csv.DictReader(stream))
@@ -128,7 +132,7 @@ def main():
     if not (profile.TOOLS / "tracy-capture.exe").is_file():
         print("Build tools/BuildProfilingTools.ps1 to enable real Tracy acceptance")
         return 77
-    output = root / "out/Profiling/Acceptance" / time.strftime("%Y%m%d-%H%M%S")
+    output = test_output_root() / "Profiling/Acceptance" / time.strftime("%Y%m%d-%H%M%S")
     output.mkdir(parents=True)
     summary = {"reconnect_event_counts": reconnect(profile, core, output)}
     for name, code, timeout, exception_type in (

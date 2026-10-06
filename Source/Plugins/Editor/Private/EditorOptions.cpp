@@ -279,14 +279,17 @@ bool ShouldPersistEditorGui(const FEditorOptions& InOptions)
 	return InOptions.Benchmark.empty() && !HasIsolatedEditorAcceptanceRequest(InOptions);
 }
 
-FEditorOptions ParseEditorOptions(int InCount, char** InValues)
+FEditorOptions ParseEditorOptions(int InCount, char** InValues, std::shared_ptr<FStorageSettings> InStorage)
 {
 	FEditorOptions Result;
-	const auto Root = std::filesystem::path(HYP_SOURCE_DIR);
-	Result.EngineContent = Root / "Content";
-	Result.Layout = Root / "out/editor/Layout.ini";
-	Result.UiPreferences = Root / "out/editor/UiScale.ini";
-	Result.PreferencesPath = Root / "out/editor/Preferences.ini";
+	Result.Storage = InStorage
+	                     ? std::move(InStorage)
+	                     : std::make_shared<FStorageSettings>(ParseStorageLaunchOptions(InCount, InValues, "Editor"));
+	const auto& Paths = Result.Storage->Paths();
+	Result.EngineContent = DefaultEngineContent(HYP_DEVELOPMENT_CONTENT);
+	Result.Layout = Paths.State / "Layout.ini";
+	Result.UiPreferences = Paths.Config / "UiScale.ini";
+	Result.PreferencesPath = Paths.Config / "Preferences.ini";
 	for (int Index = 1; Index < InCount; ++Index)
 	{
 		const std::string Argument = InValues[Index];
@@ -296,6 +299,15 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 			throw std::invalid_argument("Editor acceptance is unavailable: configure BUILD_TESTING=ON");
 		}
 #endif
+		if (IsStorageValueArgument(Argument))
+		{
+			++Index;
+			continue;
+		}
+		if (IsStorageFlagArgument(Argument))
+		{
+			continue;
+		}
 		if (ParseFlag(Result, Argument))
 		{
 			continue;
@@ -313,7 +325,7 @@ FEditorOptions ParseEditorOptions(int InCount, char** InValues)
 		throw std::invalid_argument(
 		    "Editor benchmark requires a scene and positive sample count; exercise is separate");
 	}
-	if (Result.ExerciseCapture && Result.PreferencesPath == Root / "out/editor/Preferences.ini")
+	if (Result.ExerciseCapture && Result.PreferencesPath == Paths.Config / "Preferences.ini")
 	{
 		throw std::invalid_argument("Capture acceptance requires an isolated --editor-preferences path");
 	}

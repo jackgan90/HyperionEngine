@@ -1,4 +1,6 @@
 """Serial, alternating binary A/B CPU submission benchmarks with strict workload checks."""
+from DevelopmentPaths import test_root
+from TestEnvironment import ensure_isolated_environment
 import argparse
 import csv
 import hashlib
@@ -65,7 +67,7 @@ def generate(output, counts, editor):
             continue
         scene = {"type": "hyperion.scene", "schema_version": 1,
                  "assets": [{"id": "triangle", "path": os.path.relpath(
-                     ROOT / "out/fixtures/Sources/Models/Interleaved.gltf", output)}],
+                     test_root() / "fixtures/Sources/Models/Interleaved.gltf", output)}],
                  "instances": [{"id": f"triangle-{i}", "asset": "triangle",
                                 "scale": [.05, .05, .05]} for i in range(count)],
                  "camera": {"eye": [0, 0, 10], "target": [0, 0, 0], "near": .05, "far": 100}}
@@ -120,6 +122,7 @@ def run(args, label, editor, trial, count, moving, shadows):
 
 
 def main():
+    ensure_isolated_environment()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--editor", type=pathlib.Path, required=True)
     parser.add_argument("--baseline", type=pathlib.Path)

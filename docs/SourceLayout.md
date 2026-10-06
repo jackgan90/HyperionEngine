@@ -34,6 +34,7 @@ Source/
     SceneEditing/  # CPU 场景文档、事务、历史、保存点、选择及反射请求/结果
     AssetImport/   # glTF/GLB、PNG/JPEG、HDR/EXR 转换、草稿、增量导入和完整依赖发布
     Shaders/       # DXC / SPIRV-Cross wrapper 与编译缓存
+    DerivedDataCache/ # 与具体消费者无关的本地派生数据记录及维护
     RHI/           # 公共图形契约、能力查询、后端注册表
     RenderControls/# CPU 控制接口、反射 DTO、统计值与纯校验；不依赖 Renderer/RHI
     Renderer/      # render session / primitive / resources / SceneInstance / Model 桥接 / RenderGraph

@@ -242,7 +242,7 @@ void CheckStencil(IRHIDevice& InDevice, const FDrawStateFixture& InFixture)
 FDrawStateFixture::FDrawStateFixture(IRHIDevice& InDevice, bool bInFullScreen)
 {
 	const auto Root = std::filesystem::path(HYP_SOURCE_DIR) / "Source/Tests/Shaders";
-	FShaderCompiler Compiler(Root, std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache/native-draw-state");
+	FShaderCompiler Compiler(Root, std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "shader-cache/native-draw-state");
 	PipelineA.Vertex = Compiler.Compile("NativeDrawState.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
 	PipelineA.Pixel = Compiler.Compile("NativeDrawState.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);
 	PipelineA.Attributes = {{"POSITION", 0, EVertexFormat::Float2, 0}};

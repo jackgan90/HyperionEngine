@@ -256,7 +256,8 @@ def main():
         assert missing.returncode == 0 and all(not item["available"] for item in json.loads(missing.stdout)["items"])
         failed = run(executable, "api.search", "--engine-content", root / "Missing")
         assert failed.returncode == 0 and all(not item["available"] for item in json.loads(failed.stdout)["items"])
-        absent = run(executable, "api.search", "--disable-plugin", "automation-assets", "--disable-plugin", "assets")
+        absent = run(executable, "api.search", "--disable-plugin", "automation-assets", "--disable-plugin", "assets",
+                     "--disable-plugin", "automation-storage")
         assert absent.returncode == 0 and json.loads(absent.stdout)["total"] == 0
         stopped = run(executable, "engine.info", "--disable-plugin", "automation-session")
         assert stopped.returncode == 1 and not stopped.stdout

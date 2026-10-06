@@ -65,7 +65,7 @@ struct FSceneFixture
 	FIOService IO{Tasks, Files};
 	FAssetService Assets{IO};
 	FWindow Window{"Scene controls", {640, 480}, true};
-	FShaderCompiler Compiler{TestShaderRoot(), std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache"};
+	FShaderCompiler Compiler{TestShaderRoot(), std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "shader-cache"};
 	std::unique_ptr<IRHIDevice> Device;
 	std::unique_ptr<IRHISwapchain> Swapchain;
 	std::unique_ptr<FRenderSession> Session;
@@ -92,7 +92,8 @@ struct FSceneFixture
 		FLegacySceneManifest Manifest;
 		Manifest.Assets = {
 		    {"a",
-		     {"", (std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/native/Showcase-gltf.hasset").generic_string(),
+		     {"",
+		      (std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/native/Showcase-gltf.hasset").generic_string(),
 		      RecordType<FModelAsset>().Id, ""}}};
 		Manifest.Instances = {{"one", "a"}};
 		Manifest.Eye = {0, 1, 7};

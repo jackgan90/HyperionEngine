@@ -1,5 +1,7 @@
 add_library(hyperion_application_services STATIC Private/AssetServices.cpp Private/WindowServices.cpp Private/GraphicsServices.cpp Private/GuiServices.cpp)
 hyp_module(hyperion_application_services)
+target_sources(hyperion_application_services PRIVATE Private/StorageServices.cpp)
+target_link_libraries(hyperion_application_services PRIVATE hyperion_config)
 target_link_libraries(hyperion_application_services PUBLIC hyperion_asset_import)
 target_sources(hyperion_application_services PRIVATE Private/RenderFeatureServices.cpp)
 target_link_libraries(hyperion_application_services PUBLIC hyperion_content)

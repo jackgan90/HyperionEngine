@@ -4,9 +4,13 @@ import subprocess
 import sys
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def main():
     editor, root = (pathlib.Path(value).resolve() for value in sys.argv[1:])
-    work = root / "out" / "plugin-acceptance"
+    work = test_output_root() / "plugin-acceptance"
     work.mkdir(parents=True, exist_ok=True)
 
     def run(name, *arguments, failure=False):

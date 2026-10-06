@@ -14,13 +14,14 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'tools'))
+from DevelopmentPaths import test_root
 import CheckStyle
 from SourceSize import check_source_sizes, physical_line_count
 
 
 class SourceSizeTests(unittest.TestCase):
     def setUp(self):
-        output = ROOT / 'out/source-size-tests'
+        output = test_root() / "source-size-tests"
         output.mkdir(parents=True, exist_ok=True)
         self.workspace = tempfile.TemporaryDirectory(prefix='case-', dir=output)
         self.addCleanup(self.workspace.cleanup)
@@ -177,7 +178,7 @@ class SourceSizeTests(unittest.TestCase):
                     check_source_sizes(self.root)
 
     def prepare_cli(self):
-        for name in ('CheckStyle.py', 'SourceSize.py'):
+        for name in ('CheckStyle.py', 'SourceSize.py', 'DevelopmentPaths.py'):
             shutil.copyfile(ROOT / 'tools' / name, self.root / 'tools' / name)
         self.write_policy()
 

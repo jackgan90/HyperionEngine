@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+from DevelopmentPaths import output_root, dependency_root, tool_cache_root
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 YEARS = {17: "2022", 18: "2026"}
@@ -85,11 +86,11 @@ def prepare_dependencies(environment, renderdoc=False):
     for name, package in lock.items():
         if package.get("optional") and not renderdoc:
             continue
-        marker = ROOT / "out/deps" / name / ".hyperion-sha256"
+        marker = dependency_root() / name / ".hyperion-sha256"
         if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != package["sha256"]:
             pending.append(name)
     if pending:
-        run([sys.executable, ROOT / "tools/Bootstrap.py", "--only", *pending], environment)
+        run([sys.executable, ROOT / "tools/Bootstrap.py", "--legacy-root", ROOT / "out", "--only", *pending], environment)
     else:
         print("Dependencies: all required locked packages are available.", flush=True)
 
@@ -106,7 +107,14 @@ def main():
                         help="Enable or disable the optional capture plugin; otherwise preserve the CMake cache")
     parser.add_argument("--tracy", action=argparse.BooleanOptionalAction, default=None,
                         help="Enable or disable Tracy network profiling; otherwise preserve the CMake cache (default OFF)")
+    parser.add_argument("--out-root", type=pathlib.Path)
+    parser.add_argument("--tool-cache", type=pathlib.Path)
+    parser.add_argument("--build-dir", type=pathlib.Path)
     args = parser.parse_args()
+    if args.out_root:
+        os.environ["HYP_OUT_ROOT"] = str(args.out_root.resolve())
+    if args.tool_cache:
+        os.environ["HYP_TOOL_CACHE"] = str(args.tool_cache.resolve())
     if os.name != "nt" or sys.version_info < (3, 10):
         raise RuntimeError("This script requires Windows and Python 3.10+.")
 
@@ -117,7 +125,7 @@ def main():
     selected = select_installation(found, args.vs_version)
     generator = f"Visual Studio {selected['major']} {selected['year']}"
     cmake = select_cmake(found, generator, environment)
-    directory = ROOT / "out/build" / f"vs{selected['year']}"
+    directory = args.build_dir.resolve() if args.build_dir else output_root() / "build" / f"vs{selected['year']}"
     solution = directory / "Hyperion.sln"
     print(f"Visual Studio: {selected['displayName']}\nCMake: {cmake}", flush=True)
     cache = directory / "CMakeCache.txt"
@@ -130,7 +138,8 @@ def main():
                  "-DCMAKE_GENERATOR_INSTANCE=" + str(selected["directory"]),
                  "-DCMAKE_MAKE_PROGRAM=" + str(selected["msbuild"]),
                  "-DCMAKE_CONFIGURATION_TYPES=Debug;Release;RelWithDebInfo", "-DBUILD_TESTING=ON",
-                 "-DPython3_EXECUTABLE=" + sys.executable]
+                 "-DPython3_EXECUTABLE=" + sys.executable, "-DHYP_OUTPUT_ROOT=" + str(output_root()),
+                 "-DHYP_TOOL_CACHE=" + str(tool_cache_root()), "-DHYP_DEPS=" + str(dependency_root())]
     configure.append("-DHYP_ENABLE_RENDERDOC=" + ("ON" if renderdoc else "OFF"))
     if args.tracy is not None:
         configure.append("-DHYP_ENABLE_TRACY=" + ("ON" if args.tracy else "OFF"))

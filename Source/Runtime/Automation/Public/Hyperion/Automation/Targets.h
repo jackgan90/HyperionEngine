@@ -49,7 +49,7 @@ public:
 class FLocalTargetDiscovery final : public ITargetDiscovery
 {
 public:
-	explicit FLocalTargetDiscovery(std::filesystem::path InDirectory = {});
+	explicit FLocalTargetDiscovery(std::filesystem::path InDirectory = {}, std::filesystem::path InBaseDirectory = {});
 	FTargetDiscoverySnapshot List() override;
 	std::optional<FAutomationTarget> Find(const std::string& InInstance) override;
 	void Publish(const FAutomationTarget& InTarget);
@@ -57,6 +57,7 @@ public:
 
 private:
 	std::filesystem::path Directory;
+	std::filesystem::path BaseDirectory;
 };
 
 class IAutomationAccessPolicy

@@ -1,6 +1,7 @@
 #include "Hyperion/Shaders/ShaderCompiler.h"
 #include "../ShaderCompileTarget.h"
 #include "Hyperion/Core/Core.h"
+#include "Hyperion/DerivedDataCache/DerivedDataCache.h"
 #include "Hyperion/IO/IOService.h"
 #include "Hyperion/IO/MountedFileSystem.h"
 #include "Hyperion/IO/Path.h"
@@ -12,7 +13,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <bcrypt.h>
 #include <cstring>
 #include <dxcapi.h>
 #include <fstream>
@@ -42,16 +42,6 @@ void Checked(HRESULT InHr, const char* InOperation)
 	{
 		throw std::runtime_error(InOperation);
 	}
-}
-
-std::string Read(const std::filesystem::path& InPath)
-{
-	std::ifstream Stream(InPath, std::ios::binary);
-	if (!Stream)
-	{
-		throw std::runtime_error("Cannot read shader file: " + InPath.string());
-	}
-	return {std::istreambuf_iterator<char>(Stream), {}};
 }
 
 const std::string& ReadSource(const FShaderSourceTrees& InSources, const std::filesystem::path& InRoot,
@@ -89,59 +79,6 @@ void AppendIdentity(std::string& OutIdentity, const std::string& InPart)
 	OutIdentity += std::to_string(InPart.size()) + ":" + InPart;
 }
 
-std::string Sha256(const std::string& InBytes)
-{
-	BCRYPT_ALG_HANDLE Algorithm{};
-	BCRYPT_HASH_HANDLE Hash{};
-	if (BCryptOpenAlgorithmProvider(&Algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0)
-	{
-		throw std::runtime_error("SHA256 provider");
-	}
-
-	struct FGuard
-	{
-		BCRYPT_ALG_HANDLE A;
-		BCRYPT_HASH_HANDLE& H;
-
-		~FGuard()
-		{
-			if (H)
-			{
-				BCryptDestroyHash(H);
-			}
-			BCryptCloseAlgorithmProvider(A, 0);
-		}
-	} Guard{Algorithm, Hash};
-
-	if (BCryptCreateHash(Algorithm, &Hash, nullptr, 0, nullptr, 0, 0) < 0)
-	{
-		throw std::runtime_error("SHA256 initialization");
-	}
-	std::size_t Offset{};
-	while (Offset < InBytes.size())
-	{
-		auto Size = static_cast<ULONG>(std::min<std::size_t>(InBytes.size() - Offset, 1024 * 1024));
-		if (BCryptHashData(Hash, reinterpret_cast<PUCHAR>(const_cast<char*>(InBytes.data() + Offset)), Size, 0) < 0)
-		{
-			throw std::runtime_error("SHA256 update");
-		}
-		Offset += Size;
-	}
-	unsigned char Digest[32]{};
-	if (BCryptFinishHash(Hash, Digest, 32, 0) < 0)
-	{
-		throw std::runtime_error("SHA256 finish");
-	}
-	const char* Hex = "0123456789abcdef";
-	std::string Result;
-	for (auto B : Digest)
-	{
-		Result += Hex[B >> 4];
-		Result += Hex[B & 15];
-	}
-	return Result;
-}
-
 bool Within(const std::filesystem::path& InPath, const std::filesystem::path& InRoot)
 {
 	auto Rel = InPath.lexically_relative(InRoot);
@@ -172,7 +109,7 @@ FShaderSourceTree CaptureSourceTree(IFileSystem& InFiles, const std::filesystem:
 		AppendIdentity(Identity, Path.lexically_relative(InRoot).generic_string());
 		AppendIdentity(Identity, Bytes);
 	}
-	Result.Digest = Sha256(Identity);
+	Result.Digest = DerivedDataDigest(Identity);
 	return Result;
 }
 
@@ -302,6 +239,7 @@ struct FShaderCompiler::FImpl
 	std::shared_ptr<IFileSystem> Files;
 	std::filesystem::path Root;
 	std::filesystem::path Cache;
+	std::unique_ptr<FDerivedDataCache> Store;
 	std::mutex Mutex;
 	ComPtr<IDxcUtils> Utils;
 	ComPtr<IDxcCompiler3> Compiler;
@@ -340,7 +278,8 @@ struct FShaderCompiler::FImpl
 		{
 			throw std::invalid_argument("Shader cache must be outside source root");
 		}
-		std::filesystem::create_directories(Cache);
+		Store = std::make_unique<FDerivedDataCache>(Cache, "Shaders");
+		(void)Store->Maintain();
 		Checked(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&Utils)), "Create DXC utils");
 		Checked(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&Compiler)), "Create DXC compiler");
 	}
@@ -425,7 +364,7 @@ std::string ShaderCacheKey(const std::filesystem::path& InPath, const std::files
 		Append(Additional.lexically_relative(InRoot).generic_string());
 		Append(InSources.at(Additional).Digest);
 	}
-	return Sha256(Identity);
+	return DerivedDataDigest(Identity);
 }
 
 void NormalizeOptions(FShaderCompileOptions& InOptions)
@@ -584,16 +523,11 @@ FShaderArtifact FShaderCompiler::FImpl::Compile(const std::filesystem::path& InP
 	Artifact.Format = InTarget.RequestedFormat;
 	Artifact.Stage = InStage;
 	Artifact.CacheKey = ShaderCacheKey(InPath, Root, InEntry, InStage, InTarget, LogicalTarget, InOptions, InSources);
-	const auto CacheFile = Cache / (Artifact.CacheKey + ".bin");
 	std::string Payload;
-	if (std::filesystem::exists(CacheFile))
+	if (auto Cached = Store->Read(Artifact.CacheKey))
 	{
-		const std::string Cached = Read(CacheFile);
-		if (Cached.size() > 65 && Cached[64] == '\n' && Sha256(Cached.substr(65)) == Cached.substr(0, 64))
-		{
-			Payload = Cached.substr(65);
-			Artifact.bCacheHit = true;
-		}
+		Payload = std::move(*Cached);
+		Artifact.bCacheHit = true;
 	}
 	if (!Artifact.bCacheHit)
 	{
@@ -613,13 +547,7 @@ FShaderArtifact FShaderCompiler::FImpl::Compile(const std::filesystem::path& InP
 	if (!Artifact.bCacheHit)
 	{
 		// Cache the unstripped intermediate, so hot and cold paths reconstruct identical reflection.
-		std::ofstream Out(CacheFile, std::ios::binary | std::ios::trunc);
-		Out << Sha256(Intermediate) << '\n';
-		Out.write(Intermediate.data(), static_cast<std::streamsize>(Intermediate.size()));
-		if (!Out)
-		{
-			throw std::runtime_error("Shader cache write failed");
-		}
+		(void)Store->Publish(Artifact.CacheKey, Intermediate);
 	}
 	Artifact.Bytes.assign(Payload.begin(), Payload.end());
 	return Artifact;

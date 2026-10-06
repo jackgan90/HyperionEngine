@@ -198,7 +198,7 @@ void CheckMaterialPixels(const RenderOperation& InRender, const std::filesystem:
 	Blend.Materials[0].AlphaMode = EAlphaMode::Blend;
 	const auto Blended = InRender(Blend);
 	Pixel(Blended, 160, 120, {.7354f, 0, .7354f});
-	SaveImage(InRoot / "out/captures/model-alpha.png", Blended);
+	SaveImage(std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "captures/model-alpha.png", Blended);
 	auto OffAxisBlend = Quads();
 	OffAxisBlend.Materials[0].BaseColor = {1, 0, 0, .5f};
 	OffAxisBlend.Materials[1].BaseColor = {0, 0, 1, .5f};
@@ -217,7 +217,7 @@ void CheckMaterialPixels(const RenderOperation& InRender, const std::filesystem:
 	const auto Masked = InRender(Mask);
 	Pixel(Masked, 120, 120, {0, 0, 1});
 	Pixel(Masked, 200, 120, {1, 0, 0});
-	SaveImage(InRoot / "out/captures/model-mask.png", Masked);
+	SaveImage(std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "captures/model-mask.png", Masked);
 	Mask.Images[0].Rgba = {128, 128, 128, 255, 255, 255, 255, 255};
 	Mask.Materials[0].BaseColorTexture.TexCoord = 1;
 	Mask.Primitives[0].TexCoords1 = {.25f, .5f, .25f, .5f, .25f, .5f, .25f, .5f};
@@ -360,7 +360,7 @@ void CheckCameraInput(FAsyncModelFixture& InModel, const FrameOperation& InFrame
 	InModel.Camera.Input(InModel.Scene, std::span(&Drag[1], 1), false, false);
 	InModel.Camera.Input(InModel.Scene, std::span(&Drag[2], 1), true, false);
 	HYP_CHECK(Difference(Orbited, InFrame(InModel)) < .0001f);
-	SaveImage(InRoot / "out/captures/model-orbit.png", Orbited);
+	SaveImage(std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "captures/model-orbit.png", Orbited);
 	HYP_CHECK(InFrame(InModel, {480, 200}).Width == 480);
 	auto& Scene = InModel.Scene;
 	const auto Camera = *Scene.GetSettings().DefaultCamera;
@@ -421,7 +421,7 @@ int main()
 			                          Device = Registry.CreateDevice(ERHIBackend::D3D12, {});
 			                          Swapchain = Device->CreateSwapchain(SwapchainDesc);
 		                          }));
-		FShaderCompiler Compiler(TestShaderRoot(), Root / "out/shader-cache");
+		FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "shader-cache");
 		FRenderSession Session(Tasks, *Device, Compiler);
 		const FModelReadbackContext RenderContext{Tasks, *Device, *Swapchain, Session};
 		const auto RenderModel = [&](FModelSource InModel, bool bInCheckConstantRanges = false)
@@ -434,7 +434,9 @@ int main()
 		FIOService IO(Tasks, Storage);
 		FAssetService Assets(IO);
 
-		FAsyncModelFixture ModelFixture(Session, Tasks, Assets, Root / "out/fixtures/native/Showcase-gltf.hasset");
+		FAsyncModelFixture ModelFixture(Session, Tasks, Assets,
+		                                std::filesystem::path(HYP_TEST_OUTPUT_DIR) /
+		                                    "fixtures/native/Showcase-gltf.hasset");
 		const auto Frame = [&](FAsyncModelFixture& InModel, FSize InSize = {320, 240})
 		{
 			return RenderAsyncModelFrame(Tasks, Window, *Swapchain, InModel, Session, InSize);
@@ -449,7 +451,8 @@ int main()
 		HYP_CHECK(ModelFixture.Ready() && Storage->bStarted);
 		CheckCameraInput(ModelFixture, Frame, ReadyImage, Root);
 		ModelFixture.Stop();
-		FAsyncModelFixture Broken(Session, Tasks, Assets, Root / "out/fixtures/native/Missing.hasset");
+		FAsyncModelFixture Broken(Session, Tasks, Assets,
+		                          std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/native/Missing.hasset");
 		while (Broken.Error().empty() && std::chrono::steady_clock::now() < Deadline)
 		{
 			Frame(Broken);

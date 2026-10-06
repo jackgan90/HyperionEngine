@@ -1,4 +1,6 @@
 """Build, capture and export a bounded Editor workload using the locked Tracy source."""
+from DevelopmentPaths import output_root
+from TestEnvironment import ensure_isolated_environment
 import argparse
 import csv
 import json
@@ -12,7 +14,7 @@ import time
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TOOLS = ROOT / "out/build/profiling-tools"
+TOOLS = output_root() / "build/profiling-tools"
 
 
 def hidden_process_options():
@@ -127,6 +129,7 @@ def check_frame_window(output, warmup, count):
 
 
 def main():
+    ensure_isolated_environment()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("off", "basic", "detail", "gpu", "detail-gpu", "sampling"),
                         default="basic")
@@ -157,7 +160,7 @@ def main():
         if args.mode != "off":
             run(["powershell", "-NoProfile", "-File", ROOT / "tools/BuildProfilingTools.ps1"],
                 output / "ToolsBuild.log", timeout=900)
-    editor = (args.editor or ROOT / "out/build/profile/bin/hyperion_editor.exe").resolve()
+    editor = (args.editor or output_root() / "build/profile/bin/hyperion_editor.exe").resolve()
     command = [str(editor), "--asset-root", str(args.asset_root.resolve()), "--scene", args.scene,
                "--benchmark-warmup", str(args.warmup), "--benchmark-samples", str(args.frames),
                "--benchmark", str(output / "Frames.csv"), "--benchmark-viewport", "1440x900"]

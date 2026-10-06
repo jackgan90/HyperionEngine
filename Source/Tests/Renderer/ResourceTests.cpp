@@ -975,8 +975,8 @@ int main()
 		FTaskSystem Tasks(1, 2);
 		FShaderCompiler Compiler(
 		    TestShaderRoot(),
-		    std::filesystem::path(HYP_SOURCE_DIR) /
-		        "out/shader-cache"); // Generic descriptions require no shader compilation in these tests.
+		    std::filesystem::path(HYP_TEST_OUTPUT_DIR) /
+		        "shader-cache"); // Generic descriptions require no shader compilation in these tests.
 		FTestDevice Device(Tasks);
 		CheckSharedUpload(Tasks, Device, Compiler);
 		CheckKeysAndFailures(Tasks, Device, Compiler);

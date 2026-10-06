@@ -11,6 +11,10 @@ from AttachmentAcceptance import Application, AttachedSession, ready
 from DiscoveryEnvironment import ensure_isolated_discovery
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def check_automation(cli, editor, output, mcp):
     name = "model-mcp" if mcp else "model-cli"
     app = Application(editor, output, name, output / "Placed.hasset", output / "Game", frames=0)
@@ -62,7 +66,7 @@ def check_automation(cli, editor, output, mcp):
 def main():
     ensure_isolated_discovery()
     editor, cli, root = [pathlib.Path(argument).resolve() for argument in sys.argv[1:]]
-    parent = root / "out" / "editor-tests"
+    parent = test_output_root() / "editor-tests"
     parent.mkdir(parents=True, exist_ok=True)
     output = pathlib.Path(tempfile.mkdtemp(prefix="model-placement-", dir=parent))
     report = output / "Gui.json"

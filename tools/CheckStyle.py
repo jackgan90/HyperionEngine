@@ -1,4 +1,5 @@
 """Check owned paths, formatting and optional naming; report advisory C++ sizes."""
+from DevelopmentPaths import output_root
 import argparse
 import concurrent.futures
 import json
@@ -161,7 +162,7 @@ def main():
     mode.add_argument('--sizes-only', action='store_true',
                       help='Report advisory C++ file sizes and validate exclusions without LLVM or a build')
     mode.add_argument('--naming', action='store_true', help='Also run clang-tidy with a Ninja compile database')
-    parser.add_argument('--build-dir', type=pathlib.Path, default=ROOT / 'out/build/debug')
+    parser.add_argument('--build-dir', type=pathlib.Path, default=output_root() / "build/debug")
     args = parser.parse_args()
     if args.sizes_only:
         check_source_sizes(ROOT)

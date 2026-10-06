@@ -1,5 +1,7 @@
 # Visual Studio 开发流程
 
+构建/测试输出与下载缓存可独立放置：`Build.ps1` 和 `GenerateSolution.ps1` 接受 `-OutRoot`、`-ToolCache`、`-BuildDirectory`；环境变量为 `HYP_OUT_ROOT`、`HYP_TOOL_CACHE`。CMake 的 `HYP_OUTPUT_ROOT` 决定测试 fixture 和输出路径。具体目录、旧缓存导入和运行时用户目录见 [存储说明](Storage.md)。
+
 ## 一键生成
 
 在资源管理器中双击仓库根目录的 `GenerateSolution.cmd`，或在 PowerShell 中执行：

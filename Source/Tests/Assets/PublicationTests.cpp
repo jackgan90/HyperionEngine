@@ -383,7 +383,7 @@ void CheckModelToScene()
 	FAssetImportService Imports(IO);
 	RegisterGltfImporter(Imports);
 	RegisterSkyImporter(Imports);
-	const auto Source = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/Showcase.gltf";
+	const auto Source = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/Showcase.gltf";
 	const auto Output = std::filesystem::absolute("publication-model-scene/scene.hasset");
 	FAssetImportOptions Options;
 	Options.bScene = true;
@@ -454,7 +454,7 @@ void CheckExternalImageReimport()
 	FIOService IO(Tasks);
 	FAssetImportService Imports(IO);
 	RegisterGltfImporter(Imports);
-	const auto Fixtures = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
+	const auto Fixtures = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures";
 	const auto Directory = std::filesystem::absolute("image-reimport");
 	for (const auto* File : {"Showcase.gltf", "Showcase.bin", "Checker.png"})
 	{

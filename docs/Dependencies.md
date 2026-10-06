@@ -21,4 +21,4 @@ All direct calls are isolated behind the indicated engine wrapper. Full commits 
 | [tinyexr](https://github.com/syoyo/tinyexr) | v3.2.0 | EXR image I/O (bundled miniz) |
 | [tracy](https://github.com/wolfpld/tracy) | v0.14.1 | Core profiling |
 
-Dependencies remain unmodified upstream sources under `out/deps`. Miniz is the TinyEXR package dependency, not a separate engine API. Upstream licenses are included with each downloaded package. CMake checks package identity against the lock.
+Dependencies remain unmodified upstream sources under `<HYP_TOOL_CACHE>/Dependencies/<lock identity>`. Miniz is the TinyEXR package dependency, not a separate engine API. Upstream licenses are included with each downloaded package. CMake checks package identity against the lock.

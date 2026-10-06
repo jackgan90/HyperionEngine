@@ -17,7 +17,7 @@ struct FReferenceFixture
 	FAssetImportService Imports{IO};
 	FAssetService Assets{IO};
 	std::filesystem::path Directory = std::filesystem::absolute("model-reference-publication");
-	std::filesystem::path Source = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures/Showcase.gltf";
+	std::filesystem::path Source = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/Showcase.gltf";
 	std::filesystem::path Output = Directory / "scene.hasset";
 	FSceneManifest Scene;
 	std::shared_ptr<const FModelAsset> Model;

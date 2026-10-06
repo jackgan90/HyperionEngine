@@ -8,6 +8,8 @@
 
 namespace Hyperion
 {
+class FStorageSettings;
+void RegisterStorageServices(FPluginRegistry& InRegistry, std::shared_ptr<FStorageSettings> InStorage);
 void RegisterContactShadowServices(FPluginRegistry& InRegistry);
 using FRegisterBackends = std::function<void(FRHIBackendRegistry&)>;
 

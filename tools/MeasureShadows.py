@@ -1,4 +1,6 @@
 """Serialized warmed CSM A/B measurements and sustained resource checks on a real GPU."""
+from DevelopmentPaths import output_root, test_root
+from TestEnvironment import ensure_isolated_environment
 import argparse
 import csv
 import json
@@ -59,11 +61,12 @@ def measure(editor, root, work, name, motion, enabled, samples, warmup, resoluti
 
 
 def main():
+    ensure_isolated_environment()
     root = pathlib.Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--editor", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_editor.exe")
+    parser.add_argument("--editor", type=pathlib.Path, default=output_root() / "build/release/bin/hyperion_editor.exe")
     parser.add_argument("--asset-root", type=pathlib.Path, default=root.parent / "HyperionAssets")
-    parser.add_argument("--output", type=pathlib.Path, default=root / "out/shadow-performance")
+    parser.add_argument("--output", type=pathlib.Path, default=test_root() / "shadow-performance")
     parser.add_argument("--samples", type=int, default=800)
     parser.add_argument("--warmup", type=int, default=200)
     parser.add_argument("--repeats", type=int, default=2)

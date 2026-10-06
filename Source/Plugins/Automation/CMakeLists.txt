@@ -1,5 +1,6 @@
 add_library(hyperion_automation_plugin STATIC
   Private/LogPlugin.cpp
+  Private/StoragePlugin.cpp
   Private/AutomationServices.cpp
   Private/LocalPlugin.cpp
   Private/ScenePlugin.cpp

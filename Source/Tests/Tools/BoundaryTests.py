@@ -9,13 +9,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'tools'))
+from DevelopmentPaths import test_root
 import CheckBoundaries
 import TargetGraph
 
 
 class BoundaryTests(unittest.TestCase):
     def setUp(self):
-        output = ROOT / 'out/boundary-tests'
+        output = test_root() / "boundary-tests"
         output.mkdir(parents=True, exist_ok=True)
         self.workspace = tempfile.TemporaryDirectory(prefix='case-', dir=output)
         self.root = Path(self.workspace.name).resolve()

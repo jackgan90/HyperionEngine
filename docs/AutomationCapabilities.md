@@ -24,6 +24,7 @@
 
 | 人类任务 | 操作族 | 共享服务与范围 |
 |---|---|---|
+| 修改用户数据与缓存目录 | `application.storage.get/set` | `FStorageSettings`；Editor preference 共用校验、revision、原子保存及重启语义，见 [存储](Storage.md)。不加入场景历史；无 provider 时 unavailable |
 | 查找资产、场景 | `content.assets.list` | Content/Assets 原生索引；query/type、offset/limit、root generation。写入内容后重新开始分页 |
 | 选择、清空资产目录 | `content.root.get/set/clear` | `FContentRootService`；Editor 与 GUI 同样检查 busy/dirty、关闭旧内容并保存 Preferences |
 | 打开、新建、关闭场景 | `scene.open`、`scene.status` | `ISceneDocumentHost`；Editor 空 path 表示空文档，旧场景 ID 失效。失败不声称恢复旧场景 |

@@ -1,6 +1,7 @@
 #include "Adapters/ProcessStatistics.h"
 #include "AssetCommands.h"
 #include "Hyperion/Content/ContentRootService.h"
+#include "Hyperion/IO/ApplicationPaths.h"
 #include "Hyperion/Scene/SceneManifest.h"
 #include <chrono>
 #include <iostream>
@@ -11,7 +12,7 @@ int main(int InCount, char** InArguments)
 	try
 	{
 		std::vector<std::string_view> Arguments;
-		std::filesystem::path EngineContent = std::filesystem::path(HYP_SOURCE_DIR) / "Content";
+		std::filesystem::path EngineContent = DefaultEngineContent(HYP_DEVELOPMENT_CONTENT);
 		std::optional<std::filesystem::path> AssetRoot;
 		bool bAuthoring = false;
 		bool bReadOnly = false;

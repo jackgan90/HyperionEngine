@@ -73,6 +73,19 @@ void FGui::EndPropertyRow()
 	ImGui::PopID();
 }
 
+bool FGui::InputPathWithBrowse(const char* InLabel, std::string& InValue)
+{
+	BeginPropertyRow(InLabel);
+	const auto& Style = ImGui::GetStyle();
+	const float ButtonWidth = ImGui::CalcTextSize("Browse").x + Style.FramePadding.x * 2;
+	ImGui::SetNextItemWidth(std::max(1.f, ImGui::GetContentRegionAvail().x - ButtonWidth - Style.ItemSpacing.x));
+	InputText("##path", InValue, false, true);
+	ImGui::SameLine();
+	const bool bBrowse = ImGui::Button("Browse");
+	EndPropertyRow();
+	return bBrowse;
+}
+
 void FGui::BeginDisabled(bool bInDisabled)
 {
 	Impl->Select();

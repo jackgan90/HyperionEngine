@@ -39,7 +39,7 @@ python tools/Bootstrap.py
 ./tools/Build.ps1 -Preset relwithdebinfo -Test
 ```
 
-依赖版本、commit 和 SHA-256 固定在 `dependencies.lock.json`。首次准备依赖需要下载；依赖源码和缓存位于 `out/deps`、`out/downloads`。Editor 构建直接使用已发布资源；示例需检出同级 HyperionAssets 并执行 `git lfs pull`。目录选择、离线重建及源导入测试准备见 [Content 与虚拟文件系统](docs/ContentFileSystem.md)。构建产物、日志与截图保存在被 Git 忽略的 `out` 中。
+依赖版本、commit 和 SHA-256 固定在 `dependencies.lock.json`。首次准备依赖需要下载；依赖源码和归档由独立的 `HYP_TOOL_CACHE` 管理。Editor 构建直接使用已发布资源；示例需检出同级 HyperionAssets 并执行 `git lfs pull`。目录选择、离线重建及源导入测试准备见 [Content 与虚拟文件系统](docs/ContentFileSystem.md)。构建和测试输出默认位于被 Git 忽略的 `out/build`、`out/tests`；Editor 用户数据与缓存使用独立根，可在偏好窗口调整。路径覆盖和迁移见 [存储说明](docs/Storage.md)。
 
 ## 运行
 

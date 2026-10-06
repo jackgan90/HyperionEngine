@@ -303,14 +303,15 @@ void CheckImports()
 	const auto Root = std::filesystem::path(HYP_SOURCE_DIR);
 	for (const auto* Name : {"Cloudy.hdr", "Dusk.exr", "Clear.hdr"})
 	{
-		const auto Bytes = IO.ReadAsync(Root / "out/fixtures/Sources/Skies" / Name).Get(Tasks);
+		const auto Bytes =
+		    IO.ReadAsync(std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/Sources/Skies" / Name).Get(Tasks);
 		const auto Image = DecodeHdrImage(*Bytes);
 		HYP_CHECK(Image.Width == Image.Height * 2 && Image.Width == 1024);
 		HYP_CHECK(*std::max_element(Image.Rgba.begin(), Image.Rgba.end()) > 1);
 	}
 	const auto Work = std::filesystem::absolute("environment-test") / CreateIdentifier();
 	const auto Output = Work / "Cloudy.hasset";
-	const auto Source = Root / "out/fixtures/Sources/Skies/Cloudy.hdr";
+	const auto Source = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/Sources/Skies/Cloudy.hdr";
 	FAssetImportOptions Options;
 	Options.Conversion.Sky = FEnvironmentBakeSettings{8, 4, 16};
 	const auto Imported = Imports.ImportAsync(Source, Output, Options).Get(Tasks);

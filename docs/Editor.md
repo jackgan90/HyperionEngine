@@ -57,7 +57,7 @@ Model 和 Material 的 Asset Editor 临时预览默认显示内置 Cloudy 天空
 
 ## Editor preference 与抓帧
 
-通过 **Edit > Editor preference** 打开偏好弹窗。首个选项 **Enable RenderDoc capture** 默认关闭，修改后立即保存到 `out/editor/Preferences.ini`，下次启动保留；`--editor-preferences <path>` 可指定独立的本地偏好文件。该文件与场景、布局及界面缩放配置分开，保存失败会在弹窗中显示错误并提供重试。
+通过 **Edit > Editor preference** 打开偏好弹窗。首个选项 **Enable RenderDoc capture** 默认关闭，修改后立即保存到 应用 `Config/Preferences.ini`（见 [存储路径](Storage.md)），下次启动保留；`--editor-preferences <path>` 可指定独立的本地偏好文件。该文件与场景、布局及界面缩放配置分开，保存失败会在弹窗中显示错误并提供重试。
 
 需要通过 `tools/Build.ps1 -RenderDoc` 或 `tools/GenerateSolution.ps1 -RenderDoc` 编入 RenderDoc 支持，并安装 RenderDoc。首次启用后重启编辑器，使 hooks 在图形设备创建之前加载。开启偏好后，Viewport 工具栏右侧显示相机形抓帧按钮；点击会捕获包含场景、GUI 和 Present 的完整帧，保存到 `out/captures`，并启动 RenderDoc 打开本次生成的 RDC。抓帧和自动打开由公共 Capture 服务管理。
 
@@ -69,7 +69,7 @@ Model 和 Material 的 Asset Editor 临时预览默认显示内置 Cloudy 天空
 
 **Window > Application Scale** 统一调整文字、控件、间距、工具栏和状态栏，下一帧生效。默认 125%，支持 100% / 125% / 150% / 175% / 200% 预设、自定义数值及恢复默认。左右拖动 Custom 数值可实时调整，Ctrl+单击可直接输入倍率；鼠标停下后倍率保持不变。字体按目标字号重新生成，停靠分区比例、场景数据和相机状态保持不变。放大后面板可显示的内容减少，可使用滚动或调整停靠分区。
 
-正常退出时偏好保存到 `out/editor/UiScale.ini`，独立于场景和 `Layout.ini`。`--ui-scale 1.5` 覆盖启动倍率，`--ui-preferences <path>` 指定偏好文件；有效范围为 1–2。缺失或损坏的偏好回退到 125%。验收和 benchmark 运行不读写用户偏好。
+正常退出时偏好保存到 应用 `Config/UiScale.ini`，独立于场景和 `Layout.ini`。`--ui-scale 1.5` 覆盖启动倍率，`--ui-preferences <path>` 指定偏好文件；有效范围为 1–2。缺失或损坏的偏好回退到 125%。验收和 benchmark 运行不读写用户偏好。
 
 Application Scale 不调整原生标题栏、场景镜头或渲染分辨率；framebuffer 像素密度仍独立处理。这不是自动的跨显示器 DPI 布局策略。
 
@@ -109,9 +109,9 @@ Content Browser 左侧显示 `/Game` 目录树，右侧显示所选目录的直�
 | `--engine-content <directory>` | 指定引擎资源目录；开发构建默认使用仓库 Content |
 | `--read-only` | 本次启动将 Game 根设为只读 |
 | `--scene /Game/Scenes/Sponza.hasset` | 启动后直接打开指定原生场景 |
-| `--layout out/editor/Layout.ini` | 布局文件；此路径也是默认值 |
-| `--frames 1200 --capture out/editor/Sponza.png` | 运行指定帧数并保存最后一帧 |
-| `--benchmark out/editor/Frames.csv --benchmark-warmup 120 --benchmark-samples 300` | 资源就绪后预热并记录帧、场景、GUI 和渲染等待耗时 |
+| `--layout out/tests/Editor/Layout.ini` | 显式布局文件；默认是应用 `State/Layout.ini` |
+| `--frames 1200 --capture out/tests/Editor/Sponza.png` | 运行指定帧数并保存最后一帧 |
+| `--benchmark out/tests/Editor/Frames.csv --benchmark-warmup 120 --benchmark-samples 300` | 资源就绪后预热并记录帧、场景、GUI 和渲染等待耗时 |
 | `--benchmark-camera` | 在采样期间执行确定性的移动相机路径 |
 | `--benchmark-collapsed` | 基准测试中默认收起 Outliner 层级，分离展开列表的成本 |
 

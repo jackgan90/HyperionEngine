@@ -66,7 +66,7 @@ void CheckTextureComposition()
 		                          Swapchain = Device->CreateSwapchain({Surface, Size});
 	                          }));
 	FShaderCompiler Compiler(std::filesystem::path(HYP_SOURCE_DIR) / "Content/Shaders",
-	                         std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
+	                         std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "shader-cache");
 	FRenderSession Session(Tasks, *Device, Compiler);
 	FGui Gui;
 	FGuiRenderer Renderer(*Device, Compiler, Tasks, Gui.FontImage(), &Session.GetResources());

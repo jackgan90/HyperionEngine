@@ -8,8 +8,12 @@ from AutomationAcceptance import completed
 from AttachmentAcceptance import Application, AttachedSession
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def exercise(cli, editor, root, compiled):
-    parent = root / "out" / "renderdoc-hud-tests"
+    parent = test_output_root() / "renderdoc-hud-tests"
     parent.mkdir(parents=True, exist_ok=True)
     output = pathlib.Path(tempfile.mkdtemp(dir=parent))
     assets = output / "Game"

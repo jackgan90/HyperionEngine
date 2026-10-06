@@ -1,5 +1,6 @@
 #pragma once
 #include "EditorPreferences.h"
+#include "Hyperion/Config/StorageSettings.h"
 #include "Hyperion/Core/Logging/LogHistory.h"
 #include "Hyperion/Core/ProfilingSession.h"
 #include "Hyperion/Platform/Window.h"
@@ -24,6 +25,7 @@ std::string_view EditorCaptureExerciseName(EEditorCaptureExercise InExercise);
 
 struct FEditorOptions
 {
+	std::shared_ptr<FStorageSettings> Storage;
 	FLogHistory* LogHistory{};
 	bool bExerciseLog{};
 	std::filesystem::path EngineContent;
@@ -75,5 +77,5 @@ struct FEditorOptions
 	bool bExerciseSelectionShortcuts{};
 };
 
-FEditorOptions ParseEditorOptions(int InCount, char** InValues);
+FEditorOptions ParseEditorOptions(int InCount, char** InValues, std::shared_ptr<FStorageSettings> InStorage = {});
 } // namespace Hyperion

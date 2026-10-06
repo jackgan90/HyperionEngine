@@ -1,3 +1,4 @@
+#include "Hyperion/DerivedDataCache/DerivedDataCache.h"
 #include "Hyperion/Shaders/ShaderCompiler.h"
 #include "Support/LogSupport.h"
 #include "Support/ShaderSourceSupport.h"
@@ -87,17 +88,18 @@ float4 PSMain() : SV_Target0
 
 void CheckCachedIntermediate(const std::filesystem::path& InCache, const FShaderArtifact& InArtifact)
 {
-	std::ifstream File(InCache / (InArtifact.CacheKey + ".bin"), std::ios::binary);
-	const std::string Cached{std::istreambuf_iterator<char>(File), {}};
-	Check(Cached.size() > 69 && Cached[64] == '\n', "Cache stores a checksummed intermediate");
+	FDerivedDataCache Store(InCache, "Shaders");
+	const auto Payload = Store.Read(InArtifact.CacheKey);
+	Check(Payload.has_value(), "Cache stores a checksummed intermediate");
+	const auto& Cached = *Payload;
 	if (InArtifact.Format != EShaderFormat::Dxil)
 	{
-		Check(Cached.substr(65, 4) == std::string("\x03\x02\x23\x07", 4), "SPIR-V magic in cached intermediate");
+		Check(Cached.substr(0, 4) == std::string("\x03\x02\x23\x07", 4), "SPIR-V magic in cached intermediate");
 	}
 	if (InArtifact.Format == EShaderFormat::Msl)
 	{
 		const std::string Final(InArtifact.Bytes.begin(), InArtifact.Bytes.end());
-		Check(Final.find("metal_stdlib") != std::string::npos && Final != Cached.substr(65),
+		Check(Final.find("metal_stdlib") != std::string::npos && Final != Cached,
 		      "MSL output is regenerated from its cached SPIR-V payload");
 	}
 }
@@ -132,7 +134,8 @@ float4 PSMain() : SV_Target0 { return Source.SampleLevel(LinearSampler, float2(V
 		          Restored.Bindings == Original.Bindings && Restored.Reflection == Original.Reflection,
 		      "Restoring actual policy reuses identical bytes and reflection");
 		{
-			std::ofstream Damaged(Cache / (Original.CacheKey + ".bin"), std::ios::binary | std::ios::trunc);
+			std::ofstream Damaged(FDerivedDataCache(Cache, "Shaders").RecordPath(Original.CacheKey),
+			                      std::ios::binary | std::ios::trunc);
 			Damaged << "corrupt";
 		}
 		const auto Repaired = Compiler.Compile("Policy.hlsl", "PSMain", EShaderStage::Pixel, Format, {}, Snapshot);
@@ -231,7 +234,7 @@ int main()
 		auto Changed = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
 		Check(Changed.CacheKey != First.CacheKey, "Transitive include identity");
 		{
-			std::ofstream File(std::filesystem::path("shader-test/cache") / (Changed.CacheKey + ".bin"));
+			std::ofstream File(FDerivedDataCache("shader-test/cache", "Shaders").RecordPath(Changed.CacheKey));
 			File << "corrupt";
 		}
 		auto Repaired = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);

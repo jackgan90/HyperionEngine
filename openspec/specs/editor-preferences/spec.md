@@ -48,3 +48,14 @@ Editor SHALL provide Show RenderDoc HUD, default false, persisted independently 
 #### Scenario: Automation equivalence
 - **WHEN** a client discovers and invokes renderdoc.hud.get or renderdoc.hud.set
 - **THEN** reflected contracts expose saved preference and effective state and mutation uses the GUI domain operation
+
+### Requirement: User-editable storage locations
+Editor preference SHALL display active and saved user-data/cache locations and the bootstrap locator. It SHALL allow editing both roots through the shared revisioned storage service and explain restart and launch-override behavior. Typed automation SHALL expose the same validation/persistence operation without GUI simulation.
+
+#### Scenario: GUI and automation equivalence
+- **WHEN** either entry point submits the same root edit
+- **THEN** normalization, writability checks, revision checks, persistence and restart state are identical
+
+#### Scenario: Missing optional adapter
+- **WHEN** storage automation is disabled
+- **THEN** GUI storage preferences remain usable and unrelated automation remains available

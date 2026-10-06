@@ -42,7 +42,7 @@ struct FFixture
 		RegisterSkyImporter(Imports);
 		RegisterSceneAssetTypes(Assets.Types());
 		Options.Library = Directory / "library";
-		const auto Root = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
+		const auto Root = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures";
 		for (const auto* Name : {"Showcase.gltf", "Showcase.bin", "Checker.png"})
 		{
 			IO.WriteAsync(Directory / Name, *IO.ReadAsync(Root / Name).Get(Tasks)).Get(Tasks);
@@ -320,7 +320,7 @@ void CheckRejectedSourceIds(FFixture& InFixture, const std::filesystem::path& In
 void CheckPortableSourceIds(FFixture& InFixture)
 {
 	auto& F = InFixture;
-	const auto Fixtures = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
+	const auto Fixtures = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures";
 	for (const bool bEqualRoot : {false, true})
 	{
 		const auto Directory = F.Directory / (bEqualRoot ? "equal-root" : "logical-source");

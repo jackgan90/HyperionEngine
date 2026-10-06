@@ -1,4 +1,5 @@
 """Recover source cache from versioned recipes and publish through the C++ AssetTool."""
+from DevelopmentPaths import output_root, source_cache
 import argparse
 import base64
 import hashlib
@@ -61,7 +62,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--assets-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
     parser.add_argument("--cache", type=pathlib.Path)
-    parser.add_argument("--tool", type=pathlib.Path, default=ROOT / "out/build/release/bin/hyperion_asset_tool.exe")
+    parser.add_argument("--tool", type=pathlib.Path, default=output_root() / "build/release/bin/hyperion_asset_tool.exe")
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--restore-only", action="store_true")
     parser.add_argument("--force", action="store_true")
@@ -69,7 +70,7 @@ def main():
                         help="Restore and rebuild only the built-in default sky; --cache selects its source cache")
     args = parser.parse_args()
     assets = args.assets_root.resolve()
-    default_cache = ROOT / "out/DefaultSkySources" if args.engine_sky else assets / ".cache/Sources"
+    default_cache = source_cache("EngineSky") if args.engine_sky else assets / ".cache/Sources"
     cache = (args.cache or default_cache).resolve()
     manifest_path = (ROOT / "Content/Metadata/DefaultSkySources.json" if args.engine_sky
                      else assets / "Metadata/Sources.json")

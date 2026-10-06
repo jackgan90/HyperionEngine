@@ -197,6 +197,7 @@ private:
 	void FinishReparentGesture();
 	void RouteReparentRow(FSceneHandle InHandle, bool bInActivated = false);
 	void DrawPreferences();
+	void DrawStoragePreferences();
 	void DrawCaptureButton();
 	std::string CaptureStatus() const;
 	bool CanCapture() const;
@@ -319,6 +320,8 @@ private:
 	FEditorOptions Options;
 	bool bPreferencesDialog{};
 	bool bRequestPreferences{};
+	FStorageSettingsEdit StorageEdit;
+	std::string StorageError;
 	bool bCaptureRequested{};
 #if HYP_ENABLE_RENDERDOC
 	FFrameCapture* FrameCapture{};

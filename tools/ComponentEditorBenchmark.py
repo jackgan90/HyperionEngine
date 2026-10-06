@@ -1,5 +1,6 @@
 """Repeat ready Sponza Editor workloads and retain samples and process memory evidence."""
 import argparse
+from TestEnvironment import ensure_isolated_environment
 import csv
 import ctypes
 from ctypes import wintypes
@@ -90,6 +91,7 @@ def run_case(args, build, host, moving, repetition):
 
 
 def main():
+    ensure_isolated_environment()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--debug", required=True)

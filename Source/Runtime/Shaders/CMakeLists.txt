@@ -1,7 +1,7 @@
 add_library(hyperion_shaders STATIC Private/Adapters/ShaderCompiler.cpp Private/Adapters/DxilReflection.cpp Private/Adapters/SpirvReflection.cpp)
 target_sources(hyperion_shaders PRIVATE Private/Adapters/ShaderCompileTarget.cpp)
 hyp_module(hyperion_shaders)
-target_link_libraries(hyperion_shaders PUBLIC hyperion_core hyperion_io PRIVATE spirv-cross-msl spirv-cross-core "${HYP_DEPS}/dxc/lib/x64/dxcompiler.lib" bcrypt)
+target_link_libraries(hyperion_shaders PUBLIC hyperion_core hyperion_io PRIVATE hyperion_derived_data_cache spirv-cross-msl spirv-cross-core "${HYP_DEPS}/dxc/lib/x64/dxcompiler.lib")
 target_include_directories(hyperion_shaders SYSTEM PRIVATE "${HYP_DEPS}/dxc/inc")
 file(READ "${HYP_DEPS}/dxc/.hyperion-sha256" HYP_DXC_ID)
 file(READ "${HYP_DEPS}/spirv-cross/.hyperion-sha256" HYP_CROSS_ID)

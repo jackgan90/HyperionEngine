@@ -12,7 +12,7 @@
 ./out/build/release/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/SharedAssets.hasset
 ```
 
-引擎资源目录由应用组合层提供，开发构建默认将仓库 `Content` 映射为只读 `/Engine`。可通过 `--engine-content <directory>` 指定测试或部署中的资源目录。**`/Game` 默认未挂载**；Editor 从 `Preferences.ini` 恢复上次选择，CLI/MCP 可调用 `content.root.set`，Editor、AssetTool 和单次 CLI 可使用 `--asset-root <directory>`。所有入口调用同一个内容根服务；相对目录以进程工作目录为基准。`--read-only` 将所选 Game 目录设为只读。
+引擎资源目录由应用组合层提供，优先将安装目录的 `Content` 映射为只读 `/Engine`，开发构建允许回退到仓库 `Content`。可通过 `--engine-content <directory>` 指定测试或部署中的资源目录。**`/Game` 默认未挂载**；Editor 从 `Preferences.ini` 恢复上次选择，CLI/MCP 可调用 `content.root.set`，Editor、AssetTool 和单次 CLI 可使用 `--asset-root <directory>`。所有入口调用同一个内容根服务；相对目录以进程工作目录为基准。`--read-only` 将所选 Game 目录设为只读。
 
 Triangle、Model 和 Scene 示例都使用 Game 内容，包括三角形演示的 Shader，因此运行示例需显式提供资产根目录。性能工具的 `--asset-root` 默认指向同级 HyperionAssets，并将该选择传给 Editor；这属于示例工具配置，不是引擎启动回退规则。
 
@@ -38,7 +38,7 @@ Triangle、Model 和 Scene 示例都使用 Game 内容，包括三角形演示�
 
 源导入、截图、缓存和隔离测试仍可显式使用本地路径。业务资源入口使用 `/Engine/...` 或 `/Game/...`。Scene、Environment 等 CPU 数据模块不依赖 Renderer/RHI。
 
-Shader 编译器通过同一文件系统读取主文件和 include。Game Shader 可 include `/Engine/Shaders/...`；相对 include 按编译器源目录搜索。DXIL、SPIR-V、MSL 继续使用原有编译/反射流程。缓存包含逻辑文件位置、源目录内所有扩展名的文件内容、选项和工具链版本，保存在 `out/shader-cache`；物理目录搬迁不改变包路径 Shader 的缓存身份。缓存必须位于 Shader 源目录之外，指向挂载内目录时也遵守挂载的权限、大小写和链接检查。
+Shader 编译器通过同一文件系统读取主文件和 include。Game Shader 可 include `/Engine/Shaders/...`；相对 include 按编译器源目录搜索。DXIL、SPIR-V、MSL 继续使用原有编译/反射流程。缓存包含逻辑文件位置、源目录内所有扩展名的文件内容、选项和工具链版本，保存在独立 CacheRoot 下的 `DerivedData`（见 [存储契约](Storage.md)）；物理目录搬迁不改变包路径 Shader 的缓存身份。缓存必须位于 Shader 源目录之外，指向挂载内目录时也遵守挂载的权限、大小写和链接检查。
 
 Automation 的 `content.directory.list` 将 ListDirectory 投影为分页逻辑路径候选，保留空目录、未知文件和访问错误，与 Content Browser 使用同一存储边界。它不把未索引直接判断为损坏；content.assets.list 仍只返回成功识别的资产引用。
 
@@ -72,10 +72,10 @@ HyperionAssets 的 hasset 使用 LFS，文本 Shader 和元数据使用普通 Gi
 
 ## 验证与测试
 
-引擎默认天空为 `/Engine/Skies/Cloudy.hasset`，其 radiance/specular 纹理与共享 BRDF LUT 都在 Engine 中，无 Game 根也可加载。Cloudy 不再由 HyperionAssets 发布；原有场景使用该 Engine 引用。来源、固定哈希、烘焙配方及许可位于 `Content/Metadata/DefaultSkySources.json` 和 `DefaultSkyLicense.md`。显式重建：`python tools/PrepareContent.py --engine-sky --cache out/DefaultSkySources`（缓存齐全可加 `--offline`）。普通 Game 重建继续使用其自身 Sources.json。
+引擎默认天空为 `/Engine/Skies/Cloudy.hasset`，其 radiance/specular 纹理与共享 BRDF LUT 都在 Engine 中，无 Game 根也可加载。Cloudy 不再由 HyperionAssets 发布；原有场景使用该 Engine 引用。来源、固定哈希、烘焙配方及许可位于 `Content/Metadata/DefaultSkySources.json` 和 `DefaultSkyLicense.md`。显式重建：`python tools/PrepareContent.py --engine-sky`（缓存齐全可加 `--offline`）。普通 Game 重建继续使用其自身 Sources.json。
 
 默认天空配方通过 AssetTool `--root-id` 指定固定 ID；缺失或损坏的原生天空可重建为相同身份。已有有效目标必须匹配该 ID，发布库中其他资产已占用该 ID 时拒绝写入。普通导入不传该参数时保留原有身份选择规则。
 
-独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与模型的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，并执行 `python tools/PrepareContent.py --engine-sky --restore-only` 准备 Engine 天空来源，再通过 `PrepareTestSources.py` 合并生成 `out/fixtures/Sources`。可用 `--engine-sky-cache` 指定已准备的 Engine 来源缓存，用 `--output` 指定隔离夹具目录；缺失缓存会明确失败。Editor 示例和桌面集成测试需要挂载已发布 Game 内容。
+独立 IO/native/shader 测试生成小型夹具，不依赖示例仓库。Shader/RHI 测试用测试代码生成专用 Shader，避免将演示 Shader 留在引擎 Content。原始 HDR/EXR 与模型的导入集成测试明确使用 `sample_source_fixtures`：先准备 HyperionAssets 的源缓存，并执行 `python tools/PrepareContent.py --engine-sky --restore-only` 准备 Engine 天空来源，再通过 `PrepareTestSources.py` 合并生成 `out/tests/fixtures/Sources`。可用 `--engine-sky-cache` 指定已准备的 Engine 来源缓存，用 `--output` 指定隔离夹具目录；缺失缓存会明确失败。Editor 示例和桌面集成测试需要挂载已发布 Game 内容。
 
 迁移验收检查：完整 native 依赖图、无旧目录读取、固定输入截图、天空切换与场景保存重载、不同挂载位置、Shader include/cache、LFS 指针诊断和无变化重导入。历史性能/审计文档保留当时路径作为证据；当前资源布局以本页为准。

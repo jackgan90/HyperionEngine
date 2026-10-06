@@ -4,7 +4,8 @@
 
 namespace Hyperion
 {
-FLocalTargetDiscovery::FLocalTargetDiscovery(std::filesystem::path InDirectory) : Directory(std::move(InDirectory))
+FLocalTargetDiscovery::FLocalTargetDiscovery(std::filesystem::path InDirectory, std::filesystem::path InBaseDirectory)
+    : Directory(std::move(InDirectory)), BaseDirectory(std::move(InBaseDirectory))
 {
 }
 
@@ -12,7 +13,7 @@ FTargetDiscoverySnapshot FLocalTargetDiscovery::List()
 {
 	if (Directory.empty())
 	{
-		Directory = LocalDiscoveryDirectory();
+		Directory = LocalDiscoveryDirectory(BaseDirectory);
 	}
 	return Private::CollectLocalTargets(Directory);
 }
@@ -22,7 +23,7 @@ std::optional<FAutomationTarget> FLocalTargetDiscovery::Find(const std::string& 
 	Private::ValidateTargetInstance(InInstance);
 	if (Directory.empty())
 	{
-		Directory = LocalDiscoveryDirectory();
+		Directory = LocalDiscoveryDirectory(BaseDirectory);
 	}
 	const auto Record = Private::ReadTargetRegistration(Directory / (InInstance + ".json"));
 	if (Record &&
@@ -37,7 +38,7 @@ void FLocalTargetDiscovery::Publish(const FAutomationTarget& InTarget)
 {
 	if (Directory.empty())
 	{
-		Directory = LocalDiscoveryDirectory();
+		Directory = LocalDiscoveryDirectory(BaseDirectory);
 	}
 	Private::ValidateTargetInstance(InTarget.Instance);
 	std::filesystem::create_directories(Directory);

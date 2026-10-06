@@ -71,6 +71,10 @@ class Application:
         self.log.close()
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def ready(session):
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
@@ -239,7 +243,7 @@ def failure_paths(editor, root, output):
     # A broken discovery directory must isolate the attachment plugin, not the application.
     blocker = output / "not-a-directory"
     blocker.write_text("discovery startup failure fixture", encoding="utf-8")
-    environment = dict(os.environ, LOCALAPPDATA=str(blocker))
+    environment = dict(os.environ, HYP_DISCOVERY_ROOT=str(blocker))
     for executable in (editor,):
         name = executable.stem
         args = [str(executable), "--hidden", "--frames", "16", "--asset-root",
@@ -260,7 +264,7 @@ def failure_paths(editor, root, output):
 
 def main():
     cli, editor, root = [pathlib.Path(value).resolve() for value in sys.argv[1:4]]
-    parent = root / "out" / "attachment-tests"
+    parent = test_output_root() / "attachment-tests"
     parent.mkdir(parents=True, exist_ok=True)
     output = pathlib.Path(tempfile.mkdtemp(prefix="acceptance-", dir=parent))
     workflow(cli, editor, root, output)

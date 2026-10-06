@@ -11,17 +11,28 @@ namespace Hyperion
 {
 namespace
 {
-FEditorOptions LoadStartupOptions(int InCount, char** InValues, FLogHistory* InLogHistory)
+FEditorOptions LoadStartupOptions(int InCount, char** InValues, FLogHistory* InLogHistory,
+                                  std::shared_ptr<FStorageSettings> InStorage)
 {
-	auto Options = ParseEditorOptions(InCount, InValues);
+	auto Options = ParseEditorOptions(InCount, InValues, std::move(InStorage));
+	Options.Storage->ProtectDirectory(Options.EngineContent);
+	if (Options.AssetRoot)
+	{
+		Options.Storage->ProtectDirectory(*Options.AssetRoot);
+	}
 	Options.LogHistory = InLogHistory;
+	const auto Defaults = InstalledConfigDirectory() / "Editor";
 	if (!Options.RenderSettingsPath.empty())
 	{
 		Options.Rendering = LoadRenderSettings(Options.RenderSettingsPath);
 	}
 	try
 	{
-		Options.Preferences = LoadEditorPreferences(Options.PreferencesPath);
+		const auto PreferenceSource =
+		    std::filesystem::exists(Options.PreferencesPath) || Options.Storage->LaunchOptions().bIsolated
+		        ? Options.PreferencesPath
+		        : Defaults / "Preferences.ini";
+		Options.Preferences = LoadEditorPreferences(PreferenceSource);
 	}
 	catch (const std::exception& Failure)
 	{
@@ -32,8 +43,10 @@ FEditorOptions LoadStartupOptions(int InCount, char** InValues, FLogHistory* InL
 	const bool bInteractive = !HasEditorAcceptanceRequest(Options) && Options.Benchmark.empty();
 	if (Options.RenderSettingsPath.empty() && bInteractive && !Options.bHidden && !Options.Frames)
 	{
-		Options.RenderSettingsPath = std::filesystem::path(HYP_SOURCE_DIR) / "out/editor/RenderSettings.json";
-		Options.Rendering = LoadRenderSettings(Options.RenderSettingsPath);
+		Options.RenderSettingsPath = Options.Storage->Paths().Config / "RenderSettings.json";
+		Options.Rendering =
+		    LoadRenderSettings(std::filesystem::exists(Options.RenderSettingsPath) ? Options.RenderSettingsPath
+		                                                                           : Defaults / "RenderSettings.json");
 	}
 	return Options;
 }
@@ -41,26 +54,32 @@ FEditorOptions LoadStartupOptions(int InCount, char** InValues, FLogHistory* InL
 void RegisterEditorServices(FPluginRegistry& InRegistry, const FEditorOptions& InOptions, FRegisterBackends InBackends)
 {
 	RegisterAutomationServices(InRegistry);
+	RegisterStorageServices(InRegistry, InOptions.Storage);
+	RegisterStorageAutomation(InRegistry);
 	RegisterSceneAutomation(InRegistry);
 	RegisterLogAutomation(InRegistry);
 	RegisterAssetAutomation(InRegistry);
-	RegisterAutomationLocal(InRegistry, "Editor");
+	RegisterAutomationLocal(InRegistry, "Editor", {}, {},
+	                        PathFromUtf8(InOptions.Storage->Get().SettingsFile).parent_path() / "Discovery");
 #if HYP_ENABLE_RENDERDOC
-	RegisterRenderDocPlugin(
-	    InRegistry,
-	    {{}, std::filesystem::path(HYP_SOURCE_DIR) / "out/captures", "Editor", InOptions.Preferences.bRenderDocHud});
+	RegisterRenderDocPlugin(InRegistry,
+	                        {{}, InOptions.Storage->Paths().Captures, "Editor", InOptions.Preferences.bRenderDocHud});
 #endif
 	const bool bInteractive = !HasEditorAcceptanceRequest(InOptions) && InOptions.Benchmark.empty();
 	const auto RestoredRoot = !InOptions.AssetRoot && bInteractive && !InOptions.Preferences.AssetRoot.empty()
 	                              ? std::optional(InOptions.Preferences.AssetRoot)
 	                              : std::nullopt;
+	if (RestoredRoot)
+	{
+		InOptions.Storage->ProtectDirectory(*RestoredRoot);
+	}
 	RegisterAssetServices(InRegistry,
 	                      {InOptions.EngineContent, InOptions.AssetRoot ? InOptions.AssetRoot : RestoredRoot,
 	                       InOptions.bReadOnly, RestoredRoot.has_value()});
 	RegisterWindowServices(InRegistry, {"Hyperion Editor", {1600, 960}, InOptions.bHidden, true});
-	RegisterGraphicsServices(InRegistry, {std::move(InBackends), "d3d12",
-	                                      std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache",
-	                                      InOptions.Rendering.bReversedZ});
+	RegisterGraphicsServices(InRegistry,
+	                         {std::move(InBackends), "d3d12", InOptions.Storage->Paths().CacheRoot / "DerivedData",
+	                          InOptions.Rendering.bReversedZ});
 	const bool bPersistContentLayout = ShouldPersistEditorContentLayout(InOptions);
 	RegisterGuiServices(InRegistry, {true, "/Engine/Fonts/RobotoMedium.ttf", 15,
 	                                 bPersistContentLayout ? InOptions.Layout : std::filesystem::path{},
@@ -84,7 +103,7 @@ void RegisterEditorPlugin(FPluginRegistry& InRegistry, const FEditorOptions& InO
 		Descriptor.Provides.push_back(typeid(FLogHistory));
 	}
 	Descriptor.After = {"contact-shadows"};
-	Descriptor.Optional = {typeid(FAssetImportWorkspace)};
+	Descriptor.Optional = {typeid(FAssetImportWorkspace), typeid(FStorageSettings)};
 #if HYP_ENABLE_RENDERDOC
 	Descriptor.Optional.push_back(typeid(FFrameCapture));
 #endif
@@ -115,8 +134,9 @@ FPluginSelection EditorPluginSelection(const FEditorOptions& InOptions)
 	Selection.Disabled = InOptions.DisabledPlugins;
 	if (!InOptions.bKernelOnly)
 	{
-		Selection.Requested = {"contact-shadows",   "editor",           "automation-scene",
-		                       "automation-assets", "automation-local", "automation-log"};
+		Selection.Requested = {
+		    "contact-shadows",   "editor",           "automation-scene", "storage", "automation-storage",
+		    "automation-assets", "automation-local", "automation-log"};
 		if (InOptions.Preferences.bRenderDocCapture)
 		{
 			Selection.Requested.push_back("renderdoc");
@@ -154,9 +174,11 @@ void ValidateEditorShutdown(FApplicationHost& InHost)
 }
 } // namespace
 
-void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBackends, FLogHistory* InLogHistory)
+void RunEditorApplication(int InCount, char** InValues, FRegisterBackends InBackends, FLogHistory* InLogHistory,
+                          std::shared_ptr<FStorageSettings> InStorage)
 {
-	const auto Options = LoadStartupOptions(InCount, InValues, InLogHistory);
+	const auto Options = LoadStartupOptions(InCount, InValues, InLogHistory,
+	                                        InStorage ? std::move(InStorage) : CreateEditorStorage(InCount, InValues));
 	FApplicationHost Host(4, 1);
 	FPluginRegistry Registry;
 	RegisterEditorServices(Registry, Options, std::move(InBackends));

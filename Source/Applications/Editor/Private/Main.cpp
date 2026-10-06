@@ -1,3 +1,4 @@
+#include "Hyperion/Config/StorageSettings.h"
 #include "Hyperion/Core/Core.h"
 #include "Hyperion/Core/Logging/LogHistory.h"
 #include "Hyperion/D3D12/D3D12RHIBackend.h"
@@ -20,7 +21,8 @@ int main(int InCount, char** InValues)
 	std::unique_ptr<Hyperion::FProcessOutput> Output;
 	try
 	{
-		const auto Directory = std::filesystem::path(HYP_SOURCE_DIR) / "out/logs";
+		auto Storage = Hyperion::CreateEditorStorage(InCount, InValues);
+		const auto Directory = Storage->Paths().Logs / ("Session-" + std::to_string(Hyperion::ClockNanoseconds()));
 		auto History = std::make_shared<Hyperion::FLogHistory>(
 		    Directory / ("EditorSession-" + std::to_string(Hyperion::ClockNanoseconds()) + ".bin"));
 		Hyperion::InitializeEditorLog(Directory / "editor.log", History,
@@ -34,7 +36,8 @@ int main(int InCount, char** InValues)
 		Output = std::make_unique<Hyperion::FProcessOutput>(Hyperion::LogStandardOutput);
 		Hyperion::Log(Hyperion::ELogLevel::Info, "Hyperion Editor starting");
 		Hyperion::Log(Hyperion::ELogLevel::Debug, "Editor log history initialized before plugin startup");
-		Hyperion::RunEditorApplication(InCount, InValues, Hyperion::RegisterD3D12RHIBackend, History.get());
+		Hyperion::RunEditorApplication(InCount, InValues, Hyperion::RegisterD3D12RHIBackend, History.get(),
+		                               std::move(Storage));
 		Output->Stop();
 		Hyperion::ShutdownLog();
 		return 0;

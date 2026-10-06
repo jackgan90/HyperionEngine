@@ -305,7 +305,7 @@ void CheckDeviceOwnership()
 	auto OwnIndices = Device->CreateBuffer(std::as_bytes(std::span(Indices)));
 	auto Foreign = OtherDevice->CreateBuffer(std::as_bytes(std::span(Vertices)));
 	HYP_CHECK(Own.Payload->GetDeviceIdentity() != Foreign.Payload->GetDeviceIdentity());
-	FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
+	FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "shader-cache");
 	FPipelineDesc PipelineDesc = TrianglePipeline(Compiler, *Device);
 	auto Pipeline = Device->CreatePipeline(PipelineDesc);
 	const auto ForeignDescription = TrianglePipeline(Compiler, *OtherDevice);

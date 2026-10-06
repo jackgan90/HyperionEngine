@@ -13,6 +13,10 @@ from AutomationAcceptance import completed
 from AttachmentAcceptance import Application, AttachedSession, ready
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def live_depth(agent, state, info):
     page = agent.request("api.search", {"query": "render.settings", "limit": 10})
     assert {item["id"] for item in page["items"]} >= {"render.settings.get", "render.settings.set", "render.settings.save"}
@@ -246,7 +250,7 @@ def benchmarks(editor, root, output, warmup):
 
 if __name__ == "__main__":
     cli, editor, root = [pathlib.Path(value).resolve() for value in sys.argv[1:]]
-    output = root / "out" / "editor-render-acceptance"
+    output = test_output_root() / "editor-render-acceptance"
     output.mkdir(parents=True, exist_ok=True)
     render_controls(cli, editor, root, output)
     disabled_saved_contact(cli, editor, root, output)

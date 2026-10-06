@@ -1,4 +1,6 @@
 """Measure matched HDR Forward/Deferred workloads, including readiness and submission validation."""
+from DevelopmentPaths import output_root, test_root
+from TestEnvironment import ensure_isolated_environment
 import argparse
 import csv
 import datetime
@@ -86,11 +88,12 @@ def run_case(editor, root, output, scene, workload, size, moving, shadows, pipel
 
 
 def main():
+    ensure_isolated_environment()
     root = pathlib.Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--editor", type=pathlib.Path, default=root / "out/build/release/bin/hyperion_editor.exe")
+    parser.add_argument("--editor", type=pathlib.Path, default=output_root() / "build/release/bin/hyperion_editor.exe")
     parser.add_argument("--asset-root", type=pathlib.Path, default=root.parent / "HyperionAssets")
-    parser.add_argument("--output", type=pathlib.Path, default=root / "out/deferred-performance")
+    parser.add_argument("--output", type=pathlib.Path, default=test_root() / "deferred-performance")
     parser.add_argument("--samples", type=int, default=500)
     parser.add_argument("--warmup", type=int, default=300)
     parser.add_argument("--repeats", type=int, default=2)

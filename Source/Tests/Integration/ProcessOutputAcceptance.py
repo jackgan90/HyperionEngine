@@ -6,6 +6,10 @@ import sys
 import tempfile
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def subsystem(executable):
     data = executable.read_bytes()
     pe = struct.unpack_from('<I', data, 0x3c)[0]
@@ -15,7 +19,7 @@ def subsystem(executable):
 def main():
     child, editor, root = (pathlib.Path(value).resolve() for value in sys.argv[1:])
     assert subsystem(child) == 2 and subsystem(editor) == 2
-    parent = root / 'out' / 'log-tests'
+    parent = test_output_root() / 'log-tests'
     parent.mkdir(parents=True, exist_ok=True)
     work = pathlib.Path(tempfile.mkdtemp(prefix='process-', dir=parent))
     result = subprocess.run([str(child), str(work)], capture_output=True, timeout=30)

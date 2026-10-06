@@ -89,15 +89,25 @@ FTransportAddress LocalTransportAddress(const std::string& InInstance)
 	return {"npipe", InInstance};
 }
 
-std::filesystem::path LocalDiscoveryDirectory()
+std::filesystem::path LocalDiscoveryDirectory(const std::filesystem::path& InBaseDirectory)
 {
 	wchar_t Buffer[32768]{};
-	const auto Size = GetEnvironmentVariableW(L"LOCALAPPDATA", Buffer, 32768);
-	if (!Size || Size >= 32768)
+	const auto OverrideSize = GetEnvironmentVariableW(L"HYP_DISCOVERY_ROOT", Buffer, 32768);
+	if (OverrideSize >= 32768)
 	{
-		throw FTransportError(TransportErrors::DiscoveryUnavailable, "LOCALAPPDATA is unavailable");
+		throw FTransportError(TransportErrors::DiscoveryUnavailable, "HYP_DISCOVERY_ROOT is too long");
 	}
-	const auto Directory = std::filesystem::path(Buffer) / "Hyperion" / "Automation" / CurrentPipeUser();
+	auto Base = OverrideSize ? std::filesystem::path(Buffer) : InBaseDirectory;
+	if (Base.empty())
+	{
+		const auto Size = GetEnvironmentVariableW(L"LOCALAPPDATA", Buffer, 32768);
+		if (!Size || Size >= 32768)
+		{
+			throw FTransportError(TransportErrors::DiscoveryUnavailable, "LOCALAPPDATA is unavailable");
+		}
+		Base = std::filesystem::path(Buffer) / "Hyperion" / "Automation";
+	}
+	const auto Directory = Base / CurrentPipeUser();
 	std::filesystem::create_directories(Directory);
 	FPipeSecurity Security;
 	if (!SetFileSecurityW(Directory.c_str(), DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,

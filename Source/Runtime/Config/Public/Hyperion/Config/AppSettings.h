@@ -32,7 +32,8 @@ struct FAppSettings
 	bool bReversedZ = true;
 	bool bShowGui = true;
 	std::string RenderDocLibrary;
-	std::string RenderDocOutput = "out/captures/renderdoc";
+	// Application composition resolves an empty value from its storage paths.
+	std::string RenderDocOutput;
 	bool bRenderDocAutoOpen = false;
 	double TriangleScale = 0.85;
 	double ClearRed = 0.025;

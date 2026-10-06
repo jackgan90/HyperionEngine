@@ -100,6 +100,7 @@ void FEditorPlugin::DrawPreferences()
 {
 	if (bRequestPreferences)
 	{
+		StorageEdit.Revision = 0;
 		Gui->OpenPopup("Editor preference");
 		bRequestPreferences = false;
 	}
@@ -139,6 +140,7 @@ void FEditorPlugin::DrawPreferences()
 			SavePreferences();
 		}
 	}
+	DrawStoragePreferences();
 	if (Gui->Button("Close"))
 	{
 		Gui->ClosePopup();

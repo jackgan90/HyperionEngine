@@ -1,4 +1,5 @@
 """Prepare optional source-import integration fixtures from external cached inputs."""
+from DevelopmentPaths import test_root, source_cache
 import argparse
 import json
 import pathlib
@@ -21,8 +22,8 @@ def prepare_sources(manifest_path, source_cache, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--assets-root", type=pathlib.Path, default=ROOT.parent / "HyperionAssets")
-    parser.add_argument("--engine-sky-cache", type=pathlib.Path, default=ROOT / "out/DefaultSkySources")
-    parser.add_argument("--output", type=pathlib.Path, default=ROOT / "out/fixtures/Sources")
+    parser.add_argument("--engine-sky-cache", type=pathlib.Path, default=source_cache("EngineSky"))
+    parser.add_argument("--output", type=pathlib.Path, default=test_root() / "fixtures/Sources")
     args = parser.parse_args()
     assets = args.assets_root.resolve()
     manifest_path = assets / "Metadata/Sources.json"

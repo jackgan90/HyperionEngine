@@ -27,7 +27,7 @@ Editor 可独立打开 Texture、Model、Sky、Material 资产，提供预览、
 
 源文件与输出文件必须不同。--scene 将完整模型及其内部节点层级包装为一个场景 model 节点，并创建 directionalLight/environmentLight 节点及选择，不强制创建相机；Editor 使用独立浏览视角自动取景。--name 设置模型名称或包装实例名称，--type 显式选择已注册类型，--force 跳过增量判断。inspect 和 validate 都验证根资产及依赖图，失败返回非零退出码。工具可检查模型、材质、纹理、天空和场景原生资产。导入仅接受 glTF/GLB、PNG/JPG/JPEG、HDR/EXR 外部格式，不接受 `.hasset`；材质由模型导入生成，场景可通过 `--scene` 创建。原生资产升级不属于 importer，旧 `upgrade` 别名已移除。
 
-普通 Editor 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
+普通 Editor 构建直接消费已发布资产，不再导入样例。Engine 内置资源位于 `Content`；样例位于独立 HyperionAssets，通过 `/Game` 访问。`tools/PrepareContent.py` 显式恢复来源并调用 C++ AssetTool 发布。小型测试夹具仍生成到 `out/tests/fixtures`。安装、挂载与来源重建见 [Content 与虚拟文件系统](ContentFileSystem.md)。
 
 ## 模块与线程
 

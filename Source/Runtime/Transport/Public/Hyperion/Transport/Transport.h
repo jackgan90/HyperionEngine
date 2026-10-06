@@ -97,5 +97,5 @@ private:
 // Platform composition hook. Only the current platform's compiled local provider is registered.
 void RegisterLocalTransport(FTransportRegistry& InRegistry);
 FTransportAddress LocalTransportAddress(const std::string& InInstance);
-std::filesystem::path LocalDiscoveryDirectory();
+std::filesystem::path LocalDiscoveryDirectory(const std::filesystem::path& InBaseDirectory = {});
 } // namespace Hyperion

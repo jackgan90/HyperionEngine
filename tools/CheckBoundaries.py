@@ -1,5 +1,6 @@
 """Check configured direct contracts and source/private/vendor isolation."""
 
+from DevelopmentPaths import output_root
 import argparse
 import pathlib
 import re
@@ -275,7 +276,7 @@ def check(root, targets, options=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--build-dir', type=pathlib.Path, default=ROOT / 'out/build/debug')
+    parser.add_argument('--build-dir', type=pathlib.Path, default=output_root() / "build/debug")
     args = parser.parse_args()
     try:
         graph = load_graph(ROOT, args.build_dir.resolve())

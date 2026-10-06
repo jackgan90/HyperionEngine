@@ -72,7 +72,7 @@ int main()
 		FAssetImportService Assets(IO);
 		FAssetService Native(IO);
 		RegisterGltfImporter(Assets);
-		const auto Root = std::filesystem::path(HYP_SOURCE_DIR) / "out/fixtures";
+		const auto Root = std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures";
 		auto Cancelled = Assets.LoadAsync<FModelSource>(Root / "Showcase.gltf");
 		auto Shared = Assets.LoadAsync<FModelSource>(Root / "Showcase.gltf");
 		Cancelled.Cancel();

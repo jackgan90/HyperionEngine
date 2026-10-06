@@ -164,6 +164,8 @@ public:
 	// Optional display root applies to messages and explicitly typed path inputs, never widget IDs.
 	void SetPathDisplayRoot(std::string InRoot);
 	bool InputText(const char* InLabel, std::string& InValue, bool bInCommitOnEnter = true, bool bInPath = false);
+	// Edits the path immediately; returns true when the trailing Browse button is pressed.
+	bool InputPathWithBrowse(const char* InLabel, std::string& InValue);
 	bool InputFloat(const char* InLabel, float& InValue);
 	bool InputNumber(const char* InLabel, double& InValue);
 	bool InputInteger(const char* InLabel, std::int64_t& InValue);

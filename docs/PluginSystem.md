@@ -19,6 +19,8 @@ Editor 的可执行入口位于 `Applications`，只选择 D3D12 provider 并调
 
 | ID | 所有权 / 服务 | 依赖 |
 |---|---|---|
+| `storage` | 发布早于日志解析的 Config 存储服务；注入当前 Content 根查询并随作用域释放 | 可选 FContentRootService |
+| `automation-storage` | `application.storage.get/set` 反射适配 | automation-catalog；可选 storage |
 | `assets` | 挂载文件系统、IO、资产服务、目录注册、Runtime/Content 根切换及共享 AssetImport workspace | 宿主 Tasks |
 | `automation-catalog` | 操作和类型目录 | 无 |
 | `automation-assets` | 共享资产文档的操作适配与任务 | automation-catalog；可选 assets |

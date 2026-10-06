@@ -13,7 +13,8 @@ namespace
 class FAutomationStdioPlugin final : public FPlugin
 {
 public:
-	explicit FAutomationStdioPlugin(FAutomationStreamOptions InOptions) : Options(std::move(InOptions))
+	explicit FAutomationStdioPlugin(FAutomationStreamOptions InOptions)
+	    : Options(std::move(InOptions)), Discovery({}, Options.DiscoveryRoot)
 	{
 	}
 

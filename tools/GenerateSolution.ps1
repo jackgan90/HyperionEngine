@@ -8,7 +8,10 @@ param(
     [switch]$RenderDoc,
     [switch]$NoRenderDoc,
     [switch]$Tracy,
-    [switch]$NoTracy
+    [switch]$NoTracy,
+    [string]$OutRoot = '',
+    [string]$ToolCache = '',
+    [string]$BuildDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -16,6 +19,9 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 }
 $Helper = Join-Path $PSScriptRoot 'VisualStudio.py'
 $Arguments = @($Helper, '--vs-version', $VisualStudioVersion, '--configuration', $Configuration)
+if ($OutRoot) { $Arguments += @('--out-root', $OutRoot) }
+if ($ToolCache) { $Arguments += @('--tool-cache', $ToolCache) }
+if ($BuildDirectory) { $Arguments += @('--build-dir', $BuildDirectory) }
 if ($Build) { $Arguments += '--build' }
 if ($Test) { $Arguments += '--test' }
 if ($Open) { $Arguments += '--open' }

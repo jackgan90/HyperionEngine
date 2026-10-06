@@ -1,3 +1,5 @@
 add_library(hyperion_io STATIC Private/IOService.cpp Private/Path.cpp Private/MountedFileSystem.cpp Private/FileLease.cpp Private/Adapters/LocalPath.cpp Private/Adapters/FileLease.cpp Private/Adapters/FileSystem.cpp)
 hyp_module(hyperion_io)
+target_sources(hyperion_io PRIVATE Private/ApplicationPaths.cpp Private/Adapters/ApplicationPaths.cpp)
 target_link_libraries(hyperion_io PUBLIC hyperion_tasks PRIVATE hyperion_core)
+target_link_libraries(hyperion_io PRIVATE shell32 ole32 uuid)

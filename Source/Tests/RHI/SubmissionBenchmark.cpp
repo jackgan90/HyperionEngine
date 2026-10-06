@@ -22,7 +22,7 @@ using namespace Hyperion;
 
 FDrawPacket PrepareTriangle(IRHIDevice& InDevice)
 {
-	FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::path(HYP_SOURCE_DIR) / "out/shader-cache");
+	FShaderCompiler Compiler(TestShaderRoot(), std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "shader-cache");
 	FPipelineDesc Desc;
 	Desc.Vertex = Compiler.Compile("Triangle.hlsl", "VSMain", EShaderStage::Vertex, EShaderFormat::Dxil);
 	Desc.Pixel = Compiler.Compile("Triangle.hlsl", "PSMain", EShaderStage::Pixel, EShaderFormat::Dxil);

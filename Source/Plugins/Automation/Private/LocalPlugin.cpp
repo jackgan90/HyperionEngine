@@ -11,8 +11,10 @@ namespace
 class FLocalAutomationPlugin final : public FPlugin
 {
 public:
-	FLocalAutomationPlugin(std::string InApplication, std::string InMode, std::string InLabel)
-	    : Application(std::move(InApplication)), Mode(std::move(InMode)), Label(std::move(InLabel))
+	FLocalAutomationPlugin(std::string InApplication, std::string InMode, std::string InLabel,
+	                       std::filesystem::path InDiscoveryRoot)
+	    : Application(std::move(InApplication)), Mode(std::move(InMode)), Label(std::move(InLabel)),
+	      Discovery({}, std::move(InDiscoveryRoot))
 	{
 	}
 
@@ -99,15 +101,16 @@ private:
 } // namespace
 
 void RegisterAutomationLocal(FPluginRegistry& InRegistry, std::string InApplication, std::string InMode,
-                             std::string InLabel)
+                             std::string InLabel, std::filesystem::path InDiscoveryRoot)
 {
 	FPluginDescriptor Descriptor;
 	Descriptor.Id = "automation-local";
 	Descriptor.Dependencies = {"automation-session"};
 	Descriptor.Requires = {typeid(FOperationCatalog), typeid(FTaskSystem), typeid(FApplicationControl)};
-	Descriptor.Create = [Application = std::move(InApplication), Mode = std::move(InMode), Label = std::move(InLabel)]
+	Descriptor.Create = [Application = std::move(InApplication), Mode = std::move(InMode), Label = std::move(InLabel),
+	                     DiscoveryRoot = std::move(InDiscoveryRoot)]
 	{
-		return std::make_unique<FLocalAutomationPlugin>(Application, Mode, Label);
+		return std::make_unique<FLocalAutomationPlugin>(Application, Mode, Label, DiscoveryRoot);
 	};
 	InRegistry.Add(std::move(Descriptor));
 }

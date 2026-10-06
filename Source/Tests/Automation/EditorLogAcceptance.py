@@ -10,10 +10,14 @@ from AutomationAcceptance import completed
 from DiscoveryEnvironment import ensure_isolated_discovery
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from TestEnvironment import test_output_root
+
+
 def main():
     ensure_isolated_discovery()
     editor, cli, root = (pathlib.Path(value).resolve() for value in sys.argv[1:])
-    parent = root / 'out' / 'log-tests'
+    parent = test_output_root() / 'log-tests'
     parent.mkdir(parents=True, exist_ok=True)
     work = pathlib.Path(tempfile.mkdtemp(prefix='editor-', dir=parent))
     capture = work / 'Log.png'

@@ -46,7 +46,7 @@ def saturation(cli, editor, root, output):
     apps = []
     try:
         completed(session.request("targets.list", {}))
-        directory, = (run_root / "Hyperion" / "Automation").iterdir()
+        directory, = pathlib.Path(os.environ["HYP_DISCOVERY_ROOT"]).iterdir()
         for index in range(160):
             instance = f"{index + 1:032x}"
             record = {"instance": instance, "application": "LegacyFixture", "build": "old",
