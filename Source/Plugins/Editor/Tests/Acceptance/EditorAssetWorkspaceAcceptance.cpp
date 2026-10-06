@@ -47,56 +47,66 @@ void WorkspaceKey(std::vector<FInputEvent>& InEvents, EKey InKey, bool bInDown, 
 }
 } // namespace
 
-void FEditorAcceptanceHarness::ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath)
+bool FEditorAcceptanceHarness::ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath)
 {
 	auto Bounds = Editor.AssetWorkspace->ObservedBounds("tab/" + InPath);
 	CheckWorkspace(Bounds.Z > Bounds.X, "Asset tab missing before close");
 	Bounds.X = Bounds.Z - Editor.Gui->Scale(28);
 	MovePointer(InEvents, {(Bounds.X + Bounds.Z) * .5f, (Bounds.Y + Bounds.W) * .5f});
-	if (Scenario.ExerciseWait < 30)
+	if (Scenario.Asset.TabClose.Hover.ConsumeFrame())
 	{
-		++Scenario.ExerciseWait;
-		return;
+		return false;
 	}
-	ExerciseClick(InEvents, Bounds);
+	if (!ExerciseClick(InEvents, Bounds, Scenario.Asset.TabClose.Click, EAcceptanceClickDelay::Immediate))
+	{
+		return false;
+	}
+	Scenario.Asset.TabClose.Hover.Restart();
+	return true;
 }
 
 void FEditorAcceptanceHarness::ExerciseAssetWorkspaceInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.ExerciseStep >= 173)
+	const auto Stage = DescribeAssetAcceptance(Scenario.Asset.Progress.GetState()).Stage;
+	if ((Stage == EAssetAcceptanceStage::FloatingPanel))
 	{
 		ExerciseAssetPanelInput(InEvents);
 		return;
 	}
-	if (Scenario.ExerciseStep >= 165)
+	if ((Stage == EAssetAcceptanceStage::DiscardTab))
 	{
 		ExerciseAssetDiscardInput(InEvents);
 		return;
 	}
 	const auto Path = "/Game/" + std::string(CloseNames.at(Scenario.AssetExerciseIndex)) + ".hasset";
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 161:
+		case EAssetState::OpenCleanTab:
 			Editor.AssetWorkspace->Open(Path);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitCleanTab);
 			break;
-		case 162:
+		case EAssetState::AwaitCleanTab:
 			if (Document && Document->Loaded().Path == Path && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				CheckWorkspace(!Document->IsDirty(), "Clean close fixture is dirty");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::CloseCleanTab);
 			}
 			break;
-		case 163:
-			ExerciseAssetTabClose(InEvents, Path);
+		case EAssetState::CloseCleanTab:
+			if (ExerciseAssetTabClose(InEvents, Path))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyCleanTabClose);
+			}
 			break;
-		case 164:
+		case EAssetState::VerifyCleanTabClose:
 			CheckWorkspace(Editor.AssetWorkspace->ObservedBounds("tab/" + Path).Z == 0 && !Editor.Window->ShouldClose(),
 			               "Closing clean asset did not remove only its tab");
 			CheckWorkspace(Editor.IsDirty() && Editor.History.size() == 1, "Closing asset changed scene history");
 			Log(ELogLevel::Info, "Clean asset tab close passed: " + Path);
-			Scenario.ExerciseStep = ++Scenario.AssetExerciseIndex < CloseNames.size() ? 161 : 165;
+			Scenario.Asset.Progress.TransitionTo(++Scenario.AssetExerciseIndex < CloseNames.size()
+			                                         ? EAssetState::OpenCleanTab
+			                                         : EAssetState::OpenDiscardMaterial);
 			break;
 	}
 }
@@ -104,63 +114,54 @@ void FEditorAcceptanceHarness::ExerciseAssetWorkspaceInput(std::vector<FInputEve
 void FEditorAcceptanceHarness::ExerciseAssetDiscardInput(std::vector<FInputEvent>& InEvents)
 {
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 165:
+		case EAssetState::OpenDiscardMaterial:
 			Editor.AssetWorkspace->Open("/Game/Material.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitDiscardMaterial);
 			break;
-		case 166:
+		case EAssetState::AwaitDiscardMaterial:
 			if (Document && Document->Loaded().Path == "/Game/Material.hasset" &&
 			    Editor.AssetWorkspace->IsPreviewReady())
 			{
 				Scenario.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
 				Editor.AssetWorkspace->RevealProperty("field/name");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::FocusDiscardName);
 			}
 			break;
-		case 167:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"));
-			break;
-		case 168:
-			if (++Scenario.ExerciseWait == 1)
+		case EAssetState::FocusDiscardName:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"), Scenario.Asset.Click))
 			{
-				WorkspaceKey(InEvents, EKey::A, true, 1);
-			}
-			if (Scenario.ExerciseWait == 2)
-			{
-				WorkspaceKey(InEvents, EKey::A, false);
-				FInputEvent Text;
-				Text.Type = EEventType::Text;
-				Text.Text = "Discard this draft";
-				InEvents.push_back(Text);
-			}
-			if (Scenario.ExerciseWait == 4)
-			{
-				WorkspaceKey(InEvents, EKey::Enter, true);
-			}
-			if (Scenario.ExerciseWait == 5)
-			{
-				WorkspaceKey(InEvents, EKey::Enter, false);
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::TypeDiscardName);
 			}
 			break;
-		case 169:
+		case EAssetState::TypeDiscardName:
+			if (ExerciseTextInput(InEvents, Scenario.Asset.DiscardNameInput, "Discard this draft"))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RequestDirtyTabClose);
+			}
+			break;
+		case EAssetState::RequestDirtyTabClose:
 			CheckWorkspace(Document && Document->IsDirty(), "Discard fixture was not edited");
-			ExerciseAssetTabClose(InEvents, "/Game/Material.hasset");
+			if (ExerciseAssetTabClose(InEvents, "/Game/Material.hasset"))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::DiscardDirtyTab);
+			}
 			break;
-		case 170:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("close/discard"));
+		case EAssetState::DiscardDirtyTab:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("close/discard"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::ReopenDiscardedTab);
+			}
 			break;
-		case 171:
+		case EAssetState::ReopenDiscardedTab:
 			CheckWorkspace(Editor.AssetWorkspace->ObservedBounds("tab//Game/Material.hasset").Z == 0 &&
 			                   !Editor.Window->ShouldClose(),
 			               "Discard did not remove only its asset tab");
 			Editor.AssetWorkspace->Open("/Game/Material.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyDiscardedTab);
 			break;
-		case 172:
+		case EAssetState::VerifyDiscardedTab:
 			if (Document && Document->Loaded().Path == "/Game/Material.hasset" &&
 			    Editor.AssetWorkspace->IsPreviewReady())
 			{
@@ -170,7 +171,7 @@ void FEditorAcceptanceHarness::ExerciseAssetDiscardInput(std::vector<FInputEvent
 				Log(ELogLevel::Info, "Dirty asset discard and reopen passed");
 				Editor.AssetWorkspace->Open("/Game/Texture.hasset");
 				Editor.AssetWorkspace->Open("/Game/Sky.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::PrepareFloatingPanel);
 			}
 			break;
 	}
@@ -178,9 +179,9 @@ void FEditorAcceptanceHarness::ExerciseAssetDiscardInput(std::vector<FInputEvent
 
 void FEditorAcceptanceHarness::ExerciseAssetPanelInput(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 173:
+		case EAssetState::PrepareFloatingPanel:
 			if (const auto* Document = Editor.AssetWorkspace->ActiveDocument();
 			    Document && Document->Loaded().Path == "/Game/Sky.hasset" && Editor.AssetWorkspace->IsPreviewReady())
 			{
@@ -193,57 +194,58 @@ void FEditorAcceptanceHarness::ExerciseAssetPanelInput(std::vector<FInputEvent>&
 				Layout.replace(Start, End - Start, "[Window][Place Object]\nPos=400,200\nSize=300,500\nCollapsed=0");
 				Editor.Gui->LoadLayout(Layout);
 				Editor.bFocusPlacement = true;
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.PanelDrag.TitleHover.Restart();
+				Scenario.Asset.Progress.TransitionTo(EAssetState::PressPanelTitle);
 			}
 			break;
-		case 174:
+		case EAssetState::PressPanelTitle:
 		{
 			const auto Bounds = Scenario.InspectionBounds.at("placement/title");
 			Scenario.AssetExercisePointer = {(Bounds.X + Bounds.Z) * .5f, (Bounds.Y + Bounds.W) * .5f};
 			MovePointer(InEvents, Scenario.AssetExercisePointer);
-			if (++Scenario.ExerciseWait == 3)
+			if (Scenario.Asset.PanelDrag.TitleHover.Advance())
 			{
 				PointerButton(InEvents, Scenario.AssetExercisePointer, true);
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::DragPanelTitle);
 			}
 			break;
 		}
-		case 175:
-			// Observe sustained movement across multiple held-button frames.
-			++Scenario.ExerciseWait;
-			if (Scenario.ExerciseWait == 6)
+		case EAssetState::DragPanelTitle:
+			// The baseline is sampled before the sixth held-frame move; release follows eight observations.
+			if (Scenario.Asset.PanelDrag.Progress.Is(EAssetPanelDragPhase::AwaitBaseline))
 			{
-				Scenario.AssetExercisePanelStart = Scenario.InspectionBounds.at("placement/title");
+				if (Scenario.Asset.PanelDrag.BaselineObservation.Advance())
+				{
+					Scenario.AssetExercisePanelStart = Scenario.InspectionBounds.at("placement/title");
+					Scenario.Asset.PanelDrag.Progress.TransitionTo(EAssetPanelDragPhase::ObserveHeldDrag);
+				}
 			}
-			if (Scenario.ExerciseWait == 14)
+			else if (Scenario.Asset.PanelDrag.HeldDragObservation.Advance())
 			{
 				const auto Bounds = Scenario.InspectionBounds.at("placement/title");
 				CheckWorkspace(std::abs(Bounds.X - Scenario.AssetExercisePanelStart.X - 80) < 2 &&
 				                   std::abs(Bounds.Y - Scenario.AssetExercisePanelStart.Y - 48) < 2,
 				               "Place Object window drag was interrupted while an asset tab was active");
 				PointerButton(InEvents, Scenario.AssetExercisePointer, false);
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitPanelRelease);
 				break;
 			}
 			Scenario.AssetExercisePointer.X += 10;
 			Scenario.AssetExercisePointer.Y += 6;
 			MovePointer(InEvents, Scenario.AssetExercisePointer);
 			break;
-		case 176:
+		case EAssetState::AwaitPanelRelease:
 			// A docking request from release is applied at the next frame boundary.
-			if (++Scenario.ExerciseWait < 3)
+			if (!Scenario.Asset.PanelDrag.ReleaseObservation.Advance())
 			{
 				break;
 			}
 			CheckWorkspace(!Editor.Gui->PointerState().bDown, "Panel drag mouse release was not consumed");
 			Scenario.AssetExercisePanelStart = Scenario.InspectionBounds.at("placement/title");
 			MovePointer(InEvents, {Scenario.AssetExercisePointer.X + 50, Scenario.AssetExercisePointer.Y + 50});
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyPanelRelease);
 			break;
-		case 177:
+		case EAssetState::VerifyPanelRelease:
 		{
 			const auto Bounds = Scenario.InspectionBounds.at("placement/title");
 			CheckWorkspace(Bounds.X == Scenario.AssetExercisePanelStart.X &&
@@ -253,9 +255,8 @@ void FEditorAcceptanceHarness::ExerciseAssetPanelInput(std::vector<FInputEvent>&
 			               "Panel drag changed the scene");
 			Log(ELogLevel::Info, "Place Object panel held-button drag and release passed with three asset tabs");
 			Scenario.AssetExerciseIndex = 4;
-			Scenario.ExerciseWait = 0;
 			Editor.AssetWorkspace->RevealProperty("field/name");
-			Scenario.ExerciseStep = 190;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::FocusWindowHistoryName);
 			break;
 		}
 	}

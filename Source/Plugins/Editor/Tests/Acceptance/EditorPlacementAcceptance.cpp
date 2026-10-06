@@ -51,46 +51,61 @@ void ClipboardKey(std::vector<FInputEvent>& InEvents, EKey InKey, bool bInDown)
 
 bool FEditorAcceptanceHarness::ExercisePlacementMenu(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.PlacementMenuStep > 8)
+	if (Scenario.PlacementMenu.Is(EPlacementMenuState::Complete))
 	{
 		return true;
 	}
-	switch (Scenario.PlacementMenuStep)
+	switch (Scenario.PlacementMenu.GetState())
 	{
-		case 0:
+		case EPlacementMenuState::HidePanelAndRestoreFocus:
 		{
 			FInputEvent Focus;
 			Focus.Type = EEventType::Focus;
 			Focus.bDown = true;
 			InEvents.push_back(Focus);
 			Editor.bShowPlacement = false;
+			Scenario.PlacementMenu.TransitionTo(EPlacementMenuState::PointAtWindowMenu);
 			break;
 		}
-		case 1:
+		case EPlacementMenuState::PointAtWindowMenu:
 			Move(InEvents, Center(Scenario.InspectionBounds.at("placement/window-menu")));
+			Scenario.PlacementMenu.TransitionTo(EPlacementMenuState::PressWindowMenu);
 			break;
-		case 2:
-		case 5:
+		case EPlacementMenuState::PressWindowMenu:
+		case EPlacementMenuState::PressPlacementItem:
 			Button(InEvents, true);
+			Scenario.PlacementMenu.TransitionTo(Scenario.PlacementMenu.Is(EPlacementMenuState::PressWindowMenu)
+			                                        ? EPlacementMenuState::ReleaseWindowMenu
+			                                        : EPlacementMenuState::ReleasePlacementItem);
 			break;
-		case 3:
-		case 6:
+		case EPlacementMenuState::ReleaseWindowMenu:
+		case EPlacementMenuState::ReleasePlacementItem:
 			Button(InEvents, false);
+			Scenario.PlacementMenu.TransitionTo(Scenario.PlacementMenu.Is(EPlacementMenuState::ReleaseWindowMenu)
+			                                        ? EPlacementMenuState::PointAtPlacementItem
+			                                        : EPlacementMenuState::AwaitPlacementPanel);
 			break;
-		case 4:
+		case EPlacementMenuState::PointAtPlacementItem:
 			Move(InEvents, Center(Scenario.InspectionBounds.at("placement/open-panel")));
+			Scenario.PlacementMenu.TransitionTo(EPlacementMenuState::PressPlacementItem);
 			break;
-		case 8:
+		case EPlacementMenuState::AwaitPlacementPanel:
+			Scenario.PlacementMenu.TransitionTo(EPlacementMenuState::VerifyPanel);
+			break;
+		case EPlacementMenuState::VerifyPanel:
 			Check(Editor.bShowPlacement, "Window > Place Object did not reopen the panel");
+			Scenario.PlacementMenu.TransitionTo(EPlacementMenuState::Complete);
 			break;
 	}
-	++Scenario.PlacementMenuStep;
+
 	return false;
 }
 
 void FEditorAcceptanceHarness::ExercisePlacementDrag(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.PlacementExerciseStep >= 13)
+	if (Scenario.PlacementDrag.IsAny({EPlacementDragState::PressCopy, EPlacementDragState::ReleaseCopy,
+	                                  EPlacementDragState::PressPaste, EPlacementDragState::ReleasePaste,
+	                                  EPlacementDragState::VerifyPastedObject}))
 	{
 		ExercisePlacedClipboard(InEvents);
 		return;
@@ -100,9 +115,9 @@ void FEditorAcceptanceHarness::ExercisePlacementDrag(std::vector<FInputEvent>& I
 	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Target{Bounds.X + (Bounds.Z - Bounds.X) * (.2f + .18f * (Scenario.PlacementExerciseType % 4)),
 	                   Bounds.Y + (Bounds.W - Bounds.Y) * (.5f + .2f * (Scenario.PlacementExerciseType / 4))};
-	switch (Scenario.PlacementExerciseStep)
+	switch (Scenario.PlacementDrag.GetState())
 	{
-		case 0:
+		case EPlacementDragState::PrepareDrag:
 		{
 			auto Candidate = Editor.Rendering;
 			Candidate.bReversedZ = Scenario.PlacementExerciseType % 2 != 0;
@@ -113,17 +128,17 @@ void FEditorAcceptanceHarness::ExercisePlacementDrag(std::vector<FInputEvent>& I
 			Move(InEvents, Center(Source));
 			break;
 		}
-		case 1:
+		case EPlacementDragState::PressSource:
 			Button(InEvents, true);
 			break;
-		case 2:
+		case EPlacementDragState::StartSourceDrag:
 			Move(InEvents, {Center(Source).X + 15, Center(Source).Y});
 			break;
-		case 3:
+		case EPlacementDragState::MoveToViewport:
 			Check(Editor.Gui->DragPayload().has_value(), Type + " source did not start dragging");
 			Move(InEvents, Target);
 			break;
-		case 6:
+		case EPlacementDragState::VerifyPreviewAndMove:
 			Check(Editor.Placement.GetPreview().has_value(), Type + " has no world preview: " + Editor.PlacementStatus);
 			Check(Editor.Scene->GetNodes().size() == Scenario.PlacementExerciseBaseNodes &&
 			          Editor.HistoryCursor == Scenario.PlacementExerciseBaseHistory &&
@@ -133,17 +148,17 @@ void FEditorAcceptanceHarness::ExercisePlacementDrag(std::vector<FInputEvent>& I
 			Scenario.PlacementCapture = Editor.Options.ExercisePlacement.parent_path() / (Type + "Preview.png");
 			Move(InEvents, {Target.X + 25, Target.Y + 12});
 			break;
-		case 8:
+		case EPlacementDragState::VerifyMovedPreview:
 			Check(Editor.Placement.GetPreview() && Length(Subtract(Editor.Placement.GetPreview()->Position,
 			                                                       Scenario.PlacementExercisePosition)) > .01f,
 			      Type + " preview did not follow pointer");
 			Check(!Editor.PlacementRegistry.Find(Type)->Model || Editor.FreezePlacementPreview()->Items.size() == 1,
 			      "missing mesh preview packet");
 			break;
-		case 10:
+		case EPlacementDragState::ReleaseDrop:
 			Button(InEvents, false);
 			break;
-		case 12:
+		case EPlacementDragState::VerifyDrop:
 			Check(!Editor.Placement.IsActive() && bool(Editor.Selection), Type + " did not finish its drop");
 			Check(Editor.Scene->GetNodes().size() == Scenario.PlacementExerciseBaseNodes + 1 &&
 			          Editor.HistoryCursor == Scenario.PlacementExerciseBaseHistory + 1,
@@ -165,31 +180,78 @@ void FEditorAcceptanceHarness::ExercisePlacementDrag(std::vector<FInputEvent>& I
 			}
 			break;
 	}
-	++Scenario.PlacementExerciseStep;
+	switch (Scenario.PlacementDrag.GetState())
+	{
+		case EPlacementDragState::PressSource:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::StartSourceDrag);
+			break;
+		case EPlacementDragState::StartSourceDrag:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::MoveToViewport);
+			break;
+		case EPlacementDragState::MoveToViewport:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::AwaitPreviewAdmission);
+			break;
+		case EPlacementDragState::AwaitPreviewAdmission:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::AwaitPreviewPublication);
+			break;
+		case EPlacementDragState::AwaitPreviewPublication:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::VerifyPreviewAndMove);
+			break;
+		case EPlacementDragState::VerifyPreviewAndMove:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::AwaitPointerMove);
+			break;
+		case EPlacementDragState::AwaitPointerMove:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::VerifyMovedPreview);
+			break;
+		case EPlacementDragState::VerifyMovedPreview:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::AwaitDropInput);
+			break;
+		case EPlacementDragState::AwaitDropInput:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::ReleaseDrop);
+			break;
+		case EPlacementDragState::ReleaseDrop:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::AwaitDropCommit);
+			break;
+		case EPlacementDragState::AwaitDropCommit:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::VerifyDrop);
+			break;
+		case EPlacementDragState::PrepareDrag:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::PressSource);
+			break;
+		case EPlacementDragState::VerifyDrop:
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::PressCopy);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::ExercisePlacedClipboard(std::vector<FInputEvent>& InEvents)
 {
 	const auto Original = Editor.Scene->FindHandle(Scenario.PlacementExerciseIds.back());
-	switch (Scenario.PlacementExerciseStep)
+	switch (Scenario.PlacementDrag.GetState())
 	{
-		case 13:
+		case EPlacementDragState::PressCopy:
 			// No extra click or FocusWindow: reproduce typing immediately after a real panel-to-viewport drop.
 			ClipboardKey(InEvents, EKey::C, true);
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::ReleaseCopy);
 			break;
-		case 14:
+		case EPlacementDragState::ReleaseCopy:
 			Check(Editor.Gui->IsWindowFocused("Viewport") &&
 			          Editor.HistoryCursor == Scenario.PlacementExerciseBaseHistory + 1,
 			      "placed object did not retain scene shortcut focus or copy changed history: " + Editor.Error);
 			ClipboardKey(InEvents, EKey::C, false);
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::PressPaste);
 			break;
-		case 15:
+		case EPlacementDragState::PressPaste:
 			ClipboardKey(InEvents, EKey::V, true);
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::ReleasePaste);
 			break;
-		case 16:
+		case EPlacementDragState::ReleasePaste:
 			ClipboardKey(InEvents, EKey::V, false);
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::VerifyPastedObject);
 			break;
-		case 17:
+		case EPlacementDragState::VerifyPastedObject:
 		{
 			Check(Editor.Scene->GetNodes().size() == Scenario.PlacementExerciseBaseNodes + 2 &&
 			          Editor.HistoryCursor == Scenario.PlacementExerciseBaseHistory + 2 && Editor.Selection &&
@@ -230,20 +292,19 @@ void FEditorAcceptanceHarness::ExercisePlacedClipboard(std::vector<FInputEvent>&
 			Check(!bSkyLight || Editor.Scene->GetLightingSelection().Environment.Handle ==
 			                        Editor.Scene->FindHandle(Scenario.PlacementExerciseIds.back()),
 			      "creation redo did not restore the active sky light");
-			Scenario.PlacementExerciseStep = 0;
+			Scenario.PlacementDrag.TransitionTo(EPlacementDragState::PrepareDrag);
 			++Scenario.PlacementExerciseType;
 			return;
 		}
 	}
-	++Scenario.PlacementExerciseStep;
 }
 
 void FEditorAcceptanceHarness::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 {
 	const auto Source = Scenario.InspectionBounds.at("placement/Cube");
-	switch (Scenario.PlacementExerciseStep)
+	switch (Scenario.PlacementCancel.GetState())
 	{
-		case 0:
+		case EPlacementCancelState::PrepareCancellation:
 			if (Scenario.PlacementCancelCase == 0)
 			{
 				Editor.Undo();
@@ -253,16 +314,16 @@ void FEditorAcceptanceHarness::ExercisePlacementCancel(std::vector<FInputEvent>&
 			}
 			Move(InEvents, Center(Source));
 			break;
-		case 1:
+		case EPlacementCancelState::PressSource:
 			Button(InEvents, true);
 			break;
-		case 2:
+		case EPlacementCancelState::StartSourceDrag:
 			Move(InEvents, {Center(Source).X + 15, Center(Source).Y});
 			break;
-		case 3:
+		case EPlacementCancelState::MoveToViewport:
 			Move(InEvents, Center(Editor.Viewport.ViewportRegion.Bounds));
 			break;
-		case 6:
+		case EPlacementCancelState::CancelGesture:
 		{
 			Check(Editor.Placement.GetPreview().has_value(), "cancellation setup has no preview");
 			FInputEvent Event;
@@ -299,10 +360,10 @@ void FEditorAcceptanceHarness::ExercisePlacementCancel(std::vector<FInputEvent>&
 			}
 			break;
 		}
-		case 7:
+		case EPlacementCancelState::ReleasePointer:
 			Button(InEvents, false);
 			break;
-		case 9:
+		case EPlacementCancelState::VerifyCancellation:
 		{
 			Check(!Editor.Placement.IsActive() &&
 			          Editor.Scene->GetNodes().size() == Scenario.PlacementExerciseBaseNodes &&
@@ -321,12 +382,58 @@ void FEditorAcceptanceHarness::ExercisePlacementCancel(std::vector<FInputEvent>&
 			Editor.bShowViewport = true;
 			break;
 		}
-		case 14:
+		case EPlacementCancelState::AdvanceCase:
 			++Scenario.PlacementCancelCase;
-			Scenario.PlacementExerciseStep = 0;
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::PrepareCancellation);
 			return;
 	}
-	++Scenario.PlacementExerciseStep;
+	switch (Scenario.PlacementCancel.GetState())
+	{
+		case EPlacementCancelState::PressSource:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::StartSourceDrag);
+			break;
+		case EPlacementCancelState::StartSourceDrag:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::MoveToViewport);
+			break;
+		case EPlacementCancelState::MoveToViewport:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AwaitPreviewAdmission);
+			break;
+		case EPlacementCancelState::AwaitPreviewAdmission:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AwaitPreviewPublication);
+			break;
+		case EPlacementCancelState::AwaitPreviewPublication:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::CancelGesture);
+			break;
+		case EPlacementCancelState::CancelGesture:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::ReleasePointer);
+			break;
+		case EPlacementCancelState::ReleasePointer:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AwaitCancellation);
+			break;
+		case EPlacementCancelState::AwaitCancellation:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::VerifyCancellation);
+			break;
+		case EPlacementCancelState::VerifyCancellation:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AwaitPostCancellationInput);
+			break;
+		case EPlacementCancelState::AwaitPostCancellationInput:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AwaitFocusRestore);
+			break;
+		case EPlacementCancelState::AwaitFocusRestore:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AwaitFocusSettlement);
+			break;
+		case EPlacementCancelState::AwaitFocusSettlement:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AwaitNextCase);
+			break;
+		case EPlacementCancelState::AwaitNextCase:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::AdvanceCase);
+			break;
+		case EPlacementCancelState::PrepareCancellation:
+			Scenario.PlacementCancel.TransitionTo(EPlacementCancelState::PressSource);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::ExercisePlacementHistory()
@@ -394,7 +501,21 @@ void FEditorAcceptanceHarness::ExercisePlacementInput(std::vector<FInputEvent>& 
 	{
 		Check(Editor.Scene->GetError(Handle).empty(), Editor.Scene->GetError(Handle));
 	}
-	if (Editor.FrameCount < 12 || (!Editor.Viewport.bViewportVisible && Scenario.PlacementExerciseStep == 0) ||
+	bool bAwaitViewport = Scenario.PlacementDocument.Is(EPlacementDocumentState::VerifyHistoryAndPrepareMarker);
+	if (Scenario.PlacementExerciseType < PlacementTypes.size())
+	{
+		bAwaitViewport = Scenario.PlacementDrag.Is(EPlacementDragState::PrepareDrag);
+	}
+	else if (Scenario.PlacementCancelCase < 8)
+	{
+		bAwaitViewport = Scenario.PlacementCancel.Is(EPlacementCancelState::PrepareCancellation);
+	}
+	else if (Scenario.PlacementMarkerCase < 3)
+	{
+		// Marker checks leave the original outer placement phase at its viewport entry.
+		bAwaitViewport = true;
+	}
+	if (Editor.FrameCount < 12 || (!Editor.Viewport.bViewportVisible && bAwaitViewport) ||
 	    !Editor.Scene->GetStatus().bReady || Editor.PlacementModels.size() != 5)
 	{
 		return;
@@ -437,15 +558,15 @@ void FEditorAcceptanceHarness::ExercisePlacementInput(std::vector<FInputEvent>& 
 
 void FEditorAcceptanceHarness::ExercisePlacementDocument(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.PlacementExerciseStep == 0)
+	if (Scenario.PlacementDocument.Is(EPlacementDocumentState::VerifyHistoryAndPrepareMarker))
 	{
 		ExercisePlacementHistory();
 		Editor.Scene->Tick();
 		Scenario.PlacementExerciseBaseHistory = Editor.HistoryCursor;
 		Editor.SelectObject(std::nullopt);
-		++Scenario.PlacementExerciseStep;
+		Scenario.PlacementDocument.TransitionTo(EPlacementDocumentState::PointAtMarker);
 	}
-	else if (Scenario.PlacementExerciseStep == 1)
+	else if (Scenario.PlacementDocument.Is(EPlacementDocumentState::PointAtMarker))
 	{
 		FSceneNodeView View;
 		Check(Editor.Scene->GetNodeView(Editor.Scene->FindHandle(Scenario.PlacementExerciseIds.at(6)), View),
@@ -454,28 +575,31 @@ void FEditorAcceptanceHarness::ExercisePlacementDocument(std::vector<FInputEvent
 		                                         {View.World.Values[12], View.World.Values[13], View.World.Values[14]});
 		Check(Screen.has_value(), "point light is outside viewport");
 		Move(InEvents, {Screen->X, Screen->Y});
-		++Scenario.PlacementExerciseStep;
+		Scenario.PlacementDocument.TransitionTo(EPlacementDocumentState::PressMarker);
 	}
-	else if (Scenario.PlacementExerciseStep == 2 || Scenario.PlacementExerciseStep == 3)
+	else if (Scenario.PlacementDocument.Is(EPlacementDocumentState::PressMarker) ||
+	         Scenario.PlacementDocument.Is(EPlacementDocumentState::ReleaseMarker))
 	{
-		Button(InEvents, Scenario.PlacementExerciseStep == 2);
-		++Scenario.PlacementExerciseStep;
+		Button(InEvents, Scenario.PlacementDocument.Is(EPlacementDocumentState::PressMarker));
+		Scenario.PlacementDocument.TransitionTo(Scenario.PlacementDocument.Is(EPlacementDocumentState::PressMarker)
+		                                            ? EPlacementDocumentState::ReleaseMarker
+		                                            : EPlacementDocumentState::VerifyMarkerAndSave);
 	}
-	else if (Scenario.PlacementExerciseStep == 4)
+	else if (Scenario.PlacementDocument.Is(EPlacementDocumentState::VerifyMarkerAndSave))
 	{
 		Check(Editor.Selection == Editor.Scene->FindHandle(Scenario.PlacementExerciseIds.at(6)) &&
 		          Editor.HistoryCursor == Scenario.PlacementExerciseBaseHistory,
 		      "clicking light marker did not select it without editing history");
 		Editor.SaveScene(Editor.Options.ExercisePlacement.generic_string());
-		++Scenario.PlacementExerciseStep;
+		Scenario.PlacementDocument.TransitionTo(EPlacementDocumentState::AwaitSaveAndReopen);
 	}
-	else if (Scenario.PlacementExerciseStep == 5 && !Editor.PendingSave)
+	else if (Scenario.PlacementDocument.Is(EPlacementDocumentState::AwaitSaveAndReopen) && !Editor.PendingSave)
 	{
 		Check(!Editor.IsDirty(), "save did not complete");
 		Editor.OpenScene(Editor.Options.ExercisePlacement.generic_string());
-		++Scenario.PlacementExerciseStep;
+		Scenario.PlacementDocument.TransitionTo(EPlacementDocumentState::VerifyReload);
 	}
-	else if (Scenario.PlacementExerciseStep == 6)
+	else if (Scenario.PlacementDocument.Is(EPlacementDocumentState::VerifyReload))
 	{
 		Check(Editor.Scene->GetNodes().size() == Scenario.PlacementExerciseBaseNodes,
 		      "saved placed objects did not reload");

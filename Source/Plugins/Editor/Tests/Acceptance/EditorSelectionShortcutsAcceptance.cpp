@@ -91,7 +91,7 @@ void FEditorAcceptanceHarness::PrepareSelectionShortcuts()
 void FEditorAcceptanceHarness::CheckShortcutSelection(std::initializer_list<unsigned> InIndices)
 {
 	RequireShortcut(Editor.Selection.All().size() == InIndices.size(),
-	                "selection size at step " + std::to_string(Scenario.ShortcutStep) + ": expected " +
+	                "selection size at step " + Scenario.Shortcut.Progress.Name() + ": expected " +
 	                    std::to_string(InIndices.size()) + ", got " + std::to_string(Editor.Selection.All().size()));
 	for (const auto Index : InIndices)
 	{
@@ -106,41 +106,112 @@ void FEditorAcceptanceHarness::CheckShortcutSelection(std::initializer_list<unsi
 
 void FEditorAcceptanceHarness::ExerciseSelectionRanges(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Case = (Scenario.ShortcutStep - 1) / 3;
-	const unsigned Phase = (Scenario.ShortcutStep - 1) % 3;
+	const unsigned Case = DescribeShortcutRangeContext(Scenario.Shortcut.Progress.GetState()).CaseIndex;
+	const auto Phase = DescribeShortcutRangeContext(Scenario.Shortcut.Progress.GetState()).Action;
 	const std::array<unsigned, 7> Targets{0, 3, 2, 3, 1, 0, 0};
 	const std::array<unsigned, 7> Modifiers{0, 2, 2, 1, 2, 3, 2};
 	const auto Bounds =
 	    Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[Targets[Case]])->Id);
-	if (Phase < 2)
+	if ((Phase == EShortcutRangeAction::PressRow || Phase == EShortcutRangeAction::ReleaseRow))
 	{
-		ShortcutKey(InEvents, EKey::None, Phase == 0 ? Modifiers[Case] : 0);
-		ShortcutMouse(InEvents, ShortcutPoint(Bounds), Phase == 0);
-		return;
+		ShortcutKey(InEvents, EKey::None, Phase == EShortcutRangeAction::PressRow ? Modifiers[Case] : 0);
+		ShortcutMouse(InEvents, ShortcutPoint(Bounds), Phase == EShortcutRangeAction::PressRow);
 	}
-	switch (Case)
+	else
 	{
-		case 0:
-			CheckShortcutSelection({0});
+		switch (Case)
+		{
+			case 0:
+				CheckShortcutSelection({0});
+				break;
+			case 1:
+				CheckShortcutSelection({0, 1, 2, 3});
+				break;
+			case 2:
+				CheckShortcutSelection({0, 1, 2});
+				break;
+			case 3:
+				CheckShortcutSelection({0, 1, 2, 3});
+				break;
+			case 4:
+				CheckShortcutSelection({2, 3, 1});
+				break;
+			case 5:
+				CheckShortcutSelection({1, 2, 3, 0});
+				Editor.Filter = "Shortcut A";
+				break;
+			case 6:
+				CheckShortcutSelection({0});
+				break;
+		}
+	}
+
+	switch (Scenario.Shortcut.Progress.GetState())
+	{
+		case EShortcutState::PlainPressRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::PlainReleaseRow);
 			break;
-		case 1:
-			CheckShortcutSelection({0, 1, 2, 3});
+		case EShortcutState::PlainReleaseRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::PlainVerifyRange);
 			break;
-		case 2:
-			CheckShortcutSelection({0, 1, 2});
+		case EShortcutState::PlainVerifyRange:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ExtendForwardPressRow);
 			break;
-		case 3:
-			CheckShortcutSelection({0, 1, 2, 3});
+		case EShortcutState::ExtendForwardPressRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ExtendForwardReleaseRow);
 			break;
-		case 4:
-			CheckShortcutSelection({2, 3, 1});
+		case EShortcutState::ExtendForwardReleaseRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ExtendForwardVerifyRange);
 			break;
-		case 5:
-			CheckShortcutSelection({1, 2, 3, 0});
-			Editor.Filter = "Shortcut A";
+		case EShortcutState::ExtendForwardVerifyRange:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ExtendBackwardPressRow);
 			break;
-		case 6:
-			CheckShortcutSelection({0});
+		case EShortcutState::ExtendBackwardPressRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ExtendBackwardReleaseRow);
+			break;
+		case EShortcutState::ExtendBackwardReleaseRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ExtendBackwardVerifyRange);
+			break;
+		case EShortcutState::ExtendBackwardVerifyRange:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AddPressRow);
+			break;
+		case EShortcutState::AddPressRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AddReleaseRow);
+			break;
+		case EShortcutState::AddReleaseRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AddVerifyRange);
+			break;
+		case EShortcutState::AddVerifyRange:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReplaceRangePressRow);
+			break;
+		case EShortcutState::ReplaceRangePressRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReplaceRangeReleaseRow);
+			break;
+		case EShortcutState::ReplaceRangeReleaseRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReplaceRangeVerifyRange);
+			break;
+		case EShortcutState::ReplaceRangeVerifyRange:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AddRangePressRow);
+			break;
+		case EShortcutState::AddRangePressRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AddRangeReleaseRow);
+			break;
+		case EShortcutState::AddRangeReleaseRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AddRangeVerifyRange);
+			break;
+		case EShortcutState::AddRangeVerifyRange:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::FilteredRangePressRow);
+			break;
+		case EShortcutState::FilteredRangePressRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::FilteredRangeReleaseRow);
+			break;
+		case EShortcutState::FilteredRangeReleaseRow:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::FilteredRangeVerifyRange);
+			break;
+		case EShortcutState::FilteredRangeVerifyRange:
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::FocusOutliner);
+			break;
+		default:
 			break;
 	}
 }
@@ -153,56 +224,84 @@ void FEditorAcceptanceHarness::ExerciseSelectionKeys(std::vector<FInputEvent>& I
 	RequireShortcut(bool(Point), "viewport point unavailable");
 	const FVec2 Hit{Point->X, Point->Y};
 	const FVec2 Miss{Editor.Viewport.ViewportRegion.Bounds.X + 8, Editor.Viewport.ViewportRegion.Bounds.Y + 8};
-	switch (Scenario.ShortcutStep)
+	switch (Scenario.Shortcut.Progress.GetState())
 	{
-		case 22:
+		case EShortcutState::FocusOutliner:
 			Editor.Filter = "Shortcut";
 			Editor.Gui->FocusWindow("Outliner");
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::SelectAllOutliner);
 			break;
-		case 23:
+		case EShortcutState::SelectAllOutliner:
 			ShortcutKey(InEvents, EKey::A, 1);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyOutlinerSelectAll);
 			break;
-		case 24:
-		case 26:
+		case EShortcutState::VerifyOutlinerSelectAll:
+		case EShortcutState::VerifyViewportSelectAll:
 		{
 			RequireShortcut(Editor.Selection.All().size() == Editor.Scene->GetNodes().size() &&
 			                    Editor.Selection.All().size() > 128,
 			                "Ctrl+A omitted hidden or search-excluded nodes");
-			RequireShortcut(Editor.Selection.Primary() == Scenario.ShortcutObjects[Scenario.ShortcutStep == 24 ? 0 : 2],
-			                "Ctrl+A moved primary");
+			RequireShortcut(
+			    Editor.Selection.Primary() ==
+			        Scenario
+			            .ShortcutObjects[Scenario.Shortcut.Progress.Is(EShortcutState::VerifyOutlinerSelectAll) ? 0
+			                                                                                                    : 2],
+			    "Ctrl+A moved primary");
 			const auto Before = Editor.Selection;
 			const auto Summary =
 			    SelectAllSceneNodes(Editor.SceneDocument, {Editor.SceneDocument.Id(), Scenario.ShortcutRevision});
 			RequireShortcut(Editor.Selection == Before && Summary.Count == Before.All().size(),
 			                "GUI/domain all-selection mismatch");
-			Editor.SelectObject(Scenario.ShortcutObjects[Scenario.ShortcutStep == 24 ? 2 : 0]);
+			Editor.SelectObject(
+			    Scenario
+			        .ShortcutObjects[Scenario.Shortcut.Progress.Is(EShortcutState::VerifyOutlinerSelectAll) ? 2 : 0]);
 			Editor.Gui->FocusWindow("Viewport");
+			Scenario.Shortcut.Progress.TransitionTo(
+			    Scenario.Shortcut.Progress.Is(EShortcutState::VerifyOutlinerSelectAll)
+			        ? EShortcutState::SelectAllViewport
+			        : EShortcutState::PressShiftViewportHit);
 			break;
 		}
-		case 25:
+		case EShortcutState::SelectAllViewport:
 			ShortcutKey(InEvents, EKey::A, 1);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyViewportSelectAll);
 			break;
-		case 27:
-		case 29:
-		case 31:
-			if (Scenario.ShortcutStep == 29)
+		case EShortcutState::PressShiftViewportHit:
+		case EShortcutState::PressShiftViewportToggle:
+		case EShortcutState::PressShiftViewportMiss:
+			if (Scenario.Shortcut.Progress.Is(EShortcutState::PressShiftViewportToggle))
 			{
 				CheckShortcutSelection({0, 2});
 			}
-			if (Scenario.ShortcutStep == 31)
+			if (Scenario.Shortcut.Progress.Is(EShortcutState::PressShiftViewportMiss))
 			{
 				CheckShortcutSelection({0});
 			}
 			ShortcutKey(InEvents, EKey::None, 2);
-			ShortcutMouse(InEvents, Scenario.ShortcutStep == 31 ? Miss : Hit, true);
+			ShortcutMouse(InEvents, Scenario.Shortcut.Progress.Is(EShortcutState::PressShiftViewportMiss) ? Miss : Hit,
+			              true);
+			Scenario.Shortcut.Progress.TransitionTo(
+			    Scenario.Shortcut.Progress.Is(EShortcutState::PressShiftViewportHit)
+			        ? EShortcutState::ReleaseShiftViewportHit
+			    : Scenario.Shortcut.Progress.Is(EShortcutState::PressShiftViewportToggle)
+			        ? EShortcutState::ReleaseShiftViewportToggle
+			        : EShortcutState::ReleaseShiftViewportMiss);
 			break;
-		case 28:
-		case 30:
-		case 32:
-			ShortcutMouse(InEvents, Scenario.ShortcutStep == 32 ? Miss : Hit, false);
+		case EShortcutState::ReleaseShiftViewportHit:
+		case EShortcutState::ReleaseShiftViewportToggle:
+		case EShortcutState::ReleaseShiftViewportMiss:
+			ShortcutMouse(InEvents,
+			              Scenario.Shortcut.Progress.Is(EShortcutState::ReleaseShiftViewportMiss) ? Miss : Hit, false);
+			Scenario.Shortcut.Progress.TransitionTo(
+			    Scenario.Shortcut.Progress.Is(EShortcutState::ReleaseShiftViewportHit)
+			        ? EShortcutState::PressShiftViewportToggle
+			    : Scenario.Shortcut.Progress.Is(EShortcutState::ReleaseShiftViewportToggle)
+			        ? EShortcutState::PressShiftViewportMiss
+			        : EShortcutState::VerifyViewportRange);
 			break;
-		case 33:
+		case EShortcutState::VerifyViewportRange:
 			CheckShortcutSelection({0});
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::PressSearch);
 			break;
 	}
 }
@@ -211,62 +310,74 @@ void FEditorAcceptanceHarness::ExerciseSelectionGuards(std::vector<FInputEvent>&
 {
 	const auto Search = ShortcutPoint(Scenario.InspectionBounds.at("clipboard/search"));
 	const FVec2 Miss{Editor.Viewport.ViewportRegion.Bounds.X + 8, Editor.Viewport.ViewportRegion.Bounds.Y + 8};
-	switch (Scenario.ShortcutStep)
+	switch (Scenario.Shortcut.Progress.GetState())
 	{
-		case 34:
+		case EShortcutState::PressSearch:
 			ShortcutMouse(InEvents, Search, true);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReleaseSearch);
 			break;
-		case 35:
+		case EShortcutState::ReleaseSearch:
 			ShortcutMouse(InEvents, Search, false);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AttemptSearchCommands);
 			break;
-		case 36:
+		case EShortcutState::AttemptSearchCommands:
 			ShortcutKey(InEvents, EKey::A, 1);
 			ShortcutKey(InEvents, EKey::Delete);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifySearchGuard);
 			break;
-		case 37:
+		case EShortcutState::VerifySearchGuard:
 			CheckShortcutSelection({0});
 			Editor.Gui->FinishEditing();
 			Editor.Gui->FocusWindow("Details");
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AttemptDetailsCommands);
 			break;
-		case 38:
+		case EShortcutState::AttemptDetailsCommands:
 			ShortcutKey(InEvents, EKey::A, 1);
 			ShortcutKey(InEvents, EKey::Delete);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyDetailsGuard);
 			break;
-		case 39:
+		case EShortcutState::VerifyDetailsGuard:
 			CheckShortcutSelection({0});
 			Editor.Gui->FocusWindow("Viewport");
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AttemptNavigationCommands);
 			break;
-		case 40:
+		case EShortcutState::AttemptNavigationCommands:
 			ShortcutMouse(InEvents, Miss, true, 1);
 			ShortcutKey(InEvents, EKey::A, 1);
 			ShortcutKey(InEvents, EKey::Delete);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AttemptReleaseBatchCommands);
 			break;
-		case 41:
+		case EShortcutState::AttemptReleaseBatchCommands:
 			CheckShortcutSelection({0});
 			// The key belongs to navigation even if its later release shares the same event batch.
 			ShortcutKey(InEvents, EKey::A, 1);
 			ShortcutMouse(InEvents, Miss, false, 1);
 			ShortcutKey(InEvents, EKey::Delete);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AttemptRepeatedCommands);
 			break;
-		case 42:
+		case EShortcutState::AttemptRepeatedCommands:
 			CheckShortcutSelection({0});
 			ShortcutKey(InEvents, EKey::A, 1, true, true);
 			ShortcutKey(InEvents, EKey::Delete, InputModifiers::None, true, true);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyRepeatedGuard);
 			break;
-		case 43:
+		case EShortcutState::VerifyRepeatedGuard:
 			CheckShortcutSelection({0});
 			Editor.bRequestOpen = Editor.bOpenDialog = true;
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::AttemptModalCommands);
 			break;
-		case 44:
+		case EShortcutState::AttemptModalCommands:
 			ShortcutKey(InEvents, EKey::A, 1);
 			ShortcutKey(InEvents, EKey::Delete);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyModalGuard);
 			break;
-		case 45:
+		case EShortcutState::VerifyModalGuard:
 			CheckShortcutSelection({0});
 			Editor.bOpenDialog = false;
 			Editor.Gui->ClosePopups();
 			Editor.Gui->FocusWindow("Outliner");
 			Editor.Filter.clear();
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::PressTreeToggle);
 			break;
 	}
 }
@@ -274,17 +385,20 @@ void FEditorAcceptanceHarness::ExerciseSelectionGuards(std::vector<FInputEvent>&
 void FEditorAcceptanceHarness::ExerciseSelectionTree(std::vector<FInputEvent>& InEvents)
 {
 	const FVec2 Miss{Editor.Viewport.ViewportRegion.Bounds.X + 8, Editor.Viewport.ViewportRegion.Bounds.Y + 8};
-	switch (Scenario.ShortcutStep)
+	switch (Scenario.Shortcut.Progress.GetState())
 	{
-		case 46:
-		case 47:
+		case EShortcutState::PressTreeToggle:
+		case EShortcutState::ReleaseTreeToggle:
 		{
 			const auto Bounds = Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[1])->Id);
 			ShortcutMouse(InEvents, {Bounds.X + Editor.Gui->Scale(8), (Bounds.Y + Bounds.W) / 2},
-			              Scenario.ShortcutStep == 46);
+			              Scenario.Shortcut.Progress.Is(EShortcutState::PressTreeToggle));
+			Scenario.Shortcut.Progress.TransitionTo(Scenario.Shortcut.Progress.Is(EShortcutState::PressTreeToggle)
+			                                            ? EShortcutState::ReleaseTreeToggle
+			                                            : EShortcutState::VerifyFoldAndPressRange);
 			break;
 		}
-		case 48:
+		case EShortcutState::VerifyFoldAndPressRange:
 			RequireShortcut(std::find(Editor.OutlinerRows.begin(), Editor.OutlinerRows.end(),
 			                          Scenario.ShortcutObjects[2]) == Editor.OutlinerRows.end(),
 			                "tree child did not fold");
@@ -293,35 +407,41 @@ void FEditorAcceptanceHarness::ExerciseSelectionTree(std::vector<FInputEvent>& I
 			    InEvents,
 			    ShortcutPoint(Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[3])->Id)),
 			    true);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReleaseFoldedRange);
 			break;
-		case 49:
+		case EShortcutState::ReleaseFoldedRange:
 			ShortcutMouse(
 			    InEvents,
 			    ShortcutPoint(Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[3])->Id)),
 			    false);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyFoldedRangeAndPressDrag);
 			break;
-		case 50:
+		case EShortcutState::VerifyFoldedRangeAndPressDrag:
 			CheckShortcutSelection({0, 1, 3});
 			ShortcutKey(InEvents, EKey::None, 2);
 			ShortcutMouse(
 			    InEvents,
 			    ShortcutPoint(Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[3])->Id)),
 			    true);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::DragRangeOutside);
 			break;
-		case 51:
+		case EShortcutState::DragRangeOutside:
 			ShortcutMouse(InEvents, Miss, true);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::CancelRangeDragAndDelete);
 			break;
-		case 52:
+		case EShortcutState::CancelRangeDragAndDelete:
 			RequireShortcut(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bDragging,
 			                "Shift gesture did not enter drag arbitration");
 			ShortcutKey(InEvents, EKey::Escape);
 			ShortcutKey(InEvents, EKey::Delete);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReleaseRangeDrag);
 			break;
-		case 53:
+		case EShortcutState::ReleaseRangeDrag:
 			ShortcutMouse(InEvents, Miss, false);
 			ShortcutKey(InEvents, EKey::Escape, 0, false);
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyRangeDragCancellation);
 			break;
-		case 54:
+		case EShortcutState::VerifyRangeDragCancellation:
 			CheckShortcutSelection({0, 1, 3});
 			RequireShortcut(!Editor.Reparent.GetGesture() &&
 			                    Editor.Scene->FindNode(Scenario.ShortcutObjects[2])->Parent() ==
@@ -329,6 +449,7 @@ void FEditorAcceptanceHarness::ExerciseSelectionTree(std::vector<FInputEvent>& I
 			                "cancelled Shift gesture reparented nodes");
 			Editor.SelectObject(Scenario.ShortcutObjects[0]);
 			Editor.Gui->FocusWindow("Content Browser");
+			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::DeleteInContentBrowser);
 			break;
 	}
 }
@@ -339,9 +460,10 @@ void FEditorAcceptanceHarness::ExerciseSelectionShortcuts(std::vector<FInputEven
 	{
 		return;
 	}
-	if (++Scenario.ShortcutWait % 3 != 0)
+	const auto InputPhase = Scenario.Shortcut.Cadence.Advance();
+	if (InputPhase != EAcceptanceCadencePhase::Execute)
 	{
-		if (Scenario.ShortcutWait % 3 == 1)
+		if (InputPhase == EAcceptanceCadencePhase::ReleaseKeys)
 		{
 			for (const auto Key : {EKey::A, EKey::Delete, EKey::Z, EKey::Y, EKey::S, EKey::Tab, EKey::End})
 			{
@@ -350,27 +472,46 @@ void FEditorAcceptanceHarness::ExerciseSelectionShortcuts(std::vector<FInputEven
 		}
 		return;
 	}
-	if (!Scenario.ShortcutStep)
+	if (Scenario.Shortcut.Progress.Is(EShortcutState::PrepareFixtures))
 	{
 		PrepareSelectionShortcuts();
 		FInputEvent Focus;
 		Focus.Type = EEventType::Focus;
 		Focus.bDown = true;
 		InEvents.push_back(Focus);
+		Scenario.Shortcut.Progress.TransitionTo(EShortcutState::PlainPressRow);
 	}
-	else if (Scenario.ShortcutStep <= 21)
+	else if ((IsShortcutRangeState(Scenario.Shortcut.Progress.GetState()) ||
+	          Scenario.Shortcut.Progress.Is(EShortcutState::PrepareFixtures)))
 	{
 		ExerciseSelectionRanges(InEvents);
 	}
-	else if (Scenario.ShortcutStep <= 33)
+	else if (Scenario.Shortcut.Progress.IsAny(
+	             {EShortcutState::FocusOutliner, EShortcutState::SelectAllOutliner,
+	              EShortcutState::VerifyOutlinerSelectAll, EShortcutState::SelectAllViewport,
+	              EShortcutState::VerifyViewportSelectAll, EShortcutState::PressShiftViewportHit,
+	              EShortcutState::ReleaseShiftViewportHit, EShortcutState::PressShiftViewportToggle,
+	              EShortcutState::ReleaseShiftViewportToggle, EShortcutState::PressShiftViewportMiss,
+	              EShortcutState::ReleaseShiftViewportMiss, EShortcutState::VerifyViewportRange}))
 	{
 		ExerciseSelectionKeys(InEvents);
 	}
-	else if (Scenario.ShortcutStep <= 45)
+	else if (Scenario.Shortcut.Progress.IsAny(
+	             {EShortcutState::PressSearch, EShortcutState::ReleaseSearch, EShortcutState::AttemptSearchCommands,
+	              EShortcutState::VerifySearchGuard, EShortcutState::AttemptDetailsCommands,
+	              EShortcutState::VerifyDetailsGuard, EShortcutState::AttemptNavigationCommands,
+	              EShortcutState::AttemptReleaseBatchCommands, EShortcutState::AttemptRepeatedCommands,
+	              EShortcutState::VerifyRepeatedGuard, EShortcutState::AttemptModalCommands,
+	              EShortcutState::VerifyModalGuard}))
 	{
 		ExerciseSelectionGuards(InEvents);
 	}
-	else if (Scenario.ShortcutStep <= 54)
+	else if (Scenario.Shortcut.Progress.IsAny(
+	             {EShortcutState::PressTreeToggle, EShortcutState::ReleaseTreeToggle,
+	              EShortcutState::VerifyFoldAndPressRange, EShortcutState::ReleaseFoldedRange,
+	              EShortcutState::VerifyFoldedRangeAndPressDrag, EShortcutState::DragRangeOutside,
+	              EShortcutState::CancelRangeDragAndDelete, EShortcutState::ReleaseRangeDrag,
+	              EShortcutState::VerifyRangeDragCancellation}))
 	{
 		ExerciseSelectionTree(InEvents);
 	}
@@ -378,6 +519,5 @@ void FEditorAcceptanceHarness::ExerciseSelectionShortcuts(std::vector<FInputEven
 	{
 		return;
 	}
-	++Scenario.ShortcutStep;
 }
 } // namespace Hyperion

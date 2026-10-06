@@ -22,34 +22,37 @@ void FEditorAcceptanceHarness::ExerciseContentInput(std::vector<FInputEvent>& In
 	{
 		throw std::runtime_error(Editor.Scene->GetStatus().Error);
 	}
-	if (Scenario.ExerciseStep >= 100)
+	if (Scenario.Content.Progress.IsAny(
+	        {EContentState::OpenSaveAsFileMenu, EContentState::OpenSaveAs, EContentState::FocusSaveAsPath,
+	         EContentState::SelectSaveAsPathText, EContentState::TypeSaveAsPath, EContentState::ConfirmSaveAs,
+	         EContentState::AwaitSaveAs, EContentState::VerifySaveAsCopy, EContentState::RestoreOriginalScene}))
 	{
 		ExerciseContentSaveAs(InEvents);
 		return;
 	}
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Content.Progress.GetState())
 	{
-		case 0:
+		case EContentState::SelectRootA:
 			Editor.QueueContentRoot(Editor.Options.ExerciseContent / "A");
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::VerifyRootAndOpenTexture);
 			break;
-		case 1:
+		case EContentState::VerifyRootAndOpenTexture:
 			CheckContent(Editor.CurrentPath.empty() && !Editor.Selection && Editor.History.empty(),
 			             "Root switch retained old document state");
 			Editor.RequestOpenAsset("/Game/Texture.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::AwaitTextureAndOpenScene);
 			break;
-		case 2:
+		case EContentState::AwaitTextureAndOpenScene:
 			if (!Editor.PendingAssetOpen)
 			{
 				CheckContent(Editor.AssetWorkspace->HasActive(), "Texture asset editor did not open");
 				Editor.Gui->ClosePopups();
 				Editor.bAssetMessage = Editor.bRequestAssetMessage = false;
 				Editor.RequestOpenAsset("/Game/Scene.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::AwaitRootAScene);
 			}
 			break;
-		case 3:
+		case EContentState::AwaitRootAScene:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8 && !Editor.Browser->IsScanning())
 			{
 				CheckContent(Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Name == "A",
@@ -59,10 +62,10 @@ void FEditorAcceptanceHarness::ExerciseContentInput(std::vector<FInputEvent>& In
 				             "Uncataloged scene was not discovered");
 				CheckContent(!Editor.IsDirty(), "Save As regression requires an unmodified loaded scene");
 				Scenario.ContentSaveOriginal = Editor.IO.FileSystem()->Read("/Game/Scene.hasset", 1024 * 1024);
-				Scenario.ExerciseStep = 100;
+				Scenario.Content.Progress.TransitionTo(EContentState::OpenSaveAsFileMenu);
 			}
 			break;
-		case 4:
+		case EContentState::EditSceneAndSelectRootB:
 		{
 			CheckContent(Editor.CurrentPath == "/Game/Scene.hasset", "Same-root selection closed the scene");
 			const auto Handle = Editor.Scene->FindHandle("model");
@@ -70,21 +73,27 @@ void FEditorAcceptanceHarness::ExerciseContentInput(std::vector<FInputEvent>& In
 			Node.Name = "A saved";
 			Editor.CommitEdit(Handle, std::move(Node), Editor.Scene->GetRevision());
 			Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::CancelRootSwitch);
 			break;
 		}
-		case 5:
-			ExerciseClick(InEvents, Scenario.CancelChangesBounds);
+		case EContentState::CancelRootSwitch:
+			if (ExerciseClick(InEvents, Scenario.CancelChangesBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifyCancellationAndRetry);
+			}
 			break;
-		case 6:
+		case EContentState::VerifyCancellationAndRetry:
 			CheckContent(!Editor.Transition.HasPendingRoot() && Editor.IsDirty() &&
 			                 Editor.CurrentPath == "/Game/Scene.hasset",
 			             "Cancel lost document changes");
 			Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::SaveAndSwitchRoot);
 			break;
-		case 7:
-			ExerciseClick(InEvents, Scenario.SaveSwitchBounds);
+		case EContentState::SaveAndSwitchRoot:
+			if (ExerciseClick(InEvents, Scenario.SaveSwitchBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::AwaitSavedRootSwitch);
+			}
 			break;
 		default:
 			ExerciseContentSwitch(InEvents);
@@ -94,24 +103,33 @@ void FEditorAcceptanceHarness::ExerciseContentInput(std::vector<FInputEvent>& In
 
 void FEditorAcceptanceHarness::ExerciseContentSaveAs(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Content.Progress.GetState())
 	{
-		case 100:
-			ExerciseClick(InEvents, Scenario.FileMenuBounds);
+		case EContentState::OpenSaveAsFileMenu:
+			if (ExerciseClick(InEvents, Scenario.FileMenuBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::OpenSaveAs);
+			}
 			break;
-		case 101:
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-as"));
+		case EContentState::OpenSaveAs:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-as"), Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::FocusSaveAsPath);
+			}
 			break;
-		case 102:
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-path"));
+		case EContentState::FocusSaveAsPath:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-path"), Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::SelectSaveAsPathText);
+			}
 			break;
-		case 103:
-		case 104:
+		case EContentState::SelectSaveAsPathText:
+		case EContentState::TypeSaveAsPath:
 		{
 			FInputEvent Key;
 			Key.Type = EEventType::Key;
 			Key.Key = EKey::A;
-			Key.bDown = Scenario.ExerciseStep == 103;
+			Key.bDown = Scenario.Content.Progress.Is(EContentState::SelectSaveAsPathText);
 			Key.Modifiers = Key.bDown ? 1 : 0;
 			InEvents.push_back(Key);
 			if (!Key.bDown)
@@ -121,14 +139,19 @@ void FEditorAcceptanceHarness::ExerciseContentSaveAs(std::vector<FInputEvent>& I
 				Text.Text = "Other/SceneCopy.hasset";
 				InEvents.push_back(std::move(Text));
 			}
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(Scenario.Content.Progress.Is(EContentState::SelectSaveAsPathText)
+			                                           ? EContentState::TypeSaveAsPath
+			                                           : EContentState::ConfirmSaveAs);
 			break;
 		}
-		case 105:
+		case EContentState::ConfirmSaveAs:
 			// Click Save directly: do not press Enter to commit the path first.
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-confirm"));
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-confirm"), Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::AwaitSaveAs);
+			}
 			break;
-		case 106:
+		case EContentState::AwaitSaveAs:
 			if (!Editor.PendingSave && !Editor.bSaveDialog)
 			{
 				const bool bOriginalUnchanged =
@@ -141,24 +164,24 @@ void FEditorAcceptanceHarness::ExerciseContentSaveAs(std::vector<FInputEvent>& I
 				                 .c_str());
 				CheckContent(!Editor.IsDirty(), "Save As left an unmodified scene dirty");
 				Editor.OpenScene("/Game/Other/SceneCopy.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifySaveAsCopy);
 			}
 			break;
-		case 107:
+		case EContentState::VerifySaveAsCopy:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8)
 			{
 				CheckContent(Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Name == "A" &&
 				                 !Editor.IsDirty(),
 				             "Save As copy did not reopen with the original scene contents");
 				Editor.OpenScene("/Game/Scene.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::RestoreOriginalScene);
 			}
 			break;
-		case 108:
+		case EContentState::RestoreOriginalScene:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8)
 			{
 				Editor.QueueContentRoot(Editor.Options.ExerciseContent / "A");
-				Scenario.ExerciseStep = 4;
+				Scenario.Content.Progress.TransitionTo(EContentState::EditSceneAndSelectRootB);
 			}
 			break;
 	}
@@ -166,18 +189,18 @@ void FEditorAcceptanceHarness::ExerciseContentSaveAs(std::vector<FInputEvent>& I
 
 void FEditorAcceptanceHarness::ExerciseContentSwitch(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Content.Progress.GetState())
 	{
-		case 8:
+		case EContentState::AwaitSavedRootSwitch:
 			if (!Editor.Transition.HasPendingRoot() && !Editor.PendingSave)
 			{
 				CheckContent(Editor.CurrentPath.empty() && !Editor.IsDirty() && Editor.History.empty(),
 				             "Saved root transition retained document");
 				Editor.RequestOpenAsset("/Game/Scene.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::EditRootBScene);
 			}
 			break;
-		case 9:
+		case EContentState::EditRootBScene:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8)
 			{
 				CheckContent(Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Name == "B",
@@ -187,20 +210,23 @@ void FEditorAcceptanceHarness::ExerciseContentSwitch(std::vector<FInputEvent>& I
 				Node.Name = "B discarded";
 				Editor.CommitEdit(Handle, std::move(Node), Editor.Scene->GetRevision());
 				Editor.QueueContentRoot(Editor.Options.ExerciseContent / "A");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::DiscardAndSwitchRoot);
 			}
 			break;
-		case 10:
-			ExerciseClick(InEvents, Scenario.DiscardChangesBounds);
+		case EContentState::DiscardAndSwitchRoot:
+			if (ExerciseClick(InEvents, Scenario.DiscardChangesBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::AwaitDiscardedRootSwitch);
+			}
 			break;
-		case 11:
+		case EContentState::AwaitDiscardedRootSwitch:
 			if (!Editor.Transition.HasPendingRoot())
 			{
 				Editor.RequestOpenAsset("/Game/Scene.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifyRootASave);
 			}
 			break;
-		case 12:
+		case EContentState::VerifyRootASave:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8)
 			{
 				CheckContent(Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Name == "A saved",
@@ -211,7 +237,7 @@ void FEditorAcceptanceHarness::ExerciseContentSwitch(std::vector<FInputEvent>& I
 				CheckContent(std::static_pointer_cast<FSceneManifest>(Manifest)->Nodes.front().Name == "B",
 				             "Discard unexpectedly saved B");
 				CheckContent(Editor.Options.Preferences.RecentRoots.size() == 2, "Recent roots did not deduplicate");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::SelectFolder);
 			}
 			break;
 		default:
@@ -222,39 +248,52 @@ void FEditorAcceptanceHarness::ExerciseContentSwitch(std::vector<FInputEvent>& I
 
 void FEditorAcceptanceHarness::ExerciseContentBrowser(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Content.Progress.GetState())
 	{
-		case 13:
+		case EContentState::SelectFolder:
 			if (Scenario.ContentTileBounds.contains("/Game/Other"))
 			{
 				Scenario.ContentClickBounds = Scenario.ContentTileBounds.at("/Game/Other");
-				ExerciseClick(InEvents, Scenario.ContentClickBounds);
+				if (ExerciseClick(InEvents, Scenario.ContentClickBounds, Scenario.Content.Click))
+				{
+					Scenario.Content.Progress.TransitionTo(EContentState::DoubleClickFolder);
+				}
 			}
 			break;
-		case 14:
-			ExerciseClick(InEvents, Scenario.ContentClickBounds);
+		case EContentState::DoubleClickFolder:
+			if (ExerciseClick(InEvents, Scenario.ContentClickBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::SelectNestedScene);
+			}
 			break;
-		case 15:
-		case 16:
+		case EContentState::SelectNestedScene:
+		case EContentState::DoubleClickNestedScene:
 			CheckContent(Editor.Browser->SelectedDirectory == "/Game/Other", "Folder double-click did not navigate");
 			if (Scenario.ContentTileBounds.contains("/Game/Other/Scene.hasset"))
 			{
-				ExerciseClick(InEvents, Scenario.ContentTileBounds.at("/Game/Other/Scene.hasset"));
+				if (ExerciseClick(InEvents, Scenario.ContentTileBounds.at("/Game/Other/Scene.hasset"),
+				                  Scenario.Content.Click))
+				{
+					Scenario.Content.Progress.TransitionTo(
+					    Scenario.Content.Progress.Is(EContentState::SelectNestedScene)
+					        ? EContentState::DoubleClickNestedScene
+					        : EContentState::AwaitNestedScene);
+				}
 			}
 			break;
-		case 17:
+		case EContentState::AwaitNestedScene:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8 &&
 			    Editor.CurrentPath == "/Game/Other/Scene.hasset")
 			{
 				Editor.Browser->Navigate("/Game");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifyInternalDirectoryFilter);
 			}
 			break;
-		case 18:
+		case EContentState::VerifyInternalDirectoryFilter:
 			if (!Editor.Browser->IsScanning() && Scenario.ContentTileBounds.contains("/Game/.assets"))
 			{
 				CheckContent(!Scenario.ContentTileBounds.contains("/Game/.cache"), "Cache directory remained visible");
-				Scenario.ExerciseStep = 20;
+				Scenario.Content.Progress.TransitionTo(EContentState::PrepareRootSaveFailure);
 			}
 			break;
 		default:
@@ -266,9 +305,9 @@ void FEditorAcceptanceHarness::ExerciseContentBrowser(std::vector<FInputEvent>& 
 void FEditorAcceptanceHarness::ExerciseContentFailures(std::vector<FInputEvent>& InEvents)
 {
 	const auto OldScene = Editor.Options.ExerciseContent / "A/Other/Scene.hasset";
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Content.Progress.GetState())
 	{
-		case 20:
+		case EContentState::PrepareRootSaveFailure:
 		{
 			const auto Handle = Editor.Scene->FindHandle("model");
 			auto Node = *Editor.Scene->FindNode(Handle);
@@ -276,13 +315,16 @@ void FEditorAcceptanceHarness::ExerciseContentFailures(std::vector<FInputEvent>&
 			Editor.CommitEdit(Handle, std::move(Node), Editor.Scene->GetRevision());
 			std::filesystem::permissions(OldScene, std::filesystem::perms::owner_read);
 			Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::AttemptRootSave);
 			break;
 		}
-		case 21:
-			ExerciseClick(InEvents, Scenario.SaveSwitchBounds);
+		case EContentState::AttemptRootSave:
+			if (ExerciseClick(InEvents, Scenario.SaveSwitchBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::AwaitRootSaveFailure);
+			}
 			break;
-		case 22:
+		case EContentState::AwaitRootSaveFailure:
 			if (!Editor.PendingSave && !Editor.Transition.HasPendingRoot())
 			{
 				std::filesystem::permissions(OldScene, std::filesystem::perms::owner_all);
@@ -294,10 +336,10 @@ void FEditorAcceptanceHarness::ExerciseContentFailures(std::vector<FInputEvent>&
 				Editor.Options.Preferences.RecentRoots.push_back(Editor.Options.ExerciseContent / "Missing");
 				Editor.SavePreferences();
 				Editor.QueueContentRoot(Editor.Options.ExerciseContent / "Missing");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifyMissingRootFailure);
 			}
 			break;
-		case 23:
+		case EContentState::VerifyMissingRootFailure:
 			CheckContent(Editor.IsDirty() && Editor.bAssetMessage && Editor.CurrentPath == "/Game/Other/Scene.hasset",
 			             "Invalid root destroyed old document");
 			CheckContent(Editor.Options.Preferences.RecentRoots.size() == 2 &&
@@ -315,20 +357,23 @@ void FEditorAcceptanceHarness::ExerciseContentFailures(std::vector<FInputEvent>&
 			Editor.Gui->ClosePopups();
 			Editor.bAssetMessage = Editor.bRequestAssetMessage = false;
 			Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::DiscardAndSwitchAfterFailure);
 			break;
-		case 24:
-			ExerciseClick(InEvents, Scenario.DiscardChangesBounds);
+		case EContentState::DiscardAndSwitchAfterFailure:
+			if (ExerciseClick(InEvents, Scenario.DiscardChangesBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::SwitchRootWhileLoading);
+			}
 			break;
-		case 25:
+		case EContentState::SwitchRootWhileLoading:
 			if (!Editor.Transition.HasPendingRoot())
 			{
 				Editor.OpenScene("/Game/Scene.hasset");
 				Editor.QueueContentRoot(Editor.Options.ExerciseContent / "A");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifyLoadingRootSwitch);
 			}
 			break;
-		case 26:
+		case EContentState::VerifyLoadingRootSwitch:
 			if (!Editor.Transition.HasPendingRoot() && !Editor.Browser->IsScanning())
 			{
 				CheckContent(Editor.CurrentPath.empty() && Editor.History.empty() && !Editor.Selection &&
@@ -336,7 +381,7 @@ void FEditorAcceptanceHarness::ExerciseContentFailures(std::vector<FInputEvent>&
 				                               Editor.Options.ExerciseContent / "A"),
 				             "Loading transition retained old content");
 				Editor.OpenScene("/Game/Scene.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::PrepareDismissedSave);
 			}
 			break;
 		default:
@@ -347,9 +392,9 @@ void FEditorAcceptanceHarness::ExerciseContentFailures(std::vector<FInputEvent>&
 
 void FEditorAcceptanceHarness::ExerciseContentDismissal(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Content.Progress.GetState())
 	{
-		case 27:
+		case EContentState::PrepareDismissedSave:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8)
 			{
 				const auto Handle = Editor.Scene->FindHandle("model");
@@ -357,10 +402,10 @@ void FEditorAcceptanceHarness::ExerciseContentDismissal(std::vector<FInputEvent>
 				Node.Name = "A saved after dismissal";
 				Editor.CommitEdit(Handle, std::move(Node), Editor.Scene->GetRevision());
 				Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::HoldSavePending);
 			}
 			break;
-		case 28:
+		case EContentState::HoldSavePending:
 			CheckContent(Editor.Transition.HasPendingRoot() && Editor.Transition.IsDecisionVisible(),
 			             "Root prompt was not prepared");
 			// Keep the real save queued until the title-bar click has been processed. The timeout
@@ -371,22 +416,28 @@ void FEditorAcceptanceHarness::ExerciseContentDismissal(std::vector<FInputEvent>
 			                      {
 				                      std::ignore = Gate->try_acquire_for(std::chrono::seconds(30));
 			                      });
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::StartHeldSave);
 			break;
-		case 29:
-			ExerciseClick(InEvents, Scenario.SaveSwitchBounds);
+		case EContentState::StartHeldSave:
+			if (ExerciseClick(InEvents, Scenario.SaveSwitchBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::DismissPendingSave);
+			}
 			break;
-		case 30:
+		case EContentState::DismissPendingSave:
 		{
 			CheckContent(Editor.PendingSave && !Editor.PendingSave->Result.Ready() && Editor.Transition.IsSavingRoot(),
 			             "Save was not held pending during dismissal");
 			// BeginModal leaves the title bar as the last item; its rightmost square contains X.
 			auto CloseBounds = Scenario.DiscardTitleBounds;
 			CloseBounds.X = CloseBounds.Z - (CloseBounds.W - CloseBounds.Y);
-			ExerciseClick(InEvents, CloseBounds);
+			if (ExerciseClick(InEvents, CloseBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::ReleaseDismissedSave);
+			}
 			break;
 		}
-		case 31:
+		case EContentState::ReleaseDismissedSave:
 			CheckContent(Editor.PendingSave && !Editor.PendingSave->Result.Ready() &&
 			                 !Editor.Transition.HasPendingRoot() && !Editor.Transition.IsDecisionVisible() &&
 			                 !Editor.Transition.IsSavingRoot() &&
@@ -394,9 +445,9 @@ void FEditorAcceptanceHarness::ExerciseContentDismissal(std::vector<FInputEvent>
 			             "Title-bar dismissal retained the root transition");
 			Scenario.ContentSaveGate->release();
 			Scenario.ContentSaveGate.reset();
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::VerifyDismissedSave);
 			break;
-		case 32:
+		case EContentState::VerifyDismissedSave:
 			if (!Editor.PendingSave)
 			{
 				CheckContent(!Editor.IsDirty() && Editor.CurrentPath == "/Game/Scene.hasset" &&
@@ -416,7 +467,7 @@ void FEditorAcceptanceHarness::ExerciseContentDismissal(std::vector<FInputEvent>
 				Node.Name = "Discard on application close";
 				Editor.CommitEdit(Handle, std::move(Node), Editor.Scene->GetRevision());
 				Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::PrepareFailedClose);
 			}
 			break;
 		default:
@@ -427,9 +478,9 @@ void FEditorAcceptanceHarness::ExerciseContentDismissal(std::vector<FInputEvent>
 
 void FEditorAcceptanceHarness::ExerciseContentClose(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Content.Progress.GetState())
 	{
-		case 33:
+		case EContentState::PrepareFailedClose:
 			CheckContent(Editor.Transition.HasPendingRoot() && Editor.Transition.IsDecisionVisible(),
 			             "Close overlap lacked a root prompt");
 			Editor.CancelDiscardAction();
@@ -437,9 +488,9 @@ void FEditorAcceptanceHarness::ExerciseContentClose(std::vector<FInputEvent>& In
 			std::filesystem::permissions(Editor.Options.ExerciseContent / "A/Scene.hasset",
 			                             std::filesystem::perms::owner_read);
 			Editor.RequestApplicationClose({EApplicationCloseAction::Save, Editor.CurrentPath});
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::AwaitFailedClose);
 			break;
-		case 34:
+		case EContentState::AwaitFailedClose:
 			if (Editor.Transition.ClosePhase() == EEditorTransitionPhase::Failed && !Editor.PendingSave)
 			{
 				std::filesystem::permissions(Editor.Options.ExerciseContent / "A/Scene.hasset",
@@ -447,31 +498,37 @@ void FEditorAcceptanceHarness::ExerciseContentClose(std::vector<FInputEvent>& In
 				CheckContent(Editor.Transition.HasPendingClose() && Editor.Transition.IsDecisionVisible() &&
 				                 Editor.IsDirty() && !Editor.Window->ShouldClose(),
 				             "Failed API save-close lost GUI exit intent or dirty work");
-				++Scenario.ExerciseStep;
+				Scenario.Content.Progress.TransitionTo(EContentState::CancelFailedClose);
 			}
 			break;
-		case 35:
-			ExerciseClick(InEvents, Scenario.CancelChangesBounds);
+		case EContentState::CancelFailedClose:
+			if (ExerciseClick(InEvents, Scenario.CancelChangesBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifyCancelledClose);
+			}
 			break;
-		case 36:
+		case EContentState::VerifyCancelledClose:
 			CheckContent(Editor.Transition.ClosePhase() == EEditorTransitionPhase::Idle &&
 			                 !Editor.Transition.HasPendingClose() && !Editor.Transition.IsDecisionVisible() &&
 			                 Editor.IsDirty(),
 			             "GUI cancel after API save-close failure lost work or retained exit intent");
 			Editor.QueueContentRoot(Editor.Options.ExerciseContent / "B");
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::RequestCloseDuringRootSwitch);
 			break;
-		case 37:
+		case EContentState::RequestCloseDuringRootSwitch:
 			CheckContent(Editor.Transition.HasPendingRoot() && Editor.Transition.IsDecisionVisible(),
 			             "Close overlap lacked a root prompt");
 			Editor.Window->RequestClose();
-			++Scenario.ExerciseStep;
+			Scenario.Content.Progress.TransitionTo(EContentState::DiscardDuringRootSwitch);
 			break;
-		case 38:
+		case EContentState::DiscardDuringRootSwitch:
 			CheckContent(Editor.Transition.HasPendingClose() && Editor.Transition.HasPendingRoot() && Editor.IsDirty(),
 			             "Close overlap was not exercised");
-			ExerciseClick(InEvents, Scenario.DiscardChangesBounds);
-			if (Scenario.ExerciseStep == 39)
+			if (ExerciseClick(InEvents, Scenario.DiscardChangesBounds, Scenario.Content.Click))
+			{
+				Scenario.Content.Progress.TransitionTo(EContentState::VerifyApplicationClosed);
+			}
+			if (Scenario.Content.Progress.Is(EContentState::VerifyApplicationClosed))
 			{
 				Scenario.bContentVerified = true;
 				Log(ELogLevel::Info,
@@ -479,7 +536,7 @@ void FEditorAcceptanceHarness::ExerciseContentClose(std::vector<FInputEvent>& In
 				    "save failure, loading transition, title-bar dismissal and API close failure GUI cancel verified");
 			}
 			break;
-		case 39:
+		case EContentState::VerifyApplicationClosed:
 			throw std::runtime_error("Discard during root prompt failed to close the application");
 	}
 }

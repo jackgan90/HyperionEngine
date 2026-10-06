@@ -19,7 +19,7 @@ void WriteEditorAcceptanceReport(std::ostream& InStream, const FEditorAcceptance
 	         << "\"outlines_verified\": " << InReport.bOutlines << ",\n"
 	         << "\"placement_verified\": " << InReport.bPlacement << ",\n"
 	         << "\"model_placement_verified\": " << InReport.bModelPlacement << ",\n"
-	         << "\"exercise_step\": " << InReport.Step << ",\n"
+	         << "\"interaction_verified\": " << InReport.bInteraction << ",\n"
 	         << "\"movement\": " << InReport.bMovement << ",\n"
 	         << "\"movement_gate\": " << InReport.bMovementGate << ",\n"
 	         << "\"right_release\": " << InReport.bRightRelease << ",\n"

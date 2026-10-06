@@ -66,7 +66,7 @@ bool FEditorAcceptanceHarness::ExerciseViewportChoices(std::vector<FInputEvent>&
 		return true;
 	}
 	const auto& Action = Actions[Exercise.Case];
-	if (Exercise.Step == 0)
+	if (Exercise.Progress.Is(EViewportChoiceState::OpenOptions))
 	{
 		Exercise.Before = Editor.ViewportState().Options;
 		if (Exercise.Case == 0)
@@ -77,31 +77,33 @@ bool FEditorAcceptanceHarness::ExerciseViewportChoices(std::vector<FInputEvent>&
 			Exercise.HistoryCursor = Editor.HistoryCursor;
 			Exercise.HistorySize = Editor.History.size();
 		}
-		Exercise.Step = 1;
+		Exercise.Progress.TransitionTo(EViewportChoiceState::OpenChoice);
 		return false;
 	}
-	if (Exercise.Step == 1 || Exercise.Step == 2)
+	if (Exercise.Progress.Is(EViewportChoiceState::OpenChoice) ||
+	    Exercise.Progress.Is(EViewportChoiceState::SelectChoice))
 	{
-		const bool bOpenPopup = Exercise.Step == 1 && !Editor.bViewOptionsOpen;
-		const auto Key = bOpenPopup ? std::string("view/options")
-		                            : std::string(Action.Control()) +
-		                                  (Exercise.Step == 2 ? "/" + std::to_string(Action.WireValue) : "");
-		const auto Step = Scenario.ExerciseStep;
-		ExerciseClick(InEvents, Scenario.InspectionBounds.at(Key));
-		if (Scenario.ExerciseStep != Step && !bOpenPopup)
+		const bool bOpenPopup = Exercise.Progress.Is(EViewportChoiceState::OpenChoice) && !Editor.bViewOptionsOpen;
+		const auto Key = bOpenPopup
+		                     ? std::string("view/options")
+		                     : std::string(Action.Control()) + (Exercise.Progress.Is(EViewportChoiceState::SelectChoice)
+		                                                            ? "/" + std::to_string(Action.WireValue)
+		                                                            : "");
+		if (ExerciseClick(InEvents, Scenario.InspectionBounds.at(Key), Exercise.Click) && !bOpenPopup)
 		{
-			++Exercise.Step;
+			Exercise.Progress.TransitionTo(Exercise.Progress.Is(EViewportChoiceState::OpenChoice)
+			                                   ? EViewportChoiceState::SelectChoice
+			                                   : EViewportChoiceState::VerifyChoice);
 		}
-		Scenario.ExerciseStep = Step;
 		return false;
 	}
-	if (++Exercise.Wait < 2)
+	if (!Exercise.ChoiceObservation.Advance())
 	{
 		return false;
 	}
 	CheckViewportChoice();
-	Exercise.Wait = 0;
-	Exercise.Step = 0;
+	Exercise.ChoiceObservation.Restart();
+	Exercise.Progress.TransitionTo(EViewportChoiceState::OpenOptions);
 	++Exercise.Case;
 	return false;
 }

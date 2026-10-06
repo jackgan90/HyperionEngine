@@ -46,67 +46,118 @@ void Wheel(std::vector<FInputEvent>& InEvents, float InDelta)
 }
 } // namespace
 
-void FEditorAcceptanceHarness::ExerciseClick(std::vector<FInputEvent>& InEvents, FVec4 InBounds)
+bool FEditorAcceptanceHarness::ExerciseClick(std::vector<FInputEvent>& InEvents, FVec4 InBounds,
+                                             FAcceptanceClick& OutClick, EAcceptanceClickDelay InDelay)
 {
-	if (++Scenario.ExerciseWait <= 2 || InBounds.Z <= InBounds.X || InBounds.W <= InBounds.Y)
+	const auto Action = OutClick.Advance(InDelay);
+	if (Action == EAcceptanceClickAction::None || InBounds.Z <= InBounds.X || InBounds.W <= InBounds.Y)
 	{
-		return;
+		return false;
 	}
 	const float X = (InBounds.X + InBounds.Z) * .5f;
 	const float Y = (InBounds.Y + InBounds.W) * .5f;
 	Move(InEvents, X, Y);
-	Scenario.bExerciseMouseDown = !Scenario.bExerciseMouseDown;
-	Button(InEvents, 0, Scenario.bExerciseMouseDown, X, Y);
-	if (!Scenario.bExerciseMouseDown)
+	Button(InEvents, 0, Action == EAcceptanceClickAction::Press, X, Y);
+	if (Action == EAcceptanceClickAction::Press)
 	{
-		++Scenario.ExerciseStep;
-		Scenario.ExerciseWait = 0;
+		OutClick.Pressed();
+		return false;
 	}
+	OutClick.Released();
+	return true;
+}
+
+bool FEditorAcceptanceHarness::ExerciseTextInput(std::vector<FInputEvent>& InEvents, FAcceptanceTextInput& OutInput,
+                                                 std::string_view InText)
+{
+	FInputEvent KeyEvent;
+	KeyEvent.Type = EEventType::Key;
+	switch (OutInput.Progress.GetState())
+	{
+		case EAcceptanceTextPhase::SelectAllPress:
+			KeyEvent.Key = EKey::A;
+			KeyEvent.bDown = true;
+			KeyEvent.Modifiers = InputModifiers::Control;
+			InEvents.push_back(KeyEvent);
+			OutInput.Progress.TransitionTo(EAcceptanceTextPhase::ReleaseAndType);
+			return false;
+		case EAcceptanceTextPhase::ReleaseAndType:
+		{
+			KeyEvent.Key = EKey::A;
+			InEvents.push_back(KeyEvent);
+			FInputEvent Text;
+			Text.Type = EEventType::Text;
+			Text.Text = InText;
+			InEvents.push_back(Text);
+			OutInput.Progress.TransitionTo(EAcceptanceTextPhase::AwaitTextCommit);
+			return false;
+		}
+		case EAcceptanceTextPhase::AwaitTextCommit:
+			if (!OutInput.TextCommit.Advance())
+			{
+				return false;
+			}
+			if (OutInput.Commit == EAcceptanceTextCommit::Enter)
+			{
+				KeyEvent.Key = EKey::Enter;
+				KeyEvent.bDown = true;
+				InEvents.push_back(KeyEvent);
+				OutInput.Progress.TransitionTo(EAcceptanceTextPhase::ConfirmRelease);
+				return false;
+			}
+			break;
+		case EAcceptanceTextPhase::ConfirmRelease:
+			KeyEvent.Key = EKey::Enter;
+			InEvents.push_back(KeyEvent);
+			break;
+	}
+	OutInput.Progress.TransitionTo(EAcceptanceTextPhase::SelectAllPress);
+	OutInput.TextCommit.Restart();
+	return true;
 }
 
 void FEditorAcceptanceHarness::ExerciseMovement(std::vector<FInputEvent>& InEvents, const FSceneCameraPose& InPose,
                                                 float InX, float InY)
 {
-	switch (Scenario.ExerciseMovementStep)
+	switch (Scenario.Movement.Progress.GetState())
 	{
-		case 0:
-			Scenario.ExercisePose = InPose;
+		case EMovementState::PressForward:
+			Scenario.Movement.Before = InPose;
 			Key(InEvents, true);
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseMovementStep;
+			Scenario.Movement.GateObservation.Restart();
+			Scenario.Movement.Progress.TransitionTo(EMovementState::VerifyMovementGate);
 			break;
-		case 1:
-			if (++Scenario.ExerciseWait < 6)
+		case EMovementState::VerifyMovementGate:
+			if (!Scenario.Movement.GateObservation.Advance())
 			{
 				break;
 			}
-			Scenario.bMovementGateVerified = Length(Subtract(InPose.Eye, Scenario.ExercisePose.Eye)) < .00001f;
+			Scenario.bMovementGateVerified = Length(Subtract(InPose.Eye, Scenario.Movement.Before.Eye)) < .00001f;
 			Move(InEvents, InX, InY);
 			Button(InEvents, 1, true, InX, InY);
-			Scenario.ExercisePose = InPose;
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseMovementStep;
+			Scenario.Movement.Before = InPose;
+			Scenario.Movement.MovementSample.Restart();
+			Scenario.Movement.Progress.TransitionTo(EMovementState::VerifyMovement);
 			break;
-		case 2:
-			if (++Scenario.ExerciseWait < 8)
+		case EMovementState::VerifyMovement:
+			if (!Scenario.Movement.MovementSample.Advance())
 			{
 				break;
 			}
-			Scenario.bMovementVerified = Length(Subtract(InPose.Eye, Scenario.ExercisePose.Eye)) > .01f;
+			Scenario.bMovementVerified = Length(Subtract(InPose.Eye, Scenario.Movement.Before.Eye)) > .01f;
 			Button(InEvents, 1, false, InX, InY);
-			Scenario.ExercisePose = InPose;
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseMovementStep;
+			Scenario.Movement.Before = InPose;
+			Scenario.Movement.ReleaseObservation.Restart();
+			Scenario.Movement.Progress.TransitionTo(EMovementState::VerifyRightRelease);
 			break;
-		case 3:
-			if (++Scenario.ExerciseWait < 6)
+		case EMovementState::VerifyRightRelease:
+			if (!Scenario.Movement.ReleaseObservation.Advance())
 			{
 				break;
 			}
-			Scenario.bRightReleaseVerified = Length(Subtract(InPose.Eye, Scenario.ExercisePose.Eye)) < .00001f;
+			Scenario.bRightReleaseVerified = Length(Subtract(InPose.Eye, Scenario.Movement.Before.Eye)) < .00001f;
 			Key(InEvents, false);
-			Scenario.ExerciseWait = 0;
-			Scenario.ExerciseStep = 6;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::ExerciseWheel);
 			break;
 		default:
 			break;
@@ -117,49 +168,50 @@ void FEditorAcceptanceHarness::ExerciseWheel(std::vector<FInputEvent>& InEvents,
                                              float InX, float InY)
 {
 	const float Speed = Editor.Camera.GetMovementSpeed(Editor.Viewport.ViewCamera);
-	switch (Scenario.ExerciseWheelStep)
+	switch (Scenario.Wheel.Progress.GetState())
 	{
-		case 0:
-			Scenario.ExercisePose = InPose;
-			Scenario.ExerciseSpeed = Speed;
+		case EWheelState::IncreaseSpeed:
+			Scenario.Wheel.Before = InPose;
+			Scenario.Wheel.InitialSpeed = Speed;
 			Button(InEvents, 1, true, InX, InY);
 			Wheel(InEvents, 1);
-			++Scenario.ExerciseWheelStep;
+			Scenario.Wheel.Progress.TransitionTo(EWheelState::VerifySpeedAndMove);
 			break;
-		case 1:
-			Scenario.bSpeedVerified = std::abs(Speed - Scenario.ExerciseSpeed * 1.2f) < .0001f &&
-			                          Length(Subtract(InPose.Eye, Scenario.ExercisePose.Eye)) < .00001f &&
-			                          Length(Subtract(InPose.Forward, Scenario.ExercisePose.Forward)) < .00001f;
+		case EWheelState::VerifySpeedAndMove:
+			Scenario.bSpeedVerified = std::abs(Speed - Scenario.Wheel.InitialSpeed * 1.2f) < .0001f &&
+			                          Length(Subtract(InPose.Eye, Scenario.Wheel.Before.Eye)) < .00001f &&
+			                          Length(Subtract(InPose.Forward, Scenario.Wheel.Before.Forward)) < .00001f;
 			Key(InEvents, true);
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseWheelStep;
+			Scenario.Wheel.MovementSample.Restart();
+			Scenario.Wheel.Progress.TransitionTo(EWheelState::DollyBackward);
 			break;
-		case 2:
-			if (++Scenario.ExerciseWait < 6)
+		case EWheelState::DollyBackward:
+			if (!Scenario.Wheel.MovementSample.Advance())
 			{
 				break;
 			}
-			Scenario.bSpeedVerified &=
-			    std::abs(Length(Subtract(InPose.Eye, Scenario.ExercisePose.Eye)) - Speed * 6 / 60) < .001f;
-			Scenario.ExercisePose = InPose;
+			Scenario.bSpeedVerified &= std::abs(Length(Subtract(InPose.Eye, Scenario.Wheel.Before.Eye)) -
+			                                    Speed * FWheelAcceptanceContext::MovementSampleFrames / 60) < .001f;
+			Scenario.Wheel.Before = InPose;
 			Key(InEvents, false);
 			Button(InEvents, 1, false, InX, InY);
 			Wheel(InEvents, -1);
-			++Scenario.ExerciseWheelStep;
+			Scenario.Interaction.DollyMenuDelay = EAcceptanceClickDelay::Immediate;
+			Scenario.Wheel.Progress.TransitionTo(EWheelState::RestoreSpeed);
 			break;
-		case 3:
-			Scenario.bSpeedVerified &= Dot(Subtract(InPose.Eye, Scenario.ExercisePose.Eye), InPose.Forward) < -.01f &&
-			                           std::abs(Speed - Scenario.ExerciseSpeed * 1.2f) < .0001f;
-			Scenario.ExercisePose = InPose;
+		case EWheelState::RestoreSpeed:
+			Scenario.bSpeedVerified &= Dot(Subtract(InPose.Eye, Scenario.Wheel.Before.Eye), InPose.Forward) < -.01f &&
+			                           std::abs(Speed - Scenario.Wheel.InitialSpeed * 1.2f) < .0001f;
+			Scenario.Wheel.Before = InPose;
 			Button(InEvents, 1, true, InX, InY);
 			Wheel(InEvents, -1);
-			++Scenario.ExerciseWheelStep;
+			Scenario.Wheel.Progress.TransitionTo(EWheelState::VerifyRestoredSpeed);
 			break;
-		case 4:
-			Scenario.bSpeedVerified &= std::abs(Speed - Scenario.ExerciseSpeed) < .0001f &&
-			                           Length(Subtract(InPose.Eye, Scenario.ExercisePose.Eye)) < .00001f;
+		case EWheelState::VerifyRestoredSpeed:
+			Scenario.bSpeedVerified &= std::abs(Speed - Scenario.Wheel.InitialSpeed) < .0001f &&
+			                           Length(Subtract(InPose.Eye, Scenario.Wheel.Before.Eye)) < .00001f;
 			Button(InEvents, 1, false, InX, InY);
-			Scenario.ExerciseStep = 7;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::BeginLook);
 			break;
 		default:
 			break;
@@ -171,60 +223,105 @@ void FEditorAcceptanceHarness::ExerciseCamera(std::vector<FInputEvent>& InEvents
 	const auto Pose = ExtractScenePose(Editor.Viewport.ViewCamera.World);
 	const float X = (Editor.Viewport.ViewportRegion.Bounds.X + Editor.Viewport.ViewportRegion.Bounds.Z) * .5f;
 	const float Y = (Editor.Viewport.ViewportRegion.Bounds.Y + Editor.Viewport.ViewportRegion.Bounds.W) * .5f;
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Interaction.Progress.GetState())
 	{
-		case 5:
+		case EInteractionState::ExerciseMovement:
 			ExerciseMovement(InEvents, Pose, X, Y);
 			break;
-		case 6:
+		case EInteractionState::ExerciseWheel:
 			ExerciseWheel(InEvents, Pose, X, Y);
 			break;
-		case 7:
-			Scenario.ExercisePose = Pose;
+		case EInteractionState::BeginLook:
+			Scenario.Interaction.LookBefore = Pose;
 			Move(InEvents, X, Y);
 			Button(InEvents, 1, true, X, Y);
-			++Scenario.ExerciseStep;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::MoveLook);
 			break;
-		case 8:
+		case EInteractionState::MoveLook:
 			Move(InEvents, X + 36, Y + 20);
-			++Scenario.ExerciseStep;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::VerifyLook);
 			break;
-		case 9:
+		case EInteractionState::VerifyLook:
 			Button(InEvents, 1, false, X + 36, Y + 20);
-			Scenario.bLookVerified = Length(Subtract(Pose.Forward, Scenario.ExercisePose.Forward)) > .01f &&
-			                         Length(Subtract(Pose.Eye, Scenario.ExercisePose.Eye)) < .00001f;
-			++Scenario.ExerciseStep;
+			Scenario.bLookVerified = Length(Subtract(Pose.Forward, Scenario.Interaction.LookBefore.Forward)) > .01f &&
+			                         Length(Subtract(Pose.Eye, Scenario.Interaction.LookBefore.Eye)) < .00001f;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::BeginDolly);
 			break;
-		case 10:
-			Scenario.ExercisePose = Pose;
+		case EInteractionState::BeginDolly:
+			Scenario.Interaction.DollyBefore = Pose;
 			Wheel(InEvents, 1);
-			++Scenario.ExerciseStep;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::VerifyDollyAndOpenFileMenu);
 			break;
-		case 11:
-			Scenario.bDollyVerified = Length(Subtract(Pose.Eye, Scenario.ExercisePose.Eye)) > .01f;
-			ExerciseClick(InEvents, Scenario.FileMenuBounds);
+		case EInteractionState::VerifyDollyAndOpenFileMenu:
+			Scenario.bDollyVerified = Length(Subtract(Pose.Eye, Scenario.Interaction.DollyBefore.Eye)) > .01f;
+			if (ExerciseClick(InEvents, Scenario.FileMenuBounds, Scenario.Interaction.Click,
+			                  Scenario.Interaction.DollyMenuDelay))
+			{
+				Scenario.Interaction.Progress.TransitionTo(EInteractionState::OpenSceneForIsolation);
+			}
 			break;
-		case 13:
-			Scenario.ExercisePose = Pose;
-			Scenario.ExerciseSpeed = Editor.Camera.GetMovementSpeed(Editor.Viewport.ViewCamera);
+		case EInteractionState::BeginIsolatedInput:
+			Scenario.Interaction.IsolationBefore = Pose;
+			Scenario.Interaction.IsolationSpeed = Editor.Camera.GetMovementSpeed(Editor.Viewport.ViewCamera);
 			Button(InEvents, 1, true, X, Y);
 			Key(InEvents, true);
 			Wheel(InEvents, 1);
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.Interaction.IsolationObservation.Restart();
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::VerifyInputIsolation);
 			break;
-		case 14:
-			if (++Scenario.ExerciseWait < 6)
+		case EInteractionState::VerifyInputIsolation:
+			if (!Scenario.Interaction.IsolationObservation.Advance())
 			{
 				break;
 			}
 			Key(InEvents, false);
 			Button(InEvents, 1, false, X, Y);
 			Scenario.bInputIsolationVerified =
-			    Length(Subtract(Pose.Eye, Scenario.ExercisePose.Eye)) < .00001f &&
-			    Length(Subtract(Pose.Forward, Scenario.ExercisePose.Forward)) < .00001f &&
-			    Editor.Camera.GetMovementSpeed(Editor.Viewport.ViewCamera) == Scenario.ExerciseSpeed;
-			++Scenario.ExerciseStep;
+			    Length(Subtract(Pose.Eye, Scenario.Interaction.IsolationBefore.Eye)) < .00001f &&
+			    Length(Subtract(Pose.Forward, Scenario.Interaction.IsolationBefore.Forward)) < .00001f &&
+			    Editor.Camera.GetMovementSpeed(Editor.Viewport.ViewCamera) == Scenario.Interaction.IsolationSpeed;
+			Scenario.Interaction.CancelDialogDelay = EAcceptanceClickDelay::Immediate;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::CancelSceneDialog);
+			break;
+		default:
+			break;
+	}
+}
+
+void FEditorAcceptanceHarness::RestartInteractionAfterSceneScan()
+{
+	Scenario.Interaction.Click.RestartDelay();
+	Scenario.Interaction.DollyMenuDelay = EAcceptanceClickDelay::Settle;
+	Scenario.Interaction.CancelDialogDelay = EAcceptanceClickDelay::Settle;
+	switch (Scenario.Interaction.Progress.GetState())
+	{
+		case EInteractionState::ExerciseMovement:
+			switch (Scenario.Movement.Progress.GetState())
+			{
+				case EMovementState::VerifyMovementGate:
+					Scenario.Movement.GateObservation.Restart();
+					break;
+				case EMovementState::VerifyMovement:
+					Scenario.Movement.MovementSample.Restart();
+					break;
+				case EMovementState::VerifyRightRelease:
+					Scenario.Movement.ReleaseObservation.Restart();
+					break;
+				default:
+					break;
+			}
+			break;
+		case EInteractionState::ExerciseWheel:
+			if (Scenario.Wheel.Progress.Is(EWheelState::DollyBackward))
+			{
+				Scenario.Wheel.MovementSample.Restart();
+			}
+			break;
+		case EInteractionState::VerifyInputIsolation:
+			Scenario.Interaction.IsolationObservation.Restart();
+			break;
+		case EInteractionState::AwaitHiddenViewport:
+			Scenario.Interaction.HiddenViewportObservation.Restart();
 			break;
 		default:
 			break;
@@ -235,65 +332,93 @@ void FEditorAcceptanceHarness::ExerciseInput(std::vector<FInputEvent>& InEvents)
 {
 	if (Editor.bOpenDialog && Editor.Browser->IsScanning())
 	{
-		Scenario.ExerciseWait = 0;
+		RestartInteractionAfterSceneScan();
 		return;
 	}
 	if (Editor.FrameCount < 3)
 	{
 		return;
 	}
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Interaction.Progress.GetState())
 	{
-		case 0:
-		case 18:
-			ExerciseClick(InEvents, Scenario.FileMenuBounds);
+		case EInteractionState::OpenFileMenu:
+		case EInteractionState::ReopenFileMenu:
+			if (ExerciseClick(InEvents, Scenario.FileMenuBounds, Scenario.Interaction.Click))
+			{
+				Scenario.Interaction.Progress.TransitionTo(
+				    Scenario.Interaction.Progress.Is(EInteractionState::OpenFileMenu)
+				        ? EInteractionState::OpenSceneMenu
+				        : EInteractionState::ReopenSceneMenu);
+			}
 			break;
-		case 1:
-		case 12:
-		case 19:
-			ExerciseClick(InEvents, Scenario.OpenMenuBounds);
+		case EInteractionState::OpenSceneMenu:
+		case EInteractionState::OpenSceneForIsolation:
+		case EInteractionState::ReopenSceneMenu:
+			if (ExerciseClick(InEvents, Scenario.OpenMenuBounds, Scenario.Interaction.Click))
+			{
+				Scenario.Interaction.Progress.TransitionTo(
+				    Scenario.Interaction.Progress.Is(EInteractionState::OpenSceneMenu) ? EInteractionState::SelectScene
+				    : Scenario.Interaction.Progress.Is(EInteractionState::OpenSceneForIsolation)
+				        ? EInteractionState::BeginIsolatedInput
+				        : EInteractionState::ConfirmReopen);
+			}
 			break;
-		case 2:
-			ExerciseClick(InEvents, Scenario.SponzaBounds);
+		case EInteractionState::SelectScene:
+			if (ExerciseClick(InEvents, Scenario.SponzaBounds, Scenario.Interaction.Click))
+			{
+				Scenario.Interaction.Progress.TransitionTo(EInteractionState::DoubleClickScene);
+			}
 			break;
-		case 3:
-			if (!Scenario.bExerciseMouseDown && !Editor.bOpenDialog)
+		case EInteractionState::DoubleClickScene:
+			if (!Scenario.Interaction.Click.IsPressed() && !Editor.bOpenDialog)
 			{
 				throw std::runtime_error("Single scene click unexpectedly opened the scene");
 			}
-			Scenario.ExerciseWait = 2;
-			ExerciseClick(InEvents, Scenario.SponzaBounds);
+			if (ExerciseClick(InEvents, Scenario.SponzaBounds, Scenario.Interaction.Click,
+			                  EAcceptanceClickDelay::Immediate))
+			{
+				Scenario.Interaction.Progress.TransitionTo(EInteractionState::AwaitSceneAndFocusViewport);
+			}
 			break;
-		case 20:
-			ExerciseClick(InEvents, Scenario.OpenButtonBounds);
+		case EInteractionState::ConfirmReopen:
+			if (ExerciseClick(InEvents, Scenario.OpenButtonBounds, Scenario.Interaction.Click))
+			{
+				Scenario.Interaction.Progress.TransitionTo(EInteractionState::AwaitReopenedScene);
+			}
 			break;
-		case 4:
+		case EInteractionState::AwaitSceneAndFocusViewport:
 			if (Editor.bOpenDialog || !Editor.CurrentPath.ends_with("/Sponza.hasset"))
 			{
 				throw std::runtime_error("Double scene click did not open the selected scene");
 			}
 			if (Editor.ReadyFrames > 8)
 			{
-				ExerciseClick(InEvents, Editor.Viewport.ViewportRegion.Bounds);
+				if (ExerciseClick(InEvents, Editor.Viewport.ViewportRegion.Bounds, Scenario.Interaction.Click))
+				{
+					Scenario.Interaction.Progress.TransitionTo(EInteractionState::ExerciseMovement);
+				}
 			}
 			break;
-		case 15:
-			ExerciseClick(InEvents, Scenario.CancelButtonBounds);
+		case EInteractionState::CancelSceneDialog:
+			if (ExerciseClick(InEvents, Scenario.CancelButtonBounds, Scenario.Interaction.Click,
+			                  Scenario.Interaction.CancelDialogDelay))
+			{
+				Scenario.Interaction.Progress.TransitionTo(EInteractionState::ResizeAndHideViewport);
+			}
 			break;
-		case 16:
+		case EInteractionState::ResizeAndHideViewport:
 			Editor.Window->Resize({1440, 900});
 			Editor.bShowViewport = false;
-			++Scenario.ExerciseStep;
-			Scenario.ExerciseWait = 0;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::AwaitHiddenViewport);
+			Scenario.Interaction.HiddenViewportObservation.Restart();
 			break;
-		case 17:
-			if (++Scenario.ExerciseWait < 4)
+		case EInteractionState::AwaitHiddenViewport:
+			if (!Scenario.Interaction.HiddenViewportObservation.Advance())
 			{
 				break;
 			}
 			Editor.bShowViewport = true;
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.Interaction.Progress.TransitionTo(EInteractionState::ReopenFileMenu);
 			break;
 		default:
 			ExerciseCamera(InEvents);

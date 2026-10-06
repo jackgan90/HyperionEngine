@@ -10,22 +10,34 @@ void FEditorAcceptanceHarness::ExerciseCaptureHudInput(std::vector<FInputEvent>&
 	{
 		throw std::runtime_error("HUD effective visibility differs from preference");
 	}
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.CapturePreference.Progress.GetState())
 	{
-		case 0:
-			ExerciseClick(InEvents, Scenario.EditMenuBounds);
+		case ECapturePreferenceState::OpenEditMenu:
+			if (ExerciseClick(InEvents, Scenario.EditMenuBounds, Scenario.CapturePreference.Click))
+			{
+				Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::OpenPreferences);
+			}
 			return;
-		case 1:
-			ExerciseClick(InEvents, Scenario.PreferencesMenuBounds);
+		case ECapturePreferenceState::OpenPreferences:
+			if (ExerciseClick(InEvents, Scenario.PreferencesMenuBounds, Scenario.CapturePreference.Click))
+			{
+				Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::TogglePreference);
+			}
 			return;
-		case 2:
-			ExerciseClick(InEvents, Scenario.CaptureHudPreferenceBounds);
+		case ECapturePreferenceState::TogglePreference:
+			if (ExerciseClick(InEvents, Scenario.CaptureHudPreferenceBounds, Scenario.CapturePreference.Click))
+			{
+				Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::ClosePreferences);
+			}
 			return;
-		case 3:
-			ExerciseClick(InEvents, Scenario.PreferencesCloseBounds);
+		case ECapturePreferenceState::ClosePreferences:
+			if (ExerciseClick(InEvents, Scenario.PreferencesCloseBounds, Scenario.CapturePreference.Click))
+			{
+				Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::VerifyPreference);
+			}
 			return;
 	}
-	if (++Scenario.ExerciseWait < 3)
+	if (!Scenario.CapturePreference.PreferenceObservation.Advance())
 	{
 		return;
 	}
@@ -60,22 +72,40 @@ void FEditorAcceptanceHarness::ExerciseCaptureInput(std::vector<FInputEvent>& In
 	}
 	if (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Toggle)
 	{
-		switch (Scenario.ExerciseStep)
+		switch (Scenario.CapturePreference.Progress.GetState())
 		{
-			case 0:
-				ExerciseClick(InEvents, Scenario.EditMenuBounds);
+			case ECapturePreferenceState::OpenEditMenu:
+				if (ExerciseClick(InEvents, Scenario.EditMenuBounds, Scenario.CapturePreference.Click))
+				{
+					Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::OpenPreferences);
+				}
 				return;
-			case 1:
-				ExerciseClick(InEvents, Scenario.PreferencesMenuBounds);
+			case ECapturePreferenceState::OpenPreferences:
+				if (ExerciseClick(InEvents, Scenario.PreferencesMenuBounds, Scenario.CapturePreference.Click))
+				{
+					Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::TogglePreference);
+				}
 				return;
-			case 2:
-				ExerciseClick(InEvents, Scenario.CapturePreferenceBounds);
+			case ECapturePreferenceState::TogglePreference:
+			{
+				const bool bCompleted =
+				    ExerciseClick(InEvents, Scenario.CapturePreferenceBounds, Scenario.CapturePreference.Click);
+				Scenario.CapturePreference.bCaptureBeforeToggle =
+				    Scenario.CapturePreference.Click.ReachedPressBoundary();
+				if (bCompleted)
+				{
+					Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::ClosePreferences);
+				}
 				return;
-			case 3:
-				ExerciseClick(InEvents, Scenario.PreferencesCloseBounds);
+			}
+			case ECapturePreferenceState::ClosePreferences:
+				if (ExerciseClick(InEvents, Scenario.PreferencesCloseBounds, Scenario.CapturePreference.Click))
+				{
+					Scenario.CapturePreference.Progress.TransitionTo(ECapturePreferenceState::VerifyPreference);
+				}
 				return;
 		}
-		if (++Scenario.ExerciseWait < 3)
+		if (!Scenario.CapturePreference.PreferenceObservation.Advance())
 		{
 			return;
 		}
@@ -97,7 +127,7 @@ void FEditorAcceptanceHarness::ExerciseCaptureInput(std::vector<FInputEvent>& In
 	else
 	{
 #if HYP_ENABLE_RENDERDOC
-		if (Scenario.ExerciseStep == 0)
+		if (Scenario.Capture.Progress.Is(ECaptureState::CaptureFrame))
 		{
 			if (Scenario.CaptureButtonBounds.X < Editor.Viewport.ViewportRegion.Bounds.X ||
 			    Scenario.CaptureButtonBounds.Z > Editor.Viewport.ViewportRegion.Bounds.Z)
@@ -108,7 +138,10 @@ void FEditorAcceptanceHarness::ExerciseCaptureInput(std::vector<FInputEvent>& In
 			{
 				throw std::runtime_error(Editor.CaptureStatus());
 			}
-			ExerciseClick(InEvents, Scenario.CaptureButtonBounds);
+			if (ExerciseClick(InEvents, Scenario.CaptureButtonBounds, Scenario.Capture.Click))
+			{
+				Scenario.Capture.Progress.TransitionTo(ECaptureState::VerifyCapture);
+			}
 			return;
 		}
 		const auto Status = Editor.FrameCapture->Status();

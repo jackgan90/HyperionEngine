@@ -1,23 +1,10 @@
 #pragma once
 #include "../../Private/EditorApplication.h"
+#include "AssetAcceptanceContext.h"
 #include "EditorAcceptanceState.h"
 
 namespace Hyperion
 {
-enum class EEditorAssetAcceptancePhase
-{
-	MainWindow,
-	NameAndSave,
-	AssetProperties,
-	AssetWindowLifecycle
-};
-
-enum class EEditorAcceptanceWindow
-{
-	Main,
-	Asset
-};
-
 class FEditorAcceptanceHarness
 {
 public:
@@ -45,14 +32,15 @@ public:
 	const FEditorAcceptancePolicy& Policy() const;
 
 private:
+	bool IsInteractionComplete() const;
+	std::string ScenarioStatus() const;
 	void ObserveIdentifiedWidget(EEditorWidget InWidget, FVec4 InBounds, std::string_view InId);
-	EEditorAssetAcceptancePhase AssetPhase() const;
 	EEditorAcceptanceWindow AssetInputWindow() const;
 	void BeginAssetRasterOptions();
 	void CheckAssetRasterOptions() const;
 	void CheckAssetSaveShortcut();
 	void CheckFramingResult(FVec3 InCenter);
-	void CheckGizmoHistory(unsigned InPhase);
+	void CheckGizmoHistory(EGizmoAction InPhase);
 	void CheckMultiSelectionMarkerDraws(const FGuiDrawData& InData);
 	void CheckPendingAssetEdit();
 	void CheckPlacementMarkerDraws(const FGuiDrawData& InData) const;
@@ -71,7 +59,7 @@ private:
 	void ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseAssetReferences(std::vector<FInputEvent>& InEvents);
 	void ExerciseAssetSaving(std::vector<FInputEvent>& InEvents);
-	void ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath);
+	bool ExerciseAssetTabClose(std::vector<FInputEvent>& InEvents, const std::string& InPath);
 	void ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvents);
 	void ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvents);
@@ -82,7 +70,9 @@ private:
 	void ExerciseCamera(std::vector<FInputEvent>& InEvents);
 	void ExerciseCaptureHudInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseCaptureInput(std::vector<FInputEvent>& InEvents);
-	void ExerciseClick(std::vector<FInputEvent>& InEvents, FVec4 InBounds);
+	bool ExerciseClick(std::vector<FInputEvent>& InEvents, FVec4 InBounds, FAcceptanceClick& OutClick,
+	                   EAcceptanceClickDelay InDelay = EAcceptanceClickDelay::Settle);
+	bool ExerciseTextInput(std::vector<FInputEvent>& InEvents, FAcceptanceTextInput& OutInput, std::string_view InText);
 	void ExerciseClipboard(std::vector<FInputEvent>& InEvents);
 	void ExerciseClipboardHistory(std::vector<FInputEvent>& InEvents);
 	void ExerciseClipboardText(std::vector<FInputEvent>& InEvents);
@@ -103,10 +93,11 @@ private:
 	void ExerciseFramingPopup(std::vector<FInputEvent>& InEvents);
 	void ExerciseFramingSelection(std::vector<FInputEvent>& InEvents);
 	void ExerciseFramingViewGuards(std::vector<FInputEvent>& InEvents);
-	void ExerciseGizmoFocus(unsigned InPhase, FVec2 InStart, FVec2 InEnd, std::vector<FInputEvent>& InEvents);
+	void ExerciseGizmoFocus(EGizmoAction InPhase, FVec2 InStart, FVec2 InEnd, std::vector<FInputEvent>& InEvents);
 	void ExerciseGizmoInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseImportInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseInput(std::vector<FInputEvent>& InEvents);
+	void RestartInteractionAfterSceneScan();
 	bool ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents);
 	bool ExerciseLiveDepth(std::vector<FInputEvent>& InEvents);
 	void ExerciseLogInput(std::vector<FInputEvent>& InEvents);

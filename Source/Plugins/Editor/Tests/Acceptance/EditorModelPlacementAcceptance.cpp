@@ -60,7 +60,7 @@ void WritePlacementFixture(const std::filesystem::path& InRoot)
 void FEditorAcceptanceHarness::ExerciseModelPlacement(std::vector<FInputEvent>& InEvents)
 {
 	CheckModelPlacement(!Editor.bAssetMessage, Editor.AssetMessage);
-	if (Scenario.ModelPlacementStep == 0 && Scenario.ModelPlacementCase == 0)
+	if (Scenario.ModelPlacement.Progress.Is(EModelPlacementState::PrepareFixtures) && Scenario.ModelPlacementCase == 0)
 	{
 		const auto Root = Editor.Options.ExerciseModelPlacement / "Game";
 		std::filesystem::create_directories(Root);
@@ -70,12 +70,11 @@ void FEditorAcceptanceHarness::ExerciseModelPlacement(std::vector<FInputEvent>& 
 		Focus.Type = EEventType::Focus;
 		Focus.bDown = true;
 		InEvents.push_back(Focus);
-		Scenario.ModelPlacementStep = 1;
+		Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::PointAtModel);
 		return;
 	}
-	if (Scenario.ExerciseWait)
+	if (Scenario.ModelPlacement.NextCaseSettle.ConsumeFrame())
 	{
-		--Scenario.ExerciseWait;
 		return;
 	}
 	if (Editor.Transition.HasPendingRoot() || Editor.Browser->IsScanning() || Editor.FrameCount < 12 ||
@@ -104,34 +103,35 @@ void FEditorAcceptanceHarness::ExerciseModelDrag(std::vector<FInputEvent>& InEve
 	const FVec2 Start{(Source.X + Source.Z) * .5f, (Source.Y + Source.W) * .5f};
 	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Target{Bounds.X + (Bounds.Z - Bounds.X) * .55f, Bounds.Y + (Bounds.W - Bounds.Y) * .65f};
-	if (Scenario.ModelPlacementStep >= 7)
+	if (Scenario.ModelPlacement.Progress.IsAny(
+	        {EModelPlacementState::CompleteModelGesture, EModelPlacementState::VerifyModelGesture}))
 	{
 		CompleteModelDrag(InEvents, Start);
 		return;
 	}
-	switch (Scenario.ModelPlacementStep)
+	switch (Scenario.ModelPlacement.Progress.GetState())
 	{
-		case 1:
+		case EModelPlacementState::PointAtModel:
 			Scenario.ModelPlacementBaseNodes = Editor.Scene->GetNodes().size();
 			Scenario.ModelPlacementBaseHistory = Editor.HistoryCursor;
 			MoveModelPointer(InEvents, Start);
 			break;
-		case 2:
+		case EModelPlacementState::PressModel:
 			ModelButton(InEvents, true);
 			break;
-		case 3:
+		case EModelPlacementState::StartModelDrag:
 			MoveModelPointer(InEvents, {Start.X + 15, Start.Y});
 			break;
-		case 4:
+		case EModelPlacementState::MoveToViewport:
 			MoveModelPointer(InEvents, Target);
 			if (Scenario.ModelPlacementCase == 0)
 			{
 				ModelButton(InEvents, false);
-				Scenario.ModelPlacementStep = 8;
+				Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::VerifyModelGesture);
 				return;
 			}
 			break;
-		case 5:
+		case EModelPlacementState::AwaitModelPreview:
 			CheckModelPlacement(Editor.Gui->DragPayload().has_value(), "Content tile did not start a drag in case " +
 			                                                               std::to_string(Scenario.ModelPlacementCase));
 			if (Scenario.ModelPlacementCase >= 4 && Scenario.ModelPlacementCase <= 6)
@@ -144,7 +144,7 @@ void FEditorAcceptanceHarness::ExerciseModelDrag(std::vector<FInputEvent>& InEve
 				                        Editor.PlacementPreparation.State == EPlacementPreparationState::Failed,
 				                    "Invalid asset accepted");
 				ModelButton(InEvents, false);
-				Scenario.ModelPlacementStep = 8;
+				Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::VerifyModelGesture);
 				return;
 			}
 			if (!Editor.Placement.GetPreview())
@@ -170,19 +170,44 @@ void FEditorAcceptanceHarness::ExerciseModelDrag(std::vector<FInputEvent>& InEve
 			                    "Preview modified document");
 			MoveModelPointer(InEvents, Start);
 			break;
-		case 6:
+		case EModelPlacementState::ReturnToViewport:
 			CheckModelPlacement(Editor.Placement.IsActive() && !Editor.Placement.GetPreview(),
 			                    "Outside preview was not hidden");
 			MoveModelPointer(InEvents, Target);
 			Scenario.PlacementCapture = Editor.Options.ExerciseModelPlacement / "ModelPreview.png";
 			break;
 	}
-	++Scenario.ModelPlacementStep;
+	switch (Scenario.ModelPlacement.Progress.GetState())
+	{
+		case EModelPlacementState::PointAtModel:
+			Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::PressModel);
+			break;
+		case EModelPlacementState::PressModel:
+			Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::StartModelDrag);
+			break;
+		case EModelPlacementState::StartModelDrag:
+			Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::MoveToViewport);
+			break;
+		case EModelPlacementState::MoveToViewport:
+			Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::AwaitModelPreview);
+			break;
+		case EModelPlacementState::AwaitModelPreview:
+			Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::ReturnToViewport);
+			break;
+		case EModelPlacementState::ReturnToViewport:
+			Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::CompleteModelGesture);
+			break;
+		case EModelPlacementState::CompleteModelGesture:
+			Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::VerifyModelGesture);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::CompleteModelDrag(std::vector<FInputEvent>& InEvents, FVec2 InSource)
 {
-	if (Scenario.ModelPlacementStep == 7)
+	if (Scenario.ModelPlacement.Progress.Is(EModelPlacementState::CompleteModelGesture))
 	{
 		CheckModelPlacement(Editor.Placement.GetPreview().has_value(), "Returning drag lost preview");
 		Scenario.ModelPlacementPosition = Editor.Placement.GetPreview()->Position;
@@ -214,7 +239,7 @@ void FEditorAcceptanceHarness::CompleteModelDrag(std::vector<FInputEvent>& InEve
 			Editor.Viewport.ViewCamera.World.Values[12] += 1;
 		}
 		ModelButton(InEvents, false);
-		Scenario.ModelPlacementStep = 8;
+		Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::VerifyModelGesture);
 		return;
 	}
 	if (Scenario.ModelPlacementCase == 3)
@@ -249,14 +274,14 @@ void FEditorAcceptanceHarness::CompleteModelDrag(std::vector<FInputEvent>& InEve
 		Scenario.ContentRevealPath =
 		    "/Game/" + std::string(ModelPlacementNames.at(Scenario.ModelPlacementCase)) + ".hasset";
 	}
-	Scenario.ModelPlacementStep = 1;
-	Scenario.ExerciseWait = 24;
+	Scenario.ModelPlacement.Progress.TransitionTo(EModelPlacementState::PointAtModel);
+	Scenario.ModelPlacement.NextCaseSettle.Start(FModelPlacementAcceptanceContext::NextCaseSettleFrames);
 }
 
 void FEditorAcceptanceHarness::ExerciseModelPlacementHistory()
 {
 	const auto Output = Editor.Options.ExerciseModelPlacement / "Placed.hasset";
-	if (Scenario.ModelPlacementStep == 1)
+	if (Scenario.ModelPlacementHistory.Is(EModelPlacementHistoryState::VerifyHistoryAndSave))
 	{
 		const auto* First = Editor.Scene->FindNode(Editor.Scene->FindHandle(Scenario.ModelPlacementIds.at(0)));
 		const auto* Second = Editor.Scene->FindNode(Editor.Scene->FindHandle(Scenario.ModelPlacementIds.at(1)));
@@ -273,15 +298,15 @@ void FEditorAcceptanceHarness::ExerciseModelPlacementHistory()
 		const auto Snapshot = Editor.Scene->Snapshot(Output);
 		CheckModelPlacement(Snapshot.Assets.size() == 1, "Cancelled/failed models leaked into saved references");
 		Editor.SaveScene(PathToUtf8(Output));
-		++Scenario.ModelPlacementStep;
+		Scenario.ModelPlacementHistory.TransitionTo(EModelPlacementHistoryState::AwaitSaveAndReopen);
 	}
-	else if (Scenario.ModelPlacementStep == 2 && !Editor.PendingSave)
+	else if (Scenario.ModelPlacementHistory.Is(EModelPlacementHistoryState::AwaitSaveAndReopen) && !Editor.PendingSave)
 	{
 		CheckModelPlacement(!Editor.IsDirty(), "Model placement save failed");
 		Editor.OpenScene(PathToUtf8(Output));
-		++Scenario.ModelPlacementStep;
+		Scenario.ModelPlacementHistory.TransitionTo(EModelPlacementHistoryState::VerifyReload);
 	}
-	else if (Scenario.ModelPlacementStep == 3)
+	else if (Scenario.ModelPlacementHistory.Is(EModelPlacementHistoryState::VerifyReload))
 	{
 		CheckModelPlacement(Editor.Scene->GetNodes().size() == 2 && !Editor.IsDirty(),
 		                    "Saved model scene did not reload");

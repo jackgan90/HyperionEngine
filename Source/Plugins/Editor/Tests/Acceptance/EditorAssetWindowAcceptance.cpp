@@ -26,6 +26,33 @@ void WindowShortcut(std::vector<FInputEvent>& InEvents, EKey InKey)
 	InEvents.push_back(Event);
 }
 
+bool AdvanceWindowName(std::vector<FInputEvent>& InEvents, FAssetWindowNameInput& OutInput, std::string_view InName)
+{
+	switch (OutInput.Progress.GetState())
+	{
+		case EAssetWindowNamePhase::SelectAll:
+			WindowShortcut(InEvents, EKey::A);
+			OutInput.Progress.TransitionTo(EAssetWindowNamePhase::TypeName);
+			return false;
+		case EAssetWindowNamePhase::TypeName:
+		{
+			if (!OutInput.SelectionObservation.Advance())
+			{
+				return false;
+			}
+			FInputEvent Text;
+			Text.Type = EEventType::Text;
+			Text.Text = InName;
+			InEvents.push_back(Text);
+			OutInput.Progress.TransitionTo(EAssetWindowNamePhase::AwaitTextCommit);
+			return false;
+		}
+		case EAssetWindowNamePhase::AwaitTextCommit:
+			return OutInput.TextCommit.Advance();
+	}
+	return false;
+}
+
 void CheckFailedAssetWindow(FWindow& InOwner, FWindowGroup& InGroup, FTaskSystem& InTasks, IRHIDevice& InDevice,
                             FShaderCompiler& InCompiler, FRenderSession& InSession, FAssetWorkspace& InWorkspace,
                             FApplicationControl& InControl)
@@ -47,30 +74,31 @@ void CheckFailedAssetWindow(FWindow& InOwner, FWindowGroup& InGroup, FTaskSystem
 
 void FEditorAcceptanceHarness::ExerciseAssetWindowInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.ExerciseStep < 200)
+	const auto Stage = DescribeAssetAcceptance(Scenario.Asset.Progress.GetState()).Stage;
+	if ((Stage == EAssetAcceptanceStage::WindowFixture))
 	{
 		ExerciseAssetWindowFixture(InEvents);
 		return;
 	}
-	if (Scenario.AssetExerciseLoggedStep != static_cast<int>(Scenario.ExerciseStep))
+	if (Scenario.AssetLoggedState != Scenario.Asset.Progress.GetState())
 	{
-		Scenario.AssetExerciseLoggedStep = static_cast<int>(Scenario.ExerciseStep);
-		Log(ELogLevel::Info, "Asset window acceptance step " + std::to_string(Scenario.ExerciseStep));
+		Scenario.AssetLoggedState = Scenario.Asset.Progress.GetState();
+		Log(ELogLevel::Info, "Asset window acceptance step " + Scenario.Asset.Progress.Name());
 	}
-	if (Scenario.ExerciseStep >= 209)
+	if ((Stage == EAssetAcceptanceStage::WindowClosing || Stage == EAssetAcceptanceStage::WindowSaving))
 	{
 		ExerciseAssetWindowClosing(InEvents);
 		return;
 	}
-	if (Scenario.ExerciseStep >= 205)
+	if ((Stage == EAssetAcceptanceStage::WindowSizing))
 	{
 		ExerciseAssetWindowSizing(InEvents);
 		return;
 	}
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 200:
+		case EAssetState::VerifyWindowAndUndoScene:
 			CheckAssetSaveShortcut();
 			CheckFailedAssetWindow(*Editor.Window, *Editor.WindowGroup, Editor.Tasks, *Editor.Device, *Editor.Compiler,
 			                       *Editor.Session, *Editor.AssetWorkspace, Editor.Control);
@@ -82,72 +110,69 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowInput(std::vector<FInputEvent>
 			Scenario.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
 			Scenario.AssetExerciseSceneCamera = Editor.Viewport.ViewCamera;
 			WindowShortcut(InEvents, EKey::Z);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitSceneUndoAndRedo);
 			break;
-		case 201:
+		case EAssetState::AwaitSceneUndoAndRedo:
 			if (!Editor.Scene->GetStatus().bReady)
 			{
 				break;
 			}
 			CheckAssetWindow(!Editor.IsDirty() && !Document->IsDirty(), "Main-window undo targeted the asset document");
 			WindowShortcut(InEvents, EKey::Y);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::UndoAssetHistory);
 			break;
-		case 202:
+		case EAssetState::UndoAssetHistory:
 			CheckAssetWindow(Editor.IsDirty() && !Document->IsDirty(), "Main-window redo affected the asset document");
 			WindowShortcut(InEvents, EKey::Z);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyAssetHistoryAndRequestClose);
 			break;
-		case 203:
+		case EAssetState::VerifyAssetHistoryAndRequestClose:
 			CheckAssetWindow(Editor.IsDirty() && Editor.HistoryCursor == 1 && Document->IsDirty() &&
 			                     Editor.Viewport.ViewCamera == Scenario.AssetExerciseSceneCamera,
 			                 "Asset-window undo affected scene history or camera");
 			Editor.AssetWindow->NativeWindow().RequestClose();
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::CancelAssetWindowClose);
 			break;
-		case 204:
-			ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("cancel"));
+		case EAssetState::CancelAssetWindowClose:
+			if (ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("cancel"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::ResizeAssetWindow);
+			}
 			break;
 	}
 }
 
 void FEditorAcceptanceHarness::ExerciseAssetWindowFixture(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 190:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"));
-			break;
-		case 191:
-			if (++Scenario.ExerciseWait == 1)
+		case EAssetState::FocusWindowHistoryName:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"), Scenario.Asset.Click))
 			{
-				WindowShortcut(InEvents, EKey::A);
-			}
-			if (Scenario.ExerciseWait == 3)
-			{
-				FInputEvent Text;
-				Text.Type = EEventType::Text;
-				Text.Text = "Window history baseline";
-				InEvents.push_back(Text);
-			}
-			if (Scenario.ExerciseWait == 6)
-			{
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::TypeWindowHistoryName);
 			}
 			break;
-		case 192:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("canvas"));
+		case EAssetState::TypeWindowHistoryName:
+			if (AdvanceWindowName(InEvents, Scenario.Asset.WindowHistoryName, "Window history baseline"))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::FocusWindowCanvas);
+			}
 			break;
-		case 193:
+		case EAssetState::FocusWindowCanvas:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("canvas"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::SaveWindowHistory);
+			}
+			break;
+		case EAssetState::SaveWindowHistory:
 			CheckAssetWindow(Editor.AssetWorkspace->IsDirty(), "Window history fixture was not edited");
 			WindowShortcut(InEvents, EKey::S);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitWindowHistorySave);
 			break;
-		case 194:
+		case EAssetState::AwaitWindowHistorySave:
 			if (!Editor.AssetWorkspace->IsSaving() && !Editor.AssetWorkspace->IsDirty())
 			{
-				Scenario.ExerciseStep = 200;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyWindowAndUndoScene);
 			}
 			break;
 	}
@@ -205,9 +230,9 @@ void FEditorAcceptanceHarness::BeginAssetRasterOptions()
 
 void FEditorAcceptanceHarness::ExerciseAssetWindowSizing(std::vector<FInputEvent>&)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 205:
+		case EAssetState::ResizeAssetWindow:
 		{
 			CheckAssetWindow(Editor.AssetWindow && Editor.AssetWorkspace->IsDirty() && !Editor.Window->ShouldClose(),
 			                 "Cancel asset-window close lost its draft or closed the main window");
@@ -215,11 +240,11 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSizing(std::vector<FInputEvent
 			Scenario.AssetExerciseScale = Editor.Gui->ApplicationScale();
 			Editor.Gui->SetApplicationScale(1.5f);
 			BeginAssetRasterOptions();
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyAssetResize);
 			break;
 		}
-		case 206:
-			if (++Scenario.ExerciseWait < 6)
+		case EAssetState::VerifyAssetResize:
+			if (!Scenario.Asset.ResizeObservation.Advance())
 			{
 				break;
 			}
@@ -235,12 +260,11 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSizing(std::vector<FInputEvent
 			CheckAssetRasterOptions();
 			Scenario.AssetExerciseFrames = Editor.AssetWindow->RenderedFrames();
 			Editor.AssetWindow->NativeWindow().Minimize();
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyAssetMinimize);
 			break;
-		case 207:
+		case EAssetState::VerifyAssetMinimize:
 		{
-			if (++Scenario.ExerciseWait < 6)
+			if (!Scenario.Asset.AssetMinimizeObservation.Advance())
 			{
 				break;
 			}
@@ -254,12 +278,11 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSizing(std::vector<FInputEvent
 			Editor.SetRenderSettings(Editor.RenderSettingsRevision, Candidate);
 			Editor.AssetWindow->NativeWindow().Restore();
 			Editor.Window->Minimize();
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyOwnerMinimize);
 			break;
 		}
-		case 208:
-			if (++Scenario.ExerciseWait < 6)
+		case EAssetState::VerifyOwnerMinimize:
+			if (!Scenario.Asset.OwnerMinimizeObservation.Advance())
 			{
 				break;
 			}
@@ -268,8 +291,7 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSizing(std::vector<FInputEvent
 			                     Editor.AssetWorkspace->IsDirty(),
 			                 "Owner minimization rendered the asset window or lost its draft");
 			Editor.Window->Restore();
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyOwnerRestore);
 			Log(ELogLevel::Info, "Native window rendering, input, resize, scale and owner minimization passed");
 			break;
 	}
@@ -277,16 +299,17 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSizing(std::vector<FInputEvent
 
 void FEditorAcceptanceHarness::ExerciseAssetWindowClosing(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.ExerciseStep >= 213)
+	const auto Stage = DescribeAssetAcceptance(Scenario.Asset.Progress.GetState()).Stage;
+	if ((Stage == EAssetAcceptanceStage::WindowSaving))
 	{
 		ExerciseAssetWindowSaving(InEvents);
 		return;
 	}
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 209:
-			if (++Scenario.ExerciseWait < 6)
+		case EAssetState::VerifyOwnerRestore:
+			if (!Scenario.Asset.OwnerRestoreObservation.Advance())
 			{
 				break;
 			}
@@ -298,14 +321,16 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowClosing(std::vector<FInputEven
 			                         GetDepthConvention(Editor.Rendering.bReversedZ),
 			                 "Resumed asset preview retained the old depth convention");
 			CheckAssetRasterOptions();
-			Scenario.ExerciseWait = 0;
 			Editor.AssetWindow->NativeWindow().RequestClose();
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::DiscardAssetWindow);
 			break;
-		case 210:
-			ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("discard"));
+		case EAssetState::DiscardAssetWindow:
+			if (ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("discard"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyWindowDiscardAndReopen);
+			}
 			break;
-		case 211:
+		case EAssetState::VerifyWindowDiscardAndReopen:
 		{
 			CheckAssetWindow(!Editor.AssetWindow && !Editor.AssetWorkspace->HasDocuments() && Editor.IsDirty() &&
 			                     Editor.HistoryCursor == 1,
@@ -314,10 +339,10 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowClosing(std::vector<FInputEven
 			CheckAssetWindow(Saved->Name == Scenario.AssetExerciseOriginalName,
 			                 "Asset window discard persisted changes");
 			Editor.RequestOpenAsset("/Game/Sky.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitRecreatedWindow);
 			break;
 		}
-		case 212:
+		case EAssetState::AwaitRecreatedWindow:
 			if (Editor.AssetWindow && Document && Editor.AssetWorkspace->IsPreviewReady() &&
 			    Editor.AssetWorkspace->RenderedPreviewView())
 			{
@@ -328,7 +353,7 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowClosing(std::vector<FInputEven
 				CheckAssetRasterOptions();
 				Editor.SetRenderSettings(Editor.RenderSettingsRevision, Scenario.AssetRasterInitial);
 				Editor.AssetWorkspace->RevealProperty("field/name");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::FocusWindowCloseName);
 			}
 			break;
 	}
@@ -337,40 +362,34 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowClosing(std::vector<FInputEven
 void FEditorAcceptanceHarness::ExerciseAssetWindowSaving(std::vector<FInputEvent>& InEvents)
 {
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 213:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"));
+		case EAssetState::FocusWindowCloseName:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::TypeWindowCloseName);
+			}
 			break;
-		case 214:
-			if (++Scenario.ExerciseWait == 1)
-			{
-				WindowShortcut(InEvents, EKey::A);
-			}
-			if (Scenario.ExerciseWait == 3)
-			{
-				FInputEvent Text;
-				Text.Type = EEventType::Text;
-				Text.Text = "Saved on window close";
-				InEvents.push_back(Text);
-			}
-			if (Scenario.ExerciseWait == 6)
+		case EAssetState::TypeWindowCloseName:
+			if (AdvanceWindowName(InEvents, Scenario.Asset.WindowCloseName, "Saved on window close"))
 			{
 				Editor.AssetWindow->NativeWindow().RequestClose();
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AttemptFailedWindowSave);
 			}
 			break;
-		case 215:
+		case EAssetState::AttemptFailedWindowSave:
 			CheckAssetWindow(Document && Document->IsDirty(), "Window close fixture was not edited");
 			if (!Scenario.AssetExerciseSavedBytes)
 			{
 				Scenario.AssetExerciseSavedBytes = Editor.IO.ReadAsync("/Game/Sky.hasset").Get(Editor.Tasks);
 				Editor.IO.WriteAsync("/Game/Sky.hasset", {std::byte{0}}).Get(Editor.Tasks);
 			}
-			ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("save"));
+			if (ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("save"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitFailedWindowSave);
+			}
 			break;
-		case 216:
+		case EAssetState::AwaitFailedWindowSave:
 			CheckAssetWindow(Editor.AssetWindow && Document, "Failed save closed the asset window");
 			if (!Document->IsSaving() && !Document->Error.empty())
 			{
@@ -378,13 +397,16 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSaving(std::vector<FInputEvent
 				Editor.IO.WriteAsync("/Game/Sky.hasset", *Scenario.AssetExerciseSavedBytes).Get(Editor.Tasks);
 				Scenario.AssetExerciseSavedBytes.reset();
 				Log(ELogLevel::Info, "Failed asset-window save retained the window and dirty documents");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RetryWindowSave);
 			}
 			break;
-		case 217:
-			ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("save"));
+		case EAssetState::RetryWindowSave:
+			if (ExerciseClick(InEvents, Editor.AssetWindow->ObservedBounds("save"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitWindowSaveAndClose);
+			}
 			break;
-		case 218:
+		case EAssetState::AwaitWindowSaveAndClose:
 			if (!Editor.AssetWindow)
 			{
 				const auto Saved = Editor.Assets.LoadAsync<FSkyAsset>("/Game/Sky.hasset").Get(Editor.Tasks);
@@ -393,7 +415,7 @@ void FEditorAcceptanceHarness::ExerciseAssetWindowSaving(std::vector<FInputEvent
 				                 "Asset window save/close lost changes or affected the scene");
 				Log(ELogLevel::Info, "Native asset window cancel, discard, recreation and save/close passed");
 				Scenario.AssetExerciseIndex = 4;
-				Scenario.ExerciseStep = 21;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::VerifySceneHistoryAndRequestClose);
 			}
 			break;
 	}

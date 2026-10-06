@@ -10,39 +10,49 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 	{
 		throw std::runtime_error("Import GUI acceptance needs import services");
 	}
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Import.Progress.GetState())
 	{
-		case 0:
-			ExerciseClick(InEvents, Scenario.FileMenuBounds);
+		case EImportState::OpenFileMenu:
+			if (ExerciseClick(InEvents, Scenario.FileMenuBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::OpenImportMenu);
+			}
 			break;
-		case 1:
-			ExerciseClick(InEvents, Scenario.ImportMenuBounds);
+		case EImportState::OpenImportMenu:
+			if (ExerciseClick(InEvents, Scenario.ImportMenuBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::FocusSource);
+			}
 			break;
-		case 2:
-			ExerciseClick(InEvents, Editor.ImportPanel->SourceBounds);
+		case EImportState::FocusSource:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->SourceBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::TypeSource);
+			}
 			break;
-		case 3:
-		{
-			if (++Scenario.ExerciseWait == 1)
+		case EImportState::TypeSource:
+			if (Scenario.Import.SourceEntry.Is(ESourceTextEntryPhase::EnterText))
 			{
 				FInputEvent Text;
 				Text.Type = EEventType::Text;
 				Text.Text = PathToUtf8(Editor.Options.ExerciseImport);
 				InEvents.push_back(std::move(Text));
+				Scenario.Import.SourceEntry.TransitionTo(ESourceTextEntryPhase::AwaitTextCommit);
 			}
-			if (Scenario.ExerciseWait > 4)
+			else if (Scenario.Import.SourceTextCommit.Advance())
 			{
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Import.Progress.TransitionTo(EImportState::SelectOutputDirectory);
 			}
 			break;
-		}
-		case 4:
+		case EImportState::SelectOutputDirectory:
 			// Exercise the same selection handler used by the native Browse dialog.
 			Editor.ImportPanel->SetOutputDirectory(Editor.Options.ExerciseImport.parent_path() / "Game/Destination");
-			ExerciseClick(InEvents, Editor.ImportPanel->OutputBounds);
+			if (ExerciseClick(InEvents, Editor.ImportPanel->OutputBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::AwaitDraftPreview);
+			}
 			break;
-		case 5:
+		case EImportState::AwaitDraftPreview:
 			if (!Editor.ImportPanel->DraftId.empty())
 			{
 				const auto Draft = Imports->Draft({Editor.ImportPanel->DraftId});
@@ -63,75 +73,71 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 					{
 						throw std::runtime_error("Browse selection did not update the displayed import folder");
 					}
-					++Scenario.ExerciseStep;
+					Scenario.Import.Progress.TransitionTo(EImportState::FocusDraftName);
 				}
 			}
 			break;
-		case 6:
-			ExerciseClick(InEvents, Editor.ImportPanel->PreviewNameBounds);
-			break;
-		case 7:
-		{
-			++Scenario.ExerciseWait;
-			if (Scenario.ExerciseWait <= 2)
+		case EImportState::FocusDraftName:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->PreviewNameBounds, Scenario.Import.Click))
 			{
-				FInputEvent Key;
-				Key.Type = EEventType::Key;
-				Key.Key = EKey::A;
-				Key.bDown = Scenario.ExerciseWait == 1;
-				Key.Modifiers = Scenario.ExerciseWait == 1 ? InputModifiers::Control : InputModifiers::None;
-				InEvents.push_back(Key);
-				if (Scenario.ExerciseWait == 2)
-				{
-					FInputEvent Text;
-					Text.Type = EEventType::Text;
-					Text.Text = "GUI draft texture";
-					InEvents.push_back(std::move(Text));
-				}
-			}
-			if (Scenario.ExerciseWait > 5)
-			{
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Import.Progress.TransitionTo(EImportState::TypeDraftName);
 			}
 			break;
-		}
-		case 8:
-			ExerciseClick(InEvents, Editor.ImportPanel->UndoBounds);
+		case EImportState::TypeDraftName:
+			if (ExerciseTextInput(InEvents, Scenario.Import.DraftName, "GUI draft texture"))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::UndoDraftName);
+			}
 			break;
-		case 9:
+		case EImportState::UndoDraftName:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->UndoBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::VerifyDraftUndo);
+			}
+			break;
+		case EImportState::VerifyDraftUndo:
 			if (Imports->Draft({Editor.ImportPanel->DraftId}).Name != "Color")
 			{
 				throw std::runtime_error("Import preview undo failed");
 			}
-			++Scenario.ExerciseStep;
+			Scenario.Import.Progress.TransitionTo(EImportState::RedoDraftName);
 			break;
-		case 10:
-			ExerciseClick(InEvents, Editor.ImportPanel->RedoBounds);
+		case EImportState::RedoDraftName:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->RedoBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::VerifyDraftRedo);
+			}
 			break;
-		case 11:
+		case EImportState::VerifyDraftRedo:
 			if (Imports->Draft({Editor.ImportPanel->DraftId}).Name != "GUI draft texture")
 			{
 				throw std::runtime_error("Import preview redo failed");
 			}
-			++Scenario.ExerciseStep;
+			Scenario.Import.Progress.TransitionTo(EImportState::StartImport);
 			break;
-		case 12:
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
+		case EImportState::StartImport:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::OpenImportResult);
+			}
 			break;
-		case 13:
+		case EImportState::OpenImportResult:
 			if (Editor.ImportPanel->ImportResultBounds.Z <= Editor.ImportPanel->ImportResultBounds.X)
 			{
 				break;
 			}
-			if (!Scenario.ExerciseWait &&
+			if (!Scenario.Import.bImportResultCaptured &&
 			    Editor.ImportPanel->ImportResultBounds.Z > Editor.ImportPanel->ImportResultBounds.X)
 			{
 				Scenario.PlacementCapture = Editor.Options.ExerciseImport.parent_path() / "ImportSuccess.png";
+				Scenario.Import.bImportResultCaptured = true;
 			}
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::AwaitImportResult);
+			}
 			break;
-		case 14:
+		case EImportState::AwaitImportResult:
 		{
 			const auto State = Imports->List();
 			if (State.Tasks.empty() || State.Tasks.front().Status == EImportTaskState::Running)
@@ -143,19 +149,28 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 			{
 				throw std::runtime_error("GUI import failed: " + State.Tasks.front().Error);
 			}
-			++Scenario.ExerciseStep;
+			Scenario.Import.Progress.TransitionTo(EImportState::ReopenFileMenu);
 			break;
 		}
-		case 15:
-			ExerciseClick(InEvents, Scenario.FileMenuBounds);
+		case EImportState::ReopenFileMenu:
+			if (ExerciseClick(InEvents, Scenario.FileMenuBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::ReopenImportMenu);
+			}
 			break;
-		case 16:
-			ExerciseClick(InEvents, Scenario.ImportMenuBounds);
+		case EImportState::ReopenImportMenu:
+			if (ExerciseClick(InEvents, Scenario.ImportMenuBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::StartReimport);
+			}
 			break;
-		case 17:
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
+		case EImportState::StartReimport:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::VerifyReimportResult);
+			}
 			break;
-		case 18:
+		case EImportState::VerifyReimportResult:
 		{
 			const auto State = Imports->List();
 			if (State.Tasks.size() < 2 || State.Tasks.front().Status == EImportTaskState::Running)
@@ -168,10 +183,13 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 				throw std::runtime_error("GUI reimport did not preserve zero-write freshness: " +
 				                         State.Tasks.front().Error);
 			}
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::PrepareCancelledRefresh);
+			}
 			break;
 		}
-		case 19:
+		case EImportState::PrepareCancelledRefresh:
 		{
 			if (Editor.ImportPanel->Request.Output != "/Game/Automatic.hasset")
 			{
@@ -187,31 +205,37 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 			Edits.Name = "Keep these edits";
 			Imports->EditDraft({Draft.Draft, Draft.Generation, Edits});
 			Editor.ImportPanel->Request.Output = "/Game/Changed.hasset";
-			++Scenario.ExerciseStep;
+			Scenario.Import.Progress.TransitionTo(EImportState::CancelRefresh);
 			break;
 		}
-		case 20:
+		case EImportState::CancelRefresh:
 			if (Editor.ImportPanel->RefreshCancelBounds.Z > Editor.ImportPanel->RefreshCancelBounds.X)
 			{
-				ExerciseClick(InEvents, Editor.ImportPanel->RefreshCancelBounds);
+				if (ExerciseClick(InEvents, Editor.ImportPanel->RefreshCancelBounds, Scenario.Import.Click))
+				{
+					Scenario.Import.Progress.TransitionTo(EImportState::VerifyCancelledRefresh);
+				}
 			}
 			break;
-		case 21:
+		case EImportState::VerifyCancelledRefresh:
 			if (Editor.ImportPanel->Request.Output != "/Game/Automatic.hasset" ||
 			    Imports->Draft({Editor.ImportPanel->DraftId}).Name != "Keep these edits")
 			{
 				throw std::runtime_error("Cancelling automatic refresh lost settings or property edits");
 			}
 			Editor.ImportPanel->Request.Output = "/Game/Changed.hasset";
-			++Scenario.ExerciseStep;
+			Scenario.Import.Progress.TransitionTo(EImportState::ApplyRefresh);
 			break;
-		case 22:
+		case EImportState::ApplyRefresh:
 			if (Editor.ImportPanel->RefreshApplyBounds.Z > Editor.ImportPanel->RefreshApplyBounds.X)
 			{
-				ExerciseClick(InEvents, Editor.ImportPanel->RefreshApplyBounds);
+				if (ExerciseClick(InEvents, Editor.ImportPanel->RefreshApplyBounds, Scenario.Import.Click))
+				{
+					Scenario.Import.Progress.TransitionTo(EImportState::VerifyRefreshAndChangeSource);
+				}
 			}
 			break;
-		case 23:
+		case EImportState::VerifyRefreshAndChangeSource:
 		{
 			const auto Draft = Imports->Draft({Editor.ImportPanel->DraftId});
 			if (Draft.Status != EImportDraftState::Ready || Draft.Name != "Color")
@@ -225,13 +249,16 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 			auto Bytes = *Editor.IO.ReadAsync(Editor.Options.ExerciseImport).Get(Editor.IO.TaskSystem());
 			Bytes.push_back(std::byte{});
 			Editor.IO.WriteAsync(Editor.Options.ExerciseImport, std::move(Bytes)).Get(Editor.IO.TaskSystem());
-			++Scenario.ExerciseStep;
+			Scenario.Import.Progress.TransitionTo(EImportState::ImportChangedSource);
 			break;
 		}
-		case 24:
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
+		case EImportState::ImportChangedSource:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::VerifyChangedSourceRejection);
+			}
 			break;
-		case 25:
+		case EImportState::VerifyChangedSourceRejection:
 		{
 			const auto State = Imports->List();
 			if (State.Tasks.size() < 3 || State.Tasks.front().Status == EImportTaskState::Running)
@@ -247,15 +274,19 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 			{
 				break;
 			}
-			if (!Scenario.ExerciseWait &&
+			if (!Scenario.Import.bRefreshResultCaptured &&
 			    Editor.ImportPanel->ImportResultBounds.Z > Editor.ImportPanel->ImportResultBounds.X)
 			{
 				Scenario.PlacementCapture = Editor.Options.ExerciseImport.parent_path() / "ImportFailure.png";
+				Scenario.Import.bRefreshResultCaptured = true;
 			}
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::AwaitRefreshedSource);
+			}
 			break;
 		}
-		case 26:
+		case EImportState::AwaitRefreshedSource:
 		{
 			const auto Draft = Imports->Draft({Editor.ImportPanel->DraftId});
 			if (Draft.Status == EImportDraftState::Failed)
@@ -265,14 +296,17 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 			if (Draft.Status == EImportDraftState::Ready && Draft.Error.empty() &&
 			    Editor.ImportPanel->ImportResultBounds.Z <= Editor.ImportPanel->ImportResultBounds.X)
 			{
-				++Scenario.ExerciseStep;
+				Scenario.Import.Progress.TransitionTo(EImportState::RetryImport);
 			}
 			break;
 		}
-		case 27:
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds);
+		case EImportState::RetryImport:
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::VerifyRetryResult);
+			}
 			break;
-		case 28:
+		case EImportState::VerifyRetryResult:
 		{
 			const auto State = Imports->List();
 			if (State.Tasks.size() < 4 || State.Tasks.front().Status == EImportTaskState::Running)
@@ -287,10 +321,13 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 			{
 				throw std::runtime_error("Save as does not match the current completed request");
 			}
-			ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds);
+			if (ExerciseClick(InEvents, Editor.ImportPanel->ImportResultBounds, Scenario.Import.Click))
+			{
+				Scenario.Import.Progress.TransitionTo(EImportState::RestoreSourceAndComplete);
+			}
 			break;
 		}
-		case 29:
+		case EImportState::RestoreSourceAndComplete:
 		{
 			if (Editor.ImportPanel->ImportResultBounds.Z > Editor.ImportPanel->ImportResultBounds.X)
 			{
@@ -302,7 +339,7 @@ void FEditorAcceptanceHarness::ExerciseImportInput(std::vector<FInputEvent>& InE
 			Scenario.PlacementCapture = Editor.Options.ExerciseImport.parent_path() / "ImportPanel.png";
 			Scenario.bImportVerified = true;
 			Log(ELogLevel::Info, "Import GUI acceptance passed");
-			++Scenario.ExerciseStep;
+			Scenario.Import.Progress.TransitionTo(EImportState::Complete);
 			break;
 		}
 		default:

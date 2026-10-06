@@ -32,7 +32,7 @@ bool ContainsTriangle(FVec2 InA, FVec2 InB, FVec2 InC, FVec2 InPoint)
 
 void FEditorAcceptanceHarness::ExercisePlacementMarkers(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.PlacementMarkerStep == 0 && Scenario.PlacementMarkerCase == 0)
+	if (Scenario.PlacementMarker.Is(EPlacementMarkerState::PrepareOverlap) && Scenario.PlacementMarkerCase == 0)
 	{
 		// Cancellation deliberately leaves the last light creation on the redo branch.
 		Editor.Redo();
@@ -40,7 +40,7 @@ void FEditorAcceptanceHarness::ExercisePlacementMarkers(std::vector<FInputEvent>
 	const auto Point = Editor.Scene->FindHandle(Scenario.PlacementExerciseIds.at(6));
 	const auto Spot = Editor.Scene->FindHandle(Scenario.PlacementExerciseIds.at(7));
 	Check(Editor.Scene->FindNode(Point) && Editor.Scene->FindNode(Spot), "overlap fixtures unavailable");
-	if (Scenario.PlacementMarkerStep == 0)
+	if (Scenario.PlacementMarker.Is(EPlacementMarkerState::PrepareOverlap))
 	{
 		Editor.SelectObject(std::nullopt);
 		Scenario.PlacementMarkerTransforms = {Editor.Scene->FindNode(Point)->Local(),
@@ -56,7 +56,7 @@ void FEditorAcceptanceHarness::ExercisePlacementMarkers(std::vector<FInputEvent>
 		    Translation(Add(Ray->Origin, ScaleVector(Ray->Direction, Scenario.PlacementMarkerCase == 0 ? 4.f : 2.f))));
 		Editor.Scene->Tick();
 	}
-	else if (Scenario.PlacementMarkerStep == 1)
+	else if (Scenario.PlacementMarker.Is(EPlacementMarkerState::PointAtOverlap))
 	{
 		FInputEvent Event;
 		Event.Type = EEventType::MouseMove;
@@ -66,11 +66,12 @@ void FEditorAcceptanceHarness::ExercisePlacementMarkers(std::vector<FInputEvent>
 		          (Editor.Viewport.ViewportRegion.Bounds.W - Editor.Viewport.ViewportRegion.Bounds.Y) * .3f;
 		InEvents.push_back(Event);
 	}
-	else if (Scenario.PlacementMarkerStep == 2 || Scenario.PlacementMarkerStep == 3)
+	else if (Scenario.PlacementMarker.Is(EPlacementMarkerState::PressMarker) ||
+	         Scenario.PlacementMarker.Is(EPlacementMarkerState::ReleaseMarker))
 	{
 		FInputEvent Event;
 		Event.Type = EEventType::MouseButton;
-		Event.bDown = Scenario.PlacementMarkerStep == 2;
+		Event.bDown = Scenario.PlacementMarker.Is(EPlacementMarkerState::PressMarker);
 		InEvents.push_back(Event);
 	}
 	else
@@ -82,15 +83,31 @@ void FEditorAcceptanceHarness::ExercisePlacementMarkers(std::vector<FInputEvent>
 		Editor.Scene->Tick();
 		Editor.SelectObject(std::nullopt);
 		++Scenario.PlacementMarkerCase;
-		Scenario.PlacementMarkerStep = 0;
+		Scenario.PlacementMarker.TransitionTo(EPlacementMarkerState::PrepareOverlap);
 		return;
 	}
-	++Scenario.PlacementMarkerStep;
+	switch (Scenario.PlacementMarker.GetState())
+	{
+		case EPlacementMarkerState::PrepareOverlap:
+			Scenario.PlacementMarker.TransitionTo(EPlacementMarkerState::PointAtOverlap);
+			break;
+		case EPlacementMarkerState::PointAtOverlap:
+			Scenario.PlacementMarker.TransitionTo(EPlacementMarkerState::PressMarker);
+			break;
+		case EPlacementMarkerState::PressMarker:
+			Scenario.PlacementMarker.TransitionTo(EPlacementMarkerState::ReleaseMarker);
+			break;
+		case EPlacementMarkerState::ReleaseMarker:
+			Scenario.PlacementMarker.TransitionTo(EPlacementMarkerState::VerifyMarker);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::CheckPlacementMarkerDraws(const FGuiDrawData& InData) const
 {
-	if (Scenario.PlacementMarkerCase >= 3 || Scenario.PlacementMarkerStep != 2)
+	if (Scenario.PlacementMarkerCase >= 3 || !Scenario.PlacementMarker.Is(EPlacementMarkerState::PressMarker))
 	{
 		return;
 	}

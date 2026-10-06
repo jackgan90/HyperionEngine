@@ -75,7 +75,7 @@ Source/Runtime/Assets/
 
 `Scene` 已作为独立 Runtime 模块实现，直接依赖 Math、Reflection、AssetTypes、Materials、Environment，保存模型数据、拥有组件的逻辑对象、Transform 层级、相机/光源与 v7 清单，不依赖 Renderer/RHI。`AssetImport` 将外部格式转换为 Scene 数据，`Assets` 提供通用异步服务，`Renderer` 的 Model 桥接将 CPU 数据注册为 Render primitives，共享资源服务管理 GPU 资源，由 session 统一收集和提交场景 pass。组件契约见 [SceneComponents.md](SceneComponents.md)，线程/所有权契约见 [RenderPrimitives.md](RenderPrimitives.md)。未来 `Animation` 作为同级模块保存骨骼、姿态等数据，同样不依赖 Renderer、RHI 或图形后端。资产流程详见 [AssetPipeline.md](AssetPipeline.md)。
 
-Editor 自有验收实现和场景状态放在 `Source/Plugins/Editor/Tests/Acceptance`，单元测试入口与专用 support 放在 `Tests/Unit`。生产 `Private` 保留 acceptance driver 契约、observations、report 和 unavailable 实现；生产 include 闭包不能到达 Tests。BUILD_TESTING 只选择实际验收实现或 unavailable 实现，边界检查同时核对 target sources 与编译输入。
+Editor 自有验收实现和场景状态放在 `Source/Plugins/Editor/Tests/Acceptance`，单元测试入口与专用 support 放在 `Tests/Unit`。生产 `Private` 保留 acceptance driver 契约、observations、report 和 unavailable 实现；生产 include 闭包不能到达 Tests。BUILD_TESTING 只选择实际验收实现或 unavailable 实现，边界检查同时核对 target sources 与编译输入。类型化状态声明、各场景输入/等待上下文、只读映射与 helper 的职责及新增用例接入点见 [Editor 验收用例维护](EditorAcceptance.md)。
 
 私有和测试辅助头的依赖归属由配置 target 的显式 sources 与本地 include 闭包确定，测试独有依赖不会自动归到生产模块。被多个生产 target 消费的头分别检查各自的直接依赖；Public 头仍检查模块导出的 PUBLIC/INTERFACE 契约，未选中的非测试头保留模块契约检查。模块内 Tests 头也始终接受私有头和第三方隔离检查。
 
@@ -101,4 +101,4 @@ Shaders 拥有类型化 shader stage 集合；RHI 的 `RHIBindingContracts` 显�
 
 `AssetEditing/FAssetEditWorkflow` 统一纹理编码和资产引用编辑的 admission、拥有数据的准备快照、busy 生命周期及 Main 提交；`FAssetWorkspace` 和 `FAssetAutomation` 只维护各自文档/会话适配和 polling。完成提交前重新检查文档身份、资产身份与 generation，使用共享资产文档历史；关闭和插件排空调用 Drain 汇合准备任务，不在销毁路径提交草稿。`AssetImport/FImportDraftInfo` 的纹理尺寸、dimension 和 pixelBytes 是 GUI/agent 共用的反射元信息，展示文字不作为数据接口。
 
-Editor 私有 `FEditorViewport` 拥有浏览相机、视口目标和尺寸/区域，并执行初始化、resize、取景和导航重置；`FEditorDocumentTransition` 拥有待执行的场景打开、root 切换、关闭和 discard 决策；插件继续持有生命周期与 typed service 注册。`FEditorAcceptanceDriver` 通过不完整类型持有按需创建的 `FEditorAcceptanceHarness`；场景方法、步骤、夹具与控件快照仅属于 BUILD_TESTING 实现。生产端只提供语义观察和明确的执行策略/帧钩子，关闭测试时链接无场景状态的 unavailable 实现并受控拒绝验收参数；生产 report 与普通截图保持可用。启动选项和 Outliner 绘制分别由 `EditorOptions.h`、`EditorOutliner.cpp` 承载。Renderer 的冻结快照和 GPU fence 退休边界不由这些私有 owner 替代。
+Editor 私有 `FEditorViewport` 拥有浏览相机、视口目标和尺寸/区域，并执行初始化、resize、取景和导航重置；`FEditorDocumentTransition` 拥有待执行的场景打开、root 切换、关闭和 discard 决策；插件继续持有生命周期与 typed service 注册。`FEditorAcceptanceDriver` 通过不完整类型持有按需创建的 `FEditorAcceptanceHarness`；场景方法、类型化状态、各自拥有的输入/观测上下文、夹具与控件快照仅属于 BUILD_TESTING 实现。生产端只提供语义观察和明确的执行策略/帧钩子，关闭测试时链接无场景状态的 unavailable 实现并受控拒绝验收参数；生产 report 与普通截图保持可用。启动选项和 Outliner 绘制分别由 `EditorOptions.h`、`EditorOutliner.cpp` 承载。Renderer 的冻结快照和 GPU fence 退休边界不由这些私有 owner 替代。

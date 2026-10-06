@@ -151,32 +151,39 @@ void FEditorAcceptanceHarness::ExerciseFramingSelection(std::vector<FInputEvent>
 	{
 		return FramingPoint(Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(InHandle)->Id));
 	};
-	switch (Scenario.FramingStep)
+	switch (Scenario.Framing.Progress.GetState())
 	{
-		case 1:
-		case 2:
-			FramingClick(InEvents, Row(A), Scenario.FramingStep == 1);
+		case EFramingState::PressOutlinerObject:
+		case EFramingState::ReleaseOutlinerObject:
+			FramingClick(InEvents, Row(A), Scenario.Framing.Progress.Is(EFramingState::PressOutlinerObject));
+			Scenario.Framing.Progress.TransitionTo(Scenario.Framing.Progress.Is(EFramingState::PressOutlinerObject)
+			                                           ? EFramingState::ReleaseOutlinerObject
+			                                           : EFramingState::FrameOutlinerSelection);
 			break;
-		case 3:
+		case EFramingState::FrameOutlinerSelection:
 			RequireFraming(Editor.Selection == A && Editor.Gui->IsWindowFocused("Outliner"),
 			               "Outliner did not select A");
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifySingleAndPressSecondObject);
 			break;
-		case 4:
+		case EFramingState::VerifySingleAndPressSecondObject:
 			CheckFramingResult({-3, 0, 0});
 			Editor.Viewport.ViewCamera = Scenario.FramingBefore;
 			FramingKey(InEvents, EKey::None, true, false, 1);
 			FramingClick(InEvents, Row(B), true);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::ReleaseSecondObject);
 			break;
-		case 5:
+		case EFramingState::ReleaseSecondObject:
 			FramingClick(InEvents, Row(B), false);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::FrameMultipleSelection);
 			break;
-		case 6:
+		case EFramingState::FrameMultipleSelection:
 			RequireFraming(Editor.Selection.All().size() == 2 && Editor.Selection == B,
 			               "Outliner multi-selection failed");
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyMultipleAndReversePrimary);
 			break;
-		case 7:
+		case EFramingState::VerifyMultipleAndReversePrimary:
 		{
 			CheckFramingResult({0, .5f, 0});
 			Scenario.FramingMultiple = Editor.Viewport.ViewCamera;
@@ -186,35 +193,43 @@ void FEditorAcceptanceHarness::ExerciseFramingSelection(std::vector<FInputEvent>
 			Editor.Viewport.ViewCamera = Scenario.FramingBefore;
 			Editor.Gui->FocusWindow("Details");
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyDetailsAndClearSelection);
 			break;
 		}
-		case 8:
+		case EFramingState::VerifyDetailsAndClearSelection:
 			RequireFraming(Editor.Viewport.ViewCamera == Scenario.FramingMultiple,
 			               "primary/order or Details focus changed framing");
 			CheckFramingResult({0, .5f, 0});
 			Editor.SelectObject(std::nullopt);
 			Editor.Viewport.ViewCamera = Scenario.FramingBefore;
 			Editor.Gui->FocusWindow("Viewport");
+			Scenario.Framing.Progress.TransitionTo(EFramingState::PressViewportObject);
 			break;
-		case 9:
-		case 10:
+		case EFramingState::PressViewportObject:
+		case EFramingState::ReleaseViewportObject:
 		{
 			const auto Point = ProjectViewportPoint(Editor.Viewport.ViewCamera, Editor.Viewport.ViewportRegion.Bounds,
 			                                        {-2.75f, .25f, .5f});
 			RequireFraming(Point.has_value(), "viewport test surface is off screen");
-			FramingClick(InEvents, {Point->X, Point->Y}, Scenario.FramingStep == 9);
+			FramingClick(InEvents, {Point->X, Point->Y},
+			             Scenario.Framing.Progress.Is(EFramingState::PressViewportObject));
+			Scenario.Framing.Progress.TransitionTo(Scenario.Framing.Progress.Is(EFramingState::PressViewportObject)
+			                                           ? EFramingState::ReleaseViewportObject
+			                                           : EFramingState::FrameViewportSelection);
 			break;
 		}
-		case 11:
+		case EFramingState::FrameViewportSelection:
 			RequireFraming(Editor.Selection == A && Editor.Gui->IsWindowFocused("Viewport"),
 			               "viewport did not select A");
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyViewportAndFocusContent);
 			break;
-		case 12:
+		case EFramingState::VerifyViewportAndFocusContent:
 			CheckFramingResult({-3, 0, 0});
 			RequireFramingNavigation(Editor.Viewport.ViewCamera, Editor.Viewport.ViewportSize);
 			Editor.Viewport.ViewCamera = Scenario.FramingBefore;
 			Editor.Gui->FocusWindow("Content Browser");
+			Scenario.Framing.Progress.TransitionTo(EFramingState::FrameInContentBrowser);
 			break;
 	}
 }
@@ -222,26 +237,33 @@ void FEditorAcceptanceHarness::ExerciseFramingSelection(std::vector<FInputEvent>
 void FEditorAcceptanceHarness::ExerciseFramingGuards(std::vector<FInputEvent>& InEvents)
 {
 	RequireFraming(Editor.Viewport.ViewCamera == Scenario.FramingBefore, "guarded shortcut changed camera");
-	switch (Scenario.FramingStep)
+	switch (Scenario.Framing.Progress.GetState())
 	{
-		case 13:
+		case EFramingState::FrameInContentBrowser:
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::FocusOutliner);
 			break;
-		case 14:
+		case EFramingState::FocusOutliner:
 			Editor.Gui->FocusWindow("Outliner");
+			Scenario.Framing.Progress.TransitionTo(EFramingState::RepeatFrameShortcut);
 			break;
-		case 15:
+		case EFramingState::RepeatFrameShortcut:
 			FramingKey(InEvents, EKey::F, true, true);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::ModifiedFrameShortcut);
 			break;
-		case 16:
+		case EFramingState::ModifiedFrameShortcut:
 			FramingKey(InEvents, EKey::F, true, false, 1);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::PressSearch);
 			break;
-		case 17:
-		case 18:
+		case EFramingState::PressSearch:
+		case EFramingState::ReleaseSearch:
 			FramingClick(InEvents, FramingPoint(Scenario.InspectionBounds.at("clipboard/search")),
-			             Scenario.FramingStep == 17);
+			             Scenario.Framing.Progress.Is(EFramingState::PressSearch));
+			Scenario.Framing.Progress.TransitionTo(Scenario.Framing.Progress.Is(EFramingState::PressSearch)
+			                                           ? EFramingState::ReleaseSearch
+			                                           : EFramingState::FrameDuringTextEdit);
 			break;
-		case 19:
+		case EFramingState::FrameDuringTextEdit:
 		{
 			RequireFraming(Editor.Gui->IsEditingText(), "search did not own text input");
 			FramingKey(InEvents);
@@ -249,19 +271,22 @@ void FEditorAcceptanceHarness::ExerciseFramingGuards(std::vector<FInputEvent>& I
 			Text.Type = EEventType::Text;
 			Text.Text = "f";
 			InEvents.push_back(Text);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyTextAndEscape);
 			break;
 		}
-		case 20:
+		case EFramingState::VerifyTextAndEscape:
 			RequireFraming(Editor.Filter.find('f') != std::string::npos, "F text did not reach search");
 			FramingKey(InEvents, EKey::Escape);
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::OpenSceneDialog);
 			break;
-		case 21:
+		case EFramingState::OpenSceneDialog:
 			Editor.Gui->FinishEditing();
 			Editor.Filter = "Framing";
 			Editor.ShowOpenScene();
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyModalGuard);
 			break;
-		case 22:
+		case EFramingState::VerifyModalGuard:
 		{
 			bool bRejected{};
 			try
@@ -274,6 +299,7 @@ void FEditorAcceptanceHarness::ExerciseFramingGuards(std::vector<FInputEvent>& I
 			}
 			RequireFraming(bRejected, "shared service admitted framing during a modal operation");
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::PreparePreviewGuard);
 			break;
 		}
 	}
@@ -282,20 +308,22 @@ void FEditorAcceptanceHarness::ExerciseFramingGuards(std::vector<FInputEvent>& I
 void FEditorAcceptanceHarness::ExerciseFramingViewGuards(std::vector<FInputEvent>& InEvents)
 {
 	RequireFraming(Editor.Viewport.ViewCamera == Scenario.FramingBefore, "guarded view shortcut changed camera");
-	switch (Scenario.FramingStep)
+	switch (Scenario.Framing.Progress.GetState())
 	{
-		case 23:
+		case EFramingState::PreparePreviewGuard:
 			Editor.bOpenDialog = false;
 			Editor.Gui->ClosePopups();
 			Editor.Gui->FocusWindow("Viewport");
 			Editor.PreviewSceneCamera(Editor.Scene->AddNode(MakeSceneCameraNode("framing-preview")));
 			Scenario.FramingRevision = Editor.Scene->GetRevision();
 			Scenario.FramingSnapshot = Serialize(Editor.Scene->Snapshot("FramingAcceptance.hasset"));
+			Scenario.Framing.Progress.TransitionTo(EFramingState::FramePreview);
 			break;
-		case 24:
+		case EFramingState::FramePreview:
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyPreviewAndLoseFocus);
 			break;
-		case 25:
+		case EFramingState::VerifyPreviewAndLoseFocus:
 		{
 			CheckFramingResult({0, 0, 20 - Scenario.FramingBefore.Lens.FocusDistance});
 			Editor.SetPreviewCamera({});
@@ -303,36 +331,42 @@ void FEditorAcceptanceHarness::ExerciseFramingViewGuards(std::vector<FInputEvent
 			Focus.Type = EEventType::Focus;
 			InEvents.push_back(Focus);
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::RestoreFocus);
 			break;
 		}
-		case 26:
+		case EFramingState::RestoreFocus:
 		{
 			FInputEvent Focus;
 			Focus.Type = EEventType::Focus;
 			Focus.bDown = true;
 			InEvents.push_back(Focus);
 			Editor.Gui->FocusWindow("Viewport");
+			Scenario.Framing.Progress.TransitionTo(EFramingState::BeginNavigationAndFrame);
 			break;
 		}
-		case 27:
+		case EFramingState::BeginNavigationAndFrame:
 			FramingClick(InEvents, FramingPoint(Editor.Viewport.ViewportRegion.Bounds), true, 1);
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyNavigationAndRelease);
 			break;
-		case 28:
+		case EFramingState::VerifyNavigationAndRelease:
 			RequireFraming(Editor.Viewport.bCameraDragging, "RMB navigation did not start");
 			RequireFramingBusy(Editor, {Editor.SceneDocument.Id(), Editor.Scene->GetRevision()});
 			RequireFraming(Editor.Viewport.bCameraDragging, "rejected framing interrupted RMB navigation");
 			FramingClick(InEvents, FramingPoint(Editor.Viewport.ViewportRegion.Bounds), false, 1);
 			Editor.SelectObject(std::nullopt);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::FrameEmptySelection);
 			break;
-		case 29:
+		case EFramingState::FrameEmptySelection:
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::RestoreInitialView);
 			break;
-		case 30:
+		case EFramingState::RestoreInitialView:
 			Editor.SelectObject(Scenario.FramingObjects[0]);
 			Editor.FrameSelection({Editor.SceneDocument.Id(), Editor.Scene->GetRevision()});
 			Editor.SelectObject(std::nullopt);
 			FramingKey(InEvents, EKey::Home);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyInitialViewAndSelectMultiple);
 			break;
 	}
 }
@@ -340,24 +374,29 @@ void FEditorAcceptanceHarness::ExerciseFramingViewGuards(std::vector<FInputEvent
 void FEditorAcceptanceHarness::ExerciseFramingPopup(std::vector<FInputEvent>& InEvents)
 {
 	RequireFraming(Editor.Viewport.ViewCamera == Scenario.FramingBefore, "popup interaction changed camera");
-	switch (Scenario.FramingStep)
+	switch (Scenario.Framing.Progress.GetState())
 	{
-		case 32:
-		case 33:
+		case EFramingState::PressViewOptions:
+		case EFramingState::ReleaseViewOptions:
 			FramingClick(InEvents, FramingPoint(Scenario.InspectionBounds.at("view/options")),
-			             Scenario.FramingStep == 32);
+			             Scenario.Framing.Progress.Is(EFramingState::PressViewOptions));
+			Scenario.Framing.Progress.TransitionTo(Scenario.Framing.Progress.Is(EFramingState::PressViewOptions)
+			                                           ? EFramingState::ReleaseViewOptions
+			                                           : EFramingState::VerifyPopupGuard);
 			break;
-		case 34:
+		case EFramingState::VerifyPopupGuard:
 			RequireFraming(Editor.Gui->HasOpenPopup(), "viewport options popup did not open");
 			RequireFraming(!Editor.IsDocumentInteractionBusy(), "ordinary popup was masked by document busy state");
 			RequireFramingBusy(Editor, {Editor.SceneDocument.Id(), Editor.Scene->GetRevision()});
 			FramingKey(InEvents);
+			Scenario.Framing.Progress.TransitionTo(EFramingState::VerifyPopupFraming);
 			break;
-		case 35:
+		case EFramingState::VerifyPopupFraming:
 			CheckFramingResult({0, .5f, 0});
 			Editor.Gui->ClosePopups();
 			Editor.SelectObject(std::nullopt);
 			Scenario.bFramingVerified = true;
+			Scenario.Framing.Progress.TransitionTo(EFramingState::Complete);
 			break;
 	}
 }
@@ -368,9 +407,10 @@ void FEditorAcceptanceHarness::ExerciseFraming(std::vector<FInputEvent>& InEvent
 	{
 		return;
 	}
-	if (++Scenario.FramingWait % 3 != 0)
+	const auto InputPhase = Scenario.Framing.Cadence.Advance();
+	if (InputPhase != EAcceptanceCadencePhase::Execute)
 	{
-		if (Scenario.FramingWait % 3 == 1)
+		if (InputPhase == EAcceptanceCadencePhase::ReleaseKeys)
 		{
 			FramingKey(InEvents, EKey::F, false);
 			FramingKey(InEvents, EKey::Escape, false);
@@ -378,27 +418,42 @@ void FEditorAcceptanceHarness::ExerciseFraming(std::vector<FInputEvent>& InEvent
 		}
 		return;
 	}
-	if (!Scenario.FramingStep)
+	if (Scenario.Framing.Progress.Is(EFramingState::PrepareFraming))
 	{
 		PrepareFramingExercise();
 		FInputEvent Focus;
 		Focus.Type = EEventType::Focus;
 		Focus.bDown = true;
 		InEvents.push_back(Focus);
+		Scenario.Framing.Progress.TransitionTo(EFramingState::PressOutlinerObject);
 	}
-	else if (Scenario.FramingStep <= 12)
+	else if (Scenario.Framing.Progress.IsAny(
+	             {EFramingState::PressOutlinerObject, EFramingState::ReleaseOutlinerObject,
+	              EFramingState::FrameOutlinerSelection, EFramingState::VerifySingleAndPressSecondObject,
+	              EFramingState::ReleaseSecondObject, EFramingState::FrameMultipleSelection,
+	              EFramingState::VerifyMultipleAndReversePrimary, EFramingState::VerifyDetailsAndClearSelection,
+	              EFramingState::PressViewportObject, EFramingState::ReleaseViewportObject,
+	              EFramingState::FrameViewportSelection, EFramingState::VerifyViewportAndFocusContent}))
 	{
 		ExerciseFramingSelection(InEvents);
 	}
-	else if (Scenario.FramingStep <= 22)
+	else if (Scenario.Framing.Progress.IsAny({EFramingState::FrameInContentBrowser, EFramingState::FocusOutliner,
+	                                          EFramingState::RepeatFrameShortcut, EFramingState::ModifiedFrameShortcut,
+	                                          EFramingState::PressSearch, EFramingState::ReleaseSearch,
+	                                          EFramingState::FrameDuringTextEdit, EFramingState::VerifyTextAndEscape,
+	                                          EFramingState::OpenSceneDialog, EFramingState::VerifyModalGuard}))
 	{
 		ExerciseFramingGuards(InEvents);
 	}
-	else if (Scenario.FramingStep <= 30)
+	else if (Scenario.Framing.Progress.IsAny({EFramingState::PreparePreviewGuard, EFramingState::FramePreview,
+	                                          EFramingState::VerifyPreviewAndLoseFocus, EFramingState::RestoreFocus,
+	                                          EFramingState::BeginNavigationAndFrame,
+	                                          EFramingState::VerifyNavigationAndRelease,
+	                                          EFramingState::FrameEmptySelection, EFramingState::RestoreInitialView}))
 	{
 		ExerciseFramingViewGuards(InEvents);
 	}
-	else if (Scenario.FramingStep == 31)
+	else if (Scenario.Framing.Progress.Is(EFramingState::VerifyInitialViewAndSelectMultiple))
 	{
 		CheckFramingResult({0, .5f, 0});
 		RequireFramingVisible(Editor.Viewport.ViewCamera, Editor.Viewport.ViewportSize,
@@ -407,11 +462,11 @@ void FEditorAcceptanceHarness::ExerciseFraming(std::vector<FInputEvent>& InEvent
 		Scenario.FramingBefore = Editor.Viewport.ViewCamera;
 		Editor.SelectObject(Scenario.FramingObjects[0]);
 		Editor.Gui->FocusWindow("Viewport");
+		Scenario.Framing.Progress.TransitionTo(EFramingState::PressViewOptions);
 	}
 	else
 	{
 		ExerciseFramingPopup(InEvents);
 	}
-	++Scenario.FramingStep;
 }
 } // namespace Hyperion

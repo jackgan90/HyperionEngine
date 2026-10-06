@@ -32,6 +32,7 @@ constexpr std::array Names{"Texture", "Model", "Sky", "Material", "CustomMateria
 
 void FEditorAcceptanceHarness::ExerciseAssetInput(std::vector<FInputEvent>& InEvents)
 {
+	const auto Stage = DescribeAssetAcceptance(Scenario.Asset.Progress.GetState()).Stage;
 	if (!Editor.Scene->GetStatus().Error.empty())
 	{
 		throw std::runtime_error(Editor.Scene->GetStatus().Error);
@@ -54,27 +55,32 @@ void FEditorAcceptanceHarness::ExerciseAssetInput(std::vector<FInputEvent>& InEv
 	{
 		throw std::runtime_error(Editor.Scene->GetStatus().AssetRefreshError);
 	}
-	if (Scenario.ExerciseStep >= 190)
+	if ((Stage == EAssetAcceptanceStage::WindowFixture || Stage == EAssetAcceptanceStage::WindowHistory ||
+	     Stage == EAssetAcceptanceStage::WindowSizing || Stage == EAssetAcceptanceStage::WindowClosing ||
+	     Stage == EAssetAcceptanceStage::WindowSaving))
 	{
 		ExerciseAssetWindowInput(InEvents);
 		return;
 	}
-	if (Scenario.ExerciseStep >= 100)
+	if ((Stage == EAssetAcceptanceStage::Material || Stage == EAssetAcceptanceStage::References ||
+	     Stage == EAssetAcceptanceStage::Texture || Stage == EAssetAcceptanceStage::CustomMaterial ||
+	     Stage == EAssetAcceptanceStage::CustomMaterialReset || Stage == EAssetAcceptanceStage::CleanTab ||
+	     Stage == EAssetAcceptanceStage::DiscardTab || Stage == EAssetAcceptanceStage::FloatingPanel))
 	{
 		ExerciseAssetPropertyInput(InEvents);
 		return;
 	}
 	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
-	if (Scenario.AssetExerciseLoggedStep != static_cast<int>(Scenario.ExerciseStep))
+	if (Scenario.AssetLoggedState != Scenario.Asset.Progress.GetState())
 	{
-		Scenario.AssetExerciseLoggedStep = static_cast<int>(Scenario.ExerciseStep);
-		Log(ELogLevel::Info, "Asset acceptance " + Name + " step " + std::to_string(Scenario.ExerciseStep));
+		Scenario.AssetLoggedState = Scenario.Asset.Progress.GetState();
+		Log(ELogLevel::Info, "Asset acceptance " + Name + " step " + Scenario.Asset.Progress.Name());
 	}
-	if (Scenario.ExerciseStep <= 12)
+	if ((Stage == EAssetAcceptanceStage::Opening))
 	{
 		ExerciseAssetOpening(InEvents);
 	}
-	else if (Scenario.ExerciseStep <= 18)
+	else if ((Stage == EAssetAcceptanceStage::Name))
 	{
 		ExerciseAssetNameInput(InEvents);
 	}
@@ -89,17 +95,17 @@ void FEditorAcceptanceHarness::ExerciseAssetOpening(std::vector<FInputEvent>& In
 	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
 	const auto Path = "/Game/" + Name + ".hasset";
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 0:
+		case EAssetState::SelectContentRoot:
 			Editor.QueueContentRoot(Editor.Options.ExerciseAssets);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::OpenScene);
 			break;
-		case 1:
+		case EAssetState::OpenScene:
 			Editor.RequestOpenAsset("/Game/Scene.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::PrepareDirtyScene);
 			break;
-		case 2:
+		case EAssetState::PrepareDirtyScene:
 			if (Editor.Scene->GetStatus().bReady && Editor.ReadyFrames > 8)
 			{
 				const auto Handle = Editor.Scene->FindHandle("model");
@@ -108,22 +114,28 @@ void FEditorAcceptanceHarness::ExerciseAssetOpening(std::vector<FInputEvent>& In
 				Node.Model()->Material.Roughness = .73f;
 				Editor.CommitEdit(Handle, Node, Editor.Scene->GetRevision());
 				Editor.Selection = Handle;
-				Scenario.ExerciseStep = 9;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RevealAsset);
 			}
 			break;
-		case 9:
+		case EAssetState::RevealAsset:
 			Scenario.ContentRevealPath = Path;
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::SelectAsset);
 			break;
-		case 10:
-		case 11:
+		case EAssetState::SelectAsset:
+		case EAssetState::DoubleClickAsset:
 			if (Scenario.ContentTileBounds.contains(Path))
 			{
-				ExerciseClick(InEvents, Scenario.ContentTileBounds.at(Path));
+				if (ExerciseClick(InEvents, Scenario.ContentTileBounds.at(Path), Scenario.Asset.Click))
+				{
+					Scenario.Asset.Progress.TransitionTo(Scenario.Asset.Progress.Is(EAssetState::SelectAsset)
+					                                         ? EAssetState::DoubleClickAsset
+					                                         : EAssetState::AwaitAssetPreview);
+				}
 			}
 			break;
-		case 12:
-			if (++Scenario.ExerciseWait == 120)
+		case EAssetState::AwaitAssetPreview:
+			Scenario.Asset.PreviewObservation.Advance();
+			if (Scenario.Asset.PreviewObservation.IsAt(FAssetScenarioContext::PreviewDiagnosticFrames))
 			{
 				Log(ELogLevel::Info, "Waiting for " + Path + ": " + Editor.AssetWorkspace->ActiveStatus());
 				Log(ELogLevel::Info,
@@ -137,8 +149,8 @@ void FEditorAcceptanceHarness::ExerciseAssetOpening(std::vector<FInputEvent>& In
 			{
 				Scenario.AssetExerciseOriginalName = ReadValue<std::string>(Document->Get("name"));
 				CheckAsset(!Document->IsDirty(), "Opening an asset marked it dirty");
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.PreviewObservation.Restart();
+				Scenario.Asset.Progress.TransitionTo(EAssetState::FocusName);
 			}
 			break;
 		default:
@@ -150,62 +162,45 @@ void FEditorAcceptanceHarness::ExerciseAssetNameInput(std::vector<FInputEvent>& 
 {
 	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 13:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"));
-			break;
-		case 14:
-		{
-			++Scenario.ExerciseWait;
-			if (Scenario.ExerciseWait <= 2)
+		case EAssetState::FocusName:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("field/name"), Scenario.Asset.Click))
 			{
-				FInputEvent Key;
-				Key.Type = EEventType::Key;
-				Key.Key = EKey::A;
-				Key.bDown = Scenario.ExerciseWait == 1;
-				Key.Modifiers = Key.bDown ? 1 : 0;
-				InEvents.push_back(Key);
-				if (Scenario.ExerciseWait == 2)
-				{
-					FInputEvent Text;
-					Text.Type = EEventType::Text;
-					Text.Text = "Edited " + Name;
-					InEvents.push_back(Text);
-				}
-			}
-			if (Scenario.ExerciseWait == 4)
-			{
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::TypeName);
 			}
 			break;
-		}
-		case 15:
+		case EAssetState::TypeName:
+			if (ExerciseTextInput(InEvents, Scenario.Asset.NameInput, "Edited " + Name))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::CaptureNameInteraction);
+			}
+			break;
+		case EAssetState::CaptureNameInteraction:
 			CheckAsset(Editor.AssetWorkspace->HasActiveInteraction(),
 			           "Name input lost its active live-edit interaction");
 			Scenario.PlacementCapture =
 			    Editor.Options.ExerciseAssets.parent_path() / ("AssetEditor-" + Name + "-Input.png");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::UndoName);
 			break;
-		case 16:
+		case EAssetState::UndoName:
 			CheckAsset(Document && Document->IsDirty() &&
 			               ReadValue<std::string>(Document->Get("name")) == "Edited " + Name,
 			           "Asset name input did not edit the document");
 			Shortcut(InEvents, EKey::Z);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::RedoName);
 			break;
-		case 17:
+		case EAssetState::RedoName:
 			CheckAsset(Document && !Document->IsDirty() &&
 			               ReadValue<std::string>(Document->Get("name")) == Scenario.AssetExerciseOriginalName,
 			           "Asset Undo did not restore baseline");
 			Shortcut(InEvents, EKey::Y);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::SaveName);
 			break;
-		case 18:
+		case EAssetState::SaveName:
 			CheckAsset(Document && Document->IsDirty(), "Asset Redo did not restore the edit");
 			Shortcut(InEvents, EKey::S);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitSavedName);
 			break;
 		default:
 			break;
@@ -217,9 +212,9 @@ void FEditorAcceptanceHarness::ExerciseAssetSaving(std::vector<FInputEvent>& InE
 	const auto Name = std::string(Names.at(Scenario.AssetExerciseIndex));
 	const auto Path = "/Game/" + Name + ".hasset";
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 19:
+		case EAssetState::AwaitSavedName:
 			if (Document && !Document->IsSaving() && !Document->IsDirty() && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				CheckAsset(Document->Error.empty(), "Asset save failed");
@@ -237,21 +232,21 @@ void FEditorAcceptanceHarness::ExerciseAssetSaving(std::vector<FInputEvent>& InE
 				{
 					Scenario.OutlineCapture = Editor.Options.ExerciseAssets.parent_path() / "AssetWindow-Scene.png";
 				}
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AdvanceAsset);
 			}
 			break;
-		case 20:
+		case EAssetState::AdvanceAsset:
 			if (++Scenario.AssetExerciseIndex < Names.size())
 			{
-				Scenario.ExerciseStep = 9;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RevealAsset);
 			}
 			else
 			{
 				Scenario.AssetExerciseIndex = Names.size() - 1;
-				Scenario.ExerciseStep = 100;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::OpenMaterial);
 			}
 			break;
-		case 21:
+		case EAssetState::VerifySceneHistoryAndRequestClose:
 			Editor.Undo();
 			CheckAsset(!Editor.IsDirty(), "Scene undo baseline was lost after asset saves");
 			Editor.Redo();
@@ -259,19 +254,22 @@ void FEditorAcceptanceHarness::ExerciseAssetSaving(std::vector<FInputEvent>& InE
 			               Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Name == "Unsaved scene edit",
 			           "Scene redo was lost after asset saves");
 			Editor.Window->RequestClose();
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::CancelMainClose);
 			break;
-		case 22:
-			ExerciseClick(InEvents, Scenario.CancelChangesBounds);
+		case EAssetState::CancelMainClose:
+			if (ExerciseClick(InEvents, Scenario.CancelChangesBounds, Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyMainCloseCancellation);
+			}
 			break;
-		case 23:
+		case EAssetState::VerifyMainCloseCancellation:
 			CheckAsset(!Editor.Window->ShouldClose() && Editor.IsDirty(), "Cancel close lost workspace changes");
 			Scenario.bAssetsVerified = true;
 			Log(ELogLevel::Info, "Asset editors: five previews, native save, undo/redo, scene preservation and close "
 			                     "cancellation passed");
 			Editor.ResetDocument();
 			Editor.Window->RequestClose();
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::Complete);
 			break;
 		default:
 			break;

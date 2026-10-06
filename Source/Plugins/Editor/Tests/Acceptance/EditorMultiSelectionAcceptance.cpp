@@ -55,7 +55,7 @@ void FEditorAcceptanceHarness::PrepareMultiSelection()
 	Editor.bShowLightMarkers = false;
 	Editor.ResetDocument();
 	Editor.SelectObject(std::nullopt);
-	Scenario.MultiSelectionStep = 1;
+	Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PressFirstRow);
 }
 
 void FEditorAcceptanceHarness::ExerciseMultiSelectionClicks(std::vector<FInputEvent>& InEvents)
@@ -67,54 +67,68 @@ void FEditorAcceptanceHarness::ExerciseMultiSelectionClicks(std::vector<FInputEv
 		const auto Bounds = Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(InHandle)->Id);
 		return FVec2{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
 	};
-	if (Scenario.MultiSelectionStep <= 4)
+	if (Scenario.MultiSelection.Progress.IsAny(
+	        {EMultiSelectionState::PrepareFixtures, EMultiSelectionState::PressFirstRow,
+	         EMultiSelectionState::ReleaseFirstRow, EMultiSelectionState::PressSecondRow,
+	         EMultiSelectionState::ReleaseSecondRow}))
 	{
-		if (Scenario.MultiSelectionStep == 3)
+		if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PressSecondRow))
 		{
 			RequireMulti(Editor.Selection == A && Editor.Selection.All().size() == 1, "plain outliner click");
 			Modifier(InEvents, 1);
 		}
-		if (Scenario.MultiSelectionStep == 4)
+		if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::ReleaseSecondRow))
 		{
 			Modifier(InEvents, 0);
 		}
-		Click(InEvents, Row(Scenario.MultiSelectionStep <= 2 ? A : B), Scenario.MultiSelectionStep % 2 == 1);
+		Click(InEvents,
+		      Row(Scenario.MultiSelection.Progress.IsAny({EMultiSelectionState::PrepareFixtures,
+		                                                  EMultiSelectionState::PressFirstRow,
+		                                                  EMultiSelectionState::ReleaseFirstRow})
+		              ? A
+		              : B),
+		      Scenario.MultiSelection.Progress.IsAny(
+		          {EMultiSelectionState::PressFirstRow, EMultiSelectionState::PressSecondRow}));
 	}
-	else if (Scenario.MultiSelectionStep == 5)
+	else if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::VerifyOutlinerSelection))
 	{
 		RequireMulti(Editor.Selection == B && Editor.Selection.All().size() == 2 && !Editor.IsDirty() &&
 		                 Editor.History.empty(),
 		             "Ctrl-add in outliner");
 	}
-	else if (Scenario.MultiSelectionStep >= 6 && Scenario.MultiSelectionStep <= 8)
+	else if (Scenario.MultiSelection.Progress.IsAny({EMultiSelectionState::PressViewportToggle,
+	                                                 EMultiSelectionState::ReleaseViewportModifier,
+	                                                 EMultiSelectionState::ReleaseViewportToggle}))
 	{
-		if (Scenario.MultiSelectionStep == 6)
+		if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PressViewportToggle))
 		{
 			Modifier(InEvents, 1);
 		}
 		const auto Point =
 		    ProjectViewportPoint(Editor.Viewport.ViewCamera, Editor.Viewport.ViewportRegion.Bounds, {-1, 0, 0});
 		RequireMulti(bool(Point), "viewport point");
-		if (Scenario.MultiSelectionStep == 7)
+		if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::ReleaseViewportModifier))
 		{
 			Modifier(InEvents, 0);
 		}
 		else
 		{
-			Click(InEvents, {Point->X, Point->Y}, Scenario.MultiSelectionStep == 6);
+			Click(InEvents, {Point->X, Point->Y},
+			      Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PressViewportToggle));
 		}
 	}
-	else if (Scenario.MultiSelectionStep == 9)
+	else if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::VerifyViewportToggle))
 	{
 		RequireMulti(Editor.Selection == B && Editor.Selection.All().size() == 1,
 		             "viewport Ctrl-toggle did not retain press modifier");
 	}
-	else if (Scenario.MultiSelectionStep == 10 || Scenario.MultiSelectionStep == 11)
+	else if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PressFirstRowAgain) ||
+	         Scenario.MultiSelection.Progress.Is(EMultiSelectionState::ReleaseFirstRowAgain))
 	{
 		Modifier(InEvents, 1);
-		Click(InEvents, Row(A), Scenario.MultiSelectionStep == 10);
+		Click(InEvents, Row(A), Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PressFirstRowAgain));
 	}
-	else if (Scenario.MultiSelectionStep == 12)
+	else if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::VerifyPrimary))
 	{
 		Modifier(InEvents, 0);
 		RequireMulti(Editor.Selection == A && Editor.Selection.All().size() == 2, "primary after re-add");
@@ -127,50 +141,104 @@ void FEditorAcceptanceHarness::ExerciseMultiSelectionClicks(std::vector<FInputEv
 		}
 		RequireMulti(Editor.RenderStats.SelectionOutline.Items >= 2, "both selected models need outlines");
 	}
-	++Scenario.MultiSelectionStep;
+	switch (Scenario.MultiSelection.Progress.GetState())
+	{
+		case EMultiSelectionState::PrepareFixtures:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PressFirstRow);
+			break;
+		case EMultiSelectionState::PressFirstRow:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ReleaseFirstRow);
+			break;
+		case EMultiSelectionState::ReleaseFirstRow:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PressSecondRow);
+			break;
+		case EMultiSelectionState::PressSecondRow:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ReleaseSecondRow);
+			break;
+		case EMultiSelectionState::ReleaseSecondRow:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::VerifyOutlinerSelection);
+			break;
+		case EMultiSelectionState::VerifyOutlinerSelection:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PressViewportToggle);
+			break;
+		case EMultiSelectionState::PressViewportToggle:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ReleaseViewportModifier);
+			break;
+		case EMultiSelectionState::ReleaseViewportModifier:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ReleaseViewportToggle);
+			break;
+		case EMultiSelectionState::ReleaseViewportToggle:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::VerifyViewportToggle);
+			break;
+		case EMultiSelectionState::VerifyViewportToggle:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PressFirstRowAgain);
+			break;
+		case EMultiSelectionState::PressFirstRowAgain:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ReleaseFirstRowAgain);
+			break;
+		case EMultiSelectionState::ReleaseFirstRowAgain:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::VerifyPrimary);
+			break;
+		case EMultiSelectionState::VerifyPrimary:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::VerifyOutlines);
+			break;
+		case EMultiSelectionState::VerifyOutlines:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialPreparePass);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::ExerciseMultiDetails(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Pass = (Scenario.MultiSelectionStep - 14) / 8;
-	const unsigned Phase = (Scenario.MultiSelectionStep - 14) % 8;
+	const unsigned Pass = DescribeMultiDetailsContext(Scenario.MultiSelection.Progress.GetState()).CaseIndex;
+	const auto Phase = DescribeMultiDetailsContext(Scenario.MultiSelection.Progress.GetState()).Action;
 	const auto A = Scenario.MultiSelectionObjects[0];
 	const auto B = Scenario.MultiSelectionObjects[1];
-	if (Phase == 0 && Pass == 1)
+	if (Phase == EMultiDetailsAction::PreparePass && Pass == 1)
 	{
 		auto Candidate = *Editor.Scene->FindNode(B);
 		Candidate.Local().Values[12] = 7;
 		Editor.Scene->EditNode(B, std::move(Candidate), Editor.Scene->GetRevision());
 		Editor.ResetDocument();
 	}
-	if (Phase == 1 || Phase == 2)
+	if (Phase == EMultiDetailsAction::PressField || Phase == EMultiDetailsAction::ReleaseField)
 	{
 		Modifier(InEvents, 1);
 		const auto Bounds = Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x");
-		Click(InEvents, {(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2}, Phase == 1);
+		Click(InEvents, {(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2},
+		      Phase == EMultiDetailsAction::PressField);
 	}
-	if (Phase >= 3 && Phase <= 6)
+	if ((Phase == EMultiDetailsAction::PressSelectAll || Phase == EMultiDetailsAction::ReleaseSelectAllAndType ||
+	     Phase == EMultiDetailsAction::SubmitValue || Phase == EMultiDetailsAction::FinishSubmission))
 	{
-		if (Phase == 5)
+		if (Phase == EMultiDetailsAction::SubmitValue)
 		{
 			RequireMulti(Editor.Scene->FindNode(A)->Local().Values[12] == 3 &&
 			                 Editor.Scene->FindNode(B)->Local().Values[12] == 3,
 			             "valid same-value input must broadcast before Enter or blur");
 		}
-		if (Pass == 1 && Phase >= 5)
+		if (Pass == 1 && (Phase == EMultiDetailsAction::SubmitValue || Phase == EMultiDetailsAction::FinishSubmission ||
+		                  Phase == EMultiDetailsAction::VerifyHistory))
 		{
 			const auto Bounds = Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/y");
-			Click(InEvents, {Bounds.X - Editor.Gui->Scale(8), (Bounds.Y + Bounds.W) / 2}, Phase == 5);
+			Click(InEvents, {Bounds.X - Editor.Gui->Scale(8), (Bounds.Y + Bounds.W) / 2},
+			      Phase == EMultiDetailsAction::SubmitValue);
 		}
 		else
 		{
 			FInputEvent Event;
 			Event.Type = EEventType::Key;
-			Event.Key = Phase <= 4 ? EKey::A : EKey::Enter;
-			Event.Modifiers = Phase == 3 ? 1 : 0;
-			Event.bDown = Phase == 3 || Phase == 5;
+			Event.Key = (Phase == EMultiDetailsAction::PreparePass || Phase == EMultiDetailsAction::PressField ||
+			             Phase == EMultiDetailsAction::ReleaseField || Phase == EMultiDetailsAction::PressSelectAll ||
+			             Phase == EMultiDetailsAction::ReleaseSelectAllAndType)
+			                ? EKey::A
+			                : EKey::Enter;
+			Event.Modifiers = Phase == EMultiDetailsAction::PressSelectAll ? 1 : 0;
+			Event.bDown = Phase == EMultiDetailsAction::PressSelectAll || Phase == EMultiDetailsAction::SubmitValue;
 			InEvents.push_back(Event);
-			if (Phase == 4)
+			if (Phase == EMultiDetailsAction::ReleaseSelectAllAndType)
 			{
 				Event.Type = EEventType::Text;
 				Event.Text = "3";
@@ -178,7 +246,7 @@ void FEditorAcceptanceHarness::ExerciseMultiDetails(std::vector<FInputEvent>& In
 			}
 		}
 	}
-	if (Phase == 7)
+	if (Phase == EMultiDetailsAction::VerifyHistory)
 	{
 		RequireMulti(Editor.Scene->FindNode(A)->Local().Values[12] == 3 &&
 		                 Editor.Scene->FindNode(B)->Local().Values[12] == 3,
@@ -194,17 +262,71 @@ void FEditorAcceptanceHarness::ExerciseMultiDetails(std::vector<FInputEvent>& In
 		Editor.Redo();
 		RequireMulti(Editor.Scene->FindNode(B)->Local().Values[12] == 3, "batch redo values");
 	}
-	++Scenario.MultiSelectionStep;
+	switch (Scenario.MultiSelection.Progress.GetState())
+	{
+		case EMultiSelectionState::InitialPreparePass:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialPressField);
+			break;
+		case EMultiSelectionState::InitialPressField:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialReleaseField);
+			break;
+		case EMultiSelectionState::InitialReleaseField:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialPressSelectAll);
+			break;
+		case EMultiSelectionState::InitialPressSelectAll:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialReleaseSelectAllAndType);
+			break;
+		case EMultiSelectionState::InitialReleaseSelectAllAndType:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialSubmitValue);
+			break;
+		case EMultiSelectionState::InitialSubmitValue:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialFinishSubmission);
+			break;
+		case EMultiSelectionState::InitialFinishSubmission:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::InitialVerifyHistory);
+			break;
+		case EMultiSelectionState::InitialVerifyHistory:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::UnchangedPrimaryPreparePass);
+			break;
+		case EMultiSelectionState::UnchangedPrimaryPreparePass:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::UnchangedPrimaryPressField);
+			break;
+		case EMultiSelectionState::UnchangedPrimaryPressField:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::UnchangedPrimaryReleaseField);
+			break;
+		case EMultiSelectionState::UnchangedPrimaryReleaseField:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::UnchangedPrimaryPressSelectAll);
+			break;
+		case EMultiSelectionState::UnchangedPrimaryPressSelectAll:
+			Scenario.MultiSelection.Progress.TransitionTo(
+			    EMultiSelectionState::UnchangedPrimaryReleaseSelectAllAndType);
+			break;
+		case EMultiSelectionState::UnchangedPrimaryReleaseSelectAllAndType:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::UnchangedPrimarySubmitValue);
+			break;
+		case EMultiSelectionState::UnchangedPrimarySubmitValue:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::UnchangedPrimaryFinishSubmission);
+			break;
+		case EMultiSelectionState::UnchangedPrimaryFinishSubmission:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::UnchangedPrimaryVerifyHistory);
+			break;
+		case EMultiSelectionState::UnchangedPrimaryVerifyHistory:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionPrepareModels);
+			break;
+
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::ExerciseMultiSelection(std::vector<FInputEvent>& InEvents)
 {
 	if (!Editor.Viewport.bViewportVisible || !Editor.Scene->GetStatus().bReady || Scenario.bMultiSelectionVerified ||
-	    ++Scenario.MultiSelectionWait % 3 != 0)
+	    Scenario.MultiSelection.Cadence.Advance() != EAcceptanceCadencePhase::Execute)
 	{
 		return;
 	}
-	if (Scenario.MultiSelectionStep == 0)
+	if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PrepareFixtures))
 	{
 		const auto Found = Editor.PlacementModels.find("Cube");
 		if (Found != Editor.PlacementModels.end() && Found->second.Data)
@@ -212,32 +334,56 @@ void FEditorAcceptanceHarness::ExerciseMultiSelection(std::vector<FInputEvent>& 
 			PrepareMultiSelection();
 		}
 	}
-	else if (Scenario.MultiSelectionStep < 14)
+	else if (Scenario.MultiSelection.Progress.IsAny(
+	             {EMultiSelectionState::PrepareFixtures, EMultiSelectionState::PressFirstRow,
+	              EMultiSelectionState::ReleaseFirstRow, EMultiSelectionState::PressSecondRow,
+	              EMultiSelectionState::ReleaseSecondRow, EMultiSelectionState::VerifyOutlinerSelection,
+	              EMultiSelectionState::PressViewportToggle, EMultiSelectionState::ReleaseViewportModifier,
+	              EMultiSelectionState::ReleaseViewportToggle, EMultiSelectionState::VerifyViewportToggle,
+	              EMultiSelectionState::PressFirstRowAgain, EMultiSelectionState::ReleaseFirstRowAgain,
+	              EMultiSelectionState::VerifyPrimary, EMultiSelectionState::VerifyOutlines}))
 	{
 		ExerciseMultiSelectionClicks(InEvents);
 	}
-	else if (Scenario.MultiSelectionStep < 30)
+	else if ((IsMultiDetailsState(Scenario.MultiSelection.Progress.GetState()) ||
+	          Scenario.MultiSelection.Progress.IsAny(
+	              {EMultiSelectionState::PrepareFixtures, EMultiSelectionState::PressFirstRow,
+	               EMultiSelectionState::ReleaseFirstRow, EMultiSelectionState::PressSecondRow,
+	               EMultiSelectionState::ReleaseSecondRow, EMultiSelectionState::VerifyOutlinerSelection,
+	               EMultiSelectionState::PressViewportToggle, EMultiSelectionState::ReleaseViewportModifier,
+	               EMultiSelectionState::ReleaseViewportToggle, EMultiSelectionState::VerifyViewportToggle,
+	               EMultiSelectionState::PressFirstRowAgain, EMultiSelectionState::ReleaseFirstRowAgain,
+	               EMultiSelectionState::VerifyPrimary, EMultiSelectionState::VerifyOutlines})))
 	{
 		ExerciseMultiDetails(InEvents);
 	}
-	else if (Scenario.MultiSelectionStep < 54)
+	else if ((IsMultiDetailsState(Scenario.MultiSelection.Progress.GetState()) ||
+	          IsMultiGizmoState(Scenario.MultiSelection.Progress.GetState()) ||
+	          Scenario.MultiSelection.Progress.IsAny(
+	              {EMultiSelectionState::PrepareFixtures, EMultiSelectionState::PressFirstRow,
+	               EMultiSelectionState::ReleaseFirstRow, EMultiSelectionState::PressSecondRow,
+	               EMultiSelectionState::ReleaseSecondRow, EMultiSelectionState::VerifyOutlinerSelection,
+	               EMultiSelectionState::PressViewportToggle, EMultiSelectionState::ReleaseViewportModifier,
+	               EMultiSelectionState::ReleaseViewportToggle, EMultiSelectionState::VerifyViewportToggle,
+	               EMultiSelectionState::PressFirstRowAgain, EMultiSelectionState::ReleaseFirstRowAgain,
+	               EMultiSelectionState::VerifyPrimary, EMultiSelectionState::VerifyOutlines})))
 	{
 		ExerciseMultiGizmo(InEvents);
 	}
-	else if (Scenario.MultiSelectionStep == 54)
+	else if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::VerifyHistoryAndCancellation))
 	{
 		ExerciseMultiHistory();
 		ExerciseMultiCancellation();
-		++Scenario.MultiSelectionStep;
+		Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PrepareMarkers);
 	}
-	else if (Scenario.MultiSelectionStep == 55)
+	else if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PrepareMarkers))
 	{
 		RequireMulti(Scenario.InspectionBounds.contains(RecordType<FSceneTransform>().Id + "/position/x") &&
 		                 !Scenario.InspectionBounds.contains(RecordType<FSceneModelComponent>().Id + "/visible") &&
 		                 !Scenario.InspectionBounds.contains(RecordType<FSceneCamera>().Id + "/verticalRadians"),
 		             "heterogeneous selection must show only the common components");
 		PrepareMultiSelectionMarkers();
-		++Scenario.MultiSelectionStep;
+		Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::VerifyMarkers);
 	}
 }
 
@@ -269,7 +415,7 @@ void FEditorAcceptanceHarness::PrepareMultiSelectionMarkers()
 
 void FEditorAcceptanceHarness::CheckMultiSelectionMarkerDraws(const FGuiDrawData& InData)
 {
-	if (Scenario.MultiSelectionStep != 56)
+	if (!Scenario.MultiSelection.Progress.Is(EMultiSelectionState::VerifyMarkers))
 	{
 		return;
 	}

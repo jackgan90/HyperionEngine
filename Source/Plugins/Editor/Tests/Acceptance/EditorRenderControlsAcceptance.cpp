@@ -47,32 +47,55 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 	{
 		return;
 	}
-	if (Scenario.ExerciseStep >= 11)
+	if (Scenario.RenderControls.Progress.IsAny(
+	        {ERenderControlsState::VerifyNarrowHud, ERenderControlsState::OpenProfilingCategories,
+	         ERenderControlsState::SelectTasksCategory, ERenderControlsState::VerifyCategoryAndEnableFrameCollection,
+	         ERenderControlsState::EnableGpuCollection, ERenderControlsState::VerifyGpuCollection,
+	         ERenderControlsState::PrepareVisibilityHud, ERenderControlsState::AwaitVisibilityHud,
+	         ERenderControlsState::OpenVisibilityCategories, ERenderControlsState::SelectVisibilityCategory,
+	         ERenderControlsState::VerifyVisibilityCategory, ERenderControlsState::OpenBatchCategories,
+	         ERenderControlsState::SelectVisibilityWithBatches, ERenderControlsState::SelectBatchCategory,
+	         ERenderControlsState::VerifyVisibilityAndBatches, ERenderControlsState::VerifyBatchCounts}))
 	{
 		ExerciseProfilingHudInput(InEvents);
 		return;
 	}
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.RenderControls.Progress.GetState())
 	{
-		case 0:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/status-toggle"]);
+		case ERenderControlsState::ShowStatusHud:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/status-toggle"], Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::ShowProfilingHud);
+			}
 			return;
-		case 1:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/profiling-toggle"]);
+		case ERenderControlsState::ShowProfilingHud:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/profiling-toggle"],
+			                  Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyHud);
+			}
 			return;
-		case 2:
+		case ERenderControlsState::VerifyHud:
 			CheckRenderControlsHud();
 			Scenario.PlacementCapture = Editor.Options.ExerciseRenderControls / "Hud.png";
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::OpenEditMenu);
 			return;
-		case 3:
-			ExerciseClick(InEvents, Scenario.EditMenuBounds);
+		case ERenderControlsState::OpenEditMenu:
+			if (ExerciseClick(InEvents, Scenario.EditMenuBounds, Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::OpenRenderSettings);
+			}
 			return;
-		case 4:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["render/settings-menu"]);
+		case ERenderControlsState::OpenRenderSettings:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["render/settings-menu"],
+			                  Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::ExerciseRasterAndDepth);
+			}
 			return;
-		case 5:
-			if (Scenario.RasterOptionExercise.Case == 0 && Scenario.RasterOptionExercise.Step == 0 &&
+		case ERenderControlsState::ExerciseRasterAndDepth:
+			if (Scenario.RasterOptionExercise.Case == 0 &&
+			    Scenario.RasterOptionExercise.Progress.Is(ERasterState::PrepareChoice) &&
 			    (!Editor.bShowRenderSettings ||
 			     Scenario.InspectionBounds["render/pipeline"].Z <= Scenario.InspectionBounds["render/pipeline"].X))
 			{
@@ -83,9 +106,9 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 				return;
 			}
 			Scenario.PlacementCapture = Editor.Options.ExerciseRenderControls / "Settings.png";
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::ExerciseViewportChoices);
 			return;
-		case 6:
+		case ERenderControlsState::ExerciseViewportChoices:
 			Editor.bShowRenderSettings = false;
 			if (!ExerciseViewportChoices(InEvents))
 			{
@@ -93,27 +116,36 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 			}
 			Editor.SceneDocument.ReplaceSelection(
 			    FSceneSelection(Editor.Scene->GetLightingSelection().Directional.Handle));
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.Progress.TransitionTo(
+			    ERenderControlsState::ExerciseLightPriorityAndExpandTransform);
 			return;
-		case 7:
+		case ERenderControlsState::ExerciseLightPriorityAndExpandTransform:
 			if (!ExerciseLightPriorityInput(InEvents))
 			{
 				return;
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds[RecordType<FSceneTransform>().Id + "/header"]);
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds[RecordType<FSceneTransform>().Id + "/header"],
+			                  Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::EnableLightShadows);
+			}
 			return;
-		case 8:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hyperion.scenedirectionallight/shadowSettings"]);
+		case ERenderControlsState::EnableLightShadows:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hyperion.scenedirectionallight/shadowSettings"],
+			                  Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyLightShadows);
+			}
 			return;
-		case 9:
+		case ERenderControlsState::VerifyLightShadows:
 			if (!Editor.Scene->FindNode(*Editor.Selection)->DirectionalLight()->ShadowSettings || !Editor.IsDirty())
 			{
 				throw std::runtime_error("Light shadow Inspector did not author component values");
 			}
 			Scenario.PlacementCapture = Editor.Options.ExerciseRenderControls / "Light.png";
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyShadowHistoryAndResize);
 			return;
-		case 10:
+		case ERenderControlsState::VerifyShadowHistoryAndResize:
 			Editor.Undo();
 			if (Editor.Scene->FindNode(*Editor.Selection)->DirectionalLight()->ShadowSettings)
 			{
@@ -127,15 +159,15 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 			Editor.Undo();
 			Editor.Window->Resize({1000, 900});
 			Editor.Gui->SetApplicationScale(2);
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.NarrowHudObservation.Restart();
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyNarrowHud);
 			return;
 	}
 }
 
 bool FEditorAcceptanceHarness::ExerciseLiveDepth(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.DepthExerciseStep == 0)
+	if (Scenario.Depth.Progress.Is(EDepthState::FreezeCamera))
 	{
 		FSceneViewportOptions ViewOptions;
 		ViewOptions.Frozen = true;
@@ -143,21 +175,21 @@ bool FEditorAcceptanceHarness::ExerciseLiveDepth(std::vector<FInputEvent>& InEve
 		Scenario.DepthExerciseFrozenView = *Editor.FrozenCullingView;
 		Scenario.DepthExerciseCamera = Editor.Viewport.ViewCamera;
 		Editor.Viewport.ViewCamera.World = Multiply(Translation({.25f, 0, 0}), Editor.Viewport.ViewCamera.World);
-		++Scenario.DepthExerciseStep;
+		Scenario.Depth.Progress.TransitionTo(EDepthState::ToggleDepth);
 	}
-	if (Scenario.DepthExerciseStep == 1 || Scenario.DepthExerciseStep == 3)
+	if (Scenario.Depth.Progress.Is(EDepthState::ToggleDepth) || Scenario.Depth.Progress.Is(EDepthState::RestoreDepth))
 	{
-		const auto Step = Scenario.ExerciseStep;
-		ExerciseClick(InEvents, Scenario.InspectionBounds.at("render/reversed-z"));
-		if (Scenario.ExerciseStep != Step)
+		if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("render/reversed-z"), Scenario.Depth.Click))
 		{
-			++Scenario.DepthExerciseStep;
+			Scenario.Depth.Progress.TransitionTo(Scenario.Depth.Progress.Is(EDepthState::ToggleDepth)
+			                                         ? EDepthState::VerifyToggledDepth
+			                                         : EDepthState::VerifyRestoredDepth);
 		}
-		Scenario.ExerciseStep = Step;
 		return false;
 	}
-	const bool bExpected =
-	    Scenario.DepthExerciseStep == 2 ? !Editor.Options.Rendering.bReversedZ : Editor.Options.Rendering.bReversedZ;
+	const bool bExpected = Scenario.Depth.Progress.Is(EDepthState::VerifyToggledDepth)
+	                           ? !Editor.Options.Rendering.bReversedZ
+	                           : Editor.Options.Rendering.bReversedZ;
 	const auto State = Editor.RenderSettings();
 	if (State.Values.bReversedZ != bExpected || State.bActiveReversedZ != bExpected || !Editor.FrozenCullingView ||
 	    Editor.IsDirty() || !Editor.RenderStats.MainCameraView ||
@@ -165,9 +197,10 @@ bool FEditorAcceptanceHarness::ExerciseLiveDepth(std::vector<FInputEvent>& InEve
 	{
 		throw std::runtime_error("GUI depth toggle did not commit and render without changing the document");
 	}
-	const auto Expected = Scenario.DepthExerciseStep == 2 ? Multiply(ClipDepthTransform(EDepthConvention::Reversed),
-	                                                                 Scenario.DepthExerciseFrozenView)
-	                                                      : Scenario.DepthExerciseFrozenView;
+	const auto Expected =
+	    Scenario.Depth.Progress.Is(EDepthState::VerifyToggledDepth)
+	        ? Multiply(ClipDepthTransform(EDepthConvention::Reversed), Scenario.DepthExerciseFrozenView)
+	        : Scenario.DepthExerciseFrozenView;
 	for (std::size_t Index = 0; Index < Expected.Values.size(); ++Index)
 	{
 		if (std::abs(Editor.FrozenCullingView->Values[Index] - Expected.Values[Index]) > .00001f)
@@ -175,9 +208,9 @@ bool FEditorAcceptanceHarness::ExerciseLiveDepth(std::vector<FInputEvent>& InEve
 			throw std::runtime_error("Depth switching changed the frozen camera's physical frustum");
 		}
 	}
-	if (Scenario.DepthExerciseStep == 2)
+	if (Scenario.Depth.Progress.Is(EDepthState::VerifyToggledDepth))
 	{
-		++Scenario.DepthExerciseStep;
+		Scenario.Depth.Progress.TransitionTo(EDepthState::RestoreDepth);
 		return false;
 	}
 	Editor.Viewport.ViewCamera = Scenario.DepthExerciseCamera;
@@ -190,43 +223,45 @@ bool FEditorAcceptanceHarness::ExerciseLiveDepth(std::vector<FInputEvent>& InEve
 
 bool FEditorAcceptanceHarness::ExerciseLightPriorityInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.LightPriorityExerciseStep >= 16)
+	if (Scenario.LightPriority.Progress.Is(ELightPriorityState::Complete))
 	{
 		return true;
 	}
-	const bool bSky = Scenario.LightPriorityExerciseStep >= 8;
-	const unsigned Phase = Scenario.LightPriorityExerciseStep % 8;
+	const bool bSky = DescribeLightPriorityContext(Scenario.LightPriority.Progress.GetState()).CaseIndex == 1;
+	const auto Phase = DescribeLightPriorityContext(Scenario.LightPriority.Progress.GetState()).Action;
 	const auto Type = bSky ? RecordType<FSceneEnvironmentLight>().Id : RecordType<FSceneDirectionalLight>().Id;
-	if (Phase == 0 && bSky)
+	if (Phase == ELightPriorityAction::PrepareLight && bSky)
 	{
 		auto Node = MakeSceneEnvironmentLightNode("priority-gui-sky");
 		Node.EnvironmentLight()->Source = ESceneEnvironmentSource::ConstantColor;
 		Editor.SceneDocument.ReplaceSelection(FSceneSelection(Editor.SceneDocument.CommitCreate(std::move(Node))));
 	}
-	if (Phase == 1)
+	if (Phase == ELightPriorityAction::FocusPriority)
 	{
-		const auto Step = Scenario.ExerciseStep;
-		ExerciseClick(InEvents, Scenario.InspectionBounds.at(Type + "/priority"));
-		if (Step == Scenario.ExerciseStep)
+		if (!ExerciseClick(InEvents, Scenario.InspectionBounds.at(Type + "/priority"), Scenario.LightPriority.Click))
 		{
 			return false;
 		}
-		Scenario.ExerciseStep = Step;
 	}
-	else if (Phase >= 2 && Phase <= 5)
+	else if ((Phase == ELightPriorityAction::PressSelectAll || Phase == ELightPriorityAction::ReleaseSelectAllAndType ||
+	          Phase == ELightPriorityAction::PressEnter || Phase == ELightPriorityAction::ReleaseEnter))
 	{
-		if (Phase == 4 && Scenario.ExerciseWait++ == 0)
+		if (Phase == ELightPriorityAction::PressEnter && !Scenario.LightPriority.TextCommitObservation.Advance())
 		{
 			return false;
 		}
-		Scenario.ExerciseWait = 0;
+		Scenario.LightPriority.TextCommitObservation.Restart();
 		FInputEvent Key;
 		Key.Type = EEventType::Key;
-		Key.Key = Phase < 4 ? EKey::A : EKey::Enter;
-		Key.bDown = Phase == 2 || Phase == 4;
-		Key.Modifiers = Phase == 2 ? InputModifiers::Control : InputModifiers::None;
+		Key.Key =
+		    (Phase == ELightPriorityAction::PrepareLight || Phase == ELightPriorityAction::FocusPriority ||
+		     Phase == ELightPriorityAction::PressSelectAll || Phase == ELightPriorityAction::ReleaseSelectAllAndType)
+		        ? EKey::A
+		        : EKey::Enter;
+		Key.bDown = Phase == ELightPriorityAction::PressSelectAll || Phase == ELightPriorityAction::PressEnter;
+		Key.Modifiers = Phase == ELightPriorityAction::PressSelectAll ? InputModifiers::Control : InputModifiers::None;
 		InEvents.push_back(Key);
-		if (Phase == 3)
+		if (Phase == ELightPriorityAction::ReleaseSelectAllAndType)
 		{
 			FInputEvent Text;
 			Text.Type = EEventType::Text;
@@ -234,7 +269,7 @@ bool FEditorAcceptanceHarness::ExerciseLightPriorityInput(std::vector<FInputEven
 			InEvents.push_back(Text);
 		}
 	}
-	else if (Phase == 6)
+	else if (Phase == ELightPriorityAction::VerifyPriority)
 	{
 		const auto* Node = Editor.Scene->FindNode(*Editor.Selection);
 		const auto Priority = bSky ? Node->EnvironmentLight()->Priority : Node->DirectionalLight()->Priority;
@@ -245,7 +280,7 @@ bool FEditorAcceptanceHarness::ExerciseLightPriorityInput(std::vector<FInputEven
 		Scenario.PlacementCapture =
 		    Editor.Options.ExerciseRenderControls / (bSky ? "SkyPriority.png" : "DirectionalPriority.png");
 	}
-	else if (Phase == 7)
+	else if (Phase == ELightPriorityAction::VerifyHistory)
 	{
 		Editor.Undo();
 		const auto* Node = Editor.Scene->FindNode(*Editor.Selection);
@@ -267,43 +302,108 @@ bool FEditorAcceptanceHarness::ExerciseLightPriorityInput(std::vector<FInputEven
 			    FSceneSelection(Editor.Scene->GetLightingSelection().Directional.Handle));
 		}
 	}
-	++Scenario.LightPriorityExerciseStep;
+	switch (Scenario.LightPriority.Progress.GetState())
+	{
+		case ELightPriorityState::DirectionalPrepareLight:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::DirectionalFocusPriority);
+			break;
+		case ELightPriorityState::DirectionalFocusPriority:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::DirectionalPressSelectAll);
+			break;
+		case ELightPriorityState::DirectionalPressSelectAll:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::DirectionalReleaseSelectAllAndType);
+			break;
+		case ELightPriorityState::DirectionalReleaseSelectAllAndType:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::DirectionalPressEnter);
+			break;
+		case ELightPriorityState::DirectionalPressEnter:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::DirectionalReleaseEnter);
+			break;
+		case ELightPriorityState::DirectionalReleaseEnter:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::DirectionalVerifyPriority);
+			break;
+		case ELightPriorityState::DirectionalVerifyPriority:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::DirectionalVerifyHistory);
+			break;
+		case ELightPriorityState::DirectionalVerifyHistory:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentPrepareLight);
+			break;
+		case ELightPriorityState::EnvironmentPrepareLight:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentFocusPriority);
+			break;
+		case ELightPriorityState::EnvironmentFocusPriority:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentPressSelectAll);
+			break;
+		case ELightPriorityState::EnvironmentPressSelectAll:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentReleaseSelectAllAndType);
+			break;
+		case ELightPriorityState::EnvironmentReleaseSelectAllAndType:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentPressEnter);
+			break;
+		case ELightPriorityState::EnvironmentPressEnter:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentReleaseEnter);
+			break;
+		case ELightPriorityState::EnvironmentReleaseEnter:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentVerifyPriority);
+			break;
+		case ELightPriorityState::EnvironmentVerifyPriority:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::EnvironmentVerifyHistory);
+			break;
+		case ELightPriorityState::EnvironmentVerifyHistory:
+			Scenario.LightPriority.Progress.TransitionTo(ELightPriorityState::Complete);
+			break;
+		default:
+			break;
+	}
 	return false;
 }
 
 void FEditorAcceptanceHarness::ExerciseProfilingHudInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.ExerciseStep >= 17)
+	if (Scenario.RenderControls.Progress.IsAny(
+	        {ERenderControlsState::PrepareVisibilityHud, ERenderControlsState::AwaitVisibilityHud,
+	         ERenderControlsState::OpenVisibilityCategories, ERenderControlsState::SelectVisibilityCategory,
+	         ERenderControlsState::VerifyVisibilityCategory, ERenderControlsState::OpenBatchCategories,
+	         ERenderControlsState::SelectVisibilityWithBatches, ERenderControlsState::SelectBatchCategory,
+	         ERenderControlsState::VerifyVisibilityAndBatches, ERenderControlsState::VerifyBatchCounts}))
 	{
 		ExerciseProfilingDetailsInput(InEvents);
 		return;
 	}
 	const auto Profiling = GetProfilingStatus();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.RenderControls.Progress.GetState())
 	{
-		case 11:
-			if (++Scenario.ExerciseWait < 8)
+		case ERenderControlsState::VerifyNarrowHud:
+			if (!Scenario.RenderControls.NarrowHudObservation.Advance())
 			{
 				return;
 			}
 			CheckRenderControlsHud();
 			Scenario.PlacementCapture = Editor.Options.ExerciseRenderControls / "Narrow.png";
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.NarrowHudObservation.Restart();
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::OpenProfilingCategories);
 			return;
-		case 12:
-			if (!Scenario.ExerciseWait)
+		case ERenderControlsState::OpenProfilingCategories:
+			if (!Scenario.RenderControls.bCollectionControlsPrepared)
 			{
+				Scenario.RenderControls.bCollectionControlsPrepared = true;
 				// The narrow HUD was checked above; collection controls use unscrolled click bounds.
 				Editor.Window->Resize({1600, 960});
 				Editor.Gui->SetApplicationScale(1);
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/categories"]);
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/categories"], Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::SelectTasksCategory);
+			}
 			return;
-		case 13:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/2"]);
+		case ERenderControlsState::SelectTasksCategory:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/2"], Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(
+				    ERenderControlsState::VerifyCategoryAndEnableFrameCollection);
+			}
 			return;
-		case 14:
+		case ERenderControlsState::VerifyCategoryAndEnableFrameCollection:
 			if (Editor.ProfilingCategories !=
 			        WithProfilingHudCategory(EProfilingHudCategory::Overview, EProfilingHudCategory::Tasks, true) ||
 			    Editor.IsDirty() || Profiling.Mask)
@@ -314,16 +414,20 @@ void FEditorAcceptanceHarness::ExerciseProfilingHudInput(std::vector<FInputEvent
 			{
 				Editor.ChangeProfiling(ProfileCategoryMask(EProfileCategory::Frame), {});
 			}
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::EnableGpuCollection);
 			return;
-		case 15:
+		case ERenderControlsState::EnableGpuCollection:
 			if (Profiling.bCompiled)
 			{
-				ExerciseClick(InEvents, Scenario.InspectionBounds["hud/collect-gpu"]);
+				if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/collect-gpu"],
+				                  Scenario.RenderControls.Click))
+				{
+					Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyGpuCollection);
+				}
 			}
 			else
 			{
-				++Scenario.ExerciseStep;
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyGpuCollection);
 			}
 			return;
 	}
@@ -337,14 +441,14 @@ void FEditorAcceptanceHarness::ExerciseProfilingHudInput(std::vector<FInputEvent
 		Editor.ChangeProfiling(0, {});
 	}
 	Scenario.PlacementCapture = Editor.Options.ExerciseRenderControls / "Stats.png";
-	++Scenario.ExerciseStep;
+	Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::PrepareVisibilityHud);
 }
 
 void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputEvent>& InEvents)
 {
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.RenderControls.Progress.GetState())
 	{
-		case 17:
+		case ERenderControlsState::PrepareVisibilityHud:
 		{
 			Editor.Gui->ClosePopups();
 			Editor.Window->Resize({1600, 960});
@@ -353,23 +457,29 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 			ViewOptions.ProfilingCategories = 0;
 			ViewOptions.InstanceBatching = false;
 			Editor.SetViewportOptions(ViewOptions);
-			Scenario.ExerciseWait = 0;
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.VisibilityHudObservation.Restart();
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::AwaitVisibilityHud);
 			return;
 		}
-		case 18:
-			if (++Scenario.ExerciseWait >= 8)
+		case ERenderControlsState::AwaitVisibilityHud:
+			if (Scenario.RenderControls.VisibilityHudObservation.Advance())
 			{
-				++Scenario.ExerciseStep;
-				Scenario.ExerciseWait = 0;
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::OpenVisibilityCategories);
+				Scenario.RenderControls.VisibilityHudObservation.Restart();
 			}
 			return;
-		case 19:
-		case 22:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/categories"]);
+		case ERenderControlsState::OpenVisibilityCategories:
+		case ERenderControlsState::OpenBatchCategories:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/categories"], Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(
+				    Scenario.RenderControls.Progress.Is(ERenderControlsState::OpenVisibilityCategories)
+				        ? ERenderControlsState::SelectVisibilityCategory
+				        : ERenderControlsState::SelectVisibilityWithBatches);
+			}
 			return;
-		case 20:
-		case 23:
+		case ERenderControlsState::SelectVisibilityCategory:
+		case ERenderControlsState::SelectVisibilityWithBatches:
 		{
 			const auto Anchor = Scenario.InspectionBounds.at("hud/categories");
 			const auto Title = Scenario.InspectionBounds.at("hud/menu-title");
@@ -379,13 +489,22 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 			{
 				throw std::runtime_error("Stats menu did not expand from the button's bottom-left corner");
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/64"]);
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/64"], Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(
+				    Scenario.RenderControls.Progress.Is(ERenderControlsState::SelectVisibilityCategory)
+				        ? ERenderControlsState::VerifyVisibilityCategory
+				        : ERenderControlsState::SelectBatchCategory);
+			}
 			return;
 		}
-		case 24:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/128"]);
+		case ERenderControlsState::SelectBatchCategory:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/128"], Scenario.RenderControls.Click))
+			{
+				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyVisibilityAndBatches);
+			}
 			return;
-		case 21:
+		case ERenderControlsState::VerifyVisibilityCategory:
 			if (Editor.ProfilingCategories != EProfilingHudCategory::Visibility || Editor.IsDirty() ||
 			    GetProfilingStatus().Mask)
 			{
@@ -394,7 +513,7 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 			Editor.Gui->ClosePopups();
 			Editor.HudUpdated = 0;
 			Scenario.PlacementCapture = Editor.Options.ExerciseRenderControls / "Visibility.png";
-			++Scenario.ExerciseStep;
+			Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::OpenBatchCategories);
 			return;
 	}
 	if (Editor.ProfilingCategories != EProfilingHudCategory::Batching || Editor.IsDirty() ||

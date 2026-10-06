@@ -33,15 +33,15 @@ void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPoint, bool bInButton, 
 
 void FEditorAcceptanceHarness::ExerciseMultiGizmo(std::vector<FInputEvent>& InEvents)
 {
-	const unsigned Mode = (Scenario.MultiSelectionStep - 30) / 8;
-	const unsigned Phase = (Scenario.MultiSelectionStep - 30) % 8;
+	const unsigned Mode = DescribeMultiGizmoContext(Scenario.MultiSelection.Progress.GetState()).CaseIndex;
+	const auto Phase = DescribeMultiGizmoContext(Scenario.MultiSelection.Progress.GetState()).Action;
 	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
 	const float Size = 85 * Editor.Gui->ApplicationScale();
 	const float Diagonal = Size / std::sqrt(2.f);
 	const auto Start = Mode == 1 ? FVec2{Center.X + Diagonal, Center.Y - Diagonal} : Center;
 	const auto End = Mode == 1 ? FVec2{Center.X - Diagonal, Center.Y - Diagonal} : FVec2{Center.X + Size, Center.Y};
-	if (Phase == 0)
+	if (Phase == EMultiGizmoAction::PrepareModels)
 	{
 		Editor.FinishInspectorEdit();
 		Editor.GizmoMode = static_cast<ETransformGizmoMode>(Mode);
@@ -56,16 +56,17 @@ void FEditorAcceptanceHarness::ExerciseMultiGizmo(std::vector<FInputEvent>& InEv
 		Editor.Scene->EditNodes(std::move(Edits), Editor.Scene->GetRevision());
 		Editor.ResetDocument();
 	}
-	if (Phase == 1 || Phase == 3)
+	if (Phase == EMultiGizmoAction::BeginDrag || Phase == EMultiGizmoAction::ReleaseDrag)
 	{
-		Pointer(InEvents, Phase == 1 ? Start : End, true, Phase == 1);
+		Pointer(InEvents, Phase == EMultiGizmoAction::BeginDrag ? Start : End, true,
+		        Phase == EMultiGizmoAction::BeginDrag);
 	}
-	if (Phase == 2)
+	if (Phase == EMultiGizmoAction::MoveDrag)
 	{
 		RequireMulti(Editor.Gizmo.IsDragging(), "group handle capture");
 		Pointer(InEvents, End, false, false);
 	}
-	if (Phase == 4)
+	if (Phase == EMultiGizmoAction::VerifyCommit)
 	{
 		RequireMulti(Editor.HistoryCursor == 1 && !Editor.Gizmo.IsDragging(), "one group history entry");
 		for (unsigned Index = 0; Index < 2; ++Index)
@@ -101,22 +102,98 @@ void FEditorAcceptanceHarness::ExerciseMultiGizmo(std::vector<FInputEvent>& InEv
 		}
 		Editor.Undo();
 	}
-	if (Phase == 5 || Phase == 7)
+	if (Phase == EMultiGizmoAction::VerifyUndo || Phase == EMultiGizmoAction::VerifyRedo)
 	{
 		for (unsigned Index = 0; Index < 2; ++Index)
 		{
-			const auto& Expected =
-			    Phase == 5 ? Scenario.MultiSelectionInitial[Index] : Scenario.MultiSelectionFinal[Index];
+			const auto& Expected = Phase == EMultiGizmoAction::VerifyUndo ? Scenario.MultiSelectionInitial[Index]
+			                                                              : Scenario.MultiSelectionFinal[Index];
 			RequireMulti(Editor.Scene->FindNode(Scenario.MultiSelectionObjects[Index])->Local().Values ==
 			                 Expected.Values,
 			             "group undo/redo exact matrices");
 		}
 	}
-	if (Phase == 6)
+	if (Phase == EMultiGizmoAction::Redo)
 	{
 		Editor.Redo();
 	}
-	++Scenario.MultiSelectionStep;
+	switch (Scenario.MultiSelection.Progress.GetState())
+	{
+		case EMultiSelectionState::PositionPrepareModels:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionBeginDrag);
+			break;
+		case EMultiSelectionState::PositionBeginDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionMoveDrag);
+			break;
+		case EMultiSelectionState::PositionMoveDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionReleaseDrag);
+			break;
+		case EMultiSelectionState::PositionReleaseDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionVerifyCommit);
+			break;
+		case EMultiSelectionState::PositionVerifyCommit:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionVerifyUndo);
+			break;
+		case EMultiSelectionState::PositionVerifyUndo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionRedo);
+			break;
+		case EMultiSelectionState::PositionRedo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::PositionVerifyRedo);
+			break;
+		case EMultiSelectionState::PositionVerifyRedo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationPrepareModels);
+			break;
+		case EMultiSelectionState::RotationPrepareModels:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationBeginDrag);
+			break;
+		case EMultiSelectionState::RotationBeginDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationMoveDrag);
+			break;
+		case EMultiSelectionState::RotationMoveDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationReleaseDrag);
+			break;
+		case EMultiSelectionState::RotationReleaseDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationVerifyCommit);
+			break;
+		case EMultiSelectionState::RotationVerifyCommit:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationVerifyUndo);
+			break;
+		case EMultiSelectionState::RotationVerifyUndo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationRedo);
+			break;
+		case EMultiSelectionState::RotationRedo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::RotationVerifyRedo);
+			break;
+		case EMultiSelectionState::RotationVerifyRedo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScalePrepareModels);
+			break;
+		case EMultiSelectionState::ScalePrepareModels:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScaleBeginDrag);
+			break;
+		case EMultiSelectionState::ScaleBeginDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScaleMoveDrag);
+			break;
+		case EMultiSelectionState::ScaleMoveDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScaleReleaseDrag);
+			break;
+		case EMultiSelectionState::ScaleReleaseDrag:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScaleVerifyCommit);
+			break;
+		case EMultiSelectionState::ScaleVerifyCommit:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScaleVerifyUndo);
+			break;
+		case EMultiSelectionState::ScaleVerifyUndo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScaleRedo);
+			break;
+		case EMultiSelectionState::ScaleRedo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::ScaleVerifyRedo);
+			break;
+		case EMultiSelectionState::ScaleVerifyRedo:
+			Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::VerifyHistoryAndCancellation);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::ExerciseMultiHistory()

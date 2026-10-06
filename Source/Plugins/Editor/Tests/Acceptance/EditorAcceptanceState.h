@@ -2,6 +2,8 @@
 #if !HYP_BUILD_TESTING
 #error Acceptance scenario state is only available in test-enabled builds
 #endif
+#include "AcceptanceContexts.h"
+#include "AcceptanceScenarioContexts.h"
 #include "Hyperion/Assets/AssetService.h"
 #include "Hyperion/Gui/Gui.h"
 #include "Hyperion/Renderer/RenderSettings.h"
@@ -15,10 +17,51 @@ namespace Hyperion
 {
 struct FEditorAcceptanceState
 {
+	FTransformAcceptanceContext Transform;
+	FShortcutAcceptanceContext Shortcut;
+	FLightPriorityAcceptanceContext LightPriority;
+	FDepthAcceptanceContext Depth;
+	FMultiSelectionAcceptanceContext MultiSelection;
+	TAcceptanceState<EGizmoState> Gizmo;
+	TAcceptanceState<EReparentSelectionState> ReparentSelection;
+	TAcceptanceState<EReparentKeyboardState> ReparentKeyboard;
+	TAcceptanceState<EReparentDocumentState> ReparentDocument;
+	TAcceptanceState<EReparentDragState> ReparentDrag;
+	FOutlineAcceptanceContext Outline;
+	TAcceptanceState<EPlacementDocumentState> PlacementDocument;
+	TAcceptanceState<EPlacementCancelState> PlacementCancel;
+	TAcceptanceState<EPlacementDragState> PlacementDrag;
+	FInteractionAcceptanceContext Interaction;
+	FMovementAcceptanceContext Movement;
+	FWheelAcceptanceContext Wheel;
+	FAssetScenarioContext Asset;
+	FDocumentAcceptanceContext Document;
+	FViewAcceptanceContext View;
+	FImportAcceptanceContext Import;
+	FLogAcceptanceContext Log;
+	FCapturePreferenceAcceptanceContext CapturePreference;
+	FCaptureAcceptanceContext Capture;
+	FContentAcceptanceContext Content;
+	FRenderControlsAcceptanceContext RenderControls;
+	FClipboardAcceptanceContext Clipboard;
+	FFramingAcceptanceContext Framing;
+	TAcceptanceState<EDeletionState> Deletion;
+	TAcceptanceState<EPlacementMenuState> PlacementMenu;
+	TAcceptanceState<EPlacementMarkerState> PlacementMarker;
+	TAcceptanceState<EPickingSceneState> PickingScene;
+	TAcceptanceState<EPickingState> Picking;
+	FModelPlacementAcceptanceContext ModelPlacement;
+	TAcceptanceState<EModelPlacementHistoryState> ModelPlacementHistory;
+
 	struct FAssetPreviewExercise
 	{
-		unsigned Step{};
-		unsigned Frames{};
+		static constexpr unsigned PositionControlSettleFrames = 4;
+		static constexpr unsigned DragSampleFrames = 48;
+		static constexpr unsigned HistorySettleFrames = 3;
+		TAcceptanceState<EAssetPreviewState> Progress;
+		FAcceptanceFrameWait PositionControlSettle{PositionControlSettleFrames};
+		FAcceptanceFrameWait DragSample{DragSampleFrames};
+		FAcceptanceFrameWait HistorySettle{HistorySettleFrames};
 		FVec4 Canvas;
 		FVec2 Pointer;
 		std::string Before;
@@ -30,7 +73,9 @@ struct FEditorAcceptanceState
 	struct FRasterOptionExercise
 	{
 		unsigned Case{};
-		unsigned Step{};
+		TAcceptanceState<ERasterState> Progress;
+		FAcceptanceClick Click;
+		FAcceptanceFrameWait ChoiceObservation{2};
 		FRenderSettings Initial;
 		FRenderSettings Before;
 		std::uint64_t SceneRevision{};
@@ -42,8 +87,9 @@ struct FEditorAcceptanceState
 	struct FViewportChoiceExercise
 	{
 		unsigned Case{};
-		unsigned Step{};
-		unsigned Wait{};
+		TAcceptanceState<EViewportChoiceState> Progress;
+		FAcceptanceClick Click;
+		FAcceptanceFrameWait ChoiceObservation{2};
 		FSceneViewportOptions Initial;
 		FSceneViewportOptions Before;
 		std::uint64_t SceneRevision{};
@@ -54,10 +100,8 @@ struct FEditorAcceptanceState
 
 	FViewportChoiceExercise ViewportChoiceExercise;
 
-	std::uint32_t PlacementMenuStep{};
 	std::uint32_t PlacementCancelCase{};
 	std::uint32_t PlacementMarkerCase{};
-	std::uint32_t PlacementMarkerStep{};
 	std::array<FMat4, 2> PlacementMarkerTransforms;
 	bool bInitialCapturePreference{};
 	bool bInitialCaptureHudPreference{};
@@ -79,13 +123,10 @@ struct FEditorAcceptanceState
 	float AssetExerciseRoughness{};
 	std::size_t AssetExerciseIndex{};
 	std::string AssetExerciseOriginalName;
-	int AssetExerciseLoggedStep = -1;
+	std::optional<EAssetState> AssetLoggedState;
 	bool bAssetsVerified{};
 	bool bLogVerified{};
-	unsigned ReparentExerciseStep{};
 	unsigned ReparentExerciseCase{};
-	unsigned ReparentSelectionStep{};
-	unsigned ReparentKeyboardStep{};
 	bool bReparentVerified{};
 	std::vector<FSceneHandle> ReparentExerciseNodes;
 	std::vector<std::string> ReparentExerciseIds;
@@ -93,18 +134,13 @@ struct FEditorAcceptanceState
 	std::uint64_t ReparentExerciseRevision{};
 	std::size_t ReparentExerciseHistory{};
 	std::vector<FSceneHandle> FramingObjects;
-	unsigned FramingStep{};
-	unsigned FramingWait{};
 	std::uint64_t FramingRevision{};
 	FSceneCameraView FramingBefore;
 	FSceneCameraView FramingMultiple;
 	FBytes FramingSnapshot;
 	bool bFramingVerified{};
-	unsigned ClipboardExerciseStep{};
-	unsigned ClipboardExerciseWait{};
 	std::size_t ClipboardExerciseCount{};
 	bool bClipboardVerified{};
-	std::uint32_t PlacementExerciseStep{};
 	std::uint32_t PlacementExerciseType{};
 	std::size_t PlacementExerciseBaseNodes{};
 	std::size_t PlacementExerciseBaseHistory{};
@@ -113,38 +149,28 @@ struct FEditorAcceptanceState
 	std::vector<std::string> PlacementExerciseIds;
 	bool bPlacementVerified{};
 	bool bModelPlacementVerified{};
-	unsigned ModelPlacementStep{};
 	unsigned ModelPlacementCase{};
 	std::size_t ModelPlacementBaseHistory{};
 	std::size_t ModelPlacementBaseNodes{};
 	FVec3 ModelPlacementPosition;
 	std::vector<std::string> ModelPlacementIds;
-	std::uint32_t GizmoExerciseStep{};
 	FMat4 GizmoExerciseBefore;
 	FMat4 GizmoExerciseAfter;
 	FSceneCameraView GizmoExerciseCamera;
 	bool bGizmoVerified{};
 	std::vector<FSceneHandle> OutlineExerciseObjects;
 	FSceneHandle OutlineExerciseWall;
-	unsigned OutlineExerciseStep{};
-	unsigned OutlineExerciseWait{};
 	bool bOutlinesVerified{};
-	unsigned MultiSelectionStep{};
-	unsigned MultiSelectionWait{};
 	bool bMultiSelectionVerified{};
 	std::vector<FSceneHandle> MultiSelectionObjects;
 	std::map<std::string, FVec4> MultiSelectionRows;
 	std::vector<FSceneHandle> ShortcutObjects;
-	unsigned ShortcutStep{};
-	unsigned ShortcutWait{};
 	std::uint64_t ShortcutRevision{};
 	std::string ShortcutObjectId;
 	std::string ShortcutDocumentPath;
 	bool bSelectionShortcutsVerified{};
 	std::array<FMat4, 2> MultiSelectionInitial;
 	std::array<FMat4, 2> MultiSelectionFinal;
-	unsigned PickingExerciseStep{};
-	unsigned PickingSceneStep{};
 	FVec4 PickingLightBounds;
 	FSceneHandle PickingNear;
 	FSceneHandle PickingFar;
@@ -154,12 +180,6 @@ struct FEditorAcceptanceState
 	std::shared_ptr<std::binary_semaphore> ContentSaveGate;
 	std::vector<std::byte> ContentSaveOriginal;
 	bool bImportVerified{};
-	std::uint32_t ExerciseStep{};
-	std::uint32_t ExerciseWait{};
-	std::uint32_t ExerciseMovementStep{};
-	std::uint32_t ExerciseWheelStep{};
-	float ExerciseSpeed{};
-	bool bExerciseMouseDown{};
 	bool bMovementVerified{};
 	bool bMovementGateVerified{};
 	bool bRightReleaseVerified{};
@@ -167,14 +187,9 @@ struct FEditorAcceptanceState
 	bool bDollyVerified{};
 	bool bSpeedVerified{};
 	bool bInputIsolationVerified{};
-	FSceneCameraPose ExercisePose;
-	unsigned DeletionExerciseStep{};
 	FSceneHandle DeletionExerciseHandle;
 	std::string DeletionExerciseId;
 	FSceneNode ExerciseOriginal;
-	std::uint32_t TransformExerciseStep{};
-	std::uint32_t LightPriorityExerciseStep{};
-	std::uint32_t DepthExerciseStep{};
 	FMat4 DepthExerciseFrozenView;
 	FSceneCameraView DepthExerciseCamera;
 	std::uint64_t TransformDragReadyAt{};

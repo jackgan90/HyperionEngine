@@ -39,30 +39,42 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 		return;
 	}
 	const auto MeshType = RecordType<FSceneModelComponent>().Id;
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Document.Progress.GetState())
 	{
-		case 0:
+		case EDocumentState::ExpandModelComponent:
 			Scenario.ExerciseOriginal = *Editor.Scene->FindNode(*Editor.Selection);
 			if (Scenario.InspectionBounds.contains(RecordType<FSceneModelSource>().Id + "/header"))
 			{
-				ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneModelSource>().Id + "/header"));
+				if (ExerciseClick(InEvents,
+				                  Scenario.InspectionBounds.at(RecordType<FSceneModelSource>().Id + "/header"),
+				                  Scenario.Document.Click))
+				{
+					Scenario.Document.Progress.TransitionTo(EDocumentState::ExerciseTransformAndExpandComponent);
+				}
 			}
 			else
 			{
-				++Scenario.ExerciseStep;
+				Scenario.Document.Progress.TransitionTo(EDocumentState::ExerciseTransformAndExpandComponent);
 			}
 			break;
-		case 1:
+		case EDocumentState::ExerciseTransformAndExpandComponent:
 			if (!ExerciseTransformInput(InEvents))
 			{
 				break;
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/header"));
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/header"),
+			                  Scenario.Document.Click))
+			{
+				Scenario.Document.Progress.TransitionTo(EDocumentState::HideModel);
+			}
 			break;
-		case 2:
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at(MeshType + "/visible"));
+		case EDocumentState::HideModel:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at(MeshType + "/visible"), Scenario.Document.Click))
+			{
+				Scenario.Document.Progress.TransitionTo(EDocumentState::VerifyHiddenModel);
+			}
 			break;
-		case 3:
+		case EDocumentState::VerifyHiddenModel:
 			if (!Editor.IsDirty() || Editor.Scene->FindNode(*Editor.Selection)->Model()->bVisible)
 			{
 				const auto Bounds = Scenario.InspectionBounds.at(MeshType + "/visible");
@@ -72,9 +84,9 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 			}
 			Check(Editor.HistoryCursor == 1 && Editor.History.size() == 1,
 			      "New editing did not truncate the redo branch");
-			++Scenario.ExerciseStep;
+			Scenario.Document.Progress.TransitionTo(EDocumentState::SaveEditedDocument);
 			break;
-		case 4:
+		case EDocumentState::SaveEditedDocument:
 		{
 			Check(Editor.IsDirty() && !Editor.Scene->FindNode(*Editor.Selection)->Model()->bVisible,
 			      "Live inspector did not commit the component");
@@ -96,10 +108,10 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 			auto Candidate = *Editor.Scene->FindNode(*Editor.Selection);
 			Candidate.Name += " unsaved";
 			Editor.CommitEdit(*Editor.Selection, std::move(Candidate), Editor.Scene->GetRevision());
-			++Scenario.ExerciseStep;
+			Scenario.Document.Progress.TransitionTo(EDocumentState::AwaitDocumentSave);
 			break;
 		}
-		case 5:
+		case EDocumentState::AwaitDocumentSave:
 			if (Editor.PendingSave)
 			{
 				break;
@@ -109,9 +121,9 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 			Editor.Undo();
 			Check(!Editor.IsDirty(), "Undo did not return to the captured save state");
 			Editor.OpenScene(Editor.Options.ExerciseDocument.string());
-			++Scenario.ExerciseStep;
+			Scenario.Document.Progress.TransitionTo(EDocumentState::VerifyReloadAndAttemptFailedSave);
 			break;
-		case 6:
+		case EDocumentState::VerifyReloadAndAttemptFailedSave:
 		{
 			const auto Handle = Editor.Scene->FindHandle(Scenario.ExerciseOriginal.Id);
 			const auto* Node = Editor.Scene->FindNode(Handle);
@@ -141,10 +153,10 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 			Candidate.Name += " rejected save";
 			Editor.CommitEdit(Handle, std::move(Candidate), Revision);
 			Editor.SaveScene("/Engine/Scenes/ReadOnlySaveMustFail.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Document.Progress.TransitionTo(EDocumentState::AwaitFailedDocumentSave);
 			break;
 		}
-		case 7:
+		case EDocumentState::AwaitFailedDocumentSave:
 			if (Editor.PendingSave)
 			{
 				break;

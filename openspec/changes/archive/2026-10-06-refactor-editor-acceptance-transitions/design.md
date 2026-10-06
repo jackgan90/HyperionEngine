@@ -1,0 +1,35 @@
+## Context
+
+At the change baseline, the private acceptance harness shared `ExerciseStep` between unrelated scenarios and contained additional numeric scenario/subscenario steps. Input helpers incremented outer steps, dispatch and input-window routing compared numeric ranges, and report consumers depended on the legacy interaction step value. The implemented model uses typed progress and scenario-owned input/timing contexts. The scenarios remain test-only and run on Main around the existing GUI and frame boundary.
+
+## Goals / Non-Goals
+
+**Goals:** complete migration of execution states to scenario-specific enums and explicit `TransitionTo`; make destinations visible at call sites; retain existing input ordering, delays, readiness checks, behavioral assertions, capture routing and test-disabled behavior; report interaction completion semantically without historical numeric state metadata.
+
+**Non-Goals:** new engine features, new test cases, a general workflow framework, coroutine scheduling, changes to shared editing/automation services, archive, commit or push. Numeric asset/case indices, movement sample counts and frame delays remain numeric where they actually count data or time.
+
+## Decisions
+
+1. Each independent scenario and subscenario owns a typed state. A small test-private state holder exposes read-only queries and `TransitionTo` with an explicit destination; it has no arithmetic, implicit increment or ordinal-based routing. Scenario enums use action/await/verification names rather than numbered labels.
+2. Existing shared step users become separate progress records. Other numeric execution-step fields are migrated too, including nested preview, raster and viewport exercises. State declarations are grouped in focused acceptance headers so unrelated scenarios do not share one enum.
+3. Click progress only handles synthetic pointer input and reports completion. The caller names the destination after the same release frame as before. Existing pauses, pointer-state toggles and double-click spacing remain intact; transitions do not introduce automatic wait resets or same-frame execution of another state.
+4. Dispatch and window routing use named states or scenario-owned metadata. Independent routing policy is explicit, including main-window exceptions in the asset lifecycle exercise. Range comparisons, ordinal casts and automatic next-state lookup are not execution mechanisms.
+5. Remove historical numbers from all state declarations and retire `exercise_step` from reports. State-name generation returns `string_view` directly from the same declarations; asset stage/window metadata remains explicit. A private `IsInteractionComplete()` predicate owns the existing enabled-scenario, `AwaitReopenedScene` and ready-frame conditions. Both `IsComplete()` and the report's `interaction_verified` use it. Replace the sole existing numeric report assertion with this boolean result, retaining its completion coverage without coupling the test to an internal phase name. Other report fields and CLI flags stay compatible; reporting does not influence control flow.
+6. Preserve existing scenario composition and the production driver boundary. No new exclusive-option validation, scheduler, production API or test registration is introduced. Retain existing parameterized case indices and domain-specific expected values.
+7. Keep `TAcceptanceState` concerned only with typed progress. Focused concrete scenario contexts own input gestures and timing; Movement, Wheel, Transform, LightPriority, Raster and ViewportChoice do not borrow their coordinator's input storage. Click progress has named delay/press/release phases and returns completion; callers do not inspect or seed its elapsed count.
+8. Represent text/key input sequences and release/settle/action cadence with named phases rather than comparing a shared count to ordinal milestones or taking its remainder. Actual observations, movement samples, diagnostic intervals and settling budgets retain numeric frame units and descriptive context-owned parameters. Only the owning active stage advances or restarts them.
+9. Preserve each original counting boundary: initialization does not consume a tick; frame observations complete on their configured eligible update; callers explicitly retain same-frame actions or next-frame continuation. Readiness guards retain their relative position. Replace inherited click readiness with explicit immediate/default-delay policy, including interaction menu/cancel clicks, scene double-click and hovered tab close. Before-toggle capture is a one-update observation rather than a persistent click-phase predicate. Asset preview's 120-frame point remains diagnostic, not a new timeout.
+10. Publish the current maintenance contract in `docs/EditorAcceptance.md` and link it from the coding standard, Editor, source-layout, verification and index documents. Keep typed scenario progress, input phases, frame budgets, sample data and one-shot observations distinct. Describe macro declaration sources, case extension points, scanner resets, helper counting boundaries and semantic completion. Correct blanket report-compatibility claims in current docs/specs, label baseline descriptions as historical, and retain archived evidence. Synchronizing current contract text does not archive the active change or change source behavior.
+
+## Risks / Trade-offs
+
+- Timing drift from click/helper conversion -> retain event generation, scenario-owned frame budgets and per-frame invocation order; run existing GUI acceptance cases in Debug and Release.
+- Missed cross-file transition or capture point -> inventory every execution-state read/write before edits, check residual numeric state operations and review the final diff against the baseline.
+- State-label errors in branch/loop conversion -> name destinations from the actual next action and keep every existing condition/branch and assertion.
+- Report schema retirement -> explicitly retire only `exercise_step`, supply semantic `interaction_verified` and update its sole repository consumer; run the existing interaction acceptance in Debug/Release and verify the test-disabled report emits false.
+- Header/state ownership growth -> use small private helpers and focused state declaration headers; no Runtime dependencies or mutable state visible to production.
+- Input timing drift -> preserve a fresh post-transition/report baseline, enumerate counter roles and inheritance points, and compare per-stage event/update timelines before running unchanged existing regressions. Do not impose automatic timer reset on every `TransitionTo`, global frame arithmetic or a shared input scheduler.
+
+## Migration Plan
+
+Inventory and preserve the baseline, introduce typed transition/input primitives, migrate shared-step scenarios, migrate scenario-specific and nested states, update semantic dispatch/diagnostics/report mapping, then format, build and run existing regressions. The work remains an active OpenSpec change; no archive or Git commit is performed.

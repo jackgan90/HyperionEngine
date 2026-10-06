@@ -36,7 +36,7 @@ def main():
     assert all(report[name] for name in ('movement', 'movement_gate', 'right_release', 'look',
                                          'dolly', 'wheel_speed', 'input_isolation')), report
     assert report['movement_speed'] > 0, report
-    assert report['exercise_step'] == 21, report
+    assert report['interaction_verified'], report
     with capture.open('rb') as stream:
         header = stream.read(24)
     assert header[:8] == b'\x89PNG\r\n\x1a\n'

@@ -51,19 +51,21 @@ bool FEditorAcceptanceHarness::ExerciseAssetPreviewInput(std::vector<FInputEvent
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
 	Exercise.bSawReady |= Editor.AssetWorkspace->IsPreviewReady();
 	Exercise.bSawPreparing |= Editor.AssetWorkspace->ActiveStatus().find("0/1 models ready") != std::string::npos;
-	if (Exercise.Step >= 4)
+	if (Exercise.Progress.IsAny({EAssetPreviewState::VerifyDragAndUndo, EAssetPreviewState::VerifyUndoAndRedo,
+	                             EAssetPreviewState::VerifyRedoAndRestore, EAssetPreviewState::VerifyRestoredPreview}))
 	{
 		return ExerciseAssetPreviewHistory(InEvents);
 	}
-	if (Exercise.Step == 0)
+	if (Exercise.Progress.Is(EAssetPreviewState::RevealPosition))
 	{
 		Editor.AssetWorkspace->RevealProperty("node/position");
 		Exercise.Before = HashArchive(Document->Get("nodes"));
-		++Exercise.Step;
+		Exercise.PositionControlSettle.Restart();
+		Exercise.Progress.TransitionTo(EAssetPreviewState::AwaitPositionControl);
 	}
-	else if (Exercise.Step == 1)
+	else if (Exercise.Progress.Is(EAssetPreviewState::AwaitPositionControl))
 	{
-		if (++Exercise.Frames < 4)
+		if (!Exercise.PositionControlSettle.Advance())
 		{
 			return false;
 		}
@@ -73,18 +75,18 @@ bool FEditorAcceptanceHarness::ExerciseAssetPreviewInput(std::vector<FInputEvent
 		RequirePreview(Exercise.Canvas.W > Exercise.Canvas.Y, "Model preview canvas is missing");
 		Exercise.Pointer = {(Field.X + Field.Z) * .5f, (Field.Y + Field.W) * .5f};
 		PreviewPointer(InEvents, Exercise.Pointer);
-		Exercise.Frames = 0;
-		++Exercise.Step;
+		Exercise.DragSample.Restart();
+		Exercise.Progress.TransitionTo(EAssetPreviewState::PressPosition);
 	}
-	else if (Exercise.Step == 2)
+	else if (Exercise.Progress.Is(EAssetPreviewState::PressPosition))
 	{
 		PreviewPointer(InEvents, Exercise.Pointer, true);
-		++Exercise.Step;
+		Exercise.Progress.TransitionTo(EAssetPreviewState::DragPosition);
 	}
 	else
 	{
 		CheckCanvas(Exercise.Canvas, Editor.AssetWorkspace->ObservedBounds("canvas"));
-		if (++Exercise.Frames <= 48)
+		if (Exercise.DragSample.ConsumeFrame())
 		{
 			Exercise.Pointer.X += 2;
 			PreviewPointer(InEvents, Exercise.Pointer);
@@ -92,8 +94,8 @@ bool FEditorAcceptanceHarness::ExerciseAssetPreviewInput(std::vector<FInputEvent
 		else
 		{
 			PreviewPointer(InEvents, Exercise.Pointer, false);
-			Exercise.Frames = 0;
-			++Exercise.Step;
+			Exercise.HistorySettle.Restart();
+			Exercise.Progress.TransitionTo(EAssetPreviewState::VerifyDragAndUndo);
 		}
 	}
 	return false;
@@ -104,13 +106,13 @@ bool FEditorAcceptanceHarness::ExerciseAssetPreviewHistory(std::vector<FInputEve
 	auto& Exercise = Scenario.AssetPreviewExercise;
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
 	CheckCanvas(Exercise.Canvas, Editor.AssetWorkspace->ObservedBounds("canvas"));
-	if (++Exercise.Frames < 3 || !Editor.AssetWorkspace->IsPreviewReady())
+	if (!Exercise.HistorySettle.Advance() || !Editor.AssetWorkspace->IsPreviewReady())
 	{
 		return false;
 	}
-	Exercise.Frames = 0;
+	Exercise.HistorySettle.Restart();
 	const auto Current = HashArchive(Document->Get("nodes"));
-	if (Exercise.Step == 4)
+	if (Exercise.Progress.Is(EAssetPreviewState::VerifyDragAndUndo))
 	{
 		RequirePreview(Current != Exercise.Before && Document->IsDirty(), "Position drag did not edit the model");
 		RequirePreview(Exercise.bSawReady, "Preview layout regression did not observe a ready preview");
@@ -118,12 +120,12 @@ bool FEditorAcceptanceHarness::ExerciseAssetPreviewHistory(std::vector<FInputEve
 		Exercise.After = Current;
 		PreviewShortcut(InEvents, EKey::Z);
 	}
-	else if (Exercise.Step == 5)
+	else if (Exercise.Progress.Is(EAssetPreviewState::VerifyUndoAndRedo))
 	{
 		RequirePreview(Current == Exercise.Before && !Document->IsDirty(), "Position drag Undo was not atomic");
 		PreviewShortcut(InEvents, EKey::Y);
 	}
-	else if (Exercise.Step == 6)
+	else if (Exercise.Progress.Is(EAssetPreviewState::VerifyRedoAndRestore))
 	{
 		RequirePreview(Current == Exercise.After && Document->IsDirty(), "Position drag Redo lost the edit");
 		PreviewShortcut(InEvents, EKey::Z);
@@ -134,7 +136,20 @@ bool FEditorAcceptanceHarness::ExerciseAssetPreviewHistory(std::vector<FInputEve
 		Log(ELogLevel::Info, "Model Position drag, readiness transitions and Undo/Redo retain the preview rectangle");
 		return true;
 	}
-	++Exercise.Step;
+	switch (Exercise.Progress.GetState())
+	{
+		case EAssetPreviewState::VerifyDragAndUndo:
+			Exercise.Progress.TransitionTo(EAssetPreviewState::VerifyUndoAndRedo);
+			break;
+		case EAssetPreviewState::VerifyUndoAndRedo:
+			Exercise.Progress.TransitionTo(EAssetPreviewState::VerifyRedoAndRestore);
+			break;
+		case EAssetPreviewState::VerifyRedoAndRestore:
+			Exercise.Progress.TransitionTo(EAssetPreviewState::VerifyRestoredPreview);
+			break;
+		default:
+			break;
+	}
 	return false;
 }
 } // namespace Hyperion

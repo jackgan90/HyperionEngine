@@ -82,28 +82,31 @@ void FEditorAcceptanceHarness::ExerciseViewHistory()
 void FEditorAcceptanceHarness::ExerciseViewPreview(std::vector<FInputEvent>& InEvents)
 {
 	const auto Handle = Editor.Scene->FindHandle(Scenario.ExerciseOriginal.Id);
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.View.Progress.GetState())
 	{
-		case 3:
+		case EViewState::VerifyViewAndPreviewCamera:
 			Check(Editor.Scene->FindNode(Handle)->Local().Values == Editor.Viewport.ViewCamera.World.Values,
 			      "Apply editor view widget failed");
 			Editor.Undo();
 			Check(Editor.Scene->FindNode(Handle)->Local().Values == Scenario.ExerciseOriginal.Local().Values,
 			      "Undo camera view failed");
 			Editor.Redo();
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/preview"));
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/preview"), Scenario.View.Click))
+			{
+				Scenario.View.Progress.TransitionTo(EViewState::DisablePreviewCamera);
+			}
 			break;
-		case 4:
+		case EViewState::DisablePreviewCamera:
 		{
 			Check(Editor.Viewport.PreviewCamera == Handle && Editor.IsPreviewAvailable(),
 			      "Preview camera widget failed");
 			auto Node = *Editor.Scene->FindNode(Handle);
 			Node.bEnabled = false;
 			Editor.CommitEdit(Handle, Node, Editor.Scene->GetRevision());
-			++Scenario.ExerciseStep;
+			Scenario.View.Progress.TransitionTo(EViewState::RemovePreviewCameraComponent);
 			break;
 		}
-		case 5:
+		case EViewState::RemovePreviewCameraComponent:
 		{
 			Check(!Editor.IsPreviewAvailable() && Editor.RenderStats.MainView().Draws == 0,
 			      "Disabled preview still rendered scene geometry");
@@ -111,27 +114,31 @@ void FEditorAcceptanceHarness::ExerciseViewPreview(std::vector<FInputEvent>& InE
 			Node.Camera().reset();
 			Node.bEnabled = true;
 			Editor.CommitEdit(Handle, Node, Editor.Scene->GetRevision());
-			++Scenario.ExerciseStep;
+			Scenario.View.Progress.TransitionTo(EViewState::RestoreCameraAndReturnToEditor);
 			break;
 		}
-		case 6:
-			if (Scenario.ExerciseWait == 0)
+		case EViewState::RestoreCameraAndReturnToEditor:
+			if (!Scenario.View.bCameraRestored)
 			{
+				Scenario.View.bCameraRestored = true;
 				Check(!Editor.IsPreviewAvailable() && Editor.RenderStats.MainView().Draws == 0,
 				      "Missing Camera component fell back to another camera");
 				Editor.Undo();
 				Editor.Undo();
 				Check(Editor.IsPreviewAvailable(), "Undo did not restore camera preview");
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/return"));
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/return"), Scenario.View.Click))
+			{
+				Scenario.View.Progress.TransitionTo(EViewState::SaveViewDocument);
+			}
 			break;
-		case 7:
+		case EViewState::SaveViewDocument:
 			Check(!Editor.Viewport.PreviewCamera && Editor.Viewport.ViewCamera == Scenario.ExerciseEditorView,
 			      "Returning from preview lost the editor view");
 			Check(Editor.Scene->GetSettings().InitialView == Scenario.ExerciseInitialView,
 			      "Camera edit changed the initial view");
 			Editor.SaveScene(Editor.Options.ExerciseViews.string());
-			++Scenario.ExerciseStep;
+			Scenario.View.Progress.TransitionTo(EViewState::AwaitViewSave);
 			break;
 	}
 }
@@ -146,56 +153,68 @@ void FEditorAcceptanceHarness::ExerciseViewInput(std::vector<FInputEvent>& InEve
 	{
 		return;
 	}
-	if ((Scenario.ExerciseStep == 0 || Scenario.ExerciseStep == 1 || Scenario.ExerciseStep == 6) &&
+	if ((Scenario.View.Progress.Is(EViewState::SetInitialView) || Scenario.View.Progress.Is(EViewState::CreateCamera) ||
+	     Scenario.View.Progress.Is(EViewState::RestoreCameraAndReturnToEditor)) &&
 	    !Editor.bViewOptionsOpen)
 	{
-		const auto Step = Scenario.ExerciseStep;
-		ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/options"));
-		Scenario.ExerciseStep = Step;
+		ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/options"), Scenario.View.Click);
 		return;
 	}
-	if (Scenario.ExerciseStep >= 3 && Scenario.ExerciseStep <= 7)
+	if (Scenario.View.Progress.IsAny({EViewState::VerifyViewAndPreviewCamera, EViewState::DisablePreviewCamera,
+	                                  EViewState::RemovePreviewCameraComponent,
+	                                  EViewState::RestoreCameraAndReturnToEditor, EViewState::SaveViewDocument}))
 	{
 		ExerciseViewPreview(InEvents);
 		return;
 	}
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.View.Progress.GetState())
 	{
-		case 0:
-			if (Scenario.ExerciseWait == 0)
+		case EViewState::SetInitialView:
+			if (!Scenario.View.bInitialViewCaptured)
 			{
+				Scenario.View.bInitialViewCaptured = true;
 				const auto Revision = Editor.Scene->GetRevision();
 				DollySceneCamera(Editor.Viewport.ViewCamera, .9f);
 				Check(!Editor.IsDirty() && Editor.Scene->GetRevision() == Revision,
 				      "Navigation changed authored scene data");
 				Scenario.ExerciseInitialView = Editor.Viewport.ViewCamera;
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/initial"));
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/initial"), Scenario.View.Click))
+			{
+				Scenario.View.Progress.TransitionTo(EViewState::CreateCamera);
+			}
 			break;
-		case 1:
+		case EViewState::CreateCamera:
 			Check(Editor.IsDirty() && Editor.Scene->GetSettings().InitialView == Scenario.ExerciseInitialView,
 			      "Set initial view widget failed");
 			Editor.Undo();
 			Check(!Editor.IsDirty(), "Initial view undo lost save point");
 			Editor.Redo();
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/create"));
-			break;
-		case 2:
-			if (Scenario.ExerciseWait == 0)
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/create"), Scenario.View.Click))
 			{
+				Scenario.View.Progress.TransitionTo(EViewState::ApplyEditorView);
+			}
+			break;
+		case EViewState::ApplyEditorView:
+			if (!Scenario.View.bApplyBaselineCaptured)
+			{
+				Scenario.View.bApplyBaselineCaptured = true;
 				ExerciseViewHistory();
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/apply"));
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/apply"), Scenario.View.Click))
+			{
+				Scenario.View.Progress.TransitionTo(EViewState::VerifyViewAndPreviewCamera);
+			}
 			break;
-		case 8:
+		case EViewState::AwaitViewSave:
 			if (!Editor.PendingSave)
 			{
 				Check(!Editor.IsDirty(), "View document save failed");
 				Editor.OpenScene(Editor.Options.ExerciseViews.string());
-				++Scenario.ExerciseStep;
+				Scenario.View.Progress.TransitionTo(EViewState::VerifyReloadAndDeleteCamera);
 			}
 			break;
-		case 9:
+		case EViewState::VerifyReloadAndDeleteCamera:
 		{
 			Check(Editor.Viewport.ViewCamera == Scenario.ExerciseInitialView && !Editor.IsDirty(),
 			      "Opening scene did not restore the explicit initial view");
@@ -206,10 +225,10 @@ void FEditorAcceptanceHarness::ExerciseViewInput(std::vector<FInputEvent>& InEve
 			Editor.SetPreviewCamera(Handle);
 			Editor.Scene->RemoveSubtree(Handle);
 			Check(!Editor.IsPreviewAvailable(), "Deleted camera preview remained available");
-			++Scenario.ExerciseStep;
+			Scenario.View.Progress.TransitionTo(EViewState::VerifyDeletedPreview);
 			break;
 		}
-		case 10:
+		case EViewState::VerifyDeletedPreview:
 			Check(Editor.RenderStats.MainView().Draws == 0, "Deleted preview still rendered scene geometry");
 			Editor.SetPreviewCamera({});
 			Scenario.bViewsVerified = true;

@@ -92,28 +92,37 @@ void FEditorAcceptanceHarness::PrepareReparentExercise()
 	Editor.Viewport.bViewportCameraInitialized = true;
 	Editor.bShowLightMarkers = true;
 	Editor.ResetDocument();
-	Scenario.ReparentExerciseStep = 1;
+	Scenario.ReparentDrag.TransitionTo(EReparentDragState::PrepareSelection);
 }
 
 void FEditorAcceptanceHarness::ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents)
 {
-	const auto Step = Scenario.ReparentKeyboardStep;
-	if (Step == 0)
+
+	if (Scenario.ReparentKeyboard.Is(EReparentKeyboardState::PrepareKeyboard))
 	{
 		Editor.Filter = "Reparent";
 		Scenario.ReparentExerciseHistory = Editor.HistoryCursor;
 	}
-	else if (Step == 1 || Step == 2)
+	else if (Scenario.ReparentKeyboard.Is(EReparentKeyboardState::PressRow) ||
+	         Scenario.ReparentKeyboard.Is(EReparentKeyboardState::ReleaseRow))
 	{
 		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[0])));
-		ReparentButton(InEvents, Step == 1);
+		ReparentButton(InEvents, Scenario.ReparentKeyboard.Is(EReparentKeyboardState::PressRow));
 	}
-	else if (Step >= 3 && Step <= 6)
+	else if (Scenario.ReparentKeyboard.IsAny({EReparentKeyboardState::PressDown, EReparentKeyboardState::ReleaseDown,
+	                                          EReparentKeyboardState::PressSpace,
+	                                          EReparentKeyboardState::ReleaseSpace}))
 	{
 		FInputEvent Event;
 		Event.Type = EEventType::Key;
-		Event.Key = Step <= 4 ? EKey::Down : EKey::Space;
-		Event.bDown = Step == 3 || Step == 5;
+		Event.Key =
+		    Scenario.ReparentKeyboard.IsAny({EReparentKeyboardState::PrepareKeyboard, EReparentKeyboardState::PressRow,
+		                                     EReparentKeyboardState::ReleaseRow, EReparentKeyboardState::PressDown,
+		                                     EReparentKeyboardState::ReleaseDown})
+		        ? EKey::Down
+		        : EKey::Space;
+		Event.bDown = Scenario.ReparentKeyboard.Is(EReparentKeyboardState::PressDown) ||
+		              Scenario.ReparentKeyboard.Is(EReparentKeyboardState::PressSpace);
 		InEvents.push_back(Event);
 	}
 	else
@@ -126,27 +135,55 @@ void FEditorAcceptanceHarness::ExerciseReparentKeyboard(std::vector<FInputEvent>
 		                    Editor.HistoryCursor == Scenario.ReparentExerciseHistory,
 		                "keyboard selection created a drag or history entry");
 	}
-	++Scenario.ReparentKeyboardStep;
+	switch (Scenario.ReparentKeyboard.GetState())
+	{
+		case EReparentKeyboardState::PrepareKeyboard:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::PressRow);
+			break;
+		case EReparentKeyboardState::PressRow:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::ReleaseRow);
+			break;
+		case EReparentKeyboardState::ReleaseRow:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::PressDown);
+			break;
+		case EReparentKeyboardState::PressDown:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::ReleaseDown);
+			break;
+		case EReparentKeyboardState::ReleaseDown:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::PressSpace);
+			break;
+		case EReparentKeyboardState::PressSpace:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::ReleaseSpace);
+			break;
+		case EReparentKeyboardState::ReleaseSpace:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::VerifyKeyboardSelection);
+			break;
+		case EReparentKeyboardState::VerifyKeyboardSelection:
+			Scenario.ReparentKeyboard.TransitionTo(EReparentKeyboardState::Complete);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent>& InEvents)
 {
-	const bool bLight = Scenario.ReparentSelectionStep >= 15;
-	const unsigned Phase = Scenario.ReparentSelectionStep % 15;
+	const bool bLight = DescribeReparentSelectionContext(Scenario.ReparentSelection.GetState()).CaseIndex == 1;
+	const auto Phase = DescribeReparentSelectionContext(Scenario.ReparentSelection.GetState()).Action;
 	const auto Handle = Scenario.ReparentExerciseNodes[bLight ? 5 : 0];
 	const auto Screen = ProjectViewportPoint(Editor.Viewport.ViewCamera, Editor.Viewport.ViewportRegion.Bounds,
 	                                         bLight ? FVec3{-2, 2, 0} : FVec3{-1.3f, -.3f, .5f});
 	RequireReparent(Screen.has_value(), "selection point is outside viewport");
 	const FVec2 Point{Screen->X, Screen->Y};
-	if (Phase == 0)
+	if (Phase == EReparentSelectionAction::PrepareSelection)
 	{
 		Editor.SelectObject(std::nullopt);
 		Scenario.ReparentExerciseHistory = Editor.HistoryCursor;
 		Editor.Filter.clear();
 	}
-	else if (Phase == 1 || Phase == 4)
+	else if (Phase == EReparentSelectionAction::PressViewport || Phase == EReparentSelectionAction::PressViewportDrag)
 	{
-		if (Phase == 4 && !bLight)
+		if (Phase == EReparentSelectionAction::PressViewportDrag && !bLight)
 		{
 			RequireReparent(Editor.Gizmo.HitTest(Point) == ETransformGizmoHandle::None,
 			                "mesh drag must exercise viewport input outside gizmo handles");
@@ -154,24 +191,25 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 		MoveReparent(InEvents, Point);
 		ReparentButton(InEvents, true);
 	}
-	else if (Phase == 2)
+	else if (Phase == EReparentSelectionAction::ReleaseViewport)
 	{
 		ReparentButton(InEvents, false);
 	}
-	else if (Phase == 3)
+	else if (Phase == EReparentSelectionAction::VerifyViewportSelection)
 	{
 		RequireReparent(Editor.Selection == Handle && Editor.Selection.All().size() == 1,
 		                "viewport click must select the same object used by Outliner");
 	}
-	else if (Phase == 5 || Phase == 6 || Phase == 7)
+	else if (Phase == EReparentSelectionAction::MoveViewportDrag || Phase == EReparentSelectionAction::MoveToOutliner ||
+	         Phase == EReparentSelectionAction::CancelViewportDrag)
 	{
 		RequireReparent(!Editor.Reparent.GetGesture() && !Editor.Gui->DragPayload(),
 		                "viewport must not start hierarchy drag");
-		if (Phase == 5)
+		if (Phase == EReparentSelectionAction::MoveViewportDrag)
 		{
 			MoveReparent(InEvents, {Point.X + 20, Point.Y});
 		}
-		else if (Phase == 6)
+		else if (Phase == EReparentSelectionAction::MoveToOutliner)
 		{
 			MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[3])));
 		}
@@ -185,7 +223,7 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 			InEvents.push_back(Event);
 		}
 	}
-	else if (Phase == 8)
+	else if (Phase == EReparentSelectionAction::ReleaseViewportDrag)
 	{
 		ReparentButton(InEvents, false);
 		FInputEvent Event;
@@ -193,27 +231,27 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 		Event.Key = EKey::Escape;
 		InEvents.push_back(Event);
 	}
-	else if (Phase == 9)
+	else if (Phase == EReparentSelectionAction::VerifyCancelledDrag)
 	{
 		RequireReparent(Editor.Selection == Handle && Editor.HistoryCursor == Scenario.ReparentExerciseHistory,
 		                "selection or history changed after cancelled viewport gesture");
 		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Handle)->Id)));
 	}
-	else if (Phase == 10)
+	else if (Phase == EReparentSelectionAction::PressOutliner)
 	{
 		// Let mouse/key release events drain before starting the next independent gesture.
 		ReparentButton(InEvents, true);
 	}
-	else if (Phase == 11)
+	else if (Phase == EReparentSelectionAction::StartOutlinerDrag)
 	{
 		RequireReparent(Editor.Reparent.GetGesture().has_value(), "Outliner did not use viewport selection");
 		MoveReparent(InEvents, {Editor.Reparent.GetGesture()->Start.X + 20, Editor.Reparent.GetGesture()->Start.Y});
 	}
-	else if (Phase == 12)
+	else if (Phase == EReparentSelectionAction::MoveOutlinerTarget)
 	{
 		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[3])));
 	}
-	else if (Phase == 13)
+	else if (Phase == EReparentSelectionAction::ReleaseOutlinerDrag)
 	{
 		RequireReparent(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bTargetPreview,
 		                "Outliner target did not preview");
@@ -227,7 +265,101 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 		Editor.Undo();
 		RequireReparent(Editor.Scene->FindNode(Handle)->Parent().empty(), "selection exercise undo failed");
 	}
-	++Scenario.ReparentSelectionStep;
+	switch (Scenario.ReparentSelection.GetState())
+	{
+		case EReparentSelectionState::MeshPrepareSelection:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshPressViewport);
+			break;
+		case EReparentSelectionState::MeshPressViewport:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshReleaseViewport);
+			break;
+		case EReparentSelectionState::MeshReleaseViewport:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshVerifyViewportSelection);
+			break;
+		case EReparentSelectionState::MeshVerifyViewportSelection:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshPressViewportDrag);
+			break;
+		case EReparentSelectionState::MeshPressViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshMoveViewportDrag);
+			break;
+		case EReparentSelectionState::MeshMoveViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshMoveToOutliner);
+			break;
+		case EReparentSelectionState::MeshMoveToOutliner:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshCancelViewportDrag);
+			break;
+		case EReparentSelectionState::MeshCancelViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshReleaseViewportDrag);
+			break;
+		case EReparentSelectionState::MeshReleaseViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshVerifyCancelledDrag);
+			break;
+		case EReparentSelectionState::MeshVerifyCancelledDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshPressOutliner);
+			break;
+		case EReparentSelectionState::MeshPressOutliner:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshStartOutlinerDrag);
+			break;
+		case EReparentSelectionState::MeshStartOutlinerDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshMoveOutlinerTarget);
+			break;
+		case EReparentSelectionState::MeshMoveOutlinerTarget:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshReleaseOutlinerDrag);
+			break;
+		case EReparentSelectionState::MeshReleaseOutlinerDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::MeshVerifyReparent);
+			break;
+		case EReparentSelectionState::MeshVerifyReparent:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightPrepareSelection);
+			break;
+		case EReparentSelectionState::LightPrepareSelection:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightPressViewport);
+			break;
+		case EReparentSelectionState::LightPressViewport:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightReleaseViewport);
+			break;
+		case EReparentSelectionState::LightReleaseViewport:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightVerifyViewportSelection);
+			break;
+		case EReparentSelectionState::LightVerifyViewportSelection:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightPressViewportDrag);
+			break;
+		case EReparentSelectionState::LightPressViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightMoveViewportDrag);
+			break;
+		case EReparentSelectionState::LightMoveViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightMoveToOutliner);
+			break;
+		case EReparentSelectionState::LightMoveToOutliner:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightCancelViewportDrag);
+			break;
+		case EReparentSelectionState::LightCancelViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightReleaseViewportDrag);
+			break;
+		case EReparentSelectionState::LightReleaseViewportDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightVerifyCancelledDrag);
+			break;
+		case EReparentSelectionState::LightVerifyCancelledDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightPressOutliner);
+			break;
+		case EReparentSelectionState::LightPressOutliner:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightStartOutlinerDrag);
+			break;
+		case EReparentSelectionState::LightStartOutlinerDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightMoveOutlinerTarget);
+			break;
+		case EReparentSelectionState::LightMoveOutlinerTarget:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightReleaseOutlinerDrag);
+			break;
+		case EReparentSelectionState::LightReleaseOutlinerDrag:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::LightVerifyReparent);
+			break;
+		case EReparentSelectionState::LightVerifyReparent:
+			Scenario.ReparentSelection.TransitionTo(EReparentSelectionState::Complete);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents)
@@ -268,7 +400,7 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 	const auto B = Scenario.ReparentExerciseNodes[1];
 	const auto Child = Scenario.ReparentExerciseNodes[2];
 	const unsigned Case = Scenario.ReparentExerciseCase;
-	if (Scenario.ReparentExerciseStep == 1)
+	if (Scenario.ReparentDrag.Is(EReparentDragState::PrepareSelection))
 	{
 		FEditorSelection Selected;
 		Selected.Toggle(A);
@@ -289,7 +421,7 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 		Scenario.ReparentExerciseHistory = Editor.HistoryCursor;
 		Editor.Error.clear();
 	}
-	else if (Scenario.ReparentExerciseStep == 2)
+	else if (Scenario.ReparentDrag.Is(EReparentDragState::PressSource))
 	{
 		const auto Point = RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[Case == 9    ? 1
 		                                                                                         : Case == 10 ? 5
@@ -297,13 +429,13 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 		MoveReparent(InEvents, Point);
 		ReparentButton(InEvents, true);
 	}
-	else if (Scenario.ReparentExerciseStep == 3)
+	else if (Scenario.ReparentDrag.Is(EReparentDragState::StartDrag))
 	{
 		RequireReparent(Editor.Reparent.GetGesture().has_value(),
 		                "press did not prepare source case " + std::to_string(Case));
 		MoveReparent(InEvents, {Editor.Reparent.GetGesture()->Start.X + 20, Editor.Reparent.GetGesture()->Start.Y});
 	}
-	else if (Scenario.ReparentExerciseStep == 4)
+	else if (Scenario.ReparentDrag.Is(EReparentDragState::PreviewTarget))
 	{
 		RequireReparent(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bDragging, "drag did not start");
 		RequireReparent(Editor.Selection.All().size() == (Case == 9    ? 1u
@@ -317,15 +449,15 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 		                                                                                                  : 3]);
 		MoveReparent(InEvents, Case == 7 ? FVec2{5, 5} : RowCenter(Bounds));
 	}
-	else if (Scenario.ReparentExerciseStep == 5)
+	else if (Scenario.ReparentDrag.Is(EReparentDragState::InterruptGesture))
 	{
 		ExerciseReparentInterruption(InEvents);
 	}
-	else if (Scenario.ReparentExerciseStep == 6)
+	else if (Scenario.ReparentDrag.Is(EReparentDragState::ReleasePointer))
 	{
 		ReparentButton(InEvents, false);
 	}
-	else if (Scenario.ReparentExerciseStep == 7)
+	else if (Scenario.ReparentDrag.Is(EReparentDragState::ReleaseInterruption))
 	{
 		FInputEvent Event;
 		Event.Type = Case == 6 ? EEventType::Focus : EEventType::Key;
@@ -342,10 +474,35 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 	{
 		VerifyReparentExercise();
 		++Scenario.ReparentExerciseCase;
-		Scenario.ReparentExerciseStep = 1;
+		Scenario.ReparentDrag.TransitionTo(EReparentDragState::PrepareSelection);
 		return;
 	}
-	++Scenario.ReparentExerciseStep;
+	switch (Scenario.ReparentDrag.GetState())
+	{
+		case EReparentDragState::PrepareSelection:
+			Scenario.ReparentDrag.TransitionTo(EReparentDragState::PressSource);
+			break;
+		case EReparentDragState::PressSource:
+			Scenario.ReparentDrag.TransitionTo(EReparentDragState::StartDrag);
+			break;
+		case EReparentDragState::StartDrag:
+			Scenario.ReparentDrag.TransitionTo(EReparentDragState::PreviewTarget);
+			break;
+		case EReparentDragState::PreviewTarget:
+			Scenario.ReparentDrag.TransitionTo(EReparentDragState::InterruptGesture);
+			break;
+		case EReparentDragState::InterruptGesture:
+			Scenario.ReparentDrag.TransitionTo(EReparentDragState::ReleasePointer);
+			break;
+		case EReparentDragState::ReleasePointer:
+			Scenario.ReparentDrag.TransitionTo(EReparentDragState::ReleaseInterruption);
+			break;
+		case EReparentDragState::ReleaseInterruption:
+			Scenario.ReparentDrag.TransitionTo(EReparentDragState::VerifyGesture);
+			break;
+		default:
+			break;
+	}
 }
 
 void FEditorAcceptanceHarness::VerifyReparentExercise()
@@ -396,19 +553,23 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 	{
 		return;
 	}
-	if (Scenario.ReparentExerciseStep == 0)
+	if (Scenario.ReparentDrag.Is(EReparentDragState::PrepareFixtures))
 	{
 		PrepareReparentExercise();
 		return;
 	}
 	if (Scenario.ReparentExerciseCase < 14)
 	{
-		if (Scenario.ReparentKeyboardStep < 8)
+		if (Scenario.ReparentKeyboard.IsAny({EReparentKeyboardState::PrepareKeyboard, EReparentKeyboardState::PressRow,
+		                                     EReparentKeyboardState::ReleaseRow, EReparentKeyboardState::PressDown,
+		                                     EReparentKeyboardState::ReleaseDown, EReparentKeyboardState::PressSpace,
+		                                     EReparentKeyboardState::ReleaseSpace,
+		                                     EReparentKeyboardState::VerifyKeyboardSelection}))
 		{
 			ExerciseReparentKeyboard(InEvents);
 			return;
 		}
-		if (Scenario.ReparentSelectionStep < 30)
+		if ((IsReparentSelectionState(Scenario.ReparentSelection.GetState())))
 		{
 			ExerciseReparentSelection(InEvents);
 			return;
@@ -416,22 +577,25 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 		ExerciseReparentDrag(InEvents);
 		return;
 	}
-	if (Scenario.ReparentExerciseStep == 1)
+	if (Scenario.ReparentDocument.Is(EReparentDocumentState::SaveScene))
 	{
 		Editor.SaveScene(Editor.Options.ExerciseReparent.generic_string());
-		++Scenario.ReparentExerciseStep;
+		Scenario.ReparentDocument.TransitionTo(EReparentDocumentState::AwaitSaveAndReopen);
 	}
-	else if (Scenario.ReparentExerciseStep == 2 && !Editor.PendingSave)
+	else if (Scenario.ReparentDocument.Is(EReparentDocumentState::AwaitSaveAndReopen) && !Editor.PendingSave)
 	{
 		RequireReparent(!Editor.IsDirty(), "save failed: " + Editor.Error);
 		Editor.OpenScene(Editor.Options.ExerciseReparent.generic_string());
-		++Scenario.ReparentExerciseStep;
+		Scenario.ReparentDocument.TransitionTo(EReparentDocumentState::VerifyReload);
 	}
-	else if (Scenario.ReparentExerciseStep >= 4 && Scenario.ReparentExerciseStep <= 6)
+	else if (Scenario.ReparentDocument.IsAny({EReparentDocumentState::PressReplacementSource,
+	                                          EReparentDocumentState::StartReplacementDrag,
+	                                          EReparentDocumentState::ReplaceSceneDuringDrag}))
 	{
 		ExerciseReparentReplacement(InEvents);
 	}
-	else if (Scenario.ReparentExerciseStep == 3 || Scenario.ReparentExerciseStep == 7)
+	else if (Scenario.ReparentDocument.Is(EReparentDocumentState::VerifyReload) ||
+	         Scenario.ReparentDocument.Is(EReparentDocumentState::VerifyReplacement))
 	{
 		for (std::size_t Index = 0; Index < Scenario.ReparentExerciseIds.size(); ++Index)
 		{
@@ -449,9 +613,9 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 				                "saved world changed");
 			}
 		}
-		if (Scenario.ReparentExerciseStep == 3)
+		if (Scenario.ReparentDocument.Is(EReparentDocumentState::VerifyReload))
 		{
-			++Scenario.ReparentExerciseStep;
+			Scenario.ReparentDocument.TransitionTo(EReparentDocumentState::PressReplacementSource);
 		}
 		else
 		{
@@ -462,7 +626,7 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 
 void FEditorAcceptanceHarness::ExerciseReparentReplacement(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.ReparentExerciseStep == 4)
+	if (Scenario.ReparentDocument.Is(EReparentDocumentState::PressReplacementSource))
 	{
 		const auto Handle = Editor.Scene->FindHandle(Scenario.ReparentExerciseIds[0]);
 		const auto Name = Editor.Scene->FindNode(Handle)->Name + " replacement probe";
@@ -473,7 +637,7 @@ void FEditorAcceptanceHarness::ExerciseReparentReplacement(std::vector<FInputEve
 		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[0])));
 		ReparentButton(InEvents, true);
 	}
-	else if (Scenario.ReparentExerciseStep == 5)
+	else if (Scenario.ReparentDocument.Is(EReparentDocumentState::StartReplacementDrag))
 	{
 		RequireReparent(Editor.Reparent.HasGesture(), "replacement fixture did not prepare a gesture");
 		const auto Start = Editor.Reparent.GetGesture()->Start;
@@ -504,6 +668,19 @@ void FEditorAcceptanceHarness::ExerciseReparentReplacement(std::vector<FInputEve
 		Editor.LoadSceneDocument(Editor.Options.ExerciseReparent.generic_string(), true);
 		ReparentButton(InEvents, false);
 	}
-	++Scenario.ReparentExerciseStep;
+	switch (Scenario.ReparentDocument.GetState())
+	{
+		case EReparentDocumentState::PressReplacementSource:
+			Scenario.ReparentDocument.TransitionTo(EReparentDocumentState::StartReplacementDrag);
+			break;
+		case EReparentDocumentState::StartReplacementDrag:
+			Scenario.ReparentDocument.TransitionTo(EReparentDocumentState::ReplaceSceneDuringDrag);
+			break;
+		case EReparentDocumentState::ReplaceSceneDuringDrag:
+			Scenario.ReparentDocument.TransitionTo(EReparentDocumentState::VerifyReplacement);
+			break;
+		default:
+			break;
+	}
 }
 } // namespace Hyperion

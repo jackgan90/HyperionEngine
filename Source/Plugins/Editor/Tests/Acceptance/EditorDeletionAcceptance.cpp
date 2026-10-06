@@ -19,42 +19,46 @@ bool FEditorAcceptanceHarness::ExerciseDeletionInput(std::vector<FInputEvent>& I
 	Key.Type = EEventType::Key;
 	Key.Key = EKey::Delete;
 	Key.bDown = true;
-	switch (Scenario.DeletionExerciseStep++)
+	switch (Scenario.Deletion.GetState())
 	{
-		case 0:
+		case EDeletionState::RepeatDelete:
 			CheckDeletion(bool(Editor.Selection), "click did not select deletion target");
 			Scenario.DeletionExerciseHandle = *Editor.Selection;
 			Scenario.DeletionExerciseId = Editor.Scene->FindNode(*Editor.Selection)->Id;
 			Key.bRepeat = true;
 			InEvents.push_back(Key);
+			Scenario.Deletion.TransitionTo(EDeletionState::DeleteSelection);
 			break;
-		case 1:
+		case EDeletionState::DeleteSelection:
 			CheckDeletion(Editor.Selection == Scenario.DeletionExerciseHandle && !Editor.IsDirty(),
 			              "repeat deleted an object");
 			InEvents.push_back(Key);
+			Scenario.Deletion.TransitionTo(EDeletionState::VerifyDeletion);
 			break;
-		case 2:
+		case EDeletionState::VerifyDeletion:
 			CheckDeletion(!Editor.Selection && !Editor.Scene->FindNode(Scenario.DeletionExerciseHandle) &&
 			                  Editor.IsDirty(),
 			              "Del did not delete and clear selection");
 			CheckDeletion(Editor.HistoryCursor == 1, "delete was not one history entry");
+			Scenario.Deletion.TransitionTo(EDeletionState::UndoDeletion);
 			break;
-		case 3:
+		case EDeletionState::UndoDeletion:
 			CheckDeletion(!Editor.Selection, "Outliner automatically selected a replacement");
 			Editor.Undo();
 			CheckDeletion(!Editor.IsDirty() && Editor.Scene->FindHandle(Scenario.DeletionExerciseId).Scene &&
 			                  Editor.Selection == Editor.Scene->FindHandle(Scenario.DeletionExerciseId),
 			              "undo did not restore the object, selection and save point");
 			Editor.Redo();
+			Scenario.Deletion.TransitionTo(EDeletionState::VerifyRedoAndRestore);
 			break;
-		case 4:
+		case EDeletionState::VerifyRedoAndRestore:
 			CheckDeletion(!Editor.Selection && !Editor.Scene->FindHandle(Scenario.DeletionExerciseId).Scene &&
 			                  Editor.IsDirty(),
 			              "redo did not delete and clear selection");
 			Editor.Undo();
 			Editor.SelectObject(Editor.Scene->FindHandle(Scenario.DeletionExerciseId));
 			Editor.ResetDocument();
-			Scenario.DeletionExerciseStep = 0;
+			Scenario.Deletion.TransitionTo(EDeletionState::RepeatDelete);
 			return true;
 	}
 	return false;

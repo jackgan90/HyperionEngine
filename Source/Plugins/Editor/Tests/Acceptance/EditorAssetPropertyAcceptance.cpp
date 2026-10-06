@@ -53,19 +53,22 @@ void AssetShortcut(std::vector<FInputEvent>& InEvents, EKey InKey)
 
 void FEditorAcceptanceHarness::ExerciseAssetPropertyInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.AssetExerciseLoggedStep != static_cast<int>(Scenario.ExerciseStep))
+	const auto Stage = DescribeAssetAcceptance(Scenario.Asset.Progress.GetState()).Stage;
+	if (Scenario.AssetLoggedState != Scenario.Asset.Progress.GetState())
 	{
-		Scenario.AssetExerciseLoggedStep = static_cast<int>(Scenario.ExerciseStep);
-		Log(ELogLevel::Info, "Asset property acceptance step " + std::to_string(Scenario.ExerciseStep));
+		Scenario.AssetLoggedState = Scenario.Asset.Progress.GetState();
+		Log(ELogLevel::Info, "Asset property acceptance step " + Scenario.Asset.Progress.Name());
 	}
-	if (Scenario.ExerciseStep >= 161)
+	if ((Stage == EAssetAcceptanceStage::CleanTab || Stage == EAssetAcceptanceStage::DiscardTab ||
+	     Stage == EAssetAcceptanceStage::FloatingPanel))
 	{
 		ExerciseAssetWorkspaceInput(InEvents);
 		return;
 	}
-	if (Scenario.ExerciseStep >= 130)
+	if ((Stage == EAssetAcceptanceStage::Texture || Stage == EAssetAcceptanceStage::CustomMaterial ||
+	     Stage == EAssetAcceptanceStage::CustomMaterialReset))
 	{
-		if (Scenario.ExerciseStep >= 150)
+		if ((Stage == EAssetAcceptanceStage::CustomMaterial || Stage == EAssetAcceptanceStage::CustomMaterialReset))
 		{
 			ExerciseCustomMaterialInput(InEvents);
 			return;
@@ -73,80 +76,65 @@ void FEditorAcceptanceHarness::ExerciseAssetPropertyInput(std::vector<FInputEven
 		ExerciseAssetTextureInput(InEvents);
 		return;
 	}
-	if (Scenario.ExerciseStep >= 111)
+	if ((Stage == EAssetAcceptanceStage::References))
 	{
 		ExerciseAssetReferences(InEvents);
 		return;
 	}
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
 	const auto& Model = Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Model();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 100:
+		case EAssetState::OpenMaterial:
 			Editor.AssetWorkspace->Open("/Game/Material.hasset");
 			Scenario.AssetExerciseModel = Model->Data;
 			Scenario.AssetExerciseRoughness = Roughness(*Model->Data->Materials.front()->Asset);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitMaterialAndRevealRoughness);
 			break;
-		case 101:
+		case EAssetState::AwaitMaterialAndRevealRoughness:
 			if (Document && Document->Loaded().Path == "/Game/Material.hasset" &&
 			    Editor.AssetWorkspace->IsPreviewReady())
 			{
 				Editor.AssetWorkspace->RevealProperty("value/Pbr.RoughnessFactor/0");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::FocusRoughness);
 			}
 			break;
-		case 102:
+		case EAssetState::FocusRoughness:
 			AssetKey(InEvents, EKey::None, true, 1);
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("value/Pbr.RoughnessFactor/0"));
-			break;
-		case 103:
-			++Scenario.ExerciseWait;
-			if (Scenario.ExerciseWait == 1)
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("value/Pbr.RoughnessFactor/0"),
+			                  Scenario.Asset.Click))
 			{
-				AssetKey(InEvents, EKey::A, true, 1);
-			}
-			if (Scenario.ExerciseWait == 2)
-			{
-				AssetKey(InEvents, EKey::A, false);
-				FInputEvent Text;
-				Text.Type = EEventType::Text;
-				Text.Text = "0.31";
-				InEvents.push_back(Text);
-			}
-			if (Scenario.ExerciseWait == 4)
-			{
-				AssetKey(InEvents, EKey::Enter, true);
-			}
-			if (Scenario.ExerciseWait == 5)
-			{
-				AssetKey(InEvents, EKey::Enter, false);
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::TypeRoughness);
 			}
 			break;
-		case 104:
+		case EAssetState::TypeRoughness:
+			if (ExerciseTextInput(InEvents, Scenario.Asset.RoughnessInput, "0.31"))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::UndoRoughness);
+			}
+			break;
+		case EAssetState::UndoRoughness:
 			RequireAsset(Roughness(ReadValue<FMaterialAsset>(Document->Snapshot())) == .31f,
 			             "Material numeric input failed");
 			RequireAsset(Roughness(*Model->Data->Materials.front()->Asset) == Scenario.AssetExerciseRoughness,
 			             "Draft leaked into scene");
 			Editor.Gui->FinishEditing();
 			AssetShortcut(InEvents, EKey::Z);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::RedoRoughness);
 			break;
-		case 105:
+		case EAssetState::RedoRoughness:
 			RequireAsset(Roughness(ReadValue<FMaterialAsset>(Document->Snapshot())) == Scenario.AssetExerciseRoughness,
 			             "Material numeric Undo failed");
 			AssetShortcut(InEvents, EKey::Y);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::SaveRoughness);
 			break;
-		case 106:
+		case EAssetState::SaveRoughness:
 			RequireAsset(Roughness(ReadValue<FMaterialAsset>(Document->Snapshot())) == .31f,
 			             "Material numeric Redo failed");
 			AssetShortcut(InEvents, EKey::S);
-			Scenario.ExerciseStep = 110;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitMaterialRefresh);
 			break;
-		case 110:
+		case EAssetState::AwaitMaterialRefresh:
 			if (!Document->IsSaving() && !Document->IsDirty() &&
 			    Roughness(*Model->Data->Materials.front()->Asset) == .31f)
 			{
@@ -156,7 +144,7 @@ void FEditorAcceptanceHarness::ExerciseAssetPropertyInput(std::vector<FInputEven
 				RequireAsset(Model->Material.Roughness == .73f && Model->Surface.Reference &&
 				                 !Model->Surface.Overrides.empty(),
 				             "Material refresh discarded scene overrides");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RevealTextureReference);
 			}
 			break;
 	}
@@ -167,24 +155,32 @@ void FEditorAcceptanceHarness::ExerciseAssetReferences(std::vector<FInputEvent>&
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
 	const auto& Model = Editor.Scene->FindNode(Editor.Scene->FindHandle("model"))->Model();
 	const std::string ReferenceControl = "Texture##BaseColorTexture";
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 111:
+		case EAssetState::RevealTextureReference:
 			Editor.AssetWorkspace->RevealProperty(ReferenceControl);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::OpenTextureReference);
 			break;
-		case 112:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds(ReferenceControl));
+		case EAssetState::OpenTextureReference:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds(ReferenceControl), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RevealTextureChoice);
+			}
 			break;
-		case 113:
+		case EAssetState::RevealTextureChoice:
 			Editor.AssetWorkspace->RevealProperty("choice/" + ReferenceControl + "/Game/SecondTexture.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::SelectTextureChoice);
 			break;
-		case 114:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("choice/" + ReferenceControl +
-			                                                              "/Game/SecondTexture.hasset"));
+		case EAssetState::SelectTextureChoice:
+			if (ExerciseClick(
+			        InEvents,
+			        Editor.AssetWorkspace->ObservedBounds("choice/" + ReferenceControl + "/Game/SecondTexture.hasset"),
+			        Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::SaveTextureReference);
+			}
 			break;
-		case 115:
+		case EAssetState::SaveTextureReference:
 			if (AssetValue(ReadValue<FMaterialAsset>(Document->Snapshot()), "BaseColorTexture").Texture->Path ==
 			    "/Game/SecondTexture.hasset")
 			{
@@ -192,54 +188,63 @@ void FEditorAcceptanceHarness::ExerciseAssetReferences(std::vector<FInputEvent>&
 				                 "/Game/SecondTexture.hasset",
 				             "Draft reference leaked into scene");
 				AssetShortcut(InEvents, EKey::S);
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitTextureRefresh);
 			}
 			break;
-		case 116:
+		case EAssetState::AwaitTextureRefresh:
 			if (!Document->IsSaving() && !Document->IsDirty() &&
 			    AssetValue(*Model->Data->Materials.front()->Asset, "BaseColorTexture").Texture->Path ==
 			        "/Game/SecondTexture.hasset")
 			{
 				Editor.AssetWorkspace->Open("/Game/Model.hasset");
-				Scenario.ExerciseStep = 120;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::ExerciseModelPreview);
 			}
 			break;
-		case 120:
+		case EAssetState::ExerciseModelPreview:
 			if (Document && Document->Loaded().Path == "/Game/Model.hasset" &&
-			    (Scenario.AssetPreviewExercise.Step != 0 || Editor.AssetWorkspace->IsPreviewReady()))
+			    (!Scenario.AssetPreviewExercise.Progress.Is(EAssetPreviewState::RevealPosition) ||
+			     Editor.AssetWorkspace->IsPreviewReady()))
 			{
 				if (!ExerciseAssetPreviewInput(InEvents))
 				{
 					break;
 				}
 				Editor.AssetWorkspace->RevealProperty("Slot 0");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::OpenMaterialSlot);
 			}
 			break;
-		case 121:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("Slot 0"));
+		case EAssetState::OpenMaterialSlot:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("Slot 0"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RevealMaterialChoice);
+			}
 			break;
-		case 122:
+		case EAssetState::RevealMaterialChoice:
 			Editor.AssetWorkspace->RevealProperty("choice/Slot 0/Game/CustomMaterial.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::SelectMaterialChoice);
 			break;
-		case 123:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("choice/Slot 0/Game/CustomMaterial.hasset"));
+		case EAssetState::SelectMaterialChoice:
+			if (ExerciseClick(InEvents,
+			                  Editor.AssetWorkspace->ObservedBounds("choice/Slot 0/Game/CustomMaterial.hasset"),
+			                  Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::SaveMaterialSlot);
+			}
 			break;
-		case 124:
+		case EAssetState::SaveMaterialSlot:
 			if (ReadValue<std::vector<FAssetRef>>(Document->Get("materialSlots")).front().Path ==
 			    "/Game/CustomMaterial.hasset")
 			{
 				AssetShortcut(InEvents, EKey::S);
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitMaterialSlotRefresh);
 			}
 			break;
-		case 125:
+		case EAssetState::AwaitMaterialSlotRefresh:
 			if (!Document->IsSaving() && !Document->IsDirty() &&
 			    Model->Data->Materials.front()->Asset->Name == "Edited CustomMaterial")
 			{
 				Editor.AssetWorkspace->Open("/Game/Texture.hasset");
-				Scenario.ExerciseStep = 130;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitTextureAndRevealEncoding);
 			}
 			break;
 	}
@@ -248,31 +253,37 @@ void FEditorAcceptanceHarness::ExerciseAssetReferences(std::vector<FInputEvent>&
 void FEditorAcceptanceHarness::ExerciseAssetTextureInput(std::vector<FInputEvent>& InEvents)
 {
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 130:
+		case EAssetState::AwaitTextureAndRevealEncoding:
 			if (Document && Document->Loaded().Path == "/Game/Texture.hasset" &&
 			    Editor.AssetWorkspace->IsPreviewReady())
 			{
 				Editor.AssetWorkspace->RevealProperty("encoding");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::OpenEncoding);
 			}
 			break;
-		case 131:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("encoding"));
+		case EAssetState::OpenEncoding:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("encoding"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::SelectSrgbEncoding);
+			}
 			break;
-		case 132:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("encoding/sRGB"));
+		case EAssetState::SelectSrgbEncoding:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("encoding/sRGB"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::SaveEncoding);
+			}
 			break;
-		case 133:
+		case EAssetState::SaveEncoding:
 			if (ReadValue<EMaterialTextureEncoding>(Document->Get("encoding")) == EMaterialTextureEncoding::Srgb)
 			{
 				RequireAsset(Scenario.bPendingAssetEditChecked, "Pending encoding protection was not exercised");
 				AssetShortcut(InEvents, EKey::S);
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitEncodingSave);
 			}
 			break;
-		case 134:
+		case EAssetState::AwaitEncodingSave:
 			if (!Document->IsSaving() && !Document->IsDirty() && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				const auto Saved = Editor.Assets.LoadAsync<FTextureAsset>("/Game/Texture.hasset").Get(Editor.Tasks);
@@ -280,27 +291,27 @@ void FEditorAcceptanceHarness::ExerciseAssetTextureInput(std::vector<FInputEvent
 				                 Saved->Mips.front() == Document->Loaded().As<FTextureAsset>()->Mips.front(),
 				             "Encoding save changed mip zero");
 				Editor.AssetWorkspace->Open("/Game/Radiance.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::CaptureCubePreview);
 			}
 			break;
-		case 135:
+		case EAssetState::CaptureCubePreview:
 			if (Document && Document->Loaded().Path == "/Game/Radiance.hasset" &&
 			    Editor.AssetWorkspace->IsPreviewReady())
 			{
 				Scenario.PlacementCapture = Editor.Options.ExerciseAssets.parent_path() / "AssetEditor-Cube.png";
 				Editor.AssetWorkspace->Open("/Game/Model.hasset");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::UndoModelForClose);
 			}
 			break;
-		case 136:
+		case EAssetState::UndoModelForClose:
 			if (Document && Document->Loaded().Path == "/Game/Model.hasset" && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				AssetShortcut(InEvents, EKey::Z);
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::RequestModelClose);
 			}
 			break;
-		case 137:
-		case 140:
+		case EAssetState::RequestModelClose:
+		case EAssetState::RetryModelClose:
 		{
 			RequireAsset(Document && Document->IsDirty(), "Saved model undo did not remain local and dirty");
 			auto Bounds = Editor.AssetWorkspace->ObservedBounds("tab//Game/Model.hasset");
@@ -311,39 +322,52 @@ void FEditorAcceptanceHarness::ExerciseAssetTextureInput(std::vector<FInputEvent
 			Pointer.Y = (Bounds.Y + Bounds.W) * .5f;
 			InEvents.push_back(Pointer);
 			// Settle scrolling and hover before pressing the overlapping tab close control.
-			if (Scenario.ExerciseWait < 30)
+			if (Scenario.Asset.ModelTabClose.Hover.ConsumeFrame())
 			{
-				++Scenario.ExerciseWait;
 				break;
 			}
-			ExerciseClick(InEvents, Bounds);
+			if (ExerciseClick(InEvents, Bounds, Scenario.Asset.ModelTabClose.Click, EAcceptanceClickDelay::Immediate))
+			{
+				Scenario.Asset.ModelTabClose.Hover.Restart();
+				Scenario.Asset.Progress.TransitionTo(Scenario.Asset.Progress.Is(EAssetState::RequestModelClose)
+				                                         ? EAssetState::CancelModelClose
+				                                         : EAssetState::SaveModelOnClose);
+			}
 			break;
 		}
-		case 138:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("close/cancel"));
+		case EAssetState::CancelModelClose:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("close/cancel"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyModelCloseCancellation);
+			}
 			break;
-		case 139:
+		case EAssetState::VerifyModelCloseCancellation:
 			RequireAsset(Document && Document->IsDirty(), "Cancel asset close discarded draft");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::RetryModelClose);
 			break;
-		case 141:
-			if (Scenario.ExerciseWait == 60)
+		case EAssetState::SaveModelOnClose:
+			if (Scenario.Asset.ModelCloseRequestObservation.IsAt(FAssetScenarioContext::CloseDiagnosticFrames))
 			{
 				Scenario.PlacementCapture =
 				    Editor.Options.ExerciseAssets.parent_path() / "AssetEditor-CloseRequest.png";
 			}
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("close/save"));
+			Scenario.Asset.ModelCloseRequestObservation.Advance();
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("close/save"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitModelClose);
+			}
 			break;
-		case 142:
-			if (++Scenario.ExerciseWait == 60)
+		case EAssetState::AwaitModelClose:
+			Scenario.Asset.ModelCloseObservation.Advance();
+			if (Scenario.Asset.ModelCloseObservation.IsAt(FAssetScenarioContext::CloseDiagnosticFrames))
 			{
 				Scenario.PlacementCapture = Editor.Options.ExerciseAssets.parent_path() / "AssetEditor-Close.png";
 				Log(ELogLevel::Info, "Waiting for close: " + Editor.AssetWorkspace->ActiveStatus());
 			}
 			if (!Document || Document->Loaded().Path != "/Game/Model.hasset")
 			{
-				Scenario.ExerciseWait = 0;
-				Scenario.ExerciseStep = 150;
+				Scenario.Asset.ModelCloseObservation.Restart();
+				Scenario.Asset.Progress.TransitionTo(EAssetState::OpenCustomMaterial);
 			}
 			break;
 	}
@@ -351,70 +375,55 @@ void FEditorAcceptanceHarness::ExerciseAssetTextureInput(std::vector<FInputEvent
 
 void FEditorAcceptanceHarness::ExerciseCustomMaterialInput(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.ExerciseStep >= 156)
+	const auto Stage = DescribeAssetAcceptance(Scenario.Asset.Progress.GetState()).Stage;
+	if ((Stage == EAssetAcceptanceStage::CustomMaterialReset))
 	{
 		ExerciseCustomMaterialReset(InEvents);
 		return;
 	}
 	const auto* Document = Editor.AssetWorkspace->ActiveDocument();
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 150:
+		case EAssetState::OpenCustomMaterial:
 			Editor.AssetWorkspace->Open("/Game/CustomMaterial.hasset");
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitCustomMaterialAndRevealTint);
 			break;
-		case 151:
+		case EAssetState::AwaitCustomMaterialAndRevealTint:
 			if (Document && Document->Loaded().Path == "/Game/CustomMaterial.hasset" &&
 			    Editor.AssetWorkspace->IsPreviewReady())
 			{
 				Editor.AssetWorkspace->RevealProperty("value/Tint/3");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::FocusTint);
 			}
 			break;
-		case 152:
+		case EAssetState::FocusTint:
 			AssetKey(InEvents, EKey::None, true, 1);
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("value/Tint/3"));
-			break;
-		case 153:
-			++Scenario.ExerciseWait;
-			if (Scenario.ExerciseWait == 1)
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("value/Tint/3"), Scenario.Asset.Click))
 			{
-				AssetKey(InEvents, EKey::A, true, 1);
-			}
-			if (Scenario.ExerciseWait == 2)
-			{
-				AssetKey(InEvents, EKey::A, false);
-				FInputEvent Text;
-				Text.Type = EEventType::Text;
-				Text.Text = "0.37";
-				InEvents.push_back(Text);
-			}
-			if (Scenario.ExerciseWait == 4)
-			{
-				AssetKey(InEvents, EKey::Enter, true);
-			}
-			if (Scenario.ExerciseWait == 5)
-			{
-				AssetKey(InEvents, EKey::Enter, false);
-				Scenario.ExerciseWait = 0;
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::TypeTint);
 			}
 			break;
-		case 154:
+		case EAssetState::TypeTint:
+			if (ExerciseTextInput(InEvents, Scenario.Asset.TintInput, "0.37"))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::SaveTint);
+			}
+			break;
+		case EAssetState::SaveTint:
 			RequireAsset(std::bit_cast<float>(
 			                 AssetValue(ReadValue<FMaterialAsset>(Document->Snapshot()), "Tint").Words[3]) == .37f,
 			             "Custom vector parameter edit failed");
 			AssetShortcut(InEvents, EKey::S);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitTintSave);
 			break;
-		case 155:
+		case EAssetState::AwaitTintSave:
 			if (!Document->IsSaving() && !Document->IsDirty() && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				const auto Saved = Editor.Assets.LoadAsync<FMaterialAsset>(Document->Loaded().Path).Get(Editor.Tasks);
 				RequireAsset(std::bit_cast<float>(AssetValue(*Saved, "Tint").Words[3]) == .37f,
 				             "Custom vector parameter save failed");
 				Editor.AssetWorkspace->RevealProperty("reset/Tint");
-				++Scenario.ExerciseStep;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::ResetTint);
 			}
 			break;
 	}
@@ -429,27 +438,30 @@ void FEditorAcceptanceHarness::ExerciseCustomMaterialReset(std::vector<FInputEve
 	                                     {
 		                                     return InValue.Name == "Tint";
 	                                     });
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Asset.Progress.GetState())
 	{
-		case 156:
-			ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("reset/Tint"));
+		case EAssetState::ResetTint:
+			if (ExerciseClick(InEvents, Editor.AssetWorkspace->ObservedBounds("reset/Tint"), Scenario.Asset.Click))
+			{
+				Scenario.Asset.Progress.TransitionTo(EAssetState::UndoTintReset);
+			}
 			break;
-		case 157:
+		case EAssetState::UndoTintReset:
 			RequireAsset(!bOverridden && Document->IsDirty(), "Reset did not restore declared default");
 			AssetShortcut(InEvents, EKey::Z);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::RedoTintReset);
 			break;
-		case 158:
+		case EAssetState::RedoTintReset:
 			RequireAsset(bOverridden && !Document->IsDirty(), "Custom reset undo did not restore saved baseline");
 			AssetShortcut(InEvents, EKey::Y);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::SaveTintReset);
 			break;
-		case 159:
+		case EAssetState::SaveTintReset:
 			RequireAsset(!bOverridden && Document->IsDirty(), "Custom reset redo failed");
 			AssetShortcut(InEvents, EKey::S);
-			++Scenario.ExerciseStep;
+			Scenario.Asset.Progress.TransitionTo(EAssetState::AwaitTintResetSave);
 			break;
-		case 160:
+		case EAssetState::AwaitTintResetSave:
 			if (!Document->IsSaving() && !Document->IsDirty() && Editor.AssetWorkspace->IsPreviewReady())
 			{
 				const auto Saved = Editor.Assets.LoadAsync<FMaterialAsset>(Document->Loaded().Path).Get(Editor.Tasks);
@@ -460,7 +472,7 @@ void FEditorAcceptanceHarness::ExerciseCustomMaterialReset(std::vector<FInputEve
 				                          }),
 				             "Reset was not persisted");
 				Scenario.AssetExerciseIndex = 0;
-				Scenario.ExerciseStep = 161;
+				Scenario.Asset.Progress.TransitionTo(EAssetState::OpenCleanTab);
 			}
 			break;
 	}

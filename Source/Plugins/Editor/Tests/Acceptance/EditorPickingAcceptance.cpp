@@ -29,11 +29,11 @@ void Pointer(std::vector<FInputEvent>& InEvents, FVec2 InPosition, bool bInDown,
 
 bool FEditorAcceptanceHarness::ExercisePickingScene(std::vector<FInputEvent>& InEvents)
 {
-	if (Scenario.PickingSceneStep > 10)
+	if (Scenario.PickingScene.Is(EPickingSceneState::Complete))
 	{
 		return true;
 	}
-	if (Scenario.PickingSceneStep == 10)
+	if (Scenario.PickingScene.Is(EPickingSceneState::ExerciseDeletion))
 	{
 		const auto& Outline = Editor.RenderStats.SelectionOutline;
 		CheckPicking(Outline.UnsupportedItems == 0, "native scene material has no outline coverage");
@@ -42,7 +42,9 @@ bool FEditorAcceptanceHarness::ExercisePickingScene(std::vector<FInputEvent>& In
 			return false;
 		}
 	}
-	if ((Scenario.PickingSceneStep == 3 || Scenario.PickingSceneStep == 9) && !ExerciseDeletionInput(InEvents))
+	if ((Scenario.PickingScene.Is(EPickingSceneState::PrepareSurfaceClick) ||
+	     Scenario.PickingScene.Is(EPickingSceneState::VerifySurfaceSelection)) &&
+	    !ExerciseDeletionInput(InEvents))
 	{
 		return false;
 	}
@@ -52,16 +54,16 @@ bool FEditorAcceptanceHarness::ExercisePickingScene(std::vector<FInputEvent>& In
 	const FVec2 Surface{Bounds.X + (Bounds.Z - Bounds.X) * .2f, Bounds.Y + (Bounds.W - Bounds.Y) * .7f};
 	const FVec2 LightRow{Scenario.PickingLightBounds.X + 60,
 	                     (Scenario.PickingLightBounds.Y + Scenario.PickingLightBounds.W) * .5f};
-	switch (Scenario.PickingSceneStep)
+	switch (Scenario.PickingScene.GetState())
 	{
-		case 0:
+		case EPickingSceneState::PressLightRow:
 			CheckPicking(Scenario.PickingLightBounds.W > Scenario.PickingLightBounds.Y, "light row is not visible");
 			Pointer(InEvents, LightRow, true);
 			break;
-		case 2:
+		case EPickingSceneState::ReleaseLightRow:
 			Pointer(InEvents, LightRow, false);
 			break;
-		case 3:
+		case EPickingSceneState::PrepareSurfaceClick:
 		{
 			auto Candidate = Editor.Rendering;
 			Candidate.bReversedZ = !Editor.Options.Rendering.bReversedZ;
@@ -80,11 +82,11 @@ bool FEditorAcceptanceHarness::ExercisePickingScene(std::vector<FInputEvent>& In
 			Pointer(InEvents, Surface, true);
 			break;
 		}
-		case 7:
+		case EPickingSceneState::VerifyHeldSurface:
 			CheckPicking(Editor.ViewportClick && Editor.Viewport.ViewportRegion.bFocused && !Editor.Gizmo.IsDragging(),
 			             "held Sponza click lost image ownership");
 			break;
-		case 8:
+		case EPickingSceneState::ReleaseSurface:
 		{
 			auto Candidate = Editor.Rendering;
 			Candidate.bReversedZ = Editor.Options.Rendering.bReversedZ;
@@ -92,19 +94,56 @@ bool FEditorAcceptanceHarness::ExercisePickingScene(std::vector<FInputEvent>& In
 			Pointer(InEvents, Surface, false);
 			break;
 		}
-		case 9:
+		case EPickingSceneState::VerifySurfaceSelection:
 			CheckPicking(Editor.Selection == Editor.Scene->GetNodes(ESceneNodeKind::Model).front(),
 			             "held Sponza click did not replace Outliner light selection");
 			CheckPicking(Editor.History.empty() && !Editor.IsDirty(), "Sponza selection authored an edit");
 			break;
-		case 10:
+		case EPickingSceneState::ExerciseDeletion:
 			ExerciseDeletionHistory();
 			CheckPicking(Editor.Selection && Editor.Gizmo.InitialLocal().Values ==
 			                                     Editor.Scene->FindNode(*Editor.Selection)->Local().Values,
 			             "gizmo retained the light transform after selecting Sponza");
 			break;
 	}
-	++Scenario.PickingSceneStep;
+	switch (Scenario.PickingScene.GetState())
+	{
+		case EPickingSceneState::PressLightRow:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::AwaitLightPress);
+			break;
+		case EPickingSceneState::AwaitLightPress:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::ReleaseLightRow);
+			break;
+		case EPickingSceneState::ReleaseLightRow:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::PrepareSurfaceClick);
+			break;
+		case EPickingSceneState::PrepareSurfaceClick:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::AwaitSurfacePointer);
+			break;
+		case EPickingSceneState::AwaitSurfacePointer:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::HoldSurface);
+			break;
+		case EPickingSceneState::HoldSurface:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::AwaitSurfacePress);
+			break;
+		case EPickingSceneState::AwaitSurfacePress:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::VerifyHeldSurface);
+			break;
+		case EPickingSceneState::VerifyHeldSurface:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::ReleaseSurface);
+			break;
+		case EPickingSceneState::ReleaseSurface:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::VerifySurfaceSelection);
+			break;
+		case EPickingSceneState::VerifySurfaceSelection:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::ExerciseDeletion);
+			break;
+		case EPickingSceneState::ExerciseDeletion:
+			Scenario.PickingScene.TransitionTo(EPickingSceneState::Complete);
+			break;
+		default:
+			break;
+	}
 	return false;
 }
 
@@ -157,152 +196,200 @@ void FEditorAcceptanceHarness::PreparePickingExercise()
 void FEditorAcceptanceHarness::ExercisePickingSelection(std::vector<FInputEvent>& InEvents, FVec2 InCenter,
                                                         FVec2 InEmpty)
 {
-	switch (Scenario.PickingExerciseStep)
+	switch (Scenario.Picking.GetState())
 	{
-		case 2:
+		case EPickingState::PressModel:
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::ReleaseModel);
 			break;
-		case 3:
+		case EPickingState::ReleaseModel:
 			Pointer(InEvents, InCenter, false);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyNearestModel);
 			break;
-		case 4:
+		case EPickingState::VerifyNearestModel:
 			CheckPicking(
 			    Editor.Selection == Scenario.PickingNear,
 			    "nearest triangle was not selected; selected " +
 			        (Editor.Selection ? Editor.Scene->FindNode(*Editor.Selection)->Id : std::string("nothing")));
 			CheckPicking(Editor.History.empty() && !Editor.IsDirty(), "selection changed document history");
+			Scenario.Picking.TransitionTo(EPickingState::PressEmptySpace);
 			break;
-		case 5:
+		case EPickingState::PressEmptySpace:
 			Pointer(InEvents, InEmpty, true);
+			Scenario.Picking.TransitionTo(EPickingState::ReleaseEmptySpace);
 			break;
-		case 6:
+		case EPickingState::ReleaseEmptySpace:
 			Pointer(InEvents, InEmpty, false);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyEmptySelection);
 			break;
-		case 7:
+		case EPickingState::VerifyEmptySelection:
 			CheckPicking(!Editor.Selection, "empty click did not clear selection");
+			Scenario.Picking.TransitionTo(EPickingState::VerifyClearedSelectionAndPressModel);
 			break;
-		case 8:
+		case EPickingState::VerifyClearedSelectionAndPressModel:
 			CheckPicking(!Editor.Selection, "outliner restored cleared selection");
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::DragModelPointer);
 			break;
-		case 9:
-		case 10:
-			Pointer(InEvents, {InCenter.X + 50, InCenter.Y}, Scenario.PickingExerciseStep == 9);
+		case EPickingState::DragModelPointer:
+		case EPickingState::ReleaseDraggedPointer:
+			Pointer(InEvents, {InCenter.X + 50, InCenter.Y}, Scenario.Picking.Is(EPickingState::DragModelPointer));
+			Scenario.Picking.TransitionTo(Scenario.Picking.Is(EPickingState::DragModelPointer)
+			                                  ? EPickingState::ReleaseDraggedPointer
+			                                  : EPickingState::VerifyDragAndPressModel);
 			break;
-		case 11:
+		case EPickingState::VerifyDragAndPressModel:
 			CheckPicking(!Editor.Selection, "drag selected a model");
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::BeginNavigation);
 			break;
-		case 12:
+		case EPickingState::BeginNavigation:
 			Pointer(InEvents, InCenter, true, 1);
+			Scenario.Picking.TransitionTo(EPickingState::ReleaseModelDuringNavigation);
 			break;
-		case 13:
+		case EPickingState::ReleaseModelDuringNavigation:
 			Pointer(InEvents, InCenter, false);
+			Scenario.Picking.TransitionTo(EPickingState::EndNavigation);
 			break;
-		case 14:
+		case EPickingState::EndNavigation:
 			Pointer(InEvents, InCenter, false, 1);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyNavigationAndPressModel);
 			break;
-		case 15:
+		case EPickingState::VerifyNavigationAndPressModel:
 			CheckPicking(!Editor.Selection, "navigation selected a model");
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::LoseFocus);
 			break;
-		case 16:
-		case 17:
+		case EPickingState::LoseFocus:
+		case EPickingState::RestoreFocusAndRelease:
 		{
 			FInputEvent Focus;
 			Focus.Type = EEventType::Focus;
-			Focus.bDown = Scenario.PickingExerciseStep == 17;
+			Focus.bDown = Scenario.Picking.Is(EPickingState::RestoreFocusAndRelease);
 			InEvents.push_back(Focus);
 			if (Focus.bDown)
 			{
 				Pointer(InEvents, InCenter, false);
 			}
+			Scenario.Picking.TransitionTo(Scenario.Picking.Is(EPickingState::LoseFocus)
+			                                  ? EPickingState::RestoreFocusAndRelease
+			                                  : EPickingState::VerifyFocusLoss);
 			break;
 		}
-		case 18:
+		case EPickingState::VerifyFocusLoss:
 			CheckPicking(!Editor.Selection, "focus loss completed a click");
+			Scenario.Picking.TransitionTo(EPickingState::PressBeforeViewChange);
 			break;
-		case 19:
+		case EPickingState::PressBeforeViewChange:
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::ChangeView);
 			break;
-		case 20:
+		case EPickingState::ChangeView:
 			Editor.Viewport.ViewCamera.World = Translation({1, 0, 10});
+			Scenario.Picking.TransitionTo(EPickingState::ReleaseAfterViewChange);
 			break;
-		case 21:
+		case EPickingState::ReleaseAfterViewChange:
 			Pointer(InEvents, InCenter, false);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyViewChange);
 			break;
-		case 22:
+		case EPickingState::VerifyViewChange:
 			CheckPicking(!Editor.Selection, "view change completed a click");
 			Editor.Viewport.ViewCamera.World = SceneCameraTransform({0, 0, 10}, {});
+			Scenario.Picking.TransitionTo(EPickingState::SetPreviewCamera);
+			break;
+
+		case EPickingState::AwaitPickingLayout:
+			Scenario.Picking.TransitionTo(EPickingState::PressModel);
 			break;
 	}
 }
 
 void FEditorAcceptanceHarness::ExercisePickingView(std::vector<FInputEvent>& InEvents, FVec2 InCenter)
 {
-	switch (Scenario.PickingExerciseStep)
+	switch (Scenario.Picking.GetState())
 	{
-		case 23:
+		case EPickingState::SetPreviewCamera:
 			Editor.SetPreviewCamera(Scenario.PickingPreview);
+			Scenario.Picking.TransitionTo(EPickingState::PressPreviewModel);
 			break;
-		case 24:
+		case EPickingState::PressPreviewModel:
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::ReleasePreviewModel);
 			break;
-		case 25:
+		case EPickingState::ReleasePreviewModel:
 			Pointer(InEvents, InCenter, false);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyPreviewSelection);
 			break;
-		case 26:
+		case EPickingState::VerifyPreviewSelection:
 			CheckPicking(Editor.Selection == Scenario.PickingNear, "preview camera picking failed");
+			Scenario.Picking.TransitionTo(EPickingState::DisablePreviewCamera);
 			break;
-		case 27:
+		case EPickingState::DisablePreviewCamera:
 			Editor.Scene->SetEnabled(Scenario.PickingPreview, false);
 			Editor.SelectObject(Scenario.PickingFar);
+			Scenario.Picking.TransitionTo(EPickingState::PressInvalidPreview);
 			break;
-		case 28:
+		case EPickingState::PressInvalidPreview:
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::ReleaseInvalidPreview);
 			break;
-		case 29:
+		case EPickingState::ReleaseInvalidPreview:
 			Pointer(InEvents, InCenter, false);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyInvalidPreview);
 			break;
-		case 30:
+		case EPickingState::VerifyInvalidPreview:
 			CheckPicking(Editor.Selection == Scenario.PickingFar,
 			             "invalid preview cleared selection or used editor camera");
 			Editor.Scene->SetEnabled(Scenario.PickingPreview, true);
 			Editor.SelectObject(std::nullopt);
+			Scenario.Picking.TransitionTo(EPickingState::PressBeforeResize);
 			break;
-		case 31:
+		case EPickingState::PressBeforeResize:
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::ResizeWindow);
 			break;
-		case 32:
+		case EPickingState::ResizeWindow:
 			Editor.Window->Resize({1300, 800});
+			Scenario.Picking.TransitionTo(EPickingState::AwaitResize);
 			break;
-		case 34:
+		case EPickingState::ReleaseAfterResize:
 			Pointer(InEvents, InCenter, false);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyResizeAndPrepareGizmo);
 			break;
-		case 35:
+		case EPickingState::VerifyResizeAndPrepareGizmo:
 			CheckPicking(!Editor.Selection, "resize completed a stale click");
 			Editor.SetPreviewCamera(std::nullopt);
 			Editor.SelectObject(Scenario.PickingFar);
+			Scenario.Picking.TransitionTo(EPickingState::PressGizmo);
 			break;
-		case 36:
+		case EPickingState::PressGizmo:
 			Pointer(InEvents, InCenter, true);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyGizmoOwnership);
 			break;
-		case 37:
+		case EPickingState::VerifyGizmoOwnership:
 			CheckPicking(Editor.Gizmo.IsDragging(), "gizmo did not own center press");
+			Scenario.Picking.TransitionTo(EPickingState::ReleaseGizmo);
 			break;
-		case 38:
+		case EPickingState::ReleaseGizmo:
 			Pointer(InEvents, InCenter, false);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyGizmoAndReopen);
 			break;
-		case 39:
+		case EPickingState::VerifyGizmoAndReopen:
 			CheckPicking(Editor.Selection == Scenario.PickingFar, "picking stole a gizmo gesture");
 			CheckPicking(Editor.History.empty() && !Editor.IsDirty(), "interaction authored unintended edits");
 			Editor.bShowLightMarkers = true;
 			Editor.OpenScene(Editor.CurrentPath);
+			Scenario.Picking.TransitionTo(EPickingState::VerifyReopen);
 			break;
-		case 40:
+		case EPickingState::VerifyReopen:
 			CheckPicking(!Editor.Scene->Find(Scenario.PickingNear) && !Editor.ViewportClick,
 			             "reopen retained stale picking state");
 			Scenario.bPickingVerified = true;
+			Scenario.Picking.TransitionTo(EPickingState::Complete);
+			break;
+
+		case EPickingState::AwaitResize:
+			Scenario.Picking.TransitionTo(EPickingState::ReleaseAfterResize);
 			break;
 	}
 }
@@ -317,15 +404,63 @@ void FEditorAcceptanceHarness::ExercisePickingInput(std::vector<FInputEvent>& In
 	{
 		return;
 	}
-	if (Scenario.PickingExerciseStep == 0)
+	if (Scenario.Picking.Is(EPickingState::PreparePicking))
 	{
 		PreparePickingExercise();
+		Scenario.Picking.TransitionTo(EPickingState::AwaitPickingLayout);
+		return;
 	}
 	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Center{(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2};
 	const FVec2 Empty{Bounds.X + 10, Bounds.Y + 10};
-	ExercisePickingSelection(InEvents, Center, Empty);
-	ExercisePickingView(InEvents, Center);
-	++Scenario.PickingExerciseStep;
+	switch (Scenario.Picking.GetState())
+	{
+		case EPickingState::AwaitPickingLayout:
+		case EPickingState::PressModel:
+		case EPickingState::ReleaseModel:
+		case EPickingState::VerifyNearestModel:
+		case EPickingState::PressEmptySpace:
+		case EPickingState::ReleaseEmptySpace:
+		case EPickingState::VerifyEmptySelection:
+		case EPickingState::VerifyClearedSelectionAndPressModel:
+		case EPickingState::DragModelPointer:
+		case EPickingState::ReleaseDraggedPointer:
+		case EPickingState::VerifyDragAndPressModel:
+		case EPickingState::BeginNavigation:
+		case EPickingState::ReleaseModelDuringNavigation:
+		case EPickingState::EndNavigation:
+		case EPickingState::VerifyNavigationAndPressModel:
+		case EPickingState::LoseFocus:
+		case EPickingState::RestoreFocusAndRelease:
+		case EPickingState::VerifyFocusLoss:
+		case EPickingState::PressBeforeViewChange:
+		case EPickingState::ChangeView:
+		case EPickingState::ReleaseAfterViewChange:
+		case EPickingState::VerifyViewChange:
+			ExercisePickingSelection(InEvents, Center, Empty);
+			break;
+		case EPickingState::SetPreviewCamera:
+		case EPickingState::PressPreviewModel:
+		case EPickingState::ReleasePreviewModel:
+		case EPickingState::VerifyPreviewSelection:
+		case EPickingState::DisablePreviewCamera:
+		case EPickingState::PressInvalidPreview:
+		case EPickingState::ReleaseInvalidPreview:
+		case EPickingState::VerifyInvalidPreview:
+		case EPickingState::PressBeforeResize:
+		case EPickingState::ResizeWindow:
+		case EPickingState::AwaitResize:
+		case EPickingState::ReleaseAfterResize:
+		case EPickingState::VerifyResizeAndPrepareGizmo:
+		case EPickingState::PressGizmo:
+		case EPickingState::VerifyGizmoOwnership:
+		case EPickingState::ReleaseGizmo:
+		case EPickingState::VerifyGizmoAndReopen:
+		case EPickingState::VerifyReopen:
+			ExercisePickingView(InEvents, Center);
+			break;
+		default:
+			break;
+	}
 }
 } // namespace Hyperion

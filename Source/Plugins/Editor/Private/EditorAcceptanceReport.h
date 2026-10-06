@@ -1,5 +1,4 @@
 #pragma once
-#include <cstdint>
 #include <iosfwd>
 
 namespace Hyperion
@@ -20,7 +19,7 @@ struct FEditorAcceptanceReport
 	bool bOutlines{};
 	bool bPlacement{};
 	bool bModelPlacement{};
-	std::uint32_t Step{};
+	bool bInteraction{};
 	bool bMovement{};
 	bool bMovementGate{};
 	bool bRightRelease{};

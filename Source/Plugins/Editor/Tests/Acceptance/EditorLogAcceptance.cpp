@@ -13,40 +13,57 @@ void FEditorAcceptanceHarness::ExerciseLogInput(std::vector<FInputEvent>& InEven
 	{
 		throw std::runtime_error("Editor Log acceptance requires process history");
 	}
-	switch (Scenario.ExerciseStep)
+	switch (Scenario.Log.Progress.GetState())
 	{
-		case 0:
+		case ELogState::OpenWindowMenu:
 			if (Editor.bShowLog)
 			{
 				throw std::runtime_error("Log must initially be hidden");
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"]);
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"], Scenario.Log.Click))
+			{
+				Scenario.Log.Progress.TransitionTo(ELogState::ShowLog);
+			}
 			return;
-		case 2:
+		case ELogState::VerifyLogAndOpenWindowMenu:
 			if (!Editor.bShowLog)
 			{
 				throw std::runtime_error("Log did not open");
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"]);
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"], Scenario.Log.Click))
+			{
+				Scenario.Log.Progress.TransitionTo(ELogState::HideLog);
+			}
 			return;
-		case 4:
+		case ELogState::VerifyHiddenLogAndOpenWindowMenu:
 			if (Editor.bShowLog)
 			{
 				throw std::runtime_error("Log did not close");
 			}
-			if (!Scenario.ExerciseWait)
+			if (!Scenario.Log.bClosedPanelRecordWritten)
 			{
+				Scenario.Log.bClosedPanelRecordWritten = true;
 				Log(ELogLevel::Info, "Log records while its panel is closed");
 			}
-			ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"]);
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"], Scenario.Log.Click))
+			{
+				Scenario.Log.Progress.TransitionTo(ELogState::ReopenLog);
+			}
 			return;
-		case 1:
-		case 3:
-		case 5:
-			ExerciseClick(InEvents, Scenario.InspectionBounds["log/toggle"]);
+		case ELogState::ShowLog:
+		case ELogState::HideLog:
+		case ELogState::ReopenLog:
+			if (ExerciseClick(InEvents, Scenario.InspectionBounds["log/toggle"], Scenario.Log.Click))
+			{
+				Scenario.Log.Progress.TransitionTo(
+				    Scenario.Log.Progress.Is(ELogState::ShowLog)   ? ELogState::VerifyLogAndOpenWindowMenu
+				    : Scenario.Log.Progress.Is(ELogState::HideLog) ? ELogState::VerifyHiddenLogAndOpenWindowMenu
+				                                                   : ELogState::VerifyLogHistory);
+			}
 			return;
 	}
-	if (Scenario.ExerciseStep == 6 && ++Scenario.ExerciseWait == 4)
+	if (Scenario.Log.Progress.Is(ELogState::VerifyLogHistory) &&
+	    Scenario.Log.Observation.Is(ELogObservationPhase::EmitRecords) && Scenario.Log.RecordDelay.Advance())
 	{
 		if (!Editor.bShowLog)
 		{
@@ -58,8 +75,11 @@ void FEditorAcceptanceHarness::ExerciseLogInput(std::vector<FInputEvent>& InEven
 		Log(ELogLevel::Error, "Editor Log error: red text");
 		std::cout << "Editor stdout captured\n";
 		std::cerr << "Editor stderr captured\n";
+		Scenario.Log.Observation.TransitionTo(ELogObservationPhase::VerifyCapturedHistory);
+		return;
 	}
-	if (Scenario.ExerciseStep == 6 && Scenario.ExerciseWait > 12)
+	if (Scenario.Log.Progress.Is(ELogState::VerifyLogHistory) &&
+	    Scenario.Log.Observation.Is(ELogObservationPhase::VerifyCapturedHistory) && Scenario.Log.HistoryDelay.Advance())
 	{
 		const auto First = Editor.Options.LogHistory->Read({0, 1});
 		if (First.Entries.empty() || First.Entries.front().Message != "Hyperion Editor starting")

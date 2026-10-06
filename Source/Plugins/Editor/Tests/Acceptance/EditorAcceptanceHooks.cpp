@@ -104,7 +104,7 @@ void FEditorAcceptanceHarness::WriteReport(std::ostream& InStream) const
 	                                       .bOutlines = Scenario.bOutlinesVerified,
 	                                       .bPlacement = Scenario.bPlacementVerified,
 	                                       .bModelPlacement = Scenario.bModelPlacementVerified,
-	                                       .Step = Scenario.ExerciseStep,
+	                                       .bInteraction = IsInteractionComplete(),
 	                                       .bMovement = Scenario.bMovementVerified,
 	                                       .bMovementGate = Scenario.bMovementGateVerified,
 	                                       .bRightRelease = Scenario.bRightReleaseVerified,

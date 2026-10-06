@@ -92,7 +92,7 @@ bool FEditorAcceptanceHarness::ExerciseRasterOptions(std::vector<FInputEvent>& I
 		return true;
 	}
 	const auto Action = Actions[Exercise.Case];
-	if (Exercise.Step == 0)
+	if (Exercise.Progress.Is(ERasterState::PrepareChoice))
 	{
 		if (Exercise.Case == 0)
 		{
@@ -106,34 +106,34 @@ bool FEditorAcceptanceHarness::ExerciseRasterOptions(std::vector<FInputEvent>& I
 		}
 		Editor.bShowRenderSettings = Exercise.Case >= 7;
 		Exercise.Before = Editor.Rendering;
-		Exercise.Step = 1;
+		Exercise.Progress.TransitionTo(ERasterState::OpenChoice);
 		return false;
 	}
-	if (Exercise.Step == 1 || Exercise.Step == 2)
+	if (Exercise.Progress.Is(ERasterState::OpenChoice) || Exercise.Progress.Is(ERasterState::SelectChoice))
 	{
-		const auto Key =
-		    Exercise.Step == 1 ? std::string(Action.Control) : std::string(Action.Control) + "/" + Action.Selection;
-		const auto Step = Scenario.ExerciseStep;
-		ExerciseClick(InEvents, Scenario.InspectionBounds[Key]);
-		if (Scenario.ExerciseStep != Step)
+		const auto Key = Exercise.Progress.Is(ERasterState::OpenChoice)
+		                     ? std::string(Action.Control)
+		                     : std::string(Action.Control) + "/" + Action.Selection;
+		if (ExerciseClick(InEvents, Scenario.InspectionBounds[Key], Exercise.Click))
 		{
-			Exercise.Step = Exercise.Step == 1 && Action.Selection[0] ? 2 : 3;
+			Exercise.Progress.TransitionTo(Exercise.Progress.Is(ERasterState::OpenChoice) && Action.Selection[0]
+			                                   ? ERasterState::SelectChoice
+			                                   : ERasterState::VerifyChoice);
 		}
-		Scenario.ExerciseStep = Step;
 		return false;
 	}
-	if (++Scenario.ExerciseWait < 2)
+	if (!Exercise.ChoiceObservation.Advance())
 	{
 		return false;
 	}
-	Scenario.ExerciseWait = 0;
+	Exercise.ChoiceObservation.Restart();
 	if (SettingsWire(Editor.Rendering) != SettingsWire(ExpectedSettings(Exercise.Before, Action)))
 	{
 		throw std::runtime_error("Raster GUI choice changed an unrelated field: " + std::string(Action.Control) + "/" +
 		                         Action.Selection);
 	}
 	CheckRasterOptionFrame();
-	Exercise.Step = 0;
+	Exercise.Progress.TransitionTo(ERasterState::PrepareChoice);
 	++Exercise.Case;
 	return false;
 }

@@ -2,47 +2,14 @@
 
 namespace Hyperion
 {
-EEditorAssetAcceptancePhase FEditorAcceptanceHarness::AssetPhase() const
-{
-	constexpr unsigned NameAndSaveFirstStep = 13;
-	constexpr unsigned NameAndSaveLastStep = 20;
-	constexpr unsigned PropertyFirstStep = 100;
-	constexpr unsigned PropertyLastStep = 172;
-	constexpr unsigned WindowLifecycleFirstStep = 190;
-	constexpr unsigned MainSceneCloseStep = 200;
-	constexpr unsigned MainSceneClosedStep = 201;
-	if (Scenario.ExerciseStep >= NameAndSaveFirstStep && Scenario.ExerciseStep <= NameAndSaveLastStep)
-	{
-		return EEditorAssetAcceptancePhase::NameAndSave;
-	}
-	if (Scenario.ExerciseStep >= PropertyFirstStep && Scenario.ExerciseStep <= PropertyLastStep)
-	{
-		return EEditorAssetAcceptancePhase::AssetProperties;
-	}
-	if (Scenario.ExerciseStep >= WindowLifecycleFirstStep && Scenario.ExerciseStep != MainSceneCloseStep &&
-	    Scenario.ExerciseStep != MainSceneClosedStep)
-	{
-		return EEditorAssetAcceptancePhase::AssetWindowLifecycle;
-	}
-	return EEditorAssetAcceptancePhase::MainWindow;
-}
-
 EEditorAcceptanceWindow FEditorAcceptanceHarness::AssetInputWindow() const
 {
-	switch (AssetPhase())
-	{
-		case EEditorAssetAcceptancePhase::NameAndSave:
-		case EEditorAssetAcceptancePhase::AssetProperties:
-		case EEditorAssetAcceptancePhase::AssetWindowLifecycle:
-			return EEditorAcceptanceWindow::Asset;
-		case EEditorAssetAcceptancePhase::MainWindow:
-			return EEditorAcceptanceWindow::Main;
-	}
-	throw std::logic_error("Unknown asset acceptance phase");
+	return DescribeAssetAcceptance(Scenario.Asset.Progress.GetState()).InputWindow;
 }
 
 void FEditorAcceptanceHarness::CollectInput(std::vector<FInputEvent>& InEvents, std::vector<FInputEvent>& InAssetEvents)
 {
+	Scenario.CapturePreference.bCaptureBeforeToggle = false;
 	if (!Editor.Options.ExerciseImport.empty())
 	{
 		ExerciseImportInput(InEvents);
@@ -121,14 +88,20 @@ void FEditorAcceptanceHarness::CollectInput(std::vector<FInputEvent>& InEvents, 
 	}
 }
 
+bool FEditorAcceptanceHarness::IsInteractionComplete() const
+{
+	return Editor.Options.bExercise && Scenario.Interaction.Progress.Is(EInteractionState::AwaitReopenedScene) &&
+	       Editor.ReadyFrames > 8;
+}
+
 bool FEditorAcceptanceHarness::IsComplete() const
 {
-	return (Editor.Options.bExercise && Scenario.ExerciseStep == 21 && Editor.ReadyFrames > 8) ||
-	       Scenario.bDocumentVerified || Scenario.bViewsVerified || Scenario.bGizmoVerified ||
-	       Scenario.bPickingVerified || Scenario.bPlacementVerified || Scenario.bModelPlacementVerified ||
-	       Scenario.bOutlinesVerified || Scenario.bMultiSelectionVerified || Scenario.bContentVerified ||
-	       Scenario.bRenderControlsVerified || Scenario.bReparentVerified || Scenario.bClipboardVerified ||
-	       Scenario.bLogVerified || Scenario.bFramingVerified || Scenario.bSelectionShortcutsVerified;
+	return IsInteractionComplete() || Scenario.bDocumentVerified || Scenario.bViewsVerified ||
+	       Scenario.bGizmoVerified || Scenario.bPickingVerified || Scenario.bPlacementVerified ||
+	       Scenario.bModelPlacementVerified || Scenario.bOutlinesVerified || Scenario.bMultiSelectionVerified ||
+	       Scenario.bContentVerified || Scenario.bRenderControlsVerified || Scenario.bReparentVerified ||
+	       Scenario.bClipboardVerified || Scenario.bLogVerified || Scenario.bFramingVerified ||
+	       Scenario.bSelectionShortcutsVerified;
 }
 
 bool FEditorAcceptanceHarness::ShouldCapture() const
@@ -137,8 +110,10 @@ bool FEditorAcceptanceHarness::ShouldCapture() const
 	return !Editor.Options.Capture.empty() &&
 	       (bExerciseComplete ||
 	        (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Toggle && Editor.bPreferencesDialog &&
-	         Scenario.ExerciseStep == 2 && Scenario.ExerciseWait == 2) ||
-	        (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Capture && Scenario.ExerciseStep == 1));
+	         Scenario.CapturePreference.Progress.Is(ECapturePreferenceState::TogglePreference) &&
+	         Scenario.CapturePreference.bCaptureBeforeToggle) ||
+	        (Editor.Options.ExerciseCapture == EEditorCaptureExercise::Capture &&
+	         Scenario.Capture.Progress.Is(ECaptureState::VerifyCapture)));
 }
 
 void FEditorAcceptanceHarness::CheckCompletion() const
@@ -146,23 +121,22 @@ void FEditorAcceptanceHarness::CheckCompletion() const
 	if (Editor.Options.bExerciseSelectionShortcuts && !Scenario.bSelectionShortcutsVerified)
 	{
 		throw std::runtime_error("Editor selection shortcut acceptance incomplete at step " +
-		                         std::to_string(Scenario.ShortcutStep));
+		                         Scenario.Shortcut.Progress.Name());
 	}
 	if (Editor.Options.bExerciseFraming && !Scenario.bFramingVerified)
 	{
-		throw std::runtime_error("Editor framing acceptance incomplete at step " +
-		                         std::to_string(Scenario.FramingStep));
+		throw std::runtime_error("Editor framing acceptance incomplete at step " + Scenario.Framing.Progress.Name());
 	}
 	if (!Editor.Options.ExerciseModelPlacement.empty() && !Scenario.bModelPlacementVerified)
 	{
 		throw std::runtime_error("Model placement acceptance incomplete at case " +
 		                         std::to_string(Scenario.ModelPlacementCase) + " step " +
-		                         std::to_string(Scenario.ModelPlacementStep) + ": " + Editor.PlacementStatus);
+		                         Scenario.ModelPlacement.Progress.Name() + ": " + Editor.PlacementStatus);
 	}
 	if (Editor.Options.bExerciseClipboard && !Scenario.bClipboardVerified)
 	{
 		throw std::runtime_error("Editor clipboard acceptance did not complete at step " +
-		                         std::to_string(Scenario.ClipboardExerciseStep));
+		                         Scenario.Clipboard.Progress.Name());
 	}
 	if (!Editor.Options.ExerciseReparent.empty() && !Scenario.bReparentVerified)
 	{
@@ -170,7 +144,7 @@ void FEditorAcceptanceHarness::CheckCompletion() const
 	}
 	if (!Editor.Options.ExerciseImport.empty() && !Scenario.bImportVerified)
 	{
-		throw std::runtime_error("Import GUI acceptance incomplete at step " + std::to_string(Scenario.ExerciseStep));
+		throw std::runtime_error("Import GUI acceptance incomplete at step " + Scenario.Import.Progress.Name());
 	}
 	if (!Editor.Options.ExerciseRenderControls.empty() && !Scenario.bRenderControlsVerified)
 	{
@@ -207,7 +181,7 @@ void FEditorAcceptanceHarness::CheckCompletion() const
 	}
 	if (Editor.Options.bExerciseLog && !Scenario.bLogVerified)
 	{
-		throw std::runtime_error("Editor Log acceptance incomplete at step " + std::to_string(Scenario.ExerciseStep));
+		throw std::runtime_error("Editor Log acceptance incomplete at step " + Scenario.Log.Progress.Name());
 	}
 	if (Editor.Options.bExercise &&
 	    (!Editor.CurrentPath.ends_with("/Sponza.hasset") || Editor.OpenCount < 2 || !Editor.ReadyFrames ||
@@ -217,6 +191,45 @@ void FEditorAcceptanceHarness::CheckCompletion() const
 	{
 		throw std::runtime_error("Editor interaction acceptance did not complete");
 	}
+}
+
+std::string FEditorAcceptanceHarness::ScenarioStatus() const
+{
+	std::string Status;
+	const auto Append = [&](bool bInEnabled, std::string_view InName, const auto& InProgress)
+	{
+		if (bInEnabled)
+		{
+			Status += " " + std::string(InName) + "=" + InProgress.Name();
+		}
+	};
+	Append(Editor.Options.bExercise, "interaction", Scenario.Interaction.Progress);
+	Append(!Editor.Options.ExerciseDocument.empty(), "document", Scenario.Document.Progress);
+	Append(!Editor.Options.ExerciseDocument.empty(), "transform", Scenario.Transform.Progress);
+	Append(!Editor.Options.ExerciseViews.empty(), "view", Scenario.View.Progress);
+	Append(!Editor.Options.ExerciseAssets.empty(), "asset", Scenario.Asset.Progress);
+	Append(!Editor.Options.ExerciseImport.empty(), "import", Scenario.Import.Progress);
+	Append(!Editor.Options.ExerciseContent.empty(), "content", Scenario.Content.Progress);
+	Append(!Editor.Options.ExerciseRenderControls.empty(), "render-controls", Scenario.RenderControls.Progress);
+	Append(Editor.Options.bExerciseLog, "log", Scenario.Log.Progress);
+	Append(Editor.Options.ExerciseCapture.has_value(), "capture", Scenario.Capture.Progress);
+	Append(Editor.Options.ExerciseCapture.has_value(), "capture-preference", Scenario.CapturePreference.Progress);
+	Append(Editor.Options.bExerciseClipboard, "clipboard", Scenario.Clipboard.Progress);
+	Append(Editor.Options.bExerciseFraming, "framing", Scenario.Framing.Progress);
+	Append(Editor.Options.bExerciseSelectionShortcuts, "shortcut", Scenario.Shortcut.Progress);
+	Append(Editor.Options.bExerciseGizmo, "gizmo", Scenario.Gizmo);
+	Append(Editor.Options.bExercisePicking, "picking-scene", Scenario.PickingScene);
+	Append(Editor.Options.bExercisePicking, "picking", Scenario.Picking);
+	Append(Editor.Options.bExerciseMultiSelection, "multi-selection", Scenario.MultiSelection.Progress);
+	Append(!Editor.Options.ExerciseOutlines.empty(), "outline", Scenario.Outline.Progress);
+	Append(!Editor.Options.ExerciseReparent.empty(), "reparent-drag", Scenario.ReparentDrag);
+	Append(!Editor.Options.ExerciseReparent.empty(), "reparent-document", Scenario.ReparentDocument);
+	Append(!Editor.Options.ExercisePlacement.empty(), "placement-drag", Scenario.PlacementDrag);
+	Append(!Editor.Options.ExercisePlacement.empty(), "placement-cancel", Scenario.PlacementCancel);
+	Append(!Editor.Options.ExercisePlacement.empty(), "placement-document", Scenario.PlacementDocument);
+	Append(!Editor.Options.ExerciseModelPlacement.empty(), "model-placement", Scenario.ModelPlacement.Progress);
+	Append(!Editor.Options.ExerciseModelPlacement.empty(), "model-placement-history", Scenario.ModelPlacementHistory);
+	return Status;
 }
 
 void FEditorAcceptanceHarness::CheckTimeout(double InElapsed) const
@@ -234,9 +247,8 @@ void FEditorAcceptanceHarness::CheckTimeout(double InElapsed) const
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out; model placement case " +
 		                         std::to_string(Scenario.ModelPlacementCase) + " step " +
-		                         std::to_string(Scenario.ModelPlacementStep) + " (" + Editor.PlacementStatus +
-		                         "); step " + std::to_string(Scenario.ExerciseStep) + ": " +
-		                         Editor.AssetWorkspace->ActiveStatus());
+		                         Scenario.ModelPlacement.Progress.Name() + " (" + Editor.PlacementStatus +
+		                         "); states:" + ScenarioStatus() + ": " + Editor.AssetWorkspace->ActiveStatus());
 	}
 }
 
@@ -254,7 +266,8 @@ void FEditorAcceptanceHarness::CheckGui(const FGuiDrawData& InData)
 
 void FEditorAcceptanceHarness::CheckAssetWindowFrame()
 {
-	if (!Editor.Options.ExerciseAssets.empty() && (Scenario.ExerciseStep == 132 || Scenario.ExerciseStep == 133) &&
+	if (!Editor.Options.ExerciseAssets.empty() &&
+	    Scenario.Asset.Progress.IsAny({EAssetState::SelectSrgbEncoding, EAssetState::SaveEncoding}) &&
 	    Editor.AssetWorkspace->HasPendingEdits() && !Scenario.bPendingAssetEditChecked)
 	{
 		CheckPendingAssetEdit();

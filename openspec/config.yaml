@@ -29,7 +29,7 @@ context: |
     Preserve SDK/STL required spellings and serialized IDs. Use the checked-in
     clang-format/clang-tidy configurations; never restyle third-party sources.
     Follow docs/CodingStyle.md for the recommended 100-line function and 1000-line
-    non-test C++ file sizes, counting and migration guidance, and the five semantic
+    non-test C++ file sizes, counting and migration guidance, and the semantic
     maintainability rules. Exceed these recommendations only when the logic is
     extremely cohesive and meaningful decomposition is difficult. Repository-wide
     compliance at all times is not required; automated file-size reports are

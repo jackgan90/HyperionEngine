@@ -37,7 +37,7 @@ void FEditorAcceptanceHarness::PrepareOutlineExercise()
 	Editor.ResetDocument();
 	Editor.SelectObject(std::nullopt);
 	Editor.OutlineSettings = {};
-	++Scenario.OutlineExerciseStep;
+	Scenario.Outline.Progress.TransitionTo(EOutlineState::CaptureUnion);
 }
 
 void FEditorAcceptanceHarness::ExerciseOutlines()
@@ -46,7 +46,7 @@ void FEditorAcceptanceHarness::ExerciseOutlines()
 	{
 		return;
 	}
-	if (Scenario.OutlineExerciseStep == 0)
+	if (Scenario.Outline.Progress.Is(EOutlineState::PrepareOutline))
 	{
 		const auto Found = Editor.PlacementModels.find("Cube");
 		if (Found == Editor.PlacementModels.end() || !Found->second.Data)
@@ -55,13 +55,18 @@ void FEditorAcceptanceHarness::ExerciseOutlines()
 		}
 		PrepareOutlineExercise();
 	}
-	if (Scenario.OutlineExerciseWait++ == 0)
+	if (!Scenario.Outline.bCapturePrepared)
 	{
-		Editor.OutlineSettings.Overlap =
-		    Scenario.OutlineExerciseStep == 2 ? EOutlineOverlapMode::PerObject : EOutlineOverlapMode::Union;
-		Editor.OutlineSettings.bSupersample = Scenario.OutlineExerciseStep == 5;
-		Editor.Scene->SetModelVisible(Scenario.OutlineExerciseWall, Scenario.OutlineExerciseStep >= 4);
-		if (Scenario.OutlineExerciseStep == 6)
+		Scenario.Outline.bCapturePrepared = true;
+		Editor.OutlineSettings.Overlap = Scenario.Outline.Progress.Is(EOutlineState::CapturePerObject)
+		                                     ? EOutlineOverlapMode::PerObject
+		                                     : EOutlineOverlapMode::Union;
+		Editor.OutlineSettings.bSupersample = Scenario.Outline.Progress.Is(EOutlineState::CaptureSmooth);
+		Editor.Scene->SetModelVisible(
+		    Scenario.OutlineExerciseWall,
+		    Scenario.Outline.Progress.IsAny({EOutlineState::CaptureOccluded, EOutlineState::CaptureSmooth,
+		                                     EOutlineState::CaptureCleared, EOutlineState::Complete}));
+		if (Scenario.Outline.Progress.Is(EOutlineState::CaptureCleared))
 		{
 			Scenario.OutlineExerciseObjects.clear();
 			Editor.SelectObject(std::nullopt);
@@ -69,19 +74,52 @@ void FEditorAcceptanceHarness::ExerciseOutlines()
 		return;
 	}
 	const auto& Stats = Editor.RenderStats.SelectionOutline;
-	if (Scenario.OutlineExerciseWait < 4 || Stats.PendingItems || (Scenario.OutlineExerciseStep < 6 && !Stats.Items))
+	if (!Scenario.Outline.CaptureObservation.Advance() || Stats.PendingItems ||
+	    (Scenario.Outline.Progress.IsAny({EOutlineState::PrepareOutline, EOutlineState::CaptureUnion,
+	                                      EOutlineState::CapturePerObject, EOutlineState::CaptureUnionAgain,
+	                                      EOutlineState::CaptureOccluded, EOutlineState::CaptureSmooth}) &&
+	     !Stats.Items))
 	{
 		return;
 	}
-	const auto ExpectedPasses = Scenario.OutlineExerciseStep == 6 ? 0u : Scenario.OutlineExerciseStep == 2 ? 2u : 1u;
+	const auto ExpectedPasses = Scenario.Outline.Progress.Is(EOutlineState::CaptureCleared)     ? 0u
+	                            : Scenario.Outline.Progress.Is(EOutlineState::CapturePerObject) ? 2u
+	                                                                                            : 1u;
 	if (Stats.MaskPasses != ExpectedPasses || Editor.IsDirty() || !Editor.History.empty())
 	{
 		throw std::runtime_error("Outline modes changed document history or submitted incorrect mask passes");
 	}
-	const std::array Names{"Union.png", "PerObject.png", "UnionAgain.png", "Occluded.png", "Smooth.png", "Cleared.png"};
-	Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / Names.at(Scenario.OutlineExerciseStep - 1);
-	Scenario.bOutlinesVerified = Scenario.OutlineExerciseStep == 6;
-	++Scenario.OutlineExerciseStep;
-	Scenario.OutlineExerciseWait = 0;
+	switch (Scenario.Outline.Progress.GetState())
+	{
+		case EOutlineState::CaptureUnion:
+			Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / "Union.png";
+			Scenario.Outline.Progress.TransitionTo(EOutlineState::CapturePerObject);
+			break;
+		case EOutlineState::CapturePerObject:
+			Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / "PerObject.png";
+			Scenario.Outline.Progress.TransitionTo(EOutlineState::CaptureUnionAgain);
+			break;
+		case EOutlineState::CaptureUnionAgain:
+			Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / "UnionAgain.png";
+			Scenario.Outline.Progress.TransitionTo(EOutlineState::CaptureOccluded);
+			break;
+		case EOutlineState::CaptureOccluded:
+			Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / "Occluded.png";
+			Scenario.Outline.Progress.TransitionTo(EOutlineState::CaptureSmooth);
+			break;
+		case EOutlineState::CaptureSmooth:
+			Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / "Smooth.png";
+			Scenario.Outline.Progress.TransitionTo(EOutlineState::CaptureCleared);
+			break;
+		case EOutlineState::CaptureCleared:
+			Scenario.OutlineCapture = Editor.Options.ExerciseOutlines / "Cleared.png";
+			Scenario.bOutlinesVerified = true;
+			Scenario.Outline.Progress.TransitionTo(EOutlineState::Complete);
+			break;
+		default:
+			throw std::logic_error("Invalid outline capture state");
+	}
+	Scenario.Outline.bCapturePrepared = false;
+	Scenario.Outline.CaptureObservation.Restart();
 }
 } // namespace Hyperion

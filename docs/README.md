@@ -6,6 +6,7 @@
 
 - [Visual Studio 与构建](VisualStudio.md)、[验证指南](Verification.md)
 - [编辑器工作区与场景视口](Editor.md)
+- [Editor 验收用例：状态、输入上下文与维护规范](EditorAcceptance.md)
 - [Agent 自动化：CLI、MCP、schema 与新功能接入](Automation.md)
 - [Automation 能力覆盖、共享服务与任务工作流](AutomationCapabilities.md)
 - [运行应用附着：连接、live scene、平台与设备扩展](AutomationConnections.md)
