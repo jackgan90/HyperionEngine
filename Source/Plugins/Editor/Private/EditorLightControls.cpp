@@ -4,7 +4,7 @@ namespace Hyperion
 {
 FSceneLightingInfo FEditorPlugin::LightingInfo()
 {
-	if (!Scene)
+	if (!Scene || Scene->GetStatus().bClosed)
 	{
 		throw FSceneEditError(SceneEditErrors::Unavailable, "No scene is open");
 	}

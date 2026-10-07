@@ -10,6 +10,7 @@ FEditorInteractionPolicy FEditorPlugin::CaptureInteractionPolicy() const
 	Facts.bDecisionVisible = Transition.IsDecisionVisible();
 	Facts.bAssetMessage = bAssetMessage;
 	Facts.bPendingRoot = Transition.HasPendingRoot();
+	Facts.bPendingScene = Transition.HasPendingScene();
 	Facts.bPreferencesDialog = bPreferencesDialog;
 	Facts.bSavingClose = Transition.IsSavingClose();
 	Facts.bBenchmark = !Options.Benchmark.empty();

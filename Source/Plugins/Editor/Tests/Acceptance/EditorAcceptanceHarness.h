@@ -88,6 +88,13 @@ private:
 	void ExerciseDeletionHistory();
 	bool ExerciseDeletionInput(std::vector<FInputEvent>& InEvents);
 	void ExerciseDocumentInput(std::vector<FInputEvent>& InEvents);
+	void ExerciseSceneLifecycleInput(std::vector<FInputEvent>& InEvents);
+	bool ExerciseSceneLifecycleStartup(std::vector<FInputEvent>& InEvents);
+	void PrepareSceneLifecycleCase();
+	void ExerciseSceneLifecycleDecision(std::vector<FInputEvent>& InEvents);
+	void ExerciseSceneLifecycleSavePath(std::vector<FInputEvent>& InEvents);
+	void VerifySceneLifecycleCase();
+	void CheckSceneLifecycleLateSave();
 	void ExerciseFraming(std::vector<FInputEvent>& InEvents);
 	void ExerciseFramingGuards(std::vector<FInputEvent>& InEvents);
 	void ExerciseFramingPopup(std::vector<FInputEvent>& InEvents);

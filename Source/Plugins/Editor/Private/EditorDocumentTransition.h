@@ -1,5 +1,6 @@
 #pragma once
 #include "Hyperion/Content/ContentRootService.h"
+#include "Hyperion/SceneEditing/SceneDocumentHost.h"
 
 namespace Hyperion
 {
@@ -8,6 +9,7 @@ enum class EEditorTransitionTarget
 	Document,
 	Close,
 	Root,
+	Scene,
 	Open
 };
 
@@ -47,12 +49,26 @@ struct FEditorRootCommit
 	bool bDiscard{};
 };
 
+struct FEditorSceneChange
+{
+	ESceneDocumentAction Action = ESceneDocumentAction::New;
+	FSceneLifecycleRequest Request;
+	EEditorTransitionPhase Phase = EEditorTransitionPhase::Ready;
+};
+
 // Main-only decisions; hosts supply facts and execute effects without writing transition state.
 class FEditorDocumentTransition
 {
 public:
 	void Cancel();
 	void QueueOpen(const std::string& InPath);
+	void QueueScene(ESceneDocumentAction InAction, FSceneLifecycleRequest InRequest, bool bInDecision);
+	bool HasPendingScene() const;
+	bool IsSavingScene() const;
+	EEditorTransitionPhase ScenePhase() const;
+	const FEditorSceneChange& SceneChange() const;
+	std::optional<FEditorSceneChange> TakeSceneCommit(const FEditorSaveProgress& InProgress);
+	void FinishSceneChange();
 	void QueueRoot(const std::filesystem::path& InPath);
 	bool RequestWindowClose(const FEditorSaveProgress& InProgress);
 	std::optional<std::filesystem::path> TakeRootRequest();
@@ -110,6 +126,7 @@ private:
 	FRootRequest& RequirePreparedRoot();
 	std::optional<FRootRequest> Root;
 	std::optional<FCloseRequest> Close;
+	std::optional<FEditorSceneChange> Scene;
 	std::string PendingOpen;
 	EDecisionPresentation Decision = EDecisionPresentation::Hidden;
 };

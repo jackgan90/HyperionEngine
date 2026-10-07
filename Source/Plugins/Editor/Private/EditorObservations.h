@@ -13,6 +13,9 @@ enum class EEditorSurface
 enum class EEditorWidget
 {
 	FileMenu,
+	NewScene,
+	CloseScene,
+	SaveSceneChanges,
 	OpenMenu,
 	ImportMenu,
 	EditMenu,
@@ -39,6 +42,7 @@ enum class EEditorWidget
 	SaveAs,
 	SavePath,
 	SaveConfirm,
+	SaveCancel,
 	RenderSettingsMenu,
 	WindowMenu,
 	PlacementOpen,

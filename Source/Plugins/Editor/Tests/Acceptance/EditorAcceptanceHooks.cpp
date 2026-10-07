@@ -17,7 +17,8 @@ FEditorAcceptanceHarness::FEditorAcceptanceHarness(FEditorPlugin& InEditor) : Ed
 	const auto& Options = Editor.Options;
 	Scenario.bInitialCapturePreference = Options.Preferences.bRenderDocCapture;
 	Scenario.bInitialCaptureHudPreference = Options.Preferences.bRenderDocHud;
-	if (!Options.ExerciseAssets.empty() || !Options.ExerciseReparent.empty() || !Options.ExerciseModelPlacement.empty())
+	if (!Options.ExerciseAssets.empty() || !Options.ExerciseReparent.empty() ||
+	    !Options.ExerciseModelPlacement.empty() || !Options.ExerciseSceneLifecycle.empty())
 	{
 		// Hidden swapchains must not merge separate synthetic double-click sequences.
 		ExecutionPolicy.GuiDelta = 1.f / 60;
@@ -92,6 +93,7 @@ void FEditorAcceptanceHarness::WriteReport(std::ostream& InStream) const
 {
 	WriteEditorAcceptanceReport(InStream, {.bContent = Scenario.bContentVerified,
 	                                       .bDocument = Scenario.bDocumentVerified,
+	                                       .bSceneLifecycle = Scenario.SceneLifecycle.bVerified,
 	                                       .bViews = Scenario.bViewsVerified,
 	                                       .bRenderControls = Scenario.bRenderControlsVerified,
 	                                       .bGizmo = Scenario.bGizmoVerified,

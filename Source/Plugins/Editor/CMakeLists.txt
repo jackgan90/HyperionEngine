@@ -19,6 +19,8 @@ add_library(hyperion_editor_plugin STATIC
   Private/AssetPreviewService.cpp
   Private/AssetTextureDisplay.cpp
   Private/EditorSceneDocument.cpp
+  Private/EditorSceneLifecycle.cpp
+  Private/EditorSceneTransition.cpp
   Private/EditorApplication.cpp
   Private/EditorReport.cpp
   Private/EditorAcceptanceReport.cpp
@@ -71,7 +73,7 @@ target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_asset_import)
 target_link_libraries(hyperion_editor_plugin PRIVATE hyperion_content)
 target_link_libraries(hyperion_editor_plugin PUBLIC hyperion_application_services
   PRIVATE hyperion_application hyperion_plugins hyperion_gui hyperion_gui_renderer hyperion_render hyperion_assets hyperion_asset_editing
-  hyperion_asset_types hyperion_scene hyperion_materials hyperion_platform hyperion_io hyperion_core hyperion_tasks
+  hyperion_asset_types hyperion_scene hyperion_scene_editing hyperion_materials hyperion_platform hyperion_io hyperion_core hyperion_tasks
   hyperion_shaders hyperion_rhi hyperion_math hyperion_config hyperion_textures hyperion_environment)
 target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_compile_definitions(hyperion_editor_plugin PRIVATE HYP_ENABLE_RENDERDOC=$<BOOL:${HYP_ENABLE_RENDERDOC}>)
@@ -98,9 +100,9 @@ if(BUILD_TESTING)
   add_test(NAME editor_acceptance_boundary COMMAND "${Python3_EXECUTABLE}"
     "${PROJECT_SOURCE_DIR}/Source/Tests/Integration/EditorAcceptanceBoundary.py" "${PROJECT_BINARY_DIR}"
     "${CMAKE_CURRENT_BINARY_DIR}/EditorSources-$<CONFIG>.txt")
-  add_executable(editor_document_transition_tests Tests/Unit/EditorDocumentTransitionTests.cpp Private/EditorDocumentTransition.cpp)
+  add_executable(editor_document_transition_tests Tests/Unit/EditorDocumentTransitionTests.cpp Private/EditorDocumentTransition.cpp Private/EditorSceneTransition.cpp)
   hyp_executable(editor_document_transition_tests)
-  target_link_libraries(editor_document_transition_tests PRIVATE hyperion_content)
+  target_link_libraries(editor_document_transition_tests PRIVATE hyperion_content hyperion_scene_editing)
   set_target_properties(editor_document_transition_tests PROPERTIES FOLDER "Hyperion/Tests")
   add_test(NAME editor_document_transitions COMMAND editor_document_transition_tests)
   add_executable(editor_placement_preparation_tests Tests/Unit/PlacementPreparationTests.cpp)
@@ -136,6 +138,7 @@ if(BUILD_TESTING)
     Tests/Acceptance/EditorContentAcceptance.cpp
     Tests/Acceptance/EditorDeletionAcceptance.cpp
     Tests/Acceptance/EditorDocumentAcceptance.cpp
+    Tests/Acceptance/EditorSceneLifecycleAcceptance.cpp
     Tests/Acceptance/EditorGizmoAcceptance.cpp
     Tests/Acceptance/EditorMultiSelectionAcceptance.cpp
     Tests/Acceptance/EditorMultiTransformAcceptance.cpp

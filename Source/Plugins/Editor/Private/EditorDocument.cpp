@@ -58,6 +58,13 @@ bool FEditorPlugin::PollClose()
 void FEditorPlugin::CancelDiscardAction()
 {
 	Transition.Cancel();
+	if (PendingSceneChange)
+	{
+		PendingSceneChange->Failure = std::make_exception_ptr(
+		    FSceneEditError(SceneEditErrors::Conflict, "Scene transition cancelled; admitted saves continue"));
+		PendingSceneChange.reset();
+		SceneChangeDocument.clear();
+	}
 }
 
 void FEditorPlugin::DrawDiscardDialog()
@@ -82,22 +89,31 @@ void FEditorPlugin::DrawDiscardDialog()
 	Acceptance.ObserveWidget(EEditorWidget::DiscardTitle, Gui->LastItemBounds());
 	const auto* Imports = Context.Find<FAssetImportWorkspace>();
 	const bool bImportDirty = Imports && Imports->ContentRootState().bDirty;
-	if (bImportDirty)
+	const bool bSceneDecision =
+	    Transition.HasPendingScene() && !Transition.HasPendingRoot() && !Transition.HasPendingClose();
+	if (bImportDirty && !bSceneDecision)
 	{
 		Gui->TextWrapped("Import drafts have unpublished edits. Cancel to publish them, or explicitly discard changes. "
 		                 "Save does not import assets.");
 	}
-	if (AssetWorkspace->HasPendingEdits())
+	if (AssetWorkspace->HasPendingEdits() && !bSceneDecision)
 	{
 		Gui->TextWrapped("Wait for pending texture edits to finish before saving, or discard them explicitly.");
 	}
 	Gui->TextWrapped(PendingSave ? "Wait for the current save to finish."
 	                 : Transition.HasPendingRoot()
 	                     ? "Save changes to the current asset root before switching, discard them, or cancel."
+	                 : bSceneDecision
+	                     ? "The current scene has unsaved changes. Save, discard, or cancel to keep editing."
 	                     : "Open documents have unsaved changes. Save, discard, or cancel to keep editing.");
 	const bool bPendingClose = Transition.HasPendingClose();
 	const bool bPendingRoot = Transition.HasPendingRoot();
 	std::vector<const char*> ButtonLabels;
+	if (bSceneDecision)
+	{
+		ButtonLabels.push_back(Transition.SceneChange().Action == ESceneDocumentAction::New ? "Save and create new"
+		                                                                                    : "Save and close scene");
+	}
 	if (bPendingClose)
 	{
 		ButtonLabels.push_back("Save all and exit");
@@ -109,6 +125,14 @@ void FEditorPlugin::DrawDiscardDialog()
 	ButtonLabels.push_back("Discard changes");
 	ButtonLabels.push_back("Cancel");
 	std::size_t ButtonIndex = 0;
+	if (bSceneDecision)
+	{
+		if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++, !PendingSave))
+		{
+			SaveBeforeSceneChange();
+		}
+		Acceptance.ObserveWidget(EEditorWidget::SaveSceneChanges, Gui->LastItemBounds());
+	}
 	if (bPendingClose)
 	{
 		if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++,
@@ -128,7 +152,8 @@ void FEditorPlugin::DrawDiscardDialog()
 	{
 		Acceptance.ObserveWidget(EEditorWidget::SaveSwitch, Gui->LastItemBounds());
 	}
-	if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++, !PendingSave && !AssetWorkspace->IsSaving()))
+	if (Gui->ButtonInCenteredRow(ButtonLabels, ButtonIndex++,
+	                             !PendingSave && (bSceneDecision || !AssetWorkspace->IsSaving())))
 	{
 		ConfirmDiscardAction();
 	}
@@ -192,6 +217,8 @@ void FEditorPlugin::ConfirmDiscardAction()
 			OpenScene(Action.OpenPath);
 			break;
 		case EEditorTransitionTarget::Document:
+			break;
+		case EEditorTransitionTarget::Scene:
 			break;
 	}
 }
@@ -267,6 +294,10 @@ void FEditorPlugin::PollSave()
 	}
 	Error = "Save failed: " + Outcome->Error;
 	SaveStatus = Error;
+	if (Transition.IsSavingScene())
+	{
+		FailSceneChange(std::make_exception_ptr(FSceneEditError(SceneEditErrors::SaveFailed, Error)));
+	}
 	if (Transition.SceneSaveFailed(Error))
 	{
 		Gui->ClosePopups();
@@ -294,7 +325,11 @@ void FEditorPlugin::DrawSaveDialog()
 		{
 			try
 			{
-				if (Transition.IsSavingClose())
+				if (Transition.IsSavingScene())
+				{
+					StartSceneChangeSave(SavePath);
+				}
+				else if (Transition.IsSavingClose())
 				{
 					StartSaveBeforeClose(SavePath);
 				}
@@ -322,6 +357,7 @@ void FEditorPlugin::DrawSaveDialog()
 			bSaveDialog = false;
 			Gui->ClosePopup();
 		}
+		Acceptance.ObserveWidget(EEditorWidget::SaveCancel, Gui->LastItemBounds());
 		Gui->TextWrapped(Error);
 		Gui->EndModal();
 	}

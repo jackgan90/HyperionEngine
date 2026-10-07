@@ -77,6 +77,8 @@ public:
 	void Stop() noexcept override;
 	void Finish();
 	void OpenDocument(const FSceneOpenRequest& InRequest) override;
+	std::shared_ptr<FSceneDocumentChange> ChangeDocument(ESceneDocumentAction InAction,
+	                                                     const FSceneLifecycleRequest& InRequest) override;
 	FSceneHostStatus DocumentStatus() const override;
 	FSceneHostStatus PollDocument() override;
 	bool SupportsContentTransitions() const override;
@@ -159,6 +161,15 @@ private:
 	bool IsDocumentInteractionBusy() const;
 	FEditorInteractionPolicy CaptureInteractionPolicy() const;
 	void InitializeSceneDocument();
+	std::shared_ptr<FSceneDocumentChange> RequestSceneChange(ESceneDocumentAction InAction,
+	                                                         const FSceneLifecycleRequest& InRequest, bool bInPrompt);
+	void RequestSceneCommand(ESceneDocumentAction InAction);
+	void StartSceneChangeSave(const std::string& InPath);
+	void SaveBeforeSceneChange();
+	void ProcessSceneChange();
+	void FailSceneChange(std::exception_ptr InFailure);
+	void RetireSceneDocument();
+	void RequestSceneSave();
 	void UpdateDocumentInteraction() override;
 	void EnsureAssetWindow();
 	void CloseAssetWindow();
@@ -351,6 +362,8 @@ private:
 	FEditorViewport Viewport;
 	FSceneCameraController& Camera = Viewport.Navigation;
 	FEditorDocumentTransition Transition;
+	std::shared_ptr<FSceneDocumentChange> PendingSceneChange;
+	std::string SceneChangeDocument;
 	bool bViewOptionsOpen{};
 	FTransformGizmo Gizmo;
 	FObjectPlacementRegistry PlacementRegistry;

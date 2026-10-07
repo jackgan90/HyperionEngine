@@ -44,6 +44,7 @@ struct FEditorOptions
 	std::filesystem::path Report;
 	std::filesystem::path Benchmark;
 	std::filesystem::path ExerciseDocument;
+	std::filesystem::path ExerciseSceneLifecycle;
 	std::filesystem::path ExerciseViews;
 	std::filesystem::path ExerciseRenderControls;
 	std::filesystem::path ExercisePlacement;

@@ -37,10 +37,9 @@ void FEditorPlugin::RouteHistoryShortcuts(std::span<const FInputEvent> InEvents)
 		}
 		try
 		{
-			if (Event.Key == EKey::S && !Event.bRepeat && Interaction.Allows(EEditorShortcut::Save) &&
-			    !CurrentPath.empty() && !PendingSave)
+			if (Event.Key == EKey::S && !Event.bRepeat && Interaction.Allows(EEditorShortcut::Save) && !PendingSave)
 			{
-				SaveScene(CurrentPath);
+				RequestSceneSave();
 			}
 			else if ((Event.Key == EKey::Z || Event.Key == EKey::Y) && Interaction.Allows(EEditorShortcut::History))
 			{

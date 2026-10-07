@@ -351,8 +351,11 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		PlacementModels.clear();
 		PlacementPublication.reset();
 		PlacementPublicationPreview.reset();
-		SceneDocument.AssetsRefreshed();
-		Scene->RefreshAssets(SavedAssets);
+		if (!Scene->GetStatus().bClosed)
+		{
+			SceneDocument.AssetsRefreshed();
+			Scene->RefreshAssets(SavedAssets);
+		}
 		RefreshContent();
 	}
 	PollContent();
@@ -372,6 +375,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 		}
 	}
 	ProcessContentRoot();
+	ProcessSceneChange();
 	PollSavedClose();
 	if (bFinished)
 	{
@@ -394,6 +398,7 @@ void FEditorPlugin::Update(const FPluginUpdate& InUpdate)
 
 void FEditorPlugin::Finish()
 {
+	CancelDiscardAction();
 	Acceptance.CheckCompletion();
 	bFinished = true;
 	SaveBenchmark();

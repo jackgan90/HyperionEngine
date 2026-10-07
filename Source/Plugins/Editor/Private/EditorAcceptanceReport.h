@@ -7,6 +7,7 @@ struct FEditorAcceptanceReport
 {
 	bool bContent{};
 	bool bDocument{};
+	bool bSceneLifecycle{};
 	bool bViews{};
 	bool bRenderControls{};
 	bool bGizmo{};

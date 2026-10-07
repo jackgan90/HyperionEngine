@@ -59,7 +59,8 @@ void FEditorPlugin::Render(FGuiDrawData InGui, bool bInCapture)
 	const bool bVsync = FrameSettings.bVsync && Acceptance.Policy().bUseVsync && Options.Benchmark.empty();
 	const auto Request = Viewport.MakeViewRequest(FrameSettings, CullingMode, FrozenCullingView, bInstanceBatching);
 	const auto& Status = Scene->GetStatus();
-	const bool bRenderScene = Viewport.bViewportVisible && Status.Error.empty() && Status.PublicationError.empty();
+	const bool bRenderScene =
+	    Viewport.bViewportVisible && !Status.bClosed && Status.Error.empty() && Status.PublicationError.empty();
 	if (!bRenderScene)
 	{
 		// Scene IO can fail after GUI construction. Keep the window chrome, without sampling an unavailable target.

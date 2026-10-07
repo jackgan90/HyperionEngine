@@ -295,6 +295,14 @@ hyp_discovery_test(NAME automation_capability_parity COMMAND "${Python3_EXECUTAB
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AutomationParity")
 set_tests_properties(automation_capability_parity PROPERTIES TIMEOUT 240 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+hyp_discovery_test(NAME automation_scene_lifecycle COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/SceneLifecycleAcceptance.py"
+  $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
+  $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/SceneLifecycleAutomation")
+set_tests_properties(automation_scene_lifecycle PROPERTIES TIMEOUT 180 LABELS "gpu;desktop" RUN_SERIAL TRUE)
+hyp_discovery_test(NAME editor_scene_lifecycle COMMAND "${Python3_EXECUTABLE}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Integration/SceneLifecycleAcceptance.py"
+  $<TARGET_FILE:hyperion_editor> "${PROJECT_BINARY_DIR}/SceneLifecycleGui")
+set_tests_properties(editor_scene_lifecycle PROPERTIES TIMEOUT 120 LABELS "gpu;desktop" RUN_SERIAL TRUE)
 hyp_discovery_test(NAME automation_asset_preview COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Automation/AssetPreviewAcceptance.py"
   $<TARGET_FILE:hyperion_automation_cli> $<TARGET_FILE:hyperion_editor>
   $<TARGET_FILE:automation_asset_tests> "${PROJECT_BINARY_DIR}/AssetPreviewAcceptance")

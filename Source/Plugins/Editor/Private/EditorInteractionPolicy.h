@@ -11,6 +11,7 @@ struct FEditorInteractionFacts
 	bool bDecisionVisible{};
 	bool bAssetMessage{};
 	bool bPendingRoot{};
+	bool bPendingScene{};
 	bool bPreferencesDialog{};
 	bool bSavingClose{};
 	bool bBenchmark{};

@@ -71,6 +71,7 @@ void FEditorPlugin::DrawPlacementPanel()
 	}
 	if (Gui->BeginWindow("Place Object", bShowPlacement))
 	{
+		const bool bSceneClosed = Scene->GetStatus().bClosed;
 		Acceptance.ObserveWidget(EEditorWidget::PlacementTitle, Gui->LastItemBounds());
 		if (bFocusPlacement)
 		{
@@ -99,7 +100,6 @@ void FEditorPlugin::DrawPlacementPanel()
 		for (const auto* Object : PlacementRegistry.Search(PlacementCategory, PlacementFilter))
 		{
 			const auto Preparation = GetPlacementPreparation(*Object);
-			const auto Unavailable = FormatPlacementPreparation(Preparation);
 			Gui->BeginDisabled(Preparation.State != EPlacementPreparationState::Ready);
 			if (const auto It = PlacementIcons.find(Object->Icon);
 			    It != PlacementIcons.end() && It->second.Source.Texture)
@@ -112,14 +112,22 @@ void FEditorPlugin::DrawPlacementPanel()
 			Acceptance.ObserveWidget(EEditorWidget::PlacementItem, Gui->LastItemBounds(), Object->Id);
 			Gui->DragSource(PlacementPayload, Object->Id, Object->Label.c_str());
 			Gui->EndDisabled();
-			Gui->Tooltip(Unavailable.empty() ? "Drag into the viewport to place" : Unavailable.c_str());
-			if (Preparation.State != EPlacementPreparationState::Ready)
+			if (!bSceneClosed)
 			{
-				Gui->TextWrapped(Unavailable);
+				const auto Unavailable = FormatPlacementPreparation(Preparation);
+				Gui->Tooltip(Unavailable.empty() ? "Drag into the viewport to place" : Unavailable.c_str());
+				if (Preparation.State != EPlacementPreparationState::Ready)
+				{
+					Gui->TextWrapped(Unavailable);
+				}
 			}
 		}
-		Gui->Separator();
-		Gui->TextWrapped(PlacementStatus.empty() ? "Drag an object into the viewport. Esc cancels." : PlacementStatus);
+		if (!bSceneClosed)
+		{
+			Gui->Separator();
+			Gui->TextWrapped(PlacementStatus.empty() ? "Drag an object into the viewport. Esc cancels."
+			                                         : PlacementStatus);
+		}
 	}
 	Gui->EndWindow();
 }

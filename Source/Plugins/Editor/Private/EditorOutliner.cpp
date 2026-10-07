@@ -79,6 +79,12 @@ void FEditorPlugin::DrawOutliner()
 	}
 	if (Gui->BeginWindow("Outliner", bShowOutliner))
 	{
+		if (Scene->GetStatus().bClosed)
+		{
+			Gui->TextWrapped("No scene is open.");
+			Gui->EndWindow();
+			return;
+		}
 		if (!bSelectionInitialized && !Selection && Scene->GetStatus().bReady)
 		{
 			bSelectionInitialized = true;

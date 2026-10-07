@@ -53,7 +53,7 @@ python tools/Bootstrap.py
 ./out/build/release/bin/hyperion_editor.exe --asset-root ../HyperionAssets --scene /Game/Scenes/Sponza.hasset
 ```
 
-Editor 使用独立视口相机：按住右键后 WASDQE 平移，右键拖动调整朝向，滚轮推拉、Home 取景。Outliner 选择对象，Details 通过组件反射编辑属性，支持撤销重做、保存和另存。面板可拖动停靠，布局在退出时保存。启动、挂载和功能范围见 [编辑器](docs/Editor.md)。
+Editor 使用独立视口相机：按住右键后 WASDQE 平移，右键拖动调整朝向，滚轮推拉、Home 取景。File 菜单支持新建空场景、打开、关闭、保存和另存；新建/关闭时保护未保存修改。Outliner 选择对象，Details 通过组件反射编辑属性，支持撤销重做。面板可拖动停靠，布局在退出时保存。启动、挂载和功能范围见 [编辑器](docs/Editor.md)。
 
 自定义模型先通过 AssetTool 离线导入为 `.hasset`，再在 Editor Content Browser 双击打开；模型预览、属性编辑、保存和撤销重做使用资产工作区。渲染管线、阴影、深度约定、剔除和性能测量见 [渲染诊断](docs/RenderDiagnostics.md)。
 

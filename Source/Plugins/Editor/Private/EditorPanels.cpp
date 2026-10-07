@@ -107,22 +107,38 @@ void FEditorPlugin::DrawMenus()
 			}
 			Acceptance.ObserveWidget(EEditorWidget::ImportMenu, Gui->LastItemBounds());
 			Gui->Separator();
+			Gui->BeginDisabled(Transition.HasPendingScene() || Transition.HasPendingRoot());
+			Gui->BeginDisabled(PendingSave.has_value());
+			if (Gui->MenuItem("New Scene"))
+			{
+				RequestSceneCommand(ESceneDocumentAction::New);
+			}
+			Acceptance.ObserveWidget(EEditorWidget::NewScene, Gui->LastItemBounds());
+			Gui->EndDisabled();
 			if (Gui->MenuItem("Open Scene..."))
 			{
 				ShowOpenScene();
 			}
 			Acceptance.ObserveWidget(EEditorWidget::OpenMenu, Gui->LastItemBounds());
-			Gui->BeginDisabled(CurrentPath.empty() || !Scene->GetStatus().bReady || PendingSave.has_value());
+			Gui->BeginDisabled(Scene->GetStatus().bClosed || PendingSave.has_value());
+			if (Gui->MenuItem("Close Scene"))
+			{
+				RequestSceneCommand(ESceneDocumentAction::Close);
+			}
+			Acceptance.ObserveWidget(EEditorWidget::CloseScene, Gui->LastItemBounds());
+			Gui->EndDisabled();
+			Gui->EndDisabled();
+			Gui->BeginDisabled(!Scene->GetStatus().bReady || PendingSave.has_value() || Transition.HasPendingScene());
 			if (Gui->MenuItem("Save Scene", "Ctrl+S"))
 			{
 				Attempt(
 				    [&]
 				    {
-					    SaveScene(CurrentPath);
+					    RequestSceneSave();
 				    });
 			}
 			Gui->EndDisabled();
-			Gui->BeginDisabled(!Scene->GetStatus().bReady || PendingSave.has_value());
+			Gui->BeginDisabled(!Scene->GetStatus().bReady || PendingSave.has_value() || Transition.HasPendingScene());
 			if (Gui->MenuItem("Save Scene As..."))
 			{
 				SavePath = CurrentPath;
@@ -149,7 +165,9 @@ void FEditorPlugin::DrawMenus()
 		}
 		Gui->SameLine();
 		Gui->Text("    " +
-		          (CurrentPath.empty() ? std::string("Untitled") : std::filesystem::path(CurrentPath).stem().string()) +
+		          (Scene->GetStatus().bClosed ? std::string("No scene")
+		           : CurrentPath.empty()      ? std::string("Untitled")
+		                                      : std::filesystem::path(CurrentPath).stem().string()) +
 		          (IsDirty() ? " *" : ""));
 		Gui->EndMenuBar();
 	}
@@ -264,7 +282,7 @@ void FEditorPlugin::DrawToolbar()
 {
 	if (Gui->BeginToolbar())
 	{
-		if (Gui->Button("Open Scene"))
+		if (Gui->Button("Open Scene", !Transition.HasPendingScene() && !Transition.HasPendingRoot()))
 		{
 			ShowOpenScene();
 		}
@@ -347,6 +365,21 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 	}
 	if (Gui->BeginWindow("Viewport", bShowViewport))
 	{
+		if (Scene->GetStatus().bClosed)
+		{
+			Gui->TextWrapped("No scene is open.");
+			if (Gui->Button("New Scene"))
+			{
+				RequestSceneCommand(ESceneDocumentAction::New);
+			}
+			Gui->SameLine();
+			if (Gui->Button("Open Scene..."))
+			{
+				ShowOpenScene();
+			}
+			Gui->EndWindow();
+			return;
+		}
 		DrawGizmoToolbar();
 		Gui->SameLine();
 		DrawViewControls();
@@ -370,6 +403,10 @@ void FEditorPlugin::DrawViewport(float InDelta, std::span<const FInputEvent> InE
 
 std::string FEditorPlugin::StatusText() const
 {
+	if (Scene->GetStatus().bClosed)
+	{
+		return "No scene is open  |  File > New Scene / Open Scene";
+	}
 	if (!Scene->GetStatus().AssetRefreshError.empty())
 	{
 		return "Asset refresh failed: " + Scene->GetStatus().AssetRefreshError;

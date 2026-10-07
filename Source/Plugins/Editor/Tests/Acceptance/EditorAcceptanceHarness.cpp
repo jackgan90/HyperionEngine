@@ -10,6 +10,10 @@ EEditorAcceptanceWindow FEditorAcceptanceHarness::AssetInputWindow() const
 void FEditorAcceptanceHarness::CollectInput(std::vector<FInputEvent>& InEvents, std::vector<FInputEvent>& InAssetEvents)
 {
 	Scenario.CapturePreference.bCaptureBeforeToggle = false;
+	if (!Editor.Options.ExerciseSceneLifecycle.empty())
+	{
+		ExerciseSceneLifecycleInput(InEvents);
+	}
 	if (!Editor.Options.ExerciseImport.empty())
 	{
 		ExerciseImportInput(InEvents);
@@ -96,12 +100,12 @@ bool FEditorAcceptanceHarness::IsInteractionComplete() const
 
 bool FEditorAcceptanceHarness::IsComplete() const
 {
-	return IsInteractionComplete() || Scenario.bDocumentVerified || Scenario.bViewsVerified ||
-	       Scenario.bGizmoVerified || Scenario.bPickingVerified || Scenario.bPlacementVerified ||
-	       Scenario.bModelPlacementVerified || Scenario.bOutlinesVerified || Scenario.bMultiSelectionVerified ||
-	       Scenario.bContentVerified || Scenario.bRenderControlsVerified || Scenario.bReparentVerified ||
-	       Scenario.bClipboardVerified || Scenario.bLogVerified || Scenario.bFramingVerified ||
-	       Scenario.bSelectionShortcutsVerified;
+	return IsInteractionComplete() || Scenario.SceneLifecycle.bVerified || Scenario.bDocumentVerified ||
+	       Scenario.bViewsVerified || Scenario.bGizmoVerified || Scenario.bPickingVerified ||
+	       Scenario.bPlacementVerified || Scenario.bModelPlacementVerified || Scenario.bOutlinesVerified ||
+	       Scenario.bMultiSelectionVerified || Scenario.bContentVerified || Scenario.bRenderControlsVerified ||
+	       Scenario.bReparentVerified || Scenario.bClipboardVerified || Scenario.bLogVerified ||
+	       Scenario.bFramingVerified || Scenario.bSelectionShortcutsVerified;
 }
 
 bool FEditorAcceptanceHarness::ShouldCapture() const
@@ -118,6 +122,12 @@ bool FEditorAcceptanceHarness::ShouldCapture() const
 
 void FEditorAcceptanceHarness::CheckCompletion() const
 {
+	if (!Editor.Options.ExerciseSceneLifecycle.empty() && !Scenario.SceneLifecycle.bVerified)
+	{
+		throw std::runtime_error("Scene lifecycle acceptance incomplete at case " +
+		                         std::to_string(Scenario.SceneLifecycle.CaseIndex) + " " +
+		                         Scenario.SceneLifecycle.Progress.Name());
+	}
 	if (Editor.Options.bExerciseSelectionShortcuts && !Scenario.bSelectionShortcutsVerified)
 	{
 		throw std::runtime_error("Editor selection shortcut acceptance incomplete at step " +
@@ -204,6 +214,7 @@ std::string FEditorAcceptanceHarness::ScenarioStatus() const
 		}
 	};
 	Append(Editor.Options.bExercise, "interaction", Scenario.Interaction.Progress);
+	Append(!Editor.Options.ExerciseSceneLifecycle.empty(), "scene-lifecycle", Scenario.SceneLifecycle.Progress);
 	Append(!Editor.Options.ExerciseDocument.empty(), "document", Scenario.Document.Progress);
 	Append(!Editor.Options.ExerciseDocument.empty(), "transform", Scenario.Transform.Progress);
 	Append(!Editor.Options.ExerciseViews.empty(), "view", Scenario.View.Progress);
@@ -242,7 +253,8 @@ void FEditorAcceptanceHarness::CheckTimeout(double InElapsed) const
 	     !Editor.Options.ExerciseModelPlacement.empty() || !Editor.Options.ExerciseOutlines.empty() ||
 	     Editor.Options.ExerciseCapture.has_value() || !Editor.Options.ExerciseContent.empty() ||
 	     !Editor.Options.ExerciseAssets.empty() || !Editor.Options.ExerciseRenderControls.empty() ||
-	     !Editor.Options.ExerciseImport.empty() || !Editor.Options.ExerciseReparent.empty()) &&
+	     !Editor.Options.ExerciseImport.empty() || !Editor.Options.ExerciseReparent.empty() ||
+	     !Editor.Options.ExerciseSceneLifecycle.empty()) &&
 	    InElapsed > 90)
 	{
 		throw std::runtime_error("Editor interaction acceptance timed out; model placement case " +

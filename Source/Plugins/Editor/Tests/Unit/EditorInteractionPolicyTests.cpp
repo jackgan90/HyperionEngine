@@ -127,6 +127,7 @@ void CheckDialogs()
 	                       FPolicyCase{"decision", &FEditorInteractionFacts::bDecisionVisible, true, SceneDialog},
 	                       FPolicyCase{"asset message", &FEditorInteractionFacts::bAssetMessage, true, SceneDialog},
 	                       FPolicyCase{"pending root", &FEditorInteractionFacts::bPendingRoot, true, Root},
+	                       FPolicyCase{"pending scene", &FEditorInteractionFacts::bPendingScene, true, Root},
 	                       FPolicyCase{"preferences",
 	                                   &FEditorInteractionFacts::bPreferencesDialog,
 	                                   true,

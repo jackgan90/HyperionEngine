@@ -30,6 +30,10 @@ constexpr FWidgetMember Members[]{
 };
 
 constexpr EEditorWidget Widgets[]{
+    EEditorWidget::NewScene,
+    EEditorWidget::CloseScene,
+    EEditorWidget::SaveSceneChanges,
+    EEditorWidget::SaveCancel,
     EEditorWidget::SaveAs,
     EEditorWidget::SavePath,
     EEditorWidget::SaveConfirm,

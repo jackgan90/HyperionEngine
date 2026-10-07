@@ -7,6 +7,7 @@ void WriteEditorAcceptanceReport(std::ostream& InStream, const FEditorAcceptance
 {
 	InStream << "\"content_verified\": " << InReport.bContent << ",\n"
 	         << "\"document_verified\": " << InReport.bDocument << ",\n"
+	         << "\"scene_lifecycle_verified\": " << InReport.bSceneLifecycle << ",\n"
 	         << "\"views_verified\": " << InReport.bViews << ",\n"
 	         << "\"render_controls_verified\": " << InReport.bRenderControls << ",\n"
 	         << "\"gizmo_verified\": " << InReport.bGizmo << ",\n"

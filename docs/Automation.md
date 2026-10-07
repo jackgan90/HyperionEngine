@@ -162,7 +162,9 @@ Catalog.Register(MakeOperation<FRenameRequest, FDocumentInfo>(
 
 Editor 与独立资产适配器在打开时共用 AssetEditing 的 `SupportsAssetDocument`，基础支持限于规范的 model/material/texture/sky 反射类型。预览能力与字段编辑权限分别判断，基础支持不承诺 GPU 预览成功；scene 仍由现有 `scene.open` 工作流处理。
 
-`application.health` 返回简洁的 frame、ready、error。ready=false 且 error 为空可能正在加载；ready 不保证所有资源已绘制。详情再用 scene.status、render.component_diagnostics 或 render.statistics。Editor 的概要与完整诊断共用状态来源，概要不读取 GPU 统计；无诊断服务时明确 unavailable。
+`scene.new` / `scene.close` 接收当前 `document` / `revision`，以及 dirty 决策 `action`（0=RejectDirty，默认；1=Save；2=Discard）。保存未命名场景时提供 `.hasset` 的 `scenePath`；已有路径可省略。保存失败保留原场景；成功新建完成于空场景 ready，关闭完成于场景已退出，不等待 ready。关闭后 `scene.status` 的 loaded/ready 为 false，场景编辑返回 unavailable；独立资产页签与内容根保留。GUI 菜单通过同一 host 发起操作，并将保存提示和 Save As 的决定续接到原请求。`scene.open` 的空 path 兼容语义不变。
+
+`application.health` 返回简洁的 frame、ready、error。ready=false 且 error 为空可能正在加载或没有打开场景；ready 不保证所有资源已绘制。详情再用 scene.status、render.component_diagnostics 或 render.statistics。Editor 的概要与完整诊断共用状态来源，概要不读取 GPU 统计；无诊断服务时明确 unavailable。
 
 `scene.lighting.get` 与 Editor 灯光 Inspector 共用 Renderer 诊断快照。原生诊断以 `ESceneLightDiagnosticKind` 表达已知种类，`FSceneLightDiagnosticType` 在反射边界保留既有开放字符串：`directional`、`sky`、默认空串及未知 token 均无损往返。对外 schema 不增加 enum 约束；Inspector 按组件反射成员关联识别 Priority 和 Sky 属性。
 

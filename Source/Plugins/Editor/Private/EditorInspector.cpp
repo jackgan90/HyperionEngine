@@ -175,6 +175,16 @@ void FEditorPlugin::DrawDetails()
 		InspectorDrafts.Clear();
 		return;
 	}
+	if (Scene->GetStatus().bClosed)
+	{
+		InspectorDrafts.Clear();
+		if (Gui->BeginWindow("Details", bShowDetails))
+		{
+			Gui->TextWrapped("No scene is open.");
+		}
+		Gui->EndWindow();
+		return;
+	}
 	InspectorDrafts.Prepare(DocumentEpoch, Scene->GetRevision(), Selection.All());
 	if (Gui->BeginWindow("Details", bShowDetails))
 	{

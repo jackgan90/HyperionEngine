@@ -7,6 +7,7 @@ void FEditorDocumentTransition::Cancel()
 {
 	Root.reset();
 	Close.reset();
+	Scene.reset();
 	PendingOpen.clear();
 	Decision = EDecisionPresentation::Hidden;
 }
@@ -19,7 +20,7 @@ void FEditorDocumentTransition::QueueOpen(const std::string& InPath)
 
 void FEditorDocumentTransition::QueueRoot(const std::filesystem::path& InPath)
 {
-	if (!HasPendingRoot() && !InPath.empty())
+	if (!HasPendingScene() && !HasPendingRoot() && !InPath.empty())
 	{
 		Root.emplace();
 		Root->Requested = InPath;
@@ -86,12 +87,14 @@ void FEditorDocumentTransition::ContentRootChanged()
 {
 	Root.reset();
 	PendingOpen.clear();
+	Scene.reset();
 	Decision = EDecisionPresentation::Hidden;
 }
 
 void FEditorDocumentTransition::ContentDocumentClosed()
 {
 	PendingOpen.clear();
+	Scene.reset();
 }
 
 void FEditorDocumentTransition::BeginSave(EEditorTransitionTarget InTarget)
@@ -105,9 +108,13 @@ void FEditorDocumentTransition::BeginSave(EEditorTransitionTarget InTarget)
 	{
 		RequirePreparedRoot().Phase = EEditorTransitionPhase::Saving;
 	}
+	else if (InTarget == EEditorTransitionTarget::Scene && Scene)
+	{
+		Scene->Phase = EEditorTransitionPhase::Saving;
+	}
 	else
 	{
-		throw std::logic_error("Only root and close decisions support save continuations");
+		throw std::logic_error("Only root, scene and close decisions support save continuations");
 	}
 }
 
@@ -122,9 +129,13 @@ void FEditorDocumentTransition::AwaitSavePath(EEditorTransitionTarget InTarget)
 	{
 		RequirePreparedRoot().Phase = EEditorTransitionPhase::AwaitingSavePath;
 	}
+	else if (InTarget == EEditorTransitionTarget::Scene && Scene)
+	{
+		Scene->Phase = EEditorTransitionPhase::AwaitingSavePath;
+	}
 	else
 	{
-		throw std::logic_error("Only root and close decisions can await a save path");
+		throw std::logic_error("Only root, scene and close decisions can await a save path");
 	}
 	Decision = EDecisionPresentation::Hidden;
 }
@@ -137,6 +148,7 @@ void FEditorDocumentTransition::SaveAdmitted(EEditorTransitionTarget InTarget, b
 		// Choosing save-and-exit supersedes replacement intents, even if the save later fails.
 		Root.reset();
 		PendingOpen.clear();
+		Scene.reset();
 		Decision = EDecisionPresentation::Hidden;
 	}
 	else if (InTarget == EEditorTransitionTarget::Root && IsSavingRoot())
@@ -146,6 +158,11 @@ void FEditorDocumentTransition::SaveAdmitted(EEditorTransitionTarget InTarget, b
 		{
 			Decision = EDecisionPresentation::Hidden;
 		}
+	}
+	else if (InTarget == EEditorTransitionTarget::Scene && IsSavingScene())
+	{
+		Scene->Phase = EEditorTransitionPhase::Saving;
+		Decision = EDecisionPresentation::Hidden;
 	}
 	else
 	{
@@ -169,7 +186,7 @@ void FEditorDocumentTransition::SaveRejected(EEditorTransitionTarget InTarget, c
 
 void FEditorDocumentTransition::CancelSaveDialog()
 {
-	if (IsSavingRoot() || HasPendingClose())
+	if (IsSavingRoot() || IsSavingScene() || HasPendingClose())
 	{
 		Cancel();
 	}
@@ -258,12 +275,18 @@ FEditorDiscardRequest FEditorDocumentTransition::ConfirmDiscard()
 	{
 		Result.OpenPath = std::exchange(PendingOpen, {});
 	}
+	else if (Result.Target == EEditorTransitionTarget::Scene)
+	{
+		Scene->Request.Action = ESceneDirtyAction::Discard;
+		Scene->Phase = EEditorTransitionPhase::Ready;
+	}
 	return Result;
 }
 
 void FEditorDocumentTransition::CompleteClose()
 {
 	Root.reset();
+	Scene.reset();
 	PendingOpen.clear();
 	Close.emplace();
 	Close->Phase = EEditorTransitionPhase::Ready;
@@ -356,6 +379,10 @@ EEditorTransitionTarget FEditorDocumentTransition::DiscardTarget() const
 	if (HasPendingRoot())
 	{
 		return EEditorTransitionTarget::Root;
+	}
+	if (HasPendingScene())
+	{
+		return EEditorTransitionTarget::Scene;
 	}
 	return PendingOpen.empty() ? EEditorTransitionTarget::Document : EEditorTransitionTarget::Open;
 }

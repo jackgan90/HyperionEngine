@@ -2,6 +2,30 @@
 
 namespace Hyperion
 {
+template<> std::span<const TRecordEnumEntry<ESceneDirtyAction>> RecordEnumEntries<ESceneDirtyAction>()
+{
+	static constexpr TRecordEnumEntry<ESceneDirtyAction> Values[] = {
+	    {ESceneDirtyAction::RejectDirty, "RejectDirty", "Refuse to replace unsaved scene changes."},
+	    {ESceneDirtyAction::Save, "Save", "Save the dirty scene before the requested action."},
+	    {ESceneDirtyAction::Discard, "Discard", "Explicitly discard only the current scene's unsaved changes."}};
+	return Values;
+}
+
+template<> const FRecordDescriptor& RecordType<FSceneLifecycleRequest>()
+{
+	static const auto Type = MakeRecord<FSceneLifecycleRequest>(
+	    "hyperion.scene.lifecycle.request",
+	    {Member("document", &FSceneLifecycleRequest::Document,
+	            {.bRequired = true, .Description = "Current document from scene.info, including the closed state."}),
+	     Member("revision", &FSceneLifecycleRequest::Revision,
+	            {.bRequired = true, .Description = "Current scene revision; zero when no scene is loaded."}),
+	     Member("action", &FSceneLifecycleRequest::Action,
+	            {.Description = "0: reject dirty (default); 1: save before the action; 2: explicitly discard."}),
+	     Member("scenePath", &FSceneLifecycleRequest::ScenePath,
+	            {.Description = "Save destination for a dirty untitled scene; otherwise the current path is used."})});
+	return Type;
+}
+
 template<> const FRecordDescriptor& RecordType<FSceneOpenRequest>()
 {
 	static const auto Type = MakeRecord<FSceneOpenRequest>(

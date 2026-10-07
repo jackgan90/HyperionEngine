@@ -1,6 +1,7 @@
 #include "Hyperion/Automation/Endpoint.h"
 #include "Hyperion/Automation/Session.h"
 #include "Hyperion/SceneEditing/SceneComponentEditing.h"
+#include "Hyperion/SceneEditing/SceneDocumentHost.h"
 #include "Hyperion/SceneEditing/ScenePlacement.h"
 #include "SceneOperations.h"
 #include "SceneTestTarget.h"
@@ -943,6 +944,19 @@ void PlacementWithoutProvider()
 	    "absent-document", 1, {"", "/Game/Model.hasset", RecordType<FModelAsset>().Id, ""}, {}};
 	Error(Call(Agent, "scene.placement.place_model", Request), "unavailable");
 }
+
+void LifecycleWithoutProvider()
+{
+	FOperationCatalog Catalog;
+	RegisterSceneHostOperations(Catalog, nullptr);
+	Catalog.Seal();
+	FAutomationSession Agent(Catalog);
+	for (const auto* Id : {"scene.new", "scene.close"})
+	{
+		Check(!Catalog.Find(Id).Info.Unavailable.empty());
+		Error(Call(Agent, Id, FSceneLifecycleRequest{"absent-document", 0}), "unavailable");
+	}
+}
 } // namespace
 
 void CheckSceneClipboardOperations();
@@ -962,6 +976,7 @@ int main()
 		DocumentFailureSequenceBaseline();
 		ValidationAndRootCosts();
 		PlacementWithoutProvider();
+		LifecycleWithoutProvider();
 		CheckSceneClipboardOperations();
 		CheckSceneRegistrationOperations();
 		CheckOwnedComponentRegistration();

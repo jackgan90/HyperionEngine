@@ -289,6 +289,61 @@ void CheckCloseStatusProjection()
 	Check(!Transition.RequestWindowClose({.bSceneDirty = true}));
 	Check(Transition.ClosePhase() == EEditorTransitionPhase::Reconfirming && Transition.CloseStatus() == "closing");
 }
+
+void CheckSceneLifecycle()
+{
+	for (const auto Action : {ESceneDocumentAction::New, ESceneDocumentAction::Close})
+	{
+		FEditorDocumentTransition Transition;
+		const FSceneLifecycleRequest Request{"original", 7};
+		Transition.QueueScene(Action, Request, true);
+		Check(Transition.HasPendingScene() && Transition.TakeDecisionRequest());
+		Check(Transition.SceneChange().Action == Action && !Transition.TakeSceneCommit({}));
+		Check(Transition.ConfirmDiscard().Target == EEditorTransitionTarget::Scene);
+		Check(!Transition.TakeSceneCommit({.bSceneSaving = true}));
+		const auto Commit = Transition.TakeSceneCommit({.bSceneDirty = true, .bAssetsDirty = true});
+		Check(Commit && Commit->Action == Action && Commit->Request.Document == "original" &&
+		      Commit->Request.Action == ESceneDirtyAction::Discard);
+		Check(Transition.ScenePhase() == EEditorTransitionPhase::Preparing && !Transition.TakeSceneCommit({}));
+		Transition.FinishSceneChange();
+		Check(!Transition.HasPendingScene() && !Transition.IsDecisionVisible());
+		Transition.QueueScene(Action, Request, false);
+		Check(!Transition.IsDecisionVisible() && Transition.TakeSceneCommit({}).has_value());
+		Transition.Cancel();
+		Check(!Transition.HasPendingScene());
+	}
+}
+
+void CheckSceneSaveAndCancellation()
+{
+	FEditorDocumentTransition Transition;
+	const FSceneLifecycleRequest Request{"original", 7};
+	Transition.QueueScene(ESceneDocumentAction::New, Request, true);
+	Transition.AwaitSavePath(EEditorTransitionTarget::Scene);
+	Check(Transition.IsSavingScene() && !Transition.IsDecisionVisible());
+	Transition.CancelSaveDialog();
+	Check(!Transition.HasPendingScene() && !Transition.TakeSceneCommit({}));
+	Transition.QueueScene(ESceneDocumentAction::Close, Request, true);
+	Transition.BeginSave(EEditorTransitionTarget::Scene);
+	Transition.SaveAdmitted(EEditorTransitionTarget::Scene, true);
+	Check(!Transition.IsDecisionVisible() && !Transition.TakeSceneCommit({.bSceneSaving = true}));
+	Check(Transition.TakeSceneCommit({.bAssetsDirty = true, .bAssetsSaving = true}).has_value());
+	Transition.FinishSceneChange();
+	Transition.QueueScene(ESceneDocumentAction::Close, Request, true);
+	Transition.BeginSave(EEditorTransitionTarget::Scene);
+	Check(!Transition.TakeSceneCommit({.bSceneDirty = true}));
+	Check(Transition.ScenePhase() == EEditorTransitionPhase::Failed);
+	Transition.Cancel();
+	Transition.QueueScene(ESceneDocumentAction::New, Request, true);
+	Transition.BeginSave(EEditorTransitionTarget::Scene);
+	Transition.Cancel();
+	Check(!Transition.TakeSceneCommit({}) && !Transition.HasPendingScene());
+	Transition.QueueScene(ESceneDocumentAction::New, Request, true);
+	Check(!Transition.RequestWindowClose({.bSceneDirty = true}));
+	Check(Transition.ConfirmDiscard().Target == EEditorTransitionTarget::Close);
+	Transition.CompleteClose();
+	Check(!Transition.HasPendingScene());
+}
 } // namespace
 
 int main()
@@ -301,4 +356,6 @@ int main()
 	CheckCloseFailureAndCompletion();
 	CheckOverlappingTargets();
 	CheckCloseStatusProjection();
+	CheckSceneLifecycle();
+	CheckSceneSaveAndCancellation();
 }

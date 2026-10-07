@@ -20,7 +20,7 @@
 
 “保存全部资产”由分页查询 `asset.documents.list`、逐个调用 `asset.save` 并等待完成组成；“关闭全部”同样逐个使用 `asset.close`。保留每份文档的冲突和失败结果，不承诺跨文件原子事务。Editor 删除后清空对应选择，不自动选择替代物；GUI/agent 使用同一策略。
 
-Outliner 常驻 Scene 容器是文档展示项，没有节点 handle，也不进入 `scene.nodes.list`、对象计数或选择。拖到该行与 `scene.nodes.reparent` 的 `parent:null` 共用固定 KeepWorld 事务；已在根层级的对象不增加 revision/history/dirty。容器折叠与搜索属于 GUI 呈现，不新增领域操作或 automation adapter，场景文件及既有操作 schema 保持不变。
+场景打开时，Outliner 的 Scene 容器是文档展示项，没有节点 handle，也不进入 `scene.nodes.list`、对象计数或选择。拖到该行与 `scene.nodes.reparent` 的 `parent:null` 共用固定 KeepWorld 事务；已在根层级的对象不增加 revision/history/dirty。容器折叠与搜索属于 GUI 呈现，不新增领域操作或 automation adapter，场景文件及既有操作 schema 保持不变。
 
 ## 任务映射
 
@@ -29,7 +29,7 @@ Outliner 常驻 Scene 容器是文档展示项，没有节点 handle，也不进
 | 修改用户数据与缓存目录 | `application.storage.get/set` | `FStorageSettings`；Editor preference 共用校验、revision、原子保存及重启语义，见 [存储](Storage.md)。不加入场景历史；无 provider 时 unavailable |
 | 查找资产、场景 | `content.assets.list` | Content/Assets 原生索引；query/type、offset/limit、root generation。写入内容后重新开始分页 |
 | 选择、清空资产目录 | `content.root.get/set/clear` | `FContentRootService`；Editor 与 GUI 同样检查 busy/dirty、关闭旧内容并保存 Preferences |
-| 打开、新建、关闭场景 | `scene.open`、`scene.status` | `ISceneDocumentHost`；Editor 空 path 表示空文档，旧场景 ID 失效。失败不声称恢复旧场景 |
+| 打开、新建、关闭场景 | `scene.open/new/close`、`scene.status` | `ISceneDocumentHost`；new/close 共用 GUI 的 dirty 校验、保存续接和资源退出。成功后旧场景 ID/句柄失效；close 保留资产页签与内容根。scene.open 空 path 仍兼容空文档 |
 | 查询与编辑层级 | `scene.nodes.list/reparent`、`scene.node.get/create/reparent`、`scene.nodes.set_metadata/set_transform` | `FSceneEditDocument`；metadata/transform 最多 128 个目标，事务先全量校验。批量 reparent 接收 document/revision、非空唯一 handles 和 parent（null 表示根），固定 KeepWorld，选中祖先覆盖后代，保留内部层级和选择；一次历史事务，全部无变化时不增加 revision/history；单节点旧模式兼容 |
 | 多选、全选、删除、历史 | `scene.selection.get/set/select_all/delete`、`scene.undo/redo/save` | 显式有序选择；末项为 primary。select_all 与 Ctrl+A 共用领域服务，包含全部逻辑节点、保留已有 primary，返回 document/revision/count/primary 摘要；count 为 64 位十进制字符串。set 的数量受 wire 预算而非 128 编辑批次限制；选择不改变 revision/dirty/history。Outliner 范围按显示顺序转换为显式集合后共用校验提交，agent 通过 set 表达集合，不模拟面板输入。Editor 删除后不自动选择替代物；undo 恢复并重新选择新 handle |
 | 复制与保留子节点删除 | `scene.selection.duplicate/remove_keep_children` | SceneEditing 共享事务；操作 primary，复制共享资源，删除保留子节点世界变换，支持 undo/redo 和选择恢复；GUI 入口待后续 Outliner/viewport 交互设计 |

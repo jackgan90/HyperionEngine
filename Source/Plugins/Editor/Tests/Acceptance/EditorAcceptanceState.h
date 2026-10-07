@@ -12,6 +12,7 @@
 #include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/Scene/Scene.h"
 #include "ReparentAcceptanceContext.h"
+#include "SceneLifecycleAcceptanceContext.h"
 #include <filesystem>
 #include <semaphore>
 
@@ -38,6 +39,7 @@ struct FEditorAcceptanceState
 	FWheelAcceptanceContext Wheel;
 	FAssetScenarioContext Asset;
 	FDocumentAcceptanceContext Document;
+	FSceneLifecycleAcceptanceContext SceneLifecycle;
 	FViewAcceptanceContext View;
 	FImportAcceptanceContext Import;
 	FLogAcceptanceContext Log;

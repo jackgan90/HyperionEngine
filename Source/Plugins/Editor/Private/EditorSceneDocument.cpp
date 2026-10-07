@@ -33,7 +33,11 @@ bool FEditorPlugin::SupportsContentTransitions() const
 
 FSceneHostStatus FEditorPlugin::PollDocument()
 {
+	// Session draining also pumps lifecycle work after regular Editor updates have stopped.
+	PollSave();
+	ProcessSceneChange();
 	Scene->Tick();
+	ProcessSceneChange();
 	return DocumentStatus();
 }
 

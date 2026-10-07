@@ -28,7 +28,7 @@ bool HasIsolatedEditorAcceptanceRequest(const FEditorOptions& InOptions)
 	       !InOptions.ExerciseViews.empty() || !InOptions.ExercisePlacement.empty() ||
 	       !InOptions.ExerciseOutlines.empty() || InOptions.ExerciseCapture.has_value() ||
 	       !InOptions.ExerciseRenderControls.empty() || !InOptions.ExerciseReparent.empty() ||
-	       !InOptions.ExerciseModelPlacement.empty();
+	       !InOptions.ExerciseModelPlacement.empty() || !InOptions.ExerciseSceneLifecycle.empty();
 }
 
 std::uint32_t UnsignedOption(std::string_view InValue)
@@ -112,6 +112,7 @@ bool ParsePath(FEditorOptions& InOptions, std::string_view InArgument, const std
 	    {"--benchmark", &FEditorOptions::Benchmark},
 	    {"--exercise-assets", &FEditorOptions::ExerciseAssets},
 	    {"--exercise-document", &FEditorOptions::ExerciseDocument},
+	    {"--exercise-scene-lifecycle", &FEditorOptions::ExerciseSceneLifecycle},
 	    {"--exercise-views", &FEditorOptions::ExerciseViews},
 	    {"--exercise-render-controls", &FEditorOptions::ExerciseRenderControls},
 	    {"--exercise-placement", &FEditorOptions::ExercisePlacement},

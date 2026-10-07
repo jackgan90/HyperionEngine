@@ -5,7 +5,7 @@ namespace Hyperion
 bool FEditorInteractionPolicy::HasSceneDialog() const
 {
 	return Facts.bOpenDialog || Facts.bSaveDialog || Facts.bDecisionVisible || Facts.bAssetMessage ||
-	       Facts.bPendingRoot;
+	       Facts.bPendingRoot || Facts.bPendingScene;
 }
 
 bool FEditorInteractionPolicy::HasPointerDialog() const
@@ -71,14 +71,14 @@ bool FEditorInteractionPolicy::BlocksAuxiliaryWindows() const
 
 bool FEditorInteractionPolicy::AllowsScenePanels() const
 {
-	return !Facts.bPendingRoot && !Facts.bBenchmark;
+	return !Facts.bPendingRoot && !Facts.bPendingScene && !Facts.bBenchmark;
 }
 
 bool FEditorInteractionPolicy::AllowsCloseRequest() const
 {
 	// A pending close decision must remain actionable through the shared close service.
 	return !Facts.bFinished && !Facts.bOpenDialog && !Facts.bSaveDialog && !Facts.bPendingRoot &&
-	       !Facts.bPreferencesDialog;
+	       !Facts.bPendingScene && !Facts.bPreferencesDialog;
 }
 
 bool FEditorInteractionPolicy::HasCloseInteraction() const
