@@ -390,9 +390,18 @@ void FEditorAcceptanceHarness::ExerciseSelectionTree(std::vector<FInputEvent>& I
 		case EShortcutState::PressTreeToggle:
 		case EShortcutState::ReleaseTreeToggle:
 		{
-			const auto Bounds = Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[1])->Id);
-			ShortcutMouse(InEvents, {Bounds.X + Editor.Gui->Scale(8), (Bounds.Y + Bounds.W) / 2},
+			const auto Bounds =
+			    Scenario.ShortcutTreeToggles.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[1])->Id);
+			ShortcutMouse(InEvents, ShortcutPoint(Bounds),
 			              Scenario.Shortcut.Progress.Is(EShortcutState::PressTreeToggle));
+			if (Scenario.Shortcut.Progress.Is(EShortcutState::ReleaseTreeToggle))
+			{
+				// Reveal lower fixture rows after returning from search to the full hierarchy.
+				FInputEvent Scroll;
+				Scroll.Type = EEventType::MouseWheel;
+				Scroll.Y = -1;
+				InEvents.push_back(Scroll);
+			}
 			Scenario.Shortcut.Progress.TransitionTo(Scenario.Shortcut.Progress.Is(EShortcutState::PressTreeToggle)
 			                                            ? EShortcutState::ReleaseTreeToggle
 			                                            : EShortcutState::VerifyFoldAndPressRange);
@@ -410,12 +419,19 @@ void FEditorAcceptanceHarness::ExerciseSelectionTree(std::vector<FInputEvent>& I
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReleaseFoldedRange);
 			break;
 		case EShortcutState::ReleaseFoldedRange:
+		{
+			const auto Bounds = Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[3])->Id);
+			const auto& Gesture = Editor.Reparent.GetGesture();
+			RequireShortcut(Gesture && Gesture->Source == Scenario.ShortcutObjects[3],
+			                "folded range endpoint was not hit; center=" + std::to_string(ShortcutPoint(Bounds).X) +
+			                    "," + std::to_string(ShortcutPoint(Bounds).Y));
 			ShortcutMouse(
 			    InEvents,
 			    ShortcutPoint(Scenario.MultiSelectionRows.at(Editor.Scene->FindNode(Scenario.ShortcutObjects[3])->Id)),
 			    false);
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyFoldedRangeAndPressDrag);
 			break;
+		}
 		case EShortcutState::VerifyFoldedRangeAndPressDrag:
 			CheckShortcutSelection({0, 1, 3});
 			ShortcutKey(InEvents, EKey::None, 2);

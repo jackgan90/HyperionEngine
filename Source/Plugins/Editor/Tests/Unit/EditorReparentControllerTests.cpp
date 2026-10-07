@@ -1,4 +1,6 @@
 #include "../../Private/EditorReparentController.h"
+#include "../../Private/OutlinerScene.h"
+#include "Hyperion/SceneEditing/SceneAuthoring.h"
 #include "Support/TestSupport.h"
 #include <iostream>
 
@@ -135,6 +137,8 @@ struct FReparentFixture final : IEditorReparentActions
 	unsigned Clicks{};
 	unsigned DragStarts{};
 	bool bResetBeforeFinish{};
+	bool bSceneOpen{};
+	bool bExpandScene{};
 
 	FReparentFixture()
 	{
@@ -197,24 +201,25 @@ struct FReparentFixture final : IEditorReparentActions
 		Gui.BeginFrame({640, 480}, {640, 480}, 1.f / 60, InEvents);
 		Controller.Update(Gui, Document, *this, InEvents, true, true);
 		Gui.BeginPanel("Hierarchy", {0, 0}, {500, 450});
-		Gui.Selectable("Source", Document.Selection().Contains(Source));
-		SourceBounds = Gui.LastItemBounds();
-		Controller.RouteRow(Gui, Document, *this, Source, false, true);
-		const auto Root = Controller.DrawRoot(Gui, Document);
-		if (Root.RootBounds)
+		if (Gui.BeginTable("Objects", "Item Label", "Type"))
 		{
+			bSceneOpen = FOutlinerSceneItem(Document).Draw(Gui, bExpandScene);
+			bExpandScene = false;
+			const auto Root = Controller.RouteRoot(Gui, Document);
 			RootBounds = *Root.RootBounds;
-		}
-		if (Root.Error)
-		{
-			Error = Root.Error;
-		}
-		Gui.Selectable("Parent", Document.Selection().Contains(Parent));
-		ParentBounds = Gui.LastItemBounds();
-		const auto Feedback = Controller.RouteRow(Gui, Document, *this, Parent, false, true);
-		if (Feedback.Error)
-		{
-			Error = Feedback.Error;
+			if (Root.Error)
+			{
+				Error = Root.Error;
+			}
+			Gui.NextColumn();
+			Gui.Text("Scene");
+			if (bSceneOpen)
+			{
+				DrawObject(Source, "Source", SourceBounds);
+				DrawObject(Parent, "Parent", ParentBounds);
+				Gui.EndTree();
+			}
+			Gui.EndTable();
 		}
 		Gui.EndPanel();
 		if (bResetBeforeFinish && Gui.PointerState().bReleased)
@@ -226,6 +231,25 @@ struct FReparentFixture final : IEditorReparentActions
 			Error = Result;
 		}
 		Gui.Render();
+	}
+
+	void DrawObject(FSceneHandle InHandle, const char* InLabel, FVec4& OutBounds)
+	{
+		if (!Target.FindNode(InHandle))
+		{
+			return;
+		}
+		Gui.NextRow();
+		Gui.NextColumn();
+		Gui.Selectable(InLabel, Document.Selection().Contains(InHandle));
+		OutBounds = Gui.LastItemBounds();
+		const auto Feedback = Controller.RouteRow(Gui, Document, *this, InHandle, false, true);
+		if (Feedback.Error)
+		{
+			Error = Feedback.Error;
+		}
+		Gui.NextColumn();
+		Gui.Text("Group");
 	}
 
 	void Move(FVec2 InPoint)
@@ -255,6 +279,79 @@ struct FReparentFixture final : IEditorReparentActions
 		HYP_CHECK(Controller.IsDragging() && Gui.DragPayload());
 	}
 };
+
+bool SameBounds(FVec4 InA, FVec4 InB)
+{
+	return InA.X == InB.X && InA.Y == InB.Y && InA.Z == InB.Z && InA.W == InB.W;
+}
+
+void CheckStableSceneLayout()
+{
+	FReparentFixture Fixture;
+	const auto RootBounds = Fixture.RootBounds;
+	const auto SourceBounds = Fixture.SourceBounds;
+	const auto ParentBounds = Fixture.ParentBounds;
+	const auto Revision = Fixture.Target.Revision();
+	Fixture.Start();
+	HYP_CHECK(SameBounds(Fixture.RootBounds, RootBounds));
+	HYP_CHECK(SameBounds(Fixture.SourceBounds, SourceBounds));
+	HYP_CHECK(SameBounds(Fixture.ParentBounds, ParentBounds));
+	Fixture.Move(Center(Fixture.RootBounds));
+	Fixture.Frame();
+	Fixture.Button(false);
+	HYP_CHECK(SameBounds(Fixture.RootBounds, RootBounds));
+	HYP_CHECK(SameBounds(Fixture.SourceBounds, SourceBounds));
+	HYP_CHECK(SameBounds(Fixture.ParentBounds, ParentBounds));
+	HYP_CHECK(Fixture.Target.Revision() == Revision && Fixture.Document.GetState().History.empty());
+	HYP_CHECK(!Fixture.Document.IsDirty() && Fixture.Target.Nodes().size() == 2);
+	HYP_CHECK(Fixture.Document.Selection().All().size() == 1);
+	Fixture.Start();
+	Fixture.Controller.Cancel(&Fixture.Gui);
+	Fixture.Button(false);
+	HYP_CHECK(SameBounds(Fixture.RootBounds, RootBounds));
+	HYP_CHECK(SameBounds(Fixture.ParentBounds, ParentBounds));
+}
+
+void CheckScenePresentation()
+{
+	FReparentFixture Fixture;
+	const auto SceneItem = FOutlinerSceneItem(Fixture.Document);
+	HYP_CHECK(SceneItem.Label == "Untitled Scene" && Fixture.bSceneOpen);
+	Fixture.Document.SetPath("/Game/Scenes/Courtyard.hasset");
+	HYP_CHECK(FOutlinerSceneItem(Fixture.Document).Id == SceneItem.Id);
+	HYP_CHECK(FOutlinerSceneItem(Fixture.Document).Label == "Courtyard");
+	const auto Revision = Fixture.Target.Revision();
+	const auto Selection = Fixture.Document.Selection();
+	Fixture.Move(Center(Fixture.RootBounds));
+	Fixture.Button(true);
+	Fixture.Move({Center(Fixture.RootBounds).X + 20, Center(Fixture.RootBounds).Y});
+	Fixture.Button(false);
+	HYP_CHECK(!Fixture.Controller.HasGesture() && Fixture.DragStarts == 0 && Fixture.Clicks == 0);
+	HYP_CHECK(Fixture.Document.Selection() == Selection);
+	Fixture.Move({Fixture.RootBounds.X + 5, Center(Fixture.RootBounds).Y});
+	Fixture.Button(true);
+	Fixture.Button(false);
+	HYP_CHECK(!Fixture.bSceneOpen && Fixture.Document.Selection() == Selection);
+	Fixture.bExpandScene = true;
+	Fixture.Frame();
+	HYP_CHECK(Fixture.bSceneOpen && Fixture.Target.Revision() == Revision);
+	HYP_CHECK(!Fixture.Document.IsDirty() && Fixture.Document.GetState().History.empty());
+	const auto All = SelectAllSceneNodes(Fixture.Document, {Fixture.Document.Id(), Revision});
+	HYP_CHECK(All.Count == 2 && Fixture.Document.Selection().All().size() == 2);
+	Fixture.Move({Fixture.RootBounds.X + 5, Center(Fixture.RootBounds).Y});
+	Fixture.Button(true);
+	Fixture.Button(false);
+	HYP_CHECK(!Fixture.bSceneOpen);
+	Fixture.Document.Invalidate();
+	HYP_CHECK(FOutlinerSceneItem(Fixture.Document).Id != SceneItem.Id);
+	Fixture.Frame();
+	HYP_CHECK(Fixture.bSceneOpen);
+	Fixture.Document.ReplaceSelection({});
+	Fixture.Target.Scene.Clear();
+	Fixture.Frame();
+	HYP_CHECK(Fixture.bSceneOpen && Fixture.RootBounds.Z > Fixture.RootBounds.X);
+	HYP_CHECK(Fixture.Target.Nodes().empty());
+}
 
 void CheckNodeAndRootDelivery()
 {
@@ -345,6 +442,8 @@ int main()
 {
 	try
 	{
+		CheckStableSceneLayout();
+		CheckScenePresentation();
 		CheckNodeAndRootDelivery();
 		CheckResetBeforeDeliveryAndDetach();
 		for (unsigned Case = 0; Case < 4; ++Case)

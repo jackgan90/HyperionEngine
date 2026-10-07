@@ -220,14 +220,23 @@ void FGui::EndTable()
 }
 
 bool FGui::TreeItem(const char* InId, const char* InLabel, bool bInLeaf, bool bInSelected, bool& bOutClicked,
-                    bool bInDefaultOpen)
+                    bool bInDefaultOpen, FVec4* OutToggleBounds)
 {
 	Impl->Select();
+	const auto Origin = ImGui::GetCursorScreenPos();
 	const auto Flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAllColumns |
 	                   (bInDefaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0) | (bInLeaf ? ImGuiTreeNodeFlags_Leaf : 0) |
 	                   (bInSelected ? ImGuiTreeNodeFlags_Selected : 0);
 	const bool bOpen = ImGui::TreeNodeEx(InId, Flags, "%s", InLabel);
 	bOutClicked = ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen();
+	if (OutToggleBounds)
+	{
+		const auto& Style = ImGui::GetStyle();
+		*OutToggleBounds = bInLeaf ? FVec4{}
+		                           : FVec4{Origin.x - Style.TouchExtraPadding.x, ImGui::GetItemRectMin().y,
+		                                   Origin.x + ImGui::GetTreeNodeToLabelSpacing() + Style.TouchExtraPadding.x,
+		                                   ImGui::GetItemRectMax().y};
+	}
 	return bOpen;
 }
 

@@ -30,6 +30,7 @@ enum class EEditorWidget
 	OpenScene,
 	CancelOpenScene,
 	OutlinerTreeItem,
+	OutlinerTreeToggle,
 	OutlinerRow,
 	OutlinerSearch,
 	ContentTile,

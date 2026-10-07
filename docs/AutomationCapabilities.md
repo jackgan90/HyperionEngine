@@ -20,6 +20,8 @@
 
 “保存全部资产”由分页查询 `asset.documents.list`、逐个调用 `asset.save` 并等待完成组成；“关闭全部”同样逐个使用 `asset.close`。保留每份文档的冲突和失败结果，不承诺跨文件原子事务。Editor 删除后清空对应选择，不自动选择替代物；GUI/agent 使用同一策略。
 
+Outliner 常驻 Scene 容器是文档展示项，没有节点 handle，也不进入 `scene.nodes.list`、对象计数或选择。拖到该行与 `scene.nodes.reparent` 的 `parent:null` 共用固定 KeepWorld 事务；已在根层级的对象不增加 revision/history/dirty。容器折叠与搜索属于 GUI 呈现，不新增领域操作或 automation adapter，场景文件及既有操作 schema 保持不变。
+
 ## 任务映射
 
 | 人类任务 | 操作族 | 共享服务与范围 |

@@ -423,6 +423,8 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 	}
 	else if (Scenario.ReparentDrag.Is(EReparentDragState::PressSource))
 	{
+		Scenario.ReparentSceneBounds = Scenario.InspectionBounds.at("hierarchy/root");
+		Scenario.ReparentRowBounds = Scenario.MultiSelectionRows;
 		const auto Point = RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[Case == 9    ? 1
 		                                                                                         : Case == 10 ? 5
 		                                                                                                      : 0]));
@@ -438,6 +440,24 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 	else if (Scenario.ReparentDrag.Is(EReparentDragState::PreviewTarget))
 	{
 		RequireReparent(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bDragging, "drag did not start");
+		const auto SameBounds = [](FVec4 InA, FVec4 InB)
+		{
+			return InA.X == InB.X && InA.Y == InB.Y && InA.Z == InB.Z && InA.W == InB.W;
+		};
+		RequireReparent(SameBounds(Scenario.ReparentSceneBounds, Scenario.InspectionBounds.at("hierarchy/root")),
+		                "Scene container moved when dragging started");
+		for (const auto& [Id, Bounds] : Scenario.ReparentRowBounds)
+		{
+			RequireReparent(SameBounds(Bounds, Scenario.MultiSelectionRows.at(Id)),
+			                "Outliner row moved when dragging started: " + Id);
+		}
+		RequireReparent(Editor.OutlinerRows.size() <= Editor.Scene->GetStatus().Nodes &&
+		                    std::all_of(Editor.OutlinerRows.begin(), Editor.OutlinerRows.end(),
+		                                [&](FSceneHandle InHandle)
+		                                {
+			                                return Editor.Scene->FindNode(InHandle) != nullptr;
+		                                }),
+		                "Scene container entered logical object rows");
 		RequireReparent(Editor.Selection.All().size() == (Case == 9    ? 1u
 		                                                  : Case == 10 ? 2u
 		                                                               : 3u),

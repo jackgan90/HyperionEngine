@@ -193,7 +193,7 @@ private:
 	void BeginReparentDrag() override;
 	void UpdateReparentGesture(std::span<const FInputEvent> InEvents);
 	void CancelReparentGesture();
-	void DrawReparentRoot();
+	void RouteReparentRoot();
 	void FinishReparentGesture();
 	void RouteReparentRow(FSceneHandle InHandle, bool bInActivated = false);
 	void DrawPreferences();
@@ -209,6 +209,7 @@ private:
 	void DrawApplicationScale();
 	void DrawToolbar();
 	void DrawOutliner();
+	void DrawOutlinerObjects();
 	void DrawNode(FSceneHandle InHandle);
 	void DrawDetails();
 	void DrawSceneBrowser();

@@ -234,8 +234,9 @@ public:
 	void NextRow();
 	void NextColumn();
 	void EndTable();
+	// Optional toggle bounds follow tree indentation; leaf items report an empty region.
 	bool TreeItem(const char* InId, const char* InLabel, bool bInLeaf, bool bInSelected, bool& bOutClicked,
-	              bool bInDefaultOpen = true);
+	              bool bInDefaultOpen = true, FVec4* OutToggleBounds = nullptr);
 	void EndTree();
 	void OpenNextTreeItem();
 	bool IsItemPressed() const;

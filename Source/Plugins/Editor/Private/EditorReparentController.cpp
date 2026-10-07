@@ -186,13 +186,8 @@ std::optional<std::string> FEditorReparentController::DrawTarget(FGui& InGui, FS
 	return {};
 }
 
-FEditorReparentFeedback FEditorReparentController::DrawRoot(FGui& InGui, FSceneEditDocument& InDocument)
+FEditorReparentFeedback FEditorReparentController::RouteRoot(FGui& InGui, FSceneEditDocument& InDocument)
 {
-	if (!IsDragging())
-	{
-		return {};
-	}
-	InGui.Selectable("Move to scene root##ReparentRoot", false);
 	const auto Bounds = InGui.LastItemBounds();
 	return {DrawTarget(InGui, InDocument, std::nullopt), Bounds};
 }

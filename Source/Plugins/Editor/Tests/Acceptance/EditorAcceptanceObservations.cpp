@@ -130,6 +130,12 @@ void FEditorAcceptanceHarness::ObserveIdentifiedWidget(EEditorWidget InWidget, F
 				Scenario.PickingLightBounds = InBounds;
 			}
 			break;
+		case EEditorWidget::OutlinerTreeToggle:
+			if (Options.bExerciseSelectionShortcuts)
+			{
+				Scenario.ShortcutTreeToggles[std::string(InId)] = InBounds;
+			}
+			break;
 		case EEditorWidget::OutlinerRow:
 			if (Options.bExerciseMultiSelection || Options.bExerciseFraming || Options.bExerciseSelectionShortcuts ||
 			    !Options.ExerciseReparent.empty())

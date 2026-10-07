@@ -133,6 +133,8 @@ struct FEditorAcceptanceState
 	std::vector<FMat4> ReparentExerciseWorlds;
 	std::uint64_t ReparentExerciseRevision{};
 	std::size_t ReparentExerciseHistory{};
+	FVec4 ReparentSceneBounds;
+	std::map<std::string, FVec4> ReparentRowBounds;
 	std::vector<FSceneHandle> FramingObjects;
 	std::uint64_t FramingRevision{};
 	FSceneCameraView FramingBefore;
@@ -165,6 +167,7 @@ struct FEditorAcceptanceState
 	std::vector<FSceneHandle> MultiSelectionObjects;
 	std::map<std::string, FVec4> MultiSelectionRows;
 	std::vector<FSceneHandle> ShortcutObjects;
+	std::map<std::string, FVec4> ShortcutTreeToggles;
 	std::uint64_t ShortcutRevision{};
 	std::string ShortcutObjectId;
 	std::string ShortcutDocumentPath;

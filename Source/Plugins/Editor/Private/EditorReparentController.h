@@ -54,7 +54,7 @@ public:
 	            std::span<const FInputEvent> InEvents, bool bInAllowed, bool bInOutlinerVisible);
 	FEditorReparentFeedback RouteRow(FGui& InGui, FSceneEditDocument& InDocument, IEditorReparentActions& InActions,
 	                                 FSceneHandle InHandle, bool bInActivated, bool bInAllowed);
-	FEditorReparentFeedback DrawRoot(FGui& InGui, FSceneEditDocument& InDocument);
+	FEditorReparentFeedback RouteRoot(FGui& InGui, FSceneEditDocument& InDocument);
 	std::optional<std::string> Finish(FGui& InGui, FSceneEditDocument& InDocument, IEditorReparentActions& InActions);
 
 private:

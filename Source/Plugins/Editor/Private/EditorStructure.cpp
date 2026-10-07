@@ -30,9 +30,9 @@ void FEditorPlugin::RouteReparentRow(FSceneHandle InHandle, bool bInActivated)
 	}
 }
 
-void FEditorPlugin::DrawReparentRoot()
+void FEditorPlugin::RouteReparentRoot()
 {
-	const auto Feedback = Reparent.DrawRoot(*Gui, SceneDocument);
+	const auto Feedback = Reparent.RouteRoot(*Gui, SceneDocument);
 	if (Feedback.RootBounds)
 	{
 		Acceptance.ObserveWidget(EEditorWidget::HierarchyRoot, *Feedback.RootBounds);

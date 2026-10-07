@@ -1,5 +1,6 @@
 #include "EditorApplication.h"
 #include "EditorTextFilter.h"
+#include "OutlinerScene.h"
 #include <array>
 
 namespace Hyperion
@@ -47,9 +48,12 @@ void FEditorPlugin::DrawNode(FSceneHandle InHandle)
 		{
 			Gui->OpenNextTreeItem();
 		}
-		const bool bOpen = Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(),
-		                                 Selection.Contains(Visit.Handle), bClicked, !Options.bBenchmarkCollapsed);
+		FVec4 ToggleBounds;
+		const bool bOpen =
+		    Gui->TreeItem(Node->Id.c_str(), Node->Name.c_str(), Children.empty(), Selection.Contains(Visit.Handle),
+		                  bClicked, !Options.bBenchmarkCollapsed, &ToggleBounds);
 		Acceptance.ObserveWidget(EEditorWidget::OutlinerTreeItem, Gui->LastItemBounds(), Node->Id);
+		Acceptance.ObserveWidget(EEditorWidget::OutlinerTreeToggle, ToggleBounds, Node->Id);
 		RouteReparentRow(Visit.Handle);
 		Acceptance.ObserveWidget(EEditorWidget::OutlinerRow, Gui->LastItemBounds(), Node->Id);
 		Gui->NextColumn();
@@ -87,7 +91,8 @@ void FEditorPlugin::DrawOutliner()
 		Gui->Text("Search objects");
 		Gui->SetNextItemWidth(-1);
 		Gui->InputText("##SearchObjects", Filter, false);
-		if (OutlinerSelectionFilter != Filter)
+		const bool bFilterChanged = OutlinerSelectionFilter != Filter;
+		if (bFilterChanged)
 		{
 			OutlinerSelectionFilter = Filter;
 			OutlinerSelection.Reset();
@@ -96,41 +101,51 @@ void FEditorPlugin::DrawOutliner()
 		Acceptance.ObserveWidget(EEditorWidget::OutlinerSearch, Gui->LastItemBounds());
 		Gui->Text(std::to_string(Scene->GetStatus().Nodes) + " objects" +
 		          ("  |  " + std::to_string(Selection.All().size()) + " selected"));
-		DrawReparentRoot();
 		if (Gui->BeginTable("Objects", "Item Label", "Type"))
 		{
-			if (Filter.empty())
+			const FOutlinerSceneItem SceneItem(SceneDocument);
+			const bool bSceneOpen = SceneItem.Draw(*Gui, bFilterChanged && !Filter.empty());
+			RouteReparentRoot();
+			Gui->NextColumn();
+			Gui->Text("Scene");
+			if (bSceneOpen)
 			{
-				for (const auto Root : Scene->GetRoots())
-				{
-					DrawNode(Root);
-				}
-			}
-			else
-			{
-				for (const auto Handle : Scene->GetNodes())
-				{
-					const auto* Node = Scene->FindNode(Handle);
-					if (!Node || !MatchesEditorFilter(Node->Name, Filter))
-					{
-						continue;
-					}
-					Gui->NextRow();
-					Gui->NextColumn();
-					OutlinerRows.push_back(Handle);
-					const bool bActivated =
-					    Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle));
-					RouteReparentRow(Handle, bActivated);
-					Acceptance.ObserveWidget(EEditorWidget::OutlinerRow, Gui->LastItemBounds(), Node->Id);
-					Gui->NextColumn();
-					Gui->Text(KindName(Node->GetKind()));
-				}
+				DrawOutlinerObjects();
+				Gui->EndTree();
 			}
 			Gui->ScrollDragTarget();
 			Gui->EndTable();
 		}
 	}
 	Gui->EndWindow();
+}
+
+void FEditorPlugin::DrawOutlinerObjects()
+{
+	if (Filter.empty())
+	{
+		for (const auto Root : Scene->GetRoots())
+		{
+			DrawNode(Root);
+		}
+		return;
+	}
+	for (const auto Handle : Scene->GetNodes())
+	{
+		const auto* Node = Scene->FindNode(Handle);
+		if (!Node || !MatchesEditorFilter(Node->Name, Filter))
+		{
+			continue;
+		}
+		Gui->NextRow();
+		Gui->NextColumn();
+		OutlinerRows.push_back(Handle);
+		const bool bActivated = Gui->Selectable((Node->Name + "##" + Node->Id).c_str(), Selection.Contains(Handle));
+		RouteReparentRow(Handle, bActivated);
+		Acceptance.ObserveWidget(EEditorWidget::OutlinerRow, Gui->LastItemBounds(), Node->Id);
+		Gui->NextColumn();
+		Gui->Text(KindName(Node->GetKind()));
+	}
 }
 
 } // namespace Hyperion
