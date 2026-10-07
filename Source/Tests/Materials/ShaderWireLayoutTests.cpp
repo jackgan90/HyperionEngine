@@ -3,6 +3,7 @@
 #include "Hyperion/Renderer/ClusteredLights.h"
 #include "Support/TestSupport.h"
 #include <array>
+#include <cstddef>
 #include <type_traits>
 
 namespace
@@ -87,6 +88,7 @@ struct FNonstandardClusterLight : FClusterBase
 struct alignas(4) FBooleanStorage
 {
 	bool bValue{};
+	std::array<std::byte, 3> Padding{};
 };
 
 struct FMatrixStorage

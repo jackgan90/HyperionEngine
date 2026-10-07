@@ -29,7 +29,7 @@ constexpr std::array<std::uint32_t, 12> WritableGraphUsages{32, 40, 48, 56, 64, 
 
 void CheckUsageFoundation()
 {
-	HYP_CHECK(KnownBufferUsages == 127 && ShaderReadBufferUsages == 24 && ShaderWriteBufferUsages == 96);
+	static_assert(KnownBufferUsages == 127 && ShaderReadBufferUsages == 24 && ShaderWriteBufferUsages == 96);
 	for (std::uint32_t Usage = 0; Usage < 128; ++Usage)
 	{
 		HYP_CHECK(IsKnownBufferUsage(Usage) == (Usage != 0));

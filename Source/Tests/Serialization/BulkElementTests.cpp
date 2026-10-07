@@ -94,7 +94,7 @@ void CheckType(EBulkElement InElement, std::string_view InName, std::string_view
 	HYP_CHECK(ReadBulk<std::vector<T>>(DecodeArchive(EncodeArchive(Empty))).empty());
 	HYP_CHECK(WriteJson(WriteValueWire(Shape, Empty)) == "[]");
 	HYP_CHECK(ReadBulk<std::vector<T>>(ReadValueWire(Shape, ParseJson("[]"))).empty());
-	if (sizeof(T) > 1)
+	if constexpr (sizeof(T) > 1)
 	{
 		const auto Bad = KnownArchive(InName, FixtureBytes("00"), false);
 		Reject(

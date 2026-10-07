@@ -23,7 +23,7 @@ constexpr std::array ContactOptions{
 template<class T, std::size_t Size> consteval bool IsComplete(const std::array<T, Size>& InOptions)
 {
 	using FIdentity = decltype(T::Id);
-	if (Size != static_cast<std::size_t>(FIdentity::Count))
+	if constexpr (Size != static_cast<std::size_t>(FIdentity::Count))
 	{
 		return false;
 	}

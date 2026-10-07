@@ -188,8 +188,7 @@ FImage RenderModelReadback(const FModelReadbackContext& InContext, FModelSource 
 	return Image;
 }
 
-template<class RenderOperation>
-void CheckMaterialPixels(const RenderOperation& InRender, const std::filesystem::path& InRoot)
+template<class RenderOperation> void CheckMaterialPixels(const RenderOperation& InRender)
 {
 	// Near red is submitted first; far blue must not overwrite it. Output is sRGB(.25).
 	Pixel(InRender(Quads(), true), 160, 120, {.5371f, 0, 0});
@@ -328,8 +327,7 @@ FImage RenderAsyncModelFrame(FTaskSystem& InTasks, FWindow& InWindow, IRHISwapch
 }
 
 template<class FrameOperation>
-void CheckCameraInput(FAsyncModelFixture& InModel, const FrameOperation& InFrame, const FImage& InReadyImage,
-                      const std::filesystem::path& InRoot)
+void CheckCameraInput(FAsyncModelFixture& InModel, const FrameOperation& InFrame, const FImage& InReadyImage)
 {
 	FInputEvent Wheel;
 	Wheel.Type = EEventType::MouseWheel;
@@ -407,7 +405,6 @@ int main()
 	using namespace Hyperion;
 	try
 	{
-		const auto Root = std::filesystem::path(HYP_SOURCE_DIR);
 		FTaskSystem Tasks(1, 1);
 		FWindow Window("Model material and async acceptance", {320, 240}, true);
 		const FRHISwapchainDesc SwapchainDesc{Window.Surface(), Window.PixelSize()};
@@ -428,7 +425,7 @@ int main()
 		{
 			return RenderModelReadback(RenderContext, std::move(InModel), bInCheckConstantRanges);
 		};
-		CheckMaterialPixels(RenderModel, Root);
+		CheckMaterialPixels(RenderModel);
 
 		auto Storage = std::make_shared<FGatedFileSystem>();
 		FIOService IO(Tasks, Storage);
@@ -449,7 +446,7 @@ int main()
 			ReadyImage = Frame(ModelFixture);
 		}
 		HYP_CHECK(ModelFixture.Ready() && Storage->bStarted);
-		CheckCameraInput(ModelFixture, Frame, ReadyImage, Root);
+		CheckCameraInput(ModelFixture, Frame, ReadyImage);
 		ModelFixture.Stop();
 		FAsyncModelFixture Broken(Session, Tasks, Assets,
 		                          std::filesystem::path(HYP_TEST_OUTPUT_DIR) / "fixtures/native/Missing.hasset");

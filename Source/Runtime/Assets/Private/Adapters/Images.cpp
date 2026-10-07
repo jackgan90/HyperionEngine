@@ -15,7 +15,15 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#ifdef _MSC_VER
+#pragma warning(push)
+// TinyEXR's LevelIndex has a redundant return after its exhaustive switch.
+#pragma warning(disable : 4702)
+#endif
 #include <tinyexr.h>
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 namespace Hyperion
 {

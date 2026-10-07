@@ -246,8 +246,8 @@ float4 PSMain() : SV_Target0 { return Records[0].Samples[2] + Records[0].Basis[0
 		const std::uint32_t ExpectedStride = bDxil ? 36 : 48;
 		HYP_CHECK(Binding.StructureByteStride == ExpectedStride && Element.Size == ExpectedStride);
 		HYP_CHECK(Samples.ArrayCount == 3 && Samples.ArrayStride == 4 && Samples.Size == 12);
-		HYP_CHECK(Basis.Offset == (bDxil ? 12 : 16) && Basis.MatrixStride == (bDxil ? 12 : 16));
-		HYP_CHECK(Basis.Size == (bDxil ? 24 : 28));
+		HYP_CHECK(Basis.Offset == (bDxil ? 12U : 16U) && Basis.MatrixStride == (bDxil ? 12U : 16U));
+		HYP_CHECK(Basis.Size == (bDxil ? 24U : 28U));
 		HYP_CHECK(Basis.Rows == 3 && Basis.Columns == 2 && !Basis.bRowMajor);
 	}
 }

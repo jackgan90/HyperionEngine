@@ -38,7 +38,7 @@ template<class TOption> constexpr std::string_view ProtocolName(const TOption& I
 template<class TOption, std::size_t Size> consteval bool IsComplete(const std::array<TOption, Size>& InOptions)
 {
 	using FIdentity = decltype(TOption::Id);
-	if (Size != static_cast<std::size_t>(FIdentity::Count))
+	if constexpr (Size != static_cast<std::size_t>(FIdentity::Count))
 	{
 		return false;
 	}
