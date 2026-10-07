@@ -29,7 +29,7 @@ def check_sources(private):
             case_option = r"\b(?:\w+\.)?(?:Options|InOptions|Result)\.(?:bExercise|Exercise)"
             require(not re.search(case_option, source),
                     f"Production case branch in {path.name}")
-        snapshot = r"\b(?:InspectionBounds|MultiSelectionRows|OutlineExerciseObjects)\b"
+        snapshot = r"\b(?:FAcceptanceBounds|FWidgetKey|FPropertyKey|MultiSelectionRows|OutlineExerciseObjects)\b"
         require(not re.search(snapshot, source),
                 f"Scenario snapshot leaked into {path.name}")
         require("light-courtyard-3" not in source and "/Sponza.hasset" not in source,

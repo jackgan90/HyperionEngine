@@ -112,13 +112,13 @@ void FEditorAcceptanceHarness::ExerciseContentSaveAs(std::vector<FInputEvent>& I
 			}
 			break;
 		case EContentState::OpenSaveAs:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-as"), Scenario.Content.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::SaveAs), Scenario.Content.Click))
 			{
 				Scenario.Content.Progress.TransitionTo(EContentState::FocusSaveAsPath);
 			}
 			break;
 		case EContentState::FocusSaveAsPath:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-path"), Scenario.Content.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::SavePath), Scenario.Content.Click))
 			{
 				Scenario.Content.Progress.TransitionTo(EContentState::SelectSaveAsPathText);
 			}
@@ -146,7 +146,7 @@ void FEditorAcceptanceHarness::ExerciseContentSaveAs(std::vector<FInputEvent>& I
 		}
 		case EContentState::ConfirmSaveAs:
 			// Click Save directly: do not press Enter to commit the path first.
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("document/save-confirm"), Scenario.Content.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::SaveConfirm), Scenario.Content.Click))
 			{
 				Scenario.Content.Progress.TransitionTo(EContentState::AwaitSaveAs);
 			}

@@ -12,9 +12,17 @@ struct FViewportChoiceAction
 	std::uint32_t WireValue;
 	std::variant<ESceneCullingMode, EOutlineOverlapMode> Identity;
 
-	std::string_view Control() const
+	EEditorWidget Control() const
 	{
-		return std::holds_alternative<ESceneCullingMode>(Identity) ? "view/culling" : "outline/mode";
+		return std::holds_alternative<ESceneCullingMode>(Identity) ? EEditorWidget::CullingMode
+		                                                           : EEditorWidget::OutlineMode;
+	}
+
+	FWidgetKey Selection() const
+	{
+		const auto Widget = std::holds_alternative<ESceneCullingMode>(Identity) ? EEditorWidget::CullingModeItem
+		                                                                        : EEditorWidget::OutlineModeItem;
+		return FWidgetKey::WithValue(Widget, WireValue);
 	}
 };
 
@@ -51,7 +59,7 @@ void FEditorAcceptanceHarness::CheckViewportChoice() const
 	    Editor.RenderSettingsRevision != Exercise.RenderRevision)
 	{
 		throw std::runtime_error("Viewport GUI choice changed its meaning or unrelated state: " +
-		                         std::string(Action.Control()) + "/" + std::to_string(Action.WireValue));
+		                         std::to_string(Exercise.Case) + " wire value " + std::to_string(Action.WireValue));
 	}
 }
 
@@ -84,12 +92,10 @@ bool FEditorAcceptanceHarness::ExerciseViewportChoices(std::vector<FInputEvent>&
 	    Exercise.Progress.Is(EViewportChoiceState::SelectChoice))
 	{
 		const bool bOpenPopup = Exercise.Progress.Is(EViewportChoiceState::OpenChoice) && !Editor.bViewOptionsOpen;
-		const auto Key = bOpenPopup
-		                     ? std::string("view/options")
-		                     : std::string(Action.Control()) + (Exercise.Progress.Is(EViewportChoiceState::SelectChoice)
-		                                                            ? "/" + std::to_string(Action.WireValue)
-		                                                            : "");
-		if (ExerciseClick(InEvents, Scenario.InspectionBounds.at(Key), Exercise.Click) && !bOpenPopup)
+		const auto Key = bOpenPopup ? FWidgetKey(EEditorWidget::ViewOptions)
+		                 : Exercise.Progress.Is(EViewportChoiceState::SelectChoice) ? Action.Selection()
+		                                                                            : FWidgetKey(Action.Control());
+		if (ExerciseClick(InEvents, Scenario.Bounds.Require(Key), Exercise.Click) && !bOpenPopup)
 		{
 			Exercise.Progress.TransitionTo(Exercise.Progress.Is(EViewportChoiceState::OpenChoice)
 			                                   ? EViewportChoiceState::SelectChoice

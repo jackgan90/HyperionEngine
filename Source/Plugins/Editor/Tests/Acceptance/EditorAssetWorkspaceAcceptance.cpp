@@ -200,7 +200,7 @@ void FEditorAcceptanceHarness::ExerciseAssetPanelInput(std::vector<FInputEvent>&
 			break;
 		case EAssetState::PressPanelTitle:
 		{
-			const auto Bounds = Scenario.InspectionBounds.at("placement/title");
+			const auto Bounds = Scenario.Bounds.Require(EEditorWidget::PlacementTitle);
 			Scenario.AssetExercisePointer = {(Bounds.X + Bounds.Z) * .5f, (Bounds.Y + Bounds.W) * .5f};
 			MovePointer(InEvents, Scenario.AssetExercisePointer);
 			if (Scenario.Asset.PanelDrag.TitleHover.Advance())
@@ -216,13 +216,13 @@ void FEditorAcceptanceHarness::ExerciseAssetPanelInput(std::vector<FInputEvent>&
 			{
 				if (Scenario.Asset.PanelDrag.BaselineObservation.Advance())
 				{
-					Scenario.AssetExercisePanelStart = Scenario.InspectionBounds.at("placement/title");
+					Scenario.AssetExercisePanelStart = Scenario.Bounds.Require(EEditorWidget::PlacementTitle);
 					Scenario.Asset.PanelDrag.Progress.TransitionTo(EAssetPanelDragPhase::ObserveHeldDrag);
 				}
 			}
 			else if (Scenario.Asset.PanelDrag.HeldDragObservation.Advance())
 			{
-				const auto Bounds = Scenario.InspectionBounds.at("placement/title");
+				const auto Bounds = Scenario.Bounds.Require(EEditorWidget::PlacementTitle);
 				CheckWorkspace(std::abs(Bounds.X - Scenario.AssetExercisePanelStart.X - 80) < 2 &&
 				                   std::abs(Bounds.Y - Scenario.AssetExercisePanelStart.Y - 48) < 2,
 				               "Place Object window drag was interrupted while an asset tab was active");
@@ -241,13 +241,13 @@ void FEditorAcceptanceHarness::ExerciseAssetPanelInput(std::vector<FInputEvent>&
 				break;
 			}
 			CheckWorkspace(!Editor.Gui->PointerState().bDown, "Panel drag mouse release was not consumed");
-			Scenario.AssetExercisePanelStart = Scenario.InspectionBounds.at("placement/title");
+			Scenario.AssetExercisePanelStart = Scenario.Bounds.Require(EEditorWidget::PlacementTitle);
 			MovePointer(InEvents, {Scenario.AssetExercisePointer.X + 50, Scenario.AssetExercisePointer.Y + 50});
 			Scenario.Asset.Progress.TransitionTo(EAssetState::VerifyPanelRelease);
 			break;
 		case EAssetState::VerifyPanelRelease:
 		{
-			const auto Bounds = Scenario.InspectionBounds.at("placement/title");
+			const auto Bounds = Scenario.Bounds.Require(EEditorWidget::PlacementTitle);
 			CheckWorkspace(Bounds.X == Scenario.AssetExercisePanelStart.X &&
 			                   Bounds.Y == Scenario.AssetExercisePanelStart.Y,
 			               "Place Object window kept moving after mouse release");

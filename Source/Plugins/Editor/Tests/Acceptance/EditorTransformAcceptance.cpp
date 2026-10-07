@@ -115,7 +115,7 @@ bool FEditorAcceptanceHarness::ExerciseTransformInput(std::vector<FInputEvent>& 
 		const std::array Values{"2", "45", "1.25"};
 		if (Phase == ETransformTextAction::FocusField)
 		{
-			if (!ExerciseClick(InEvents, Scenario.InspectionBounds.at(Type + "/" + Ids[Field]),
+			if (!ExerciseClick(InEvents, Scenario.Bounds.Require(FPropertyKey{Type, Ids[Field]}),
 			                   Scenario.Transform.Click))
 			{
 				return false;
@@ -278,7 +278,8 @@ bool FEditorAcceptanceHarness::ExerciseUnchangedHistory(std::vector<FInputEvent>
 	switch (Scenario.Transform.Progress.GetState())
 	{
 		case ETransformState::FocusUnchangedValue:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x"),
+			if (ExerciseClick(InEvents,
+			                  Scenario.Bounds.Require(FPropertyKey{RecordType<FSceneTransform>().Id, "position/x"}),
 			                  Scenario.Transform.Click))
 			{
 				Scenario.Transform.Progress.TransitionTo(ETransformState::SelectChangedValue);
@@ -363,7 +364,7 @@ bool FEditorAcceptanceHarness::ExerciseTransformDrag(std::vector<FInputEvent>& I
 	if ((Phase == ETransformDragAction::BeginDrag || Phase == ETransformDragAction::MoveForward ||
 	     Phase == ETransformDragAction::MoveBackward))
 	{
-		const auto Bounds = Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x");
+		const auto Bounds = Scenario.Bounds.Require(FPropertyKey{RecordType<FSceneTransform>().Id, "position/x"});
 		FInputEvent Move;
 		Move.Type = EEventType::MouseMove;
 		Move.X = (Bounds.X + Bounds.Z) / 2 + (Phase == ETransformDragAction::BeginDrag     ? 0

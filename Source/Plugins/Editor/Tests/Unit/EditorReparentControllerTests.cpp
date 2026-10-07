@@ -1,5 +1,6 @@
 #include "../../Private/EditorReparentController.h"
 #include "../../Private/OutlinerScene.h"
+#include "../Acceptance/AcceptanceBounds.h"
 #include "Hyperion/SceneEditing/SceneAuthoring.h"
 #include "Support/TestSupport.h"
 #include <iostream>
@@ -8,6 +9,38 @@ using namespace Hyperion;
 
 namespace
 {
+void CheckAcceptanceBoundsIdentities()
+{
+	FAcceptanceBounds Bounds;
+	std::string TemporaryId = "1";
+	const auto Item = FWidgetKey::WithId(EEditorWidget::PlacementItem, TemporaryId);
+	Bounds.Set(Item, {1, 2, 3, 4});
+	TemporaryId = "changed";
+	Bounds.Set(FWidgetKey::WithId(EEditorWidget::RenderPipelineItem, "1"), {5, 6, 7, 8});
+	Bounds.Set(FWidgetKey::WithValue(EEditorWidget::PlacementItem, 1), {9, 10, 11, 12});
+	Bounds.Set(FPropertyKey{"component/a", "field"}, {13, 14, 15, 16});
+	Bounds.Set(FPropertyKey{"component", "a/field"}, {17, 18, 19, 20});
+	HYP_CHECK(Bounds.Require(FWidgetKey::WithId(EEditorWidget::PlacementItem, "1")).X == 1);
+	HYP_CHECK(Bounds.Require(FWidgetKey::WithId(EEditorWidget::RenderPipelineItem, "1")).X == 5);
+	HYP_CHECK(Bounds.Require(FWidgetKey::WithValue(EEditorWidget::PlacementItem, 1)).X == 9);
+	HYP_CHECK(Bounds.Require(FPropertyKey{"component/a", "field"}).X == 13);
+	HYP_CHECK(Bounds.Require(FPropertyKey{"component", "a/field"}).X == 17);
+	HYP_CHECK(Bounds.FindOrEmpty(EEditorWidget::HierarchyRoot).Z == 0);
+	HYP_CHECK(!Bounds.Contains(EEditorWidget::HierarchyRoot));
+	bool bMissingRejected{};
+	try
+	{
+		Bounds.Require(EEditorWidget::HierarchyRoot);
+	}
+	catch (const std::out_of_range&)
+	{
+		bMissingRejected = true;
+	}
+	HYP_CHECK(bMissingRejected);
+	Bounds.Clear();
+	HYP_CHECK(!Bounds.Contains(Item) && !Bounds.Contains(FPropertyKey{"component/a", "field"}));
+}
+
 // A real CPU scene; unsupported fixture operations fail instead of simulating persistence or rendering.
 class FTestSceneTarget final : public ISceneEditTarget
 {
@@ -442,6 +475,7 @@ int main()
 {
 	try
 	{
+		CheckAcceptanceBoundsIdentities();
 		CheckStableSceneLayout();
 		CheckScenePresentation();
 		CheckNodeAndRootDelivery();

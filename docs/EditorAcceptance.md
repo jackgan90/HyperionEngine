@@ -13,6 +13,8 @@ Editor 的合成输入、场景状态和验收断言属于测试实现。新增�
 | [AcceptanceTransition.h](../Source/Plugins/Editor/Tests/Acceptance/AcceptanceTransition.h) | 生成状态枚举与诊断名称；`TAcceptanceState` 只保存执行状态 |
 | [AcceptanceScenarioContexts.h](../Source/Plugins/Editor/Tests/Acceptance/AcceptanceScenarioContexts.h) | 具体场景或操作拥有的输入进度、等待预算、观测、快照和一次性标志 |
 | [AcceptanceInput.h](../Source/Plugins/Editor/Tests/Acceptance/AcceptanceInput.h) | 测试私有的点击、文本输入、输入节奏和帧等待原语 |
+| [AcceptanceBounds.h](../Source/Plugins/Editor/Tests/Acceptance/AcceptanceBounds.h) | 共享控件与反射属性的类型化 observation 键及 bounds 访问 |
+| [ReparentAcceptanceContext.h](../Source/Plugins/Editor/Tests/Acceptance/ReparentAcceptanceContext.h) | Reparent 夹具角色、记录及有序用例配置 |
 | [AcceptanceContexts.h](../Source/Plugins/Editor/Tests/Acceptance/AcceptanceContexts.h)、[AssetAcceptanceContext.h](../Source/Plugins/Editor/Tests/Acceptance/AssetAcceptanceContext.h) | 执行状态到动作、实际用例索引、阶段及窗口的显式只读映射 |
 | [EditorAcceptanceState.h](../Source/Plugins/Editor/Tests/Acceptance/EditorAcceptanceState.h) | 聚合场景上下文；承载预览、视口等聚焦上下文及验收结果 |
 | [EditorAcceptanceHarness.h](../Source/Plugins/Editor/Tests/Acceptance/EditorAcceptanceHarness.h)、[EditorAcceptanceHarness.cpp](../Source/Plugins/Editor/Tests/Acceptance/EditorAcceptanceHarness.cpp) | 场景方法边界、`CollectInput` 调度、窗口路由、截图与完成判断 |
@@ -57,6 +59,12 @@ if (ExerciseClick(InEvents, Scenario.FileMenuBounds, Scenario.Interaction.Click)
 `TransitionTo` 只改变执行状态，不重置输入或等待，也不决定是否继续执行本帧后续代码。进入采样阶段时由场景显式 `Start` 或 `Restart`；循环、重试和复用输入时明确复位位置。保持 `break`、`return`、同帧调用及事件顺序的实际含义，不能因改用状态名而改变行为。
 
 ## 输入与计帧边界
+
+控件 bounds 使用 `FWidgetKey`：固定控件复用生产 observation 的 `EEditorWidget`，列表项携带稳定 ID 或生产 observer 发出的 wire value；不能用显示文本、字符串前缀或枚举顺序识别目标。反射属性使用独立的 `FPropertyKey{Component, Field}`，保留权威 component type ID 与完整 field path。Component header 属于控件，以 type ID 标识，并非名为 `header` 的属性。动态键拥有字符串，不能保存临时 `string_view`。
+
+`Scenario.Bounds.Require` 要求目标已被观察，缺失时失败；`Contains` 检查是否记录；`FindOrEmpty` 在尚未绘制时返回空矩形供输入 helper 等待，且不插入记录。记录端和所有读取端必须共同使用此契约。捕获条件与 surface 清理边界由 observer 保持，不能借迁移改变生命周期。
+
+Reparent 的 `CaseIndex` 只遍历有序 `ReparentCases`。每项明确选择角色、拖拽源、Scene root/对象/窗口外目标、过滤、取消方式和结果；夹具记录集中拥有 handle、稳定 ID、初始 world 与父关系快照。成功用例声明被移动的根角色，取消、拒绝及 no-op 保留操作前父关系。维护用例时同步配置及行为断言，不新增按编号判断的分支；fixture 名称和 ID 保持现有持久化契约。
 
 | 原语或行为 | 计数与完成语义 |
 | --- | --- |

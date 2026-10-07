@@ -43,10 +43,12 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 	{
 		case EDocumentState::ExpandModelComponent:
 			Scenario.ExerciseOriginal = *Editor.Scene->FindNode(*Editor.Selection);
-			if (Scenario.InspectionBounds.contains(RecordType<FSceneModelSource>().Id + "/header"))
+			if (Scenario.Bounds.Contains(
+			        FWidgetKey::WithId(EEditorWidget::ComponentHeader, RecordType<FSceneModelSource>().Id)))
 			{
 				if (ExerciseClick(InEvents,
-				                  Scenario.InspectionBounds.at(RecordType<FSceneModelSource>().Id + "/header"),
+				                  Scenario.Bounds.Require(FWidgetKey::WithId(EEditorWidget::ComponentHeader,
+				                                                             RecordType<FSceneModelSource>().Id)),
 				                  Scenario.Document.Click))
 				{
 					Scenario.Document.Progress.TransitionTo(EDocumentState::ExerciseTransformAndExpandComponent);
@@ -62,14 +64,17 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 			{
 				break;
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/header"),
+			if (ExerciseClick(InEvents,
+			                  Scenario.Bounds.Require(
+			                      FWidgetKey::WithId(EEditorWidget::ComponentHeader, RecordType<FSceneTransform>().Id)),
 			                  Scenario.Document.Click))
 			{
 				Scenario.Document.Progress.TransitionTo(EDocumentState::HideModel);
 			}
 			break;
 		case EDocumentState::HideModel:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at(MeshType + "/visible"), Scenario.Document.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(FPropertyKey{MeshType, "visible"}),
+			                  Scenario.Document.Click))
 			{
 				Scenario.Document.Progress.TransitionTo(EDocumentState::VerifyHiddenModel);
 			}
@@ -77,7 +82,7 @@ void FEditorAcceptanceHarness::ExerciseDocumentInput(std::vector<FInputEvent>& I
 		case EDocumentState::VerifyHiddenModel:
 			if (!Editor.IsDirty() || Editor.Scene->FindNode(*Editor.Selection)->Model()->bVisible)
 			{
-				const auto Bounds = Scenario.InspectionBounds.at(MeshType + "/visible");
+				const auto Bounds = Scenario.Bounds.Require(FPropertyKey{MeshType, "visible"});
 				throw std::runtime_error(
 				    "Inspector change was not applied immediately; target=" + std::to_string(Bounds.X) + "," +
 				    std::to_string(Bounds.Y) + "," + std::to_string(Bounds.Z) + "," + std::to_string(Bounds.W));

@@ -333,9 +333,15 @@ enum class EReparentSelectionAction
 	VerifyReparent,
 };
 
+enum class EReparentSelectionSubject
+{
+	Mesh,
+	Light,
+};
+
 struct FReparentSelectionContext
 {
-	unsigned CaseIndex{};
+	EReparentSelectionSubject Subject{};
 	EReparentSelectionAction Action{};
 };
 
@@ -344,65 +350,89 @@ inline std::optional<FReparentSelectionContext> FindReparentSelectionContext(ERe
 	switch (InState)
 	{
 		case EReparentSelectionState::MeshPrepareSelection:
-			return FReparentSelectionContext{0, EReparentSelectionAction::PrepareSelection};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::PrepareSelection};
 		case EReparentSelectionState::MeshPressViewport:
-			return FReparentSelectionContext{0, EReparentSelectionAction::PressViewport};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh, EReparentSelectionAction::PressViewport};
 		case EReparentSelectionState::MeshReleaseViewport:
-			return FReparentSelectionContext{0, EReparentSelectionAction::ReleaseViewport};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::ReleaseViewport};
 		case EReparentSelectionState::MeshVerifyViewportSelection:
-			return FReparentSelectionContext{0, EReparentSelectionAction::VerifyViewportSelection};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::VerifyViewportSelection};
 		case EReparentSelectionState::MeshPressViewportDrag:
-			return FReparentSelectionContext{0, EReparentSelectionAction::PressViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::PressViewportDrag};
 		case EReparentSelectionState::MeshMoveViewportDrag:
-			return FReparentSelectionContext{0, EReparentSelectionAction::MoveViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::MoveViewportDrag};
 		case EReparentSelectionState::MeshMoveToOutliner:
-			return FReparentSelectionContext{0, EReparentSelectionAction::MoveToOutliner};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh, EReparentSelectionAction::MoveToOutliner};
 		case EReparentSelectionState::MeshCancelViewportDrag:
-			return FReparentSelectionContext{0, EReparentSelectionAction::CancelViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::CancelViewportDrag};
 		case EReparentSelectionState::MeshReleaseViewportDrag:
-			return FReparentSelectionContext{0, EReparentSelectionAction::ReleaseViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::ReleaseViewportDrag};
 		case EReparentSelectionState::MeshVerifyCancelledDrag:
-			return FReparentSelectionContext{0, EReparentSelectionAction::VerifyCancelledDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::VerifyCancelledDrag};
 		case EReparentSelectionState::MeshPressOutliner:
-			return FReparentSelectionContext{0, EReparentSelectionAction::PressOutliner};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh, EReparentSelectionAction::PressOutliner};
 		case EReparentSelectionState::MeshStartOutlinerDrag:
-			return FReparentSelectionContext{0, EReparentSelectionAction::StartOutlinerDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::StartOutlinerDrag};
 		case EReparentSelectionState::MeshMoveOutlinerTarget:
-			return FReparentSelectionContext{0, EReparentSelectionAction::MoveOutlinerTarget};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::MoveOutlinerTarget};
 		case EReparentSelectionState::MeshReleaseOutlinerDrag:
-			return FReparentSelectionContext{0, EReparentSelectionAction::ReleaseOutlinerDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh,
+			                                 EReparentSelectionAction::ReleaseOutlinerDrag};
 		case EReparentSelectionState::MeshVerifyReparent:
-			return FReparentSelectionContext{0, EReparentSelectionAction::VerifyReparent};
+			return FReparentSelectionContext{EReparentSelectionSubject::Mesh, EReparentSelectionAction::VerifyReparent};
 		case EReparentSelectionState::LightPrepareSelection:
-			return FReparentSelectionContext{1, EReparentSelectionAction::PrepareSelection};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::PrepareSelection};
 		case EReparentSelectionState::LightPressViewport:
-			return FReparentSelectionContext{1, EReparentSelectionAction::PressViewport};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light, EReparentSelectionAction::PressViewport};
 		case EReparentSelectionState::LightReleaseViewport:
-			return FReparentSelectionContext{1, EReparentSelectionAction::ReleaseViewport};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::ReleaseViewport};
 		case EReparentSelectionState::LightVerifyViewportSelection:
-			return FReparentSelectionContext{1, EReparentSelectionAction::VerifyViewportSelection};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::VerifyViewportSelection};
 		case EReparentSelectionState::LightPressViewportDrag:
-			return FReparentSelectionContext{1, EReparentSelectionAction::PressViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::PressViewportDrag};
 		case EReparentSelectionState::LightMoveViewportDrag:
-			return FReparentSelectionContext{1, EReparentSelectionAction::MoveViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::MoveViewportDrag};
 		case EReparentSelectionState::LightMoveToOutliner:
-			return FReparentSelectionContext{1, EReparentSelectionAction::MoveToOutliner};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::MoveToOutliner};
 		case EReparentSelectionState::LightCancelViewportDrag:
-			return FReparentSelectionContext{1, EReparentSelectionAction::CancelViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::CancelViewportDrag};
 		case EReparentSelectionState::LightReleaseViewportDrag:
-			return FReparentSelectionContext{1, EReparentSelectionAction::ReleaseViewportDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::ReleaseViewportDrag};
 		case EReparentSelectionState::LightVerifyCancelledDrag:
-			return FReparentSelectionContext{1, EReparentSelectionAction::VerifyCancelledDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::VerifyCancelledDrag};
 		case EReparentSelectionState::LightPressOutliner:
-			return FReparentSelectionContext{1, EReparentSelectionAction::PressOutliner};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light, EReparentSelectionAction::PressOutliner};
 		case EReparentSelectionState::LightStartOutlinerDrag:
-			return FReparentSelectionContext{1, EReparentSelectionAction::StartOutlinerDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::StartOutlinerDrag};
 		case EReparentSelectionState::LightMoveOutlinerTarget:
-			return FReparentSelectionContext{1, EReparentSelectionAction::MoveOutlinerTarget};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::MoveOutlinerTarget};
 		case EReparentSelectionState::LightReleaseOutlinerDrag:
-			return FReparentSelectionContext{1, EReparentSelectionAction::ReleaseOutlinerDrag};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::ReleaseOutlinerDrag};
 		case EReparentSelectionState::LightVerifyReparent:
-			return FReparentSelectionContext{1, EReparentSelectionAction::VerifyReparent};
+			return FReparentSelectionContext{EReparentSelectionSubject::Light,
+			                                 EReparentSelectionAction::VerifyReparent};
 		default:
 			return std::nullopt;
 	}

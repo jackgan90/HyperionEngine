@@ -206,7 +206,7 @@ void FEditorAcceptanceHarness::ExerciseMultiDetails(std::vector<FInputEvent>& In
 	if (Phase == EMultiDetailsAction::PressField || Phase == EMultiDetailsAction::ReleaseField)
 	{
 		Modifier(InEvents, 1);
-		const auto Bounds = Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/x");
+		const auto Bounds = Scenario.Bounds.Require(FPropertyKey{RecordType<FSceneTransform>().Id, "position/x"});
 		Click(InEvents, {(Bounds.X + Bounds.Z) / 2, (Bounds.Y + Bounds.W) / 2},
 		      Phase == EMultiDetailsAction::PressField);
 	}
@@ -222,7 +222,7 @@ void FEditorAcceptanceHarness::ExerciseMultiDetails(std::vector<FInputEvent>& In
 		if (Pass == 1 && (Phase == EMultiDetailsAction::SubmitValue || Phase == EMultiDetailsAction::FinishSubmission ||
 		                  Phase == EMultiDetailsAction::VerifyHistory))
 		{
-			const auto Bounds = Scenario.InspectionBounds.at(RecordType<FSceneTransform>().Id + "/position/y");
+			const auto Bounds = Scenario.Bounds.Require(FPropertyKey{RecordType<FSceneTransform>().Id, "position/y"});
 			Click(InEvents, {Bounds.X - Editor.Gui->Scale(8), (Bounds.Y + Bounds.W) / 2},
 			      Phase == EMultiDetailsAction::SubmitValue);
 		}
@@ -378,9 +378,9 @@ void FEditorAcceptanceHarness::ExerciseMultiSelection(std::vector<FInputEvent>& 
 	}
 	else if (Scenario.MultiSelection.Progress.Is(EMultiSelectionState::PrepareMarkers))
 	{
-		RequireMulti(Scenario.InspectionBounds.contains(RecordType<FSceneTransform>().Id + "/position/x") &&
-		                 !Scenario.InspectionBounds.contains(RecordType<FSceneModelComponent>().Id + "/visible") &&
-		                 !Scenario.InspectionBounds.contains(RecordType<FSceneCamera>().Id + "/verticalRadians"),
+		RequireMulti(Scenario.Bounds.Contains(FPropertyKey{RecordType<FSceneTransform>().Id, "position/x"}) &&
+		                 !Scenario.Bounds.Contains(FPropertyKey{RecordType<FSceneModelComponent>().Id, "visible"}) &&
+		                 !Scenario.Bounds.Contains(FPropertyKey{RecordType<FSceneCamera>().Id, "verticalRadians"}),
 		             "heterogeneous selection must show only the common components");
 		PrepareMultiSelectionMarkers();
 		Scenario.MultiSelection.Progress.TransitionTo(EMultiSelectionState::VerifyMarkers);

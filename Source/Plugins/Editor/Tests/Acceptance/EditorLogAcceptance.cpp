@@ -20,7 +20,7 @@ void FEditorAcceptanceHarness::ExerciseLogInput(std::vector<FInputEvent>& InEven
 			{
 				throw std::runtime_error("Log must initially be hidden");
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"], Scenario.Log.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::WindowMenu), Scenario.Log.Click))
 			{
 				Scenario.Log.Progress.TransitionTo(ELogState::ShowLog);
 			}
@@ -30,7 +30,7 @@ void FEditorAcceptanceHarness::ExerciseLogInput(std::vector<FInputEvent>& InEven
 			{
 				throw std::runtime_error("Log did not open");
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"], Scenario.Log.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::WindowMenu), Scenario.Log.Click))
 			{
 				Scenario.Log.Progress.TransitionTo(ELogState::HideLog);
 			}
@@ -45,7 +45,7 @@ void FEditorAcceptanceHarness::ExerciseLogInput(std::vector<FInputEvent>& InEven
 				Scenario.Log.bClosedPanelRecordWritten = true;
 				Log(ELogLevel::Info, "Log records while its panel is closed");
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["placement/window-menu"], Scenario.Log.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::WindowMenu), Scenario.Log.Click))
 			{
 				Scenario.Log.Progress.TransitionTo(ELogState::ReopenLog);
 			}
@@ -53,7 +53,7 @@ void FEditorAcceptanceHarness::ExerciseLogInput(std::vector<FInputEvent>& InEven
 		case ELogState::ShowLog:
 		case ELogState::HideLog:
 		case ELogState::ReopenLog:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["log/toggle"], Scenario.Log.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::LogToggle), Scenario.Log.Click))
 			{
 				Scenario.Log.Progress.TransitionTo(
 				    Scenario.Log.Progress.Is(ELogState::ShowLog)   ? ELogState::VerifyLogAndOpenWindowMenu

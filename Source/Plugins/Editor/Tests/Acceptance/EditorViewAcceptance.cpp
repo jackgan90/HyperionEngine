@@ -91,7 +91,7 @@ void FEditorAcceptanceHarness::ExerciseViewPreview(std::vector<FInputEvent>& InE
 			Check(Editor.Scene->FindNode(Handle)->Local().Values == Scenario.ExerciseOriginal.Local().Values,
 			      "Undo camera view failed");
 			Editor.Redo();
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/preview"), Scenario.View.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::PreviewCamera), Scenario.View.Click))
 			{
 				Scenario.View.Progress.TransitionTo(EViewState::DisablePreviewCamera);
 			}
@@ -127,7 +127,8 @@ void FEditorAcceptanceHarness::ExerciseViewPreview(std::vector<FInputEvent>& InE
 				Editor.Undo();
 				Check(Editor.IsPreviewAvailable(), "Undo did not restore camera preview");
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/return"), Scenario.View.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::ReturnToEditorView),
+			                  Scenario.View.Click))
 			{
 				Scenario.View.Progress.TransitionTo(EViewState::SaveViewDocument);
 			}
@@ -157,7 +158,7 @@ void FEditorAcceptanceHarness::ExerciseViewInput(std::vector<FInputEvent>& InEve
 	     Scenario.View.Progress.Is(EViewState::RestoreCameraAndReturnToEditor)) &&
 	    !Editor.bViewOptionsOpen)
 	{
-		ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/options"), Scenario.View.Click);
+		ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::ViewOptions), Scenario.View.Click);
 		return;
 	}
 	if (Scenario.View.Progress.IsAny({EViewState::VerifyViewAndPreviewCamera, EViewState::DisablePreviewCamera,
@@ -179,7 +180,7 @@ void FEditorAcceptanceHarness::ExerciseViewInput(std::vector<FInputEvent>& InEve
 				      "Navigation changed authored scene data");
 				Scenario.ExerciseInitialView = Editor.Viewport.ViewCamera;
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/initial"), Scenario.View.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::InitialView), Scenario.View.Click))
 			{
 				Scenario.View.Progress.TransitionTo(EViewState::CreateCamera);
 			}
@@ -190,7 +191,7 @@ void FEditorAcceptanceHarness::ExerciseViewInput(std::vector<FInputEvent>& InEve
 			Editor.Undo();
 			Check(!Editor.IsDirty(), "Initial view undo lost save point");
 			Editor.Redo();
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/create"), Scenario.View.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::CreateCamera), Scenario.View.Click))
 			{
 				Scenario.View.Progress.TransitionTo(EViewState::ApplyEditorView);
 			}
@@ -201,7 +202,7 @@ void FEditorAcceptanceHarness::ExerciseViewInput(std::vector<FInputEvent>& InEve
 				Scenario.View.bApplyBaselineCaptured = true;
 				ExerciseViewHistory();
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("view/apply"), Scenario.View.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::ApplyCamera), Scenario.View.Click))
 			{
 				Scenario.View.Progress.TransitionTo(EViewState::VerifyViewAndPreviewCamera);
 			}

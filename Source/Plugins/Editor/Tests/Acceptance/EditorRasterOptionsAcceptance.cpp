@@ -6,21 +6,63 @@ namespace Hyperion
 {
 namespace
 {
-struct FOptionAction
+struct FToggleVsync
 {
-	const char* Control;
-	const char* Selection;
 };
 
-constexpr std::array Actions{FOptionAction{"hud/visualizer", "0"},        FOptionAction{"hud/visualizer", "1"},
-                             FOptionAction{"hud/visualizer", "2"},        FOptionAction{"hud/visualizer", "3"},
-                             FOptionAction{"hud/visualizer", "4"},        FOptionAction{"hud/visualizer", "5"},
-                             FOptionAction{"hud/visualizer", "6"},        FOptionAction{"render/gbuffer", "high"},
-                             FOptionAction{"render/vsync", ""},           FOptionAction{"render/pipeline", "forward"},
-                             FOptionAction{"render/vsync", ""},           FOptionAction{"render/pipeline", "deferred"},
-                             FOptionAction{"render/gbuffer", "compact"},  FOptionAction{"render/vsync", ""},
-                             FOptionAction{"render/pipeline", "forward"}, FOptionAction{"render/vsync", ""},
-                             FOptionAction{"render/pipeline", "deferred"}};
+struct FOptionAction
+{
+	std::variant<EGBufferVisualizer, EGBufferPreset, ESceneRenderPipeline, FToggleVsync> Identity;
+
+	EEditorWidget Control() const
+	{
+		if (std::holds_alternative<EGBufferVisualizer>(Identity))
+		{
+			return EEditorWidget::Visualizer;
+		}
+		if (std::holds_alternative<EGBufferPreset>(Identity))
+		{
+			return EEditorWidget::GBufferFormat;
+		}
+		return std::holds_alternative<ESceneRenderPipeline>(Identity) ? EEditorWidget::RenderPipeline
+		                                                              : EEditorWidget::Vsync;
+	}
+
+	std::optional<FWidgetKey> Selection() const
+	{
+		if (const auto* Mode = std::get_if<EGBufferVisualizer>(&Identity))
+		{
+			return FWidgetKey::WithValue(EEditorWidget::VisualizerItem, ToVisualizerWireValue(*Mode));
+		}
+		if (const auto* Preset = std::get_if<EGBufferPreset>(&Identity))
+		{
+			return FWidgetKey::WithId(EEditorWidget::GBufferFormatItem, ToGBufferPresetToken(*Preset));
+		}
+		if (const auto* Pipeline = std::get_if<ESceneRenderPipeline>(&Identity))
+		{
+			return FWidgetKey::WithId(EEditorWidget::RenderPipelineItem, ToSceneRenderPipelineToken(*Pipeline));
+		}
+		return std::nullopt;
+	}
+};
+
+constexpr std::array Actions{FOptionAction{EGBufferVisualizer::Lit},
+                             FOptionAction{EGBufferVisualizer::BaseColor},
+                             FOptionAction{EGBufferVisualizer::ShadingNormal},
+                             FOptionAction{EGBufferVisualizer::MaterialChannels},
+                             FOptionAction{EGBufferVisualizer::Emissive},
+                             FOptionAction{EGBufferVisualizer::SceneDepth},
+                             FOptionAction{EGBufferVisualizer::GeometryNormal},
+                             FOptionAction{EGBufferPreset::HighPrecision},
+                             FOptionAction{FToggleVsync{}},
+                             FOptionAction{ESceneRenderPipeline::Forward},
+                             FOptionAction{FToggleVsync{}},
+                             FOptionAction{ESceneRenderPipeline::Deferred},
+                             FOptionAction{EGBufferPreset::Compact},
+                             FOptionAction{FToggleVsync{}},
+                             FOptionAction{ESceneRenderPipeline::Forward},
+                             FOptionAction{FToggleVsync{}},
+                             FOptionAction{ESceneRenderPipeline::Deferred}};
 
 std::string SettingsWire(const FRenderSettings& InSettings)
 {
@@ -29,18 +71,17 @@ std::string SettingsWire(const FRenderSettings& InSettings)
 
 FRenderSettings ExpectedSettings(FRenderSettings InBefore, FOptionAction InAction)
 {
-	const std::string_view Control(InAction.Control);
-	if (Control == "hud/visualizer")
+	if (const auto* Mode = std::get_if<EGBufferVisualizer>(&InAction.Identity))
 	{
-		InBefore.DebugMode = ParseGBufferVisualizer(static_cast<std::uint32_t>(std::stoul(InAction.Selection)));
+		InBefore.DebugMode = *Mode;
 	}
-	else if (Control == "render/pipeline")
+	else if (const auto* Pipeline = std::get_if<ESceneRenderPipeline>(&InAction.Identity))
 	{
-		InBefore.Pipeline = ParseSceneRenderPipeline(InAction.Selection);
+		InBefore.Pipeline = *Pipeline;
 	}
-	else if (Control == "render/gbuffer")
+	else if (const auto* Preset = std::get_if<EGBufferPreset>(&InAction.Identity))
 	{
-		InBefore.GBuffer = ParseGBufferPreset(InAction.Selection);
+		InBefore.GBuffer = *Preset;
 	}
 	else
 	{
@@ -104,19 +145,19 @@ bool FEditorAcceptanceHarness::ExerciseRasterOptions(std::vector<FInputEvent>& I
 			Initial.GBuffer = EGBufferPreset::Compact;
 			Editor.SetRenderSettings(Editor.RenderSettingsRevision, Initial);
 		}
-		Editor.bShowRenderSettings = Exercise.Case >= 7;
+		Editor.bShowRenderSettings = !std::holds_alternative<EGBufferVisualizer>(Action.Identity);
 		Exercise.Before = Editor.Rendering;
 		Exercise.Progress.TransitionTo(ERasterState::OpenChoice);
 		return false;
 	}
 	if (Exercise.Progress.Is(ERasterState::OpenChoice) || Exercise.Progress.Is(ERasterState::SelectChoice))
 	{
-		const auto Key = Exercise.Progress.Is(ERasterState::OpenChoice)
-		                     ? std::string(Action.Control)
-		                     : std::string(Action.Control) + "/" + Action.Selection;
-		if (ExerciseClick(InEvents, Scenario.InspectionBounds[Key], Exercise.Click))
+		const auto Selection = Action.Selection();
+		const auto Key =
+		    Exercise.Progress.Is(ERasterState::OpenChoice) ? FWidgetKey(Action.Control()) : Selection.value();
+		if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(Key), Exercise.Click))
 		{
-			Exercise.Progress.TransitionTo(Exercise.Progress.Is(ERasterState::OpenChoice) && Action.Selection[0]
+			Exercise.Progress.TransitionTo(Exercise.Progress.Is(ERasterState::OpenChoice) && Selection.has_value()
 			                                   ? ERasterState::SelectChoice
 			                                   : ERasterState::VerifyChoice);
 		}
@@ -129,8 +170,8 @@ bool FEditorAcceptanceHarness::ExerciseRasterOptions(std::vector<FInputEvent>& I
 	Exercise.ChoiceObservation.Restart();
 	if (SettingsWire(Editor.Rendering) != SettingsWire(ExpectedSettings(Exercise.Before, Action)))
 	{
-		throw std::runtime_error("Raster GUI choice changed an unrelated field: " + std::string(Action.Control) + "/" +
-		                         Action.Selection);
+		throw std::runtime_error("Raster GUI choice changed an unrelated field at action " +
+		                         std::to_string(Exercise.Case));
 	}
 	CheckRasterOptionFrame();
 	Exercise.Progress.TransitionTo(ERasterState::PrepareChoice);

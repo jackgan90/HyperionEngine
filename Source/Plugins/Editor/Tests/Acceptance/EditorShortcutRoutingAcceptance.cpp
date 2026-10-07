@@ -96,12 +96,12 @@ void FEditorAcceptanceHarness::ExerciseShortcutFocus(std::vector<FInputEvent>& I
 		}
 		case EShortcutState::DeleteOnSearchActivation:
 			// Newly activated search owns Delete during this same event batch.
-			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), true);
+			RoutingClick(InEvents, Scenario.Bounds.Require(EEditorWidget::OutlinerSearch), true);
 			RoutingKey(InEvents, EKey::Delete);
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReleaseActivatedSearch);
 			break;
 		case EShortcutState::ReleaseActivatedSearch:
-			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), false);
+			RoutingClick(InEvents, Scenario.Bounds.Require(EEditorWidget::OutlinerSearch), false);
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::VerifyActivationGuard);
 			break;
 		case EShortcutState::VerifyActivationGuard:
@@ -183,11 +183,11 @@ void FEditorAcceptanceHarness::ExerciseShortcutHistory(std::vector<FInputEvent>&
 			break;
 		}
 		case EShortcutState::PressTextSearch:
-			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), true);
+			RoutingClick(InEvents, Scenario.Bounds.Require(EEditorWidget::OutlinerSearch), true);
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReleaseTextSearch);
 			break;
 		case EShortcutState::ReleaseTextSearch:
-			RoutingClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), false);
+			RoutingClick(InEvents, Scenario.Bounds.Require(EEditorWidget::OutlinerSearch), false);
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::MoveTextCaret);
 			break;
 		case EShortcutState::MoveTextCaret:
@@ -226,11 +226,11 @@ void FEditorAcceptanceHarness::ExerciseShortcutText(std::vector<FInputEvent>& In
 	switch (Scenario.Shortcut.Progress.GetState())
 	{
 		case EShortcutState::PressInspectorName:
-			RoutingClick(InEvents, Scenario.InspectionBounds.at("shortcut/name"), true);
+			RoutingClick(InEvents, Scenario.Bounds.Require(EEditorWidget::ObjectName), true);
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::ReleaseInspectorName);
 			break;
 		case EShortcutState::ReleaseInspectorName:
-			RoutingClick(InEvents, Scenario.InspectionBounds.at("shortcut/name"), false);
+			RoutingClick(InEvents, Scenario.Bounds.Require(EEditorWidget::ObjectName), false);
 			Scenario.Shortcut.Progress.TransitionTo(EShortcutState::SelectInspectorName);
 			break;
 		case EShortcutState::SelectInspectorName:

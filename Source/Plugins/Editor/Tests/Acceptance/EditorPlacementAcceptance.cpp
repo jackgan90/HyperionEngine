@@ -68,7 +68,7 @@ bool FEditorAcceptanceHarness::ExercisePlacementMenu(std::vector<FInputEvent>& I
 			break;
 		}
 		case EPlacementMenuState::PointAtWindowMenu:
-			Move(InEvents, Center(Scenario.InspectionBounds.at("placement/window-menu")));
+			Move(InEvents, Center(Scenario.Bounds.Require(EEditorWidget::WindowMenu)));
 			Scenario.PlacementMenu.TransitionTo(EPlacementMenuState::PressWindowMenu);
 			break;
 		case EPlacementMenuState::PressWindowMenu:
@@ -86,7 +86,7 @@ bool FEditorAcceptanceHarness::ExercisePlacementMenu(std::vector<FInputEvent>& I
 			                                        : EPlacementMenuState::AwaitPlacementPanel);
 			break;
 		case EPlacementMenuState::PointAtPlacementItem:
-			Move(InEvents, Center(Scenario.InspectionBounds.at("placement/open-panel")));
+			Move(InEvents, Center(Scenario.Bounds.Require(EEditorWidget::PlacementOpen)));
 			Scenario.PlacementMenu.TransitionTo(EPlacementMenuState::PressPlacementItem);
 			break;
 		case EPlacementMenuState::AwaitPlacementPanel:
@@ -111,7 +111,7 @@ void FEditorAcceptanceHarness::ExercisePlacementDrag(std::vector<FInputEvent>& I
 		return;
 	}
 	const std::string Type = PlacementTypes.at(Scenario.PlacementExerciseType);
-	const auto Source = Scenario.InspectionBounds.at("placement/" + Type);
+	const auto Source = Scenario.Bounds.Require(FWidgetKey::WithId(EEditorWidget::PlacementItem, Type));
 	const auto Bounds = Editor.Viewport.ViewportRegion.Bounds;
 	const FVec2 Target{Bounds.X + (Bounds.Z - Bounds.X) * (.2f + .18f * (Scenario.PlacementExerciseType % 4)),
 	                   Bounds.Y + (Bounds.W - Bounds.Y) * (.5f + .2f * (Scenario.PlacementExerciseType / 4))};
@@ -301,7 +301,7 @@ void FEditorAcceptanceHarness::ExercisePlacedClipboard(std::vector<FInputEvent>&
 
 void FEditorAcceptanceHarness::ExercisePlacementCancel(std::vector<FInputEvent>& InEvents)
 {
-	const auto Source = Scenario.InspectionBounds.at("placement/Cube");
+	const auto Source = Scenario.Bounds.Require(FWidgetKey::WithId(EEditorWidget::PlacementItem, "Cube"));
 	switch (Scenario.PlacementCancel.GetState())
 	{
 		case EPlacementCancelState::PrepareCancellation:

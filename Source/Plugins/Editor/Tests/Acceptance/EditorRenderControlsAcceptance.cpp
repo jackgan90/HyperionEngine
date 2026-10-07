@@ -9,30 +9,31 @@ namespace Hyperion
 void FEditorAcceptanceHarness::CheckRenderControlsHud() const
 {
 	const auto Clip = Editor.Viewport.ViewportRegion.Bounds;
-	for (const auto* Name : {"hud/status", "hud/profiling"})
+	for (const auto Widget : {EEditorWidget::StatusHud, EEditorWidget::ProfilingHud})
 	{
-		const auto Bounds = Scenario.InspectionBounds.at(Name);
+		const auto Bounds = Scenario.Bounds.Require(Widget);
 		if (Bounds.Z <= Bounds.X || Bounds.W <= Bounds.Y || Bounds.X < Clip.X || Bounds.Y < Clip.Y ||
 		    Bounds.Z > Clip.Z || Bounds.W > Clip.W)
 		{
-			throw std::runtime_error("HUD missing or outside the viewport: " + std::string(Name) +
-			                         " clip=" + std::to_string(Clip.X) + "," + std::to_string(Clip.Y) + "," +
-			                         std::to_string(Clip.Z) + "," + std::to_string(Clip.W) +
-			                         " bounds=" + std::to_string(Bounds.X) + "," + std::to_string(Bounds.Y) + "," +
-			                         std::to_string(Bounds.Z) + "," + std::to_string(Bounds.W));
+			throw std::runtime_error(
+			    "HUD missing or outside the viewport: " + std::to_string(static_cast<unsigned>(Widget)) +
+			    " clip=" + std::to_string(Clip.X) + "," + std::to_string(Clip.Y) + "," + std::to_string(Clip.Z) + "," +
+			    std::to_string(Clip.W) + " bounds=" + std::to_string(Bounds.X) + "," + std::to_string(Bounds.Y) + "," +
+			    std::to_string(Bounds.Z) + "," + std::to_string(Bounds.W));
 		}
 	}
-	if (Scenario.InspectionBounds.at("hud/status").Z > Scenario.InspectionBounds.at("hud/profiling").X)
+	if (Scenario.Bounds.Require(EEditorWidget::StatusHud).Z > Scenario.Bounds.Require(EEditorWidget::ProfilingHud).X)
 	{
 		throw std::runtime_error("Status and profiling HUDs overlap");
 	}
-	for (const auto* Name :
-	     {"hud/status-toggle", "hud/profiling-toggle", "hud/visualizer", "hud/exposure", "hud/categories"})
+	for (const auto Widget : {EEditorWidget::HudStatusToggle, EEditorWidget::HudProfilingToggle,
+	                          EEditorWidget::Visualizer, EEditorWidget::Exposure, EEditorWidget::ProfilingCategories})
 	{
-		const auto Bounds = Scenario.InspectionBounds.at(Name);
+		const auto Bounds = Scenario.Bounds.Require(Widget);
 		if (Bounds.Z <= Bounds.X || Bounds.X < Clip.X || Bounds.Z > Clip.Z || Bounds.W > Clip.Y)
 		{
-			throw std::runtime_error("Render toolbar control is clipped: " + std::string(Name));
+			throw std::runtime_error("Render toolbar control is clipped: " +
+			                         std::to_string(static_cast<unsigned>(Widget)));
 		}
 	}
 	if (Editor.IsDirty())
@@ -63,13 +64,14 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 	switch (Scenario.RenderControls.Progress.GetState())
 	{
 		case ERenderControlsState::ShowStatusHud:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/status-toggle"], Scenario.RenderControls.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::HudStatusToggle),
+			                  Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::ShowProfilingHud);
 			}
 			return;
 		case ERenderControlsState::ShowProfilingHud:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/profiling-toggle"],
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::HudProfilingToggle),
 			                  Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyHud);
@@ -87,7 +89,7 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 			}
 			return;
 		case ERenderControlsState::OpenRenderSettings:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["render/settings-menu"],
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::RenderSettingsMenu),
 			                  Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::ExerciseRasterAndDepth);
@@ -96,8 +98,8 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 		case ERenderControlsState::ExerciseRasterAndDepth:
 			if (Scenario.RasterOptionExercise.Case == 0 &&
 			    Scenario.RasterOptionExercise.Progress.Is(ERasterState::PrepareChoice) &&
-			    (!Editor.bShowRenderSettings ||
-			     Scenario.InspectionBounds["render/pipeline"].Z <= Scenario.InspectionBounds["render/pipeline"].X))
+			    (!Editor.bShowRenderSettings || Scenario.Bounds.FindOrEmpty(EEditorWidget::RenderPipeline).Z <=
+			                                        Scenario.Bounds.FindOrEmpty(EEditorWidget::RenderPipeline).X))
 			{
 				throw std::runtime_error("Render settings menu did not open its window");
 			}
@@ -124,15 +126,19 @@ void FEditorAcceptanceHarness::ExerciseRenderControlsInput(std::vector<FInputEve
 			{
 				return;
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds[RecordType<FSceneTransform>().Id + "/header"],
+			if (ExerciseClick(InEvents,
+			                  Scenario.Bounds.FindOrEmpty(
+			                      FWidgetKey::WithId(EEditorWidget::ComponentHeader, RecordType<FSceneTransform>().Id)),
 			                  Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::EnableLightShadows);
 			}
 			return;
 		case ERenderControlsState::EnableLightShadows:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hyperion.scenedirectionallight/shadowSettings"],
-			                  Scenario.RenderControls.Click))
+			if (ExerciseClick(
+			        InEvents,
+			        Scenario.Bounds.FindOrEmpty(FPropertyKey{"hyperion.scenedirectionallight", "shadowSettings"}),
+			        Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyLightShadows);
 			}
@@ -179,7 +185,7 @@ bool FEditorAcceptanceHarness::ExerciseLiveDepth(std::vector<FInputEvent>& InEve
 	}
 	if (Scenario.Depth.Progress.Is(EDepthState::ToggleDepth) || Scenario.Depth.Progress.Is(EDepthState::RestoreDepth))
 	{
-		if (ExerciseClick(InEvents, Scenario.InspectionBounds.at("render/reversed-z"), Scenario.Depth.Click))
+		if (ExerciseClick(InEvents, Scenario.Bounds.Require(EEditorWidget::ReversedZ), Scenario.Depth.Click))
 		{
 			Scenario.Depth.Progress.TransitionTo(Scenario.Depth.Progress.Is(EDepthState::ToggleDepth)
 			                                         ? EDepthState::VerifyToggledDepth
@@ -238,7 +244,8 @@ bool FEditorAcceptanceHarness::ExerciseLightPriorityInput(std::vector<FInputEven
 	}
 	if (Phase == ELightPriorityAction::FocusPriority)
 	{
-		if (!ExerciseClick(InEvents, Scenario.InspectionBounds.at(Type + "/priority"), Scenario.LightPriority.Click))
+		if (!ExerciseClick(InEvents, Scenario.Bounds.Require(FPropertyKey{Type, "priority"}),
+		                   Scenario.LightPriority.Click))
 		{
 			return false;
 		}
@@ -391,13 +398,18 @@ void FEditorAcceptanceHarness::ExerciseProfilingHudInput(std::vector<FInputEvent
 				Editor.Window->Resize({1600, 960});
 				Editor.Gui->SetApplicationScale(1);
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/categories"], Scenario.RenderControls.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::ProfilingCategories),
+			                  Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::SelectTasksCategory);
 			}
 			return;
 		case ERenderControlsState::SelectTasksCategory:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/2"], Scenario.RenderControls.Click))
+			if (ExerciseClick(
+			        InEvents,
+			        Scenario.Bounds.FindOrEmpty(FWidgetKey::WithValue(
+			            EEditorWidget::ProfilingCategory, ToProfilingHudWireValue(EProfilingHudCategory::Tasks))),
+			        Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(
 				    ERenderControlsState::VerifyCategoryAndEnableFrameCollection);
@@ -419,7 +431,7 @@ void FEditorAcceptanceHarness::ExerciseProfilingHudInput(std::vector<FInputEvent
 		case ERenderControlsState::EnableGpuCollection:
 			if (Profiling.bCompiled)
 			{
-				if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/collect-gpu"],
+				if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::ProfilingGpuCollection),
 				                  Scenario.RenderControls.Click))
 				{
 					Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyGpuCollection);
@@ -470,7 +482,8 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 			return;
 		case ERenderControlsState::OpenVisibilityCategories:
 		case ERenderControlsState::OpenBatchCategories:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/categories"], Scenario.RenderControls.Click))
+			if (ExerciseClick(InEvents, Scenario.Bounds.FindOrEmpty(EEditorWidget::ProfilingCategories),
+			                  Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(
 				    Scenario.RenderControls.Progress.Is(ERenderControlsState::OpenVisibilityCategories)
@@ -481,15 +494,19 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 		case ERenderControlsState::SelectVisibilityCategory:
 		case ERenderControlsState::SelectVisibilityWithBatches:
 		{
-			const auto Anchor = Scenario.InspectionBounds.at("hud/categories");
-			const auto Title = Scenario.InspectionBounds.at("hud/menu-title");
+			const auto Anchor = Scenario.Bounds.Require(EEditorWidget::ProfilingCategories);
+			const auto Title = Scenario.Bounds.Require(EEditorWidget::ProfilingMenuTitle);
 			const float Padding = Editor.Gui->Scale(16);
 			if (Title.X < Anchor.X || Title.X > Anchor.X + Padding || Title.Y < Anchor.W ||
 			    Title.Y > Anchor.W + Padding)
 			{
 				throw std::runtime_error("Stats menu did not expand from the button's bottom-left corner");
 			}
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/64"], Scenario.RenderControls.Click))
+			if (ExerciseClick(
+			        InEvents,
+			        Scenario.Bounds.FindOrEmpty(FWidgetKey::WithValue(
+			            EEditorWidget::ProfilingCategory, ToProfilingHudWireValue(EProfilingHudCategory::Visibility))),
+			        Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(
 				    Scenario.RenderControls.Progress.Is(ERenderControlsState::SelectVisibilityCategory)
@@ -499,7 +516,11 @@ void FEditorAcceptanceHarness::ExerciseProfilingDetailsInput(std::vector<FInputE
 			return;
 		}
 		case ERenderControlsState::SelectBatchCategory:
-			if (ExerciseClick(InEvents, Scenario.InspectionBounds["hud/category/128"], Scenario.RenderControls.Click))
+			if (ExerciseClick(
+			        InEvents,
+			        Scenario.Bounds.FindOrEmpty(FWidgetKey::WithValue(
+			            EEditorWidget::ProfilingCategory, ToProfilingHudWireValue(EProfilingHudCategory::Batching))),
+			        Scenario.RenderControls.Click))
 			{
 				Scenario.RenderControls.Progress.TransitionTo(ERenderControlsState::VerifyVisibilityAndBatches);
 			}

@@ -35,6 +35,89 @@ FVec2 RowCenter(FVec4 InBounds)
 {
 	return {(InBounds.X + InBounds.Z) / 2, (InBounds.Y + InBounds.W) / 2};
 }
+
+constexpr float DragDistance = 20.f;
+constexpr float WorldTransformTolerance = .0001f;
+constexpr unsigned MinimumReadyFrames = 12;
+constexpr FVec2 OutsideDropPoint{5, 5};
+
+enum class EFixtureKind
+{
+	Model,
+	Folder,
+	PointLight,
+};
+
+struct FFixtureDefinition
+{
+	EReparentFixtureRole Role;
+	std::string_view Name;
+	std::string_view Id;
+	EFixtureKind Kind;
+	std::string_view Parent;
+	FMat4 Local;
+};
+
+const FFixtureDefinition FixtureDefinitions[]{
+    {EReparentFixtureRole::PrimaryModel, "Reparent 0", "reparent-0", EFixtureKind::Model, "", Translation({-1, 0, 0})},
+    {EReparentFixtureRole::SecondaryModel, "Reparent 1", "reparent-1", EFixtureKind::Model, "", Translation({1, 1, 0})},
+    {EReparentFixtureRole::PrimaryChild, "Reparent 2", "reparent-2", EFixtureKind::Folder, "reparent-0",
+     Translation({0, 2, 0})},
+    {EReparentFixtureRole::ParentTarget, "Reparent 3", "reparent-3", EFixtureKind::Folder, "",
+     ComposeTRS({3, 2, -1}, {0, std::sin(.2f), 0, std::cos(.2f)}, {-2, .5f, 3})},
+    {EReparentFixtureRole::SingularTarget, "Reparent 4", "reparent-4", EFixtureKind::Folder, "", Scale({1, 0, 1})},
+    {EReparentFixtureRole::PointLight, "Reparent 5", "reparent-5", EFixtureKind::PointLight, "",
+     Translation({-2, 2, 0})},
+};
+
+void CaptureExpectedParents(const FSceneInstance& InScene, FReparentAcceptanceContext& OutExercise,
+                            const FReparentCaseDefinition& InCase)
+{
+	for (auto& Fixture : OutExercise.Fixtures)
+	{
+		Fixture.BeforeParent = InScene.FindNode(Fixture.Handle)->Parent();
+		Fixture.ExpectedParent = Fixture.BeforeParent;
+	}
+	if (InCase.Outcome == EReparentOutcome::Changed)
+	{
+		const auto* Target = std::get_if<EReparentFixtureRole>(&InCase.Target);
+		const auto Parent = Target ? OutExercise.Fixture(*Target).Id : std::string{};
+		for (const auto Role : InCase.MovedRoots)
+		{
+			OutExercise.Fixture(Role).ExpectedParent = Parent;
+		}
+	}
+}
+
+void RequireFixtureState(const FSceneInstance& InScene, const FReparentAcceptanceContext& InExercise,
+                         bool bInBefore = false)
+{
+	for (const auto& Fixture : InExercise.Fixtures)
+	{
+		FSceneNodeView View;
+		const auto Handle = InScene.FindHandle(Fixture.Id);
+		RequireReparent(InScene.GetNodeView(Handle, View), "fixture missing: " + Fixture.Id);
+		if (Fixture.Role == EReparentFixtureRole::PrimaryChild)
+		{
+			RequireReparent(View.Node->Parent() == InExercise.Fixture(EReparentFixtureRole::PrimaryModel).Id,
+			                "child was flattened");
+		}
+		RequireReparent(View.Node->Parent() == (bInBefore ? Fixture.BeforeParent : Fixture.ExpectedParent),
+		                "incorrect parent: " + Fixture.Id);
+		for (std::size_t Element = 0; Element < View.World.Values.size(); ++Element)
+		{
+			RequireReparent(std::abs(View.World.Values[Element] - Fixture.InitialWorld.Values[Element]) <
+			                    WorldTransformTolerance,
+			                "world transform changed: " + Fixture.Id);
+		}
+	}
+}
+
+bool SameBounds(FVec4 InA, FVec4 InB)
+{
+	return InA.X == InB.X && InA.Y == InB.Y && InA.Z == InB.Z && InA.W == InB.W;
+}
+
 } // namespace
 
 void FEditorAcceptanceHarness::PrepareReparentExercise()
@@ -49,40 +132,27 @@ void FEditorAcceptanceHarness::PrepareReparentExercise()
 		}
 	}
 	Editor.Scene->RemoveSubtrees(Editor.Scene->GetRoots());
-	for (unsigned Index = 0; Index < 6; ++Index)
+	for (const auto& Definition : FixtureDefinitions)
 	{
 		FSceneNode Node;
-		Node.Name = "Reparent " + std::to_string(Index);
-		Node.Id = "reparent-" + std::to_string(Index);
-		if (Index < 2)
+		Node.Name = Definition.Name;
+		Node.Id = Definition.Id;
+		Node.Parent() = Definition.Parent;
+		Node.Local() = Definition.Local;
+		if (Definition.Kind == EFixtureKind::Model)
 		{
 			Node.Model() = FSceneModelComponent{};
 			Node.Model()->Asset = Editor.PlacementModels.at("Cube").Asset;
-			Node.Local() = Translation({Index == 0 ? -1.f : 1.f, float(Index), 0});
 		}
-		else if (Index == 2)
-		{
-			Node.Parent() = "reparent-0";
-			Node.Local() = Translation({0, 2, 0});
-		}
-		else if (Index == 3)
-		{
-			Node.Local() = ComposeTRS({3, 2, -1}, {0, std::sin(.2f), 0, std::cos(.2f)}, {-2, .5f, 3});
-		}
-		else if (Index == 4)
-		{
-			Node.Local() = Scale({1, 0, 1});
-		}
-		else
+		else if (Definition.Kind == EFixtureKind::PointLight)
 		{
 			Node.PointLight() = FScenePointLight{};
-			Node.Local() = Translation({-2, 2, 0});
 		}
-		Scenario.ReparentExerciseNodes.push_back(Editor.Scene->AddNode(Node));
-		Scenario.ReparentExerciseIds.push_back(Node.Id);
+		const auto Handle = Editor.Scene->AddNode(Node);
 		FSceneNodeView View;
-		Editor.Scene->GetNodeView(Scenario.ReparentExerciseNodes.back(), View);
-		Scenario.ReparentExerciseWorlds.push_back(View.World);
+		RequireReparent(Editor.Scene->GetNodeView(Handle, View), "fixture preparation failed");
+		Scenario.ReparentExercise.Fixtures.push_back(
+		    {Definition.Role, Handle, Node.Id, View.World, Node.Parent(), Node.Parent()});
 	}
 	for (auto& Node : Lighting)
 	{
@@ -106,7 +176,8 @@ void FEditorAcceptanceHarness::ExerciseReparentKeyboard(std::vector<FInputEvent>
 	else if (Scenario.ReparentKeyboard.Is(EReparentKeyboardState::PressRow) ||
 	         Scenario.ReparentKeyboard.Is(EReparentKeyboardState::ReleaseRow))
 	{
-		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[0])));
+		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(
+		                           Scenario.ReparentExercise.Fixture(EReparentFixtureRole::PrimaryModel).Id)));
 		ReparentButton(InEvents, Scenario.ReparentKeyboard.Is(EReparentKeyboardState::PressRow));
 	}
 	else if (Scenario.ReparentKeyboard.IsAny({EReparentKeyboardState::PressDown, EReparentKeyboardState::ReleaseDown,
@@ -127,7 +198,9 @@ void FEditorAcceptanceHarness::ExerciseReparentKeyboard(std::vector<FInputEvent>
 	}
 	else
 	{
-		RequireReparent(Editor.Selection == Scenario.ReparentExerciseNodes[1] && Editor.Selection.All().size() == 1,
+		RequireReparent(Editor.Selection ==
+		                        Scenario.ReparentExercise.Fixture(EReparentFixtureRole::SecondaryModel).Handle &&
+		                    Editor.Selection.All().size() == 1,
 		                "keyboard activation of filtered Outliner row did not select object: " +
 		                    (Editor.Selection ? Editor.Scene->FindNode(*Editor.Selection)->Id : "none") +
 		                    " gesture=" + std::to_string(Editor.Reparent.GetGesture().has_value()));
@@ -168,9 +241,12 @@ void FEditorAcceptanceHarness::ExerciseReparentKeyboard(std::vector<FInputEvent>
 
 void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent>& InEvents)
 {
-	const bool bLight = DescribeReparentSelectionContext(Scenario.ReparentSelection.GetState()).CaseIndex == 1;
+	const bool bLight = DescribeReparentSelectionContext(Scenario.ReparentSelection.GetState()).Subject ==
+	                    EReparentSelectionSubject::Light;
 	const auto Phase = DescribeReparentSelectionContext(Scenario.ReparentSelection.GetState()).Action;
-	const auto Handle = Scenario.ReparentExerciseNodes[bLight ? 5 : 0];
+	const auto Handle = Scenario.ReparentExercise
+	                        .Fixture(bLight ? EReparentFixtureRole::PointLight : EReparentFixtureRole::PrimaryModel)
+	                        .Handle;
 	const auto Screen = ProjectViewportPoint(Editor.Viewport.ViewCamera, Editor.Viewport.ViewportRegion.Bounds,
 	                                         bLight ? FVec3{-2, 2, 0} : FVec3{-1.3f, -.3f, .5f});
 	RequireReparent(Screen.has_value(), "selection point is outside viewport");
@@ -207,11 +283,12 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 		                "viewport must not start hierarchy drag");
 		if (Phase == EReparentSelectionAction::MoveViewportDrag)
 		{
-			MoveReparent(InEvents, {Point.X + 20, Point.Y});
+			MoveReparent(InEvents, {Point.X + DragDistance, Point.Y});
 		}
 		else if (Phase == EReparentSelectionAction::MoveToOutliner)
 		{
-			MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[3])));
+			MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(
+			                           Scenario.ReparentExercise.Fixture(EReparentFixtureRole::ParentTarget).Id)));
 		}
 		else
 		{
@@ -245,11 +322,13 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 	else if (Phase == EReparentSelectionAction::StartOutlinerDrag)
 	{
 		RequireReparent(Editor.Reparent.GetGesture().has_value(), "Outliner did not use viewport selection");
-		MoveReparent(InEvents, {Editor.Reparent.GetGesture()->Start.X + 20, Editor.Reparent.GetGesture()->Start.Y});
+		MoveReparent(InEvents,
+		             {Editor.Reparent.GetGesture()->Start.X + DragDistance, Editor.Reparent.GetGesture()->Start.Y});
 	}
 	else if (Phase == EReparentSelectionAction::MoveOutlinerTarget)
 	{
-		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[3])));
+		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(
+		                           Scenario.ReparentExercise.Fixture(EReparentFixtureRole::ParentTarget).Id)));
 	}
 	else if (Phase == EReparentSelectionAction::ReleaseOutlinerDrag)
 	{
@@ -259,7 +338,8 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 	}
 	else
 	{
-		RequireReparent(Editor.Scene->FindNode(Handle)->Parent() == Scenario.ReparentExerciseIds[3] &&
+		RequireReparent(Editor.Scene->FindNode(Handle)->Parent() ==
+		                        Scenario.ReparentExercise.Fixture(EReparentFixtureRole::ParentTarget).Id &&
 		                    Editor.HistoryCursor == Scenario.ReparentExerciseHistory + 1 && Editor.Selection == Handle,
 		                "Outliner reparent after viewport selection failed");
 		Editor.Undo();
@@ -364,110 +444,120 @@ void FEditorAcceptanceHarness::ExerciseReparentSelection(std::vector<FInputEvent
 
 void FEditorAcceptanceHarness::ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents)
 {
-	const auto Case = Scenario.ReparentExerciseCase;
-	RequireReparent(Case == 7 || (Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bTargetPreview),
-	                "target did not preview case " + std::to_string(Case));
-	if (Case == 5 || Case == 6 || Case == 11)
+	const auto& Case = ReparentCases[Scenario.ReparentExercise.CaseIndex];
+	RequireReparent(std::holds_alternative<FOutsideTarget>(Case.Target) ||
+	                    (Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bTargetPreview),
+	                "target did not preview: " + std::string(Case.Name));
+	switch (Case.Interruption)
 	{
-		FInputEvent Event;
-		Event.Type = Case == 5 ? EEventType::Key : Case == 6 ? EEventType::Focus : EEventType::MouseButton;
-		Event.Key = EKey::Escape;
-		Event.Button = InputButtons::Right;
-		Event.bDown = Case != 6;
-		InEvents.push_back(Event);
+		case EReparentInterruption::Escape:
+		case EReparentInterruption::FocusLoss:
+		case EReparentInterruption::RightButton:
+		{
+			FInputEvent Event;
+			Event.Type = Case.Interruption == EReparentInterruption::Escape      ? EEventType::Key
+			             : Case.Interruption == EReparentInterruption::FocusLoss ? EEventType::Focus
+			                                                                     : EEventType::MouseButton;
+			Event.Key = EKey::Escape;
+			Event.Button = InputButtons::Right;
+			Event.bDown = Case.Interruption != EReparentInterruption::FocusLoss;
+			InEvents.push_back(Event);
+			break;
+		}
+		case EReparentInterruption::RevisionChange:
+		{
+			const auto Handle = Scenario.ReparentExercise.Fixture(EReparentFixtureRole::SecondaryModel).Handle;
+			auto Node = *Editor.Scene->FindNode(Handle);
+			Node.Name += " changed";
+			Editor.Scene->EditNode(Handle, Node, Editor.Scene->GetRevision());
+			Scenario.ReparentExerciseRevision = Editor.Scene->GetRevision();
+			break;
+		}
+		case EReparentInterruption::DocumentInvalidation:
+			Editor.SceneDocument.Invalidate();
+			break;
+		case EReparentInterruption::SelectionChange:
+			Editor.ClickObject(Scenario.ReparentExercise.Fixture(EReparentFixtureRole::PrimaryChild).Handle, true);
+			break;
+		case EReparentInterruption::None:
+			break;
 	}
-	if (Case == 8)
+}
+
+void FEditorAcceptanceHarness::ExerciseReparentPreview(std::vector<FInputEvent>& InEvents)
+{
+	const auto& Exercise = Scenario.ReparentExercise;
+	const auto& Case = ReparentCases[Exercise.CaseIndex];
+	RequireReparent(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bDragging, "drag did not start");
+	RequireReparent(SameBounds(Scenario.ReparentSceneBounds, Scenario.Bounds.Require(EEditorWidget::HierarchyRoot)),
+	                "Scene container moved when dragging started");
+	for (const auto& [Id, Bounds] : Scenario.ReparentRowBounds)
 	{
-		const auto B = Scenario.ReparentExerciseNodes[1];
-		auto Node = *Editor.Scene->FindNode(B);
-		Node.Name += " changed";
-		Editor.Scene->EditNode(B, Node, Editor.Scene->GetRevision());
-		Scenario.ReparentExerciseRevision = Editor.Scene->GetRevision();
+		RequireReparent(SameBounds(Bounds, Scenario.MultiSelectionRows.at(Id)),
+		                "Outliner row moved when dragging started: " + Id);
 	}
-	if (Case == 12)
+	RequireReparent(Editor.OutlinerRows.size() <= Editor.Scene->GetStatus().Nodes &&
+	                    std::all_of(Editor.OutlinerRows.begin(), Editor.OutlinerRows.end(),
+	                                [&](FSceneHandle InHandle)
+	                                {
+		                                return Editor.Scene->FindNode(InHandle) != nullptr;
+	                                }),
+	                "Scene container entered logical object rows");
+	RequireReparent(Editor.Selection.All().size() == Case.Selection.size(), "drag collapsed the selection");
+	FVec2 TargetPoint;
+	if (std::holds_alternative<FOutsideTarget>(Case.Target))
 	{
-		Editor.SceneDocument.Invalidate();
+		TargetPoint = OutsideDropPoint;
 	}
-	if (Case == 13)
+	else if (const auto* Target = std::get_if<EReparentFixtureRole>(&Case.Target))
 	{
-		Editor.ClickObject(Scenario.ReparentExerciseNodes[2], true);
+		TargetPoint = RowCenter(Scenario.MultiSelectionRows.at(Exercise.Fixture(*Target).Id));
 	}
+	else
+	{
+		TargetPoint = RowCenter(Scenario.Bounds.Require(EEditorWidget::HierarchyRoot));
+	}
+	MoveReparent(InEvents, TargetPoint);
 }
 
 void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& InEvents)
 {
-	const auto A = Scenario.ReparentExerciseNodes[0];
-	const auto B = Scenario.ReparentExerciseNodes[1];
-	const auto Child = Scenario.ReparentExerciseNodes[2];
-	const unsigned Case = Scenario.ReparentExerciseCase;
+	auto& Exercise = Scenario.ReparentExercise;
+	const auto& Case = ReparentCases[Exercise.CaseIndex];
 	if (Scenario.ReparentDrag.Is(EReparentDragState::PrepareSelection))
 	{
 		FEditorSelection Selected;
-		Selected.Toggle(A);
-		Selected.Toggle(Child);
-		Selected.Toggle(B);
-		if (Case == 9)
+		for (const auto Role : Case.Selection)
 		{
-			Selected = B;
-		}
-		if (Case == 10)
-		{
-			Selected = Scenario.ReparentExerciseNodes[5];
-			Selected.Toggle(B);
+			Selected.Toggle(Exercise.Fixture(Role).Handle);
 		}
 		Editor.SetSelection(std::move(Selected));
-		Editor.Filter = Case == 1 || Case == 9 ? "Reparent" : "";
+		Editor.Filter = Case.bFiltered ? "Reparent" : "";
+		// Validate the declared/previous outcome before accepting the current topology as this case's snapshot.
+		RequireFixtureState(*Editor.Scene, Exercise);
+		CaptureExpectedParents(*Editor.Scene, Exercise, Case);
 		Scenario.ReparentExerciseRevision = Editor.Scene->GetRevision();
 		Scenario.ReparentExerciseHistory = Editor.HistoryCursor;
 		Editor.Error.clear();
 	}
 	else if (Scenario.ReparentDrag.Is(EReparentDragState::PressSource))
 	{
-		Scenario.ReparentSceneBounds = Scenario.InspectionBounds.at("hierarchy/root");
+		Scenario.ReparentSceneBounds = Scenario.Bounds.Require(EEditorWidget::HierarchyRoot);
 		Scenario.ReparentRowBounds = Scenario.MultiSelectionRows;
-		const auto Point = RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[Case == 9    ? 1
-		                                                                                         : Case == 10 ? 5
-		                                                                                                      : 0]));
+		const auto Point = RowCenter(Scenario.MultiSelectionRows.at(Exercise.Fixture(Case.Source).Id));
 		MoveReparent(InEvents, Point);
 		ReparentButton(InEvents, true);
 	}
 	else if (Scenario.ReparentDrag.Is(EReparentDragState::StartDrag))
 	{
 		RequireReparent(Editor.Reparent.GetGesture().has_value(),
-		                "press did not prepare source case " + std::to_string(Case));
-		MoveReparent(InEvents, {Editor.Reparent.GetGesture()->Start.X + 20, Editor.Reparent.GetGesture()->Start.Y});
+		                "press did not prepare source: " + std::string(Case.Name));
+		MoveReparent(InEvents,
+		             {Editor.Reparent.GetGesture()->Start.X + DragDistance, Editor.Reparent.GetGesture()->Start.Y});
 	}
 	else if (Scenario.ReparentDrag.Is(EReparentDragState::PreviewTarget))
 	{
-		RequireReparent(Editor.Reparent.GetGesture() && Editor.Reparent.GetGesture()->bDragging, "drag did not start");
-		const auto SameBounds = [](FVec4 InA, FVec4 InB)
-		{
-			return InA.X == InB.X && InA.Y == InB.Y && InA.Z == InB.Z && InA.W == InB.W;
-		};
-		RequireReparent(SameBounds(Scenario.ReparentSceneBounds, Scenario.InspectionBounds.at("hierarchy/root")),
-		                "Scene container moved when dragging started");
-		for (const auto& [Id, Bounds] : Scenario.ReparentRowBounds)
-		{
-			RequireReparent(SameBounds(Bounds, Scenario.MultiSelectionRows.at(Id)),
-			                "Outliner row moved when dragging started: " + Id);
-		}
-		RequireReparent(Editor.OutlinerRows.size() <= Editor.Scene->GetStatus().Nodes &&
-		                    std::all_of(Editor.OutlinerRows.begin(), Editor.OutlinerRows.end(),
-		                                [&](FSceneHandle InHandle)
-		                                {
-			                                return Editor.Scene->FindNode(InHandle) != nullptr;
-		                                }),
-		                "Scene container entered logical object rows");
-		RequireReparent(Editor.Selection.All().size() == (Case == 9    ? 1u
-		                                                  : Case == 10 ? 2u
-		                                                               : 3u),
-		                "drag collapsed the selection");
-		const auto Bounds = Case == 1 || Case == 2
-		                        ? Scenario.InspectionBounds.at("hierarchy/root")
-		                        : Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[Case == 3   ? 2
-		                                                                                      : Case == 4 ? 4
-		                                                                                                  : 3]);
-		MoveReparent(InEvents, Case == 7 ? FVec2{5, 5} : RowCenter(Bounds));
+		ExerciseReparentPreview(InEvents);
 	}
 	else if (Scenario.ReparentDrag.Is(EReparentDragState::InterruptGesture))
 	{
@@ -480,10 +570,10 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 	else if (Scenario.ReparentDrag.Is(EReparentDragState::ReleaseInterruption))
 	{
 		FInputEvent Event;
-		Event.Type = Case == 6 ? EEventType::Focus : EEventType::Key;
+		Event.Type = Case.Interruption == EReparentInterruption::FocusLoss ? EEventType::Focus : EEventType::Key;
 		Event.Key = EKey::Escape;
-		Event.bDown = Case == 6;
-		if (Case == 11)
+		Event.bDown = Case.Interruption == EReparentInterruption::FocusLoss;
+		if (Case.Interruption == EReparentInterruption::RightButton)
 		{
 			Event.Type = EEventType::MouseButton;
 			Event.Button = InputButtons::Right;
@@ -493,7 +583,7 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 	else
 	{
 		VerifyReparentExercise();
-		++Scenario.ReparentExerciseCase;
+		++Exercise.CaseIndex;
 		Scenario.ReparentDrag.TransitionTo(EReparentDragState::PrepareSelection);
 		return;
 	}
@@ -527,47 +617,35 @@ void FEditorAcceptanceHarness::ExerciseReparentDrag(std::vector<FInputEvent>& In
 
 void FEditorAcceptanceHarness::VerifyReparentExercise()
 {
-	const auto Case = Scenario.ReparentExerciseCase;
-	const bool bChanged = Case == 0 || Case == 1 || Case == 9 || Case == 10;
+	const auto& Exercise = Scenario.ReparentExercise;
+	const auto& Case = ReparentCases[Exercise.CaseIndex];
+	const bool bChanged = Case.Outcome == EReparentOutcome::Changed;
+	const unsigned ExpectedEdits = bChanged ? 1 : 0;
 	RequireReparent(!Editor.Reparent.GetGesture() && !Editor.Gui->DragPayload(),
 	                "gesture survived delivery/cancellation");
-	RequireReparent(Editor.HistoryCursor == Scenario.ReparentExerciseHistory + (bChanged ? 1 : 0),
-	                "unexpected history case " + std::to_string(Case) + " actual " +
+	RequireReparent(Editor.HistoryCursor == Scenario.ReparentExerciseHistory + ExpectedEdits,
+	                "unexpected history: " + std::string(Case.Name) + " actual " +
 	                    std::to_string(Editor.HistoryCursor) + ": " + Editor.Error);
-	RequireReparent(Editor.Scene->GetRevision() == Scenario.ReparentExerciseRevision + (bChanged ? 1 : 0),
-	                "unexpected revision");
-	RequireReparent(Editor.Scene->FindNode(Scenario.ReparentExerciseNodes[2])->Parent() ==
-	                    Scenario.ReparentExerciseIds[0],
-	                "child was flattened");
-	const auto Parent = Case == 0 || Case >= 9 ? Scenario.ReparentExerciseIds[3] : std::string{};
-	RequireReparent(Editor.Scene->FindNode(Scenario.ReparentExerciseNodes[1])->Parent() == Parent, "incorrect parent");
-	for (std::size_t Index = 0; Index < Scenario.ReparentExerciseNodes.size(); ++Index)
-	{
-		FSceneNodeView View;
-		Editor.Scene->GetNodeView(Scenario.ReparentExerciseNodes[Index], View);
-		for (std::size_t Element = 0; Element < View.World.Values.size(); ++Element)
-		{
-			RequireReparent(
-			    std::abs(View.World.Values[Element] - Scenario.ReparentExerciseWorlds[Index].Values[Element]) < .0001f,
-			    "world transform changed");
-		}
-	}
+	RequireReparent(Editor.Scene->GetRevision() == Scenario.ReparentExerciseRevision + ExpectedEdits,
+	                "unexpected revision: " + std::string(Case.Name));
+	RequireFixtureState(*Editor.Scene, Exercise);
 	if (bChanged)
 	{
 		const auto Selected = Editor.Selection;
 		Editor.Undo();
 		RequireReparent(Editor.HistoryCursor == Scenario.ReparentExerciseHistory && Editor.Selection == Selected,
 		                "undo selection/history");
+		RequireFixtureState(*Editor.Scene, Exercise, true);
 		Editor.Redo();
-		RequireReparent(Editor.Selection == Selected &&
-		                    Editor.Scene->FindNode(Scenario.ReparentExerciseNodes[1])->Parent() == Parent,
-		                "redo parent/selection");
+		RequireReparent(Editor.Selection == Selected, "redo selection");
+		RequireFixtureState(*Editor.Scene, Exercise);
 	}
 }
 
 void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEvents)
 {
-	if (Editor.FrameCount < 12 || !Editor.Scene->GetStatus().bReady || !Editor.Viewport.bViewportVisible ||
+	if (Editor.FrameCount < MinimumReadyFrames || !Editor.Scene->GetStatus().bReady ||
+	    !Editor.Viewport.bViewportVisible ||
 	    Editor.GetPlacementPreparation(*Editor.PlacementRegistry.Find("Cube")).State !=
 	        EPlacementPreparationState::Ready)
 	{
@@ -578,7 +656,7 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 		PrepareReparentExercise();
 		return;
 	}
-	if (Scenario.ReparentExerciseCase < 14)
+	if (Scenario.ReparentExercise.CaseIndex < std::size(ReparentCases))
 	{
 		if (Scenario.ReparentKeyboard.IsAny({EReparentKeyboardState::PrepareKeyboard, EReparentKeyboardState::PressRow,
 		                                     EReparentKeyboardState::ReleaseRow, EReparentKeyboardState::PressDown,
@@ -617,22 +695,7 @@ void FEditorAcceptanceHarness::ExerciseReparent(std::vector<FInputEvent>& InEven
 	else if (Scenario.ReparentDocument.Is(EReparentDocumentState::VerifyReload) ||
 	         Scenario.ReparentDocument.Is(EReparentDocumentState::VerifyReplacement))
 	{
-		for (std::size_t Index = 0; Index < Scenario.ReparentExerciseIds.size(); ++Index)
-		{
-			const auto Handle = Editor.Scene->FindHandle(Scenario.ReparentExerciseIds[Index]);
-			FSceneNodeView View;
-			RequireReparent(Editor.Scene->GetNodeView(Handle, View), "saved node missing");
-			const auto ExpectedParent = Index == 1 || Index == 5 ? Scenario.ReparentExerciseIds[3]
-			                            : Index == 2             ? Scenario.ReparentExerciseIds[0]
-			                                                     : "";
-			RequireReparent(View.Node->Parent() == ExpectedParent, "saved parent changed");
-			for (std::size_t Element = 0; Element < View.World.Values.size(); ++Element)
-			{
-				RequireReparent(std::abs(View.World.Values[Element] -
-				                         Scenario.ReparentExerciseWorlds[Index].Values[Element]) < .0001f,
-				                "saved world changed");
-			}
-		}
+		RequireFixtureState(*Editor.Scene, Scenario.ReparentExercise);
 		if (Scenario.ReparentDocument.Is(EReparentDocumentState::VerifyReload))
 		{
 			Scenario.ReparentDocument.TransitionTo(EReparentDocumentState::PressReplacementSource);
@@ -648,20 +711,22 @@ void FEditorAcceptanceHarness::ExerciseReparentReplacement(std::vector<FInputEve
 {
 	if (Scenario.ReparentDocument.Is(EReparentDocumentState::PressReplacementSource))
 	{
-		const auto Handle = Editor.Scene->FindHandle(Scenario.ReparentExerciseIds[0]);
+		const auto Handle =
+		    Editor.Scene->FindHandle(Scenario.ReparentExercise.Fixture(EReparentFixtureRole::PrimaryModel).Id);
 		const auto Name = Editor.Scene->FindNode(Handle)->Name + " replacement probe";
 		SetSceneMetadata(Editor.SceneDocument,
 		                 {Editor.SceneDocument.Id(), Editor.Scene->GetRevision(), {{Handle, Name, std::nullopt}}});
 		RequireReparent(Editor.HistoryCursor > 0 && Editor.IsDirty(), "replacement fixture needs real history");
 		Editor.SetSelection(FSceneSelection(Handle));
-		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(Scenario.ReparentExerciseIds[0])));
+		MoveReparent(InEvents, RowCenter(Scenario.MultiSelectionRows.at(
+		                           Scenario.ReparentExercise.Fixture(EReparentFixtureRole::PrimaryModel).Id)));
 		ReparentButton(InEvents, true);
 	}
 	else if (Scenario.ReparentDocument.Is(EReparentDocumentState::StartReplacementDrag))
 	{
 		RequireReparent(Editor.Reparent.HasGesture(), "replacement fixture did not prepare a gesture");
 		const auto Start = Editor.Reparent.GetGesture()->Start;
-		MoveReparent(InEvents, {Start.X + 20, Start.Y});
+		MoveReparent(InEvents, {Start.X + DragDistance, Start.Y});
 	}
 	else
 	{

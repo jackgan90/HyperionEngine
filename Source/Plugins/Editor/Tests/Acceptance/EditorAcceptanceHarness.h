@@ -133,6 +133,7 @@ private:
 	void ExerciseReparent(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentReplacement(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentDrag(std::vector<FInputEvent>& InEvents);
+	void ExerciseReparentPreview(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentInterruption(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentKeyboard(std::vector<FInputEvent>& InEvents);
 	void ExerciseReparentSelection(std::vector<FInputEvent>& InEvents);

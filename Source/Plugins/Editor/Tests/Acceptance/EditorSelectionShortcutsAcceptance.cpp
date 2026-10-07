@@ -308,7 +308,7 @@ void FEditorAcceptanceHarness::ExerciseSelectionKeys(std::vector<FInputEvent>& I
 
 void FEditorAcceptanceHarness::ExerciseSelectionGuards(std::vector<FInputEvent>& InEvents)
 {
-	const auto Search = ShortcutPoint(Scenario.InspectionBounds.at("clipboard/search"));
+	const auto Search = ShortcutPoint(Scenario.Bounds.Require(EEditorWidget::OutlinerSearch));
 	const FVec2 Miss{Editor.Viewport.ViewportRegion.Bounds.X + 8, Editor.Viewport.ViewportRegion.Bounds.Y + 8};
 	switch (Scenario.Shortcut.Progress.GetState())
 	{

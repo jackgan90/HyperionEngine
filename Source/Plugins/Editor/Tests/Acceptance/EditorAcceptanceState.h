@@ -2,6 +2,7 @@
 #if !HYP_BUILD_TESTING
 #error Acceptance scenario state is only available in test-enabled builds
 #endif
+#include "AcceptanceBounds.h"
 #include "AcceptanceContexts.h"
 #include "AcceptanceScenarioContexts.h"
 #include "Hyperion/Assets/AssetService.h"
@@ -10,6 +11,7 @@
 #include "Hyperion/Renderer/SceneCameraController.h"
 #include "Hyperion/Renderer/SceneViewport.h"
 #include "Hyperion/Scene/Scene.h"
+#include "ReparentAcceptanceContext.h"
 #include <filesystem>
 #include <semaphore>
 
@@ -126,11 +128,8 @@ struct FEditorAcceptanceState
 	std::optional<EAssetState> AssetLoggedState;
 	bool bAssetsVerified{};
 	bool bLogVerified{};
-	unsigned ReparentExerciseCase{};
+	FReparentAcceptanceContext ReparentExercise;
 	bool bReparentVerified{};
-	std::vector<FSceneHandle> ReparentExerciseNodes;
-	std::vector<std::string> ReparentExerciseIds;
-	std::vector<FMat4> ReparentExerciseWorlds;
 	std::uint64_t ReparentExerciseRevision{};
 	std::size_t ReparentExerciseHistory{};
 	FVec4 ReparentSceneBounds;
@@ -220,7 +219,7 @@ struct FEditorAcceptanceState
 	FVec4 SponzaBounds;
 	FVec4 OpenButtonBounds;
 	FVec4 CancelButtonBounds;
-	std::map<std::string, FVec4> InspectionBounds;
+	FAcceptanceBounds Bounds;
 	std::string ContentRevealPath;
 };
 } // namespace Hyperion

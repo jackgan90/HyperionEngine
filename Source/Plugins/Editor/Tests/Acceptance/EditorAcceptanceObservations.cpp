@@ -29,44 +29,38 @@ constexpr FWidgetMember Members[]{
     {EEditorWidget::CancelOpenScene, &FEditorAcceptanceState::CancelButtonBounds},
 };
 
-struct FWidgetKey
-{
-	EEditorWidget Widget;
-	std::string_view Key;
-};
-
-constexpr FWidgetKey Keys[]{
-    {EEditorWidget::SaveAs, "document/save-as"},
-    {EEditorWidget::SavePath, "document/save-path"},
-    {EEditorWidget::SaveConfirm, "document/save-confirm"},
-    {EEditorWidget::RenderSettingsMenu, "render/settings-menu"},
-    {EEditorWidget::WindowMenu, "placement/window-menu"},
-    {EEditorWidget::PlacementOpen, "placement/open-panel"},
-    {EEditorWidget::PlacementTitle, "placement/title"},
-    {EEditorWidget::LogToggle, "log/toggle"},
-    {EEditorWidget::RenderPipeline, "render/pipeline"},
-    {EEditorWidget::GBufferFormat, "render/gbuffer"},
-    {EEditorWidget::Vsync, "render/vsync"},
-    {EEditorWidget::ReversedZ, "render/reversed-z"},
-    {EEditorWidget::HudStatusToggle, "hud/status-toggle"},
-    {EEditorWidget::HudProfilingToggle, "hud/profiling-toggle"},
-    {EEditorWidget::Visualizer, "hud/visualizer"},
-    {EEditorWidget::ProfilingCategories, "hud/categories"},
-    {EEditorWidget::ProfilingMenuTitle, "hud/menu-title"},
-    {EEditorWidget::ProfilingGpuCollection, "hud/collect-gpu"},
-    {EEditorWidget::Exposure, "hud/exposure"},
-    {EEditorWidget::StatusHud, "hud/status"},
-    {EEditorWidget::ProfilingHud, "hud/profiling"},
-    {EEditorWidget::ViewOptions, "view/options"},
-    {EEditorWidget::CullingMode, "view/culling"},
-    {EEditorWidget::OutlineMode, "outline/mode"},
-    {EEditorWidget::OutlineQuality, "outline/quality"},
-    {EEditorWidget::ReturnToEditorView, "view/return"},
-    {EEditorWidget::InitialView, "view/initial"},
-    {EEditorWidget::CreateCamera, "view/create"},
-    {EEditorWidget::PreviewCamera, "view/preview"},
-    {EEditorWidget::ApplyCamera, "view/apply"},
-    {EEditorWidget::HierarchyRoot, "hierarchy/root"},
+constexpr EEditorWidget Widgets[]{
+    EEditorWidget::SaveAs,
+    EEditorWidget::SavePath,
+    EEditorWidget::SaveConfirm,
+    EEditorWidget::RenderSettingsMenu,
+    EEditorWidget::WindowMenu,
+    EEditorWidget::PlacementOpen,
+    EEditorWidget::PlacementTitle,
+    EEditorWidget::LogToggle,
+    EEditorWidget::RenderPipeline,
+    EEditorWidget::GBufferFormat,
+    EEditorWidget::Vsync,
+    EEditorWidget::ReversedZ,
+    EEditorWidget::HudStatusToggle,
+    EEditorWidget::HudProfilingToggle,
+    EEditorWidget::Visualizer,
+    EEditorWidget::ProfilingCategories,
+    EEditorWidget::ProfilingMenuTitle,
+    EEditorWidget::ProfilingGpuCollection,
+    EEditorWidget::Exposure,
+    EEditorWidget::StatusHud,
+    EEditorWidget::ProfilingHud,
+    EEditorWidget::ViewOptions,
+    EEditorWidget::CullingMode,
+    EEditorWidget::OutlineMode,
+    EEditorWidget::OutlineQuality,
+    EEditorWidget::ReturnToEditorView,
+    EEditorWidget::InitialView,
+    EEditorWidget::CreateCamera,
+    EEditorWidget::PreviewCamera,
+    EEditorWidget::ApplyCamera,
+    EEditorWidget::HierarchyRoot,
 };
 } // namespace
 
@@ -86,7 +80,7 @@ void FEditorAcceptanceHarness::BeginSurface(EEditorSurface InSurface)
 		case EEditorSurface::SelectionInspector:
 			if (Editor.Options.bExerciseMultiSelection)
 			{
-				Scenario.InspectionBounds.clear();
+				Scenario.Bounds.Clear();
 			}
 			break;
 	}
@@ -102,11 +96,11 @@ void FEditorAcceptanceHarness::ObserveWidget(EEditorWidget InWidget, FVec4 InBou
 			return;
 		}
 	}
-	for (const auto& Entry : Keys)
+	for (const auto Widget : Widgets)
 	{
-		if (Entry.Widget == InWidget)
+		if (Widget == InWidget)
 		{
-			Scenario.InspectionBounds[std::string(Entry.Key)] = InBounds;
+			Scenario.Bounds.Set(Widget, InBounds);
 			return;
 		}
 	}
@@ -146,7 +140,7 @@ void FEditorAcceptanceHarness::ObserveIdentifiedWidget(EEditorWidget InWidget, F
 		case EEditorWidget::OutlinerSearch:
 			if (Options.bExerciseClipboard || Options.bExerciseFraming || Options.bExerciseSelectionShortcuts)
 			{
-				Scenario.InspectionBounds["clipboard/search"] = InBounds;
+				Scenario.Bounds.Set(InWidget, InBounds);
 			}
 			break;
 		case EEditorWidget::ContentTile:
@@ -159,23 +153,23 @@ void FEditorAcceptanceHarness::ObserveIdentifiedWidget(EEditorWidget InWidget, F
 		case EEditorWidget::ComponentHeader:
 			if (!Options.ExerciseDocument.empty() || !Options.ExerciseRenderControls.empty())
 			{
-				Scenario.InspectionBounds[std::string(InId) + "/header"] = InBounds;
+				Scenario.Bounds.Set(FWidgetKey::WithId(InWidget, InId), InBounds);
 			}
 			break;
 		case EEditorWidget::ObjectName:
 			if (Options.bExerciseSelectionShortcuts)
 			{
-				Scenario.InspectionBounds["shortcut/name"] = InBounds;
+				Scenario.Bounds.Set(InWidget, InBounds);
 			}
 			break;
 		case EEditorWidget::PlacementItem:
-			Scenario.InspectionBounds["placement/" + std::string(InId)] = InBounds;
+			Scenario.Bounds.Set(FWidgetKey::WithId(InWidget, InId), InBounds);
 			break;
 		case EEditorWidget::RenderPipelineItem:
-			Scenario.InspectionBounds["render/pipeline/" + std::string(InId)] = InBounds;
+			Scenario.Bounds.Set(FWidgetKey::WithId(InWidget, InId), InBounds);
 			break;
 		case EEditorWidget::GBufferFormatItem:
-			Scenario.InspectionBounds["render/gbuffer/" + std::string(InId)] = InBounds;
+			Scenario.Bounds.Set(FWidgetKey::WithId(InWidget, InId), InBounds);
 			break;
 		default:
 			break;
@@ -190,16 +184,16 @@ void FEditorAcceptanceHarness::ObserveIndexedWidget(EEditorWidget InWidget, FVec
 			Scenario.GizmoButtonBounds.at(InIndex) = InBounds;
 			break;
 		case EEditorWidget::ProfilingCategory:
-			Scenario.InspectionBounds["hud/category/" + std::to_string(InIndex)] = InBounds;
+			Scenario.Bounds.Set(FWidgetKey::WithValue(InWidget, InIndex), InBounds);
 			break;
 		case EEditorWidget::VisualizerItem:
-			Scenario.InspectionBounds["hud/visualizer/" + std::to_string(InIndex)] = InBounds;
+			Scenario.Bounds.Set(FWidgetKey::WithValue(InWidget, InIndex), InBounds);
 			break;
 		case EEditorWidget::CullingModeItem:
-			Scenario.InspectionBounds["view/culling/" + std::to_string(InIndex)] = InBounds;
+			Scenario.Bounds.Set(FWidgetKey::WithValue(InWidget, InIndex), InBounds);
 			break;
 		case EEditorWidget::OutlineModeItem:
-			Scenario.InspectionBounds["outline/mode/" + std::to_string(InIndex)] = InBounds;
+			Scenario.Bounds.Set(FWidgetKey::WithValue(InWidget, InIndex), InBounds);
 			break;
 		default:
 			break;
@@ -215,7 +209,7 @@ std::function<void(std::string_view, FVec4)> FEditorAcceptanceHarness::PropertyO
 	}
 	return [this, Component = std::string(InComponent)](std::string_view InField, FVec4 InBounds)
 	{
-		Scenario.InspectionBounds[Component + "/" + std::string(InField)] = InBounds;
+		Scenario.Bounds.Set(FPropertyKey{Component, std::string(InField)}, InBounds);
 	};
 }
 } // namespace Hyperion

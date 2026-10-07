@@ -257,7 +257,7 @@ void FEditorAcceptanceHarness::ExerciseFramingGuards(std::vector<FInputEvent>& I
 			break;
 		case EFramingState::PressSearch:
 		case EFramingState::ReleaseSearch:
-			FramingClick(InEvents, FramingPoint(Scenario.InspectionBounds.at("clipboard/search")),
+			FramingClick(InEvents, FramingPoint(Scenario.Bounds.Require(EEditorWidget::OutlinerSearch)),
 			             Scenario.Framing.Progress.Is(EFramingState::PressSearch));
 			Scenario.Framing.Progress.TransitionTo(Scenario.Framing.Progress.Is(EFramingState::PressSearch)
 			                                           ? EFramingState::ReleaseSearch
@@ -378,7 +378,7 @@ void FEditorAcceptanceHarness::ExerciseFramingPopup(std::vector<FInputEvent>& In
 	{
 		case EFramingState::PressViewOptions:
 		case EFramingState::ReleaseViewOptions:
-			FramingClick(InEvents, FramingPoint(Scenario.InspectionBounds.at("view/options")),
+			FramingClick(InEvents, FramingPoint(Scenario.Bounds.Require(EEditorWidget::ViewOptions)),
 			             Scenario.Framing.Progress.Is(EFramingState::PressViewOptions));
 			Scenario.Framing.Progress.TransitionTo(Scenario.Framing.Progress.Is(EFramingState::PressViewOptions)
 			                                           ? EFramingState::ReleaseViewOptions

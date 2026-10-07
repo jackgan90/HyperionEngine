@@ -126,7 +126,7 @@ void FEditorAcceptanceHarness::ExerciseClipboardHistory(std::vector<FInputEvent>
 		case EClipboardState::VerifyContentBrowserAndPressSearch:
 			RequireClipboard(Editor.HistoryCursor == 2, "Content Browser pasted scene nodes");
 			Editor.Gui->FocusWindow("Outliner");
-			ClipboardClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), true);
+			ClipboardClick(InEvents, Scenario.Bounds.Require(EEditorWidget::OutlinerSearch), true);
 			Scenario.Clipboard.Progress.TransitionTo(EClipboardState::ReleaseSearch);
 			break;
 	}
@@ -137,7 +137,7 @@ void FEditorAcceptanceHarness::ExerciseClipboardText(std::vector<FInputEvent>& I
 	switch (Scenario.Clipboard.Progress.GetState())
 	{
 		case EClipboardState::ReleaseSearch:
-			ClipboardClick(InEvents, Scenario.InspectionBounds.at("clipboard/search"), false);
+			ClipboardClick(InEvents, Scenario.Bounds.Require(EEditorWidget::OutlinerSearch), false);
 			Scenario.Clipboard.Progress.TransitionTo(EClipboardState::SelectSearchText);
 			break;
 		case EClipboardState::SelectSearchText:
