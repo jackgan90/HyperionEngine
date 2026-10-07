@@ -1,4 +1,11 @@
 cmake_minimum_required(VERSION 3.28)
+# Adopt supported modern policies without raising the CMake minimum.
+set(hyp_cmake_policies CMP0156 CMP0159 CMP0179 CMP0181)
+foreach(policy IN LISTS hyp_cmake_policies)
+  if(POLICY ${policy})
+    cmake_policy(SET ${policy} NEW)
+  endif()
+endforeach()
 project(Hyperion VERSION 0.1.0 LANGUAGES C CXX)
 if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "This first backend requires Windows x64 and MSVC. Other backends are not implemented yet.")

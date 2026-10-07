@@ -188,8 +188,10 @@ def configure(cmake, root, build, arguments):
     (build / 'TargetGraph.json').unlink(missing_ok=True)
     trace = build / 'TargetTrace.jsonl'
     trace_args = ['--trace-expand', '--trace-format=json-v1', f'--trace-redirect={trace}']
-    trace_args.extend(f'--trace-source={root / name}' for name in graph_inputs(root)
-                      if name.endswith(('.cmake', 'CMakeLists.txt')))
+    # CMake accepts a semicolon list; one option avoids a banner for every file.
+    trace_sources = [str(root / name) for name in graph_inputs(root)
+                     if name.endswith(('.cmake', 'CMakeLists.txt'))]
+    trace_args.append('--trace-source=' + ';'.join(trace_sources))
     subprocess.run([str(cmake), *trace_args, *arguments], cwd=root, check=True)
     export_graph(root, build, trace)
 
